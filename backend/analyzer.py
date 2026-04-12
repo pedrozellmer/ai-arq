@@ -519,9 +519,10 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo) -> dict:
     for crop_path in sheet.crops[:8]:
         if os.path.exists(crop_path):
             b64 = encode_image(crop_path)
+            media = "image/jpeg" if crop_path.endswith('.jpg') else "image/png"
             content.append({
                 "type": "image",
-                "source": {"type": "base64", "media_type": "image/png", "data": b64}
+                "source": {"type": "base64", "media_type": media, "data": b64}
             })
 
     content.append({"type": "text", "text": prompt})
