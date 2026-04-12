@@ -391,9 +391,9 @@
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
 
-      if (res.status === 404) {
+      if (res.status === 404 || res.status === 502) {
         errorCount++;
-        if (errorCount > 10) {
+        if (errorCount > 40) {
           clearInterval(pollTimer);
           pollTimer = null;
           errorMessage.textContent = 'O servidor perdeu a conexão. Por favor, tente novamente.';
@@ -439,7 +439,7 @@
     } catch (err) {
       console.error('Erro no polling:', err);
       errorCount++;
-      if (errorCount > 15) {
+      if (errorCount > 40) {
         clearInterval(pollTimer);
         pollTimer = null;
         errorMessage.textContent = 'Não foi possível conectar ao servidor. Tente novamente.';
