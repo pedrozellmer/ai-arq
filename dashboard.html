@@ -36,6 +36,14 @@
   .animate-pulse-bar {
     animation: pulse-bar 2s ease-in-out infinite;
   }
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .animate-spin-slow {
+    animation: spin-slow 4s linear infinite;
+  }
 </style>
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
@@ -56,6 +64,26 @@
     </div>
   </div>
 </nav>
+
+<!-- WARNING BANNER -->
+<div id="warning-banner" class="px-4 pt-6">
+  <div class="mx-auto max-w-3xl">
+    <div class="relative rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+      <div class="flex items-start gap-3">
+        <svg class="w-6 h-6 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+        <div class="flex-1">
+          <p class="text-sm text-amber-800 leading-relaxed">
+            <strong>&#9888;&#65039; Aviso importante:</strong> As planilhas geradas por IA s&#227;o estimativas e devem ser revisadas por um profissional antes de uso em concorr&#234;ncia. Itens em laranja requerem verifica&#231;&#227;o.
+          </p>
+          <a href="termos.html" class="text-xs text-amber-600 hover:text-amber-800 underline mt-1 inline-block">Ver Termos de Uso completos</a>
+        </div>
+        <button onclick="dismissWarning()" class="text-amber-400 hover:text-amber-600 transition shrink-0 p-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- MAIN CONTENT -->
 <main class="flex-1 py-10 px-4">
@@ -89,7 +117,9 @@
     <div id="state-processing" class="hidden">
       <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient text-center">
         <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-main text-white mb-6 animate-pulse-bar">
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+          <svg class="w-8 h-8 animate-spin-slow" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+          </svg>
         </div>
         <h2 class="text-xl font-bold text-gray-900 mb-2">Processando projeto...</h2>
         <p id="processing-step" class="text-sm text-gray-500 mb-6">Enviando arquivos...</p>
@@ -149,9 +179,9 @@
         <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
       </div>
       <div class="flex gap-6 text-sm text-gray-500">
-        <a href="#" class="hover:text-gray-900 transition">Termos de Uso</a>
-        <a href="#" class="hover:text-gray-900 transition">Privacidade</a>
-        <a href="#" class="hover:text-gray-900 transition">Contato</a>
+        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+        <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
       </div>
       <p class="text-sm text-gray-400">2026 AI.arq. Todos os direitos reservados.</p>
     </div>
@@ -159,6 +189,20 @@
 </footer>
 
 <script>
+  // ── WARNING BANNER ──
+  function dismissWarning() {
+    const banner = document.getElementById('warning-banner');
+    if (banner) {
+      banner.style.display = 'none';
+      localStorage.setItem('aiarq_warning_dismissed', 'true');
+    }
+  }
+  // Hide banner if previously dismissed
+  if (localStorage.getItem('aiarq_warning_dismissed') === 'true') {
+    const banner = document.getElementById('warning-banner');
+    if (banner) banner.style.display = 'none';
+  }
+
   // ── CONFIG ──
   const API_BASE = 'https://ai-arq.onrender.com';
   const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
