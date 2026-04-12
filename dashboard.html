@@ -44,152 +44,535 @@
   .animate-spin-slow {
     animation: spin-slow 4s linear infinite;
   }
+
+  /* Sidebar */
+  .sidebar {
+    transition: transform 0.3s ease;
+  }
+  .sidebar-overlay {
+    transition: opacity 0.3s ease;
+  }
+  .nav-item {
+    transition: all 0.15s ease;
+  }
+  .nav-item:hover {
+    background-color: rgba(255,255,255,0.1);
+  }
+  .nav-item.active {
+    background-color: rgba(255,255,255,0.15);
+    border-right: 3px solid #06b6d4;
+  }
+
+  /* File progress items */
+  .file-progress-item {
+    transition: all 0.3s ease;
+  }
+
+  /* Scrollbar */
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+  @keyframes bounce-house {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    25% { transform: translateY(-8px) rotate(-2deg); }
+    50% { transform: translateY(0) rotate(0deg); }
+    75% { transform: translateY(-4px) rotate(2deg); }
+  }
+  .animate-bounce-house {
+    animation: bounce-house 2s ease-in-out infinite;
+  }
 </style>
 </head>
-<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
 
-<!-- NAVBAR -->
-<nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
-  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-    <a href="index.html" class="flex items-center gap-2">
-      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
-      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
-    </a>
-    <div class="flex items-center gap-4">
-      <div id="user-info" class="hidden items-center gap-3">
-        <img id="user-avatar" src="" alt="Avatar" class="h-8 w-8 rounded-full object-cover border border-gray-200">
-        <span id="user-name" class="text-sm font-medium text-gray-700 hidden sm:inline"></span>
+<!-- MOBILE OVERLAY -->
+<div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-40 hidden opacity-0 lg:hidden" onclick="closeSidebar()"></div>
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="sidebar fixed top-0 left-0 z-50 h-full w-64 gradient-main flex flex-col transform -translate-x-full lg:translate-x-0">
+  <!-- Logo -->
+  <div class="flex items-center gap-3 px-6 py-5 border-b border-white/10">
+    <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-white font-bold text-sm">AI</div>
+    <span class="text-xl font-bold text-white">AI<span class="text-cyan-300">.arq</span></span>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+    <button onclick="switchTab('novo-projeto')" data-tab="novo-projeto" class="nav-item active w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128202;</span>
+      <span>Novo Projeto</span>
+    </button>
+    <button onclick="switchTab('meus-projetos')" data-tab="meus-projetos" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128193;</span>
+      <span>Meus Projetos</span>
+    </button>
+    <button onclick="switchTab('cashback')" data-tab="cashback" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128176;</span>
+      <span>Cashback</span>
+    </button>
+    <button onclick="switchTab('como-funciona')" data-tab="como-funciona" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128214;</span>
+      <span>Como Funciona</span>
+    </button>
+
+    <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
+      <a href="termos.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
+        <span class="text-lg">&#128196;</span>
+        <span>Termos de Uso</span>
+      </a>
+      <a href="privacidade.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
+        <span class="text-lg">&#128274;</span>
+        <span>Privacidade</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- User section at bottom -->
+  <div class="px-4 py-4 border-t border-white/10">
+    <div class="flex items-center gap-3">
+      <img id="user-avatar" src="" alt="Avatar" class="h-9 w-9 rounded-full object-cover border-2 border-white/20 shrink-0">
+      <div class="min-w-0 flex-1">
+        <p id="user-name" class="text-sm font-medium text-white truncate"></p>
+        <button id="btn-logout" class="text-xs text-white/50 hover:text-red-300 transition font-medium">Sair</button>
       </div>
-      <button id="btn-logout" class="text-sm text-gray-500 hover:text-red-600 px-3 py-2 rounded-lg hover:bg-red-50 transition font-medium">Sair</button>
     </div>
   </div>
-</nav>
+</aside>
 
-<!-- WARNING BANNER -->
-<div id="warning-banner" class="px-4 pt-6">
-  <div class="mx-auto max-w-3xl">
-    <div class="relative rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
-      <div class="flex items-start gap-3">
-        <svg class="w-6 h-6 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-        <div class="flex-1">
-          <p class="text-sm text-amber-800 leading-relaxed">
-            <strong>&#9888;&#65039; Aviso importante:</strong> As planilhas geradas por IA s&#227;o estimativas e devem ser revisadas por um profissional antes de uso em concorr&#234;ncia. Itens em laranja requerem verifica&#231;&#227;o.
-          </p>
-          <a href="termos.html" class="text-xs text-amber-600 hover:text-amber-800 underline mt-1 inline-block">Ver Termos de Uso completos</a>
+<!-- MAIN WRAPPER -->
+<div class="lg:ml-64 min-h-screen flex flex-col">
+
+  <!-- MOBILE TOPBAR -->
+  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b lg:hidden">
+    <div class="flex items-center justify-between h-14 px-4">
+      <button onclick="openSidebar()" class="p-2 -ml-2 text-gray-600 hover:text-gray-900">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="flex items-center gap-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <div class="w-10"></div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 p-4 md:p-8 lg:p-10">
+    <div class="max-w-4xl mx-auto">
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- TAB 1: NOVO PROJETO                        -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div id="tab-novo-projeto" class="tab-content">
+
+        <!-- Page header -->
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Novo Projeto</h1>
+          <p class="text-sm text-gray-500 mt-1">Envie as pranchas do projeto para gerar a planilha de quantitativos</p>
         </div>
-        <button onclick="dismissWarning()" class="text-amber-400 hover:text-amber-600 transition shrink-0 p-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
+
+        <!-- Warning banner -->
+        <div id="warning-banner" class="mb-6">
+          <div class="relative rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+            <div class="flex items-start gap-3">
+              <svg class="w-6 h-6 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+              <div class="flex-1">
+                <p class="text-sm text-amber-800 leading-relaxed">
+                  <strong>&#9888;&#65039; Aviso importante:</strong> As planilhas geradas por IA s&#227;o estimativas e devem ser revisadas por um profissional antes de uso em concorr&#234;ncia. Itens em laranja requerem verifica&#231;&#227;o.
+                </p>
+                <a href="termos.html" class="text-xs text-amber-600 hover:text-amber-800 underline mt-1 inline-block">Ver Termos de Uso completos</a>
+              </div>
+              <button onclick="dismissWarning()" class="text-amber-400 hover:text-amber-600 transition shrink-0 p-1">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- STATE: UPLOAD -->
+        <div id="state-upload">
+          <!-- Drop Zone -->
+          <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-500 mb-6">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            </div>
+            <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os PDFs das pranchas aqui</p>
+            <p class="text-sm text-gray-400 mb-3">ou clique para selecionar</p>
+            <p class="text-xs text-gray-300">At&#233; 20 pranchas em PDF</p>
+            <input type="file" id="file-input" multiple accept=".pdf" class="hidden">
+          </div>
+
+          <!-- File List -->
+          <div id="file-list" class="mt-4 space-y-2 hidden"></div>
+
+          <!-- Process Button -->
+          <button id="btn-process" disabled class="mt-6 w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            Processar Projeto
+          </button>
+        </div>
+
+        <!-- STATE: PROCESSING -->
+        <div id="state-processing" class="hidden">
+          <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient">
+            <!-- Header with animation -->
+            <div class="text-center mb-8">
+              <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-main text-white mb-4 animate-pulse-bar">
+                <svg class="w-8 h-8 animate-bounce-house" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
+                </svg>
+              </div>
+              <h2 class="text-xl font-bold text-gray-900 mb-1">Processando projeto...</h2>
+              <p id="processing-step" class="text-sm text-gray-500">Enviando arquivos...</p>
+            </div>
+
+            <!-- Per-file progress list -->
+            <div id="file-progress-list" class="mb-6 space-y-2"></div>
+
+            <!-- Overall progress bar -->
+            <div class="mb-2">
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-xs font-medium text-gray-500">Progresso geral</span>
+                <span id="progress-percent" class="text-sm font-bold gradient-text">0%</span>
+              </div>
+              <div class="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                <div id="progress-bar" class="progress-bar-fill h-3 rounded-full" style="width: 0%"></div>
+              </div>
+            </div>
+
+            <!-- Time estimate -->
+            <p id="time-estimate" class="text-xs text-gray-400 text-center mt-3"></p>
+          </div>
+        </div>
+
+        <!-- STATE: DONE -->
+        <div id="state-done" class="hidden">
+          <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 mb-6">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <h2 class="text-xl font-bold text-gray-900 mb-2">Planilha pronta!</h2>
+            <p class="text-sm text-gray-500 mb-8">Seu levantamento de quantitativos foi gerado com sucesso.</p>
+
+            <button id="btn-download" class="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-lg font-semibold shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              Baixar Planilha .xlsx
+            </button>
+
+            <button id="btn-new-project" class="mt-4 w-full py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition">
+              Novo Projeto
+            </button>
+          </div>
+        </div>
+
+        <!-- STATE: ERROR -->
+        <div id="state-error" class="hidden">
+          <div class="rounded-2xl border border-red-200 bg-white p-8 md:p-10 shadow-gradient text-center">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100 text-red-500 mb-6">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            </div>
+            <h2 class="text-xl font-bold text-gray-900 mb-2">Erro no processamento</h2>
+            <p id="error-message" class="text-sm text-gray-500 mb-8">Ocorreu um erro inesperado. Tente novamente.</p>
+
+            <button id="btn-retry" class="w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition flex items-center justify-center gap-2">
+              Tentar Novamente
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- TAB 2: MEUS PROJETOS                       -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div id="tab-meus-projetos" class="tab-content hidden">
+
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Meus Projetos</h1>
+          <p class="text-sm text-gray-500 mt-1">Hist&#243;rico de projetos processados</p>
+        </div>
+
+        <div id="projects-list"></div>
+
+        <!-- Empty state -->
+        <div id="projects-empty" class="hidden">
+          <div class="rounded-2xl border bg-white p-12 text-center shadow-gradient">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 mb-6">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+            </div>
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">Nenhum projeto ainda</h2>
+            <p class="text-sm text-gray-400 mb-6">Comece enviando suas pranchas!</p>
+            <button onclick="switchTab('novo-projeto')" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition text-sm">
+              Criar Primeiro Projeto
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- TAB 3: CASHBACK                            -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div id="tab-cashback" class="tab-content hidden">
+
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Cashback</h1>
+          <p class="text-sm text-gray-500 mt-1">Ganhe desconto revisando suas planilhas</p>
+        </div>
+
+        <!-- Explanation card -->
+        <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-gradient mb-6">
+          <div class="flex items-start gap-4 mb-6">
+            <div class="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600 shrink-0">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+              <h2 class="text-lg font-bold text-gray-900 mb-1">Ganhe desconto revisando suas planilhas</h2>
+              <p class="text-sm text-gray-500">Seus dados ajudam a melhorar a precis&#227;o da IA para todos os usu&#225;rios</p>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <div class="flex items-start gap-3">
+              <div class="flex h-7 w-7 items-center justify-center rounded-full gradient-main text-white text-xs font-bold shrink-0 mt-0.5">1</div>
+              <p class="text-sm text-gray-700">Baixe a planilha gerada pela IA</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-7 w-7 items-center justify-center rounded-full gradient-main text-white text-xs font-bold shrink-0 mt-0.5">2</div>
+              <p class="text-sm text-gray-700">Revise os quantitativos e corrija os valores</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-7 w-7 items-center justify-center rounded-full gradient-main text-white text-xs font-bold shrink-0 mt-0.5">3</div>
+              <p class="text-sm text-gray-700">Fa&#231;a upload da planilha corrigida</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500 text-white text-xs font-bold shrink-0 mt-0.5">4</div>
+              <p class="text-sm text-gray-700 font-semibold">Ganhe <span class="text-emerald-600">20% de desconto</span> no pr&#243;ximo projeto</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload corrected spreadsheet -->
+        <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-gradient mb-6">
+          <h3 class="text-base font-semibold text-gray-900 mb-4">Enviar planilha corrigida</h3>
+          <div id="cashback-drop-zone" class="drop-zone rounded-xl bg-gray-50 p-8 text-center cursor-pointer">
+            <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-500 mb-4">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            </div>
+            <p class="text-sm font-medium text-gray-600 mb-1">Arraste a planilha corrigida aqui</p>
+            <p class="text-xs text-gray-400">Formato aceito: .xlsx</p>
+            <input type="file" id="cashback-file-input" accept=".xlsx,.xls" class="hidden">
+          </div>
+          <div id="cashback-file-name" class="mt-3 text-sm text-gray-600 hidden"></div>
+          <button id="btn-send-review" disabled class="mt-4 w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed text-sm">
+            Enviar Revis&#227;o
+          </button>
+        </div>
+
+        <!-- Pending reviews -->
+        <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-gradient">
+          <h3 class="text-base font-semibold text-gray-900 mb-4">Revis&#245;es pendentes</h3>
+          <div id="pending-reviews"></div>
+          <div id="no-reviews" class="text-center py-6">
+            <p class="text-sm text-gray-400">Nenhuma revis&#227;o pendente.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- TAB 4: COMO FUNCIONA                       -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div id="tab-como-funciona" class="tab-content hidden">
+
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Como Funciona</h1>
+          <p class="text-sm text-gray-500 mt-1">Entenda o processo de gera&#231;&#227;o de quantitativos com IA</p>
+        </div>
+
+        <!-- Step by step -->
+        <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-gradient mb-6">
+          <h2 class="text-lg font-bold text-gray-900 mb-6">Passo a passo</h2>
+          <div class="space-y-5">
+            <div class="flex items-start gap-4">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">1</div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Fa&#231;a upload dos PDFs das pranchas do projeto</p>
+                <p class="text-xs text-gray-400 mt-0.5">Planta baixa, layout, demoli&#231;&#227;o, forro, pontos etc.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">2</div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Nossa IA analisa cada prancha</p>
+                <p class="text-xs text-gray-400 mt-0.5">Legendas, portas, lumin&#225;rias, pontos el&#233;tricos, revestimentos</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">3</div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Comparamos layout atual vs novo</p>
+                <p class="text-xs text-gray-400 mt-0.5">Em projetos de reforma, identificamos o que muda</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">4</div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Geramos a planilha com 16 disciplinas e ~200 itens</p>
+                <p class="text-xs text-gray-400 mt-0.5">Demoli&#231;&#227;o, alvenaria, gesso, el&#233;trica, hidr&#225;ulica e mais</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-white text-sm font-bold shrink-0">5</div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Revise os itens em laranja</p>
+                <p class="text-xs text-gray-400 mt-0.5">Quantidades estimadas que precisam de verifica&#231;&#227;o profissional</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-4">
+              <div class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white text-sm font-bold shrink-0">6</div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Envie aos fornecedores para concorr&#234;ncia</p>
+                <p class="text-xs text-gray-400 mt-0.5">Planilha pronta para cota&#231;&#227;o</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Specs -->
+        <div class="grid gap-4 md:grid-cols-2 mb-6">
+          <div class="rounded-xl border bg-white p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 text-indigo-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </div>
+              <h3 class="font-semibold text-gray-900 text-sm">Formato aceito</h3>
+            </div>
+            <p class="text-sm text-gray-500">PDF (pranchas de projeto arquitet&#244;nico)</p>
+          </div>
+          <div class="rounded-xl border bg-white p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-100 text-cyan-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+              </div>
+              <h3 class="font-semibold text-gray-900 text-sm">M&#225;ximo de arquivos</h3>
+            </div>
+            <p class="text-sm text-gray-500">20 pranchas por projeto</p>
+          </div>
+          <div class="rounded-xl border bg-white p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              </div>
+              <h3 class="font-semibold text-gray-900 text-sm">Tempo de processamento</h3>
+            </div>
+            <p class="text-sm text-gray-500">~10 minutos para 10 pranchas</p>
+          </div>
+          <div class="rounded-xl border bg-white p-5 shadow-sm">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-500">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+              </div>
+              <h3 class="font-semibold text-gray-900 text-sm">Precis&#227;o</h3>
+            </div>
+            <p class="text-sm text-gray-500">Leitura de legendas: ~95%<br>Contagem de s&#237;mbolos: ~40-60%</p>
+          </div>
+        </div>
+
+        <!-- FAQ -->
+        <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-gradient">
+          <h2 class="text-lg font-bold text-gray-900 mb-5">Perguntas Frequentes</h2>
+          <div class="space-y-4">
+            <div class="border-b pb-4">
+              <h3 class="text-sm font-semibold text-gray-800 mb-1">Quais tipos de projeto s&#227;o suportados?</h3>
+              <p class="text-sm text-gray-500">Projetos de reforma residencial com pranchas em PDF. O sistema analisa demoli&#231;&#227;o, constru&#231;&#227;o, el&#233;trica, hidr&#225;ulica, forro, revestimentos e mais.</p>
+            </div>
+            <div class="border-b pb-4">
+              <h3 class="text-sm font-semibold text-gray-800 mb-1">A planilha &#233; precisa o suficiente para concorr&#234;ncia?</h3>
+              <p class="text-sm text-gray-500">A IA gera estimativas que servem como base. Itens marcados em laranja devem ser revisados por um profissional antes de enviar para fornecedores.</p>
+            </div>
+            <div class="border-b pb-4">
+              <h3 class="text-sm font-semibold text-gray-800 mb-1">Posso processar v&#225;rios projetos?</h3>
+              <p class="text-sm text-gray-500">Sim! Cada envio &#233; tratado como um projeto independente. Voc&#234; pode ver o hist&#243;rico na aba "Meus Projetos".</p>
+            </div>
+            <div>
+              <h3 class="text-sm font-semibold text-gray-800 mb-1">Como funciona o cashback?</h3>
+              <p class="text-sm text-gray-500">Ao revisar e corrigir a planilha gerada, voc&#234; nos ajuda a melhorar a IA e ganha 20% de desconto no pr&#243;ximo projeto. Veja a aba "Cashback" para detalhes.</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="border-t bg-gray-50 py-8">
+    <div class="max-w-4xl mx-auto px-4">
+      <div class="flex flex-col items-center gap-3 md:flex-row md:justify-between">
+        <div class="flex items-center gap-2">
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+          <span class="font-bold text-gray-900 text-sm">AI<span class="gradient-text">.arq</span></span>
+        </div>
+        <div class="flex gap-6 text-xs text-gray-400">
+          <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+          <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+          <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
+        </div>
+        <p class="text-xs text-gray-300">2026 AI.arq. Todos os direitos reservados.</p>
       </div>
     </div>
-  </div>
+  </footer>
+
 </div>
 
-<!-- MAIN CONTENT -->
-<main class="flex-1 py-10 px-4">
-  <div class="mx-auto max-w-3xl">
-
-    <h1 class="text-2xl font-bold text-gray-900 mb-8">Seus Projetos</h1>
-
-    <!-- STATE: UPLOAD -->
-    <div id="state-upload">
-      <!-- Drop Zone -->
-      <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-500 mb-6">
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-        </div>
-        <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os PDFs das pranchas aqui</p>
-        <p class="text-sm text-gray-400">ou clique para selecionar</p>
-        <input type="file" id="file-input" multiple accept=".pdf" class="hidden">
-      </div>
-
-      <!-- File List -->
-      <div id="file-list" class="mt-4 space-y-2 hidden"></div>
-
-      <!-- Process Button -->
-      <button id="btn-process" disabled class="mt-6 w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-        Processar Projeto
-      </button>
-    </div>
-
-    <!-- STATE: PROCESSING -->
-    <div id="state-processing" class="hidden">
-      <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient text-center">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-main text-white mb-6 animate-pulse-bar">
-          <svg class="w-8 h-8 animate-spin-slow" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/>
-          </svg>
-        </div>
-        <h2 class="text-xl font-bold text-gray-900 mb-2">Processando projeto...</h2>
-        <p id="processing-step" class="text-sm text-gray-500 mb-6">Enviando arquivos...</p>
-
-        <!-- Progress Bar -->
-        <div class="w-full bg-gray-200 rounded-full h-3 mb-3 overflow-hidden">
-          <div id="progress-bar" class="progress-bar-fill h-3 rounded-full" style="width: 0%"></div>
-        </div>
-        <p id="progress-percent" class="text-sm font-semibold gradient-text">0%</p>
-      </div>
-    </div>
-
-    <!-- STATE: DONE -->
-    <div id="state-done" class="hidden">
-      <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient text-center">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 mb-6">
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        </div>
-        <h2 class="text-xl font-bold text-gray-900 mb-2">Planilha pronta!</h2>
-        <p class="text-sm text-gray-500 mb-8">Seu levantamento de quantitativos foi gerado com sucesso.</p>
-
-        <button id="btn-download" class="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-lg font-semibold shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          Baixar Planilha .xlsx
-        </button>
-
-        <button id="btn-new-project" class="mt-4 w-full py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition">
-          Novo Projeto
-        </button>
-      </div>
-    </div>
-
-    <!-- STATE: ERROR -->
-    <div id="state-error" class="hidden">
-      <div class="rounded-2xl border border-red-200 bg-white p-8 md:p-10 shadow-gradient text-center">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100 text-red-500 mb-6">
-          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-        </div>
-        <h2 class="text-xl font-bold text-gray-900 mb-2">Erro no processamento</h2>
-        <p id="error-message" class="text-sm text-gray-500 mb-8">Ocorreu um erro inesperado. Tente novamente.</p>
-
-        <button id="btn-retry" class="w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition flex items-center justify-center gap-2">
-          Tentar Novamente
-        </button>
-      </div>
-    </div>
-
-  </div>
-</main>
-
-<!-- FOOTER -->
-<footer class="border-t bg-gray-50 py-12">
-  <div class="mx-auto max-w-6xl px-4">
-    <div class="flex flex-col items-center gap-4 md:flex-row md:justify-between">
-      <div class="flex items-center gap-2">
-        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
-        <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
-      </div>
-      <div class="flex gap-6 text-sm text-gray-500">
-        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
-        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
-        <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
-      </div>
-      <p class="text-sm text-gray-400">2026 AI.arq. Todos os direitos reservados.</p>
-    </div>
-  </div>
-</footer>
-
 <script>
-  // ── WARNING BANNER ──
+  // ══════════════════════════════════════════════
+  //  SIDEBAR / MOBILE MENU
+  // ══════════════════════════════════════════════
+  const sidebar = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+  function openSidebar() {
+    sidebar.classList.remove('-translate-x-full');
+    sidebarOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => sidebarOverlay.classList.remove('opacity-0'));
+  }
+
+  function closeSidebar() {
+    sidebar.classList.add('-translate-x-full');
+    sidebarOverlay.classList.add('opacity-0');
+    setTimeout(() => sidebarOverlay.classList.add('hidden'), 300);
+  }
+
+  // ══════════════════════════════════════════════
+  //  TAB SWITCHING
+  // ══════════════════════════════════════════════
+  function switchTab(tabName) {
+    // Hide all tabs
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
+    // Show target
+    const target = document.getElementById('tab-' + tabName);
+    if (target) target.classList.remove('hidden');
+
+    // Update nav active state
+    document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
+      btn.classList.remove('active');
+      if (btn.getAttribute('data-tab') === tabName) btn.classList.add('active');
+    });
+
+    // Close mobile sidebar
+    closeSidebar();
+
+    // If switching to history, render it
+    if (tabName === 'meus-projetos') renderProjectHistory();
+    if (tabName === 'cashback') renderPendingReviews();
+  }
+
+  // ══════════════════════════════════════════════
+  //  WARNING BANNER
+  // ══════════════════════════════════════════════
   function dismissWarning() {
     const banner = document.getElementById('warning-banner');
     if (banner) {
@@ -197,26 +580,32 @@
       localStorage.setItem('aiarq_warning_dismissed', 'true');
     }
   }
-  // Hide banner if previously dismissed
   if (localStorage.getItem('aiarq_warning_dismissed') === 'true') {
     const banner = document.getElementById('warning-banner');
     if (banner) banner.style.display = 'none';
   }
 
-  // ── CONFIG ──
+  // ══════════════════════════════════════════════
+  //  CONFIG
+  // ══════════════════════════════════════════════
   const API_BASE = 'https://ai-arq.onrender.com';
   const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
 
   const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // ── STATE ──
+  // ══════════════════════════════════════════════
+  //  STATE
+  // ══════════════════════════════════════════════
   let accessToken = '';
   let selectedFiles = [];
   let currentJobId = null;
   let pollTimer = null;
+  let timeEstimateTimer = null;
 
-  // ── DOM REFS ──
+  // ══════════════════════════════════════════════
+  //  DOM REFS
+  // ══════════════════════════════════════════════
   const stateUpload = document.getElementById('state-upload');
   const stateProcessing = document.getElementById('state-processing');
   const stateDone = document.getElementById('state-done');
@@ -228,16 +617,19 @@
   const progressBar = document.getElementById('progress-bar');
   const progressPercent = document.getElementById('progress-percent');
   const processingStep = document.getElementById('processing-step');
+  const fileProgressList = document.getElementById('file-progress-list');
+  const timeEstimate = document.getElementById('time-estimate');
   const btnDownload = document.getElementById('btn-download');
   const btnNewProject = document.getElementById('btn-new-project');
   const btnRetry = document.getElementById('btn-retry');
   const btnLogout = document.getElementById('btn-logout');
-  const userInfo = document.getElementById('user-info');
   const userAvatar = document.getElementById('user-avatar');
   const userName = document.getElementById('user-name');
   const errorMessage = document.getElementById('error-message');
 
-  // ── AUTH CHECK ──
+  // ══════════════════════════════════════════════
+  //  AUTH CHECK
+  // ══════════════════════════════════════════════
   async function checkAuth() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) {
@@ -249,24 +641,25 @@
     const user = session.user;
     const meta = user.user_metadata || {};
 
-    // Show user info
     userName.textContent = meta.full_name || meta.name || user.email;
     userAvatar.src = meta.avatar_url || meta.picture || '';
     if (!userAvatar.src) {
       userAvatar.style.display = 'none';
     }
-    userInfo.classList.remove('hidden');
-    userInfo.classList.add('flex');
   }
   checkAuth();
 
-  // ── LOGOUT ──
+  // ══════════════════════════════════════════════
+  //  LOGOUT
+  // ══════════════════════════════════════════════
   btnLogout.addEventListener('click', async () => {
     await sbClient.auth.signOut();
     window.location.href = 'login.html';
   });
 
-  // ── SHOW STATE HELPERS ──
+  // ══════════════════════════════════════════════
+  //  SHOW STATE HELPERS
+  // ══════════════════════════════════════════════
   function showState(state) {
     stateUpload.classList.add('hidden');
     stateProcessing.classList.add('hidden');
@@ -275,14 +668,18 @@
     state.classList.remove('hidden');
   }
 
-  // ── FILE SIZE FORMAT ──
+  // ══════════════════════════════════════════════
+  //  FILE SIZE FORMAT
+  // ══════════════════════════════════════════════
   function formatSize(bytes) {
     if (bytes < 1024) return bytes + ' B';
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
-  // ── RENDER FILE LIST ──
+  // ══════════════════════════════════════════════
+  //  RENDER FILE LIST (upload state)
+  // ══════════════════════════════════════════════
   function renderFiles() {
     if (selectedFiles.length === 0) {
       fileList.classList.add('hidden');
@@ -312,9 +709,8 @@
       fileList.appendChild(div);
     });
 
-    // Remove file handler
     fileList.querySelectorAll('.btn-remove-file').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         const idx = parseInt(btn.getAttribute('data-idx'));
         selectedFiles.splice(idx, 1);
         renderFiles();
@@ -322,11 +718,12 @@
     });
   }
 
-  // ── ADD FILES ──
+  // ══════════════════════════════════════════════
+  //  ADD FILES
+  // ══════════════════════════════════════════════
   function addFiles(newFiles) {
     for (const f of newFiles) {
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
-        // Avoid duplicates
         if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) {
           selectedFiles.push(f);
         }
@@ -335,7 +732,9 @@
     renderFiles();
   }
 
-  // ── DROP ZONE EVENTS ──
+  // ══════════════════════════════════════════════
+  //  DROP ZONE EVENTS
+  // ══════════════════════════════════════════════
   dropZone.addEventListener('click', () => fileInput.click());
 
   fileInput.addEventListener('change', (e) => {
@@ -358,7 +757,68 @@
     addFiles(e.dataTransfer.files);
   });
 
-  // ── PROCESS PROJECT ──
+  // ══════════════════════════════════════════════
+  //  PER-FILE PROGRESS RENDERING
+  // ══════════════════════════════════════════════
+  function renderFileProgress(currentStepText, overallProgress) {
+    if (!selectedFiles.length) return;
+
+    // Parse "Etapa X/Y: filename" from current_step
+    let currentFileIndex = -1;
+    let totalSteps = selectedFiles.length;
+    const etapaMatch = currentStepText.match(/Etapa\s+(\d+)\s*\/\s*(\d+)/i);
+    if (etapaMatch) {
+      currentFileIndex = parseInt(etapaMatch[1]) - 1; // 0-based
+      totalSteps = parseInt(etapaMatch[2]);
+    }
+
+    let html = '';
+    selectedFiles.forEach((file, idx) => {
+      let statusIcon, statusText, statusClass;
+
+      if (overallProgress >= 100) {
+        // All done
+        statusIcon = '<span class="text-emerald-500">&#10003;</span>';
+        statusText = 'Conclu\u00eddo';
+        statusClass = 'text-emerald-600';
+      } else if (currentFileIndex >= 0 && idx < currentFileIndex) {
+        // Completed
+        statusIcon = '<span class="text-emerald-500">&#10003;</span>';
+        statusText = 'Conclu\u00eddo';
+        statusClass = 'text-emerald-600';
+      } else if (currentFileIndex >= 0 && idx === currentFileIndex) {
+        // Currently processing
+        statusIcon = '<span class="animate-spin-slow inline-block text-indigo-500">&#9881;</span>';
+        statusText = 'Analisando com IA...';
+        statusClass = 'text-indigo-600 font-medium';
+      } else {
+        // Waiting
+        statusIcon = '<span class="text-gray-300">&#9208;</span>';
+        statusText = 'Aguardando';
+        statusClass = 'text-gray-400';
+      }
+
+      const shortName = file.name.replace(/\.pdf$/i, '');
+      html += `
+        <div class="file-progress-item flex items-center justify-between py-2.5 px-3 rounded-lg ${idx === currentFileIndex ? 'bg-indigo-50' : 'bg-gray-50'}">
+          <div class="flex items-center gap-2.5 min-w-0 flex-1">
+            <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            <span class="text-sm text-gray-700 truncate">${shortName}</span>
+          </div>
+          <div class="flex items-center gap-2 shrink-0 ml-3">
+            <span class="text-xs ${statusClass}">${statusText}</span>
+            ${statusIcon}
+          </div>
+        </div>
+      `;
+    });
+
+    fileProgressList.innerHTML = html;
+  }
+
+  // ══════════════════════════════════════════════
+  //  PROCESS PROJECT
+  // ══════════════════════════════════════════════
   btnProcess.addEventListener('click', async () => {
     if (selectedFiles.length === 0) return;
 
@@ -366,6 +826,8 @@
     processingStep.textContent = 'Enviando arquivos...';
     progressBar.style.width = '0%';
     progressPercent.textContent = '0%';
+    timeEstimate.textContent = '';
+    renderFileProgress('Enviando...', 0);
 
     try {
       const formData = new FormData();
@@ -385,7 +847,6 @@
       const data = await res.json();
       currentJobId = data.job_id;
 
-      // Start polling
       processingStep.textContent = 'Analisando pranchas...';
       progressBar.style.width = '10%';
       progressPercent.textContent = '10%';
@@ -398,28 +859,32 @@
     }
   });
 
-  // ── STATUS POLLING ──
+  // ══════════════════════════════════════════════
+  //  STATUS POLLING
+  // ══════════════════════════════════════════════
   let realProgress = 0;
   let pollStartTime = 0;
   let errorCount = 0;
-  const ESTIMATED_TOTAL_SECONDS = 900; // ~15 min estimado (10 PDFs)
+  const ESTIMATED_TOTAL_SECONDS = 900;
 
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
+    if (timeEstimateTimer) clearInterval(timeEstimateTimer);
     realProgress = 0;
     pollStartTime = Date.now();
     errorCount = 0;
     pollTimer = setInterval(pollStatus, 3000);
-    // Tempo estimado a cada 1s
-    setInterval(() => {
+
+    timeEstimateTimer = setInterval(() => {
       if (!currentJobId) return;
       const elapsed = (Date.now() - pollStartTime) / 1000;
       const remaining = Math.max(0, ESTIMATED_TOTAL_SECONDS - elapsed);
       const mins = Math.floor(remaining / 60);
       const secs = Math.floor(remaining % 60);
-      const stepText = processingStep.textContent.split(' —')[0];
-      if (remaining > 0 && stepText) {
-        processingStep.textContent = stepText + ` — ~${mins}min ${secs}s restantes`;
+      if (remaining > 0) {
+        timeEstimate.textContent = `Tempo estimado restante: ~${mins}min ${secs}s`;
+      } else {
+        timeEstimate.textContent = 'Finalizando processamento...';
       }
     }, 1000);
   }
@@ -436,8 +901,9 @@
         errorCount++;
         if (errorCount > 100) {
           clearInterval(pollTimer);
+          clearInterval(timeEstimateTimer);
           pollTimer = null;
-          errorMessage.textContent = 'O servidor perdeu a conexão. Por favor, tente novamente.';
+          errorMessage.textContent = 'O servidor perdeu a conex\u00e3o. Por favor, tente novamente.';
           showState(stateError);
         }
         return;
@@ -451,27 +917,40 @@
       const step = data.step || data.current_step || 'Processando...';
       const status = data.status || '';
 
-      // Usar progresso REAL do servidor
       realProgress = pct;
       progressBar.style.width = pct + '%';
       progressPercent.textContent = pct + '%';
-      processingStep.textContent = step;
+
+      // Set step text without time (time is separate now)
+      const cleanStep = step.split(' \u2014')[0].split(' —')[0];
+      processingStep.textContent = cleanStep;
+
+      // Update per-file progress
+      renderFileProgress(step, pct);
 
       if (status === 'done' || status === 'completed' || pct >= 100) {
         clearInterval(pollTimer);
+        clearInterval(timeEstimateTimer);
         pollTimer = null;
         realProgress = 100;
         progressBar.style.width = '100%';
         progressPercent.textContent = '100%';
-        processingStep.textContent = 'Concluído!';
+        processingStep.textContent = 'Conclu\u00eddo!';
+        timeEstimate.textContent = '';
+        renderFileProgress(step, 100);
+
+        // Save to history
+        saveProjectToHistory('done');
 
         setTimeout(() => showState(stateDone), 600);
       }
 
       if (status === 'error' || status === 'failed') {
         clearInterval(pollTimer);
+        clearInterval(timeEstimateTimer);
         pollTimer = null;
         errorMessage.textContent = data.error_message || data.error || data.message || 'Ocorreu um erro durante o processamento.';
+        saveProjectToHistory('error');
         showState(stateError);
       }
 
@@ -480,21 +959,26 @@
       errorCount++;
       if (errorCount > 100) {
         clearInterval(pollTimer);
+        clearInterval(timeEstimateTimer);
         pollTimer = null;
-        errorMessage.textContent = 'Não foi possível conectar ao servidor. Tente novamente.';
+        errorMessage.textContent = 'N\u00e3o foi poss\u00edvel conectar ao servidor. Tente novamente.';
         showState(stateError);
       }
     }
   }
 
-  // ── DOWNLOAD ──
+  // ══════════════════════════════════════════════
+  //  DOWNLOAD
+  // ══════════════════════════════════════════════
   btnDownload.addEventListener('click', () => {
     if (currentJobId) {
       window.open(`${API_BASE}/api/download/${currentJobId}`, '_blank');
     }
   });
 
-  // ── NEW PROJECT ──
+  // ══════════════════════════════════════════════
+  //  NEW PROJECT
+  // ══════════════════════════════════════════════
   btnNewProject.addEventListener('click', () => {
     selectedFiles = [];
     currentJobId = null;
@@ -502,11 +986,207 @@
     showState(stateUpload);
   });
 
-  // ── RETRY ──
+  // ══════════════════════════════════════════════
+  //  RETRY
+  // ══════════════════════════════════════════════
   btnRetry.addEventListener('click', () => {
     currentJobId = null;
     showState(stateUpload);
   });
+
+  // ══════════════════════════════════════════════
+  //  PROJECT HISTORY (localStorage)
+  // ══════════════════════════════════════════════
+  function getProjectHistory() {
+    try {
+      return JSON.parse(localStorage.getItem('aiarq_project_history') || '[]');
+    } catch { return []; }
+  }
+
+  function saveProjectToHistory(status) {
+    const history = getProjectHistory();
+    const now = new Date();
+    const project = {
+      id: currentJobId,
+      name: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      fileCount: selectedFiles.length,
+      fileNames: selectedFiles.map(f => f.name),
+      status: status,
+      date: now.toISOString(),
+      reviewed: false
+    };
+    history.unshift(project);
+    // Keep last 50
+    if (history.length > 50) history.length = 50;
+    localStorage.setItem('aiarq_project_history', JSON.stringify(history));
+  }
+
+  function renderProjectHistory() {
+    const history = getProjectHistory();
+    const listEl = document.getElementById('projects-list');
+    const emptyEl = document.getElementById('projects-empty');
+
+    if (history.length === 0) {
+      listEl.innerHTML = '';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    let html = '<div class="space-y-3">';
+
+    history.forEach((proj, idx) => {
+      const statusBadge = proj.status === 'done'
+        ? '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700"><span>&#10003;</span> Conclu\u00eddo</span>'
+        : '<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700"><span>&#10007;</span> Erro</span>';
+
+      const downloadBtn = proj.status === 'done' && proj.id
+        ? `<button onclick="window.open('${API_BASE}/api/download/${proj.id}', '_blank')" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition">Baixar .xlsx</button>`
+        : '';
+
+      const reviewBtn = proj.status === 'done' && !proj.reviewed
+        ? `<button onclick="startReview(${idx})" class="text-xs text-emerald-600 hover:text-emerald-800 font-medium transition">Enviar revis\u00e3o</button>`
+        : proj.reviewed
+          ? '<span class="text-xs text-gray-400">Revis\u00e3o enviada</span>'
+          : '';
+
+      html += `
+        <div class="bg-white rounded-xl border p-4 hover:shadow-md transition">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-3 mb-1.5">
+                <h3 class="text-sm font-semibold text-gray-900">Projeto ${proj.name}</h3>
+                ${statusBadge}
+              </div>
+              <p class="text-xs text-gray-400">${proj.fileCount} arquivo${proj.fileCount !== 1 ? 's' : ''}</p>
+            </div>
+            <div class="flex items-center gap-3 shrink-0">
+              ${downloadBtn}
+              ${reviewBtn}
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    html += '</div>';
+    listEl.innerHTML = html;
+  }
+
+  function startReview(projectIdx) {
+    switchTab('cashback');
+    // Store which project is being reviewed
+    window._reviewingProjectIdx = projectIdx;
+  }
+
+  // ══════════════════════════════════════════════
+  //  CASHBACK - UPLOAD CORRECTED SPREADSHEET
+  // ══════════════════════════════════════════════
+  const cashbackDropZone = document.getElementById('cashback-drop-zone');
+  const cashbackFileInput = document.getElementById('cashback-file-input');
+  const cashbackFileName = document.getElementById('cashback-file-name');
+  const btnSendReview = document.getElementById('btn-send-review');
+  let cashbackFile = null;
+
+  cashbackDropZone.addEventListener('click', () => cashbackFileInput.click());
+
+  cashbackFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+      cashbackFile = e.target.files[0];
+      cashbackFileName.textContent = '\uD83D\uDCC4 ' + cashbackFile.name + ' (' + formatSize(cashbackFile.size) + ')';
+      cashbackFileName.classList.remove('hidden');
+      btnSendReview.disabled = false;
+    }
+  });
+
+  cashbackDropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    cashbackDropZone.classList.add('drag-over');
+  });
+
+  cashbackDropZone.addEventListener('dragleave', () => {
+    cashbackDropZone.classList.remove('drag-over');
+  });
+
+  cashbackDropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    cashbackDropZone.classList.remove('drag-over');
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const f = files[0];
+      if (f.name.endsWith('.xlsx') || f.name.endsWith('.xls')) {
+        cashbackFile = f;
+        cashbackFileName.textContent = '\uD83D\uDCC4 ' + cashbackFile.name + ' (' + formatSize(cashbackFile.size) + ')';
+        cashbackFileName.classList.remove('hidden');
+        btnSendReview.disabled = false;
+      }
+    }
+  });
+
+  btnSendReview.addEventListener('click', () => {
+    if (!cashbackFile) return;
+
+    // Save review to localStorage
+    const reviews = JSON.parse(localStorage.getItem('aiarq_reviews') || '[]');
+    const now = new Date();
+    reviews.unshift({
+      fileName: cashbackFile.name,
+      date: now.toISOString(),
+      dateFormatted: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      status: 'pending'
+    });
+    localStorage.setItem('aiarq_reviews', JSON.stringify(reviews));
+
+    // Mark project as reviewed if applicable
+    if (typeof window._reviewingProjectIdx === 'number') {
+      const history = getProjectHistory();
+      if (history[window._reviewingProjectIdx]) {
+        history[window._reviewingProjectIdx].reviewed = true;
+        localStorage.setItem('aiarq_project_history', JSON.stringify(history));
+      }
+      window._reviewingProjectIdx = undefined;
+    }
+
+    // Reset
+    cashbackFile = null;
+    cashbackFileName.classList.add('hidden');
+    cashbackFileInput.value = '';
+    btnSendReview.disabled = true;
+
+    renderPendingReviews();
+    alert('Revis\u00e3o enviada com sucesso! Seu desconto ser\u00e1 aplicado no pr\u00f3ximo projeto.');
+  });
+
+  function renderPendingReviews() {
+    const reviews = JSON.parse(localStorage.getItem('aiarq_reviews') || '[]');
+    const container = document.getElementById('pending-reviews');
+    const noReviews = document.getElementById('no-reviews');
+
+    if (reviews.length === 0) {
+      container.innerHTML = '';
+      noReviews.classList.remove('hidden');
+      return;
+    }
+
+    noReviews.classList.add('hidden');
+    let html = '<div class="space-y-2">';
+    reviews.forEach(r => {
+      const statusBadge = r.status === 'pending'
+        ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pendente</span>'
+        : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Aprovada</span>';
+      html += `
+        <div class="flex items-center justify-between py-2.5 px-3 bg-gray-50 rounded-lg">
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-gray-700 truncate">${r.fileName}</p>
+            <p class="text-xs text-gray-400">${r.dateFormatted}</p>
+          </div>
+          ${statusBadge}
+        </div>
+      `;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+  }
 </script>
 
 </body>
