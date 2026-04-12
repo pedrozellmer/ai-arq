@@ -105,37 +105,41 @@ def extract_text(pdf_path: str) -> str:
     return "\n".join(text_parts)
 
 
-def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 200) -> list[str]:
-    """Renderiza um PDF e corta regiões de interesse. Retorna lista de caminhos das imagens."""
-    crops = CROP_REGIONS.get(sheet_type, {})
-    if not crops:
-        crops = {"full": (0.0, 0.0, 1.0, 1.0)}
+def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 120) -> list[str]:
+    """Renderiza um PDF e corta regiões de interesse. Otimizado pra baixo consumo de memória."""
+    import gc
+    crops_config = CROP_REGIONS.get(sheet_type, {})
+    if not crops_config:
+        crops_config = {"full": (0.0, 0.0, 1.0, 1.0)}
 
     crop_paths = []
     try:
         pdf = pdfium.PdfDocument(pdf_path)
         page = pdf[0]
+        # DPI 120 = ~3300x2300 px por prancha A1 (~30MB RAM vs 80MB em 200 DPI)
         bitmap = page.render(scale=dpi / 72)
         img = bitmap.to_pil()
         w, h = img.size
+        # Liberar bitmap imediatamente
+        del bitmap
+        gc.collect()
 
-        for name, (x1, y1, x2, y2) in crops.items():
+        for name, (x1, y1, x2, y2) in crops_config.items():
             crop = img.crop((int(w * x1), int(h * y1), int(w * x2), int(h * y2)))
-            # Redimensionar pra max 1500px (qualidade boa pra Claude Vision)
+            # Max 1000px no lado maior (suficiente pra ler legendas, baixo consumo)
             max_side = max(crop.size)
-            if max_side > 1500:
-                ratio = 1500 / max_side
+            if max_side > 1000:
+                ratio = 1000 / max_side
                 crop = crop.resize((int(crop.width * ratio), int(crop.height * ratio)), Image.LANCZOS)
 
-            crop_path = os.path.join(output_dir, f"{Path(pdf_path).stem}_{name}.png")
-            # Salvar como JPEG (menor que PNG, suficiente pra IA)
-            crop.save(crop_path.replace('.png', '.jpg'), "JPEG", quality=85)
-            crop_paths.append(crop_path.replace('.png', '.jpg'))
+            crop_path = os.path.join(output_dir, f"{Path(pdf_path).stem}_{name}.jpg")
+            crop.save(crop_path, "JPEG", quality=80)
+            crop_paths.append(crop_path)
             del crop
 
         pdf.close()
-        del bitmap, img
-        import gc; gc.collect()
+        del img
+        gc.collect()
     except Exception as e:
         print(f"Erro ao renderizar {pdf_path}: {e}")
 
