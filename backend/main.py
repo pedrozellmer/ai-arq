@@ -46,10 +46,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Armazenamento de jobs em memória (produção usaria Redis/DB)
-jobs: dict[str, ProcessingStatus] = {}
+# Armazenamento de jobs em arquivo JSON (sobrevive a restarts)
+import json as _json
 WORK_DIR = os.path.join(tempfile.gettempdir(), "aiarq_jobs")
 os.makedirs(WORK_DIR, exist_ok=True)
+JOBS_FILE = os.path.join(WORK_DIR, "_jobs.json")
+
+def _load_jobs() -> dict:
+    try:
+        if os.path.exists(JOBS_FILE):
+            with open(JOBS_FILE, 'r') as f:
+                return _json.load(f)
+    except: pass
+    return {}
+
+def _save_jobs(jobs_dict):
+    try:
+        with open(JOBS_FILE, 'w') as f:
+            _json.dump(jobs_dict, f)
+    except: pass
+
+class JobsStore:
+    """Armazena jobs em arquivo JSON."""
+    def __getitem__(self, key):
+        jobs = _load_jobs()
+        if key not in jobs:
+            raise KeyError(key)
+        return ProcessingStatus(**jobs[key])
+
+    def __setitem__(self, key, value):
+        jobs = _load_jobs()
+        if isinstance(value, ProcessingStatus):
+            jobs[key] = value.model_dump()
+        else:
+            jobs[key] = value
+        _save_jobs(jobs)
+
+    def __contains__(self, key):
+        return key in _load_jobs()
+
+    def update_field(self, key, **kwargs):
+        jobs = _load_jobs()
+        if key in jobs:
+            jobs[key].update(kwargs)
+            _save_jobs(jobs)
+
+jobs = JobsStore()
 
 
 def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
@@ -62,12 +104,12 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        jobs[job_id].status = "error"
-        jobs[job_id].error_message = "API key não configurada"
+        jobs.update_field(job_id, status="error")
+        jobs.update_field(job_id, error_message="API key não configurada")
         return
 
     try:
-        jobs[job_id].status = "processing"
+        jobs.update_field(job_id, status="processing")
         total = len(pdf_paths)
         client = anthropic.Anthropic(api_key=api_key)
         all_items = []
@@ -89,8 +131,8 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
 
         for i, (pdf_path, filename, sheet_type) in enumerate(pdf_infos):
             step_pct = int((i / total) * 90) + 5
-            jobs[job_id].progress = step_pct
-            jobs[job_id].current_step = f"Etapa {i+1}/{total}: {filename}"
+            jobs.update_field(job_id, progress=step_pct)
+            jobs.update_field(job_id, current_step=f"Etapa {i+1}/{total}: {filename}")
 
             if sheet_type == SheetType.DESCONHECIDO:
                 continue
@@ -102,7 +144,7 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
             crop_paths = render_crops(pdf_path, sheet_type, crops_dir)
 
             # 3. Analisar com IA
-            jobs[job_id].current_step = f"Etapa {i+1}/{total}: Analisando {filename} com IA..."
+            jobs.update_field(job_id, current_step=f"Etapa {i+1}/{total}: Analisando {filename} com IA...")
             sheet = SheetInfo(
                 filename=filename,
                 sheet_type=sheet_type,
@@ -171,22 +213,22 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
             gc.collect()
 
         # Gerar planilha
-        jobs[job_id].progress = 92
-        jobs[job_id].current_step = f"Gerando planilha com {len(all_items)} itens..."
+        jobs.update_field(job_id, progress=92)
+        jobs.update_field(job_id, current_step=f"Gerando planilha com {len(all_items)} itens...")
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path)
 
-        jobs[job_id].progress = 100
-        jobs[job_id].status = "done"
-        jobs[job_id].current_step = "Concluído!"
-        jobs[job_id].download_url = f"/api/download/{job_id}"
+        jobs.update_field(job_id, progress=100)
+        jobs.update_field(job_id, status="done")
+        jobs.update_field(job_id, current_step="Concluído!")
+        jobs.update_field(job_id, download_url=f"/api/download/{job_id}")
 
     except Exception as e:
-        jobs[job_id].status = "error"
-        jobs[job_id].error_message = str(e)
-        jobs[job_id].current_step = f"Erro: {str(e)[:200]}"
-        jobs[job_id].current_step = f"Erro: {str(e)[:200]}"
+        jobs.update_field(job_id, status="error")
+        jobs.update_field(job_id, error_message=str(e))
+        jobs.update_field(job_id, current_step=f"Erro: {str(e)[:200]}")
+        jobs.update_field(job_id, current_step=f"Erro: {str(e)[:200]}")
 
 
 @app.get("/")

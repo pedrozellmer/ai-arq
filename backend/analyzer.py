@@ -516,14 +516,20 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo) -> dict:
             "text": f"Texto extraído do PDF:\n{sheet.text_content[:3000]}"
         })
 
-    for crop_path in sheet.crops[:8]:
+    for crop_path in sheet.crops[:4]:  # Max 4 imagens por prancha (economia de memória)
         if os.path.exists(crop_path):
+            # Pular imagens maiores que 500KB pra não estourar memória
+            file_size = os.path.getsize(crop_path)
+            if file_size > 500_000:
+                print(f"Pulando {crop_path} ({file_size//1024}KB > 500KB)")
+                continue
             b64 = encode_image(crop_path)
             media = "image/jpeg" if crop_path.endswith('.jpg') else "image/png"
             content.append({
                 "type": "image",
                 "source": {"type": "base64", "media_type": media, "data": b64}
             })
+            del b64  # Liberar memória do base64
 
     content.append({"type": "text", "text": prompt})
 
