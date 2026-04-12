@@ -207,7 +207,10 @@
           <div id="file-list" class="mt-4 space-y-2 hidden"></div>
 
           <!-- Process Button -->
-          <button id="btn-process" disabled class="mt-6 w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+          <div id="price-info" class="mt-4 text-center text-sm text-gray-500 hidden">
+            <span id="price-label"></span>
+          </div>
+          <button id="btn-process" disabled class="mt-3 w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
             Processar Projeto
           </button>
@@ -691,6 +694,20 @@
     btnProcess.disabled = false;
     fileList.innerHTML = '';
 
+    // Atualizar preço
+    const priceInfo = document.getElementById('price-info');
+    const priceLabel = document.getElementById('price-label');
+    const n = selectedFiles.length;
+    const free = isFirstProject() && n <= 5;
+    let price = n <= 5 ? 'R$ 49' : n <= 10 ? 'R$ 99' : 'R$ 149';
+    let planName = n <= 5 ? 'Pequeno' : n <= 10 ? 'Médio' : 'Grande';
+    priceInfo.classList.remove('hidden');
+    if (free) {
+      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) — <span class="line-through text-gray-400">${price}</span> <span class="text-green-600 font-bold">GRÁTIS</span> <span class="text-xs">(1º projeto)</span>`;
+    } else {
+      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) — <span class="font-bold text-indigo-600">${price}</span>`;
+    }
+
     selectedFiles.forEach((file, idx) => {
       const div = document.createElement('div');
       div.className = 'flex items-center justify-between bg-white rounded-lg border px-4 py-3';
@@ -819,9 +836,13 @@
   // ══════════════════════════════════════════════
   //  PROCESS PROJECT
   // ══════════════════════════════════════════════
-  btnProcess.addEventListener('click', async () => {
-    if (selectedFiles.length === 0) return;
+  // Check if first project (free)
+  function isFirstProject() {
+    const history = JSON.parse(localStorage.getItem('aiarq_projects') || '[]');
+    return history.length === 0;
+  }
 
+  async function startProcessing() {
     showState(stateProcessing);
     processingStep.textContent = 'Enviando arquivos...';
     progressBar.style.width = '0%';
@@ -857,7 +878,60 @@
       errorMessage.textContent = err.message || 'Erro ao enviar os arquivos. Tente novamente.';
       showState(stateError);
     }
+  }
+
+  btnProcess.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) return;
+
+    const numFiles = selectedFiles.length;
+    const isFree = isFirstProject() && numFiles <= 5;
+
+    if (isFree) {
+      // Primeiro projeto pequeno = grátis, processa direto
+      startProcessing();
+    } else {
+      // Precisa pagar — abrir Stripe Checkout
+      btnProcess.disabled = true;
+      btnProcess.textContent = 'Redirecionando para pagamento...';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/checkout?num_files=${numFiles}`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        const data = await res.json();
+
+        if (data.checkout_url) {
+          // Salvar arquivos no localStorage pra processar após pagamento
+          localStorage.setItem('aiarq_pending_files', JSON.stringify(
+            selectedFiles.map(f => f.name)
+          ));
+          window.location.href = data.checkout_url;
+        } else {
+          throw new Error('Não foi possível criar checkout');
+        }
+      } catch (err) {
+        console.error('Erro checkout:', err);
+        btnProcess.disabled = false;
+        btnProcess.innerHTML = '<svg class="w-5 h-5 animate-spin-slow" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg> Processar Projeto';
+        alert('Erro ao iniciar pagamento. Tente novamente.');
+      }
+    }
   });
+
+  // Verificar retorno do pagamento
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('payment') === 'success') {
+    // Pagamento aprovado — iniciar processamento
+    const sessionId = urlParams.get('session_id');
+    // Limpar URL
+    window.history.replaceState({}, document.title, 'dashboard.html');
+    // Mostrar mensagem e pedir pra enviar arquivos novamente
+    alert('Pagamento aprovado! Envie as pranchas novamente para processar.');
+  }
+  if (urlParams.get('payment') === 'cancelled') {
+    window.history.replaceState({}, document.title, 'dashboard.html');
+  }
 
   // ══════════════════════════════════════════════
   //  STATUS POLLING
