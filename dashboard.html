@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI.arq - Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
+  .shadow-btn { box-shadow: 0 8px 30px -8px rgba(79,70,229,0.4); }
+
+  .drop-zone {
+    border: 2px dashed #d1d5db;
+    transition: all 0.2s ease;
+  }
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: #4f46e5;
+    background-color: #eef2ff;
+  }
+
+  .progress-bar-fill {
+    background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%);
+    transition: width 0.5s ease;
+  }
+
+  @keyframes pulse-bar {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+  .animate-pulse-bar {
+    animation: pulse-bar 2s ease-in-out infinite;
+  }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
+
+<!-- NAVBAR -->
+<nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="index.html" class="flex items-center gap-2">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="flex items-center gap-4">
+      <div id="user-info" class="hidden items-center gap-3">
+        <img id="user-avatar" src="" alt="Avatar" class="h-8 w-8 rounded-full object-cover border border-gray-200">
+        <span id="user-name" class="text-sm font-medium text-gray-700 hidden sm:inline"></span>
+      </div>
+      <button id="btn-logout" class="text-sm text-gray-500 hover:text-red-600 px-3 py-2 rounded-lg hover:bg-red-50 transition font-medium">Sair</button>
+    </div>
+  </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="flex-1 py-10 px-4">
+  <div class="mx-auto max-w-3xl">
+
+    <h1 class="text-2xl font-bold text-gray-900 mb-8">Seus Projetos</h1>
+
+    <!-- STATE: UPLOAD -->
+    <div id="state-upload">
+      <!-- Drop Zone -->
+      <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-500 mb-6">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        </div>
+        <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os PDFs das pranchas aqui</p>
+        <p class="text-sm text-gray-400">ou clique para selecionar</p>
+        <input type="file" id="file-input" multiple accept=".pdf" class="hidden">
+      </div>
+
+      <!-- File List -->
+      <div id="file-list" class="mt-4 space-y-2 hidden"></div>
+
+      <!-- Process Button -->
+      <button id="btn-process" disabled class="mt-6 w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        Processar Projeto
+      </button>
+    </div>
+
+    <!-- STATE: PROCESSING -->
+    <div id="state-processing" class="hidden">
+      <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-main text-white mb-6 animate-pulse-bar">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 mb-2">Processando projeto...</h2>
+        <p id="processing-step" class="text-sm text-gray-500 mb-6">Enviando arquivos...</p>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-gray-200 rounded-full h-3 mb-3 overflow-hidden">
+          <div id="progress-bar" class="progress-bar-fill h-3 rounded-full" style="width: 0%"></div>
+        </div>
+        <p id="progress-percent" class="text-sm font-semibold gradient-text">0%</p>
+      </div>
+    </div>
+
+    <!-- STATE: DONE -->
+    <div id="state-done" class="hidden">
+      <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 mb-6">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 mb-2">Planilha pronta!</h2>
+        <p class="text-sm text-gray-500 mb-8">Seu levantamento de quantitativos foi gerado com sucesso.</p>
+
+        <button id="btn-download" class="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-lg font-semibold shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Baixar Planilha .xlsx
+        </button>
+
+        <button id="btn-new-project" class="mt-4 w-full py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 transition">
+          Novo Projeto
+        </button>
+      </div>
+    </div>
+
+    <!-- STATE: ERROR -->
+    <div id="state-error" class="hidden">
+      <div class="rounded-2xl border border-red-200 bg-white p-8 md:p-10 shadow-gradient text-center">
+        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100 text-red-500 mb-6">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+        </div>
+        <h2 class="text-xl font-bold text-gray-900 mb-2">Erro no processamento</h2>
+        <p id="error-message" class="text-sm text-gray-500 mb-8">Ocorreu um erro inesperado. Tente novamente.</p>
+
+        <button id="btn-retry" class="w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition flex items-center justify-center gap-2">
+          Tentar Novamente
+        </button>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- FOOTER -->
+<footer class="border-t bg-gray-50 py-12">
+  <div class="mx-auto max-w-6xl px-4">
+    <div class="flex flex-col items-center gap-4 md:flex-row md:justify-between">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <div class="flex gap-6 text-sm text-gray-500">
+        <a href="#" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="#" class="hover:text-gray-900 transition">Privacidade</a>
+        <a href="#" class="hover:text-gray-900 transition">Contato</a>
+      </div>
+      <p class="text-sm text-gray-400">2026 AI.arq. Todos os direitos reservados.</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ── CONFIG ──
+  const API_BASE = 'https://ai-arq.onrender.com';
+  const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ── STATE ──
+  let accessToken = '';
+  let selectedFiles = [];
+  let currentJobId = null;
+  let pollTimer = null;
+
+  // ── DOM REFS ──
+  const stateUpload = document.getElementById('state-upload');
+  const stateProcessing = document.getElementById('state-processing');
+  const stateDone = document.getElementById('state-done');
+  const stateError = document.getElementById('state-error');
+  const dropZone = document.getElementById('drop-zone');
+  const fileInput = document.getElementById('file-input');
+  const fileList = document.getElementById('file-list');
+  const btnProcess = document.getElementById('btn-process');
+  const progressBar = document.getElementById('progress-bar');
+  const progressPercent = document.getElementById('progress-percent');
+  const processingStep = document.getElementById('processing-step');
+  const btnDownload = document.getElementById('btn-download');
+  const btnNewProject = document.getElementById('btn-new-project');
+  const btnRetry = document.getElementById('btn-retry');
+  const btnLogout = document.getElementById('btn-logout');
+  const userInfo = document.getElementById('user-info');
+  const userAvatar = document.getElementById('user-avatar');
+  const userName = document.getElementById('user-name');
+  const errorMessage = document.getElementById('error-message');
+
+  // ── AUTH CHECK ──
+  async function checkAuth() {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) {
+      window.location.href = 'login.html';
+      return;
+    }
+
+    accessToken = session.access_token;
+    const user = session.user;
+    const meta = user.user_metadata || {};
+
+    // Show user info
+    userName.textContent = meta.full_name || meta.name || user.email;
+    userAvatar.src = meta.avatar_url || meta.picture || '';
+    if (!userAvatar.src) {
+      userAvatar.style.display = 'none';
+    }
+    userInfo.classList.remove('hidden');
+    userInfo.classList.add('flex');
+  }
+  checkAuth();
+
+  // ── LOGOUT ──
+  btnLogout.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    window.location.href = 'login.html';
+  });
+
+  // ── SHOW STATE HELPERS ──
+  function showState(state) {
+    stateUpload.classList.add('hidden');
+    stateProcessing.classList.add('hidden');
+    stateDone.classList.add('hidden');
+    stateError.classList.add('hidden');
+    state.classList.remove('hidden');
+  }
+
+  // ── FILE SIZE FORMAT ──
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  // ── RENDER FILE LIST ──
+  function renderFiles() {
+    if (selectedFiles.length === 0) {
+      fileList.classList.add('hidden');
+      btnProcess.disabled = true;
+      return;
+    }
+
+    fileList.classList.remove('hidden');
+    btnProcess.disabled = false;
+    fileList.innerHTML = '';
+
+    selectedFiles.forEach((file, idx) => {
+      const div = document.createElement('div');
+      div.className = 'flex items-center justify-between bg-white rounded-lg border px-4 py-3';
+      div.innerHTML = `
+        <div class="flex items-center gap-3 min-w-0">
+          <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-gray-800 truncate">${file.name}</p>
+            <p class="text-xs text-gray-400">${formatSize(file.size)}</p>
+          </div>
+        </div>
+        <button data-idx="${idx}" class="btn-remove-file text-gray-400 hover:text-red-500 transition p-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      `;
+      fileList.appendChild(div);
+    });
+
+    // Remove file handler
+    fileList.querySelectorAll('.btn-remove-file').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(btn.getAttribute('data-idx'));
+        selectedFiles.splice(idx, 1);
+        renderFiles();
+      });
+    });
+  }
+
+  // ── ADD FILES ──
+  function addFiles(newFiles) {
+    for (const f of newFiles) {
+      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+        // Avoid duplicates
+        if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) {
+          selectedFiles.push(f);
+        }
+      }
+    }
+    renderFiles();
+  }
+
+  // ── DROP ZONE EVENTS ──
+  dropZone.addEventListener('click', () => fileInput.click());
+
+  fileInput.addEventListener('change', (e) => {
+    addFiles(e.target.files);
+    fileInput.value = '';
+  });
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('drag-over');
+  });
+
+  dropZone.addEventListener('dragleave', () => {
+    dropZone.classList.remove('drag-over');
+  });
+
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('drag-over');
+    addFiles(e.dataTransfer.files);
+  });
+
+  // ── PROCESS PROJECT ──
+  btnProcess.addEventListener('click', async () => {
+    if (selectedFiles.length === 0) return;
+
+    showState(stateProcessing);
+    processingStep.textContent = 'Enviando arquivos...';
+    progressBar.style.width = '0%';
+    progressPercent.textContent = '0%';
+
+    try {
+      const formData = new FormData();
+      selectedFiles.forEach(f => formData.append('files', f));
+
+      const res = await fetch(`${API_BASE}/api/process`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        body: formData
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `Erro HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      currentJobId = data.job_id;
+
+      // Start polling
+      processingStep.textContent = 'Analisando pranchas...';
+      progressBar.style.width = '10%';
+      progressPercent.textContent = '10%';
+      startPolling();
+
+    } catch (err) {
+      console.error('Erro ao enviar:', err);
+      errorMessage.textContent = err.message || 'Erro ao enviar os arquivos. Tente novamente.';
+      showState(stateError);
+    }
+  });
+
+  // ── STATUS POLLING ──
+  function startPolling() {
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(pollStatus, 3000);
+  }
+
+  async function pollStatus() {
+    if (!currentJobId) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/api/status/${currentJobId}`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+
+      if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+
+      const data = await res.json();
+      const pct = data.progress || 0;
+      const step = data.step || data.current_step || 'Processando...';
+      const status = data.status || '';
+
+      progressBar.style.width = pct + '%';
+      progressPercent.textContent = pct + '%';
+      processingStep.textContent = step;
+
+      if (status === 'done' || status === 'completed' || pct >= 100) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        progressBar.style.width = '100%';
+        progressPercent.textContent = '100%';
+
+        setTimeout(() => showState(stateDone), 600);
+      }
+
+      if (status === 'error' || status === 'failed') {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        errorMessage.textContent = data.error || data.message || 'Ocorreu um erro durante o processamento.';
+        showState(stateError);
+      }
+
+    } catch (err) {
+      console.error('Erro no polling:', err);
+      // Don't stop polling on transient network errors
+    }
+  }
+
+  // ── DOWNLOAD ──
+  btnDownload.addEventListener('click', () => {
+    if (currentJobId) {
+      window.open(`${API_BASE}/api/download/${currentJobId}`, '_blank');
+    }
+  });
+
+  // ── NEW PROJECT ──
+  btnNewProject.addEventListener('click', () => {
+    selectedFiles = [];
+    currentJobId = null;
+    renderFiles();
+    showState(stateUpload);
+  });
+
+  // ── RETRY ──
+  btnRetry.addEventListener('click', () => {
+    currentJobId = null;
+    showState(stateUpload);
+  });
+</script>
+
+</body>
+</html>
