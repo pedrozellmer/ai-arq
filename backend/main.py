@@ -90,7 +90,7 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
         for i, (pdf_path, filename, sheet_type) in enumerate(pdf_infos):
             step_pct = int((i / total) * 90) + 5
             jobs[job_id].progress = step_pct
-            jobs[job_id].current_step = f"Etapa {i+1}/{total}: Processando {filename}..."
+            jobs[job_id].current_step = f"Etapa {i+1}/{total}: {filename}"
 
             if sheet_type == SheetType.DESCONHECIDO:
                 continue
@@ -234,8 +234,10 @@ async def process_files(
         total_steps=3,
     )
 
-    # Iniciar processamento em background
-    background_tasks.add_task(process_job, job_id, pdf_paths, work_dir)
+    # Iniciar processamento em thread separada (não bloqueia HTTP)
+    import threading
+    t = threading.Thread(target=process_job, args=(job_id, pdf_paths, work_dir), daemon=True)
+    t.start()
 
     return {"job_id": job_id, "files_received": len(pdf_paths), "status": "queued"}
 
