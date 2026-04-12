@@ -318,11 +318,72 @@ async def download_file(job_id: str):
 async def health():
     """Health check."""
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    stripe_key = os.getenv("STRIPE_SECRET_KEY", "")
     return {
         "status": "healthy",
         "api_key_configured": bool(api_key and api_key.startswith("sk-")),
+        "stripe_configured": bool(stripe_key),
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+# ── STRIPE CHECKOUT ──
+@app.post("/api/checkout")
+async def create_checkout(num_files: int = 1):
+    """Cria sessão de pagamento no Stripe."""
+    import stripe
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    if not stripe.api_key:
+        raise HTTPException(500, "Stripe não configurado")
+
+    # Definir preço por quantidade de pranchas
+    if num_files <= 5:
+        price_cents = 4900  # R$ 49
+        plan_name = "Projeto Pequeno (até 5 pranchas)"
+    elif num_files <= 10:
+        price_cents = 9900  # R$ 99
+        plan_name = "Projeto Médio (6-10 pranchas)"
+    else:
+        price_cents = 14900  # R$ 149
+        plan_name = "Projeto Grande (11+ pranchas)"
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "brl",
+                    "product_data": {
+                        "name": f"AI.arq — {plan_name}",
+                        "description": f"Planilha de quantitativos para {num_files} pranchas",
+                    },
+                    "unit_amount": price_cents,
+                },
+                "quantity": 1,
+            }],
+            mode="payment",
+            success_url="https://ai.arq.br/dashboard.html?payment=success&session_id={CHECKOUT_SESSION_ID}",
+            cancel_url="https://ai.arq.br/dashboard.html?payment=cancelled",
+        )
+        return {"checkout_url": session.url, "session_id": session.id}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao criar checkout: {str(e)}")
+
+
+@app.get("/api/checkout/verify/{session_id}")
+async def verify_payment(session_id: str):
+    """Verifica se o pagamento foi concluído."""
+    import stripe
+    stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        return {
+            "paid": session.payment_status == "paid",
+            "status": session.payment_status,
+            "amount": session.amount_total,
+        }
+    except Exception as e:
+        raise HTTPException(404, f"Sessão não encontrada: {str(e)}")
 
 
 if __name__ == "__main__":
