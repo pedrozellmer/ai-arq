@@ -37,20 +37,15 @@ CROP_REGIONS = {
     SheetType.FORRO: {
         "legenda_luminarias": (0.55, 0.75, 1.0, 1.0),
         "legenda_tecnica": (0.55, 0.50, 1.0, 0.78),
-        "planta_q1": (0.02, 0.02, 0.30, 0.45),
-        "planta_q2": (0.25, 0.02, 0.55, 0.45),
-        "planta_q3": (0.02, 0.40, 0.30, 0.75),
-        "planta_q4": (0.25, 0.40, 0.55, 0.75),
+        "planta_geral": (0.02, 0.02, 0.55, 0.75),
     },
     SheetType.PISO: {
         "legenda": (0.58, 0.0, 0.90, 0.35),
         "planta": (0.02, 0.02, 0.58, 0.95),
     },
     SheetType.PONTOS: {
-        "legenda_eletrico": (0.58, 0.0, 0.95, 0.12),
-        "legenda_dados": (0.58, 0.12, 0.95, 0.40),
-        "legenda_notas": (0.58, 0.40, 0.95, 0.70),
-        "planta": (0.02, 0.03, 0.58, 0.85),
+        "legenda_completa": (0.58, 0.0, 0.95, 0.70),
+        "planta": (0.02, 0.03, 0.55, 0.85),
     },
     SheetType.MOBILIARIO: {
         "legenda_departamentos": (0.58, 0.0, 0.90, 0.18),
@@ -66,22 +61,15 @@ CROP_REGIONS = {
     },
     SheetType.LAYOUT_NOVO: {
         "legenda": (0.58, 0.0, 0.95, 0.50),
-        "planta_q1": (0.02, 0.03, 0.30, 0.48),
-        "planta_q2": (0.25, 0.03, 0.58, 0.48),
-        "planta_q3": (0.02, 0.43, 0.30, 0.90),
-        "planta_q4": (0.25, 0.43, 0.58, 0.90),
+        "planta": (0.02, 0.03, 0.58, 0.90),
     },
     SheetType.LAYOUT_ATUAL: {
         "legenda": (0.58, 0.0, 0.95, 0.50),
-        "planta_q1": (0.02, 0.03, 0.30, 0.48),
-        "planta_q2": (0.25, 0.03, 0.58, 0.48),
-        "planta_q3": (0.02, 0.43, 0.30, 0.90),
-        "planta_q4": (0.25, 0.43, 0.58, 0.90),
+        "planta": (0.02, 0.03, 0.58, 0.90),
     },
     SheetType.DET_FORRO: {
         "planta": (0.0, 0.0, 0.45, 0.45),
         "detalhes": (0.45, 0.0, 1.0, 0.45),
-        "corte": (0.0, 0.40, 1.0, 1.0),
     },
 }
 
@@ -140,11 +128,13 @@ def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int
                 crop = crop.resize((int(crop.width * ratio), int(crop.height * ratio)), Image.LANCZOS)
 
             crop_path = os.path.join(output_dir, f"{Path(pdf_path).stem}_{name}.png")
-            crop.save(crop_path, "PNG", optimize=True)
-            crop_paths.append(crop_path)
+            # Salvar como JPEG (menor que PNG, suficiente pra IA)
+            crop.save(crop_path.replace('.png', '.jpg'), "JPEG", quality=85)
+            crop_paths.append(crop_path.replace('.png', '.jpg'))
+            del crop
 
         pdf.close()
-        del bitmap, img  # Liberar memória
+        del bitmap, img
         import gc; gc.collect()
     except Exception as e:
         print(f"Erro ao renderizar {pdf_path}: {e}")
