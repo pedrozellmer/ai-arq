@@ -53,7 +53,13 @@ os.makedirs(WORK_DIR, exist_ok=True)
 
 
 def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
-    """Processa um job de forma síncrona (roda em background)."""
+    """Processa um job prancha por prancha pra economizar memória."""
+    import gc
+    import anthropic
+    from processor import identify_sheet_type, extract_text, render_crops
+    from analyzer import analyze_sheet, SYSTEM_PROMPT
+    from models import SheetInfo, SheetType, ProjectData, BudgetItem, Confidence
+
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         jobs[job_id].status = "error"
@@ -61,33 +67,115 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
         return
 
     try:
-        total_steps = 3
-        jobs[job_id].total_steps = total_steps
-
-        # PASSO 1: Processar PDFs (extrair texto + renderizar crops)
         jobs[job_id].status = "processing"
-        jobs[job_id].progress = 10
-        jobs[job_id].current_step = "Extraindo dados dos PDFs..."
+        total = len(pdf_paths)
+        client = anthropic.Anthropic(api_key=api_key)
+        all_items = []
+        project_data = ProjectData()
+        crops_dir = os.path.join(work_dir, "crops")
+        os.makedirs(crops_dir, exist_ok=True)
 
-        sheets = process_pdfs(pdf_paths, work_dir)
+        # Ordenar por prioridade (layout primeiro)
+        priority = {"layout_novo": 0, "layout_atual": 1, "demolir": 2, "arquitetura": 3,
+                     "forro": 4, "piso": 5, "pontos": 6, "mobiliario": 7, "marcenaria": 8, "det_forro": 9}
 
-        jobs[job_id].progress = 30
-        jobs[job_id].current_step = f"{len(sheets)} pranchas identificadas. Analisando com IA..."
+        pdf_infos = []
+        for pdf_path in pdf_paths:
+            filename = os.path.basename(pdf_path)
+            sheet_type = identify_sheet_type(filename)
+            pdf_infos.append((pdf_path, filename, sheet_type))
 
-        # PASSO 2: Analisar com Claude API
-        def progress_cb(current, total, msg):
-            pct = 30 + int((current / max(total, 1)) * 50)
-            jobs[job_id].progress = min(pct, 80)
-            jobs[job_id].current_step = msg
+        pdf_infos.sort(key=lambda x: priority.get(x[2].value, 99))
 
-        project_data, items = analyze_all_sheets(sheets, api_key, progress_cb)
+        for i, (pdf_path, filename, sheet_type) in enumerate(pdf_infos):
+            step_pct = int((i / total) * 90) + 5
+            jobs[job_id].progress = step_pct
+            jobs[job_id].current_step = f"Etapa {i+1}/{total}: Processando {filename}..."
 
-        jobs[job_id].progress = 85
-        jobs[job_id].current_step = f"Gerando planilha com {len(items)} itens..."
+            if sheet_type == SheetType.DESCONHECIDO:
+                continue
 
-        # PASSO 3: Gerar planilha
+            # 1. Extrair texto
+            text = extract_text(pdf_path)
+
+            # 2. Renderizar crops (1 PDF de cada vez)
+            crop_paths = render_crops(pdf_path, sheet_type, crops_dir)
+
+            # 3. Analisar com IA
+            jobs[job_id].current_step = f"Etapa {i+1}/{total}: Analisando {filename} com IA..."
+            sheet = SheetInfo(
+                filename=filename,
+                sheet_type=sheet_type,
+                text_content=text[:5000],
+                crops=crop_paths,
+            )
+            result = analyze_sheet(client, sheet)
+
+            # 4. Extrair dados do projeto
+            if "project_data" in result:
+                pd = result["project_data"]
+                def sf(v):
+                    if v is None: return 0
+                    s = str(v).replace('m²','').replace('m2','').replace('cm','').replace(',','').strip()
+                    try: return float(s)
+                    except: return 0
+                if pd.get("total_area"): project_data.total_area = sf(pd["total_area"])
+                if pd.get("layout_area"): project_data.layout_area = sf(pd["layout_area"])
+                if pd.get("no_intervention_area"): project_data.no_intervention_area = sf(pd["no_intervention_area"])
+                if pd.get("workstations"):
+                    try: project_data.workstations = int(float(str(pd["workstations"]).replace('un','').strip()))
+                    except: pass
+                if pd.get("departments"): project_data.departments = pd["departments"]
+                if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
+                if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
+                if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
+                if pd.get("name") and not project_data.name: project_data.name = pd["name"]
+                if pd.get("address") and not project_data.address: project_data.address = pd["address"]
+                if pd.get("architect") and not project_data.architect: project_data.architect = pd["architect"]
+
+            # 5. Extrair itens
+            valid_disciplines = [
+                "Serviços Preliminares", "Demolição e Remoção", "Fechamentos Verticais",
+                "Revestimentos", "Pisos e Rodapés", "Forros", "Portas e Ferragens",
+                "Divisórias e Vidros", "Persianas e Cortinas", "Iluminação",
+                "Instalações Elétricas e Dados", "Ar-Condicionado", "Incêndio e Segurança",
+                "Marcenaria", "Mobiliário", "Complementares"
+            ]
+            for item_data in result.get("items", []):
+                try:
+                    desc = item_data.get("description", "")
+                    if not desc or len(desc) < 3: continue
+                    discipline = item_data.get("discipline", "Complementares")
+                    if discipline not in valid_disciplines: discipline = "Complementares"
+                    conf = item_data.get("confidence", "estimado")
+                    if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
+                    qty_raw = item_data.get("quantity", 1)
+                    qty = sf(qty_raw) if qty_raw else 1
+                    if qty <= 0: qty = 1
+
+                    item = BudgetItem(
+                        item_num=str(item_data.get("item_num", "")),
+                        description=desc,
+                        unit=item_data.get("unit", "vb"),
+                        quantity=qty,
+                        observations=item_data.get("observations", ""),
+                        ref_sheet=item_data.get("ref_sheet", f"Pr.{filename[:7]}"),
+                        confidence=Confidence(conf),
+                        discipline=discipline,
+                    )
+                    all_items.append(item)
+                except: continue
+
+            # 6. Liberar memória desta prancha
+            del text, crop_paths, sheet, result
+            gc.collect()
+
+        # Gerar planilha
+        jobs[job_id].progress = 92
+        jobs[job_id].current_step = f"Gerando planilha com {len(all_items)} itens..."
+
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
-        generate_spreadsheet(project_data, items, output_path)
+        generate_spreadsheet(project_data, all_items, output_path)
 
         jobs[job_id].progress = 100
         jobs[job_id].status = "done"
@@ -97,6 +185,7 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
     except Exception as e:
         jobs[job_id].status = "error"
         jobs[job_id].error_message = str(e)
+        jobs[job_id].current_step = f"Erro: {str(e)[:200]}"
         jobs[job_id].current_step = f"Erro: {str(e)[:200]}"
 
 

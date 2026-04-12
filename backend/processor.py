@@ -117,7 +117,7 @@ def extract_text(pdf_path: str) -> str:
     return "\n".join(text_parts)
 
 
-def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 150) -> list[str]:
+def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 200) -> list[str]:
     """Renderiza um PDF e corta regiões de interesse. Retorna lista de caminhos das imagens."""
     crops = CROP_REGIONS.get(sheet_type, {})
     if not crops:
@@ -133,10 +133,10 @@ def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int
 
         for name, (x1, y1, x2, y2) in crops.items():
             crop = img.crop((int(w * x1), int(h * y1), int(w * x2), int(h * y2)))
-            # Redimensionar pra max 1200px (otimizado pra Render 2GB)
+            # Redimensionar pra max 1500px (qualidade boa pra Claude Vision)
             max_side = max(crop.size)
-            if max_side > 1200:
-                ratio = 1200 / max_side
+            if max_side > 1500:
+                ratio = 1500 / max_side
                 crop = crop.resize((int(crop.width * ratio), int(crop.height * ratio)), Image.LANCZOS)
 
             crop_path = os.path.join(output_dir, f"{Path(pdf_path).stem}_{name}.png")
