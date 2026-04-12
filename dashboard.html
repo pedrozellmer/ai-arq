@@ -355,9 +355,32 @@
   });
 
   // ── STATUS POLLING ──
+  let visualProgress = 0;
+  let pollStartTime = 0;
+  let errorCount = 0;
+  const ESTIMATED_TOTAL_SECONDS = 600; // ~10 min estimado
+
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
+    visualProgress = 0;
+    pollStartTime = Date.now();
+    errorCount = 0;
     pollTimer = setInterval(pollStatus, 3000);
+    // Progresso visual gradual a cada 1s
+    setInterval(() => {
+      if (!currentJobId || visualProgress >= 99) return;
+      visualProgress = Math.min(visualProgress + 0.3, 99);
+      progressBar.style.width = Math.round(visualProgress) + '%';
+      progressPercent.textContent = Math.round(visualProgress) + '%';
+      // Tempo estimado
+      const elapsed = (Date.now() - pollStartTime) / 1000;
+      const remaining = Math.max(0, ESTIMATED_TOTAL_SECONDS - elapsed);
+      const mins = Math.floor(remaining / 60);
+      const secs = Math.floor(remaining % 60);
+      if (remaining > 0) {
+        processingStep.textContent = processingStep.textContent.split(' —')[0] + ` — ~${mins}min ${secs}s restantes`;
+      }
+    }, 1000);
   }
 
   async function pollStatus() {
@@ -368,22 +391,40 @@
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
 
+      if (res.status === 404) {
+        errorCount++;
+        if (errorCount > 10) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+          errorMessage.textContent = 'O servidor perdeu a conexão. Por favor, tente novamente.';
+          showState(stateError);
+        }
+        return;
+      }
+
       if (!res.ok) throw new Error(`Erro HTTP ${res.status}`);
+      errorCount = 0;
 
       const data = await res.json();
       const pct = data.progress || 0;
       const step = data.step || data.current_step || 'Processando...';
       const status = data.status || '';
 
-      progressBar.style.width = pct + '%';
-      progressPercent.textContent = pct + '%';
+      // Atualizar progresso real (sempre maior que o visual)
+      if (pct > visualProgress) {
+        visualProgress = pct;
+      }
+      progressBar.style.width = Math.round(visualProgress) + '%';
+      progressPercent.textContent = Math.round(visualProgress) + '%';
       processingStep.textContent = step;
 
       if (status === 'done' || status === 'completed' || pct >= 100) {
         clearInterval(pollTimer);
         pollTimer = null;
+        visualProgress = 100;
         progressBar.style.width = '100%';
         progressPercent.textContent = '100%';
+        processingStep.textContent = 'Concluído!';
 
         setTimeout(() => showState(stateDone), 600);
       }
@@ -391,13 +432,19 @@
       if (status === 'error' || status === 'failed') {
         clearInterval(pollTimer);
         pollTimer = null;
-        errorMessage.textContent = data.error || data.message || 'Ocorreu um erro durante o processamento.';
+        errorMessage.textContent = data.error_message || data.error || data.message || 'Ocorreu um erro durante o processamento.';
         showState(stateError);
       }
 
     } catch (err) {
       console.error('Erro no polling:', err);
-      // Don't stop polling on transient network errors
+      errorCount++;
+      if (errorCount > 15) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+        errorMessage.textContent = 'Não foi possível conectar ao servidor. Tente novamente.';
+        showState(stateError);
+      }
     }
   }
 
