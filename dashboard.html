@@ -849,7 +849,7 @@
       try {
         const { data: profile } = await sbClient
           .from('profiles')
-          .select('id')
+          .select('user_id')
           .eq('user_id', user.id)
           .maybeSingle();
 
@@ -861,9 +861,8 @@
         }
       } catch (err) {
         console.error('Erro ao verificar perfil:', err);
-        // If query fails, redirect to cadastro to be safe
-        window.location.href = 'cadastro.html';
-        return;
+        // Se falhar a query, não redirecionar — pode ser problema de rede
+        localStorage.setItem('aiarq_profile_complete', 'true');
       }
     }
 
