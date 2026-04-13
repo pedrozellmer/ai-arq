@@ -427,6 +427,17 @@
           </div>
         </div>
 
+        <!-- Aviso uso de dados -->
+        <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-6">
+          <div class="flex items-start gap-2">
+            <span class="text-blue-500 shrink-0 mt-0.5">&#128274;</span>
+            <div>
+              <p class="text-sm text-blue-800 font-medium">Sobre o uso dos seus dados</p>
+              <p class="text-xs text-blue-700 mt-1 leading-relaxed">Ao enviar a planilha revisada, voc&ecirc; autoriza o AI.arq a utilizar os dados corrigidos para <strong>treinar e melhorar a precis&atilde;o da nossa intelig&ecirc;ncia artificial</strong>. Os dados s&atilde;o usados de forma anonimizada, apenas para calibrar quantitativos &mdash; seus projetos e informa&ccedil;&otilde;es pessoais n&atilde;o s&atilde;o compartilhados com terceiros. Veja nossa <a href="privacidade.html" class="underline hover:text-blue-900">Pol&iacute;tica de Privacidade</a>.</p>
+            </div>
+          </div>
+        </div>
+
         <!-- Upload corrected spreadsheet -->
         <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-gradient mb-6">
           <h3 class="text-base font-semibold text-gray-900 mb-4">Enviar planilha corrigida</h3>
@@ -1019,18 +1030,47 @@
       priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="font-bold text-indigo-600">${price}</span>`;
     }
 
+    // Auto-detectar tipo pela nome do arquivo
+    function guessType(name) {
+      const n = name.toLowerCase();
+      if (n.includes('demolir') || n.includes('demoli')) return 'demolir';
+      if (n.includes('layout') && n.includes('novo')) return 'layout_novo';
+      if (n.includes('layout') && n.includes('atual')) return 'layout_atual';
+      if (n.includes('layout')) return 'layout_novo';
+      if (n.includes('mobili')) return 'mobiliario';
+      if (n.includes('marcenaria')) return 'marcenaria';
+      if (n.includes('arquitetura')) return 'arquitetura';
+      if (n.includes('ponto')) return 'pontos';
+      if (n.includes('piso')) return 'piso';
+      if (n.includes('det') && n.includes('forro')) return 'det_forro';
+      if (n.includes('forro')) return 'forro';
+      return '';
+    }
+
     selectedFiles.forEach((file, idx) => {
+      const guessed = guessType(file.name);
       const div = document.createElement('div');
-      div.className = 'flex items-center justify-between bg-white rounded-lg border px-4 py-3';
+      div.className = 'flex items-center gap-3 bg-white rounded-lg border px-4 py-3';
       div.innerHTML = `
-        <div class="flex items-center gap-3 min-w-0">
-          <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-          <div class="min-w-0">
-            <p class="text-sm font-medium text-gray-800 truncate">${file.name}</p>
-            <p class="text-xs text-gray-400">${formatSize(file.size)}</p>
-          </div>
+        <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-gray-800 truncate">${file.name}</p>
+          <p class="text-xs text-gray-400">${formatSize(file.size)}</p>
         </div>
-        <button data-idx="${idx}" class="btn-remove-file text-gray-400 hover:text-red-500 transition p-1">
+        <select data-idx="${idx}" class="file-type-select text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none">
+          <option value="" ${!guessed ? 'selected' : ''}>Tipo da prancha</option>
+          <option value="demolir" ${guessed==='demolir'?'selected':''}>Demoli\u00e7\u00e3o</option>
+          <option value="layout_atual" ${guessed==='layout_atual'?'selected':''}>Layout Atual</option>
+          <option value="layout_novo" ${guessed==='layout_novo'?'selected':''}>Layout Novo</option>
+          <option value="arquitetura" ${guessed==='arquitetura'?'selected':''}>Arquitetura</option>
+          <option value="pontos" ${guessed==='pontos'?'selected':''}>Pontos El\u00e9tricos</option>
+          <option value="piso" ${guessed==='piso'?'selected':''}>Pisos</option>
+          <option value="forro" ${guessed==='forro'?'selected':''}>Forro / Ilumina\u00e7\u00e3o</option>
+          <option value="det_forro" ${guessed==='det_forro'?'selected':''}>Det. Forro</option>
+          <option value="mobiliario" ${guessed==='mobiliario'?'selected':''}>Mobili\u00e1rio</option>
+          <option value="marcenaria" ${guessed==='marcenaria'?'selected':''}>Marcenaria</option>
+        </select>
+        <button data-idx="${idx}" class="btn-remove-file text-gray-400 hover:text-red-500 transition p-1 shrink-0">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       `;
