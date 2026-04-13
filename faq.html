@@ -65,6 +65,20 @@
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
 
+<!-- PUBLIC NAVBAR (shown when NOT logged in) -->
+<nav id="public-navbar" class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md hidden">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="index.html" class="flex items-center gap-2">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="flex items-center gap-3">
+      <a href="login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Gr&aacute;tis</a>
+    </div>
+  </div>
+</nav>
+
 <!-- MOBILE OVERLAY -->
 <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-40 hidden opacity-0 lg:hidden" onclick="closeSidebar()"></div>
 
@@ -209,7 +223,7 @@
           </div>
 
           <!-- Q2 -->
-          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="para quem arquitetos engenheiros or&ccedil;amentistas construtoras incorporadoras escrit&oacute;rios engenharia quantitativos concorr&ecirc;ncia obras">
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="para quem arquitetos engenheiros or&ccedil;amentistas construtoras incorporadoras escrit&oacute;rios engenharia quantitativos concorr&ecirc;ncia or&ccedil;amento obras">
             <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
               <span class="text-sm font-semibold text-gray-800 pr-4">Para quem &eacute; o AI.arq?</span>
               <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -298,23 +312,24 @@
             </div>
           </div>
 
-          <!-- Q7 -->
-          
-      <!-- BIM/Revit -->
-      <div class="faq-item border border-gray-200 rounded-xl overflow-hidden">
-        <button onclick="this.parentElement.classList.toggle('open')" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition">
-          <span class="font-semibold text-gray-900">O AI.arq funciona com projetos em BIM/Revit?</span>
-          <svg class="w-5 h-5 text-gray-400 shrink-0 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="faq-answer px-5 pb-5 text-gray-600 leading-relaxed">
-          <p>O AI.arq aceita arquivos em <strong>PDF</strong>. Se o seu projeto foi desenvolvido em Revit, AutoCAD ou outro software BIM/CAD, exporte as pranchas em PDF antes de enviar.</p>
-          <p class="mt-2">O AI.arq <strong>n&#227;o l&#234;</strong> arquivos nativos (.rvt, .dwg, .ifc) diretamente, mas l&#234; perfeitamente os PDFs gerados por esses softwares.</p>
-          <p class="mt-2">A qualidade da an&#225;lise depende da qualidade do PDF exportado. Recomendamos exportar em alta resolu&#231;&#227;o (300 DPI) para melhores resultados.</p>
-          <p class="mt-2 text-sm text-indigo-600"><strong>Em breve:</strong> suporte direto a arquivos DWG (AutoCAD).</p>
-        </div>
-      </div>
+          <!-- Q7 - BIM/Revit -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="bim revit autocad dwg rvt ifc cad exportar pdf projeto 300 dpi resolu&ccedil;&atilde;o">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq funciona com projetos em BIM/Revit?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <p>O AI.arq aceita arquivos em <strong>PDF</strong>. Se o seu projeto foi desenvolvido em Revit, AutoCAD ou outro software BIM/CAD, exporte as pranchas em PDF antes de enviar.</p>
+                <p class="mt-2">O AI.arq <strong>n&atilde;o l&ecirc;</strong> arquivos nativos (.rvt, .dwg, .ifc) diretamente, mas l&ecirc; perfeitamente os PDFs gerados por esses softwares.</p>
+                <p class="mt-2">A qualidade da an&aacute;lise depende da qualidade do PDF exportado. Recomendamos exportar em alta resolu&ccedil;&atilde;o (300 DPI) para melhores resultados.</p>
+                <p class="mt-2 text-sm text-indigo-600"><strong>Em breve:</strong> suporte direto a arquivos DWG (AutoCAD).</p>
+              </div>
+            </div>
+          </div>
 
-      <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo leva processamento minutos pranchas r&aacute;pido demora">
+          <!-- Q8 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo leva processamento minutos pranchas r&aacute;pido demora">
             <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
               <span class="text-sm font-semibold text-gray-800 pr-4">Quanto tempo leva o processamento?</span>
               <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -672,7 +687,7 @@
           <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
           <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
         </div>
-        <p class="text-xs text-gray-300">2026 AI.arq. Todos os direitos reservados.</p>
+        <p class="text-xs text-gray-300">&copy; 2026 AI.arq. Todos os direitos reservados.</p>
       </div>
     </div>
   </footer>
@@ -714,16 +729,29 @@
   const sectionLoggedIn = document.getElementById('user-section-logged-in');
   const sectionLoggedOut = document.getElementById('user-section-logged-out');
 
+  const publicNavbar = document.getElementById('public-navbar');
+  const mainWrapper = document.querySelector('.lg\\:ml-64');
+  const mobileTopbar = document.querySelector('header.lg\\:hidden');
+
   async function checkAuth() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (session) {
+      // Logged in: show sidebar
       const user = session.user;
       const meta = user.user_metadata || {};
       userName.textContent = meta.full_name || meta.name || user.email;
       userAvatar.src = meta.avatar_url || meta.picture || '';
       sectionLoggedIn.classList.remove('hidden');
       sectionLoggedOut.classList.add('hidden');
+      sidebar.classList.remove('hidden');
+      if (sidebarOverlay) sidebarOverlay.classList.remove('hidden-permanent');
     } else {
+      // Not logged in: hide sidebar, show public navbar, full-width content
+      sidebar.classList.add('hidden');
+      if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
+      if (mobileTopbar) mobileTopbar.classList.add('hidden');
+      if (mainWrapper) mainWrapper.classList.remove('lg:ml-64');
+      publicNavbar.classList.remove('hidden');
       sectionLoggedIn.classList.add('hidden');
       sectionLoggedOut.classList.remove('hidden');
     }
