@@ -1572,15 +1572,27 @@
           ? '<span class="text-xs text-gray-400">Revis\u00e3o enviada</span>'
           : '';
 
+      const fileListHtml = (proj.fileNames && proj.fileNames.length > 0)
+        ? `<div id="files-${idx}" class="hidden mt-3 pt-3 border-t border-gray-100">
+            <p class="text-xs font-medium text-gray-500 mb-2">Arquivos enviados:</p>
+            <div class="space-y-1">
+              ${proj.fileNames.map(f => `<div class="flex items-center gap-2 text-xs text-gray-500"><svg class="w-3.5 h-3.5 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg><span class="truncate">${f}</span></div>`).join('')}
+            </div>
+          </div>`
+        : '';
+
       html += `
         <div class="bg-white rounded-xl border p-4 hover:shadow-md transition">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0 flex-1">
               <div class="flex items-center gap-3 mb-1.5">
-                <h3 class="text-sm font-semibold text-gray-900">Projeto ${proj.name}</h3>
+                <h3 class="text-sm font-semibold text-gray-900">${proj.name}</h3>
                 ${statusBadge}
               </div>
-              <p class="text-xs text-gray-400">${proj.fileCount} arquivo${proj.fileCount !== 1 ? 's' : ''}</p>
+              <button onclick="document.getElementById('files-${idx}').classList.toggle('hidden')" class="text-xs text-indigo-600 hover:text-indigo-800 transition">
+                ${proj.fileCount} arquivo${proj.fileCount !== 1 ? 's' : ''} &#9662;
+              </button>
+              ${fileListHtml}
             </div>
             <div class="flex items-center gap-3 shrink-0">
               ${downloadBtn}
