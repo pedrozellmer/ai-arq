@@ -299,7 +299,22 @@
           </div>
 
           <!-- Q7 -->
-          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo leva processamento minutos pranchas r&aacute;pido demora">
+          
+      <!-- BIM/Revit -->
+      <div class="faq-item border border-gray-200 rounded-xl overflow-hidden">
+        <button onclick="this.parentElement.classList.toggle('open')" class="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition">
+          <span class="font-semibold text-gray-900">O AI.arq funciona com projetos em BIM/Revit?</span>
+          <svg class="w-5 h-5 text-gray-400 shrink-0 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="faq-answer px-5 pb-5 text-gray-600 leading-relaxed">
+          <p>O AI.arq aceita arquivos em <strong>PDF</strong>. Se o seu projeto foi desenvolvido em Revit, AutoCAD ou outro software BIM/CAD, exporte as pranchas em PDF antes de enviar.</p>
+          <p class="mt-2">O AI.arq <strong>n&#227;o l&#234;</strong> arquivos nativos (.rvt, .dwg, .ifc) diretamente, mas l&#234; perfeitamente os PDFs gerados por esses softwares.</p>
+          <p class="mt-2">A qualidade da an&#225;lise depende da qualidade do PDF exportado. Recomendamos exportar em alta resolu&#231;&#227;o (300 DPI) para melhores resultados.</p>
+          <p class="mt-2 text-sm text-indigo-600"><strong>Em breve:</strong> suporte direto a arquivos DWG (AutoCAD).</p>
+        </div>
+      </div>
+
+      <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo leva processamento minutos pranchas r&aacute;pido demora">
             <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
               <span class="text-sm font-semibold text-gray-800 pr-4">Quanto tempo leva o processamento?</span>
               <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
