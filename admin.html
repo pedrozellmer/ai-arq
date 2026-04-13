@@ -490,7 +490,7 @@ async function loadUsers() {
     const { data, error } = await sbClient
       .from('profiles')
       .select('*')
-      .order('created_at', { ascending: false });
+      ;
 
     if (error) throw error;
 
@@ -559,7 +559,7 @@ async function loadBetaCodes() {
     const { data, error } = await sbClient
       .from('beta_codes')
       .select('*')
-      .order('created_at', { ascending: false });
+      ;
 
     if (error) throw error;
 
