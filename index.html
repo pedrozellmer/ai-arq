@@ -35,9 +35,15 @@
       <a href="#precos" class="hover:text-indigo-600 transition">Planos</a>
       <a href="faq.html" class="hover:text-indigo-600 transition">FAQ</a>
     </div>
-    <div class="flex items-center gap-3">
-      <a href="login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
-      <a href="login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    <div id="nav-auth" class="flex items-center gap-3">
+      <a href="login.html" id="nav-login" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="login.html" id="nav-cta" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+      <!-- Mostrado quando logado -->
+      <div id="nav-user" class="hidden flex items-center gap-3">
+        <img id="nav-avatar" src="" alt="" class="w-8 h-8 rounded-full">
+        <span id="nav-name" class="text-sm font-medium text-gray-700"></span>
+        <a href="dashboard.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Minha Área</a>
+      </div>
     </div>
   </div>
 </nav>
@@ -305,5 +311,28 @@
   </div>
 </footer>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  const sbClient = window.supabase.createClient(
+    'https://kqjabzwgbfuivzlcfvvu.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI'
+  );
+  (async () => {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (session) {
+      const user = session.user;
+      const meta = user.user_metadata || {};
+      document.getElementById('nav-login').classList.add('hidden');
+      document.getElementById('nav-cta').classList.add('hidden');
+      const navUser = document.getElementById('nav-user');
+      navUser.classList.remove('hidden');
+      navUser.classList.add('flex');
+      document.getElementById('nav-name').textContent = meta.full_name || meta.name || user.email.split('@')[0];
+      const avatar = meta.avatar_url || meta.picture || '';
+      if (avatar) document.getElementById('nav-avatar').src = avatar;
+      else document.getElementById('nav-avatar').classList.add('hidden');
+    }
+  })();
+</script>
 </body>
 </html>
