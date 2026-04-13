@@ -349,7 +349,7 @@ async def create_checkout(num_files: int = 1):
 
     try:
         session = stripe.checkout.Session.create(
-            payment_method_types=["card"],
+            payment_method_types=["card", "pix"],
             line_items=[{
                 "price_data": {
                     "currency": "brl",
