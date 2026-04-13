@@ -1222,7 +1222,8 @@
   let realProgress = 0;
   let pollStartTime = 0;
   let errorCount = 0;
-  const ESTIMATED_TOTAL_SECONDS = 900;
+  // Tempo estimado baseado no número de arquivos (~40s por prancha)
+  const ESTIMATED_TOTAL_SECONDS = Math.max(120, selectedFiles.length * 40);
 
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
