@@ -678,6 +678,7 @@
   //  STATE
   // ══════════════════════════════════════════════
   let accessToken = '';
+  let currentUser = null;
   let selectedFiles = [];
   let currentJobId = null;
   let pollTimer = null;
@@ -718,7 +719,8 @@
     }
 
     accessToken = session.access_token;
-    const user = session.user;
+    currentUser = session.user;
+    const user = currentUser;
     const meta = user.user_metadata || {};
 
     // Check if profile is complete (onboarding)
