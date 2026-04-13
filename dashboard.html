@@ -118,7 +118,16 @@
       <span>Como Funciona</span>
     </button>
 
+    <button onclick="switchTab('meu-cadastro')" data-tab="meu-cadastro" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128100;</span>
+      <span>Meu Cadastro</span>
+    </button>
+
     <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
+      <a href="faq.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
+        <span class="text-lg">&#10067;</span>
+        <span>FAQ</span>
+      </a>
       <a href="termos.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
         <span class="text-lg">&#128196;</span>
         <span>Termos de Uso</span>
@@ -509,6 +518,71 @@
 
       </div>
 
+      <!-- TAB: MEU CADASTRO -->
+      <div id="tab-meu-cadastro" class="tab-content hidden">
+        <h1 class="text-2xl font-bold text-gray-900">Meu Cadastro</h1>
+        <p class="text-gray-500 mt-1 mb-6">Seus dados pessoais e profissionais</p>
+
+        <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-sm">
+          <div id="profile-loading" class="text-center py-8 text-gray-400">Carregando dados...</div>
+          <div id="profile-data" class="hidden space-y-4">
+            <div class="grid md:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Nome completo</label>
+                <input id="prof-name" type="text" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">E-mail</label>
+                <input id="prof-email" type="email" readonly class="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-500">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">WhatsApp</label>
+                <input id="prof-whatsapp" type="text" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">CPF ou CNPJ</label>
+                <input id="prof-cpf" type="text" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Empresa / Escrit&oacute;rio</label>
+                <input id="prof-company" type="text" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">&Aacute;rea de atua&ccedil;&atilde;o</label>
+                <select id="prof-area" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+                  <option value="">Selecione</option>
+                  <option>Arquitetura</option>
+                  <option>Engenharia Civil</option>
+                  <option>Constru&ccedil;&atilde;o</option>
+                  <option>Or&ccedil;amento e Custos</option>
+                  <option>Incorpora&ccedil;&atilde;o</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Cargo</label>
+                <select id="prof-role" class="w-full px-4 py-3 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+                  <option value="">Selecione</option>
+                  <option>Arquiteto(a)</option>
+                  <option>Engenheiro(a)</option>
+                  <option>Or&ccedil;amentista</option>
+                  <option>Diretor(a)</option>
+                  <option>Coordenador(a)</option>
+                  <option>Estagi&aacute;rio(a)</option>
+                  <option>Outro</option>
+                </select>
+              </div>
+            </div>
+            <div class="pt-4 flex items-center justify-between">
+              <span id="prof-status" class="text-sm text-green-600 hidden">Dados salvos com sucesso!</span>
+              <button id="btn-save-profile" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition hover:opacity-90">
+                Salvar Altera&ccedil;&otilde;es
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
 
@@ -572,6 +646,7 @@
 
     // If switching to history, render it
     if (tabName === 'meus-projetos') renderProjectHistory();
+    if (tabName === 'meu-cadastro') loadProfile();
     if (tabName === 'cashback') renderPendingReviews();
   }
 
@@ -1122,6 +1197,69 @@
     if (history.length > 50) history.length = 50;
     localStorage.setItem('aiarq_project_history', JSON.stringify(history));
   }
+
+  // ══════════════════════════════════════════════
+  //  MEU CADASTRO
+  // ══════════════════════════════════════════════
+  async function loadProfile() {
+    const loading = document.getElementById('profile-loading');
+    const data = document.getElementById('profile-data');
+    loading.classList.remove('hidden');
+    data.classList.add('hidden');
+
+    try {
+      const { data: profile } = await sbClient.from('profiles')
+        .select('*').eq('user_id', currentUser.id).maybeSingle();
+
+      if (profile) {
+        document.getElementById('prof-name').value = profile.full_name || '';
+        document.getElementById('prof-email').value = profile.email || currentUser.email || '';
+        document.getElementById('prof-whatsapp').value = profile.whatsapp || '';
+        document.getElementById('prof-cpf').value = profile.cpf_cnpj || '';
+        document.getElementById('prof-company').value = profile.company || '';
+        document.getElementById('prof-area').value = profile.area || '';
+        document.getElementById('prof-role').value = profile.role || '';
+      } else {
+        document.getElementById('prof-name').value = currentUser.user_metadata?.full_name || '';
+        document.getElementById('prof-email').value = currentUser.email || '';
+      }
+      loading.classList.add('hidden');
+      data.classList.remove('hidden');
+    } catch (e) {
+      loading.textContent = 'Erro ao carregar dados.';
+    }
+  }
+
+  document.getElementById('btn-save-profile')?.addEventListener('click', async () => {
+    const btn = document.getElementById('btn-save-profile');
+    const status = document.getElementById('prof-status');
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+    status.classList.add('hidden');
+
+    const updates = {
+      full_name: document.getElementById('prof-name').value,
+      whatsapp: document.getElementById('prof-whatsapp').value,
+      cpf_cnpj: document.getElementById('prof-cpf').value,
+      company: document.getElementById('prof-company').value,
+      area: document.getElementById('prof-area').value,
+      role: document.getElementById('prof-role').value,
+    };
+
+    const { error } = await sbClient.from('profiles')
+      .update(updates).eq('user_id', currentUser.id);
+
+    if (error) {
+      status.textContent = 'Erro ao salvar. Tente novamente.';
+      status.className = 'text-sm text-red-600';
+    } else {
+      status.textContent = 'Dados salvos com sucesso!';
+      status.className = 'text-sm text-green-600';
+    }
+    status.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = 'Salvar Alterações';
+  });
 
   function renderProjectHistory() {
     const history = getProjectHistory();
