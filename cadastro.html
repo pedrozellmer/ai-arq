@@ -227,15 +227,20 @@
     emailInput.value = currentUser.email || '';
 
     // If profile already exists, redirect to dashboard
-    const { data: profile } = await sbClient
-      .from('profiles')
-      .select('id')
-      .eq('user_id', currentUser.id)
-      .maybeSingle();
+    try {
+      const { data: profile } = await sbClient
+        .from('profiles')
+        .select('user_id')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
 
-    if (profile) {
-      localStorage.setItem('aiarq_profile_complete', 'true');
-      window.location.href = 'dashboard.html';
+      if (profile) {
+        localStorage.setItem('aiarq_profile_complete', 'true');
+        window.location.href = 'dashboard.html';
+        return;
+      }
+    } catch (err) {
+      console.error('Erro ao verificar perfil:', err);
     }
   }
   checkAuth();
