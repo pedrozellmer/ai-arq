@@ -145,6 +145,9 @@
 
   <!-- User section at bottom -->
   <div class="px-4 py-4 border-t border-white/10">
+    <a id="btn-admin" href="admin.html" class="hidden w-full flex items-center gap-2 px-4 py-2 mb-3 rounded-lg bg-red-500/20 text-red-200 text-xs font-medium hover:bg-red-500/30 transition no-underline">
+      <span>&#9881;</span> Painel Admin
+    </a>
     <div class="flex items-center gap-3">
       <img id="user-avatar" src="" alt="Avatar" class="h-9 w-9 rounded-full object-cover border-2 border-white/20 shrink-0">
       <div class="min-w-0 flex-1">
@@ -814,6 +817,12 @@
     userAvatar.src = meta.avatar_url || meta.picture || '';
     if (!userAvatar.src) {
       userAvatar.style.display = 'none';
+    }
+
+    // Mostrar botão admin só pro email admin
+    if (user.email === 'zarelalopes@gmail.com') {
+      const btnAdmin = document.getElementById('btn-admin');
+      if (btnAdmin) { btnAdmin.classList.remove('hidden'); btnAdmin.classList.add('flex'); }
     }
 
     // ── Load beta code banner ──
