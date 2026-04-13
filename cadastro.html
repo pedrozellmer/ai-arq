@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI.arq - Complete seu cadastro</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
+  .shadow-btn { box-shadow: 0 8px 30px -8px rgba(79,70,229,0.4); }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
+
+<!-- NAVBAR -->
+<nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="index.html" class="flex items-center gap-2">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+  </div>
+</nav>
+
+<!-- MAIN CONTENT -->
+<main class="flex-1 flex items-center justify-center px-4 py-10">
+  <div class="w-full max-w-lg">
+    <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient">
+
+      <!-- Logo -->
+      <div class="flex items-center justify-center gap-3 mb-2">
+        <div class="flex h-14 w-14 items-center justify-center rounded-xl gradient-main text-white font-bold text-xl shadow-lg shadow-indigo-500/25">AI</div>
+        <span class="text-3xl font-extrabold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+
+      <!-- Title -->
+      <h1 class="text-2xl font-bold text-gray-900 text-center mt-6 mb-1">Complete seu cadastro</h1>
+      <p class="text-sm text-gray-500 text-center mb-8">Precisamos de algumas informa&#231;&#245;es para sua conta</p>
+
+      <!-- Form -->
+      <form id="form-cadastro" class="space-y-5" novalidate>
+
+        <!-- Nome completo -->
+        <div>
+          <label for="nome" class="block text-sm font-medium text-gray-700 mb-1">Nome completo</label>
+          <input type="text" id="nome" name="nome" required
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+            placeholder="Seu nome completo">
+        </div>
+
+        <!-- E-mail -->
+        <div>
+          <label for="email" class="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+          <input type="email" id="email" name="email" readonly
+            class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-500 cursor-not-allowed"
+            placeholder="seu@email.com">
+        </div>
+
+        <!-- WhatsApp -->
+        <div>
+          <label for="whatsapp" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
+          <input type="tel" id="whatsapp" name="whatsapp" required
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+            placeholder="(21) 99999-9999" maxlength="15">
+        </div>
+
+        <!-- CPF ou CNPJ -->
+        <div>
+          <label for="cpf_cnpj" class="block text-sm font-medium text-gray-700 mb-1">CPF ou CNPJ</label>
+          <input type="text" id="cpf_cnpj" name="cpf_cnpj" required
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+            placeholder="000.000.000-00" maxlength="18">
+        </div>
+
+        <!-- Empresa / Escritorio -->
+        <div>
+          <label for="empresa" class="block text-sm font-medium text-gray-700 mb-1">Empresa / Escrit&#243;rio</label>
+          <input type="text" id="empresa" name="empresa"
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+            placeholder="Nome da empresa">
+        </div>
+
+        <!-- Area de atuacao -->
+        <div>
+          <label for="area" class="block text-sm font-medium text-gray-700 mb-1">&#193;rea de atua&#231;&#227;o</label>
+          <select id="area" name="area" required
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition bg-white appearance-none"
+            style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22%3E%3Cpath stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;">
+            <option value="" disabled selected>Selecione sua &#225;rea</option>
+            <option value="Arquitetura">Arquitetura</option>
+            <option value="Engenharia Civil">Engenharia Civil</option>
+            <option value="Construção">Constru&#231;&#227;o</option>
+            <option value="Orçamento e Custos">Or&#231;amento e Custos</option>
+            <option value="Incorporação">Incorpora&#231;&#227;o</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+
+        <!-- Cargo -->
+        <div>
+          <label for="cargo" class="block text-sm font-medium text-gray-700 mb-1">Cargo</label>
+          <select id="cargo" name="cargo" required
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition bg-white appearance-none"
+            style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22%3E%3Cpath stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;">
+            <option value="" disabled selected>Selecione seu cargo</option>
+            <option value="Arquiteto(a)">Arquiteto(a)</option>
+            <option value="Engenheiro(a)">Engenheiro(a)</option>
+            <option value="Orçamentista">Or&#231;amentista</option>
+            <option value="Diretor(a)">Diretor(a)</option>
+            <option value="Coordenador(a)">Coordenador(a)</option>
+            <option value="Estagiário(a)">Estagi&#225;rio(a)</option>
+            <option value="Outro">Outro</option>
+          </select>
+        </div>
+
+        <!-- Checkboxes -->
+        <div class="space-y-3 pt-2">
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="aceita_marketing" name="aceita_marketing"
+              class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            <span class="text-sm text-gray-600">Aceito receber novidades e promo&#231;&#245;es por e-mail e WhatsApp</span>
+          </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="aceita_termos" name="aceita_termos" required
+              class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            <span class="text-sm text-gray-600">Li e aceito os <a href="termos.html" target="_blank" class="text-indigo-500 hover:text-indigo-700 underline">Termos de Uso</a> e a <a href="privacidade.html" target="_blank" class="text-indigo-500 hover:text-indigo-700 underline">Pol&#237;tica de Privacidade</a></span>
+          </label>
+        </div>
+
+        <!-- Error message -->
+        <div id="form-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600"></div>
+
+        <!-- Submit -->
+        <button type="submit" id="btn-submit"
+          class="w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+          Salvar e Continuar
+        </button>
+
+      </form>
+    </div>
+  </div>
+</main>
+
+<!-- FOOTER -->
+<footer class="border-t bg-gray-50 py-8">
+  <div class="mx-auto max-w-6xl px-4">
+    <div class="flex flex-col items-center gap-3 md:flex-row md:justify-between">
+      <div class="flex items-center gap-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="font-bold text-gray-900 text-sm">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <div class="flex gap-6 text-xs text-gray-400">
+        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+        <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
+      </div>
+      <p class="text-xs text-gray-300">2026 AI.arq. Todos os direitos reservados.</p>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // ══════════════════════════════════════════════
+  //  SUPABASE CONFIG
+  // ══════════════════════════════════════════════
+  const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
+
+  const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ══════════════════════════════════════════════
+  //  DOM REFS
+  // ══════════════════════════════════════════════
+  const form = document.getElementById('form-cadastro');
+  const nomeInput = document.getElementById('nome');
+  const emailInput = document.getElementById('email');
+  const whatsappInput = document.getElementById('whatsapp');
+  const cpfCnpjInput = document.getElementById('cpf_cnpj');
+  const empresaInput = document.getElementById('empresa');
+  const areaSelect = document.getElementById('area');
+  const cargoSelect = document.getElementById('cargo');
+  const aceitaMarketing = document.getElementById('aceita_marketing');
+  const aceitaTermos = document.getElementById('aceita_termos');
+  const formError = document.getElementById('form-error');
+  const btnSubmit = document.getElementById('btn-submit');
+
+  let currentUser = null;
+
+  // ══════════════════════════════════════════════
+  //  AUTH CHECK & PRE-FILL
+  // ══════════════════════════════════════════════
+  async function checkAuth() {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) {
+      window.location.href = 'login.html';
+      return;
+    }
+
+    currentUser = session.user;
+    const meta = currentUser.user_metadata || {};
+
+    // Pre-fill from Google session
+    nomeInput.value = meta.full_name || meta.name || '';
+    emailInput.value = currentUser.email || '';
+
+    // If profile already exists, redirect to dashboard
+    const { data: profile } = await sbClient
+      .from('profiles')
+      .select('id')
+      .eq('user_id', currentUser.id)
+      .maybeSingle();
+
+    if (profile) {
+      localStorage.setItem('aiarq_profile_complete', 'true');
+      window.location.href = 'dashboard.html';
+    }
+  }
+  checkAuth();
+
+  // ══════════════════════════════════════════════
+  //  WHATSAPP MASK — (XX) XXXXX-XXXX
+  // ══════════════════════════════════════════════
+  whatsappInput.addEventListener('input', function () {
+    let v = this.value.replace(/\D/g, '');
+    if (v.length > 11) v = v.slice(0, 11);
+
+    if (v.length > 6) {
+      v = '(' + v.slice(0, 2) + ') ' + v.slice(2, 7) + '-' + v.slice(7);
+    } else if (v.length > 2) {
+      v = '(' + v.slice(0, 2) + ') ' + v.slice(2);
+    } else if (v.length > 0) {
+      v = '(' + v;
+    }
+    this.value = v;
+  });
+
+  // ══════════════════════════════════════════════
+  //  CPF / CNPJ MASK
+  // ══════════════════════════════════════════════
+  cpfCnpjInput.addEventListener('input', function () {
+    let v = this.value.replace(/\D/g, '');
+    if (v.length > 14) v = v.slice(0, 14);
+
+    if (v.length <= 11) {
+      // CPF: 000.000.000-00
+      if (v.length > 9) {
+        v = v.slice(0, 3) + '.' + v.slice(3, 6) + '.' + v.slice(6, 9) + '-' + v.slice(9);
+      } else if (v.length > 6) {
+        v = v.slice(0, 3) + '.' + v.slice(3, 6) + '.' + v.slice(6);
+      } else if (v.length > 3) {
+        v = v.slice(0, 3) + '.' + v.slice(3);
+      }
+    } else {
+      // CNPJ: 00.000.000/0000-00
+      v = v.slice(0, 2) + '.' + v.slice(2, 5) + '.' + v.slice(5, 8) + '/' + v.slice(8, 12) + '-' + v.slice(12);
+    }
+    this.value = v;
+  });
+
+  // ══════════════════════════════════════════════
+  //  SHOW / HIDE ERROR
+  // ══════════════════════════════════════════════
+  function showError(msg) {
+    formError.textContent = msg;
+    formError.classList.remove('hidden');
+  }
+
+  function hideError() {
+    formError.classList.add('hidden');
+  }
+
+  // ══════════════════════════════════════════════
+  //  FORM SUBMIT
+  // ══════════════════════════════════════════════
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideError();
+
+    // Validations
+    const nome = nomeInput.value.trim();
+    const whatsapp = whatsappInput.value.trim();
+    const cpfCnpj = cpfCnpjInput.value.trim();
+    const empresa = empresaInput.value.trim();
+    const area = areaSelect.value;
+    const cargo = cargoSelect.value;
+
+    if (!nome) {
+      showError('Por favor, preencha seu nome completo.');
+      nomeInput.focus();
+      return;
+    }
+
+    if (!whatsapp || whatsapp.replace(/\D/g, '').length < 10) {
+      showError('Por favor, informe um n\u00famero de WhatsApp v\u00e1lido.');
+      whatsappInput.focus();
+      return;
+    }
+
+    const cpfCnpjDigits = cpfCnpj.replace(/\D/g, '');
+    if (!cpfCnpjDigits || (cpfCnpjDigits.length !== 11 && cpfCnpjDigits.length !== 14)) {
+      showError('Por favor, informe um CPF (11 d\u00edgitos) ou CNPJ (14 d\u00edgitos) v\u00e1lido.');
+      cpfCnpjInput.focus();
+      return;
+    }
+
+    if (!area) {
+      showError('Por favor, selecione sua \u00e1rea de atua\u00e7\u00e3o.');
+      areaSelect.focus();
+      return;
+    }
+
+    if (!cargo) {
+      showError('Por favor, selecione seu cargo.');
+      cargoSelect.focus();
+      return;
+    }
+
+    if (!aceitaTermos.checked) {
+      showError('Voc\u00ea precisa aceitar os Termos de Uso e a Pol\u00edtica de Privacidade para continuar.');
+      return;
+    }
+
+    // Disable button
+    btnSubmit.disabled = true;
+    btnSubmit.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg> Salvando...';
+
+    try {
+      const { error } = await sbClient.from('profiles').insert({
+        user_id: currentUser.id,
+        email: currentUser.email,
+        nome_completo: nome,
+        whatsapp: whatsapp,
+        cpf_cnpj: cpfCnpjDigits,
+        empresa: empresa,
+        area_atuacao: area,
+        cargo: cargo,
+        aceita_marketing: aceitaMarketing.checked,
+        aceita_termos: true,
+        created_at: new Date().toISOString()
+      });
+
+      if (error) {
+        // Handle duplicate key (profile already exists)
+        if (error.code === '23505') {
+          localStorage.setItem('aiarq_profile_complete', 'true');
+          window.location.href = 'dashboard.html';
+          return;
+        }
+        throw error;
+      }
+
+      // Success
+      localStorage.setItem('aiarq_profile_complete', 'true');
+      window.location.href = 'dashboard.html';
+
+    } catch (err) {
+      console.error('Erro ao salvar perfil:', err);
+      showError('Erro ao salvar seus dados. Por favor, tente novamente.');
+      btnSubmit.disabled = false;
+      btnSubmit.textContent = 'Salvar e Continuar';
+    }
+  });
+</script>
+
+</body>
+</html>

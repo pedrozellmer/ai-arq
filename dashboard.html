@@ -646,6 +646,31 @@
     const user = session.user;
     const meta = user.user_metadata || {};
 
+    // Check if profile is complete (onboarding)
+    const profileComplete = localStorage.getItem('aiarq_profile_complete');
+    if (!profileComplete) {
+      // Query Supabase to confirm
+      try {
+        const { data: profile } = await sbClient
+          .from('profiles')
+          .select('id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+
+        if (profile) {
+          localStorage.setItem('aiarq_profile_complete', 'true');
+        } else {
+          window.location.href = 'cadastro.html';
+          return;
+        }
+      } catch (err) {
+        console.error('Erro ao verificar perfil:', err);
+        // If query fails, redirect to cadastro to be safe
+        window.location.href = 'cadastro.html';
+        return;
+      }
+    }
+
     userName.textContent = meta.full_name || meta.name || user.email;
     userAvatar.src = meta.avatar_url || meta.picture || '';
     if (!userAvatar.src) {
@@ -658,6 +683,7 @@
   //  LOGOUT
   // ══════════════════════════════════════════════
   btnLogout.addEventListener('click', async () => {
+    localStorage.removeItem('aiarq_profile_complete');
     await sbClient.auth.signOut();
     window.location.href = 'login.html';
   });
