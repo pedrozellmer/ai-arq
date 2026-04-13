@@ -5,7 +5,7 @@
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI.arq - Pol&#237;tica de Privacidade</title>
+<title>AI.arq - Pol&iacute;tica de Privacidade</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -43,179 +43,479 @@
 
     <!-- Header -->
     <div class="mb-10">
-      <h1 class="text-3xl font-bold text-gray-900 md:text-4xl">Pol&#237;tica de Privacidade</h1>
+      <h1 class="text-3xl font-bold text-gray-900 md:text-4xl">Pol&iacute;tica de Privacidade</h1>
       <p class="mt-2 text-lg text-gray-500">AI.arq</p>
-      <p class="mt-1 text-sm text-gray-400">&#218;ltima atualiza&#231;&#227;o: Abril/2026</p>
+      <p class="mt-1 text-sm text-gray-400">&Uacute;ltima atualiza&ccedil;&atilde;o: Abril/2026</p>
     </div>
 
     <div class="space-y-10">
 
+      <!-- Introdu&#231;&#227;o -->
+      <section>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            Esta Pol&iacute;tica de Privacidade descreve como o AI.arq coleta, utiliza, armazena, compartilha e protege os dados pessoais dos usu&aacute;rios da plataforma, em conformidade com a Lei Geral de Prote&ccedil;&atilde;o de Dados &mdash; LGPD (Lei n&ordm; 13.709/2018) e demais normas aplic&aacute;veis.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            Ao criar uma conta e utilizar o Servi&ccedil;o, voc&ecirc; consente com as pr&aacute;ticas descritas neste documento.
+          </p>
+        </div>
+      </section>
+
       <!-- 1. Dados Coletados -->
       <section>
         <h2 class="text-xl font-bold text-gray-900 mb-3">1. Dados Coletados</h2>
-        <div class="rounded-xl bg-white border p-6 shadow-sm">
-          <p class="text-gray-600 leading-relaxed mb-4">
-            Coletamos os seguintes dados para fornecer nosso servi&#231;o:
-          </p>
-          <ul class="space-y-3">
-            <li class="flex items-start gap-3">
-              <svg class="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-              <p class="text-gray-600"><strong>Nome e e-mail</strong> &#8212; obtidos via autentica&#231;&#227;o Google OAuth</p>
-            </li>
-            <li class="flex items-start gap-3">
-              <svg class="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-              <p class="text-gray-600"><strong>Arquivos PDF</strong> &#8212; pranchas de arquitetura enviadas para processamento</p>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <!-- 2. Uso dos Dados -->
-      <section>
-        <h2 class="text-xl font-bold text-gray-900 mb-3">2. Uso dos Dados</h2>
-        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-5">
           <p class="text-gray-600 leading-relaxed">
-            Utilizamos seus dados exclusivamente para:
+            Coletamos os seguintes dados para fornecer e melhorar nosso Servi&ccedil;o:
           </p>
-          <ul class="space-y-2 ml-4">
-            <li class="flex items-start gap-2">
-              <span class="mt-1.5 h-2 w-2 rounded-full bg-indigo-400 shrink-0"></span>
-              <p class="text-gray-600">Processar os PDFs enviados e gerar as planilhas de quantitativos</p>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="mt-1.5 h-2 w-2 rounded-full bg-indigo-400 shrink-0"></span>
-              <p class="text-gray-600">Melhorar a qualidade e precis&#227;o do servi&#231;o</p>
-            </li>
-            <li class="flex items-start gap-2">
-              <span class="mt-1.5 h-2 w-2 rounded-full bg-indigo-400 shrink-0"></span>
-              <p class="text-gray-600">Gerenciar sua conta e autentica&#231;&#227;o</p>
-            </li>
-          </ul>
+
+          <!-- 1.1 Dados de autentica&#231;&#227;o -->
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-5 h-5 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+              <p class="text-sm font-semibold text-gray-800">1.1. Dados de autentica&ccedil;&atilde;o</p>
+            </div>
+            <ul class="space-y-1.5 ml-4">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600"><strong>Via Google OAuth:</strong> nome completo, endere&ccedil;o de e-mail e foto de perfil associados &agrave; conta Google</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600"><strong>Via e-mail/senha:</strong> endere&ccedil;o de e-mail e senha (armazenada com hash pelo Supabase; n&atilde;o temos acesso &agrave; senha em texto)</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- 1.2 Dados cadastrais -->
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-5 h-5 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+              <p class="text-sm font-semibold text-gray-800">1.2. Dados cadastrais</p>
+            </div>
+            <ul class="space-y-1.5 ml-4">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Nome completo</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">N&uacute;mero de WhatsApp</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">CPF ou CNPJ</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Nome da empresa ou escrit&oacute;rio</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">&Aacute;rea de atua&ccedil;&atilde;o (Arquitetura, Engenharia Civil, Constru&ccedil;&atilde;o, Or&ccedil;amento e Custos, Incorpora&ccedil;&atilde;o, Outro)</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Cargo (Arquiteto(a), Engenheiro(a), Or&ccedil;amentista, Diretor(a), Coordenador(a), Estagi&aacute;rio(a), Outro)</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- 1.3 Dados de uso -->
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-5 h-5 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+              <p class="text-sm font-semibold text-gray-800">1.3. Dados de uso da plataforma</p>
+            </div>
+            <ul class="space-y-1.5 ml-4">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Arquivos PDF de pranchas de arquitetura enviados para processamento</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Hist&oacute;rico de projetos processados (nome, data, status, quantidade de pranchas)</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Planilhas de quantitativos geradas</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Planilhas revisadas enviadas via programa de cashback (quando aplic&aacute;vel)</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- 1.4 Dados de pagamento -->
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-5 h-5 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
+              <p class="text-sm font-semibold text-gray-800">1.4. Dados de pagamento</p>
+            </div>
+            <ul class="space-y-1.5 ml-4">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Dados de cart&atilde;o de cr&eacute;dito/d&eacute;bito e PIX &mdash; processados integralmente pelo <strong>Stripe</strong>. O AI.arq <strong>n&atilde;o armazena</strong> n&uacute;mero de cart&atilde;o, CVV, data de validade ou quaisquer dados financeiros sens&iacute;veis</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Recebemos do Stripe apenas confirma&ccedil;&atilde;o de pagamento (status, valor e identificador da sess&atilde;o)</span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- 1.5 Dados t&eacute;cnicos -->
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-5 h-5 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              <p class="text-sm font-semibold text-gray-800">1.5. Dados t&eacute;cnicos (localStorage do navegador)</p>
+            </div>
+            <ul class="space-y-1.5 ml-4">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Status de conclus&atilde;o do perfil (<code class="text-xs bg-gray-200 px-1 rounded">aiarq_profile_complete</code>)</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">C&oacute;digo beta ativo (<code class="text-xs bg-gray-200 px-1 rounded">aiarq_beta_code</code>)</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Hist&oacute;rico de projetos e planilhas revisadas (<code class="text-xs bg-gray-200 px-1 rounded">aiarq_project_history</code>, <code class="text-xs bg-gray-200 px-1 rounded">aiarq_reviews</code>)</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Prefer&ecirc;ncias de interface (<code class="text-xs bg-gray-200 px-1 rounded">aiarq_warning_dismissed</code>)</span>
+              </li>
+            </ul>
+            <p class="text-xs text-gray-400 mt-3">Estes dados ficam armazenados exclusivamente no navegador do usu&aacute;rio e n&atilde;o s&atilde;o transmitidos aos nossos servidores.</p>
+          </div>
+
+          <!-- 1.6 Consentimentos -->
+          <div class="bg-gray-50 rounded-lg p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-5 h-5 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <p class="text-sm font-semibold text-gray-800">1.6. Consentimentos e prefer&ecirc;ncias</p>
+            </div>
+            <ul class="space-y-1.5 ml-4">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Aceite dos Termos de Uso e Pol&iacute;tica de Privacidade (obrigat&oacute;rio)</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Consentimento para receber comunica&ccedil;&otilde;es de marketing por e-mail e WhatsApp (opt-in, facultativo)</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">C&oacute;digo de convite beta (quando informado)</span>
+              </li>
+            </ul>
+          </div>
         </div>
       </section>
 
-      <!-- 3. Armazenamento -->
+      <!-- 2. Finalidade do Uso dos Dados -->
       <section>
-        <h2 class="text-xl font-bold text-gray-900 mb-3">3. Armazenamento</h2>
-        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
-          <div class="flex items-start gap-3 bg-emerald-50 rounded-lg p-4">
-            <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-            <div>
-              <p class="text-emerald-700 font-medium">PDFs s&#227;o tempor&#225;rios</p>
-              <p class="text-emerald-600 text-sm mt-1">Os arquivos PDF s&#227;o deletados automaticamente ap&#243;s o processamento e download da planilha.</p>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">2. Finalidade do Uso dos Dados</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm">
+          <div class="space-y-3">
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">1</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Presta&ccedil;&atilde;o do Servi&ccedil;o</p>
+                <p class="text-sm text-gray-600">Processar PDFs e gerar planilhas de quantitativos; gerenciar conta e autentica&ccedil;&atilde;o; processar pagamentos.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">2</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Melhoria do Servi&ccedil;o</p>
+                <p class="text-sm text-gray-600">Utilizar planilhas revisadas (programa de cashback) para calibrar e melhorar a precis&atilde;o do algoritmo de an&aacute;lise.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">3</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Comunica&ccedil;&atilde;o</p>
+                <p class="text-sm text-gray-600">Enviar notifica&ccedil;&otilde;es sobre o Servi&ccedil;o e, mediante consentimento expl&iacute;cito (opt-in), novidades e promo&ccedil;&otilde;es por e-mail e WhatsApp.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">4</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Identifica&ccedil;&atilde;o e Seguran&ccedil;a</p>
+                <p class="text-sm text-gray-600">CPF/CNPJ utilizado para identifica&ccedil;&atilde;o fiscal e preven&ccedil;&atilde;o de fraudes; dados de empresa e cargo para personaliza&ccedil;&atilde;o da experi&ecirc;ncia.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">5</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Programa Beta e Cashback</p>
+                <p class="text-sm text-gray-600">Gerenciar c&oacute;digos de convite, controlar limites de uso e aplicar descontos do programa de cashback.</p>
+              </div>
             </div>
           </div>
-          <p class="text-gray-600 leading-relaxed">
-            Dados da conta (nome, e-mail) s&#227;o armazenados de forma segura no Supabase, com criptografia e controle de acesso.
-          </p>
         </div>
       </section>
 
-      <!-- 4. Compartilhamento -->
+      <!-- 3. Compartilhamento com Terceiros -->
       <section>
-        <h2 class="text-xl font-bold text-gray-900 mb-3">4. Compartilhamento de Dados</h2>
-        <div class="rounded-xl border border-emerald-200 bg-white p-6 shadow-sm">
-          <div class="flex items-center gap-2 mb-4">
-            <svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-            <span class="text-lg font-bold text-emerald-700">Seus dados est&#227;o protegidos</span>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">3. Compartilhamento com Terceiros</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-5">
+          <p class="text-gray-600 leading-relaxed">
+            Para a presta&ccedil;&atilde;o do Servi&ccedil;o, compartilhamos dados espec&iacute;ficos com os seguintes parceiros:
+          </p>
+
+          <div class="space-y-3">
+            <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-4">
+              <span class="mt-0.5 text-lg shrink-0">&#129302;</span>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Anthropic (Claude API)</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>O que recebe:</strong> imagens recortadas das pranchas de arquitetura e texto extra&iacute;do dos PDFs para an&aacute;lise com intelig&ecirc;ncia artificial.</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Finalidade:</strong> gera&ccedil;&atilde;o dos quantitativos e levantamento or&ccedil;ament&aacute;rio.</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Garantia:</strong> os dados enviados via API <strong>n&atilde;o s&atilde;o utilizados pela Anthropic para treinamento de modelos de IA</strong>.</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-4">
+              <span class="mt-0.5 text-lg shrink-0">&#128179;</span>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Stripe</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>O que recebe:</strong> dados de pagamento (cart&atilde;o de cr&eacute;dito/d&eacute;bito ou PIX).</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Finalidade:</strong> processamento seguro de transa&ccedil;&otilde;es financeiras.</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Garantia:</strong> o AI.arq n&atilde;o tem acesso a dados de cart&atilde;o; todo o fluxo financeiro ocorre nos servidores do Stripe, certificado PCI-DSS.</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-4">
+              <span class="mt-0.5 text-lg shrink-0">&#128451;</span>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Supabase</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>O que recebe:</strong> dados cadastrais do perfil do usu&aacute;rio e c&oacute;digos beta.</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Finalidade:</strong> banco de dados seguro para gerenciamento de contas.</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Garantia:</strong> dados criptografados em tr&acirc;nsito e em repouso, datacenter localizado na Am&eacute;rica.</p>
+              </div>
+            </div>
+
+            <div class="flex items-start gap-3 bg-gray-50 rounded-lg p-4">
+              <span class="mt-0.5 text-lg shrink-0">&#128275;</span>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Google</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>O que recebe/envia:</strong> protocolo OAuth 2.0 para autentica&ccedil;&atilde;o segura (o AI.arq recebe nome, e-mail e foto).</p>
+                <p class="text-sm text-gray-600 mt-1"><strong>Finalidade:</strong> login simplificado e seguro.</p>
+              </div>
+            </div>
           </div>
-          <ul class="space-y-3">
-            <li class="flex items-start gap-3">
-              <span class="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0"></span>
-              <p class="text-gray-700"><strong>N&#195;O</strong> compartilhamos seus dados com terceiros.</p>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0"></span>
-              <p class="text-gray-700">Seus PDFs <strong>N&#195;O</strong> s&#227;o usados para treinar modelos de IA.</p>
-            </li>
-            <li class="flex items-start gap-3">
-              <span class="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0"></span>
-              <p class="text-gray-700">Seus projetos permanecem 100% confidenciais.</p>
-            </li>
-          </ul>
+
+          <div class="border-t pt-4 space-y-2">
+            <div class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <p class="text-sm text-gray-700"><strong>N&Atilde;O vendemos, alugamos ou comercializamos</strong> seus dados pessoais a terceiros sob nenhuma hip&oacute;tese.</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <p class="text-sm text-gray-700">Seus PDFs <strong>N&Atilde;O s&atilde;o utilizados para treinar modelos de IA</strong>, nem pelo AI.arq nem pela Anthropic.</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <p class="text-sm text-gray-700">Seus projetos permanecem <strong>100% confidenciais</strong>.</p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <!-- 5. Cookies -->
+      <!-- 4. Armazenamento e Seguran&#231;a -->
       <section>
-        <h2 class="text-xl font-bold text-gray-900 mb-3">5. Cookies</h2>
-        <div class="rounded-xl bg-white border p-6 shadow-sm">
+        <h2 class="text-xl font-bold text-gray-900 mb-3">4. Armazenamento e Seguran&ccedil;a</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-4">
           <p class="text-gray-600 leading-relaxed">
-            Utilizamos apenas cookies essenciais para manter sua autentica&#231;&#227;o e sess&#227;o ativa. N&#227;o utilizamos cookies de rastreamento ou publicidade.
+            Adotamos as seguintes medidas t&eacute;cnicas e organizacionais para proteger seus dados:
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <span class="text-sm text-gray-700">HTTPS em todas as comunica&ccedil;&otilde;es</span>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <span class="text-sm text-gray-700">Autentica&ccedil;&atilde;o segura via OAuth 2.0</span>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <span class="text-sm text-gray-700">Dados criptografados em tr&acirc;nsito e em repouso</span>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <span class="text-sm text-gray-700">Exclus&atilde;o autom&aacute;tica de PDFs ap&oacute;s processamento</span>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <span class="text-sm text-gray-700">Senhas com hash (nunca armazenadas em texto)</span>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <span class="text-sm text-gray-700">Pagamentos processados por Stripe (PCI-DSS)</span>
+            </div>
+          </div>
+
+          <div class="space-y-3 mt-2">
+            <div class="flex items-start gap-3 bg-emerald-50 rounded-lg p-4">
+              <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+              <div>
+                <p class="text-emerald-700 font-medium">PDFs: processamento tempor&aacute;rio</p>
+                <p class="text-emerald-600 text-sm mt-1">Os arquivos PDF s&atilde;o armazenados em diret&oacute;rio tempor&aacute;rio do servidor durante o processamento e deletados automaticamente ap&oacute;s a conclus&atilde;o.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-blue-50 rounded-lg p-4">
+              <svg class="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <div>
+                <p class="text-blue-700 font-medium">Planilhas: dispon&iacute;veis por 15 dias</p>
+                <p class="text-blue-600 text-sm mt-1">As planilhas geradas ficam dispon&iacute;veis para download por at&eacute; 15 dias, sendo exclu&iacute;das automaticamente ap&oacute;s esse prazo.</p>
+              </div>
+            </div>
+          </div>
+
+          <p class="text-gray-600 leading-relaxed">
+            <strong>Dados de conta</strong> (perfil cadastral) ficam armazenados no Supabase enquanto a conta permanecer ativa, com criptografia e datacenter na Am&eacute;rica.
           </p>
         </div>
       </section>
 
-      <!-- 6. Direitos do Usu&#225;rio (LGPD) -->
+      <!-- 5. Cookies e localStorage -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">5. Cookies e localStorage</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            <strong>Cookies:</strong> Utilizamos exclusivamente cookies essenciais gerenciados pelo Supabase para manter sua sess&atilde;o de autentica&ccedil;&atilde;o ativa. N&atilde;o utilizamos cookies de rastreamento, an&aacute;lise comportamental ou publicidade.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            <strong>localStorage:</strong> Armazenamos no navegador do usu&aacute;rio dados de sess&atilde;o, prefer&ecirc;ncias de interface, hist&oacute;rico de projetos e c&oacute;digo beta. Esses dados n&atilde;o s&atilde;o transmitidos aos nossos servidores e ficam sob controle exclusivo do usu&aacute;rio, que pode remov&ecirc;-los a qualquer momento nas configura&ccedil;&otilde;es do navegador.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6. Seus Direitos (LGPD) -->
       <section>
         <h2 class="text-xl font-bold text-gray-900 mb-3">6. Seus Direitos (LGPD)</h2>
-        <div class="rounded-xl bg-white border p-6 shadow-sm">
-          <p class="text-gray-600 leading-relaxed mb-4">
-            Em conformidade com a Lei Geral de Prote&#231;&#227;o de Dados (LGPD), voc&#234; tem direito a:
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-4">
+          <p class="text-gray-600 leading-relaxed">
+            Em conformidade com a Lei Geral de Prote&ccedil;&atilde;o de Dados (Lei n&ordm; 13.709/2018), voc&ecirc; tem os seguintes direitos:
           </p>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
               <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span class="text-sm text-gray-700">Acesso aos seus dados</span>
+              <span class="text-sm text-gray-700"><strong>Acesso</strong> aos seus dados pessoais</span>
             </div>
             <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
               <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span class="text-sm text-gray-700">Corre&#231;&#227;o de dados</span>
+              <span class="text-sm text-gray-700"><strong>Corre&ccedil;&atilde;o</strong> de dados incompletos ou incorretos</span>
             </div>
             <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
               <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span class="text-sm text-gray-700">Exclus&#227;o de dados</span>
+              <span class="text-sm text-gray-700"><strong>Exclus&atilde;o</strong> de conta e dados pessoais</span>
             </div>
             <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
               <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span class="text-sm text-gray-700">Portabilidade de dados</span>
+              <span class="text-sm text-gray-700"><strong>Portabilidade</strong> dos dados</span>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span class="text-sm text-gray-700"><strong>Revoga&ccedil;&atilde;o</strong> do consentimento de marketing</span>
+            </div>
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
+              <svg class="w-4 h-4 text-indigo-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span class="text-sm text-gray-700"><strong>Informa&ccedil;&atilde;o</strong> sobre uso compartilhado</span>
             </div>
           </div>
-          <p class="text-sm text-gray-500 mt-4">
-            Para exercer qualquer um desses direitos, entre em contato pelo e-mail abaixo.
-          </p>
+          <div class="bg-indigo-50 rounded-lg p-4 mt-3">
+            <p class="text-sm text-indigo-700">
+              Para exercer qualquer um desses direitos, envie sua solicita&ccedil;&atilde;o para
+              <a href="mailto:contato@ai.arq.br" class="font-medium underline">contato@ai.arq.br</a>.
+              Responderemos no prazo m&aacute;ximo de 15 dias &uacute;teis, conforme previsto na LGPD.
+            </p>
+          </div>
         </div>
       </section>
 
-      <!-- 7. Seguran&#231;a -->
+      <!-- 7. Reten&#231;&#227;o de Dados -->
       <section>
-        <h2 class="text-xl font-bold text-gray-900 mb-3">7. Seguran&#231;a</h2>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">7. Reten&ccedil;&atilde;o de Dados</h2>
         <div class="rounded-xl bg-white border p-6 shadow-sm">
-          <p class="text-gray-600 leading-relaxed mb-4">
-            Adotamos as seguintes medidas de seguran&#231;a para proteger seus dados:
-          </p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-              <span class="text-sm text-gray-700">Conex&#227;o HTTPS criptografada</span>
+          <div class="space-y-3">
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-gray-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>PDFs de pranchas:</strong> deletados automaticamente ap&oacute;s processamento (minutos).</p>
             </div>
-            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-              <span class="text-sm text-gray-700">Autentica&#231;&#227;o via Google OAuth</span>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-gray-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Planilhas geradas:</strong> dispon&iacute;veis por 15 dias, depois exclu&iacute;das.</p>
             </div>
-            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-              <span class="text-sm text-gray-700">Dados criptografados em repouso</span>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-gray-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Dados cadastrais:</strong> mantidos enquanto a conta estiver ativa; exclu&iacute;dos em at&eacute; 15 dias &uacute;teis ap&oacute;s solicita&ccedil;&atilde;o de cancelamento.</p>
             </div>
-            <div class="flex items-center gap-2 bg-gray-50 rounded-lg p-3">
-              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-              <span class="text-sm text-gray-700">Exclus&#227;o autom&#225;tica de PDFs</span>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-gray-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Dados de pagamento:</strong> retidos pelo Stripe conforme pol&iacute;tica pr&oacute;pria; o AI.arq n&atilde;o armazena dados financeiros.</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-gray-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>localStorage:</strong> permanece no navegador at&eacute; ser limpo pelo usu&aacute;rio ou at&eacute; o logout.</p>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- 8. Contato -->
+      <!-- 8. Menores de Idade -->
       <section>
-        <h2 class="text-xl font-bold text-gray-900 mb-3">8. Contato</h2>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">8. Menores de Idade</h2>
         <div class="rounded-xl bg-white border p-6 shadow-sm">
           <p class="text-gray-600 leading-relaxed">
-            Para d&#250;vidas sobre esta Pol&#237;tica de Privacidade ou para exercer seus direitos, entre em contato:
+            O AI.arq &eacute; destinado exclusivamente a usu&aacute;rios com 18 (dezoito) anos de idade ou mais. N&atilde;o coletamos intencionalmente dados de menores de idade. Caso tomemos conhecimento de que dados de um menor foram coletados, estes ser&atilde;o exclu&iacute;dos imediatamente.
+          </p>
+        </div>
+      </section>
+
+      <!-- 9. Altera&#231;&#245;es na Pol&iacute;tica -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">9. Altera&ccedil;&otilde;es nesta Pol&iacute;tica</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            Esta Pol&iacute;tica de Privacidade pode ser atualizada periodicamente. Altera&ccedil;&otilde;es substanciais ser&atilde;o comunicadas por e-mail aos usu&aacute;rios cadastrados com anteced&ecirc;ncia m&iacute;nima de 15 dias.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            A data de &uacute;ltima atualiza&ccedil;&atilde;o ser&aacute; sempre indicada no topo desta p&aacute;gina. Recomendamos a consulta peri&oacute;dica deste documento.
+          </p>
+        </div>
+      </section>
+
+      <!-- 10. Contato e Encarregado de Dados -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">10. Contato e Encarregado de Dados (DPO)</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            Para d&uacute;vidas, solicita&ccedil;&otilde;es de exerc&iacute;cio de direitos (LGPD), reclama&ccedil;&otilde;es ou contato com nosso Encarregado de Prote&ccedil;&atilde;o de Dados (DPO), utilize o canal abaixo:
           </p>
           <a href="mailto:contato@ai.arq.br" class="mt-3 inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
             contato@ai.arq.br
           </a>
+          <p class="text-sm text-gray-500 mt-3">
+            Voc&ecirc; tamb&eacute;m pode apresentar reclama&ccedil;&atilde;o perante a Autoridade Nacional de Prote&ccedil;&atilde;o de Dados (ANPD) caso entenda que o tratamento de seus dados pessoais viola a LGPD.
+          </p>
         </div>
       </section>
 
