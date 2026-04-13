@@ -41,6 +41,20 @@
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
 
+<!-- PUBLIC NAVBAR (shown when NOT logged in) -->
+<nav id="public-navbar" class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md hidden">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="index.html" class="flex items-center gap-2">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="flex items-center gap-3">
+      <a href="login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Gr&aacute;tis</a>
+    </div>
+  </div>
+</nav>
+
 <!-- MOBILE OVERLAY -->
 <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-40 hidden opacity-0 lg:hidden" onclick="closeSidebar()"></div>
 
@@ -321,7 +335,7 @@
           <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
           <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
         </div>
-        <p class="text-sm text-gray-400">2026 AI.arq. Todos os direitos reservados.</p>
+        <p class="text-sm text-gray-400">&copy; 2026 AI.arq. Todos os direitos reservados.</p>
       </div>
     </div>
   </footer>
@@ -364,9 +378,14 @@
   const userName = document.getElementById('user-name');
   const btnLogout = document.getElementById('btn-logout');
 
+  const publicNavbar = document.getElementById('public-navbar');
+  const mainWrapper = document.querySelector('.lg\\:ml-64');
+  const mobileTopbar = document.querySelector('header.lg\\:hidden');
+
   async function checkAuth() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (session) {
+      // Logged in: show sidebar
       const user = session.user;
       const meta = user.user_metadata || {};
       userName.textContent = meta.full_name || meta.name || user.email;
@@ -375,7 +394,15 @@
         userAvatar.style.display = 'none';
       }
       userLoggedIn.classList.remove('hidden');
+      sidebar.classList.remove('hidden');
+      if (sidebarOverlay) sidebarOverlay.classList.remove('hidden-permanent');
     } else {
+      // Not logged in: hide sidebar, show public navbar, full-width content
+      sidebar.classList.add('hidden');
+      if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
+      if (mobileTopbar) mobileTopbar.classList.add('hidden');
+      if (mainWrapper) mainWrapper.classList.remove('lg:ml-64');
+      publicNavbar.classList.remove('hidden');
       userLoggedOut.classList.remove('hidden');
     }
   }

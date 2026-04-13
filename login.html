@@ -55,9 +55,39 @@
         Entrar com Google
       </button>
 
+      <!-- Divider -->
+      <div class="flex items-center gap-3 my-6">
+        <div class="flex-1 h-px bg-gray-200"></div>
+        <span class="text-xs text-gray-400 font-medium">&mdash; ou &mdash;</span>
+        <div class="flex-1 h-px bg-gray-200"></div>
+      </div>
+
+      <!-- Email login form -->
+      <form id="form-email-login" class="space-y-4" novalidate>
+        <div>
+          <input type="email" id="login-email" required placeholder="Seu e-mail"
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition">
+        </div>
+        <div>
+          <input type="password" id="login-password" required placeholder="Sua senha" minlength="6"
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition">
+        </div>
+        <div id="email-login-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600"></div>
+        <div id="email-login-success" class="hidden rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-600"></div>
+        <button type="submit" id="btn-email-login"
+          class="w-full flex items-center justify-center gap-2 gradient-main text-white rounded-xl px-6 py-4 text-base font-medium shadow-sm hover:shadow-md transition-all duration-200">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          Entrar com E-mail
+        </button>
+      </form>
+
+      <p class="mt-4 text-sm text-gray-500">
+        N&atilde;o tem conta? <a href="#" id="link-signup" class="text-indigo-500 hover:text-indigo-700 underline font-medium">Cadastre-se</a>
+      </p>
+
       <!-- Terms -->
       <p class="mt-6 text-xs text-gray-400">
-        Ao entrar, você concorda com nossos <a href="#" class="text-indigo-500 hover:text-indigo-700 underline">Termos de Uso</a>
+        Ao entrar, voc&ecirc; concorda com nossos <a href="termos.html" class="text-indigo-500 hover:text-indigo-700 underline">Termos de Uso</a>
       </p>
     </div>
   </div>
@@ -72,11 +102,11 @@
         <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
       </div>
       <div class="flex gap-6 text-sm text-gray-500">
-        <a href="#" class="hover:text-gray-900 transition">Termos de Uso</a>
-        <a href="#" class="hover:text-gray-900 transition">Privacidade</a>
-        <a href="#" class="hover:text-gray-900 transition">Contato</a>
+        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+        <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
       </div>
-      <p class="text-sm text-gray-400">2026 AI.arq. Todos os direitos reservados.</p>
+      <p class="text-sm text-gray-400">&copy; 2026 AI.arq. Todos os direitos reservados.</p>
     </div>
   </div>
 </footer>
@@ -101,12 +131,98 @@
     const { error } = await sbClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'https://ai.arq.br/dashboard.html'
+        redirectTo: 'https://ai.arq.br/cadastro.html'
       }
     });
     if (error) {
       console.error('Erro ao fazer login:', error.message);
       alert('Erro ao iniciar login. Tente novamente.');
+    }
+  });
+
+  // ══════════════════════════════════════════════
+  //  EMAIL LOGIN / SIGNUP
+  // ══════════════════════════════════════════════
+  const formEmailLogin = document.getElementById('form-email-login');
+  const loginEmail = document.getElementById('login-email');
+  const loginPassword = document.getElementById('login-password');
+  const emailLoginError = document.getElementById('email-login-error');
+  const emailLoginSuccess = document.getElementById('email-login-success');
+  const btnEmailLogin = document.getElementById('btn-email-login');
+  const linkSignup = document.getElementById('link-signup');
+
+  let isSignupMode = false;
+
+  function showEmailError(msg) {
+    emailLoginError.textContent = msg;
+    emailLoginError.classList.remove('hidden');
+    emailLoginSuccess.classList.add('hidden');
+  }
+
+  function showEmailSuccess(msg) {
+    emailLoginSuccess.textContent = msg;
+    emailLoginSuccess.classList.remove('hidden');
+    emailLoginError.classList.add('hidden');
+  }
+
+  function hideEmailMessages() {
+    emailLoginError.classList.add('hidden');
+    emailLoginSuccess.classList.add('hidden');
+  }
+
+  linkSignup.addEventListener('click', (e) => {
+    e.preventDefault();
+    hideEmailMessages();
+    isSignupMode = !isSignupMode;
+    if (isSignupMode) {
+      btnEmailLogin.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg> Criar Conta';
+      linkSignup.textContent = 'J\u00e1 tem conta? Entrar';
+    } else {
+      btnEmailLogin.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Entrar com E-mail';
+      linkSignup.textContent = 'N\u00e3o tem conta? Cadastre-se';
+    }
+  });
+
+  formEmailLogin.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideEmailMessages();
+
+    const email = loginEmail.value.trim();
+    const password = loginPassword.value;
+
+    if (!email) { showEmailError('Por favor, informe seu e-mail.'); return; }
+    if (!password || password.length < 6) { showEmailError('A senha deve ter pelo menos 6 caracteres.'); return; }
+
+    btnEmailLogin.disabled = true;
+    const originalHTML = btnEmailLogin.innerHTML;
+    btnEmailLogin.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg> Aguarde...';
+
+    try {
+      if (isSignupMode) {
+        const { data, error } = await sbClient.auth.signUp({ email, password });
+        if (error) throw error;
+        if (data.user && data.user.identities && data.user.identities.length === 0) {
+          showEmailError('Este e-mail j\u00e1 est\u00e1 cadastrado. Tente fazer login.');
+        } else {
+          showEmailSuccess('Conta criada! Verifique seu e-mail para confirmar e depois fa\u00e7a login.');
+        }
+      } else {
+        const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        window.location.href = 'dashboard.html';
+      }
+    } catch (err) {
+      console.error('Erro:', err);
+      if (err.message.includes('Invalid login')) {
+        showEmailError('E-mail ou senha incorretos.');
+      } else if (err.message.includes('Email not confirmed')) {
+        showEmailError('E-mail ainda n\u00e3o confirmado. Verifique sua caixa de entrada.');
+      } else {
+        showEmailError(err.message || 'Erro inesperado. Tente novamente.');
+      }
+    } finally {
+      btnEmailLogin.disabled = false;
+      btnEmailLogin.innerHTML = originalHTML;
     }
   });
 </script>
