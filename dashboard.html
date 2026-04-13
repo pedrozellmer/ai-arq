@@ -205,6 +205,22 @@
           </div>
         </div>
 
+        <!-- BETA BANNER -->
+        <div id="beta-banner" class="mb-6 hidden">
+          <div class="relative rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <div class="flex items-start gap-3">
+              <span class="text-2xl shrink-0">&#127881;</span>
+              <div class="flex-1">
+                <p class="text-sm text-emerald-800 leading-relaxed">
+                  <strong>Plano Beta Gratuito</strong> &#8212; Voc&#234; tem <strong id="beta-remaining">0</strong> projetos gr&#225;tis restantes.
+                  Em troca, revise a planilha e envie pelo Cashback.
+                </p>
+                <p class="text-xs text-emerald-600 mt-1">C&#243;digo: <span id="beta-code-display" class="font-mono font-semibold"></span></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- STATE: UPLOAD -->
         <div id="state-upload">
           <!-- Nome do Projeto -->
@@ -609,6 +625,14 @@
                 </select>
               </div>
             </div>
+            <!-- Beta code info in profile -->
+            <div id="prof-beta-section" class="hidden mt-2">
+              <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                <label class="block text-xs font-medium text-emerald-700 mb-1">C&#243;digo Beta</label>
+                <p id="prof-beta-info" class="text-sm font-semibold text-emerald-800"></p>
+              </div>
+            </div>
+
             <div class="pt-4 flex items-center justify-between">
               <span id="prof-status" class="text-sm text-green-600 hidden">Dados salvos com sucesso!</span>
               <button id="btn-save-profile" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition hover:opacity-90">
@@ -720,6 +744,7 @@
   let currentJobId = null;
   let pollTimer = null;
   let timeEstimateTimer = null;
+  let activeBetaCode = null; // holds beta_codes row if user has active beta
 
   // ══════════════════════════════════════════════
   //  DOM REFS
@@ -790,14 +815,112 @@
     if (!userAvatar.src) {
       userAvatar.style.display = 'none';
     }
+
+    // ── Load beta code banner ──
+    await loadBetaBanner();
   }
   checkAuth();
+
+  // ══════════════════════════════════════════════
+  //  BETA CODE BANNER & HELPERS
+  // ══════════════════════════════════════════════
+  async function loadBetaBanner() {
+    const betaBanner = document.getElementById('beta-banner');
+    const betaRemaining = document.getElementById('beta-remaining');
+    const betaCodeDisplay = document.getElementById('beta-code-display');
+
+    // Check localStorage first
+    const storedCode = localStorage.getItem('aiarq_beta_code');
+    if (!storedCode) {
+      // Also check profile in case code was set during registration
+      try {
+        const { data: profile } = await sbClient.from('profiles')
+          .select('beta_code')
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+        if (profile && profile.beta_code) {
+          localStorage.setItem('aiarq_beta_code', profile.beta_code);
+        } else {
+          betaBanner.classList.add('hidden');
+          return;
+        }
+      } catch (e) {
+        betaBanner.classList.add('hidden');
+        return;
+      }
+    }
+
+    const code = localStorage.getItem('aiarq_beta_code');
+    if (!code) { betaBanner.classList.add('hidden'); return; }
+
+    try {
+      const { data: betaData, error } = await sbClient
+        .from('beta_codes')
+        .select('*')
+        .eq('code', code.toUpperCase())
+        .eq('active', true)
+        .maybeSingle();
+
+      if (error || !betaData) {
+        betaBanner.classList.add('hidden');
+        activeBetaCode = null;
+        return;
+      }
+
+      const isExpired = betaData.expires_at && new Date(betaData.expires_at) < new Date();
+      const remaining = betaData.max_projects - betaData.used_projects;
+
+      if (isExpired || remaining <= 0) {
+        betaBanner.classList.add('hidden');
+        activeBetaCode = null;
+        return;
+      }
+
+      // Show banner
+      activeBetaCode = betaData;
+      betaRemaining.textContent = remaining;
+      betaCodeDisplay.textContent = betaData.code;
+      betaBanner.classList.remove('hidden');
+
+    } catch (e) {
+      console.error('Erro ao carregar c\u00f3digo beta:', e);
+      betaBanner.classList.add('hidden');
+    }
+  }
+
+  function hasBetaCredits() {
+    if (!activeBetaCode) return false;
+    const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
+    return remaining > 0;
+  }
+
+  async function useBetaCredit() {
+    if (!activeBetaCode) return;
+    const newUsed = activeBetaCode.used_projects + 1;
+    await sbClient.from('beta_codes').update({
+      used_projects: newUsed,
+      used_by: currentUser.email
+    }).eq('code', activeBetaCode.code);
+    activeBetaCode.used_projects = newUsed;
+
+    // Update banner remaining count
+    const betaRemaining = document.getElementById('beta-remaining');
+    const remaining = activeBetaCode.max_projects - newUsed;
+    if (betaRemaining) betaRemaining.textContent = remaining;
+
+    // Hide banner if no credits left
+    if (remaining <= 0) {
+      const betaBanner = document.getElementById('beta-banner');
+      if (betaBanner) betaBanner.classList.add('hidden');
+    }
+  }
 
   // ══════════════════════════════════════════════
   //  LOGOUT
   // ══════════════════════════════════════════════
   btnLogout.addEventListener('click', async () => {
     localStorage.removeItem('aiarq_profile_complete');
+    localStorage.removeItem('aiarq_beta_code');
     await sbClient.auth.signOut();
     window.location.href = 'login.html';
   });
@@ -841,13 +964,17 @@
     const priceLabel = document.getElementById('price-label');
     const n = selectedFiles.length;
     const free = isFirstProject() && n <= 5;
+    const betaFree = hasBetaCredits();
     let price = n <= 5 ? 'R$ 49' : n <= 10 ? 'R$ 99' : 'R$ 149';
-    let planName = n <= 5 ? 'Pequeno' : n <= 10 ? 'Médio' : 'Grande';
+    let planName = n <= 5 ? 'Pequeno' : n <= 10 ? 'M\u00e9dio' : 'Grande';
     priceInfo.classList.remove('hidden');
     if (free) {
-      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) — <span class="line-through text-gray-400">${price}</span> <span class="text-green-600 font-bold">GRÁTIS</span> <span class="text-xs">(1º projeto)</span>`;
+      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="line-through text-gray-400">${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
+    } else if (betaFree) {
+      const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
+      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="line-through text-gray-400">${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} restante${remaining !== 1 ? 's' : ''}</span>`;
     } else {
-      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) — <span class="font-bold text-indigo-600">${price}</span>`;
+      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="font-bold text-indigo-600">${price}</span>`;
     }
 
     selectedFiles.forEach((file, idx) => {
@@ -1027,9 +1154,14 @@
 
     const numFiles = selectedFiles.length;
     const isFree = isFirstProject() && numFiles <= 5;
+    const isBetaFree = hasBetaCredits();
 
-    if (isFree) {
-      // Primeiro projeto pequeno = grátis, processa direto
+    if (isFree || isBetaFree) {
+      if (isBetaFree && !isFree) {
+        // Using beta credit — increment usage
+        await useBetaCredit();
+      }
+      // Projeto gratuito (primeiro ou beta) — processa direto
       startProcessing();
     } else {
       // Precisa pagar — abrir Stripe Checkout
@@ -1050,7 +1182,7 @@
           ));
           window.location.href = data.checkout_url;
         } else {
-          throw new Error('Não foi possível criar checkout');
+          throw new Error('N\u00e3o foi poss\u00edvel criar checkout');
         }
       } catch (err) {
         console.error('Erro checkout:', err);
@@ -1303,6 +1435,23 @@
         document.getElementById('prof-company').value = profile.company || '';
         document.getElementById('prof-area').value = profile.area || '';
         document.getElementById('prof-role').value = profile.role || '';
+
+        // Show beta code info if available
+        const profBetaSection = document.getElementById('prof-beta-section');
+        const profBetaInfo = document.getElementById('prof-beta-info');
+        const betaCode = profile.beta_code || localStorage.getItem('aiarq_beta_code');
+        if (betaCode && profBetaSection && profBetaInfo) {
+          try {
+            const { data: betaData } = await sbClient.from('beta_codes')
+              .select('*').eq('code', betaCode.toUpperCase()).maybeSingle();
+            if (betaData) {
+              profBetaInfo.textContent = `${betaData.code} \u2014 ${betaData.used_projects}/${betaData.max_projects} projetos utilizados`;
+              profBetaSection.classList.remove('hidden');
+            }
+          } catch (e) {
+            // silent fail
+          }
+        }
       } else {
         document.getElementById('prof-name').value = currentUser.user_metadata?.full_name || '';
         document.getElementById('prof-email').value = currentUser.email || '';

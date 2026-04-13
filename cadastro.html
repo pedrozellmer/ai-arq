@@ -120,6 +120,17 @@
           </select>
         </div>
 
+        <!-- Codigo de convite (beta) -->
+        <div>
+          <label for="beta_code" class="block text-sm font-medium text-gray-700 mb-1">C&#243;digo de convite (opcional)</label>
+          <input type="text" id="beta_code" name="beta_code"
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+            placeholder="Ex: BETA-AI.ARQ-SEUNOME">
+          <p class="text-xs text-gray-400 mt-1">Tem um c&#243;digo beta? Insira para acesso gratuito</p>
+          <div id="beta-code-error" class="hidden mt-1 text-xs text-red-500"></div>
+          <div id="beta-code-success" class="hidden mt-1 text-xs text-green-600"></div>
+        </div>
+
         <!-- Checkboxes -->
         <div class="space-y-3 pt-2">
           <label class="flex items-start gap-3 cursor-pointer">
@@ -191,8 +202,12 @@
   const aceitaTermos = document.getElementById('aceita_termos');
   const formError = document.getElementById('form-error');
   const btnSubmit = document.getElementById('btn-submit');
+  const betaCodeInput = document.getElementById('beta_code');
+  const betaCodeError = document.getElementById('beta-code-error');
+  const betaCodeSuccess = document.getElementById('beta-code-success');
 
   let currentUser = null;
+  let validatedBetaCode = null; // will hold the beta_codes row if valid
 
   // ══════════════════════════════════════════════
   //  AUTH CHECK & PRE-FILL
@@ -333,7 +348,43 @@
     btnSubmit.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg> Salvando...';
 
     try {
-      const { error } = await sbClient.from('profiles').insert({
+      // ── Beta code validation ──
+      const betaCodeValue = betaCodeInput.value.trim().toUpperCase();
+      validatedBetaCode = null;
+      betaCodeError.classList.add('hidden');
+      betaCodeSuccess.classList.add('hidden');
+
+      if (betaCodeValue) {
+        const { data: betaData, error: betaErr } = await sbClient
+          .from('beta_codes')
+          .select('*')
+          .eq('code', betaCodeValue)
+          .eq('active', true)
+          .maybeSingle();
+
+        if (betaErr || !betaData) {
+          betaCodeError.textContent = 'C\u00f3digo de convite inv\u00e1lido ou expirado';
+          betaCodeError.classList.remove('hidden');
+          // Allow registration without code — don't block
+        } else {
+          // Check expiration
+          const isExpired = betaData.expires_at && new Date(betaData.expires_at) < new Date();
+          // Check usage limit
+          const isOverLimit = betaData.used_projects >= betaData.max_projects;
+
+          if (isExpired || isOverLimit) {
+            betaCodeError.textContent = 'C\u00f3digo de convite inv\u00e1lido ou expirado';
+            betaCodeError.classList.remove('hidden');
+          } else {
+            validatedBetaCode = betaData;
+            betaCodeSuccess.textContent = 'C\u00f3digo v\u00e1lido! Voc\u00ea ter\u00e1 acesso beta gratuito.';
+            betaCodeSuccess.classList.remove('hidden');
+          }
+        }
+      }
+
+      // ── Save profile ──
+      const profileData = {
         user_id: currentUser.id,
         full_name: nome,
         email: currentUser.email,
@@ -343,7 +394,14 @@
         role: cargo,
         area: area,
         accept_marketing: aceitaMarketing.checked
-      });
+      };
+
+      // Add beta_code to profile if validated
+      if (validatedBetaCode) {
+        profileData.beta_code = validatedBetaCode.code;
+      }
+
+      const { error } = await sbClient.from('profiles').insert(profileData);
 
       if (error) {
         // Handle duplicate key (profile already exists)
@@ -353,6 +411,16 @@
           return;
         }
         throw error;
+      }
+
+      // ── Update beta_codes usage if code was used ──
+      if (validatedBetaCode) {
+        await sbClient.from('beta_codes').update({
+          used_projects: validatedBetaCode.used_projects + 1,
+          used_by: currentUser.email
+        }).eq('code', validatedBetaCode.code);
+
+        localStorage.setItem('aiarq_beta_code', validatedBetaCode.code);
       }
 
       // Success
