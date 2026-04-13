@@ -14,390 +14,237 @@
   .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
   .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
   .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
-
-  /* Sidebar */
-  .sidebar {
-    transition: transform 0.3s ease;
-  }
-  .sidebar-overlay {
-    transition: opacity 0.3s ease;
-  }
-  .nav-item {
-    transition: all 0.15s ease;
-  }
-  .nav-item:hover {
-    background-color: rgba(255,255,255,0.1);
-  }
-  .nav-item.active {
-    background-color: rgba(255,255,255,0.15);
-    border-right: 3px solid #06b6d4;
-  }
-
-  /* Scrollbar */
-  .sidebar::-webkit-scrollbar { width: 4px; }
-  .sidebar::-webkit-scrollbar-track { background: transparent; }
-  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
 </style>
 </head>
-<body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
 
-<!-- PUBLIC NAVBAR (shown when NOT logged in) -->
-<nav id="public-navbar" class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md hidden">
+<!-- NAVBAR -->
+<nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
   <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
-    <a href="index.html" class="flex items-center gap-2">
+    <a href="index.html" class="flex items-center gap-2 no-underline">
       <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
       <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
     </a>
-    <div class="flex items-center gap-3">
-      <a href="login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
-      <a href="login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Gr&aacute;tis</a>
+    <div id="nav-auth" class="flex items-center gap-3">
+      <a href="login.html" id="nav-login" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="login.html" id="nav-cta" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm no-underline">Comece Gr&aacute;tis</a>
+      <div id="nav-user" class="hidden flex items-center gap-3">
+        <img id="nav-avatar" src="" alt="" class="w-8 h-8 rounded-full">
+        <span id="nav-name" class="text-sm font-medium text-gray-700"></span>
+        <a href="dashboard.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm no-underline">Minha &Aacute;rea</a>
+      </div>
     </div>
   </div>
 </nav>
 
-<!-- MOBILE OVERLAY -->
-<div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-40 hidden opacity-0 lg:hidden" onclick="closeSidebar()"></div>
+<!-- MAIN CONTENT -->
+<main class="flex-1">
+  <div class="max-w-4xl mx-auto px-4 py-12">
 
-<!-- SIDEBAR -->
-<aside id="sidebar" class="sidebar fixed top-0 left-0 z-50 h-full w-64 gradient-main flex flex-col transform -translate-x-full lg:translate-x-0">
-  <!-- Logo -->
-  <a href="index.html" class="flex items-center gap-3 px-6 py-5 border-b border-white/10 no-underline hover:bg-white/10 transition">
-    <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-white font-bold text-sm">AI</div>
-    <span class="text-xl font-bold text-white">AI<span class="text-cyan-300">.arq</span></span>
-  </a>
-
-  <!-- Navigation -->
-  <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-    <a href="dashboard.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128202;</span>
-      <span>Novo Projeto</span>
-    </a>
-    <a href="dashboard.html#projetos" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128193;</span>
-      <span>Meus Projetos</span>
-    </a>
-    <a href="dashboard.html#cashback" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128176;</span>
-      <span>Cashback</span>
-    </a>
-    <a href="dashboard.html#como-funciona" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128214;</span>
-      <span>Como Funciona</span>
-    </a>
-
-    <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
-      <a href="termos.html" class="nav-item active flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-        <span class="text-lg">&#128196;</span>
-        <span>Termos de Uso</span>
-      </a>
-      <a href="privacidade.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
-        <span class="text-lg">&#128274;</span>
-        <span>Privacidade</span>
-      </a>
+    <!-- Header -->
+    <div class="mb-10">
+      <h1 class="text-3xl font-bold text-gray-900 md:text-4xl">Termos de Uso</h1>
+      <p class="mt-2 text-lg text-gray-500">AI.arq</p>
+      <p class="mt-1 text-sm text-gray-400">Data de vig&#234;ncia: Abril/2026</p>
     </div>
-  </nav>
 
-  <!-- User section at bottom -->
-  <div id="user-section" class="px-4 py-4 border-t border-white/10">
-    <!-- Logged in state (hidden by default) -->
-    <div id="user-logged-in" class="hidden">
-      <div class="flex items-center gap-3">
-        <img id="user-avatar" src="" alt="Avatar" class="h-9 w-9 rounded-full object-cover border-2 border-white/20 shrink-0">
-        <div class="min-w-0 flex-1">
-          <p id="user-name" class="text-sm font-medium text-white truncate"></p>
-          <button id="btn-logout" class="text-xs text-white/50 hover:text-red-300 transition font-medium">Sair</button>
+    <div class="space-y-10">
+
+      <!-- 1. Aceita&#231;&#227;o dos Termos -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">1. Aceita&#231;&#227;o dos Termos</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm">
+          <p class="text-gray-600 leading-relaxed">
+            Ao acessar e utilizar o AI.arq, voc&#234; concorda integralmente com estes Termos de Uso. Caso n&#227;o concorde com algum dos termos aqui descritos, por favor, n&#227;o utilize o servi&#231;o.
+          </p>
         </div>
-      </div>
-    </div>
-    <!-- Logged out state (hidden by default) -->
-    <div id="user-logged-out" class="hidden">
-      <a href="login.html" class="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-white/20 text-white text-sm font-medium hover:bg-white/30 transition">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
-        Entrar
-      </a>
+      </section>
+
+      <!-- 2. Descri&#231;&#227;o do Servi&#231;o -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">2. Descri&#231;&#227;o do Servi&#231;o</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            AI.arq &#233; uma ferramenta de intelig&#234;ncia artificial que l&#234; pranchas de arquitetura (PDFs) e gera planilhas de quantitativos para or&#231;amento de obras.
+          </p>
+          <div class="flex items-start gap-3 bg-indigo-50 rounded-lg p-4">
+            <svg class="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <p class="text-sm text-indigo-700 font-medium">
+              O servi&#231;o N&#195;O substitui o trabalho de um engenheiro de custos ou or&#231;amentista profissional.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Limita&#231;&#245;es da Intelig&#234;ncia Artificial -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">3. Limita&#231;&#245;es da Intelig&#234;ncia Artificial</h2>
+        <div class="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
+          <div class="flex items-center gap-2 mb-4">
+            <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+            <span class="text-lg font-bold text-red-600">IMPORTANTE</span>
+          </div>
+          <ul class="space-y-3">
+            <li class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-red-400 shrink-0"></span>
+              <p class="text-gray-700">As planilhas geradas s&#227;o <strong>ESTIMATIVAS</strong> baseadas em an&#225;lise automatizada.</p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-red-400 shrink-0"></span>
+              <p class="text-gray-700">Quantidades podem conter erros de <strong>&#177;30-50%</strong> dependendo da complexidade do projeto.</p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-orange-400 shrink-0"></span>
+              <p class="text-gray-700">Itens marcados em <span class="font-bold text-orange-600">LARANJA</span> requerem verifica&#231;&#227;o obrigat&#243;ria.</p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-red-400 shrink-0"></span>
+              <p class="text-gray-700">A contagem de s&#237;mbolos em plantas (portas, lumin&#225;rias, pontos) tem acur&#225;cia de <strong>40-60%</strong> conforme benchmarks do setor.</p>
+            </li>
+            <li class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0"></span>
+              <p class="text-gray-700">Leitura de legendas e especifica&#231;&#245;es de materiais tem acur&#225;cia de <strong>~95%</strong>.</p>
+            </li>
+          </ul>
+          <div class="mt-5 bg-red-50 rounded-lg p-4 border border-red-100">
+            <p class="text-red-700 font-semibold text-sm">
+              TODA planilha gerada DEVE ser revisada por profissional habilitado antes de uso em or&#231;amento.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Responsabilidade -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">4. Responsabilidade</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            AI.arq n&#227;o se responsabiliza por erros em quantitativos gerados pela intelig&#234;ncia artificial.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            O usu&#225;rio &#233; respons&#225;vel por revisar e validar todos os dados antes de enviar a fornecedores ou utilizar em processos de or&#231;amento.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            N&#227;o nos responsabilizamos por preju&#237;zos decorrentes do uso direto das planilhas sem revis&#227;o por profissional habilitado.
+          </p>
+        </div>
+      </section>
+
+      <!-- 5. Dados e Privacidade -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">5. Dados e Privacidade</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm">
+          <p class="text-gray-600 leading-relaxed">
+            Seus dados s&#227;o tratados com seriedade. Consulte nossa
+            <a href="privacidade.html" class="text-indigo-600 hover:text-indigo-800 font-medium underline">Pol&#237;tica de Privacidade</a>
+            para informa&#231;&#245;es detalhadas sobre como coletamos, utilizamos e protegemos seus dados pessoais e projetos.
+          </p>
+        </div>
+      </section>
+
+      <!-- 6. Propriedade Intelectual -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">6. Propriedade Intelectual</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            Os projetos enviados permanecem de propriedade exclusiva do usu&#225;rio.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            AI.arq n&#227;o armazena nem compartilha os projetos com terceiros.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            Os PDFs s&#227;o processados e deletados automaticamente ap&#243;s o download da planilha.
+          </p>
+        </div>
+      </section>
+
+      <!-- 7. Pre&#231;os e Pagamento -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">7. Pre&#231;os e Pagamento</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            O primeiro projeto &#233; gratuito para todos os usu&#225;rios.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            Ap&#243;s o per&#237;odo gratuito, os pre&#231;os seguem a tabela dispon&#237;vel no site:
+          </p>
+          <div class="grid grid-cols-3 gap-3 mt-2">
+            <div class="rounded-lg bg-gray-50 border p-3 text-center">
+              <p class="text-lg font-bold text-gray-900">R$49</p>
+              <p class="text-xs text-gray-500">por projeto</p>
+            </div>
+            <div class="rounded-lg bg-gray-50 border p-3 text-center">
+              <p class="text-lg font-bold text-gray-900">R$99</p>
+              <p class="text-xs text-gray-500">por projeto</p>
+            </div>
+            <div class="rounded-lg bg-gray-50 border p-3 text-center">
+              <p class="text-lg font-bold text-gray-900">R$149</p>
+              <p class="text-xs text-gray-500">por projeto</p>
+            </div>
+          </div>
+          <p class="text-sm text-gray-500 mt-2">
+            Os pre&#231;os podem ser alterados com aviso pr&#233;vio aos usu&#225;rios.
+          </p>
+        </div>
+      </section>
+
+      <!-- 8. Contato -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">8. Contato</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm">
+          <p class="text-gray-600 leading-relaxed">
+            Em caso de d&#250;vidas sobre estes Termos de Uso, entre em contato conosco:
+          </p>
+          <a href="mailto:contato@ai.arq.br" class="mt-3 inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            contato@ai.arq.br
+          </a>
+        </div>
+      </section>
+
     </div>
   </div>
-</aside>
+</main>
 
-<!-- MAIN WRAPPER -->
-<div class="lg:ml-64 min-h-screen flex flex-col">
-
-  <!-- MOBILE TOPBAR -->
-  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b lg:hidden">
-    <div class="flex items-center justify-between h-14 px-4">
-      <button onclick="openSidebar()" class="p-2 -ml-2 text-gray-600 hover:text-gray-900">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
+<!-- FOOTER -->
+<footer class="border-t bg-gray-50 py-12">
+  <div class="mx-auto max-w-6xl px-4">
+    <div class="flex flex-col items-center gap-4 md:flex-row md:justify-between">
       <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
-        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
       </div>
-      <div class="w-10"></div>
+      <div class="flex gap-6 text-sm text-gray-500">
+        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+        <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
+      </div>
+      <p class="text-sm text-gray-400">&copy; 2026 AI.arq. Todos os direitos reservados.</p>
     </div>
-  </header>
-
-  <!-- MAIN CONTENT -->
-  <main class="flex-1 p-4 md:p-8 lg:p-10">
-    <div class="max-w-3xl mx-auto">
-
-      <!-- Header -->
-      <div class="mb-10">
-        <h1 class="text-3xl font-bold text-gray-900 md:text-4xl">Termos de Uso</h1>
-        <p class="mt-2 text-lg text-gray-500">AI.arq</p>
-        <p class="mt-1 text-sm text-gray-400">Data de vig&#234;ncia: Abril/2026</p>
-      </div>
-
-      <div class="space-y-10">
-
-        <!-- 1. Aceita&#231;&#227;o dos Termos -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">1. Aceita&#231;&#227;o dos Termos</h2>
-          <div class="rounded-xl bg-white border p-6 shadow-sm">
-            <p class="text-gray-600 leading-relaxed">
-              Ao acessar e utilizar o AI.arq, voc&#234; concorda integralmente com estes Termos de Uso. Caso n&#227;o concorde com algum dos termos aqui descritos, por favor, n&#227;o utilize o servi&#231;o.
-            </p>
-          </div>
-        </section>
-
-        <!-- 2. Descri&#231;&#227;o do Servi&#231;o -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">2. Descri&#231;&#227;o do Servi&#231;o</h2>
-          <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
-            <p class="text-gray-600 leading-relaxed">
-              AI.arq &#233; uma ferramenta de intelig&#234;ncia artificial que l&#234; pranchas de arquitetura (PDFs) e gera planilhas de quantitativos para or&#231;amento de obras.
-            </p>
-            <div class="flex items-start gap-3 bg-indigo-50 rounded-lg p-4">
-              <svg class="w-5 h-5 text-indigo-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              <p class="text-sm text-indigo-700 font-medium">
-                O servi&#231;o N&#195;O substitui o trabalho de um engenheiro de custos ou or&#231;amentista profissional.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <!-- 3. Limita&#231;&#245;es da Intelig&#234;ncia Artificial -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">3. Limita&#231;&#245;es da Intelig&#234;ncia Artificial</h2>
-          <div class="rounded-xl border border-red-200 bg-white p-6 shadow-sm">
-            <div class="flex items-center gap-2 mb-4">
-              <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-              <span class="text-lg font-bold text-red-600">IMPORTANTE</span>
-            </div>
-            <ul class="space-y-3">
-              <li class="flex items-start gap-3">
-                <span class="mt-1.5 h-2 w-2 rounded-full bg-red-400 shrink-0"></span>
-                <p class="text-gray-700">As planilhas geradas s&#227;o <strong>ESTIMATIVAS</strong> baseadas em an&#225;lise automatizada.</p>
-              </li>
-              <li class="flex items-start gap-3">
-                <span class="mt-1.5 h-2 w-2 rounded-full bg-red-400 shrink-0"></span>
-                <p class="text-gray-700">Quantidades podem conter erros de <strong>&#177;30-50%</strong> dependendo da complexidade do projeto.</p>
-              </li>
-              <li class="flex items-start gap-3">
-                <span class="mt-1.5 h-2 w-2 rounded-full bg-orange-400 shrink-0"></span>
-                <p class="text-gray-700">Itens marcados em <span class="font-bold text-orange-600">LARANJA</span> requerem verifica&#231;&#227;o obrigat&#243;ria.</p>
-              </li>
-              <li class="flex items-start gap-3">
-                <span class="mt-1.5 h-2 w-2 rounded-full bg-red-400 shrink-0"></span>
-                <p class="text-gray-700">A contagem de s&#237;mbolos em plantas (portas, lumin&#225;rias, pontos) tem acur&#225;cia de <strong>40-60%</strong> conforme benchmarks do setor.</p>
-              </li>
-              <li class="flex items-start gap-3">
-                <span class="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0"></span>
-                <p class="text-gray-700">Leitura de legendas e especifica&#231;&#245;es de materiais tem acur&#225;cia de <strong>~95%</strong>.</p>
-              </li>
-            </ul>
-            <div class="mt-5 bg-red-50 rounded-lg p-4 border border-red-100">
-              <p class="text-red-700 font-semibold text-sm">
-                TODA planilha gerada DEVE ser revisada por profissional habilitado antes de uso em or&#231;amento.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        <!-- 4. Responsabilidade -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">4. Responsabilidade</h2>
-          <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
-            <p class="text-gray-600 leading-relaxed">
-              AI.arq n&#227;o se responsabiliza por erros em quantitativos gerados pela intelig&#234;ncia artificial.
-            </p>
-            <p class="text-gray-600 leading-relaxed">
-              O usu&#225;rio &#233; respons&#225;vel por revisar e validar todos os dados antes de enviar a fornecedores ou utilizar em processos de or&#231;amento.
-            </p>
-            <p class="text-gray-600 leading-relaxed">
-              N&#227;o nos responsabilizamos por preju&#237;zos decorrentes do uso direto das planilhas sem revis&#227;o por profissional habilitado.
-            </p>
-          </div>
-        </section>
-
-        <!-- 5. Dados e Privacidade -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">5. Dados e Privacidade</h2>
-          <div class="rounded-xl bg-white border p-6 shadow-sm">
-            <p class="text-gray-600 leading-relaxed">
-              Seus dados s&#227;o tratados com seriedade. Consulte nossa
-              <a href="privacidade.html" class="text-indigo-600 hover:text-indigo-800 font-medium underline">Pol&#237;tica de Privacidade</a>
-              para informa&#231;&#245;es detalhadas sobre como coletamos, utilizamos e protegemos seus dados pessoais e projetos.
-            </p>
-          </div>
-        </section>
-
-        <!-- 6. Propriedade Intelectual -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">6. Propriedade Intelectual</h2>
-          <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
-            <p class="text-gray-600 leading-relaxed">
-              Os projetos enviados permanecem de propriedade exclusiva do usu&#225;rio.
-            </p>
-            <p class="text-gray-600 leading-relaxed">
-              AI.arq n&#227;o armazena nem compartilha os projetos com terceiros.
-            </p>
-            <p class="text-gray-600 leading-relaxed">
-              Os PDFs s&#227;o processados e deletados automaticamente ap&#243;s o download da planilha.
-            </p>
-          </div>
-        </section>
-
-        <!-- 7. Pre&#231;os e Pagamento -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">7. Pre&#231;os e Pagamento</h2>
-          <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
-            <p class="text-gray-600 leading-relaxed">
-              O primeiro projeto &#233; gratuito para todos os usu&#225;rios.
-            </p>
-            <p class="text-gray-600 leading-relaxed">
-              Ap&#243;s o per&#237;odo gratuito, os pre&#231;os seguem a tabela dispon&#237;vel no site:
-            </p>
-            <div class="grid grid-cols-3 gap-3 mt-2">
-              <div class="rounded-lg bg-gray-50 border p-3 text-center">
-                <p class="text-lg font-bold text-gray-900">R$49</p>
-                <p class="text-xs text-gray-500">por projeto</p>
-              </div>
-              <div class="rounded-lg bg-gray-50 border p-3 text-center">
-                <p class="text-lg font-bold text-gray-900">R$99</p>
-                <p class="text-xs text-gray-500">por projeto</p>
-              </div>
-              <div class="rounded-lg bg-gray-50 border p-3 text-center">
-                <p class="text-lg font-bold text-gray-900">R$149</p>
-                <p class="text-xs text-gray-500">por projeto</p>
-              </div>
-            </div>
-            <p class="text-sm text-gray-500 mt-2">
-              Os pre&#231;os podem ser alterados com aviso pr&#233;vio aos usu&#225;rios.
-            </p>
-          </div>
-        </section>
-
-        <!-- 8. Contato -->
-        <section>
-          <h2 class="text-xl font-bold text-gray-900 mb-3">8. Contato</h2>
-          <div class="rounded-xl bg-white border p-6 shadow-sm">
-            <p class="text-gray-600 leading-relaxed">
-              Em caso de d&#250;vidas sobre estes Termos de Uso, entre em contato conosco:
-            </p>
-            <a href="mailto:contato@ai.arq.br" class="mt-3 inline-flex items-center gap-2 text-indigo-600 hover:text-indigo-800 font-medium">
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-              contato@ai.arq.br
-            </a>
-          </div>
-        </section>
-
-      </div>
-    </div>
-  </main>
-
-  <!-- FOOTER -->
-  <footer class="border-t bg-gray-50 py-12">
-    <div class="mx-auto max-w-6xl px-4">
-      <div class="flex flex-col items-center gap-4 md:flex-row md:justify-between">
-        <div class="flex items-center gap-2">
-          <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
-          <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
-        </div>
-        <div class="flex gap-6 text-sm text-gray-500">
-          <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
-          <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
-          <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
-        </div>
-        <p class="text-sm text-gray-400">&copy; 2026 AI.arq. Todos os direitos reservados.</p>
-      </div>
-    </div>
-  </footer>
-
-</div>
+  </div>
+</footer>
 
 <script>
-  // ══════════════════════════════════════════════
-  //  SIDEBAR / MOBILE MENU
-  // ══════════════════════════════════════════════
-  const sidebar = document.getElementById('sidebar');
-  const sidebarOverlay = document.getElementById('sidebar-overlay');
-
-  function openSidebar() {
-    sidebar.classList.remove('-translate-x-full');
-    sidebarOverlay.classList.remove('hidden');
-    requestAnimationFrame(() => sidebarOverlay.classList.remove('opacity-0'));
-  }
-
-  function closeSidebar() {
-    sidebar.classList.add('-translate-x-full');
-    sidebarOverlay.classList.add('opacity-0');
-    setTimeout(() => sidebarOverlay.classList.add('hidden'), 300);
-  }
-
-  // ══════════════════════════════════════════════
-  //  SUPABASE CONFIG
-  // ══════════════════════════════════════════════
   const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
-
   const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-  // ══════════════════════════════════════════════
-  //  AUTH CHECK
-  // ══════════════════════════════════════════════
-  const userLoggedIn = document.getElementById('user-logged-in');
-  const userLoggedOut = document.getElementById('user-logged-out');
-  const userAvatar = document.getElementById('user-avatar');
-  const userName = document.getElementById('user-name');
-  const btnLogout = document.getElementById('btn-logout');
-
-  const publicNavbar = document.getElementById('public-navbar');
-  const mainWrapper = document.querySelector('.lg\\:ml-64');
-  const mobileTopbar = document.querySelector('header.lg\\:hidden');
-
-  async function checkAuth() {
+  (async () => {
     const { data: { session } } = await sbClient.auth.getSession();
     if (session) {
-      // Logged in: show sidebar
       const user = session.user;
       const meta = user.user_metadata || {};
-      userName.textContent = meta.full_name || meta.name || user.email;
-      userAvatar.src = meta.avatar_url || meta.picture || '';
-      if (!userAvatar.src) {
-        userAvatar.style.display = 'none';
-      }
-      userLoggedIn.classList.remove('hidden');
-      sidebar.classList.remove('hidden');
-      if (sidebarOverlay) sidebarOverlay.classList.remove('hidden-permanent');
-    } else {
-      // Not logged in: hide sidebar, show public navbar, full-width content
-      sidebar.classList.add('hidden');
-      if (sidebarOverlay) sidebarOverlay.classList.add('hidden');
-      if (mobileTopbar) mobileTopbar.classList.add('hidden');
-      if (mainWrapper) mainWrapper.classList.remove('lg:ml-64');
-      publicNavbar.classList.remove('hidden');
-      userLoggedOut.classList.remove('hidden');
+      document.getElementById('nav-login').classList.add('hidden');
+      document.getElementById('nav-cta').classList.add('hidden');
+      const navUser = document.getElementById('nav-user');
+      navUser.classList.remove('hidden');
+      navUser.classList.add('flex');
+      document.getElementById('nav-name').textContent = meta.full_name || meta.name || user.email.split('@')[0];
+      const avatar = meta.avatar_url || meta.picture || '';
+      if (avatar) document.getElementById('nav-avatar').src = avatar;
+      else document.getElementById('nav-avatar').classList.add('hidden');
     }
-  }
-  checkAuth();
-
-  // ══════════════════════════════════════════════
-  //  LOGOUT
-  // ══════════════════════════════════════════════
-  btnLogout.addEventListener('click', async () => {
-    await sbClient.auth.signOut();
-    window.location.href = 'login.html';
-  });
+  })();
 </script>
 
 </body>
