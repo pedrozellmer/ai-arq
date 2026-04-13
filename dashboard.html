@@ -122,6 +122,10 @@
       <span class="text-lg">&#128100;</span>
       <span>Meu Cadastro</span>
     </button>
+    <button onclick="switchTab('meus-pagamentos')" data-tab="meus-pagamentos" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128179;</span>
+      <span>Meus Pagamentos</span>
+    </button>
 
     <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
       <a href="faq.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
@@ -203,6 +207,11 @@
 
         <!-- STATE: UPLOAD -->
         <div id="state-upload">
+          <!-- Nome do Projeto -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Nome do projeto</label>
+            <input type="text" id="project-name" placeholder="Ex: Reforma Escritório 14º Andar" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+          </div>
           <!-- Drop Zone -->
           <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-500 mb-6">
@@ -518,6 +527,33 @@
 
       </div>
 
+      <!-- TAB: MEUS PAGAMENTOS -->
+      <div id="tab-meus-pagamentos" class="tab-content hidden">
+        <h1 class="text-2xl font-bold text-gray-900">Meus Pagamentos</h1>
+        <p class="text-gray-500 mt-1 mb-6">Hist&oacute;rico de pagamentos realizados</p>
+
+        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b">
+              <tr>
+                <th class="text-left px-6 py-3 font-medium text-gray-500">Data</th>
+                <th class="text-left px-6 py-3 font-medium text-gray-500">Projeto</th>
+                <th class="text-left px-6 py-3 font-medium text-gray-500">Pranchas</th>
+                <th class="text-left px-6 py-3 font-medium text-gray-500">Valor</th>
+                <th class="text-left px-6 py-3 font-medium text-gray-500">Status</th>
+              </tr>
+            </thead>
+            <tbody id="payments-list">
+            </tbody>
+          </table>
+          <div id="payments-empty" class="text-center py-12 text-gray-400">
+            <span class="text-4xl block mb-3">&#128179;</span>
+            <p class="font-medium">Nenhum pagamento realizado</p>
+            <p class="text-xs mt-1">Seu primeiro projeto &eacute; gr&aacute;tis!</p>
+          </div>
+        </div>
+      </div>
+
       <!-- TAB: MEU CADASTRO -->
       <div id="tab-meu-cadastro" class="tab-content hidden">
         <h1 class="text-2xl font-bold text-gray-900">Meu Cadastro</h1>
@@ -647,6 +683,7 @@
     // If switching to history, render it
     if (tabName === 'meus-projetos') renderProjectHistory();
     if (tabName === 'meu-cadastro') loadProfile();
+    if (tabName === 'meus-pagamentos') renderPayments();
     if (tabName === 'cashback') renderPendingReviews();
   }
 
@@ -1187,11 +1224,16 @@
     const now = new Date();
     const project = {
       id: currentJobId,
-      name: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      name: document.getElementById('project-name')?.value || ('Projeto ' + now.toLocaleDateString('pt-BR')),
+      projectName: document.getElementById('project-name')?.value || '',
       fileCount: selectedFiles.length,
       fileNames: selectedFiles.map(f => f.name),
+      files: selectedFiles.length,
       status: status,
       date: now.toISOString(),
+      timestamp: now.toISOString(),
+      free: isFirstProject() && selectedFiles.length <= 5,
+      price: selectedFiles.length <= 5 ? 49 : selectedFiles.length <= 10 ? 99 : 149,
       reviewed: false
     };
     history.unshift(project);
@@ -1203,6 +1245,46 @@
   // ══════════════════════════════════════════════
   //  MEU CADASTRO
   // ══════════════════════════════════════════════
+  // Pré-preencher nome do projeto com data
+  const projNameInput = document.getElementById('project-name');
+  if (projNameInput) {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('pt-BR');
+    projNameInput.value = `Projeto ${dateStr}`;
+  }
+
+  // Renderizar pagamentos
+  function renderPayments() {
+    const list = document.getElementById('payments-list');
+    const empty = document.getElementById('payments-empty');
+    const history = JSON.parse(localStorage.getItem('aiarq_project_history') || '[]');
+    const payments = history.filter(p => p.status === 'done' || p.paid);
+
+    if (payments.length === 0) {
+      list.innerHTML = '';
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    empty.classList.add('hidden');
+    list.innerHTML = payments.map(p => {
+      const date = new Date(p.date || p.timestamp).toLocaleDateString('pt-BR');
+      const name = p.name || p.projectName || 'Projeto sem nome';
+      const files = p.fileCount || p.files || '—';
+      const isFree = p.free || p.price === 0;
+      const price = isFree ? 'Gr\u00e1tis' : (p.price ? `R$ ${p.price}` : '—');
+      const statusClass = isFree ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700';
+      const statusText = isFree ? 'Gr\u00e1tis' : 'Pago';
+      return `<tr class="border-b hover:bg-gray-50">
+        <td class="px-6 py-4 text-gray-600">${date}</td>
+        <td class="px-6 py-4 font-medium text-gray-900">${name}</td>
+        <td class="px-6 py-4 text-gray-600">${files}</td>
+        <td class="px-6 py-4 text-gray-900 font-medium">${price}</td>
+        <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs font-medium ${statusClass}">${statusText}</span></td>
+      </tr>`;
+    }).join('');
+  }
+
   async function loadProfile() {
     const loading = document.getElementById('profile-loading');
     const data = document.getElementById('profile-data');
