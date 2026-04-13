@@ -441,6 +441,16 @@
         <!-- Upload corrected spreadsheet -->
         <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-gradient mb-6">
           <h3 class="text-base font-semibold text-gray-900 mb-4">Enviar planilha corrigida</h3>
+
+          <!-- Seletor de projeto -->
+          <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Qual projeto voc&ecirc; est&aacute; revisando?</label>
+            <select id="cashback-project-select" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none">
+              <option value="">Selecione o projeto</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1">Selecione o projeto correspondente &agrave; planilha que voc&ecirc; revisou</p>
+          </div>
+
           <div id="cashback-drop-zone" class="drop-zone rounded-xl bg-gray-50 p-8 text-center cursor-pointer">
             <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-emerald-500 mb-4">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
@@ -755,7 +765,7 @@
     if (tabName === 'meus-projetos') renderProjectHistory();
     if (tabName === 'meu-cadastro') loadProfile();
     if (tabName === 'meus-pagamentos') renderPayments();
-    if (tabName === 'cashback') renderPendingReviews();
+    if (tabName === 'cashback') { loadCashbackProjects(); renderPendingReviews(); }
   }
 
   // ══════════════════════════════════════════════
@@ -1700,25 +1710,42 @@
   btnSendReview.addEventListener('click', () => {
     if (!cashbackFile) return;
 
+    // Validar que selecionou um projeto
+    const projectSelect = document.getElementById('cashback-project-select');
+    if (!projectSelect.value && projectSelect.options.length > 1) {
+      alert('Por favor, selecione o projeto que você está revisando.');
+      projectSelect.focus();
+      return;
+    }
+
+    // Pegar nome do projeto selecionado
+    const selectedOption = projectSelect.options[projectSelect.selectedIndex];
+    const projectName = selectedOption ? selectedOption.textContent : '';
+
     // Save review to localStorage
     const reviews = JSON.parse(localStorage.getItem('aiarq_reviews') || '[]');
     const now = new Date();
     reviews.unshift({
       fileName: cashbackFile.name,
+      projectName: projectName,
       date: now.toISOString(),
       dateFormatted: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       status: 'pending'
     });
     localStorage.setItem('aiarq_reviews', JSON.stringify(reviews));
 
-    // Mark project as reviewed if applicable
-    if (typeof window._reviewingProjectIdx === 'number') {
-      const history = getProjectHistory();
-      if (history[window._reviewingProjectIdx]) {
-        history[window._reviewingProjectIdx].reviewed = true;
+    // Mark project as reviewed
+    const history = getProjectHistory();
+    const doneProjects = history.filter(p => p.status === 'done' && !p.reviewed);
+    const selectedIdx = parseInt(projectSelect.value);
+    if (!isNaN(selectedIdx) && doneProjects[selectedIdx]) {
+      // Encontrar no histórico original e marcar
+      const proj = doneProjects[selectedIdx];
+      const origIdx = history.findIndex(p => p.id === proj.id);
+      if (origIdx >= 0) {
+        history[origIdx].reviewed = true;
         localStorage.setItem('aiarq_project_history', JSON.stringify(history));
       }
-      window._reviewingProjectIdx = undefined;
     }
 
     // Reset
@@ -1730,6 +1757,29 @@
     renderPendingReviews();
     alert('Revis\u00e3o enviada com sucesso! Seu desconto ser\u00e1 aplicado no pr\u00f3ximo projeto.');
   });
+
+  function loadCashbackProjects() {
+    const select = document.getElementById('cashback-project-select');
+    if (!select) return;
+    const history = JSON.parse(localStorage.getItem('aiarq_project_history') || '[]');
+    const doneProjects = history.filter(p => p.status === 'done' && !p.reviewed);
+
+    // Limpar e repopular
+    select.innerHTML = '<option value="">Selecione o projeto</option>';
+    if (doneProjects.length === 0) {
+      select.innerHTML = '<option value="">Nenhum projeto dispon\u00edvel para revis\u00e3o</option>';
+      return;
+    }
+    doneProjects.forEach((p, idx) => {
+      const date = new Date(p.date || p.timestamp).toLocaleDateString('pt-BR');
+      const name = p.name || p.projectName || ('Projeto ' + date);
+      const files = p.fileCount || 0;
+      const opt = document.createElement('option');
+      opt.value = idx;
+      opt.textContent = `${name} (${files} arquivo${files !== 1 ? 's' : ''} \u2014 ${date})`;
+      select.appendChild(opt);
+    });
+  }
 
   function renderPendingReviews() {
     const reviews = JSON.parse(localStorage.getItem('aiarq_reviews') || '[]');
