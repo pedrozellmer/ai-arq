@@ -335,16 +335,14 @@
     try {
       const { error } = await sbClient.from('profiles').insert({
         user_id: currentUser.id,
+        full_name: nome,
         email: currentUser.email,
-        nome_completo: nome,
         whatsapp: whatsapp,
-        cpf_cnpj: cpfCnpjDigits,
-        empresa: empresa,
-        area_atuacao: area,
-        cargo: cargo,
-        aceita_marketing: aceitaMarketing.checked,
-        aceita_termos: true,
-        created_at: new Date().toISOString()
+        cpf_cnpj: document.getElementById('cpf_cnpj').value,
+        company: empresa,
+        role: cargo,
+        area: area,
+        accept_marketing: aceitaMarketing.checked
       });
 
       if (error) {
