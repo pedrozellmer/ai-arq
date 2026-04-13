@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI.arq - Perguntas Frequentes</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
+
+  /* Sidebar */
+  .sidebar {
+    transition: transform 0.3s ease;
+  }
+  .sidebar-overlay {
+    transition: opacity 0.3s ease;
+  }
+  .nav-item {
+    transition: all 0.15s ease;
+  }
+  .nav-item:hover {
+    background-color: rgba(255,255,255,0.1);
+  }
+  .nav-item.active {
+    background-color: rgba(255,255,255,0.15);
+    border-right: 3px solid #06b6d4;
+  }
+
+  /* Scrollbar */
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+
+  /* Accordion */
+  .faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+  }
+  .faq-answer.open {
+    max-height: 600px;
+  }
+  .faq-chevron {
+    transition: transform 0.3s ease;
+  }
+  .faq-chevron.rotated {
+    transform: rotate(180deg);
+  }
+
+  /* Search highlight */
+  .faq-item.hidden-by-search {
+    display: none;
+  }
+  .section-group.hidden-by-search {
+    display: none;
+  }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
+
+<!-- MOBILE OVERLAY -->
+<div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-40 hidden opacity-0 lg:hidden" onclick="closeSidebar()"></div>
+
+<!-- SIDEBAR -->
+<aside id="sidebar" class="sidebar fixed top-0 left-0 z-50 h-full w-64 gradient-main flex flex-col transform -translate-x-full lg:translate-x-0">
+  <!-- Logo -->
+  <div class="flex items-center gap-3 px-6 py-5 border-b border-white/10">
+    <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-white font-bold text-sm">AI</div>
+    <span class="text-xl font-bold text-white">AI<span class="text-cyan-300">.arq</span></span>
+  </div>
+
+  <!-- Navigation -->
+  <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+    <a href="dashboard.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128202;</span>
+      <span>Novo Projeto</span>
+    </a>
+    <a href="dashboard.html#projetos" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128193;</span>
+      <span>Meus Projetos</span>
+    </a>
+    <a href="dashboard.html#cashback" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128176;</span>
+      <span>Cashback</span>
+    </a>
+    <a href="dashboard.html#como-funciona" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#128214;</span>
+      <span>Como Funciona</span>
+    </a>
+    <a href="faq.html" class="nav-item active flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#10067;</span>
+      <span>FAQ</span>
+    </a>
+
+    <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
+      <a href="termos.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
+        <span class="text-lg">&#128196;</span>
+        <span>Termos de Uso</span>
+      </a>
+      <a href="privacidade.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
+        <span class="text-lg">&#128274;</span>
+        <span>Privacidade</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- User section at bottom -->
+  <div class="px-4 py-4 border-t border-white/10">
+    <div id="user-section-logged-in" class="hidden">
+      <div class="flex items-center gap-3">
+        <img id="user-avatar" src="" alt="Avatar" class="h-9 w-9 rounded-full object-cover border-2 border-white/20 shrink-0">
+        <div class="min-w-0 flex-1">
+          <p id="user-name" class="text-sm font-medium text-white truncate"></p>
+          <button id="btn-logout" onclick="handleLogout()" class="text-xs text-white/50 hover:text-red-300 transition font-medium">Sair</button>
+        </div>
+      </div>
+    </div>
+    <div id="user-section-logged-out" class="hidden">
+      <a href="login.html" class="flex items-center gap-3 px-2 py-2 rounded-lg text-white/80 hover:text-white hover:bg-white/10 transition text-sm font-medium">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+        <span>Entrar</span>
+      </a>
+    </div>
+  </div>
+</aside>
+
+<!-- MAIN WRAPPER -->
+<div class="lg:ml-64 min-h-screen flex flex-col">
+
+  <!-- MOBILE TOPBAR -->
+  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b lg:hidden">
+    <div class="flex items-center justify-between h-14 px-4">
+      <button onclick="openSidebar()" class="p-2 -ml-2 text-gray-600 hover:text-gray-900">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="flex items-center gap-2">
+        <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <div class="w-10"></div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT -->
+  <main class="flex-1 p-4 md:p-8 lg:p-10">
+    <div class="max-w-4xl mx-auto">
+
+      <!-- Page header -->
+      <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">Perguntas Frequentes</h1>
+        <p class="text-sm text-gray-500 mt-1">Encontre respostas para as principais d&uacute;vidas sobre o AI.arq</p>
+      </div>
+
+      <!-- Search bar -->
+      <div class="mb-8">
+        <div class="relative">
+          <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          </div>
+          <input id="faq-search" type="text" placeholder="Buscar pergunta..." class="w-full pl-12 pr-10 py-3.5 rounded-xl border border-gray-200 bg-white text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition shadow-sm">
+          <button id="btn-clear-search" class="absolute inset-y-0 right-0 pr-4 flex items-center text-gray-300 hover:text-gray-500 transition hidden" onclick="clearSearch()">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <p id="search-results-count" class="text-xs text-gray-400 mt-2 hidden"></p>
+      </div>
+
+      <!-- No results message -->
+      <div id="no-results" class="hidden">
+        <div class="rounded-2xl border bg-white p-12 text-center shadow-gradient">
+          <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 mb-6">
+            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h2 class="text-lg font-semibold text-gray-700 mb-2">Nenhum resultado encontrado</h2>
+          <p class="text-sm text-gray-400">Tente buscar com outros termos ou entre em contato conosco.</p>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- SECTION 1: Sobre o AI.arq                   -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="section-group mb-8" data-section="sobre">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-100 text-indigo-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-gray-900">Sobre o AI.arq</h2>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Q1 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="o que plataforma intelig&ecirc;ncia artificial pranchas projetos arquitetura pdfs planilha or&ccedil;amento quantitativos upload minutos">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O que &eacute; o AI.arq?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                AI.arq &eacute; uma plataforma de intelig&ecirc;ncia artificial que l&ecirc; pranchas de projetos de arquitetura (PDFs) e gera automaticamente planilhas de or&ccedil;amento com quantitativos detalhados. Em vez de passar dias lendo plantas e contando itens manualmente, voc&ecirc; faz upload dos PDFs e recebe a planilha pronta em aproximadamente 10 minutos.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q2 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="para quem arquitetos engenheiros or&ccedil;amentistas construtoras incorporadoras escrit&oacute;rios engenharia quantitativos concorr&ecirc;ncia obras">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Para quem &eacute; o AI.arq?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Arquitetos, engenheiros de custos, or&ccedil;amentistas, construtoras, incorporadoras e escrit&oacute;rios de engenharia que precisam levantar quantitativos de projetos para concorr&ecirc;ncia ou or&ccedil;amento de obras.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q3 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="substitui or&ccedil;amentista profissional ferramenta apoio levantamento inicial revisada habilitado laranja verifica&ccedil;&atilde;o">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq substitui um or&ccedil;amentista profissional?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                N&atilde;o. O AI.arq &eacute; uma ferramenta de apoio que acelera o levantamento inicial de quantitativos. A planilha gerada deve <strong>sempre</strong> ser revisada por um profissional habilitado antes de ser utilizada em processos de concorr&ecirc;ncia ou contrata&ccedil;&atilde;o. Itens marcados em laranja requerem verifica&ccedil;&atilde;o especial.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- SECTION 2: Como Funciona                    -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="section-group mb-8" data-section="como-funciona">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-100 text-cyan-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-gray-900">Como Funciona</h2>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Q4 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="tipos pranchas sistema analisa demoli&ccedil;&atilde;o layout mobili&aacute;rio marcenaria arquitetura portas revestimentos divis&oacute;rias pontos el&eacute;tricos dados pisos forro ilumina&ccedil;&atilde;o detalhamento">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Quais tipos de pranchas o AI.arq l&ecirc;?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <p class="mb-3">O sistema analisa mais de 10 tipos de pranchas:</p>
+                <ul class="space-y-1.5 ml-1">
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Demoli&ccedil;&atilde;o (Pr. 100)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Layout Atual e Novo (Pr. 200/201)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Mobili&aacute;rio (Pr. 300)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Marcenaria (Pr. 301)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Arquitetura (Pr. 400) &mdash; portas, revestimentos, divis&oacute;rias</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Pontos El&eacute;tricos e Dados (Pr. 500)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Pisos (Pr. 600)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Forro e Ilumina&ccedil;&atilde;o (Pr. 700)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Detalhamento de Forro (Pr. 701)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Q5 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="formato arquivo aceito pdf dwg autocad rvt revit exportar">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Qual o formato de arquivo aceito?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Apenas arquivos <strong>PDF</strong>. Se seus projetos est&atilde;o em DWG (AutoCAD) ou RVT (Revit), exporte primeiro para PDF antes de enviar.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q6 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quantas pranchas enviar projeto limite 20 maiores contato">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Quantas pranchas posso enviar por projeto?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                At&eacute; <strong>20 pranchas</strong> por projeto. Para projetos maiores, entre em contato.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q7 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto tempo leva processamento minutos pranchas r&aacute;pido demora">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Quanto tempo leva o processamento?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Aproximadamente <strong>10 minutos</strong> para um projeto com 10 pranchas. Projetos menores (3-5 pranchas) podem levar de 3 a 5 minutos.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q8 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="planilha gerada cont&eacute;m resumo comparativo or&ccedil;amento disciplinas ref prancha laranja estimada f&oacute;rmulas subtotal bdi pre&ccedil;o fornecedor">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O que a planilha gerada cont&eacute;m?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <ul class="space-y-2 ml-1">
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Sheet 1:</strong> Resumo Comparativo (an&aacute;lise do que sai, entra e permanece em reformas)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Sheet 2:</strong> Or&ccedil;amento detalhado com at&eacute; 16 disciplinas (Servi&ccedil;os Preliminares, Demoli&ccedil;&atilde;o, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divis&oacute;rias, Persianas, Ilumina&ccedil;&atilde;o, El&eacute;trica, AC, Inc&ecirc;ndio, Marcenaria, Mobili&aacute;rio, Complementares)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Coluna <strong>REF. PRANCHA</strong> para rastreabilidade</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Itens em <span class="text-amber-600 font-semibold">laranja</span> = quantidade estimada (revisar)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> F&oacute;rmulas autom&aacute;ticas de subtotal e BDI (30%)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Colunas de pre&ccedil;o para preenchimento pelo fornecedor</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- SECTION 3: Precis&atilde;o e Qualidade              -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="section-group mb-8" data-section="precisao">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-gray-900">Precis&atilde;o e Qualidade</h2>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Q9 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="precis&atilde;o acur&aacute;cia leitura legendas especifica&ccedil;&otilde;es materiais identifica&ccedil;&atilde;o portas revestimentos pisos contagem s&iacute;mbolos lumin&aacute;rias el&eacute;tricos estimativa &aacute;reas pintura forro carpete benchmark">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Qual a precis&atilde;o do AI.arq?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <p class="mb-3">A precis&atilde;o varia conforme o tipo de informa&ccedil;&atilde;o:</p>
+                <div class="space-y-2">
+                  <div class="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50">
+                    <span class="text-emerald-600 font-bold text-xs shrink-0">~95%</span>
+                    <span>Leitura de legendas e especifica&ccedil;&otilde;es de materiais</span>
+                  </div>
+                  <div class="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50">
+                    <span class="text-emerald-600 font-bold text-xs shrink-0">~90%</span>
+                    <span>Identifica&ccedil;&atilde;o de tipos de portas, revestimentos, pisos</span>
+                  </div>
+                  <div class="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50">
+                    <span class="text-amber-600 font-bold text-xs shrink-0">40-60%</span>
+                    <span>Contagem de s&iacute;mbolos na planta (lumin&aacute;rias, pontos el&eacute;tricos)</span>
+                  </div>
+                  <div class="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50">
+                    <span class="text-amber-600 font-bold text-xs shrink-0">&plusmn;30%</span>
+                    <span>Estimativa de &aacute;reas (pintura, forro, carpete)</span>
+                  </div>
+                </div>
+                <p class="mt-3 text-xs text-gray-400">Essas taxas s&atilde;o consistentes com os benchmarks do setor (AECV-bench 2026) para modelos de IA aplicados a plantas de arquitetura.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Q10 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="itens laranja estimadas f&oacute;rmulas per&iacute;metro p&eacute; direito legenda conferidos projeto executivo quantidade">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Por que alguns itens ficam em laranja?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Itens em <span class="text-amber-600 font-semibold">laranja</span> tiveram suas quantidades estimadas pela IA com base em f&oacute;rmulas (ex: m&sup2; de pintura = per&iacute;metro &times; p&eacute;-direito) em vez de lidas diretamente na legenda. Esses itens devem ser conferidos no projeto executivo.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q11 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="calcula quantidades f&oacute;rmulas t&eacute;cnicas pintura per&iacute;metro paredes pisos perda lumin&aacute;rias nbr sprinklers el&eacute;trica tomadas dados tcpo">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Como a IA calcula as quantidades?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <p class="mb-3">Usamos f&oacute;rmulas t&eacute;cnicas reais:</p>
+                <ul class="space-y-2 ml-1">
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Pintura:</strong> Per&iacute;metro das paredes &times; p&eacute;-direito - v&atilde;os (regra TCPO: n&atilde;o descontar v&atilde;os &le; 2m&sup2;)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Pisos:</strong> &Aacute;rea + 10% de perda (placas modulares)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Lumin&aacute;rias:</strong> F&oacute;rmula NBR 8995 (500 lux para escrit&oacute;rio)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Sprinklers:</strong> NBR 10897 (1 a cada 20,9m&sup2; para risco leve)</li>
+                  <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>El&eacute;trica:</strong> 2 tomadas comuns + 2 estabilizadas + 1 dado por posi&ccedil;&atilde;o de trabalho</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- Q12 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="obras novas reformas compara automaticamente layout atual novo identifica sai entra permanece">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq funciona para obras novas ou s&oacute; reformas?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Funciona para ambos. Para reformas, o sistema compara automaticamente o layout atual com o novo e identifica o que sai, o que entra e o que permanece.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- SECTION 4: Pre&ccedil;os e Pagamento                -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="section-group mb-8" data-section="precos">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-gray-900">Pre&ccedil;os e Pagamento</h2>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Q13 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto custa pre&ccedil;o valor gr&aacute;tis primeiro projeto pequeno m&eacute;dio grande pranchas reais">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Quanto custa?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-center">
+                    <p class="text-xs text-emerald-600 font-semibold uppercase tracking-wide mb-1">Primeiro projeto</p>
+                    <p class="text-2xl font-bold text-emerald-700">GR&Aacute;TIS</p>
+                    <p class="text-xs text-emerald-500 mt-1">At&eacute; 5 pranchas</p>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+                    <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Projeto Pequeno</p>
+                    <p class="text-2xl font-bold text-gray-800">R$ 49</p>
+                    <p class="text-xs text-gray-400 mt-1">At&eacute; 5 pranchas</p>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+                    <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Projeto M&eacute;dio</p>
+                    <p class="text-2xl font-bold text-gray-800">R$ 99</p>
+                    <p class="text-xs text-gray-400 mt-1">6&ndash;10 pranchas</p>
+                  </div>
+                  <div class="rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+                    <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Projeto Grande</p>
+                    <p class="text-2xl font-bold text-gray-800">R$ 149</p>
+                    <p class="text-xs text-gray-400 mt-1">11+ pranchas</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Q14 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="formas pagamento cart&atilde;o cr&eacute;dito d&eacute;bito pix stripe uber spotify">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Quais formas de pagamento s&atilde;o aceitas?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Cart&atilde;o de cr&eacute;dito/d&eacute;bito e PIX, processados pelo <strong>Stripe</strong> (mesma plataforma usada por Uber, Spotify, etc.).
+              </div>
+            </div>
+          </div>
+
+          <!-- Q15 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="mensalidade assinatura paga projeto sem">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Tem mensalidade?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                N&atilde;o. Voc&ecirc; paga por projeto, sem assinatura ou mensalidade.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q16 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="programa cashback desconto revisar corrigir quantitativos upload vers&atilde;o corrigida calibrar melhorar precis&atilde;o">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O que &eacute; o programa de Cashback?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Ao revisar e corrigir os quantitativos da planilha gerada pela IA e fazer upload da vers&atilde;o corrigida, voc&ecirc; ganha <strong>20% de desconto</strong> no pr&oacute;ximo projeto. Seus dados de revis&atilde;o ajudam a calibrar e melhorar a precis&atilde;o da IA para todos os usu&aacute;rios.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- SECTION 5: Seguran&ccedil;a e Privacidade           -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="section-group mb-8" data-section="seguranca">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-100 text-violet-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-gray-900">Seguran&ccedil;a e Privacidade</h2>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Q17 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="projetos armazenados pdfs processados servidor seguro mantidos por 15 dias para download e depois deletados automaticamente n&atilde;o armazenamos">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Meus projetos ficam armazenados?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <strong>N&atilde;o.</strong> Os PDFs s&atilde;o processados em servidor seguro e mantidos por 15 dias para download e depois deletados automaticamente ap&oacute;s a gera&ccedil;&atilde;o da planilha. N&atilde;o armazenamos seus projetos.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q18 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="dados compartilhados terceiros vendidos treinar modelos">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Meus dados s&atilde;o compartilhados com terceiros?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                <strong>N&atilde;o.</strong> Seus dados n&atilde;o s&atilde;o compartilhados nem vendidos. Os PDFs n&atilde;o s&atilde;o utilizados para treinar modelos de IA.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q19 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="login seguro autentica&ccedil;&atilde;o google oauth supabase criptografia https">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O login &eacute; seguro?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Sim. Utilizamos autentica&ccedil;&atilde;o via <strong>Google OAuth</strong> (o mesmo sistema usado por Gmail, YouTube, etc.) atrav&eacute;s do Supabase, com criptografia HTTPS em todas as comunica&ccedil;&otilde;es.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q20 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="lgpd conformidade lei geral prote&ccedil;&atilde;o dados acesso corre&ccedil;&atilde;o exclus&atilde;o">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq est&aacute; em conformidade com a LGPD?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Sim. Seguimos as diretrizes da <strong>Lei Geral de Prote&ccedil;&atilde;o de Dados</strong>. Voc&ecirc; pode solicitar acesso, corre&ccedil;&atilde;o ou exclus&atilde;o dos seus dados a qualquer momento.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- SECTION 6: Suporte e Contato                -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div class="section-group mb-8" data-section="suporte">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-100 text-rose-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          </div>
+          <h2 class="text-lg font-bold text-gray-900">Suporte e Contato</h2>
+        </div>
+
+        <div class="space-y-3">
+          <!-- Q21 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="contato suporte email respondemos horas &uacute;teis">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Como entro em contato com o suporte?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Envie um email para <a href="mailto:contato@ai.arq.br" class="text-indigo-600 hover:text-indigo-800 underline font-medium">contato@ai.arq.br</a>. Respondemos em at&eacute; 24 horas &uacute;teis.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q22 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="sugerir melhorias feedback sugest&otilde;es">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">Posso sugerir melhorias?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Sim! Adoramos feedback. Envie sugest&otilde;es para <a href="mailto:contato@ai.arq.br" class="text-indigo-600 hover:text-indigo-800 underline font-medium">contato@ai.arq.br</a>.
+              </div>
+            </div>
+          </div>
+
+          <!-- Q23 -->
+          <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="celular mobile responsivo dispositivo computador upload arquivos tablet">
+            <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+              <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq funciona no celular?</span>
+              <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+            <div class="faq-answer px-5">
+              <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+                Sim. O site &eacute; totalmente responsivo e funciona em qualquer dispositivo. Por&eacute;m, recomendamos usar computador para fazer upload de muitos arquivos.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Contact CTA -->
+      <div class="rounded-2xl gradient-main p-6 md:p-8 text-center mb-8">
+        <h3 class="text-lg font-bold text-white mb-2">N&atilde;o encontrou sua resposta?</h3>
+        <p class="text-sm text-white/80 mb-5">Entre em contato com nossa equipe. Respondemos em at&eacute; 24 horas &uacute;teis.</p>
+        <a href="mailto:contato@ai.arq.br" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-indigo-600 font-semibold text-sm hover:bg-gray-50 transition shadow-lg">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          contato@ai.arq.br
+        </a>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="border-t bg-gray-50 py-8">
+    <div class="max-w-4xl mx-auto px-4">
+      <div class="flex flex-col items-center gap-3 md:flex-row md:justify-between">
+        <div class="flex items-center gap-2">
+          <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+          <span class="font-bold text-gray-900 text-sm">AI<span class="gradient-text">.arq</span></span>
+        </div>
+        <div class="flex gap-6 text-xs text-gray-400">
+          <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+          <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+          <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
+        </div>
+        <p class="text-xs text-gray-300">2026 AI.arq. Todos os direitos reservados.</p>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // ══════════════════════════════════════════════
+  //  SIDEBAR / MOBILE MENU
+  // ══════════════════════════════════════════════
+  const sidebar = document.getElementById('sidebar');
+  const sidebarOverlay = document.getElementById('sidebar-overlay');
+
+  function openSidebar() {
+    sidebar.classList.remove('-translate-x-full');
+    sidebarOverlay.classList.remove('hidden');
+    requestAnimationFrame(() => sidebarOverlay.classList.remove('opacity-0'));
+  }
+
+  function closeSidebar() {
+    sidebar.classList.add('-translate-x-full');
+    sidebarOverlay.classList.add('opacity-0');
+    setTimeout(() => sidebarOverlay.classList.add('hidden'), 300);
+  }
+
+  // ══════════════════════════════════════════════
+  //  SUPABASE CONFIG
+  // ══════════════════════════════════════════════
+  const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
+
+  const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ══════════════════════════════════════════════
+  //  AUTH CHECK
+  // ══════════════════════════════════════════════
+  const userAvatar = document.getElementById('user-avatar');
+  const userName = document.getElementById('user-name');
+  const sectionLoggedIn = document.getElementById('user-section-logged-in');
+  const sectionLoggedOut = document.getElementById('user-section-logged-out');
+
+  async function checkAuth() {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (session) {
+      const user = session.user;
+      const meta = user.user_metadata || {};
+      userName.textContent = meta.full_name || meta.name || user.email;
+      userAvatar.src = meta.avatar_url || meta.picture || '';
+      sectionLoggedIn.classList.remove('hidden');
+      sectionLoggedOut.classList.add('hidden');
+    } else {
+      sectionLoggedIn.classList.add('hidden');
+      sectionLoggedOut.classList.remove('hidden');
+    }
+  }
+
+  async function handleLogout() {
+    await sbClient.auth.signOut();
+    window.location.href = 'login.html';
+  }
+
+  checkAuth();
+
+  // ══════════════════════════════════════════════
+  //  FAQ ACCORDION
+  // ══════════════════════════════════════════════
+  function toggleFaq(button) {
+    const item = button.closest('.faq-item');
+    const answer = item.querySelector('.faq-answer');
+    const chevron = item.querySelector('.faq-chevron');
+
+    if (answer.classList.contains('open')) {
+      answer.classList.remove('open');
+      chevron.classList.remove('rotated');
+    } else {
+      answer.classList.add('open');
+      chevron.classList.add('rotated');
+    }
+  }
+
+  // ══════════════════════════════════════════════
+  //  SEARCH / FILTER
+  // ══════════════════════════════════════════════
+  const searchInput = document.getElementById('faq-search');
+  const btnClearSearch = document.getElementById('btn-clear-search');
+  const searchResultsCount = document.getElementById('search-results-count');
+  const noResults = document.getElementById('no-results');
+
+  function normalizeText(text) {
+    return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  }
+
+  function filterFaq() {
+    const query = normalizeText(searchInput.value.trim());
+    const allItems = document.querySelectorAll('.faq-item');
+    const allSections = document.querySelectorAll('.section-group');
+
+    // Show/hide clear button
+    if (query.length > 0) {
+      btnClearSearch.classList.remove('hidden');
+    } else {
+      btnClearSearch.classList.add('hidden');
+    }
+
+    if (query.length === 0) {
+      // Show everything
+      allItems.forEach(item => item.classList.remove('hidden-by-search'));
+      allSections.forEach(sec => sec.classList.remove('hidden-by-search'));
+      searchResultsCount.classList.add('hidden');
+      noResults.classList.add('hidden');
+      return;
+    }
+
+    const words = query.split(/\s+/).filter(w => w.length > 0);
+    let visibleCount = 0;
+
+    allItems.forEach(item => {
+      const questionText = normalizeText(item.querySelector('.faq-toggle span').textContent);
+      const answerText = normalizeText(item.querySelector('.faq-answer').textContent);
+      const keywords = normalizeText(item.getAttribute('data-keywords') || '');
+      const fullText = questionText + ' ' + answerText + ' ' + keywords;
+
+      const matches = words.every(word => fullText.includes(word));
+      if (matches) {
+        item.classList.remove('hidden-by-search');
+        visibleCount++;
+      } else {
+        item.classList.add('hidden-by-search');
+        // Close if hidden
+        const answer = item.querySelector('.faq-answer');
+        const chevron = item.querySelector('.faq-chevron');
+        answer.classList.remove('open');
+        chevron.classList.remove('rotated');
+      }
+    });
+
+    // Hide sections with no visible items
+    allSections.forEach(sec => {
+      const visibleItems = sec.querySelectorAll('.faq-item:not(.hidden-by-search)');
+      if (visibleItems.length === 0) {
+        sec.classList.add('hidden-by-search');
+      } else {
+        sec.classList.remove('hidden-by-search');
+      }
+    });
+
+    // Results count
+    if (visibleCount > 0) {
+      searchResultsCount.textContent = visibleCount + (visibleCount === 1 ? ' resultado encontrado' : ' resultados encontrados');
+      searchResultsCount.classList.remove('hidden');
+      noResults.classList.add('hidden');
+    } else {
+      searchResultsCount.classList.add('hidden');
+      noResults.classList.remove('hidden');
+    }
+  }
+
+  function clearSearch() {
+    searchInput.value = '';
+    btnClearSearch.classList.add('hidden');
+    filterFaq();
+    searchInput.focus();
+  }
+
+  searchInput.addEventListener('input', filterFaq);
+</script>
+</body>
+</html>
