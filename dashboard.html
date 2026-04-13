@@ -226,10 +226,22 @@
 
         <!-- STATE: UPLOAD -->
         <div id="state-upload">
+          <!-- Guia rápido -->
+          <div class="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/50 p-5">
+            <h3 class="text-sm font-semibold text-indigo-800 mb-2">&#128161; Como obter o melhor resultado:</h3>
+            <ul class="text-xs text-indigo-700 space-y-1.5 leading-relaxed">
+              <li>&#8226; Envie as <strong>pranchas principais</strong>: Arquitetura, Pisos, Forro, Pontos El&eacute;tricos, Demoli&ccedil;&atilde;o</li>
+              <li>&#8226; Pranchas de <strong>Marcenaria</strong> e <strong>Mobili&aacute;rio</strong> complementam com itens sob medida</li>
+              <li>&#8226; Para <strong>reformas</strong>, inclua o Layout Atual e o Layout Novo para comparativo</li>
+              <li>&#8226; Pode ser um PDF por prancha ou v&aacute;rias pranchas em um &uacute;nico PDF</li>
+              <li>&#8226; Quanto mais pranchas, mais completa a planilha &mdash; m&iacute;nimo recomendado: <strong>3 pranchas</strong></li>
+            </ul>
+          </div>
+
           <!-- Nome do Projeto -->
           <div class="mb-6">
             <label class="block text-sm font-medium text-gray-700 mb-2">Nome do projeto</label>
-            <input type="text" id="project-name" placeholder="Ex: Reforma Escritório 14º Andar" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+            <input type="text" id="project-name" placeholder="Ex: Reforma Escrit&oacute;rio 14&ordm; Andar" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
           </div>
           <!-- Drop Zone -->
           <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
@@ -295,7 +307,28 @@
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
             </div>
             <h2 class="text-xl font-bold text-gray-900 mb-2">Planilha pronta!</h2>
-            <p class="text-sm text-gray-500 mb-8">Seu levantamento de quantitativos foi gerado com sucesso.</p>
+            <p class="text-sm text-gray-500 mb-4">Seu levantamento de quantitativos foi gerado com sucesso.</p>
+
+            <!-- Aviso poucas pranchas -->
+            <div id="few-items-warning" class="hidden mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-left">
+              <div class="flex items-start gap-2">
+                <span class="text-amber-500 shrink-0">&#9888;&#65039;</span>
+                <div>
+                  <p class="text-sm text-amber-800 font-medium">Poucos itens foram extraídos</p>
+                  <p class="text-xs text-amber-700 mt-1">Para um orçamento mais completo, envie também as pranchas de <strong>Arquitetura</strong>, <strong>Pisos</strong>, <strong>Forro</strong> e <strong>Pontos Elétricos</strong>. Quanto mais pranchas, mais detalhada a planilha.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Aviso revisão -->
+            <div class="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 text-left">
+              <div class="flex items-start gap-2">
+                <span class="text-blue-500 shrink-0">&#128270;</span>
+                <div>
+                  <p class="text-xs text-blue-700">Lembre-se: itens em <strong>laranja</strong> na planilha são estimativas e devem ser revisados por um profissional. A planilha ficará disponível para download por <strong>15 dias</strong>.</p>
+                </div>
+              </div>
+            </div>
 
             <button id="btn-download" class="w-full py-4 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-lg font-semibold shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
@@ -1300,6 +1333,12 @@
         // Save to history
         saveProjectToHistory('done');
 
+        // Mostrar aviso se poucas pranchas
+        if (selectedFiles.length <= 3) {
+          document.getElementById('few-items-warning')?.classList.remove('hidden');
+        } else {
+          document.getElementById('few-items-warning')?.classList.add('hidden');
+        }
         setTimeout(() => showState(stateDone), 600);
       }
 
