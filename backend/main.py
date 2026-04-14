@@ -31,6 +31,7 @@ from models import ProcessingStatus
 from processor import process_pdfs
 from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
+from instagram_webhook import router as instagram_router, start_auto_poster
 
 app = FastAPI(
     title="AI.arq API",
@@ -45,6 +46,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Instagram Agent ──
+app.include_router(instagram_router)
+start_auto_poster()
 
 # Armazenamento de jobs em arquivo JSON (sobrevive a restarts)
 import json as _json
