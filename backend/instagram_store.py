@@ -38,9 +38,9 @@ def _save_json(filename: str, data):
 # ══════════════════════════════════════════════════
 
 DEFAULT_CONFIG = {
-    "agent_enabled": True,
-    "auto_reply_enabled": True,
-    "auto_post_enabled": True,
+    "agent_enabled": False,
+    "auto_reply_enabled": False,
+    "auto_post_enabled": False,
     "post_interval_hours": 24,
     "max_messages_per_day": 200,
     "messages_sent_today": 0,
