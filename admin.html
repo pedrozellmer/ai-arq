@@ -294,16 +294,28 @@
       <div id="tab-projetos" class="tab-content hidden">
         <div class="mb-6">
           <h1 class="text-2xl font-bold text-gray-900">Projetos</h1>
-          <p class="text-sm text-gray-500 mt-1">Hist&#243;rico de projetos processados</p>
+          <p class="text-sm text-gray-500 mt-1">Todos os projetos processados na plataforma</p>
         </div>
 
-        <div class="rounded-2xl border bg-white p-12 text-center shadow-gradient">
-          <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 mb-6">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-          </div>
-          <h2 class="text-lg font-semibold text-gray-700 mb-2">Em breve</h2>
-          <p class="text-sm text-gray-400">Dados de projetos processados aparecer&#227;o aqui.</p>
+        <div class="rounded-2xl border bg-white shadow-gradient overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left">
+              <tr>
+                <th class="px-4 py-3 font-semibold text-gray-600">Job ID</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">Usu&#225;rio</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">Arquivos</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">Itens</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">&#193;rea</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">Status</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">Data</th>
+              </tr>
+            </thead>
+            <tbody id="projects-table-body">
+              <tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Carregando projetos...</td></tr>
+            </tbody>
+          </table>
         </div>
+        <p class="text-xs text-gray-400 mt-2" id="projects-count">0 projeto(s)</p>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -451,7 +463,46 @@ function switchTab(tabName) {
   // Load data for tab
   if (tabName === 'usuarios') loadUsers();
   if (tabName === 'codigos') loadBetaCodes();
+  if (tabName === 'projetos') loadProjects();
   if (tabName === 'dashboard') loadDashboardStats();
+}
+
+// ══════════════════════════════════════════════
+// PROJECTS
+// ══════════════════════════════════════════════
+async function loadProjects() {
+  const tbody = document.getElementById('projects-table-body');
+  tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Carregando projetos...</td></tr>';
+  try {
+    const { data, error } = await sbClient
+      .from('projects')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    const projects = data || [];
+    document.getElementById('projects-count').textContent = projects.length + ' projeto(s)';
+    if (!projects.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Nenhum projeto encontrado.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = projects.map(p => {
+      const statusColor = p.status === 'done' ? 'text-green-600 bg-green-50' : p.status === 'error' ? 'text-red-600 bg-red-50' : 'text-yellow-600 bg-yellow-50';
+      const date = p.created_at ? new Date(p.created_at).toLocaleDateString('pt-BR') : '--';
+      const types = p.file_types ? Object.entries(p.file_types).filter(([k,v])=>v>0).map(([k,v])=>v+' '+k.toUpperCase()).join(', ') : '--';
+      return '<tr class="border-t hover:bg-gray-50">' +
+        '<td class="px-4 py-3 font-mono text-xs">' + (p.job_id || '--') + '</td>' +
+        '<td class="px-4 py-3">' + (p.user_email || p.user_name || 'An\u00f4nimo') + '</td>' +
+        '<td class="px-4 py-3">' + (p.files_count || 0) + ' (' + types + ')</td>' +
+        '<td class="px-4 py-3">' + (p.items_count || '--') + '</td>' +
+        '<td class="px-4 py-3">' + (p.total_area ? p.total_area.toFixed(0) + ' m\u00b2' : '--') + '</td>' +
+        '<td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs font-medium ' + statusColor + '">' + (p.status || '--') + '</span></td>' +
+        '<td class="px-4 py-3 text-xs text-gray-500">' + date + '</td>' +
+        '</tr>';
+    }).join('');
+  } catch (err) {
+    console.error('Error loading projects:', err);
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-red-400">Erro ao carregar projetos.</td></tr>';
+  }
 }
 
 // ══════════════════════════════════════════════
