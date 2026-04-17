@@ -313,7 +313,12 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
             timeout=120,
             env=env,
         )
-        print(f"[ODA] returncode={result.returncode} stdout={result.stdout[:200]} stderr={result.stderr[:200]}")
+        # Salvar log do ODA num arquivo pra poder ler via API
+        oda_log = f"rc={result.returncode}\nstdout={result.stdout[:500]}\nstderr={result.stderr[:500]}\ncmd={' '.join(cmd)}\noutput_dir={output_dir}\nfiles_in_output={os.listdir(output_dir) if os.path.isdir(output_dir) else 'DIR NOT FOUND'}"
+        log_path = os.path.join(os.path.dirname(dwg_path), "_oda_log.txt")
+        with open(log_path, 'w') as lf:
+            lf.write(oda_log)
+        print(f"[ODA] {oda_log}")
         if result.returncode != 0:
             logger.error(
                 "ODA File Converter falhou (code %d): %s",

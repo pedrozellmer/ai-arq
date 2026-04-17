@@ -598,6 +598,16 @@ async def debug_dwg():
     return result
 
 
+@app.get("/api/debug/oda-log/{job_id}")
+async def get_oda_log(job_id: str):
+    """Retorna o log do ODA File Converter para um job."""
+    log_path = os.path.join(WORK_DIR, job_id, "_oda_log.txt")
+    if os.path.exists(log_path):
+        with open(log_path, 'r') as f:
+            return {"log": f.read()}
+    return {"log": "Log não encontrado", "path_checked": log_path}
+
+
 @app.get("/api/status/{job_id}")
 async def get_status(job_id: str):
     """Retorna o status de processamento de um job."""
