@@ -206,11 +206,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
                     else:
                         dxf_paths.append(cad_path)
             except ImportError as ie:
-                jobs.update_field(job_id, current_step=f"dwg_extractor não disponível: {ie}")
-                print(f"dwg_extractor não disponível: {ie}")
+                jobs.update_field(job_id, error_message=f"dwg_extractor não disponível: {ie}")
+                jobs.update_field(job_id, current_step=f"ERRO IMPORT: {ie}")
+                raise  # Deixar o erro aparecer
             except Exception as e:
-                jobs.update_field(job_id, current_step=f"Erro DWG→DXF: {e}")
-                print(f"Erro DWG/DXF: {e}")
+                jobs.update_field(job_id, error_message=f"Erro DWG→DXF: {e}")
+                jobs.update_field(job_id, current_step=f"ERRO DWG: {e}")
+                raise  # Deixar o erro aparecer
 
         jobs.update_field(job_id, current_step=f"DXF paths: {len(dxf_paths)}. CAD paths: {len(cad_paths)}")
 
@@ -335,8 +337,11 @@ Retorne APENAS JSON válido no formato:
                     gc.collect()
 
             except Exception as e:
-                jobs.update_field(job_id, current_step=f"Erro extração DXF: {str(e)[:200]}")
-                print(f"Erro extração DXF: {e}")
+                jobs.update_field(job_id, error_message=f"Erro extração DXF: {str(e)[:500]}")
+                jobs.update_field(job_id, current_step=f"ERRO DXF: {str(e)[:200]}")
+                import traceback
+                traceback.print_exc()
+                raise  # Deixar o erro aparecer
 
         total = len(pdf_paths)
         client = anthropic.Anthropic(api_key=api_key)
