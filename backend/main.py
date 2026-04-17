@@ -191,28 +191,125 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
             except Exception as e:
                 print(f"Erro DWG/DXF: {e}. Continuando com PDFs.")
 
-        # Extrair dados de DXF (se houver)
+        # Extrair dados de DXF e enviar pro Claude interpretar
         dxf_items = []
-        dxf_project_data = None
         if dxf_paths:
             jobs.update_field(job_id, current_step="Extraindo geometria dos DXF...")
             try:
-                from dwg_extractor import extract_from_file, generate_budget_data
-                for dxf_path in dxf_paths:
+                from dwg_extractor import extract_from_file
+                from analyzer import SYSTEM_PROMPT
+                import json as _j
+
+                for idx, dxf_path in enumerate(dxf_paths):
+                    jobs.update_field(job_id, current_step=f"DXF {idx+1}/{len(dxf_paths)}: Extraindo {os.path.basename(dxf_path)}...")
+
+                    # 1. Extrair dados estruturados do DXF
                     extraction = extract_from_file(dxf_path)
-                    budget = generate_budget_data(extraction)
-                    for item_data in budget.get("items", []):
-                        item = BudgetItem(
-                            item_num=str(item_data.get("item_num", "")),
-                            description=item_data.get("description", ""),
-                            unit=item_data.get("unit", "vb"),
-                            quantity=float(item_data.get("quantity", 1)),
-                            observations=item_data.get("observations", ""),
-                            ref_sheet=item_data.get("ref_sheet", "DXF"),
-                            confidence=Confidence(item_data.get("confidence", "confirmado")),
-                            discipline=item_data.get("discipline", "Complementares"),
+                    structured_text = extraction.to_structured_prompt()
+
+                    # 2. Enviar pro Claude interpretar
+                    jobs.update_field(job_id, current_step=f"DXF {idx+1}/{len(dxf_paths)}: Claude analisando dados extraídos...")
+                    dxf_client = anthropic.Anthropic(api_key=api_key)
+
+                    dxf_prompt = f"""Analise os dados extraídos de um arquivo DXF de projeto de arquitetura.
+Os dados abaixo foram extraídos automaticamente do arquivo CAD (blocos, textos, layers, comprimentos, áreas).
+Gere itens de orçamento com base nesses dados.
+
+{structured_text}
+
+IMPORTANTE:
+- Use os dados EXATOS extraídos (contagem de blocos = quantidade confirmada)
+- Comprimentos e áreas calculados do DXF são precisos
+- Textos extraídos das legendas são confiáveis
+- Para itens que você não consegue determinar a quantidade, marque confidence "verificar"
+
+Retorne APENAS JSON válido no formato:
+{{
+  "project_data": {{
+    "name": "",
+    "total_area": 0,
+    "layout_area": 0,
+    "workstations": 0,
+    "departments": [],
+    "demolition_notes": [],
+    "new_rooms": [],
+    "kept_elements": []
+  }},
+  "items": [
+    {{
+      "item_num": "1",
+      "description": "Descrição completa",
+      "unit": "m²",
+      "quantity": 100,
+      "observations": "Fonte: DXF bloco/texto/geometria",
+      "ref_sheet": "DXF",
+      "confidence": "confirmado",
+      "discipline": "Categoria"
+    }}
+  ]
+}}"""
+
+                    try:
+                        response = dxf_client.messages.create(
+                            model="claude-sonnet-4-20250514",
+                            max_tokens=8000,
+                            temperature=0,
+                            system=SYSTEM_PROMPT,
+                            messages=[{"role": "user", "content": dxf_prompt}],
                         )
-                        dxf_items.append(item)
+
+                        text = response.content[0].text
+                        if "```json" in text:
+                            json_str = text.split("```json")[1].split("```")[0].strip()
+                        elif "```" in text:
+                            json_str = text.split("```")[1].split("```")[0].strip()
+                        else:
+                            json_str = text.strip()
+
+                        result = _j.loads(json_str)
+
+                        # Extrair project_data
+                        if "project_data" in result:
+                            pd = result["project_data"]
+                            if pd.get("total_area"): project_data.total_area = sf(pd["total_area"])
+                            if pd.get("layout_area"): project_data.layout_area = sf(pd["layout_area"])
+                            if pd.get("name") and not project_data.name: project_data.name = pd["name"]
+                            if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
+                            if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
+                            if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
+
+                        # Extrair itens
+                        for item_data in result.get("items", []):
+                            try:
+                                desc = item_data.get("description", "")
+                                if not desc or len(desc) < 3: continue
+                                discipline = item_data.get("discipline", "Complementares")
+                                conf = item_data.get("confidence", "confirmado")
+                                if conf not in ["confirmado", "estimado", "verificar"]: conf = "confirmado"
+                                qty = sf(item_data.get("quantity", 1))
+                                if qty <= 0: qty = 1
+
+                                item = BudgetItem(
+                                    item_num=str(item_data.get("item_num", "")),
+                                    description=desc,
+                                    unit=item_data.get("unit", "vb"),
+                                    quantity=qty,
+                                    observations=item_data.get("observations", "Fonte: DXF"),
+                                    ref_sheet="DXF",
+                                    confidence=Confidence(conf),
+                                    discipline=discipline,
+                                )
+                                dxf_items.append(item)
+                            except: continue
+
+                        print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
+
+                    except Exception as e:
+                        print(f"Erro Claude DXF: {e}")
+
+                    del structured_text
+                    gc.collect()
+
             except Exception as e:
                 print(f"Erro extração DXF: {e}")
 
