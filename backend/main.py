@@ -549,6 +549,41 @@ async def process_files(
     return {"job_id": job_id, "files_received": len(file_paths), "file_types": file_types, "status": "queued"}
 
 
+@app.get("/api/debug/dwg")
+async def debug_dwg():
+    """Diagnóstico do suporte DWG."""
+    import shutil
+    result = {
+        "oda_which": shutil.which("ODAFileConverter"),
+        "oda_paths_checked": [],
+    }
+    # Verificar caminhos
+    for p in ["/usr/bin/ODAFileConverter", "/usr/local/bin/ODAFileConverter",
+              "/opt/ODAFileConverter/ODAFileConverter"]:
+        result["oda_paths_checked"].append({"path": p, "exists": os.path.exists(p)})
+
+    # Tentar importar dwg_extractor
+    try:
+        from dwg_extractor import _find_oda_converter, extract_from_file
+        result["dwg_extractor_import"] = True
+        oda = _find_oda_converter()
+        result["oda_found_by_extractor"] = oda
+    except Exception as e:
+        result["dwg_extractor_import"] = False
+        result["dwg_extractor_error"] = str(e)
+
+    # Listar binários ODA
+    try:
+        import subprocess
+        find_result = subprocess.run(["find", "/", "-name", "ODAFileConverter*", "-type", "f"],
+                                     capture_output=True, text=True, timeout=5)
+        result["oda_files_found"] = find_result.stdout.strip().split("\n") if find_result.stdout.strip() else []
+    except:
+        result["oda_files_found"] = "find failed"
+
+    return result
+
+
 @app.get("/api/status/{job_id}")
 async def get_status(job_id: str):
     """Retorna o status de processamento de um job."""
