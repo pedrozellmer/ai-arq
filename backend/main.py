@@ -33,6 +33,44 @@ from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
 
+# Supabase client para salvar projetos
+SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
+SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+
+def _supabase_insert(table, data):
+    """Insere registro no Supabase via REST API."""
+    try:
+        import urllib.request, json
+        url = f"{SUPABASE_URL}/rest/v1/{table}"
+        body = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Prefer', 'return=minimal')
+        urllib.request.urlopen(req, timeout=5)
+        return True
+    except Exception as e:
+        print(f"Supabase insert error: {e}")
+        return False
+
+def _supabase_update(table, match_field, match_value, data):
+    """Atualiza registro no Supabase via REST API."""
+    try:
+        import urllib.request, json
+        url = f"{SUPABASE_URL}/rest/v1/{table}?{match_field}=eq.{match_value}"
+        body = json.dumps(data).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='PATCH')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Prefer', 'return=minimal')
+        urllib.request.urlopen(req, timeout=5)
+        return True
+    except Exception as e:
+        print(f"Supabase update error: {e}")
+        return False
+
 app = FastAPI(
     title="AI.arq API",
     description="Motor de processamento de pranchas de arquitetura com IA",
@@ -281,11 +319,24 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
         jobs.update_field(job_id, current_step="Concluído!")
         jobs.update_field(job_id, download_url=f"/api/download/{job_id}")
 
+        # Atualizar projeto no Supabase
+        _supabase_update("projects", "job_id", job_id, {
+            "status": "done",
+            "items_count": len(all_items),
+            "total_area": project_data.total_area if project_data.total_area else None,
+            "completed_at": datetime.utcnow().isoformat(),
+        })
+
     except Exception as e:
         jobs.update_field(job_id, status="error")
         jobs.update_field(job_id, error_message=str(e))
         jobs.update_field(job_id, current_step=f"Erro: {str(e)[:200]}")
-        jobs.update_field(job_id, current_step=f"Erro: {str(e)[:200]}")
+
+        # Atualizar erro no Supabase
+        _supabase_update("projects", "job_id", job_id, {
+            "status": "error",
+            "error_message": str(e)[:500],
+        })
 
 
 @app.get("/")
@@ -339,6 +390,23 @@ async def process_files(
         current_step=f"Recebidos {len(file_paths)} arquivos ({types_summary}). Iniciando processamento...",
         total_steps=3,
     )
+
+    # Salvar projeto no Supabase
+    # Pegar user_id/email do header Authorization (se enviado pelo frontend)
+    from fastapi import Request
+    user_id = ""
+    user_email = ""
+    user_name = ""
+    # Os dados do usuário vêm como query params opcionais
+    _supabase_insert("projects", {
+        "job_id": job_id,
+        "user_id": user_id or "anonymous",
+        "user_email": user_email,
+        "user_name": user_name,
+        "files_count": len(file_paths),
+        "file_types": file_types,
+        "status": "queued",
+    })
 
     # Iniciar processamento em thread separada (não bloqueia HTTP)
     import threading
