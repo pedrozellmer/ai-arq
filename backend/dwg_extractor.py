@@ -301,9 +301,14 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
     ]
 
     logger.info("Convertendo DWG -> DXF: %s", " ".join(cmd))
-    # ODA precisa de QT_QPA_PLATFORM=offscreen em Linux sem display
+    # ODA usa Qt que precisa de display. Usar xvfb-run pra simular display.
+    # Fallback: tentar QT_QPA_PLATFORM=xcb com Xvfb
     env = os.environ.copy()
-    env["QT_QPA_PLATFORM"] = "offscreen"
+
+    # Tentar com xvfb-run (simula display X11)
+    import shutil
+    if shutil.which("xvfb-run"):
+        cmd = ["xvfb-run", "--auto-servernum", "--server-args=-screen 0 1024x768x24"] + cmd
 
     try:
         result = subprocess.run(
