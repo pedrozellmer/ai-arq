@@ -1178,7 +1178,7 @@
         statusClass = 'text-gray-400';
       }
 
-      const shortName = file.name.replace(/\.pdf$/i, '');
+      const shortName = file.name.replace(/\.(pdf|dwg|dxf)$/i, '');
       html += `
         <div class="file-progress-item flex items-center justify-between py-2.5 px-3 rounded-lg ${idx === currentFileIndex ? 'bg-indigo-50' : 'bg-gray-50'}">
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
