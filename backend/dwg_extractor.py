@@ -301,19 +301,26 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
     ]
 
     logger.info("Convertendo DWG -> DXF: %s", " ".join(cmd))
+    # ODA precisa de QT_QPA_PLATFORM=offscreen em Linux sem display
+    env = os.environ.copy()
+    env["QT_QPA_PLATFORM"] = "offscreen"
+
     try:
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
             timeout=120,
+            env=env,
         )
+        print(f"[ODA] returncode={result.returncode} stdout={result.stdout[:200]} stderr={result.stderr[:200]}")
         if result.returncode != 0:
             logger.error(
                 "ODA File Converter falhou (code %d): %s",
                 result.returncode,
                 result.stderr or result.stdout,
             )
+            return None
     except FileNotFoundError:
         logger.error("Executável ODA não acessível: %s", oda_exe)
         return None
