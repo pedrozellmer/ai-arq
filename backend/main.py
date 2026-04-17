@@ -32,6 +32,12 @@ from processor import process_pdfs
 from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
+from calibrator import (
+    compare_spreadsheets,
+    save_calibration_data,
+    get_correction_factors,
+    apply_corrections,
+)
 
 # Supabase client para salvar projetos
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
@@ -307,6 +313,16 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
             del text, crop_paths, sheet, result
             gc.collect()
 
+        # ── Auto-calibração: aplicar fatores de correção ──
+        jobs.update_field(job_id, progress=91)
+        jobs.update_field(job_id, current_step="Aplicando calibração baseada em projetos anteriores...")
+        try:
+            cal_factors = get_correction_factors()
+            if cal_factors:
+                all_items = apply_corrections(all_items, cal_factors)
+        except Exception as e:
+            print(f"[calibrator] Erro ao aplicar correções: {e}")
+
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
         jobs.update_field(job_id, current_step=f"Gerando planilha com {len(all_items)} itens...")
@@ -516,6 +532,159 @@ async def verify_payment(session_id: str):
         }
     except Exception as e:
         raise HTTPException(404, f"Sessão não encontrada: {str(e)}")
+
+
+# ── CALIBRATION ENDPOINTS ──
+
+@app.post("/api/cashback/upload")
+async def cashback_upload(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    job_id: str = "",
+):
+    """Receive a user-revised XLSX, compare with original, and store calibration data."""
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
+        raise HTTPException(400, "Arquivo deve ser .xlsx")
+
+    if not job_id:
+        raise HTTPException(400, "job_id e obrigatorio")
+
+    # Save revised file temporarily
+    tmp_dir = os.path.join(WORK_DIR, "_calibration_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    revised_path = os.path.join(tmp_dir, f"revised_{job_id}_{file.filename}")
+    try:
+        content = await file.read()
+        with open(revised_path, "wb") as f:
+            f.write(content)
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao salvar arquivo: {str(e)}")
+
+    # Find the original XLSX for this job_id
+    work_dir = os.path.join(WORK_DIR, job_id)
+    original_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
+
+    if not os.path.exists(original_path):
+        # Clean up
+        if os.path.exists(revised_path):
+            os.remove(revised_path)
+        raise HTTPException(404, f"Planilha original do job {job_id} nao encontrada")
+
+    try:
+        # Compare spreadsheets
+        comparisons = compare_spreadsheets(original_path, revised_path)
+
+        # Save to Supabase
+        inserted = 0
+        if comparisons:
+            inserted = save_calibration_data(
+                comparisons, source="user", project_id=job_id
+            )
+
+        # Calculate summary stats
+        avg_deviation = 0
+        if comparisons:
+            avg_deviation = sum(c["deviation_pct"] for c in comparisons) / len(comparisons)
+
+        return {
+            "status": "ok",
+            "items_compared": len(comparisons),
+            "items_saved": inserted,
+            "avg_deviation_pct": round(avg_deviation, 2),
+            "comparisons": comparisons[:20],  # Return first 20 for UI display
+            "cashback_granted": True,
+        }
+
+    except Exception as e:
+        raise HTTPException(500, f"Erro na comparacao: {str(e)}")
+
+    finally:
+        # Clean up temp file
+        if os.path.exists(revised_path):
+            try:
+                os.remove(revised_path)
+            except:
+                pass
+
+
+@app.post("/api/calibration/manual")
+async def calibration_manual(
+    original: UploadFile = File(...),
+    revised: UploadFile = File(...),
+    source: str = "admin",
+):
+    """Admin endpoint: compare two XLSX files and store calibration data."""
+    tmp_dir = os.path.join(WORK_DIR, "_calibration_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+
+    orig_path = os.path.join(tmp_dir, f"orig_{original.filename}")
+    rev_path = os.path.join(tmp_dir, f"rev_{revised.filename}")
+
+    try:
+        orig_content = await original.read()
+        with open(orig_path, "wb") as f:
+            f.write(orig_content)
+
+        rev_content = await revised.read()
+        with open(rev_path, "wb") as f:
+            f.write(rev_content)
+
+        comparisons = compare_spreadsheets(orig_path, rev_path)
+
+        inserted = 0
+        if comparisons:
+            inserted = save_calibration_data(
+                comparisons, source=source, project_id="manual"
+            )
+
+        avg_deviation = 0
+        if comparisons:
+            avg_deviation = sum(c["deviation_pct"] for c in comparisons) / len(comparisons)
+
+        return {
+            "status": "ok",
+            "items_compared": len(comparisons),
+            "items_saved": inserted,
+            "avg_deviation_pct": round(avg_deviation, 2),
+            "comparisons": comparisons,
+        }
+
+    except Exception as e:
+        raise HTTPException(500, f"Erro na comparacao manual: {str(e)}")
+
+    finally:
+        for p in [orig_path, rev_path]:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except:
+                    pass
+
+
+@app.get("/api/calibration/factors")
+async def calibration_factors():
+    """Return current correction factors from the calibration system."""
+    try:
+        factors = get_correction_factors()
+        # Convert to list for JSON response
+        factors_list = []
+        for item_type, data in factors.items():
+            factors_list.append({
+                "item_type": item_type,
+                "discipline": data.get("discipline", ""),
+                "unit": data.get("unit", ""),
+                "factor": data.get("factor", 1.0),
+                "data_points": data.get("data_points", 0),
+                "deviation": data.get("deviation", 0),
+                "stddev": data.get("stddev"),
+                "min_factor": data.get("min_factor"),
+                "max_factor": data.get("max_factor"),
+            })
+        # Sort by data_points descending
+        factors_list.sort(key=lambda x: x["data_points"], reverse=True)
+        return {"status": "ok", "count": len(factors_list), "factors": factors_list}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar fatores: {str(e)}")
 
 
 if __name__ == "__main__":

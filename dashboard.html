@@ -1706,45 +1706,107 @@
     }
   });
 
-  btnSendReview.addEventListener('click', () => {
+  btnSendReview.addEventListener('click', async () => {
     if (!cashbackFile) return;
 
     // Validar que selecionou um projeto
     const projectSelect = document.getElementById('cashback-project-select');
     if (!projectSelect.value && projectSelect.options.length > 1) {
-      alert('Por favor, selecione o projeto que você está revisando.');
+      alert('Por favor, selecione o projeto que voc\u00ea est\u00e1 revisando.');
       projectSelect.focus();
       return;
     }
 
-    // Pegar nome do projeto selecionado
+    // Pegar dados do projeto selecionado
     const selectedOption = projectSelect.options[projectSelect.selectedIndex];
     const projectName = selectedOption ? selectedOption.textContent : '';
-
-    // Save review to localStorage
-    const reviews = JSON.parse(localStorage.getItem('aiarq_reviews') || '[]');
-    const now = new Date();
-    reviews.unshift({
-      fileName: cashbackFile.name,
-      projectName: projectName,
-      date: now.toISOString(),
-      dateFormatted: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-      status: 'pending'
-    });
-    localStorage.setItem('aiarq_reviews', JSON.stringify(reviews));
-
-    // Mark project as reviewed
     const history = getProjectHistory();
     const doneProjects = history.filter(p => p.status === 'done' && !p.reviewed);
     const selectedIdx = parseInt(projectSelect.value);
-    if (!isNaN(selectedIdx) && doneProjects[selectedIdx]) {
-      // Encontrar no histórico original e marcar
-      const proj = doneProjects[selectedIdx];
-      const origIdx = history.findIndex(p => p.id === proj.id);
-      if (origIdx >= 0) {
-        history[origIdx].reviewed = true;
-        localStorage.setItem('aiarq_project_history', JSON.stringify(history));
+    const selectedProject = (!isNaN(selectedIdx) && doneProjects[selectedIdx]) ? doneProjects[selectedIdx] : null;
+    const jobId = selectedProject ? selectedProject.id : '';
+
+    // Desabilitar botao durante envio
+    btnSendReview.disabled = true;
+    btnSendReview.textContent = 'Enviando e analisando...';
+
+    try {
+      // Enviar arquivo para o backend
+      const formData = new FormData();
+      formData.append('file', cashbackFile);
+      formData.append('job_id', jobId);
+
+      const res = await fetch(`${API_BASE}/api/cashback/upload?job_id=${encodeURIComponent(jobId)}`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.detail || 'Erro ao enviar revis\u00e3o');
       }
+
+      // Save review to localStorage with calibration results
+      const reviews = JSON.parse(localStorage.getItem('aiarq_reviews') || '[]');
+      const now = new Date();
+      reviews.unshift({
+        fileName: cashbackFile.name,
+        projectName: projectName,
+        jobId: jobId,
+        date: now.toISOString(),
+        dateFormatted: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        status: 'approved',
+        itemsCompared: result.items_compared || 0,
+        avgDeviation: result.avg_deviation_pct || 0,
+      });
+      localStorage.setItem('aiarq_reviews', JSON.stringify(reviews));
+
+      // Mark project as reviewed
+      if (selectedProject) {
+        const origIdx = history.findIndex(p => p.id === selectedProject.id);
+        if (origIdx >= 0) {
+          history[origIdx].reviewed = true;
+          localStorage.setItem('aiarq_project_history', JSON.stringify(history));
+        }
+      }
+
+      // Show results
+      let msg = 'Revis\u00e3o enviada com sucesso!\n\n';
+      if (result.items_compared > 0) {
+        msg += `Itens comparados: ${result.items_compared}\n`;
+        msg += `Desvio m\u00e9dio da IA: ${Math.abs(result.avg_deviation_pct).toFixed(1)}%\n`;
+        msg += `Dados salvos: ${result.items_saved} corre\u00e7\u00f5es\n\n`;
+      } else {
+        msg += 'Nenhuma diferen\u00e7a de quantidade encontrada.\n\n';
+      }
+      msg += 'R$ 20 de desconto ser\u00e1 aplicado no pr\u00f3ximo projeto.';
+      alert(msg);
+
+    } catch (err) {
+      console.error('Cashback upload error:', err);
+      // Fallback: salvar localmente mesmo se backend falhar
+      const reviews = JSON.parse(localStorage.getItem('aiarq_reviews') || '[]');
+      const now = new Date();
+      reviews.unshift({
+        fileName: cashbackFile.name,
+        projectName: projectName,
+        jobId: jobId,
+        date: now.toISOString(),
+        dateFormatted: now.toLocaleDateString('pt-BR') + ' ' + now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        status: 'pending',
+      });
+      localStorage.setItem('aiarq_reviews', JSON.stringify(reviews));
+
+      if (selectedProject) {
+        const origIdx = history.findIndex(p => p.id === selectedProject.id);
+        if (origIdx >= 0) {
+          history[origIdx].reviewed = true;
+          localStorage.setItem('aiarq_project_history', JSON.stringify(history));
+        }
+      }
+
+      alert('Revis\u00e3o salva localmente. A calibra\u00e7\u00e3o ser\u00e1 processada quando o servidor estiver dispon\u00edvel.\n\nR$ 20 de desconto ser\u00e1 aplicado no pr\u00f3ximo projeto.');
     }
 
     // Reset
@@ -1752,9 +1814,9 @@
     cashbackFileName.classList.add('hidden');
     cashbackFileInput.value = '';
     btnSendReview.disabled = true;
+    btnSendReview.textContent = 'Enviar Revis\u00e3o';
 
     renderPendingReviews();
-    alert('Revis\u00e3o enviada com sucesso! Seu desconto ser\u00e1 aplicado no pr\u00f3ximo projeto.');
   });
 
   function loadCashbackProjects() {
@@ -1797,11 +1859,15 @@
       const statusBadge = r.status === 'pending'
         ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pendente</span>'
         : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Aprovada</span>';
+      const calibrationInfo = r.itemsCompared
+        ? `<p class="text-xs text-gray-400">${r.itemsCompared} itens comparados | desvio m\u00e9dio ${Math.abs(r.avgDeviation || 0).toFixed(1)}%</p>`
+        : '';
       html += `
         <div class="flex items-center justify-between py-2.5 px-3 bg-gray-50 rounded-lg">
           <div class="min-w-0">
             <p class="text-sm font-medium text-gray-700 truncate">${r.fileName}</p>
             <p class="text-xs text-gray-400">${r.dateFormatted}</p>
+            ${calibrationInfo}
           </div>
           ${statusBadge}
         </div>
