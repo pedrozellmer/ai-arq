@@ -196,8 +196,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
                         # Converter DWG→DXF via ODA
                         from dwg_extractor import convert_dwg_to_dxf
                         jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF: {os.path.basename(cad_path)}")
-                        dxf_path = convert_dwg_to_dxf(cad_path)
-                        jobs.update_field(job_id, current_step=f"DWG→DXF resultado: {dxf_path}")
+                        try:
+                            dxf_path = convert_dwg_to_dxf(cad_path)
+                        except Exception as conv_err:
+                            dxf_path = None
+                            jobs.update_field(job_id, error_message=f"CONV ERROR: {conv_err}")
+                        jobs.update_field(job_id, error_message=f"DWG→DXF result: {dxf_path}")
                         if dxf_path:
                             dxf_paths.append(dxf_path)
                             jobs.update_field(job_id, current_step=f"DWG convertido OK: {os.path.basename(dxf_path)}")
