@@ -336,32 +336,32 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
     ro += 1
 
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
-    ws.cell(row=ro, column=1, value='Itens baseados em dados reais de 3 fornecedores (SUM, Hauz, Citrus). Não constam nas pranchas — são custos de gestão e execução.').font = Font(name='Arial', size=8, italic=True, color='7B2D8E')
+    ws.cell(row=ro, column=1, value='Itens que não constam nas pranchas — são custos de gestão e execução típicos de obras.').font = Font(name='Arial', size=8, italic=True, color='7B2D8E')
     ro += 1
 
     P_PURPLE = PatternFill('solid', fgColor='F3E8FF')
 
     suggestions = [
-        ('S.1', 'Equipe técnica — Gerente de contrato / PMO', 'mês', 2.5, 'Média 3 fornecedores: R$ 13-25k/mês'),
-        ('S.2', 'Equipe técnica — Engenheiro de campo residente', 'mês', 2.5, 'Média 3 fornecedores: R$ 14-16k/mês'),
-        ('S.3', 'Equipe técnica — Engenheiro de instalações', 'mês', 2.5, 'Citrus e Hauz incluem'),
-        ('S.4', 'Equipe técnica — Mestre de obras residente', 'mês', 2.5, 'Média 3 fornecedores: R$ 9-10k/mês'),
+        ('S.1', 'Equipe técnica — Gerente de contrato / PMO', 'mês', 2.5, 'Ajustar conforme prazo da obra'),
+        ('S.2', 'Equipe técnica — Engenheiro de campo residente', 'mês', 2.5, 'Ajustar conforme prazo da obra'),
+        ('S.3', 'Equipe técnica — Engenheiro de instalações', 'mês', 2.5, 'Quando houver instalações complexas'),
+        ('S.4', 'Equipe técnica — Mestre de obras residente', 'mês', 2.5, 'Ajustar conforme prazo da obra'),
         ('S.5', 'Equipe técnica — Técnico de Segurança do Trabalho', 'mês', 2.5, 'Visita semanal. Média: R$ 3-8k/mês'),
-        ('S.6', 'Equipe técnica — Auxiliar administrativo', 'mês', 2.5, 'SUM e Hauz incluem'),
+        ('S.6', 'Equipe técnica — Auxiliar administrativo', 'mês', 2.5, 'Apoio administrativo de obra'),
         ('S.7', 'Serventia — ajudante geral de obra (seg-sex)', 'dia', 80, 'Média 3 forn: 20-150 dias. Mediana: ~80'),
         ('S.8', 'Caçambas de entulho (classe A + classe C)', 'un', 20, 'Média 3 forn: 13-25 un'),
-        ('S.9', 'Limpeza permanente de obra', 'dia', 60, 'Citrus: 80 dias, Hauz: vb'),
+        ('S.9', 'Limpeza permanente de obra', 'dia', 60, 'Ajustar conforme prazo da obra'),
         ('S.10', 'Limpeza fina pré-entrega', 'm²', 1286, 'Área total de intervenção'),
         ('S.11', 'Seguro de obra e responsabilidade civil', 'vb', 1, 'Valores variam: R$ 1.472 a R$ 20.400'),
-        ('S.12', 'As-built (elétrica, AC, hidráulica, SPK)', 'vb', 1, 'Padrão condomínio. Citrus: R$ 14.500'),
-        ('S.13', 'Certificação de todos os pontos elétricos', 'vb', 1, 'Hauz: R$ 5.400, Citrus: R$ 12.000'),
-        ('S.14', 'Termografia de quadros elétricos (OPCIONAL)', 'vb', 1, 'Hauz: R$ 27.950, Citrus: R$ 3.500'),
-        ('S.15', 'Fee / Administração de obra (~9%)', '%', 9, 'SUM 8%, Citrus 10%, Hauz CI'),
-        ('S.16', 'Impostos (~30% sobre faturamento)', '%', 30, 'SUM e Hauz: 30%. Padrão mercado.'),
-        ('S.17', 'Gerenciamento de terceiros (marcenaria, divisórias, carpete)', 'vb', 1, 'Hauz e Citrus: R$ 60.000'),
+        ('S.12', 'As-built (elétrica, AC, hidráulica, SPK)', 'vb', 1, 'Conforme padrão do condomínio'),
+        ('S.13', 'Certificação de todos os pontos elétricos', 'vb', 1, 'Verificar exigência do condomínio'),
+        ('S.14', 'Termografia de quadros elétricos (OPCIONAL)', 'vb', 1, 'Opcional — verificar necessidade'),
+        ('S.15', 'Fee / Administração de obra (~9%)', '%', 9, 'Percentual típico de mercado: 8-10%'),
+        ('S.16', 'Impostos (~30% sobre faturamento)', '%', 30, 'Padrão de mercado'),
+        ('S.17', 'Gerenciamento de terceiros (marcenaria, divisórias, carpete)', 'vb', 1, 'Quando houver terceiros no escopo'),
         ('S.18', 'Transporte vertical de mobiliário (entre andares)', 'vb', 1, 'Se mobiliário armazenado em outro andar'),
-        ('S.19', 'FM-200 gás inerte para CPD (OPCIONAL)', 'vb', 1, 'SUM: R$ 39.620, Hauz: R$ 81.648. Depende do PPCI.'),
-        ('S.20', 'Controle de acesso facial (substituir cartão)', 'un', 2, 'Citrus: R$ 8.500, Hauz: R$ 3.240'),
+        ('S.19', 'FM-200 gás inerte para CPD (OPCIONAL)', 'vb', 1, 'Depende do projeto de PPCI'),
+        ('S.20', 'Controle de acesso facial (substituir cartão)', 'un', 2, 'Se aplicável ao projeto'),
     ]
 
     section_start_sug = ro
@@ -537,13 +537,13 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
         '3. BDI padrão 27,5% (ref. TCU para reforma). Fórmula: ((1+AC)(1+CF)(1+S)(1+R)(1+G)(1+L)/(1-T))-1.',
         '4. Itens em LARANJA: quantidade estimada visualmente — confirmar com projeto executivo.',
         '5. Itens em BRANCO: quantidade confirmada na legenda da prancha.',
-        '6. Itens em ROXO (Sugestões): custos indiretos baseados em dados reais de 3 fornecedores.',
+        '6. Itens em ROXO (Sugestões): custos indiretos típicos de obras — avaliar inclusão.',
         '7. Contingência 10% — reserva técnica para imprevistos. Ajustar conforme risco do projeto.',
         '8. Quantidades de materiais já incluem perda estimada de 5-10% (TCPO).',
         '9. Para alvenaria/pintura: vãos ≤ 2m² NÃO descontados (regra TCPO). Vãos > 2m²: desconta excedente.',
         '10. OMISSOS: itens que podem ser necessários mas não foram incluídos — avaliar com equipe de projeto.',
         '11. EXCLUSOS: itens padrão de mercado excluídos do escopo de empreiteiras.',
-        '12. Dados calibrados: SUM Engenharia, Hauz e Citrus (Casa Granado 1.286m², RJ, 2026).',
+        '12. Motor calibrado com dados reais de mercado.',
         '13. Planilha gerada por AI.arq (ai.arq.br) — validar com engenheiro de custos.',
     ]
     for n in notas:
