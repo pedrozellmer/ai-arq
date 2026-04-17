@@ -539,6 +539,12 @@ async def health():
             "projects_today": today_count,
             "total_projects": total_projects,
             "total_users": total_users,
+        },
+        "features": {
+            "pdf": True,
+            "dxf": True,
+            "dwg": shutil.which("ODAFileConverter") is not None,
+            "calibrator": HAS_CALIBRATOR if 'HAS_CALIBRATOR' in dir() else False,
         }
     }
 
