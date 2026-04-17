@@ -177,6 +177,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
+        # Debug: logar paths recebidos
+        jobs.update_field(job_id, current_step=f"Arquivos: {len(file_paths)} total, {len(pdf_paths)} PDF, {len(cad_paths)} CAD. Paths: {[os.path.basename(f) for f in file_paths]}")
+        print(f"[{job_id}] file_paths: {file_paths}")
+        print(f"[{job_id}] pdf_paths: {pdf_paths}")
+        print(f"[{job_id}] cad_paths: {cad_paths}")
+
         # Converter DWG→DXF se necessário
         dxf_paths = []
         if cad_paths:
