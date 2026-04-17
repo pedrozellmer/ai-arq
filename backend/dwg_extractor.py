@@ -229,8 +229,12 @@ def _detect_unit_factor(doc) -> float:
 # ---------------------------------------------------------------------------
 
 _ODA_SEARCH_PATHS = [
-    r"C:\Program Files\ODA\ODAFileConverter",
-    r"C:\Program Files (x86)\ODA\ODAFileConverter",
+    # Linux (servidor Render)
+    "/usr/bin/ODAFileConverter",
+    "/usr/local/bin/ODAFileConverter",
+    "/opt/ODAFileConverter/ODAFileConverter",
+    # Windows (desenvolvimento local)
+    r"C:\Program Files\ODA\ODAFileConverter 27.1.0\ODAFileConverter.exe",
     r"C:\Program Files\ODA\ODAFileConverter\ODAFileConverter.exe",
     r"C:\Program Files (x86)\ODA\ODAFileConverter\ODAFileConverter.exe",
 ]
@@ -238,14 +242,21 @@ _ODA_SEARCH_PATHS = [
 
 def _find_oda_converter() -> Optional[str]:
     """Locate ODAFileConverter executable on disk."""
+    import shutil
+    # Primeiro tentar via PATH (funciona em Linux e Windows)
+    which = shutil.which("ODAFileConverter")
+    if which:
+        return which
+    # Depois tentar caminhos conhecidos
     for p in _ODA_SEARCH_PATHS:
         path = Path(p)
-        if path.is_file() and path.suffix.lower() == ".exe":
+        if path.is_file():
             return str(path)
         if path.is_dir():
-            exe = path / "ODAFileConverter.exe"
-            if exe.is_file():
-                return str(exe)
+            for name in ["ODAFileConverter", "ODAFileConverter.exe"]:
+                exe = path / name
+                if exe.is_file():
+                    return str(exe)
     return None
 
 
