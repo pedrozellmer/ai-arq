@@ -195,10 +195,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
                             print(f"Falha ao converter DWG: {cad_path}. Pulando.")
                     else:
                         dxf_paths.append(cad_path)
-            except ImportError:
-                print("dwg_extractor não disponível. Processando apenas PDFs.")
+            except ImportError as ie:
+                jobs.update_field(job_id, current_step=f"dwg_extractor não disponível: {ie}")
+                print(f"dwg_extractor não disponível: {ie}")
             except Exception as e:
-                print(f"Erro DWG/DXF: {e}. Continuando com PDFs.")
+                jobs.update_field(job_id, current_step=f"Erro DWG→DXF: {e}")
+                print(f"Erro DWG/DXF: {e}")
+
+        jobs.update_field(job_id, current_step=f"DXF paths: {len(dxf_paths)}. CAD paths: {len(cad_paths)}")
 
         # Extrair dados de DXF e enviar pro Claude interpretar
         dxf_items = []
@@ -314,12 +318,14 @@ Retorne APENAS JSON válido no formato:
                         print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
 
                     except Exception as e:
+                        jobs.update_field(job_id, current_step=f"Erro Claude DXF: {str(e)[:200]}")
                         print(f"Erro Claude DXF: {e}")
 
                     del structured_text
                     gc.collect()
 
             except Exception as e:
+                jobs.update_field(job_id, current_step=f"Erro extração DXF: {str(e)[:200]}")
                 print(f"Erro extração DXF: {e}")
 
         total = len(pdf_paths)
