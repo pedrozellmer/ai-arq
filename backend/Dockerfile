@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     xvfb \
+    xauth \
     && rm -rf /var/lib/apt/lists/* \
     || (apt-get update && apt-get install -y --no-install-recommends \
     wget libgl1 libglib2.0-0 xvfb \
