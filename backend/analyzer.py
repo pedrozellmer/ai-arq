@@ -85,16 +85,18 @@ REGRAS OBRIGATÓRIAS:
 NUNCA retorne quantity=1 para itens que claramente têm área ou quantidade maior.
 Use estas FÓRMULAS REAIS para calcular:
 
-### PINTURA/REVESTIMENTO (fonte: TCPO/SINAPI)
-- Fórmula: Área = Perímetro das paredes × Pé-direito
-- REGRA TCPO para vãos: NÃO descontar vãos ≤ 2 m². Para vãos > 2 m², descontar apenas o excedente.
-  Ex: porta 2,10×0,80m = 1,68 m² → NÃO desconta. Janela 3×2m = 6 m² → desconta 4 m².
-- Escritório ~1200 m² útil com PD médio ~2,80m e ~120m de paredes = ~336 m² de parede
-- Pintura branca (geral): ~60-70% das paredes = 200-250 m² + paredes dos dois lados = 400-500 m²
-- Cores de destaque: ~5-10% da área de pintura = 20-50 m² por cor
+### PINTURA/REVESTIMENTO — CALIBRADO COM 3 FORNECEDORES REAIS
+- Branco Neve (geral): ~460 m² (média 3 fornecedores para ~1.286m² de escritório)
+- Cinza de Grife (cor PREDOMINANTE!): ~435 m² — NÃO é cor de destaque, é a COR PRINCIPAL.
+  Benchmark: V5 estimou 140m², real é 435m². Contar TODOS os tags "B" na Pr.400.
+- Azul Echarpe: ~108 m² — aplicado em MÚLTIPLAS salas, não apenas 1 parede.
+  Benchmark: V5 estimou 16m², real é 108m². Contar TODOS os tags "J" na Pr.400.
+- Lousa preta: ~18 m²
 - Cerâmicas (copas/úmidas): ~25-40 m² por tipo
 - Massa corrida/selador: MESMA ÁREA da pintura total
 - Perda de tinta: incluir 10% sobre a área calculada
+- ATENÇÃO: fornecedores também cotam pintura de TABEIRAS (~145m), FECHAMENTOS VERTICAIS (~215m), SEPTOS (~47m) e FORRO (~150m²).
+- Pintura de CORE e áreas sem intervenção: ~300-650 m² — item frequentemente cotado.
 
 ### PORTAS
 - CONTAR na planta: cada arco de abertura = 1 porta
@@ -111,23 +113,35 @@ Use estas FÓRMULAS REAIS para calcular:
   - Porcelanato (copas renovadas): ~50-80 m²
 - Rodapé: perímetro interno das áreas com piso novo
 
-### FORROS
-- Mineral modular: ~25-40% da área útil (áreas open plan) = ~150-300 m²
+### FORROS — CALIBRADO
+- Forro mineral modular FORNECIMENTO: ~124 m² (NÃO 150-300). V5 confundiu total com fornecimento novo.
 - Gesso liso: somar áreas das salas fechadas individualmente
 - Ripado: estimar pela zona hachurada na planta (geralmente ~100-170 m²)
-- Tabica: perímetro interno onde há troca forro-parede = ~300-400 ml
+- Tabica metálica: ~102 ml (NÃO 300-400). V5 superestimou 3,5×.
+- Tabeira de gesso: ~91 m — item SEPARADO da tabica. Adicionar se houver transição de forro.
+- Grid metálico / perfilado: verificar na Pr.400 se existe perfil para iluminação (~45-68m).
+- Forro modular áreas SEM intervenção: ~110 m² — substituição por manutenção.
+- Alçapão de inspeção: ~8 un
 
-### LUMINÁRIAS (fonte: NBR 8995 — 500 lux para escritório)
-- Fórmula: N = (Iluminância × Área) / (Fluxo luminoso × fator utilização × fator manutenção)
-- Regra simplificada para escritório 500 lux:
-  - Downlights LED (D3, ~800 lm): ~1 a cada 3-5 m² = para 300m² → ~60-100 un
-  - Lineares T5 (R4, ~2500 lm): ~1 a cada 8-12 m² = para 200m² → ~20-50 un
-  - Pendentes lineares (P5, ~10.000 lm): ~1 a cada 15-20 m² = para 300m² → ~15-30 un
-  - Spots/decorativos: contar individualmente na planta
+### LUMINÁRIAS — ATENÇÃO ESPECIAL
+- NÃO use fórmulas de estimativa por m². Benchmark real mostrou erros de 600-2650%.
+- LEIA A TABELA DE LUMINÁRIAS na Pr.700 (geralmente no canto inferior direito).
+- A tabela contém: código, descrição, quantidade, especificação.
+- Se a tabela estiver em blocos CAD (não texto), marque confidence "verificar" e note "tabela em formato gráfico — confirmar com quadro de cargas".
+- Referência real (projeto 1.286m²):
+  D3 (spot quadrado 10W): 12 un (NÃO 85)
+  D8 (spot retangular 6W): 45 un
+  R4 (luminária retangular): 2 un (NÃO 55)
+  P5 (pendente linear): 85 un — item mais caro! (NÃO 35)
+  P6 (pendente decorativo): 5 un
+  A1+A2 (spots trilho): 11 un total
+  M1 (perfil LED): 18 m
 
-### SPRINKLERS (fonte: NBR 10897 — risco leve)
-- Escritório = risco leve: 1 sprinkler a cada 20,9 m² (máximo)
-- Espaçamento: mínimo 1,8m, máximo 4,6m
+### SPRINKLERS — CALIBRADO
+- NÃO usar fórmula de 1 sprinkler a cada 20,9 m². Isso conta TODOS os sprinklers do pavimento.
+- Em REFORMA: contar apenas os sprinklers AFETADOS pela obra (remanejamento ou novo).
+- Benchmark: V5 estimou 33un, real é 8un (5 remanejamento + 3 reinstalação).
+- Buscar na Pr.700: símbolos "REMANEJAR OU NOVO" (diferente dos existentes).
 - Para 800 m² de forro: ~800/20,9 ≈ ~38 sprinklers total
 - Remanejamento em reforma: ~60-70% do total
 
@@ -149,12 +163,34 @@ Use estas FÓRMULAS REAIS para calcular:
 - Material MDF: adicionar 5-10% de perda sobre chapas
 - Cada peça = 1 un (não agrupar peças diferentes)
 
-### DEMOLIÇÃO EM REFORMA
-- Divisórias vidro: somar ml das salas EXISTENTES que serão demolidas
-- Drywall: somar m² das paredes a demolir (altura × comprimento de cada trecho)
-- Forro: área TOTAL menos zonas que MANTÊM forro existente
-- Carpete: APENAS áreas de substituição (REMIX existente que fica NÃO conta)
+### DEMOLIÇÃO EM REFORMA — CALIBRADO COM 3 FORNECEDORES
+- PRIMEIRO: ler TODAS as notas da Pr.100. Se disser "DEMOLIR SOMENTE FORRO MODULAR", NÃO contar todo o forro.
+- Forro modular (demolição): ~150-220 m² (apenas modular, NÃO gesso). Benchmark: V5 errou 600m² vs real 194m².
+- Drywall (demolição): somar TODAS as paredes vermelhas na Pr.100. Benchmark: real ~200m², V5 errou 60m².
+- Carpete (remoção): apenas áreas de SUBSTITUIÇÃO, não reaproveitamento. Benchmark: real ~200m², V5 errou 350m².
+- Portas (remoção): contar APENAS portas marcadas para demolição. Benchmark: real 1un, V5 errou 10un.
+- Divisórias vidro: verificar se é EXCLUSO (fornecedores frequentemente excluem do escopo).
 - Entulho: regra geral ~1 m³ a cada 30-40 m² de demolição
+- Pilar de gesso: 2 un se mencionado "demolir caixa em gesso do pilar"
+- Tabeira existente: ~20m se houver troca de forro
+
+### SEPTO DRYWALL — ITEM FREQUENTEMENTE ESQUECIDO
+- Buscar a palavra "SEPTO" na legenda da Pr.400. Se aparecer, ADICIONAR item separado.
+- Septo = continuação da parede ACIMA do forro até a laje.
+- Comprimento do septo = mesmo comprimento das paredes novas que têm septo especificado.
+- Benchmark: V5 esqueceu completamente. Real: ~47m (média 3 fornecedores).
+- Também adicionar LÃ DE ROCHA para tratamento acústico dos septos (~99 m²).
+
+### ITENS FREQUENTEMENTE ESQUECIDOS (encontrados em 3/3 fornecedores):
+- Septo drywall (acima do forro): ~47m — se Pr.400 menciona "SEPTO"
+- Pintura de tabeiras: ~145m — onde forro muda de tipo
+- Pintura de fechamentos verticais: ~215m — se Pr.400 menciona "fechamento vertical"
+- Rodapé MDF 10cm: ~50-120m — nas áreas reformadas
+- Recomposição de piso no pilar: vb — se demolir caixa de gesso do pilar
+- Recomposição de rejunte porcelanato: ~168 m² — áreas existentes
+- Grid metálico / perfilado iluminação: ~45m — se Pr.400 mostra perfil no estúdio
+- Forro modular áreas SEM intervenção: ~110 m² — substituição por manutenção
+- Lã de rocha: ~99 m² — nos septos e divisórias acústicas
 - Perda em paredes de alvenaria para desconto de vãos: mesmo critério TCPO
 
 FORMATO DE RESPOSTA — retorne APENAS JSON válido:
