@@ -326,6 +326,78 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
         ro += 1
         disc_num += 1
 
+    # ================================================================
+    # SEÇÃO: SUGESTÕES POR TIPO DE PROJETO
+    # ================================================================
+    ro += 1
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.cell(row=ro, column=1, value='SUGESTÕES POR TIPO DE PROJETO (itens que NÃO aparecem nas pranchas)')
+    _style_row(ws, ro, Font(name='Arial', bold=True, size=11, color='FFFFFF'), PatternFill('solid', fgColor='7B2D8E'), AL, 9)
+    ro += 1
+
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.cell(row=ro, column=1, value='Itens baseados em dados reais de 3 fornecedores (SUM, Hauz, Citrus). Não constam nas pranchas — são custos de gestão e execução.').font = Font(name='Arial', size=8, italic=True, color='7B2D8E')
+    ro += 1
+
+    P_PURPLE = PatternFill('solid', fgColor='F3E8FF')
+
+    suggestions = [
+        ('S.1', 'Equipe técnica — Gerente de contrato / PMO', 'mês', 2.5, 'Média 3 fornecedores: R$ 13-25k/mês'),
+        ('S.2', 'Equipe técnica — Engenheiro de campo residente', 'mês', 2.5, 'Média 3 fornecedores: R$ 14-16k/mês'),
+        ('S.3', 'Equipe técnica — Engenheiro de instalações', 'mês', 2.5, 'Citrus e Hauz incluem'),
+        ('S.4', 'Equipe técnica — Mestre de obras residente', 'mês', 2.5, 'Média 3 fornecedores: R$ 9-10k/mês'),
+        ('S.5', 'Equipe técnica — Técnico de Segurança do Trabalho', 'mês', 2.5, 'Visita semanal. Média: R$ 3-8k/mês'),
+        ('S.6', 'Equipe técnica — Auxiliar administrativo', 'mês', 2.5, 'SUM e Hauz incluem'),
+        ('S.7', 'Serventia — ajudante geral de obra (seg-sex)', 'dia', 80, 'Média 3 forn: 20-150 dias. Mediana: ~80'),
+        ('S.8', 'Caçambas de entulho (classe A + classe C)', 'un', 20, 'Média 3 forn: 13-25 un'),
+        ('S.9', 'Limpeza permanente de obra', 'dia', 60, 'Citrus: 80 dias, Hauz: vb'),
+        ('S.10', 'Limpeza fina pré-entrega', 'm²', 1286, 'Área total de intervenção'),
+        ('S.11', 'Seguro de obra e responsabilidade civil', 'vb', 1, 'Valores variam: R$ 1.472 a R$ 20.400'),
+        ('S.12', 'As-built (elétrica, AC, hidráulica, SPK)', 'vb', 1, 'Padrão condomínio. Citrus: R$ 14.500'),
+        ('S.13', 'Certificação de todos os pontos elétricos', 'vb', 1, 'Hauz: R$ 5.400, Citrus: R$ 12.000'),
+        ('S.14', 'Termografia de quadros elétricos (OPCIONAL)', 'vb', 1, 'Hauz: R$ 27.950, Citrus: R$ 3.500'),
+        ('S.15', 'Fee / Administração de obra (~9%)', '%', 9, 'SUM 8%, Citrus 10%, Hauz CI'),
+        ('S.16', 'Impostos (~30% sobre faturamento)', '%', 30, 'SUM e Hauz: 30%. Padrão mercado.'),
+        ('S.17', 'Gerenciamento de terceiros (marcenaria, divisórias, carpete)', 'vb', 1, 'Hauz e Citrus: R$ 60.000'),
+        ('S.18', 'Transporte vertical de mobiliário (entre andares)', 'vb', 1, 'Se mobiliário armazenado em outro andar'),
+        ('S.19', 'FM-200 gás inerte para CPD (OPCIONAL)', 'vb', 1, 'SUM: R$ 39.620, Hauz: R$ 81.648. Depende do PPCI.'),
+        ('S.20', 'Controle de acesso facial (substituir cartão)', 'un', 2, 'Citrus: R$ 8.500, Hauz: R$ 3.240'),
+    ]
+
+    section_start_sug = ro
+    for num, desc, un, qtd, obs in suggestions:
+        ws.cell(row=ro, column=1, value=num).font = F_N
+        ws.cell(row=ro, column=2, value=desc).font = F_N
+        ws.cell(row=ro, column=3, value=un).font = F_N
+        ws.cell(row=ro, column=4, value=qtd).font = F_BLUE
+        ws.cell(row=ro, column=5).font = F_BLUE; ws.cell(row=ro, column=5).fill = P_YEL
+        ws.cell(row=ro, column=6).font = F_BLUE; ws.cell(row=ro, column=6).fill = P_YEL
+        if un == '%':
+            ws.cell(row=ro, column=7, value='Calcular sobre o total').font = F_N
+        else:
+            ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
+        ws.cell(row=ro, column=8, value=obs).font = F_N
+        ws.cell(row=ro, column=9, value='Experiência').font = Font(name='Arial', size=7)
+        for c in range(1, 10):
+            ws.cell(row=ro, column=c).border = BD
+            ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
+            ws.cell(row=ro, column=c).fill = P_PURPLE
+        ws.cell(row=ro, column=4).alignment = AR
+        for c in [5, 6, 7]:
+            ws.cell(row=ro, column=c).alignment = AR
+            ws.cell(row=ro, column=c).number_format = '#,##0.00'
+        ro += 1
+
+    section_end_sug = ro - 1
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=6)
+    ws.cell(row=ro, column=1, value='SUBTOTAL SUGESTÕES (custos indiretos e gestão)')
+    ws.cell(row=ro, column=7, value=f'=SUM(G{section_start_sug}:G{section_end_sug})')
+    ws.cell(row=ro, column=7).number_format = '#,##0.00'
+    _style_row(ws, ro, F_BOLD, PatternFill('solid', fgColor='E9D5FF'), AR, 9)
+    ws.cell(row=ro, column=1).alignment = AL
+    subtotal_rows.append(ro)
+    ro += 1
+
     # Resumo
     ro += 1
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
@@ -356,10 +428,10 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
     ws.cell(row=ro, column=1).alignment = AL
     td = ro; ro += 1
 
-    # BDI
+    # Contingência
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=5)
-    ws.cell(row=ro, column=1, value='BDI (%)')
-    ws.cell(row=ro, column=6, value=0.30)
+    ws.cell(row=ro, column=1, value='CONTINGÊNCIA (%)')
+    ws.cell(row=ro, column=6, value=0.10)
     ws.cell(row=ro, column=6).font = F_BLUE
     ws.cell(row=ro, column=6).number_format = '0.00%'
     ws.cell(row=ro, column=6).fill = P_YEL
@@ -369,15 +441,91 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
     ws.cell(row=ro, column=1).alignment = AL
     ws.cell(row=ro, column=6).alignment = AR
     ws.cell(row=ro, column=7).alignment = AR
+    ws.cell(row=ro, column=8, value='Reserva técnica para imprevistos (ajustável 5-15%)').font = F_SM
+    cont = ro; ro += 1
+
+    # BDI (fórmula TCU: AC+CF+S+R+G+L+T ≈ 27,5% para reforma escritório)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=5)
+    ws.cell(row=ro, column=1, value='BDI (%) — Ref. TCU para reforma')
+    ws.cell(row=ro, column=6, value=0.275)
+    ws.cell(row=ro, column=6).font = F_BLUE
+    ws.cell(row=ro, column=6).number_format = '0.00%'
+    ws.cell(row=ro, column=6).fill = P_YEL
+    ws.cell(row=ro, column=7, value=f'=(G{td}+G{cont})*F{ro}')
+    ws.cell(row=ro, column=7).number_format = '#,##0.00'
+    _style_row(ws, ro, F_BOLD, None, None, 9)
+    ws.cell(row=ro, column=1).alignment = AL
+    ws.cell(row=ro, column=6).alignment = AR
+    ws.cell(row=ro, column=7).alignment = AR
+    ws.cell(row=ro, column=8, value='AC 4% + CF 1,5% + S 0,8% + R 0,5% + G 0,5% + L 6% + T 11%').font = F_SM
     bdi = ro; ro += 1
 
     # Total com BDI
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=6)
-    ws.cell(row=ro, column=1, value='TOTAL GERAL COM BDI')
-    ws.cell(row=ro, column=7, value=f'=G{td}+G{bdi}')
+    ws.cell(row=ro, column=1, value='TOTAL GERAL COM CONTINGÊNCIA + BDI')
+    ws.cell(row=ro, column=7, value=f'=G{td}+G{cont}+G{bdi}')
     ws.cell(row=ro, column=7).number_format = '#,##0.00'
     _style_row(ws, ro, Font(name='Arial', bold=True, size=12, color='FFFFFF'), P_SEC, AR, 9)
     ws.cell(row=ro, column=1).alignment = AL
+
+    # ================================================================
+    # SEÇÃO: OMISSOS (itens não incluídos que podem ser necessários)
+    # ================================================================
+    ro += 2
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.cell(row=ro, column=1, value='OMISSOS — Itens não incluídos que provavelmente serão necessários')
+    _style_row(ws, ro, Font(name='Arial', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='B45309'), AL, 9)
+    ro += 1
+    omissos = [
+        'Projeto executivo de instalações (elétrica, hidráulica, PPCI, AC) — se não contratado separadamente',
+        'Aprovação no Corpo de Bombeiros (PPCI) — taxas e honorários do projetista',
+        'Compatibilização de projetos (elétrica × forro × sprinkler × AC)',
+        'Adequação de infraestrutura do condomínio (elétrica, hidráulica, incêndio)',
+        'Reforço estrutural — se necessário para novas cargas (marcenaria pesada, equipamentos)',
+        'Impermeabilização — se houver alteração em áreas úmidas (copas, banheiros)',
+        'Paisagismo interno — se o projeto prever jardineiras ou verde',
+        'Automação e integração de sistemas (BMS, controle de iluminação)',
+    ]
+    for om in omissos:
+        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+        ws.cell(row=ro, column=1, value=f'  • {om}').font = Font(name='Arial', size=8, color='92400E')
+        ws.cell(row=ro, column=1).fill = PatternFill('solid', fgColor='FEF3C7')
+        ro += 1
+
+    # ================================================================
+    # SEÇÃO: EXCLUSOS (itens explicitamente fora do escopo)
+    # ================================================================
+    ro += 1
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.cell(row=ro, column=1, value='EXCLUSOS — Itens explicitamente fora deste escopo (padrão de mercado)')
+    _style_row(ws, ro, Font(name='Arial', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='6B7280'), AL, 9)
+    ro += 1
+    exclusos = [
+        'Divisórias industriais piso-teto (vidro liso, polarizado) — cargo do contratante',
+        'Carpete — fornecimento pelo cliente; instalação pode estar inclusa',
+        'Marcenaria sob medida (bancadas, armários, painéis) — cargo do contratante',
+        'Mobiliário decorativo e de escritório — cargo do contratante',
+        'Persianas e cortinas — cargo do contratante',
+        'Equipamentos de TI (switches, servidores, APs, nobreaks) — cargo do contratante',
+        'Sistema de CFTV e controle de acesso — quando fornecido por empresa especializada',
+        'Contas de água, luz e telefone durante a obra — cargo do condomínio/contratante',
+    ]
+    for ex in exclusos:
+        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+        ws.cell(row=ro, column=1, value=f'  • {ex}').font = Font(name='Arial', size=8, color='374151')
+        ws.cell(row=ro, column=1).fill = PatternFill('solid', fgColor='F3F4F6')
+        ro += 1
+
+    # ================================================================
+    # NÍVEL DE PRECISÃO
+    # ================================================================
+    ro += 1
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.cell(row=ro, column=1, value='NÍVEL DE PRECISÃO: ±20-30% (orçamento entre paramétrico e analítico)')
+    _style_row(ws, ro, Font(name='Arial', bold=True, size=9, color='FFFFFF'), PatternFill('solid', fgColor='DC2626'), AL, 9)
+    ro += 1
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.cell(row=ro, column=1, value='Este orçamento foi gerado por IA a partir de pranchas de arquitetura, sem projeto executivo complementar. Quantitativos devem ser validados in loco. Para precisão de ±5-10%, solicitar cotações reais de fornecedores. Ref.: ABNT NBR 16633 / IBEC.').font = Font(name='Arial', size=8, italic=True, color='991B1B')
 
     # Notas profissionais
     ro += 2
@@ -386,12 +534,17 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
     notas = [
         '1. REFORMA: quantitativos consideram apenas o que MUDA. Conferir in loco e em projeto executivo.',
         '2. Colunas MAT e M.O. (amarelo): preencher pelo orçamentista/fornecedor.',
-        '3. BDI padrão 30% — ajustar conforme negociação e tipo de contratação.',
+        '3. BDI padrão 27,5% (ref. TCU para reforma). Fórmula: ((1+AC)(1+CF)(1+S)(1+R)(1+G)(1+L)/(1-T))-1.',
         '4. Itens em LARANJA: quantidade estimada visualmente — confirmar com projeto executivo.',
         '5. Itens em BRANCO: quantidade confirmada na legenda da prancha.',
-        '6. Quantidades de materiais já incluem perda estimada de 5-10%.',
-        '7. Para alvenaria: vãos de portas e janelas foram descontados quando identificados.',
-        '8. Planilha gerada automaticamente por AI.arq — validar com engenheiro de custos.',
+        '6. Itens em ROXO (Sugestões): custos indiretos baseados em dados reais de 3 fornecedores.',
+        '7. Contingência 10% — reserva técnica para imprevistos. Ajustar conforme risco do projeto.',
+        '8. Quantidades de materiais já incluem perda estimada de 5-10% (TCPO).',
+        '9. Para alvenaria/pintura: vãos ≤ 2m² NÃO descontados (regra TCPO). Vãos > 2m²: desconta excedente.',
+        '10. OMISSOS: itens que podem ser necessários mas não foram incluídos — avaliar com equipe de projeto.',
+        '11. EXCLUSOS: itens padrão de mercado excluídos do escopo de empreiteiras.',
+        '12. Dados calibrados: SUM Engenharia, Hauz e Citrus (Casa Granado 1.286m², RJ, 2026).',
+        '13. Planilha gerada por AI.arq (ai.arq.br) — validar com engenheiro de custos.',
     ]
     for n in notas:
         ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
