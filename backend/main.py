@@ -98,8 +98,8 @@ class JobsStore:
 jobs = JobsStore()
 
 
-def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
-    """Processa um job prancha por prancha pra economizar memória."""
+def process_job(job_id: str, file_paths: list[str], work_dir: str):
+    """Processa um job prancha por prancha. Aceita PDF, DWG e DXF."""
     import gc
     import anthropic
     from processor import identify_sheet_type, extract_text, render_crops
@@ -114,14 +114,67 @@ def process_job(job_id: str, pdf_paths: list[str], work_dir: str):
 
     try:
         jobs.update_field(job_id, status="processing")
+
+        # Separar PDFs de DWG/DXF
+        pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
+        cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
+
+        # Converter DWG→DXF se necessário
+        dxf_paths = []
+        if cad_paths:
+            jobs.update_field(job_id, current_step="Processando arquivos DWG/DXF...")
+            try:
+                from dwg_extractor import extract_from_file, generate_budget_data
+                for cad_path in cad_paths:
+                    ext = cad_path.lower().rsplit('.', 1)[-1]
+                    if ext == 'dwg':
+                        # Converter DWG→DXF via ODA
+                        from dwg_extractor import convert_dwg_to_dxf
+                        dxf_path = convert_dwg_to_dxf(cad_path)
+                        if dxf_path:
+                            dxf_paths.append(dxf_path)
+                        else:
+                            print(f"Falha ao converter DWG: {cad_path}. Pulando.")
+                    else:
+                        dxf_paths.append(cad_path)
+            except ImportError:
+                print("dwg_extractor não disponível. Processando apenas PDFs.")
+            except Exception as e:
+                print(f"Erro DWG/DXF: {e}. Continuando com PDFs.")
+
+        # Extrair dados de DXF (se houver)
+        dxf_items = []
+        dxf_project_data = None
+        if dxf_paths:
+            jobs.update_field(job_id, current_step="Extraindo geometria dos DXF...")
+            try:
+                from dwg_extractor import extract_from_file, generate_budget_data
+                for dxf_path in dxf_paths:
+                    extraction = extract_from_file(dxf_path)
+                    budget = generate_budget_data(extraction)
+                    for item_data in budget.get("items", []):
+                        item = BudgetItem(
+                            item_num=str(item_data.get("item_num", "")),
+                            description=item_data.get("description", ""),
+                            unit=item_data.get("unit", "vb"),
+                            quantity=float(item_data.get("quantity", 1)),
+                            observations=item_data.get("observations", ""),
+                            ref_sheet=item_data.get("ref_sheet", "DXF"),
+                            confidence=Confidence(item_data.get("confidence", "confirmado")),
+                            discipline=item_data.get("discipline", "Complementares"),
+                        )
+                        dxf_items.append(item)
+            except Exception as e:
+                print(f"Erro extração DXF: {e}")
+
         total = len(pdf_paths)
         client = anthropic.Anthropic(api_key=api_key)
-        all_items = []
+        all_items = list(dxf_items)  # Começar com itens DXF
         project_data = ProjectData()
         crops_dir = os.path.join(work_dir, "crops")
         os.makedirs(crops_dir, exist_ok=True)
 
-        # Ordenar por prioridade (layout primeiro)
+        # Ordenar PDFs por prioridade (layout primeiro)
         priority = {"layout_novo": 0, "layout_atual": 1, "demolir": 2, "arquitetura": 3,
                      "forro": 4, "piso": 5, "pontos": 6, "mobiliario": 7, "marcenaria": 8, "det_forro": 9}
 
@@ -245,47 +298,54 @@ async def process_files(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
 ):
-    """Recebe PDFs e inicia processamento em background."""
+    """Recebe PDF, DWG ou DXF e inicia processamento em background."""
     if not files:
         raise HTTPException(400, "Nenhum arquivo enviado")
 
-    # Validar arquivos
-    pdf_files = [f for f in files if f.filename and f.filename.lower().endswith('.pdf')]
-    if not pdf_files:
-        raise HTTPException(400, "Nenhum arquivo PDF encontrado")
+    # Validar arquivos (aceitar PDF, DWG e DXF)
+    valid_extensions = ('.pdf', '.dwg', '.dxf')
+    valid_files = [f for f in files if f.filename and f.filename.lower().endswith(valid_extensions)]
+    if not valid_files:
+        raise HTTPException(400, "Nenhum arquivo válido encontrado. Aceito: PDF, DWG ou DXF.")
 
-    if len(pdf_files) > 20:
-        raise HTTPException(400, "Máximo de 20 pranchas por projeto")
+    if len(valid_files) > 20:
+        raise HTTPException(400, "Máximo de 20 arquivos por projeto")
 
     # Criar job
     job_id = str(uuid.uuid4())[:8]
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
 
-    # Salvar PDFs
-    pdf_paths = []
-    for pdf_file in pdf_files:
-        file_path = os.path.join(work_dir, pdf_file.filename)
+    # Salvar arquivos
+    file_paths = []
+    file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
+    for upload_file in valid_files:
+        file_path = os.path.join(work_dir, upload_file.filename)
         with open(file_path, "wb") as f:
-            content = await pdf_file.read()
+            content = await upload_file.read()
             f.write(content)
-        pdf_paths.append(file_path)
+        file_paths.append(file_path)
+        ext = upload_file.filename.lower().rsplit('.', 1)[-1]
+        file_types[ext] = file_types.get(ext, 0) + 1
+
+    # Resumo de tipos recebidos
+    types_summary = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
 
     # Criar status
     jobs[job_id] = ProcessingStatus(
         job_id=job_id,
         status="queued",
         progress=0,
-        current_step=f"Recebidos {len(pdf_paths)} PDFs. Iniciando processamento...",
+        current_step=f"Recebidos {len(file_paths)} arquivos ({types_summary}). Iniciando processamento...",
         total_steps=3,
     )
 
     # Iniciar processamento em thread separada (não bloqueia HTTP)
     import threading
-    t = threading.Thread(target=process_job, args=(job_id, pdf_paths, work_dir), daemon=True)
+    t = threading.Thread(target=process_job, args=(job_id, file_paths, work_dir), daemon=True)
     t.start()
 
-    return {"job_id": job_id, "files_received": len(pdf_paths), "status": "queued"}
+    return {"job_id": job_id, "files_received": len(file_paths), "file_types": file_types, "status": "queued"}
 
 
 @app.get("/api/status/{job_id}")
