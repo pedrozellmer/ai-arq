@@ -164,6 +164,15 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
     try:
         jobs.update_field(job_id, status="processing")
 
+        # Funções auxiliares (definir antes de usar)
+        def sf(v):
+            if v is None: return 0
+            s = str(v).replace('m²','').replace('m2','').replace('cm','').replace(',','').strip()
+            try: return float(s)
+            except: return 0
+
+        project_data = ProjectData()
+
         # Separar PDFs de DWG/DXF
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
@@ -316,7 +325,6 @@ Retorne APENAS JSON válido no formato:
         total = len(pdf_paths)
         client = anthropic.Anthropic(api_key=api_key)
         all_items = list(dxf_items)  # Começar com itens DXF
-        project_data = ProjectData()
         crops_dir = os.path.join(work_dir, "crops")
         os.makedirs(crops_dir, exist_ok=True)
 
@@ -359,11 +367,6 @@ Retorne APENAS JSON válido no formato:
             # 4. Extrair dados do projeto
             if "project_data" in result:
                 pd = result["project_data"]
-                def sf(v):
-                    if v is None: return 0
-                    s = str(v).replace('m²','').replace('m2','').replace('cm','').replace(',','').strip()
-                    try: return float(s)
-                    except: return 0
                 if pd.get("total_area"): project_data.total_area = sf(pd["total_area"])
                 if pd.get("layout_area"): project_data.layout_area = sf(pd["layout_area"])
                 if pd.get("no_intervention_area"): project_data.no_intervention_area = sf(pd["no_intervention_area"])
