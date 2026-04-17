@@ -32,12 +32,17 @@ from processor import process_pdfs
 from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
-from calibrator import (
-    compare_spreadsheets,
-    save_calibration_data,
-    get_correction_factors,
-    apply_corrections,
-)
+try:
+    from calibrator import (
+        compare_spreadsheets,
+        save_calibration_data,
+        get_correction_factors,
+        apply_corrections,
+    )
+    HAS_CALIBRATOR = True
+except ImportError:
+    HAS_CALIBRATOR = False
+    print("calibrator.py não disponível — calibração desativada")
 
 # Supabase client para salvar projetos
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
@@ -464,14 +469,77 @@ async def download_file(job_id: str):
 
 @app.get("/api/health")
 async def health():
-    """Health check."""
+    """Health check com métricas do sistema."""
+    try:
+        import psutil
+    except ImportError:
+        psutil = None
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     stripe_key = os.getenv("STRIPE_SECRET_KEY", "")
+
+    # Métricas de sistema
+    if psutil:
+        mem = psutil.virtual_memory()
+        disk = psutil.disk_usage('/')
+    else:
+        mem = None
+        disk = None
+
+    # Contar projetos hoje
+    today_count = 0
+    try:
+        import urllib.request, json
+        url = f"{SUPABASE_URL}/rest/v1/projects?select=id&created_at=gte.{datetime.utcnow().strftime('%Y-%m-%d')}T00:00:00"
+        req = urllib.request.Request(url)
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Prefer', 'count=exact')
+        resp = urllib.request.urlopen(req, timeout=3)
+        count_header = resp.headers.get('content-range', '')
+        if '/' in count_header:
+            today_count = int(count_header.split('/')[1])
+        else:
+            today_count = len(json.loads(resp.read()))
+    except:
+        pass
+
+    # Contar totais
+    total_projects = 0
+    total_users = 0
+    try:
+        import urllib.request, json
+        for table, var_name in [('projects', 'total_projects'), ('profiles', 'total_users')]:
+            url = f"{SUPABASE_URL}/rest/v1/{table}?select=id"
+            req = urllib.request.Request(url)
+            req.add_header('apikey', SUPABASE_KEY)
+            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Prefer', 'count=exact')
+            resp = urllib.request.urlopen(req, timeout=3)
+            count_header = resp.headers.get('content-range', '')
+            if '/' in count_header:
+                locals()[var_name] = int(count_header.split('/')[1])
+            else:
+                locals()[var_name] = len(json.loads(resp.read()))
+    except:
+        pass
+
     return {
         "status": "healthy",
         "api_key_configured": bool(api_key and api_key.startswith("sk-")),
         "stripe_configured": bool(stripe_key),
         "timestamp": datetime.utcnow().isoformat(),
+        "system": {
+            "ram_used_pct": round(mem.percent, 1) if mem else 0,
+            "ram_used_mb": round(mem.used / 1024 / 1024) if mem else 0,
+            "ram_total_mb": round(mem.total / 1024 / 1024) if mem else 0,
+            "disk_used_pct": round(disk.percent, 1) if disk else 0,
+            "cpu_pct": psutil.cpu_percent(interval=0.5) if psutil else 0,
+        },
+        "stats": {
+            "projects_today": today_count,
+            "total_projects": total_projects,
+            "total_users": total_users,
+        }
     }
 
 
@@ -486,13 +554,13 @@ async def create_checkout(num_files: int = 1):
 
     # Definir preço por quantidade de pranchas
     if num_files <= 5:
-        price_cents = 4900  # R$ 49
+        price_cents = 9700  # R$ 97
         plan_name = "Projeto Pequeno (até 5 pranchas)"
     elif num_files <= 10:
-        price_cents = 9900  # R$ 99
+        price_cents = 19700  # R$ 197
         plan_name = "Projeto Médio (6-10 pranchas)"
     else:
-        price_cents = 14900  # R$ 149
+        price_cents = 39700  # R$ 397
         plan_name = "Projeto Grande (11+ pranchas)"
 
     try:
