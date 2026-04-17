@@ -26,9 +26,8 @@ RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=
     rm -rf /var/lib/apt/lists/* || \
     echo "ODA install failed"
 
-# Variável pra ODA rodar sem display
-ENV QT_QPA_PLATFORM=offscreen
-ENV DISPLAY=:99
+# xvfb-run vai criar o display virtual automaticamente
+# NÃO setar QT_QPA_PLATFORM=offscreen — deixar usar xcb com xvfb
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
