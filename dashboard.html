@@ -860,13 +860,10 @@
       }
     }
 
-    // Se não completou cadastro, mostrar banner (não bloquear)
+    // Se não completou cadastro, redirecionar obrigatoriamente
     if (!localStorage.getItem('aiarq_profile_complete')) {
-      const banner = document.createElement('div');
-      banner.className = 'mb-6 rounded-xl border border-indigo-200 bg-indigo-50 p-4';
-      banner.innerHTML = '<div class="flex items-center justify-between gap-4"><div class="flex items-start gap-2"><span class="text-indigo-500 shrink-0">&#128100;</span><div><p class="text-sm text-indigo-800 font-medium">Complete seu cadastro</p><p class="text-xs text-indigo-600 mt-1">Preencha seus dados para uma experi\u00eancia completa e acesso a todos os recursos.</p></div></div><a href="cadastro.html" class="shrink-0 px-4 py-2 rounded-lg gradient-main text-white text-xs font-medium no-underline">Completar</a></div>';
-      const mainContent = document.querySelector('#tab-novo-projeto .mb-6') || document.getElementById('tab-novo-projeto');
-      if (mainContent) mainContent.parentNode.insertBefore(banner, mainContent);
+      window.location.href = 'cadastro.html';
+      return;
     }
 
     userName.textContent = meta.full_name || meta.name || user.email;
