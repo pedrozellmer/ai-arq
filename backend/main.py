@@ -177,49 +177,27 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
-        # Debug: salvar paths no error_message pra conseguir ler depois
-        debug_info = f"files={len(file_paths)} pdf={len(pdf_paths)} cad={len(cad_paths)} paths={[os.path.basename(f) for f in file_paths]} exists={[os.path.exists(f) for f in file_paths]}"
-        jobs.update_field(job_id, error_message=debug_info)
-        print(f"[{job_id}] file_paths: {file_paths}")
-        print(f"[{job_id}] pdf_paths: {pdf_paths}")
-        print(f"[{job_id}] cad_paths: {cad_paths}")
-
         # Converter DWG→DXF se necessário
         dxf_paths = []
         if cad_paths:
             jobs.update_field(job_id, current_step="Processando arquivos DWG/DXF...")
             try:
-                from dwg_extractor import extract_from_file, generate_budget_data
+                from dwg_extractor import extract_from_file, generate_budget_data, convert_dwg_to_dxf
                 for cad_path in cad_paths:
                     ext = cad_path.lower().rsplit('.', 1)[-1]
                     if ext == 'dwg':
-                        # Converter DWG→DXF via ODA
-                        from dwg_extractor import convert_dwg_to_dxf
                         jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF: {os.path.basename(cad_path)}")
-                        try:
-                            dxf_path = convert_dwg_to_dxf(cad_path)
-                        except Exception as conv_err:
-                            dxf_path = None
-                            jobs.update_field(job_id, error_message=f"CONV ERROR: {conv_err}")
-                        jobs.update_field(job_id, error_message=f"DWG→DXF result: {dxf_path}")
+                        dxf_path = convert_dwg_to_dxf(cad_path)
                         if dxf_path:
                             dxf_paths.append(dxf_path)
-                            jobs.update_field(job_id, current_step=f"DWG convertido OK: {os.path.basename(dxf_path)}")
+                            jobs.update_field(job_id, current_step=f"DWG convertido: {os.path.basename(dxf_path)}")
                         else:
-                            jobs.update_field(job_id, current_step=f"FALHA converter DWG: {os.path.basename(cad_path)}")
-                            print(f"Falha ao converter DWG: {cad_path}. Pulando.")
+                            jobs.update_field(job_id, current_step=f"Falha ao converter DWG: {os.path.basename(cad_path)} (seguindo sem)")
                     else:
                         dxf_paths.append(cad_path)
-            except ImportError as ie:
-                jobs.update_field(job_id, error_message=f"dwg_extractor não disponível: {ie}")
-                jobs.update_field(job_id, current_step=f"ERRO IMPORT: {ie}")
-                raise  # Deixar o erro aparecer
             except Exception as e:
                 jobs.update_field(job_id, error_message=f"Erro DWG→DXF: {e}")
-                jobs.update_field(job_id, current_step=f"ERRO DWG: {e}")
-                raise  # Deixar o erro aparecer
-
-        jobs.update_field(job_id, current_step=f"DXF paths: {len(dxf_paths)}. CAD paths: {len(cad_paths)}")
+                raise
 
         # Extrair dados de DXF e enviar pro Claude interpretar
         dxf_items = []
