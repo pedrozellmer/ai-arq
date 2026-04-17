@@ -197,7 +197,7 @@
               <svg class="w-6 h-6 text-amber-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
               <div class="flex-1">
                 <p class="text-sm text-amber-800 leading-relaxed">
-                  <strong>&#9888;&#65039; Aviso importante:</strong> As planilhas geradas por IA s&#227;o estimativas e devem ser revisadas por um profissional antes de uso em or&#231;amento. Itens em laranja requerem verifica&#231;&#227;o.
+                  <strong>&#9888;&#65039; Aviso importante:</strong> As planilhas geradas por IA s&#227;o estimativas e devem ser revisadas por um profissional antes de uso em or&#231;amento. Itens coloridos indicam o n&#237;vel de confian&#231;a (ver legenda na planilha).
                 </p>
                 <a href="termos.html" class="text-xs text-amber-600 hover:text-amber-800 underline mt-1 inline-block">Ver Termos de Uso completos</a>
               </div>
@@ -233,7 +233,7 @@
               <li>&#8226; Envie as <strong>pranchas principais</strong>: Arquitetura, Pisos, Forro, Pontos El&eacute;tricos, Demoli&ccedil;&atilde;o</li>
               <li>&#8226; Pranchas de <strong>Marcenaria</strong> e <strong>Mobili&aacute;rio</strong> complementam com itens sob medida</li>
               <li>&#8226; Para <strong>reformas</strong>, inclua o Layout Atual e o Layout Novo para comparativo</li>
-              <li>&#8226; Pode ser um PDF por prancha ou v&aacute;rias pranchas em um &uacute;nico PDF</li>
+              <li>&#8226; PDF, DWG ou DXF &mdash; um arquivo por prancha</li>
               <li>&#8226; Quanto mais pranchas, mais completa a planilha &mdash; m&iacute;nimo recomendado: <strong>3 pranchas</strong></li>
             </ul>
           </div>
@@ -248,10 +248,10 @@
             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-500 mb-6">
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             </div>
-            <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os PDFs do projeto aqui</p>
+            <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os arquivos do projeto aqui</p>
             <p class="text-sm text-gray-400 mb-3">ou clique para selecionar</p>
-            <p class="text-xs text-gray-300">At&#233; 20 arquivos em PDF</p>
-            <input type="file" id="file-input" multiple accept=".pdf" class="hidden">
+            <p class="text-xs text-gray-300">At&#233; 20 arquivos (PDF, DWG ou DXF)</p>
+            <input type="file" id="file-input" multiple accept=".pdf,.dwg,.dxf" class="hidden">
           </div>
 
           <!-- File List -->
@@ -325,7 +325,7 @@
               <div class="flex items-start gap-2">
                 <span class="text-blue-500 shrink-0">&#128270;</span>
                 <div>
-                  <p class="text-xs text-blue-700">Lembre-se: itens em <strong>laranja</strong> na planilha são estimativas e devem ser revisados por um profissional. A planilha ficará disponível para download por <strong>15 dias</strong>.</p>
+                  <p class="text-xs text-blue-700">Lembre-se: ver legenda de cores na aba Resumo da planilha. A planilha ficará disponível para download por <strong>15 dias</strong>.</p>
                 </div>
               </div>
             </div>
@@ -493,7 +493,7 @@
             <div class="flex items-start gap-4">
               <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">1</div>
               <div>
-                <p class="text-sm font-semibold text-gray-800">Fa&#231;a upload dos PDFs do projeto</p>
+                <p class="text-sm font-semibold text-gray-800">Fa&#231;a upload dos arquivos do projeto (PDF, DWG ou DXF)</p>
                 <p class="text-xs text-gray-400 mt-0.5">Planta baixa, layout, demoli&#231;&#227;o, forro, pontos etc.</p>
               </div>
             </div>
@@ -544,7 +544,7 @@
               </div>
               <h3 class="font-semibold text-gray-900 text-sm">Formato aceito</h3>
             </div>
-            <p class="text-sm text-gray-500">PDF (pranchas de projeto arquitet&#244;nico)</p>
+            <p class="text-sm text-gray-500">PDF, DWG ou DXF (pranchas de projeto arquitet&#244;nico)</p>
           </div>
           <div class="rounded-xl border bg-white p-5 shadow-sm">
             <div class="flex items-center gap-3 mb-3">
@@ -571,7 +571,7 @@
               </div>
               <h3 class="font-semibold text-gray-900 text-sm">Precis&#227;o</h3>
             </div>
-            <p class="text-sm text-gray-500">Leitura de legendas: ~95%<br>Contagem de s&#237;mbolos: ~40-60%</p>
+            <p class="text-sm text-gray-500">Precis&#227;o geral: &#177;15% para projeto arquitet&#244;nico. DXF tem precis&#227;o superior ao PDF.</p>
           </div>
         </div>
 
@@ -581,7 +581,7 @@
           <div class="space-y-4">
             <div class="border-b pb-4">
               <h3 class="text-sm font-semibold text-gray-800 mb-1">Quais tipos de projeto s&#227;o suportados?</h3>
-              <p class="text-sm text-gray-500">Projetos de reforma residencial com arquivos em PDF. O sistema analisa demoli&#231;&#227;o, constru&#231;&#227;o, el&#233;trica, hidr&#225;ulica, forro, revestimentos e mais.</p>
+              <p class="text-sm text-gray-500">Projetos de reforma com arquivos em PDF, DWG ou DXF. O sistema analisa demoli&#231;&#227;o, constru&#231;&#227;o, el&#233;trica, hidr&#225;ulica, forro, revestimentos e mais.</p>
             </div>
             <div class="border-b pb-4">
               <h3 class="text-sm font-semibold text-gray-800 mb-1">A planilha &#233; precisa o suficiente para or&#231;amento?</h3>
@@ -1030,7 +1030,7 @@
     const n = selectedFiles.length;
     const free = isFirstProject() && n <= 5;
     const betaFree = hasBetaCredits();
-    let price = n <= 5 ? 'R$ 49' : n <= 10 ? 'R$ 99' : 'R$ 149';
+    let price = n <= 5 ? 'R$ 97' : n <= 10 ? 'R$ 197' : 'R$ 397';
     let planName = n <= 5 ? 'Pequeno' : n <= 10 ? 'M\u00e9dio' : 'Grande';
     priceInfo.classList.remove('hidden');
     if (free) {
@@ -1103,7 +1103,7 @@
   // ══════════════════════════════════════════════
   function addFiles(newFiles) {
     for (const f of newFiles) {
-      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || f.name.toLowerCase().endsWith('.dwg') || f.name.toLowerCase().endsWith('.dxf')) {
         if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) {
           selectedFiles.push(f);
         }
@@ -1466,7 +1466,7 @@
       date: now.toISOString(),
       timestamp: now.toISOString(),
       free: isFirstProject() && selectedFiles.length <= 5,
-      price: selectedFiles.length <= 5 ? 49 : selectedFiles.length <= 10 ? 99 : 149,
+      price: selectedFiles.length <= 5 ? 97 : selectedFiles.length <= 10 ? 197 : 397,
       reviewed: false
     };
     history.unshift(project);

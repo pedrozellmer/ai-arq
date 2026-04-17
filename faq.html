@@ -116,7 +116,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              O AI.arq &eacute; uma plataforma de intelig&ecirc;ncia artificial que l&ecirc; pranchas de projetos de arquitetura em PDF e gera automaticamente planilhas de or&ccedil;amento com quantitativos detalhados. Em vez de passar dias lendo plantas e contando itens manualmente, voc&ecirc; faz upload dos PDFs e recebe a planilha pronta em aproximadamente 10 minutos.
+              O AI.arq &eacute; uma plataforma de intelig&ecirc;ncia artificial que l&ecirc; pranchas de projetos de arquitetura em PDF, DWG ou DXF e gera automaticamente planilhas de or&ccedil;amento com quantitativos detalhados. Em vez de passar dias lendo plantas e contando itens manualmente, voc&ecirc; faz upload dos PDFs e recebe a planilha pronta em aproximadamente 10 minutos.
             </div>
           </div>
         </div>
@@ -207,9 +207,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p>O AI.arq aceita apenas arquivos <strong>PDF</strong>. Se o seu projeto foi desenvolvido em Revit, AutoCAD ou outro software BIM/CAD, exporte as pranchas em PDF antes de enviar.</p>
-              <p class="mt-2">O AI.arq <strong>n&atilde;o l&ecirc;</strong> arquivos nativos (.rvt, .dwg, .ifc) diretamente, mas l&ecirc; perfeitamente os PDFs gerados por esses softwares.</p>
-              <p class="mt-2">Recomendamos exportar em alta resolu&ccedil;&atilde;o (300 DPI) para melhores resultados.</p>
+              <p>O AI.arq aceita arquivos em <strong>PDF</strong>, <strong>DWG</strong> e <strong>DXF</strong>. Para arquivos DWG/DXF, o sistema extrai dados geom&eacute;tricos diretamente (&aacute;reas, per&iacute;metros, comprimentos de parede, contagem de blocos), resultando em maior precis&atilde;o. Para projetos em Revit, exporte em PDF ou DXF antes de enviar. Arquivos .rvt e .ifc n&atilde;o s&atilde;o suportados diretamente.</p>
             </div>
           </div>
         </div>
@@ -222,7 +220,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              At&eacute; <strong>20 arquivos PDF</strong> por projeto. Voc&ecirc; pode enviar m&uacute;ltiplos PDFs de uma s&oacute; vez &mdash; o sistema processa todas as pranchas juntas e gera uma &uacute;nica planilha consolidada. Para projetos maiores, entre em contato pelo <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.
+              At&eacute; <strong>20 arquivos (PDF, DWG ou DXF)</strong> por projeto. Voc&ecirc; pode enviar m&uacute;ltiplos PDFs de uma s&oacute; vez &mdash; o sistema processa todas as pranchas juntas e gera uma &uacute;nica planilha consolidada. Para projetos maiores, entre em contato pelo <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.
             </div>
           </div>
         </div>
@@ -254,7 +252,8 @@
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Aba 2 &mdash; Or&ccedil;amento Detalhado:</strong> itens organizados em at&eacute; 16 disciplinas (Servi&ccedil;os Preliminares, Demoli&ccedil;&atilde;o, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divis&oacute;rias, Persianas, Ilumina&ccedil;&atilde;o, El&eacute;trica, AC, Inc&ecirc;ndio, Marcenaria, Mobili&aacute;rio, Complementares).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Coluna <strong>REF. PRANCHA</strong> para rastreabilidade de cada item.</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Itens em <span class="text-amber-600 font-semibold">laranja</span> = quantidade estimada por f&oacute;rmula (revisar obrigatoriamente).</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> F&oacute;rmulas autom&aacute;ticas de subtotal por disciplina e BDI (30%).</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> F&oacute;rmulas autom&aacute;ticas de subtotal por disciplina e BDI (27,5% &mdash; ref. TCU Ac&oacute;rd&atilde;o 2.622/2013) + Conting&ecirc;ncia (10%).</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Se&ccedil;&otilde;es OMISSOS, EXCLUSOS e SUGEST&Otilde;ES (custos indiretos baseados em dados reais de fornecedores).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Colunas de pre&ccedil;o unit&aacute;rio e total para preenchimento pelo fornecedor.</li>
               </ul>
             </div>
@@ -272,7 +271,7 @@
               <ol class="space-y-2 ml-1 list-decimal list-inside">
                 <li><strong>Upload:</strong> voc&ecirc; envia os PDFs das pranchas pelo dashboard.</li>
                 <li><strong>Identifica&ccedil;&atilde;o:</strong> o sistema identifica automaticamente o tipo de cada prancha pelo nome do arquivo.</li>
-                <li><strong>Extra&ccedil;&atilde;o:</strong> o texto &eacute; extra&iacute;do do PDF e imagens s&atilde;o recortadas para an&aacute;lise.</li>
+                <li><strong>Extra&ccedil;&atilde;o:</strong> o texto &eacute; extra&iacute;do, imagens s&atilde;o recortadas para an&aacute;lise (PDF) ou dados geom&eacute;tricos s&atilde;o extra&iacute;dos diretamente (DWG/DXF).</li>
                 <li><strong>An&aacute;lise com IA:</strong> cada prancha &eacute; enviada para a intelig&ecirc;ncia artificial (Claude API), que identifica todos os itens, materiais, quantidades e especifica&ccedil;&otilde;es.</li>
                 <li><strong>Gera&ccedil;&atilde;o:</strong> todos os itens s&atilde;o consolidados em uma planilha .xlsx profissional com f&oacute;rmulas.</li>
                 <li><strong>Download:</strong> voc&ecirc; baixa a planilha pronta para revis&atilde;o.</li>
@@ -303,26 +302,8 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3">A precis&atilde;o varia conforme o tipo de informa&ccedil;&atilde;o:</p>
-              <div class="space-y-2">
-                <div class="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50">
-                  <span class="text-emerald-600 font-bold text-xs shrink-0">~95%</span>
-                  <span>Leitura de legendas e especifica&ccedil;&otilde;es de materiais</span>
-                </div>
-                <div class="flex items-center gap-3 p-2.5 rounded-lg bg-emerald-50">
-                  <span class="text-emerald-600 font-bold text-xs shrink-0">~90%</span>
-                  <span>Identifica&ccedil;&atilde;o de tipos de portas, revestimentos, pisos</span>
-                </div>
-                <div class="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50">
-                  <span class="text-amber-600 font-bold text-xs shrink-0">40&ndash;60%</span>
-                  <span>Contagem de s&iacute;mbolos na planta (lumin&aacute;rias, pontos el&eacute;tricos, sprinklers)</span>
-                </div>
-                <div class="flex items-center gap-3 p-2.5 rounded-lg bg-amber-50">
-                  <span class="text-amber-600 font-bold text-xs shrink-0">&plusmn;30%</span>
-                  <span>Estimativa de &aacute;reas e quantidades (pintura, forro, carpete)</span>
-                </div>
-              </div>
-              <p class="mt-3 text-xs text-gray-400">Por isso a IA usa f&oacute;rmulas t&eacute;cnicas (TCPO, NBR) para estimar quantidades em vez de contar s&iacute;mbolos. Toda planilha deve ser revisada por profissional.</p>
+              <p>Precis&atilde;o geral: <strong>&plusmn;15%</strong> para projeto arquitet&ocirc;nico sem projeto executivo. Arquivos DWG/DXF t&ecirc;m precis&atilde;o superior ao PDF por permitirem extra&ccedil;&atilde;o geom&eacute;trica direta. Calibrado com dados reais de fornecedores.</p>
+              <p class="mt-3 text-xs text-gray-400">Toda planilha deve ser revisada por profissional.</p>
             </div>
           </div>
         </div>
@@ -335,11 +316,12 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p>A planilha usa tr&ecirc;s n&iacute;veis de confian&ccedil;a:</p>
+              <p>A planilha usa quatro n&iacute;veis de confian&ccedil;a:</p>
               <ul class="space-y-2 ml-1 mt-2">
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong>Branco (confirmado):</strong> quantidade lida diretamente da legenda &mdash; ~95% de acur&aacute;cia.</li>
-                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-amber-600">Laranja (estimado):</strong> quantidade calculada por f&oacute;rmula (ex.: m&sup2; de pintura = per&iacute;metro &times; p&eacute;-direito) &mdash; <strong>requer revis&atilde;o</strong>.</li>
-                <li class="flex items-start gap-2"><span class="text-red-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-red-600">Vermelho (verificar):</strong> quantidade muito incerta &mdash; <strong>verificar com projeto executivo</strong>.</li>
+                <li class="flex items-start gap-2"><span class="text-gray-400 mt-1.5 shrink-0">&bull;</span> <strong>CONFIRMADO (branco):</strong> dado lido diretamente do arquivo (bloco, texto, nota). Usar diretamente.</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-600">CALCULADO (verde):</strong> quantidade computada por geometria (per&iacute;metro &times; p&eacute;-direito, &aacute;rea de hatch). Conferir in loco.</li>
+                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-amber-600">VERIFICAR (laranja):</strong> item presente na legenda mas sem dado exato. Obrigat&oacute;rio confirmar com arquiteto.</li>
+                <li class="flex items-start gap-2"><span class="text-yellow-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-yellow-600">SUGEST&Atilde;O (amarelo):</strong> item que n&atilde;o aparece nas pranchas mas fornecedores tipicamente incluem (equipe, serventia, fee). Avaliar inclus&atilde;o.</li>
               </ul>
             </div>
           </div>
@@ -415,17 +397,17 @@
                 </div>
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
                   <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Pequeno</p>
-                  <p class="text-xl font-bold text-gray-800">R$ 49</p>
+                  <p class="text-xl font-bold text-gray-800">R$ 97</p>
                   <p class="text-xs text-gray-400 mt-1">At&eacute; 5 pranchas</p>
                 </div>
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
                   <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">M&eacute;dio</p>
-                  <p class="text-xl font-bold text-gray-800">R$ 99</p>
+                  <p class="text-xl font-bold text-gray-800">R$ 197</p>
                   <p class="text-xs text-gray-400 mt-1">6&ndash;10 pranchas</p>
                 </div>
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
                   <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Grande</p>
-                  <p class="text-xl font-bold text-gray-800">R$ 149</p>
+                  <p class="text-xl font-bold text-gray-800">R$ 397</p>
                   <p class="text-xs text-gray-400 mt-1">11+ pranchas</p>
                 </div>
               </div>
@@ -508,7 +490,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Sim. Seus PDFs s&atilde;o processados em servidor tempor&aacute;rio e <strong>deletados automaticamente</strong> ap&oacute;s a gera&ccedil;&atilde;o da planilha. N&atilde;o armazenamos seus projetos de forma permanente. Toda comunica&ccedil;&atilde;o &eacute; criptografada via HTTPS. Seus projetos permanecem 100% confidenciais.
+              Sim. Seus arquivos s&atilde;o processados em servidor tempor&aacute;rio e <strong>deletados automaticamente</strong> ap&oacute;s a gera&ccedil;&atilde;o da planilha. N&atilde;o armazenamos seus projetos de forma permanente. Toda comunica&ccedil;&atilde;o &eacute; criptografada via HTTPS. Seus projetos permanecem 100% confidenciais.
             </div>
           </div>
         </div>
@@ -578,7 +560,7 @@
               <ul class="space-y-1.5 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via Google:</strong> nome, e-mail e foto de perfil</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via cadastro:</strong> nome completo, WhatsApp, CPF/CNPJ, empresa, &aacute;rea de atua&ccedil;&atilde;o e cargo</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via uso:</strong> PDFs enviados (deletados ap&oacute;s processamento) e hist&oacute;rico de projetos</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via uso:</strong> Arquivos enviados &mdash; PDF, DWG e DXF (deletados ap&oacute;s processamento) e hist&oacute;rico de projetos</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via pagamento:</strong> processado pelo Stripe &mdash; n&atilde;o armazenamos dados de cart&atilde;o</li>
               </ul>
               <p class="mt-3 text-xs text-gray-400">Consulte nossa <a href="privacidade.html" class="text-indigo-500 underline">Pol&iacute;tica de Privacidade</a> para detalhes completos.</p>
@@ -610,7 +592,7 @@
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p class="mb-3">Verifique os seguintes pontos:</p>
               <ul class="space-y-1.5 ml-1">
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Os arquivos est&atilde;o em formato <strong>PDF</strong>?</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Os arquivos est&atilde;o em formato <strong>PDF, DWG ou DXF</strong>?</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Os nomes dos arquivos identificam claramente o tipo de prancha?</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Cada PDF tem apenas <strong>1 p&aacute;gina</strong> (uma prancha por arquivo)?</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> A resolu&ccedil;&atilde;o &eacute; adequada (m&iacute;nimo 150 DPI, ideal 300 DPI)?</li>
