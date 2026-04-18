@@ -303,47 +303,66 @@ Essa regra garante que subir o mesmo arquivo duas vezes retorne o MESMO resultad
 UNIDADES CORRETAS — ml VS un VS m² VS vb
 ════════════════════════════════════════════════════════
 
-Escolha a unidade conforme o que o item REALMENTE significa:
-- "ml" (metro linear): perfis, rodapés, eletrocalhas, barras contínuas, perímetros.
-  Se há comprimento em "COMPRIMENTOS POR LAYER" pro item, use esse valor em ml.
-- "un" (unidade): blocos contáveis (luminárias, difusores, interruptores, portas, spots).
-- "m²" (área): forros, pisos, paredes hachuradas, pinturas.
-- "vb" (verba): serviços globais sem medida unitária clara (administração, retrofit, recomposição).
+**A unidade vem do TIPO DE DADO no DXF, não do que parece intuitivo:**
+- Valor vindo de "COMPRIMENTOS POR LAYER" → **ml** (metro linear). Use o número LITERAL.
+- Valor vindo de "ÁREAS HACHURADAS POR LAYER" → **m²**. Use o número LITERAL.
+- Valor vindo de "CONTAGEM DE BLOCOS" → **un**. Use o número LITERAL.
+- Valor vindo de "COTAS/DIMENSÕES" → **m** (metro simples). Use o número LITERAL.
+- Verba sem medida clara → **vb** com quantity=0 (laranja, usuário preenche).
 
-ATENÇÃO PARA LINEARES:
-- "Luminária linear LED LINE 45°" ou "perfil LED": se a contagem DXF é "2 un"
-  mas há um comprimento associado no layer (ex.: 23.24 m), use ml + o comprimento.
-  Não use "un=2" pra item que é linear.
-- Rodapés, tabicas, perfis: sempre ml, nunca un.
+REGRA GERAL: a unidade vai PARTE COM O DADO EXTRAÍDO. Se você usa um valor de
+"ÁREAS HACHURADAS" e coloca unidade "ml", está errado — o valor é m² por definição.
 
-════════════════════════════════════════════════════════
-QUANTIDADE EM ITENS "estimado" (LARANJA)
-════════════════════════════════════════════════════════
-
-Quando o item é "estimado" (você não tem número medido):
-- **Se não conseguir inferir quantidade concreta, deixe `quantity` = 0** (que virará vazio na planilha).
-  O usuário preenche manualmente. NÃO use "1" ou "2" como placeholder — isso confunde.
-- Casos típicos: administração local (mês), retrofit (vb), recomposição (vb), itens "preencher conforme prazo".
-- Só coloque quantidade > 0 se vier de algo concreto lido no arquivo (texto, cota, contagem).
+CASO ESPECIAL — lineares aparecem 2× no DXF:
+- "LED LINE 45°" ou "perfil linear" podem aparecer em **CONTAGEM DE BLOCOS** (como
+  "un") E em **COMPRIMENTOS POR LAYER** (como "ml"). São o mesmo item físico.
+  Escolha o COMPRIMENTO (ml), não a contagem, pois é a medida útil pra orçar.
+  Exemplo: "LUMINI LED LINE: 2 un" + "layer LUM-LINE: 23.24 m" → gera item com
+  ml=23.24 (não un=2).
+- Rodapés, tabicas, eletrocalhas, perfis: sempre ml.
 
 ════════════════════════════════════════════════════════
-DUPLA CONTAGEM DE ÁREAS — CUIDADO COM LAYERS LEV- vs FOR-
+QUANDO MARCAR "estimado" (LARANJA)
 ════════════════════════════════════════════════════════
 
-Convenção comum em projetos BR: prefixos de layer diferenciam tipos:
-- "LEV-" = LEVANTAMENTO (o que EXISTE hoje no imóvel). NÃO É ORÇAMENTO em reforma.
-- "FOR-" / "NOV-" / "ARQ-" = PROJETO NOVO (o que vai ser construído/instalado).
+**NÃO seja tímido com "confirmado" quando o DADO EXISTE.** Se o DXF tem um
+comprimento (ex.: "ARQ-DIV: 491.84 m") e você está orçando a divisória dessa
+layer, use 491.84 ml como "confirmado" — é uma medição objetiva.
+
+Você só deve marcar "estimado" (laranja) nos casos abaixo:
+
+(a) Quantidade você INFERIU de texto/contexto, não leu direto:
+    - "demolir X" → qtd=1 (texto não numérico)
+    - "administração local 2 meses" (não vem do arquivo)
+    - "retrofit de lâmpadas existentes" (sem contagem)
+    → **quantity=0** (vazio na planilha, usuário preenche)
+
+(b) Clara dupla contagem de áreas LEV vs FOR:
+    Se "ÁREAS HACHURADAS" tem AMBOS "LEV-X: A m²" E "FOR-X: B m²" e você
+    está tentando orçar o mesmo tipo, escolha apenas UM (geralmente o
+    "FOR-*" / "NOV-*" / "ARQ-*" = novo projeto) e coloque confirmado.
+    Se ficar em dúvida entre os dois, marque estimado.
+
+(c) Área total > área da laje (impossível):
+    Se a soma de áreas de um tipo fica > "Área construída" das PREMISSAS,
+    suspeite de dupla contagem e marque estimado.
+
+**NÃO marque estimado só por precaução em valores medidos.** Se COMPRIMENTOS
+POR LAYER dá 491.84 m pra ARQ-DIV, use 491.84 confirmado. Não desconfie do
+número só porque vem de soma de linhas — medir soma de linhas É a medição.
+
+════════════════════════════════════════════════════════
+LEV- vs FOR- — convenção de layers em reforma (regra B acima)
+════════════════════════════════════════════════════════
+
+Em projetos BR:
+- "LEV-" = LEVANTAMENTO (existente no imóvel). Não orçar, exceto como demolição.
+- "FOR-" / "NOV-" / "ARQ-" = PROJETO NOVO (a construir).
 - "DEM-" = DEMOLIÇÃO.
 
-Se você ver DUAS áreas similares em "ÁREAS HACHURADAS POR LAYER" (ex.: "LEV-MFR: 2150 m²"
-e "FOR-MFR: 79 m²"), são coisas diferentes — o LEV é inventário, o FOR é novo.
-Em um orçamento de REFORMA, use APENAS o FOR (ou NOV/ARQ). O LEV entra como metadado,
-ou como demolição se estiver explicitamente marcado pra sair.
-
-Se a área TOTAL hachurada de um tipo (ex.: "forro modular") ficar maior que a área da laje
-do projeto (que aparece em "PREMISSAS" ou "metadados"), SUSPEITE de dupla contagem.
-Marque o item como "estimado" e anote em observations: "áreas em layers LEV e FOR somadas —
-verificar se há sobreposição".
+**Se aparecerem AMBOS (LEV e FOR do mesmo tipo)**, use só o FOR/NOV.
+**Se aparecer SÓ UM**, use-o (pode ser o único dado disponível).
+**Nunca some LEV + FOR** — são momentos distintos (antes/depois da reforma).
 
 Retorne APENAS JSON válido no formato:
 {{
@@ -568,13 +587,10 @@ Retorne APENAS JSON válido no formato:
         # Normalizar nome do projeto: quando há múltiplos arquivos, evitar
         # que o project.name inferido da IA (que geralmente pega o nome do
         # primeiro DXF) dê uma impressão errada de "projeto de só uma coisa".
-        uploaded_names = [os.path.splitext(os.path.basename(f))[0] for f in file_paths]
+        # Sempre sobrescreve quando >1 arquivo, pois a IA processa um por vez
+        # e escolhe o nome do que viu primeiro.
         if len(file_paths) > 1:
-            # Se IA chutou nome baseado em UM dos arquivos, substituir por descrição genérica
-            if project_data.name and any(n in project_data.name for n in uploaded_names):
-                project_data.name = f"Quantitativos — {len(file_paths)} arquivos processados"
-            elif not project_data.name:
-                project_data.name = f"Quantitativos — {len(file_paths)} arquivos processados"
+            project_data.name = f"Quantitativos — {len(file_paths)} arquivos processados"
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path)
