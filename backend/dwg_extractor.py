@@ -13,6 +13,7 @@ import ezdxf
 import logging
 import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -222,6 +223,46 @@ def _detect_unit_factor(doc) -> float:
 
     # Default for Brazilian architecture: millimeters
     return 0.001
+
+
+def _validate_unit_factor(doc, unit_factor: float) -> tuple[float, list[str]]:
+    """Sanity-check the detected unit factor against modelspace extent.
+
+    In practice: if the factor is off by 1000× (common when $INSUNITS=0 forces mm
+    but the drawing is actually in meters), walls come out as 5000m or 0.003m.
+    This function runs a quick pass over LINE entities and flags absurd lengths,
+    returning the (possibly adjusted) factor and a list of warning strings.
+    """
+    warnings: list[str] = []
+    try:
+        msp = doc.modelspace()
+        max_len = 0.0
+        for ent in msp.query("LINE")[:200]:  # sample, not full scan
+            try:
+                dx = ent.dxf.end.x - ent.dxf.start.x
+                dy = ent.dxf.end.y - ent.dxf.start.y
+                raw_len = (dx * dx + dy * dy) ** 0.5
+                converted = raw_len * unit_factor
+                if converted > max_len:
+                    max_len = converted
+            except Exception:
+                continue
+
+        # A single architectural drawing rarely has a line > 500m or < 0.01m as *largest*.
+        # Flag but don't auto-fix — we want the caller to know.
+        if max_len > 500:
+            warnings.append(
+                f"Unidade suspeita: maior linha mede {max_len:.1f}m "
+                f"(>500m), fator {unit_factor} pode estar grande demais."
+            )
+        elif max_len < 0.05 and max_len > 0:
+            warnings.append(
+                f"Unidade suspeita: maior linha mede {max_len*1000:.1f}mm "
+                f"(<5cm), fator {unit_factor} pode estar pequeno demais."
+            )
+    except Exception:
+        pass
+    return unit_factor, warnings
 
 
 # ---------------------------------------------------------------------------
@@ -508,6 +549,9 @@ def extract_dxf(filepath: str) -> DXFExtraction:
 
     msp = doc.modelspace()
     unit_factor = _detect_unit_factor(doc)
+    unit_factor, unit_warnings = _validate_unit_factor(doc, unit_factor)
+    for w in unit_warnings:
+        logger.warning("[unit-sanity] %s", w)
     area_factor = unit_factor * unit_factor  # for m² conversion
 
     # ---- Metadata ---------------------------------------------------------
@@ -530,6 +574,8 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         }
         metadata["unidade_desenho"] = unit_names.get(insunits, f"Código {insunits}")
         metadata["fator_para_metros"] = f"{unit_factor}"
+        if unit_warnings:
+            metadata["alerta_unidade"] = " | ".join(unit_warnings)
     except Exception:
         pass
 
@@ -537,6 +583,41 @@ def extract_dxf(filepath: str) -> DXFExtraction:
     layer_names = [layer.dxf.name for layer in doc.layers]
 
     # ---- Blocks (INSERT entities) -----------------------------------------
+    # Nota sobre blocos aninhados: msp.query("INSERT") é NÃO-recursivo — retorna só
+    # INSERTs do modelspace. INSERTs dentro de outros blocos (BLOCK_RECORD) ficam
+    # na definição daquele bloco, não aqui, então não há dupla contagem.
+    # Layers utilitárias do AutoCAD (DEFPOINTS, viewports, etc.) são filtradas
+    # pois contêm blocos auxiliares de cotação que não são itens do projeto.
+    _UTILITY_LAYERS_UPPER = {
+        "DEFPOINTS", "0-DEFPOINTS", "DEFPOINTS_NO_PLOT",
+        "VIEWPORTS", "VIEWPORT", "VP",
+        "_GRADE", "GRADE", "GRID",
+    }
+    # Prefixos/tokens que indicam blocos de ANOTAÇÃO/CALLOUT (não são itens orçáveis).
+    _ANNOTATION_NAME_PREFIXES = (
+        "ANNO_", "ANNO-", "ANNOTATION_", "NOTE_", "NOTES_",
+        "LEG_", "LEG-", "LEGENDA_", "LEGENDA-", "LEGEND_", "LEGEND-",
+        "TAG-", "TAG_",
+        "SECTION_", "SECTION-", "ELEVATION_", "ELEVATION-",
+        "DETAIL_", "DETAIL-", "DET_", "DET-",
+        "ARROW_", "ARROW-", "CALLOUT_", "CALLOUT-",
+        "NORTH_", "NORTE_", "ROSA_DOS_VENTOS",
+        "TITLE_", "TITLE-", "TITLEBLOCK_", "CARIMBO_", "CARIMBO-",
+        "REVISION_", "REVISION-", "REVISAO_", "REVISAO-",
+        "ADCADD_",  # acad utility helper
+        "AREA1", "AREA2", "AREA3", "AREA4", "AREA5", "AREA6", "AREA7",  # marcações de área (polígonos coloridos)
+    )
+    # Nomes que são claramente xrefs/referências externas (arquivo com extensão ou GUID no nome)
+    _XREF_NAME_RE = re.compile(r"\.(dwg|dxf)$|\.xref|^xref", re.IGNORECASE)
+
+    def _is_annotation_block(name: str) -> bool:
+        up = name.upper()
+        if any(up.startswith(p) for p in _ANNOTATION_NAME_PREFIXES):
+            return True
+        if _XREF_NAME_RE.search(name):
+            return True
+        return False
+
     block_counter: dict[str, dict] = {}  # {name: {"count": n, "layer": l, "positions": [...]}}
     for insert in msp.query("INSERT"):
         try:
@@ -549,6 +630,12 @@ def extract_dxf(filepath: str) -> DXFExtraction:
 
         # Skip anonymous / internal blocks (names starting with *)
         if bname.startswith("*"):
+            continue
+        # Skip utility / system layers that don't represent real items
+        if layer and layer.upper() in _UTILITY_LAYERS_UPPER:
+            continue
+        # Skip annotation / callout blocks (legendas, TAGs, cortes, elevações)
+        if _is_annotation_block(bname):
             continue
 
         if bname not in block_counter:
@@ -692,9 +779,12 @@ def extract_dxf(filepath: str) -> DXFExtraction:
                 pass
             if measurement is not None:
                 value_m = measurement * unit_factor
+                # Pular cotas vazias (0 ou muito pequenas — provavelmente dim sem valor real)
+                if abs(value_m) < 0.001:
+                    continue
                 display_label = label if label else "cota"
                 dims.append((display_label, f"{value_m:.3f} m"))
-            elif label:
+            elif label and label != "0" and label != "":
                 dims.append((label, label))
         except Exception:
             continue
@@ -715,27 +805,49 @@ def extract_dxf(filepath: str) -> DXFExtraction:
 # Architectural element identification via layer naming conventions
 # ---------------------------------------------------------------------------
 
-# (keyword_fragments, category_name)
+# Matching é feito por TOKEN: o nome do layer é dividido em partes (por -, _, ., /
+# etc.) e cada parte é comparada aos aliases. Match = token EQUALS alias ou token
+# STARTS WITH alias. Isso pega tanto nomes AIA ("A-WALL-INT"), numéricos
+# ("04-PAREDES_DRYWALL"), portugueses ("FOR-GESSO") quanto curtos ("LUM-01").
 _LAYER_PATTERNS: list[tuple[list[str], str]] = [
-    (["LUM", "LIGHT", "ILUM"],          "luminarias"),
-    (["PAREDE", "WALL", "DRY"],         "paredes"),
-    (["FORRO", "CEIL"],                  "forro"),
-    (["PISO", "FLOOR"],                  "piso"),
-    (["PORTA", "DOOR"],                  "portas"),
-    (["SPK", "SPRINK", "INCEND"],        "incendio"),
-    (["ELET", "ELEC", "TOMADA"],         "eletrica"),
-    (["DEMOL"],                          "demolicao"),
-    (["PINT", "PAINT"],                  "pintura"),
+    (["LUM", "LUMI", "LUMINARIA", "ILUM", "ILU", "LIGHT", "LT", "LGT"],                           "luminarias"),
+    (["PAR", "PARED", "PAREDE", "WALL", "DRY", "DRYWALL", "GESS", "GYP", "DIV", "DVR"],           "paredes"),
+    (["FOR", "FORR", "FORRO", "CEIL", "TET", "TETO"],                                             "forro"),
+    (["PIS", "PISO", "FLOOR", "FLR", "FLOR", "PAV", "CARPE", "CARPET", "RODA", "RODAP", "SKIRT"], "piso"),
+    (["PORT", "PORTA", "PRT", "DOOR", "DR"],                                                      "portas"),
+    (["SPK", "SPRINK", "SPRINKLER", "INC", "INCEND", "INCENDIO", "FIRE", "PPCI"],                 "incendio"),
+    (["ELET", "ELETR", "ELE", "ELEC", "POWR", "POWER", "TOMAD", "TOM", "TOMADA", "INTER", "CIRC"], "eletrica"),
+    (["DEM", "DEMOL", "DEMO", "DEMOLIR"],                                                         "demolicao"),
+    (["PINT", "PINTURA", "PAINT", "PNT"],                                                         "pintura"),
 ]
+
+_LAYER_SPLIT_RE = re.compile(r"[-_\s./\\|:]+")
+
+
+def _layer_matches_category(layer_name: str, keywords: list[str]) -> bool:
+    """Return True se algum token do layer_name casa com algum keyword.
+    Match via EQUALS ou STARTS WITH (case-insensitive)."""
+    if not layer_name:
+        return False
+    tokens = [t.upper() for t in _LAYER_SPLIT_RE.split(layer_name) if t]
+    for tok in tokens:
+        for kw in keywords:
+            if tok == kw or tok.startswith(kw):
+                return True
+    return False
 
 
 def identify_architectural_elements(extraction: DXFExtraction) -> dict:
-    """Map extraction data to architectural categories based on layer names.
+    """Map extraction data to architectural categories based on layer AND block names.
+
+    Classificação em dois passos:
+    1. Layer → categoria (primary)
+    2. Block name → categoria (fallback quando o layer é genérico ex. "0" ou xref)
 
     Returns:
         dict mapping category name to a dict with keys:
             - "layers": list of matching layer names
-            - "blocks": list of BlockCount on matching layers
+            - "blocks": list of BlockCount categorized (via layer OR nome)
             - "walls": list of WallSegment on matching layers
             - "hatches": list of HatchArea on matching layers
             - "texts": list of TextAnnotation on matching layers
@@ -745,16 +857,27 @@ def identify_architectural_elements(extraction: DXFExtraction) -> dict:
     for keywords, category in _LAYER_PATTERNS:
         matching_layers = [
             lyr for lyr in extraction.layers
-            if any(kw in lyr.upper() for kw in keywords)
+            if _layer_matches_category(lyr, keywords)
         ]
-        if not matching_layers:
-            continue
-
         layer_set = set(matching_layers)
+
+        # Blocks classificados por layer
+        blocks_by_layer = [b for b in extraction.blocks if b.layer in layer_set]
+        # Blocks classificados pelo NOME (rodape, porta_PM3, lum-R4) — só se
+        # o layer ainda não casou, evita dupla categorização
+        blocks_by_name = [
+            b for b in extraction.blocks
+            if b.layer not in layer_set
+            and _layer_matches_category(b.name, keywords)
+        ]
+        blocks_combined = blocks_by_layer + blocks_by_name
+
+        if not matching_layers and not blocks_by_name:
+            continue
 
         result[category] = {
             "layers": matching_layers,
-            "blocks": [b for b in extraction.blocks if b.layer in layer_set],
+            "blocks": blocks_combined,
             "walls": [w for w in extraction.walls if w.layer in layer_set],
             "hatches": [h for h in extraction.hatches if h.layer in layer_set],
             "texts": [t for t in extraction.texts if t.layer in layer_set],
