@@ -171,12 +171,10 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
     info_parts = []
     if project.name: info_parts.append(project.name)
     if project.architect: info_parts.append(project.architect)
-    if project.total_area: info_parts.append(f'Laje {project.total_area:,.0f} m²')
-    if project.layout_area: info_parts.append(f'Layout {project.layout_area:,.0f} m²')
-    if project.workstations: info_parts.append(f'{project.workstations} posições')
-    ws.cell(row=2, column=1, value=' | '.join(info_parts) if info_parts else 'Projeto de Arquitetura').font = F_N
+    # Áreas aparecem na seção PREMISSAS (se extraídas) — não duplicar no subtítulo
+    ws.cell(row=2, column=1, value=' | '.join(info_parts) if info_parts else 'Quantitativos de projeto').font = F_N
     ws.merge_cells('A3:I3')
-    ws.cell(row=3, column=1, value='REFORMA: quantitativos = apenas o que MUDA. Itens em LARANJA = qtd estimada. AMARELO = preencher preço.').font = F_NOTE
+    ws.cell(row=3, column=1, value='Cores: BRANCO = medido/contado do arquivo (confiável) · LARANJA = sugerido pela IA (confirmar) · CINZA = metadado · ROXO = checklist de indiretos · AMARELO = coluna para preencher preço.').font = F_NOTE
 
     ro = 5
     hdrs = ['ITEM', 'DESCRIÇÃO DO SERVIÇO', 'UN', 'QTDE', 'MAT (R$)', 'M.O. (R$)', 'TOTAL (R$)', 'OBSERVAÇÕES', 'REF.']

@@ -278,6 +278,18 @@ NENHUMA dúvida.
 
 Não existe "verificar" nesta fase — use "estimado" pra qualquer incerteza.
 
+════════════════════════════════════════════════════════
+REGRA DE DETERMINISMO — UM ITEM POR BLOCO ÚNICO
+════════════════════════════════════════════════════════
+
+Ao gerar os itens a partir de "CONTAGEM DE BLOCOS":
+- Cada nome de bloco único = **um item só** na planilha, com a quantidade literal da contagem. Não reagrupar, não dividir, não combinar blocos diferentes.
+- Se a contagem listou "lum R4 remanejada: 20 un" e "lum R4 nova: 2 un", gerar DOIS itens separados com essas quantidades exatas. NÃO inferir que "são ambos R4" e somar, nem dividir um único em sub-itens por intuição.
+- Se um bloco tem nome genérico/estranho ("BLOCO1", "INSERT_0"), mantenha — marcar como estimado pra o usuário identificar.
+- A descrição do item pode ser enriquecida (modelo, fabricante) mas o IDENTIFICADOR e a QUANTIDADE são literais do DXF.
+
+Essa regra garante que subir o mesmo arquivo duas vezes retorne o MESMO resultado.
+
 Retorne APENAS JSON válido no formato:
 {{
   "project_data": {{
