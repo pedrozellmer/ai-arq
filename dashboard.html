@@ -1161,36 +1161,76 @@
   function renderFileProgress(currentStepText, overallProgress) {
     if (!selectedFiles.length) return;
 
-    // Parse "Etapa X/Y: filename" from current_step
+    // Separar arquivos por tipo: backend processa CAD (DWG/DXF) primeiro, depois PDFs.
+    const isCad = (f) => /\.(dwg|dxf)$/i.test(f.name);
+    const cadFiles = selectedFiles.filter(isCad);
+    const pdfFiles = selectedFiles.filter(f => !isCad(f));
+    // Mapa de arquivo -> índice global (na ordem original do usuário)
+    const globalIdx = new Map(selectedFiles.map((f, i) => [f, i]));
+
+    // Extrair qual tipo/índice está sendo processado do current_step
+    // Padrões possíveis:
+    //   "Convertendo DWG→DXF (2/5): filename"
+    //   "DXF 2/5: Extraindo..."
+    //   "DXF 2/5: Nossa IA está analisando..."
+    //   "Prancha 3/7: filename..."
+    //   "Prancha 3/7: Nossa IA está analisando..."
+    //   "Etapa 3/7: filename" (legado)
+    const cadMatch = currentStepText.match(/(?:DXF|DWG[→>]DXF|Convertendo\s+DWG[→>]DXF.*?\()\s*(\d+)\s*\/\s*(\d+)/i);
+    const pdfMatch = currentStepText.match(/(?:Prancha|Etapa)\s+(\d+)\s*\/\s*(\d+)/i);
+
+    // Determinar índice do arquivo atual em selectedFiles
     let currentFileIndex = -1;
-    let totalSteps = selectedFiles.length;
-    const etapaMatch = currentStepText.match(/Etapa\s+(\d+)\s*\/\s*(\d+)/i);
-    if (etapaMatch) {
-      currentFileIndex = parseInt(etapaMatch[1]) - 1; // 0-based
-      totalSteps = parseInt(etapaMatch[2]);
+    let cadDoneCount = 0;  // CADs já finalizados
+    if (cadMatch) {
+      const idx1based = parseInt(cadMatch[1]);
+      const currCad = cadFiles[idx1based - 1];
+      if (currCad) currentFileIndex = globalIdx.get(currCad);
+      cadDoneCount = idx1based - 1;  // anteriores já feitos
+    } else if (pdfMatch) {
+      // Se entrou em PDF, todos os CADs já terminaram
+      cadDoneCount = cadFiles.length;
+      const idx1based = parseInt(pdfMatch[1]);
+      const currPdf = pdfFiles[idx1based - 1];
+      if (currPdf) currentFileIndex = globalIdx.get(currPdf);
     }
 
     let html = '';
     selectedFiles.forEach((file, idx) => {
       let statusIcon, statusText, statusClass;
+      const fileIsCad = isCad(file);
+      const cadOrder = cadFiles.indexOf(file);  // posição dentro do grupo CAD (0-based)
 
+      // Lógica de estado:
+      //   1) processo todo terminado → todos concluídos
+      //   2) arquivo é o atualmente em processamento → spinner
+      //   3) arquivo CAD e estamos processando PDF OU CAD já foi → concluído
+      //   4) arquivo CAD e vai ser processado ainda → aguardando
+      //   5) arquivo PDF e estamos em PDF anterior → concluído; depois → aguardando
       if (overallProgress >= 100) {
-        // All done
         statusIcon = '<span class="text-emerald-500">&#10003;</span>';
         statusText = 'Conclu\u00eddo';
         statusClass = 'text-emerald-600';
-      } else if (currentFileIndex >= 0 && idx < currentFileIndex) {
-        // Completed
-        statusIcon = '<span class="text-emerald-500">&#10003;</span>';
-        statusText = 'Conclu\u00eddo';
-        statusClass = 'text-emerald-600';
-      } else if (currentFileIndex >= 0 && idx === currentFileIndex) {
-        // Currently processing
+      } else if (idx === currentFileIndex) {
         statusIcon = '<span class="animate-spin-slow inline-block text-indigo-500">&#9881;</span>';
         statusText = 'Analisando com IA...';
         statusClass = 'text-indigo-600 font-medium';
+      } else if (fileIsCad && cadOrder < cadDoneCount) {
+        statusIcon = '<span class="text-emerald-500">&#10003;</span>';
+        statusText = 'Conclu\u00eddo';
+        statusClass = 'text-emerald-600';
+      } else if (!fileIsCad && pdfMatch) {
+        // Estamos em PDF — PDFs anteriores a currentFileIndex estão concluídos
+        if (currentFileIndex >= 0 && idx < currentFileIndex) {
+          statusIcon = '<span class="text-emerald-500">&#10003;</span>';
+          statusText = 'Conclu\u00eddo';
+          statusClass = 'text-emerald-600';
+        } else {
+          statusIcon = '<span class="text-gray-300">&#9208;</span>';
+          statusText = 'Aguardando';
+          statusClass = 'text-gray-400';
+        }
       } else {
-        // Waiting
         statusIcon = '<span class="text-gray-300">&#9208;</span>';
         statusText = 'Aguardando';
         statusClass = 'text-gray-400';
