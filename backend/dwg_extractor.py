@@ -495,19 +495,47 @@ def _line_length(start, end) -> float:
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 
 
-def _lwpolyline_length(entity) -> float:
-    """Total length of an LWPOLYLINE (sum of segment lengths)."""
-    try:
-        points = list(entity.get_points(format="xy"))
-    except Exception:
+def _arc_length_from_bulge(p1, p2, bulge: float) -> float:
+    """Comprimento real do arco entre dois pontos, dado o parâmetro bulge do DXF.
+    bulge = tan(ângulo_de_abertura / 4). bulge=0 → reta."""
+    if abs(bulge) < 1e-9:
+        return _line_length(p1, p2)
+    chord = _line_length(p1, p2)
+    if chord < 1e-9:
         return 0.0
-    if len(points) < 2:
+    # ângulo de abertura total do arco (em radianos)
+    theta = 4.0 * math.atan(abs(bulge))
+    # raio via relação chord = 2·r·sin(θ/2)
+    try:
+        r = chord / (2.0 * math.sin(theta / 2.0))
+    except Exception:
+        return chord
+    return abs(r * theta)
+
+
+def _lwpolyline_length(entity) -> float:
+    """Total length of an LWPOLYLINE incluindo interpolação de bulges (arcos)."""
+    try:
+        pts = list(entity.get_points(format="xyb"))  # (x, y, bulge)
+    except Exception:
+        try:
+            pts_xy = list(entity.get_points(format="xy"))
+            pts = [(p[0], p[1], 0.0) for p in pts_xy]
+        except Exception:
+            return 0.0
+    if len(pts) < 2:
         return 0.0
     total = 0.0
-    for i in range(len(points) - 1):
-        total += _line_length(points[i], points[i + 1])
-    if entity.closed and len(points) >= 3:
-        total += _line_length(points[-1], points[0])
+    for i in range(len(pts) - 1):
+        p1 = (pts[i][0], pts[i][1])
+        p2 = (pts[i + 1][0], pts[i + 1][1])
+        bulge = pts[i][2] if len(pts[i]) > 2 else 0.0
+        total += _arc_length_from_bulge(p1, p2, bulge)
+    if entity.closed and len(pts) >= 3:
+        p1 = (pts[-1][0], pts[-1][1])
+        p2 = (pts[0][0], pts[0][1])
+        bulge = pts[-1][2] if len(pts[-1]) > 2 else 0.0
+        total += _arc_length_from_bulge(p1, p2, bulge)
     return total
 
 
@@ -530,49 +558,133 @@ def _polyline_length(entity) -> float:
 def _hatch_area(entity) -> float:
     """Calculate area of a HATCH entity.
 
-    Tries ezdxf built-in methods first, falls back to Shoelace formula on
-    the boundary path vertices.
+    Tries ezdxf built-in path API first (lida bem com arcos/splines),
+    faz fallback pra shoelace sobre os vértices das boundary paths
+    com aproximação de arcos por amostragem de pontos intermediários.
     """
-    # ezdxf >= 0.18 exposes paths that can be converted to areas
+    # Primeira tentativa: usar ezdxf.path que faz flattening automático de arcos
     try:
         from ezdxf import path as ezdxf_path
-        paths = ezdxf_path.make_path(entity)
-        if paths:
-            # Use the ezdxf built-in area from the control vertices
-            from ezdxf.math import area as math_area
-            bbox_paths = ezdxf_path.to_polylines2d(
-                [paths] if not isinstance(paths, list) else paths
-            )
+        from ezdxf.math import Vec2
+        path_result = ezdxf_path.make_path(entity)
+        if path_result:
+            paths_list = path_result if isinstance(path_result, list) else [path_result]
             total = 0.0
-            for poly_pts in bbox_paths:
-                pts = [(p.x, p.y) for p in poly_pts]
-                if len(pts) >= 3:
-                    total += abs(_shoelace_area(pts))
+            for p in paths_list:
+                try:
+                    # flattening com distância de 0.5 unidades (equilibra precisão/custo)
+                    vertices = list(p.flattening(0.5))
+                    pts = [(v.x, v.y) for v in vertices]
+                    if len(pts) >= 3:
+                        total += abs(_shoelace_area(pts))
+                except Exception:
+                    continue
             if total > 0:
                 return total
     except Exception:
         pass
 
-    # Fallback: iterate boundary paths manually
+    # Fallback: iterar boundary paths manualmente com aproximação de arcos
     total_area = 0.0
     try:
         for bpath in entity.paths:
+            pts: list[tuple[float, float]] = []
             if hasattr(bpath, "vertices") and bpath.vertices:
-                pts = [(v[0], v[1]) for v in bpath.vertices]
-                if len(pts) >= 3:
-                    total_area += abs(_shoelace_area(pts))
+                # PolylinePath: vertices podem ter bulge (arco entre pontos)
+                raw = [(v[0], v[1], v[2] if len(v) > 2 else 0.0) for v in bpath.vertices]
+                for i in range(len(raw)):
+                    p1 = (raw[i][0], raw[i][1])
+                    pts.append(p1)
+                    # Interpolar arco se bulge != 0
+                    bulge = raw[i][2]
+                    if abs(bulge) > 1e-9 and i + 1 < len(raw):
+                        p2 = (raw[i + 1][0], raw[i + 1][1])
+                        # Amostra pontos intermediários do arco (~8 pontos)
+                        pts.extend(_sample_arc_from_bulge(p1, p2, bulge, segments=8))
             elif hasattr(bpath, "edges"):
-                # Edge-type boundary — collect endpoints
-                pts = []
+                # EdgePath: mix de Line/Arc/Ellipse/Spline edges
                 for edge in bpath.edges:
-                    if hasattr(edge, "start"):
-                        pts.append((edge.start[0], edge.start[1]))
-                if len(pts) >= 3:
-                    total_area += abs(_shoelace_area(pts))
+                    etype = type(edge).__name__.lower()
+                    try:
+                        if "line" in etype:
+                            pts.append((edge.start[0], edge.start[1]))
+                        elif "arc" in etype:
+                            center = (edge.center[0], edge.center[1])
+                            radius = edge.radius
+                            start_angle = math.radians(edge.start_angle)
+                            end_angle = math.radians(edge.end_angle)
+                            if end_angle < start_angle:
+                                end_angle += 2 * math.pi
+                            # Amostrar pontos no arco
+                            segments = 12
+                            for k in range(segments + 1):
+                                t = k / segments
+                                ang = start_angle + (end_angle - start_angle) * t
+                                pts.append((
+                                    center[0] + radius * math.cos(ang),
+                                    center[1] + radius * math.sin(ang),
+                                ))
+                        elif "ellipse" in etype or "spline" in etype:
+                            # Tentar extrair start
+                            if hasattr(edge, "start"):
+                                pts.append((edge.start[0], edge.start[1]))
+                    except Exception:
+                        continue
+            if len(pts) >= 3:
+                total_area += abs(_shoelace_area(pts))
     except Exception:
         pass
 
     return total_area
+
+
+def _sample_arc_from_bulge(p1, p2, bulge: float, segments: int = 8) -> list:
+    """Retorna pontos intermediários de um arco definido por dois endpoints + bulge.
+    Usado na aproximação de área em hatch boundaries com polyline."""
+    if abs(bulge) < 1e-9:
+        return []
+    chord = _line_length(p1, p2)
+    if chord < 1e-9:
+        return []
+    theta = 4.0 * math.atan(abs(bulge))
+    try:
+        r = chord / (2.0 * math.sin(theta / 2.0))
+    except Exception:
+        return []
+    # ponto médio do chord
+    mx = (p1[0] + p2[0]) / 2.0
+    my = (p1[1] + p2[1]) / 2.0
+    # vetor perpendicular ao chord (direção do centro do arco)
+    dx = p2[0] - p1[0]
+    dy = p2[1] - p1[1]
+    length = math.sqrt(dx * dx + dy * dy)
+    if length < 1e-9:
+        return []
+    nx = -dy / length
+    ny = dx / length
+    # distância do ponto médio até o centro
+    h = r * math.cos(theta / 2.0)
+    if bulge < 0:
+        h = -h
+    cx = mx + nx * h
+    cy = my + ny * h
+    # ângulos dos endpoints relativos ao centro
+    a1 = math.atan2(p1[1] - cy, p1[0] - cx)
+    a2 = math.atan2(p2[1] - cy, p2[0] - cx)
+    # sentido do arco baseado no sinal de bulge
+    if bulge > 0:
+        if a2 < a1:
+            a2 += 2 * math.pi
+    else:
+        if a2 > a1:
+            a2 -= 2 * math.pi
+    # amostra pontos (exclui endpoints, esses já foram adicionados pelo chamador)
+    result = []
+    for k in range(1, segments):
+        t = k / segments
+        ang = a1 + (a2 - a1) * t
+        result.append((cx + r * math.cos(ang), cy + r * math.sin(ang)))
+    return result
 
 
 def _shoelace_area(points: list) -> float:
@@ -833,6 +945,43 @@ def extract_dxf(filepath: str) -> DXFExtraction:
                     length=length,
                     start=start,
                     end=end,
+                ))
+        except Exception:
+            continue
+
+    # ARCs como segmentos (paredes curvas, trechos circulares de circulação)
+    for arc in msp.query("ARC"):
+        try:
+            r = arc.dxf.radius
+            start_angle = math.radians(arc.dxf.start_angle)
+            end_angle = math.radians(arc.dxf.end_angle)
+            if end_angle < start_angle:
+                end_angle += 2 * math.pi
+            length_raw = abs(r * (end_angle - start_angle))
+            length = length_raw * unit_factor
+            if length > 0:
+                c = arc.dxf.center
+                walls.append(WallSegment(
+                    layer=arc.dxf.layer,
+                    length=length,
+                    start=(c.x + r * math.cos(start_angle), c.y + r * math.sin(start_angle)),
+                    end=(c.x + r * math.cos(end_angle), c.y + r * math.sin(end_angle)),
+                ))
+        except Exception:
+            continue
+
+    # CIRCLEs fechados (2πr)
+    for circle in msp.query("CIRCLE"):
+        try:
+            r = circle.dxf.radius
+            length = (2 * math.pi * r) * unit_factor
+            if length > 0:
+                c = circle.dxf.center
+                walls.append(WallSegment(
+                    layer=circle.dxf.layer,
+                    length=length,
+                    start=(c.x, c.y),
+                    end=(c.x, c.y),
                 ))
         except Exception:
             continue
