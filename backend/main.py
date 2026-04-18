@@ -147,6 +147,62 @@ class JobsStore:
 jobs = JobsStore()
 
 
+# Regras determinísticas de unidade por tipo de serviço (pós-IA).
+# Se a IA retornar unidade errada pra descrição específica, o código força a
+# unidade correta e marca o item como "estimado" (laranja) pra o usuário revisar.
+import re as _re
+_UNIT_SURFACE_KEYWORDS = _re.compile(
+    r"\b(pisos?|forros?|pinturas?|revestimentos?|azulejos?|cer[âa]micas?|"
+    r"porcelanatos?|carpetes?|viníl|vinílicos?|tapetes?)\b",
+    _re.IGNORECASE,
+)
+_UNIT_LINEAR_KEYWORDS = _re.compile(
+    r"\b(rodap[eé]s?|tabicas?|soleiras?|perfi(?:l|s)|perfilados?|molduras?|"
+    r"eletrocalhas?|eletrodutos?|trilhos?|cord[aã]o|cord[õo]es|"
+    r"cornijas?)\b",
+    _re.IGNORECASE,
+)
+_UNIT_COUNT_KEYWORDS = _re.compile(
+    r"\b(lumin[áa]rias?|spots?|projetores?|pendentes?|arandelas?|"
+    r"portas?|janelas?|esquadrias?|tomadas?|interruptores?|sensores?|"
+    r"difusores?|grelhas?|sprinklers?|detectores?|c[âa]meras?|cftv|"
+    r"quadro|qdf|caixa(?:\s+de\s+som)?|al[çc]ap[ãa]o|al[çc]ap[õo]es|"
+    r"chuveiros?|torneiras?)\b",
+    _re.IGNORECASE,
+)
+
+
+def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, bool]:
+    """Ajusta a unidade baseada na descrição do item.
+    Retorna (unidade_nova, foi_corrigida).
+    - Item com palavra-chave de SUPERFÍCIE (piso/forro/pintura) → m²
+    - Item com palavra-chave LINEAR (rodapé/perfil/eletrocalha) → ml
+    - Item com palavra-chave CONTÁVEL (luminária/porta) → un
+    - Senão, mantém a unidade atual"""
+    if not description:
+        return current_unit, False
+    desc_lower = description.lower()
+
+    # Vb / % / mês / dia são especiais — não corrigir
+    if current_unit in ("vb", "%", "mês", "mes", "dia", "h"):
+        return current_unit, False
+
+    # Ordem de precedência: contável > linear > superfície (senão piso vira superfície erroneamente)
+    if _UNIT_COUNT_KEYWORDS.search(desc_lower):
+        if current_unit != "un":
+            return "un", True
+        return "un", False
+    if _UNIT_LINEAR_KEYWORDS.search(desc_lower):
+        if current_unit != "ml":
+            return "ml", True
+        return "ml", False
+    if _UNIT_SURFACE_KEYWORDS.search(desc_lower):
+        if current_unit != "m²":
+            return "m²", True
+        return "m²", False
+    return current_unit, False
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF."""
     import gc
@@ -451,12 +507,24 @@ Retorne APENAS JSON válido no formato:
                                 if qty == 0 and conf == "confirmado":
                                     qty = 1  # defensivo: confirmado sem número cai em vb=1
 
+                                # Normalização pós-IA: força unidade correta pra descrição
+                                # (ex.: "piso vinílico" sempre m², nunca ml).
+                                original_unit = item_data.get("unit", "vb")
+                                normalized_unit, unit_corrected = _normalize_unit_for_item(desc, original_unit)
+                                obs_raw = item_data.get("observations", "Fonte: DXF")
+                                if unit_corrected:
+                                    # IA escolheu unidade inconsistente com o tipo — marcar estimado
+                                    # pra usuário conferir o número
+                                    conf = "estimado"
+                                    obs_raw = (f"{obs_raw} | Unidade ajustada de {original_unit} "
+                                               f"para {normalized_unit} (revisar quantidade)")
+
                                 item = BudgetItem(
                                     item_num=str(item_data.get("item_num", "")),
                                     description=desc,
-                                    unit=item_data.get("unit", "vb"),
+                                    unit=normalized_unit,
                                     quantity=qty,
-                                    observations=item_data.get("observations", "Fonte: DXF"),
+                                    observations=obs_raw,
                                     ref_sheet="DXF",
                                     confidence=Confidence(conf),
                                     discipline=discipline,
@@ -568,12 +636,21 @@ Retorne APENAS JSON válido no formato:
                     if qty == 0 and conf == "confirmado":
                         qty = 1
 
+                    # Normalização pós-IA: força unidade consistente com descrição
+                    original_unit = item_data.get("unit", "vb")
+                    normalized_unit, unit_corrected = _normalize_unit_for_item(desc, original_unit)
+                    obs_raw = item_data.get("observations", "")
+                    if unit_corrected:
+                        conf = "estimado"
+                        obs_raw = (f"{obs_raw} | Unidade ajustada de {original_unit} "
+                                   f"para {normalized_unit}").strip(" |")
+
                     item = BudgetItem(
                         item_num=str(item_data.get("item_num", "")),
                         description=desc,
-                        unit=item_data.get("unit", "vb"),
+                        unit=normalized_unit,
                         quantity=qty,
-                        observations=item_data.get("observations", ""),
+                        observations=obs_raw,
                         ref_sheet=item_data.get("ref_sheet", f"Pr.{filename[:7]}"),
                         confidence=Confidence(conf),
                         discipline=discipline,
