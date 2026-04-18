@@ -838,9 +838,15 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         r"ADCADD|"
         r"FORMA|FORM|"  # "forma 12", "form-01" — marcadores de formato em plantas
         r"NIVEL|NIV|LEVEL|"  # marcadores de nivel/cota
+        r"CHNIVP|CHNIV|CHNIVEL|"  # cota de nível de piso (padrão BR: marcação com triângulo)
         r"AREA[0-9])(?:[\s_\-]|$)",
         re.IGNORECASE
     )
+    # Nomes curtos de símbolos de cota/nível que não têm separador no final
+    _ANNOTATION_EXACT_NAMES = {
+        "CHNIVP", "CHNIV", "CHNIVEL",
+        "INDNORTE", "INDNIVEL", "INDCORTE", "INDETALHE",
+    }
     # Nomes que são claramente xrefs/referências externas (arquivo com extensão ou GUID no nome)
     _XREF_NAME_RE = re.compile(r"\.(dwg|dxf)$|\.xref|^xref", re.IGNORECASE)
 
@@ -850,6 +856,8 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         if _ANNOTATION_NAME_RE.match(name):
             return True
         if _XREF_NAME_RE.search(name):
+            return True
+        if name.upper() in _ANNOTATION_EXACT_NAMES:
             return True
         return False
 

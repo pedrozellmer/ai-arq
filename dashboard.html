@@ -1250,8 +1250,8 @@
       currentJobId = data.job_id;
 
       processingStep.textContent = 'Analisando pranchas...';
-      progressBar.style.width = '10%';
-      progressPercent.textContent = '10%';
+      // Não setar barra manualmente aqui — startPolling() cuida da progressão
+      // contínua (setar 10% aqui causa volta pra trás quando creep inicia em 0)
       startPolling();
 
     } catch (err) {
@@ -1410,8 +1410,11 @@
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     if (timeEstimateTimer) clearInterval(timeEstimateTimer);
-    realProgress = 0;
-    displayProgress = 0;
+    // Começa em 2% pra barra ter algo visível e nunca parecer "vazia/travada"
+    realProgress = 2;
+    displayProgress = 2;
+    progressBar.style.width = '2%';
+    progressPercent.textContent = '2%';
     pollStartTime = Date.now();
     errorCount = 0;
     estimatedTotalSeconds = estimateProcessingTime(selectedFiles);

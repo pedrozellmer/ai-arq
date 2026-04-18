@@ -321,6 +321,21 @@ CASO ESPECIAL — lineares aparecem 2× no DXF:
   ml=23.24 (não un=2).
 - Rodapés, tabicas, eletrocalhas, perfis: sempre ml.
 
+PRIORIDADE SEMÂNTICA — a unidade do ITEM é definida pelo TIPO DE SERVIÇO, não só
+pelo dado extraído:
+- **Pisos** (carpete, cerâmica, porcelanato, vinílico, laminado, madeira) → **SEMPRE m²**
+  mesmo que o dado do DXF venha como comprimento de polyline. Pisos se orçam por área.
+- **Forros** (modular, gesso, ripado) → **SEMPRE m²**.
+- **Pinturas e revestimentos verticais** (parede, azulejo, tijolinho, papel) → **m²**.
+- **Rodapés, tabicas, soleiras, perfis, eletrocalhas, molduras** → **ml** (linear).
+- **Luminárias, portas, difusores, interruptores, tomadas** → **un** (contagem).
+
+Se o DXF te der um comprimento (em COMPRIMENTOS POR LAYER) pra uma SUPERFÍCIE
+como piso/forro/pintura, esse comprimento provavelmente é o perímetro da área,
+não uma medida linear pra orçar. Nesse caso, procure a área correspondente em
+"ÁREAS HACHURADAS" e use m². Se não houver área hachurada, marque o item como
+"estimado" com `quantity=0` e pede confirmação na observação.
+
 ════════════════════════════════════════════════════════
 QUANDO MARCAR "estimado" (LARANJA)
 ════════════════════════════════════════════════════════
