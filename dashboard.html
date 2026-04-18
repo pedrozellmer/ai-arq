@@ -1302,31 +1302,69 @@
   //  STATUS POLLING
   // ══════════════════════════════════════════════
   let realProgress = 0;
+  let displayProgress = 0;
   let pollStartTime = 0;
   let errorCount = 0;
-  // Tempo estimado baseado no número de arquivos (~40s por prancha)
-  const ESTIMATED_TOTAL_SECONDS = Math.max(120, selectedFiles.length * 40);
+  let estimatedTotalSeconds = 120;
+
+  // Estimativa baseada no tamanho e tipo de cada arquivo
+  function estimateProcessingTime(files) {
+    let total = 15; // overhead fixo: upload, inicialização, geração da planilha
+    files.forEach(f => {
+      const sizeMB = (f.size || 0) / (1024 * 1024);
+      const name = (f.name || '').toLowerCase();
+      if (name.endsWith('.dwg')) {
+        total += 15 + sizeMB * 10; // conversão ODA + extração + IA
+      } else if (name.endsWith('.dxf')) {
+        total += 5 + sizeMB * 5;
+      } else if (name.endsWith('.pdf')) {
+        total += 30 + sizeMB * 2; // render + IA visão
+      } else {
+        total += 20;
+      }
+    });
+    return Math.round(total);
+  }
 
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     if (timeEstimateTimer) clearInterval(timeEstimateTimer);
     realProgress = 0;
+    displayProgress = 0;
     pollStartTime = Date.now();
     errorCount = 0;
+    estimatedTotalSeconds = estimateProcessingTime(selectedFiles);
     pollTimer = setInterval(pollStatus, 3000);
 
     timeEstimateTimer = setInterval(() => {
       if (!currentJobId) return;
       const elapsed = (Date.now() - pollStartTime) / 1000;
-      const remaining = Math.max(0, ESTIMATED_TOTAL_SECONDS - elapsed);
+
+      // Creep suave: visual sempre avança baseado em tempo, mas nunca cai.
+      // Se backend reportou mais, usa o maior. Se não, avança suavemente até 95%.
+      const timeBasedPct = Math.min(95, Math.round((elapsed / estimatedTotalSeconds) * 100));
+      const target = Math.max(realProgress, timeBasedPct);
+      if (target > displayProgress) {
+        // avança gradualmente (evita pulos bruscos)
+        const step = Math.min(target - displayProgress, 0.5);
+        displayProgress = Math.min(target, displayProgress + step);
+        progressBar.style.width = displayProgress + '%';
+        progressPercent.textContent = Math.round(displayProgress) + '%';
+      }
+
+      const remaining = Math.max(0, estimatedTotalSeconds - elapsed);
       const mins = Math.floor(remaining / 60);
       const secs = Math.floor(remaining % 60);
-      if (remaining > 0) {
-        timeEstimate.textContent = `Tempo estimado restante: ~${mins}min ${secs}s`;
+      if (remaining > 5) {
+        timeEstimate.textContent = mins > 0
+          ? `Tempo estimado restante: ~${mins}min ${secs}s`
+          : `Tempo estimado restante: ~${secs}s`;
+      } else if (realProgress < 95) {
+        timeEstimate.textContent = 'Nossa IA está finalizando...';
       } else {
-        timeEstimate.textContent = 'Finalizando processamento...';
+        timeEstimate.textContent = 'Gerando sua planilha...';
       }
-    }, 1000);
+    }, 500);
   }
 
   async function pollStatus() {
@@ -1357,22 +1395,22 @@
       const step = data.step || data.current_step || 'Processando...';
       const status = data.status || '';
 
-      realProgress = pct;
-      progressBar.style.width = pct + '%';
-      progressPercent.textContent = pct + '%';
+      // Só sobe; nunca deixa cair
+      realProgress = Math.max(realProgress, pct);
 
       // Set step text without time (time is separate now)
       const cleanStep = step.split(' \u2014')[0].split(' —')[0];
       processingStep.textContent = cleanStep;
 
       // Update per-file progress
-      renderFileProgress(step, pct);
+      renderFileProgress(step, realProgress);
 
       if (status === 'done' || status === 'completed' || pct >= 100) {
         clearInterval(pollTimer);
         clearInterval(timeEstimateTimer);
         pollTimer = null;
         realProgress = 100;
+        displayProgress = 100;
         progressBar.style.width = '100%';
         progressPercent.textContent = '100%';
         processingStep.textContent = 'Conclu\u00eddo!';
