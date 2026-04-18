@@ -163,6 +163,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
 
     try:
         jobs.update_field(job_id, status="processing")
+        jobs.update_field(job_id, progress=3)
+        jobs.update_field(job_id, current_step="Iniciando processamento...")
 
         # Funções auxiliares (definir antes de usar)
         def sf(v):
@@ -177,16 +179,28 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
+        # Pesos de progresso conforme tipos de arquivo
+        has_cad = bool(cad_paths)
+        has_pdf = bool(pdf_paths)
+        # Se só CAD: CAD vai de 5% a 90%. Se só PDF: PDF vai de 5% a 95%. Misto: CAD 5-45%, PDF 45-95%.
+        cad_end_pct = 45 if has_pdf else 90
+
         # Converter DWG→DXF se necessário
         dxf_paths = []
         if cad_paths:
+            jobs.update_field(job_id, progress=8)
             jobs.update_field(job_id, current_step="Processando arquivos DWG/DXF...")
             try:
                 from dwg_extractor import extract_from_file, generate_budget_data, convert_dwg_to_dxf
-                for cad_path in cad_paths:
+                n_cad = len(cad_paths)
+                # Conversão DWG→DXF usa primeiros 35% da fase CAD (8% → cad_end_pct*0.4)
+                conv_span = int((cad_end_pct - 8) * 0.4)
+                for ci, cad_path in enumerate(cad_paths):
+                    base = 8 + int((ci / max(n_cad, 1)) * conv_span)
                     ext = cad_path.lower().rsplit('.', 1)[-1]
                     if ext == 'dwg':
-                        jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF: {os.path.basename(cad_path)}")
+                        jobs.update_field(job_id, progress=base)
+                        jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF ({ci+1}/{n_cad}): {os.path.basename(cad_path)}")
                         dxf_path = convert_dwg_to_dxf(cad_path)
                         if dxf_path:
                             dxf_paths.append(dxf_path)
@@ -202,21 +216,32 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
         # Extrair dados de DXF e enviar pro Claude interpretar
         dxf_items = []
         if dxf_paths:
+            extract_start = 8 + int((cad_end_pct - 8) * 0.4)
+            jobs.update_field(job_id, progress=extract_start)
             jobs.update_field(job_id, current_step="Extraindo geometria dos DXF...")
             try:
                 from dwg_extractor import extract_from_file
                 from analyzer import SYSTEM_PROMPT
                 import json as _j
 
+                n_dxf = len(dxf_paths)
+                dxf_span = cad_end_pct - extract_start  # espaço restante até cad_end_pct
                 for idx, dxf_path in enumerate(dxf_paths):
-                    jobs.update_field(job_id, current_step=f"DXF {idx+1}/{len(dxf_paths)}: Extraindo {os.path.basename(dxf_path)}...")
+                    # Cada DXF ocupa uma faixa: extração 40%, IA 60% da faixa
+                    dxf_base = extract_start + int((idx / max(n_dxf, 1)) * dxf_span)
+                    dxf_next = extract_start + int(((idx + 1) / max(n_dxf, 1)) * dxf_span)
+                    dxf_mid = dxf_base + int((dxf_next - dxf_base) * 0.4)
+
+                    jobs.update_field(job_id, progress=dxf_base)
+                    jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Extraindo {os.path.basename(dxf_path)}...")
 
                     # 1. Extrair dados estruturados do DXF
                     extraction = extract_from_file(dxf_path)
                     structured_text = extraction.to_structured_prompt()
 
                     # 2. Enviar pro Claude interpretar
-                    jobs.update_field(job_id, current_step=f"DXF {idx+1}/{len(dxf_paths)}: Claude analisando dados extraídos...")
+                    jobs.update_field(job_id, progress=dxf_mid)
+                    jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Nossa IA está analisando os dados extraídos...")
                     dxf_client = anthropic.Anthropic(api_key=api_key)
 
                     dxf_prompt = f"""Analise os dados extraídos de um arquivo DXF de projeto de arquitetura.
@@ -313,7 +338,7 @@ Retorne APENAS JSON válido no formato:
                         print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
 
                     except Exception as e:
-                        jobs.update_field(job_id, current_step=f"Erro Claude DXF: {str(e)[:200]}")
+                        jobs.update_field(job_id, current_step=f"Erro IA (DXF): {str(e)[:200]}")
                         print(f"Erro Claude DXF: {e}")
 
                     del structured_text
@@ -344,10 +369,15 @@ Retorne APENAS JSON válido no formato:
 
         pdf_infos.sort(key=lambda x: priority.get(x[2].value, 99))
 
+        # Faixa de progresso reservada para PDFs: após cad_end_pct (se houver CAD) até 90%
+        pdf_start_pct = cad_end_pct if has_cad else 5
+        pdf_end_pct = 90
+        pdf_span = pdf_end_pct - pdf_start_pct
+
         for i, (pdf_path, filename, sheet_type) in enumerate(pdf_infos):
-            step_pct = int((i / total) * 90) + 5
+            step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
             jobs.update_field(job_id, progress=step_pct)
-            jobs.update_field(job_id, current_step=f"Etapa {i+1}/{total}: {filename}")
+            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename}")
 
             if sheet_type == SheetType.DESCONHECIDO:
                 continue
@@ -359,7 +389,7 @@ Retorne APENAS JSON válido no formato:
             crop_paths = render_crops(pdf_path, sheet_type, crops_dir)
 
             # 3. Analisar com IA
-            jobs.update_field(job_id, current_step=f"Etapa {i+1}/{total}: Analisando {filename} com IA...")
+            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: Nossa IA está analisando {filename}...")
             sheet = SheetInfo(
                 filename=filename,
                 sheet_type=sheet_type,
