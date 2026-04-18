@@ -250,11 +250,33 @@ Gere itens de orçamento com base nesses dados.
 
 {structured_text}
 
-IMPORTANTE:
-- Use os dados EXATOS extraídos (contagem de blocos = quantidade confirmada)
-- Comprimentos e áreas calculados do DXF são precisos
-- Textos extraídos das legendas são confiáveis
-- Para itens que você não consegue determinar a quantidade, marque confidence "verificar"
+════════════════════════════════════════════════════════
+REGRA CRÍTICA DE CONFIANÇA — NUNCA ESTIMAR, SÓ MEDIR OU SUGERIR
+════════════════════════════════════════════════════════
+
+O campo "confidence" TEM apenas duas categorias possíveis:
+
+1. "confirmado" — SÓ quando a quantidade corresponde EXATAMENTE a uma medição objetiva do DXF:
+   - Contagem literal de blocos (INSERT) que aparece em "CONTAGEM DE BLOCOS"
+   - Comprimento calculado em "COMPRIMENTOS POR LAYER" (valor em metros)
+   - Área calculada em "ÁREAS HACHURADAS POR LAYER" (valor em m²)
+   - Cota numérica que aparece em "COTAS/DIMENSÕES"
+   A quantidade do item TEM que bater com o número extraído. Se você multiplicou, somou
+   ou fez qualquer cálculo além de copiar o valor, NÃO é confirmado.
+
+2. "estimado" — para todo o resto, SEM EXCEÇÃO:
+   - Quantidades derivadas de texto/legenda ("demolir X" → qtd=1)
+   - Itens sugeridos de práxis (administração local, limpeza final, instalação de placa)
+   - Qualquer item cuja quantidade você não conseguiu ler DIRETO dos dados extraídos
+   - Itens "vb" (verba) de valor único
+   - Composições inferidas ("se tem drywall, precisa de montante" sem count no CAD)
+
+REGRA DE OURO: **NA DÚVIDA, MARQUE "estimado".** É preferível 100 itens laranja que o
+usuário confirma um a um, do que 1 item branco com número inventado. O usuário quer
+poder confiar que "branco = aprovado direto", então só marque branco quando não houver
+NENHUMA dúvida.
+
+Não existe "verificar" nesta fase — use "estimado" pra qualquer incerteza.
 
 Retorne APENAS JSON válido no formato:
 {{
@@ -274,9 +296,9 @@ Retorne APENAS JSON válido no formato:
       "description": "Descrição completa",
       "unit": "m²",
       "quantity": 100,
-      "observations": "Fonte: DXF bloco/texto/geometria",
+      "observations": "Fonte: DXF bloco X / área layer Y / comprimento layer Z (cite a fonte EXATA dos dados extraídos)",
       "ref_sheet": "DXF",
-      "confidence": "confirmado",
+      "confidence": "confirmado ou estimado — nunca inventar",
       "discipline": "Categoria"
     }}
   ]
@@ -317,8 +339,8 @@ Retorne APENAS JSON válido no formato:
                                 desc = item_data.get("description", "")
                                 if not desc or len(desc) < 3: continue
                                 discipline = item_data.get("discipline", "Complementares")
-                                conf = item_data.get("confidence", "confirmado")
-                                if conf not in ["confirmado", "estimado", "verificar"]: conf = "confirmado"
+                                conf = item_data.get("confidence", "estimado")
+                                if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
                                 qty = sf(item_data.get("quantity", 1))
                                 if qty <= 0: qty = 1
 
