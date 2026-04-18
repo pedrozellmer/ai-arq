@@ -299,6 +299,52 @@ Ao gerar os itens a partir de "CONTAGEM DE BLOCOS":
 
 Essa regra garante que subir o mesmo arquivo duas vezes retorne o MESMO resultado.
 
+════════════════════════════════════════════════════════
+UNIDADES CORRETAS — ml VS un VS m² VS vb
+════════════════════════════════════════════════════════
+
+Escolha a unidade conforme o que o item REALMENTE significa:
+- "ml" (metro linear): perfis, rodapés, eletrocalhas, barras contínuas, perímetros.
+  Se há comprimento em "COMPRIMENTOS POR LAYER" pro item, use esse valor em ml.
+- "un" (unidade): blocos contáveis (luminárias, difusores, interruptores, portas, spots).
+- "m²" (área): forros, pisos, paredes hachuradas, pinturas.
+- "vb" (verba): serviços globais sem medida unitária clara (administração, retrofit, recomposição).
+
+ATENÇÃO PARA LINEARES:
+- "Luminária linear LED LINE 45°" ou "perfil LED": se a contagem DXF é "2 un"
+  mas há um comprimento associado no layer (ex.: 23.24 m), use ml + o comprimento.
+  Não use "un=2" pra item que é linear.
+- Rodapés, tabicas, perfis: sempre ml, nunca un.
+
+════════════════════════════════════════════════════════
+QUANTIDADE EM ITENS "estimado" (LARANJA)
+════════════════════════════════════════════════════════
+
+Quando o item é "estimado" (você não tem número medido):
+- **Se não conseguir inferir quantidade concreta, deixe `quantity` = 0** (que virará vazio na planilha).
+  O usuário preenche manualmente. NÃO use "1" ou "2" como placeholder — isso confunde.
+- Casos típicos: administração local (mês), retrofit (vb), recomposição (vb), itens "preencher conforme prazo".
+- Só coloque quantidade > 0 se vier de algo concreto lido no arquivo (texto, cota, contagem).
+
+════════════════════════════════════════════════════════
+DUPLA CONTAGEM DE ÁREAS — CUIDADO COM LAYERS LEV- vs FOR-
+════════════════════════════════════════════════════════
+
+Convenção comum em projetos BR: prefixos de layer diferenciam tipos:
+- "LEV-" = LEVANTAMENTO (o que EXISTE hoje no imóvel). NÃO É ORÇAMENTO em reforma.
+- "FOR-" / "NOV-" / "ARQ-" = PROJETO NOVO (o que vai ser construído/instalado).
+- "DEM-" = DEMOLIÇÃO.
+
+Se você ver DUAS áreas similares em "ÁREAS HACHURADAS POR LAYER" (ex.: "LEV-MFR: 2150 m²"
+e "FOR-MFR: 79 m²"), são coisas diferentes — o LEV é inventário, o FOR é novo.
+Em um orçamento de REFORMA, use APENAS o FOR (ou NOV/ARQ). O LEV entra como metadado,
+ou como demolição se estiver explicitamente marcado pra sair.
+
+Se a área TOTAL hachurada de um tipo (ex.: "forro modular") ficar maior que a área da laje
+do projeto (que aparece em "PREMISSAS" ou "metadados"), SUSPEITE de dupla contagem.
+Marque o item como "estimado" e anote em observations: "áreas em layers LEV e FOR somadas —
+verificar se há sobreposição".
+
 Retorne APENAS JSON válido no formato:
 {{
   "project_data": {{
@@ -362,8 +408,14 @@ Retorne APENAS JSON válido no formato:
                                 discipline = item_data.get("discipline", "Complementares")
                                 conf = item_data.get("confidence", "estimado")
                                 if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
-                                qty = sf(item_data.get("quantity", 1))
-                                if qty <= 0: qty = 1
+                                qty = sf(item_data.get("quantity", 0))
+                                # qty=0 é permitido para itens estimados sem número concreto
+                                # (virará vazio na planilha pro usuário preencher).
+                                # Só forçamos qty=1 em CONFIRMADO (deveria ter número real).
+                                if qty < 0:
+                                    qty = 0
+                                if qty == 0 and conf == "confirmado":
+                                    qty = 1  # defensivo: confirmado sem número cai em vb=1
 
                                 item = BudgetItem(
                                     item_num=str(item_data.get("item_num", "")),
@@ -474,9 +526,13 @@ Retorne APENAS JSON válido no formato:
                     if discipline not in valid_disciplines: discipline = "Complementares"
                     conf = item_data.get("confidence", "estimado")
                     if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
-                    qty_raw = item_data.get("quantity", 1)
-                    qty = sf(qty_raw) if qty_raw else 1
-                    if qty <= 0: qty = 1
+                    qty_raw = item_data.get("quantity", 0)
+                    qty = sf(qty_raw) if qty_raw else 0
+                    # qty=0 permitido em "estimado" (usuário preenche); forçar 1 só em confirmado
+                    if qty < 0:
+                        qty = 0
+                    if qty == 0 and conf == "confirmado":
+                        qty = 1
 
                     item = BudgetItem(
                         item_num=str(item_data.get("item_num", "")),
@@ -508,6 +564,17 @@ Retorne APENAS JSON válido no formato:
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
         jobs.update_field(job_id, current_step=f"Gerando planilha com {len(all_items)} itens...")
+
+        # Normalizar nome do projeto: quando há múltiplos arquivos, evitar
+        # que o project.name inferido da IA (que geralmente pega o nome do
+        # primeiro DXF) dê uma impressão errada de "projeto de só uma coisa".
+        uploaded_names = [os.path.splitext(os.path.basename(f))[0] for f in file_paths]
+        if len(file_paths) > 1:
+            # Se IA chutou nome baseado em UM dos arquivos, substituir por descrição genérica
+            if project_data.name and any(n in project_data.name for n in uploaded_names):
+                project_data.name = f"Quantitativos — {len(file_paths)} arquivos processados"
+            elif not project_data.name:
+                project_data.name = f"Quantitativos — {len(file_paths)} arquivos processados"
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path)
