@@ -253,7 +253,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
             ws.cell(row=ro, column=1, value=item_num).font = F_N
             ws.cell(row=ro, column=2, value=item.description).font = F_N
             ws.cell(row=ro, column=3, value=item.unit).font = F_N
-            ws.cell(row=ro, column=4, value=item.quantity).font = F_BLUE
+            # qty=0 vira célula vazia (IA não tinha número e marcou como estimado)
+            ws.cell(row=ro, column=4, value=(item.quantity if item.quantity else None)).font = F_BLUE
             ws.cell(row=ro, column=5).font = F_BLUE; ws.cell(row=ro, column=5).fill = P_YEL
             ws.cell(row=ro, column=6).font = F_BLUE; ws.cell(row=ro, column=6).fill = P_YEL
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
@@ -301,7 +302,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
             ws.cell(row=ro, column=1, value=item_num).font = F_N
             ws.cell(row=ro, column=2, value=item.description).font = F_N
             ws.cell(row=ro, column=3, value=item.unit).font = F_N
-            ws.cell(row=ro, column=4, value=item.quantity).font = F_BLUE
+            # qty=0 vira célula vazia (IA não tinha número e marcou como estimado)
+            ws.cell(row=ro, column=4, value=(item.quantity if item.quantity else None)).font = F_BLUE
             ws.cell(row=ro, column=5).font = F_BLUE; ws.cell(row=ro, column=5).fill = P_YEL
             ws.cell(row=ro, column=6).font = F_BLUE; ws.cell(row=ro, column=6).fill = P_YEL
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N

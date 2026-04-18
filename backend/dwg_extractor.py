@@ -836,6 +836,8 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         r"TITLE|TITLEBLOCK|CARIMBO|"
         r"REVISION|REVISAO|"
         r"ADCADD|"
+        r"FORMA|FORM|"  # "forma 12", "form-01" — marcadores de formato em plantas
+        r"NIVEL|NIV|LEVEL|"  # marcadores de nivel/cota
         r"AREA[0-9])(?:[\s_\-]|$)",
         re.IGNORECASE
     )
