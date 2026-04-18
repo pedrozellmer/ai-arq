@@ -258,11 +258,20 @@ O campo "confidence" TEM apenas duas categorias possíveis:
 
 1. "confirmado" — SÓ quando a quantidade corresponde EXATAMENTE a uma medição objetiva do DXF:
    - Contagem literal de blocos (INSERT) que aparece em "CONTAGEM DE BLOCOS"
+   - Contagem literal de esquadrias na seção "ESQUADRIAS" (com dimensão W×H)
    - Comprimento calculado em "COMPRIMENTOS POR LAYER" (valor em metros)
    - Área calculada em "ÁREAS HACHURADAS POR LAYER" (valor em m²)
    - Cota numérica que aparece em "COTAS/DIMENSÕES"
    A quantidade do item TEM que bater com o número extraído. Se você multiplicou, somou
    ou fez qualquer cálculo além de copiar o valor, NÃO é confirmado.
+
+IMPORTANTE — SEÇÃO ESQUADRIAS (quando presente nos dados):
+Cada linha tem o formato "NOME: N un | ~Wm × Hm = Xm²". Isso é DADO ESTRUTURADO
+de portas/janelas com dimensão REAL extraída do CAD. Use para:
+   - Gerar item de portas/janelas com a quantidade e dimensão exatas
+   - Aplicar regra TCPO: se área ≤ 2m², NÃO descontar esse vão da pintura;
+     se > 2m², descontar o excedente (área_vão - 2m²) da pintura adjacente
+   - Toda esquadria extraída aqui pode ser marcada "confirmado" (veio de medição)
 
 2. "estimado" — para todo o resto, SEM EXCEÇÃO:
    - Quantidades derivadas de texto/legenda ("demolir X" → qtd=1)
