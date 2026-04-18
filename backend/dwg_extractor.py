@@ -125,9 +125,15 @@ class DXFExtraction:
                 lines.append(f"  {k}: {v}")
             lines.append("")
 
-        # Layers
-        lines.append(f"LAYERS ENCONTRADOS ({len(self.layers)}):")
-        for layer in sorted(self.layers):
+        # Layers — com xref prefix removido e deduplicado pra não poluir o prompt
+        clean_layers = set()
+        for layer in self.layers:
+            # Layers de xref tem formato "xrefname|actual_layer" — usamos só a 2ª parte
+            clean_name = layer.split("|", 1)[-1].strip()
+            if clean_name:
+                clean_layers.add(clean_name)
+        lines.append(f"LAYERS ENCONTRADOS ({len(clean_layers)} únicos / {len(self.layers)} com xrefs):")
+        for layer in sorted(clean_layers):
             lines.append(f"  - {layer}")
         lines.append("")
 
