@@ -17,8 +17,9 @@ REGRAS OBRIGATÓRIAS:
 ## LEVANTAMENTO DE QUANTITATIVOS
 1. Extraia CADA item individualmente — nunca agrupe itens diferentes
 2. TODA descrição deve ser completa: serviço + material + fabricante + referência + cor + dimensão
-3. Exemplo BOM: "Pintura acrílica acetinada cor Branco Neve — Coral Dulux A.5/041, em parede de gesso acartonado"
-4. Exemplo RUIM: "Pintura de parede"
+3. Exemplo BOM: "Pintura acrílica acetinada cor <cor da legenda> — <fabricante/ref da legenda>, em parede de gesso acartonado"
+4. Exemplo RUIM: "Pintura de parede" (sem cor, fabricante nem referência)
+   Sempre extrair cor/fabricante/referência do que estiver NA LEGENDA do projeto atual. Nunca assumir marca ou cor "padrão".
 
 ## UNIDADES (nunca misturar)
 - m² = áreas (pisos, paredes, forros, pinturas)
@@ -46,7 +47,7 @@ REGRAS OBRIGATÓRIAS:
 **TUDO o que não for isso deve ser "estimado" (aparecerá em laranja pro usuário confirmar):**
 - Contagem visual de símbolos (benchmark: IA acerta 26-41%) → SEMPRE estimado
 - Cálculo por área/perímetro × fórmula → SEMPRE estimado
-- Fórmulas calibradas por fornecedor (Cinza de Grife ~435 m², etc.) → SEMPRE estimado
+- Fórmulas/números calibrados por fornecedor de outros projetos → SEMPRE estimado (nunca usar valores de outro projeto)
 - Qualquer quantidade inferida de convenção ou boa prática → SEMPRE estimado
 - Itens "padrão de obra" (ADM local, limpeza final) → SEMPRE estimado
 
@@ -93,117 +94,41 @@ Não use "verificar" — use "estimado" pra qualquer incerteza.
 - Para TEXTO em legendas/quadros: IA acerta 95% na leitura — SE a legenda listar quantidade explicita (ex: "85 un" em quadro de esquadrias), pode marcar "confirmado". Se o texto é descritivo sem quantidade explícita, marque "estimado".
 - Se não conseguir ler algo com certeza, marque "estimado" (nunca "verificar", esse campo não é usado)
 
-## ESTIMATIVA DE QUANTIDADES — FÓRMULAS OBRIGATÓRIAS
-NUNCA retorne quantity=1 para itens que claramente têm área ou quantidade maior.
-Use estas FÓRMULAS REAIS para calcular:
+## LÓGICA GEOMÉTRICA DE QUANTIFICAÇÃO
 
-### PINTURA/REVESTIMENTO — CALIBRADO COM 3 FORNECEDORES REAIS
-- Branco Neve (geral): ~460 m² (média 3 fornecedores para ~1.286m² de escritório)
-- Cinza de Grife (cor PREDOMINANTE!): ~435 m² — NÃO é cor de destaque, é a COR PRINCIPAL.
-  Benchmark: V5 estimou 140m², real é 435m². Contar TODOS os tags "B" na Pr.400.
-- Azul Echarpe: ~108 m² — aplicado em MÚLTIPLAS salas, não apenas 1 parede.
-  Benchmark: V5 estimou 16m², real é 108m². Contar TODOS os tags "J" na Pr.400.
-- Lousa preta: ~18 m²
-- Cerâmicas (copas/úmidas): ~25-40 m² por tipo
-- Massa corrida/selador: MESMA ÁREA da pintura total
-- Perda de tinta: incluir 10% sobre a área calculada
-- ATENÇÃO: fornecedores também cotam pintura de TABEIRAS (~145m), FECHAMENTOS VERTICAIS (~215m), SEPTOS (~47m) e FORRO (~150m²).
-- Pintura de CORE e áreas sem intervenção: ~300-650 m² — item frequentemente cotado.
+**Regra principal:** cada projeto é analisado em isolamento. Não existe número "típico de escritório X m²" ou "projeto similar teve Y m² de pintura". A quantidade de CADA item precisa sair da leitura objetiva DESTE arquivo — medição no CAD, leitura de legenda, contagem de bloco. Se não conseguir extrair, marque "estimado" e deixe que o usuário confirme.
 
-### PORTAS
-- CONTAR na planta: cada arco de abertura = 1 porta
-- Se não conseguir contar, estimar por número de salas:
-  - Escritório com ~15 salas + 3 copas + 2 CPDs + 2 escadas = ~22-28 portas
-  - Distribuição típica: P3 (mais comum) ~30%, P1/P2 ~20%, P4/P5 ~20%, P6/P7 ~10%
-- Ferragens: 1 conjunto por porta (somar total de portas)
+### MEDIÇÃO DE ÁREAS
+- **Hachuras fechadas** na planta → área direta (polígono pelo algoritmo Shoelace).
+- **Perímetro × pé-direito (PD)** → área de parede. Descontar vãos de portas/janelas > 2m² (regra TCPO: vãos ≤ 2m² não descontam). Se não conseguir identificar os vãos, marcar "estimado".
+- **Somar polilinhas fechadas** delimitando a área → último recurso quando não há hachura.
 
-### PISOS (fonte: norma de instalação)
-- Área = Comprimento × Largura + 10% perda (instalação reta) ou + 15% (diagonal)
-- REFORMA: orçar APENAS áreas que MUDAM:
-  - Carpete a COMPLETAR: ~15-20% da área existente = ~150-250 m²
-  - Carpete NOVO (modelo diferente): somar zonas marcadas = ~100-200 m²
-  - Porcelanato (copas renovadas): ~50-80 m²
-- Rodapé: perímetro interno das áreas com piso novo
+### MEDIÇÃO DE COMPRIMENTOS
+- **Somar linhas/polilinhas** no layer específico (parede, rodapé, perfil, tabica).
+- Arcos/curvas: interpolar pelo raio × ângulo, não aproximar por corda reta.
 
-### FORROS — CALIBRADO
-- Forro mineral modular FORNECIMENTO: ~124 m² (NÃO 150-300). V5 confundiu total com fornecimento novo.
-- Gesso liso: somar áreas das salas fechadas individualmente
-- Ripado: estimar pela zona hachurada na planta (geralmente ~100-170 m²)
-- Tabica metálica: ~102 ml (NÃO 300-400). V5 superestimou 3,5×.
-- Tabeira de gesso: ~91 m — item SEPARADO da tabica. Adicionar se houver transição de forro.
-- Grid metálico / perfilado: verificar na Pr.400 se existe perfil para iluminação (~45-68m).
-- Forro modular áreas SEM intervenção: ~110 m² — substituição por manutenção.
-- Alçapão de inspeção: ~8 un
+### CONTAGEM DE ELEMENTOS
+- **Primeiro: ler a LEGENDA / QUADRO DE CARGAS** (luminárias, esquadrias, elétrica) — se listar quantidade numérica explícita, é confirmado.
+- **Segundo: contar INSERT blocks** do DXF no layer correto — é confirmado (contagem objetiva).
+- **Último: contagem visual** na imagem — benchmark mostra que IA acerta apenas 26-41% nesse modo. Se recorrer a isso, SEMPRE marcar "estimado".
 
-### LUMINÁRIAS — ATENÇÃO ESPECIAL
-- NÃO use fórmulas de estimativa por m². Benchmark real mostrou erros de 600-2650%.
-- LEIA A TABELA DE LUMINÁRIAS na Pr.700 (geralmente no canto inferior direito).
-- A tabela contém: código, descrição, quantidade, especificação.
-- Se a tabela estiver em blocos CAD (não texto), marque confidence "verificar" e note "tabela em formato gráfico — confirmar com quadro de cargas".
-- Referência real (projeto 1.286m²):
-  D3 (spot quadrado 10W): 12 un (NÃO 85)
-  D8 (spot retangular 6W): 45 un
-  R4 (luminária retangular): 2 un (NÃO 55)
-  P5 (pendente linear): 85 un — item mais caro! (NÃO 35)
-  P6 (pendente decorativo): 5 un
-  A1+A2 (spots trilho): 11 un total
-  M1 (perfil LED): 18 m
+### REFORMA — O QUE MUDA
+- Leia TODAS as notas da prancha de demolição antes de quantificar.
+- Se o projeto mantém carpete existente, NÃO orçar carpete novo para essa área.
+- Se mantém forro, NÃO orçar forro novo.
+- Contar APENAS o que está explicitamente marcado como "demolir", "novo", "remanejar".
+- Se uma área está sombreada/hachurada como "sem intervenção", não entra nos quantitativos.
 
-### SPRINKLERS — CALIBRADO
-- NÃO usar fórmula de 1 sprinkler a cada 20,9 m². Isso conta TODOS os sprinklers do pavimento.
-- Em REFORMA: contar apenas os sprinklers AFETADOS pela obra (remanejamento ou novo).
-- Benchmark: V5 estimou 33un, real é 8un (5 remanejamento + 3 reinstalação).
-- Buscar na Pr.700: símbolos "REMANEJAR OU NOVO" (diferente dos existentes).
-- Para 800 m² de forro: ~800/20,9 ≈ ~38 sprinklers total
-- Remanejamento em reforma: ~60-70% do total
+### DESCRIÇÃO DOS ITENS
+- Use descrição completa com material, fabricante e referência quando constar na legenda.
+- Não inventar modelo/fabricante — se a legenda não especifica, descrever genericamente ("spot LED embutido — especificação por definir").
+- Para itens com variantes (diferentes códigos de luminária, tipos de porta, etc.): gerar UM item por variante que aparece no arquivo, cada um com sua própria quantidade.
 
-### AR-CONDICIONADO
-- Regra: 600-800 BTU/m² base + 600 BTU/pessoa + 600 BTU/eletrônico
-- Para remanejamento em reforma: contar difusores na planta
-- Difusores novos: ~1 a cada 15-25 m² em áreas novas
-
-### ELÉTRICA (fonte: Pr. 500 — padrão por posição)
-- Tomadas comuns: 2 por posição + ~30 extras (copas, circulação)
-- Tomadas estabilizadas: 2 por posição + ~20 extras
-- Dados/VOIP: 1 por posição + ~20 extras
-- Interruptores: ~1-2 por sala/ambiente = ~25-35 total
-- Caixa de piso (Sporim): ~60% dos pontos em piso elevado
-- Réguas de tomadas: 1 por posição de trabalho
-
-### MARCENARIA (fonte: projeto)
-- Ler dimensões EXATAS da legenda (L × P × A)
-- Material MDF: adicionar 5-10% de perda sobre chapas
-- Cada peça = 1 un (não agrupar peças diferentes)
-
-### DEMOLIÇÃO EM REFORMA — CALIBRADO COM 3 FORNECEDORES
-- PRIMEIRO: ler TODAS as notas da Pr.100. Se disser "DEMOLIR SOMENTE FORRO MODULAR", NÃO contar todo o forro.
-- Forro modular (demolição): ~150-220 m² (apenas modular, NÃO gesso). Benchmark: V5 errou 600m² vs real 194m².
-- Drywall (demolição): somar TODAS as paredes vermelhas na Pr.100. Benchmark: real ~200m², V5 errou 60m².
-- Carpete (remoção): apenas áreas de SUBSTITUIÇÃO, não reaproveitamento. Benchmark: real ~200m², V5 errou 350m².
-- Portas (remoção): contar APENAS portas marcadas para demolição. Benchmark: real 1un, V5 errou 10un.
-- Divisórias vidro: verificar se é EXCLUSO (fornecedores frequentemente excluem do escopo).
-- Entulho: regra geral ~1 m³ a cada 30-40 m² de demolição
-- Pilar de gesso: 2 un se mencionado "demolir caixa em gesso do pilar"
-- Tabeira existente: ~20m se houver troca de forro
-
-### SEPTO DRYWALL — ITEM FREQUENTEMENTE ESQUECIDO
-- Buscar a palavra "SEPTO" na legenda da Pr.400. Se aparecer, ADICIONAR item separado.
-- Septo = continuação da parede ACIMA do forro até a laje.
-- Comprimento do septo = mesmo comprimento das paredes novas que têm septo especificado.
-- Benchmark: V5 esqueceu completamente. Real: ~47m (média 3 fornecedores).
-- Também adicionar LÃ DE ROCHA para tratamento acústico dos septos (~99 m²).
-
-### ITENS FREQUENTEMENTE ESQUECIDOS (encontrados em 3/3 fornecedores):
-- Septo drywall (acima do forro): ~47m — se Pr.400 menciona "SEPTO"
-- Pintura de tabeiras: ~145m — onde forro muda de tipo
-- Pintura de fechamentos verticais: ~215m — se Pr.400 menciona "fechamento vertical"
-- Rodapé MDF 10cm: ~50-120m — nas áreas reformadas
-- Recomposição de piso no pilar: vb — se demolir caixa de gesso do pilar
-- Recomposição de rejunte porcelanato: ~168 m² — áreas existentes
-- Grid metálico / perfilado iluminação: ~45m — se Pr.400 mostra perfil no estúdio
-- Forro modular áreas SEM intervenção: ~110 m² — substituição por manutenção
-- Lã de rocha: ~99 m² — nos septos e divisórias acústicas
-- Perda em paredes de alvenaria para desconto de vãos: mesmo critério TCPO
+### REGRAS GERAIS
+- **NUNCA** recitar números de projetos anteriores ou "médias de mercado". Cada orçamento é ÚNICO.
+- **NUNCA** aplicar perda automática (5-10%) na quantidade — isso é decisão do orçamentista ao compor custo.
+- **NUNCA** retornar quantity=1 para item que obviamente tem área maior — prefira marcar como "estimado" e pedir para o usuário informar o valor.
+- Se o arquivo não tem dados suficientes pra um item, é melhor NÃO incluir do que incluir com número chutado.
 
 FORMATO DE RESPOSTA — retorne APENAS JSON válido:
 {
@@ -215,7 +140,7 @@ FORMATO DE RESPOSTA — retorne APENAS JSON válido:
       "unit": "m²",
       "quantity": 100,
       "observations": "Nota relevante",
-      "ref_sheet": "Pr.400",
+      "ref_sheet": "<nome/código da prancha deste projeto>",
       "confidence": "estimado",
       "discipline": "Revestimentos"
     }
@@ -223,7 +148,7 @@ FORMATO DE RESPOSTA — retorne APENAS JSON válido:
 }"""
 
 
-PROMPT_ARQUITETURA = """Analise DETALHADAMENTE estas imagens da prancha de ARQUITETURA (Pr. 400).
+PROMPT_ARQUITETURA = """Analise DETALHADAMENTE estas imagens da prancha de ARQUITETURA.
 
 Extraia TODOS os itens das legendas visíveis:
 
@@ -233,121 +158,90 @@ Extraia TODOS os itens das legendas visíveis:
 - Laminado sobre drywall
 
 ## REVESTIMENTOS (discipline: "Revestimentos")
-- CADA cor de pintura separada: Branco Neve, Cinza de Grife 50YY 63/041, tinta lousa preta, epóxi Wandepoxy, Azul Assinatura 30BB, Azul Echarpe 90BG
-- CADA cerâmica: Metro White BR Eliane 20×10, Forma Slim Branco BR Eliane 30×40
-- Revestimento tijolinho Arte em Ladrilhos salmão
-- Painel madeira Cumaru com portas
-- Massa corrida PVA + selador (preparação)
+- Para CADA cor de pintura listada NA LEGENDA do projeto atual: gerar um item separado com o nome/código/referência que aparece na legenda
+- Para CADA cerâmica/porcelanato listado NA LEGENDA: um item por tipo, com dimensão e código da legenda
+- Revestimentos especiais (tijolinho, painel madeira, lousa): incluir se constarem na legenda
+- Massa corrida / selador: sempre acompanham a pintura; mesma área da pintura total
 
 ## PORTAS (discipline: "Portas e Ferragens")
-Para CADA tipo P1 a P7:
-- Descrição completa: dimensões, material, tipo abertura, ferragem La Fonte
-- QUANTIDADE: CONTAR os arcos de abertura na planta. Cada arco = 1 porta.
-  Se não conseguir contar, ESTIMAR:
-  - P1 (MDF Branco TX, passa-visor, mola aérea): ~3-5 un (copas, serviço)
-  - P2 (Camarão MDF Branco TX): ~2-4 un (sanitários, pequenos ambientes)
-  - P3 (BP Freijó Puro, alumínio): ~4-8 un (salas individuais)
-  - P4 (vidro temperado 10mm): ~2-4 un (salas com transparência)
-  - P5 (dupla BP Freijó Puro): ~2-4 un (salas de reunião grandes)
-  - P6 (dupla vidro + fixas, mola piso): ~1-2 un (entrada principal)
-  - P7 (industrial corta-fogo aço): ~1-2 un (saídas emergência)
-- Ferragens: 1 conjunto por porta = somar todas as portas
-- NUNCA colocar quantity=1 para TODAS as portas
+- Para cada tipo de porta (P1, P2, ... Pn) listado na legenda ou quadro de esquadrias:
+  - Descrição: copiar a descrição da legenda (dimensões, material, tipo de abertura, ferragem)
+  - QUANTIDADE: se o quadro de esquadrias listar quantidade explícita, usar esse número (confirmado).
+    Senão, contar arcos de abertura na planta — cada arco = 1 porta — e marcar "estimado".
+- Ferragens: 1 conjunto por porta; somar total de portas do projeto
 
 ## DIVISÓRIAS (discipline: "Divisórias e Vidros")
-- Vidro liso incolor h=2550mm com porta
-- Vidro polarizado h=2550mm com porta
-- Vidro fixo extra clear acima de parede
-- Película de segurança/privacidade
-- Perfil/sapato alumínio
+- Copiar da legenda: tipo de vidro, espessura, altura, tratamento (polarizado, película)
+- Contar na planta as divisórias efetivamente indicadas
 
 ## PERSIANAS (discipline: "Persianas e Cortinas")
-- Cortina rolô Solar: Luxaflex Silver Screen, acionamento, material
-- Cortina rolô Blackout: Luxaflex QN Morrison
+- Copiar fabricante/linha/modelo da legenda do projeto atual
+- Contar as janelas/ambientes que receberão persiana conforme indicado na planta
 
-REGRAS DE QUANTIDADE:
-- Pintura Branco Neve: estimar ~400-500 m² (paredes gerais de um escritório ~1200 m²)
-- Cinza de Grife: estimar ~100-150 m² se aplicado em rodapé e paredes de circulação
-- Lousa preta: ~8-15 m² (1-2 paredes de sala de reunião)
-- Epóxi: ~15-25 m² (copas/áreas úmidas)
-- Azul Assinatura/Echarpe: ~5-20 m² cada (paredes de destaque)
-- Cerâmicas: ~20-30 m² cada tipo (copas)
-- Tijolinho: ~10-15 m²
-- Painel Cumaru: ~30-40 m²
-- Portas: CONTAR os arcos de abertura na planta — NÃO colocar 1 para cada tipo
-- Massa corrida/selador: mesma área da pintura total (~450-600 m²)
+## MEDIÇÃO DE PINTURA
+- Pintura por cor = somar perímetro × pé-direito das paredes com aquela cor, descontando vãos > 2m² (regra TCPO)
+- Se a planta tem hachura/tag por cor, somar áreas hachuradas por cor
+- Nunca usar "área típica de escritório" ou "médias de mercado"
 
-Retorne JSON com TODOS os itens encontrados."""
+Retorne JSON com TODOS os itens que conseguir extrair do projeto ATUAL. Se um item tem quantidade incerta, marque "estimado" e deixe o usuário completar."""
 
 
-PROMPT_FORRO = """Analise DETALHADAMENTE estas imagens da prancha de FORRO (Pr. 700).
+PROMPT_FORRO = """Analise DETALHADAMENTE estas imagens da prancha de FORRO.
 
 ## FORROS (discipline: "Forros")
-Para cada tipo, ESTIMAR A ÁREA baseado na planta:
-- Forro mineral modular (Geometrone Tegular): ~150-300 m² (áreas open plan PD=3,40m)
-- Forro gesso liso h=2,55m: somar áreas das salas fechadas (~80-150 m²)
-- Forro gesso liso h=2,95m: refeitório (~100-120 m²)
-- Forro ripado: ~100-170 m² (zona perimetral staff/lounge) + estrutura metálica (mesma área)
-- Laje aparente tratamento/pintura: ~60-100 m²
-- Tabica/acabamento forro-parede: ~300-400 ml (perímetro interno)
-- Cubetas gesso/drywall: ~30-50 ml
-- Eletrocalha h=3,22m: ~60-100 ml
-- Alçapões: ~5-10 un
+Para CADA tipo de forro listado NA LEGENDA do projeto atual:
+- Copiar nome/código/especificação da legenda (modelo, dimensão, fabricante)
+- ÁREA: somar áreas hachuradas ou regiões delimitadas na planta que correspondem àquele tipo
+- Se não houver hachura diferenciada, somar as áreas das salas/ambientes listados para aquele tipo
+- Pé-direito (PD): extrair da legenda quando especificado
+Tipos comuns a buscar (mas SÓ incluir se estiverem na planta): forro mineral modular, forro gesso liso, forro ripado, laje aparente tratada.
+
+## ACABAMENTOS DE FORRO
+- Tabica/cantoneira de acabamento: somar perímetro interno dos ambientes com forro
+- Cubetas, transições, reforços: buscar na legenda
+- Alçapões de inspeção: contar símbolos específicos na planta
 
 ## LUMINÁRIAS (discipline: "Iluminação")
-Para CADA tipo de luminária na legenda, extraia:
-- Código (D3, D8, R4, P5, P6, etc.)
-- Modelo completo e fabricante
-- Lâmpada: tipo, potência, temperatura de cor
-- Driver/reator: tipo, tensão
-- Acabamento e fixação
-- CONTE os símbolos na planta: varra cada quadrante sistematicamente, numere cada um (D3 #1, D3 #2...) e dê o total por tipo
-- Se a contagem for aproximada por sobreposição, marque confidence "estimado" e adicione nota "confirmar com quadro de cargas"
-
-Incluir também:
-- Luminária de emergência autônoma
-- Trilho eletrificado
-- Barra de iluminação cênica
-- LED LINE perfil com fita flex
-- Retrofit de luminárias existentes (se mencionado em notas)
+Para CADA tipo de luminária listado NA LEGENDA do projeto atual:
+- Copiar código, modelo, fabricante, lâmpada (potência, temperatura de cor), driver, acabamento
+- QUANTIDADE: se houver quadro de cargas com totais numéricos, usar esse número (confirmado).
+  Senão, contar símbolos na planta por varredura sistemática quadrante a quadrante e marcar "estimado".
+- Incluir luminárias de emergência, trilhos, barras cênicas, perfis LED quando constarem
 
 ## ITENS TÉCNICOS NO TETO (discipline conforme tipo)
 - Sprinklers → "Incêndio e Segurança"
-- Detectores fumaça → "Incêndio e Segurança"
-- Caixa de som → "Incêndio e Segurança"
-- Sensor presença → "Instalações Elétricas e Dados"
-- Projetor no teto → "Complementares"
-- Difusores AC → "Ar-Condicionado"
-- Grelha exaustão → "Ar-Condicionado"
+- Detectores de fumaça → "Incêndio e Segurança"
+- Caixa de som / sonorização → "Complementares"
+- Sensor de presença → "Instalações Elétricas e Dados"
+- Projetor multimídia → "Complementares"
+- Difusores / grelhas AC → "Ar-Condicionado"
+- Grelha de exaustão → "Ar-Condicionado"
 
-Retorne JSON com TODOS os itens."""
+Retorne JSON com TODOS os itens encontrados. Não inventar quantidades — se incerto, marcar "estimado"."""
 
 
-PROMPT_PISO = """Analise DETALHADAMENTE estas imagens da prancha de PISOS (Pr. 600).
+PROMPT_PISO = """Analise DETALHADAMENTE estas imagens da prancha de PISOS.
 
 ## PISOS (discipline: "Pisos e Rodapés")
 IMPORTANTE: Diferencie EXISTENTE (que fica) de NOVO (que precisa comprar) de COMPLETAR (lacunas).
 
-Para CADA tipo na legenda:
-- Carpete REMIX 2.0 Milliken Trímero Modular TMP141 100×100cm — EXISTENTE? COMPLETAR?
-- Carpete Formwork Milliken FMK101/FWK45/FWK182 50×50cm — NOVO
-- Carpete Remix Remastered MXT141 Dub w/ Apple — NOVO
-- Porcelanato MUNARI Cimento AC — dimensão exata (80×80 ou 90×90?)
-- Contrapiso elástico MONARQ
-- Piso madeira Cumaru (existente ou novo?)
-- Jardim pedrisco branco — altura exata
-- Rodapé metálico h=10cm
-- Rodapé MDF laca fosca branca h=80mm (marcenaria)
-- Soleira/transição de piso
-- Rejunte área porcelanato
-- Revisão de carpete geral existente (nota da prancha)
+Para CADA tipo de piso listado NA LEGENDA do projeto atual:
+- Copiar o nome/código/fabricante/dimensão da legenda (ex.: carpete modular, porcelanato, piso vinílico, madeira) — não inventar marca
+- Status: novo / existente / completar — conforme indicado na planta
+- ÁREA: somar hachuras ou zonas delimitadas correspondentes ao tipo; descontar áreas marcadas como "sem intervenção"
+- Incluir também quando constar: contrapiso, soleiras/transições, rejuntes, revisões de piso existente
 
-Extraia as ÁREAS informadas: perímetro externo, área sem intervenção, área layout.
+## RODAPÉS E PERIFERIAS
+- Rodapés: somar perímetro interno das áreas com piso novo
+- Extrair altura/material da legenda
 
-Retorne JSON com items + project_data com áreas."""
+## DADOS DO PROJETO
+Extrair as ÁREAS informadas NA PLANTA/LEGENDA deste arquivo: perímetro externo (laje bruta), área sem intervenção, área de layout. Só preencher se a planta mostrar explicitamente.
+
+Retorne JSON com items + project_data. Se uma área não está especificada na planta, deixe o campo vazio."""
 
 
-PROMPT_PONTOS = """Analise DETALHADAMENTE estas imagens da prancha de PONTOS ELÉTRICOS (Pr. 500).
+PROMPT_PONTOS = """Analise DETALHADAMENTE estas imagens da prancha de PONTOS ELÉTRICOS.
 
 ## ELÉTRICA (discipline: "Instalações Elétricas e Dados")
 - Pontos elétricos COMUNS (2P+T): calcular baseado em posições de trabalho
@@ -378,116 +272,95 @@ Extraia TODAS as notas (impressoras circuitos independentes, tomadas serviço, e
 Retorne JSON com items."""
 
 
-PROMPT_MOBILIARIO = """Analise DETALHADAMENTE estas imagens da prancha de MOBILIÁRIO (Pr. 300).
+PROMPT_MOBILIARIO = """Analise DETALHADAMENTE estas imagens da prancha de MOBILIÁRIO.
 
 ## DEPARTAMENTOS (em project_data)
-Liste cada departamento com nome e número de posições.
+Liste cada departamento indicado na legenda/quadro desta prancha, com nome e número de posições.
 
-## MOBILIÁRIO INDUSTRIAL (discipline: "Mobiliário")
-- CADA tipo de mesa com código, dimensões, acabamento, quantidade EXATA da legenda
+## MOBILIÁRIO (discipline: "Mobiliário")
+Para CADA item listado NA LEGENDA desta prancha:
+- Código (se houver)
+- Descrição e dimensões copiadas da legenda
+- Quantidade: usar o total indicado; se ausente, contar símbolos na planta e marcar "estimado"
+- Acabamento/material conforme legenda
 
-## MOBILIÁRIO DECORATIVO (discipline: "Mobiliário")
-- CADA item: poltrona, mesa apoio, mesa centro, banqueta — com código e quantidade EXATA
-
-## EQUIPAMENTOS (discipline: "Mobiliário")
-- Impressoras: quantidade, voltagem
-- TVs: tamanho, voltagem, quantidade
-- Separar EQ-01, EQ-02, EQ-03
-
-## ASSENTOS (discipline: "Mobiliário")
-- Cadeiras escritório ergonômicas (134 posições)
-- Cadeiras de reunião
-- Cadeira específica sala Sissi
+Categorias a separar quando presentes: mobiliário industrial (mesas de trabalho), mobiliário decorativo (poltronas, apoio), equipamentos (impressoras, TVs — separar códigos), assentos (cadeiras ergonômicas, reunião, especiais).
 
 Retorne JSON com project_data (departments) + items."""
 
 
-PROMPT_MARCENARIA = """Analise DETALHADAMENTE estas imagens da prancha de MARCENARIA (Pr. 301).
+PROMPT_MARCENARIA = """Analise DETALHADAMENTE estas imagens da prancha de MARCENARIA.
 
 ## MARCENARIA SOB MEDIDA (discipline: "Marcenaria")
-Para CADA peça, extraia:
-- Código (M01, M02, etc.)
+Para CADA peça listada NA LEGENDA desta prancha:
+- Código (ex.: M01, M02 — usar o código do projeto atual)
 - Descrição completa
-- Dimensões EXATAS (L×P×A em cm)
-- Material: MDF, BP Freijó Puro, tampo, caixa de tomadas
-- Quantidade EXATA da legenda
+- Dimensões EXATAS da legenda (L×P×A)
+- Material copiado da legenda (MDF, laminados, chapas especiais)
+- Quantidade exata da legenda
 
-Itens típicos:
-- Mesas de reunião módulo pé caixa (vários tamanhos)
-- Expositor
-- Mesa alta com nichos e prateleira
-- Estantes altas com nichos (vários tamanhos — listar CADA um)
-- Estante baixa
-- Estante com vão para TV
-- Aparador refeitório
-- Marcenaria nova da copa (se mencionado)
-- Painel ripado decorativo
+Tipos comuns a buscar (SÓ incluir se aparecerem na planta/legenda): mesas de reunião, expositores, estantes de diferentes alturas, aparadores, marcenaria de copa, painéis decorativos.
 
-Retorne JSON com items."""
+Retorne JSON com items. Na dúvida de quantidade, marque "estimado"."""
 
 
-PROMPT_DEMOLIR = """Analise DETALHADAMENTE estas imagens da prancha de DEMOLIÇÃO (Pr. 100).
+PROMPT_DEMOLIR = """Analise DETALHADAMENTE estas imagens da prancha de DEMOLIÇÃO.
 
 ## ÁREAS (em project_data)
+Extrair APENAS se estiverem explicitamente indicadas na planta/legenda:
 - Área construída (perímetro externo da laje)
 - Área sem intervenção
 - Área utilizada para layout
 
 ## ITENS DE DEMOLIÇÃO (discipline: "Demolição e Remoção")
-Separe CADA tipo:
-- Remoção de divisórias de VIDRO/industriais existentes (em ml)
-- Demolição de divisórias em DRYWALL/gesso (em m²)
-- Demolição de alvenaria existente (em m²)
-- Remoção de caixa em gesso do pilar (un) — se mencionado
-- Remoção de forro existente (parcial? total?) — se há nota "manter forro"
-- Remoção de forro existente (PARCIAL — verificar nota sobre manter forro do estúdio)
-- Remoção de carpete (APENAS áreas de substituição — carpete REMIX 2.0 existente PERMANECE em grande parte, orçar só ~350 m² não a totalidade)
-- Remoção de portas e batentes
-- Remoção de rodapés
-- Remoção de revestimentos cerâmicos
-- Demolição de marcenaria da copa — se mencionado
-- Remoção de instalações elétricas/dados
-- Remoção de luminárias existentes
-- Carga, transporte e bota-fora de entulho
+SÓ INCLUIR um item se a planta marcar EXPLICITAMENTE algo para demolir. Nunca supor demolição só porque é reforma.
+Para CADA elemento marcado para demolir:
+- Divisórias de vidro / industriais: somar comprimento linear marcado
+- Divisórias drywall / gesso: somar área marcada em m²
+- Alvenaria: somar área marcada em m²
+- Caixa de gesso de pilar: contar marcações
+- Forro: somar área marcada; ler notas para diferenciar parcial × total
+- Carpete/piso existente: apenas áreas marcadas para substituição (respeitar áreas a preservar)
+- Portas, rodapés, revestimentos: contar/somar conforme marcação
+- Marcenaria demolida: verificar notas
+- Instalações e luminárias: verificar notas
+- Carga, transporte e bota-fora de entulho: volume conforme volume total demolido
 
 ## NOTAS ESPECIAIS (em project_data.demolition_notes)
-Extraia TODAS as notas escritas na prancha, especialmente:
-- "DEMOLIR SOMENTE A FORMA MODULADA. MANTER O FORRO DE GESSO"
-- "DEMOLIR MARCENARIAS DA COPA E PREVER NOVA"
-- "DEMOLIR CAIXA EM GESSO DO PILAR"
+Extraia TODAS as notas escritas NESTA prancha — copiar literalmente o texto. Essas notas orientam o que demolir e o que preservar. Nunca inventar notas de outros projetos.
 
-Retorne JSON com project_data + items."""
+Retorne JSON com project_data + items. Na dúvida sobre quantidade, marque "estimado"."""
 
 
-PROMPT_LAYOUT_NOVO = """Analise estas imagens do LAYOUT NOVO (Pr. 200).
+PROMPT_LAYOUT_NOVO = """Analise estas imagens do LAYOUT NOVO.
 
 ## DADOS DO PROJETO (em project_data)
-- Nome do projeto (se visível no carimbo)
+Extrair APENAS o que aparece EXPLICITAMENTE no carimbo/legenda desta prancha:
+- Nome do projeto (carimbo)
 - Endereço
 - Arquiteto/escritório
-- Áreas (construída, layout, sem intervenção)
-- Total de posições de trabalho
+- Áreas (construída, layout, sem intervenção) — só se numericamente indicadas
+- Total de posições de trabalho — só se houver quadro totalizando
 
 ## DEPARTAMENTOS (em project_data.departments)
-Liste cada departamento com cor e número de posições.
+Listar departamentos que aparecem na legenda/quadro de cores desta prancha, com cor e número de posições quando indicado.
 
 ## NOVOS AMBIENTES (em project_data.new_rooms)
-Liste CADA sala nova como objeto com TODOS os campos preenchidos:
-{"name": "Sala Ana Paula Andrade", "ceiling_height": "255cm", "area": 16.5}
-NUNCA deixar ceiling_height ou area vazios — se não souber exato, ESTIMAR.
-PDs típicos: salas fechadas=255cm, circulação=280cm, staff/open plan=340cm, projeção gesso=295cm.
+Para CADA sala nova indicada na planta, gerar objeto: `{"name": "<nome da sala>", "ceiling_height": "<PD da legenda>", "area": <m²>}`.
+Se um campo não constar na planta, DEIXAR VAZIO em vez de inventar. Não assumir PD "padrão" — ler do projeto atual.
 
 ## SERVIÇOS PRELIMINARES (discipline: "Serviços Preliminares")
-Adicione itens padrão com estas unidades EXATAS:
-- Mobilização e desmobilização de obra — UN: vb, QTD: 1
-- Projeto executivo complementar — UN: vb, QTD: 1
-- Administração local de obra (engenheiro + mestre) — UN: mês, QTD: 3
-- Limpeza permanente e final de obra — UN: vb, QTD: 1
-- Proteção de áreas sem intervenção — UN: vb, QTD: 1
+Itens padrão de obra (sempre incluir, marcando "estimado" — quantidade a confirmar pelo orçamentista):
+- Mobilização e desmobilização de obra (un: vb)
+- Projeto executivo complementar (un: vb)
+- Administração local de obra (un: mês — quantidade conforme prazo)
+- Limpeza permanente e final de obra (un: vb)
+- Proteção de áreas sem intervenção (un: vb)
 
-ATENÇÃO: Limpeza e proteção são VERBA (vb=1), NÃO m²!
+ATENÇÃO: Limpeza e proteção de obra são VERBA (vb), NÃO m². Todos esses itens saem como "estimado".
 
 ## COMPLEMENTARES (discipline: "Complementares")
+Incluir quando explicitamente indicado na planta ou legenda:
 - Sinalização de portas e ambientes
 - Adesivagem/plotagem em vidros
 - Painéis decorativos
@@ -498,40 +371,34 @@ ATENÇÃO: Limpeza e proteção são VERBA (vb=1), NÃO m²!
 Retorne JSON com project_data + items."""
 
 
-PROMPT_LAYOUT_ATUAL = """Analise estas imagens do LAYOUT ATUAL (Pr. 201).
+PROMPT_LAYOUT_ATUAL = """Analise estas imagens do LAYOUT ATUAL.
 
 ## ELEMENTOS EXISTENTES (em project_data.kept_elements)
-Liste tudo que EXISTE HOJE como strings descritivas completas (NÃO use nomes de variáveis como "salas_fechadas"):
-- "1× reunião 6 pessoas (divisória de vidro)"
-- "1× sala diretor (divisória de vidro)"
-- "2× salas gerente (divisórias de vidro)"
-- "Open plan STAFF com estações de trabalho"
-- "Refeitório — XX m² (HOJE com mesas de trabalho)"
-- "Copa 1 + Copa 2 + Café + Lavagem"
-- "Core (elevadores, escadas, banheiros) — sem intervenção"
-
-Use DESCRIÇÕES completas em português, NÃO nomes de variáveis.
+Liste tudo que EXISTE HOJE na planta do projeto atual como strings descritivas em português. Copiar o que está na planta — NÃO usar nomes de variáveis nem inventar ambientes.
+Exemplos de formato: "1× sala de reunião 6 pessoas (divisória de vidro)", "Open plan staff com estações de trabalho", "Core (elevadores, escadas, banheiros) — sem intervenção".
 
 Retorne JSON com project_data (kept_elements como array de strings descritivas)."""
 
 
-PROMPT_DET_FORRO = """Analise estas imagens do DETALHAMENTO DE FORRO (Pr. 701).
+PROMPT_DET_FORRO = """Analise estas imagens do DETALHAMENTO DE FORRO.
 
-## FORRO RIPADO (discipline: "Forros")
-- Área estimada do forro ripado (baseado na planta)
-- Estrutura metálica / pendurais / perfis (item separado, mesma área)
-- Forro removível para manutenção
+## FORRO DETALHADO (discipline: "Forros")
+Para CADA tipo de forro detalhado NA LEGENDA:
+- Copiar descrição, material, dimensões da legenda
+- ÁREA: somar a partir da planta de detalhes (hachura ou região demarcada)
+- Estrutura metálica / pendurais / perfis: item separado com mesma área do forro correspondente
+- Forro removível para manutenção: incluir se houver símbolo específico na planta
 
 ## DETALHES (discipline: "Forros")
-- Tipos de corte (ripado face externa, face interna)
+- Tipos de corte (ripado face externa, face interna) — conforme detalhamento
 - Materiais e acabamentos visíveis
-- Luminárias integradas ao ripado
+- Luminárias integradas ao ripado (se houver)
 
 ## SERRALHERIA (discipline: "Complementares")
-- Barra iluminação cênica perfil "U"
-- Perfil quadrado acabamento encontro com gesso
+- Barra de iluminação cênica — incluir se indicada
+- Perfis de acabamento de encontro — incluir se indicado
 
-Retorne JSON com items."""
+Retorne JSON com items. Na dúvida de quantidade, marque "estimado"."""
 
 
 PROMPTS_POR_TIPO = {
