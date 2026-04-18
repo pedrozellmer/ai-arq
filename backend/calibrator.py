@@ -390,14 +390,10 @@ def apply_corrections(items: list, factors: dict) -> list:
         else:
             item.observations = cal_note
 
-        # Upgrade confidence
-        try:
-            from models import Confidence
-            if item.confidence == Confidence.ESTIMADO:
-                item.confidence = Confidence.CONFIRMADO
-        except ImportError:
-            if str(item.confidence) == "estimado":
-                item.confidence = "confirmado"
+        # NÃO promover confidence: calibração é uma estimativa baseada em histórico,
+        # não uma medição. Itens corrigidos por calibração permanecem como "estimado"
+        # (laranja) pro usuário revisar manualmente. Regra do produto: nunca marcar
+        # como "confirmado" algo que não tenha origem em medição objetiva do CAD.
 
         corrections_applied += 1
 

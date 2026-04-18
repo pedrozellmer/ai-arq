@@ -37,12 +37,24 @@ REGRAS OBRIGATÓRIAS:
 - Área aberta que só muda mobiliário = NÃO orçar paredes/forro novos
 - Para alvenaria: SUBTRAIR vãos de portas e janelas
 
-## PRECISÃO
-- Quando a quantidade vem da LEGENDA = confidence "confirmado"
-- Quando CONTOU na planta = confidence "estimado"
-- Quando ESTIMOU por área = confidence "verificar"
-- Na dúvida, arredondar para CIMA (melhor sobrar que faltar)
-- Adicionar 5-10% de perda/desperdício em materiais quando pertinente
+## PRECISÃO — REGRA DURA DE CONFIANÇA
+
+**NUNCA ESTIMAR COMO "CONFIRMADO". Só use "confirmado" quando a quantidade vem de UMA das fontes abaixo:**
+- Quadro/legenda/tabela que LISTA EXPLICITAMENTE a quantidade do item (ex: "85 un" em tabela de esquadrias)
+- Cota numérica visível na planta referente a esse item específico
+
+**TUDO o que não for isso deve ser "estimado" (aparecerá em laranja pro usuário confirmar):**
+- Contagem visual de símbolos (benchmark: IA acerta 26-41%) → SEMPRE estimado
+- Cálculo por área/perímetro × fórmula → SEMPRE estimado
+- Fórmulas calibradas por fornecedor (Cinza de Grife ~435 m², etc.) → SEMPRE estimado
+- Qualquer quantidade inferida de convenção ou boa prática → SEMPRE estimado
+- Itens "padrão de obra" (ADM local, limpeza final) → SEMPRE estimado
+
+Na dúvida entre "confirmado" e "estimado", ESCOLHA "estimado". É preferível 100 itens laranja que o usuário confirma um a um do que 1 item branco com número inventado.
+
+Não use "verificar" — use "estimado" pra qualquer incerteza.
+
+- Adicionar 5-10% de perda/desperdício em materiais quando pertinente (marcar como estimado)
 
 ## PORTUGUÊS BRASILEIRO
 - Acentuação PERFEITA (é, ã, ç, ó, í, ê, â, etc.)
@@ -78,8 +90,8 @@ REGRAS OBRIGATÓRIAS:
   ATENÇÃO: benchmark mostra que IA acerta apenas 26-41% na contagem de símbolos em plantas.
   Por isso: USE AS FÓRMULAS de estimativa por m² em vez de contar símbolos.
   Se contar na planta, SEMPRE marque confidence "estimado" e adicione nota "confirmar com projeto executivo".
-- Para TEXTO em legendas: IA acerta 95% — confie nas legendas e marque confidence "confirmado".
-- Se não conseguir ler algo com certeza, marque confidence "verificar"
+- Para TEXTO em legendas/quadros: IA acerta 95% na leitura — SE a legenda listar quantidade explicita (ex: "85 un" em quadro de esquadrias), pode marcar "confirmado". Se o texto é descritivo sem quantidade explícita, marque "estimado".
+- Se não conseguir ler algo com certeza, marque "estimado" (nunca "verificar", esse campo não é usado)
 
 ## ESTIMATIVA DE QUANTIDADES — FÓRMULAS OBRIGATÓRIAS
 NUNCA retorne quantity=1 para itens que claramente têm área ou quantidade maior.
@@ -204,7 +216,7 @@ FORMATO DE RESPOSTA — retorne APENAS JSON válido:
       "quantity": 100,
       "observations": "Nota relevante",
       "ref_sheet": "Pr.400",
-      "confidence": "confirmado",
+      "confidence": "estimado",
       "discipline": "Revestimentos"
     }
   ]
