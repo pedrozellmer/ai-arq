@@ -487,6 +487,33 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
 # Core extraction
 # ---------------------------------------------------------------------------
 
+_MTEXT_FORMAT_CODES_RE = re.compile(
+    r"""
+    \\[fF][^;]*;       # \fArial|b0|i0|c0|p34;
+    | \\[cC][0-9]+;    # \C256; (color)
+    | \\[LlOoKk]        # \L \l \O \o \K \k (underline/strike toggles)
+    | \\[Pp]            # \P (newline)
+    | \\[SsQqHhWwTt][^;]*;   # \S2/3; \H1.5x; \Q15; etc (superscript, height, etc.)
+    | \\~               # non-breaking space
+    | [{}]              # grupos MTEXT
+    """,
+    re.VERBOSE,
+)
+
+
+def _strip_mtext_codes(raw: str) -> str:
+    """Remove códigos de formatação de MTEXT deixando só o texto legível.
+    Fallback pra quando mtext.plain_text() não está disponível."""
+    if not raw:
+        return ""
+    cleaned = _MTEXT_FORMAT_CODES_RE.sub(" ", raw)
+    # Converter \P (que pode ter sobrado) em newline
+    cleaned = cleaned.replace("\\P", "\n").replace("\\p", "\n")
+    # Compactar espaços múltiplos
+    cleaned = re.sub(r"[ \t]+", " ", cleaned)
+    return cleaned.strip()
+
+
 def _line_length(start, end) -> float:
     """Euclidean distance between two 2D/3D points."""
     dx = end[0] - start[0]
@@ -1026,8 +1053,11 @@ def extract_dxf(filepath: str) -> DXFExtraction:
 
     for mtext in msp.query("MTEXT"):
         try:
-            content = mtext.text.strip()
-            # Strip MTEXT formatting codes  {\fArial|...; }  etc.
+            # Tentar primeiro o .plain_text() do ezdxf (já strip da formatação)
+            try:
+                content = mtext.plain_text(split=False).strip()
+            except Exception:
+                content = _strip_mtext_codes(mtext.text).strip()
             if content:
                 pos = (mtext.dxf.insert.x, mtext.dxf.insert.y)
                 height = mtext.dxf.char_height if hasattr(mtext.dxf, "char_height") else 0
@@ -1097,6 +1127,8 @@ _LAYER_PATTERNS: list[tuple[list[str], str]] = [
     (["PORT", "PORTA", "PRT", "DOOR", "DR"],                                                      "portas"),
     (["SPK", "SPRINK", "SPRINKLER", "INC", "INCEND", "INCENDIO", "FIRE", "PPCI"],                 "incendio"),
     (["ELET", "ELETR", "ELE", "ELEC", "POWR", "POWER", "TOMAD", "TOM", "TOMADA", "INTER", "CIRC"], "eletrica"),
+    (["HVAC", "COND", "CLIMA", "DUTO", "DIFUS", "FRIG", "EVAP", "SPLIT", "CHILL", "ARCOND"],      "ar_condicionado"),
+    (["DAD", "DADOS", "DATA", "REDE", "LOG", "VOIP", "RJ", "CAT6", "WIFI", "ACCESS"],             "dados"),
     (["DEM", "DEMOL", "DEMO", "DEMOLIR"],                                                         "demolicao"),
     (["PINT", "PINTURA", "PAINT", "PNT"],                                                         "pintura"),
 ]
@@ -1222,15 +1254,17 @@ def extract_from_file(filepath: str) -> DXFExtraction:
 
 # Map architectural category -> discipline name (matching models.py)
 _CATEGORY_TO_DISCIPLINE: dict[str, str] = {
-    "luminarias": "Iluminação",
-    "paredes":    "Fechamentos Verticais",
-    "forro":      "Forros",
-    "piso":       "Pisos e Rodapés",
-    "portas":     "Portas e Ferragens",
-    "incendio":   "Prevenção e Combate a Incêndio",
-    "eletrica":   "Instalações Elétricas",
-    "demolicao":  "Demolição e Remoção",
-    "pintura":    "Revestimentos",
+    "luminarias":        "Iluminação",
+    "paredes":           "Fechamentos Verticais",
+    "forro":             "Forros",
+    "piso":              "Pisos e Rodapés",
+    "portas":            "Portas e Ferragens",
+    "incendio":          "Prevenção e Combate a Incêndio",
+    "eletrica":          "Instalações Elétricas",
+    "ar_condicionado":   "Ar-Condicionado",
+    "dados":             "Instalações Elétricas e Dados",
+    "demolicao":         "Demolição e Remoção",
+    "pintura":           "Revestimentos",
 }
 
 
