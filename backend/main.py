@@ -172,6 +172,108 @@ _UNIT_COUNT_KEYWORDS = _re.compile(
 )
 
 
+def _normalize_description_key(desc: str) -> str:
+    """Reduz a descrição a uma chave de comparação — remove acentos, sufixos
+    por departamento, números extras, e faz lowercase. Usado pra detectar
+    itens similares em consolidação."""
+    if not desc:
+        return ""
+    s = desc.lower()
+    # Remover acentos
+    import unicodedata
+    s = unicodedata.normalize('NFD', s)
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    # Remover sufixos de departamento/variante (após " - ")
+    # Ex.: "painel divisorio - contabilidade" → "painel divisorio"
+    s = s.split(' - ')[0].split(' — ')[0].split(' / ')[0]
+    # Normalizar espaços e pontuação
+    s = _re.sub(r"[^a-z0-9]+", " ", s)
+    s = _re.sub(r"\s+", " ", s).strip()
+    # Remover palavras genéricas que não mudam o significado
+    GENERIC_WORDS = {"de", "do", "da", "para", "com", "em", "nova", "novo", "existente",
+                     "conforme", "especificacao", "projeto", "instalacao", "execucao",
+                     "fornecimento", "tipo", "altura", "comprimento", "m2", "m"}
+    tokens = [t for t in s.split() if t not in GENERIC_WORDS and len(t) > 1]
+    return " ".join(sorted(tokens[:6]))  # primeiras 6 palavras ordenadas
+
+
+def _consolidate_items(items: list) -> list:
+    """Consolida itens redundantes:
+    - Itens com mesma chave normalizada E mesma quantidade E mesma unidade →
+      mantém apenas um (o com descrição mais completa).
+    - Itens com mesma chave normalizada E mesma unidade mas quantidades
+      diferentes → mantém todos (são variantes reais tipo R4 remanejada/R4 nova).
+    - Itens replicados por departamento (mesma desc-base × N deptos) com
+      qty ≤ 1 m² → consolida em 1 item "estimado" com qty vazia.
+    """
+    from models import BudgetItem, Confidence
+
+    # Agrupar por chave normalizada + unidade
+    groups: dict = {}
+    for item in items:
+        key = (_normalize_description_key(item.description), item.unit)
+        groups.setdefault(key, []).append(item)
+
+    result = []
+    for key, group in groups.items():
+        if len(group) == 1:
+            result.append(group[0])
+            continue
+
+        # Vários itens com mesma chave — analisar
+        quantities = [round(float(it.quantity), 2) for it in group]
+        unique_qtys = set(quantities)
+
+        if len(unique_qtys) == 1:
+            # TODOS têm a mesma quantidade — duplicata exata, manter só 1
+            # (o com descrição mais longa)
+            best = max(group, key=lambda x: len(x.description or ""))
+            result.append(best)
+        elif max(quantities) < 2.0 and len(group) >= 4:
+            # Replicado por departamento com qty pequena (< 2) — consolidar
+            # num só item "estimado" pra evitar 16 linhas de painel 0.72 m²
+            best = max(group, key=lambda x: len(x.description or ""))
+            # Remove sufixo de departamento
+            clean_desc = best.description.split(' - ')[0].split(' — ')[0]
+            # Manter mesma discipline, mas marcar estimado e limpar qty
+            consolidated = BudgetItem(
+                item_num=best.item_num,
+                description=f"{clean_desc} (várias variantes)",
+                unit=best.unit,
+                quantity=0,
+                observations=(
+                    f"Consolidado de {len(group)} entradas replicadas por "
+                    f"departamento/variante — revisar e preencher qty total"
+                ),
+                ref_sheet=best.ref_sheet,
+                confidence=Confidence("estimado"),
+                discipline=best.discipline,
+            )
+            result.append(consolidated)
+        else:
+            # Quantidades diferentes e plausíveis — manter todos (são variantes reais)
+            result.extend(group)
+
+    return result
+
+
+def _validate_quantity_for_unit(item) -> tuple[float, bool]:
+    """Garante consistência entre unidade e quantidade.
+    - 'un' só aceita inteiros positivos (arredonda se frac, ou zera + marca estimado)
+    - 'ml' / 'm²' aceita qualquer número >= 0
+    Retorna (qty_ajustada, foi_ajustada)"""
+    qty = float(item.quantity) if item.quantity is not None else 0
+    if item.unit == "un":
+        if qty != int(qty):
+            # un com decimal é suspeito (ex.: "un=222.11")
+            # Se for "quase inteiro" (ex.: 9.0001), arredonda. Senão zera.
+            if abs(qty - round(qty)) < 0.01:
+                return float(round(qty)), True
+            # Valor claramente não é contagem — descartar e marcar estimado
+            return 0.0, True
+    return qty, False
+
+
 def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, bool]:
     """Ajusta a unidade baseada na descrição do item.
     Retorna (unidade_nova, foi_corrigida).
@@ -671,6 +773,31 @@ Retorne APENAS JSON válido no formato:
                 all_items = apply_corrections(all_items, cal_factors)
         except Exception as e:
             print(f"[calibrator] Erro ao aplicar correções: {e}")
+
+        # ── Consolidação pós-IA ──
+        # Remove duplicatas similares (ex.: "alvenaria nova" × 4 pranchas com
+        # mesma qty 491.84 ml), consolida réplicas por departamento (painel
+        # 0.72m² × 16 deptos) e valida un=inteiro (corrige "un=222.11").
+        jobs.update_field(job_id, current_step="Consolidando itens duplicados...")
+        n_before = len(all_items)
+        all_items = _consolidate_items(all_items)
+        # Validar qty/unit após consolidação
+        for it in all_items:
+            new_qty, adjusted = _validate_quantity_for_unit(it)
+            if adjusted:
+                it.quantity = new_qty
+                try:
+                    from models import Confidence
+                    it.confidence = Confidence("estimado")
+                except Exception:
+                    pass
+                it.observations = (
+                    (it.observations or "") +
+                    " | Qty de un ajustada: valor original não-inteiro"
+                ).strip(" |")
+        n_after = len(all_items)
+        if n_before != n_after:
+            print(f"[consolidação] {n_before} → {n_after} itens ({n_before - n_after} consolidados)")
 
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
