@@ -1360,6 +1360,53 @@
     return Math.round(total);
   }
 
+  // Mensagens temáticas rotativas por fase do processamento
+  const PHASE_MESSAGES = {
+    upload: [
+      'Recebendo seu projeto com todo carinho...',
+      'Desembrulhando os arquivos do seu pacote...',
+      'Nossa equipe virtual acabou de vestir o capacete...',
+    ],
+    conversao: [
+      'Traduzindo o DWG pra uma linguagem que a gente entende...',
+      'Abrindo as pranchas na prancheta virtual...',
+      'Folheando cada camada do seu projeto...',
+    ],
+    extracao: [
+      'Pegando a trena e medindo paredes...',
+      'Contando luminárias no teto com o facho da lanterna...',
+      'Somando áreas de forro e piso no escalímetro...',
+      'Percorrendo layers igual um engenheiro atento...',
+      'Conferindo cada hachura, uma por uma...',
+    ],
+    analise: [
+      'Cruzando informações com nossa biblioteca técnica...',
+      'Identificando cada item do projeto...',
+      'Transformando linhas em itens de orçamento...',
+      'Comparando blocos pra não deixar nada passar...',
+      'Separando o que é medição do que é sugestão...',
+    ],
+    planilha: [
+      'Montando sua planilha com ordem e método...',
+      'Dando os toques finais no orçamento...',
+      'Revisando os quantitativos antes de te entregar...',
+      'Organizando tudo em disciplinas...',
+    ],
+  };
+
+  function pickMessageForProgress(pct) {
+    let phase;
+    if (pct < 10)      phase = 'upload';
+    else if (pct < 30) phase = 'conversao';
+    else if (pct < 55) phase = 'extracao';
+    else if (pct < 90) phase = 'analise';
+    else               phase = 'planilha';
+    const arr = PHASE_MESSAGES[phase];
+    // escolhe baseado no tempo decorrido, rotacionando a cada ~5s
+    const idx = Math.floor(Date.now() / 5000) % arr.length;
+    return arr[idx];
+  }
+
   function startPolling() {
     if (pollTimer) clearInterval(pollTimer);
     if (timeEstimateTimer) clearInterval(timeEstimateTimer);
@@ -1386,17 +1433,18 @@
         progressPercent.textContent = Math.round(displayProgress) + '%';
       }
 
+      // Mensagem temática conforme a fase + tempo restante
       const remaining = Math.max(0, estimatedTotalSeconds - elapsed);
       const mins = Math.floor(remaining / 60);
       const secs = Math.floor(remaining % 60);
+      const themed = pickMessageForProgress(displayProgress);
+
       if (remaining > 5) {
-        timeEstimate.textContent = mins > 0
-          ? `Tempo estimado restante: ~${mins}min ${secs}s`
-          : `Tempo estimado restante: ~${secs}s`;
-      } else if (realProgress < 95) {
-        timeEstimate.textContent = 'Nossa IA está finalizando...';
+        const timeStr = mins > 0 ? `~${mins}min ${secs}s` : `~${secs}s`;
+        timeEstimate.textContent = `${themed}  ·  ${timeStr}`;
       } else {
-        timeEstimate.textContent = 'Gerando sua planilha...';
+        // Passou do tempo estimado — só a mensagem temática, sem contador
+        timeEstimate.textContent = themed;
       }
     }, 500);
   }
