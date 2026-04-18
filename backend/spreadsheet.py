@@ -194,24 +194,27 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
 
     premissas = []
     if project.total_area:
-        premissas.append(('0.1', 'Área construída — perímetro externo da laje', 'm²', project.total_area, '', 'Pr.100'))
+        premissas.append(('0.1', 'Área construída — perímetro externo da laje', 'm²', project.total_area, '', ''))
     if project.no_intervention_area:
-        premissas.append(('0.2', 'Área sem intervenção (core)', 'm²', project.no_intervention_area, '', 'Pr.100'))
+        premissas.append(('0.2', 'Área sem intervenção (core)', 'm²', project.no_intervention_area, '', ''))
     if project.layout_area:
-        premissas.append(('0.3', 'Área utilizada para layout / intervenção', 'm²', project.layout_area, '', 'Pr.200'))
+        premissas.append(('0.3', 'Área utilizada para layout / intervenção', 'm²', project.layout_area, '', ''))
     if project.workstations:
-        premissas.append(('0.4', 'Posições de trabalho', 'un', project.workstations, 'Conforme quadro de departamentos', 'Pr.300'))
+        premissas.append(('0.4', 'Posições de trabalho', 'un', project.workstations, 'Conforme quadro de departamentos', ''))
 
+    # Premissas são metadados do projeto (não itens orçáveis) — fill cinza claro
+    P_PREMISSA = PatternFill('solid', fgColor='F3F4F6')
     for num, desc, un, qtd, obs, ref in premissas:
         ws.cell(row=ro, column=1, value=num).font = F_N
-        ws.cell(row=ro, column=2, value=desc).font = F_N
+        ws.cell(row=ro, column=2, value=desc).font = Font(name='Arial', size=9, italic=True, color='6B7280')
         ws.cell(row=ro, column=3, value=un).font = F_N
         ws.cell(row=ro, column=4, value=qtd).font = F_N
-        ws.cell(row=ro, column=8, value=obs).font = F_N
+        ws.cell(row=ro, column=8, value=obs or 'Metadado do projeto — revisar no arquivo original').font = Font(name='Arial', size=8, italic=True, color='6B7280')
         ws.cell(row=ro, column=9, value=ref).font = Font(name='Arial', size=7)
         for c in range(1, 10):
             ws.cell(row=ro, column=c).border = BD
             ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
+            ws.cell(row=ro, column=c).fill = P_PREMISSA
         ws.cell(row=ro, column=4).alignment = AR
         ro += 1
 
@@ -341,27 +344,29 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
 
     P_PURPLE = PatternFill('solid', fgColor='F3E8FF')
 
+    # Checklist de itens típicos de obra — sem quantidades hardcoded.
+    # O orçamentista preenche conforme o projeto específico.
     suggestions = [
-        ('S.1', 'Equipe técnica — Gerente de contrato / PMO', 'mês', 2.5, 'Ajustar conforme prazo da obra'),
-        ('S.2', 'Equipe técnica — Engenheiro de campo residente', 'mês', 2.5, 'Ajustar conforme prazo da obra'),
-        ('S.3', 'Equipe técnica — Engenheiro de instalações', 'mês', 2.5, 'Quando houver instalações complexas'),
-        ('S.4', 'Equipe técnica — Mestre de obras residente', 'mês', 2.5, 'Ajustar conforme prazo da obra'),
-        ('S.5', 'Equipe técnica — Técnico de Segurança do Trabalho', 'mês', 2.5, 'Visita semanal. Média: R$ 3-8k/mês'),
-        ('S.6', 'Equipe técnica — Auxiliar administrativo', 'mês', 2.5, 'Apoio administrativo de obra'),
-        ('S.7', 'Serventia — ajudante geral de obra (seg-sex)', 'dia', 80, 'Média 3 forn: 20-150 dias. Mediana: ~80'),
-        ('S.8', 'Caçambas de entulho (classe A + classe C)', 'un', 20, 'Média 3 forn: 13-25 un'),
-        ('S.9', 'Limpeza permanente de obra', 'dia', 60, 'Ajustar conforme prazo da obra'),
-        ('S.10', 'Limpeza fina pré-entrega', 'm²', 1286, 'Área total de intervenção'),
-        ('S.11', 'Seguro de obra e responsabilidade civil', 'vb', 1, 'Valores variam: R$ 1.472 a R$ 20.400'),
-        ('S.12', 'As-built (elétrica, AC, hidráulica, SPK)', 'vb', 1, 'Conforme padrão do condomínio'),
-        ('S.13', 'Certificação de todos os pontos elétricos', 'vb', 1, 'Verificar exigência do condomínio'),
-        ('S.14', 'Termografia de quadros elétricos (OPCIONAL)', 'vb', 1, 'Opcional — verificar necessidade'),
-        ('S.15', 'Fee / Administração de obra (~9%)', '%', 9, 'Percentual típico de mercado: 8-10%'),
-        ('S.16', 'Impostos (~30% sobre faturamento)', '%', 30, 'Padrão de mercado'),
-        ('S.17', 'Gerenciamento de terceiros (marcenaria, divisórias, carpete)', 'vb', 1, 'Quando houver terceiros no escopo'),
-        ('S.18', 'Transporte vertical de mobiliário (entre andares)', 'vb', 1, 'Se mobiliário armazenado em outro andar'),
-        ('S.19', 'FM-200 gás inerte para CPD (OPCIONAL)', 'vb', 1, 'Depende do projeto de PPCI'),
-        ('S.20', 'Controle de acesso facial (substituir cartão)', 'un', 2, 'Se aplicável ao projeto'),
+        ('S.1', 'Equipe técnica — Gerente de contrato / PMO', 'mês', None, 'Preencher conforme prazo da obra'),
+        ('S.2', 'Equipe técnica — Engenheiro de campo residente', 'mês', None, 'Preencher conforme prazo da obra'),
+        ('S.3', 'Equipe técnica — Engenheiro de instalações', 'mês', None, 'Se houver instalações complexas'),
+        ('S.4', 'Equipe técnica — Mestre de obras residente', 'mês', None, 'Preencher conforme prazo da obra'),
+        ('S.5', 'Equipe técnica — Técnico de Segurança do Trabalho', 'mês', None, 'Visita semanal típica'),
+        ('S.6', 'Equipe técnica — Auxiliar administrativo', 'mês', None, 'Apoio administrativo de obra'),
+        ('S.7', 'Serventia — ajudante geral de obra (seg-sex)', 'dia', None, 'Preencher conforme prazo da obra'),
+        ('S.8', 'Caçambas de entulho (classe A + classe C)', 'un', None, 'Conforme volume de resíduos do projeto'),
+        ('S.9', 'Limpeza permanente de obra', 'dia', None, 'Preencher conforme prazo da obra'),
+        ('S.10', 'Limpeza fina pré-entrega', 'm²', None, 'Área total de intervenção'),
+        ('S.11', 'Seguro de obra e responsabilidade civil', 'vb', None, 'Valor conforme porte da obra'),
+        ('S.12', 'As-built (elétrica, AC, hidráulica, SPK)', 'vb', None, 'Conforme padrão do condomínio'),
+        ('S.13', 'Certificação de todos os pontos elétricos', 'vb', None, 'Verificar exigência do condomínio'),
+        ('S.14', 'Termografia de quadros elétricos (OPCIONAL)', 'vb', None, 'Opcional — verificar necessidade'),
+        ('S.15', 'Fee / Administração de obra', '%', None, 'Percentual conforme contrato'),
+        ('S.16', 'Impostos sobre faturamento', '%', None, 'Conforme regime tributário'),
+        ('S.17', 'Gerenciamento de terceiros (marcenaria, divisórias, carpete)', 'vb', None, 'Quando houver terceiros no escopo'),
+        ('S.18', 'Transporte vertical de mobiliário (entre andares)', 'vb', None, 'Se mobiliário armazenado em outro andar'),
+        ('S.19', 'FM-200 gás inerte para CPD (OPCIONAL)', 'vb', None, 'Depende do projeto de PPCI'),
+        ('S.20', 'Controle de acesso facial (substituir cartão)', 'un', None, 'Se aplicável ao projeto'),
     ]
 
     section_start_sug = ro
@@ -516,17 +521,6 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
         ws.cell(row=ro, column=1).fill = PatternFill('solid', fgColor='F3F4F6')
         ro += 1
 
-    # ================================================================
-    # NÍVEL DE PRECISÃO
-    # ================================================================
-    ro += 1
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
-    ws.cell(row=ro, column=1, value='NÍVEL DE PRECISÃO: ±20-30% (orçamento entre paramétrico e analítico)')
-    _style_row(ws, ro, Font(name='Arial', bold=True, size=9, color='FFFFFF'), PatternFill('solid', fgColor='DC2626'), AL, 9)
-    ro += 1
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
-    ws.cell(row=ro, column=1, value='Este orçamento foi gerado por IA a partir de pranchas de arquitetura, sem projeto executivo complementar. Quantitativos devem ser validados in loco. Para precisão de ±5-10%, solicitar cotações reais de fornecedores. Ref.: ABNT NBR 16633 / IBEC.').font = Font(name='Arial', size=8, italic=True, color='991B1B')
-
     # Notas profissionais
     ro += 2
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
@@ -535,16 +529,15 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
         '1. REFORMA: quantitativos consideram apenas o que MUDA. Conferir in loco e em projeto executivo.',
         '2. Colunas MAT e M.O. (amarelo): preencher pelo orçamentista/fornecedor.',
         '3. BDI padrão 27,5% (ref. TCU para reforma). Fórmula: ((1+AC)(1+CF)(1+S)(1+R)(1+G)(1+L)/(1-T))-1.',
-        '4. Itens em LARANJA: quantidade estimada visualmente — confirmar com projeto executivo.',
-        '5. Itens em BRANCO: quantidade confirmada na legenda da prancha.',
-        '6. Itens em ROXO (Sugestões): custos indiretos típicos de obras — avaliar inclusão.',
-        '7. Contingência 10% — reserva técnica para imprevistos. Ajustar conforme risco do projeto.',
-        '8. Quantidades de materiais já incluem perda estimada de 5-10% (TCPO).',
-        '9. Para alvenaria/pintura: vãos ≤ 2m² NÃO descontados (regra TCPO). Vãos > 2m²: desconta excedente.',
+        '4. Itens em BRANCO: quantidade medida/contada diretamente do arquivo (bloco, hachura, linha). Confiável pra aprovar direto.',
+        '5. Itens em LARANJA: quantidade sugerida pela IA sem medição direta — SEMPRE confirmar antes de orçar.',
+        '6. Itens em CINZA (Premissas): metadados do projeto extraídos do arquivo — revisar no original.',
+        '7. Itens em ROXO (Sugestões): checklist de custos indiretos típicos — preencher quantidade conforme o projeto.',
+        '8. Contingência 10% — reserva técnica para imprevistos. Ajustar conforme risco do projeto.',
+        '9. Perdas de material (5-10% típico) NÃO aplicadas automaticamente — adicionar ao preencher a coluna de custo se pertinente.',
         '10. OMISSOS: itens que podem ser necessários mas não foram incluídos — avaliar com equipe de projeto.',
         '11. EXCLUSOS: itens padrão de mercado excluídos do escopo de empreiteiras.',
-        '12. Motor calibrado com dados reais de mercado.',
-        '13. Planilha gerada por AI.arq (ai.arq.br) — validar com engenheiro de custos.',
+        '12. Planilha gerada por AI.arq (ai.arq.br) — validar com engenheiro de custos.',
     ]
     for n in notas:
         ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
