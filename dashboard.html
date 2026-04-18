@@ -889,6 +889,12 @@
       const btnAdmin = document.getElementById('btn-admin');
       if (btnAdmin) { btnAdmin.classList.remove('hidden'); btnAdmin.classList.add('flex'); }
     }
+    // Usuários com acesso ilimitado (testing/dev)
+    window.__isUnlimitedUser = [
+      'zarelalopes@gmail.com',
+      'pedro.zellmer@famicapital.com.br',
+      'pedrozellmer@gmail.com',
+    ].includes(user.email);
 
     // ── Load beta code banner ──
     await loadBetaBanner();
@@ -1048,10 +1054,13 @@
     const n = selectedFiles.length;
     const free = isFirstProject() && n <= 5;
     const betaFree = hasBetaCredits();
+    const unlimited = !!window.__isUnlimitedUser;
     let price = n <= 5 ? 'R$ 97' : n <= 10 ? 'R$ 197' : 'R$ 397';
     let planName = n <= 5 ? 'Pequeno' : n <= 10 ? 'M\u00e9dio' : 'Grande';
     priceInfo.classList.remove('hidden');
-    if (free) {
+    if (unlimited) {
+      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
+    } else if (free) {
       priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="line-through text-gray-400">${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
     } else if (betaFree) {
       const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
@@ -1320,13 +1329,14 @@
     const numFiles = selectedFiles.length;
     const isFree = isFirstProject() && numFiles <= 5;
     const isBetaFree = hasBetaCredits();
+    const isUnlimited = !!window.__isUnlimitedUser;  // testing/dev bypass
 
-    if (isFree || isBetaFree) {
-      if (isBetaFree && !isFree) {
+    if (isFree || isBetaFree || isUnlimited) {
+      if (isBetaFree && !isFree && !isUnlimited) {
         // Using beta credit — increment usage
         await useBetaCredit();
       }
-      // Projeto gratuito (primeiro ou beta) — processa direto
+      // Projeto gratuito (primeiro / beta / ilimitado) — processa direto
       startProcessing();
     } else {
       // Precisa pagar — abrir Stripe Checkout

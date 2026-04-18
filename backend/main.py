@@ -859,8 +859,8 @@ async def process_files(
     if not valid_files:
         raise HTTPException(400, "Nenhum arquivo válido encontrado. Aceito: PDF, DWG ou DXF.")
 
-    if len(valid_files) > 20:
-        raise HTTPException(400, "Máximo de 20 arquivos por projeto")
+    if len(valid_files) > 50:
+        raise HTTPException(400, "Máximo de 50 arquivos por projeto")
 
     # Criar job
     job_id = str(uuid.uuid4())[:8]
