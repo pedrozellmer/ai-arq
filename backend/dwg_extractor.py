@@ -36,6 +36,11 @@ class BlockCount:
     count: int
     layer: str = ""
     positions: list = field(default_factory=list)  # [(x,y)] coordinates
+    # Dimensão aproximada em metros (bbox da definição × escala do INSERT médio).
+    # Populado só pra blocos de esquadria (portas/janelas) — permite aplicar
+    # regra TCPO de vãos (≤2m² não descontam da pintura).
+    width_m: float = 0.0
+    height_m: float = 0.0
 
 
 @dataclass
@@ -126,13 +131,34 @@ class DXFExtraction:
             lines.append(f"  - {layer}")
         lines.append("")
 
-        # Block counts
+        # Block counts — separando esquadrias (com dimensão) dos demais
         block_summary = self.get_block_summary()
         if block_summary:
-            lines.append(f"CONTAGEM DE BLOCOS ({len(block_summary)} tipos):")
-            for name, count in sorted(block_summary.items(), key=lambda x: -x[1]):
-                lines.append(f"  {name}: {count} un")
-            lines.append("")
+            # Blocos com dimensão extraída (esquadrias)
+            esquadria_blocks = [b for b in self.blocks if b.width_m > 0 and b.height_m > 0]
+            if esquadria_blocks:
+                lines.append("ESQUADRIAS (dimensões aproximadas do bbox × escala do INSERT):")
+                # deduplica por nome
+                seen = set()
+                for b in sorted(esquadria_blocks, key=lambda x: -x.count):
+                    if b.name in seen:
+                        continue
+                    seen.add(b.name)
+                    area = b.width_m * b.height_m
+                    lines.append(
+                        f"  {b.name}: {b.count} un  |  ~{b.width_m:.2f}m × {b.height_m:.2f}m = {area:.2f} m²"
+                    )
+                lines.append("  Regra TCPO: vãos com área ≤ 2 m² NÃO se desconta da pintura; > 2 m² desconta o excedente.")
+                lines.append("")
+
+            # Demais blocos (contagem simples)
+            other = {name: count for name, count in block_summary.items()
+                     if not any(b.name == name and b.width_m > 0 for b in self.blocks)}
+            if other:
+                lines.append(f"CONTAGEM DE BLOCOS ({len(other)} tipos):")
+                for name, count in sorted(other.items(), key=lambda x: -x[1]):
+                    lines.append(f"  {name}: {count} un")
+                lines.append("")
 
         # Wall lengths
         walls_by_layer = self.get_walls_by_layer()
@@ -223,6 +249,65 @@ def _detect_unit_factor(doc) -> float:
 
     # Default for Brazilian architecture: millimeters
     return 0.001
+
+
+# Padrões que indicam bloco de esquadria (porta ou janela).
+# Matching case-insensitive via startswith OU contains.
+_ESQUADRIA_PATTERNS = (
+    "PORT", "PRT", "DOOR",
+    "JANE", "JN", "JAN",
+    "ESQU", "ESQ-",
+    "VIDRO", "GLASS", "WIN",
+    # Códigos típicos de projeto (P1, P2, PM3, PJ4 etc.)
+)
+_ESQUADRIA_CODE_RE = re.compile(r"^(PM|PJ|PD|JN|JL|J[0-9]|P[0-9])", re.IGNORECASE)
+
+
+def _is_esquadria_block(name: str) -> bool:
+    if not name:
+        return False
+    up = name.upper()
+    if any(p in up for p in _ESQUADRIA_PATTERNS):
+        return True
+    if _ESQUADRIA_CODE_RE.match(name):
+        return True
+    return False
+
+
+def _compute_block_bbox(block_layout) -> Optional[tuple[float, float]]:
+    """Calcula bounding box (width, height) das entidades dentro de uma definição
+    de bloco, em unidades de desenho. Retorna None se não conseguir computar."""
+    try:
+        xs, ys = [], []
+        for ent in block_layout:
+            dxftype = ent.dxftype()
+            try:
+                if dxftype == "LINE":
+                    xs.extend([ent.dxf.start.x, ent.dxf.end.x])
+                    ys.extend([ent.dxf.start.y, ent.dxf.end.y])
+                elif dxftype == "LWPOLYLINE":
+                    for p in ent.get_points(format="xy"):
+                        xs.append(p[0]); ys.append(p[1])
+                elif dxftype == "POLYLINE":
+                    for v in ent.vertices:
+                        xs.append(v.dxf.location.x); ys.append(v.dxf.location.y)
+                elif dxftype == "CIRCLE":
+                    c = ent.dxf.center
+                    r = ent.dxf.radius
+                    xs.extend([c.x - r, c.x + r])
+                    ys.extend([c.y - r, c.y + r])
+                elif dxftype == "ARC":
+                    c = ent.dxf.center
+                    r = ent.dxf.radius
+                    xs.extend([c.x - r, c.x + r])
+                    ys.extend([c.y - r, c.y + r])
+            except Exception:
+                continue
+        if not xs or not ys:
+            return None
+        return (max(xs) - min(xs), max(ys) - min(ys))
+    except Exception:
+        return None
 
 
 def _validate_unit_factor(doc, unit_factor: float) -> tuple[float, list[str]]:
@@ -593,32 +678,49 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         "VIEWPORTS", "VIEWPORT", "VP",
         "_GRADE", "GRADE", "GRID",
     }
-    # Prefixos/tokens que indicam blocos de ANOTAÇÃO/CALLOUT (não são itens orçáveis).
-    _ANNOTATION_NAME_PREFIXES = (
-        "ANNO_", "ANNO-", "ANNOTATION_", "NOTE_", "NOTES_",
-        "LEG_", "LEG-", "LEGENDA_", "LEGENDA-", "LEGEND_", "LEGEND-",
-        "TAG-", "TAG_",
-        "SECTION_", "SECTION-", "ELEVATION_", "ELEVATION-",
-        "DETAIL_", "DETAIL-", "DET_", "DET-",
-        "ARROW_", "ARROW-", "CALLOUT_", "CALLOUT-",
-        "NORTH_", "NORTE_", "ROSA_DOS_VENTOS",
-        "TITLE_", "TITLE-", "TITLEBLOCK_", "CARIMBO_", "CARIMBO-",
-        "REVISION_", "REVISION-", "REVISAO_", "REVISAO-",
-        "ADCADD_",  # acad utility helper
-        "AREA1", "AREA2", "AREA3", "AREA4", "AREA5", "AREA6", "AREA7",  # marcações de área (polígonos coloridos)
+    # Regex pra identificar blocos de ANOTAÇÃO/CALLOUT — não são itens orçáveis.
+    # Casa nomes tipo "ANNO_Section_A2", "leg mb", "TAG-porta", "AREA3", etc.
+    # Tolera separador _/- ou espaço entre o token e o resto do nome.
+    _ANNOTATION_NAME_RE = re.compile(
+        r"^(ANNO|ANNOTATION|NOTE|NOTES|"
+        r"LEG|LEGEND|LEGENDA|"
+        r"TAG|"
+        r"SECTION|ELEVATION|DETAIL|DET|"
+        r"ARROW|CALLOUT|"
+        r"NORTH|NORTE|ROSA_DOS_VENTOS|"
+        r"TITLE|TITLEBLOCK|CARIMBO|"
+        r"REVISION|REVISAO|"
+        r"ADCADD|"
+        r"AREA[0-9])(?:[\s_\-]|$)",
+        re.IGNORECASE
     )
     # Nomes que são claramente xrefs/referências externas (arquivo com extensão ou GUID no nome)
     _XREF_NAME_RE = re.compile(r"\.(dwg|dxf)$|\.xref|^xref", re.IGNORECASE)
 
     def _is_annotation_block(name: str) -> bool:
-        up = name.upper()
-        if any(up.startswith(p) for p in _ANNOTATION_NAME_PREFIXES):
+        if not name:
+            return False
+        if _ANNOTATION_NAME_RE.match(name):
             return True
         if _XREF_NAME_RE.search(name):
             return True
         return False
 
-    block_counter: dict[str, dict] = {}  # {name: {"count": n, "layer": l, "positions": [...]}}
+    block_counter: dict[str, dict] = {}  # {name: {"count": n, "layer": l, "positions": [...], "widths": [], "heights": []}}
+    # Cache de bbox por nome de bloco (definição) para não recalcular
+    _block_def_bbox_cache: dict[str, Optional[tuple[float, float]]] = {}
+
+    def _bbox_for_block_def(bname: str) -> Optional[tuple[float, float]]:
+        if bname in _block_def_bbox_cache:
+            return _block_def_bbox_cache[bname]
+        try:
+            block = doc.blocks.get(bname)
+            bbox = _compute_block_bbox(block) if block is not None else None
+        except Exception:
+            bbox = None
+        _block_def_bbox_cache[bname] = bbox
+        return bbox
+
     for insert in msp.query("INSERT"):
         try:
             bname = insert.dxf.name
@@ -628,8 +730,9 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         except Exception:
             continue
 
-        # Skip anonymous / internal blocks (names starting with *)
-        if bname.startswith("*"):
+        # Skip anonymous / internal blocks (names starting with * or contendo $)
+        # Blocos dinâmicos do AutoCAD têm sufixos tipo "A$C6BFD6B53" — filtrar.
+        if bname.startswith("*") or "$" in bname:
             continue
         # Skip utility / system layers that don't represent real items
         if layer and layer.upper() in _UTILITY_LAYERS_UPPER:
@@ -639,9 +742,35 @@ def extract_dxf(filepath: str) -> DXFExtraction:
             continue
 
         if bname not in block_counter:
-            block_counter[bname] = {"count": 0, "layer": layer, "positions": []}
+            block_counter[bname] = {
+                "count": 0, "layer": layer, "positions": [],
+                "widths": [], "heights": [],
+            }
         block_counter[bname]["count"] += 1
         block_counter[bname]["positions"].append((round(x, 2), round(y, 2)))
+
+        # Se parece ser esquadria (porta/janela), armazena dimensão em metros
+        if _is_esquadria_block(bname):
+            bbox = _bbox_for_block_def(bname)
+            if bbox is not None:
+                try:
+                    xscale = getattr(insert.dxf, "xscale", 1.0) or 1.0
+                    yscale = getattr(insert.dxf, "yscale", 1.0) or 1.0
+                    w_m = abs(bbox[0] * xscale * unit_factor)
+                    h_m = abs(bbox[1] * yscale * unit_factor)
+                    # Sanity: rejeitar bbox absurdos (0 ou >10m) que indicam problema
+                    if 0.1 < w_m < 10 and 0.1 < h_m < 10:
+                        block_counter[bname]["widths"].append(w_m)
+                        block_counter[bname]["heights"].append(h_m)
+                except Exception:
+                    pass
+
+    def _median(xs: list) -> float:
+        if not xs:
+            return 0.0
+        s = sorted(xs)
+        n = len(s)
+        return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2.0
 
     blocks = [
         BlockCount(
@@ -649,6 +778,8 @@ def extract_dxf(filepath: str) -> DXFExtraction:
             count=info["count"],
             layer=info["layer"],
             positions=info["positions"],
+            width_m=round(_median(info.get("widths", [])), 2),
+            height_m=round(_median(info.get("heights", [])), 2),
         )
         for name, info in block_counter.items()
     ]
