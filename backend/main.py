@@ -396,24 +396,43 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
-        # Pesos de progresso conforme tipos de arquivo
+        # ── Pesos de progresso alinhados com percepção do usuário ──
+        # A fase que o usuário percebe como "cada prancha processada" é a análise
+        # IA (CoT + JSON), não a conversão DWG→DXF (rápida, parte invisível).
+        # Alocação:
+        #   0-5%:    upload/init
+        #   5-20%:   conversão DWG→DXF (leve, 15% span pro total dos CADs)
+        #   20-X%:   análise DXF (maior fatia — cada DXF = 1/N do span restante)
+        #   X-95%:   análise PDFs (se houver)
+        #   95-100%: consolidação + planilha
         has_cad = bool(cad_paths)
         has_pdf = bool(pdf_paths)
-        # Se só CAD: CAD vai de 5% a 90%. Se só PDF: PDF vai de 5% a 95%. Misto: CAD 5-45%, PDF 45-95%.
-        cad_end_pct = 45 if has_pdf else 90
+        # Partição principal do progresso
+        if has_cad and has_pdf:
+            # CAD conversão 5→15%, análise CAD 15→55%, PDF 55→92%
+            conv_end_pct = 15
+            cad_analysis_end_pct = 55
+        elif has_cad:
+            # Só CAD: conversão 5→20%, análise CAD 20→92% (bem maior pra DXF dominar)
+            conv_end_pct = 20
+            cad_analysis_end_pct = 92
+        else:
+            # Só PDF: 5→92%
+            conv_end_pct = 5
+            cad_analysis_end_pct = 92
+        cad_end_pct = cad_analysis_end_pct  # compatibilidade com código abaixo
 
         # Converter DWG→DXF se necessário
         dxf_paths = []
         if cad_paths:
-            jobs.update_field(job_id, progress=8)
+            jobs.update_field(job_id, progress=5)
             jobs.update_field(job_id, current_step="Processando arquivos DWG/DXF...")
             try:
                 from dwg_extractor import extract_from_file, generate_budget_data, convert_dwg_to_dxf
                 n_cad = len(cad_paths)
-                # Conversão DWG→DXF usa primeiros 35% da fase CAD (8% → cad_end_pct*0.4)
-                conv_span = int((cad_end_pct - 8) * 0.4)
+                conv_span = conv_end_pct - 5  # ex.: 15 ou 10 pts
                 for ci, cad_path in enumerate(cad_paths):
-                    base = 8 + int((ci / max(n_cad, 1)) * conv_span)
+                    base = 5 + int((ci / max(n_cad, 1)) * conv_span)
                     ext = cad_path.lower().rsplit('.', 1)[-1]
                     if ext == 'dwg':
                         jobs.update_field(job_id, progress=base)
@@ -433,7 +452,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
         # Extrair dados de DXF e enviar pro Claude interpretar
         dxf_items = []
         if dxf_paths:
-            extract_start = 8 + int((cad_end_pct - 8) * 0.4)
+            # Análise DXF começa onde a conversão termina
+            extract_start = conv_end_pct
             jobs.update_field(job_id, progress=extract_start)
             jobs.update_field(job_id, current_step="Extraindo geometria dos DXF...")
             try:
@@ -442,12 +462,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str):
                 import json as _j
 
                 n_dxf = len(dxf_paths)
-                dxf_span = cad_end_pct - extract_start  # espaço restante até cad_end_pct
+                dxf_span = cad_end_pct - extract_start
                 for idx, dxf_path in enumerate(dxf_paths):
-                    # Cada DXF ocupa uma faixa: extração 40%, IA 60% da faixa
+                    # Cada DXF ocupa 1/N da faixa. Extração 30% + IA 70% dentro da faixa.
                     dxf_base = extract_start + int((idx / max(n_dxf, 1)) * dxf_span)
                     dxf_next = extract_start + int(((idx + 1) / max(n_dxf, 1)) * dxf_span)
-                    dxf_mid = dxf_base + int((dxf_next - dxf_base) * 0.4)
+                    dxf_mid = dxf_base + int((dxf_next - dxf_base) * 0.3)
 
                     jobs.update_field(job_id, progress=dxf_base)
                     jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Extraindo {os.path.basename(dxf_path)}...")
