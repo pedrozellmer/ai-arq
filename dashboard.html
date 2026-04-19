@@ -239,9 +239,21 @@
           </div>
 
           <!-- Nome do Projeto -->
-          <div class="mb-6">
+          <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-2">Nome do projeto</label>
             <input type="text" id="project-name" placeholder="Ex: Reforma Escrit&oacute;rio 14&ordm; Andar" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+          </div>
+          <!-- Tipologia do Projeto -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 mb-2">Tipologia da obra</label>
+            <select id="project-typology" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none bg-white">
+              <option value="office">Escrit&oacute;rio corporativo</option>
+              <option value="residential">Residencial</option>
+              <option value="retail">Varejo / Lojas</option>
+              <option value="hospital">Hospitalar / Cl&iacute;nicas</option>
+              <option value="educational">Educacional</option>
+            </select>
+            <p class="text-xs text-gray-400 mt-1.5">Usado pra comparar seu projeto com padr&otilde;es t&iacute;picos da mesma tipologia e sinalizar poss&iacute;veis anomalias.</p>
           </div>
           <!-- Drop Zone -->
           <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
@@ -1283,8 +1295,11 @@
     try {
       const formData = new FormData();
       selectedFiles.forEach(f => formData.append('files', f));
+      const projectName = (document.getElementById('project-name')?.value || '').trim();
+      const typology = document.getElementById('project-typology')?.value || 'office';
+      const qs = new URLSearchParams({ typology, project_name: projectName }).toString();
 
-      const res = await fetch(`${API_BASE}/api/process`, {
+      const res = await fetch(`${API_BASE}/api/process?${qs}`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${accessToken}` },
         body: formData
@@ -1946,12 +1961,16 @@
 
       // Show results
       let msg = 'Revis\u00e3o enviada com sucesso!\n\n';
-      if (result.items_compared > 0) {
-        msg += `Itens comparados: ${result.items_compared}\n`;
-        msg += `Desvio m\u00e9dio da IA: ${Math.abs(result.avg_deviation_pct).toFixed(1)}%\n`;
-        msg += `Dados salvos: ${result.items_saved} corre\u00e7\u00f5es\n\n`;
+      const parsed = result.items_parsed || result.items_compared || 0;
+      const saved = result.benchmarks_updated || result.items_saved || 0;
+      if (parsed > 0) {
+        msg += `Linhas da sua planilha lidas: ${parsed}\n`;
+        msg += `Padr\u00f5es de densidade atualizados: ${saved}\n`;
+        msg += `Tipologia: ${result.typology || 'office'}\n\n`;
+        msg += 'Sua revis\u00e3o alimenta as propor\u00e7\u00f5es t\u00edpicas da IA — ';
+        msg += 'ela aprende o que \u00e9 normal por m\u00b2 pra cada tipo de obra, sem copiar seus n\u00fameros para outros projetos.\n\n';
       } else {
-        msg += 'Nenhuma diferen\u00e7a de quantidade encontrada.\n\n';
+        msg += 'Nenhuma linha com quantidade v\u00e1lida foi encontrada.\n\n';
       }
       msg += 'R$ 20 de desconto ser\u00e1 aplicado no pr\u00f3ximo projeto.';
       alert(msg);

@@ -32,17 +32,9 @@ from processor import process_pdfs
 from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
-try:
-    from calibrator import (
-        compare_spreadsheets,
-        save_calibration_data,
-        get_correction_factors,
-        apply_corrections,
-    )
-    HAS_CALIBRATOR = True
-except ImportError:
-    HAS_CALIBRATOR = False
-    print("calibrator.py não disponível — calibração desativada")
+# calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
+# respeita o isolamento entre projetos. A calibração agora é 100% por
+# densidade (density_calibration.py) e só gera alertas.
 
 # Supabase client para salvar projetos
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
@@ -491,8 +483,12 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
     return current_unit, False
 
 
-def process_job(job_id: str, file_paths: list[str], work_dir: str):
-    """Processa um job prancha por prancha. Aceita PDF, DWG e DXF."""
+def process_job(job_id: str, file_paths: list[str], work_dir: str,
+                typology: str = "office"):
+    """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
+
+    `typology` alimenta a camada de calibração por densidade — alertas
+    comparam o projeto contra benchmarks da mesma categoria."""
     import gc
     import anthropic
     from processor import identify_sheet_type, extract_text, render_crops
@@ -1028,17 +1024,8 @@ revisor humano confirme direto no arquivo."""
             del text, crop_paths, sheet, result
             gc.collect()
 
-        # ── Auto-calibração: aplicar fatores de correção ──
-        jobs.update_field(job_id, progress=91)
-        jobs.update_field(job_id, current_step="Aplicando calibração baseada em projetos anteriores...")
-        try:
-            cal_factors = get_correction_factors()
-            if cal_factors:
-                all_items = apply_corrections(all_items, cal_factors)
-        except Exception as e:
-            print(f"[calibrator] Erro ao aplicar correções: {e}")
-
         # ── Consolidação pós-IA ──
+        jobs.update_field(job_id, progress=91)
         # Remove duplicatas similares (ex.: "alvenaria nova" × 4 pranchas com
         # mesma qty 491.84 ml), consolida réplicas por departamento (painel
         # 0.72m² × 16 deptos) e valida un=inteiro (corrige "un=222.11").
@@ -1093,11 +1080,11 @@ revisor humano confirme direto no arquivo."""
         if HAS_DENSITY_CAL and ref_area > 0:
             try:
                 from density_calibration import check_density_anomaly
-                benchmarks = density_get_benchmarks(typology="office")
+                benchmarks = density_get_benchmarks(typology=typology)
                 density_flagged = 0
                 for it in all_items:
                     is_anom, reason = check_density_anomaly(
-                        it, ref_area, benchmarks=benchmarks, typology="office",
+                        it, ref_area, benchmarks=benchmarks, typology=typology,
                     )
                     if is_anom:
                         try:
@@ -1139,6 +1126,7 @@ revisor humano confirme direto no arquivo."""
             "status": "done",
             "items_count": len(all_items),
             "total_area": project_data.total_area if project_data.total_area else None,
+            "layout_area": project_data.layout_area if project_data.layout_area else None,
             "completed_at": datetime.utcnow().isoformat(),
         })
 
@@ -1159,12 +1147,24 @@ async def root():
     return {"service": "AI.arq API", "version": "1.0.0", "status": "online"}
 
 
+_VALID_TYPOLOGIES = {"office", "residential", "retail", "hospital", "educational"}
+
+
 @app.post("/api/process")
 async def process_files(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
+    typology: str = "office",
+    project_name: str = "",
 ):
-    """Recebe PDF, DWG ou DXF e inicia processamento em background."""
+    """Recebe PDF, DWG ou DXF e inicia processamento em background.
+
+    - `typology` (opcional, default `office`): usado pela calibração por
+      densidade pra comparar o projeto com padrões da mesma categoria.
+    - `project_name` (opcional): apelido amigável dado pelo cliente.
+    """
+    if typology not in _VALID_TYPOLOGIES:
+        typology = "office"
     if not files:
         raise HTTPException(400, "Nenhum arquivo enviado")
 
@@ -1218,6 +1218,8 @@ async def process_files(
         "user_id": user_id or "anonymous",
         "user_email": user_email,
         "user_name": user_name,
+        "project_name": project_name or "Sem nome",
+        "typology": typology,
         "files_count": len(file_paths),
         "file_types": file_types,
         "status": "queued",
@@ -1225,10 +1227,16 @@ async def process_files(
 
     # Iniciar processamento em thread separada (não bloqueia HTTP)
     import threading
-    t = threading.Thread(target=process_job, args=(job_id, file_paths, work_dir), daemon=True)
+    t = threading.Thread(
+        target=process_job,
+        args=(job_id, file_paths, work_dir),
+        kwargs={"typology": typology},
+        daemon=True,
+    )
     t.start()
 
-    return {"job_id": job_id, "files_received": len(file_paths), "file_types": file_types, "status": "queued"}
+    return {"job_id": job_id, "files_received": len(file_paths),
+            "file_types": file_types, "status": "queued", "typology": typology}
 
 
 @app.get("/api/debug/dwg")
@@ -1455,149 +1463,87 @@ async def cashback_upload(
     file: UploadFile = File(...),
     job_id: str = "",
 ):
-    """Receive a user-revised XLSX, compare with original, and store calibration data."""
+    """Cashback: recebe a planilha revisada do cliente e alimenta os
+    benchmarks de densidade da mesma tipologia.
+
+    A tipologia e a área de referência são resolvidas consultando o
+    projeto no Supabase. A lógica é a mesma da ingestão do admin —
+    o sistema aprende **proporções típicas** (qty/m²) e apenas
+    alerta sobre anomalias em projetos futuros. Nunca copia valores
+    absolutos entre projetos.
+    """
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xls")):
         raise HTTPException(400, "Arquivo deve ser .xlsx")
-
     if not job_id:
-        raise HTTPException(400, "job_id e obrigatorio")
+        raise HTTPException(400, "job_id é obrigatório")
+    if not HAS_DENSITY_CAL:
+        raise HTTPException(500, "Módulo density_calibration não carregado")
 
-    # Save revised file temporarily
-    tmp_dir = os.path.join(WORK_DIR, "_calibration_tmp")
+    project = _get_project_from_supabase(job_id)
+    if not project:
+        raise HTTPException(404, f"Projeto não encontrado pro job_id={job_id}")
+
+    typology = project.get("typology") or "office"
+    ref_area = project.get("layout_area") or project.get("total_area") or 0
+    try:
+        ref_area = float(ref_area or 0)
+    except Exception:
+        ref_area = 0
+    if ref_area <= 0:
+        raise HTTPException(
+            400,
+            "Projeto não tem área de referência (layout_area ou total_area) — "
+            "ainda não foi possível computar a área pelo DWG. "
+            "Aguarde o processamento terminar completamente antes de enviar a revisão.",
+        )
+
+    label = (project.get("project_name") or f"job_{job_id}")[:100]
+
+    tmp_dir = os.path.join(WORK_DIR, "_density_tmp")
     os.makedirs(tmp_dir, exist_ok=True)
-    revised_path = os.path.join(tmp_dir, f"revised_{job_id}_{file.filename}")
+    revised_path = os.path.join(tmp_dir, f"cashback_{job_id}_{file.filename}")
     try:
         content = await file.read()
         with open(revised_path, "wb") as f:
             f.write(content)
-    except Exception as e:
-        raise HTTPException(500, f"Erro ao salvar arquivo: {str(e)}")
 
-    # Find the original XLSX for this job_id
-    work_dir = os.path.join(WORK_DIR, job_id)
-    original_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
-
-    if not os.path.exists(original_path):
-        # Clean up
-        if os.path.exists(revised_path):
-            os.remove(revised_path)
-        raise HTTPException(404, f"Planilha original do job {job_id} nao encontrada")
-
-    try:
-        # Compare spreadsheets
-        comparisons = compare_spreadsheets(original_path, revised_path)
-
-        # Save to Supabase
-        inserted = 0
-        if comparisons:
-            inserted = save_calibration_data(
-                comparisons, source="user", project_id=job_id
-            )
-
-        # Calculate summary stats
-        avg_deviation = 0
-        if comparisons:
-            avg_deviation = sum(c["deviation_pct"] for c in comparisons) / len(comparisons)
-
+        from density_calibration import ingest_budget as _ingest
+        summary = _ingest(
+            revised_path, area_m2=ref_area, typology=typology, project_label=label,
+        )
         return {
             "status": "ok",
-            "items_compared": len(comparisons),
-            "items_saved": inserted,
-            "avg_deviation_pct": round(avg_deviation, 2),
-            "comparisons": comparisons[:20],  # Return first 20 for UI display
+            "source": "cashback",
+            "job_id": job_id,
+            "typology": typology,
+            "area_m2": ref_area,
+            "project_label": label,
+            "items_parsed": summary.get("items_parsed", 0),
+            "benchmarks_updated": summary.get("benchmarks_updated", 0),
+            "new_item_types": summary.get("new_item_types", 0),
+            # Legacy fields for UI compat (dashboard shows these)
+            "items_compared": summary.get("items_parsed", 0),
+            "items_saved": summary.get("benchmarks_updated", 0),
+            "avg_deviation_pct": 0,
             "cashback_granted": True,
         }
-
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"Erro na comparacao: {str(e)}")
-
+        raise HTTPException(500, f"Erro na ingestão da revisão: {str(e)}")
     finally:
-        # Clean up temp file
         if os.path.exists(revised_path):
             try:
                 os.remove(revised_path)
-            except:
+            except Exception:
                 pass
 
 
-@app.post("/api/calibration/manual")
-async def calibration_manual(
-    original: UploadFile = File(...),
-    revised: UploadFile = File(...),
-    source: str = "admin",
-):
-    """Admin endpoint: compare two XLSX files and store calibration data."""
-    tmp_dir = os.path.join(WORK_DIR, "_calibration_tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-
-    orig_path = os.path.join(tmp_dir, f"orig_{original.filename}")
-    rev_path = os.path.join(tmp_dir, f"rev_{revised.filename}")
-
-    try:
-        orig_content = await original.read()
-        with open(orig_path, "wb") as f:
-            f.write(orig_content)
-
-        rev_content = await revised.read()
-        with open(rev_path, "wb") as f:
-            f.write(rev_content)
-
-        comparisons = compare_spreadsheets(orig_path, rev_path)
-
-        inserted = 0
-        if comparisons:
-            inserted = save_calibration_data(
-                comparisons, source=source, project_id="manual"
-            )
-
-        avg_deviation = 0
-        if comparisons:
-            avg_deviation = sum(c["deviation_pct"] for c in comparisons) / len(comparisons)
-
-        return {
-            "status": "ok",
-            "items_compared": len(comparisons),
-            "items_saved": inserted,
-            "avg_deviation_pct": round(avg_deviation, 2),
-            "comparisons": comparisons,
-        }
-
-    except Exception as e:
-        raise HTTPException(500, f"Erro na comparacao manual: {str(e)}")
-
-    finally:
-        for p in [orig_path, rev_path]:
-            if os.path.exists(p):
-                try:
-                    os.remove(p)
-                except:
-                    pass
-
-
-@app.get("/api/calibration/factors")
-async def calibration_factors():
-    """Return current correction factors from the calibration system."""
-    try:
-        factors = get_correction_factors()
-        # Convert to list for JSON response
-        factors_list = []
-        for item_type, data in factors.items():
-            factors_list.append({
-                "item_type": item_type,
-                "discipline": data.get("discipline", ""),
-                "unit": data.get("unit", ""),
-                "factor": data.get("factor", 1.0),
-                "data_points": data.get("data_points", 0),
-                "deviation": data.get("deviation", 0),
-                "stddev": data.get("stddev"),
-                "min_factor": data.get("min_factor"),
-                "max_factor": data.get("max_factor"),
-            })
-        # Sort by data_points descending
-        factors_list.sort(key=lambda x: x["data_points"], reverse=True)
-        return {"status": "ok", "count": len(factors_list), "factors": factors_list}
-    except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar fatores: {str(e)}")
+# Endpoints /api/calibration/manual e /api/calibration/factors foram removidos
+# porque alimentavam o modelo de "fator absoluto" (correction_factor = real/ai),
+# que contraria a regra de isolamento de projetos. A mesma ingestão agora é
+# feita via /api/calibration/ingest (admin) e /api/cashback/upload (cliente),
+# que aprendem RATIOS de densidade (qty/m²) por tipologia e só geram alertas.
 
 
 # ═══════════════════════════════════════════════
@@ -1657,6 +1603,94 @@ async def calibration_ingest_density(
         raise
     except Exception as e:
         raise HTTPException(500, f"Erro na ingestão: {str(e)}")
+    finally:
+        if os.path.exists(xlsx_path):
+            try:
+                os.remove(xlsx_path)
+            except Exception:
+                pass
+
+
+def _get_project_from_supabase(job_id: str) -> dict:
+    """Busca um projeto pelo job_id — usado pelo cashback pra resolver
+    typology + área do projeto revisado."""
+    try:
+        import urllib.request, json as _json
+        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        resp = urllib.request.urlopen(req, timeout=8)
+        rows = _json.loads(resp.read().decode("utf-8"))
+        return rows[0] if rows else {}
+    except Exception as e:
+        print(f"Supabase select project error: {e}")
+        return {}
+
+
+@app.post("/api/calibration/ingest-from-review")
+async def calibration_ingest_from_review(
+    xlsx: UploadFile = File(...),
+    job_id: str = "",
+):
+    """Cashback: cliente sobe a planilha revisada do próprio projeto e o
+    backend alimenta os benchmarks de densidade da mesma tipologia. Nunca
+    copia valores absolutos pra outros projetos — só aprende proporções
+    típicas pra sinalizar anomalias futuras.
+
+    Resolve tipologia + área consultando o `projects` no Supabase pelo
+    `job_id` do projeto original.
+    """
+    if not HAS_DENSITY_CAL:
+        raise HTTPException(500, "Módulo density_calibration não carregado")
+    if not job_id:
+        raise HTTPException(400, "job_id obrigatório")
+
+    project = _get_project_from_supabase(job_id)
+    if not project:
+        raise HTTPException(404, f"Projeto não encontrado pro job_id={job_id}")
+
+    typology = project.get("typology") or "office"
+    ref_area = project.get("layout_area") or project.get("total_area") or 0
+    try:
+        ref_area = float(ref_area or 0)
+    except Exception:
+        ref_area = 0
+    if ref_area <= 0:
+        raise HTTPException(
+            400,
+            "Projeto não tem área de referência (layout_area ou total_area). "
+            "A calibração precisa da área pra computar densidades.",
+        )
+
+    label = (project.get("project_name") or f"job_{job_id}")[:100]
+
+    tmp_dir = os.path.join(WORK_DIR, "_density_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    xlsx_path = os.path.join(tmp_dir, f"review_{job_id}_{xlsx.filename}")
+    try:
+        content = await xlsx.read()
+        with open(xlsx_path, "wb") as f:
+            f.write(content)
+
+        from density_calibration import ingest_budget as _ingest
+        summary = _ingest(
+            xlsx_path, area_m2=ref_area, typology=typology, project_label=label,
+        )
+        return {
+            "status": "ok",
+            "source": "cashback",
+            "job_id": job_id,
+            "typology": typology,
+            "area_m2": ref_area,
+            "project_label": label,
+            **summary,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro na ingestão da revisão: {str(e)}")
     finally:
         if os.path.exists(xlsx_path):
             try:

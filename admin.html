@@ -355,29 +355,30 @@
           </button>
         </div>
 
-        <!-- Summary cards -->
+        <!-- Summary cards (density) -->
         <div class="grid gap-4 sm:grid-cols-3 mb-6">
           <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <p class="text-sm font-medium text-gray-500 mb-1">Total de Fatores</p>
+            <p class="text-sm font-medium text-gray-500 mb-1">Benchmarks totais</p>
             <p id="cal-total" class="text-2xl font-bold text-gray-900">--</p>
           </div>
           <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <p class="text-sm font-medium text-gray-500 mb-1">Desvio M&#233;dio Global</p>
-            <p id="cal-avg-dev" class="text-2xl font-bold text-gray-900">--</p>
+            <p class="text-sm font-medium text-gray-500 mb-1">Tipologia com mais dados</p>
+            <p id="cal-top-typology" class="text-2xl font-bold text-gray-900">--</p>
           </div>
           <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <p class="text-sm font-medium text-gray-500 mb-1">Itens Calibrados (2+ projetos)</p>
+            <p class="text-sm font-medium text-gray-500 mb-1">Prontos pra alerta (n&#8805;2)</p>
             <p id="cal-calibrated" class="text-2xl font-bold text-gray-900">--</p>
           </div>
         </div>
 
-        <!-- Ingestão por densidade (novo) -->
+        <!-- Ingestão por densidade -->
         <div class="rounded-2xl border bg-white p-6 shadow-sm mb-6">
-          <h3 class="text-base font-semibold text-gray-900 mb-1">Ingest&#227;o por densidade (novo)</h3>
+          <h3 class="text-base font-semibold text-gray-900 mb-1">Ingest&#227;o de or&#231;amento-fonte</h3>
           <p class="text-xs text-gray-500 mb-4">
-            Envie or&#231;amentos-fonte reais pra ensinar a IA a reconhecer <b>densidades t&#237;picas</b>
-            (ex.: lumin&#225;rias/m&#178;, alvenaria/m&#178;) por tipologia. Projetos novos v&#227;o receber
-            <b>alertas laranja</b> quando uma densidade fugir do padr&#227;o &plusmn;2&sigma;. Nunca copia valores absolutos.
+            Envie or&#231;amentos reais pra ensinar a IA a reconhecer <b>densidades t&#237;picas</b>
+            (ex.: lumin&#225;rias/m&#178;, alvenaria/m&#178;) por tipologia. Projetos novos recebem
+            <b>alertas laranja</b> quando fogem do padr&#227;o &plusmn;2&sigma;. Nunca copia valores absolutos.
+            Clientes que mandam revis&#227;o pelo cashback alimentam a mesma base, automaticamente.
           </p>
           <div class="grid gap-4 sm:grid-cols-2 mb-4">
             <div class="sm:col-span-2">
@@ -417,65 +418,6 @@
           <div id="den-benchmarks" class="mt-4 hidden rounded-xl border bg-gray-50 p-4 text-xs max-h-96 overflow-y-auto"></div>
         </div>
 
-        <!-- Manual upload -->
-        <div class="rounded-2xl border bg-white p-6 shadow-sm mb-6">
-          <h3 class="text-base font-semibold text-gray-900 mb-3">Upload manual (admin)</h3>
-          <p class="text-xs text-gray-500 mb-4">Envie duas planilhas (original da IA e revisada) para alimentar a calibra&#231;&#227;o.</p>
-          <div class="grid gap-4 sm:grid-cols-2 mb-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Planilha original (IA)</label>
-              <input type="file" id="cal-original-file" accept=".xlsx,.xls" class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Planilha revisada</label>
-              <input type="file" id="cal-revised-file" accept=".xlsx,.xls" class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
-            </div>
-          </div>
-          <button onclick="uploadManualCalibration()" id="btn-cal-manual" class="px-5 py-2.5 rounded-xl gradient-main text-white font-semibold text-sm shadow-btn transition hover:opacity-90 disabled:opacity-40" disabled>
-            Comparar e Salvar
-          </button>
-          <div id="cal-manual-result" class="mt-4 hidden rounded-xl border p-4 text-sm"></div>
-        </div>
-
-        <!-- Factors table -->
-        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-          <div class="table-container">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b bg-gray-50">
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Item</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Disciplina</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Unidade</th>
-                  <th class="text-right px-4 py-3 font-semibold text-gray-600">Fator</th>
-                  <th class="text-right px-4 py-3 font-semibold text-gray-600">Desvio M&#233;dio</th>
-                  <th class="text-center px-4 py-3 font-semibold text-gray-600">Data Points</th>
-                </tr>
-              </thead>
-              <tbody id="calibration-table-body">
-                <tr>
-                  <td colspan="6" class="px-4 py-12 text-center text-gray-400">Clique em "Atualizar" para carregar os fatores de calibra&#231;&#227;o.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <p id="calibration-count" class="text-xs text-gray-400 mt-3"></p>
-
-        <!-- Legend -->
-        <div class="mt-4 flex flex-wrap items-center gap-4 text-xs text-gray-500">
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block w-3 h-3 rounded-full bg-emerald-400"></span>
-            Fator 0.8 &ndash; 1.2 (bom)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block w-3 h-3 rounded-full bg-amber-400"></span>
-            Fator 0.5 &ndash; 0.8 ou 1.2 &ndash; 2.0 (aten&#231;&#227;o)
-          </span>
-          <span class="flex items-center gap-1.5">
-            <span class="inline-block w-3 h-3 rounded-full bg-red-400"></span>
-            Fator &lt; 0.5 ou &gt; 2.0 (cr&#237;tico)
-          </span>
-        </div>
       </div>
 
     </div>
@@ -911,143 +853,34 @@ document.getElementById('form-new-code').addEventListener('submit', async functi
 });
 
 // ══════════════════════════════════════════════
-// CALIBRATION
+// CALIBRATION — summary cards (todas tipologias)
 // ══════════════════════════════════════════════
 const API_BASE = 'https://ai-arq.onrender.com';
 
 async function loadCalibrationFactors() {
-  const tbody = document.getElementById('calibration-table-body');
-  tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-400">Carregando fatores...</td></tr>';
-
+  // Carrega os summary cards usando benchmarks de densidade (todas tipologias)
   try {
-    const res = await fetch(`${API_BASE}/api/calibration/factors`);
+    const res = await fetch(`${API_BASE}/api/calibration/benchmarks`);
     if (!res.ok) throw new Error('Erro ' + res.status);
     const data = await res.json();
-    const factors = data.factors || [];
+    const rows = data.benchmarks || [];
 
-    document.getElementById('cal-total').textContent = factors.length;
+    document.getElementById('cal-total').textContent = rows.length;
 
-    // Calculate global avg deviation
-    if (factors.length > 0) {
-      const avgDev = factors.reduce((s, f) => s + Math.abs(f.deviation || 0), 0) / factors.length;
-      document.getElementById('cal-avg-dev').textContent = avgDev.toFixed(1) + '%';
-    } else {
-      document.getElementById('cal-avg-dev').textContent = '--';
-    }
+    // Tipologia com mais dados
+    const byTyp = {};
+    rows.forEach(r => { byTyp[r.typology] = (byTyp[r.typology] || 0) + 1; });
+    const top = Object.entries(byTyp).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById('cal-top-typology').textContent = top ? `${top[0]} (${top[1]})` : '--';
 
-    // Count calibrated (2+ data points)
-    const calibrated = factors.filter(f => f.data_points >= 2).length;
-    document.getElementById('cal-calibrated').textContent = calibrated;
-
-    document.getElementById('calibration-count').textContent = factors.length + ' fator(es) encontrado(s)';
-
-    if (!factors.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-gray-400">Nenhum fator de calibra\u00e7\u00e3o encontrado. Envie revis\u00f5es para alimentar o sistema.</td></tr>';
-      return;
-    }
-
-    tbody.innerHTML = factors.map(f => {
-      const factor = f.factor != null ? f.factor : 1;
-      const deviation = f.deviation != null ? f.deviation : 0;
-      const dp = f.data_points || 0;
-
-      // Color coding for factor
-      let factorColor, factorBg;
-      if (factor >= 0.8 && factor <= 1.2) {
-        factorColor = 'text-emerald-700';
-        factorBg = 'bg-emerald-50';
-      } else if ((factor >= 0.5 && factor < 0.8) || (factor > 1.2 && factor <= 2.0)) {
-        factorColor = 'text-amber-700';
-        factorBg = 'bg-amber-50';
-      } else {
-        factorColor = 'text-red-700';
-        factorBg = 'bg-red-50';
-      }
-
-      // Format item_type for display: replace underscores with spaces, titlecase
-      const displayName = (f.item_type || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-
-      return `
-        <tr class="border-b hover:bg-gray-50 transition">
-          <td class="px-4 py-3 font-medium text-gray-900 max-w-xs truncate" title="${esc(f.item_type)}">${esc(displayName)}</td>
-          <td class="px-4 py-3 text-gray-600">${esc(f.discipline || '--')}</td>
-          <td class="px-4 py-3 text-gray-600">${esc(f.unit || '--')}</td>
-          <td class="px-4 py-3 text-right">
-            <span class="inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${factorColor} ${factorBg}">${factor.toFixed(3)}</span>
-          </td>
-          <td class="px-4 py-3 text-right text-gray-600">${deviation.toFixed(1)}%</td>
-          <td class="px-4 py-3 text-center">
-            <span class="inline-flex items-center justify-center min-w-[24px] px-1.5 py-0.5 rounded-full text-xs font-medium ${dp >= 2 ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}">${dp}</span>
-          </td>
-        </tr>
-      `;
-    }).join('');
-
+    // Prontos pra alerta (n >= 2)
+    const ready = rows.filter(r => (r.n_projects || 0) >= 2).length;
+    document.getElementById('cal-calibrated').textContent = ready;
   } catch (err) {
-    console.error('Error loading calibration factors:', err);
-    tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-12 text-center text-red-400">Erro ao carregar fatores: ' + esc(err.message) + '</td></tr>';
-  }
-}
-
-// Enable manual upload button when both files selected
-document.getElementById('cal-original-file').addEventListener('change', toggleManualBtn);
-document.getElementById('cal-revised-file').addEventListener('change', toggleManualBtn);
-function toggleManualBtn() {
-  const orig = document.getElementById('cal-original-file').files.length > 0;
-  const rev = document.getElementById('cal-revised-file').files.length > 0;
-  document.getElementById('btn-cal-manual').disabled = !(orig && rev);
-}
-
-async function uploadManualCalibration() {
-  const origFile = document.getElementById('cal-original-file').files[0];
-  const revFile = document.getElementById('cal-revised-file').files[0];
-  if (!origFile || !revFile) return;
-
-  const btn = document.getElementById('btn-cal-manual');
-  const resultDiv = document.getElementById('cal-manual-result');
-  btn.disabled = true;
-  btn.textContent = 'Processando...';
-  resultDiv.classList.add('hidden');
-
-  try {
-    const formData = new FormData();
-    formData.append('original', origFile);
-    formData.append('revised', revFile);
-    formData.append('source', 'admin');
-
-    const res = await fetch(`${API_BASE}/api/calibration/manual`, {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.detail || 'Erro ao processar');
-
-    resultDiv.classList.remove('hidden');
-    if (data.items_compared > 0) {
-      resultDiv.className = 'mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800';
-      resultDiv.innerHTML = `
-        <p class="font-semibold mb-1">Compara\u00e7\u00e3o conclu\u00edda</p>
-        <p>Itens comparados: <strong>${data.items_compared}</strong></p>
-        <p>Salvos no banco: <strong>${data.items_saved}</strong></p>
-        <p>Desvio m\u00e9dio: <strong>${Math.abs(data.avg_deviation_pct).toFixed(1)}%</strong></p>
-      `;
-    } else {
-      resultDiv.className = 'mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800';
-      resultDiv.innerHTML = '<p>Nenhuma diferen\u00e7a de quantidade encontrada entre as planilhas.</p>';
-    }
-
-    // Reload factors table
-    loadCalibrationFactors();
-
-  } catch (err) {
-    console.error('Manual calibration error:', err);
-    resultDiv.classList.remove('hidden');
-    resultDiv.className = 'mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800';
-    resultDiv.innerHTML = '<p>Erro: ' + esc(err.message) + '</p>';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Comparar e Salvar';
+    console.error('Error loading benchmarks summary:', err);
+    document.getElementById('cal-total').textContent = '--';
+    document.getElementById('cal-top-typology').textContent = '--';
+    document.getElementById('cal-calibrated').textContent = '--';
   }
 }
 
