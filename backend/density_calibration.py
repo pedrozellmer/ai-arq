@@ -493,6 +493,12 @@ def check_density_anomaly(item, project_area_m2: float,
     if not benchmarks:
         return False, ""
 
+    # OTIMIZAÇÃO: se nenhum benchmark tem n>=2, NUNCA vamos disparar alerta
+    # (a função sempre retorna False). Pula a chamada de classify_item (~3s
+    # de LLM) — caso contrário desperdiçamos tempo+tokens em todo job.
+    if not any((b.get("n_projects") or 0) >= 2 for b in benchmarks.values()):
+        return False, ""
+
     # CASCATA: classifica o item e busca benchmark do mais específico pro
     # mais genérico — família → grupo → capítulo. Preserva especificidade
     # quando há dados; ainda dá sinal útil nos níveis superiores.
