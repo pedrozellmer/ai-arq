@@ -165,25 +165,45 @@ def _supabase_select(table: str, query: str = "select=*") -> list[dict]:
 
 def ingest_budget(xlsx_path: str, area_m2: float, typology: str,
                   project_label: str = "") -> dict:
-    """Parseia XLSX e atualiza os benchmarks agregados.
+    """Parseia XLSX, classifica cada item via LLM (`classifier.classify_item`)
+    e recomputa benchmarks em 3 níveis: família, grupo e capítulo.
 
-    Retorna dict de resumo: {items_parsed, benchmarks_updated, new_item_types}.
+    Cada item do XLSX vira:
+    - 1 linha em `density_ingest_raw` com familia_id, atributos folha
+      extraídos (cor, PD, marca, dim…) e confidence da classificação.
+    - Densidades agregadas em `density_benchmarks` com level={familia|grupo|
+      capitulo}. Alertas futuros cascateiam leaf → familia → grupo → capitulo.
+
+    Retorna resumo com items_parsed, classificados, benchmarks_updated
+    por nível.
     """
     ratios = extract_density_ratios(xlsx_path, area_m2, typology)
     if not ratios:
-        return {"items_parsed": 0, "benchmarks_updated": 0, "new_item_types": 0,
+        return {"items_parsed": 0, "classified": 0,
+                "benchmarks_updated_familia": 0,
+                "benchmarks_updated_grupo": 0,
+                "benchmarks_updated_capitulo": 0,
                 "error": "nenhuma linha válida extraída do XLSX"}
 
-    # Busca benchmarks existentes pra esta tipologia
-    existing = _supabase_select(
-        "density_benchmarks",
-        f"select=*&typology=eq.{urllib.request.quote(typology)}",
-    )
-    existing_by_key = {
-        (r["item_type"], r.get("unit") or ""): r for r in existing
-    }
+    # 1) Classifica cada item via LLM (pode ser lento — N chamadas API)
+    classified = 0
+    for r in ratios:
+        try:
+            from classifier import classify_item
+            cls = classify_item(r["description"], r["unit"])
+        except Exception as e:
+            print(f"[density] classifier error: {e}")
+            cls = {"familia_id": None, "grupo_id": None, "capitulo_id": None,
+                   "confidence": 0, "attributes": {}, "reasoning": f"err: {e}"}
+        r["familia_id"] = cls.get("familia_id")
+        r["grupo_id"] = cls.get("grupo_id")
+        r["capitulo_id"] = cls.get("capitulo_id")
+        r["classification_confidence"] = cls.get("confidence") or 0
+        r["attributes"] = cls.get("attributes") or {}
+        if r["familia_id"]:
+            classified += 1
 
-    # Também salva a ingestão bruta (rastreabilidade)
+    # 2) Escreve raw com classificação
     for r in ratios:
         raw_record = {
             "typology": typology,
@@ -194,63 +214,126 @@ def ingest_budget(xlsx_path: str, area_m2: float, typology: str,
             "area_m2": area_m2,
             "density": r["density"],
             "project_label": project_label[:100],
+            "familia_id": r["familia_id"],
+            "classification_confidence": r["classification_confidence"],
+            "attributes": r["attributes"],
         }
         _supabase_upsert(
             "density_ingest_raw", raw_record,
             "typology,item_type,unit,project_label",
         )
 
-    # Agrega por (item_type, unit) pra recomputar média/stddev incluindo este upload
-    updated = 0
-    new_types = 0
-    by_key: dict = {}
-    for r in ratios:
-        k = (r["item_type"], r["unit"])
-        by_key.setdefault(k, []).append(r["density"])
+    # 3) Recomputa benchmarks em 3 níveis (familia, grupo, capitulo).
+    # A agregação é: pra cada (typology, nivel_id, unit), busca todas as linhas
+    # raw que pertencem àquele nó, soma densidades por project_label (mesmo
+    # projeto com várias linhas na mesma família vira a soma), e computa
+    # mean/stddev através dos projetos.
+    updated_fam = _recompute_level(typology, "familia")
+    updated_grp = _recompute_level(typology, "grupo")
+    updated_cap = _recompute_level(typology, "capitulo")
 
-    for (item_type, unit), densities in by_key.items():
-        # Puxa histórico desta tipologia+item_type+unit (inclui esta ingestão)
-        hist_q = (
-            f"select=density,project_label&typology=eq.{urllib.request.quote(typology)}"
-            f"&item_type=eq.{urllib.request.quote(item_type)}"
-            f"&unit=eq.{urllib.request.quote(unit)}"
-        )
-        hist = _supabase_select("density_ingest_raw", hist_q)
-        # Dedupe por project_label pra não super-representar um único projeto
-        seen_labels = set()
-        all_densities = []
-        for h in hist:
-            lab = h.get("project_label") or ""
-            if lab in seen_labels:
-                # mantém só 1 valor por projeto (média das linhas se múltiplas)
-                continue
-            seen_labels.add(lab)
-            all_densities.append(_parse_float(h.get("density")))
-        all_densities = [d for d in all_densities if d > 0]
-        if not all_densities:
+    _benchmarks_cache["data"] = None
+    _benchmarks_cache["timestamp"] = 0
+
+    return {
+        "items_parsed": len(ratios),
+        "classified": classified,
+        "benchmarks_updated_familia": updated_fam,
+        "benchmarks_updated_grupo": updated_grp,
+        "benchmarks_updated_capitulo": updated_cap,
+        "benchmarks_updated": updated_fam + updated_grp + updated_cap,
+        "new_item_types": 0,  # mantém chave por retrocompatibilidade
+    }
+
+
+def _recompute_level(typology: str, level: str) -> int:
+    """Recomputa benchmarks pra um nível da árvore (familia|grupo|capitulo)
+    agregando todas as linhas raw pela classificação + unit. Escreve em
+    density_benchmarks. Retorna nº de benchmarks upsertados."""
+    id_col = {"familia": "familia_id", "grupo": "grupo_id", "capitulo": "capitulo_id"}[level]
+
+    # Puxa todas as raws classificadas desta tipologia (com classificação não-nula)
+    hist = _supabase_select(
+        "density_ingest_raw",
+        f"select=description,density,project_label,unit,familia_id"
+        f"&typology=eq.{urllib.request.quote(typology)}"
+        f"&familia_id=not.is.null",
+    )
+    if not hist:
+        return 0
+
+    # Precisa resolver familia_id → grupo_id/capitulo_id pra agregar nos níveis
+    # superiores. Busca todos os familia→grupo→capitulo numa query só.
+    familias = _supabase_select(
+        "catalog_familia",
+        "select=id,grupo:grupo_id(id,capitulo_id)",
+    )
+    fam_to_grp_cap: dict = {}
+    for f in familias:
+        grupo = f.get("grupo") or {}
+        if isinstance(grupo, dict):
+            fam_to_grp_cap[f["id"]] = {
+                "grupo_id": grupo.get("id"),
+                "capitulo_id": grupo.get("capitulo_id"),
+            }
+
+    # Agrupa: (nivel_id, unit) → {project_label: soma_density}
+    buckets: dict = {}
+    for h in hist:
+        fid = h.get("familia_id")
+        if fid is None:
             continue
+        if level == "familia":
+            nid = fid
+        elif level == "grupo":
+            nid = (fam_to_grp_cap.get(fid) or {}).get("grupo_id")
+        else:
+            nid = (fam_to_grp_cap.get(fid) or {}).get("capitulo_id")
+        if nid is None:
+            continue
+        unit = (h.get("unit") or "").strip()
+        lab = h.get("project_label") or ""
+        d = _parse_float(h.get("density"))
+        if d <= 0:
+            continue
+        key = (nid, unit)
+        per_project = buckets.setdefault(key, {})
+        per_project[lab] = per_project.get(lab, 0.0) + d
 
-        n = len(all_densities)
-        mean = statistics.mean(all_densities)
-        stddev = statistics.stdev(all_densities) if n >= 2 else 0.0
-        mn = min(all_densities)
-        mx = max(all_densities)
-
+    # Escreve benchmarks. Usa `item_type` como rótulo derivado do nível pra
+    # manter a unique key existente (typology, item_type, unit).
+    updated = 0
+    for (nid, unit), per_project in buckets.items():
+        densities = [d for d in per_project.values() if d > 0]
+        if not densities:
+            continue
+        n = len(densities)
+        mean = statistics.mean(densities)
+        stddev = statistics.stdev(densities) if n >= 2 else 0.0
+        item_type_label = f"{level}:{nid}"
         record = {
             "typology": typology,
-            "item_type": item_type,
+            "item_type": item_type_label,
             "unit": unit,
             "mean": round(mean, 6),
             "stddev": round(stddev, 6),
-            "min_value": round(mn, 6),
-            "max_value": round(mx, 6),
+            "min_value": round(min(densities), 6),
+            "max_value": round(max(densities), 6),
             "n_projects": n,
+            "level": level,
             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         }
+        # Popula o FK correto no nível
+        if level == "familia":
+            record["familia_id"] = nid
+        elif level == "grupo":
+            record["grupo_id"] = nid
+        else:
+            record["capitulo_id"] = nid
+
         if _supabase_upsert("density_benchmarks", record, "typology,item_type,unit"):
-            if (item_type, unit) not in existing_by_key:
-                new_types += 1
             updated += 1
+    return updated
 
     # Invalida cache
     _benchmarks_cache["data"] = None
@@ -320,24 +403,34 @@ def check_density_anomaly(item, project_area_m2: float,
     if not benchmarks:
         return False, ""
 
-    item_type = _normalize_item_type(item.description)
-    if not item_type:
-        return False, ""
+    # CASCATA: classifica o item e busca benchmark do mais específico pro
+    # mais genérico — família → grupo → capítulo. Preserva especificidade
+    # quando há dados; ainda dá sinal útil nos níveis superiores.
+    try:
+        from classifier import classify_item
+        cls = classify_item(item.description, item.unit or "")
+    except Exception:
+        cls = {"familia_id": None, "grupo_id": None, "capitulo_id": None}
 
     unit = (item.unit or "").strip()
-    bench = benchmarks.get((item_type, unit))
-    if bench is None:
-        # Fallback: procura qualquer unit
-        for (it, u), b in benchmarks.items():
-            if it == item_type:
-                bench = b
-                break
+    bench = None
+    level_hit = None
+    for level, nid in (
+        ("familia",  cls.get("familia_id")),
+        ("grupo",    cls.get("grupo_id")),
+        ("capitulo", cls.get("capitulo_id")),
+    ):
+        if nid is None:
+            continue
+        candidate = benchmarks.get((f"{level}:{nid}", unit))
+        if candidate and (candidate.get("n_projects") or 0) >= 2:
+            bench = candidate
+            level_hit = level
+            break
     if bench is None:
         return False, ""
 
     n = bench["n_projects"]
-    if n < 2:
-        return False, ""
 
     density = qty / project_area_m2
     mean = bench["mean"]
@@ -347,14 +440,17 @@ def check_density_anomaly(item, project_area_m2: float,
     if mean <= 0:
         return False, ""
 
+    level_label = {"familia": "família", "grupo": "grupo", "capitulo": "capítulo"}.get(
+        level_hit or "familia", "família")
+
     # Alta
     threshold_hi = mean + 2 * stddev if stddev > 0 else mean * 2.5
     if density > threshold_hi or (max_v > 0 and density > max_v * 1.5):
         factor = density / mean
         return True, (
             f"densidade {density:.3f} {unit}/m² é {factor:.1f}× maior que "
-            f"o típico ({mean:.3f} ± {stddev:.3f}, n={n} projetos) — "
-            f"possível dupla contagem"
+            f"o típico (nível {level_label}: {mean:.3f} ± {stddev:.3f}, "
+            f"n={n} projetos) — possível dupla contagem"
         )
     # Baixa (só se faz sentido)
     threshold_lo = mean - 2 * stddev if stddev > 0 else mean / 2.5
@@ -362,8 +458,8 @@ def check_density_anomaly(item, project_area_m2: float,
         factor = mean / density if density > 0 else 0
         return True, (
             f"densidade {density:.3f} {unit}/m² é {factor:.1f}× menor que "
-            f"o típico ({mean:.3f} ± {stddev:.3f}, n={n} projetos) — "
-            f"possível subcontagem"
+            f"o típico (nível {level_label}: {mean:.3f} ± {stddev:.3f}, "
+            f"n={n} projetos) — possível subcontagem"
         )
 
     return False, ""
