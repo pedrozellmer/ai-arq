@@ -346,6 +346,96 @@ def _recompute_level(typology: str, level: str) -> int:
     }
 
 
+def reclassify_raws(typology: Optional[str] = None,
+                    only_unclassified: bool = True,
+                    limit: Optional[int] = None) -> dict:
+    """Classifica linhas raw existentes via LLM e recomputa benchmarks.
+
+    Útil pra "ativar" raws antigos ingeridos antes do classificador existir.
+    Por padrão só toca linhas com `familia_id IS NULL` (idempotente).
+
+    Args:
+        typology: filtra por tipologia. None = todas.
+        only_unclassified: se True, pula raws já classificados.
+        limit: máximo de raws pra processar (útil pra batch incremental).
+
+    Retorna resumo: {raws_total, classified, skipped, recomputed_benchmarks}.
+    """
+    from classifier import classify_item
+
+    base = ("select=id,description,unit,typology,project_label,familia_id"
+            "&order=ingested_at.asc")
+    if typology:
+        base += f"&typology=eq.{urllib.request.quote(typology)}"
+    if only_unclassified:
+        base += "&familia_id=is.null"
+    if limit:
+        base += f"&limit={int(limit)}"
+
+    raws = _supabase_select("density_ingest_raw", base)
+    classified = 0
+    skipped = 0
+    typologies_touched = set()
+
+    for raw in raws:
+        rid = raw.get("id")
+        desc = raw.get("description") or ""
+        unit = raw.get("unit") or ""
+        typ = raw.get("typology") or "office"
+        if not desc or not rid:
+            skipped += 1
+            continue
+
+        try:
+            cls = classify_item(desc, unit)
+        except Exception as e:
+            print(f"[reclassify] error on raw {rid}: {e}")
+            skipped += 1
+            continue
+
+        familia_id = cls.get("familia_id")
+        patch: dict = {
+            "classification_confidence": cls.get("confidence") or 0,
+            "attributes": cls.get("attributes") or {},
+        }
+        if familia_id is not None:
+            patch["familia_id"] = familia_id
+            classified += 1
+            typologies_touched.add(typ)
+
+        # PATCH in-place pelo id (único)
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/density_ingest_raw?id=eq.{rid}"
+            body = json.dumps(patch).encode("utf-8")
+            req = urllib.request.Request(url, data=body, method="PATCH")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Prefer", "return=minimal")
+            urllib.request.urlopen(req, timeout=15)
+        except Exception as e:
+            print(f"[reclassify] patch error on raw {rid}: {e}")
+            skipped += 1
+            continue
+
+    # Recomputa benchmarks pra cada tipologia tocada
+    benchmarks_total = 0
+    for typ in typologies_touched:
+        for level in ("familia", "grupo", "capitulo"):
+            benchmarks_total += _recompute_level(typ, level)
+
+    _benchmarks_cache["data"] = None
+    _benchmarks_cache["timestamp"] = 0
+
+    return {
+        "raws_total": len(raws),
+        "classified": classified,
+        "skipped": skipped,
+        "typologies_touched": sorted(typologies_touched),
+        "benchmarks_recomputed": benchmarks_total,
+    }
+
+
 def get_benchmarks(typology: Optional[str] = None) -> dict:
     """Busca benchmarks do Supabase — indexado por (item_type, unit)."""
     now = time.time()

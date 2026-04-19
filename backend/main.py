@@ -1757,6 +1757,32 @@ async def calibration_ingest_from_review(
                 pass
 
 
+@app.post("/api/calibration/reclassify-raws")
+async def calibration_reclassify_raws(
+    typology: Optional[str] = None,
+    limit: Optional[int] = None,
+    only_unclassified: bool = True,
+):
+    """Classifica linhas raw existentes via LLM e recompila benchmarks.
+
+    Útil pra "ativar" raws antigos ingeridos antes do classificador
+    existir. Idempotente: por padrão só toca raws sem familia_id.
+
+    Cada raw vira ~3s (chamada Claude Haiku). Lote de 264 leva ~10min
+    e custa ~$0.50. Use `limit` pra testar incrementalmente.
+    """
+    if not HAS_DENSITY_CAL:
+        raise HTTPException(500, "Módulo density_calibration não carregado")
+    try:
+        from density_calibration import reclassify_raws
+        result = reclassify_raws(
+            typology=typology, limit=limit, only_unclassified=only_unclassified,
+        )
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(500, f"Erro na reclassificação: {str(e)}")
+
+
 @app.get("/api/calibration/benchmarks")
 async def calibration_benchmarks(typology: Optional[str] = None):
     """Lista os benchmarks de densidade agregados (mean ± stddev por
