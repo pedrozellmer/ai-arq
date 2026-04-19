@@ -220,7 +220,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              At&eacute; <strong>20 arquivos (PDF, DWG ou DXF)</strong> por projeto. Voc&ecirc; pode enviar m&uacute;ltiplos PDFs de uma s&oacute; vez &mdash; o sistema processa todas as pranchas juntas e gera uma &uacute;nica planilha consolidada. Para projetos maiores, entre em contato pelo <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.
+              At&eacute; <strong>20 arquivos (PDF, DWG ou DXF)</strong> por projeto, sem limite de pranchas dentro deles. Voc&ecirc; pode enviar PDFs com m&uacute;ltiplas p&aacute;ginas e DWGs com v&aacute;rios layouts &mdash; o sistema conta cada prancha real e processa todas juntas, gerando uma &uacute;nica planilha consolidada. O pre&ccedil;o se ajusta &agrave; quantidade de pranchas detectada (R$ 20 cada, m&iacute;nimo R$ 97). Para projetos maiores, entre em contato pelo <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.
             </div>
           </div>
         </div>
@@ -360,8 +360,8 @@
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Exporte os PDFs em <strong>alta resolu&ccedil;&atilde;o</strong> (300 DPI).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Nomeie os arquivos de forma clara (ex.: &ldquo;Pr100_Demolir.pdf&rdquo;, &ldquo;Pr400_Arquitetura.pdf&rdquo;).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Inclua legendas completas com materiais, fabricantes e refer&ecirc;ncias.</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Envie todas as pranchas do projeto juntas &mdash; o sistema cruza dados entre elas.</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Envie pranchas separadas (1 PDF por prancha), n&atilde;o PDFs com v&aacute;rias p&aacute;ginas.</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Envie todas as pranchas do projeto juntas &mdash; o sistema cruza dados entre elas e d&aacute; resultado mais consolidado.</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Pode enviar PDFs com m&uacute;ltiplas p&aacute;ginas e DWGs com v&aacute;rios layouts &mdash; cada p&aacute;gina/layout vira uma prancha separada na contagem.</li>
               </ul>
             </div>
           </div>
@@ -389,6 +389,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-3">Pre&ccedil;o linear: <strong>R$ 20 por prancha real</strong>, com m&iacute;nimo de R$ 97 por projeto. Sem pulos de pacote, sem incentivo a dividir.</p>
               <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                 <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-center">
                   <p class="text-xs text-emerald-600 font-semibold uppercase tracking-wide mb-1">1&ordm; projeto</p>
@@ -396,21 +397,22 @@
                   <p class="text-xs text-emerald-500 mt-1">At&eacute; 5 pranchas</p>
                 </div>
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Pequeno</p>
-                  <p class="text-xl font-bold text-gray-800">R$ 97</p>
-                  <p class="text-xs text-gray-400 mt-1">At&eacute; 5 pranchas</p>
+                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">5 pranchas</p>
+                  <p class="text-xl font-bold text-gray-800">R$ 100</p>
+                  <p class="text-xs text-gray-400 mt-1">M&iacute;nimo R$ 97</p>
                 </div>
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">M&eacute;dio</p>
-                  <p class="text-xl font-bold text-gray-800">R$ 197</p>
-                  <p class="text-xs text-gray-400 mt-1">6&ndash;10 pranchas</p>
+                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">10 pranchas</p>
+                  <p class="text-xl font-bold text-gray-800">R$ 200</p>
+                  <p class="text-xs text-gray-400 mt-1">R$ 20/prancha</p>
                 </div>
                 <div class="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center">
-                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">Grande</p>
-                  <p class="text-xl font-bold text-gray-800">R$ 397</p>
-                  <p class="text-xs text-gray-400 mt-1">11+ pranchas</p>
+                  <p class="text-xs text-gray-500 font-semibold uppercase tracking-wide mb-1">20 pranchas</p>
+                  <p class="text-xl font-bold text-gray-800">R$ 400</p>
+                  <p class="text-xs text-gray-400 mt-1">R$ 20/prancha</p>
                 </div>
               </div>
+              <p class="text-xs text-gray-500 mb-2"><strong>O que conta como prancha?</strong> P&aacute;ginas dentro de PDFs e layouts dentro de DWG/DXF s&atilde;o contados separadamente. Um PDF com 12 p&aacute;ginas = 12 pranchas. Um DWG com 3 layouts = 3 pranchas. O sistema mostra a contagem antes de voc&ecirc; pagar.</p>
               <p class="text-xs text-gray-400">Pagamento por projeto, sem mensalidade ou assinatura.</p>
             </div>
           </div>
