@@ -40,6 +40,19 @@ from instagram_webhook import router as instagram_router
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
 
+# Log persistente de operações Supabase (só erros + último sucesso por operação)
+# pra poder investigar via /api/debug/supa-log quando o log do Render tá fora de alcance.
+_SUPA_LOG_PATH = os.path.join(tempfile.gettempdir(), "aiarq_supa_log.txt")
+
+
+def _supa_log(line: str):
+    try:
+        with open(_SUPA_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.utcnow().isoformat()}Z {line}\n")
+    except Exception:
+        pass
+
+
 def _supabase_insert(table, data):
     """Insere registro no Supabase via REST API."""
     import urllib.request, urllib.error, json
@@ -52,16 +65,21 @@ def _supabase_insert(table, data):
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=20)
+        _supa_log(f"INSERT {table} OK  data={json.dumps(data)[:200]}")
         return True
     except urllib.error.HTTPError as e:
         try:
             resp_body = e.read().decode('utf-8', errors='replace')[:500]
         except Exception:
             resp_body = '(unreadable)'
+        msg = f"INSERT {table} HTTP {e.code}: {resp_body}  data={json.dumps(data)[:200]}"
         print(f"Supabase insert HTTP {e.code} ({table}): {resp_body}")
+        _supa_log(msg)
         return False
     except Exception as e:
+        msg = f"INSERT {table} ERR {type(e).__name__}: {e}  data={json.dumps(data)[:200]}"
         print(f"Supabase insert error ({table}): {type(e).__name__}: {e}")
+        _supa_log(msg)
         return False
 
 
@@ -77,16 +95,21 @@ def _supabase_update(table, match_field, match_value, data):
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=20)
+        _supa_log(f"UPDATE {table} {match_field}={match_value} OK  data={json.dumps(data)[:200]}")
         return True
     except urllib.error.HTTPError as e:
         try:
             resp_body = e.read().decode('utf-8', errors='replace')[:500]
         except Exception:
             resp_body = '(unreadable)'
+        msg = f"UPDATE {table} {match_field}={match_value} HTTP {e.code}: {resp_body}  data={json.dumps(data)[:200]}"
         print(f"Supabase update HTTP {e.code} ({table} where {match_field}={match_value}): {resp_body}")
+        _supa_log(msg)
         return False
     except Exception as e:
+        msg = f"UPDATE {table} {match_field}={match_value} ERR {type(e).__name__}: {e}  data={json.dumps(data)[:200]}"
         print(f"Supabase update error ({table} where {match_field}={match_value}): {type(e).__name__}: {e}")
+        _supa_log(msg)
         return False
 
 app = FastAPI(
@@ -1256,6 +1279,22 @@ async def process_files(
 
     return {"job_id": job_id, "files_received": len(file_paths),
             "file_types": file_types, "status": "queued", "typology": typology}
+
+
+@app.get("/api/debug/supa-log")
+async def debug_supa_log(tail: int = 50):
+    """Últimas N linhas do log de operações Supabase — pra investigar por que
+    updates silenciosos falham sem ter acesso direto ao log do Render."""
+    try:
+        if not os.path.exists(_SUPA_LOG_PATH):
+            return {"status": "ok", "lines": [], "note": "log vazio ou ainda não criado"}
+        with open(_SUPA_LOG_PATH, "r", encoding="utf-8") as f:
+            all_lines = f.readlines()
+        last = all_lines[-tail:] if tail > 0 else all_lines
+        return {"status": "ok", "total_lines": len(all_lines),
+                "returned": len(last), "lines": [ln.rstrip("\n") for ln in last]}
+    except Exception as e:
+        return {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
 
 @app.get("/api/debug/dwg")
