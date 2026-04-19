@@ -42,8 +42,8 @@ SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 
 def _supabase_insert(table, data):
     """Insere registro no Supabase via REST API."""
+    import urllib.request, urllib.error, json
     try:
-        import urllib.request, json
         url = f"{SUPABASE_URL}/rest/v1/{table}"
         body = json.dumps(data).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
@@ -51,16 +51,24 @@ def _supabase_insert(table, data):
         req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
-        urllib.request.urlopen(req, timeout=5)
+        urllib.request.urlopen(req, timeout=20)
         return True
-    except Exception as e:
-        print(f"Supabase insert error: {e}")
+    except urllib.error.HTTPError as e:
+        try:
+            resp_body = e.read().decode('utf-8', errors='replace')[:500]
+        except Exception:
+            resp_body = '(unreadable)'
+        print(f"Supabase insert HTTP {e.code} ({table}): {resp_body}")
         return False
+    except Exception as e:
+        print(f"Supabase insert error ({table}): {type(e).__name__}: {e}")
+        return False
+
 
 def _supabase_update(table, match_field, match_value, data):
     """Atualiza registro no Supabase via REST API."""
+    import urllib.request, urllib.error, json
     try:
-        import urllib.request, json
         url = f"{SUPABASE_URL}/rest/v1/{table}?{match_field}=eq.{match_value}"
         body = json.dumps(data).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='PATCH')
@@ -68,10 +76,17 @@ def _supabase_update(table, match_field, match_value, data):
         req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
-        urllib.request.urlopen(req, timeout=5)
+        urllib.request.urlopen(req, timeout=20)
         return True
+    except urllib.error.HTTPError as e:
+        try:
+            resp_body = e.read().decode('utf-8', errors='replace')[:500]
+        except Exception:
+            resp_body = '(unreadable)'
+        print(f"Supabase update HTTP {e.code} ({table} where {match_field}={match_value}): {resp_body}")
+        return False
     except Exception as e:
-        print(f"Supabase update error: {e}")
+        print(f"Supabase update error ({table} where {match_field}={match_value}): {type(e).__name__}: {e}")
         return False
 
 app = FastAPI(
@@ -1121,14 +1136,18 @@ revisor humano confirme direto no arquivo."""
         jobs.update_field(job_id, current_step="Concluído!")
         jobs.update_field(job_id, download_url=f"/api/download/{job_id}")
 
-        # Atualizar projeto no Supabase
-        _supabase_update("projects", "job_id", job_id, {
+        # Atualizar projeto no Supabase (log explícito do resultado pra rastrear
+        # falhas que antes passavam silenciosas)
+        _supa_ok = _supabase_update("projects", "job_id", job_id, {
             "status": "done",
             "items_count": len(all_items),
             "total_area": project_data.total_area if project_data.total_area else None,
             "layout_area": project_data.layout_area if project_data.layout_area else None,
             "completed_at": datetime.utcnow().isoformat(),
         })
+        print(f"[supabase] update job={job_id} status=done items={len(all_items)} "
+              f"total_area={project_data.total_area} layout_area={project_data.layout_area} "
+              f"ok={_supa_ok}")
 
     except Exception as e:
         jobs.update_field(job_id, status="error")
