@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
@@ -1829,20 +1829,34 @@ async def calibration_ingest_from_review(
 # ═══════════════════════════════════════════════════════════════
 
 @app.post("/api/agent/ask")
-async def agent_ask(job_id: str, question: str = ""):
+async def agent_ask(request: Request, job_id: str, question: str = ""):
     """Cliente faz uma pergunta sobre o orçamento de UM job. O agente
     investiga (lê planilha, busca itens, lê DXFs, checa calibração) e
     responde em linguagem natural com referências aos itens.
 
-    Body: pode mandar `question` por query string ou JSON.
+    Body opcional (JSON): {"history": [{"role": "user|assistant", "content": "..."}]}
+    pra manter contexto de conversação contínua.
     """
     if not job_id:
         raise HTTPException(400, "job_id obrigatório")
     if not question or len(question.strip()) < 2:
         raise HTTPException(400, "pergunta vazia")
+
+    # History opcional via JSON body
+    history = None
+    try:
+        body_bytes = await request.body()
+        if body_bytes:
+            import json as _j
+            body = _j.loads(body_bytes.decode("utf-8"))
+            if isinstance(body, dict) and isinstance(body.get("history"), list):
+                history = body["history"]
+    except Exception:
+        history = None
+
     try:
         from agent import ask
-        result = ask(job_id=job_id, question=question.strip())
+        result = ask(job_id=job_id, question=question.strip(), history=history)
         return {"status": "ok", **result}
     except Exception as e:
         raise HTTPException(500, f"Erro do agente: {type(e).__name__}: {e}")

@@ -374,8 +374,12 @@
               </div>
               <div class="flex-1">
                 <h3 class="text-base font-semibold text-gray-900">Pergunte sobre sua planilha</h3>
-                <p class="text-xs text-gray-500 mt-0.5">Ex.: "Por que tem 222 m de LED no item 4.1?" &middot; "Resumo dos itens de demoli&ccedil;&atilde;o" &middot; "Tem alguma anomalia detectada?"</p>
+                <p class="text-xs text-gray-500 mt-0.5">Ex.: "Por que tem 222 m de LED no item 4.1?" &middot; "E o item 6.3?" &middot; "Tem alguma anomalia?"</p>
               </div>
+              <button id="btn-agent-clear" title="Limpar conversa e come&ccedil;ar do zero"
+                class="text-xs text-gray-400 hover:text-indigo-600 transition px-2 py-1 rounded">
+                Limpar
+              </button>
             </div>
             <div id="agent-chat-history" class="max-h-96 overflow-y-auto space-y-3 mb-3"></div>
             <div class="flex gap-2">
@@ -1635,11 +1639,16 @@
   });
 
   // ══════════════════════════════════════════════
-  //  AGENTE TIRA-DÚVIDAS
+  //  AGENTE TIRA-DÚVIDAS — com conversa contínua
   // ══════════════════════════════════════════════
   const agentInput = document.getElementById('agent-input');
   const btnAgentAsk = document.getElementById('btn-agent-ask');
+  const btnAgentClear = document.getElementById('btn-agent-clear');
   const agentChatHistory = document.getElementById('agent-chat-history');
+
+  // Histórico da conversa atual — enviado ao backend pra o agente lembrar.
+  // Cada turno: { role: 'user'|'assistant', content: '...' }
+  let agentConversation = [];
 
   function appendAgentMessage(role, text) {
     const wrap = document.createElement('div');
@@ -1665,6 +1674,11 @@
     return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
   }
 
+  function resetAgentConversation() {
+    agentConversation = [];
+    agentChatHistory.innerHTML = '';
+  }
+
   async function askAgent() {
     if (!currentJobId) { alert('Sem projeto ativo.'); return; }
     const q = agentInput.value.trim();
@@ -1675,12 +1689,24 @@
     appendAgentMessage('thinking', '');
     try {
       const url = `${API_BASE}/api/agent/ask?job_id=${currentJobId}&question=${encodeURIComponent(q)}`;
-      const res = await fetch(url, { method: 'POST' });
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ history: agentConversation }),
+      });
       const data = await res.json();
       const thinking = document.getElementById('agent-thinking');
       if (thinking) thinking.remove();
       if (!res.ok) throw new Error(data.detail || 'Erro');
-      appendAgentMessage('assistant', data.answer || '(sem resposta)');
+      const answer = data.answer || '(sem resposta)';
+      appendAgentMessage('assistant', answer);
+      // Persiste na conversa local pra próximas perguntas terem contexto
+      agentConversation.push({ role: 'user', content: q });
+      agentConversation.push({ role: 'assistant', content: answer });
+      // Limita histórico (20 turnos = 10 trocas) pra não estourar
+      if (agentConversation.length > 20) {
+        agentConversation = agentConversation.slice(-20);
+      }
     } catch (err) {
       const thinking = document.getElementById('agent-thinking');
       if (thinking) thinking.remove();
@@ -1692,6 +1718,7 @@
   }
 
   btnAgentAsk.addEventListener('click', askAgent);
+  if (btnAgentClear) btnAgentClear.addEventListener('click', resetAgentConversation);
   agentInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
