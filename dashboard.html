@@ -1091,6 +1091,76 @@
   // ══════════════════════════════════════════════
   //  RENDER FILE LIST (upload state)
   // ══════════════════════════════════════════════
+  // Estimativa de preço — chama backend pra contar pranchas REAIS
+  // (páginas dentro de PDF + layouts dentro de DWG/DXF) e calcular preço.
+  let estimateAbortCtrl = null;
+  let lastEstimateKey = '';
+  let lastEstimate = null;  // {total_pranchas, price_brl, price_cents}
+
+  async function estimatePriceForFiles(files) {
+    if (!files || !files.length) {
+      lastEstimate = null;
+      return;
+    }
+    const key = files.map(f => `${f.name}:${f.size}`).join('|');
+    if (key === lastEstimateKey && lastEstimate) {
+      renderEstimate(lastEstimate);
+      return;
+    }
+    lastEstimateKey = key;
+    if (estimateAbortCtrl) { try { estimateAbortCtrl.abort(); } catch(_) {} }
+    estimateAbortCtrl = new AbortController();
+    try {
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      const res = await fetch(`${API_BASE}/api/estimate-price`, {
+        method: 'POST',
+        body: fd,
+        signal: estimateAbortCtrl.signal,
+      });
+      if (!res.ok) throw new Error('estimate falhou');
+      const data = await res.json();
+      lastEstimate = data;
+      renderEstimate(data);
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      console.warn('estimate err', err);
+      // Fallback simples: 1 prancha = 1 arquivo
+      const n = files.length;
+      const fallbackPrice = Math.max(97, n * 20);
+      renderEstimate({ total_pranchas: n, price_brl: fallbackPrice, _fallback: true });
+    }
+  }
+
+  function renderEstimate(est) {
+    const priceLabel = document.getElementById('price-label');
+    if (!priceLabel || !est) return;
+    const n = est.total_pranchas || 0;
+    const price = est.price_brl || 0;
+    const free = isFirstProject() && n <= 5;
+    const betaFree = hasBetaCredits();
+    const unlimited = !!window.__isUnlimitedUser;
+
+    const breakdown = (est.breakdown || []).filter(b => b.pranchas > 1);
+    let detail = '';
+    if (breakdown.length) {
+      detail = ' <span class="text-xs text-gray-400">(' +
+        breakdown.map(b => `${b.filename.slice(0, 25)}: ${b.pranchas}p`).join(', ') +
+        ')</span>';
+    }
+
+    if (unlimited) {
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
+    } else if (free) {
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
+    } else if (betaFree) {
+      const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} restante${remaining !== 1 ? 's' : ''}</span>`;
+    } else {
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span>`;
+    }
+  }
+
   function renderFiles() {
     const termsWrapper = document.getElementById('terms-wrapper');
     const termsCheckbox = document.getElementById('terms-checkbox');
@@ -1111,26 +1181,18 @@
     btnProcess.disabled = !(termsCheckbox && termsCheckbox.checked);
     fileList.innerHTML = '';
 
-    // Atualizar preço
+    // Atualizar preço — primeiro mostra estimativa por # arquivos enquanto
+    // o backend não responde com a contagem REAL de pranchas (páginas dentro
+    // de PDFs + layouts dentro de DWG/DXF).
     const priceInfo = document.getElementById('price-info');
     const priceLabel = document.getElementById('price-label');
-    const n = selectedFiles.length;
-    const free = isFirstProject() && n <= 5;
-    const betaFree = hasBetaCredits();
-    const unlimited = !!window.__isUnlimitedUser;
-    let price = n <= 5 ? 'R$ 97' : n <= 10 ? 'R$ 197' : 'R$ 397';
-    let planName = n <= 5 ? 'Pequeno' : n <= 10 ? 'M\u00e9dio' : 'Grande';
+    const nFiles = selectedFiles.length;
     priceInfo.classList.remove('hidden');
-    if (unlimited) {
-      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
-    } else if (free) {
-      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="line-through text-gray-400">${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
-    } else if (betaFree) {
-      const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="line-through text-gray-400">${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} restante${remaining !== 1 ? 's' : ''}</span>`;
-    } else {
-      priceLabel.innerHTML = `Projeto ${planName} (${n} pranchas) \u2014 <span class="font-bold text-indigo-600">${price}</span>`;
-    }
+    priceLabel.innerHTML = `<span class="text-gray-400">Calculando pre\u00e7o real…</span>`;
+
+    // Dispara estimate em background (sem bloquear UI). Ignora resposta
+    // antiga se o usuário trocou os arquivos enquanto isso.
+    estimatePriceForFiles(selectedFiles).catch(() => {});
 
     // Auto-detectar tipo pela nome do arquivo
     function guessType(name) {
@@ -1412,7 +1474,10 @@
       btnProcess.textContent = 'Redirecionando para pagamento...';
 
       try {
-        const res = await fetch(`${API_BASE}/api/checkout?num_files=${numFiles}`, {
+        // Usa num_pranchas REAL detectado em vez de num_files
+        // (PDFs com várias páginas + DWGs com vários layouts contam certo)
+        const numPranchas = (lastEstimate && lastEstimate.total_pranchas) || numFiles;
+        const res = await fetch(`${API_BASE}/api/checkout?num_pranchas=${numPranchas}&num_files=${numFiles}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
