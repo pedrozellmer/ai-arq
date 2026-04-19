@@ -1522,24 +1522,54 @@ async def health():
 
 
 # ── STRIPE CHECKOUT ──
+@app.post("/api/estimate-price")
+async def estimate_price(files: list[UploadFile] = File(...)):
+    """Conta pranchas REAIS (páginas dentro de PDFs + layouts dentro de DWG/DXF)
+    e devolve preço calculado. Usado antes do checkout pra mostrar preview
+    transparente pro cliente.
+    """
+    if not files:
+        raise HTTPException(400, "Nenhum arquivo enviado")
+    tmp_dir = os.path.join(WORK_DIR, "_estimate_tmp", str(uuid.uuid4())[:8])
+    os.makedirs(tmp_dir, exist_ok=True)
+    saved_paths = []
+    try:
+        for f in files:
+            if not f.filename:
+                continue
+            p = os.path.join(tmp_dir, f.filename)
+            with open(p, "wb") as out:
+                out.write(await f.read())
+            saved_paths.append(p)
+        from pricing import estimate_for_files
+        result = estimate_for_files(saved_paths)
+        return {"status": "ok", **result}
+    finally:
+        # Limpa
+        for p in saved_paths:
+            try: os.remove(p)
+            except Exception: pass
+        try: os.rmdir(tmp_dir)
+        except Exception: pass
+
+
 @app.post("/api/checkout")
-async def create_checkout(num_files: int = 1):
-    """Cria sessão de pagamento no Stripe."""
+async def create_checkout(num_pranchas: int = 1, num_files: int = 0):
+    """Cria sessão de pagamento no Stripe baseado em PRANCHAS REAIS.
+
+    Aceita `num_pranchas` (preferido — vem de /api/estimate-price). Mantém
+    `num_files` como fallback compatibilidade — se passado sem num_pranchas,
+    assume 1 prancha por arquivo (pode subestimar PDFs grandes).
+    """
     import stripe
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
     if not stripe.api_key:
         raise HTTPException(500, "Stripe não configurado")
 
-    # Definir preço por quantidade de pranchas
-    if num_files <= 5:
-        price_cents = 9700  # R$ 97
-        plan_name = "Projeto Pequeno (até 5 pranchas)"
-    elif num_files <= 10:
-        price_cents = 19700  # R$ 197
-        plan_name = "Projeto Médio (6-10 pranchas)"
-    else:
-        price_cents = 39700  # R$ 397
-        plan_name = "Projeto Grande (11+ pranchas)"
+    n = num_pranchas if num_pranchas > 0 else (num_files or 1)
+    from pricing import calculate_price, PRICE_PER_SHEET_CENTS, MIN_PRICE_CENTS
+    price_cents = calculate_price(n)
+    plan_name = f"{n} pranchas × R$ {PRICE_PER_SHEET_CENTS/100:.0f} (mínimo R$ {MIN_PRICE_CENTS/100:.0f})"
 
     try:
         session = stripe.checkout.Session.create(
@@ -1548,8 +1578,8 @@ async def create_checkout(num_files: int = 1):
                 "price_data": {
                     "currency": "brl",
                     "product_data": {
-                        "name": f"AI.arq — {plan_name}",
-                        "description": f"Planilha de quantitativos para {num_files} pranchas",
+                        "name": f"AI.arq — Planilha de quantitativos",
+                        "description": plan_name,
                     },
                     "unit_amount": price_cents,
                 },
@@ -1559,7 +1589,9 @@ async def create_checkout(num_files: int = 1):
             success_url="https://ai.arq.br/dashboard.html?payment=success&session_id={CHECKOUT_SESSION_ID}",
             cancel_url="https://ai.arq.br/dashboard.html?payment=cancelled",
         )
-        return {"checkout_url": session.url, "session_id": session.id}
+        return {"checkout_url": session.url, "session_id": session.id,
+                "num_pranchas": n, "price_cents": price_cents,
+                "price_brl": round(price_cents/100, 2)}
     except Exception as e:
         raise HTTPException(500, f"Erro ao criar checkout: {str(e)}")
 
