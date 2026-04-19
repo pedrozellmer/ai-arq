@@ -112,6 +112,73 @@ def _supabase_update(table, match_field, match_value, data):
         _supa_log(msg)
         return False
 
+# ═══════════════════════════════════════════════════════════════
+#  Supabase Storage helpers (bucket aiarq-planilhas)
+#  Persiste planilhas geradas pra sobreviverem a redeploys do Render.
+# ═══════════════════════════════════════════════════════════════
+
+PLANILHAS_BUCKET = "aiarq-planilhas"
+
+
+def _supabase_storage_upload(local_path: str, remote_key: str) -> bool:
+    """Faz upload de um arquivo pro Supabase Storage. Sobrescreve se existe."""
+    import urllib.request, urllib.error
+    try:
+        with open(local_path, "rb") as f:
+            body = f.read()
+        url = f"{SUPABASE_URL}/storage/v1/object/{PLANILHAS_BUCKET}/{remote_key}"
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type",
+                       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        req.add_header("x-upsert", "true")
+        urllib.request.urlopen(req, timeout=30)
+        _supa_log(f"STORAGE upload {remote_key} OK ({len(body)} bytes)")
+        return True
+    except urllib.error.HTTPError as e:
+        try:
+            resp_body = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            resp_body = "(unreadable)"
+        _supa_log(f"STORAGE upload {remote_key} HTTP {e.code}: {resp_body}")
+        print(f"Storage upload {remote_key} HTTP {e.code}: {resp_body}")
+        return False
+    except Exception as e:
+        _supa_log(f"STORAGE upload {remote_key} ERR {type(e).__name__}: {e}")
+        print(f"Storage upload error: {e}")
+        return False
+
+
+def _supabase_storage_download(remote_key: str, local_path: str) -> bool:
+    """Baixa arquivo do Supabase Storage pra path local. Cria diretório se preciso."""
+    import urllib.request
+    try:
+        url = f"{SUPABASE_URL}/storage/v1/object/{PLANILHAS_BUCKET}/{remote_key}"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=30)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        with open(local_path, "wb") as f:
+            f.write(resp.read())
+        return True
+    except Exception as e:
+        print(f"Storage download error ({remote_key}): {e}")
+        return False
+
+
+def get_planilha_path(job_id: str) -> Optional[str]:
+    """Retorna o path local da planilha de um job. Se sumiu (Render
+    /tmp volátil), tenta baixar do Supabase Storage. None se falhou."""
+    local = os.path.join(WORK_DIR, job_id, f"orcamento_{job_id}.xlsx")
+    if os.path.exists(local):
+        return local
+    if _supabase_storage_download(f"{job_id}.xlsx", local):
+        return local
+    return None
+
+
 app = FastAPI(
     title="AI.arq API",
     description="Motor de processamento de pranchas de arquitetura com IA",
@@ -1154,6 +1221,11 @@ revisor humano confirme direto no arquivo."""
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path)
 
+        # Persistir no Supabase Storage pra sobreviver redeploy do Render
+        # (o /tmp do dyno é volátil — sem isso, agente e download quebram).
+        _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
+        print(f"[storage] upload {job_id}.xlsx ok={_storage_ok}")
+
         jobs.update_field(job_id, progress=100)
         jobs.update_field(job_id, status="done")
         jobs.update_field(job_id, current_step="Concluído!")
@@ -1352,18 +1424,13 @@ async def get_status(job_id: str):
 
 @app.get("/api/download/{job_id}")
 async def download_file(job_id: str):
-    """Baixa a planilha gerada."""
-    if job_id not in jobs:
-        raise HTTPException(404, "Job não encontrado")
-
-    if jobs[job_id].status != "done":
-        raise HTTPException(400, f"Job ainda não concluído. Status: {jobs[job_id].status}")
-
-    work_dir = os.path.join(WORK_DIR, job_id)
-    output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
-
-    if not os.path.exists(output_path):
-        raise HTTPException(404, "Arquivo não encontrado")
+    """Baixa a planilha gerada. Tenta cache local primeiro; se sumiu
+    (Render redeploy), busca no Supabase Storage."""
+    # Suaviza a checagem de job — se o JSON foi limpo no restart mas o
+    # arquivo está no Storage, ainda servimos pra não perder o cliente.
+    output_path = get_planilha_path(job_id)
+    if not output_path:
+        raise HTTPException(404, "Planilha não encontrada (nem em cache nem no Storage)")
 
     return FileResponse(
         output_path,
