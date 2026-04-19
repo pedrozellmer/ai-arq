@@ -31,13 +31,22 @@ WORK_DIR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "aiarq_jobs")
 #  Tools — funções Python que o agente pode chamar
 # ════════════════════════════════════════════════════════════════
 
-def _planilha_path(job_id: str) -> str:
-    return os.path.join(WORK_DIR, job_id, f"orcamento_{job_id}.xlsx")
+def _planilha_path(job_id: str) -> Optional[str]:
+    """Path local da planilha. Se sumiu (Render restart), tenta baixar
+    do Supabase Storage via helper do main.py."""
+    local = os.path.join(WORK_DIR, job_id, f"orcamento_{job_id}.xlsx")
+    if os.path.exists(local):
+        return local
+    try:
+        from main import get_planilha_path as _get
+        return _get(job_id)
+    except Exception:
+        return None
 
 
 def _open_planilha(job_id: str):
     path = _planilha_path(job_id)
-    if not os.path.exists(path):
+    if not path or not os.path.exists(path):
         return None
     return load_workbook(path, read_only=True, data_only=True)
 
