@@ -417,8 +417,16 @@ def _log_conversation(job_id: str, question: str, answer: str,
         print(f"[agent] log error: {e}")
 
 
-def ask(job_id: str, question: str, max_iterations: int = 8) -> dict:
+def ask(job_id: str, question: str, max_iterations: int = 8,
+        history: Optional[list] = None) -> dict:
     """Roda o loop do agente até ele dar resposta final.
+
+    Args:
+        job_id: identificador do projeto (escopo das tools)
+        question: pergunta atual do cliente
+        history: opcional, lista de {role, content} de turnos anteriores
+                 da MESMA conversa. Permite o cliente perguntar "e o item 3.4?"
+                 como continuação. Se None, conversa inicia do zero.
 
     Retorna {answer, tool_calls: [(name, input, result)...], iterations}.
     Loga conversa em agent_conversations no Supabase.
@@ -443,7 +451,18 @@ def ask(job_id: str, question: str, max_iterations: int = 8) -> dict:
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    messages = [{"role": "user", "content": question}]
+    # Monta histórico — turnos anteriores + pergunta atual.
+    # Filtra cada entrada do history pra ficar só com {role, content} string
+    # (sem tool_use blocks intermediários, que não fazem sentido fora da
+    # iteração original e podem confundir o modelo se não pareados com tool_result).
+    messages: list = []
+    if history:
+        for turn in history[-20:]:  # limita pra não estourar contexto
+            role = turn.get("role")
+            content = turn.get("content")
+            if role in ("user", "assistant") and isinstance(content, str) and content.strip():
+                messages.append({"role": role, "content": content.strip()[:4000]})
+    messages.append({"role": "user", "content": question})
     tool_calls_log = []
     final_answer = ""
 
