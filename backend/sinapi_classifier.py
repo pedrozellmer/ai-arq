@@ -22,14 +22,37 @@ SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
 
 
-def _supabase_get(query: str) -> list[dict]:
-    url = f"{SUPABASE_URL}/rest/v1/{query}"
-    req = urllib.request.Request(url, method="GET")
-    req.add_header("apikey", SUPABASE_KEY)
-    req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-    req.add_header("Accept", "application/json")
-    resp = urllib.request.urlopen(req, timeout=20)
-    return json.loads(resp.read().decode("utf-8"))
+def _supabase_get(query: str, paginate: bool = False, page_size: int = 1000) -> list[dict]:
+    """GET ao Supabase REST. Se paginate=True, faz loop com Range header
+    pra contornar o limite default de 1000 rows."""
+    if not paginate:
+        url = f"{SUPABASE_URL}/rest/v1/{query}"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        resp = urllib.request.urlopen(req, timeout=20)
+        return json.loads(resp.read().decode("utf-8"))
+
+    out = []
+    offset = 0
+    while True:
+        url = f"{SUPABASE_URL}/rest/v1/{query}"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        req.add_header("Range-Unit", "items")
+        req.add_header("Range", f"{offset}-{offset+page_size-1}")
+        resp = urllib.request.urlopen(req, timeout=30)
+        page = json.loads(resp.read().decode("utf-8"))
+        if not page:
+            break
+        out.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return out
 
 
 def _supabase_patch(query: str, data: dict) -> bool:
@@ -89,18 +112,25 @@ def _build_catalog_text(families):
 
 _BATCH_PROMPT = """Você classifica composições do catálogo SINAPI nas famílias do catálogo abaixo.
 
-CATÁLOGO DE FAMÍLIAS:
+CATÁLOGO DE FAMÍLIAS DISPONÍVEIS:
 {catalog}
 
-LISTA DE COMPOSIÇÕES SINAPI A CLASSIFICAR (json):
+LISTA DE COMPOSIÇÕES SINAPI A CLASSIFICAR:
 {items}
 
-Pra CADA composição, escolha a família mais adequada (use o `code` da família, ex: "fam_pint_acrilica"). Se nenhuma família serve, retorne null.
+Pra CADA composição, escolha a família mais adequada do catálogo (use o `code`, ex: "fam_pint_acrilica"). **Se nenhuma família encaixa BEM, retorne null** — não force.
 
-REGRAS:
-- Use APENAS códigos da lista de famílias acima.
-- Composições de subactividade (ex.: "carga e descarga", "adicional"...) que servem como insumo de várias famílias → null.
-- Use unidade como dica (m², m, ml, un, vb).
+REGRAS DE QUALIDADE (importantíssimas):
+- Use APENAS códigos da lista de famílias acima. NÃO invente.
+- Material/produto exato deve bater. Exemplos:
+  * "Tinta acrílica" vai em fam_pint_acrilica; "Tinta esmalte/alquídica/poliuretânica" vai em fam_pint_esmalte (NÃO em fam_pint_epoxi)
+  * "Luminária CALHA T8/fluorescente/sobrepor" vai em fam_lum_fluorescente (NÃO em fam_lum_linear que é fita LED moderna)
+  * "Janela PVC/madeira/alumínio" vai em fam_janela_madeira ou fam_janela_metal (NÃO em fam_vidro_fixo)
+  * "Entrada de energia da concessionária" vai em fam_entrada_energia (NÃO em fam_quadro)
+- Composições genéricas/de insumo (carga/descarga, transporte, hora de equipe, argamassas avulsas como insumo, conexões pontuais) → null. Não força em família de produto-final.
+- Demolição/remoção/recolocação são famílias separadas (DEMO.*); não confundir com instalação nova.
+- Use unidade como dica forte (m², m, ml, un, vb, kg, h, dia).
+- Em dúvida razoável, prefira null. **Mais vale ficar sem mapear do que errar.**
 
 Retorne APENAS JSON na ordem da lista de entrada (mesma ordem):
 [
@@ -174,12 +204,14 @@ def main():
     catalog_text = _build_catalog_text(families)
     print(f"  {len(families)} famílias")
 
-    # Pega composições sem familia_id
+    # Pega composições sem familia_id (paginado pra contornar limite 1000)
     print("Buscando composições SINAPI sem classificação...")
     query = "sinapi_composicao?select=codigo,descricao,unidade&familia_id=is.null&order=codigo"
     if limit:
         query += f"&limit={limit}"
-    pending = _supabase_get(query)
+        pending = _supabase_get(query)
+    else:
+        pending = _supabase_get(query, paginate=True)
     total = len(pending)
     print(f"  {total} pendentes")
     if total == 0:

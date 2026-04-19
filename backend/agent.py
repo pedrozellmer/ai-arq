@@ -173,6 +173,58 @@ def tool_read_dxf_summary(job_id: str, dxf_filename: str = "") -> dict:
         return {"error": f"erro ao ler DXF: {type(e).__name__}: {e}"}
 
 
+def tool_get_sinapi_codes(familia_code: str, query: str = "",
+                           top_k: int = 5) -> dict:
+    """Lista códigos SINAPI mapeados pra uma família. Se `query` informada,
+    filtra por similaridade simples na descrição (palavras-chave)."""
+    if not familia_code:
+        return {"error": "familia_code obrigatório"}
+    try:
+        # Pega o id da família
+        url = (f"{SUPABASE_URL}/rest/v1/catalog_familia"
+               f"?select=id,name&code=eq.{familia_code}")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        resp = urllib.request.urlopen(req, timeout=10)
+        fams = json.loads(resp.read().decode("utf-8"))
+        if not fams:
+            return {"error": f"família '{familia_code}' não encontrada"}
+        familia_id = fams[0]["id"]
+        familia_nome = fams[0]["name"]
+
+        # Pega SINAPIs da família
+        url = (f"{SUPABASE_URL}/rest/v1/sinapi_composicao"
+               f"?select=codigo,descricao,unidade&familia_id=eq.{familia_id}"
+               f"&limit=50")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        resp = urllib.request.urlopen(req, timeout=10)
+        rows = json.loads(resp.read().decode("utf-8"))
+
+        # Se query informada, ranqueia por keyword overlap
+        if query and rows:
+            q_tokens = set(re.findall(r"\w{4,}", query.lower()))
+            for r in rows:
+                d_tokens = set(re.findall(r"\w{4,}", (r.get("descricao") or "").lower()))
+                r["_score"] = len(q_tokens & d_tokens)
+            rows.sort(key=lambda r: -r.get("_score", 0))
+            for r in rows:
+                r.pop("_score", None)
+
+        return {
+            "familia_code": familia_code,
+            "familia_nome": familia_nome,
+            "total_sinapis_mapeados": len(rows),
+            "top": rows[:top_k],
+        }
+    except Exception as e:
+        return {"error": f"erro: {type(e).__name__}: {e}"}
+
+
 def tool_check_density_for_item(job_id: str, item_num: str,
                                  typology: str = "office") -> dict:
     """Roda check_density_anomaly num item específico da planilha."""
@@ -284,6 +336,19 @@ TOOLS = [
             "required": ["item_num"],
         },
     },
+    {
+        "name": "get_sinapi_codes",
+        "description": "Lista códigos SINAPI mapeados pra uma família do catálogo. Use quando o cliente perguntar 'qual código SINAPI desse item?' ou pedir referência oficial pra compra. Fornece familia_code (você obtém de get_item_details.categoria.familia) e opcionalmente query (descrição original do item) pra ranqueamento por similaridade.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "familia_code": {"type": "string", "description": "Código da família, ex: 'fam_pint_acrilica' (vem de get_item_details.categoria.familia)"},
+                "query": {"type": "string", "description": "Descrição do item original pra ranquear melhores matches (opcional)"},
+                "top_k": {"type": "integer", "description": "Quantos códigos retornar (default 5)"},
+            },
+            "required": ["familia_code"],
+        },
+    },
 ]
 
 
@@ -298,6 +363,12 @@ def _dispatch_tool(name: str, job_id: str, tool_input: dict) -> Any:
         return tool_read_dxf_summary(job_id, tool_input.get("dxf_filename", ""))
     if name == "check_density_for_item":
         return tool_check_density_for_item(job_id, tool_input["item_num"])
+    if name == "get_sinapi_codes":
+        return tool_get_sinapi_codes(
+            tool_input["familia_code"],
+            tool_input.get("query", ""),
+            tool_input.get("top_k", 5),
+        )
     return {"error": f"tool '{name}' desconhecida"}
 
 
