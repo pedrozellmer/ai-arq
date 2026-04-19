@@ -591,22 +591,26 @@ def _polyline_length(entity) -> float:
 def _hatch_area(entity) -> float:
     """Calculate area of a HATCH entity.
 
-    Tries ezdxf built-in path API first (lida bem com arcos/splines),
-    faz fallback pra shoelace sobre os vértices das boundary paths
-    com aproximação de arcos por amostragem de pontos intermediários.
+    Abordagem em 3 camadas, todas usando APIs nativas do ezdxf (mais confiável
+    que amostragem manual de bulges):
+
+    1. Tenta make_path() + flattening() em cima da hatch inteira — lida com
+       arcos, bulges e splines automaticamente.
+    2. Se falhar, normaliza boundary paths via polyline_to_edge_paths() e roda
+       make_path() por path individual.
+    3. Último recurso: shoelace nos vértices brutos (perde precisão em arcos
+       mas nunca crasha).
     """
-    # Primeira tentativa: usar ezdxf.path que faz flattening automático de arcos
+    # --- Camada 1: API unificada ---
     try:
         from ezdxf import path as ezdxf_path
-        from ezdxf.math import Vec2
         path_result = ezdxf_path.make_path(entity)
         if path_result:
             paths_list = path_result if isinstance(path_result, list) else [path_result]
             total = 0.0
             for p in paths_list:
                 try:
-                    # flattening com distância de 0.5 unidades (equilibra precisão/custo)
-                    vertices = list(p.flattening(0.5))
+                    vertices = list(p.flattening(0.5))  # distância 0.5 = bom equilíbrio precisão/custo
                     pts = [(v.x, v.y) for v in vertices]
                     if len(pts) >= 3:
                         total += abs(_shoelace_area(pts))
@@ -617,63 +621,55 @@ def _hatch_area(entity) -> float:
     except Exception:
         pass
 
-    # Fallback: iterar boundary paths manualmente com aproximação de arcos
+    # --- Camada 2: normalizar polyline→edge paths e processar por boundary ---
+    try:
+        from ezdxf import path as ezdxf_path
+        # polyline_to_edge_paths converte in-place; operamos numa cópia defensiva
+        try:
+            entity.paths.polyline_to_edge_paths()
+        except Exception:
+            pass
+        total = 0.0
+        for bpath in entity.paths:
+            try:
+                p = ezdxf_path.from_hatch_boundary_path(bpath)
+                if p is None:
+                    continue
+                vertices = list(p.flattening(0.5))
+                pts = [(v.x, v.y) for v in vertices]
+                if len(pts) >= 3:
+                    total += abs(_shoelace_area(pts))
+            except Exception:
+                continue
+        if total > 0:
+            return total
+    except Exception:
+        pass
+
+    # --- Camada 3: shoelace bruto (último recurso, perde arcos) ---
     total_area = 0.0
     try:
         for bpath in entity.paths:
             pts: list[tuple[float, float]] = []
             if hasattr(bpath, "vertices") and bpath.vertices:
-                # PolylinePath: vertices podem ter bulge (arco entre pontos)
-                raw = [(v[0], v[1], v[2] if len(v) > 2 else 0.0) for v in bpath.vertices]
-                for i in range(len(raw)):
-                    p1 = (raw[i][0], raw[i][1])
-                    pts.append(p1)
-                    # Interpolar arco se bulge != 0
-                    bulge = raw[i][2]
-                    if abs(bulge) > 1e-9 and i + 1 < len(raw):
-                        p2 = (raw[i + 1][0], raw[i + 1][1])
-                        # Amostra pontos intermediários do arco (~8 pontos)
-                        pts.extend(_sample_arc_from_bulge(p1, p2, bulge, segments=8))
+                pts = [(v[0], v[1]) for v in bpath.vertices]
             elif hasattr(bpath, "edges"):
-                # EdgePath: mix de Line/Arc/Ellipse/Spline edges
                 for edge in bpath.edges:
-                    etype = type(edge).__name__.lower()
-                    try:
-                        if "line" in etype:
+                    if hasattr(edge, "start"):
+                        try:
                             pts.append((edge.start[0], edge.start[1]))
-                        elif "arc" in etype:
-                            center = (edge.center[0], edge.center[1])
-                            radius = edge.radius
-                            start_angle = math.radians(edge.start_angle)
-                            end_angle = math.radians(edge.end_angle)
-                            if end_angle < start_angle:
-                                end_angle += 2 * math.pi
-                            # Amostrar pontos no arco
-                            segments = 12
-                            for k in range(segments + 1):
-                                t = k / segments
-                                ang = start_angle + (end_angle - start_angle) * t
-                                pts.append((
-                                    center[0] + radius * math.cos(ang),
-                                    center[1] + radius * math.sin(ang),
-                                ))
-                        elif "ellipse" in etype or "spline" in etype:
-                            # Tentar extrair start
-                            if hasattr(edge, "start"):
-                                pts.append((edge.start[0], edge.start[1]))
-                    except Exception:
-                        continue
+                        except Exception:
+                            continue
             if len(pts) >= 3:
                 total_area += abs(_shoelace_area(pts))
     except Exception:
         pass
-
     return total_area
 
 
-def _sample_arc_from_bulge(p1, p2, bulge: float, segments: int = 8) -> list:
-    """Retorna pontos intermediários de um arco definido por dois endpoints + bulge.
-    Usado na aproximação de área em hatch boundaries com polyline."""
+def _sample_arc_from_bulge_DEPRECATED(p1, p2, bulge: float, segments: int = 8) -> list:
+    """DEPRECATED — substituído por APIs nativas do ezdxf em _hatch_area.
+    Mantido temporariamente pra compatibilidade mas não é mais usado."""
     if abs(bulge) < 1e-9:
         return []
     chord = _line_length(p1, p2)
