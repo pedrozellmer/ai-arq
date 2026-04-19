@@ -1457,7 +1457,10 @@
     }
 
     const numFiles = selectedFiles.length;
-    const isFree = isFirstProject() && numFiles <= 5;
+    // Conta PRANCHAS REAIS (páginas dentro de PDFs + layouts dentro de DWGs)
+    // se o estimate já rodou, senão fallback pra arquivos.
+    const numPranchasReais = (lastEstimate && lastEstimate.total_pranchas) || numFiles;
+    const isFree = isFirstProject() && numPranchasReais <= 5;
     const isBetaFree = hasBetaCredits();
     const isUnlimited = !!window.__isUnlimitedUser;  // testing/dev bypass
 
