@@ -218,30 +218,52 @@ def main():
         print("Nada a classificar.")
         return
 
-    # Processa em batches
+    # Processa em batches PARALELOS (5 workers concorrentes pra acelerar
+    # ~5×; rate limit de Haiku 4.5 aguenta).
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import threading
     classified = 0
     null_count = 0
+    lock = threading.Lock()
     t0 = time.time()
-    for i in range(0, total, batch_size):
-        batch = pending[i:i + batch_size]
+
+    def process_batch(batch_idx):
+        batch = pending[batch_idx:batch_idx + batch_size]
+        nonlocal classified, null_count
         results = classify_batch(batch, catalog_text, families_by_code, client)
+        local_classified = 0
+        local_null = 0
         for r in results:
             if r.get("familia_id") is None:
-                null_count += 1
-                # mantém familia_id null pra retentativa futura, mas
-                # marca confidence=0 (já passou pelo classificador)
+                local_null += 1
                 continue
             ok = _supabase_patch(
                 f"sinapi_composicao?codigo=eq.{r['codigo']}",
                 {"familia_id": r["familia_id"]},
             )
             if ok:
-                classified += 1
-        elapsed = time.time() - t0
-        rate = (i + len(batch)) / elapsed if elapsed > 0 else 0
-        eta = (total - (i + len(batch))) / rate if rate > 0 else 0
-        print(f"  [{i + len(batch)}/{total}] classified={classified} null={null_count} "
-              f"rate={rate:.1f}/s eta={eta/60:.1f}min")
+                local_classified += 1
+        with lock:
+            classified += local_classified
+            null_count += local_null
+        return batch_idx, len(batch), local_classified, local_null
+
+    batch_indices = list(range(0, total, batch_size))
+    completed = 0
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(process_batch, idx): idx for idx in batch_indices}
+        for fut in as_completed(futures):
+            try:
+                idx, sz, c, n = fut.result()
+            except Exception as e:
+                print(f"  batch err: {e}")
+                continue
+            completed += sz
+            elapsed = time.time() - t0
+            rate = completed / elapsed if elapsed > 0 else 0
+            eta = (total - completed) / rate if rate > 0 else 0
+            print(f"  [{completed}/{total}] classified={classified} null={null_count} "
+                  f"rate={rate:.1f}/s eta={eta/60:.1f}min", flush=True)
 
     print(f"\nDONE em {(time.time()-t0)/60:.1f}min")
     print(f"  Classificados: {classified}")
