@@ -381,6 +381,29 @@
                 Limpar
               </button>
             </div>
+            <!-- Chips de sugest\u00f5es (somem ap\u00f3s primeira pergunta) -->
+            <div id="agent-suggestions" class="flex flex-wrap gap-2 mb-3">
+              <button type="button" data-suggestion="Me d&aacute; um resumo dos itens da planilha por disciplina"
+                class="agent-chip text-xs px-3 py-1.5 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition border border-indigo-100">
+                &#128202; Resumo por disciplina
+              </button>
+              <button type="button" data-suggestion="Quais itens est&atilde;o em laranja e por qu&ecirc;?"
+                class="agent-chip text-xs px-3 py-1.5 rounded-full bg-amber-50 text-amber-700 hover:bg-amber-100 transition border border-amber-100">
+                &#129000; Itens em laranja
+              </button>
+              <button type="button" data-suggestion="Tem alguma quantidade que parece anormal pra um escrit&oacute;rio desse tamanho?"
+                class="agent-chip text-xs px-3 py-1.5 rounded-full bg-red-50 text-red-700 hover:bg-red-100 transition border border-red-100">
+                &#128680; Detectar anomalias
+              </button>
+              <button type="button" data-suggestion="Quais itens de demoli&ccedil;&atilde;o tem nessa planilha?"
+                class="agent-chip text-xs px-3 py-1.5 rounded-full bg-gray-50 text-gray-700 hover:bg-gray-100 transition border border-gray-200">
+                &#128296; Itens de demoli&ccedil;&atilde;o
+              </button>
+              <button type="button" data-suggestion="Lista os 5 itens com maior quantidade da planilha"
+                class="agent-chip text-xs px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition border border-emerald-100">
+                &#128293; Top 5 quantidades
+              </button>
+            </div>
             <div id="agent-chat-history" class="max-h-96 overflow-y-auto space-y-3 mb-3"></div>
             <div class="flex gap-2">
               <input id="agent-input" type="text" placeholder="Digite sua pergunta sobre o or&ccedil;amento..."
@@ -1677,12 +1700,21 @@
   function resetAgentConversation() {
     agentConversation = [];
     agentChatHistory.innerHTML = '';
+    // Mostra chips de novo ao limpar
+    const sug = document.getElementById('agent-suggestions');
+    if (sug) sug.classList.remove('hidden');
+  }
+
+  function hideAgentSuggestions() {
+    const sug = document.getElementById('agent-suggestions');
+    if (sug) sug.classList.add('hidden');
   }
 
   async function askAgent() {
     if (!currentJobId) { alert('Sem projeto ativo.'); return; }
     const q = agentInput.value.trim();
     if (q.length < 2) return;
+    hideAgentSuggestions();
     appendAgentMessage('user', q);
     agentInput.value = '';
     btnAgentAsk.disabled = true;
@@ -1724,6 +1756,16 @@
       e.preventDefault();
       askAgent();
     }
+  });
+
+  // Chips clicáveis: preenche input e dispara askAgent
+  document.querySelectorAll('.agent-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const q = chip.getAttribute('data-suggestion') || '';
+      if (!q) return;
+      agentInput.value = q;
+      askAgent();
+    });
   });
 
   // ══════════════════════════════════════════════
