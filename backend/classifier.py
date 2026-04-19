@@ -128,6 +128,13 @@ Retorne APENAS o JSON (sem texto antes ou depois):
 }}"""
 
 
+# Cache em memória de classificações já feitas (chave: desc lowercase + unit)
+# Evita chamadas redundantes ao LLM pra itens com a mesma descrição (ex.: várias
+# luminárias R5 num mesmo job).
+_classify_cache: dict = {}
+_CLASSIFY_CACHE_MAX = 5000  # limite simples; se estourar, limpa metade
+
+
 def classify_item(description: str, unit: str = "") -> dict:
     """Classifica uma descrição em família do catálogo.
 
@@ -136,9 +143,20 @@ def classify_item(description: str, unit: str = "") -> dict:
 
     Em caso de erro (API key faltando, LLM indisponível, JSON inválido),
     retorna familia_id=None com confidence=0.
+
+    Cache in-memory por (descrição.lower(), unit) reduz chamadas
+    redundantes quando o mesmo item aparece várias vezes no job.
     """
     if not description or len(description.strip()) < 3:
         return _empty_result("descrição muito curta")
+
+    cache_key = (description.strip().lower()[:200], (unit or "").lower())
+    if cache_key in _classify_cache:
+        return _classify_cache[cache_key]
+    # Auto-limpeza simples se passa do limite
+    if len(_classify_cache) >= _CLASSIFY_CACHE_MAX:
+        for k in list(_classify_cache.keys())[:len(_classify_cache) // 2]:
+            _classify_cache.pop(k, None)
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
@@ -180,7 +198,7 @@ def classify_item(description: str, unit: str = "") -> dict:
     familia_code = data.get("familia_code") or None
     familia = next((f for f in families if f["code"] == familia_code), None) if familia_code else None
 
-    return {
+    result = {
         "familia_id": familia["id"] if familia else None,
         "familia_code": familia_code,
         "grupo_id": familia["grupo_id"] if familia else None,
@@ -191,6 +209,8 @@ def classify_item(description: str, unit: str = "") -> dict:
         "attributes": data.get("attributes", {}) or {},
         "reasoning": (data.get("reasoning") or "")[:200],
     }
+    _classify_cache[cache_key] = result
+    return result
 
 
 def _empty_result(reason: str) -> dict:
