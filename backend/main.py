@@ -1757,6 +1757,30 @@ async def calibration_ingest_from_review(
                 pass
 
 
+# ═══════════════════════════════════════════════════════════════
+#  Agente "tira-dúvidas" — Q&A sobre uma planilha gerada
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/agent/ask")
+async def agent_ask(job_id: str, question: str = ""):
+    """Cliente faz uma pergunta sobre o orçamento de UM job. O agente
+    investiga (lê planilha, busca itens, lê DXFs, checa calibração) e
+    responde em linguagem natural com referências aos itens.
+
+    Body: pode mandar `question` por query string ou JSON.
+    """
+    if not job_id:
+        raise HTTPException(400, "job_id obrigatório")
+    if not question or len(question.strip()) < 2:
+        raise HTTPException(400, "pergunta vazia")
+    try:
+        from agent import ask
+        result = ask(job_id=job_id, question=question.strip())
+        return {"status": "ok", **result}
+    except Exception as e:
+        raise HTTPException(500, f"Erro do agente: {type(e).__name__}: {e}")
+
+
 @app.post("/api/calibration/reclassify-raws")
 async def calibration_reclassify_raws(
     typology: Optional[str] = None,
