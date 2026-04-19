@@ -202,6 +202,85 @@ def _empty_result(reason: str) -> dict:
     }
 
 
+# Cache simples pra busca de SINAPI por palavras-chave
+_sinapi_cache = {}
+
+
+def suggest_sinapi(description: str, unit: str = "", top_k: int = 1) -> list[dict]:
+    """Sugere o(s) código(s) SINAPI mais próximo(s) da descrição.
+
+    Estratégia simples (sem embedding por enquanto): busca via PostgREST
+    full-text-ish — quebra a descrição em palavras-chave e busca em
+    sinapi_composicao.descricao via ILIKE com peso pela quantidade de
+    palavras que casam.
+
+    Cacheia o resultado por (description normalizada, unit).
+    """
+    if not description or len(description.strip()) < 4:
+        return []
+    cache_key = (description.strip().lower()[:120], (unit or "").lower())
+    if cache_key in _sinapi_cache:
+        return _sinapi_cache[cache_key][:top_k]
+
+    # Extrai palavras-chave significativas (>=4 chars, sem genéricas)
+    import unicodedata as _u
+    text = _u.normalize("NFD", description.lower()).encode("ascii", "ignore").decode("ascii")
+    text = re.sub(r"[^a-z0-9 ]", " ", text)
+    stop = {"de", "do", "da", "em", "com", "para", "tipo", "modelo",
+            "novo", "nova", "existente", "conforme", "execucao",
+            "fornecimento", "instalacao"}
+    keywords = [w for w in text.split() if len(w) >= 4 and w not in stop][:5]
+    if not keywords:
+        return []
+
+    # Busca cada keyword em sinapi_composicao e pontua por overlap
+    candidates: dict = {}  # codigo -> (score, row)
+    try:
+        for kw in keywords:
+            url = (f"{SUPABASE_URL}/rest/v1/sinapi_composicao"
+                   f"?select=codigo,descricao,unidade"
+                   f"&descricao=ilike.*{urllib.request.quote(kw)}*&limit=20")
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Accept", "application/json")
+            resp = urllib.request.urlopen(req, timeout=10)
+            rows = json.loads(resp.read().decode("utf-8"))
+            for r in rows:
+                cod = r["codigo"]
+                desc = (r.get("descricao") or "").lower()
+                if cod not in candidates:
+                    candidates[cod] = {"score": 0, "row": r}
+                # +1 por keyword presente
+                candidates[cod]["score"] += 1
+                # bônus se unit bate
+                if unit and r.get("unidade") and unit.lower() in r["unidade"].lower():
+                    candidates[cod]["score"] += 0.5
+    except Exception as e:
+        print(f"[classifier] sinapi search error: {e}")
+        return []
+
+    if not candidates:
+        return []
+
+    # Ordena por score desc; empate por descrição mais curta (mais genérica)
+    ranked = sorted(
+        candidates.values(),
+        key=lambda x: (-x["score"], len(x["row"].get("descricao") or "")),
+    )
+    out = []
+    for entry in ranked[:max(top_k, 5)]:
+        r = entry["row"]
+        out.append({
+            "codigo": r["codigo"],
+            "descricao": r.get("descricao", "")[:150],
+            "unidade": r.get("unidade"),
+            "match_score": entry["score"],
+        })
+    _sinapi_cache[cache_key] = out
+    return out[:top_k]
+
+
 def get_ancestors(familia_id: int) -> dict:
     """Busca grupo_id + capitulo_id a partir de um familia_id.
     Útil pra popular cascade em benchmarks e alertas."""
