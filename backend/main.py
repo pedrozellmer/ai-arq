@@ -172,6 +172,20 @@ _UNIT_COUNT_KEYWORDS = _re.compile(
 )
 
 
+_GENERIC_WORDS = {
+    "de", "do", "da", "dos", "das", "para", "com", "em",
+    "nova", "novo", "existente", "existentes",
+    "conforme", "especificacao", "especificacoes", "projeto",
+    "instalacao", "execucao", "fornecimento", "fornecida",
+    "tipo", "tipos", "cor", "modelo", "padrao",
+    "altura", "comprimento", "largura", "espessura",
+    "ceramico", "ceramica", "ceramicos", "ceramicas",
+    "metalico", "metalica", "plastico", "plastica",
+    "area", "areas",
+    "m2", "m", "un", "ml",
+}
+
+
 def _normalize_description_key(desc: str) -> str:
     """Reduz a descrição a uma chave de comparação — remove acentos, sufixos
     por departamento, números extras, e faz lowercase. Usado pra detectar
@@ -183,78 +197,191 @@ def _normalize_description_key(desc: str) -> str:
     import unicodedata
     s = unicodedata.normalize('NFD', s)
     s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
-    # Remover sufixos de departamento/variante (após " - ")
+    # Remover sufixos de departamento/variante
     # Ex.: "painel divisorio - contabilidade" → "painel divisorio"
-    s = s.split(' - ')[0].split(' — ')[0].split(' / ')[0]
+    # Ex.: "demarcacao de area departamento contabilidade" → "demarcacao de area"
+    for sep in (' - ', ' — ', ' / ', ' departamento ', ' deptos ', ' do depto ',
+                ' da sala ', ' sala ', ' para sala '):
+        s = s.split(sep)[0]
     # Normalizar espaços e pontuação
     s = _re.sub(r"[^a-z0-9]+", " ", s)
     s = _re.sub(r"\s+", " ", s).strip()
     # Remover palavras genéricas que não mudam o significado
-    GENERIC_WORDS = {"de", "do", "da", "para", "com", "em", "nova", "novo", "existente",
-                     "conforme", "especificacao", "projeto", "instalacao", "execucao",
-                     "fornecimento", "tipo", "altura", "comprimento", "m2", "m"}
-    tokens = [t for t in s.split() if t not in GENERIC_WORDS and len(t) > 1]
+    tokens = [t for t in s.split() if t not in _GENERIC_WORDS and len(t) > 1]
     return " ".join(sorted(tokens[:6]))  # primeiras 6 palavras ordenadas
 
 
+def _primary_noun(desc: str) -> str:
+    """Retorna o primeiro token significativo (>3 chars, não-genérico) da
+    descrição. Usado pra detectar mesma 'família' (alvenaria, luminária, etc.)
+    mesmo quando descrições divergem bastante."""
+    if not desc:
+        return ""
+    import unicodedata
+    s = unicodedata.normalize('NFD', desc.lower())
+    s = ''.join(c for c in s if unicodedata.category(c) != 'Mn')
+    s = _re.sub(r"[^a-z0-9]+", " ", s)
+    for t in s.split():
+        if len(t) > 3 and t not in _GENERIC_WORDS:
+            return t
+    return ""
+
+
+def _pick_best_unit(units: list[str], description: str) -> str:
+    """Entre vários units candidatos, escolhe o mais coerente com a descrição.
+    Se o normalizer semântico diz algo, usa. Senão, prefere contagem (un) >
+    linear (ml) > superfície (m²) > vb — ordem de especificidade crescente."""
+    norm, corrected = _normalize_unit_for_item(description, units[0] if units else "vb")
+    if corrected:
+        return norm
+    # Sem opinião semântica: primeiro unidade não-m² presente (m² é o problema usual)
+    priority = ["un", "ml", "m²", "m", "vb"]
+    for u in priority:
+        if u in units:
+            return u
+    return units[0] if units else "vb"
+
+
 def _consolidate_items(items: list) -> list:
-    """Consolida itens redundantes:
-    - Itens com mesma chave normalizada E mesma quantidade E mesma unidade →
-      mantém apenas um (o com descrição mais completa).
-    - Itens com mesma chave normalizada E mesma unidade mas quantidades
-      diferentes → mantém todos (são variantes reais tipo R4 remanejada/R4 nova).
-    - Itens replicados por departamento (mesma desc-base × N deptos) com
-      qty ≤ 1 m² → consolida em 1 item "estimado" com qty vazia.
+    """Consolida itens redundantes em duas passadas:
+
+    PASSADA 1 — por (chave_normalizada, unidade):
+    - Mesma chave + mesma qty + mesma unidade → mantém 1 (desc mais completa).
+    - Mesma chave + mesma unidade + qtys diferentes → mantém todos.
+    - Réplica por departamento (4+ itens, qty<2) → funde em 1 estimado.
+
+    PASSADA 2 — fusões mais agressivas (qty+discipline+noun):
+    - Mesma qty_arredondada + mesma discipline + units diferentes →
+      funde (ex.: LED LINE m² vs ml com qty 222.11). Escolhe melhor unit.
+    - Mesma qty_arredondada + mesma discipline + mesma unit + primary_noun
+      igual → funde (ex.: alvenaria 491.84 ml × 2 descrições diferentes).
     """
     from models import BudgetItem, Confidence
 
-    # Agrupar por chave normalizada + unidade
+    # ── Passada 1 ──
     groups: dict = {}
     for item in items:
         key = (_normalize_description_key(item.description), item.unit)
         groups.setdefault(key, []).append(item)
 
-    result = []
+    pass1 = []
     for key, group in groups.items():
         if len(group) == 1:
-            result.append(group[0])
+            pass1.append(group[0])
             continue
 
-        # Vários itens com mesma chave — analisar
         quantities = [round(float(it.quantity), 2) for it in group]
         unique_qtys = set(quantities)
 
-        if len(unique_qtys) == 1:
-            # TODOS têm a mesma quantidade — duplicata exata, manter só 1
-            # (o com descrição mais longa)
+        # Réplica por departamento tem prioridade (4+ itens com qty < 2) —
+        # independente de qtys serem idênticas, porque itens "Contabilidade"
+        # e "RH" costumam bater mesmo quando são na verdade áreas distintas.
+        if max(quantities) < 2.0 and len(group) >= 4:
             best = max(group, key=lambda x: len(x.description or ""))
-            result.append(best)
-        elif max(quantities) < 2.0 and len(group) >= 4:
-            # Replicado por departamento com qty pequena (< 2) — consolidar
-            # num só item "estimado" pra evitar 16 linhas de painel 0.72 m²
-            best = max(group, key=lambda x: len(x.description or ""))
-            # Remove sufixo de departamento
-            clean_desc = best.description.split(' - ')[0].split(' — ')[0]
-            # Manter mesma discipline, mas marcar estimado e limpar qty
+            clean_desc = best.description
+            for sep in (' - ', ' — ', ' departamento ', ' deptos ', ' da sala '):
+                clean_desc = clean_desc.split(sep)[0]
+            total_qty = round(sum(quantities), 2)
             consolidated = BudgetItem(
                 item_num=best.item_num,
-                description=f"{clean_desc} (várias variantes)",
+                description=f"{clean_desc.strip()} (várias variantes)",
                 unit=best.unit,
-                quantity=0,
+                quantity=total_qty,
                 observations=(
                     f"Consolidado de {len(group)} entradas replicadas por "
-                    f"departamento/variante — revisar e preencher qty total"
+                    f"departamento/variante — soma de qtys: {total_qty} {best.unit}. "
+                    f"Revisar se faz sentido tratar como item único."
                 ),
                 ref_sheet=best.ref_sheet,
                 confidence=Confidence("estimado"),
                 discipline=best.discipline,
             )
-            result.append(consolidated)
+            pass1.append(consolidated)
+        elif len(unique_qtys) == 1:
+            best = max(group, key=lambda x: len(x.description or ""))
+            pass1.append(best)
         else:
-            # Quantidades diferentes e plausíveis — manter todos (são variantes reais)
-            result.extend(group)
+            pass1.extend(group)
 
-    return result
+    # ── Passada 2 ──
+    # Cada item é reapresentado com fingerprint (discipline, qty_arred). Se
+    # mais de um item compartilha fingerprint, avaliamos noun+overlap pra
+    # decidir se funde.
+    # Qty pequena (< 2) é frequentemente um "un" que se repete por acaso — não
+    # fundimos por coincidência de qty+discipline nesse range pra evitar falso
+    # positivo (ex.: 1 porta de emergência + 1 porta comum ambas qty=1).
+    MIN_QTY_PASS2 = 2.0
+
+    buckets: dict = {}
+    for it in pass1:
+        try:
+            qty_r = round(float(it.quantity or 0), 2)
+        except Exception:
+            qty_r = 0.0
+        if qty_r < MIN_QTY_PASS2:
+            buckets.setdefault(("__solo__", id(it)), []).append(it)
+            continue
+        buckets.setdefault((it.discipline or "", qty_r), []).append(it)
+
+    pass2 = []
+    for (disc, qty_r), group in buckets.items():
+        if disc == "__solo__" or len(group) == 1:
+            pass2.extend(group)
+            continue
+
+        # Tenta fundir itens do mesmo bucket em "famílias". Critério de fusão:
+        # mesmo primary_noun OU interseção de >= 2 tokens significativos.
+        # (1 token só gera FP — ex.: dois itens com "porta" mas sentidos distintos.)
+        families: list[list] = []
+        for it in group:
+            noun = _primary_noun(it.description)
+            key_tokens = set(_normalize_description_key(it.description).split())
+            placed = False
+            for fam in families:
+                fam_noun = _primary_noun(fam[0].description)
+                fam_tokens = set(_normalize_description_key(fam[0].description).split())
+                overlap = key_tokens & fam_tokens
+                if noun and noun == fam_noun:
+                    fam.append(it); placed = True; break
+                if len(overlap) >= 2:
+                    fam.append(it); placed = True; break
+            if not placed:
+                families.append([it])
+
+        for fam in families:
+            if len(fam) == 1:
+                pass2.append(fam[0])
+                continue
+            # Fundir família: melhor descrição, melhor unidade, obs combinada
+            best = max(fam, key=lambda x: len(x.description or ""))
+            units = [it.unit for it in fam]
+            chosen_unit = _pick_best_unit(units, best.description)
+            unit_changed = len(set(units)) > 1
+            variant_count = len(fam)
+            obs_parts = [best.observations or ""]
+            if unit_changed:
+                obs_parts.append(
+                    f"Fundido de {variant_count} entradas com units divergentes "
+                    f"({'/'.join(sorted(set(units)))}) — mesma qty {qty_r}"
+                )
+            else:
+                obs_parts.append(
+                    f"Fundido de {variant_count} entradas com mesma qty "
+                    f"{qty_r} {chosen_unit} — descrições similares"
+                )
+            merged_item = BudgetItem(
+                item_num=best.item_num,
+                description=best.description,
+                unit=chosen_unit,
+                quantity=float(qty_r),
+                observations=" | ".join(p for p in obs_parts if p).strip(),
+                ref_sheet=best.ref_sheet,
+                confidence=Confidence("estimado"),
+                discipline=best.discipline,
+            )
+            pass2.append(merged_item)
+
+    return pass2
 
 
 # Ranges plausíveis por unidade — valores fora disso indicam erro provável.
@@ -957,6 +1084,36 @@ revisor humano confirme direto no arquivo."""
         if flagged_count > 0:
             print(f"[plausibilidade] {flagged_count} itens flagados pra revisão")
 
+        # ── Calibração por DENSIDADE (ratios qty/área) ──
+        # Compara a densidade (qty/área) de cada item contra benchmarks
+        # agregados de projetos históricos (mesma tipologia). Desvio > ±2σ
+        # vira observação laranja. NUNCA promove pra confirmado.
+        # Área de referência: layout_area se disponível, senão total_area.
+        ref_area = project_data.layout_area or project_data.total_area or 0
+        if HAS_DENSITY_CAL and ref_area > 0:
+            try:
+                from density_calibration import check_density_anomaly
+                benchmarks = density_get_benchmarks(typology="office")
+                density_flagged = 0
+                for it in all_items:
+                    is_anom, reason = check_density_anomaly(
+                        it, ref_area, benchmarks=benchmarks, typology="office",
+                    )
+                    if is_anom:
+                        try:
+                            from models import Confidence
+                            it.confidence = Confidence("estimado")
+                        except Exception:
+                            pass
+                        it.observations = (
+                            (it.observations or "") + f" | ⚠ Calibração: {reason}"
+                        ).strip(" |")
+                        density_flagged += 1
+                if density_flagged > 0:
+                    print(f"[densidade] {density_flagged} itens fora do padrão histórico")
+            except Exception as e:
+                print(f"[densidade] Erro no check de anomalia: {e}")
+
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
         jobs.update_field(job_id, current_step=f"Gerando planilha com {len(all_items)} itens...")
@@ -1441,6 +1598,98 @@ async def calibration_factors():
         return {"status": "ok", "count": len(factors_list), "factors": factors_list}
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar fatores: {str(e)}")
+
+
+# ═══════════════════════════════════════════════
+#  Calibração por DENSIDADE (ratios qty/área)
+#  — regra: aprende padrões proporcionais pra ALERTAR anomalias,
+#  nunca copia valores absolutos entre projetos.
+# ═══════════════════════════════════════════════
+
+try:
+    from density_calibration import (
+        ingest_budget as density_ingest_budget,
+        get_benchmarks as density_get_benchmarks,
+    )
+    HAS_DENSITY_CAL = True
+except ImportError:
+    HAS_DENSITY_CAL = False
+    print("density_calibration.py não disponível — calibração por densidade desativada")
+
+
+@app.post("/api/calibration/ingest")
+async def calibration_ingest_density(
+    xlsx: UploadFile = File(...),
+    area_m2: float = 0,
+    typology: str = "office",
+    project_label: str = "",
+):
+    """Ingere um orçamento-fonte histórico pra enriquecer os benchmarks
+    de densidade. `area_m2` é a área de referência do projeto-fonte (layout
+    ou laje) usada pra computar qty/área por item.
+
+    Benchmarks são agregados por (typology, item_type, unit) — projetos
+    novos só recebem ALERTAS, nunca valores copiados.
+    """
+    if not HAS_DENSITY_CAL:
+        raise HTTPException(500, "Módulo density_calibration não carregado")
+    if area_m2 <= 0:
+        raise HTTPException(400, "area_m2 deve ser > 0 (área de referência do projeto-fonte)")
+    if not typology or len(typology) < 3:
+        raise HTTPException(400, "typology obrigatória (ex.: 'office', 'residential')")
+
+    tmp_dir = os.path.join(WORK_DIR, "_density_tmp")
+    os.makedirs(tmp_dir, exist_ok=True)
+    xlsx_path = os.path.join(tmp_dir, f"ingest_{xlsx.filename}")
+    try:
+        content = await xlsx.read()
+        with open(xlsx_path, "wb") as f:
+            f.write(content)
+
+        label = project_label or xlsx.filename
+        summary = density_ingest_budget(
+            xlsx_path, area_m2=area_m2, typology=typology,
+            project_label=label,
+        )
+        return {"status": "ok", "area_m2": area_m2, "typology": typology,
+                "project_label": label, **summary}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro na ingestão: {str(e)}")
+    finally:
+        if os.path.exists(xlsx_path):
+            try:
+                os.remove(xlsx_path)
+            except Exception:
+                pass
+
+
+@app.get("/api/calibration/benchmarks")
+async def calibration_benchmarks(typology: Optional[str] = None):
+    """Lista os benchmarks de densidade agregados (mean ± stddev por
+    tipologia × item_type × unit). Usado pelo admin pra auditar os
+    padrões aprendidos."""
+    if not HAS_DENSITY_CAL:
+        raise HTTPException(500, "Módulo density_calibration não carregado")
+    try:
+        raw = density_get_benchmarks(typology=typology)
+        rows = []
+        for (item_type, unit), data in raw.items():
+            rows.append({
+                "typology": data.get("typology"),
+                "item_type": item_type,
+                "unit": unit,
+                "mean": data.get("mean"),
+                "stddev": data.get("stddev"),
+                "min_value": data.get("min_value"),
+                "max_value": data.get("max_value"),
+                "n_projects": data.get("n_projects"),
+            })
+        rows.sort(key=lambda r: (-(r["n_projects"] or 0), r["item_type"]))
+        return {"status": "ok", "count": len(rows), "benchmarks": rows}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar benchmarks: {str(e)}")
 
 
 if __name__ == "__main__":
