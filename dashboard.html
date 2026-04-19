@@ -1336,6 +1336,8 @@
   }
 
   async function startProcessing() {
+    // Pede permissão de notificação na 1ª vez (silencioso se já decidida)
+    requestNotificationPermission();
     showState(stateProcessing);
     processingStep.textContent = 'Enviando arquivos...';
     progressBar.style.width = '0%';
@@ -1627,7 +1629,15 @@
         } else {
           document.getElementById('few-items-warning')?.classList.add('hidden');
         }
-        setTimeout(() => showState(stateDone), 600);
+
+        // Notifica o navegador (caso a aba esteja em background)
+        notifyDone();
+
+        setTimeout(() => {
+          showState(stateDone);
+          // Tenta carregar conversas anteriores deste job (se houver)
+          loadAgentConversation(currentJobId);
+        }, 600);
       }
 
       if (status === 'error' || status === 'failed') {
@@ -1708,6 +1718,59 @@
   function hideAgentSuggestions() {
     const sug = document.getElementById('agent-suggestions');
     if (sug) sug.classList.add('hidden');
+  }
+
+  // Carrega conversas anteriores do agente pra este job (se cliente já
+  // perguntou antes e fechou a aba). Persistência server-side.
+  async function loadAgentConversation(jobId) {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/agent/conversations?job_id=${jobId}&limit=20`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const convs = (data.conversations || []).reverse();  // mais antiga primeiro
+      if (!convs.length) return;
+      // Reseta estado e popula
+      agentConversation = [];
+      agentChatHistory.innerHTML = '';
+      hideAgentSuggestions();
+      for (const c of convs) {
+        if (c.question) {
+          appendAgentMessage('user', c.question);
+          agentConversation.push({ role: 'user', content: c.question });
+        }
+        if (c.answer) {
+          appendAgentMessage('assistant', c.answer);
+          agentConversation.push({ role: 'assistant', content: c.answer });
+        }
+      }
+    } catch (err) {
+      console.warn('loadAgentConversation falhou:', err);
+    }
+  }
+
+  // Notificação do navegador quando processamento termina
+  function notifyDone() {
+    if (!('Notification' in window)) return;
+    if (document.visibilityState === 'visible') return;  // já tá vendo
+    if (Notification.permission === 'granted') {
+      try {
+        const n = new Notification('Sua planilha está pronta! 📊', {
+          body: 'Volte ao AI.arq pra baixar e tirar dúvidas com o agente.',
+          icon: '/favicon.png',
+          tag: 'aiarq-done',
+        });
+        n.onclick = () => { window.focus(); n.close(); };
+      } catch (_) {}
+    }
+  }
+
+  // Pede permissão de notificação ao iniciar processamento (uma única vez)
+  function requestNotificationPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'default') {
+      try { Notification.requestPermission(); } catch (_) {}
+    }
   }
 
   async function askAgent() {
