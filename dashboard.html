@@ -363,6 +363,30 @@
               Novo Projeto
             </button>
           </div>
+
+          <!-- ═══════════════════════════════════════════ -->
+          <!-- AGENTE TIRA-D&Uacute;VIDAS                          -->
+          <!-- ═══════════════════════════════════════════ -->
+          <div class="mt-6 rounded-2xl border bg-white p-6 md:p-8 shadow-gradient">
+            <div class="flex items-start gap-3 mb-4">
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+              </div>
+              <div class="flex-1">
+                <h3 class="text-base font-semibold text-gray-900">Pergunte sobre sua planilha</h3>
+                <p class="text-xs text-gray-500 mt-0.5">Ex.: "Por que tem 222 m de LED no item 4.1?" &middot; "Resumo dos itens de demoli&ccedil;&atilde;o" &middot; "Tem alguma anomalia detectada?"</p>
+              </div>
+            </div>
+            <div id="agent-chat-history" class="max-h-96 overflow-y-auto space-y-3 mb-3"></div>
+            <div class="flex gap-2">
+              <input id="agent-input" type="text" placeholder="Digite sua pergunta sobre o or&ccedil;amento..."
+                class="flex-1 px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+              <button id="btn-agent-ask" class="px-5 py-3 rounded-xl gradient-main text-white font-semibold text-sm shadow-btn transition disabled:opacity-40 flex items-center gap-2">
+                Perguntar
+              </button>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-2">A IA l&ecirc; sua planilha, busca itens, e cita a fonte de cada quantidade. Respostas em ~5-10s.</p>
+          </div>
         </div>
 
         <!-- STATE: ERROR -->
@@ -1607,6 +1631,71 @@
   btnDownload.addEventListener('click', () => {
     if (currentJobId) {
       window.open(`${API_BASE}/api/download/${currentJobId}`, '_blank');
+    }
+  });
+
+  // ══════════════════════════════════════════════
+  //  AGENTE TIRA-DÚVIDAS
+  // ══════════════════════════════════════════════
+  const agentInput = document.getElementById('agent-input');
+  const btnAgentAsk = document.getElementById('btn-agent-ask');
+  const agentChatHistory = document.getElementById('agent-chat-history');
+
+  function appendAgentMessage(role, text) {
+    const wrap = document.createElement('div');
+    if (role === 'user') {
+      wrap.className = 'flex justify-end';
+      wrap.innerHTML = `<div class="max-w-[80%] rounded-2xl bg-indigo-600 text-white px-4 py-2 text-sm">${escapeHtml(text)}</div>`;
+    } else if (role === 'thinking') {
+      wrap.className = 'flex justify-start';
+      wrap.id = 'agent-thinking';
+      wrap.innerHTML = `<div class="max-w-[80%] rounded-2xl bg-gray-100 text-gray-500 px-4 py-2 text-sm italic flex items-center gap-2">
+        <svg class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+        Investigando sua planilha…
+      </div>`;
+    } else {
+      wrap.className = 'flex justify-start';
+      wrap.innerHTML = `<div class="max-w-[80%] rounded-2xl bg-gray-100 text-gray-800 px-4 py-3 text-sm whitespace-pre-wrap">${escapeHtml(text)}</div>`;
+    }
+    agentChatHistory.appendChild(wrap);
+    agentChatHistory.scrollTop = agentChatHistory.scrollHeight;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
+  }
+
+  async function askAgent() {
+    if (!currentJobId) { alert('Sem projeto ativo.'); return; }
+    const q = agentInput.value.trim();
+    if (q.length < 2) return;
+    appendAgentMessage('user', q);
+    agentInput.value = '';
+    btnAgentAsk.disabled = true;
+    appendAgentMessage('thinking', '');
+    try {
+      const url = `${API_BASE}/api/agent/ask?job_id=${currentJobId}&question=${encodeURIComponent(q)}`;
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json();
+      const thinking = document.getElementById('agent-thinking');
+      if (thinking) thinking.remove();
+      if (!res.ok) throw new Error(data.detail || 'Erro');
+      appendAgentMessage('assistant', data.answer || '(sem resposta)');
+    } catch (err) {
+      const thinking = document.getElementById('agent-thinking');
+      if (thinking) thinking.remove();
+      appendAgentMessage('assistant', `Erro: ${err.message}`);
+    } finally {
+      btnAgentAsk.disabled = false;
+      agentInput.focus();
+    }
+  }
+
+  btnAgentAsk.addEventListener('click', askAgent);
+  agentInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      askAgent();
     }
   });
 

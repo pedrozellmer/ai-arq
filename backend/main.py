@@ -1848,6 +1848,59 @@ async def agent_ask(job_id: str, question: str = ""):
         raise HTTPException(500, f"Erro do agente: {type(e).__name__}: {e}")
 
 
+@app.get("/api/agent/conversations")
+async def agent_conversations(job_id: Optional[str] = None, limit: int = 50):
+    """Lista conversas do agente — usado pelo admin pra acompanhar uso."""
+    try:
+        import urllib.request as _ur
+        query = f"select=*&order=created_at.desc&limit={int(limit)}"
+        if job_id:
+            query += f"&job_id=eq.{_ur.quote(job_id)}"
+        url = f"{SUPABASE_URL}/rest/v1/agent_conversations?{query}"
+        req = _ur.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        resp = _ur.urlopen(req, timeout=10)
+        rows = _json.loads(resp.read().decode("utf-8"))
+        return {"status": "ok", "count": len(rows), "conversations": rows}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar conversas: {str(e)}")
+
+
+@app.get("/api/agent/stats")
+async def agent_stats():
+    """Estatísticas agregadas do uso do agente — pra dashboard admin."""
+    try:
+        import urllib.request as _ur
+        url = (f"{SUPABASE_URL}/rest/v1/rpc/agent_stats_summary")
+        # Fallback: faz a agregação aqui via select básico
+        url = (f"{SUPABASE_URL}/rest/v1/agent_conversations"
+               "?select=id,iterations,duration_ms,error,job_id,created_at")
+        req = _ur.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        resp = _ur.urlopen(req, timeout=10)
+        rows = _json.loads(resp.read().decode("utf-8"))
+        total = len(rows)
+        with_error = sum(1 for r in rows if r.get("error"))
+        unique_jobs = len({r.get("job_id") for r in rows if r.get("job_id")})
+        durations = [r.get("duration_ms") or 0 for r in rows]
+        avg_dur = int(sum(durations)/len(durations)) if durations else 0
+        avg_iter = (sum(r.get("iterations") or 0 for r in rows) / total) if total else 0
+        return {
+            "status": "ok",
+            "total_conversations": total,
+            "unique_jobs": unique_jobs,
+            "errors": with_error,
+            "avg_duration_ms": avg_dur,
+            "avg_iterations": round(avg_iter, 2),
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Erro stats: {str(e)}")
+
+
 @app.post("/api/calibration/reclassify-raws")
 async def calibration_reclassify_raws(
     typology: Optional[str] = None,
