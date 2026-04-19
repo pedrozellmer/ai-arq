@@ -371,6 +371,52 @@
           </div>
         </div>
 
+        <!-- Ingestão por densidade (novo) -->
+        <div class="rounded-2xl border bg-white p-6 shadow-sm mb-6">
+          <h3 class="text-base font-semibold text-gray-900 mb-1">Ingest&#227;o por densidade (novo)</h3>
+          <p class="text-xs text-gray-500 mb-4">
+            Envie or&#231;amentos-fonte reais pra ensinar a IA a reconhecer <b>densidades t&#237;picas</b>
+            (ex.: lumin&#225;rias/m&#178;, alvenaria/m&#178;) por tipologia. Projetos novos v&#227;o receber
+            <b>alertas laranja</b> quando uma densidade fugir do padr&#227;o &plusmn;2&sigma;. Nunca copia valores absolutos.
+          </p>
+          <div class="grid gap-4 sm:grid-cols-2 mb-4">
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">Planilha do or&#231;amento-fonte (.xlsx)</label>
+              <input type="file" id="den-xlsx-file" accept=".xlsx,.xls" class="w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-sky-50 file:text-sky-700 hover:file:bg-sky-100">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">&#193;rea de refer&#234;ncia (m&#178;)</label>
+              <input type="number" id="den-area" step="0.01" min="0" placeholder="Ex.: 1286" class="w-full px-4 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none">
+              <p class="text-[11px] text-gray-400 mt-1">Layout do projeto-fonte (n&#227;o a laje bruta)</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tipologia</label>
+              <select id="den-typology" class="w-full px-4 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none">
+                <option value="office">Escrit&#243;rio corporativo (office)</option>
+                <option value="residential">Residencial</option>
+                <option value="retail">Varejo / Lojas</option>
+                <option value="hospital">Hospitalar</option>
+                <option value="educational">Educacional</option>
+              </select>
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-sm font-medium text-gray-700 mb-1">R&#243;tulo do projeto-fonte</label>
+              <input type="text" id="den-label" placeholder="Ex.: Vista Guanabara 14&ordm; andar" class="w-full px-4 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-sky-500 focus:border-transparent outline-none">
+              <p class="text-[11px] text-gray-400 mt-1">Usado pra deduplicar: mesma tipologia+item+unit+label s&#243; conta uma vez</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="uploadDensityIngest()" id="btn-den-ingest" class="px-5 py-2.5 rounded-xl bg-sky-600 text-white font-semibold text-sm shadow-btn transition hover:bg-sky-700 disabled:opacity-40">
+              Ingerir or&#231;amento-fonte
+            </button>
+            <button onclick="loadBenchmarks()" class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium text-xs hover:bg-gray-50 transition">
+              Ver benchmarks
+            </button>
+          </div>
+          <div id="den-result" class="mt-4 hidden rounded-xl border p-4 text-sm"></div>
+          <div id="den-benchmarks" class="mt-4 hidden rounded-xl border bg-gray-50 p-4 text-xs max-h-96 overflow-y-auto"></div>
+        </div>
+
         <!-- Manual upload -->
         <div class="rounded-2xl border bg-white p-6 shadow-sm mb-6">
           <h3 class="text-base font-semibold text-gray-900 mb-3">Upload manual (admin)</h3>
@@ -1002,6 +1048,95 @@ async function uploadManualCalibration() {
   } finally {
     btn.disabled = false;
     btn.textContent = 'Comparar e Salvar';
+  }
+}
+
+// ══════════════════════════════════════════════
+// CALIBRAÇÃO POR DENSIDADE (ratios qty/área)
+// ══════════════════════════════════════════════
+async function uploadDensityIngest() {
+  const file = document.getElementById('den-xlsx-file').files[0];
+  const area = parseFloat(document.getElementById('den-area').value);
+  const typology = document.getElementById('den-typology').value;
+  const label = document.getElementById('den-label').value.trim();
+  const btn = document.getElementById('btn-den-ingest');
+  const resultDiv = document.getElementById('den-result');
+
+  if (!file) { alert('Selecione um arquivo XLSX'); return; }
+  if (!area || area <= 0) { alert('Informe uma área de referência (m²) > 0'); return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Ingerindo...';
+  resultDiv.classList.add('hidden');
+
+  try {
+    const formData = new FormData();
+    formData.append('xlsx', file);
+    const params = new URLSearchParams({
+      area_m2: area,
+      typology: typology,
+      project_label: label || file.name,
+    });
+    const res = await fetch(`${API_BASE}/api/calibration/ingest?${params}`, {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Erro ao ingerir');
+
+    resultDiv.classList.remove('hidden');
+    if (data.items_parsed > 0) {
+      resultDiv.className = 'mt-4 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800';
+      resultDiv.innerHTML = `
+        <p class="font-semibold mb-1">Ingestão concluída</p>
+        <p>Linhas parseadas: <strong>${data.items_parsed}</strong></p>
+        <p>Benchmarks atualizados: <strong>${data.benchmarks_updated}</strong></p>
+        <p>Tipos novos: <strong>${data.new_item_types}</strong></p>
+        <p class="text-xs text-sky-700 mt-2">Projeto-fonte: ${esc(data.project_label)} — ${data.area_m2} m² (${data.typology})</p>
+      `;
+    } else {
+      resultDiv.className = 'mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800';
+      resultDiv.innerHTML = `<p>Nenhuma linha válida encontrada: ${esc(data.error || '—')}</p>`;
+    }
+  } catch (err) {
+    console.error('Density ingest error:', err);
+    resultDiv.classList.remove('hidden');
+    resultDiv.className = 'mt-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800';
+    resultDiv.innerHTML = '<p>Erro: ' + esc(err.message) + '</p>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Ingerir orçamento-fonte';
+  }
+}
+
+async function loadBenchmarks() {
+  const box = document.getElementById('den-benchmarks');
+  const typology = document.getElementById('den-typology').value;
+  box.classList.remove('hidden');
+  box.innerHTML = '<p class="text-gray-400">Carregando benchmarks…</p>';
+  try {
+    const res = await fetch(`${API_BASE}/api/calibration/benchmarks?typology=${encodeURIComponent(typology)}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Erro ao carregar');
+    const rows = data.benchmarks || [];
+    if (rows.length === 0) {
+      box.innerHTML = `<p class="text-gray-500">Nenhum benchmark para tipologia <b>${esc(typology)}</b> ainda. Ingira pelo menos 2 projetos pra começar a alertar.</p>`;
+      return;
+    }
+    let html = `<p class="font-semibold mb-2">${rows.length} benchmarks — tipologia <b>${esc(typology)}</b></p>`;
+    html += '<table class="w-full text-[11px]"><thead><tr class="text-left text-gray-500"><th class="py-1 pr-2">item_type</th><th class="py-1 pr-2">unit</th><th class="py-1 pr-2 text-right">média /m²</th><th class="py-1 pr-2 text-right">±σ</th><th class="py-1 pr-2 text-right">min</th><th class="py-1 pr-2 text-right">max</th><th class="py-1 pr-2 text-right">n</th></tr></thead><tbody>';
+    for (const r of rows) {
+      const mean = r.mean ? r.mean.toFixed(5) : '—';
+      const std = r.stddev ? r.stddev.toFixed(5) : '—';
+      const mn = r.min_value ? r.min_value.toFixed(5) : '—';
+      const mx = r.max_value ? r.max_value.toFixed(5) : '—';
+      const ready = (r.n_projects || 0) >= 2;
+      html += `<tr class="border-t border-gray-200 ${ready ? '' : 'opacity-50'}"><td class="py-1 pr-2 font-mono">${esc(r.item_type)}</td><td class="py-1 pr-2">${esc(r.unit)}</td><td class="py-1 pr-2 text-right">${mean}</td><td class="py-1 pr-2 text-right">${std}</td><td class="py-1 pr-2 text-right">${mn}</td><td class="py-1 pr-2 text-right">${mx}</td><td class="py-1 pr-2 text-right">${r.n_projects}</td></tr>`;
+    }
+    html += '</tbody></table><p class="text-[10px] text-gray-400 mt-2">Linhas em cinza têm n&lt;2 e não disparam alerta ainda.</p>';
+    box.innerHTML = html;
+  } catch (err) {
+    box.innerHTML = `<p class="text-red-600">Erro: ${esc(err.message)}</p>`;
   }
 }
 
