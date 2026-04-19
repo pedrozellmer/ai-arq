@@ -257,6 +257,65 @@ def _consolidate_items(items: list) -> list:
     return result
 
 
+# Ranges plausíveis por unidade — valores fora disso indicam erro provável.
+# Valores em contexto de reforma de escritório corporativo (nosso nicho atual).
+_PLAUSIBILITY_RANGES = {
+    "un": (0, 5000),   # 5000+ un em uma obra é raro (ex.: difusores AC em torre)
+    "ml": (0, 50000),  # 50km de perfil é improvável; mas casos grandes permitidos
+    "m²": (0, 50000),  # 50000m² = escritório de 5 andares grandes
+    "m": (0, 50000),
+    "mês": (0, 60),    # 5 anos de obra é improvável
+    "dia": (0, 1000),  # 3 anos em dias
+    "%": (0, 100),     # percentual
+    "vb": (0, 1),      # verba por definição é 0 ou 1
+}
+# Combinações disciplina × unidade que não fazem sentido.
+# (disciplina, unidade) -> mensagem descritiva do problema
+_DISCIPLINE_UNIT_MISMATCHES = {
+    ("Iluminação", "m²"): "luminárias se contam em 'un', não em área",
+    ("Iluminação", "m"):  "luminárias se contam em 'un', não em metros",
+    ("Pisos e Rodapés", "un"): "piso é superfície, deve ser m² — exceção: elementos pontuais como grelhas",
+    ("Forros", "un"): "forro é superfície, deve ser m²",
+    ("Ar-Condicionado", "m²"): "equipamentos de AC são unidades, não área",
+    ("Incêndio e Segurança", "m²"): "sprinklers/detectores são unidades",
+    ("Portas e Ferragens", "m²"): "portas são unidades, não área",
+}
+
+
+def _check_plausibility(item, project_total_area_m2: float = 0) -> tuple[bool, str]:
+    """Retorna (é_plausível, motivo_se_não). Só avalia — decisão é do caller."""
+    if item is None:
+        return True, ""
+    try:
+        qty = float(item.quantity or 0)
+    except Exception:
+        return False, "quantidade não-numérica"
+
+    # 1. Range plausível pela unidade
+    unit = item.unit or "vb"
+    if unit in _PLAUSIBILITY_RANGES:
+        lo, hi = _PLAUSIBILITY_RANGES[unit]
+        if qty > hi:
+            return False, f"{qty:.0f} {unit} é alto demais pro tipo (max típico {hi})"
+        if qty < lo:
+            return False, f"{qty} {unit} é negativo"
+
+    # 2. Disciplina × unidade
+    disc = item.discipline or ""
+    mismatch_key = (disc, unit)
+    if mismatch_key in _DISCIPLINE_UNIT_MISMATCHES:
+        return False, _DISCIPLINE_UNIT_MISMATCHES[mismatch_key]
+
+    # 3. Área vs laje (só pra superfícies)
+    if unit == "m²" and project_total_area_m2 > 0 and qty > project_total_area_m2 * 1.5:
+        return False, (
+            f"área {qty:.1f} m² é maior que 1.5× área da laje "
+            f"({project_total_area_m2:.0f} m²) — possível dupla contagem"
+        )
+
+    return True, ""
+
+
 def _validate_quantity_for_unit(item) -> tuple[float, bool]:
     """Garante consistência entre unidade e quantidade.
     - 'un' só aceita inteiros positivos (arredonda se frac, ou zera + marca estimado)
@@ -537,7 +596,42 @@ Em projetos BR:
 **Se aparecer SÓ UM**, use-o (pode ser o único dado disponível).
 **Nunca some LEV + FOR** — são momentos distintos (antes/depois da reforma).
 
-Retorne APENAS JSON válido no formato:
+════════════════════════════════════════════════════════
+FORMATO DE RESPOSTA — RACIOCÍNIO EXPLÍCITO ANTES DO JSON
+════════════════════════════════════════════════════════
+
+Antes de retornar o JSON, PENSE em voz alta em 4 passos. O texto do raciocínio
+é obrigatório — ele ajuda você a errar menos e ajuda o revisor humano a
+confiar no resultado. Formato:
+
+```
+RACIOCÍNIO:
+
+Passo 1 — Inventário de layers:
+  Para cada LAYER relevante, uma linha:
+    "<nome do layer>: <tipo de dado> — <quantidade extraída> — representa <item>"
+  Exemplo: "FOR-MFR: área hachurada — 79.66 m² — forro modular novo"
+  Ignore layers de anotação, xrefs e aux.
+
+Passo 2 — Checagem de LEV vs FOR:
+  Liste pares conflitantes (mesmo tipo em layer LEV e FOR).
+  Para cada par, diga qual escolheu e por quê.
+  Exemplo: "LEV-MFR 2150m² vs FOR-MFR 79m² — escolhi FOR-MFR (novo projeto)"
+
+Passo 3 — Plausibilidade:
+  Para cada grupo de itens, verifique se a soma faz sentido:
+  - Áreas de piso/forro somadas ≤ área da laje construída
+  - Contagens (un) são números inteiros
+  - Comprimentos e áreas são positivos
+  Se algo parece absurdo, marque estimado.
+
+Passo 4 — Geração dos itens:
+  Para cada item que vai no JSON, uma linha:
+    "<descrição>: <qtd> <un> — fonte: <layer/bloco exato>"
+```
+
+Depois do raciocínio, retorne o JSON em bloco de código (```json...```):
+
 {{
   "project_data": {{
     "name": "",
@@ -555,29 +649,52 @@ Retorne APENAS JSON válido no formato:
       "description": "Descrição completa",
       "unit": "m²",
       "quantity": 100,
-      "observations": "Fonte: DXF bloco X / área layer Y / comprimento layer Z (cite a fonte EXATA dos dados extraídos)",
+      "observations": "Fonte: <layer/bloco/texto exato da extração>",
       "ref_sheet": "DXF",
       "confidence": "confirmado ou estimado — nunca inventar",
       "discipline": "Categoria"
     }}
   ]
-}}"""
+}}
+
+REGRA DA OBSERVATION: o campo "observations" deve SEMPRE citar a fonte exata
+do número no DXF — ex.: "Fonte: 85 INSERTs do bloco 'lum. R5 remanejada'"
+ou "Fonte: área hachurada do layer FOR-MFR = 79.66 m²". Isso permite que o
+revisor humano confirme direto no arquivo."""
 
                     try:
                         response = dxf_client.messages.create(
                             model="claude-sonnet-4-20250514",
-                            max_tokens=8000,
+                            max_tokens=16000,  # aumentado pra caber raciocínio (CoT) + JSON
                             temperature=0,
                             system=SYSTEM_PROMPT,
                             messages=[{"role": "user", "content": dxf_prompt}],
                         )
 
                         text = response.content[0].text
+                        # Parser robusto: agora o Claude pode retornar raciocínio ANTES do JSON (CoT).
+                        # Tentar em ordem: bloco ```json, bloco ```, último objeto {...} do texto.
+                        json_str = None
                         if "```json" in text:
-                            json_str = text.split("```json")[1].split("```")[0].strip()
+                            json_str = text.split("```json")[-1].split("```")[0].strip()
                         elif "```" in text:
-                            json_str = text.split("```")[1].split("```")[0].strip()
-                        else:
+                            # Pegar o último bloco de código (caso tenha múltiplos)
+                            parts = text.split("```")
+                            if len(parts) >= 3:
+                                json_str = parts[-2].strip()
+                        if not json_str or not json_str.startswith("{"):
+                            # Fallback: regex pra achar último JSON object "compatível" no texto
+                            import re as _re_parse
+                            # Matches { ... } que contém "items" ou "project_data"
+                            candidates = _re_parse.findall(
+                                r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}",
+                                text, flags=_re_parse.DOTALL
+                            )
+                            for cand in reversed(candidates):
+                                if '"items"' in cand or '"project_data"' in cand:
+                                    json_str = cand
+                                    break
+                        if not json_str:
                             json_str = text.strip()
 
                         result = _j.loads(json_str)
@@ -798,6 +915,27 @@ Retorne APENAS JSON válido no formato:
         n_after = len(all_items)
         if n_before != n_after:
             print(f"[consolidação] {n_before} → {n_after} itens ({n_before - n_after} consolidados)")
+
+        # ── Validação de plausibilidade ──
+        # Detecta disciplina×unidade mismatch, range absurdo, área > laje×1.5.
+        # Marca estimado (laranja) e anota o motivo pra usuário revisar.
+        jobs.update_field(job_id, current_step="Validando plausibilidade dos itens...")
+        flagged_count = 0
+        laje_area = project_data.total_area or 0
+        for it in all_items:
+            plausible, reason = _check_plausibility(it, laje_area)
+            if not plausible:
+                try:
+                    from models import Confidence
+                    it.confidence = Confidence("estimado")
+                except Exception:
+                    pass
+                it.observations = (
+                    (it.observations or "") + f" | ⚠ Revisar: {reason}"
+                ).strip(" |")
+                flagged_count += 1
+        if flagged_count > 0:
+            print(f"[plausibilidade] {flagged_count} itens flagados pra revisão")
 
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
