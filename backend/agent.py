@@ -94,16 +94,34 @@ def tool_list_items(job_id: str, max_items: int = 200) -> dict:
 
 
 def tool_get_item_details(job_id: str, item_num: str) -> dict:
-    """Dados completos de UM item, incluindo observação inteira."""
+    """Dados completos de UM item + classificação automática (família,
+    grupo, capítulo) e atributos folha extraídos (cor, PD, marca, etc.)."""
     wb = _open_planilha(job_id)
     if wb is None:
         return {"error": f"planilha do job {job_id} não encontrada"}
+    found = None
     for r in _iter_orcamento_rows(wb):
         if r["item_num"] == item_num.strip():
-            wb.close()
-            return r
+            found = r
+            break
     wb.close()
-    return {"error": f"item {item_num} não encontrado"}
+    if not found:
+        return {"error": f"item {item_num} não encontrado"}
+
+    # Enriquece com classificação (LLM Haiku, ~3s)
+    try:
+        from classifier import classify_item
+        cls = classify_item(found["description"], found["unit"])
+        found["categoria"] = {
+            "capitulo": cls.get("capitulo_code"),
+            "grupo": cls.get("grupo_code"),
+            "familia": cls.get("familia_code"),
+            "confidence": round(cls.get("confidence", 0), 2),
+        }
+        found["atributos_folha"] = cls.get("attributes") or {}
+    except Exception as e:
+        found["categoria"] = {"error": str(e)[:100]}
+    return found
 
 
 def tool_search_items(job_id: str, query: str, max_hits: int = 20) -> dict:
@@ -225,7 +243,7 @@ TOOLS = [
     },
     {
         "name": "get_item_details",
-        "description": "Retorna dados completos de UM item, incluindo observação inteira (cita fonte/layer CAD/consolidador).",
+        "description": "Retorna dados completos de UM item, incluindo observação inteira (cita fonte/layer CAD/consolidador) E classificação automática (capítulo > grupo > família) e atributos folha extraídos (cor, PD, marca, dimensão, código produto). Use SEMPRE que o usuário perguntar 'por que tem X' ou pedir detalhes de um item específico — a categoria + atributos enriquecem a explicação.",
         "input_schema": {
             "type": "object",
             "properties": {
