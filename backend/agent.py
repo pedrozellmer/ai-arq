@@ -302,19 +302,55 @@ REGRAS:
 """
 
 
+def _log_conversation(job_id: str, question: str, answer: str,
+                      tool_calls: list, iterations: int, duration_ms: int,
+                      error: str = "") -> None:
+    """Persiste a conversa em agent_conversations pra auditoria/admin."""
+    try:
+        record = {
+            "job_id": job_id,
+            "question": question[:2000],
+            "answer": (answer or "")[:5000],
+            "tool_calls": tool_calls[:30],  # limita pra não estourar
+            "iterations": iterations,
+            "duration_ms": duration_ms,
+            "error": (error or "")[:500] or None,
+        }
+        url = f"{SUPABASE_URL}/rest/v1/agent_conversations"
+        body = json.dumps(record, default=str, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Prefer", "return=minimal")
+        urllib.request.urlopen(req, timeout=8)
+    except Exception as e:
+        print(f"[agent] log error: {e}")
+
+
 def ask(job_id: str, question: str, max_iterations: int = 8) -> dict:
     """Roda o loop do agente até ele dar resposta final.
 
     Retorna {answer, tool_calls: [(name, input, result)...], iterations}.
+    Loga conversa em agent_conversations no Supabase.
     """
+    import time as _t
+    t0 = _t.time()
+
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        return {"answer": "API key não configurada.", "tool_calls": [], "iterations": 0}
+        result = {"answer": "API key não configurada.", "tool_calls": [], "iterations": 0}
+        _log_conversation(job_id, question, result["answer"], [], 0,
+                          int((_t.time()-t0)*1000), "no api key")
+        return result
 
     try:
         import anthropic
     except ImportError:
-        return {"answer": "SDK anthropic não instalado.", "tool_calls": [], "iterations": 0}
+        result = {"answer": "SDK anthropic não instalado.", "tool_calls": [], "iterations": 0}
+        _log_conversation(job_id, question, result["answer"], [], 0,
+                          int((_t.time()-t0)*1000), "no anthropic SDK")
+        return result
 
     client = anthropic.Anthropic(api_key=api_key)
 
@@ -332,8 +368,11 @@ def ask(job_id: str, question: str, max_iterations: int = 8) -> dict:
                 messages=messages,
             )
         except Exception as e:
-            return {"answer": f"Erro na chamada Claude: {type(e).__name__}: {e}",
-                    "tool_calls": tool_calls_log, "iterations": it}
+            err_msg = f"Erro na chamada Claude: {type(e).__name__}: {e}"
+            _log_conversation(job_id, question, err_msg, tool_calls_log, it,
+                              int((_t.time()-t0)*1000), str(e)[:300])
+            return {"answer": err_msg, "tool_calls": tool_calls_log,
+                    "iterations": it}
 
         # Coleta texto + tool_use blocks
         text_chunks = []
@@ -373,8 +412,13 @@ def ask(job_id: str, question: str, max_iterations: int = 8) -> dict:
     if not final_answer:
         final_answer = "Não consegui formular uma resposta após várias iterações."
 
+    duration_ms = int((_t.time() - t0) * 1000)
+    _log_conversation(job_id, question, final_answer, tool_calls_log,
+                      it + 1, duration_ms)
+
     return {
         "answer": final_answer,
         "tool_calls": tool_calls_log,
         "iterations": it + 1,
+        "duration_ms": duration_ms,
     }
