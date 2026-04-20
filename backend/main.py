@@ -1271,6 +1271,8 @@ async def process_files(
     typology: str = "office",
     project_name: str = "",
     user_id: str = "",
+    user_email: str = "",
+    user_name: str = "",
     credits_to_consume_cents: int = 0,
 ):
     """Recebe PDF, DWG ou DXF e inicia processamento em background.
@@ -1328,13 +1330,11 @@ async def process_files(
     )
 
     # Salvar projeto no Supabase
-    user_email = ""
-    user_name = ""
     _supabase_insert("projects", {
         "job_id": job_id,
         "user_id": user_id or "anonymous",
-        "user_email": user_email,
-        "user_name": user_name,
+        "user_email": user_email or "",
+        "user_name": user_name or "",
         "project_name": project_name or "Sem nome",
         "typology": typology,
         "files_count": len(file_paths),
