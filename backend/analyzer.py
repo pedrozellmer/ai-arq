@@ -41,18 +41,24 @@ REGRAS OBRIGATÓRIAS:
 
 ## PRECISÃO — REGRA DURA DE CONFIANÇA
 
-**NUNCA ESTIMAR COMO "CONFIRMADO". Só use "confirmado" quando a quantidade vem de UMA das fontes abaixo:**
-- Quadro/legenda/tabela que LISTA EXPLICITAMENTE a quantidade do item (ex: "85 un" em tabela de esquadrias)
+Cada item volta com um campo "confidence" que determina a cor na planilha final:
+- "confirmado" (BRANCO) — número lido direto de fonte explícita do projeto atual
+- "estimado"   (LARANJA) — número calculado, contado ou inferido (usuário precisa revisar)
+
+**Use "confirmado" QUANDO a quantidade vem de UMA destas fontes DO ARQUIVO ATUAL:**
+- Quadro/legenda/tabela que LISTA EXPLICITAMENTE a quantidade do item (ex: "85 un" em tabela de esquadrias; "LM1: 12 un" em quadro de luminárias)
 - Cota numérica visível na planta referente a esse item específico
+- Item descrito LITERALMENTE na legenda com dimensão/quantidade explícita (ex: "Espelho 80×60cm — 2 un")
 
-**TUDO o que não for isso deve ser "estimado" (aparecerá em laranja pro usuário confirmar):**
-- Contagem visual de símbolos (benchmark: IA acerta 26-41%) → SEMPRE estimado
-- Cálculo por área/perímetro × fórmula → SEMPRE estimado
-- Fórmulas/números calibrados por fornecedor de outros projetos → SEMPRE estimado (nunca usar valores de outro projeto)
-- Qualquer quantidade inferida de convenção ou boa prática → SEMPRE estimado
-- Itens "padrão de obra" (ADM local, limpeza final) → SEMPRE estimado
+**Use "estimado" quando:**
+- Contagem visual de símbolos sem quadro totalizador (benchmark: IA acerta 26-41%)
+- Cálculo por área/perímetro × fórmula (ex: rodapé = perímetro × 1)
+- Inferência de boa prática (ADM local, limpeza final, mobilização)
+- Qualquer caso onde você não pode apontar o número exato na legenda
 
-Na dúvida entre "confirmado" e "estimado", ESCOLHA "estimado". É preferível 100 itens laranja que o usuário confirma um a um do que 1 item branco com número inventado.
+**Equilíbrio**: quando o projeto tem um QUADRO DE CARGAS LUMINÁRIAS ou QUADRO DE ESQUADRIAS com números, USE "confirmado". É errado marcar tudo como "estimado" se a legenda tem os totais. A planilha fica inútil se cada linha for laranja.
+
+Na dúvida real entre "confirmado" e "estimado" (você encontrou o número mas tem alguma ressalva), escolha "estimado". Mas NÃO marque estimado por reflexo — use a régua acima.
 
 Não use "verificar" — use "estimado" pra qualquer incerteza.
 
@@ -189,36 +195,39 @@ Retorne JSON com TODOS os itens que conseguir extrair do projeto ATUAL. Se um it
 
 PROMPT_FORRO = """Analise DETALHADAMENTE estas imagens da prancha de FORRO.
 
+## REGRA DURA DE ISOLAMENTO
+**Extraia APENAS tipos de forro, luminárias e itens de teto que APARECEM NA LEGENDA / PLANTA deste arquivo.** Não gerar itens por "padrão de projeto" ou "tipicamente tem". Se não consegue ler a legenda, retorne items=[].
+
 ## FORROS (discipline: "Forros")
 Para CADA tipo de forro listado NA LEGENDA do projeto atual:
 - Copiar nome/código/especificação da legenda (modelo, dimensão, fabricante)
 - ÁREA: somar áreas hachuradas ou regiões delimitadas na planta que correspondem àquele tipo
 - Se não houver hachura diferenciada, somar as áreas das salas/ambientes listados para aquele tipo
 - Pé-direito (PD): extrair da legenda quando especificado
-Tipos comuns a buscar (mas SÓ incluir se estiverem na planta): forro mineral modular, forro gesso liso, forro ripado, laje aparente tratada.
 
 ## ACABAMENTOS DE FORRO
-- Tabica/cantoneira de acabamento: somar perímetro interno dos ambientes com forro
-- Cubetas, transições, reforços: buscar na legenda
-- Alçapões de inspeção: contar símbolos específicos na planta
+Só incluir os que constam na legenda/planta desta prancha:
+- Tabica/cantoneira/moldura de acabamento
+- Cubetas, transições, reforços
+- Alçapões de inspeção (contar símbolos visíveis)
 
 ## LUMINÁRIAS (discipline: "Iluminação")
 Para CADA tipo de luminária listado NA LEGENDA do projeto atual:
 - Copiar código, modelo, fabricante, lâmpada (potência, temperatura de cor), driver, acabamento
 - QUANTIDADE: se houver quadro de cargas com totais numéricos, usar esse número (confirmado).
   Senão, contar símbolos na planta por varredura sistemática quadrante a quadrante e marcar "estimado".
-- Incluir luminárias de emergência, trilhos, barras cênicas, perfis LED quando constarem
+- Incluir apenas os tipos que APARECEM na legenda/planta. Não criar "luminária de emergência padrão" se não aparece.
 
-## ITENS TÉCNICOS NO TETO (discipline conforme tipo)
-- Sprinklers → "Incêndio e Segurança"
-- Detectores de fumaça → "Incêndio e Segurança"
-- Caixa de som / sonorização → "Complementares"
+## ITENS TÉCNICOS NO TETO
+Incluir APENAS os que você vê no desenho ou na legenda desta prancha, classificando pela discipline correta:
+- Sprinkler → "Incêndio e Segurança"
+- Detector de fumaça → "Incêndio e Segurança"
+- Caixa de som → "Complementares"
 - Sensor de presença → "Instalações Elétricas e Dados"
-- Projetor multimídia → "Complementares"
-- Difusores / grelhas AC → "Ar-Condicionado"
-- Grelha de exaustão → "Ar-Condicionado"
+- Difusor / grelha AC / exaustão → "Ar-Condicionado"
+- Outros símbolos de teto → mapear pela categoria que melhor descreve o símbolo visto
 
-Retorne JSON com TODOS os itens encontrados. Não inventar quantidades — se incerto, marcar "estimado"."""
+Retorne JSON com TODOS os itens encontrados NA PRANCHA. Não inventar quantidades — se incerto, marcar "estimado"."""
 
 
 PROMPT_PISO = """Analise DETALHADAMENTE estas imagens da prancha de PISOS.
@@ -244,31 +253,28 @@ Retorne JSON com items + project_data. Se uma área não está especificada na p
 
 PROMPT_PONTOS = """Analise DETALHADAMENTE estas imagens da prancha de PONTOS ELÉTRICOS.
 
+## REGRA DURA DE ISOLAMENTO
+**Extraia APENAS o que APARECE EXPLICITAMENTE NA LEGENDA / QUADRO DE CARGAS / PLANTA deste arquivo.**
+Não gere item por "tipicamente tem em projeto assim". Se a legenda não lista um ponto específico, ele NÃO entra. Se você não consegue ler a legenda, retorne items=[] em vez de chutar.
+
 ## ELÉTRICA (discipline: "Instalações Elétricas e Dados")
-- Pontos elétricos COMUNS (2P+T): calcular baseado em posições de trabalho
-- Pontos elétricos ESTABILIZADOS
-- Pontos DADOS/VOIP (RJ45 Cat6)
-- Tipos de instalação: piso elevado (Sporim), alvenaria, mobiliário (réguas), teto, armário/copa
-- Interruptores: simples, three-way, dimmer/polarização
-- Sensor de presença
-- Ponto Wi-Fi (access point)
-- Quadro de força/elétrica novo
-- Eletrocalha metálica (complementar ao existente)
-- Eletroduto metálico/PVC
-- Cabeamento elétrico geral
-- Cabeamento estruturado Cat6
-- Ponto para TV + armário multimídia
-- IPAD para agendamento de salas
+Pra cada símbolo elétrico desenhado na planta OU listado na legenda (tomadas, interruptores, pontos de dados, caixas de saída, sensores):
+- Copiar a descrição EXATA como está na legenda (tensão, amperagem, altura, localização)
+- Agrupar por tipo/código
+- Quantidade: contagem objetiva dos símbolos no layer correspondente ou total do quadro de cargas
+- Altura de instalação: só se estiver escrita na planta/legenda
 
 ## SEGURANÇA (discipline: "Incêndio e Segurança")
-- Controle de acesso FACIAL (com altura de instalação)
-- Fechadura eletromagnética
-- Dispositivo antipânico
-- CFTV ponto + suporte
-- Controle de ponto
+Só incluir itens de segurança se aparecerem EXPLICITAMENTE na legenda deste arquivo (ex: sprinkler, detector de fumaça, alarme, extintor, CFTV). NÃO presumir controle de acesso, fechadura eletromagnética, câmera etc se a planta não mostra.
 
-Extraia TODAS as alturas de instalação mencionadas.
-Extraia TODAS as notas (impressoras circuitos independentes, tomadas serviço, etc.)
+## QUANDO NÃO TEM LEGENDA LEGÍVEL
+Se a imagem não tem legenda legível e você só vê planta de pontos sem tags claras:
+- Retorne APENAS os tipos que consegue identificar com certeza absoluta pelo símbolo desenhado
+- Marque todos como "estimado"
+- NÃO preencha lista genérica do tipo "projeto corporativo típico"
+
+## REFORMA — O QUE MUDA
+Se a planta separa "pontos existentes" de "pontos novos/remanejados", SÓ orçar os novos/remanejados.
 
 Retorne JSON com items."""
 
@@ -292,15 +298,18 @@ Retorne JSON com project_data (departments) + items."""
 
 PROMPT_MARCENARIA = """Analise DETALHADAMENTE estas imagens da prancha de MARCENARIA.
 
+## REGRA DURA DE ISOLAMENTO
+**Extraia APENAS peças que APARECEM NA LEGENDA / QUADRO / PLANTA deste arquivo.**
+Não inventar "peças típicas" de qualquer tipo de projeto. Se a prancha não tem legenda visível, retorne items=[].
+
 ## MARCENARIA SOB MEDIDA (discipline: "Marcenaria")
 Para CADA peça listada NA LEGENDA desta prancha:
 - Código (ex.: M01, M02 — usar o código do projeto atual)
-- Descrição completa
+- Descrição completa copiada da legenda (nome da peça + onde vai)
 - Dimensões EXATAS da legenda (L×P×A)
-- Material copiado da legenda (MDF, laminados, chapas especiais)
-- Quantidade exata da legenda
-
-Tipos comuns a buscar (SÓ incluir se aparecerem na planta/legenda): mesas de reunião, expositores, estantes de diferentes alturas, aparadores, marcenaria de copa, painéis decorativos.
+- Material copiado da legenda (MDF, laminados, chapas especiais, granito, etc.)
+- Acabamento copiado da legenda (laminado X, pintura Y, verniz Z)
+- Quantidade exata da legenda ou contagem de peças visíveis na planta
 
 Retorne JSON com items. Na dúvida de quantidade, marque "estimado"."""
 
@@ -374,9 +383,15 @@ Retorne JSON com project_data + items."""
 
 PROMPT_LAYOUT_ATUAL = """Analise estas imagens do LAYOUT ATUAL.
 
+## REGRA DURA DE ISOLAMENTO
+Descreva APENAS os ambientes e elementos QUE VOCÊ CONSEGUE VER NA PLANTA.
+Se a planta mostra uma residência (suíte, cozinha, lavabo, sala de estar), descreva ESSES ambientes. Se mostra escritório corporativo (estações, core, sala de reunião), descreva ESSES. NÃO misturar categorias. NÃO assumir "projeto corporativo" por default.
+
 ## ELEMENTOS EXISTENTES (em project_data.kept_elements)
-Liste tudo que EXISTE HOJE na planta do projeto atual como strings descritivas em português. Copiar o que está na planta — NÃO usar nomes de variáveis nem inventar ambientes.
-Exemplos de formato: "1× sala de reunião 6 pessoas (divisória de vidro)", "Open plan staff com estações de trabalho", "Core (elevadores, escadas, banheiros) — sem intervenção".
+Liste TODOS os ambientes existentes visíveis no layout atual, como strings descritivas em português-br.
+Copie os nomes LITERAIS que estão escritos na planta (suíte, cozinha, lavabo, sala de estar, sala de reuniões, open plan, copa, etc.) — NÃO inventar ambientes que não aparecem. NÃO usar nomes de variáveis.
+
+Formato das strings: "<quantidade/presença> <nome do ambiente como aparece na planta> — <características relevantes da planta>".
 
 Retorne JSON com project_data (kept_elements como array de strings descritivas)."""
 
@@ -421,8 +436,56 @@ def encode_image(image_path: str) -> str:
         return base64.standard_b64encode(f.read()).decode("utf-8")
 
 
-def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo) -> dict:
-    prompt = PROMPTS_POR_TIPO.get(sheet.sheet_type, "Analise esta prancha de arquitetura e extraia todos os itens para orçamento. Retorne JSON com array 'items', cada item com: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline.")
+_TYPOLOGY_HINT = {
+    "office": (
+        "TIPOLOGIA DO PROJETO: ESCRITÓRIO CORPORATIVO.\n"
+        "Ambientes típicos: estações de trabalho, salas de reunião, copa corporativa, "
+        "core (elevadores/escadas/banheiros de uso comum), recepção, sala de diretoria, "
+        "open plan. Pode ter piso elevado, cabeamento estruturado, controle de acesso.\n"
+    ),
+    "residential": (
+        "TIPOLOGIA DO PROJETO: RESIDENCIAL.\n"
+        "Ambientes típicos: suíte, dormitório, sala de estar, sala de jantar, cozinha, "
+        "lavanderia, lavabo, banheiro, área gourmet, varanda. NÃO existe: estações de "
+        "trabalho, sala de reuniões corporativa, cabeamento Cat6 massivo, piso elevado "
+        "Sporim, iPad de agendamento de salas, controle de acesso facial, CFTV profissional, "
+        "fechadura eletromagnética corporativa. NÃO incluir esses itens sob hipótese "
+        "alguma — se aparecerem na sua resposta, é alucinação e deve ser removido.\n"
+        "Quando a planta mostra 'banheiro suíte' ou 'banheiro escritório', trata-se de "
+        "banheiro privado (home office ou suíte master), NÃO banheiro corporativo "
+        "com mictórios múltiplos.\n"
+    ),
+    "retail": (
+        "TIPOLOGIA DO PROJETO: COMÉRCIO / VAREJO.\n"
+        "Ambientes típicos: loja/showroom, provador, estoque, caixa, depósito, "
+        "área de atendimento. Mobiliário específico de retail (expositores, balcões).\n"
+    ),
+    "hospital": (
+        "TIPOLOGIA DO PROJETO: HOSPITALAR / SAÚDE.\n"
+        "Ambientes típicos: consultório, sala de procedimento, enfermaria, "
+        "recepção, sala de espera, farmácia, laboratório. Instalações médicas "
+        "específicas (gases, elétrica estabilizada médica, pisos vinílicos condutivos).\n"
+    ),
+    "educational": (
+        "TIPOLOGIA DO PROJETO: EDUCACIONAL.\n"
+        "Ambientes típicos: sala de aula, laboratório, biblioteca, sala de professores, "
+        "auditório, pátio. Mobiliário e acústica específicos.\n"
+    ),
+}
+
+
+def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
+                  typology: str = "office") -> dict:
+    base_prompt = PROMPTS_POR_TIPO.get(sheet.sheet_type, "Analise esta prancha de arquitetura e extraia todos os itens para orçamento. Retorne JSON com array 'items', cada item com: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline.")
+
+    # Injetar contexto de tipologia antes do prompt específico da prancha.
+    # Isso impede a IA de presumir "projeto corporativo" quando processa uma
+    # planta residencial em isolamento.
+    typology_hint = _TYPOLOGY_HINT.get(typology, "")
+    if typology_hint:
+        prompt = typology_hint + "\n" + base_prompt
+    else:
+        prompt = base_prompt
 
     content = []
 
@@ -479,7 +542,9 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo) -> dict:
         return {"items": [], "error": str(e)}
 
 
-def analyze_all_sheets(sheets: list[SheetInfo], api_key: str, progress_callback=None) -> tuple[ProjectData, list[BudgetItem]]:
+def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
+                       progress_callback=None,
+                       typology: str = "office") -> tuple[ProjectData, list[BudgetItem]]:
     client = anthropic.Anthropic(api_key=api_key)
     all_items = []
     project_data = ProjectData()
@@ -506,7 +571,7 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str, progress_callback=
         if sheet.sheet_type == SheetType.DESCONHECIDO:
             continue
 
-        result = analyze_sheet(client, sheet)
+        result = analyze_sheet(client, sheet, typology=typology)
 
         # Extrair dados do projeto
         def safe_float(val):

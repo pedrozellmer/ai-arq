@@ -62,8 +62,24 @@ def _style_row(ws, row, font, fill=None, align=None, cols=9):
         cell.border = BD
 
 
-def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_path: str):
-    """Gera a planilha .xlsx completa."""
+_TYPOLOGY_LABEL = {
+    "office":      "REFORMA DE ESCRITÓRIO",
+    "residential": "REFORMA RESIDENCIAL",
+    "retail":      "REFORMA COMERCIAL / VAREJO",
+    "hospital":    "REFORMA HOSPITALAR / SAÚDE",
+    "educational": "REFORMA EDUCACIONAL",
+}
+
+
+def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
+                         output_path: str, typology: str = "office"):
+    """Gera a planilha .xlsx completa.
+
+    `typology` define o cabeçalho da análise comparativa e regras de
+    sugestões — evita que projeto residencial apareça como "reforma de
+    escritório" no título, ou que itens corporativos (controle de acesso,
+    iPad de agendamento) sejam sugeridos pra projetos que não fazem sentido.
+    """
     wb = Workbook()
 
     # ================================================================
@@ -100,7 +116,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
         c.alignment = AL
         r += 1
 
-    add_title('ANÁLISE COMPARATIVA — REFORMA DE ESCRITÓRIO')
+    _titulo = _TYPOLOGY_LABEL.get(typology, "REFORMA / INTERIORES")
+    add_title(f'ANÁLISE COMPARATIVA — {_titulo}')
     r += 1
     if project.name:
         add_line(f'Projeto: {project.name}', bold=True)
@@ -119,12 +136,19 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
     add_line('ATENÇÃO: Reforma de andar existente. Quantitativos consideram apenas o que MUDA.', bold=True)
     r += 1
 
+    # "DEPARTAMENTOS" só faz sentido em escritório/educacional; em residencial
+    # o conceito é "AMBIENTES". Gate por tipologia pra evitar titular uma
+    # residência como "Departamentos — Cozinha".
     if project.departments:
-        add_title('DEPARTAMENTOS')
+        _header_deps = 'DEPARTAMENTOS' if typology in ("office", "educational") else 'AMBIENTES'
+        add_title(_header_deps)
         for dept in project.departments:
             name = dept.get('name', '')
             positions = dept.get('positions', 0)
-            add_line(f'  {name}: {positions} posições')
+            if typology in ("office", "educational") and positions:
+                add_line(f'  {name}: {positions} posições')
+            else:
+                add_line(f'  {name}')
         r += 1
 
     if project.demolition_notes:
@@ -346,6 +370,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
 
     # Checklist de itens típicos de obra — sem quantidades hardcoded.
     # O orçamentista preenche conforme o projeto específico.
+    # Sugestões BASE — aplicáveis a qualquer obra (residencial, office etc)
     suggestions = [
         ('S.1', 'Equipe técnica — Gerente de contrato / PMO', 'mês', None, 'Preencher conforme prazo da obra'),
         ('S.2', 'Equipe técnica — Engenheiro de campo residente', 'mês', None, 'Preencher conforme prazo da obra'),
@@ -358,16 +383,38 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem], output_p
         ('S.9', 'Limpeza permanente de obra', 'dia', None, 'Preencher conforme prazo da obra'),
         ('S.10', 'Limpeza fina pré-entrega', 'm²', None, 'Área total de intervenção'),
         ('S.11', 'Seguro de obra e responsabilidade civil', 'vb', None, 'Valor conforme porte da obra'),
-        ('S.12', 'As-built (elétrica, AC, hidráulica, SPK)', 'vb', None, 'Conforme padrão do condomínio'),
-        ('S.13', 'Certificação de todos os pontos elétricos', 'vb', None, 'Verificar exigência do condomínio'),
-        ('S.14', 'Termografia de quadros elétricos (OPCIONAL)', 'vb', None, 'Opcional — verificar necessidade'),
-        ('S.15', 'Fee / Administração de obra', '%', None, 'Percentual conforme contrato'),
-        ('S.16', 'Impostos sobre faturamento', '%', None, 'Conforme regime tributário'),
-        ('S.17', 'Gerenciamento de terceiros (marcenaria, divisórias, carpete)', 'vb', None, 'Quando houver terceiros no escopo'),
-        ('S.18', 'Transporte vertical de mobiliário (entre andares)', 'vb', None, 'Se mobiliário armazenado em outro andar'),
-        ('S.19', 'FM-200 gás inerte para CPD (OPCIONAL)', 'vb', None, 'Depende do projeto de PPCI'),
-        ('S.20', 'Controle de acesso facial (substituir cartão)', 'un', None, 'Se aplicável ao projeto'),
+        ('S.12', 'As-built (elétrica, hidráulica, AC quando houver)', 'vb', None, 'Conforme escopo do projeto'),
+        ('S.13', 'Fee / Administração de obra', '%', None, 'Percentual conforme contrato'),
+        ('S.14', 'Impostos sobre faturamento', '%', None, 'Conforme regime tributário'),
+        ('S.15', 'Gerenciamento de terceiros (marcenaria, divisórias, acabamentos)', 'vb', None, 'Quando houver terceiros no escopo'),
     ]
+
+    # Sugestões ESPECÍFICAS por tipologia (só entram se fizerem sentido pra
+    # essa obra). Não contaminam residencial com "iPad de reuniões" nem
+    # corporativo com "móveis de área gourmet".
+    if typology == "office":
+        suggestions += [
+            ('S.16', 'Certificação de todos os pontos elétricos', 'vb', None, 'Verificar exigência do condomínio corporativo'),
+            ('S.17', 'Termografia de quadros elétricos (OPCIONAL)', 'vb', None, 'Opcional — verificar necessidade'),
+            ('S.18', 'FM-200 gás inerte para CPD (OPCIONAL)', 'vb', None, 'Depende do projeto de PPCI'),
+            ('S.19', 'Transporte vertical de mobiliário (entre andares)', 'vb', None, 'Se mobiliário armazenado em outro andar'),
+        ]
+    elif typology == "residential":
+        suggestions += [
+            ('S.16', 'Taxa de obra do condomínio', 'vb', None, 'Conforme regulamento do condomínio'),
+            ('S.17', 'Instalação de ar-condicionado split (se não especificado)', 'un', None, 'Somente se não constar no projeto elétrico'),
+            ('S.18', 'Projeto executivo de iluminação residencial', 'vb', None, 'Se não contratado separadamente'),
+        ]
+    elif typology == "hospital":
+        suggestions += [
+            ('S.16', 'Certificação sanitária (Anvisa)', 'vb', None, 'Conforme regulamento local'),
+            ('S.17', 'Gases medicinais (instalação e teste)', 'vb', None, 'Se aplicável ao projeto'),
+        ]
+    elif typology == "retail":
+        suggestions += [
+            ('S.16', 'Comunicação visual / fachada', 'vb', None, 'Se não contratado separadamente'),
+            ('S.17', 'Sistema de alarme e CFTV', 'vb', None, 'Conforme padrão da operação'),
+        ]
 
     section_start_sug = ro
     for num, desc, un, qtd, obs in suggestions:

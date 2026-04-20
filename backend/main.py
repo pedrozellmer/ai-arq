@@ -1240,7 +1240,7 @@ revisor humano confirme direto no arquivo."""
                 text_content=text[:5000],
                 crops=crop_paths,
             )
-            result = analyze_sheet(client, sheet)
+            result = analyze_sheet(client, sheet, typology=typology)
 
             # 4. Extrair dados do projeto
             if "project_data" in result:
@@ -1399,7 +1399,7 @@ revisor humano confirme direto no arquivo."""
             project_data.name = f"Quantitativos — {len(file_paths)} arquivos processados"
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
-        generate_spreadsheet(project_data, all_items, output_path)
+        generate_spreadsheet(project_data, all_items, output_path, typology=typology)
 
         # Persistir no Supabase Storage pra sobreviver redeploy do Render
         # (o /tmp do dyno é volátil — sem isso, agente e download quebram).
