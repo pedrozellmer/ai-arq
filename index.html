@@ -336,24 +336,20 @@
       <p class="mt-4 text-gray-600 max-w-2xl mx-auto">Preço fechado por faixa de pranchas. <strong>Quanto maior o projeto, mais barato por prancha.</strong> Primeiro levantamento é por nossa conta.</p>
     </div>
 
-    <div class="mt-16 grid gap-8 md:grid-cols-3">
+    <!-- 3 cards enxutos — plano + preço + caso de uso -->
+    <div class="mt-16 grid gap-6 md:grid-cols-3">
       <!-- Pequeno -->
-      <div class="rounded-2xl border p-8 shadow-sm flex flex-col">
+      <div class="rounded-2xl border p-7 shadow-sm flex flex-col">
         <h3 class="text-lg font-semibold text-gray-900">Pequeno</h3>
         <p class="text-sm text-gray-500 mt-1">Até 5 pranchas</p>
-        <div class="mt-4"><span class="text-4xl font-bold text-gray-900">R$ 97</span><span class="text-gray-500">/projeto</span></div>
+        <div class="mt-5"><span class="text-4xl font-bold text-gray-900">R$ 97</span><span class="text-gray-500">/projeto</span></div>
         <p class="text-xs text-gray-400 mt-1">R$ 19,40 por prancha</p>
-        <ul class="mt-6 space-y-3 flex-1">
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Até 5 pranchas (PDF, DWG ou DXF)</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Planilha .xlsx com 16 disciplinas</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>3 níveis de confiança</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Chat com IA pra tirar dúvidas</li>
-        </ul>
-        <a href="login.html" class="mt-8 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
+        <p class="mt-6 text-sm text-gray-600 flex-1 leading-relaxed">Para <strong>residencial</strong>, <strong>loja</strong> ou <strong>escritório simples</strong> com poucas pranchas (layout, pontos, forro).</p>
+        <a href="login.html" class="mt-6 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
       </div>
 
       <!-- Médio - destaque -->
-      <div class="rounded-2xl p-8 shadow-xl relative flex flex-col"
+      <div class="rounded-2xl p-7 shadow-xl relative flex flex-col"
            style="border: 2px solid transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #4f46e5, #06b6d4); background-origin: border-box; background-clip: padding-box, border-box; box-shadow: 0 25px 50px -12px rgba(79,70,229,0.15);">
         <div class="absolute -top-3 left-1/2 -translate-x-1/2">
           <span class="gradient-main text-white text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
@@ -363,36 +359,88 @@
         </div>
         <h3 class="text-lg font-semibold text-gray-900">Médio</h3>
         <p class="text-sm text-gray-500 mt-1">6 a 10 pranchas</p>
-        <div class="mt-4"><span class="text-4xl font-bold text-gray-900">R$ 157</span><span class="text-gray-500">/projeto</span></div>
+        <div class="mt-5"><span class="text-4xl font-bold text-gray-900">R$ 157</span><span class="text-gray-500">/projeto</span></div>
         <p class="text-xs text-emerald-600 mt-1 font-medium">R$ 15,70 por prancha · economia de 19%</p>
-        <ul class="mt-6 space-y-3 flex-1">
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>6 a 10 pranchas</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Tudo do Pequeno</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Comparativo layout atual vs novo</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Sugestões de custos indiretos</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Cashback de R$ 20 ao revisar</li>
-        </ul>
-        <a href="login.html" class="mt-8 w-full py-3 rounded-lg gradient-main text-white font-medium transition block text-center no-underline">Começar</a>
+        <p class="mt-6 text-sm text-gray-600 flex-1 leading-relaxed"><strong>Reforma comercial</strong> ou escritório médio com várias disciplinas (arquitetura, piso, forro, elétrica, marcenaria).</p>
+        <a href="login.html" class="mt-6 w-full py-3 rounded-lg gradient-main text-white font-medium transition block text-center no-underline">Começar</a>
       </div>
 
       <!-- Grande -->
-      <div class="rounded-2xl border p-8 shadow-sm flex flex-col">
+      <div class="rounded-2xl border p-7 shadow-sm flex flex-col">
         <h3 class="text-lg font-semibold text-gray-900">Grande</h3>
         <p class="text-sm text-gray-500 mt-1">11 a 20 pranchas</p>
-        <div class="mt-4"><span class="text-4xl font-bold text-gray-900">R$ 247</span><span class="text-gray-500">/projeto</span></div>
+        <div class="mt-5"><span class="text-4xl font-bold text-gray-900">R$ 247</span><span class="text-gray-500">/projeto</span></div>
         <p class="text-xs text-emerald-600 mt-1 font-medium">R$ 12,35 por prancha · economia de 36%</p>
-        <ul class="mt-6 space-y-3 flex-1">
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>11 a 20 pranchas</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Tudo do Médio</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Detecção de anomalias por densidade</li>
-          <li class="flex items-center gap-2 text-sm text-gray-600"><svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>Códigos SINAPI sugeridos</li>
-        </ul>
-        <a href="login.html" class="mt-8 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
+        <p class="mt-6 text-sm text-gray-600 flex-1 leading-relaxed"><strong>Andar corporativo</strong>, <strong>hotel</strong>, <strong>escola</strong> ou <strong>clínica</strong> — projetos com elétrica, dados, AC, incêndio e detalhamento extensivo.</p>
+        <a href="login.html" class="mt-6 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
+      </div>
+    </div>
+
+    <!-- Todo plano inclui -->
+    <div class="mt-10 rounded-2xl bg-white border p-8 shadow-sm">
+      <h3 class="text-base font-bold text-gray-900 text-center mb-6">Todo plano inclui</h3>
+      <div class="grid gap-4 md:grid-cols-2">
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Planilha com 16 disciplinas</p>
+            <p class="text-xs text-gray-500 mt-0.5">Arquivo .xlsx com demolição, alvenaria, forro, pintura, elétrica, iluminação, marcenaria e mais.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 shrink-0"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">3 níveis de confiança por item</p>
+            <p class="text-xs text-gray-500 mt-0.5">Branco (confirmado pelo CAD), laranja (revisar), roxo (sugestão de gestão).</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Comparativo atual vs novo</p>
+            <p class="text-xs text-gray-500 mt-0.5">Em reformas, identifica o que sai, o que entra e o que permanece.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Chat com IA sobre sua planilha</p>
+            <p class="text-xs text-gray-500 mt-0.5">Pergunte "por que tem 222m de LED no item 4.1?" e a IA responde citando o layer do CAD.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-50 text-rose-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Detecção de anomalias</p>
+            <p class="text-xs text-gray-500 mt-0.5">Alerta quando alguma quantidade foge do padrão histórico de projetos similares.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50 text-purple-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Códigos SINAPI sugeridos</p>
+            <p class="text-xs text-gray-500 mt-0.5">Pra cada item, a IA sugere o código SINAPI correspondente pra facilitar a compra.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-yellow-50 text-yellow-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Sugestões de custos indiretos</p>
+            <p class="text-xs text-gray-500 mt-0.5">Seção separada pra gestão, fee, impostos — que não aparecem nas pranchas mas entram no orçamento.</p>
+          </div>
+        </div>
+        <div class="flex items-start gap-3">
+          <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-green-50 text-green-600 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div>
+          <div>
+            <p class="text-sm font-semibold text-gray-900">Cashback de R$ 20</p>
+            <p class="text-xs text-gray-500 mt-0.5">Revise a planilha, envie de volta e ganhe R$ 20 de desconto no próximo projeto. Sua revisão ajuda a IA a melhorar.</p>
+          </div>
+        </div>
       </div>
     </div>
 
     <!-- Callout sobre detecção de pranchas -->
-    <div class="mt-8 max-w-3xl mx-auto rounded-xl bg-indigo-50 border border-indigo-100 p-5">
+    <div class="mt-6 max-w-3xl mx-auto rounded-xl bg-indigo-50 border border-indigo-100 p-5">
       <p class="text-xs font-semibold text-indigo-700 mb-2">O que conta como prancha?</p>
       <ul class="text-sm text-indigo-700 space-y-1">
         <li>• Cada <strong>página dentro de PDF</strong> conta como 1 prancha (PDF de 12 páginas = 12 pranchas)</li>
