@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import anthropic
 from models import SheetType, SheetInfo, BudgetItem, ProjectData, Confidence
+from llm_retry import call_with_retry
 
 
 SYSTEM_PROMPT = """Você é um engenheiro de custos especialista em leitura de pranchas de arquitetura brasileiras e levantamento quantitativo para concorrência de obras.
@@ -449,7 +450,9 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo) -> dict:
     content.append({"type": "text", "text": prompt})
 
     try:
-        response = client.messages.create(
+        response = call_with_retry(
+            client,
+            tag=f"analyzer:{sheet.filename}",
             model="claude-sonnet-4-20250514",
             max_tokens=8000,
             temperature=0,

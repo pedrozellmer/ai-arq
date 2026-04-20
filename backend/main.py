@@ -84,8 +84,19 @@ def _supabase_insert(table, data):
 
 
 def _supabase_update(table, match_field, match_value, data):
-    """Atualiza registro no Supabase via REST API."""
+    """Atualiza registro no Supabase via REST API.
+
+    IMPORTANTE: pra table='projects' com match_field='job_id', usa RPC
+    `update_project_status` (SECURITY DEFINER) que bypassa RLS. Sem isso, o
+    PATCH volta 200 OK mas 0 rows afetadas — causa do bug silencioso onde
+    projetos de usuários logados ficavam 'queued' pra sempre no admin mesmo
+    com processamento concluído."""
     import urllib.request, urllib.error, json
+
+    # Caminho especial: atualizar projects por job_id via RPC.
+    if table == "projects" and match_field == "job_id":
+        return _rpc_update_project_status(match_value, data)
+
     try:
         url = f"{SUPABASE_URL}/rest/v1/{table}?{match_field}=eq.{match_value}"
         body = json.dumps(data).encode('utf-8')
@@ -109,6 +120,70 @@ def _supabase_update(table, match_field, match_value, data):
     except Exception as e:
         msg = f"UPDATE {table} {match_field}={match_value} ERR {type(e).__name__}: {e}  data={json.dumps(data)[:200]}"
         print(f"Supabase update error ({table} where {match_field}={match_value}): {type(e).__name__}: {e}")
+        _supa_log(msg)
+        return False
+
+
+def _rpc_update_project_status(job_id: str, data: dict) -> bool:
+    """Atualiza uma row de projects via RPC `update_project_status`.
+    Retorna True só se a RPC retornou rows_updated >= 1 (detecta silent fail)."""
+    import urllib.request, urllib.error, json
+
+    # Converte o dict de colunas → argumentos da RPC
+    payload = {
+        "p_job_id": job_id,
+        "p_status":        data.get("status"),
+        "p_items_count":   data.get("items_count"),
+        "p_total_area":    data.get("total_area"),
+        "p_layout_area":   data.get("layout_area"),
+        "p_error_message": data.get("error_message"),
+        "p_completed_at":  data.get("completed_at"),
+    }
+
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/update_project_status"
+        body = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=20)
+        resp_body = resp.read().decode('utf-8', errors='replace')
+        rows = 0
+        try:
+            rows = int(resp_body.strip())
+        except (ValueError, TypeError):
+            # Pode vir como string JSON: "1" ou como array
+            try:
+                parsed = json.loads(resp_body)
+                if isinstance(parsed, int):
+                    rows = parsed
+                elif isinstance(parsed, list) and parsed:
+                    rows = int(parsed[0]) if isinstance(parsed[0], int) else 0
+            except Exception:
+                pass
+
+        if rows >= 1:
+            _supa_log(f"RPC update_project_status job_id={job_id} OK rows={rows}  data={json.dumps(data)[:200]}")
+            return True
+
+        # 0 rows: a row não existe (provável erro de job_id ou race condition)
+        _supa_log(f"RPC update_project_status job_id={job_id} ZERO_ROWS  data={json.dumps(data)[:200]}")
+        print(f"[supabase] RPC update_project_status job={job_id}: row não encontrada")
+        return False
+
+    except urllib.error.HTTPError as e:
+        try:
+            resp_body = e.read().decode('utf-8', errors='replace')[:500]
+        except Exception:
+            resp_body = '(unreadable)'
+        msg = f"RPC update_project_status job_id={job_id} HTTP {e.code}: {resp_body}  data={json.dumps(data)[:200]}"
+        print(f"[supabase] RPC HTTP {e.code}: {resp_body}")
+        _supa_log(msg)
+        return False
+    except Exception as e:
+        msg = f"RPC update_project_status job_id={job_id} ERR {type(e).__name__}: {e}  data={json.dumps(data)[:200]}"
+        print(f"[supabase] RPC err: {e}")
         _supa_log(msg)
         return False
 
@@ -242,6 +317,108 @@ class JobsStore:
             _save_jobs(jobs)
 
 jobs = JobsStore()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Startup recovery: jobs travados após redeploy
+#
+#  O /tmp do Render é volátil: num redeploy, a thread de processamento
+#  morre no meio e o `jobs[job_id]` em memória/JSON some, mas o registro
+#  no Supabase fica pendurado em status='queued'/'processing' pra sempre.
+#  Admin via acumular jobs-fantasma e o usuário final via "processando…"
+#  sem nenhuma thread de verdade rodando.
+#
+#  Fix: no startup, varrer o Supabase atrás de jobs em aberto e marcá-los
+#  como error com mensagem clara. Trades-offs:
+#  - Não tenta retomar o processamento (seria complexo e caro); só encerra
+#    o status pra o usuário poder reenviar.
+#  - Só toca em linhas cujo `created_at` é mais velho que RECOVERY_GRACE_MIN
+#    (3min) — evita marcar como erro um job que acabou de nascer no mesmo
+#    tick do startup.
+# ═══════════════════════════════════════════════════════════════
+
+RECOVERY_GRACE_MIN = 3  # minutos: jobs mais novos que isso são ignorados
+
+
+def _recover_stuck_jobs_on_startup():
+    """Marca como 'error' qualquer projeto no Supabase ainda em queued/processing
+    que tenha sobrevivido ao redeploy. Roda uma vez no startup do FastAPI.
+
+    Usa RPC `list_stuck_jobs` (SECURITY DEFINER) pra enxergar rows de
+    qualquer usuário — o SELECT direto via anon esbarra em RLS."""
+    import urllib.request, urllib.error, json
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_stuck_jobs"
+        body = json.dumps({"p_older_than_minutes": RECOVERY_GRACE_MIN}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=15)
+        rows = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"[recovery] falha ao buscar jobs pendentes via RPC: {e}")
+        _supa_log(f"RECOVERY fetch ERR {type(e).__name__}: {e}")
+        return
+
+    if not rows:
+        print("[recovery] nenhum job pendente no Supabase — startup limpo")
+        return
+
+    now = datetime.utcnow()
+    recovered = 0
+    skipped_grace = 0
+
+    for row in rows:
+        job_id = row.get("job_id")
+        created_at = row.get("created_at")
+        if not job_id:
+            continue
+
+        # Grace period: não marcar jobs que acabaram de nascer
+        try:
+            if created_at:
+                # formato ISO: 2026-04-20T12:34:56.789Z ou +00:00
+                clean = created_at.replace("Z", "+00:00")
+                dt = datetime.fromisoformat(clean)
+                age_min = (now.replace(tzinfo=dt.tzinfo) - dt).total_seconds() / 60
+                if age_min < RECOVERY_GRACE_MIN:
+                    skipped_grace += 1
+                    continue
+        except Exception:
+            pass  # se data malformada, marca como erro mesmo assim
+
+        # Marca como erro
+        ok = _supabase_update("projects", "job_id", job_id, {
+            "status": "error",
+            "error_message": "Processamento interrompido por reinício do servidor. Reenvie o projeto.",
+            "completed_at": now.isoformat(),
+        })
+        if ok:
+            recovered += 1
+            # Também atualiza o JobsStore local se ainda estiver lá
+            try:
+                if job_id in jobs:
+                    jobs.update_field(job_id,
+                                       status="error",
+                                       error_message="Processamento interrompido por reinício do servidor.",
+                                       current_step="Erro: reinício do servidor")
+            except Exception:
+                pass
+
+    print(f"[recovery] startup: {recovered} jobs marcados como erro, "
+          f"{skipped_grace} pulados (dentro da janela de graça)")
+    _supa_log(f"RECOVERY startup recovered={recovered} grace_skip={skipped_grace}")
+
+
+@app.on_event("startup")
+async def _on_startup_recover_jobs():
+    """Hook de startup do FastAPI: limpa jobs travados do redeploy anterior."""
+    try:
+        _recover_stuck_jobs_on_startup()
+    except Exception as e:
+        # Nunca deixar o startup falhar por causa da recuperação
+        print(f"[recovery] exceção não-fatal no startup: {e}")
 
 
 # Regras determinísticas de unidade por tipo de serviço (pós-IA).
@@ -911,7 +1088,10 @@ ou "Fonte: área hachurada do layer FOR-MFR = 79.66 m²". Isso permite que o
 revisor humano confirme direto no arquivo."""
 
                     try:
-                        response = dxf_client.messages.create(
+                        from llm_retry import call_with_retry as _llm_retry
+                        response = _llm_retry(
+                            dxf_client,
+                            tag=f"dxf:{os.path.basename(dxf_path)}",
                             model="claude-sonnet-4-20250514",
                             max_tokens=16000,  # aumentado pra caber raciocínio (CoT) + JSON
                             temperature=0,
