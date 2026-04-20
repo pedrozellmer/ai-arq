@@ -81,6 +81,8 @@ Não use "verificar" — use "estimado" pra qualquer incerteza.
    - "Persianas e Cortinas"
    - "Iluminação"
    - "Instalações Elétricas e Dados"
+   - "Instalações Hidráulicas"     ← água fria, água quente, esgoto, pontos de louças
+   - "Instalações de Gás"          ← ponto de gás, tubulação, aquecedor a gás
    - "Ar-Condicionado"
    - "Incêndio e Segurança"
    - "Marcenaria"
@@ -256,6 +258,26 @@ PROMPT_PONTOS = """Analise DETALHADAMENTE estas imagens da prancha de PONTOS EL�
 ## REGRA DURA DE ISOLAMENTO
 **Extraia APENAS o que APARECE EXPLICITAMENTE NA LEGENDA / QUADRO DE CARGAS / PLANTA deste arquivo.**
 Não gere item por "tipicamente tem em projeto assim". Se a legenda não lista um ponto específico, ele NÃO entra. Se você não consegue ler a legenda, retorne items=[] em vez de chutar.
+
+## LEGENDA DE SÍMBOLOS ≠ LISTA DE ITENS
+**CRÍTICO**: uma LEGENDA de símbolos (retângulo explicando "○ = tomada 2P+T, ● = ponto de dados, △ = interruptor, etc.") **NÃO é uma lista de itens a orçar**. É só referência visual. Você só deve criar um item de orçamento quando:
+- O símbolo aparece contado na planta (ex: você consegue contar 15 tomadas desenhadas)
+- OU o quadro de cargas dá o TOTAL explícito ("Tomadas 2P+T: 15 un")
+
+Se você só vê a entrada na legenda sem conseguir contar ocorrências na planta NEM ver número total, NÃO crie o item. É pior incluir item com qty=1 genérica ("água fria = 1 un") do que omitir.
+
+Exemplo ERRADO (não fazer):
+- "Água fria — 1 un — conforme legenda" ← a legenda só explica o símbolo ◐
+- "Disjuntor 1×16 — 1 un — conforme legenda" ← legenda de quadro elétrico
+- "Espelho 4×2 — 1 un" ← "4×2" é caixa elétrica 10×5cm, NÃO é espelho real
+
+Exemplo CORRETO:
+- "Tomada 2P+T 10A h=30cm — 15 un — contadas na planta de pontos" (com contagem de verdade)
+
+## DESAMBIGUAÇÃO DE NOTAÇÕES
+- **Caixa elétrica "4×2"**: padrão brasileiro (~10cm×5cm). Nunca confunda com dimensões de mobiliário, espelho ou quadro.
+- **Caixa "4×4"**: padrão (~10cm×10cm), idem.
+- **Disjuntor "1×16"** ou "2×25": "1×" é número de polos, "16" é amperagem. Não é quantidade.
 
 ## ELÉTRICA (discipline: "Instalações Elétricas e Dados")
 Pra cada símbolo elétrico desenhado na planta OU listado na legenda (tomadas, interruptores, pontos de dados, caixas de saída, sensores):
@@ -612,7 +634,9 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                     "Serviços Preliminares", "Demolição e Remoção", "Fechamentos Verticais",
                     "Revestimentos", "Pisos e Rodapés", "Forros", "Portas e Ferragens",
                     "Divisórias e Vidros", "Persianas e Cortinas", "Iluminação",
-                    "Instalações Elétricas e Dados", "Ar-Condicionado", "Incêndio e Segurança",
+                    "Instalações Elétricas e Dados",
+                    "Instalações Hidráulicas", "Instalações de Gás",
+                    "Ar-Condicionado", "Incêndio e Segurança",
                     "Marcenaria", "Mobiliário", "Complementares"
                 ]
                 if discipline not in valid_disciplines:
@@ -622,9 +646,18 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                 if conf not in ["confirmado", "estimado", "verificar"]:
                     conf = "estimado"
 
-                qty_raw = item_data.get("quantity", 1)
-                qty = safe_float(qty_raw) if qty_raw else 1
-                if qty <= 0: qty = 1
+                qty_raw = item_data.get("quantity", 0)
+                qty = safe_float(qty_raw) if qty_raw else 0
+                # Política:
+                #  - qty < 0 sempre vira 0
+                #  - qty == 0 é permitido pra items "estimado" (usuário preenche)
+                #  - qty == 0 em "confirmado" é inconsistência → força 1 e
+                #    rebaixa pra "estimado"
+                if qty < 0:
+                    qty = 0
+                if qty == 0 and conf == "confirmado":
+                    qty = 1
+                    conf = "estimado"
 
                 item = BudgetItem(
                     item_num=str(item_data.get("item_num", "")),
