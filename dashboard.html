@@ -1125,10 +1125,11 @@
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.warn('estimate err', err);
-      // Fallback simples: 1 prancha = 1 arquivo
+      // Fallback simples: usa tabela de tiers direto
       const n = files.length;
-      const fallbackPrice = Math.max(97, n * 20);
-      renderEstimate({ total_pranchas: n, price_brl: fallbackPrice, _fallback: true });
+      const fallbackPrice = n <= 5 ? 97 : (n <= 10 ? 157 : (n <= 20 ? 247 : 247 + (n - 20) * 10));
+      const tier = n <= 5 ? 'Pequeno' : (n <= 10 ? 'Médio' : (n <= 20 ? 'Grande' : 'XL'));
+      renderEstimate({ total_pranchas: n, price_brl: fallbackPrice, tier_name: tier, _fallback: true });
     }
   }
 
@@ -1137,6 +1138,7 @@
     if (!priceLabel || !est) return;
     const n = est.total_pranchas || 0;
     const price = est.price_brl || 0;
+    const tier = est.tier_name || '';
     const free = isFirstProject() && n <= 5;
     const betaFree = hasBetaCredits();
     const unlimited = !!window.__isUnlimitedUser;
@@ -1149,15 +1151,17 @@
         ')</span>';
     }
 
+    const tierLabel = tier ? ` &middot; Plano <strong>${tier}</strong>` : '';
+
     if (unlimited) {
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
     } else if (free) {
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
     } else if (betaFree) {
       const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} restante${remaining !== 1 ? 's' : ''}</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} restante${remaining !== 1 ? 's' : ''}</span>`;
     } else {
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span>`;
     }
   }
 

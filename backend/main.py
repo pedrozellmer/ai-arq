@@ -1567,9 +1567,10 @@ async def create_checkout(num_pranchas: int = 1, num_files: int = 0):
         raise HTTPException(500, "Stripe não configurado")
 
     n = num_pranchas if num_pranchas > 0 else (num_files or 1)
-    from pricing import calculate_price, PRICE_PER_SHEET_CENTS, MIN_PRICE_CENTS
+    from pricing import calculate_price, get_tier_for
     price_cents = calculate_price(n)
-    plan_name = f"{n} pranchas × R$ {PRICE_PER_SHEET_CENTS/100:.0f} (mínimo R$ {MIN_PRICE_CENTS/100:.0f})"
+    tier = get_tier_for(n)
+    plan_name = f"Plano {tier['name']} — {n} pranchas"
 
     try:
         session = stripe.checkout.Session.create(

@@ -14,16 +14,47 @@ from pathlib import Path
 from typing import Optional
 
 
-PRICE_PER_SHEET_CENTS = 2000  # R$ 20 por prancha
-MIN_PRICE_CENTS = 9700        # R$ 97 mínimo (cobre 4-5 pranchas pequenas)
+MIN_PRICE_CENTS = 9700  # R$ 97 mínimo (tier Pequeno)
+
+# Três tiers com economia de escala — projetos grandes pagam menos por
+# prancha. Checado: em TODAS as bordas, juntar pranchas num só projeto
+# sai mais barato que dividir em jobs menores (sem incentivo perverso).
+#
+#   1-5 pranchas   → R$ 97   (R$ 19,40/prancha)
+#   6-10 pranchas  → R$ 157  (R$ 15,70/prancha, -19% vs Pequeno)
+#   11-20 pranchas → R$ 247  (R$ 12,35/prancha, -36% vs Pequeno)
+#   21+ pranchas   → R$ 247 + R$ 10 × (n-20)  (marginal mais barata ainda)
+TIERS = [
+    {"max": 5,  "price_cents":  9700, "name": "Pequeno"},
+    {"max": 10, "price_cents": 15700, "name": "Médio"},
+    {"max": 20, "price_cents": 24700, "name": "Grande"},
+]
+EXTRA_PRICE_PER_SHEET_CENTS = 1000  # R$ 10/prancha acima de 20
 
 
 def calculate_price(num_pranchas: int) -> int:
-    """Retorna preço em centavos."""
+    """Retorna preço em centavos pra N pranchas, com economia de escala
+    nos 3 tiers e taxa marginal baixa acima de 20.
+
+    Monotônica (sempre crescente) e sem incentivo a dividir em jobs menores.
+    """
     if num_pranchas < 1:
         num_pranchas = 1
-    raw = num_pranchas * PRICE_PER_SHEET_CENTS
-    return max(MIN_PRICE_CENTS, raw)
+    for tier in TIERS:
+        if num_pranchas <= tier["max"]:
+            return tier["price_cents"]
+    # acima do último tier, adiciona R$ 10/prancha pelo excedente
+    last = TIERS[-1]
+    extra = num_pranchas - last["max"]
+    return last["price_cents"] + extra * EXTRA_PRICE_PER_SHEET_CENTS
+
+
+def get_tier_for(num_pranchas: int) -> dict:
+    """Retorna o tier ao qual as pranchas pertencem (ou 'XL' se acima)."""
+    for tier in TIERS:
+        if num_pranchas <= tier["max"]:
+            return tier
+    return {"max": None, "price_cents": calculate_price(num_pranchas), "name": "XL"}
 
 
 def count_pdf_pages(path: str) -> int:
@@ -111,10 +142,11 @@ def estimate_for_files(file_paths: list[str]) -> dict:
     sheets = count_real_sheets(file_paths)
     n = sheets["total_pranchas"]
     price_cents = calculate_price(n)
+    tier = get_tier_for(n)
     return {
         **sheets,
         "price_cents": price_cents,
         "price_brl": round(price_cents / 100, 2),
-        "price_per_sheet_cents": PRICE_PER_SHEET_CENTS,
+        "tier_name": tier["name"],
         "min_price_cents": MIN_PRICE_CENTS,
     }
