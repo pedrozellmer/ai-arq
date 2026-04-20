@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from dotenv import load_dotenv
@@ -766,11 +766,18 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
 
 
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
-                typology: str = "office"):
+                typology: str = "office",
+                user_sheet_types: dict[str, str] | None = None):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
 
     `typology` alimenta a camada de calibração por densidade — alertas
-    comparam o projeto contra benchmarks da mesma categoria."""
+    comparam o projeto contra benchmarks da mesma categoria.
+
+    `user_sheet_types` (opcional): mapa {caminho_arquivo: sheet_type}
+    pra sobrescrever a detecção automática quando o usuário classificou
+    a prancha manualmente no dashboard. Sem isso, o classificador por
+    nome falha com numerações próprias de cada escritório."""
+    user_sheet_types = user_sheet_types or {}
     import gc
     import anthropic
     from processor import identify_sheet_type, extract_text, render_crops
@@ -1208,7 +1215,17 @@ revisor humano confirme direto no arquivo."""
         pdf_infos = []
         for pdf_path in pdf_paths:
             filename = os.path.basename(pdf_path)
-            sheet_type = identify_sheet_type(filename)
+            # Prioridade: escolha manual do usuário no dropdown > detecção por nome.
+            # Sem isso, nomes arbitrários tipo "225.AFS.700.DET BANH SUITE" caíam
+            # em DESCONHECIDO ou eram misclassificados.
+            user_st_str = user_sheet_types.get(pdf_path, "")
+            if user_st_str:
+                try:
+                    sheet_type = SheetType(user_st_str)
+                except ValueError:
+                    sheet_type = identify_sheet_type(filename)
+            else:
+                sheet_type = identify_sheet_type(filename)
             pdf_infos.append((pdf_path, filename, sheet_type))
 
         pdf_infos.sort(key=lambda x: priority.get(x[2].value, 99))
@@ -1223,8 +1240,14 @@ revisor humano confirme direto no arquivo."""
             jobs.update_field(job_id, progress=step_pct)
             jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename}")
 
+            # Se o auto-detect falhou E o usuário não classificou manualmente,
+            # usar ARQUITETURA como prompt-genérico de fallback. Antes pulava
+            # silenciosamente — detalhes de ambiente (DET COZINHA, DET LAVABO,
+            # DET BANH) eram perdidos porque o nome não tem palavra-chave.
             if sheet_type == SheetType.DESCONHECIDO:
-                continue
+                print(f"[fallback] {filename}: tipo não detectado, usando PROMPT_ARQUITETURA como genérico")
+                sheet_type = SheetType.ARQUITETURA
+                jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (tipo não identificado — extração genérica)")
 
             # 1. Extrair texto
             text = extract_text(pdf_path)
@@ -1450,6 +1473,7 @@ _VALID_TYPOLOGIES = {"office", "residential", "retail", "hospital", "educational
 async def process_files(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
+    sheet_types: list[str] = Form(default=[]),
     typology: str = "office",
     project_name: str = "",
     user_id: str = "",
@@ -1459,6 +1483,12 @@ async def process_files(
 ):
     """Recebe PDF, DWG ou DXF e inicia processamento em background.
 
+    - `files`: arquivos de prancha.
+    - `sheet_types` (opcional): lista paralela a `files`. String vazia
+      em uma posição significa "detectar automaticamente". Valor não-vazio
+      sobrescreve a detecção e força o prompt do tipo escolhido pelo user.
+      Valores aceitos: demolir, layout_novo, layout_atual, arquitetura,
+      pontos, piso, forro, det_forro, mobiliario, marcenaria.
     - `typology` (opcional, default `office`): usado pela calibração por
       densidade pra comparar o projeto com padrões da mesma categoria.
     - `project_name` (opcional): apelido amigável dado pelo cliente.
@@ -1475,11 +1505,17 @@ async def process_files(
 
     # Validar arquivos (aceitar PDF, DWG e DXF)
     valid_extensions = ('.pdf', '.dwg', '.dxf')
-    valid_files = [f for f in files if f.filename and f.filename.lower().endswith(valid_extensions)]
-    if not valid_files:
+    # Guarda pares (arquivo, sheet_type) pra manter o mapeamento após
+    # filtragem de inválidos. sheet_types pode estar vazia (auto-detect).
+    valid_pairs = []
+    for idx, f in enumerate(files):
+        if f.filename and f.filename.lower().endswith(valid_extensions):
+            st = sheet_types[idx] if idx < len(sheet_types) else ""
+            valid_pairs.append((f, st))
+    if not valid_pairs:
         raise HTTPException(400, "Nenhum arquivo válido encontrado. Aceito: PDF, DWG ou DXF.")
 
-    if len(valid_files) > 50:
+    if len(valid_pairs) > 50:
         raise HTTPException(400, "Máximo de 50 arquivos por projeto")
 
     # Criar job
@@ -1487,15 +1523,18 @@ async def process_files(
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
 
-    # Salvar arquivos
+    # Salvar arquivos + montar mapa {caminho_local: sheet_type_escolhido_pelo_user}
     file_paths = []
+    user_sheet_types: dict[str, str] = {}
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
-    for upload_file in valid_files:
+    for upload_file, user_st in valid_pairs:
         file_path = os.path.join(work_dir, upload_file.filename)
         with open(file_path, "wb") as f:
             content = await upload_file.read()
             f.write(content)
         file_paths.append(file_path)
+        if user_st:
+            user_sheet_types[file_path] = user_st
         ext = upload_file.filename.lower().rsplit('.', 1)[-1]
         file_types[ext] = file_types.get(ext, 0) + 1
 
@@ -1535,7 +1574,7 @@ async def process_files(
     t = threading.Thread(
         target=process_job,
         args=(job_id, file_paths, work_dir),
-        kwargs={"typology": typology},
+        kwargs={"typology": typology, "user_sheet_types": user_sheet_types},
         daemon=True,
     )
     t.start()

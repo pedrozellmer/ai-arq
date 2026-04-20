@@ -10,18 +10,31 @@ from PIL import Image
 from models import SheetType, SheetInfo
 
 
-# Mapeamento de nomes de arquivo para tipos de prancha
+# Classificação de prancha — SOMENTE por palavras-chave semânticas.
+# REGRA DURA: zero padrões numéricos hardcoded. Cada escritório usa sua
+# própria numeração (225.AFS.700, 0123.PRJ.05, RN-500, etc), então
+# casar "700\." com FORRO contamina outros projetos — o "700" do
+# projeto A pode ser FORRO mas o "700" do projeto B é detalhe de
+# banheiro. Só palavras em português do nome do arquivo.
+#
+# ORDEM IMPORTA: tipos específicos primeiro, genéricos (layout) por último.
+# Arquivos como "ARQUITETURA_EX" têm "_ex" (existente) mas o tipo é
+# ARQUITETURA — se LAYOUT_ATUAL fosse avaliado antes, capturaria todas as
+# pranchas "_ex" errado.
 SHEET_PATTERNS = {
-    SheetType.DEMOLIR: [r"demolir", r"demoli", r"100\."],
-    SheetType.LAYOUT_NOVO: [r"layout\s*novo", r"200\."],
-    SheetType.LAYOUT_ATUAL: [r"layout\s*atual", r"201\."],
-    SheetType.MOBILIARIO: [r"mobili", r"300\."],
-    SheetType.MARCENARIA: [r"marcenaria", r"301\."],
-    SheetType.ARQUITETURA: [r"arquitetura", r"400\."],
-    SheetType.PONTOS: [r"pontos", r"500\."],
-    SheetType.PISO: [r"piso", r"600\."],
-    SheetType.FORRO: [r"forro\.?\d*\-", r"forro.*00", r"700\."],
-    SheetType.DET_FORRO: [r"det\s*forro", r"701\."],
+    SheetType.DEMOLIR:      [r"demolir", r"demoli[çc][aã]o"],
+    SheetType.DET_FORRO:    [r"det[\s_\-]*forro", r"detalhe[\s_\-]*forro"],
+    SheetType.MARCENARIA:   [r"marcenaria", r"marcenar"],
+    # Usa lookbehind/lookahead customizado: início ou separador (não letra) + palavra
+    # + fim ou separador (não letra). Evita matches dentro de palavras mas
+    # permite "FORRO_EX" (underscore é separador semântico apesar de \w).
+    SheetType.MOBILIARIO:   [r"(?:^|[^a-z])mobili[áa]rio(?:[^a-z]|$)", r"(?:^|[^a-z])mobili(?:[^a-z]|$)"],
+    SheetType.ARQUITETURA:  [r"arquitetur", r"planta[\s_]*baixa"],
+    SheetType.PONTOS:       [r"(?:^|[^a-z])pontos?(?:[^a-z]|$)", r"el[ée]trica", r"el[ée]trico", r"hidr[áa]ulica", r"instala[çc][õo]es"],
+    SheetType.PISO:         [r"(?:^|[^a-z])pisos?(?:[^a-z]|$)", r"(?:^|[^a-z])rodap"],
+    SheetType.FORRO:        [r"(?:^|[^a-z])forros?(?:[^a-z]|$)", r"ilumina[çc][aã]o", r"lumin[áa]ria"],
+    SheetType.LAYOUT_NOVO:  [r"layout[_\s-]*novo", r"(?:^|[^a-z])novo(?:[^a-z]|$)"],
+    SheetType.LAYOUT_ATUAL: [r"layout[_\s-]*atual", r"(?:^|[^a-z])atual(?:[^a-z]|$)", r"(?:^|[^a-z])existente(?:[^a-z]|$)", r"(?:^|[^a-z])layout(?:[^a-z]|$)"],
 }
 
 # Regiões de crop por tipo de prancha (frações x1, y1, x2, y2)

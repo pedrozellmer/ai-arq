@@ -1451,6 +1451,17 @@
     try {
       const formData = new FormData();
       selectedFiles.forEach(f => formData.append('files', f));
+
+      // Se o usuário escolheu o tipo de cada prancha no dropdown, manda
+      // em paralelo aos arquivos. String vazia = "auto-detecta no backend".
+      // A ordem dos selects no DOM corresponde à ordem dos arquivos.
+      const typeSelects = Array.from(document.querySelectorAll('.file-type-select'));
+      const sheetTypes = selectedFiles.map((f, idx) => {
+        const sel = typeSelects[idx];
+        return (sel && sel.value) ? sel.value : '';
+      });
+      sheetTypes.forEach(st => formData.append('sheet_types', st));
+
       const projectName = (document.getElementById('project-name')?.value || '').trim();
       const typology = document.getElementById('project-typology')?.value || 'office';
       const params = { typology, project_name: projectName };
