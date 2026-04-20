@@ -484,11 +484,11 @@ def generate_pricing_post(photo: str = "building.jpg") -> str:
 
     _gradient_line(draw, (w - 60) // 2, 205, 60)
 
-    # Cards de preço
+    # Cards de preço (sincronizados com backend/pricing.py)
     plans = [
-        ("Pequeno", "até 5 pranchas", "R$ 49", False),
-        ("Médio", "6-10 pranchas", "R$ 99", True),
-        ("Grande", "11+ pranchas", "R$ 149", False),
+        ("Pequeno", "até 5 pranchas", "R$ 97", False),
+        ("Médio", "6-10 pranchas", "R$ 157", True),
+        ("Grande", "11-20 pranchas", "R$ 247", False),
     ]
 
     card_w = w - 120

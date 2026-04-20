@@ -38,12 +38,14 @@ Nosso slogan: "Planilha de orçamento em minutos, não em dias."
 - Marca itens duvidosos em laranja para revisão humana
 - Colunas de preço prontas para preenchimento
 
-## Preços:
-- Projeto Pequeno (até 5 pranchas): R$ 49
-- Projeto Médio (6-10 pranchas): R$ 99 (mais popular)
-- Projeto Grande (11+ pranchas): R$ 149
-- PRIMEIRO PROJETO É GRÁTIS! Sem cartão de crédito.
+## Preços (com economia de escala — quanto mais pranchas, mais barato por prancha):
+- Projeto Pequeno (até 5 pranchas): R$ 97
+- Projeto Médio (6-10 pranchas): R$ 157 (mais popular, R$ 15,70/prancha)
+- Projeto Grande (11-20 pranchas): R$ 247 (R$ 12,35/prancha)
+- Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra
+- PRIMEIRO PROJETO É GRÁTIS (até 5 pranchas). Sem cartão de crédito.
 - Sem mensalidade — pague por projeto.
+- Cashback: R$ 20 ao revisar a planilha e enviar de volta.
 
 ## Site: ai.arq.br
 ## Status: Beta Gratuito com vagas limitadas
