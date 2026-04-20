@@ -1704,44 +1704,68 @@ async def create_checkout(num_pranchas: int = 1, num_files: int = 0,
     if credit_cents > 0:
         description += f" (R$ {credit_cents/100:.2f} de desconto aplicado)"
 
-    try:
-        session_params = {
-            "payment_method_types": ["card", "pix"],
-            "line_items": [{
-                "price_data": {
-                    "currency": "brl",
-                    "product_data": {
-                        "name": f"AI.arq — Planilha de quantitativos",
-                        "description": description,
-                    },
-                    "unit_amount": final_cents,
-                },
-                "quantity": 1,
-            }],
-            "mode": "payment",
-            "success_url": "https://ai.arq.br/dashboard.html?payment=success&session_id={CHECKOUT_SESSION_ID}",
-            "cancel_url": "https://ai.arq.br/dashboard.html?payment=cancelled",
-            "metadata": {
-                "user_id": user_id or "anonymous",
-                "num_pranchas": str(n),
-                "price_cents": str(price_cents),
-                "credit_applied_cents": str(credit_cents),
+    line_items = [{
+        "price_data": {
+            "currency": "brl",
+            "product_data": {
+                "name": f"AI.arq — Planilha de quantitativos",
+                "description": description,
             },
-        }
+            "unit_amount": final_cents,
+        },
+        "quantity": 1,
+    }]
+    base_params = {
+        "line_items": line_items,
+        "mode": "payment",
+        "success_url": "https://ai.arq.br/dashboard.html?payment=success&session_id={CHECKOUT_SESSION_ID}",
+        "cancel_url": "https://ai.arq.br/dashboard.html?payment=cancelled",
+        "metadata": {
+            "user_id": user_id or "anonymous",
+            "num_pranchas": str(n),
+            "price_cents": str(price_cents),
+            "credit_applied_cents": str(credit_cents),
+        },
+    }
+
+    # Tenta com PIX+card primeiro. Se o Stripe não tiver PIX ativado
+    # (típico em conta nova ou ainda não configurada), cai pra card-only
+    # automaticamente — evita quebrar o fluxo do cliente.
+    session = None
+    methods_used = []
+    try:
+        session_params = {**base_params, "payment_method_types": ["card", "pix"]}
         session = stripe.checkout.Session.create(**session_params)
-        return {
-            "is_free": False,
-            "checkout_url": session.url,
-            "session_id": session.id,
-            "num_pranchas": n,
-            "price_cents": price_cents,
-            "credit_applied_cents": credit_cents,
-            "credit_applied_brl": round(credit_cents / 100, 2),
-            "final_cents": final_cents,
-            "final_brl": round(final_cents / 100, 2),
-        }
+        methods_used = ["card", "pix"]
+    except stripe.error.InvalidRequestError as e:
+        msg = str(e).lower()
+        if "pix" in msg or "payment_method_types" in msg:
+            print(f"[checkout] PIX indisponível ({e}); caindo pra card-only")
+            try:
+                session_params = {**base_params, "payment_method_types": ["card"]}
+                session = stripe.checkout.Session.create(**session_params)
+                methods_used = ["card"]
+            except Exception as e2:
+                raise HTTPException(500, f"Erro Stripe (card-only fallback): {str(e2)}")
+        else:
+            raise HTTPException(500, f"Erro ao criar checkout: {str(e)}")
     except Exception as e:
         raise HTTPException(500, f"Erro ao criar checkout: {str(e)}")
+
+    if not session:
+        raise HTTPException(500, "Erro ao criar checkout: session não foi criada")
+    return {
+        "is_free": False,
+        "checkout_url": session.url,
+        "session_id": session.id,
+        "num_pranchas": n,
+        "price_cents": price_cents,
+        "credit_applied_cents": credit_cents,
+        "credit_applied_brl": round(credit_cents / 100, 2),
+        "final_cents": final_cents,
+        "final_brl": round(final_cents / 100, 2),
+        "payment_methods": methods_used,
+    }
 
 
 @app.get("/api/checkout/verify/{session_id}")
