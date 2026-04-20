@@ -1449,7 +1449,14 @@
       const projectName = (document.getElementById('project-name')?.value || '').trim();
       const typology = document.getElementById('project-typology')?.value || 'office';
       const params = { typology, project_name: projectName };
-      if (currentUser?.id) params.user_id = currentUser.id;
+      if (currentUser?.id) {
+        params.user_id = currentUser.id;
+        if (currentUser.email) params.user_email = currentUser.email;
+        const displayName = currentUser.user_metadata?.full_name
+          || currentUser.user_metadata?.name
+          || '';
+        if (displayName) params.user_name = displayName;
+      }
       if (window.__creditsToConsumeCents > 0) {
         params.credits_to_consume_cents = window.__creditsToConsumeCents;
         window.__creditsToConsumeCents = 0;  // reset para próximo projeto
