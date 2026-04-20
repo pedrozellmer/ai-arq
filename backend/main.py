@@ -1270,12 +1270,19 @@ async def process_files(
     files: list[UploadFile] = File(...),
     typology: str = "office",
     project_name: str = "",
+    user_id: str = "",
+    credits_to_consume_cents: int = 0,
 ):
     """Recebe PDF, DWG ou DXF e inicia processamento em background.
 
     - `typology` (opcional, default `office`): usado pela calibração por
       densidade pra comparar o projeto com padrões da mesma categoria.
     - `project_name` (opcional): apelido amigável dado pelo cliente.
+    - `user_id` (opcional): se informado, vincula o projeto ao usuário e
+      permite consumo/crédito.
+    - `credits_to_consume_cents` (opcional): se > 0, consome esse valor
+      de créditos do user (usado quando checkout retornou is_free=true
+      por saldo suficiente).
     """
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
@@ -1321,12 +1328,8 @@ async def process_files(
     )
 
     # Salvar projeto no Supabase
-    # Pegar user_id/email do header Authorization (se enviado pelo frontend)
-    from fastapi import Request
-    user_id = ""
     user_email = ""
     user_name = ""
-    # Os dados do usuário vêm como query params opcionais
     _supabase_insert("projects", {
         "job_id": job_id,
         "user_id": user_id or "anonymous",
@@ -1338,6 +1341,12 @@ async def process_files(
         "file_types": file_types,
         "status": "queued",
     })
+
+    # Consome créditos de cashback/cupom se o frontend declarou uso
+    # (quando crédito cobriu 100% do preço e pulou o Stripe).
+    if credits_to_consume_cents > 0 and user_id and user_id != "anonymous":
+        consumed = _consume_credits(user_id, credits_to_consume_cents, job_id)
+        print(f"[credits] job={job_id} user={user_id} consumed={consumed}/{credits_to_consume_cents}")
 
     # Iniciar processamento em thread separada (não bloqueia HTTP)
     import threading
@@ -1553,13 +1562,112 @@ async def estimate_price(files: list[UploadFile] = File(...)):
         except Exception: pass
 
 
+# ═══════════════════════════════════════════════════════════════
+#  Créditos de usuário (cashback, cupom, referral)
+# ═══════════════════════════════════════════════════════════════
+
+def _get_available_credits(user_id: str) -> list[dict]:
+    """Retorna créditos disponíveis (used_at IS NULL e não expirados),
+    ordenados por expires_at asc (expira primeiro consome primeiro)."""
+    if not user_id or user_id == "anonymous":
+        return []
+    try:
+        import urllib.request as _ur, urllib.parse as _up
+        query = (f"select=id,amount_cents,source,source_ref,description,expires_at,created_at"
+                 f"&user_id=eq.{_up.quote(user_id)}&used_at=is.null"
+                 f"&order=expires_at.asc.nullslast,created_at.asc")
+        url = f"{SUPABASE_URL}/rest/v1/user_credits?{query}"
+        req = _ur.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Accept", "application/json")
+        resp = _ur.urlopen(req, timeout=8)
+        rows = _json.loads(resp.read().decode("utf-8"))
+        now = datetime.utcnow().isoformat()
+        # Filtra expirados
+        return [r for r in rows if not r.get("expires_at") or r["expires_at"] > now]
+    except Exception as e:
+        print(f"credits query error: {e}")
+        return []
+
+
+def _total_available_credit(user_id: str) -> int:
+    """Soma dos créditos disponíveis em centavos."""
+    return sum(int(c.get("amount_cents") or 0) for c in _get_available_credits(user_id))
+
+
+def _grant_credit(user_id: str, amount_cents: int, source: str,
+                  source_ref: str = "", description: str = "",
+                  expires_days: Optional[int] = None) -> bool:
+    """Cria um crédito novo pro user."""
+    if not user_id or user_id == "anonymous" or amount_cents <= 0:
+        return False
+    record = {
+        "user_id": user_id,
+        "amount_cents": int(amount_cents),
+        "source": source,
+        "source_ref": (source_ref or "")[:100],
+        "description": (description or "")[:200],
+    }
+    if expires_days:
+        record["expires_at"] = (datetime.utcnow() + __import__("datetime").timedelta(
+            days=expires_days)).isoformat() + "Z"
+    return _supabase_insert("user_credits", record)
+
+
+def _consume_credits(user_id: str, amount_cents: int, job_id: str) -> int:
+    """Consome créditos até somar amount_cents. Marca used_at nos usados.
+    Retorna o TOTAL efetivamente consumido (pode ser menor se saldo insuficiente)."""
+    available = _get_available_credits(user_id)
+    if not available:
+        return 0
+    consumed = 0
+    now_iso = datetime.utcnow().isoformat() + "Z"
+    import urllib.request as _ur
+    for cr in available:
+        if consumed >= amount_cents:
+            break
+        # Marca used_at
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/user_credits?id=eq.{cr['id']}&used_at=is.null"
+            body = _json.dumps({"used_at": now_iso, "used_on_job_id": job_id}).encode("utf-8")
+            req = _ur.Request(url, data=body, method="PATCH")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Prefer", "return=minimal")
+            _ur.urlopen(req, timeout=8)
+            consumed += int(cr.get("amount_cents") or 0)
+        except Exception as e:
+            print(f"consume credit error: {e}")
+    return consumed
+
+
+@app.get("/api/credits/balance")
+async def credits_balance(user_id: str):
+    """Retorna saldo de crédito disponível pro usuário."""
+    credits = _get_available_credits(user_id)
+    total = sum(int(c.get("amount_cents") or 0) for c in credits)
+    return {
+        "status": "ok",
+        "user_id": user_id,
+        "total_cents": total,
+        "total_brl": round(total / 100, 2),
+        "credits": credits,
+    }
+
+
 @app.post("/api/checkout")
-async def create_checkout(num_pranchas: int = 1, num_files: int = 0):
+async def create_checkout(num_pranchas: int = 1, num_files: int = 0,
+                          user_id: str = ""):
     """Cria sessão de pagamento no Stripe baseado em PRANCHAS REAIS.
 
+    Aplica automaticamente créditos disponíveis do usuário (cashback,
+    cupom, etc.) reduzindo o valor cobrado. Se o saldo cobrir 100%,
+    pula Stripe e retorna direto `is_free=true`.
+
     Aceita `num_pranchas` (preferido — vem de /api/estimate-price). Mantém
-    `num_files` como fallback compatibilidade — se passado sem num_pranchas,
-    assume 1 prancha por arquivo (pode subestimar PDFs grandes).
+    `num_files` como fallback compatibilidade.
     """
     import stripe
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
@@ -1572,27 +1680,66 @@ async def create_checkout(num_pranchas: int = 1, num_files: int = 0):
     tier = get_tier_for(n)
     plan_name = f"Plano {tier['name']} — {n} pranchas"
 
+    # Aplica créditos disponíveis (se houver user_id)
+    credit_cents = min(price_cents, _total_available_credit(user_id)) if user_id else 0
+    final_cents = max(0, price_cents - credit_cents)
+
+    # Se crédito cobriu 100%, pula Stripe
+    if final_cents == 0 and credit_cents > 0:
+        return {
+            "is_free": True,
+            "checkout_url": None,
+            "session_id": None,
+            "num_pranchas": n,
+            "price_cents": price_cents,
+            "credit_applied_cents": credit_cents,
+            "credit_applied_brl": round(credit_cents / 100, 2),
+            "final_cents": 0,
+            "final_brl": 0.0,
+            "message": "Coberto pelo saldo de créditos — processe direto sem pagamento",
+        }
+
+    # Descrição do produto inclui o desconto aplicado se houver
+    description = plan_name
+    if credit_cents > 0:
+        description += f" (R$ {credit_cents/100:.2f} de desconto aplicado)"
+
     try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=["card", "pix"],
-            line_items=[{
+        session_params = {
+            "payment_method_types": ["card", "pix"],
+            "line_items": [{
                 "price_data": {
                     "currency": "brl",
                     "product_data": {
                         "name": f"AI.arq — Planilha de quantitativos",
-                        "description": plan_name,
+                        "description": description,
                     },
-                    "unit_amount": price_cents,
+                    "unit_amount": final_cents,
                 },
                 "quantity": 1,
             }],
-            mode="payment",
-            success_url="https://ai.arq.br/dashboard.html?payment=success&session_id={CHECKOUT_SESSION_ID}",
-            cancel_url="https://ai.arq.br/dashboard.html?payment=cancelled",
-        )
-        return {"checkout_url": session.url, "session_id": session.id,
-                "num_pranchas": n, "price_cents": price_cents,
-                "price_brl": round(price_cents/100, 2)}
+            "mode": "payment",
+            "success_url": "https://ai.arq.br/dashboard.html?payment=success&session_id={CHECKOUT_SESSION_ID}",
+            "cancel_url": "https://ai.arq.br/dashboard.html?payment=cancelled",
+            "metadata": {
+                "user_id": user_id or "anonymous",
+                "num_pranchas": str(n),
+                "price_cents": str(price_cents),
+                "credit_applied_cents": str(credit_cents),
+            },
+        }
+        session = stripe.checkout.Session.create(**session_params)
+        return {
+            "is_free": False,
+            "checkout_url": session.url,
+            "session_id": session.id,
+            "num_pranchas": n,
+            "price_cents": price_cents,
+            "credit_applied_cents": credit_cents,
+            "credit_applied_brl": round(credit_cents / 100, 2),
+            "final_cents": final_cents,
+            "final_brl": round(final_cents / 100, 2),
+        }
     except Exception as e:
         raise HTTPException(500, f"Erro ao criar checkout: {str(e)}")
 
@@ -1669,6 +1816,29 @@ async def cashback_upload(
         summary = _ingest(
             revised_path, area_m2=ref_area, typology=typology, project_label=label,
         )
+
+        # Concede crédito de R$ 20 de cashback pro usuário — idempotente
+        # por job_id (só libera uma vez por projeto revisado). Expira em
+        # 180 dias pra evitar credit acumulando pra sempre sem uso.
+        CASHBACK_CENTS = 2000  # R$ 20
+        CASHBACK_EXPIRE_DAYS = 180
+        cashback_granted = False
+        user_id = project.get("user_id") or ""
+        if user_id and user_id != "anonymous" and summary.get("items_parsed", 0) > 0:
+            # Evita duplicar crédito pra mesma revisão
+            already = _get_available_credits(user_id)
+            duplicate = any(c.get("source") == "cashback" and c.get("source_ref") == job_id
+                            for c in already)
+            if not duplicate:
+                cashback_granted = _grant_credit(
+                    user_id=user_id,
+                    amount_cents=CASHBACK_CENTS,
+                    source="cashback",
+                    source_ref=job_id,
+                    description=f"Cashback revisão do projeto {label}",
+                    expires_days=CASHBACK_EXPIRE_DAYS,
+                )
+
         return {
             "status": "ok",
             "source": "cashback",
@@ -1683,7 +1853,8 @@ async def cashback_upload(
             "items_compared": summary.get("items_parsed", 0),
             "items_saved": summary.get("benchmarks_updated", 0),
             "avg_deviation_pct": 0,
-            "cashback_granted": True,
+            "cashback_granted": cashback_granted,
+            "cashback_amount_brl": CASHBACK_CENTS / 100 if cashback_granted else 0,
         }
     except HTTPException:
         raise

@@ -961,6 +961,8 @@
 
     // ── Load beta code banner ──
     await loadBetaBanner();
+    // ── Load credit balance (cashback, cupom, referral) ──
+    await loadUserCredits();
   }
   checkAuth();
 
@@ -1028,6 +1030,20 @@
     } catch (e) {
       console.error('Erro ao carregar c\u00f3digo beta:', e);
       betaBanner.classList.add('hidden');
+    }
+  }
+
+  // Saldo de créditos (cashback, cupom, referral) — carregado do backend
+  let userCreditsCents = 0;
+  async function loadUserCredits() {
+    if (!currentUser?.id) { userCreditsCents = 0; return; }
+    try {
+      const res = await fetch(`${API_BASE}/api/credits/balance?user_id=${encodeURIComponent(currentUser.id)}`);
+      const data = await res.json();
+      userCreditsCents = data.total_cents || 0;
+    } catch (e) {
+      console.warn('loadUserCredits err', e);
+      userCreditsCents = 0;
     }
   }
 
@@ -1138,10 +1154,18 @@
     if (!priceLabel || !est) return;
     const n = est.total_pranchas || 0;
     const price = est.price_brl || 0;
+    const priceCents = Math.round(price * 100);
     const tier = est.tier_name || '';
+
     const free = isFirstProject() && n <= 5;
-    const betaFree = hasBetaCredits();
+    const betaFree = hasBetaCredits() && n <= 10;
+    const betaOverLimit = hasBetaCredits() && n > 10;
     const unlimited = !!window.__isUnlimitedUser;
+
+    // Crédito disponível aplicável a esse projeto
+    const creditApplicable = Math.min(userCreditsCents, priceCents);
+    const finalCents = Math.max(0, priceCents - creditApplicable);
+    const creditCoversAll = creditApplicable > 0 && finalCents === 0;
 
     const breakdown = (est.breakdown || []).filter(b => b.pranchas > 1);
     let detail = '';
@@ -1159,7 +1183,14 @@
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
     } else if (betaFree) {
       const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} restante${remaining !== 1 ? 's' : ''}</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} projeto${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}</span>`;
+    } else if (betaOverLimit) {
+      const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span> <span class="text-xs text-amber-600">(Beta libera at\u00e9 10 pranchas; este tem ${n})</span>`;
+    } else if (creditCoversAll) {
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">COBERTO pelo cr\u00e9dito</span> <span class="text-xs">(R$ ${(creditApplicable/100).toFixed(2)} do seu saldo)</span>`;
+    } else if (creditApplicable > 0) {
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="font-bold text-indigo-600">R$ ${(finalCents/100).toFixed(2)}</span> <span class="text-xs text-emerald-600">(R$ ${(creditApplicable/100).toFixed(2)} de cr\u00e9dito aplicado)</span>`;
     } else {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span>`;
     }
@@ -1416,7 +1447,13 @@
       selectedFiles.forEach(f => formData.append('files', f));
       const projectName = (document.getElementById('project-name')?.value || '').trim();
       const typology = document.getElementById('project-typology')?.value || 'office';
-      const qs = new URLSearchParams({ typology, project_name: projectName }).toString();
+      const params = { typology, project_name: projectName };
+      if (currentUser?.id) params.user_id = currentUser.id;
+      if (window.__creditsToConsumeCents > 0) {
+        params.credits_to_consume_cents = window.__creditsToConsumeCents;
+        window.__creditsToConsumeCents = 0;  // reset para próximo projeto
+      }
+      const qs = new URLSearchParams(params).toString();
 
       const res = await fetch(`${API_BASE}/api/process?${qs}`, {
         method: 'POST',
@@ -1464,16 +1501,26 @@
     // Conta PRANCHAS REAIS (páginas dentro de PDFs + layouts dentro de DWGs)
     // se o estimate já rodou, senão fallback pra arquivos.
     const numPranchasReais = (lastEstimate && lastEstimate.total_pranchas) || numFiles;
+    const priceCents = lastEstimate ? Math.round((lastEstimate.price_brl || 0) * 100) : 0;
     const isFree = isFirstProject() && numPranchasReais <= 5;
-    const isBetaFree = hasBetaCredits();
+    // Beta cobre projeto até 10 pranchas. Acima disso, cliente paga normal.
+    const isBetaFree = hasBetaCredits() && numPranchasReais <= 10;
     const isUnlimited = !!window.__isUnlimitedUser;  // testing/dev bypass
+    // Crédito cobre tudo? (cashback, cupom, referral)
+    const creditCoversAll = priceCents > 0 && userCreditsCents >= priceCents;
 
-    if (isFree || isBetaFree || isUnlimited) {
+    if (isFree || isBetaFree || isUnlimited || creditCoversAll) {
       if (isBetaFree && !isFree && !isUnlimited) {
         // Using beta credit — increment usage
         await useBetaCredit();
       }
-      // Projeto gratuito (primeiro / beta / ilimitado) — processa direto
+      // Se crédito cobre tudo, passa instrução pro backend consumir
+      if (creditCoversAll && !isFree && !isBetaFree && !isUnlimited) {
+        window.__creditsToConsumeCents = priceCents;
+      } else {
+        window.__creditsToConsumeCents = 0;
+      }
+      // Projeto gratuito (primeiro / beta / ilimitado / coberto por crédito) — processa direto
       startProcessing();
     } else {
       // Precisa pagar — abrir Stripe Checkout
@@ -1483,8 +1530,10 @@
       try {
         // Usa num_pranchas REAL detectado em vez de num_files
         // (PDFs com várias páginas + DWGs com vários layouts contam certo)
+        // Também passa user_id pra aplicar créditos disponíveis automaticamente.
         const numPranchas = (lastEstimate && lastEstimate.total_pranchas) || numFiles;
-        const res = await fetch(`${API_BASE}/api/checkout?num_pranchas=${numPranchas}&num_files=${numFiles}`, {
+        const userIdParam = currentUser?.id ? `&user_id=${encodeURIComponent(currentUser.id)}` : '';
+        const res = await fetch(`${API_BASE}/api/checkout?num_pranchas=${numPranchas}&num_files=${numFiles}${userIdParam}`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${accessToken}` }
         });
@@ -2252,6 +2301,9 @@
         }
       }
 
+      // Atualiza saldo em memória pra próximo upload mostrar
+      await loadUserCredits();
+
       // Show results
       let msg = 'Revis\u00e3o enviada com sucesso!\n\n';
       const parsed = result.items_parsed || result.items_compared || 0;
@@ -2265,7 +2317,12 @@
       } else {
         msg += 'Nenhuma linha com quantidade v\u00e1lida foi encontrada.\n\n';
       }
-      msg += 'R$ 20 de desconto ser\u00e1 aplicado no pr\u00f3ximo projeto.';
+      if (result.cashback_granted) {
+        const amt = result.cashback_amount_brl || 20;
+        msg += `\u2705 R$ ${amt.toFixed(2)} de cashback creditado \u2014 aplicado automaticamente no pr\u00f3ximo projeto.`;
+      } else {
+        msg += 'Cashback n\u00e3o foi liberado (revis\u00e3o duplicada ou sem linhas v\u00e1lidas).';
+      }
       alert(msg);
 
     } catch (err) {
