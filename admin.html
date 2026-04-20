@@ -300,9 +300,48 @@
       <!-- TAB: PROJETOS                           -->
       <!-- ════════════════════════════════════════ -->
       <div id="tab-projetos" class="tab-content hidden">
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Projetos</h1>
-          <p class="text-sm text-gray-500 mt-1">Todos os projetos processados na plataforma</p>
+        <div class="mb-6 flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Projetos</h1>
+            <p class="text-sm text-gray-500 mt-1">Operações em tempo real &middot; atualiza a cada 10s</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="inline-flex items-center gap-2 text-xs text-gray-600">
+              <input type="checkbox" id="proj-auto-refresh" checked class="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+              <span>Auto-refresh</span>
+            </label>
+            <button onclick="loadProjects()" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-50">
+              Atualizar agora
+            </button>
+          </div>
+        </div>
+
+        <!-- 4 cards de m&#233;tricas em tempo real -->
+        <div class="grid gap-3 sm:grid-cols-4 mb-5">
+          <div class="rounded-xl border bg-amber-50 border-amber-200 p-4">
+            <p class="text-xs uppercase tracking-wide font-semibold text-amber-700">Em processamento</p>
+            <p id="proj-stat-running" class="text-2xl font-bold text-amber-900 mt-1">0</p>
+          </div>
+          <div class="rounded-xl border bg-red-50 border-red-200 p-4">
+            <p class="text-xs uppercase tracking-wide font-semibold text-red-700">Travados (&gt;15min)</p>
+            <p id="proj-stat-stuck" class="text-2xl font-bold text-red-900 mt-1">0</p>
+          </div>
+          <div class="rounded-xl border bg-emerald-50 border-emerald-200 p-4">
+            <p class="text-xs uppercase tracking-wide font-semibold text-emerald-700">Conclu&#237;dos hoje</p>
+            <p id="proj-stat-done" class="text-2xl font-bold text-emerald-900 mt-1">0</p>
+          </div>
+          <div class="rounded-xl border bg-gray-50 border-gray-200 p-4">
+            <p class="text-xs uppercase tracking-wide font-semibold text-gray-700">Erros (24h)</p>
+            <p id="proj-stat-errors" class="text-2xl font-bold text-gray-900 mt-1">0</p>
+          </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="mb-3 flex flex-wrap items-center gap-2">
+          <button onclick="setProjectsFilter('ativos')" data-pf="ativos" class="proj-filter-btn text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-50">Ativos (queued+processing)</button>
+          <button onclick="setProjectsFilter('hoje')" data-pf="hoje" class="proj-filter-btn text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-50">Hoje</button>
+          <button onclick="setProjectsFilter('erros')" data-pf="erros" class="proj-filter-btn text-xs px-3 py-1.5 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-50">Com erro</button>
+          <button onclick="setProjectsFilter('tudo')" data-pf="tudo" class="proj-filter-btn text-xs px-3 py-1.5 rounded-full border border-indigo-400 bg-indigo-50 text-indigo-700">Tudo</button>
         </div>
 
         <div class="rounded-2xl border bg-white shadow-gradient overflow-x-auto">
@@ -315,11 +354,12 @@
                 <th class="px-4 py-3 font-semibold text-gray-600">Itens</th>
                 <th class="px-4 py-3 font-semibold text-gray-600">&#193;rea</th>
                 <th class="px-4 py-3 font-semibold text-gray-600">Status</th>
-                <th class="px-4 py-3 font-semibold text-gray-600">Data</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">Decorrido</th>
+                <th class="px-4 py-3 font-semibold text-gray-600">Quando</th>
               </tr>
             </thead>
             <tbody id="projects-table-body">
-              <tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Carregando projetos...</td></tr>
+              <tr><td colspan="8" class="px-4 py-12 text-center text-gray-400">Carregando projetos...</td></tr>
             </tbody>
           </table>
         </div>
@@ -604,26 +644,98 @@ function switchTab(tabName) {
 }
 
 // ══════════════════════════════════════════════
-// PROJECTS
+// PROJECTS — dashboard de operações em tempo real
 // ══════════════════════════════════════════════
+
+let _projectsFilter = 'tudo';
+let _projectsRefreshTimer = null;
+const STUCK_MINUTES = 15;  // queued há mais de 15min = travado
+
+function setProjectsFilter(filter) {
+  _projectsFilter = filter;
+  document.querySelectorAll('.proj-filter-btn').forEach(btn => {
+    const isActive = btn.getAttribute('data-pf') === filter;
+    btn.classList.toggle('border-indigo-400', isActive);
+    btn.classList.toggle('bg-indigo-50', isActive);
+    btn.classList.toggle('text-indigo-700', isActive);
+    btn.classList.toggle('border-gray-300', !isActive);
+    btn.classList.toggle('text-gray-700', !isActive);
+  });
+  loadProjects();
+}
+
+function humanElapsed(isoStart, isoEnd) {
+  if (!isoStart) return '--';
+  const start = new Date(isoStart);
+  const end = isoEnd ? new Date(isoEnd) : new Date();
+  const sec = Math.floor((end - start) / 1000);
+  if (sec < 60) return `${sec}s`;
+  if (sec < 3600) return `${Math.floor(sec / 60)}min ${sec % 60}s`;
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  return `${h}h ${m}min`;
+}
+
+function minutesSince(iso) {
+  if (!iso) return 0;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+}
+
 async function loadProjects() {
   const tbody = document.getElementById('projects-table-body');
-  tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Carregando projetos...</td></tr>';
   try {
     const { data, error } = await sbClient
       .from('projects')
       .select('*')
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(200);
     if (error) throw error;
-    const projects = data || [];
-    document.getElementById('projects-count').textContent = projects.length + ' projeto(s)';
+    const allProjects = data || [];
+    const now = Date.now();
+    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+    const last24h = now - 24 * 3600 * 1000;
+
+    // Stats (sempre sobre o conjunto completo, não filtrado)
+    const running = allProjects.filter(p => (p.status === 'queued' || p.status === 'processing')).length;
+    const stuck = allProjects.filter(p => (p.status === 'queued' || p.status === 'processing')
+                                        && minutesSince(p.created_at) > STUCK_MINUTES).length;
+    const doneToday = allProjects.filter(p => p.status === 'done'
+                                             && p.completed_at
+                                             && new Date(p.completed_at) >= today0).length;
+    const errors24h = allProjects.filter(p => p.status === 'error'
+                                             && p.created_at
+                                             && new Date(p.created_at).getTime() >= last24h).length;
+    document.getElementById('proj-stat-running').textContent = running;
+    document.getElementById('proj-stat-stuck').textContent = stuck;
+    document.getElementById('proj-stat-done').textContent = doneToday;
+    document.getElementById('proj-stat-errors').textContent = errors24h;
+
+    // Filtro
+    let projects = allProjects;
+    if (_projectsFilter === 'ativos') {
+      projects = projects.filter(p => p.status === 'queued' || p.status === 'processing');
+    } else if (_projectsFilter === 'hoje') {
+      projects = projects.filter(p => p.created_at && new Date(p.created_at) >= today0);
+    } else if (_projectsFilter === 'erros') {
+      projects = projects.filter(p => p.status === 'error');
+    }
+
+    document.getElementById('projects-count').textContent = `${projects.length} projeto(s) / ${allProjects.length} total`;
+
     if (!projects.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-400">Nenhum projeto encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-gray-400">Nenhum projeto neste filtro.</td></tr>';
       return;
     }
+
     tbody.innerHTML = projects.map(p => {
-      const statusColor = p.status === 'done' ? 'text-green-600 bg-green-50' : p.status === 'error' ? 'text-red-600 bg-red-50' : 'text-yellow-600 bg-yellow-50';
-      // Data+hora em pt-BR, fácil de rastrear (ex: "19/04/2026 14:32")
+      const mins = minutesSince(p.created_at);
+      const isStuck = (p.status === 'queued' || p.status === 'processing') && mins > STUCK_MINUTES;
+      let statusColor = 'text-yellow-700 bg-yellow-50';
+      if (p.status === 'done') statusColor = 'text-green-700 bg-green-50';
+      else if (p.status === 'error') statusColor = 'text-red-700 bg-red-50';
+      else if (isStuck) statusColor = 'text-red-700 bg-red-100 animate-pulse';
+      const statusLabel = isStuck ? 'TRAVADO' : (p.status || '--');
+
       let dateFmt = '--';
       if (p.created_at) {
         const d = new Date(p.created_at);
@@ -634,8 +746,11 @@ async function loadProjects() {
         const mi = String(d.getMinutes()).padStart(2, '0');
         dateFmt = `${dd}/${mm}/${yy} ${hh}:${mi}`;
       }
+      const elapsed = (p.status === 'done')
+        ? humanElapsed(p.created_at, p.completed_at)
+        : (p.status === 'error' ? humanElapsed(p.created_at, p.created_at) : humanElapsed(p.created_at, null));
+
       const types = p.file_types ? Object.entries(p.file_types).filter(([k,v])=>v>0).map(([k,v])=>v+' '+k.toUpperCase()).join(', ') : '--';
-      // Mostra email (principal) + nome (se houver) — fallback só pra "Anônimo" quando nada
       let userLabel = 'An\u00f4nimo';
       if (p.user_email) {
         userLabel = p.user_name
@@ -644,21 +759,36 @@ async function loadProjects() {
       } else if (p.user_name) {
         userLabel = esc(p.user_name);
       }
-      return '<tr class="border-t hover:bg-gray-50">' +
+      const rowClass = isStuck ? 'border-t bg-red-50/50 hover:bg-red-50' : 'border-t hover:bg-gray-50';
+      return `<tr class="${rowClass}">` +
         '<td class="px-4 py-3 font-mono text-xs">' + (p.job_id || '--') + '</td>' +
         '<td class="px-4 py-3">' + userLabel + '</td>' +
         '<td class="px-4 py-3">' + (p.files_count || 0) + ' (' + types + ')</td>' +
         '<td class="px-4 py-3">' + (p.items_count || '--') + '</td>' +
         '<td class="px-4 py-3">' + (p.total_area ? p.total_area.toFixed(0) + ' m\u00b2' : '--') + '</td>' +
-        '<td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs font-medium ' + statusColor + '">' + (p.status || '--') + '</span></td>' +
+        '<td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs font-medium ' + statusColor + '">' + statusLabel + '</span></td>' +
+        '<td class="px-4 py-3 text-xs font-mono ' + (isStuck ? 'text-red-700 font-semibold' : 'text-gray-500') + '">' + elapsed + '</td>' +
         '<td class="px-4 py-3 text-xs text-gray-500 font-mono">' + dateFmt + '</td>' +
         '</tr>';
     }).join('');
   } catch (err) {
     console.error('Error loading projects:', err);
-    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-red-400">Erro ao carregar projetos.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-red-400">Erro ao carregar projetos: ' + esc(err.message) + '</td></tr>';
   }
 }
+
+// Auto-refresh a cada 10s quando aba Projetos visível e checkbox marcada
+function startProjectsAutoRefresh() {
+  if (_projectsRefreshTimer) clearInterval(_projectsRefreshTimer);
+  _projectsRefreshTimer = setInterval(() => {
+    const tabVisible = !document.getElementById('tab-projetos').classList.contains('hidden');
+    const cb = document.getElementById('proj-auto-refresh');
+    if (tabVisible && cb && cb.checked && document.visibilityState === 'visible') {
+      loadProjects();
+    }
+  }, 10000);
+}
+startProjectsAutoRefresh();
 
 // ══════════════════════════════════════════════
 // DASHBOARD STATS
