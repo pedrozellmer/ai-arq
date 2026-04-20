@@ -952,11 +952,12 @@
       const btnAdmin = document.getElementById('btn-admin');
       if (btnAdmin) { btnAdmin.classList.remove('hidden'); btnAdmin.classList.add('flex'); }
     }
-    // Usuários com acesso ilimitado (testing/dev)
+    // Usuários com acesso ilimitado (testing/dev + testadores confiáveis)
     window.__isUnlimitedUser = [
       'zarelalopes@gmail.com',
       'pedro.zellmer@famicapital.com.br',
       'pedrozellmer@gmail.com',
+      'danielatp@gmail.com',  // testadora ativa
     ].includes(user.email);
 
     // ── Load beta code banner ──
