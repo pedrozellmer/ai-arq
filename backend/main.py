@@ -1264,7 +1264,9 @@ revisor humano confirme direto no arquivo."""
                 "Serviços Preliminares", "Demolição e Remoção", "Fechamentos Verticais",
                 "Revestimentos", "Pisos e Rodapés", "Forros", "Portas e Ferragens",
                 "Divisórias e Vidros", "Persianas e Cortinas", "Iluminação",
-                "Instalações Elétricas e Dados", "Ar-Condicionado", "Incêndio e Segurança",
+                "Instalações Elétricas e Dados",
+                "Instalações Hidráulicas", "Instalações de Gás",
+                "Ar-Condicionado", "Incêndio e Segurança",
                 "Marcenaria", "Mobiliário", "Complementares"
             ]
             for item_data in result.get("items", []):

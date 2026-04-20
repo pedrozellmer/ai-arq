@@ -126,14 +126,27 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     if project.architect:
         add_line(f'Arquitetura: {project.architect}')
     add_line(f'Fase: {project.phase}')
-    if project.total_area:
-        add_line(f'Área laje bruta: {project.total_area:,.1f} m² | Área layout: {project.layout_area:,.1f} m² | Sem intervenção: {project.no_intervention_area:,.1f} m²')
+    # Exibir áreas apenas se a IA conseguiu extrair. Se layout_area == 0 e
+    # total_area > 0, fallback: assumir que toda a laje é área de intervenção
+    # (caso típico de residência sem distinção de zonas).
+    if project.total_area or project.layout_area:
+        _total = project.total_area or 0
+        _layout = project.layout_area or 0
+        _nointer = project.no_intervention_area or 0
+        if _total and not _layout:
+            # layout=0 vira "a confirmar" visível em vez de número enganoso
+            add_line(f'Área laje bruta: {_total:,.1f} m² | Área layout: a confirmar | Sem intervenção: {_nointer:,.1f} m²')
+        else:
+            add_line(f'Área laje bruta: {_total:,.1f} m² | Área layout: {_layout:,.1f} m² | Sem intervenção: {_nointer:,.1f} m²')
     if project.workstations:
         add_line(f'Posições de trabalho: {project.workstations}')
     r += 1
 
-    # Nota de contexto
-    add_line('ATENÇÃO: Reforma de andar existente. Quantitativos consideram apenas o que MUDA.', bold=True)
+    # Nota de contexto (só fala de "andar" em office — residencial é reforma de casa/ap)
+    if typology == "residential":
+        add_line('ATENÇÃO: Reforma residencial. Quantitativos consideram apenas o que MUDA.', bold=True)
+    else:
+        add_line('ATENÇÃO: Reforma de andar existente. Quantitativos consideram apenas o que MUDA.', bold=True)
     r += 1
 
     # "DEPARTAMENTOS" só faz sentido em escritório/educacional; em residencial
@@ -528,16 +541,46 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.cell(row=ro, column=1, value='OMISSOS — Itens não incluídos que provavelmente serão necessários')
     _style_row(ws, ro, Font(name='Arial', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='B45309'), AL, 9)
     ro += 1
-    omissos = [
-        'Projeto executivo de instalações (elétrica, hidráulica, PPCI, AC) — se não contratado separadamente',
-        'Aprovação no Corpo de Bombeiros (PPCI) — taxas e honorários do projetista',
-        'Compatibilização de projetos (elétrica × forro × sprinkler × AC)',
-        'Adequação de infraestrutura do condomínio (elétrica, hidráulica, incêndio)',
-        'Reforço estrutural — se necessário para novas cargas (marcenaria pesada, equipamentos)',
-        'Impermeabilização — se houver alteração em áreas úmidas (copas, banheiros)',
-        'Paisagismo interno — se o projeto prever jardineiras ou verde',
-        'Automação e integração de sistemas (BMS, controle de iluminação)',
+    # OMISSOS por tipologia — itens que COSTUMAM ser esquecidos em cada tipo de obra.
+    # Base comum + específicos.
+    _omissos_base = [
+        'Projeto executivo de instalações (elétrica, hidráulica, AC) — se não contratado separadamente',
+        'Reforço estrutural — se necessário para novas cargas (marcenaria pesada, bancadas de pedra)',
+        'Impermeabilização — se houver alteração em áreas úmidas (cozinha, banheiros, lavanderia)',
     ]
+    if typology == "residential":
+        omissos = _omissos_base + [
+            'Adequação de prumadas do condomínio (elétrica, hidráulica, gás) — se o projeto exigir',
+            'Aprovação em prefeitura / taxa de habite-se, se ampliação',
+            'Automação residencial (persianas, iluminação cênica, áudio) — se desejado',
+            'Paisagismo / jardins / área verde — se prevê plantas',
+            'Tratamento acústico adicional (pisos, portas) — apartamentos de condomínio exigente',
+        ]
+    elif typology == "office":
+        omissos = _omissos_base + [
+            'Aprovação no Corpo de Bombeiros (PPCI) — taxas e honorários do projetista',
+            'Compatibilização de projetos (elétrica × forro × sprinkler × AC)',
+            'Adequação de infraestrutura do condomínio (elétrica, hidráulica, incêndio)',
+            'Paisagismo interno — se o projeto prever jardineiras ou verde',
+            'Automação e integração de sistemas (BMS, controle de iluminação)',
+        ]
+    elif typology == "hospital":
+        omissos = _omissos_base + [
+            'Projeto de gases medicinais e aprovação Anvisa',
+            'Licença sanitária municipal',
+            'Piso hospitalar condutivo em áreas específicas',
+        ]
+    elif typology == "retail":
+        omissos = _omissos_base + [
+            'Comunicação visual / fachada / letreiro',
+            'Sistema de som e sonorização ambiente',
+            'Adequação a exigências do shopping / locador',
+        ]
+    else:
+        omissos = _omissos_base + [
+            'Aprovação em órgãos (Bombeiros, Vigilância Sanitária, Prefeitura) — conforme tipologia',
+            'Compatibilização de projetos entre disciplinas',
+        ]
     for om in omissos:
         ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
         ws.cell(row=ro, column=1, value=f'  • {om}').font = Font(name='Arial', size=8, color='92400E')
@@ -552,16 +595,47 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.cell(row=ro, column=1, value='EXCLUSOS — Itens explicitamente fora deste escopo (padrão de mercado)')
     _style_row(ws, ro, Font(name='Arial', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='6B7280'), AL, 9)
     ro += 1
-    exclusos = [
-        'Divisórias industriais piso-teto (vidro liso, polarizado) — cargo do contratante',
-        'Carpete — fornecimento pelo cliente; instalação pode estar inclusa',
-        'Marcenaria sob medida (bancadas, armários, painéis) — cargo do contratante',
-        'Mobiliário decorativo e de escritório — cargo do contratante',
-        'Persianas e cortinas — cargo do contratante',
-        'Equipamentos de TI (switches, servidores, APs, nobreaks) — cargo do contratante',
-        'Sistema de CFTV e controle de acesso — quando fornecido por empresa especializada',
+    # EXCLUSOS por tipologia — itens que PADRÃO DE MERCADO não entram neste tipo de obra.
+    # Contaminação residencial era colocar CFTV e "móveis de escritório" pra casa.
+    _exclusos_base = [
         'Contas de água, luz e telefone durante a obra — cargo do condomínio/contratante',
     ]
+    if typology == "residential":
+        exclusos = _exclusos_base + [
+            'Eletrodomésticos (geladeira, fogão, cooktop, coifa, microondas, lava-louças) — fornecimento do cliente',
+            'Louças sanitárias e metais (vasos, cubas, torneiras, chuveiros) — costumam ser fornecidos separadamente',
+            'Cortinas, persianas e tapeçaria — fornecimento do cliente/decorador',
+            'Mobiliário solto e decoração — fornecimento do cliente',
+            'Sistema de som, automação e TV — projetos especializados separados',
+            'Paisagismo e vasos — projeto de paisagismo separado',
+        ]
+    elif typology == "office":
+        exclusos = _exclusos_base + [
+            'Divisórias industriais piso-teto (vidro liso, polarizado) — cargo do contratante',
+            'Carpete — fornecimento pelo cliente; instalação pode estar inclusa',
+            'Marcenaria sob medida (bancadas, armários, painéis) — cargo do contratante',
+            'Mobiliário decorativo e de escritório — cargo do contratante',
+            'Persianas e cortinas — cargo do contratante',
+            'Equipamentos de TI (switches, servidores, APs, nobreaks) — cargo do contratante',
+            'Sistema de CFTV e controle de acesso — quando fornecido por empresa especializada',
+        ]
+    elif typology == "hospital":
+        exclusos = _exclusos_base + [
+            'Equipamentos médicos (raio-x, ultrassom, macas, etc) — fornecimento separado',
+            'Mobiliário clínico (armários de medicamentos, carrinhos) — fornecimento separado',
+            'Sistemas de TI médico (PACS, prontuário) — cargo do contratante',
+        ]
+    elif typology == "retail":
+        exclusos = _exclusos_base + [
+            'Mercadoria / estoque inicial — cargo do contratante',
+            'Expositores e vitrines específicas da marca — design ou fornecimento separado',
+            'Sistema PDV e TI da loja — cargo do contratante',
+        ]
+    else:
+        exclusos = _exclusos_base + [
+            'Mobiliário solto e decoração — cargo do contratante',
+            'Equipamentos específicos da operação — cargo do contratante',
+        ]
     for ex in exclusos:
         ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
         ws.cell(row=ro, column=1, value=f'  • {ex}').font = Font(name='Arial', size=8, color='374151')
