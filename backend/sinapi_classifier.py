@@ -150,7 +150,11 @@ def classify_batch(items: list[dict], catalog_text: str, families_by_code: dict,
     prompt = _BATCH_PROMPT.format(catalog=catalog_text, items=items_str)
 
     try:
-        resp = client.messages.create(
+        from llm_retry import call_with_retry
+        resp = call_with_retry(
+            client,
+            tag="sinapi_batch",
+            max_retries=4,
             model="claude-haiku-4-5-20251001",
             max_tokens=4000,
             messages=[{"role": "user", "content": prompt}],

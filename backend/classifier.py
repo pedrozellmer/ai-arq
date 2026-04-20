@@ -175,8 +175,12 @@ def classify_item(description: str, unit: str = "") -> dict:
 
     try:
         import anthropic
+        from llm_retry import call_with_retry
         client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
+        resp = call_with_retry(
+            client,
+            tag="classifier",
+            max_retries=3,  # per-item, não queremos bloquear muito
             model="claude-haiku-4-5-20251001",
             max_tokens=600,
             messages=[{"role": "user", "content": prompt}],

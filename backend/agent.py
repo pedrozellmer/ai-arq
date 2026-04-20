@@ -466,9 +466,13 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
     tool_calls_log = []
     final_answer = ""
 
+    from llm_retry import call_with_retry
     for it in range(max_iterations):
         try:
-            resp = client.messages.create(
+            resp = call_with_retry(
+                client,
+                tag=f"agent:job={job_id}",
+                max_retries=3,
                 model="claude-sonnet-4-6",
                 max_tokens=2000,
                 system=SYSTEM_PROMPT.format(job_id=job_id),
