@@ -91,40 +91,52 @@
     <div class="mx-auto mt-16 max-w-4xl">
       <div class="rounded-2xl border bg-white p-2 shadow-gradient">
         <div class="rounded-xl bg-gradient-to-br from-indigo-50/50 to-cyan-50/50 p-8 md:p-10">
+          <!-- 3 métricas honestas -->
           <div class="grid grid-cols-3 gap-4 text-center">
             <div>
-              <div class="text-3xl font-bold gradient-text">10+</div>
-              <div class="text-sm text-gray-500 mt-1">Tipos de pranchas</div>
+              <div class="text-3xl font-bold gradient-text">16</div>
+              <div class="text-sm text-gray-500 mt-1">Disciplinas na planilha</div>
             </div>
             <div>
-              <div class="text-3xl font-bold gradient-text">130+</div>
-              <div class="text-sm text-gray-500 mt-1">Itens identificados</div>
+              <div class="text-3xl font-bold gradient-text">10.000+</div>
+              <div class="text-sm text-gray-500 mt-1">Códigos SINAPI mapeados</div>
             </div>
             <div>
-              <div class="text-3xl font-bold gradient-text">~10min</div>
-              <div class="text-sm text-gray-500 mt-1">Tempo de processamento</div>
+              <div class="text-3xl font-bold gradient-text">~5min</div>
+              <div class="text-sm text-gray-500 mt-1">Pra projeto médio</div>
             </div>
           </div>
-          <div class="mt-8 rounded-lg border bg-white p-4 text-left font-mono text-xs text-gray-600 space-y-2">
+
+          <!-- Exemplo REAL (caso de teste interno: escritório corporativo 1.286 m²) -->
+          <p class="mt-8 text-xs text-gray-400 text-center">Exemplo de um escritório corporativo de 1.286 m² com 5 DWGs processados:</p>
+          <div class="mt-2 rounded-lg border bg-white p-4 text-left font-mono text-xs text-gray-600 space-y-2">
             <div class="flex items-center gap-2">
               <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span>Planta Demolição ............. 13 itens extraídos</span>
+              <span>Demolição .................... 23 itens (alvenaria, forro, piso)</span>
             </div>
             <div class="flex items-center gap-2">
               <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span>Planta Arquitetura ........... 11 revestimentos, 7 portas</span>
+              <span>Alvenaria .................... 491,84 m (layer ARQ-ALV)</span>
             </div>
             <div class="flex items-center gap-2">
               <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span>Planta Forro ................. 10 tipos de luminárias</span>
+              <span>Forro de gesso ............... 1.017 m² (3 tipos de acabamento)</span>
             </div>
             <div class="flex items-center gap-2">
               <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span>Planta Pontos ................ 745 pontos elétricos</span>
+              <span>LED linear ................... 222,11 m (layer LUM-FORRO)</span>
             </div>
-            <div class="flex items-center gap-2 font-semibold text-indigo-600">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span>Pontos elétricos ............. 87 un (tomadas, dados, AC)</span>
+            </div>
+            <div class="flex items-center gap-2 text-amber-700">
+              <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
+              <span>3 itens marcados &quot;revisar&quot; (laranja) - qty fora do padrão</span>
+            </div>
+            <div class="flex items-center gap-2 font-semibold text-indigo-600 pt-1 border-t border-gray-100 mt-2">
               <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              <span>Planilha .xlsx gerada com sucesso!</span>
+              <span>126 itens em 16 disciplinas - planilha gerada em 3min 20s</span>
             </div>
           </div>
         </div>
