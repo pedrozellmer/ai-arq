@@ -411,7 +411,7 @@ Se a planta mostra uma residência (suíte, cozinha, lavabo, sala de estar), des
 
 ## ELEMENTOS EXISTENTES (em project_data.kept_elements)
 Liste TODOS os ambientes existentes visíveis no layout atual, como strings descritivas em português-br.
-Copie os nomes LITERAIS que estão escritos na planta (suíte, cozinha, lavabo, sala de estar, sala de reuniões, open plan, copa, etc.) — NÃO inventar ambientes que não aparecem. NÃO usar nomes de variáveis.
+Copie os nomes LITERAIS que estão escritos na planta — NÃO inventar ambientes que não aparecem. NÃO usar nomes de variáveis ou termos padrão "típicos".
 
 Formato das strings: "<quantidade/presença> <nome do ambiente como aparece na planta> — <características relevantes da planta>".
 

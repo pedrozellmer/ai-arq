@@ -31,9 +31,9 @@ _CACHE_TTL = 300  # 5 minutes
 def normalize_item_type(description: str) -> str:
     """Normalize a description into a stable key for calibration lookup.
 
-    Examples:
-        "Forro mineral modular Geometrone" -> "forro_mineral_modular_geometrone"
-        "Pintura acrilica Branco Neve"     -> "pintura_acrilica_branco_neve"
+    Converts the description to lowercase, strips accents, replaces
+    non-alphanumeric characters with underscores, and truncates to 50 chars.
+    Used as a stable lookup key regardless of how the description is written.
     """
     if not description:
         return ""
