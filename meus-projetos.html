@@ -96,14 +96,34 @@ function renderProjects(projects) {
       <a href="${API_BASE}/api/download/${p.job_id}" target="_blank" class="ml-3 text-emerald-600 hover:text-emerald-800 font-medium">Baixar</a>
     ` : '—';
 
+    // Busca % revisado em background (não bloqueia render da tabela)
+    setTimeout(async () => {
+      if (p.status !== 'done') return;
+      try {
+        const r = await fetch(`${API_BASE}/api/items/${p.job_id}/review-state`);
+        const d = await r.json();
+        const reviewed = d.count || 0;
+        const total = p.items_count || 1;
+        const pct = Math.round((reviewed / total) * 100);
+        const cell = document.querySelector(`tr[data-job="${p.job_id}"] .review-pct`);
+        if (cell) {
+          if (reviewed > 0 && reviewed < total) {
+            cell.innerHTML = `<span class="text-xs text-indigo-600">${pct}% revisado</span>`;
+          } else if (reviewed >= total) {
+            cell.innerHTML = '<span class="text-xs text-emerald-600">100% revisado</span>';
+          }
+        }
+      } catch (e) {}
+    }, 0);
+
     return `
-      <tr class="hover:bg-gray-50">
+      <tr class="hover:bg-gray-50" data-job="${escapeHtml(p.job_id)}">
         <td class="px-4 py-3">
           <p class="font-medium text-gray-800">${escapeHtml(p.project_name || 'Sem nome')}</p>
           <p class="text-xs text-gray-400">${escapeHtml(p.job_id)}</p>
         </td>
         <td class="px-4 py-3 text-gray-600 capitalize">${escapeHtml(p.typology || '--')}</td>
-        <td class="px-4 py-3 text-gray-700">${p.items_count || '--'}</td>
+        <td class="px-4 py-3 text-gray-700">${p.items_count || '--'} <span class="review-pct block"></span></td>
         <td class="px-4 py-3 text-gray-600">${p.files_count || 0}</td>
         <td class="px-4 py-3">${statusBadge}</td>
         <td class="px-4 py-3 text-gray-500 text-xs">${created}</td>
