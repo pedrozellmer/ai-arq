@@ -42,44 +42,117 @@ REGRAS OBRIGATÓRIAS:
 - Unidade "vb=1" com descrição genérica tipo "acabamentos diversos" é red flag
   de item-lixo — só gere se for verba-real que aparece na planta/memorial.
 
-## CONVENÇÕES DE DESENHO TÉCNICO BR (NBR 6492 / NBR 10067)
-Use essas regras pra interpretar corretamente o que você vê:
+## CONVENÇÕES DE DESENHO TÉCNICO BR
+Regras consolidadas de NBR 6492:2021 (representação de projetos arquitetônicos),
+NBR 8403 (aplicação de linhas), NBR 10067 (princípios gerais de representação),
+NBR 13532 (elaboração de projetos de edificações — arquitetura) e TCPO.
 
-### HIERARQUIA DE TRAÇOS (planta baixa)
-- **Traço GROSSO contínuo** = parede/elemento cortado pelo plano horizontal (o plano de corte da planta baixa está ~1,50m do piso). É o que você está orçando como "parede a construir" OU "parede existente".
-- **Traço FINO contínuo** = elementos em vista, não cortados (mobiliário, bancadas sob janela, soleiras).
-- **Traço TRACEJADO** = elemento OCULTO / ACIMA do plano de corte (vigas, armários aéreos, projeção de cobertura). NÃO orçar como parede — é projeção.
-- **Traço PONTILHADO / amarelo / hachura amarela** = elemento a DEMOLIR. Orça em demolição, não em construção.
-- **Hachura sólida cinza/preta** = parede/elemento EXISTENTE (manter).
-- **Hachura com linhas 45°** = parede/elemento NOVO (construir).
-- Regra do TCPO: vãos ≤ 2m² não descontam da área de parede. Vãos > 2m² descontam.
+### LINHAS — NBR 8403 + NBR 6492 (espessuras e significados)
+Relação entre linha larga e estreita é no MÍNIMO 2:1. Espessuras típicas em
+desenho arquitetônico: larga 0,7-1,0mm · média 0,5mm · estreita 0,25-0,35mm.
 
-### COTAS
-- **Plantas baixas**: cotas são HORIZONTAIS (largura × comprimento de ambientes).
-- **Cortes e elevações**: cotas são VERTICAIS (altura de peitoril, janela, porta, pé-direito, forro).
-- Cotas em sequência (ex: "1,20 | 0,80 | 2,40 | 0,90") devem ser SOMADAS pra dimensão total, não tratadas como alternativas.
-- Cota ENTRE FACES (interna) × ENTRE EIXOS (estrutural) — ler a convenção do carimbo.
-- Nível indicado como "+0,30" ou "-0,15" é em metros, relativo ao nível 0,00 (piso acabado térreo).
+- **Contínua LARGA (grossa)** → contornos visíveis principais; em planta
+  baixa representa o que é CORTADO pelo plano horizontal de corte (que
+  passa a ~1,50m do piso): paredes, pilares, divisórias. É o que você
+  orça como "parede a construir" OU "parede existente a manter".
+- **Contínua MÉDIA** → contornos secundários (bancadas, peitoris, batentes
+  rebatidos no piso).
+- **Contínua ESTREITA (fina)** → cotas, linhas de chamada, hachuras, linhas
+  auxiliares, contornos de detalhes pequenos. NÃO é parede.
+- **Tracejada** → elementos OCULTOS ou ACIMA do plano de corte: vigas no
+  teto, armários aéreos, projeção de cobertura, soleira embutida no piso.
+  NÃO orçar como parede — é projeção.
+- **Traço-ponto / Traço-dois-pontos** → eixos de simetria, linhas de centro,
+  limites de propriedade, contorno desenvolvido. Sem quantidade orçável.
+- **Pontilhada / hachura amarela** → convenção comum em plantas de reforma
+  pra elemento a DEMOLIR. Orça em DEMOLIÇÃO, não em construção nova.
 
-### ESCALAS
-- 1:100 = plantas gerais de layout (1cm no papel = 1m real).
-- 1:50 = plantas baixas de detalhamento.
-- 1:25 / 1:20 = detalhes construtivos (banheiros, cozinhas, escadas).
-- 1:200 = situação / implantação.
-- Use a escala indicada no carimbo pra conferir ordem de grandeza de medidas extraídas.
+### HACHURAS POR MATERIAL — NBR 6492
+Padrões visuais codificam o material do elemento cortado:
+- **Diagonal cruzada (#)** = alvenaria de tijolo/bloco cerâmico.
+- **Pontos dispersos** = concreto armado / concreto simples.
+- **Linhas paralelas (=)** = madeira (no corte transversal; em vista, textura
+  de veios curvos).
+- **Diagonal espaçada (/)** = vidro.
+- **Hachura sólida cinza/preta** = elemento EXISTENTE (que permanece em reforma).
+- **Hachura 45° linhas contínuas** = elemento NOVO a construir.
+- **Hachura 45° linhas tracejadas** ou cor amarela = DEMOLIR.
+Em caso de ambiguidade, SEMPRE buscar LEGENDA DE HACHURAS na prancha — o
+significado pode variar por escritório.
 
-### SÍMBOLOS COMUNS
-- **Arco de abertura** na planta = indica porta; cada arco = 1 porta. Direção do arco = lado que abre.
-- **Losango / triângulo no teto** = luminária (verificar legenda pra tipo específico).
-- **Círculo com cruz** = tomada; **retângulo com traço** = interruptor (convenções variam — priorizar LEGENDA de símbolos elétricos).
-- **Setas de porta de correr** = porta deslizante.
-- **H=nnn** ao lado de um ponto = altura de instalação em cm (H=110 = interruptor; H=30 = tomada baixa; H=220 = ponto pra AC).
+### COTAS — NBR 6492 (item 5.5) e TCPO
+- **Unidade única por desenho**: normalmente metro (1,20) ou centímetro (120).
+  Nunca misturar no mesmo desenho.
+- **Posição**: linha de cota PARALELA ao elemento medido, com setas ou
+  traços perpendiculares nas extremidades. Número LEGÍVEL sem girar a folha.
+- **Sequência de cotas** (ex.: "1,20 | 0,80 | 2,40 | 0,90"): são PARCIAIS que
+  devem ser SOMADAS pra dimensão total. NUNCA tratar como alternativas.
+- **Cota acumulada** (começa do 0): cada número é a distância desde o ponto
+  inicial — NÃO somar, é o valor absoluto em si.
+- **Plantas baixas**: cotas HORIZONTAIS (larguras, comprimentos).
+- **Cortes/elevações**: cotas VERTICAIS (altura peitoril, janela, porta,
+  pé-direito, forro).
+- **Níveis** "+0,30", "-0,15" são metros relativos ao piso acabado térreo (0,00).
+- **Cota ENTRE FACES (interna)** × **ENTRE EIXOS (estrutural)** — ler o carimbo.
+- **Regra TCPO de vãos em paredes**: vãos ≤ 2m² NÃO descontam da área de
+  parede; vãos > 2m² descontam o excedente. Aplicado a paredes de alvenaria
+  e divisórias em drywall.
 
-### QUADROS DE LEGENDA (fonte mais confiável)
-- Quadro de esquadrias: lista EXPLÍCITA com código (P1, J1...), dimensão, material, quantidade. **Se aparece, use como CONFIRMADO.**
-- Quadro de cargas luminárias: código (LM1, LUM-01...), potência, temperatura cor, fabricante, TOTAL na coluna à direita. Se o total numérico aparece, CONFIRMADO.
-- Quadro de pontos elétricos: símbolo + descrição. O quadro EXPLICA o símbolo mas geralmente NÃO dá o total — o total vem da contagem na planta.
-- Quadro de ambientes / programa de necessidades: áreas por cômodo. Se aparecer "Área total: X m²", é CONFIRMADO.
+### ESCALAS — NBR 6492 (item 4.5) + NBR 13532
+- **1:500 / 1:1000 / 1:2000** → implantação, situação, locação.
+- **1:100 / 1:200** → plantas gerais de layout (projeto básico/anteprojeto).
+- **1:50** → plantas baixas de detalhamento (projeto executivo principal).
+- **1:25 / 1:20** → detalhes construtivos (banheiros, cozinhas, escadas).
+- **1:10 / 1:5** → detalhes de caixilharia, rodapé, forro.
+- **1:1** → detalhe natural (raro, peças especiais).
+A escala aparece no carimbo. Use-a pra conferir ordem de grandeza de medidas.
+
+### FASE DO PROJETO — NBR 13532 (afeta como confiar nas qtds)
+Sequência de etapas: LV-ARQ (levantamento) → PN-ARQ (programa) → EV-ARQ
+(viabilidade) → EP-ARQ (estudo preliminar) → AP-ARQ / PR-ARQ (anteprojeto)
+→ PL-ARQ (projeto legal) → PB-ARQ (básico, opcional) → PE-ARQ (executivo).
+
+- **ESTUDO PRELIMINAR** → ideia geral; escala 1:200 ou 1:100; SEM
+  especificação detalhada. Quase tudo deve ser "estimado".
+- **ANTEPROJETO** (AP / PR) → plantas + cortes detalhados; escalas 1:100 a
+  1:50; especificações parciais (tipo de material, sem fabricante ainda).
+  Maior parte "estimado", alguns itens de legenda "confirmado".
+- **PROJETO LEGAL** (PL) → focado em aprovação; muita informação reduzida
+  porque serve pra prefeitura/bombeiros, não pra execução.
+- **PROJETO EXECUTIVO** (PE) → detalhamento COMPLETO pra execução; escalas
+  1:50 e detalhes 1:25/1:20/1:10; especificações FINAIS (fabricante,
+  modelo, cor, referência). Aqui sim muita coisa pode ser "confirmado".
+
+Ao ver "Fase" ou "Etapa" no carimbo da prancha, calibre a confidence:
+fases iniciais → mais laranja (estimado); executivo → mais branco (confirmado)
+quando os dados estiverem explícitos.
+
+### SÍMBOLOS COMUNS em plantas BR
+- **Arco de abertura** = porta; cada arco = 1 porta; direção do arco = lado
+  que abre. Porta de correr usa setas.
+- **Losango / triângulo / círculo no teto** = luminária. Tipo específico
+  SEMPRE vem da legenda de luminárias, nunca do símbolo sozinho.
+- **Símbolos elétricos** (tomada, interruptor, ponto de dados, sensor): a
+  convenção varia MUITO por escritório. SEMPRE priorizar a LEGENDA DE
+  PONTOS ELÉTRICOS da prancha sobre assumir significado.
+- **H=nnn** ao lado de um ponto = altura de instalação em cm (H=110
+  interruptor padrão; H=30 tomada baixa; H=220 tomada pra AC; H=154 etc.
+  específica do projeto).
+- **Nível ▽ +0,30** ou **⊽ -0,15** = cota vertical em metros relativa a 0,00.
+
+### QUADROS DE LEGENDA (fonte MAIS confiável)
+Quando um QUADRO aparece na prancha com TOTAL numérico explícito, use como
+"confirmado". Tipos comuns:
+- **Quadro de esquadrias**: código (P1, P2, J1, J2...) + dimensão + material
+  + quantidade por tipo. TOTAL explícito → confirmado.
+- **Quadro de cargas (luminárias)**: código (LM1, LUM-01...) + potência
+  + temperatura cor + fabricante/modelo + TOTAL na coluna direita.
+- **Quadro de pontos elétricos**: explica o símbolo; geralmente SEM total
+  (total vem da contagem na planta — marcar "estimado" se contado visual).
+- **Quadro de acabamentos / ambientes**: áreas por cômodo. Se "Área total:
+  X m²" aparece, é confirmado.
+- **Quadro de materiais / memorial descritivo**: fabricante, referência,
+  cor, modelo — use pra enriquecer descrição dos itens.
 
 ## QUANTIDADES PARA REFORMA
 - Orçar APENAS o que MUDA — não a totalidade da área
