@@ -516,20 +516,135 @@ def _pick_best_unit(units: list[str], description: str) -> str:
     return units[0] if units else "vb"
 
 
+def _pick_area_consensus(readings: list) -> float:
+    """Consenso de área entre leituras de várias pranchas.
+
+    Antes: cada prancha sobrescrevia o valor anterior — bug onde uma prancha
+    de detalhe com valor errado (135m² em vez de 270m² ou vice-versa)
+    "ganhava" simplesmente por ser a última processada. Resultado: área
+    dependia da ordem de processamento.
+
+    Agora: coleta todas as leituras, agrupa por similaridade (±5%), e
+    retorna a MODA (valor mais frequente). Empate resolvido pelo maior valor.
+
+    Exemplo:
+      leituras = [135.4, 135.4, 270.0, 135.0]  → winner bucket = [135.4, 135.4, 135.0] (3 pranchas)
+      → retorna ~135.3
+    """
+    vals = [float(v) for v in readings if v and float(v) > 0]
+    if not vals:
+        return 0.0
+    if len(vals) == 1:
+        return vals[0]
+
+    buckets: list[list[float]] = []
+    for v in vals:
+        placed = False
+        for bucket in buckets:
+            median = sum(bucket) / len(bucket)
+            if median > 0 and abs(v - median) / median <= 0.05:
+                bucket.append(v)
+                placed = True
+                break
+        if not placed:
+            buckets.append([v])
+
+    # Mais leituras = mais confiável. Empate: maior valor (laje bruta
+    # costuma ser o maior dos candidatos na dúvida).
+    buckets.sort(key=lambda b: (-len(b), -max(b)))
+    winner = buckets[0]
+    return round(sum(winner) / len(winner), 2)
+
+
+def _dedupe_rooms(rooms: list) -> list:
+    """Dedup de ambientes em kept_elements/new_rooms.
+
+    A IA extrai "BANHEIRO" de uma prancha e "Banheiro suíte" de outra; sem
+    dedup, ambos aparecem no resumo. Regra:
+    - Case-insensitive + remove acentos pra comparar
+    - Se um ambiente é substring do outro (ex.: "banheiro" ⊂ "banheiro
+      suíte"), mantém só o MAIS específico
+    - Preserva a forma original de escrita do item mantido
+    - Aceita itens como strings OU dicts (formato usado por new_rooms)
+    """
+    if not rooms:
+        return rooms
+
+    import unicodedata
+
+    def _key(r) -> str:
+        if isinstance(r, dict):
+            name = r.get("name", "")
+        else:
+            name = str(r or "")
+        s = name.lower().strip()
+        s = unicodedata.normalize("NFD", s)
+        s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+        s = _re.sub(r"[^a-z0-9]+", " ", s).strip()
+        return s
+
+    # Ordena por length decrescente — "banheiro suíte" vem antes de "banheiro"
+    # pra garantir que a versão mais específica seja mantida
+    sorted_rooms = sorted(rooms, key=lambda r: -len(_key(r)))
+    seen_keys: list[str] = []
+    out = []
+    for r in sorted_rooms:
+        k = _key(r)
+        if not k:
+            continue
+        # Se já vimos key igual ou key atual é substring de alguma já vista
+        # (ex.: "banheiro" enquanto já temos "banheiro suite"), pula
+        is_subset = any(k == s or k in s.split() and len(k.split()) == 1
+                        for s in seen_keys)
+        if is_subset:
+            continue
+        # Também: se key atual tem substring em comum de >=2 palavras com
+        # alguma já vista, considera duplicata (ex.: "sala de estar e jantar"
+        # vs "sala de estar" — ambos devem virar 1)
+        cur_tokens = set(k.split())
+        is_dup = False
+        for s in seen_keys:
+            overlap = cur_tokens & set(s.split())
+            if len(overlap) >= 2 and len(overlap) >= len(cur_tokens) * 0.6:
+                is_dup = True
+                break
+        if is_dup:
+            continue
+        seen_keys.append(k)
+        out.append(r)
+    return out
+
+
 def _consolidate_items(items: list) -> list:
-    """Consolida itens redundantes em duas passadas:
+    """Consolida itens redundantes em múltiplas passadas:
 
     PASSADA 1 — por (chave_normalizada, unidade):
     - Mesma chave + mesma qty + mesma unidade → mantém 1 (desc mais completa).
     - Mesma chave + mesma unidade + qtys diferentes → mantém todos.
     - Réplica por departamento (4+ itens, qty<2) → funde em 1 estimado.
 
-    PASSADA 2 — fusões mais agressivas (qty+discipline+noun):
+    PASSADA 2 — fusões qty+discipline+noun (qty >= 2):
     - Mesma qty_arredondada + mesma discipline + units diferentes →
-      funde (a IA gera o mesmo comprimento em m² e ml por variação de
-      descrição). Escolhe melhor unit.
+      funde. Escolhe melhor unit.
     - Mesma qty_arredondada + mesma discipline + mesma unit + primary_noun
-      igual → funde (mesmo tipo, duas descrições levemente diferentes).
+      igual → funde.
+
+    PASSADA 3 — fusões por FAMÍLIA em qty pequena (unit=un, vb, ml):
+    - Itens com mesmo primary_noun + mesma discipline + qty <= 2 +
+      descrições "quase iguais" (variantes de legenda "conforme
+      especificação XX") → consolida em 1 linha "NOUN — N un (várias
+      variantes)" somando qtys.
+    - Casos típicos: 6 portas "conforme especificação X" qty=1, 5 ralos,
+      4 luminárias LM1/LM2 duplicadas cross-prancha.
+
+    PASSADA 4 — agrupar luminárias por código LM*/LN*:
+    - Descrições tipo "Luminária LM1" extraídas de pranchas diferentes
+      viram 1 linha por código, somando qtys.
+
+    PASSADA 5 — filtrar itens "a definir" sem fonte real:
+    - Descrições/obs com "a definir", "por definir", "conforme projeto"
+      + qty=1 default + 3+ casos similares → consolida em 1 linha única
+      "Itens a especificar em projeto executivo".
     """
     from models import BudgetItem, Confidence
 
@@ -656,7 +771,224 @@ def _consolidate_items(items: list) -> list:
             )
             pass2.append(merged_item)
 
-    return pass2
+    # ═══════════════════════════════════════════════════════════════
+    #  PASSADA 3 — Famílias em qty pequena (un/ml/vb com qty<=2)
+    # ═══════════════════════════════════════════════════════════════
+    # Alvo: "Porta conforme especificação 08" qty=1 × 6 duplicadas;
+    # "Ralo sifonado" qty=1 × 5 vezes; "Mobilização" qty=1 × 3 vezes.
+    # A IA analisa cada prancha em isolamento e cria variantes da mesma
+    # família que passada 2 ignora (corte em qty>=2).
+    #
+    # Regra pra evitar falso-positivo: só funde se as descrições são
+    # "quase iguais" (começam com o mesmo noun + mesmas primeiras 3
+    # palavras OU todas contêm "especificação"/"conforme" como marca
+    # de item-de-legenda).
+    def _is_legend_variant(descs: list[str]) -> bool:
+        """True se as descrições parecem variações numéricas da mesma
+        linha de legenda (ex.: 'Porta conforme especificação 08', 09, 10)."""
+        markers = ("conforme especifica", "conforme projeto", "especifica",
+                   "a definir", "por definir", "conforme detalhe",
+                   "conforme indicado")
+        hits = sum(1 for d in descs if any(m in (d or "").lower() for m in markers))
+        # Se >=60% têm marca de legenda, trata como variante
+        return hits >= max(2, int(len(descs) * 0.6))
+
+    def _same_opening(descs: list[str], n_tokens: int = 3) -> bool:
+        """True se todas descrições começam com os mesmos n primeiros tokens
+        significativos (>3 chars, não-genéricos)."""
+        def _open(d):
+            norm = _normalize_description_key(d or "")
+            return " ".join(norm.split()[:n_tokens])
+        openings = {_open(d) for d in descs}
+        return len(openings) == 1 and next(iter(openings)) != ""
+
+    # Código de luminária (LM1, LM2, etc.) — se presente, separa o bucket
+    # pra passada 3 não misturar luminárias de códigos diferentes.
+    _lum_code_re_p3 = _re.compile(r"\b([LMN][MN]\d{1,2})\b", _re.IGNORECASE)
+
+    buckets_p3: dict = {}
+    keep_as_is: list = []
+    for it in pass2:
+        try:
+            qty_r = round(float(it.quantity or 0), 2)
+        except Exception:
+            qty_r = 0.0
+        # Só considera qty pequena (1, 1.5, 2); qty grandes já foram
+        # tratadas em passada 2
+        if qty_r > 2.0 or qty_r <= 0:
+            keep_as_is.append(it)
+            continue
+        if it.unit not in ("un", "ml", "vb", "cj"):
+            keep_as_is.append(it)
+            continue
+        noun = _primary_noun(it.description)
+        if not noun:
+            keep_as_is.append(it)
+            continue
+        # Código de luminária entra no key pra não misturar LM1 com LM2
+        code = _lum_code_re_p3.search(it.description or "")
+        code_tag = code.group(1).upper() if code else ""
+        # Bucket: discipline + primary_noun + unit + código LM (se houver)
+        key = (it.discipline or "", noun, it.unit, code_tag)
+        buckets_p3.setdefault(key, []).append(it)
+
+    pass3 = list(keep_as_is)
+    for (disc, noun, unit, code_tag), group in buckets_p3.items():
+        descs = [it.description for it in group]
+
+        # Critério de consolidação por nível de segurança:
+        #
+        # SEGURO — sempre consolida, mesmo com só 2 itens:
+        #   - unit=vb + mesmo noun (ex.: 3 "Mobilização" vb=1 é sempre erro;
+        #     vb não faz sentido duplicar)
+        #
+        # FORTE — consolida com 3+ itens se mesmo noun/disc/unit:
+        #   - un + mesmo noun ("Ralo" × 5, "Porta" × 6) são quase sempre
+        #     variantes da mesma família em pranchas diferentes
+        #
+        # BORDERLINE — precisa reforço (legenda-variant ou mesma abertura):
+        #   - ml + mesmo noun (rodapé de cozinha ≠ rodapé do banheiro)
+        #   - un com só 2 itens (pode ser 2 portas distintas legítimas)
+        should_merge = False
+        if unit == "vb" and len(group) >= 2:
+            should_merge = True  # vb duplicado é sempre erro
+        elif unit == "un" and len(group) >= 3:
+            should_merge = True  # 3+ un mesma família: provável duplicação
+        elif unit == "cj" and len(group) >= 2:
+            should_merge = True  # conjuntos duplicados
+        elif len(group) >= 3 and (_is_legend_variant(descs) or _same_opening(descs, 3)):
+            should_merge = True  # ml/etc só com reforço
+        elif len(group) >= 2 and _is_legend_variant(descs):
+            # 2 itens ambos com "conforme especificação" também funde
+            should_merge = True
+
+        if not should_merge:
+            pass3.extend(group)
+            continue
+
+        # Consolida
+        best = max(group, key=lambda x: len(x.description or ""))
+        total_qty = round(sum(float(it.quantity or 0) for it in group), 2)
+        # Remove sufixo numérico da legenda pra descrição limpa
+        clean = _re.sub(r"\s*(conforme\s+)?(especifica[çc][aã]o\s+\d+|especifica[çc][aã]o\b).*$",
+                        "", best.description, flags=_re.IGNORECASE).strip()
+        if not clean or len(clean) < 5:
+            clean = noun.capitalize()
+        consolidated = BudgetItem(
+            item_num=best.item_num,
+            description=f"{clean} — {len(group)} variantes consolidadas",
+            unit=unit,
+            quantity=total_qty,
+            observations=(
+                f"Consolidado de {len(group)} entradas com mesma família "
+                f"({noun}) — soma: {total_qty} {unit}. "
+                f"Ver legenda do projeto pra especificações individuais."
+            ),
+            ref_sheet=best.ref_sheet,
+            confidence=Confidence("estimado"),
+            discipline=disc,
+        )
+        pass3.append(consolidated)
+
+    # ═══════════════════════════════════════════════════════════════
+    #  PASSADA 4 — Luminárias por código LM*/LN*/LU*
+    # ═══════════════════════════════════════════════════════════════
+    # "Luminária LM1" extraída de 3 pranchas como 3 itens separados
+    # (qty 3 + 1 + 1) vira 1 linha (qty 5). Só aplicável em iluminação.
+    lum_code_re = _re.compile(r"\b([LMN][MN]\d{1,2})\b", _re.IGNORECASE)
+
+    def _lum_code(desc: str) -> str | None:
+        m = lum_code_re.search(desc or "")
+        return m.group(1).upper() if m else None
+
+    by_code: dict[str, list] = {}
+    pass4 = []
+    for it in pass3:
+        if (it.discipline or "").lower() != "iluminação".lower():
+            pass4.append(it)
+            continue
+        code = _lum_code(it.description)
+        if not code or it.unit != "un":
+            pass4.append(it)
+            continue
+        by_code.setdefault(code, []).append(it)
+
+    for code, group in by_code.items():
+        if len(group) == 1:
+            pass4.append(group[0])
+            continue
+        best = max(group, key=lambda x: len(x.description or ""))
+        total_qty = round(sum(float(it.quantity or 0) for it in group), 2)
+        total_qty_int = int(total_qty) if total_qty == int(total_qty) else total_qty
+        consolidated = BudgetItem(
+            item_num=best.item_num,
+            description=best.description,
+            unit="un",
+            quantity=float(total_qty_int),
+            observations=(
+                f"Consolidado — código {code} aparece em {len(group)} pranchas, "
+                f"somando {total_qty_int} unidades. Ver quadro de cargas "
+                f"do projeto pra confirmar total."
+            ),
+            ref_sheet=best.ref_sheet,
+            confidence=best.confidence,  # preserva confirmado se todos eram
+            discipline=best.discipline,
+        )
+        pass4.append(consolidated)
+
+    # ═══════════════════════════════════════════════════════════════
+    #  PASSADA 5 — Consolidar itens "a definir" sem fonte clara
+    # ═══════════════════════════════════════════════════════════════
+    # "Acabamento elétrico a definir" qty=1 × 3 vezes é noise —
+    # orçamentista já sabe que precisa de projeto executivo. Consolida
+    # em 1 linha única por disciplina.
+    def _is_vague(it) -> bool:
+        text = f"{it.description or ''} {it.observations or ''}".lower()
+        vague_markers = (
+            "a definir", "por definir", "a ser definida",
+            "acabamento elétrico a definir", "acabamentos elétricos a definir",
+            "especificação a definir",
+        )
+        has_vague = any(m in text for m in vague_markers)
+        short = (it.description or "").strip()
+        # Só marca como vago se qty=1/0 e unit vb/un e o texto é genérico
+        try:
+            qty_r = float(it.quantity or 0)
+        except Exception:
+            qty_r = 0.0
+        return has_vague and qty_r <= 1.0 and it.unit in ("un", "vb", "cj")
+
+    vague_by_disc: dict[str, list] = {}
+    pass5 = []
+    for it in pass4:
+        if _is_vague(it):
+            vague_by_disc.setdefault(it.discipline or "Complementares", []).append(it)
+        else:
+            pass5.append(it)
+
+    for disc, group in vague_by_disc.items():
+        if len(group) == 1:
+            pass5.append(group[0])
+            continue
+        # 2+ itens vagos mesma disciplina → consolida em 1 linha
+        best = max(group, key=lambda x: len(x.description or ""))
+        consolidated = BudgetItem(
+            item_num=best.item_num,
+            description=f"Itens de {disc.lower()} a especificar em projeto executivo",
+            unit="vb",
+            quantity=1.0,
+            observations=(
+                f"Consolidado de {len(group)} entradas genéricas "
+                f"(\"a definir\", \"conforme projeto\") sem especificação na "
+                f"legenda. Quantificar e especificar no projeto executivo."
+            ),
+            ref_sheet=best.ref_sheet,
+            confidence=Confidence("estimado"),
+            discipline=disc,
+        )
+        pass5.append(consolidated)
+
+    return pass5
 
 
 # Ranges plausíveis por unidade — valores fora disso indicam erro provável.
@@ -805,6 +1137,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
             except: return 0
 
         project_data = ProjectData()
+        # Acumulador de áreas: consenso ao final do loop (evita ordem de
+        # processamento decidir qual valor sobrevive)
+        _area_readings = {"total_area": [], "layout_area": [], "no_intervention_area": []}
 
         # Separar PDFs de DWG/DXF
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
@@ -1141,8 +1476,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # Extrair project_data
                         if "project_data" in result:
                             pd = result["project_data"]
-                            if pd.get("total_area"): project_data.total_area = sf(pd["total_area"])
-                            if pd.get("layout_area"): project_data.layout_area = sf(pd["layout_area"])
+                            # Acumula em vez de sobrescrever — resolvido via consenso depois
+                            for _fld in ("total_area", "layout_area", "no_intervention_area"):
+                                _v = pd.get(_fld)
+                                if _v:
+                                    _vf = sf(_v)
+                                    if _vf > 0:
+                                        _area_readings[_fld].append(_vf)
                             if pd.get("name") and not project_data.name: project_data.name = pd["name"]
                             if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
                             if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
@@ -1272,9 +1612,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # 4. Extrair dados do projeto
             if "project_data" in result:
                 pd = result["project_data"]
-                if pd.get("total_area"): project_data.total_area = sf(pd["total_area"])
-                if pd.get("layout_area"): project_data.layout_area = sf(pd["layout_area"])
-                if pd.get("no_intervention_area"): project_data.no_intervention_area = sf(pd["no_intervention_area"])
+                # Acumula em vez de sobrescrever — consenso ao final do loop
+                for _fld in ("total_area", "layout_area", "no_intervention_area"):
+                    _v = pd.get(_fld)
+                    if _v:
+                        _vf = sf(_v)
+                        if _vf > 0:
+                            _area_readings[_fld].append(_vf)
                 if pd.get("workstations"):
                     try: project_data.workstations = int(float(str(pd["workstations"]).replace('un','').strip()))
                     except: pass
@@ -1426,6 +1770,23 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # e escolhe o nome do que viu primeiro.
         if len(file_paths) > 1:
             project_data.name = f"Quantitativos — {len(file_paths)} arquivos processados"
+
+        # Dedup de ambientes (kept_elements/new_rooms) case-insensitive.
+        # A IA extrai de várias pranchas e acaba gerando "BANHEIRO" + "Banheiro"
+        # + "Banheiro suíte" como itens separados. Agrupa por forma canônica.
+        project_data.kept_elements = _dedupe_rooms(project_data.kept_elements)
+        project_data.new_rooms = _dedupe_rooms(project_data.new_rooms)
+
+        # Consenso de área: pega a MODA entre leituras de várias pranchas.
+        # Sem isso, a última prancha processada sobrescrevia — uma leitura
+        # errada da IA (135 vs 270 m²) dependia da ordem de análise.
+        project_data.total_area = _pick_area_consensus(_area_readings["total_area"])
+        project_data.layout_area = _pick_area_consensus(_area_readings["layout_area"])
+        project_data.no_intervention_area = _pick_area_consensus(_area_readings["no_intervention_area"])
+        for _fld, _reads in _area_readings.items():
+            if len(set(_reads)) > 1:
+                print(f"[area-consensus] {_fld}: leituras={_reads} → "
+                      f"escolhido={getattr(project_data, _fld)}")
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)
