@@ -7,7 +7,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -272,6 +272,7 @@ def _rpc_update_project_status(job_id: str, data: dict) -> bool:
 # ═══════════════════════════════════════════════════════════════
 
 PLANILHAS_BUCKET = "aiarq-planilhas"
+PRANCHAS_BUCKET = "aiarq-pranchas"  # PDFs originais pra "abrir prancha" na revisão inline
 
 
 def _supabase_storage_upload(local_path: str, remote_key: str) -> bool:
@@ -302,6 +303,47 @@ def _supabase_storage_upload(local_path: str, remote_key: str) -> bool:
         _supa_log(f"STORAGE upload {remote_key} ERR {type(e).__name__}: {e}")
         print(f"Storage upload error: {e}")
         return False
+
+
+def _supabase_storage_upload_pdf(local_path: str, job_id: str, filename: str) -> bool:
+    """Upload de PDF original de prancha pro bucket aiarq-pranchas.
+    Key: {job_id}/{filename}. Permite servir via /api/sheet/{job_id}?ref=...
+    pra revisão inline abrir em nova aba."""
+    import urllib.request, urllib.error
+    try:
+        with open(local_path, "rb") as f:
+            body = f.read()
+        # URL-encode filename pra caracteres especiais (acentos, espaços)
+        import urllib.parse as _up
+        remote_key = f"{job_id}/{_up.quote(filename)}"
+        url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{remote_key}"
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/pdf")
+        req.add_header("x-upsert", "true")
+        urllib.request.urlopen(req, timeout=60)
+        return True
+    except Exception as e:
+        _supa_log(f"STORAGE upload prancha {filename} ERR {type(e).__name__}: {e}")
+        print(f"[storage pranchas] upload {filename} error: {e}")
+        return False
+
+
+def _supabase_storage_download_pdf(job_id: str, filename: str) -> Optional[bytes]:
+    """Baixa o PDF original de uma prancha do Storage. Retorna None se falhar."""
+    import urllib.request, urllib.parse as _up
+    try:
+        remote_key = f"{job_id}/{_up.quote(filename)}"
+        url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{remote_key}"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=30)
+        return resp.read()
+    except Exception as e:
+        print(f"[storage pranchas] download {filename}: {e}")
+        return None
 
 
 def _supabase_storage_download(remote_key: str, local_path: str) -> bool:
@@ -1223,6 +1265,23 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # Separar PDFs de DWG/DXF
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
+
+        # Persistir PDFs originais no Storage pra serem abertos em nova aba
+        # durante a revisão inline (botão 👁 "Ver prancha"). Roda em background
+        # pra não atrasar o processamento — se falhar, só perde a feature do
+        # thumbnail, não afeta a planilha.
+        def _upload_pranchas_bg():
+            for _p in pdf_paths:
+                try:
+                    _fname = os.path.basename(_p)
+                    _supabase_storage_upload_pdf(_p, job_id, _fname)
+                except Exception:
+                    pass
+        try:
+            import threading as _t
+            _t.Thread(target=_upload_pranchas_bg, daemon=True).start()
+        except Exception:
+            pass
 
         # ── Pesos de progresso alinhados com percepção do usuário ──
         # A fase que o usuário percebe como "cada prancha processada" é a análise
@@ -3147,6 +3206,142 @@ async def admin_nps_responses(limit: int = 50):
         return {"responses": json.loads(resp.read().decode('utf-8'))}
     except Exception as e:
         raise HTTPException(500, f"Erro: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  SERVIR PRANCHA (pra revisão inline abrir em nova aba)
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/sheet/{job_id}")
+async def get_sheet_pdf(job_id: str, ref: str = ""):
+    """Serve o PDF original de uma prancha pro orçamentista abrir em nova aba
+    durante revisão. `ref` é o ref_sheet salvo no item (nome do arquivo).
+    Busca primeiro no /tmp local (hot cache); senão no Storage."""
+    from fastapi.responses import Response
+
+    if not ref:
+        raise HTTPException(400, "parâmetro 'ref' obrigatório (nome do arquivo da prancha)")
+
+    # Sanitize: só permite nome de arquivo, sem paths
+    safe_ref = os.path.basename(ref).strip()
+    if not safe_ref or not safe_ref.lower().endswith('.pdf'):
+        raise HTTPException(400, "ref deve ser um arquivo .pdf")
+
+    # 1) Hot cache local
+    local_path = os.path.join(WORK_DIR, job_id, safe_ref)
+    if os.path.exists(local_path):
+        try:
+            with open(local_path, "rb") as f:
+                data = f.read()
+            return Response(
+                content=data,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'inline; filename="{safe_ref}"'}
+            )
+        except Exception:
+            pass
+
+    # 2) Storage (persistente após redeploy)
+    data = _supabase_storage_download_pdf(job_id, safe_ref)
+    if data:
+        return Response(
+            content=data,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{safe_ref}"'}
+        )
+
+    raise HTTPException(404, f"Prancha '{safe_ref}' não encontrada")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  INSIGHTS DE REVISÕES (pra admin entender o que ajustar no motor)
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/admin/review-insights")
+async def admin_review_insights(days: int = 30, limit: int = 30):
+    """Agrega revisões recentes pra identificar padrões de erro do motor:
+    - Quais tipos de item são mais rejeitados (alucinação)?
+    - Quais edits são mais comuns (qty errada, unidade errada)?
+    - Quais comentários o usuário deixou (insights qualitativos)?
+
+    Serve pra eu (humano ou Claude) olhar e decidir o que ajustar no
+    SYSTEM_PROMPT ou nas regras de consolidação."""
+    import urllib.request, urllib.error, json
+
+    # 1) Busca reviews recentes (com JOIN manual pra pegar description do item)
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
+               f"?select=id,job_id,item_id,action,edits,comment,reviewed_at"
+               f"&reviewed_at=gte.{(datetime.utcnow() - timedelta(days=days)).isoformat()}"
+               f"&order=reviewed_at.desc&limit=1000")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=20)
+        reviews = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar reviews: {e}")
+
+    # 2) Enrich com descrição original do item (se ainda existe)
+    from collections import Counter
+    rejected_patterns = Counter()       # descrição normalizada → contagem de rejects
+    edit_patterns = Counter()           # (campo editado) → contagem
+    comments = []                       # textos de comentário
+    by_typology = Counter()             # typology → contagem total reviews
+
+    for r in reviews:
+        action = r.get("action", "")
+        comment = (r.get("comment") or "").strip()
+        if comment:
+            comments.append({
+                "comment": comment[:300],
+                "action": action,
+                "job_id": r.get("job_id"),
+                "at": r.get("reviewed_at"),
+            })
+
+        # Pra rejects/edits: tenta buscar a row original (pode ter sido deletada
+        # se action=reject, então guardamos na própria review)
+        item_id = r.get("item_id")
+        item_desc = None
+        if item_id:
+            try:
+                durl = (f"{SUPABASE_URL}/rest/v1/project_items"
+                        f"?id=eq.{item_id}&select=description,discipline")
+                dreq = urllib.request.Request(durl, method="GET")
+                dreq.add_header("apikey", SUPABASE_KEY)
+                dreq.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+                dresp = urllib.request.urlopen(dreq, timeout=5)
+                drows = json.loads(dresp.read().decode('utf-8'))
+                if drows:
+                    item_desc = drows[0].get("description", "")
+            except Exception:
+                pass
+
+        if action == "reject" and item_desc:
+            # Normaliza pra primeiras 3 palavras significativas
+            key = " ".join(item_desc.lower().split()[:3])
+            rejected_patterns[key] += 1
+
+        if action == "edit":
+            edits = r.get("edits") or {}
+            if isinstance(edits, dict):
+                for field in edits.keys():
+                    edit_patterns[field] += 1
+
+    return {
+        "period_days": days,
+        "total_reviews": len(reviews),
+        "rejected_top": [
+            {"pattern": k, "count": v}
+            for k, v in rejected_patterns.most_common(limit)
+        ],
+        "edit_fields_top": [
+            {"field": k, "count": v}
+            for k, v in edit_patterns.most_common(limit)
+        ],
+        "comments_recent": comments[:limit],
+    }
 
 
 if __name__ == "__main__":
