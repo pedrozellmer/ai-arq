@@ -193,6 +193,15 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         for elem in project.kept_elements:
             add_line(f'  • {elem}', fill=PatternFill('solid', fgColor='FFE0B2'))
 
+    # Avisos técnicos do motor (prancha órfã, legenda ausente, etc).
+    # Aparecem destacados em âmbar pra chamar atenção do orçamentista.
+    if project.warnings:
+        r += 1
+        add_title('⚠ AVISOS DO MOTOR — REVISAR')
+        for w in project.warnings:
+            add_line(f'  ⚠ {w}', bold=True,
+                     fill=PatternFill('solid', fgColor='FEF3C7'))
+
     # ================================================================
     # SHEET 2: ORÇAMENTO
     # ================================================================

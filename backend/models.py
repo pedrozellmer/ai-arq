@@ -49,6 +49,7 @@ class ProjectData(BaseModel):
     demolition_notes: list[str] = []
     new_rooms: list[str] = []
     kept_elements: list[str] = []
+    warnings: list[str] = []  # avisos gerados pela IA: prancha órfã, legenda faltante, status indefinido
 
 
 class ProcessingStatus(BaseModel):

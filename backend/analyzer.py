@@ -194,6 +194,31 @@ Quando um QUADRO aparece na prancha com TOTAL numérico explícito, use como
 - Área aberta que só muda mobiliário = NÃO orçar paredes/forro novos
 - Para alvenaria: SUBTRAIR vãos de portas e janelas
 
+## 🚨 REGRA HARD — STATUS "EXISTENTE" VS "NOVO"
+Em reformas (o caso comum no AI.arq), MUITOS itens da planta são MANTIDOS do
+ambiente original. A legenda/quadro de especificações da prancha indica o
+status. Marcas de EXISTENTE a reconhecer:
+- Palavra "EXISTENTE" literal (ex.: "BACIA - EXISTENTE", "PISO EXISTENTE")
+- "(EXISTENTE)" entre parênteses
+- "manter", "manter existente", "reaproveitar", "preservar"
+- Sufixo "_EX" no nome do arquivo ou elemento
+- Hachura cinza sólida em plantas de reforma (vs hachura 45° = novo)
+
+Quando detectar status EXISTENTE em um item:
+- NÃO coloque ele como custo de COMPRA no orçamento
+- Gere com description começando por "[EXISTENTE - manter] " + nome
+- discipline = "Complementares"
+- unit = "vb" e quantity = 0
+- observations cita fonte literal ("legenda: 05 BACIA - EXISTENTE")
+
+Atenção a casos híbridos: FORRO EXISTENTE + PINTURA NOVA são 2 itens separados.
+O forro entra como [EXISTENTE - manter] vb=0, mas a pintura é m² real.
+
+Se a prancha não tem status explícito e é reforma residencial em ambiente
+que tipicamente mantém (lavabo/banheiro sem reforma estrutural), marque
+louças e metais como "estimado" com observations "Status não indicado —
+confirmar se novo ou existente".
+
 ## PRECISÃO — REGRA DURA DE CONFIANÇA
 
 Cada item volta com um campo "confidence" que determina a cor na planilha final:
@@ -603,6 +628,70 @@ Pranchas de detalhe de ambiente (ex.: "DET BANHEIRO SUÍTE", "DET COZINHA", "DET
 - Detalhes construtivos de bancadas, nichos, prateleiras
 - Legenda de acabamentos específica do ambiente (quadro AFS ou similar)
 
+## 🚨 DETECÇÃO DE PRANCHA ÓRFÃ (COMPLEMENTAR FALTANDO)
+
+Pranchas de DETALHE DE AMBIENTE costumam vir em PARES:
+- **PLANTA BAIXA** do ambiente → contém o QUADRO DE ESPECIFICAÇÕES (legenda com
+  códigos 01-14 explicados)
+- **ELEVAÇÕES** do ambiente → mostra os códigos (01, 03, 07...) espalhados nas
+  paredes indicando onde cada acabamento vai
+
+Se você vê códigos numerados (01, 02, 03... 14) nas elevações MAS NÃO vê o
+quadro de especificações que explica cada número, a prancha está ÓRFÃ.
+
+**Quando detectar órfã**:
+- Em project_data.warnings, adicione: "Pr {filename}: códigos numéricos
+  (01-N) visíveis sem o quadro de especificações correspondente. Recomendamos
+  subir também a PLANTA BAIXA do mesmo ambiente pra interpretação correta
+  dos materiais e status (novo/existente)."
+- Ao extrair items, marque TODOS com observations começando por
+  "Status (novo/existente) não identificável sem quadro de especificações" e
+  confidence = "estimado".
+
+## 🚨 REGRA CRÍTICA — STATUS "EXISTENTE" vs "NOVO"
+
+Em reforma residencial, muitos itens são MANTIDOS do ambiente original. O quadro de
+especificações (legenda AFS, ESPECIFICAÇÕES, QUADRO DE ACABAMENTOS) frequentemente
+indica o STATUS de cada item. Palavras que marcam EXISTENTE:
+- "EXISTENTE" literal (ex.: "05 BACIA - EXISTENTE")
+- "manter", "manter existente", "reaproveitar"
+- "(EXISTENTE)" entre parênteses após o nome do item
+- "atual" ou sufixo "_EX" associado
+
+**Se o quadro diz "EXISTENTE" num item, NÃO gere esse item no orçamento de
+COMPRA**. Em vez disso, gere como:
+- description começa com "[EXISTENTE - manter] " + descrição do item
+- discipline = "Complementares"
+- unit = "vb"
+- quantity = 0 (sem custo de compra; usuário adiciona serviço de manutenção se
+  necessário)
+- observations: copiar literalmente o texto da legenda ("05 BACIA - EXISTENTE")
+
+Pintura de parede/forro pode ser NOVA mesmo que o substrato seja EXISTENTE.
+Exemplo: "04 TETO FORRO (EXISTENTE) PINTURA PVA BRANCA NEVE" — forro é
+mantido mas a PINTURA É NOVA. Gere DOIS itens:
+1. "[EXISTENTE - manter] Forro de gesso" (quantity=0, vb)
+2. "Pintura PVA branca neve em forro" (quantity=área_forro, m²)
+
+Se um item da legenda está sem status explícito (ex.: "06 PIA -"), assuma NOVO
+e marque "estimado" com obs "Status não indicado — confirmar com projeto".
+
+## LEITURA DO QUADRO DE ESPECIFICAÇÕES (FONTE PRINCIPAL)
+
+Se aparecer um quadro tipo "ESPECIFICAÇÕES" com numeração (01, 02, 03...),
+use-o como FONTE PRINCIPAL. Cada linha numerada corresponde a um item do
+ambiente. Os números mesmos aparecem nas elevações indicando a localização.
+
+Exemplo de quadro lido:
+```
+01  PISO E RODAPÉ - EXISTENTE
+02  PAREDES (ver elev.) TINTA ACRÍLICA BRANCA FOSCA, COR BRANCO NEVE
+14  ESPELHO FUMÊ 6mm APLICADO/COLADO SOBRE PAREDE
+```
+
+Gere 3 items correspondentes com status correto (01=existente, 02=novo pintura,
+14=novo espelho).
+
 {ambiente_context}
 
 ## O QUE EXTRAIR (discipline varia conforme item)
@@ -763,13 +852,31 @@ _TYPOLOGY_HINT = {
 
 def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                   typology: str = "office",
-                  ambiente: str = "") -> dict:
+                  ambiente: str = "",
+                  siblings: list = None) -> dict:
     base_prompt = PROMPTS_POR_TIPO.get(sheet.sheet_type, "Analise esta prancha de arquitetura e extraia todos os itens para orçamento. Retorne JSON com array 'items', cada item com: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline.")
+    siblings = siblings or []
 
     # Se for DETALHE_AMBIENTE, injetar contexto do ambiente específico no placeholder
     if sheet.sheet_type == SheetType.DETALHE_AMBIENTE:
         base_prompt = base_prompt.replace(
             "{ambiente_context}", _ambiente_context(ambiente) or "")
+
+    # Aviso sobre pranchas IRMÃS do mesmo ambiente. Sem isso, a IA processa
+    # cada prancha em isolamento e gera "prancha órfã" quando a planta baixa
+    # (com quadro de especificações) está em outro PDF e só recebeu este
+    # (elevações com códigos 01-14 sem legenda).
+    if siblings:
+        base_prompt = (
+            f"## IRMÃS DO MESMO AMBIENTE\n"
+            f"Esta prancha faz parte de um GRUPO de {len(siblings)+1} pranchas do "
+            f"mesmo ambiente. Outras pranchas deste ambiente processadas neste "
+            f"job: {', '.join(siblings)}.\n"
+            f"NÃO gere warning de 'prancha órfã' — os dados complementares "
+            f"(planta baixa / elevações / quadro de especificações) estão "
+            f"sendo processados em paralelo. Itens duplicados entre pranchas "
+            f"serão consolidados depois automaticamente.\n\n"
+        ) + base_prompt
 
     # Injetar contexto de tipologia antes do prompt específico da prancha.
     # Isso impede a IA de presumir "projeto corporativo" quando processa uma
@@ -909,6 +1016,7 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
             if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
             if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
             if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
+            if pd.get("warnings"): project_data.warnings.extend(pd["warnings"])
             if pd.get("name") and not project_data.name: project_data.name = pd["name"]
             if pd.get("address") and not project_data.address: project_data.address = pd["address"]
             if pd.get("architect") and not project_data.architect: project_data.architect = pd["architect"]

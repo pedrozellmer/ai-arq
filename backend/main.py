@@ -217,6 +217,7 @@ def _rpc_update_project_status(job_id: str, data: dict) -> bool:
         "p_layout_area":   data.get("layout_area"),
         "p_error_message": data.get("error_message"),
         "p_completed_at":  data.get("completed_at"),
+        "p_warnings":      data.get("warnings"),
     }
 
     try:
@@ -387,6 +388,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Filename", "Content-Disposition"],
 )
 
 # ── Instagram Agent (desativado por padrão, ativar manualmente via /api/instagram/toggle) ──
@@ -1724,6 +1726,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
         pdf_infos.sort(key=lambda x: priority.get(x[2].value, 99))
 
+        # Agrupar pranchas IRMÃS: pranchas do mesmo ambiente (ex.: DET LAVABO
+        # pode ter planta baixa + elevações em PDFs separados). Saber que
+        # existem irmãs evita warning de "prancha órfã" e permite o prompt
+        # cruzar informação entre elas (ex.: legenda de códigos 01-14 que
+        # está no PDF da planta mas não nas elevações).
+        from processor import identify_ambiente as _id_amb_sib
+        _siblings_map: dict[str, list[str]] = {}
+        for _p, _fn, _st in pdf_infos:
+            if _st == SheetType.DETALHE_AMBIENTE:
+                _amb = user_ambientes.get(_p, "") or _id_amb_sib(_fn)
+                if _amb:
+                    _siblings_map.setdefault(_amb, []).append(_fn)
+
         # Faixa de progresso reservada para PDFs: após cad_end_pct (se houver CAD) até 90%
         pdf_start_pct = cad_end_pct if has_cad else 5
         pdf_end_pct = 90
@@ -1771,7 +1786,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
             amb_for_sheet = user_ambientes.get(pdf_path, "") or (
                 _id_amb(filename) if sheet_type == SheetType.DETALHE_AMBIENTE else ""
             )
-            result = analyze_sheet(client, sheet, typology=typology, ambiente=amb_for_sheet)
+            # Irmãs: outras pranchas do mesmo ambiente (ex: LAVABO em 704+705)
+            siblings = []
+            if amb_for_sheet and amb_for_sheet in _siblings_map:
+                siblings = [s for s in _siblings_map[amb_for_sheet] if s != filename]
+            result = analyze_sheet(client, sheet, typology=typology,
+                                   ambiente=amb_for_sheet, siblings=siblings)
 
             # 4. Extrair dados do projeto
             if "project_data" in result:
@@ -1967,6 +1987,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
         # existem no xlsx — a revisão só poderia ser feita no Excel offline.
         _persist_items_to_supabase(job_id, all_items)
+
+        # Persistir warnings do motor (prancha órfã, legenda ausente) no
+        # campo `warnings` da tabela projects — exibido em Meus Projetos
+        # como alerta "precisa de complemento".
+        if getattr(project_data, 'warnings', None):
+            _supabase_update("projects", "job_id", job_id, {
+                "warnings": project_data.warnings,
+            })
 
         # Persistir no Supabase Storage pra sobreviver redeploy do Render
         # (o /tmp do dyno é volátil — sem isso, agente e download quebram).
@@ -3370,7 +3398,11 @@ async def get_sheet_pdf(job_id: str, ref: str = ""):
             return Response(
                 content=data,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'inline; filename="{filename}"'}
+                headers={
+                    "Content-Disposition": "inline",
+                    "X-Filename": filename,  # disponível via JS se frontend quiser
+                    "Cache-Control": "private, max-age=3600",
+                }
             )
         except Exception:
             pass
