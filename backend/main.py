@@ -12,6 +12,7 @@ from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from pydantic import BaseModel
 from dotenv import load_dotenv
 
 # Carregar .env do mesmo diretório do script
@@ -122,6 +123,84 @@ def _supabase_update(table, match_field, match_value, data):
         print(f"Supabase update error ({table} where {match_field}={match_value}): {type(e).__name__}: {e}")
         _supa_log(msg)
         return False
+
+
+_DISCIPLINE_TO_SECTION = {
+    "Serviços Preliminares":       "1. Serviços Preliminares",
+    "Demolição e Remoção":         "2. Demolição e Remoção",
+    "Fechamentos Verticais":       "3. Fechamentos Verticais",
+    "Revestimentos":               "4. Revestimentos",
+    "Pisos e Rodapés":             "5. Pisos e Rodapés",
+    "Forros":                      "6. Forros",
+    "Iluminação":                  "7. Iluminação",
+    "Instalações Elétricas e Dados":"8. Instalações Elétricas e Dados",
+    "Instalações Hidráulicas":     "9. Instalações Hidráulicas",
+    "Instalações de Gás":          "10. Instalações de Gás",
+    "Ar-Condicionado":             "11. Ar-Condicionado",
+    "Incêndio e Segurança":        "12. Incêndio e Segurança",
+    "Portas e Ferragens":          "13. Portas e Ferragens",
+    "Divisórias e Vidros":         "14. Divisórias e Vidros",
+    "Persianas e Cortinas":        "15. Persianas e Cortinas",
+    "Marcenaria":                  "16. Marcenaria",
+    "Mobiliário":                  "17. Mobiliário",
+    "Complementares":              "18. Complementares",
+}
+
+
+def _persist_items_to_supabase(job_id: str, items: list) -> int:
+    """Insere cada BudgetItem como row em project_items.
+    Permite revisão inline no navegador via endpoint /api/items/{job_id}.
+    Retorna quantos foram persistidos com sucesso."""
+    import urllib.request, urllib.error, json
+
+    rows = []
+    for idx, it in enumerate(items):
+        disc = getattr(it, "discipline", "") or "Complementares"
+        section = _DISCIPLINE_TO_SECTION.get(disc, f"99. {disc}")
+        rows.append({
+            "job_id": job_id,
+            "item_num": str(getattr(it, "item_num", "") or ""),
+            "description": (getattr(it, "description", "") or "")[:500],
+            "unit": (getattr(it, "unit", "") or "vb")[:20],
+            "quantity": float(getattr(it, "quantity", 0) or 0),
+            "observations": (getattr(it, "observations", "") or "")[:1000],
+            "ref_sheet": (getattr(it, "ref_sheet", "") or "")[:200],
+            "confidence": str(getattr(getattr(it, "confidence", None), "value", "estimado"))
+                          if hasattr(getattr(it, "confidence", None), "value")
+                          else str(getattr(it, "confidence", "estimado") or "estimado"),
+            "discipline": disc,
+            "section": section,
+            "sort_order": idx,
+        })
+
+    if not rows:
+        _supa_log(f"PERSIST items job={job_id} SKIP (empty)")
+        return 0
+
+    # Batch insert — REST do Supabase aceita array
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/project_items"
+        body = json.dumps(rows).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Prefer', 'return=minimal')
+        urllib.request.urlopen(req, timeout=30)
+        _supa_log(f"PERSIST items job={job_id} OK n={len(rows)}")
+        return len(rows)
+    except urllib.error.HTTPError as e:
+        try:
+            resp = e.read().decode('utf-8', errors='replace')[:500]
+        except Exception:
+            resp = '(unreadable)'
+        _supa_log(f"PERSIST items job={job_id} HTTP {e.code}: {resp}")
+        print(f"[persist_items] HTTP {e.code}: {resp}")
+        return 0
+    except Exception as e:
+        _supa_log(f"PERSIST items job={job_id} ERR {type(e).__name__}: {e}")
+        print(f"[persist_items] err: {e}")
+        return 0
 
 
 def _rpc_update_project_status(job_id: str, data: dict) -> bool:
@@ -1791,6 +1870,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)
 
+        # Persistir itens individuais no Supabase pra permitir revisão inline
+        # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
+        # existem no xlsx — a revisão só poderia ser feita no Excel offline.
+        _persist_items_to_supabase(job_id, all_items)
+
         # Persistir no Supabase Storage pra sobreviver redeploy do Render
         # (o /tmp do dyno é volátil — sem isso, agente e download quebram).
         _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
@@ -2780,6 +2864,289 @@ async def calibration_benchmarks(typology: Optional[str] = None):
         return {"status": "ok", "count": len(rows), "benchmarks": rows}
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar benchmarks: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  REVISÃO INLINE DE ITENS (feedback loop)
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/items/{job_id}")
+async def get_project_items(job_id: str):
+    """Retorna lista de itens individuais de um job pra revisão inline.
+    Usa RPC `list_project_items` pra bypassar RLS."""
+    import urllib.request, urllib.error, json
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+        body = json.dumps({"p_job_id": job_id}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=15)
+        items = json.loads(resp.read().decode('utf-8'))
+        return {"status": "ok", "job_id": job_id, "items": items, "count": len(items)}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar itens: {str(e)}")
+
+
+class ReviewPayload(BaseModel):
+    action: str                              # 'approve' | 'reject' | 'edit'
+    edits: Optional[dict] = None             # {description?, unit?, quantity?, discipline?, observations?}
+    comment: Optional[str] = ""
+    reviewed_by: Optional[str] = ""
+
+
+@app.post("/api/items/{job_id}/review/{item_id}")
+async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload):
+    """Registra uma revisão pra um item específico.
+    Se action='edit', também aplica os edits à row em project_items.
+    Insere sempre uma linha em item_reviews pra histórico/aprendizado."""
+    import urllib.request, urllib.error, json
+
+    action = (payload.action or "").strip().lower()
+    if action not in ("approve", "reject", "edit"):
+        raise HTTPException(400, "action inválida (use approve/reject/edit)")
+
+    # 1) Log da revisão
+    review_row = {
+        "job_id": job_id,
+        "item_id": item_id,
+        "action": action,
+        "edits": payload.edits or None,
+        "comment": payload.comment or "",
+        "reviewed_by": payload.reviewed_by or "",
+    }
+    _supabase_insert("item_reviews", review_row)
+
+    # 2) Aplicar edits à row original (se action=edit)
+    if action == "edit" and payload.edits:
+        safe_edits = {}
+        allowed = {"description", "unit", "quantity", "discipline", "observations"}
+        for k, v in payload.edits.items():
+            if k in allowed and v is not None:
+                safe_edits[k] = v
+        if safe_edits:
+            try:
+                url = f"{SUPABASE_URL}/rest/v1/project_items?id=eq.{item_id}"
+                body = json.dumps(safe_edits).encode('utf-8')
+                req = urllib.request.Request(url, data=body, method='PATCH')
+                req.add_header('apikey', SUPABASE_KEY)
+                req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+                req.add_header('Content-Type', 'application/json')
+                req.add_header('Prefer', 'return=minimal')
+                urllib.request.urlopen(req, timeout=15)
+            except Exception as e:
+                _supa_log(f"REVIEW edit item={item_id} ERR {e}")
+
+    # 3) Se rejeitado, deleta row do item (mantém review pra histórico)
+    if action == "reject":
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/project_items?id=eq.{item_id}"
+            req = urllib.request.Request(url, method='DELETE')
+            req.add_header('apikey', SUPABASE_KEY)
+            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Prefer', 'return=minimal')
+            urllib.request.urlopen(req, timeout=15)
+        except Exception as e:
+            _supa_log(f"REVIEW reject item={item_id} ERR {e}")
+
+    return {"status": "ok", "action": action}
+
+
+@app.post("/api/items/{job_id}/finalize")
+async def finalize_review(job_id: str):
+    """Regenera o .xlsx com as revisões aplicadas e sobe pro Storage.
+    Busca items atuais do Supabase (já com edits/rejects aplicados) e
+    passa pro generate_spreadsheet. Retorna URL de download."""
+    import urllib.request, urllib.error, json
+    from models import BudgetItem, Confidence, ProjectData
+    from spreadsheet import generate_spreadsheet
+
+    # 1) Buscar project metadata
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        resp = urllib.request.urlopen(req, timeout=15)
+        projects = json.loads(resp.read().decode('utf-8'))
+        if not projects:
+            raise HTTPException(404, "Projeto não encontrado")
+        proj = projects[0]
+    except urllib.error.HTTPError as e:
+        raise HTTPException(500, f"Erro Supabase: {e}")
+
+    # 2) Buscar items atuais (já revisados)
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+        body = json.dumps({"p_job_id": job_id}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=15)
+        rows = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar itens: {e}")
+
+    # 3) Reconstituir ProjectData + BudgetItems
+    pd = ProjectData(
+        name=proj.get("project_name", "") or "Projeto",
+        total_area=proj.get("total_area") or 0,
+        layout_area=proj.get("layout_area") or 0,
+    )
+    items = []
+    for r in rows:
+        try:
+            items.append(BudgetItem(
+                item_num=r.get("item_num", "") or "",
+                description=r.get("description", "") or "",
+                unit=r.get("unit", "vb") or "vb",
+                quantity=float(r.get("quantity") or 0),
+                observations=r.get("observations", "") or "",
+                ref_sheet=r.get("ref_sheet", "") or "",
+                confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
+                discipline=r.get("discipline", "Complementares") or "Complementares",
+            ))
+        except Exception:
+            continue
+
+    # 4) Gerar xlsx revisado
+    typology = proj.get("typology") or "office"
+    work_dir = os.path.join(WORK_DIR, job_id)
+    os.makedirs(work_dir, exist_ok=True)
+    output_path = os.path.join(work_dir, f"orcamento_{job_id}_revisado.xlsx")
+    generate_spreadsheet(pd, items, output_path, typology=typology)
+
+    # 5) Subir pra Storage sobrescrevendo o antigo
+    _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
+
+    return {
+        "status": "ok",
+        "job_id": job_id,
+        "items_count": len(items),
+        "download_url": f"/api/download/{job_id}",
+        "storage_uploaded": _storage_ok,
+    }
+
+
+@app.get("/api/projects/by-user/{user_id}")
+async def list_my_projects(user_id: str):
+    """Lista projetos de um usuário (pra tela 'Meus projetos').
+    Usa RPC list_user_projects (SECURITY DEFINER)."""
+    import urllib.request, urllib.error, json
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_user_projects"
+        body = json.dumps({"p_user_id": user_id}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=15)
+        projects = json.loads(resp.read().decode('utf-8'))
+        return {"status": "ok", "user_id": user_id, "projects": projects, "count": len(projects)}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar projetos: {str(e)}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  NPS (Net Promoter Score)
+# ═══════════════════════════════════════════════════════════════
+
+class NPSPayload(BaseModel):
+    user_id: str
+    score: int                               # 0-10
+    comment: Optional[str] = ""
+    context: Optional[str] = "manual"        # 'after_download' | 'after_review' | 'manual' | 'first_project'
+    user_email: Optional[str] = ""
+    user_name: Optional[str] = ""
+    job_id: Optional[str] = ""
+
+
+@app.post("/api/nps")
+async def submit_nps(payload: NPSPayload):
+    """Registra uma resposta NPS. Score 0-10 obrigatório, comentário opcional."""
+    if payload.score < 0 or payload.score > 10:
+        raise HTTPException(400, "score deve estar entre 0 e 10")
+    if not payload.user_id:
+        raise HTTPException(400, "user_id obrigatório")
+
+    row = {
+        "user_id": payload.user_id,
+        "user_email": payload.user_email or "",
+        "user_name": payload.user_name or "",
+        "score": int(payload.score),
+        "comment": (payload.comment or "")[:2000],
+        "context": (payload.context or "manual")[:50],
+        "job_id": payload.job_id or "",
+    }
+    ok = _supabase_insert("nps_responses", row)
+    category = "promoter" if payload.score >= 9 else "passive" if payload.score >= 7 else "detractor"
+    return {"status": "ok" if ok else "error", "category": category}
+
+
+@app.get("/api/nps/check/{user_id}")
+async def should_show_nps(user_id: str):
+    """Verifica se o usuário já respondeu NPS recentemente (últimos 60 dias).
+    Frontend usa isso pra não mostrar o widget repetidamente."""
+    import urllib.request, urllib.error, json
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/nps_responses"
+               f"?user_id=eq.{user_id}&select=created_at"
+               f"&order=created_at.desc&limit=1")
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        resp = urllib.request.urlopen(req, timeout=10)
+        rows = json.loads(resp.read().decode('utf-8'))
+        if not rows:
+            return {"should_show": True, "last_answered": None}
+        last = rows[0].get("created_at")
+        # 60 dias de cooldown
+        from datetime import timedelta
+        try:
+            dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
+            days_since = (datetime.utcnow().replace(tzinfo=dt.tzinfo) - dt).days
+            return {"should_show": days_since >= 60, "last_answered": last, "days_since": days_since}
+        except Exception:
+            return {"should_show": False, "last_answered": last}
+    except Exception as e:
+        return {"should_show": False, "error": str(e)}
+
+
+@app.get("/api/admin/nps/summary")
+async def admin_nps_summary(days: int = 30):
+    """Dashboard admin: resumo agregado de NPS."""
+    import urllib.request, urllib.error, json
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/get_nps_summary"
+        body = json.dumps({"p_days": days}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=10)
+        rows = json.loads(resp.read().decode('utf-8'))
+        return rows[0] if rows else {}
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
+
+
+@app.get("/api/admin/nps/responses")
+async def admin_nps_responses(limit: int = 50):
+    """Dashboard admin: respostas recentes com comentários (insights qualitativos)."""
+    import urllib.request, urllib.error, json
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_nps_responses"
+        body = json.dumps({"p_limit": limit}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=10)
+        return {"responses": json.loads(resp.read().decode('utf-8'))}
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
 
 
 if __name__ == "__main__":
