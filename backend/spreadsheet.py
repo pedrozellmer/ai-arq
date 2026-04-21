@@ -138,7 +138,9 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             add_line(f'Área laje bruta: {_total:,.1f} m² | Área layout: a confirmar | Sem intervenção: {_nointer:,.1f} m²')
         else:
             add_line(f'Área laje bruta: {_total:,.1f} m² | Área layout: {_layout:,.1f} m² | Sem intervenção: {_nointer:,.1f} m²')
-    if project.workstations:
+    # "Posições de trabalho" só faz sentido em escritório/escola.
+    # Em residencial/hospital/varejo é campo sem significado.
+    if project.workstations and typology in ("office", "educational"):
         add_line(f'Posições de trabalho: {project.workstations}')
     r += 1
 
@@ -231,10 +233,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     if project.total_area:
         premissas.append(('0.1', 'Área construída — perímetro externo da laje', 'm²', project.total_area, '', ''))
     if project.no_intervention_area:
-        premissas.append(('0.2', 'Área sem intervenção (core)', 'm²', project.no_intervention_area, '', ''))
+        # "core" é jargão de escritório (elevadores/escadas/banheiros comuns)
+        label_noint = 'Área sem intervenção (core)' if typology == "office" else 'Área sem intervenção'
+        premissas.append(('0.2', label_noint, 'm²', project.no_intervention_area, '', ''))
     if project.layout_area:
         premissas.append(('0.3', 'Área utilizada para layout / intervenção', 'm²', project.layout_area, '', ''))
-    if project.workstations:
+    if project.workstations and typology in ("office", "educational"):
         premissas.append(('0.4', 'Posições de trabalho', 'un', project.workstations, 'Conforme quadro de departamentos', ''))
 
     # Premissas são metadados do projeto (não itens orçáveis) — fill cinza claro

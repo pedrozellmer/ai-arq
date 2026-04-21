@@ -526,9 +526,10 @@ def _consolidate_items(items: list) -> list:
 
     PASSADA 2 — fusões mais agressivas (qty+discipline+noun):
     - Mesma qty_arredondada + mesma discipline + units diferentes →
-      funde (ex.: LED LINE m² vs ml com qty 222.11). Escolhe melhor unit.
+      funde (a IA gera o mesmo comprimento em m² e ml por variação de
+      descrição). Escolhe melhor unit.
     - Mesma qty_arredondada + mesma discipline + mesma unit + primary_noun
-      igual → funde (ex.: alvenaria 491.84 ml × 2 descrições diferentes).
+      igual → funde (mesmo tipo, duas descrições levemente diferentes).
     """
     from models import BudgetItem, Confidence
 
@@ -725,7 +726,8 @@ def _validate_quantity_for_unit(item) -> tuple[float, bool]:
     qty = float(item.quantity) if item.quantity is not None else 0
     if item.unit == "un":
         if qty != int(qty):
-            # un com decimal é suspeito (ex.: "un=222.11")
+            # un com decimal é suspeito (ex.: IA confunde um comprimento
+            # em ml com contagem e devolve un=NNN.NN).
             # Se for "quase inteiro" (ex.: 9.0001), arredonda. Senão zera.
             if abs(qty - round(qty)) < 0.01:
                 return float(round(qty)), True
@@ -990,8 +992,9 @@ QUANDO MARCAR "estimado" (LARANJA)
 ════════════════════════════════════════════════════════
 
 **NÃO seja tímido com "confirmado" quando o DADO EXISTE.** Se o DXF tem um
-comprimento (ex.: "ARQ-DIV: 491.84 m") e você está orçando a divisória dessa
-layer, use 491.84 ml como "confirmado" — é uma medição objetiva.
+comprimento somado de polylines de uma layer (ex.: layer de divisória com um
+valor em metros), use esse valor como "confirmado" — é uma medição objetiva
+direta do arquivo.
 
 Você só deve marcar "estimado" (laranja) nos casos abaixo:
 
@@ -1012,8 +1015,9 @@ Você só deve marcar "estimado" (laranja) nos casos abaixo:
     suspeite de dupla contagem e marque estimado.
 
 **NÃO marque estimado só por precaução em valores medidos.** Se COMPRIMENTOS
-POR LAYER dá 491.84 m pra ARQ-DIV, use 491.84 confirmado. Não desconfie do
-número só porque vem de soma de linhas — medir soma de linhas É a medição.
+POR LAYER te dá um valor em metros pra uma layer de projeto, use esse valor
+como confirmado. Não desconfie do número só porque vem de soma de linhas —
+medir soma de linhas É a medição.
 
 ════════════════════════════════════════════════════════
 LEV- vs FOR- — convenção de layers em reforma (regra B acima)
@@ -1042,13 +1046,12 @@ RACIOCÍNIO:
 Passo 1 — Inventário de layers:
   Para cada LAYER relevante, uma linha:
     "<nome do layer>: <tipo de dado> — <quantidade extraída> — representa <item>"
-  Exemplo: "FOR-MFR: área hachurada — 79.66 m² — forro modular novo"
-  Ignore layers de anotação, xrefs e aux.
+  Use os nomes de layer DESTE arquivo. Ignore layers de anotação, xrefs e aux.
 
 Passo 2 — Checagem de LEV vs FOR:
-  Liste pares conflitantes (mesmo tipo em layer LEV e FOR).
-  Para cada par, diga qual escolheu e por quê.
-  Exemplo: "LEV-MFR 2150m² vs FOR-MFR 79m² — escolhi FOR-MFR (novo projeto)"
+  Liste pares conflitantes (mesmo tipo em layer LEV/existente e FOR/novo).
+  Para cada par, diga qual escolheu e por quê (geralmente o layer de projeto
+  NOVO vence sobre o de levantamento do existente).
 
 Passo 3 — Plausibilidade:
   Para cada grupo de itens, verifique se a soma faz sentido:
@@ -1069,8 +1072,8 @@ Depois do raciocínio, retorne o JSON em bloco de código (```json...```):
     "name": "",
     "total_area": 0,
     "layout_area": 0,
-    "workstations": 0,
-    "departments": [],
+    "workstations": 0,  // apenas pra ESCRITÓRIOS; em residencial/clínica etc deixe 0
+    "departments": [],  // apenas pra escritório/escola; em residencial use new_rooms
     "demolition_notes": [],
     "new_rooms": [],
     "kept_elements": []
@@ -1090,9 +1093,10 @@ Depois do raciocínio, retorne o JSON em bloco de código (```json...```):
 }}
 
 REGRA DA OBSERVATION: o campo "observations" deve SEMPRE citar a fonte exata
-do número no DXF — ex.: "Fonte: 85 INSERTs do bloco 'lum. R5 remanejada'"
-ou "Fonte: área hachurada do layer FOR-MFR = 79.66 m²". Isso permite que o
-revisor humano confirme direto no arquivo."""
+do número no DXF, usando os nomes de layer/bloco desta prancha — ex.:
+"Fonte: <N> INSERTs do bloco '<nome_bloco_real>'" ou "Fonte: área hachurada
+do layer '<nome_layer_real>' = <valor> m²". Nunca invente nomes de layer ou
+bloco — só cite os que estão no inventário deste arquivo."""
 
                     try:
                         from llm_retry import call_with_retry as _llm_retry
@@ -1336,9 +1340,9 @@ revisor humano confirme direto no arquivo."""
 
         # ── Consolidação pós-IA ──
         jobs.update_field(job_id, progress=91)
-        # Remove duplicatas similares (ex.: "alvenaria nova" × 4 pranchas com
-        # mesma qty 491.84 ml), consolida réplicas por departamento (painel
-        # 0.72m² × 16 deptos) e valida un=inteiro (corrige "un=222.11").
+        # Remove duplicatas similares (mesmo item com qty idêntica repetido em
+        # múltiplas pranchas), consolida réplicas por departamento/zona e valida
+        # un=inteiro (corrige quando a IA devolve un com decimais suspeitos).
         jobs.update_field(job_id, current_step="Consolidando itens duplicados...")
         n_before = len(all_items)
         all_items = _consolidate_items(all_items)
