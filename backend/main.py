@@ -1257,9 +1257,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         jobs.update_field(job_id, current_step="Iniciando processamento...")
 
         # Funções auxiliares (definir antes de usar)
+        from analyzer import _normalize_br_number as _norm_br
         def sf(v):
+            """Converte valor (string ou número) em float, respeitando notação
+            PT-BR: vírgula pode ser decimal. Antes usávamos replace(',', '')
+            que transformava '135,4' em 1354 — área de casa virava 10x maior."""
             if v is None: return 0
-            s = str(v).replace('m²','').replace('m2','').replace('cm','').replace(',','').strip()
+            s = str(v).replace('m²','').replace('m2','').replace('cm','').strip()
+            s = _norm_br(s)
             try: return float(s)
             except: return 0
 
@@ -1824,13 +1829,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         obs_raw = (f"{obs_raw} | Unidade ajustada de {original_unit} "
                                    f"para {normalized_unit}").strip(" |")
 
+                    # ref_sheet SEMPRE tem o filename real pra que o botão
+                    # "Ver prancha" na revisão inline funcione. Hint da IA
+                    # vai entre parênteses se for diferente do nome.
+                    ia_hint = (item_data.get("ref_sheet") or "").strip()
+                    if ia_hint and ia_hint.lower() not in filename.lower():
+                        _ref = f"{filename} ({ia_hint[:60]})"
+                    else:
+                        _ref = filename
                     item = BudgetItem(
                         item_num=str(item_data.get("item_num", "")),
                         description=desc,
                         unit=normalized_unit,
                         quantity=qty,
                         observations=obs_raw,
-                        ref_sheet=item_data.get("ref_sheet", f"Pr.{filename[:7]}"),
+                        ref_sheet=_ref,
                         confidence=Confidence(conf),
                         discipline=discipline,
                     )
@@ -3240,23 +3253,116 @@ async def admin_nps_responses(limit: int = 50):
 #  SERVIR PRANCHA (pra revisão inline abrir em nova aba)
 # ═══════════════════════════════════════════════════════════════
 
+def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
+    """Dado um ref_sheet (que pode vir como nome exato, descrição da IA, ou
+    concatenação 'filename (hint)'), encontra o filename real do PDF:
+
+    1. Se `ref` termina em .pdf e existe no hot cache → usa direto.
+    2. Se `ref` tem formato "filename.pdf (hint)" → extrai o filename antes do "(".
+    3. Fuzzy match: lista PDFs do job no /tmp OU no Storage, escolhe o que
+       tem maior substring overlap com `ref`.
+
+    Retorna o filename encontrado ou None.
+    """
+    import urllib.request
+    ref_clean = (ref or "").strip()
+    if not ref_clean:
+        return None
+
+    # Remover sufixo "(hint da IA)" se houver
+    if "(" in ref_clean and ref_clean.endswith(")"):
+        ref_clean = ref_clean.split("(")[0].strip()
+
+    # Caso direto: já é um filename .pdf válido
+    if ref_clean.lower().endswith(".pdf"):
+        candidate = os.path.basename(ref_clean)
+        # Verificar se existe
+        if os.path.exists(os.path.join(WORK_DIR, job_id, candidate)):
+            return candidate
+        # Senão, tenta no Storage (via list)
+        try:
+            url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+            import json as _j
+            body = _j.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
+            req = urllib.request.Request(url, data=body, method="POST")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Content-Type", "application/json")
+            resp = urllib.request.urlopen(req, timeout=10)
+            files = _j.loads(resp.read().decode("utf-8"))
+            names = [f.get("name", "") for f in files]
+            for n in names:
+                # Storage keys são URL-encoded
+                from urllib.parse import unquote
+                if unquote(n) == candidate:
+                    return candidate
+        except Exception:
+            pass
+
+    # Fuzzy match: lista PDFs locais + Storage, acha melhor match
+    candidates = set()
+    local_dir = os.path.join(WORK_DIR, job_id)
+    if os.path.isdir(local_dir):
+        for fn in os.listdir(local_dir):
+            if fn.lower().endswith(".pdf"):
+                candidates.add(fn)
+    try:
+        from urllib.parse import unquote
+        url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        import json as _j2
+        body = _j2.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=10)
+        for f in _j2.loads(resp.read().decode("utf-8")):
+            n = unquote(f.get("name", ""))
+            if n.lower().endswith(".pdf"):
+                candidates.add(n)
+    except Exception:
+        pass
+
+    if not candidates:
+        return None
+
+    # Tokeniza o ref e cada candidato; retorna o candidato com mais tokens
+    # em comum (case-insensitive, ignorando caracteres não-alfanum).
+    import re as _re
+    def _tokens(s):
+        return set(t for t in _re.split(r"[^a-z0-9]+", s.lower()) if len(t) > 1)
+    ref_tok = _tokens(ref_clean)
+    if not ref_tok:
+        return None
+    best, best_score = None, 0
+    for c in candidates:
+        score = len(ref_tok & _tokens(c))
+        if score > best_score:
+            best_score = score
+            best = c
+    return best if best_score >= 1 else None
+
+
 @app.get("/api/sheet/{job_id}")
 async def get_sheet_pdf(job_id: str, ref: str = ""):
     """Serve o PDF original de uma prancha pro orçamentista abrir em nova aba
-    durante revisão. `ref` é o ref_sheet salvo no item (nome do arquivo).
-    Busca primeiro no /tmp local (hot cache); senão no Storage."""
+    durante revisão. `ref` pode ser:
+    - Nome exato do arquivo (ex: "225.AFS.500.PONTOS_EX.pdf")
+    - Descrição da IA (ex: "Pontos Elétricos") — faz fuzzy match
+    - Filename + hint ("225.AFS.500.PONTOS_EX.pdf (Pontos Elétricos)")
+
+    Busca primeiro no /tmp local; senão no Storage."""
     from fastapi.responses import Response
 
     if not ref:
-        raise HTTPException(400, "parâmetro 'ref' obrigatório (nome do arquivo da prancha)")
+        raise HTTPException(400, "parâmetro 'ref' obrigatório")
 
-    # Sanitize: só permite nome de arquivo, sem paths
-    safe_ref = os.path.basename(ref).strip()
-    if not safe_ref or not safe_ref.lower().endswith('.pdf'):
-        raise HTTPException(400, "ref deve ser um arquivo .pdf")
+    filename = _find_prancha_file(job_id, ref)
+    if not filename:
+        raise HTTPException(404, f"Prancha correspondente a '{ref}' não encontrada")
 
     # 1) Hot cache local
-    local_path = os.path.join(WORK_DIR, job_id, safe_ref)
+    local_path = os.path.join(WORK_DIR, job_id, filename)
     if os.path.exists(local_path):
         try:
             with open(local_path, "rb") as f:
@@ -3264,21 +3370,54 @@ async def get_sheet_pdf(job_id: str, ref: str = ""):
             return Response(
                 content=data,
                 media_type="application/pdf",
-                headers={"Content-Disposition": f'inline; filename="{safe_ref}"'}
+                headers={"Content-Disposition": f'inline; filename="{filename}"'}
             )
         except Exception:
             pass
 
     # 2) Storage (persistente após redeploy)
-    data = _supabase_storage_download_pdf(job_id, safe_ref)
+    data = _supabase_storage_download_pdf(job_id, filename)
     if data:
         return Response(
             content=data,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'inline; filename="{safe_ref}"'}
+            headers={"Content-Disposition": f'inline; filename="{filename}"'}
         )
 
-    raise HTTPException(404, f"Prancha '{safe_ref}' não encontrada")
+    raise HTTPException(404, f"Prancha '{filename}' não encontrada no Storage")
+
+
+@app.get("/api/items/{job_id}/review-state")
+async def get_review_state(job_id: str):
+    """Retorna as revisões já feitas nesse job pra restaurar o estado no
+    browser quando o user volta pra terminar depois.
+
+    Retorna mapa {item_id: {action, edits, comment, reviewed_at}} com a
+    última review de cada item."""
+    import urllib.request, urllib.error, json
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
+               f"?job_id=eq.{job_id}"
+               f"&select=item_id,action,edits,comment,reviewed_at"
+               f"&order=reviewed_at.desc&limit=2000")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=15)
+        reviews = json.loads(resp.read().decode("utf-8"))
+        # Manter só a MAIS RECENTE por item (supabase retorna ordenado desc)
+        state = {}
+        for r in reviews:
+            iid = r.get("item_id")
+            if iid and iid not in state:
+                state[iid] = {
+                    "action": r.get("action"),
+                    "comment": r.get("comment") or "",
+                    "reviewed_at": r.get("reviewed_at"),
+                }
+        return {"status": "ok", "job_id": job_id, "state": state, "count": len(state)}
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar state: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════

@@ -3,10 +3,43 @@
 import base64
 import json
 import os
+import re
 from pathlib import Path
 import anthropic
 from models import SheetType, SheetInfo, BudgetItem, ProjectData, Confidence
 from llm_retry import call_with_retry
+
+
+def _normalize_br_number(s: str) -> str:
+    """Normaliza número em notação PT-BR/EN pra float parseável.
+
+    Regra: o ÚLTIMO separador (. ou ,) na string é o DECIMAL;
+    todos os outros são milhar e são removidos. Funciona tanto pra
+    "135,4" (BR = 135.4) quanto "1.354,00" (BR = 1354.0) quanto
+    "1,354.00" (EN = 1354.0).
+
+    Exemplos:
+      "135,4"      -> "135.4"
+      "1.354,00"   -> "1354.00"
+      "1,354.00"   -> "1354.00"
+      "13540"      -> "13540"
+      "1 354"      -> "1354"
+    """
+    if not s:
+        return s
+    s = s.strip().replace(" ", "")
+    # Posição do último . e da última ,
+    last_dot = s.rfind('.')
+    last_com = s.rfind(',')
+    if last_dot == -1 and last_com == -1:
+        return s
+    # O decimal é o separador que vem POR ÚLTIMO
+    if last_com > last_dot:
+        # vírgula é decimal → remove pontos (milhar), troca vírgula por ponto
+        return s.replace('.', '').replace(',', '.')
+    else:
+        # ponto é decimal → remove vírgulas (milhar)
+        return s.replace(',', '')
 
 
 SYSTEM_PROMPT = """Você é um engenheiro de custos especialista em leitura de pranchas de arquitetura brasileiras e levantamento quantitativo para concorrência de obras.
@@ -842,14 +875,22 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
 
         # Extrair dados do projeto
         def safe_float(val):
-            """Converte valor para float, limpando unidades (m², cm, etc)."""
+            """Converte valor para float, limpando unidades (m², cm, etc).
+
+            BUG HISTÓRICO: antes fazia `.replace(',', '')` — isso transformava
+            "135,4" (notação PT-BR) em "1354" — área de casa virava 10x maior.
+            Regra correta: vírgula e ponto podem ser separador decimal OU de
+            milhar. O ÚLTIMO separador na string é o decimal; outros são milhar.
+            """
             if val is None: return 0
-            s = str(val).replace('m²', '').replace('m2', '').replace('cm', '').replace(',', '').strip()
+            s = str(val).replace('m²', '').replace('m2', '').replace('cm', '').strip()
+            s = _normalize_br_number(s)
             try: return float(s)
             except: return 0
 
         def safe_int(val):
-            s = str(val).replace('un', '').replace(',', '').strip()
+            s = str(val).replace('un', '').strip()
+            s = _normalize_br_number(s)
             try: return int(float(s))
             except: return 0
 
@@ -915,7 +956,15 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                     unit=item_data.get("unit", "vb"),
                     quantity=qty,
                     observations=item_data.get("observations", ""),
-                    ref_sheet=item_data.get("ref_sheet", f"Pr.{sheet.filename[:7]}"),
+                    # ref_sheet SEMPRE contém o nome real do arquivo da prancha.
+                    # Antes, a IA podia retornar descrições ("Pontos Elétricos")
+                    # que não batem com o filename e quebram o link "Ver prancha".
+                    # Guardamos o filename + (opcional) hint da IA entre parênteses.
+                    ref_sheet=(f"{sheet.filename}"
+                               + (f" ({item_data.get('ref_sheet','')[:60]})"
+                                  if item_data.get('ref_sheet') and
+                                  item_data.get('ref_sheet').lower() not in sheet.filename.lower()
+                                  else "")),
                     confidence=Confidence(conf),
                     discipline=discipline,
                 )

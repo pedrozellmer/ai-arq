@@ -62,6 +62,11 @@
         <span><span id="count-edited"   class="font-semibold text-amber-600">0</span> editados</span>
         <span><span id="count-pending"  class="font-semibold text-gray-600">0</span> pendentes</span>
       </div>
+      <button id="btn-save-later" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+        title="Salvar progresso e continuar depois em Meus Projetos">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Salvar e terminar depois
+      </button>
       <button id="btn-export" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Exportar .xlsx
@@ -231,14 +236,28 @@ let commentingItem = null;
 // ═══════════════════════════════════════════════
 async function loadItems() {
   try {
-    const res = await fetch(`${API_BASE}/api/items/${jobId}`);
-    const data = await res.json();
-    items = data.items || [];
+    // Carrega itens + state de revisão em paralelo
+    const [itemsRes, stateRes] = await Promise.all([
+      fetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()),
+      fetch(`${API_BASE}/api/items/${jobId}/review-state`).then(r => r.json()).catch(() => ({state: {}})),
+    ]);
+    items = itemsRes.items || [];
+    // Restaura state persistido: aprovar/remover/editar anteriores
+    const persisted = (stateRes && stateRes.state) || {};
+    Object.entries(persisted).forEach(([itemId, rev]) => {
+      const a = rev.action;
+      reviewState[itemId] = a === 'approve' ? 'approved'
+                          : a === 'reject' ? 'rejected'
+                          : a === 'edit'   ? 'edited'
+                          : 'pending';
+    });
+    const alreadyReviewed = Object.keys(reviewState).length;
     document.getElementById('project-meta').textContent =
-      `${items.length} itens · job ${jobId}`;
+      `${items.length} itens · job ${jobId}` +
+      (alreadyReviewed ? ` · ${alreadyReviewed} já revisados` : '');
     render();
   } catch (e) {
-    toast('Erro ao carregar itens: ' + e.message);
+    toast('Erro ao carregar: ' + e.message);
   }
 }
 
@@ -428,6 +447,21 @@ async function submitComment() {
 // ═══════════════════════════════════════════════
 // EXPORT
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// SALVAR E TERMINAR DEPOIS
+// ═══════════════════════════════════════════════
+document.getElementById('btn-save-later').addEventListener('click', () => {
+  const pending = items.filter(it => !reviewState[it.id] || reviewState[it.id] === 'pending').length;
+  const msg = pending > 0
+    ? `Progresso salvo! Você ainda tem ${pending} itens pendentes.\n\nVoltar pra "Meus Projetos" — você pode terminar a revisão depois.`
+    : 'Progresso salvo! Voltando pra "Meus Projetos".';
+  toast('✓ Progresso salvo');
+  setTimeout(() => {
+    alert(msg);
+    window.location.href = 'meus-projetos.html';
+  }, 600);
+});
+
 document.getElementById('btn-export').addEventListener('click', async () => {
   const btn = document.getElementById('btn-export');
   btn.disabled = true;
