@@ -32,6 +32,55 @@ REGRAS OBRIGATÓRIAS:
 - cj = conjunto (ferragens complementares)
 - ATENÇÃO: Limpeza de obra = vb (NÃO m²), Proteção de áreas = vb (NÃO m²)
 
+## REGRA DO "VB" (IMPORTANTE — fonte: Manual IOPES, Lei 8666/93)
+- Só use "vb" pra itens que GENUINAMENTE não se medem (mobilização, ADM local, seguro).
+- **NÃO** use "vb" como fuga quando você não conseguiu quantificar um item
+  mensurável. Ex: "Instalação de ar-condicionado" NÃO é vb — tem N equipamentos
+  a instalar; "Pintura" NÃO é vb — tem m². Se você não conseguiu medir um item
+  que OBVIAMENTE tem unidade (un/m²/ml), marque com a unidade correta e
+  `quantity=0` (orçamentista preenche) em vez de forçar "vb=1".
+- Unidade "vb=1" com descrição genérica tipo "acabamentos diversos" é red flag
+  de item-lixo — só gere se for verba-real que aparece na planta/memorial.
+
+## CONVENÇÕES DE DESENHO TÉCNICO BR (NBR 6492 / NBR 10067)
+Use essas regras pra interpretar corretamente o que você vê:
+
+### HIERARQUIA DE TRAÇOS (planta baixa)
+- **Traço GROSSO contínuo** = parede/elemento cortado pelo plano horizontal (o plano de corte da planta baixa está ~1,50m do piso). É o que você está orçando como "parede a construir" OU "parede existente".
+- **Traço FINO contínuo** = elementos em vista, não cortados (mobiliário, bancadas sob janela, soleiras).
+- **Traço TRACEJADO** = elemento OCULTO / ACIMA do plano de corte (vigas, armários aéreos, projeção de cobertura). NÃO orçar como parede — é projeção.
+- **Traço PONTILHADO / amarelo / hachura amarela** = elemento a DEMOLIR. Orça em demolição, não em construção.
+- **Hachura sólida cinza/preta** = parede/elemento EXISTENTE (manter).
+- **Hachura com linhas 45°** = parede/elemento NOVO (construir).
+- Regra do TCPO: vãos ≤ 2m² não descontam da área de parede. Vãos > 2m² descontam.
+
+### COTAS
+- **Plantas baixas**: cotas são HORIZONTAIS (largura × comprimento de ambientes).
+- **Cortes e elevações**: cotas são VERTICAIS (altura de peitoril, janela, porta, pé-direito, forro).
+- Cotas em sequência (ex: "1,20 | 0,80 | 2,40 | 0,90") devem ser SOMADAS pra dimensão total, não tratadas como alternativas.
+- Cota ENTRE FACES (interna) × ENTRE EIXOS (estrutural) — ler a convenção do carimbo.
+- Nível indicado como "+0,30" ou "-0,15" é em metros, relativo ao nível 0,00 (piso acabado térreo).
+
+### ESCALAS
+- 1:100 = plantas gerais de layout (1cm no papel = 1m real).
+- 1:50 = plantas baixas de detalhamento.
+- 1:25 / 1:20 = detalhes construtivos (banheiros, cozinhas, escadas).
+- 1:200 = situação / implantação.
+- Use a escala indicada no carimbo pra conferir ordem de grandeza de medidas extraídas.
+
+### SÍMBOLOS COMUNS
+- **Arco de abertura** na planta = indica porta; cada arco = 1 porta. Direção do arco = lado que abre.
+- **Losango / triângulo no teto** = luminária (verificar legenda pra tipo específico).
+- **Círculo com cruz** = tomada; **retângulo com traço** = interruptor (convenções variam — priorizar LEGENDA de símbolos elétricos).
+- **Setas de porta de correr** = porta deslizante.
+- **H=nnn** ao lado de um ponto = altura de instalação em cm (H=110 = interruptor; H=30 = tomada baixa; H=220 = ponto pra AC).
+
+### QUADROS DE LEGENDA (fonte mais confiável)
+- Quadro de esquadrias: lista EXPLÍCITA com código (P1, J1...), dimensão, material, quantidade. **Se aparece, use como CONFIRMADO.**
+- Quadro de cargas luminárias: código (LM1, LUM-01...), potência, temperatura cor, fabricante, TOTAL na coluna à direita. Se o total numérico aparece, CONFIRMADO.
+- Quadro de pontos elétricos: símbolo + descrição. O quadro EXPLICA o símbolo mas geralmente NÃO dá o total — o total vem da contagem na planta.
+- Quadro de ambientes / programa de necessidades: áreas por cômodo. Se aparecer "Área total: X m²", é CONFIRMADO.
+
 ## QUANTIDADES PARA REFORMA
 - Orçar APENAS o que MUDA — não a totalidade da área
 - Carpete existente que PERMANECE = NÃO orçar demolição nem reposição
