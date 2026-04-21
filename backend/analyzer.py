@@ -570,6 +570,12 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
     client = anthropic.Anthropic(api_key=api_key)
     all_items = []
     project_data = ProjectData()
+    # Coleta TODAS as leituras de área em pranchas diferentes pra não ficar
+    # dependente da ordem de processamento. Antes: sobrescrevia a cada prancha
+    # — bug em que uma prancha de detalhe com valor errado (ou soma) apagava o
+    # valor correto extraído de outra. Solução: pegar a MODA (consenso) entre
+    # todas as leituras.
+    area_readings = {"total_area": [], "layout_area": [], "no_intervention_area": []}
 
     # Ordenar: layout novo primeiro (pega dados do projeto), depois demolição, depois o resto
     priority = {
@@ -610,9 +616,14 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
 
         if "project_data" in result:
             pd = result["project_data"]
-            if pd.get("total_area"): project_data.total_area = safe_float(pd["total_area"])
-            if pd.get("layout_area"): project_data.layout_area = safe_float(pd["layout_area"])
-            if pd.get("no_intervention_area"): project_data.no_intervention_area = safe_float(pd["no_intervention_area"])
+            # Coleta leituras em vez de sobrescrever. Resolve depois fora do
+            # loop via _pick_area_consensus.
+            for field in ("total_area", "layout_area", "no_intervention_area"):
+                v = pd.get(field)
+                if v:
+                    val = safe_float(v)
+                    if val > 0:
+                        area_readings[field].append(val)
             if pd.get("workstations"): project_data.workstations = safe_int(pd["workstations"])
             if pd.get("departments"): project_data.departments = pd["departments"]
             if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
@@ -676,5 +687,40 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
 
     if progress_callback:
         progress_callback(len(sorted_sheets), len(sorted_sheets), "Análise concluída!")
+
+    # Consenso de áreas: pega o valor mais frequente (MODA). Tolerância ±5%
+    # pra agrupar leituras próximas (ex.: 135.0 e 135.4 = mesma área).
+    def _pick_area_consensus(readings: list[float]) -> float:
+        if not readings:
+            return 0
+        if len(readings) == 1:
+            return readings[0]
+        # Agrupa valores em buckets com tolerância de 5%
+        buckets: list[list[float]] = []
+        for v in readings:
+            placed = False
+            for bucket in buckets:
+                median = sum(bucket) / len(bucket)
+                if median > 0 and abs(v - median) / median <= 0.05:
+                    bucket.append(v)
+                    placed = True
+                    break
+            if not placed:
+                buckets.append([v])
+        # Pega o bucket com MAIS leituras (moda). Empate: maior valor
+        # (laje bruta costuma ser o maior dos candidatos).
+        buckets.sort(key=lambda b: (-len(b), -max(b)))
+        winner = buckets[0]
+        # Retorna a média do bucket vencedor (ou mediana se impar, média ok)
+        return round(sum(winner) / len(winner), 2)
+
+    project_data.total_area = _pick_area_consensus(area_readings["total_area"])
+    project_data.layout_area = _pick_area_consensus(area_readings["layout_area"])
+    project_data.no_intervention_area = _pick_area_consensus(area_readings["no_intervention_area"])
+
+    # Log das leituras pra debug — quando der divergência, fica claro
+    for field, reads in area_readings.items():
+        if len(set(reads)) > 1:
+            print(f"[area-consensus] {field}: leituras={reads} → escolhido={getattr(project_data, field)}")
 
     return project_data, all_items
