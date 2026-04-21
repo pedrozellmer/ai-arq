@@ -1246,45 +1246,134 @@
     // antiga se o usuário trocou os arquivos enquanto isso.
     estimatePriceForFiles(selectedFiles).catch(() => {});
 
-    // Auto-detectar tipo pela nome do arquivo
-    function guessType(name) {
+    // Auto-detectar tipo + ambiente pelo nome do arquivo.
+    // Retorna {type, ambiente} — ambiente só preenchido se type=detalhe_ambiente.
+    function guessTypeAndAmbiente(name) {
       const n = name.toLowerCase();
-      if (n.includes('demolir') || n.includes('demoli')) return 'demolir';
-      if (n.includes('layout') && n.includes('novo')) return 'layout_novo';
-      if (n.includes('layout') && n.includes('atual')) return 'layout_atual';
-      if (n.includes('layout')) return 'layout_novo';
-      if (n.includes('mobili')) return 'mobiliario';
-      if (n.includes('marcenaria')) return 'marcenaria';
-      if (n.includes('arquitetura')) return 'arquitetura';
-      if (n.includes('ponto')) return 'pontos';
-      if (n.includes('piso')) return 'piso';
-      if (n.includes('det') && n.includes('forro')) return 'det_forro';
-      if (n.includes('forro')) return 'forro';
-      return '';
+
+      // 1) Detecta AMBIENTE primeiro — mais específico
+      const ambienteMap = [
+        [/banh(?:eiro)?[\s_\-.]*(?:suite|su[íi]te|master)/, 'banheiro_suite'],
+        [/banh(?:eiro)?[\s_\-.]*(?:social|visitas?|secund|escrit)/, 'banheiro_social'],
+        [/banh(?:eiro)?/,                          'banheiro_social'],
+        [/lavabo/,                                  'lavabo'],
+        [/coz(?:inha)?[\s_\-.]*(?:e|\+)?[\s_\-.]*area[\s_\-.]*gourmet/, 'cozinha'],
+        [/area[\s_\-.]*gourmet|varanda[\s_\-.]*gourmet/, 'area_gourmet'],
+        [/coz(?:inha)?/,                            'cozinha'],
+        [/lavand(?:eria)?/,                         'lavanderia'],
+        [/dormit(?:o|ó)rio/,                        'dormitorio'],
+        [/(?:master[\s_\-]+)?suite|su[íi]te/,       'suite'],
+        [/closet/,                                  'closet'],
+        [/sala[\s_\-]*(?:de\s+)?(?:estar|jantar)/,  'sala'],
+        [/sala[\s_\-]*(?:de\s+)?reuni/,             'sala_reuniao'],
+        [/(?:^|[^a-z])sala(?:[^a-z]|$)/,            'sala'],
+        [/varanda|terraco|terraço|sacada/,          'varanda'],
+        [/home[\s_\-]*office|escrit(?:o|ó)rio/,     'home_office'],
+      ];
+      const hasDet = /\bdet[\s_\-.]|\bamp[\s_\-.]|\bdetalha?[\s_\-]/i.test(n);
+
+      // 2) Prioridade tipo > detalhe
+      if (n.includes('demolir') || n.includes('demoli')) return {type:'demolir', ambiente:''};
+      if (n.includes('det') && n.includes('forro')) return {type:'det_forro', ambiente:''};
+      if (n.includes('rack') || n.includes('estante') || n.includes('marcenaria') ||
+          /banc(?:ada|ão).*granito/i.test(n)) return {type:'marcenaria', ambiente:''};
+      if (n.includes('mobili')) return {type:'mobiliario', ambiente:''};
+
+      // 3) Se tem "DET" + palavra de ambiente → detalhe_ambiente
+      for (const [rex, amb] of ambienteMap) {
+        if (rex.test(n)) {
+          return { type: 'detalhe_ambiente', ambiente: amb };
+        }
+      }
+
+      // 4) Senão, tipo geral
+      if (n.includes('layout') && n.includes('novo')) return {type:'layout_novo', ambiente:''};
+      if (n.includes('layout') && n.includes('atual')) return {type:'layout_atual', ambiente:''};
+      if (n.includes('layout')) return {type:'layout_atual', ambiente:''};
+      if (n.includes('arquitetura')) return {type:'arquitetura', ambiente:''};
+      if (n.includes('ponto') || n.includes('eletrica') || n.includes('elétrica')) return {type:'pontos', ambiente:''};
+      if (n.includes('piso')) return {type:'piso', ambiente:''};
+      if (n.includes('forro')) return {type:'forro', ambiente:''};
+      return { type: '', ambiente: '' };
     }
 
+    // Monta o <select> com optgroups baseados na tipologia escolhida.
+    const projTypology = (document.getElementById('project-typology')?.value || 'office').toLowerCase();
+    const ambienteOpts = {
+      residential: [
+        ['suite',           'Det. Suíte'],
+        ['dormitorio',      'Det. Dormitório'],
+        ['sala',            'Det. Sala (estar/jantar)'],
+        ['cozinha',         'Det. Cozinha'],
+        ['area_gourmet',    'Det. Área Gourmet / Varanda Gourmet'],
+        ['lavanderia',      'Det. Lavanderia'],
+        ['lavabo',          'Det. Lavabo'],
+        ['banheiro_suite',  'Det. Banheiro Suíte'],
+        ['banheiro_social', 'Det. Banheiro Social'],
+        ['home_office',     'Det. Home Office / Escritório'],
+        ['closet',          'Det. Closet'],
+        ['varanda',         'Det. Varanda / Área Externa'],
+      ],
+      office: [
+        ['sala_reuniao',    'Det. Sala de Reunião'],
+        ['open_plan',       'Det. Open Plan'],
+        ['recepcao',        'Det. Recepção'],
+        ['copa',            'Det. Copa'],
+        ['banheiro_social', 'Det. Banheiros (core)'],
+        ['diretoria',       'Det. Diretoria'],
+      ],
+      hospital: [
+        ['consultorio',     'Det. Consultório'],
+        ['sala_procedimento','Det. Sala de Procedimento'],
+        ['recepcao',        'Det. Recepção'],
+      ],
+      retail: [
+        ['loja',            'Det. Loja / Showroom'],
+        ['provador',        'Det. Provador'],
+      ],
+      educational: [
+        ['sala_aula',       'Det. Sala de Aula'],
+      ],
+    };
+    const ambientList = ambienteOpts[projTypology] || ambienteOpts.office;
+
     selectedFiles.forEach((file, idx) => {
-      const guessed = guessType(file.name);
+      const {type: guessed, ambiente: guessedAmb} = guessTypeAndAmbiente(file.name);
       const div = document.createElement('div');
       div.className = 'flex items-center gap-3 bg-white rounded-lg border px-4 py-3';
+
+      // valor combinado: "tipo" ou "detalhe_ambiente:banheiro_suite"
+      const selValue = (guessed === 'detalhe_ambiente' && guessedAmb)
+        ? `detalhe_ambiente:${guessedAmb}`
+        : guessed;
+
+      const ambienteOpts = ambientList.map(([k, label]) =>
+        `<option value="detalhe_ambiente:${k}" ${selValue === `detalhe_ambiente:${k}` ? 'selected' : ''}>${label}</option>`
+      ).join('');
+
       div.innerHTML = `
         <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium text-gray-800 truncate">${file.name}</p>
           <p class="text-xs text-gray-400">${formatSize(file.size)}</p>
         </div>
-        <select data-idx="${idx}" class="file-type-select text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none">
+        <select data-idx="${idx}" class="file-type-select text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none max-w-xs">
           <option value="" ${!guessed ? 'selected' : ''}>Tipo da prancha</option>
-          <option value="demolir" ${guessed==='demolir'?'selected':''}>Demoli\u00e7\u00e3o</option>
-          <option value="layout_atual" ${guessed==='layout_atual'?'selected':''}>Layout Atual</option>
-          <option value="layout_novo" ${guessed==='layout_novo'?'selected':''}>Layout Novo</option>
-          <option value="arquitetura" ${guessed==='arquitetura'?'selected':''}>Arquitetura</option>
-          <option value="pontos" ${guessed==='pontos'?'selected':''}>Pontos El\u00e9tricos</option>
-          <option value="piso" ${guessed==='piso'?'selected':''}>Pisos</option>
-          <option value="forro" ${guessed==='forro'?'selected':''}>Forro / Ilumina\u00e7\u00e3o</option>
-          <option value="det_forro" ${guessed==='det_forro'?'selected':''}>Det. Forro</option>
-          <option value="mobiliario" ${guessed==='mobiliario'?'selected':''}>Mobili\u00e1rio</option>
-          <option value="marcenaria" ${guessed==='marcenaria'?'selected':''}>Marcenaria</option>
+          <optgroup label="— Pranchas gerais —">
+            <option value="demolir" ${guessed==='demolir'?'selected':''}>Demolição</option>
+            <option value="layout_atual" ${guessed==='layout_atual'?'selected':''}>Layout Atual</option>
+            <option value="layout_novo" ${guessed==='layout_novo'?'selected':''}>Layout Novo</option>
+            <option value="arquitetura" ${guessed==='arquitetura'?'selected':''}>Arquitetura</option>
+            <option value="pontos" ${guessed==='pontos'?'selected':''}>Pontos (elétrica / hidráulica)</option>
+            <option value="piso" ${guessed==='piso'?'selected':''}>Pisos</option>
+            <option value="forro" ${guessed==='forro'?'selected':''}>Forro / Iluminação</option>
+            <option value="det_forro" ${guessed==='det_forro'?'selected':''}>Det. Forro</option>
+            <option value="mobiliario" ${guessed==='mobiliario'?'selected':''}>Mobiliário</option>
+            <option value="marcenaria" ${guessed==='marcenaria'?'selected':''}>Marcenaria</option>
+          </optgroup>
+          <optgroup label="— Detalhes por ambiente —">
+            ${ambienteOpts}
+          </optgroup>
         </select>
         <button data-idx="${idx}" class="btn-remove-file text-gray-400 hover:text-red-500 transition p-1 shrink-0">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -1465,13 +1554,24 @@
 
       // Se o usuário escolheu o tipo de cada prancha no dropdown, manda
       // em paralelo aos arquivos. String vazia = "auto-detecta no backend".
+      // Formato: value pode ser "tipo" (ex: "forro") ou "detalhe_ambiente:banheiro_suite"
       // A ordem dos selects no DOM corresponde à ordem dos arquivos.
       const typeSelects = Array.from(document.querySelectorAll('.file-type-select'));
-      const sheetTypes = selectedFiles.map((f, idx) => {
+      const sheetTypes = [];
+      const sheetAmbientes = [];
+      selectedFiles.forEach((f, idx) => {
         const sel = typeSelects[idx];
-        return (sel && sel.value) ? sel.value : '';
+        const raw = (sel && sel.value) ? sel.value : '';
+        if (raw.startsWith('detalhe_ambiente:')) {
+          sheetTypes.push('detalhe_ambiente');
+          sheetAmbientes.push(raw.slice('detalhe_ambiente:'.length));
+        } else {
+          sheetTypes.push(raw);
+          sheetAmbientes.push('');
+        }
       });
       sheetTypes.forEach(st => formData.append('sheet_types', st));
+      sheetAmbientes.forEach(a => formData.append('sheet_ambientes', a));
 
       const projectName = (document.getElementById('project-name')?.value || '').trim();
       const typology = document.getElementById('project-typology')?.value || 'office';

@@ -561,6 +561,68 @@ Para CADA tipo de forro detalhado NA LEGENDA:
 Retorne JSON com items. Na dúvida de quantidade, marque "estimado"."""
 
 
+PROMPT_DETALHE_AMBIENTE = """Analise DETALHADAMENTE esta prancha de AMPLIAÇÃO / DETALHE DE AMBIENTE.
+
+## CONTEXTO DA PRANCHA
+Pranchas de detalhe de ambiente (ex.: "DET BANHEIRO SUÍTE", "DET COZINHA", "DET LAVABO") são AMPLIAÇÕES em escala 1:25 ou 1:20, focadas em UM ambiente específico. Contêm:
+- Planta baixa ampliada do ambiente
+- Elevações das paredes (2-4 paredes com vista)
+- Detalhes construtivos de bancadas, nichos, prateleiras
+- Legenda de acabamentos específica do ambiente (quadro AFS ou similar)
+
+{ambiente_context}
+
+## O QUE EXTRAIR (discipline varia conforme item)
+
+### Revestimentos (discipline: "Revestimentos")
+- Revestimento cerâmico/porcelanato de parede: tipo, fabricante, dimensão, área
+  (somar elevações visíveis em m²). Até altura indicada na cota vertical.
+- Pintura (PVA/acrílica/esmalte): cor, fabricante, área das paredes não revestidas
+- Papel de parede, revestimento especial: se aparecer na legenda
+
+### Piso (discipline: "Pisos e Rodapés")
+- Tipo de piso específico do ambiente (cerâmica antiderrapante pra área molhada,
+  porcelanato, vinílico, madeira). Área = área do ambiente em planta.
+- Rodapé compatível (m perímetro do ambiente descontando portas)
+
+### Bancadas e marcenaria (discipline: "Marcenaria")
+- Bancada: material (granito, mármore, quartzo, corian), espessura,
+  dimensão linear (ml) ou área (m²). Ler do quadro AFS/legenda.
+- Cuba/pia (integrada ou sobreposta): quantidade (un)
+- Armários superior e inferior: dimensões e material (MDF + laminado X)
+- Nichos em alvenaria ou marcenaria: quantidade (un) + dimensões
+
+### Metais (discipline: "Instalações Hidráulicas")
+- Torneira, misturador, chuveiro, ducha higiênica: quantidade + fabricante/ref
+- Válvula de descarga, registro de gaveta: quantidade
+- Ponto de água fria, água quente: contar nas elevações com H=altura
+
+### Louças (discipline: "Instalações Hidráulicas")
+- Vaso sanitário (caixa acoplada ou válvula), lavatório, bidê, banheira,
+  tanque de lavanderia: quantidade + fabricante/ref do quadro
+
+### Acessórios (discipline: "Complementares")
+- Espelho: dimensão em m² (altura × largura da elevação)
+- Papeleira, toalheiro, saboneteira: contar
+- Box de banheiro: esquadria de vidro, dimensão
+- Cortineiro, porta-shampoo em nicho
+
+### Pontos elétricos (discipline: "Instalações Elétricas e Dados")
+Só pontos visíveis NESTA prancha de detalhe. Tomadas perto da bancada,
+pontos pra secador, barbeador, microondas, coifa — com altura H=nnn indicada.
+
+### Iluminação (discipline: "Iluminação")
+Luminárias específicas do ambiente visíveis nesta prancha (spot, pendente,
+arandela, perfil LED) com código da legenda.
+
+## REGRA DURA
+Extraia APENAS o que aparece na legenda/quadro desta prancha OU mede-se
+pelas elevações visíveis. NÃO inventar itens "típicos de banheiro" se não
+aparecerem. Se a legenda está ilegível, retorne items=[].
+
+Retorne JSON com items classificados na discipline correta."""
+
+
 PROMPTS_POR_TIPO = {
     SheetType.ARQUITETURA: PROMPT_ARQUITETURA,
     SheetType.FORRO: PROMPT_FORRO,
@@ -572,7 +634,55 @@ PROMPTS_POR_TIPO = {
     SheetType.LAYOUT_NOVO: PROMPT_LAYOUT_NOVO,
     SheetType.LAYOUT_ATUAL: PROMPT_LAYOUT_ATUAL,
     SheetType.DET_FORRO: PROMPT_DET_FORRO,
+    SheetType.DETALHE_AMBIENTE: PROMPT_DETALHE_AMBIENTE,
 }
+
+
+_AMBIENTE_CONTEXT_HINTS = {
+    # Residencial
+    "suite":            "AMBIENTE: Suíte master/secundária. Esperar: cama, closet pequeno, pontos elétricos de cabeceira (H=80cm), tomada pra TV, ponto de ar-condicionado (H=220cm).",
+    "dormitorio":       "AMBIENTE: Dormitório. Esperar: cama, armário, pontos de cabeceira, tomada pra TV.",
+    "sala":             "AMBIENTE: Sala de estar/jantar. Esperar: sofás, mesa de jantar, rack de TV, pontos pra home theater, tomadas de piso, ponto de ar-condicionado.",
+    "cozinha":          "AMBIENTE: Cozinha. Esperar: bancada com cooktop, pia, coifa, forno, microondas, geladeira, lava-louças. Pontos elétricos específicos pra cada equipamento com altura indicada. Ponto de gás (cooktop).",
+    "area_gourmet":     "AMBIENTE: Área gourmet / varanda gourmet. Esperar: churrasqueira, bancada em granito, pia, coifa, pontos elétricos pra adega/frigobar, ponto de gás.",
+    "lavanderia":       "AMBIENTE: Lavanderia/área de serviço. Esperar: tanque, máquina de lavar, secadora, varal de teto. Pontos de água fria/quente, esgoto, tomada 220V pra secadora.",
+    "lavabo":           "AMBIENTE: Lavabo (banheiro social pequeno, sem chuveiro). Esperar: bancada c/ cuba, vaso sanitário, espelho, papeleira. Sem área de chuveiro nem box.",
+    "banheiro_suite":   "AMBIENTE: Banheiro da suíte (privativo). Esperar: bancada, cuba(s) dupla ou simples, vaso sanitário, box com chuveiro, ducha higiênica, espelho grande, papeleira, toalheiro. Revestimento cerâmico até teto.",
+    "banheiro_social":  "AMBIENTE: Banheiro social (visitas + uso geral). Esperar: bancada com cuba, vaso, box com chuveiro, espelho.",
+    "home_office":      "AMBIENTE: Home office / escritório residencial. Esperar: mesa de trabalho, estante, cadeira, múltiplas tomadas + pontos de dados. NÃO é escritório corporativo.",
+    "closet":           "AMBIENTE: Closet. Esperar: marcenaria sob medida (cabideiros, gavetas, prateleiras), ponto de luz LED no armário, tomada pra cofre/secador.",
+    "varanda":          "AMBIENTE: Varanda / área externa coberta. Esperar: piso externo, ponto elétrico, ponto de água se tiver pia, luminária de parede/teto.",
+
+    # Escritório / Corporativo
+    "sala_reuniao":     "AMBIENTE: Sala de reunião corporativa. Esperar: mesa de reunião grande, cadeiras, TV/projetor, pontos elétricos no piso (piso elevado ou passagem), ponto de dados, caixas de som.",
+    "open_plan":        "AMBIENTE: Open plan (área de estações de trabalho). Esperar: estações em baias, pontos elétricos+dados por estação, iluminação geral.",
+    "recepcao":         "AMBIENTE: Recepção corporativa. Esperar: balcão de recepção em marcenaria, lounge, iluminação cênica, logo na parede.",
+    "copa":             "AMBIENTE: Copa corporativa. Esperar: bancada, pia, geladeira, microondas, máquina de café, armários.",
+    "diretoria":        "AMBIENTE: Sala de diretoria. Esperar: mesa grande, cadeiras, armário, iluminação especial, acabamento premium.",
+
+    # Saúde
+    "consultorio":      "AMBIENTE: Consultório médico. Esperar: mesa médica, maca/poltrona, armário de medicamentos, lavatório, pontos pra equipamentos específicos.",
+    "sala_procedimento":"AMBIENTE: Sala de procedimento/cirurgia. Esperar: maca cirúrgica, foco cirúrgico, mobiliário médico, gases medicinais.",
+
+    # Varejo
+    "loja":             "AMBIENTE: Loja / showroom. Esperar: expositores, vitrines, caixa, provadores, iluminação comercial.",
+    "provador":         "AMBIENTE: Provador. Esperar: cortina/porta, banco, espelho corpo inteiro, cabideiros.",
+
+    # Educacional
+    "sala_aula":        "AMBIENTE: Sala de aula. Esperar: carteiras, lousa, projetor, iluminação adequada.",
+}
+
+
+def _ambiente_context(ambiente: str) -> str:
+    """Retorna instrução contextual específica pra o ambiente (ou string vazia)."""
+    if not ambiente:
+        return ""
+    key = ambiente.lower().strip().replace(" ", "_").replace("-", "_")
+    hint = _AMBIENTE_CONTEXT_HINTS.get(key, "")
+    if hint:
+        return f"\n{hint}\n"
+    # Ambiente não mapeado: instrução genérica
+    return f"\nAMBIENTE: {ambiente}. Extraia itens relevantes visíveis na prancha.\n"
 
 
 def encode_image(image_path: str) -> str:
@@ -619,8 +729,14 @@ _TYPOLOGY_HINT = {
 
 
 def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
-                  typology: str = "office") -> dict:
+                  typology: str = "office",
+                  ambiente: str = "") -> dict:
     base_prompt = PROMPTS_POR_TIPO.get(sheet.sheet_type, "Analise esta prancha de arquitetura e extraia todos os itens para orçamento. Retorne JSON com array 'items', cada item com: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline.")
+
+    # Se for DETALHE_AMBIENTE, injetar contexto do ambiente específico no placeholder
+    if sheet.sheet_type == SheetType.DETALHE_AMBIENTE:
+        base_prompt = base_prompt.replace(
+            "{ambiente_context}", _ambiente_context(ambiente) or "")
 
     # Injetar contexto de tipologia antes do prompt específico da prancha.
     # Isso impede a IA de presumir "projeto corporativo" quando processa uma
@@ -711,6 +827,7 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
         SheetType.MOBILIARIO: 7,
         SheetType.MARCENARIA: 8,
         SheetType.DET_FORRO: 9,
+        SheetType.DETALHE_AMBIENTE: 10,
     }
     sorted_sheets = sorted(sheets, key=lambda s: priority.get(s.sheet_type, 99))
 

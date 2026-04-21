@@ -15,6 +15,7 @@ class SheetType(str, Enum):
     PISO = "piso"
     FORRO = "forro"
     DET_FORRO = "det_forro"
+    DETALHE_AMBIENTE = "detalhe_ambiente"  # ampliação/detalhe de um ambiente específico (banheiro, cozinha, etc)
     DESCONHECIDO = "desconhecido"
 
 
