@@ -1222,7 +1222,8 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
 
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
-                user_sheet_types: dict[str, str] | None = None):
+                user_sheet_types: dict[str, str] | None = None,
+                user_ambientes: dict[str, str] | None = None):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
 
     `typology` alimenta a camada de calibração por densidade — alertas
@@ -1231,8 +1232,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
     `user_sheet_types` (opcional): mapa {caminho_arquivo: sheet_type}
     pra sobrescrever a detecção automática quando o usuário classificou
     a prancha manualmente no dashboard. Sem isso, o classificador por
-    nome falha com numerações próprias de cada escritório."""
+    nome falha com numerações próprias de cada escritório.
+
+    `user_ambientes` (opcional): mapa {caminho_arquivo: ambiente_canonico}
+    quando sheet_type = detalhe_ambiente (banheiro_suite, cozinha, lavabo
+    etc). Injeta contexto específico no prompt da IA."""
     user_sheet_types = user_sheet_types or {}
+    user_ambientes = user_ambientes or {}
     import gc
     import anthropic
     from processor import identify_sheet_type, extract_text, render_crops
@@ -1692,7 +1698,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
         # Ordenar PDFs por prioridade (layout primeiro)
         priority = {"layout_novo": 0, "layout_atual": 1, "demolir": 2, "arquitetura": 3,
-                     "forro": 4, "piso": 5, "pontos": 6, "mobiliario": 7, "marcenaria": 8, "det_forro": 9}
+                     "forro": 4, "piso": 5, "pontos": 6, "mobiliario": 7, "marcenaria": 8,
+                     "det_forro": 9, "detalhe_ambiente": 10}
 
         pdf_infos = []
         for pdf_path in pdf_paths:
@@ -1722,14 +1729,23 @@ bloco — só cite os que estão no inventário deste arquivo."""
             jobs.update_field(job_id, progress=step_pct)
             jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename}")
 
-            # Se o auto-detect falhou E o usuário não classificou manualmente,
-            # usar ARQUITETURA como prompt-genérico de fallback. Antes pulava
-            # silenciosamente — detalhes de ambiente (DET COZINHA, DET LAVABO,
-            # DET BANH) eram perdidos porque o nome não tem palavra-chave.
+            # Se o auto-detect falhou E o usuário não classificou manualmente:
+            # - se o nome contém palavra-chave de AMBIENTE (banh, cozinha, lavabo,
+            #   suíte, etc), trata como DETALHE_AMBIENTE e extrai o ambiente do nome.
+            # - senão, usa ARQUITETURA como prompt-genérico de fallback.
             if sheet_type == SheetType.DESCONHECIDO:
-                print(f"[fallback] {filename}: tipo não detectado, usando PROMPT_ARQUITETURA como genérico")
-                sheet_type = SheetType.ARQUITETURA
-                jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (tipo não identificado — extração genérica)")
+                from processor import identify_ambiente as _id_amb2
+                _auto_amb = _id_amb2(filename)
+                if _auto_amb:
+                    print(f"[fallback] {filename}: detectado ambiente '{_auto_amb}' — usando PROMPT_DETALHE_AMBIENTE")
+                    sheet_type = SheetType.DETALHE_AMBIENTE
+                    # Guarda auto-detect no mapa (vai ser lido por user_ambientes.get)
+                    user_ambientes.setdefault(pdf_path, _auto_amb)
+                    jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (detalhe de {_auto_amb})")
+                else:
+                    print(f"[fallback] {filename}: tipo não detectado, usando PROMPT_ARQUITETURA como genérico")
+                    sheet_type = SheetType.ARQUITETURA
+                    jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (tipo não identificado — extração genérica)")
 
             # 1. Extrair texto
             text = extract_text(pdf_path)
@@ -1745,7 +1761,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 text_content=text[:5000],
                 crops=crop_paths,
             )
-            result = analyze_sheet(client, sheet, typology=typology)
+            # Ambiente: user escolheu manualmente > auto-detect por keyword
+            from processor import identify_ambiente as _id_amb
+            amb_for_sheet = user_ambientes.get(pdf_path, "") or (
+                _id_amb(filename) if sheet_type == SheetType.DETALHE_AMBIENTE else ""
+            )
+            result = analyze_sheet(client, sheet, typology=typology, ambiente=amb_for_sheet)
 
             # 4. Extrair dados do projeto
             if "project_data" in result:
@@ -1982,6 +2003,7 @@ async def process_files(
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     sheet_types: list[str] = Form(default=[]),
+    sheet_ambientes: list[str] = Form(default=[]),
     typology: str = "office",
     project_name: str = "",
     user_id: str = "",
@@ -2013,13 +2035,14 @@ async def process_files(
 
     # Validar arquivos (aceitar PDF, DWG e DXF)
     valid_extensions = ('.pdf', '.dwg', '.dxf')
-    # Guarda pares (arquivo, sheet_type) pra manter o mapeamento após
-    # filtragem de inválidos. sheet_types pode estar vazia (auto-detect).
+    # Guarda triplas (arquivo, sheet_type, ambiente) pra manter o mapeamento
+    # após filtragem. sheet_types/sheet_ambientes podem estar vazias.
     valid_pairs = []
     for idx, f in enumerate(files):
         if f.filename and f.filename.lower().endswith(valid_extensions):
             st = sheet_types[idx] if idx < len(sheet_types) else ""
-            valid_pairs.append((f, st))
+            amb = sheet_ambientes[idx] if idx < len(sheet_ambientes) else ""
+            valid_pairs.append((f, st, amb))
     if not valid_pairs:
         raise HTTPException(400, "Nenhum arquivo válido encontrado. Aceito: PDF, DWG ou DXF.")
 
@@ -2031,11 +2054,12 @@ async def process_files(
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
 
-    # Salvar arquivos + montar mapa {caminho_local: sheet_type_escolhido_pelo_user}
+    # Salvar arquivos + mapas {caminho_local: sheet_type / ambiente}
     file_paths = []
     user_sheet_types: dict[str, str] = {}
+    user_ambientes: dict[str, str] = {}
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
-    for upload_file, user_st in valid_pairs:
+    for upload_file, user_st, user_amb in valid_pairs:
         file_path = os.path.join(work_dir, upload_file.filename)
         with open(file_path, "wb") as f:
             content = await upload_file.read()
@@ -2043,6 +2067,8 @@ async def process_files(
         file_paths.append(file_path)
         if user_st:
             user_sheet_types[file_path] = user_st
+        if user_amb:
+            user_ambientes[file_path] = user_amb
         ext = upload_file.filename.lower().rsplit('.', 1)[-1]
         file_types[ext] = file_types.get(ext, 0) + 1
 
@@ -2082,7 +2108,9 @@ async def process_files(
     t = threading.Thread(
         target=process_job,
         args=(job_id, file_paths, work_dir),
-        kwargs={"typology": typology, "user_sheet_types": user_sheet_types},
+        kwargs={"typology": typology,
+                "user_sheet_types": user_sheet_types,
+                "user_ambientes": user_ambientes},
         daemon=True,
     )
     t.start()
