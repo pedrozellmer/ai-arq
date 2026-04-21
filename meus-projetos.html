@@ -116,11 +116,21 @@ function renderProjects(projects) {
       } catch (e) {}
     }, 0);
 
+    // Warnings do motor (prancha órfã, legenda ausente)
+    const warnings = Array.isArray(p.warnings) ? p.warnings : [];
+    const warningBadge = warnings.length
+      ? `<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium cursor-help"
+           title="${escapeHtml(warnings.join('\n\n'))}">
+           ⚠ ${warnings.length} aviso${warnings.length>1?'s':''}: subir arquivo complementar
+         </div>`
+      : '';
+
     return `
       <tr class="hover:bg-gray-50" data-job="${escapeHtml(p.job_id)}">
         <td class="px-4 py-3">
           <p class="font-medium text-gray-800">${escapeHtml(p.project_name || 'Sem nome')}</p>
           <p class="text-xs text-gray-400">${escapeHtml(p.job_id)}</p>
+          ${warningBadge}
         </td>
         <td class="px-4 py-3 text-gray-600 capitalize">${escapeHtml(p.typology || '--')}</td>
         <td class="px-4 py-3 text-gray-700">${p.items_count || '--'} <span class="review-pct block"></span></td>
