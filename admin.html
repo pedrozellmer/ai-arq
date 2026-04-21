@@ -120,6 +120,11 @@
       <span>Agente Q&amp;A</span>
     </button>
 
+    <button onclick="switchTab('nps')" data-tab="nps" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/></svg>
+      <span>NPS</span>
+    </button>
+
     <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
       <a href="dashboard.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/></svg>
@@ -513,6 +518,78 @@
         </div>
       </div>
 
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <!-- TAB: NPS                                                 -->
+      <!-- ═══════════════════════════════════════════════════════ -->
+      <div id="tab-nps" class="tab-content hidden">
+        <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">NPS (Net Promoter Score)</h1>
+            <p class="text-sm text-gray-500 mt-1">Satisfação dos usuários e feedback qualitativo</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <select id="nps-period" class="px-3 py-2 rounded-lg border border-gray-300 text-sm">
+              <option value="7">Últimos 7 dias</option>
+              <option value="30" selected>Últimos 30 dias</option>
+              <option value="90">Últimos 90 dias</option>
+              <option value="365">Último ano</option>
+            </select>
+            <button onclick="loadNPSData()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Atualizar
+            </button>
+          </div>
+        </div>
+
+        <!-- Cards métricas NPS -->
+        <div class="grid gap-4 sm:grid-cols-4 mb-6">
+          <div class="rounded-2xl border-2 border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-indigo-700 mb-1">NPS Score</p>
+            <p id="nps-score" class="text-4xl font-bold text-indigo-900">--</p>
+            <p class="text-xs text-indigo-500 mt-1">Range: -100 a +100</p>
+          </div>
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-emerald-600 mb-1">Promotores (9-10)</p>
+            <p id="nps-promoters" class="text-2xl font-bold text-gray-900">--</p>
+            <p id="nps-promoters-pct" class="text-xs text-gray-400 mt-1">--%</p>
+          </div>
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-gray-600 mb-1">Neutros (7-8)</p>
+            <p id="nps-passives" class="text-2xl font-bold text-gray-900">--</p>
+            <p id="nps-passives-pct" class="text-xs text-gray-400 mt-1">--%</p>
+          </div>
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-red-600 mb-1">Detratores (0-6)</p>
+            <p id="nps-detractors" class="text-2xl font-bold text-gray-900">--</p>
+            <p id="nps-detractors-pct" class="text-xs text-gray-400 mt-1">--%</p>
+          </div>
+        </div>
+
+        <!-- Métricas secundárias -->
+        <div class="grid gap-4 sm:grid-cols-2 mb-6">
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-gray-500 mb-1">Respostas totais</p>
+            <p id="nps-total" class="text-2xl font-bold text-gray-900">--</p>
+          </div>
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-gray-500 mb-1">Score médio</p>
+            <p id="nps-avg" class="text-2xl font-bold text-gray-900">--</p>
+            <p class="text-xs text-gray-400 mt-1">0 a 10</p>
+          </div>
+        </div>
+
+        <!-- Lista de respostas recentes -->
+        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
+          <div class="px-6 py-4 border-b bg-gray-50">
+            <h3 class="font-semibold text-gray-800">Respostas recentes</h3>
+            <p class="text-xs text-gray-500 mt-0.5">Comentários qualitativos pra entender o "por quê"</p>
+          </div>
+          <div id="nps-responses" class="divide-y max-h-[700px] overflow-y-auto">
+            <div class="text-center text-sm text-gray-500 py-12">Carregando...</div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -644,7 +721,101 @@ function switchTab(tabName) {
   if (tabName === 'dashboard') loadDashboardStats();
   if (tabName === 'calibracao') loadCalibrationFactors();
   if (tabName === 'agente') loadAgentData();
+  if (tabName === 'nps') loadNPSData();
 }
+
+
+// ══════════════════════════════════════════════
+// NPS — métricas e respostas recentes
+// ══════════════════════════════════════════════
+const API_BASE = 'https://ai-arq.onrender.com';
+
+async function loadNPSData() {
+  const periodSel = document.getElementById('nps-period');
+  const days = parseInt((periodSel && periodSel.value) || '30');
+  try {
+    const [sumRes, respRes] = await Promise.all([
+      fetch(`${API_BASE}/api/admin/nps/summary?days=${days}`).then(r => r.json()),
+      fetch(`${API_BASE}/api/admin/nps/responses?limit=100`).then(r => r.json()),
+    ]);
+
+    // Summary
+    const s = sumRes || {};
+    const total = s.total || 0;
+    document.getElementById('nps-score').textContent = total ? s.nps_score : '--';
+    document.getElementById('nps-promoters').textContent = s.promoters || 0;
+    document.getElementById('nps-passives').textContent = s.passives || 0;
+    document.getElementById('nps-detractors').textContent = s.detractors || 0;
+    document.getElementById('nps-total').textContent = total;
+    document.getElementById('nps-avg').textContent = total ? s.avg_score : '--';
+
+    const pct = (n) => total ? Math.round((n / total) * 100) + '%' : '--';
+    document.getElementById('nps-promoters-pct').textContent = pct(s.promoters);
+    document.getElementById('nps-passives-pct').textContent = pct(s.passives);
+    document.getElementById('nps-detractors-pct').textContent = pct(s.detractors);
+
+    // Score color
+    const scoreEl = document.getElementById('nps-score');
+    const score = parseFloat(s.nps_score || 0);
+    scoreEl.className = 'text-4xl font-bold ' + (
+      score >= 50 ? 'text-emerald-600' :
+      score >= 0  ? 'text-indigo-600' :
+      'text-red-600'
+    );
+
+    // Respostas
+    const list = (respRes && respRes.responses) || [];
+    const container = document.getElementById('nps-responses');
+    if (!list.length) {
+      container.innerHTML = '<div class="text-center text-sm text-gray-500 py-12">Nenhuma resposta ainda.</div>';
+    } else {
+      container.innerHTML = list.map(r => {
+        const color = r.category === 'promoter' ? 'emerald' : r.category === 'passive' ? 'gray' : 'red';
+        const when = r.created_at ? new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+        const ctx = {
+          'after_download': 'Após download',
+          'after_review':   'Após revisão',
+          'first_project':  'Primeiro projeto',
+          'manual':         'Manual',
+        }[r.context] || r.context;
+        return `
+          <div class="p-4 hover:bg-gray-50">
+            <div class="flex items-start gap-3">
+              <div class="flex-shrink-0 w-12 h-12 rounded-full bg-${color}-100 text-${color}-700 flex items-center justify-center font-bold text-lg">
+                ${r.score}
+              </div>
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 text-xs text-gray-500">
+                  <span class="font-medium text-gray-700">${esc(r.user_name || r.user_email || 'Anônimo')}</span>
+                  <span>·</span>
+                  <span>${when}</span>
+                  ${ctx ? `<span>·</span><span>${esc(ctx)}</span>` : ''}
+                  ${r.job_id ? `<span>·</span><span class="font-mono">${esc(r.job_id)}</span>` : ''}
+                </div>
+                ${r.comment ? `<p class="mt-1.5 text-sm text-gray-800 leading-relaxed">${esc(r.comment)}</p>` : '<p class="mt-1 text-xs text-gray-400 italic">(sem comentário)</p>'}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  } catch (e) {
+    console.error('NPS load error:', e);
+    document.getElementById('nps-responses').innerHTML =
+      '<div class="text-center text-sm text-red-500 py-12">Erro ao carregar: ' + esc(e.message) + '</div>';
+  }
+}
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Recarrega NPS quando muda período
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('nps-period');
+  if (sel) sel.addEventListener('change', loadNPSData);
+});
 
 // ══════════════════════════════════════════════
 // PROJECTS — dashboard de operações em tempo real
