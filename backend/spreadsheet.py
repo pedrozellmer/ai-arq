@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Gerador de planilha .xlsx de orçamento."""
+"""Gerador de planilha .xlsx de quantitativos (aba 'Orçamento' pronta pro orçamentista preencher preços)."""
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter

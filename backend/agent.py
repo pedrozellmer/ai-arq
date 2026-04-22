@@ -285,7 +285,7 @@ def _supabase_select_project(job_id: str) -> Optional[dict]:
 TOOLS = [
     {
         "name": "list_items",
-        "description": "Lista itens da planilha de orçamento (número, descrição, unidade, quantidade). Use pra ter visão geral do que existe.",
+        "description": "Lista itens da planilha de quantitativos (número, descrição, unidade, quantidade). Use pra ter visão geral do que existe.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -387,7 +387,7 @@ REGRAS:
 - Quando citar um item, mencione o item_num e cite a observação que justifica a quantidade.
 - Se o usuário perguntar "por que essa quantidade?", busca o item, leia a observação (que cita layer CAD ou processo de consolidação) e explique.
 - Respostas curtas (3-5 frases). Use linguagem comum, sem jargão técnico de IA.
-- Se a pergunta sair do escopo do orçamento, redirecione: "Não tenho acesso a isso, posso ajudar com itens da sua planilha?"
+- Se a pergunta sair do escopo do quantitativo, redirecione: "Não tenho acesso a isso, posso ajudar com itens da sua planilha?"
 """
 
 
