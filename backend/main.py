@@ -3600,13 +3600,19 @@ async def get_sheet_pdf(job_id: str, ref: str = ""):
 #  REPROCESSAR PROJETO (motor atualizado)
 # ═══════════════════════════════════════════════════════════════
 
+REPROCESS_FREE_LIMIT = 1  # 1 reprocessamento grátis por projeto
+
+
 @app.post("/api/project/{job_id}/reprocess")
 async def reprocess_project(job_id: str):
     """Baixa os arquivos originais do Storage e cria novo job com os mesmos
-    arquivos + tipologia. Usa a última versão do motor (prompts + regras)."""
+    arquivos + tipologia. Usa a última versão do motor (prompts + regras).
+
+    Política: 1 reprocessamento grátis por projeto. Tentativas adicionais
+    retornam 402 (Payment Required) com mensagem orientando o user."""
     import urllib.request, urllib.error, json, shutil
 
-    # 1) Buscar projeto original
+    # 1) Buscar projeto original + checar contador
     try:
         url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
         req = urllib.request.Request(url, method='GET')
@@ -3619,6 +3625,16 @@ async def reprocess_project(job_id: str):
         orig = projects[0]
     except urllib.error.HTTPError as e:
         raise HTTPException(500, f"Erro ao buscar projeto: {e}")
+
+    # Política: 1 reprocessamento grátis por projeto
+    current_count = int(orig.get("reprocess_count") or 0)
+    if current_count >= REPROCESS_FREE_LIMIT:
+        raise HTTPException(
+            402,  # Payment Required
+            f"Este projeto já foi reprocessado {current_count}× — o limite "
+            f"gratuito é {REPROCESS_FREE_LIMIT} por projeto. Crie um novo "
+            f"projeto pra processar com o motor atualizado."
+        )
 
     # 2) Listar arquivos originais no Storage
     from urllib.parse import unquote
@@ -3687,7 +3703,20 @@ async def reprocess_project(job_id: str):
         "files_count": len(new_file_paths),
         "file_types": file_types,
         "status": "queued",
+        "parent_job_id": job_id,  # rastreabilidade: novo projeto é filho do original
     })
+
+    # Incrementar contador do ORIGINAL via RPC atômica
+    try:
+        inc_url = f"{SUPABASE_URL}/rest/v1/rpc/increment_reprocess_count"
+        inc_body = json.dumps({"p_job_id": job_id}).encode('utf-8')
+        inc_req = urllib.request.Request(inc_url, data=inc_body, method='POST')
+        inc_req.add_header('apikey', SUPABASE_KEY)
+        inc_req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        inc_req.add_header('Content-Type', 'application/json')
+        urllib.request.urlopen(inc_req, timeout=10)
+    except Exception as _inc_e:
+        print(f"[reprocess] Erro ao incrementar contador: {_inc_e}")
 
     # 5) Disparar em thread
     import threading

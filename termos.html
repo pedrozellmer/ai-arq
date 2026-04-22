@@ -215,7 +215,7 @@
               <ul class="space-y-1 ml-4">
                 <li class="flex items-start gap-2">
                   <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
-                  <span class="text-sm text-gray-600">Arquivos PDF, DWG e DXF de pranchas de arquitetura (processados e deletados automaticamente ap&oacute;s gera&ccedil;&atilde;o da planilha)</span>
+                  <span class="text-sm text-gray-600">Arquivos PDF, DWG e DXF de pranchas de arquitetura (armazenados em storage criptografado por at&eacute; 90 dias ap&oacute;s o processamento para permitir revis&atilde;o inline e reprocessamento, depois exclu&iacute;dos automaticamente)</span>
                 </li>
               </ul>
             </div>
@@ -272,15 +272,22 @@
             <div class="flex items-start gap-3 bg-emerald-50 rounded-lg p-4">
               <svg class="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
               <div>
-                <p class="text-emerald-700 font-medium">Arquivos enviados (PDF, DWG, DXF) s&atilde;o tempor&aacute;rios</p>
-                <p class="text-emerald-600 text-sm mt-1">Os arquivos PDF enviados s&atilde;o armazenados em servidor tempor&aacute;rio exclusivamente durante o processamento e s&atilde;o deletados automaticamente ap&oacute;s a conclus&atilde;o.</p>
+                <p class="text-emerald-700 font-medium">Arquivos enviados (PDF, DWG, DXF): at&eacute; 90 dias</p>
+                <p class="text-emerald-600 text-sm mt-1">Os arquivos s&atilde;o armazenados em storage criptografado (Supabase) por at&eacute; <strong>90 dias ap&oacute;s o processamento</strong>, permitindo abrir a prancha em nova aba durante a revis&atilde;o inline e reprocessar o projeto com a &uacute;ltima vers&atilde;o do motor. Depois desse prazo, s&atilde;o exclu&iacute;dos automaticamente. Exclus&atilde;o antecipada sob solicita&ccedil;&atilde;o em contato@ai.arq.br.</p>
               </div>
             </div>
             <div class="flex items-start gap-3 bg-blue-50 rounded-lg p-4">
               <svg class="w-5 h-5 text-blue-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               <div>
-                <p class="text-blue-700 font-medium">Planilhas dispon&iacute;veis por 15 dias</p>
-                <p class="text-blue-600 text-sm mt-1">As planilhas geradas ficam dispon&iacute;veis para download por at&eacute; 15 dias ap&oacute;s o processamento, sendo exclu&iacute;das automaticamente ap&oacute;s esse per&iacute;odo.</p>
+                <p class="text-blue-700 font-medium">Planilhas dispon&iacute;veis por 90 dias</p>
+                <p class="text-blue-600 text-sm mt-1">As planilhas geradas ficam dispon&iacute;veis para download, revis&atilde;o inline e reprocessamento por at&eacute; 90 dias ap&oacute;s a cria&ccedil;&atilde;o, sendo exclu&iacute;das automaticamente ap&oacute;s esse per&iacute;odo.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-purple-50 rounded-lg p-4">
+              <svg class="w-5 h-5 text-purple-500 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+              <div>
+                <p class="text-purple-700 font-medium">Seus arquivos n&atilde;o treinam IA de terceiros</p>
+                <p class="text-purple-600 text-sm mt-1">N&atilde;o compartilhamos seus arquivos com terceiros al&eacute;m da Anthropic (API Claude) no momento do processamento. Seus projetos n&atilde;o s&atilde;o usados para treinamento de modelos de IA gen&eacute;ricos.</p>
               </div>
             </div>
           </div>
