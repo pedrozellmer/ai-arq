@@ -97,10 +97,11 @@ function renderProjects(projects) {
       'processing': '<span class="inline-block px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">Processando</span>',
     }[p.status] || p.status;
 
+    // Stop propagation nos links pra não disparar o click da row inteira
     const actions = p.status === 'done' ? `
-      <a href="projeto.html?job_id=${p.job_id}" class="text-indigo-600 hover:text-indigo-800 font-medium">Abrir</a>
-      <a href="revisao.html?job_id=${p.job_id}" class="ml-3 text-amber-600 hover:text-amber-800 font-medium">Revisar</a>
-      <a href="${API_BASE}/api/download/${p.job_id}" target="_blank" class="ml-3 text-emerald-600 hover:text-emerald-800 font-medium">Baixar</a>
+      <a href="projeto.html?job_id=${p.job_id}" onclick="event.stopPropagation()" class="text-indigo-600 hover:text-indigo-800 font-medium">Abrir</a>
+      <a href="revisao.html?job_id=${p.job_id}" onclick="event.stopPropagation()" class="ml-3 text-amber-600 hover:text-amber-800 font-medium">Revisar</a>
+      <a href="${API_BASE}/api/download/${p.job_id}" onclick="event.stopPropagation()" target="_blank" class="ml-3 text-emerald-600 hover:text-emerald-800 font-medium">Baixar</a>
     ` : (p.status === 'error' ? '<span class="text-red-500 text-xs">ver erro</span>' : '—');
 
     // Busca % revisado em background (não bloqueia render da tabela)
@@ -132,8 +133,16 @@ function renderProjects(projects) {
          </div>`
       : '';
 
+    // Row inteira clicável quando projeto está concluído — abre projeto.html
+    const rowClass = p.status === 'done'
+      ? 'hover:bg-indigo-50 cursor-pointer transition'
+      : 'hover:bg-gray-50';
+    const rowClick = p.status === 'done'
+      ? `onclick="window.location.href='projeto.html?job_id=${escapeHtml(p.job_id)}'"`
+      : '';
+
     return `
-      <tr class="hover:bg-gray-50" data-job="${escapeHtml(p.job_id)}">
+      <tr class="${rowClass}" ${rowClick} data-job="${escapeHtml(p.job_id)}">
         <td class="px-4 py-3">
           <p class="font-medium text-gray-800">${escapeHtml(p.project_name || 'Sem nome')}</p>
           <p class="text-xs text-gray-400">${escapeHtml(p.job_id)}</p>
