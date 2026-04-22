@@ -81,7 +81,7 @@
     <span class="text-2xl">🔄</span>
     <div class="flex-1">
       <p class="text-sm font-semibold text-gray-800">Reprocessar com motor atualizado</p>
-      <p class="text-xs text-gray-500">O AI.arq evolui constantemente. Gere a planilha de novo usando a última versão do motor — sem pagar novamente.</p>
+      <p id="reprocess-desc" class="text-xs text-gray-500">O AI.arq evolui constantemente. Gere a planilha de novo usando a última versão do motor. <strong>1 reprocessamento grátis por projeto.</strong></p>
     </div>
     <button id="btn-reprocess" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">
       Reprocessar
@@ -228,28 +228,44 @@ function renderHeader(p) {
     });
   }
 
-  // Botão reprocessar
+  // Botão reprocessar — desabilita se já usou o grátis
   const btnReprocess = document.getElementById('btn-reprocess');
+  const reprocessCount = parseInt(p.reprocess_count || 0);
   if (btnReprocess) {
-    btnReprocess.addEventListener('click', async () => {
-      if (!confirm('Reprocessar este projeto com a última versão do motor?\n\nA planilha atual será substituída. Itens já revisados serão perdidos.')) return;
+    if (reprocessCount >= 1) {
+      // Já usado — desabilitar
       btnReprocess.disabled = true;
-      btnReprocess.innerHTML = '<svg class="animate-spin w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reprocessando...';
-      try {
-        const res = await fetch(`${API_BASE}/api/project/${jobId}/reprocess`, {method: 'POST'});
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Erro');
-        alert('Reprocessamento iniciado. O novo job é ' + (data.new_job_id || jobId) + '. Vou recarregar a página em 5s pra acompanhar.');
-        setTimeout(() => {
-          if (data.new_job_id) window.location.href = `projeto.html?job_id=${data.new_job_id}`;
-          else window.location.reload();
-        }, 5000);
-      } catch (e) {
-        alert('Erro ao reprocessar: ' + e.message);
-        btnReprocess.disabled = false;
-        btnReprocess.textContent = 'Reprocessar';
-      }
-    });
+      btnReprocess.textContent = 'Já reprocessado';
+      btnReprocess.className = 'px-4 py-2 bg-gray-300 text-gray-500 text-sm rounded-lg font-medium cursor-not-allowed';
+      document.getElementById('reprocess-desc').innerHTML =
+        'Este projeto já foi reprocessado 1×. Para rodar de novo, crie um <a href="dashboard.html" class="text-indigo-600 underline">novo projeto</a> com os mesmos arquivos.';
+    } else {
+      btnReprocess.addEventListener('click', async () => {
+        if (!confirm('Reprocessar este projeto com a última versão do motor?\n\nA planilha atual será substituída. Itens já revisados ficam junto ao projeto original.\n\nNota: você tem 1 reprocessamento grátis por projeto.')) return;
+        btnReprocess.disabled = true;
+        btnReprocess.innerHTML = '<svg class="animate-spin w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reprocessando...';
+        try {
+          const res = await fetch(`${API_BASE}/api/project/${jobId}/reprocess`, {method: 'POST'});
+          const data = await res.json();
+          if (res.status === 402) {
+            alert(data.detail || 'Limite de reprocessamento atingido.');
+            btnReprocess.disabled = true;
+            btnReprocess.textContent = 'Limite atingido';
+            return;
+          }
+          if (!res.ok) throw new Error(data.detail || 'Erro');
+          alert('Reprocessamento iniciado. O novo job é ' + (data.new_job_id || jobId) + '. Vou redirecionar em 5s.');
+          setTimeout(() => {
+            if (data.new_job_id) window.location.href = `projeto.html?job_id=${data.new_job_id}`;
+            else window.location.reload();
+          }, 5000);
+        } catch (e) {
+          alert('Erro ao reprocessar: ' + e.message);
+          btnReprocess.disabled = false;
+          btnReprocess.textContent = 'Reprocessar';
+        }
+      });
+    }
   }
 }
 
