@@ -3908,6 +3908,26 @@ def _supabase_storage_list(bucket: str, prefix: str) -> list:
         return []
 
 
+@app.get("/api/admin/cleanup-secret-check")
+async def cleanup_secret_check():
+    """Debug: mostra se CLEANUP_SECRET está configurado no Render (sem expor
+    o valor). Útil pra diagnosticar 401 no workflow."""
+    if not CLEANUP_SECRET:
+        return {
+            "configured": False,
+            "message": "CLEANUP_SECRET NÃO está setado no Render. "
+                       "Adicione em Environment e dê 'Save, rebuild, and deploy'."
+        }
+    return {
+        "configured": True,
+        "length": len(CLEANUP_SECRET),
+        "first_4": CLEANUP_SECRET[:4],
+        "last_4": CLEANUP_SECRET[-4:],
+        "message": "Secret configurada. Compare first_4/last_4 com o que você "
+                   "colou no GitHub Secrets."
+    }
+
+
 @app.post("/api/admin/cleanup-old-projects")
 async def cleanup_old_projects(request: Request):
     """Deleta arquivos originais + planilha de projetos com 90+ dias.
