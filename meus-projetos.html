@@ -22,11 +22,17 @@
 </div>
 
 <header class="bg-white border-b">
-  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-    <a href="dashboard.html" class="text-gray-400 hover:text-indigo-600">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <a href="dashboard.html" class="text-gray-400 hover:text-indigo-600" title="Voltar ao dashboard">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </a>
+      <h1 class="font-semibold text-gray-800">Meus projetos</h1>
+    </div>
+    <a href="dashboard.html" class="inline-flex items-center gap-2 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Novo projeto
     </a>
-    <h1 class="font-semibold text-gray-800">Meus projetos</h1>
   </div>
 </header>
 
@@ -92,9 +98,10 @@ function renderProjects(projects) {
     }[p.status] || p.status;
 
     const actions = p.status === 'done' ? `
-      <a href="revisao.html?job_id=${p.job_id}" class="text-indigo-600 hover:text-indigo-800 font-medium">Revisar</a>
+      <a href="projeto.html?job_id=${p.job_id}" class="text-indigo-600 hover:text-indigo-800 font-medium">Abrir</a>
+      <a href="revisao.html?job_id=${p.job_id}" class="ml-3 text-amber-600 hover:text-amber-800 font-medium">Revisar</a>
       <a href="${API_BASE}/api/download/${p.job_id}" target="_blank" class="ml-3 text-emerald-600 hover:text-emerald-800 font-medium">Baixar</a>
-    ` : '—';
+    ` : (p.status === 'error' ? '<span class="text-red-500 text-xs">ver erro</span>' : '—');
 
     // Busca % revisado em background (não bloqueia render da tabela)
     setTimeout(async () => {

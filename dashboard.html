@@ -106,7 +106,11 @@
 
   <!-- Navigation -->
   <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-    <button onclick="switchTab('novo-projeto')" data-tab="novo-projeto" class="nav-item active w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+    <button onclick="switchTab('home')" data-tab="home" class="nav-item active w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <span class="text-lg">&#127968;</span>
+      <span>Início</span>
+    </button>
+    <button onclick="switchTab('novo-projeto')" data-tab="novo-projeto" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <span class="text-lg">&#128202;</span>
       <span>Novo Projeto</span>
     </button>
@@ -187,7 +191,107 @@
       <!-- ═══════════════════════════════════════════ -->
       <!-- TAB 1: NOVO PROJETO                        -->
       <!-- ═══════════════════════════════════════════ -->
-      <div id="tab-novo-projeto" class="tab-content">
+      <!-- ═══════════════════════════════════════════ -->
+      <!-- TAB 0: INÍCIO (home com métricas)         -->
+      <!-- ═══════════════════════════════════════════ -->
+      <div id="tab-home" class="tab-content">
+
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Olá, <span id="home-name">você</span> 👋</h1>
+          <p class="text-sm text-gray-500 mt-1">Panorama dos seus projetos e economia com AI.arq</p>
+        </div>
+
+        <!-- Cards de métricas principais -->
+        <div class="grid gap-4 md:grid-cols-4 mb-6">
+          <div class="rounded-2xl border-2 border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-2xl">📊</span>
+              <p class="text-xs font-medium text-indigo-700">Projetos</p>
+            </div>
+            <p id="stat-projects" class="text-3xl font-bold text-indigo-900">0</p>
+            <p id="stat-projects-sub" class="text-xs text-indigo-500 mt-1">Total processados</p>
+          </div>
+          <div class="rounded-2xl border-2 border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-2xl">⏱️</span>
+              <p class="text-xs font-medium text-emerald-700">Horas economizadas</p>
+            </div>
+            <p id="stat-hours" class="text-3xl font-bold text-emerald-900">0h</p>
+            <p class="text-xs text-emerald-500 mt-1">~16h por projeto</p>
+          </div>
+          <div class="rounded-2xl border-2 border-amber-100 bg-gradient-to-br from-amber-50 to-white p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-2xl">💰</span>
+              <p class="text-xs font-medium text-amber-700">R$ economizados</p>
+            </div>
+            <p id="stat-saved" class="text-3xl font-bold text-amber-900">R$ 0</p>
+            <p class="text-xs text-amber-500 mt-1">Estimativa R$ 80/h orçamentista</p>
+          </div>
+          <div class="rounded-2xl border-2 border-purple-100 bg-gradient-to-br from-purple-50 to-white p-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-2xl">📋</span>
+              <p class="text-xs font-medium text-purple-700">Itens gerados</p>
+            </div>
+            <p id="stat-items" class="text-3xl font-bold text-purple-900">0</p>
+            <p class="text-xs text-purple-500 mt-1">Linhas de orçamento</p>
+          </div>
+        </div>
+
+        <!-- Métricas secundárias + atalhos -->
+        <div class="grid gap-4 md:grid-cols-3 mb-6">
+          <div class="rounded-xl border bg-white p-4">
+            <p class="text-xs font-medium text-gray-500 mb-1">Tipologia mais usada</p>
+            <p id="stat-top-typology" class="text-lg font-semibold text-gray-800 capitalize">--</p>
+          </div>
+          <div class="rounded-xl border bg-white p-4">
+            <p class="text-xs font-medium text-gray-500 mb-1">Projetos este mês</p>
+            <p id="stat-this-month" class="text-lg font-semibold text-gray-800">0</p>
+          </div>
+          <div class="rounded-xl border bg-white p-4">
+            <p class="text-xs font-medium text-gray-500 mb-1">Tempo médio / projeto</p>
+            <p id="stat-avg-time" class="text-lg font-semibold text-gray-800">--</p>
+          </div>
+        </div>
+
+        <!-- Ações rápidas -->
+        <div class="grid gap-3 md:grid-cols-3 mb-6">
+          <button onclick="switchTab('novo-projeto')" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl p-4 flex items-center gap-3 text-left">
+            <span class="text-2xl">➕</span>
+            <div>
+              <p class="font-semibold">Novo projeto</p>
+              <p class="text-xs text-indigo-100">Subir PDFs/DWGs</p>
+            </div>
+          </button>
+          <button onclick="switchTab('meus-projetos')" class="bg-white border-2 border-gray-200 hover:border-indigo-300 text-gray-700 rounded-xl p-4 flex items-center gap-3 text-left">
+            <span class="text-2xl">📁</span>
+            <div>
+              <p class="font-semibold">Meus projetos</p>
+              <p class="text-xs text-gray-500">Histórico e revisar</p>
+            </div>
+          </button>
+          <button onclick="switchTab('cashback')" class="bg-white border-2 border-gray-200 hover:border-amber-300 text-gray-700 rounded-xl p-4 flex items-center gap-3 text-left">
+            <span class="text-2xl">💸</span>
+            <div>
+              <p class="font-semibold">Cashback</p>
+              <p class="text-xs text-gray-500">Ganhe R$ 20</p>
+            </div>
+          </button>
+        </div>
+
+        <!-- Últimos projetos (atividade recente) -->
+        <div class="rounded-xl border bg-white overflow-hidden">
+          <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
+            <h3 class="font-semibold text-gray-800">Atividade recente</h3>
+            <button onclick="switchTab('meus-projetos')" class="text-xs text-indigo-600 hover:text-indigo-800">ver todos →</button>
+          </div>
+          <div id="home-recent" class="divide-y">
+            <div class="p-6 text-center text-sm text-gray-400">Carregando...</div>
+          </div>
+        </div>
+
+      </div>
+
+      <div id="tab-novo-projeto" class="tab-content hidden">
 
         <!-- Page header -->
         <div class="mb-6">
@@ -856,6 +960,103 @@
     if (tabName === 'meu-cadastro') loadProfile();
     if (tabName === 'meus-pagamentos') renderPayments();
     if (tabName === 'cashback') { loadCashbackProjects(); renderPendingReviews(); }
+    if (tabName === 'home') loadHomeStats();
+  }
+
+  // ══════════════════════════════════════════════
+  //  HOME — métricas agregadas do usuário
+  // ══════════════════════════════════════════════
+  async function loadHomeStats() {
+    if (!currentUser?.id) return;
+    // Nome
+    const displayName = currentUser.user_metadata?.full_name
+      || currentUser.user_metadata?.name
+      || (currentUser.email || '').split('@')[0]
+      || 'você';
+    document.getElementById('home-name').textContent = displayName.split(' ')[0];
+
+    try {
+      const res = await fetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
+      const data = await res.json();
+      const projects = (data.projects || []).filter(p => p.status === 'done');
+
+      // Métricas principais
+      const totalProj = projects.length;
+      const hoursPerProject = 16;  // estimativa: 2 dias de orçamentista
+      const hourlyRate = 80;  // R$ por hora orçamentista sênior
+      const totalItems = projects.reduce((s, p) => s + (p.items_count || 0), 0);
+
+      document.getElementById('stat-projects').textContent = totalProj;
+      document.getElementById('stat-hours').textContent = (totalProj * hoursPerProject) + 'h';
+      document.getElementById('stat-saved').textContent = 'R$ ' + (totalProj * hoursPerProject * hourlyRate).toLocaleString('pt-BR');
+      document.getElementById('stat-items').textContent = totalItems.toLocaleString('pt-BR');
+
+      // Tipologia mais usada
+      const typCount = {};
+      projects.forEach(p => {
+        const t = p.typology || 'office';
+        typCount[t] = (typCount[t] || 0) + 1;
+      });
+      const topTyp = Object.entries(typCount).sort((a,b) => b[1] - a[1])[0];
+      const typLabels = {
+        office: 'Escritório', residential: 'Residencial',
+        retail: 'Varejo', hospital: 'Hospitalar', educational: 'Educacional',
+      };
+      document.getElementById('stat-top-typology').textContent =
+        topTyp ? `${typLabels[topTyp[0]] || topTyp[0]} (${topTyp[1]})` : '--';
+
+      // Este mês
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const thisMonth = projects.filter(p =>
+        p.created_at && new Date(p.created_at) >= monthStart
+      ).length;
+      document.getElementById('stat-this-month').textContent = thisMonth;
+
+      // Tempo médio
+      const times = projects
+        .filter(p => p.created_at && p.completed_at)
+        .map(p => (new Date(p.completed_at) - new Date(p.created_at)) / 1000);
+      if (times.length) {
+        const avg = times.reduce((s,t) => s+t, 0) / times.length;
+        const min = Math.floor(avg / 60);
+        const sec = Math.floor(avg % 60);
+        document.getElementById('stat-avg-time').textContent = `${min}min ${sec}s`;
+      }
+
+      // Projetos este mês — sub do card principal
+      document.getElementById('stat-projects-sub').textContent =
+        thisMonth > 0 ? `${thisMonth} este mês` : 'Total processados';
+
+      // Atividade recente (últimos 5)
+      const recent = projects.slice(0, 5);
+      const recentEl = document.getElementById('home-recent');
+      if (!recent.length) {
+        recentEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-400">Nenhum projeto ainda. <button onclick="switchTab(\'novo-projeto\')" class="text-indigo-600 hover:underline font-medium">Criar primeiro →</button></div>';
+      } else {
+        recentEl.innerHTML = recent.map(p => {
+          const when = p.created_at ? new Date(p.created_at).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+          return `
+            <a href="projeto.html?job_id=${p.job_id}" class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 no-underline">
+              <div class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="font-medium text-gray-800 truncate">${escapeH(p.project_name || 'Sem nome')}</p>
+                <p class="text-xs text-gray-400">${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>
+              </div>
+              <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+            </a>
+          `;
+        }).join('');
+      }
+    } catch (e) {
+      console.error('loadHomeStats:', e);
+    }
+  }
+  function escapeH(s) {
+    return String(s || '').replace(/[&<>"']/g, c =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
   // ══════════════════════════════════════════════
