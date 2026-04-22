@@ -3861,6 +3861,142 @@ async def admin_review_insights(days: int = 30, limit: int = 30):
     }
 
 
+# ═══════════════════════════════════════════════════════════════
+#  CLEANUP AUTOMÁTICO — retenção de 90 dias (LGPD)
+#  Chamado diariamente via GitHub Actions cron. Deleta arquivos do
+#  Storage e marca projetos como archived=true.
+# ═══════════════════════════════════════════════════════════════
+
+CLEANUP_RETENTION_DAYS = 90
+CLEANUP_SECRET = os.getenv("CLEANUP_SECRET", "")
+
+
+def _supabase_storage_delete(bucket: str, object_path: str) -> bool:
+    """Deleta um objeto do Storage. Retorna True se OK (ou se já não existia)."""
+    import urllib.request, urllib.error
+    try:
+        url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{object_path}"
+        req = urllib.request.Request(url, method="DELETE")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        urllib.request.urlopen(req, timeout=15)
+        return True
+    except urllib.error.HTTPError as e:
+        # 404 = já não existe (tudo ok)
+        if e.code == 404:
+            return True
+        return False
+    except Exception:
+        return False
+
+
+def _supabase_storage_list(bucket: str, prefix: str) -> list:
+    """Lista objetos no bucket com o prefix dado. Retorna lista de nomes."""
+    import urllib.request, json as _j
+    try:
+        url = f"{SUPABASE_URL}/storage/v1/object/list/{bucket}"
+        body = _j.dumps({"prefix": prefix, "limit": 500}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=15)
+        files = _j.loads(resp.read().decode("utf-8"))
+        return [f.get("name", "") for f in files if f.get("name")]
+    except Exception as e:
+        print(f"[cleanup] list {bucket}/{prefix}: {e}")
+        return []
+
+
+@app.post("/api/admin/cleanup-old-projects")
+async def cleanup_old_projects(request: Request):
+    """Deleta arquivos originais + planilha de projetos com 90+ dias.
+    Marca projeto como archived=true pra preservar histórico no DB.
+
+    Autenticação: header 'X-Cleanup-Secret' deve bater com env var
+    CLEANUP_SECRET. Se CLEANUP_SECRET não estiver setado no Render, o
+    endpoint responde 503.
+
+    Chamado por GitHub Action cron diariamente."""
+    # Auth
+    provided_secret = request.headers.get("X-Cleanup-Secret", "")
+    if not CLEANUP_SECRET:
+        raise HTTPException(503, "CLEANUP_SECRET não configurado no ambiente")
+    if provided_secret != CLEANUP_SECRET:
+        raise HTTPException(401, "Secret inválido")
+
+    # Query days pode customizar pra testes (default 90)
+    import urllib.request, json as _j
+    try:
+        days = int(request.query_params.get("days", CLEANUP_RETENTION_DAYS))
+    except Exception:
+        days = CLEANUP_RETENTION_DAYS
+
+    # 1) Lista projetos elegíveis via RPC
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_expired_projects"
+        body = _j.dumps({"p_days": days}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=15)
+        expired = _j.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar projetos expirados: {e}")
+
+    stats = {
+        "days_threshold": days,
+        "total_expired": len(expired),
+        "archived": 0,
+        "files_deleted": 0,
+        "errors": [],
+        "jobs": [],
+    }
+
+    # 2) Pra cada projeto: deletar arquivos do Storage + marcar archived
+    for proj in expired:
+        job_id = proj.get("job_id")
+        if not job_id:
+            continue
+
+        # 2a) Arquivos originais (bucket aiarq-pranchas/{job_id}/)
+        pranchas_list = _supabase_storage_list(PRANCHAS_BUCKET, f"{job_id}/")
+        files_ok = 0
+        for obj in pranchas_list:
+            # list retorna "nome.pdf" (sem prefix). Delete precisa do path completo.
+            path = f"{job_id}/{obj}"
+            if _supabase_storage_delete(PRANCHAS_BUCKET, path):
+                files_ok += 1
+
+        # 2b) Planilha (bucket aiarq-planilhas/{job_id}.xlsx)
+        if _supabase_storage_delete(PLANILHAS_BUCKET, f"{job_id}.xlsx"):
+            files_ok += 1
+
+        # 2c) Marcar projeto como archived
+        try:
+            mark_url = f"{SUPABASE_URL}/rest/v1/rpc/mark_project_archived"
+            mark_body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
+            mark_req = urllib.request.Request(mark_url, data=mark_body, method="POST")
+            mark_req.add_header("apikey", SUPABASE_KEY)
+            mark_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            mark_req.add_header("Content-Type", "application/json")
+            urllib.request.urlopen(mark_req, timeout=10)
+            stats["archived"] += 1
+            stats["files_deleted"] += files_ok
+            stats["jobs"].append({"job_id": job_id, "files_deleted": files_ok})
+        except Exception as e:
+            stats["errors"].append({"job_id": job_id, "error": str(e)[:200]})
+
+    _supa_log(f"CLEANUP archived={stats['archived']} files={stats['files_deleted']} "
+              f"errors={len(stats['errors'])}")
+    print(f"[cleanup] {stats['archived']} projetos arquivados, "
+          f"{stats['files_deleted']} arquivos deletados, "
+          f"{len(stats['errors'])} erros")
+
+    return stats
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", 8000))
