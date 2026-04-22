@@ -2133,6 +2133,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 print(f"[area-consensus] {_fld}: leituras={_reads} → "
                       f"escolhido={getattr(project_data, _fld)}")
 
+        # Enriquece itens com matches TCPO (base técnica de composições).
+        # Serve como referência de insumos esperados — não preço.
+        try:
+            from tcpo_matcher import match_item, get_insumos
+            for it in all_items:
+                try:
+                    ms = match_item(it.description, limit=3)
+                    if ms:
+                        ms[0]['insumos'] = get_insumos(ms[0]['id'])
+                        it.tcpo_matches = ms
+                except Exception as _e:
+                    pass  # matching é best-effort, nunca bloqueia planilha
+        except ImportError:
+            pass  # tcpo_matcher opcional
+
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)
 
@@ -2479,6 +2494,50 @@ async def health():
             "calibrator": HAS_CALIBRATOR if 'HAS_CALIBRATOR' in dir() else False,
         }
     }
+
+
+# ── TCPO BIM: busca técnica de composições ──
+@app.get("/api/tcpo/search")
+async def tcpo_search(q: str, limit: int = 5):
+    """Busca composições TCPO BIM por similaridade de descrição.
+
+    Exemplo: /api/tcpo/search?q=luminaria+fluorescente&limit=5
+
+    Retorna top N composições ordenadas por similaridade, com o 1º match
+    enriquecido com a lista de insumos (material/mão de obra/equipamento).
+    Usado pela UI pra permitir que o revisor busque a referência TCPO ideal
+    pra cada item.
+    """
+    try:
+        from tcpo_matcher import match_item, get_insumos
+    except ImportError:
+        return {"results": [], "error": "tcpo_matcher indisponível"}
+
+    if not q or len(q.strip()) < 2:
+        return {"results": []}
+
+    matches = match_item(q.strip(), limit=min(int(limit or 5), 15))
+    # Enriquece o 1º com insumos pra UI poder mostrar direto
+    if matches:
+        matches[0]['insumos'] = get_insumos(matches[0]['id'])
+    return {"query": q, "count": len(matches), "results": matches}
+
+
+@app.get("/api/tcpo/details/{composicao_id}")
+async def tcpo_details(composicao_id: str):
+    """Retorna detalhes completos de uma composição TCPO — todos os insumos,
+    metadados (conteúdo, critério, normas). Usado quando o usuário expande uma
+    referência pra ver a composição inteira.
+    """
+    try:
+        from tcpo_matcher import get_insumos, _supabase_rpc
+    except ImportError:
+        return {"error": "tcpo_matcher indisponível"}
+
+    rows = _supabase_rpc("get_tcpo_details", {"p_id": composicao_id}) or []
+    if not rows:
+        return {"error": "composição não encontrada"}
+    return rows[0] if isinstance(rows, list) else rows
 
 
 # ── STRIPE CHECKOUT ──
@@ -3292,7 +3351,20 @@ async def finalize_review(job_id: str):
         except Exception:
             continue
 
-    # 4) Gerar xlsx revisado
+    # 4) Gerar xlsx revisado — também enriquece com matches TCPO
+    try:
+        from tcpo_matcher import match_item, get_insumos
+        for it in items:
+            try:
+                ms = match_item(it.description, limit=3)
+                if ms:
+                    ms[0]['insumos'] = get_insumos(ms[0]['id'])
+                    it.tcpo_matches = ms
+            except Exception:
+                pass
+    except ImportError:
+        pass
+
     typology = proj.get("typology") or "office"
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
