@@ -1414,9 +1414,10 @@
     const priceCents = Math.round(price * 100);
     const tier = est.tier_name || '';
 
+    const betaMaxPranchas = (activeBetaCode && activeBetaCode.max_pranchas) ?? 10;
     const free = isFirstProject() && n <= 5;
-    const betaFree = hasBetaCredits() && n <= 10;
-    const betaOverLimit = hasBetaCredits() && n > 10;
+    const betaFree = hasBetaCredits() && n <= betaMaxPranchas;
+    const betaOverLimit = hasBetaCredits() && n > betaMaxPranchas;
     const unlimited = !!window.__isUnlimitedUser;
 
     // Crédito disponível aplicável a esse projeto
@@ -1443,7 +1444,7 @@
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} projeto${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}</span>`;
     } else if (betaOverLimit) {
       const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span> <span class="text-xs text-amber-600">(Beta libera at\u00e9 10 pranchas; este tem ${n})</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span> <span class="text-xs text-amber-600">(Beta libera at\u00e9 ${betaMaxPranchas} pranchas; este tem ${n})</span>`;
     } else if (creditCoversAll) {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">COBERTO pelo cr\u00e9dito</span> <span class="text-xs">(R$ ${(creditApplicable/100).toFixed(2)} do seu saldo)</span>`;
     } else if (creditApplicable > 0) {
@@ -1878,8 +1879,9 @@
     const numPranchasReais = (lastEstimate && lastEstimate.total_pranchas) || numFiles;
     const priceCents = lastEstimate ? Math.round((lastEstimate.price_brl || 0) * 100) : 0;
     const isFree = isFirstProject() && numPranchasReais <= 5;
-    // Beta cobre projeto até 10 pranchas. Acima disso, cliente paga normal.
-    const isBetaFree = hasBetaCredits() && numPranchasReais <= 10;
+    // Beta cobre projeto até max_pranchas (default 10). Acima disso, cliente paga normal.
+    const betaMaxPranchas = (activeBetaCode && activeBetaCode.max_pranchas) ?? 10;
+    const isBetaFree = hasBetaCredits() && numPranchasReais <= betaMaxPranchas;
     const isUnlimited = !!window.__isUnlimitedUser;  // testing/dev bypass
     // Crédito cobre tudo? (cashback, cupom, referral)
     const creditCoversAll = priceCents > 0 && userCreditsCents >= priceCents;
