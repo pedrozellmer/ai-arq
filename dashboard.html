@@ -999,7 +999,7 @@
     document.getElementById('home-name').textContent = displayName.split(' ')[0];
 
     try {
-      const res = await fetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
+      const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
       const data = await res.json();
       const projects = (data.projects || []).filter(p => p.status === 'done');
 
@@ -1105,6 +1105,16 @@
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
 
   const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // Helper: fetch com Bearer token do Supabase (pra endpoints com ownership)
+  async function authFetch(url, options = {}) {
+    const { data: { session } } = await sbClient.auth.getSession();
+    const headers = Object.assign({}, options.headers || {});
+    if (session && session.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+    return fetch(url, Object.assign({}, options, { headers }));
+  }
 
   // ══════════════════════════════════════════════
   //  STATE
@@ -2516,7 +2526,7 @@
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
+      const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
       const data = await res.json();
       const projects = data.projects || [];
 

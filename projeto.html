@@ -166,6 +166,16 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const API_BASE = 'https://ai-arq.onrender.com';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Helper: fetch com Bearer token do Supabase (pra endpoints com ownership)
+async function authFetch(url, options = {}) {
+  const { data: { session } } = await sb.auth.getSession();
+  const headers = Object.assign({}, options.headers || {});
+  if (session && session.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+  return fetch(url, Object.assign({}, options, { headers }));
+}
+
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
 if (!jobId) { window.location.href = 'meus-projetos.html'; }
@@ -180,7 +190,7 @@ if (!jobId) { window.location.href = 'meus-projetos.html'; }
 
   // Carregar dados em paralelo
   const [userProjectsRes, itemsRes, stateRes] = await Promise.all([
-    fetch(`${API_BASE}/api/projects/by-user/${session.user.id}`).then(r => r.json()).catch(() => ({projects: []})),
+    authFetch(`${API_BASE}/api/projects/by-user/${session.user.id}`).then(r => r.json()).catch(() => ({projects: []})),
     fetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()).catch(() => ({items: []})),
     fetch(`${API_BASE}/api/items/${jobId}/review-state`).then(r => r.json()).catch(() => ({state: {}})),
   ]);
@@ -217,7 +227,7 @@ function renderHeader(p) {
     sel.value = p.user_status || 'em_analise';
     sel.addEventListener('change', async () => {
       try {
-        await fetch(`${API_BASE}/api/project/${jobId}/status`, {
+        await authFetch(`${API_BASE}/api/project/${jobId}/status`, {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({user_status: sel.value}),
@@ -245,7 +255,7 @@ function renderHeader(p) {
         btnReprocess.disabled = true;
         btnReprocess.innerHTML = '<svg class="animate-spin w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reprocessando...';
         try {
-          const res = await fetch(`${API_BASE}/api/project/${jobId}/reprocess`, {method: 'POST'});
+          const res = await authFetch(`${API_BASE}/api/project/${jobId}/reprocess`, {method: 'POST'});
           const data = await res.json();
           if (res.status === 402) {
             alert(data.detail || 'Limite de reprocessamento atingido.');

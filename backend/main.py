@@ -38,8 +38,16 @@ from instagram_webhook import router as instagram_router
 # densidade (density_calibration.py) e só gera alertas.
 
 # Supabase client para salvar projetos
-SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+# Env vars recomendados no Render: SUPABASE_URL, SUPABASE_KEY (ou SUPABASE_ANON_KEY)
+# Fallbacks hardcoded temporários — remover após confirmar env vars em produção.
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kqjabzwgbfuivzlcfvvu.supabase.co")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY")
+if not SUPABASE_KEY:
+    print("[WARN] SUPABASE_KEY não configurado no ambiente — usando fallback hardcoded (remover em breve)")
+    SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+
+# Email do admin (tem acesso a /api/admin/*). Pode ser overridado por env.
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "zarelalopes@gmail.com").lower()
 
 # Log persistente de operações Supabase (só erros + último sucesso por operação)
 # pra poder investigar via /api/debug/supa-log quando o log do Render tá fora de alcance.
@@ -123,6 +131,97 @@ def _supabase_update(table, match_field, match_value, data):
         print(f"Supabase update error ({table} where {match_field}={match_value}): {type(e).__name__}: {e}")
         _supa_log(msg)
         return False
+
+
+# ═══════════════════════════════════════════════════════════════
+#  AUTH HELPERS — JWT do Supabase para admin e ownership
+# ═══════════════════════════════════════════════════════════════
+
+def _get_user_from_request(request):
+    """Valida header Authorization: Bearer <jwt> contra /auth/v1/user do Supabase.
+
+    Retorna dict com {"id", "email"} se válido, ou None se inválido/ausente."""
+    import urllib.request, urllib.error, json as _j
+    try:
+        auth_header = request.headers.get("Authorization", "") or request.headers.get("authorization", "")
+        if not auth_header.lower().startswith("bearer "):
+            return None
+        token = auth_header[7:].strip()
+        if not token:
+            return None
+        url = f"{SUPABASE_URL}/auth/v1/user"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {token}")
+        resp = urllib.request.urlopen(req, timeout=10)
+        data = _j.loads(resp.read().decode("utf-8"))
+        uid = data.get("id")
+        email = (data.get("email") or "").lower()
+        if not uid:
+            return None
+        return {"id": uid, "email": email}
+    except Exception as _e:
+        _supa_log(f"AUTH validate fail: {type(_e).__name__}: {_e}")
+        return None
+
+
+def _require_admin(request):
+    """Valida JWT + email == ADMIN_EMAIL. Raise HTTPException se falha.
+
+    Retorna o dict do usuário em caso de sucesso."""
+    user = _get_user_from_request(request)
+    if not user:
+        raise HTTPException(401, "Autenticação requerida (Bearer token ausente ou inválido)")
+    if user.get("email", "").lower() != ADMIN_EMAIL:
+        raise HTTPException(403, "Acesso restrito a administradores")
+    return user
+
+
+def _get_project_owner(job_id: str):
+    """Retorna o user_id registrado no projeto (ou None se não existe)."""
+    import urllib.request, urllib.error, json as _j
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=user_id"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=10)
+        rows = _j.loads(resp.read().decode("utf-8"))
+        if not rows:
+            return None
+        return rows[0].get("user_id") or "anonymous"
+    except Exception:
+        return None
+
+
+def _require_project_owner(request, job_id: str):
+    """Valida que quem chamou é dono do projeto.
+
+    Regra de retrocompat:
+    - Projeto com user_id='anonymous' (ou vazio/null): libera acesso sem JWT.
+    - Projeto com user_id real: exige JWT válido e user.id == project.user_id.
+      JWT inválido → 401; válido mas não dono → 403.
+
+    Admin (ADMIN_EMAIL) tem acesso a qualquer projeto.
+    Retorna o user_id do projeto."""
+    owner = _get_project_owner(job_id)
+    if owner is None:
+        raise HTTPException(404, "Projeto não encontrado")
+
+    # Projetos anônimos: livres
+    if not owner or owner == "anonymous":
+        return owner
+
+    # Projetos de usuário logado: exigem JWT
+    user = _get_user_from_request(request)
+    if not user:
+        raise HTTPException(401, "Autenticação requerida para acessar este projeto")
+    # Admin liberado
+    if user.get("email", "").lower() == ADMIN_EMAIL:
+        return owner
+    if user.get("id") != owner:
+        raise HTTPException(403, "Acesso restrito ao dono do projeto")
+    return owner
 
 
 _DISCIPLINE_TO_SECTION = {
@@ -3221,9 +3320,10 @@ class StatusPayload(BaseModel):
 
 
 @app.post("/api/project/{job_id}/status")
-async def update_project_user_status(job_id: str, payload: StatusPayload):
+async def update_project_user_status(job_id: str, payload: StatusPayload, request: Request):
     """Atualiza o status editável do projeto (em_analise, enviado_cliente,
     aprovado, fechado, arquivado)."""
+    _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     valid = {"em_analise", "enviado_cliente", "aprovado", "fechado", "arquivado"}
     if payload.user_status not in valid:
@@ -3250,8 +3350,9 @@ class NotePayload(BaseModel):
 
 
 @app.post("/api/items/{job_id}/note/{item_id}")
-async def save_item_note(job_id: str, item_id: str, payload: NotePayload):
+async def save_item_note(job_id: str, item_id: str, payload: NotePayload, request: Request):
     """Salva (upsert) nota de um item. Vazio deleta a nota."""
+    _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     text = (payload.note or "").strip()
     try:
@@ -3316,9 +3417,18 @@ async def list_job_notes(job_id: str):
 
 
 @app.get("/api/projects/by-user/{user_id}")
-async def list_my_projects(user_id: str):
+async def list_my_projects(user_id: str, request: Request):
     """Lista projetos de um usuário (pra tela 'Meus projetos').
-    Usa RPC list_user_projects (SECURITY DEFINER)."""
+    Usa RPC list_user_projects (SECURITY DEFINER).
+
+    Auth: user_id='anonymous' é livre (retrocompat). Para user_id real,
+    exige JWT Bearer do próprio usuário (ou admin)."""
+    if user_id and user_id != "anonymous":
+        user = _get_user_from_request(request)
+        if not user:
+            raise HTTPException(401, "Autenticação requerida")
+        if user.get("id") != user_id and user.get("email", "").lower() != ADMIN_EMAIL:
+            raise HTTPException(403, "Só é possível listar seus próprios projetos")
     import urllib.request, urllib.error, json
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/list_user_projects"
@@ -3400,8 +3510,9 @@ async def should_show_nps(user_id: str):
 
 
 @app.get("/api/admin/nps/summary")
-async def admin_nps_summary(days: int = 30):
+async def admin_nps_summary(request: Request, days: int = 30):
     """Dashboard admin: resumo agregado de NPS."""
+    _require_admin(request)
     import urllib.request, urllib.error, json
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/get_nps_summary"
@@ -3418,8 +3529,9 @@ async def admin_nps_summary(days: int = 30):
 
 
 @app.get("/api/admin/nps/responses")
-async def admin_nps_responses(limit: int = 50):
+async def admin_nps_responses(request: Request, limit: int = 50):
     """Dashboard admin: respostas recentes com comentários (insights qualitativos)."""
+    _require_admin(request)
     import urllib.request, urllib.error, json
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/list_nps_responses"
@@ -3604,12 +3716,13 @@ REPROCESS_FREE_LIMIT = 1  # 1 reprocessamento grátis por projeto
 
 
 @app.post("/api/project/{job_id}/reprocess")
-async def reprocess_project(job_id: str):
+async def reprocess_project(job_id: str, request: Request):
     """Baixa os arquivos originais do Storage e cria novo job com os mesmos
     arquivos + tipologia. Usa a última versão do motor (prompts + regras).
 
     Política: 1 reprocessamento grátis por projeto. Tentativas adicionais
     retornam 402 (Payment Required) com mensagem orientando o user."""
+    _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json, shutil
 
     # 1) Buscar projeto original + checar contador
@@ -3775,7 +3888,7 @@ async def get_review_state(job_id: str):
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/admin/review-insights")
-async def admin_review_insights(days: int = 30, limit: int = 30):
+async def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
     """Agrega revisões recentes pra identificar padrões de erro do motor:
     - Quais tipos de item são mais rejeitados (alucinação)?
     - Quais edits são mais comuns (qty errada, unidade errada)?
@@ -3783,6 +3896,7 @@ async def admin_review_insights(days: int = 30, limit: int = 30):
 
     Serve pra eu (humano ou Claude) olhar e decidir o que ajustar no
     SYSTEM_PROMPT ou nas regras de consolidação."""
+    _require_admin(request)
     import urllib.request, urllib.error, json
 
     # 1) Busca reviews recentes (com JOIN manual pra pegar description do item)
@@ -4028,8 +4142,9 @@ async def cleanup_old_projects(request: Request):
 
 
 @app.get("/api/admin/cleanup-log")
-async def admin_cleanup_log(limit: int = 30):
+async def admin_cleanup_log(request: Request, limit: int = 30):
     """Retorna últimas execuções do cleanup pra dashboard admin."""
+    _require_admin(request)
     import urllib.request, json as _j
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/list_cleanup_runs"
