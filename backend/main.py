@@ -3994,7 +3994,34 @@ async def cleanup_old_projects(request: Request):
           f"{stats['files_deleted']} arquivos deletados, "
           f"{len(stats['errors'])} erros")
 
+    # Registra execução no cleanup_log pra monitoramento no admin
+    _supabase_insert("cleanup_log", {
+        "days_threshold": days,
+        "total_expired": stats["total_expired"],
+        "archived": stats["archived"],
+        "files_deleted": stats["files_deleted"],
+        "errors_count": len(stats["errors"]),
+        "details": {"jobs": stats["jobs"][:50]},  # limita tamanho
+    })
+
     return stats
+
+
+@app.get("/api/admin/cleanup-log")
+async def admin_cleanup_log(limit: int = 30):
+    """Retorna últimas execuções do cleanup pra dashboard admin."""
+    import urllib.request, json as _j
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_cleanup_runs"
+        body = _j.dumps({"p_limit": limit}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=10)
+        return {"runs": _j.loads(resp.read().decode("utf-8"))}
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
 
 
 if __name__ == "__main__":
