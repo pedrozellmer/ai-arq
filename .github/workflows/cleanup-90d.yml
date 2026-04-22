@@ -1,0 +1,43 @@
+name: Cleanup projetos antigos (retenção 90d LGPD)
+
+# Roda diariamente às 3h UTC (00h BRT — fora do horário de pico).
+# Deleta arquivos originais + planilhas de projetos com 90+ dias.
+# Projeto permanece no DB com archived=true.
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:  # permite rodar manualmente via GitHub UI
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar endpoint de cleanup
+        env:
+          CLEANUP_SECRET: ${{ secrets.CLEANUP_SECRET }}
+        run: |
+          if [ -z "$CLEANUP_SECRET" ]; then
+            echo "::error::CLEANUP_SECRET não configurado nos secrets do repo"
+            exit 1
+          fi
+
+          echo "Chamando endpoint de cleanup..."
+          response=$(curl -s -w "\n%{http_code}" \
+            -X POST \
+            -H "X-Cleanup-Secret: $CLEANUP_SECRET" \
+            "https://ai-arq.onrender.com/api/admin/cleanup-old-projects")
+
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+
+          echo "Status: $status"
+          echo "Response:"
+          echo "$body" | python3 -m json.tool || echo "$body"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::Cleanup falhou com status $status"
+            exit 1
+          fi
+
+          echo "::notice::Cleanup executado com sucesso"
