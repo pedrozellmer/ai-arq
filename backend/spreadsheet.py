@@ -682,5 +682,136 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.page_setup.orientation = 'landscape'
     ws.page_setup.fitToWidth = 1
 
+    # ================================================================
+    # SHEET 3: MEMÓRIA TÉCNICA (referências TCPO BIM por item)
+    # ================================================================
+    # Só gera se algum item tem tcpo_matches preenchido
+    items_with_tcpo = [it for it in items if getattr(it, 'tcpo_matches', None)]
+    if items_with_tcpo:
+        wsm = wb.create_sheet('Memória Técnica')
+        wsm.sheet_properties.tabColor = '059669'  # verde
+
+        widths_m = [7, 45, 5, 10, 14, 42, 22, 6, 8]
+        for i, w in enumerate(widths_m, 1):
+            wsm.column_dimensions[get_column_letter(i)].width = w
+
+        # Cabeçalho geral
+        wsm.merge_cells('A1:I1')
+        wsm.cell(row=1, column=1,
+                 value='MEMÓRIA TÉCNICA — Referências TCPO BIM').font = F_TITLE
+        wsm.merge_cells('A2:I2')
+        wsm.cell(row=2, column=1, value=(
+            'Composições técnicas da base TCPO BIM 15ª Edição (Pini) alinhadas a '
+            'cada item do quantitativo. Serve como referência de insumos (material, '
+            'mão de obra, equipamento) pra apoiar o orçamentista.')).font = F_NOTE
+        wsm.merge_cells('A3:I3')
+        wsm.cell(row=3, column=1, value=(
+            'Fonte: TCPO BIM 15ª Ed. (Pini Editora). Os preços NÃO são fornecidos — '
+            'apenas a composição técnica com coeficientes de consumo. '
+            'Compatibilidade indicada por % de similaridade de descrição.')
+        ).font = F_NOTE
+
+        rm = 5
+        hdrs_m = ['ITEM', 'DESCRIÇÃO DO QUANTITATIVO', 'UN', 'QTDE',
+                  'CÓD. TCPO', 'COMPOSIÇÃO TCPO (referência)',
+                  'SISTEMA', 'UN.TCPO', 'MATCH %']
+        for c, h in enumerate(hdrs_m, 1):
+            cl = wsm.cell(row=rm, column=c, value=h)
+            cl.font = F_HDR; cl.fill = P_HDR; cl.alignment = AC; cl.border = BD
+        rm += 1
+
+        P_INSUMO = PatternFill('solid', fgColor='ECFDF5')   # verde claro pros insumos
+        P_NOMATCH = PatternFill('solid', fgColor='FEE2E2')  # vermelho claro pra sem match
+
+        for item in items:
+            matches = getattr(item, 'tcpo_matches', []) or []
+
+            if not matches:
+                # Item sem match TCPO — linha informativa
+                wsm.cell(row=rm, column=1, value=item.item_num).font = F_N
+                wsm.cell(row=rm, column=2, value=item.description).font = F_N
+                wsm.cell(row=rm, column=3, value=item.unit).font = F_N
+                wsm.cell(row=rm, column=4, value=item.quantity).font = F_N
+                wsm.merge_cells(start_row=rm, start_column=5, end_row=rm, end_column=9)
+                wsm.cell(row=rm, column=5,
+                         value='Sem referência TCPO BIM (base não cobre ou '
+                         'descrição muito específica)').font = F_NOTE
+                for c in range(1, 10):
+                    wsm.cell(row=rm, column=c).border = BD
+                    wsm.cell(row=rm, column=c).fill = P_NOMATCH
+                    wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4) else AL
+                rm += 1
+                continue
+
+            # Linha principal do item com o melhor match
+            best = matches[0]
+            wsm.cell(row=rm, column=1, value=item.item_num).font = F_BOLD
+            wsm.cell(row=rm, column=2, value=item.description).font = F_BOLD
+            wsm.cell(row=rm, column=3, value=item.unit).font = F_N
+            wsm.cell(row=rm, column=4, value=item.quantity).font = F_N
+            wsm.cell(row=rm, column=5, value=best.get('codigo_bim', '')).font = F_N
+            wsm.cell(row=rm, column=6, value=best.get('descricao', '')).font = F_N
+            wsm.cell(row=rm, column=7, value=best.get('sistema', '')).font = F_SM
+            wsm.cell(row=rm, column=8, value=best.get('unidade', '')).font = F_N
+            sim_pct = f"{int(best.get('similarity', 0) * 100)}%"
+            wsm.cell(row=rm, column=9, value=sim_pct).font = F_BOLD
+            for c in range(1, 10):
+                wsm.cell(row=rm, column=c).border = BD
+                wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4, 5, 8, 9) else AL
+            rm += 1
+
+            # Linhas de insumos da composição (se carregados)
+            insumos = best.get('insumos', []) or []
+            for ins in insumos[:12]:  # max 12 insumos por composição
+                tipo_label = {
+                    'mao_de_obra': 'MO', 'material': 'Mat',
+                    'equipamento': 'Eq',
+                }.get(ins.get('tipo', 'material'), '-')
+                consumo = ins.get('consumo')
+                consumo_str = (f"{consumo:.4f}" if isinstance(consumo, (int, float))
+                               else '-')
+                wsm.cell(row=rm, column=1, value='').font = F_SM
+                wsm.cell(row=rm, column=2,
+                         value=f"   → {tipo_label}: {ins.get('descricao', '')}").font = F_SM
+                wsm.cell(row=rm, column=3, value=ins.get('unidade', '')).font = F_SM
+                wsm.cell(row=rm, column=4, value=consumo_str).font = F_SM
+                wsm.cell(row=rm, column=5, value=ins.get('codigo_insumo', '')).font = F_SM
+                wsm.merge_cells(start_row=rm, start_column=6, end_row=rm, end_column=9)
+                wsm.cell(row=rm, column=6,
+                         value='Consumo por unidade da composição (coef. TCPO)').font = F_NOTE
+                for c in range(1, 10):
+                    wsm.cell(row=rm, column=c).border = BD
+                    wsm.cell(row=rm, column=c).fill = P_INSUMO
+                    wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4, 5) else AL
+                rm += 1
+
+            # Linhas dos outros matches (menor similaridade — apenas nome)
+            for alt in matches[1:3]:
+                wsm.cell(row=rm, column=1, value='').font = F_SM
+                wsm.cell(row=rm, column=2,
+                         value=f"   (alternativa) {alt.get('descricao', '')}").font = F_NOTE
+                wsm.cell(row=rm, column=5, value=alt.get('codigo_bim', '')).font = F_SM
+                wsm.cell(row=rm, column=7, value=alt.get('sistema', '')).font = F_SM
+                wsm.cell(row=rm, column=8, value=alt.get('unidade', '')).font = F_SM
+                wsm.cell(row=rm, column=9,
+                         value=f"{int(alt.get('similarity', 0) * 100)}%").font = F_SM
+                for c in range(1, 10):
+                    wsm.cell(row=rm, column=c).border = BD
+                    wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4, 5, 8, 9) else AL
+                rm += 1
+
+            rm += 1  # linha em branco entre itens
+
+        # Rodapé
+        wsm.merge_cells(start_row=rm + 1, start_column=1, end_row=rm + 1, end_column=9)
+        wsm.cell(row=rm + 1, column=1, value=(
+            'Como ler: MATCH % indica a similaridade entre a descrição do item '
+            'e a composição TCPO. Acima de 70% = referência forte. 40-70% = '
+            'revisar. Abaixo = usar com cautela.')).font = F_NOTE
+
+        wsm.freeze_panes = 'A6'
+        wsm.page_setup.orientation = 'landscape'
+        wsm.page_setup.fitToWidth = 1
+
     wb.save(output_path)
     return output_path

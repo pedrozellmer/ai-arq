@@ -34,6 +34,11 @@ class BudgetItem(BaseModel):
     ref_sheet: str = ""
     confidence: Confidence = Confidence.ESTIMADO
     discipline: str = ""
+    # Matches da base TCPO BIM (composições técnicas de referência).
+    # Preenchido opcionalmente pelo tcpo_matcher antes da geração da planilha.
+    # Formato: lista de dicts com chaves codigo_bim, descricao, unidade,
+    # sistema, similarity, e opcionalmente 'insumos'.
+    tcpo_matches: list[dict] = []
 
 
 class ProjectData(BaseModel):
