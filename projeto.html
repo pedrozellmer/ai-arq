@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Projeto — AI.arq</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Inter', -apple-system, sans-serif; }</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<div id="gate" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+  <div class="text-center">
+    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto"></div>
+    <p class="mt-3 text-sm text-gray-500">Carregando...</p>
+  </div>
+</div>
+
+<header class="bg-white border-b sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+    <a href="meus-projetos.html" class="text-gray-400 hover:text-indigo-600" title="Voltar pra Meus Projetos">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    </a>
+    <div class="flex-1 min-w-0">
+      <h1 id="proj-title" class="font-semibold text-gray-800 truncate">Projeto</h1>
+      <p id="proj-id" class="text-xs text-gray-400 font-mono"></p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="proj-status-badge"></span>
+      <select id="user-status-select" class="hidden px-3 py-1.5 border border-gray-300 rounded-lg text-xs font-medium bg-white">
+        <option value="em_analise">📝 Em análise</option>
+        <option value="enviado_cliente">📤 Enviado ao cliente</option>
+        <option value="aprovado">✅ Aprovado</option>
+        <option value="fechado">🏁 Fechado</option>
+        <option value="arquivado">📦 Arquivado</option>
+      </select>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- Warnings do motor -->
+  <div id="proj-warnings" class="hidden rounded-xl border-2 border-amber-200 bg-amber-50 p-5">
+    <div class="flex items-start gap-3">
+      <svg class="w-6 h-6 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
+      <div class="flex-1">
+        <h3 class="font-semibold text-amber-900 mb-2">Avisos do motor</h3>
+        <ul id="proj-warnings-list" class="space-y-1.5 text-sm text-amber-800"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Métricas do projeto -->
+  <div class="grid gap-4 md:grid-cols-4">
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-xs font-medium text-gray-500 mb-1">Tipologia</p>
+      <p id="m-typology" class="text-xl font-semibold text-gray-900 capitalize">--</p>
+    </div>
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-xs font-medium text-gray-500 mb-1">Área da laje</p>
+      <p id="m-area" class="text-xl font-semibold text-gray-900">--</p>
+    </div>
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-xs font-medium text-gray-500 mb-1">Arquivos</p>
+      <p id="m-files" class="text-xl font-semibold text-gray-900">--</p>
+    </div>
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-xs font-medium text-gray-500 mb-1">Itens no orçamento</p>
+      <p id="m-items" class="text-xl font-semibold text-gray-900">--</p>
+    </div>
+  </div>
+
+  <!-- Botão reprocessar -->
+  <div id="reprocess-box" class="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 flex items-center gap-3">
+    <span class="text-2xl">🔄</span>
+    <div class="flex-1">
+      <p class="text-sm font-semibold text-gray-800">Reprocessar com motor atualizado</p>
+      <p class="text-xs text-gray-500">O AI.arq evolui constantemente. Gere a planilha de novo usando a última versão do motor — sem pagar novamente.</p>
+    </div>
+    <button id="btn-reprocess" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">
+      Reprocessar
+    </button>
+  </div>
+
+  <!-- Ações principais -->
+  <div class="grid gap-3 md:grid-cols-3">
+    <a id="btn-review" href="#" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl p-5 flex items-center gap-3 no-underline">
+      <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      <div>
+        <p class="font-semibold">Revisar no navegador</p>
+        <p class="text-xs text-indigo-100 mt-0.5"><span id="rev-pct">--</span></p>
+      </div>
+    </a>
+    <a id="btn-download" href="#" target="_blank" class="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl p-5 flex items-center gap-3 no-underline">
+      <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <div>
+        <p class="font-semibold">Baixar planilha .xlsx</p>
+        <p class="text-xs text-emerald-100 mt-0.5">Versão atual (com revisões)</p>
+      </div>
+    </a>
+    <a href="dashboard.html" class="bg-white border-2 border-gray-200 hover:border-indigo-300 text-gray-700 rounded-xl p-5 flex items-center gap-3 no-underline">
+      <svg class="w-7 h-7 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      <div>
+        <p class="font-semibold">Novo projeto</p>
+        <p class="text-xs text-gray-500 mt-0.5">Voltar ao dashboard</p>
+      </div>
+    </a>
+  </div>
+
+  <!-- Arquivos da prancha -->
+  <div class="rounded-xl border bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50">
+      <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
+      <p class="text-xs text-gray-500 mt-0.5">Clique em cada um pra abrir a prancha em nova aba</p>
+    </div>
+    <div id="proj-files" class="divide-y">
+      <div class="p-8 text-center text-sm text-gray-500">Carregando arquivos...</div>
+    </div>
+  </div>
+
+  <!-- Info extra -->
+  <div class="grid gap-4 md:grid-cols-2">
+    <div class="rounded-xl border bg-white p-5">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Datas</h3>
+      <dl class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <dt class="text-gray-500">Criado</dt>
+          <dd id="d-created" class="text-gray-800 font-medium">--</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-gray-500">Concluído</dt>
+          <dd id="d-completed" class="text-gray-800 font-medium">--</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-gray-500">Tempo total</dt>
+          <dd id="d-elapsed" class="text-gray-800 font-medium">--</dd>
+        </div>
+      </dl>
+    </div>
+    <div class="rounded-xl border bg-white p-5">
+      <h3 class="text-sm font-semibold text-gray-700 mb-3">Identificação</h3>
+      <dl class="space-y-2 text-sm">
+        <div class="flex justify-between">
+          <dt class="text-gray-500">Job ID</dt>
+          <dd id="d-jobid" class="text-gray-800 font-mono text-xs">--</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-gray-500">Fase</dt>
+          <dd id="d-phase" class="text-gray-800">--</dd>
+        </div>
+      </dl>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
+const API_BASE = 'https://ai-arq.onrender.com';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+const urlParams = new URLSearchParams(window.location.search);
+const jobId = urlParams.get('job_id');
+if (!jobId) { window.location.href = 'meus-projetos.html'; }
+
+(async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  document.getElementById('gate').classList.add('hidden');
+
+  document.getElementById('btn-review').href = `revisao.html?job_id=${jobId}`;
+  document.getElementById('btn-download').href = `${API_BASE}/api/download/${jobId}`;
+
+  // Carregar dados em paralelo
+  const [userProjectsRes, itemsRes, stateRes] = await Promise.all([
+    fetch(`${API_BASE}/api/projects/by-user/${session.user.id}`).then(r => r.json()).catch(() => ({projects: []})),
+    fetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()).catch(() => ({items: []})),
+    fetch(`${API_BASE}/api/items/${jobId}/review-state`).then(r => r.json()).catch(() => ({state: {}})),
+  ]);
+
+  const proj = (userProjectsRes.projects || []).find(p => p.job_id === jobId);
+  if (!proj) {
+    document.querySelector('main').innerHTML = '<div class="text-center py-12 text-gray-500">Projeto não encontrado.</div>';
+    return;
+  }
+
+  renderHeader(proj);
+  renderMetrics(proj, itemsRes.items || []);
+  renderWarnings(proj.warnings || []);
+  renderDates(proj);
+  renderFiles(proj, itemsRes.items || []);
+  renderReviewPct(itemsRes.items || [], stateRes.state || {});
+})();
+
+function renderHeader(p) {
+  document.getElementById('proj-title').textContent = p.project_name || 'Projeto sem nome';
+  document.getElementById('proj-id').textContent = `job ${p.job_id}`;
+  const badges = {
+    'done':       '<span class="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">Concluído</span>',
+    'error':      '<span class="inline-block px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">Erro</span>',
+    'queued':     '<span class="inline-block px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">Na fila</span>',
+    'processing': '<span class="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">Processando</span>',
+  };
+  document.getElementById('proj-status-badge').innerHTML = badges[p.status] || p.status;
+
+  // User status (fluxo comercial) — só mostra se projeto está done
+  if (p.status === 'done') {
+    const sel = document.getElementById('user-status-select');
+    sel.classList.remove('hidden');
+    sel.value = p.user_status || 'em_analise';
+    sel.addEventListener('change', async () => {
+      try {
+        await fetch(`${API_BASE}/api/project/${jobId}/status`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({user_status: sel.value}),
+        });
+      } catch (e) {
+        alert('Erro ao salvar status: ' + e.message);
+      }
+    });
+  }
+
+  // Botão reprocessar
+  const btnReprocess = document.getElementById('btn-reprocess');
+  if (btnReprocess) {
+    btnReprocess.addEventListener('click', async () => {
+      if (!confirm('Reprocessar este projeto com a última versão do motor?\n\nA planilha atual será substituída. Itens já revisados serão perdidos.')) return;
+      btnReprocess.disabled = true;
+      btnReprocess.innerHTML = '<svg class="animate-spin w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reprocessando...';
+      try {
+        const res = await fetch(`${API_BASE}/api/project/${jobId}/reprocess`, {method: 'POST'});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Erro');
+        alert('Reprocessamento iniciado. O novo job é ' + (data.new_job_id || jobId) + '. Vou recarregar a página em 5s pra acompanhar.');
+        setTimeout(() => {
+          if (data.new_job_id) window.location.href = `projeto.html?job_id=${data.new_job_id}`;
+          else window.location.reload();
+        }, 5000);
+      } catch (e) {
+        alert('Erro ao reprocessar: ' + e.message);
+        btnReprocess.disabled = false;
+        btnReprocess.textContent = 'Reprocessar';
+      }
+    });
+  }
+}
+
+function renderMetrics(p, items) {
+  document.getElementById('m-typology').textContent = p.typology || '--';
+  const area = p.total_area ? `${Number(p.total_area).toLocaleString('pt-BR', {maximumFractionDigits: 1})} m²` : '--';
+  document.getElementById('m-area').textContent = area;
+  document.getElementById('m-files').textContent = p.files_count || items.length || '--';
+  document.getElementById('m-items').textContent = p.items_count || items.length || '--';
+}
+
+function renderWarnings(warnings) {
+  if (!Array.isArray(warnings) || !warnings.length) return;
+  document.getElementById('proj-warnings').classList.remove('hidden');
+  document.getElementById('proj-warnings-list').innerHTML = warnings.map(w =>
+    `<li class="flex items-start gap-2"><span class="mt-0.5">⚠</span><span>${esc(w)}</span></li>`
+  ).join('');
+}
+
+function renderDates(p) {
+  const fmt = (d) => d ? new Date(d).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '--';
+  document.getElementById('d-created').textContent = fmt(p.created_at);
+  document.getElementById('d-completed').textContent = fmt(p.completed_at);
+  if (p.created_at && p.completed_at) {
+    const ms = new Date(p.completed_at) - new Date(p.created_at);
+    const min = Math.floor(ms / 60000);
+    const sec = Math.floor((ms % 60000) / 1000);
+    document.getElementById('d-elapsed').textContent = `${min}min ${sec}s`;
+  }
+  document.getElementById('d-jobid').textContent = p.job_id;
+  document.getElementById('d-phase').textContent = p.phase || 'Anteprojeto';
+}
+
+function renderFiles(proj, items) {
+  // Coleta nomes únicos de arquivo da lista de itens (ref_sheet)
+  const filesSet = new Map();  // filename → contagem de items
+  items.forEach(it => {
+    const raw = (it.ref_sheet || '').trim();
+    if (!raw) return;
+    // ref_sheet pode vir "filename.pdf (hint)" → pega só filename
+    const cleanName = raw.split('(')[0].trim();
+    if (cleanName.toLowerCase().endsWith('.pdf') ||
+        cleanName.toLowerCase().endsWith('.dwg') ||
+        cleanName.toLowerCase().endsWith('.dxf')) {
+      filesSet.set(cleanName, (filesSet.get(cleanName) || 0) + 1);
+    }
+  });
+
+  const container = document.getElementById('proj-files');
+  if (!filesSet.size) {
+    container.innerHTML = '<div class="p-6 text-center text-sm text-gray-500">Nomes de arquivo não disponíveis pra este projeto.</div>';
+    return;
+  }
+
+  const rows = Array.from(filesSet.entries())
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([fname, count]) => {
+      const ext = fname.toLowerCase().split('.').pop();
+      const viewerUrl = `visualizar-prancha.html?job_id=${proj.job_id}&ref=${encodeURIComponent(fname)}`;
+      const icon = ext === 'pdf' ? '📄' : (ext === 'dwg' || ext === 'dxf') ? '📐' : '📎';
+      return `
+        <div class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
+          <span class="text-xl shrink-0">${icon}</span>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-800 truncate">${esc(fname)}</p>
+            <p class="text-xs text-gray-400">${count} ${count === 1 ? 'item extraído' : 'itens extraídos'}</p>
+          </div>
+          <a href="${viewerUrl}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 no-underline">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M14 10l7-7M10 21H5a2 2 0 01-2-2v-5m0-4V5a2 2 0 012-2h4"/></svg>
+            Abrir
+          </a>
+        </div>
+      `;
+    }).join('');
+  container.innerHTML = rows;
+}
+
+function renderReviewPct(items, state) {
+  const total = items.length;
+  const reviewed = Object.keys(state).length;
+  const pct = total ? Math.round((reviewed/total)*100) : 0;
+  const txt = total === 0 ? 'Revisar' :
+              reviewed === 0 ? `0 de ${total} revisados` :
+              reviewed >= total ? '100% revisado ✓' :
+              `${pct}% revisado · ${reviewed}/${total}`;
+  document.getElementById('rev-pct').textContent = txt;
+}
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+</script>
+
+</body>
+</html>

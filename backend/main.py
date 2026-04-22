@@ -306,22 +306,32 @@ def _supabase_storage_upload(local_path: str, remote_key: str) -> bool:
         return False
 
 
-def _supabase_storage_upload_pdf(local_path: str, job_id: str, filename: str) -> bool:
-    """Upload de PDF original de prancha pro bucket aiarq-pranchas.
-    Key: {job_id}/{filename}. Permite servir via /api/sheet/{job_id}?ref=...
-    pra revisão inline abrir em nova aba."""
+_PRANCHA_MIME = {
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".dxf": "application/acad",
+    ".dwg": "application/acad",
+}
+
+
+def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str) -> bool:
+    """Upload de prancha (PDF, PNG, JPG) pro bucket aiarq-pranchas.
+    Key: {job_id}/{filename}. Content-Type derivado da extensão."""
     import urllib.request, urllib.error
     try:
         with open(local_path, "rb") as f:
             body = f.read()
-        # URL-encode filename pra caracteres especiais (acentos, espaços)
         import urllib.parse as _up
         remote_key = f"{job_id}/{_up.quote(filename)}"
         url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{remote_key}"
+        ext = os.path.splitext(filename.lower())[1]
+        mime = _PRANCHA_MIME.get(ext, "application/octet-stream")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
         req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        req.add_header("Content-Type", "application/pdf")
+        req.add_header("Content-Type", mime)
         req.add_header("x-upsert", "true")
         urllib.request.urlopen(req, timeout=60)
         return True
@@ -331,8 +341,12 @@ def _supabase_storage_upload_pdf(local_path: str, job_id: str, filename: str) ->
         return False
 
 
-def _supabase_storage_download_pdf(job_id: str, filename: str) -> Optional[bytes]:
-    """Baixa o PDF original de uma prancha do Storage. Retorna None se falhar."""
+# Alias de compatibilidade com código antigo
+_supabase_storage_upload_pdf = _supabase_storage_upload_prancha
+
+
+def _supabase_storage_download_prancha(job_id: str, filename: str) -> Optional[bytes]:
+    """Baixa prancha (PDF/PNG/etc) do Storage. Retorna bytes ou None."""
     import urllib.request, urllib.parse as _up
     try:
         remote_key = f"{job_id}/{_up.quote(filename)}"
@@ -345,6 +359,10 @@ def _supabase_storage_download_pdf(job_id: str, filename: str) -> Optional[bytes
     except Exception as e:
         print(f"[storage pranchas] download {filename}: {e}")
         return None
+
+
+# Alias de compatibilidade
+_supabase_storage_download_pdf = _supabase_storage_download_prancha
 
 
 def _supabase_storage_download(remote_key: str, local_path: str) -> bool:
@@ -1279,22 +1297,58 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
-        # Persistir PDFs originais no Storage pra serem abertos em nova aba
-        # durante a revisão inline (botão 👁 "Ver prancha"). Roda em background
-        # pra não atrasar o processamento — se falhar, só perde a feature do
-        # thumbnail, não afeta a planilha.
+        # Persistir TODOS os arquivos originais (PDF + DWG + DXF) no Storage.
+        # Serve pra 2 coisas:
+        # 1. Botão 👁 "Ver prancha" na revisão inline
+        # 2. Reprocessar projeto com motor atualizado (baixa originais, roda de novo)
+        # Roda em background pra não atrasar o processamento.
         def _upload_pranchas_bg():
-            for _p in pdf_paths:
+            for _p in file_paths:
                 try:
                     _fname = os.path.basename(_p)
-                    _supabase_storage_upload_pdf(_p, job_id, _fname)
-                except Exception:
-                    pass
+                    _supabase_storage_upload_prancha(_p, job_id, _fname)
+                except Exception as _e:
+                    print(f"[upload-pranchas] erro {_fname}: {_e}")
         try:
             import threading as _t
             _t.Thread(target=_upload_pranchas_bg, daemon=True).start()
         except Exception:
             pass
+
+        # Render DWG/DXF → PNG pra preview na revisão (opção 1 acordada).
+        # Só roda se tem CAD no projeto. Matplotlib é pesado, por isso
+        # em thread separada.
+        if cad_paths:
+            def _render_cad_previews_bg():
+                try:
+                    from dxf_render import render_dxf_to_png_safe
+                except Exception as _imp_e:
+                    print(f"[cad-preview] import erro: {_imp_e}")
+                    return
+                for _cad in cad_paths:
+                    _fname = os.path.basename(_cad)
+                    # Procura o DXF convertido (se era DWG) ou usa direto
+                    _dxf_path = _cad
+                    if _cad.lower().endswith('.dwg'):
+                        # Procurar DXF equivalente em work_dir
+                        _base = os.path.splitext(_fname)[0]
+                        for _cand in os.listdir(work_dir):
+                            if _cand.lower().endswith('.dxf') and _base.lower() in _cand.lower():
+                                _dxf_path = os.path.join(work_dir, _cand)
+                                break
+                        else:
+                            continue  # DWG sem DXF convertido — pula
+                    # Render
+                    _png_path = os.path.join(work_dir, os.path.splitext(_fname)[0] + '.png')
+                    if render_dxf_to_png_safe(_dxf_path, _png_path, timeout_s=60):
+                        # Upload PNG pro Storage
+                        _png_fname = os.path.splitext(_fname)[0] + '.png'
+                        _supabase_storage_upload_prancha(_png_path, job_id, _png_fname)
+            try:
+                import threading as _t2
+                _t2.Thread(target=_render_cad_previews_bg, daemon=True).start()
+            except Exception:
+                pass
 
         # ── Pesos de progresso alinhados com percepção do usuário ──
         # A fase que o usuário percebe como "cada prancha processada" é a análise
@@ -3158,6 +3212,109 @@ async def finalize_review(job_id: str):
     }
 
 
+# ═══════════════════════════════════════════════════════════════
+#  STATUS EDITÁVEL + NOTAS POR ITEM
+# ═══════════════════════════════════════════════════════════════
+
+class StatusPayload(BaseModel):
+    user_status: str
+
+
+@app.post("/api/project/{job_id}/status")
+async def update_project_user_status(job_id: str, payload: StatusPayload):
+    """Atualiza o status editável do projeto (em_analise, enviado_cliente,
+    aprovado, fechado, arquivado)."""
+    import urllib.request, urllib.error, json
+    valid = {"em_analise", "enviado_cliente", "aprovado", "fechado", "arquivado"}
+    if payload.user_status not in valid:
+        raise HTTPException(400, f"status inválido. Aceito: {valid}")
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/update_user_status"
+        body = json.dumps({
+            "p_job_id": job_id,
+            "p_user_status": payload.user_status,
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=15)
+        return {"status": "ok", "user_status": payload.user_status}
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
+
+
+class NotePayload(BaseModel):
+    note: str
+    author: Optional[str] = ""
+
+
+@app.post("/api/items/{job_id}/note/{item_id}")
+async def save_item_note(job_id: str, item_id: str, payload: NotePayload):
+    """Salva (upsert) nota de um item. Vazio deleta a nota."""
+    import urllib.request, urllib.error, json
+    text = (payload.note or "").strip()
+    try:
+        if not text:
+            # Delete
+            url = f"{SUPABASE_URL}/rest/v1/item_notes?item_id=eq.{item_id}"
+            req = urllib.request.Request(url, method='DELETE')
+            req.add_header('apikey', SUPABASE_KEY)
+            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            urllib.request.urlopen(req, timeout=10)
+            return {"status": "ok", "deleted": True}
+
+        # Upsert: try update first, insert on 0 rows
+        url = f"{SUPABASE_URL}/rest/v1/item_notes?item_id=eq.{item_id}"
+        body = json.dumps({
+            "note": text,
+            "author": payload.author or "",
+            "updated_at": datetime.utcnow().isoformat(),
+        }).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='PATCH')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Prefer', 'return=representation')
+        resp = urllib.request.urlopen(req, timeout=10)
+        rows = json.loads(resp.read().decode('utf-8') or '[]')
+        if not rows:
+            # Insert novo
+            _supabase_insert("item_notes", {
+                "job_id": job_id,
+                "item_id": item_id,
+                "note": text,
+                "author": payload.author or "",
+            })
+        return {"status": "ok", "saved": True}
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
+
+
+@app.get("/api/items/{job_id}/notes")
+async def list_job_notes(job_id: str):
+    """Lista todas as notas de itens de um job — restaura estado na revisão."""
+    import urllib.request, urllib.error, json
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_item_notes"
+        body = json.dumps({"p_job_id": job_id}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=15)
+        notes = json.loads(resp.read().decode('utf-8'))
+        # Retorna como mapa {item_id: {note, author, updated_at}}
+        state = {n["item_id"]: {
+            "note": n.get("note", ""),
+            "author": n.get("author", ""),
+            "updated_at": n.get("updated_at"),
+        } for n in notes}
+        return {"status": "ok", "notes": state}
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
+
+
 @app.get("/api/projects/by-user/{user_id}")
 async def list_my_projects(user_id: str):
     """Lista projetos de um usuário (pra tela 'Meus projetos').
@@ -3373,13 +3530,8 @@ def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
 
 @app.get("/api/sheet/{job_id}")
 async def get_sheet_pdf(job_id: str, ref: str = ""):
-    """Serve o PDF original de uma prancha pro orçamentista abrir em nova aba
-    durante revisão. `ref` pode ser:
-    - Nome exato do arquivo (ex: "225.AFS.500.PONTOS_EX.pdf")
-    - Descrição da IA (ex: "Pontos Elétricos") — faz fuzzy match
-    - Filename + hint ("225.AFS.500.PONTOS_EX.pdf (Pontos Elétricos)")
-
-    Busca primeiro no /tmp local; senão no Storage."""
+    """Serve a prancha (PDF, PNG, etc) inline pro viewer. Pra DWG/DXF
+    tenta servir o PNG renderizado (render server-side) antes."""
     from fastapi.responses import Response
 
     if not ref:
@@ -3389,34 +3541,171 @@ async def get_sheet_pdf(job_id: str, ref: str = ""):
     if not filename:
         raise HTTPException(404, f"Prancha correspondente a '{ref}' não encontrada")
 
-    # 1) Hot cache local
-    local_path = os.path.join(WORK_DIR, job_id, filename)
+    ext = os.path.splitext(filename.lower())[1]
+    preview_filename = filename
+    mime = _PRANCHA_MIME.get(ext, "application/octet-stream")
+
+    # DWG/DXF: preferir PNG renderizado se existe
+    if ext in ('.dwg', '.dxf'):
+        _png_name = os.path.splitext(filename)[0] + '.png'
+        _png_local = os.path.join(WORK_DIR, job_id, _png_name)
+        if os.path.exists(_png_local):
+            preview_filename = _png_name
+            mime = "image/png"
+        else:
+            _png_data = _supabase_storage_download_prancha(job_id, _png_name)
+            if _png_data:
+                return Response(
+                    content=_png_data, media_type="image/png",
+                    headers={
+                        "Content-Disposition": "inline",
+                        "X-Filename": _png_name,
+                        "Cache-Control": "private, max-age=3600",
+                    }
+                )
+
+    # Hot cache local
+    local_path = os.path.join(WORK_DIR, job_id, preview_filename)
     if os.path.exists(local_path):
         try:
             with open(local_path, "rb") as f:
                 data = f.read()
             return Response(
-                content=data,
-                media_type="application/pdf",
+                content=data, media_type=mime,
                 headers={
                     "Content-Disposition": "inline",
-                    "X-Filename": filename,  # disponível via JS se frontend quiser
+                    "X-Filename": preview_filename,
                     "Cache-Control": "private, max-age=3600",
                 }
             )
         except Exception:
             pass
 
-    # 2) Storage (persistente após redeploy)
-    data = _supabase_storage_download_pdf(job_id, filename)
+    # Storage
+    data = _supabase_storage_download_prancha(job_id, preview_filename)
     if data:
         return Response(
-            content=data,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'inline; filename="{filename}"'}
+            content=data, media_type=mime,
+            headers={
+                "Content-Disposition": "inline",
+                "X-Filename": preview_filename,
+                "Cache-Control": "private, max-age=3600",
+            }
         )
 
-    raise HTTPException(404, f"Prancha '{filename}' não encontrada no Storage")
+    raise HTTPException(404, f"Prancha '{preview_filename}' não encontrada no Storage")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  REPROCESSAR PROJETO (motor atualizado)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/project/{job_id}/reprocess")
+async def reprocess_project(job_id: str):
+    """Baixa os arquivos originais do Storage e cria novo job com os mesmos
+    arquivos + tipologia. Usa a última versão do motor (prompts + regras)."""
+    import urllib.request, urllib.error, json, shutil
+
+    # 1) Buscar projeto original
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        resp = urllib.request.urlopen(req, timeout=15)
+        projects = json.loads(resp.read().decode('utf-8'))
+        if not projects:
+            raise HTTPException(404, "Projeto original não encontrado")
+        orig = projects[0]
+    except urllib.error.HTTPError as e:
+        raise HTTPException(500, f"Erro ao buscar projeto: {e}")
+
+    # 2) Listar arquivos originais no Storage
+    from urllib.parse import unquote
+    try:
+        list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        body = json.dumps({"prefix": f"{job_id}/", "limit": 100}).encode("utf-8")
+        req = urllib.request.Request(list_url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=20)
+        storage_files = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar Storage: {e}")
+
+    valid_ext = ('.pdf', '.dwg', '.dxf')
+    original_filenames = []
+    for f in storage_files:
+        n = unquote(f.get("name", ""))
+        if n.lower().endswith(valid_ext):
+            original_filenames.append(n)
+    if not original_filenames:
+        raise HTTPException(400,
+            "Arquivos originais não disponíveis no Storage. "
+            "Projetos anteriores a 21/04/2026 não tiveram upload automático — "
+            "suba novamente pra reprocessar.")
+
+    # 3) Criar novo job_id + work dir + baixar arquivos
+    new_job_id = str(uuid.uuid4())[:8]
+    new_work_dir = os.path.join(WORK_DIR, new_job_id)
+    os.makedirs(new_work_dir, exist_ok=True)
+
+    new_file_paths = []
+    file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
+    for fname in original_filenames:
+        local_path = os.path.join(new_work_dir, fname)
+        data = _supabase_storage_download_prancha(job_id, fname)
+        if not data:
+            continue
+        with open(local_path, "wb") as f:
+            f.write(data)
+        new_file_paths.append(local_path)
+        ext = fname.lower().rsplit('.', 1)[-1]
+        file_types[ext] = file_types.get(ext, 0) + 1
+
+    if not new_file_paths:
+        shutil.rmtree(new_work_dir, ignore_errors=True)
+        raise HTTPException(500, "Falha ao baixar arquivos do Storage")
+
+    # 4) Criar novo projeto + status
+    types_summary = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
+    jobs[new_job_id] = ProcessingStatus(
+        job_id=new_job_id, status="queued", progress=0,
+        current_step=f"Reprocessamento: {len(new_file_paths)} arquivos recuperados ({types_summary})",
+        total_steps=3,
+    )
+
+    typology = orig.get("typology") or "office"
+    _supabase_insert("projects", {
+        "job_id": new_job_id,
+        "user_id": orig.get("user_id") or "anonymous",
+        "user_email": orig.get("user_email") or "",
+        "user_name": orig.get("user_name") or "",
+        "project_name": f"{orig.get('project_name','Projeto')} (reprocessado)",
+        "typology": typology,
+        "files_count": len(new_file_paths),
+        "file_types": file_types,
+        "status": "queued",
+    })
+
+    # 5) Disparar em thread
+    import threading
+    t = threading.Thread(
+        target=process_job,
+        args=(new_job_id, new_file_paths, new_work_dir),
+        kwargs={"typology": typology},
+        daemon=True,
+    )
+    t.start()
+
+    return {
+        "status": "ok",
+        "original_job_id": job_id,
+        "new_job_id": new_job_id,
+        "files_count": len(new_file_paths),
+        "typology": typology,
+    }
 
 
 @app.get("/api/items/{job_id}/review-state")
