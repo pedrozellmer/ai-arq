@@ -709,11 +709,22 @@
 // ══════════════════════════════════════════════
 // SUPABASE CONFIG
 // ══════════════════════════════════════════════
+// TODO: mover pra fetch inicial de config endpoint
 const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
 const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const ADMIN_EMAIL = 'zarelalopes@gmail.com';
+
+// Helper: fetch com Bearer token do Supabase pra endpoints /api/admin/*
+async function authFetch(url, options = {}) {
+  const { data: { session } } = await sbClient.auth.getSession();
+  const headers = Object.assign({}, options.headers || {});
+  if (session && session.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+  return fetch(url, Object.assign({}, options, { headers }));
+}
 
 // ══════════════════════════════════════════════
 // ACCESS CONTROL
@@ -806,7 +817,7 @@ function switchTab(tabName) {
 async function loadInsights() {
   const days = parseInt((document.getElementById('ins-period') || {value:'30'}).value);
   try {
-    const res = await fetch(`${API_BASE}/api/admin/review-insights?days=${days}&limit=50`);
+    const res = await authFetch(`${API_BASE}/api/admin/review-insights?days=${days}&limit=50`);
     const d = await res.json();
 
     document.getElementById('ins-total').textContent = d.total_reviews || 0;
@@ -912,8 +923,8 @@ async function loadNPSData() {
   const days = parseInt((periodSel && periodSel.value) || '30');
   try {
     const [sumRes, respRes] = await Promise.all([
-      fetch(`${API_BASE}/api/admin/nps/summary?days=${days}`).then(r => r.json()),
-      fetch(`${API_BASE}/api/admin/nps/responses?limit=100`).then(r => r.json()),
+      authFetch(`${API_BASE}/api/admin/nps/summary?days=${days}`).then(r => r.json()),
+      authFetch(`${API_BASE}/api/admin/nps/responses?limit=100`).then(r => r.json()),
     ]);
 
     // Summary
