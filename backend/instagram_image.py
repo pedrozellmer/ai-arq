@@ -312,8 +312,8 @@ def generate_features_post(
 
 
 def generate_promo_post(
-    headline: str = "Planilha de orçamento em minutos, não em dias",
-    subtitle: str = "Envie as pranchas do projeto e receba o orçamento pronto. Primeiro projeto grátis!",
+    headline: str = "Planilha de quantitativos em minutos, não em dias",
+    subtitle: str = "Envie as pranchas do projeto e receba os quantitativos SINAPI prontos. Você só precifica. Primeiro projeto grátis!",
     cta: str = "Teste Grátis",
 ) -> str:
     """Post 3: Promo/institucional sobre foto de prédio."""

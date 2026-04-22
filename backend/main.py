@@ -1536,7 +1536,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
                     dxf_prompt = f"""Analise os dados extraídos de um arquivo DXF de projeto de arquitetura.
 Os dados abaixo foram extraídos automaticamente do arquivo CAD (blocos, textos, layers, comprimentos, áreas).
-Gere itens de orçamento com base nesses dados.
+Gere itens quantitativos (descrição + unidade + quantidade, SEM preço) com base nesses dados.
 
 {structured_text}
 
@@ -3009,7 +3009,7 @@ async def calibration_ingest_from_review(
 
 @app.post("/api/agent/ask")
 async def agent_ask(request: Request, job_id: str, question: str = ""):
-    """Cliente faz uma pergunta sobre o orçamento de UM job. O agente
+    """Cliente faz uma pergunta sobre o quantitativo de UM job. O agente
     investiga (lê planilha, busca itens, lê DXFs, checa calibração) e
     responde em linguagem natural com referências aos itens.
 
