@@ -4735,6 +4735,85 @@ async def reprocess_project(job_id: str, request: Request):
     }
 
 
+@app.post("/api/items/{job_id}/review-finalize")
+async def finalize_review(job_id: str, request: Request):
+    """Marca a revisão inline como concluída e credita cashback (R$0,10 por
+    ação, teto R$ 20,00 por projeto).
+
+    Chamado quando o usuário clica "Concluir revisão" na tela de revisão.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    user_id = body.get("user_id", "")
+
+    try:
+        # Conta reviews desse job
+        rv_url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
+                  f"?job_id=eq.{job_id}&select=item_id&limit=5000")
+        req = urllib.request.Request(rv_url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=10)
+        reviews = json.loads(resp.read().decode("utf-8"))
+        n_actions = len({r["item_id"] for r in reviews if r.get("item_id")})
+    except Exception as e:
+        return {"error": f"erro contando reviews: {e}"}
+
+    # Cashback: R$ 0,10 por ação (item revisado), teto R$ 20,00 (200 ações)
+    credit_cents = min(n_actions * 10, 2000)
+
+    # Checa se já tem cashback do tipo inline_review pra esse job (não duplicar)
+    try:
+        chk_url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+                   f"?job_id=eq.{job_id}&event_type=eq.inline_review&select=id")
+        chk_req = urllib.request.Request(chk_url, method="GET")
+        chk_req.add_header("apikey", SUPABASE_KEY)
+        chk_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        chk_resp = urllib.request.urlopen(chk_req, timeout=8)
+        existing = json.loads(chk_resp.read().decode("utf-8"))
+    except Exception:
+        existing = []
+
+    if existing:
+        return {
+            "status": "ok",
+            "already_credited": True,
+            "n_actions": n_actions,
+            "message": "Cashback dessa revisão já foi creditado anteriormente.",
+        }
+
+    if user_id and credit_cents > 0:
+        try:
+            cb_payload = {
+                "job_id": job_id,
+                "user_id": user_id,
+                "event_type": "inline_review",
+                "credit_cents": credit_cents,
+                "description": f"Revisão inline: {n_actions} itens",
+                "approved_at": datetime.utcnow().isoformat(),
+                "approved_by": "auto",
+            }
+            cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+            cb_body = json.dumps(cb_payload).encode("utf-8")
+            cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
+            cb_req.add_header("apikey", SUPABASE_KEY)
+            cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            cb_req.add_header("Content-Type", "application/json")
+            cb_req.add_header("Prefer", "return=minimal")
+            urllib.request.urlopen(cb_req, timeout=8)
+        except Exception as e:
+            print(f"[review-finalize] erro cashback: {e}")
+
+    return {
+        "status": "ok",
+        "n_actions": n_actions,
+        "credit_cents": credit_cents,
+        "credit_brl": credit_cents / 100.0,
+    }
+
+
 @app.get("/api/items/{job_id}/review-state")
 async def get_review_state(job_id: str):
     """Retorna as revisões já feitas nesse job pra restaurar o estado no
