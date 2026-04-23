@@ -23,18 +23,36 @@
 
 <header class="bg-white border-b sticky top-0 z-40">
   <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-    <a href="meus-projetos.html" class="text-gray-400 hover:text-indigo-600" title="Voltar pra Meus Projetos">
+    <button onclick="smartBack()" class="text-gray-400 hover:text-indigo-600" title="Voltar">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-    </a>
+    </button>
     <div class="flex-1 min-w-0">
-      <h1 id="proj-title" class="font-semibold text-gray-800 truncate">Projeto</h1>
-      <p id="proj-id" class="text-xs text-gray-400 font-mono"></p>
+      <nav class="text-[11px] text-gray-400 flex items-center gap-1">
+        <a href="dashboard.html" class="hover:text-indigo-600">Início</a>
+        <span>›</span>
+        <a href="dashboard.html#meus-projetos" class="hover:text-indigo-600">Meus Projetos</a>
+      </nav>
+      <h1 id="proj-title" class="font-semibold text-gray-800 truncate leading-tight">Projeto</h1>
     </div>
     <div class="flex items-center gap-2">
       <span id="proj-status-badge"></span>
     </div>
   </div>
 </header>
+
+<script>
+// Volta pro local de onde o usuário veio. Se abriu direto (document.referrer
+// vazio ou de fora), vai pra dashboard home.
+function smartBack() {
+  const ref = document.referrer || '';
+  const sameOrigin = ref.startsWith(window.location.origin);
+  if (sameOrigin && window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.href = 'dashboard.html';
+  }
+}
+</script>
 
 <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
 
