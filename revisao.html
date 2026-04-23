@@ -62,6 +62,11 @@
         <span><span id="count-edited"   class="font-semibold text-amber-600">0</span> editados</span>
         <span><span id="count-pending"  class="font-semibold text-gray-600">0</span> pendentes</span>
       </div>
+      <!-- Pill de cashback acumulado nesta sessão -->
+      <div id="cashback-session-pill" class="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800" title="Cashback que você está acumulando neste projeto">
+        <span>💰</span>
+        <span>+R$ <span id="cashback-session-value">0,00</span></span>
+      </div>
       <button id="btn-save-later" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
         title="Salvar progresso e continuar depois em Meus Projetos">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -70,6 +75,12 @@
       <button id="btn-export" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Exportar .xlsx
+      </button>
+      <!-- Botão Concluir revisão — fica destacado quando não há pendentes -->
+      <button id="btn-finish" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 opacity-50 cursor-not-allowed" disabled
+        title="Conclua todos os itens pra finalizar">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        Concluir revisão
       </button>
     </div>
   </div>
@@ -279,7 +290,21 @@ function render() {
     return a.localeCompare(b);
   });
   container.innerHTML = sortedSecs.map(sec => {
-    const secItems = groups[sec];
+    // Ordena itens DENTRO da seção por item_num (ex: 1, 2, 3.1, 3.2, 4...).
+    // Antes vinham na ordem que o motor devolveu (bagunçada visualmente).
+    const secItems = groups[sec].slice().sort((a, b) => {
+      const sa = String(a.item_num || '');
+      const sb = String(b.item_num || '');
+      // Compara numericamente por cada componente: "4.10" > "4.2"
+      const pa = sa.split('.').map(n => parseInt(n, 10) || 0);
+      const pb = sb.split('.').map(n => parseInt(n, 10) || 0);
+      const len = Math.max(pa.length, pb.length);
+      for (let i = 0; i < len; i++) {
+        const diff = (pa[i] || 0) - (pb[i] || 0);
+        if (diff !== 0) return diff;
+      }
+      return sa.localeCompare(sb);
+    });
     const pendingInSec = secItems.filter(it => !reviewState[it.id] || reviewState[it.id] === 'pending').length;
     return `
     <section class="bg-white rounded-lg border overflow-hidden">
@@ -675,7 +700,73 @@ function updateCounters() {
   document.getElementById('count-rejected').textContent = counts.rejected;
   document.getElementById('count-edited').textContent   = counts.edited;
   document.getElementById('count-pending').textContent  = counts.pending;
+
+  // Pill de cashback: R$ 0,10 por ação (aprovar/editar/remover).
+  // Valor simbólico; o backend registra oficialmente quando for concluído.
+  const reviewed = counts.approved + counts.rejected + counts.edited;
+  const CASHBACK_PER_ACTION_BRL = 0.10;
+  const cbValue = reviewed * CASHBACK_PER_ACTION_BRL;
+  const cbEl = document.getElementById('cashback-session-value');
+  if (cbEl) cbEl.textContent = cbValue.toFixed(2).replace('.', ',');
+
+  // Botão "Concluir revisão" — habilita só quando pendentes == 0
+  const btnFinish = document.getElementById('btn-finish');
+  if (btnFinish) {
+    if (counts.pending === 0 && items.length > 0) {
+      btnFinish.disabled = false;
+      btnFinish.classList.remove('opacity-50', 'cursor-not-allowed');
+      btnFinish.classList.add('shadow-btn', 'animate-pulse');
+      btnFinish.title = 'Finaliza a revisão e credita o cashback';
+    } else {
+      btnFinish.disabled = true;
+      btnFinish.classList.add('opacity-50', 'cursor-not-allowed');
+      btnFinish.classList.remove('shadow-btn', 'animate-pulse');
+      btnFinish.title = `Faltam ${counts.pending} itens pra concluir`;
+    }
+  }
 }
+
+// Handler do "Concluir revisão"
+document.getElementById('btn-finish')?.addEventListener('click', async () => {
+  if (document.getElementById('btn-finish').disabled) return;
+  const counts = {
+    approved: items.filter(it => reviewState[it.id] === 'approved').length,
+    rejected: items.filter(it => reviewState[it.id] === 'rejected').length,
+    edited: items.filter(it => reviewState[it.id] === 'edited').length,
+  };
+  const total = counts.approved + counts.rejected + counts.edited;
+  const cashback = (total * 0.10).toFixed(2).replace('.', ',');
+  const ok = confirm(
+    `Concluir revisão de ${items.length} itens?\n\n` +
+    `✓ ${counts.approved} aprovados\n` +
+    `✗ ${counts.rejected} removidos\n` +
+    `✎ ${counts.edited} editados\n\n` +
+    `💰 Cashback estimado: R$ ${cashback} (creditado automaticamente)\n\n` +
+    `Depois de concluir, você pode exportar a planilha final.`
+  );
+  if (!ok) return;
+
+  const btn = document.getElementById('btn-finish');
+  btn.disabled = true;
+  btn.textContent = 'Concluindo...';
+  try {
+    // Marca revisão como concluída (endpoint POST — best-effort)
+    await fetch(`${API_BASE}/api/items/${jobId}/review-finalize`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ user_id: window.currentUserId || '' }),
+    }).catch(() => {});
+    toast('✓ Revisão concluída! Cashback será creditado.');
+    // Redireciona pra página do projeto após 1.5s
+    setTimeout(() => {
+      window.location.href = `projeto.html?job_id=${jobId}`;
+    }, 1500);
+  } catch (e) {
+    toast('Erro: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> Concluir revisão';
+  }
+});
 function toast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
