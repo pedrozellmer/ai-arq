@@ -103,13 +103,6 @@
           <span id="topbar-balance-value">R$ 0,00</span>
         </div>
 
-        <!-- CTA Novo Projeto -->
-        <button onclick="switchTab('novo-projeto')" class="inline-flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg gradient-main text-white font-semibold text-sm shadow-btn hover:opacity-90 transition">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-          <span class="hidden sm:inline">Novo Projeto</span>
-          <span class="sm:hidden">Novo</span>
-        </button>
-
         <!-- Avatar com dropdown -->
         <div class="relative" id="avatar-wrapper">
           <button onclick="toggleAvatarMenu()" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition">
@@ -120,6 +113,9 @@
           <div id="avatar-menu" class="absolute right-0 top-full mt-2 w-60 rounded-xl border bg-white shadow-lg py-2 hidden z-50">
             <button onclick="switchTab('home'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-3">
               <span>🏠</span> <span>Dashboard (Início)</span>
+            </button>
+            <button onclick="switchTab('novo-projeto'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+              <span>➕</span> <span>Novo projeto</span>
             </button>
             <button onclick="switchTab('meus-projetos'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
               <span>📁</span> <span>Meus projetos</span>
