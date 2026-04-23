@@ -1,0 +1,87 @@
+# Deploy customizado pro GitHub Pages.
+#
+# Por que este workflow existe:
+# - O deploy automático "pages build and deployment" do GitHub estava
+#   falhando em 1s no step "Deploy to GitHub Pages" (environment
+#   travado/state problem), sem nunca chegar a publicar.
+# - Este workflow toma controle explícito do upload do artefato e do
+#   deployment, usando as actions oficiais do GitHub. Mais confiável
+#   que o pipeline automático.
+#
+# O que faz:
+# 1. Checkout do repo
+# 2. Empacota a raiz inteira como artefato estático
+# 3. Faz deploy pro environment github-pages
+#
+# Quando dispara:
+# - Todo push na main
+# - Ou manualmente via "Run workflow" na aba Actions
+
+name: Deploy site to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Evita deploys concorrentes que causam race condition
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Prepare static site directory
+        # Copia apenas arquivos do frontend pro _site/, excluindo backend,
+        # arquivos de trabalho/teste, .github, .git etc.
+        run: |
+          mkdir -p _site
+          # Copia HTMLs, CSS, JS, imagens, fonts, favicon, CNAME, .nojekyll
+          find . -maxdepth 1 -type f \( \
+            -name "*.html" -o \
+            -name "*.css" -o \
+            -name "*.js" -o \
+            -name "*.png" -o \
+            -name "*.jpg" -o \
+            -name "*.jpeg" -o \
+            -name "*.gif" -o \
+            -name "*.svg" -o \
+            -name "*.ico" -o \
+            -name "*.webp" -o \
+            -name "*.woff*" -o \
+            -name "*.ttf" -o \
+            -name "CNAME" -o \
+            -name ".nojekyll" \
+          \) -exec cp {} _site/ \;
+          # Copia pastas de assets frontend (se existirem)
+          for d in assets img images static fonts frontend; do
+            if [ -d "$d" ]; then cp -r "$d" _site/; fi
+          done
+          echo "=== Conteúdo de _site ==="
+          ls -la _site/ | head -40
+          echo "=== Total de arquivos: $(find _site -type f | wc -l) ==="
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
