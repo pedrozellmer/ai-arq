@@ -52,33 +52,19 @@
     animation: spin-slow 4s linear infinite;
   }
 
-  /* Sidebar */
-  .sidebar {
-    transition: transform 0.3s ease;
-  }
-  .sidebar-overlay {
-    transition: opacity 0.3s ease;
-  }
-  .nav-item {
-    transition: all 0.15s ease;
-  }
-  .nav-item:hover {
-    background-color: rgba(255,255,255,0.1);
-  }
-  .nav-item.active {
-    background-color: rgba(255,255,255,0.15);
-    border-right: 3px solid #06b6d4;
-  }
-
   /* File progress items */
   .file-progress-item {
     transition: all 0.3s ease;
   }
 
-  /* Scrollbar */
-  .sidebar::-webkit-scrollbar { width: 4px; }
-  .sidebar::-webkit-scrollbar-track { background: transparent; }
-  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 2px; }
+  /* Avatar dropdown menu */
+  #avatar-menu {
+    animation: menuFadeIn 0.15s ease-out;
+  }
+  @keyframes menuFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
 
   @keyframes bounce-house {
     0%, 100% { transform: translateY(0) rotate(0deg); }
@@ -93,100 +79,80 @@
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
 
-<!-- MOBILE OVERLAY -->
-<div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-40 hidden opacity-0 lg:hidden" onclick="closeSidebar()"></div>
+<!-- Avatar dropdown backdrop (clique fora fecha) -->
+<div id="avatar-backdrop" class="fixed inset-0 z-30 hidden" onclick="closeAvatarMenu()"></div>
 
 <!-- SIDEBAR -->
-<aside id="sidebar" class="sidebar fixed top-0 left-0 z-50 h-full w-64 gradient-main flex flex-col transform -translate-x-full lg:translate-x-0">
-  <!-- Logo -->
-  <a href="index.html" class="flex items-center gap-3 px-6 py-5 border-b border-white/10 no-underline hover:bg-white/10 transition">
-    <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-white/20 text-white font-bold text-sm">AI</div>
-    <span class="text-xl font-bold text-white">AI<span class="text-cyan-300">.arq</span></span>
-  </a>
+<!-- MAIN WRAPPER (sem menu lateral) -->
+<div class="min-h-screen flex flex-col">
 
-  <!-- Navigation -->
-  <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-    <button onclick="switchTab('home')" data-tab="home" class="nav-item active w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#127968;</span>
-      <span>Início</span>
-    </button>
-    <button onclick="switchTab('novo-projeto')" data-tab="novo-projeto" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128202;</span>
-      <span>Novo Projeto</span>
-    </button>
-    <button onclick="switchTab('meus-projetos')" data-tab="meus-projetos" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128193;</span>
-      <span>Meus Projetos</span>
-    </button>
-    <button onclick="switchTab('cashback')" data-tab="cashback" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128176;</span>
-      <span>Cashback</span>
-    </button>
-    <button onclick="switchTab('como-funciona')" data-tab="como-funciona" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128214;</span>
-      <span>Como Funciona</span>
-    </button>
-
-    <button onclick="switchTab('meu-cadastro')" data-tab="meu-cadastro" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128100;</span>
-      <span>Meu Cadastro</span>
-    </button>
-    <button onclick="switchTab('meus-pagamentos')" data-tab="meus-pagamentos" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <span class="text-lg">&#128179;</span>
-      <span>Meus Pagamentos</span>
-    </button>
-
-    <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
-      <a href="faq.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
-        <span class="text-lg">&#10067;</span>
-        <span>FAQ</span>
-      </a>
-      <a href="termos.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
-        <span class="text-lg">&#128196;</span>
-        <span>Termos de Uso</span>
-      </a>
-      <a href="privacidade.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
-        <span class="text-lg">&#128274;</span>
-        <span>Privacidade</span>
-      </a>
-    </div>
-  </nav>
-
-  <!-- User section at bottom -->
-  <div class="px-4 py-4 border-t border-white/10">
-    <a id="btn-admin" href="admin.html" class="hidden w-full flex items-center gap-2 px-4 py-2 mb-3 rounded-lg bg-red-500/20 text-red-200 text-xs font-medium hover:bg-red-500/30 transition no-underline">
-      <span>&#9881;</span> Painel Admin
-    </a>
-    <div class="flex items-center gap-3">
-      <img id="user-avatar" src="" alt="Avatar" class="h-9 w-9 rounded-full object-cover border-2 border-white/20 shrink-0">
-      <div class="min-w-0 flex-1">
-        <p id="user-name" class="text-sm font-medium text-white truncate"></p>
-        <button id="btn-logout" class="text-xs text-white/50 hover:text-red-300 transition font-medium">Sair</button>
-      </div>
-    </div>
-  </div>
-</aside>
-
-<!-- MAIN WRAPPER -->
-<div class="lg:ml-64 min-h-screen flex flex-col">
-
-  <!-- MOBILE TOPBAR -->
-  <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b lg:hidden">
-    <div class="flex items-center justify-between h-14 px-4">
-      <button onclick="openSidebar()" class="p-2 -ml-2 text-gray-600 hover:text-gray-900">
-        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-      </button>
-      <div class="flex items-center gap-2">
-        <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+  <!-- TOPBAR — Logo + Novo Projeto + Avatar dropdown -->
+  <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b">
+    <div class="mx-auto max-w-7xl flex items-center justify-between h-16 px-4 md:px-6">
+      <!-- Logo clicável (volta pra Home) -->
+      <button onclick="switchTab('home')" class="flex items-center gap-2 hover:opacity-80 transition">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
         <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </button>
+
+      <!-- Ações principais -->
+      <div class="flex items-center gap-2 md:gap-3">
+        <!-- Saldo (desktop) -->
+        <div id="topbar-balance" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-100 transition" onclick="switchTab('cashback')" title="Ver cashback">
+          <span>💰</span>
+          <span id="topbar-balance-value">R$ 0,00</span>
+        </div>
+
+        <!-- CTA Novo Projeto -->
+        <button onclick="switchTab('novo-projeto')" class="inline-flex items-center gap-2 px-3 md:px-4 py-2 rounded-lg gradient-main text-white font-semibold text-sm shadow-btn hover:opacity-90 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          <span class="hidden sm:inline">Novo Projeto</span>
+          <span class="sm:hidden">Novo</span>
+        </button>
+
+        <!-- Avatar com dropdown -->
+        <div class="relative" id="avatar-wrapper">
+          <button onclick="toggleAvatarMenu()" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition">
+            <img id="user-avatar" src="" alt="Avatar" class="h-8 w-8 rounded-full object-cover border border-gray-200 shrink-0">
+            <span id="user-name" class="hidden md:inline text-sm font-medium text-gray-700 max-w-[140px] truncate"></span>
+            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div id="avatar-menu" class="absolute right-0 top-full mt-2 w-60 rounded-xl border bg-white shadow-lg py-2 hidden z-50">
+            <button onclick="switchTab('meu-cadastro'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+              <span>👤</span> <span>Meu cadastro</span>
+            </button>
+            <button onclick="switchTab('cashback'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+              <span>💰</span> <span>Cashback</span>
+            </button>
+            <button onclick="switchTab('meus-pagamentos'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+              <span>💳</span> <span>Meus pagamentos</span>
+            </button>
+            <div class="border-t my-1"></div>
+            <a href="faq.html" class="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3 no-underline">
+              <span>❓</span> <span>FAQ</span>
+            </a>
+            <a href="termos.html" class="block px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 flex items-center gap-3 no-underline">
+              <span>📄</span> <span>Termos de Uso</span>
+            </a>
+            <a href="privacidade.html" class="block px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 flex items-center gap-3 no-underline">
+              <span>🔒</span> <span>Privacidade</span>
+            </a>
+            <a id="btn-admin" href="admin.html" class="hidden px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3 no-underline">
+              <span>⚙️</span> <span>Painel Admin</span>
+            </a>
+            <div class="border-t my-1"></div>
+            <button id="btn-logout" class="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-3">
+              <span>🚪</span> <span>Sair</span>
+            </button>
+          </div>
+        </div>
       </div>
-      <div class="w-10"></div>
     </div>
   </header>
 
   <!-- MAIN CONTENT -->
-  <main class="flex-1 p-4 md:p-8 lg:p-10">
-    <div class="max-w-4xl mx-auto">
+  <main class="flex-1 p-4 md:p-6 lg:p-8">
+    <div class="max-w-7xl mx-auto">
 
       <!-- ═══════════════════════════════════════════ -->
       <!-- TAB 1: NOVO PROJETO                        -->
@@ -995,24 +961,6 @@
 
 <script>
   // ══════════════════════════════════════════════
-  //  SIDEBAR / MOBILE MENU
-  // ══════════════════════════════════════════════
-  const sidebar = document.getElementById('sidebar');
-  const sidebarOverlay = document.getElementById('sidebar-overlay');
-
-  function openSidebar() {
-    sidebar.classList.remove('-translate-x-full');
-    sidebarOverlay.classList.remove('hidden');
-    requestAnimationFrame(() => sidebarOverlay.classList.remove('opacity-0'));
-  }
-
-  function closeSidebar() {
-    sidebar.classList.add('-translate-x-full');
-    sidebarOverlay.classList.add('opacity-0');
-    setTimeout(() => sidebarOverlay.classList.add('hidden'), 300);
-  }
-
-  // ══════════════════════════════════════════════
   //  TAB SWITCHING
   // ══════════════════════════════════════════════
   function switchTab(tabName) {
@@ -1022,22 +970,51 @@
     const target = document.getElementById('tab-' + tabName);
     if (target) target.classList.remove('hidden');
 
-    // Update nav active state
-    document.querySelectorAll('.nav-item[data-tab]').forEach(btn => {
-      btn.classList.remove('active');
-      if (btn.getAttribute('data-tab') === tabName) btn.classList.add('active');
-    });
+    // Update URL hash pra possibilitar linking direto + botão back do browser
+    if (tabName && tabName !== 'home') {
+      try { history.replaceState(null, '', '#' + tabName); } catch (_) {}
+    } else {
+      try { history.replaceState(null, '', window.location.pathname); } catch (_) {}
+    }
 
-    // Close mobile sidebar
-    closeSidebar();
+    // Scroll pro topo (impede "lag" ao trocar aba)
+    window.scrollTo({ top: 0, behavior: 'instant' });
 
-    // If switching to history, render it
+    // Fecha avatar dropdown se estava aberto
+    closeAvatarMenu();
+
+    // Trigger data loaders por aba
     if (tabName === 'meus-projetos') renderProjectHistory();
     if (tabName === 'meu-cadastro') loadProfile();
     if (tabName === 'meus-pagamentos') renderPayments();
     if (tabName === 'cashback') { loadCashbackAggregated(); loadCashbackProjects(); renderPendingReviews(); }
     if (tabName === 'home') loadHomeStats();
   }
+
+  // Avatar dropdown
+  function toggleAvatarMenu() {
+    const menu = document.getElementById('avatar-menu');
+    const backdrop = document.getElementById('avatar-backdrop');
+    if (!menu) return;
+    const isHidden = menu.classList.contains('hidden');
+    if (isHidden) {
+      menu.classList.remove('hidden');
+      backdrop.classList.remove('hidden');
+    } else {
+      menu.classList.add('hidden');
+      backdrop.classList.add('hidden');
+    }
+  }
+  function closeAvatarMenu() {
+    const menu = document.getElementById('avatar-menu');
+    const backdrop = document.getElementById('avatar-backdrop');
+    if (menu) menu.classList.add('hidden');
+    if (backdrop) backdrop.classList.add('hidden');
+  }
+
+  // Shim pras chamadas antigas (algum código ainda chama closeSidebar)
+  function closeSidebar() { closeAvatarMenu(); }
+  function openSidebar() { /* no-op: sidebar removida */ }
 
   // ══════════════════════════════════════════════
   //  HOME — métricas agregadas do usuário
@@ -1360,6 +1337,14 @@
       console.warn('loadUserCredits err', e);
       userCreditsCents = 0;
     }
+    // Atualiza pill de saldo na topbar
+    try {
+      const el = document.getElementById('topbar-balance-value');
+      if (el) {
+        const brl = (userCreditsCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        el.textContent = 'R$ ' + brl;
+      }
+    } catch (_) {}
   }
 
   function hasBetaCredits() {
