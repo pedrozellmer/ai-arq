@@ -907,6 +907,27 @@
               </div>
             </div>
 
+            <!-- Logo do escritório (co-branding em planilhas/PPT gerados) -->
+            <div class="mt-4 pt-4 border-t">
+              <label class="block text-sm font-semibold text-gray-800 mb-1">🎨 Logo do escritório</label>
+              <p class="text-xs text-gray-500 mb-3">Aparece nas planilhas e apresentações PPT que o AI.arq gera. Ajuda você a entregar material com a sua marca.</p>
+              <div class="flex items-center gap-4">
+                <div id="logo-preview-box" class="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50 overflow-hidden">
+                  <img id="logo-preview" src="" class="max-w-full max-h-full hidden"/>
+                  <span id="logo-placeholder" class="text-xs text-gray-400 text-center px-2">Nenhuma logo</span>
+                </div>
+                <div class="flex-1">
+                  <input id="logo-file-input" type="file" accept="image/png,image/jpeg,image/svg+xml" class="text-sm"/>
+                  <p class="text-xs text-gray-400 mt-1">PNG, JPG ou SVG (máx 2MB). Fundo transparente recomendado.</p>
+                  <div class="mt-2 flex gap-2">
+                    <button onclick="uploadLogo()" id="btn-upload-logo" class="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Enviar logo</button>
+                    <button onclick="removeLogo()" id="btn-remove-logo" class="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg hidden">Remover</button>
+                  </div>
+                  <p id="logo-status" class="mt-2 text-xs hidden"></p>
+                </div>
+              </div>
+            </div>
+
             <div class="pt-4 flex items-center justify-between">
               <span id="prof-status" class="text-sm text-green-600 hidden">Dados salvos com sucesso!</span>
               <button id="btn-save-profile" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition hover:opacity-90">
@@ -1216,9 +1237,14 @@
     await loadUserCredits();
 
     // ── Se URL tem hash (#meus-projetos, #cashback etc), ativa a aba ──
+    // Se NÃO tem hash, ativa 'home' explicitamente — sem isso, loadHomeStats
+    // nunca é chamado na carga inicial (a aba fica visível mas sem dados
+    // carregados, dando impressão de "dashboard vazio até dar F5").
     const hash = (window.location.hash || '').replace(/^#/, '');
     if (hash && document.getElementById('tab-' + hash)) {
       switchTab(hash);
+    } else {
+      switchTab('home');
     }
   }
   checkAuth();
@@ -2453,6 +2479,15 @@
         document.getElementById('prof-area').value = profile.area || '';
         document.getElementById('prof-role').value = profile.role || '';
 
+        // Logo
+        if (profile.logo_url) {
+          const img = document.getElementById('logo-preview');
+          img.src = profile.logo_url + '?t=' + Date.now(); // cache bust
+          img.classList.remove('hidden');
+          document.getElementById('logo-placeholder').classList.add('hidden');
+          document.getElementById('btn-remove-logo').classList.remove('hidden');
+        }
+
         // Show beta code info if available
         const profBetaSection = document.getElementById('prof-beta-section');
         const profBetaInfo = document.getElementById('prof-beta-info');
@@ -2479,6 +2514,71 @@
       loading.textContent = 'Erro ao carregar dados.';
     }
   }
+
+  // Upload de logo do escritório
+  window.uploadLogo = async function() {
+    const input = document.getElementById('logo-file-input');
+    const statusEl = document.getElementById('logo-status');
+    const file = input.files[0];
+    if (!file) { alert('Selecione um arquivo de imagem'); return; }
+    if (file.size > 2 * 1024 * 1024) { alert('Arquivo maior que 2MB'); return; }
+
+    const btn = document.getElementById('btn-upload-logo');
+    btn.disabled = true;
+    btn.textContent = 'Enviando...';
+    statusEl.classList.remove('hidden');
+    statusEl.className = 'mt-2 text-xs text-gray-500';
+    statusEl.textContent = 'Enviando logo...';
+
+    try {
+      // Upload pro Storage (bucket 'logos')
+      const fileName = `logo_${currentUser.id}_${Date.now()}.${file.name.split('.').pop()}`;
+      const { data: upData, error: upErr } = await sbClient.storage
+        .from('logos').upload(fileName, file, { upsert: true });
+      if (upErr) throw upErr;
+
+      // URL pública
+      const { data: urlData } = sbClient.storage
+        .from('logos').getPublicUrl(fileName);
+      const publicUrl = urlData.publicUrl;
+
+      // Atualiza o profile
+      const { error: updErr } = await sbClient.from('profiles')
+        .update({ logo_url: publicUrl }).eq('user_id', currentUser.id);
+      if (updErr) throw updErr;
+
+      // Mostra preview
+      const img = document.getElementById('logo-preview');
+      img.src = publicUrl + '?t=' + Date.now();
+      img.classList.remove('hidden');
+      document.getElementById('logo-placeholder').classList.add('hidden');
+      document.getElementById('btn-remove-logo').classList.remove('hidden');
+
+      statusEl.className = 'mt-2 text-xs text-emerald-600';
+      statusEl.textContent = '✓ Logo atualizada! Aparece automaticamente nos seus próximos PPTs.';
+      input.value = '';
+    } catch (e) {
+      statusEl.className = 'mt-2 text-xs text-red-600';
+      statusEl.textContent = '✗ Erro: ' + (e.message || e);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Enviar logo';
+    }
+  };
+
+  window.removeLogo = async function() {
+    if (!confirm('Remover a logo atual?')) return;
+    try {
+      await sbClient.from('profiles').update({ logo_url: null }).eq('user_id', currentUser.id);
+      const img = document.getElementById('logo-preview');
+      img.classList.add('hidden');
+      img.src = '';
+      document.getElementById('logo-placeholder').classList.remove('hidden');
+      document.getElementById('btn-remove-logo').classList.add('hidden');
+    } catch (e) {
+      alert('Erro: ' + (e.message || e));
+    }
+  };
 
   document.getElementById('btn-save-profile')?.addEventListener('click', async () => {
     const btn = document.getElementById('btn-save-profile');
