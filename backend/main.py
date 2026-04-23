@@ -2611,6 +2611,258 @@ async def heuristics_summary():
 
 
 # ═══════════════════════════════════════════════════════════════
+#  CHAT PÚBLICO (widget de vendas/dúvidas no site) + CAPTURA DE LEADS
+# ═══════════════════════════════════════════════════════════════
+
+# Rate limit simples em memória: max 20 mensagens / 10min por IP
+_PUBLIC_CHAT_HITS: dict = {}  # ip → [timestamps]
+
+
+@app.post("/api/public/chat/lead")
+async def save_chat_lead(request: Request):
+    """Salva (ou atualiza) um lead do chat widget.
+
+    Chamado quando o visitante preenche nome + email ANTES da primeira
+    mensagem. Usa email como chave de dedupe — se já existir, atualiza.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    name = str(body.get("name", "")).strip()[:120]
+    email = str(body.get("email", "")).strip().lower()[:200]
+    phone = str(body.get("phone", "")).strip()[:40]
+    source_page = str(body.get("source_page", "")).strip()[:80]
+    first_question = str(body.get("first_question", "")).strip()[:500]
+    user_agent = request.headers.get("user-agent", "")[:300]
+
+    if not name or not email or "@" not in email:
+        return {"error": "Nome e email válidos são obrigatórios"}
+
+    try:
+        import urllib.parse as _up
+        # Upsert por email (se já existe, atualiza last_message_at e n_messages)
+        # Primeiro tenta achar
+        find_url = (f"{SUPABASE_URL}/rest/v1/chat_leads"
+                    f"?email=eq.{_up.quote(email)}&select=id,n_messages")
+        req = urllib.request.Request(find_url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        existing = json.loads(resp.read().decode("utf-8"))
+
+        now_iso = datetime.utcnow().isoformat()
+
+        if existing:
+            # Atualiza existente
+            lead_id = existing[0]["id"]
+            n_msgs = (existing[0].get("n_messages") or 0) + 1
+            upd_url = f"{SUPABASE_URL}/rest/v1/chat_leads?id=eq.{lead_id}"
+            upd_payload = {
+                "name": name,
+                "phone": phone or None,
+                "n_messages": n_msgs,
+                "last_message_at": now_iso,
+            }
+            if first_question:
+                upd_payload["first_question"] = first_question[:500]
+            body_bytes = json.dumps(upd_payload).encode("utf-8")
+            upd_req = urllib.request.Request(upd_url, data=body_bytes, method="PATCH")
+            upd_req.add_header("apikey", SUPABASE_KEY)
+            upd_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            upd_req.add_header("Content-Type", "application/json")
+            upd_req.add_header("Prefer", "return=minimal")
+            urllib.request.urlopen(upd_req, timeout=8)
+            return {"status": "ok", "lead_id": lead_id, "new": False}
+
+        # Insere novo
+        ins_payload = {
+            "name": name,
+            "email": email,
+            "phone": phone or None,
+            "source_page": source_page,
+            "user_agent": user_agent,
+            "first_question": first_question[:500],
+            "n_messages": 1,
+        }
+        ins_url = f"{SUPABASE_URL}/rest/v1/chat_leads"
+        body_bytes = json.dumps(ins_payload).encode("utf-8")
+        ins_req = urllib.request.Request(ins_url, data=body_bytes, method="POST")
+        ins_req.add_header("apikey", SUPABASE_KEY)
+        ins_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        ins_req.add_header("Content-Type", "application/json")
+        ins_req.add_header("Prefer", "return=representation")
+        ins_resp = urllib.request.urlopen(ins_req, timeout=8)
+        inserted = json.loads(ins_resp.read().decode("utf-8"))
+        return {
+            "status": "ok",
+            "lead_id": inserted[0]["id"] if inserted else None,
+            "new": True,
+        }
+    except Exception as e:
+        print(f"[chat_lead] erro: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/api/admin/chat/leads")
+async def admin_list_chat_leads(limit: int = 200):
+    """Lista leads do chat pra painel admin. Requer auth admin."""
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/chat_leads"
+               f"?select=*&order=last_message_at.desc&limit={int(limit)}")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=15)
+        return {"leads": json.loads(resp.read().decode("utf-8"))}
+    except Exception as e:
+        return {"error": str(e)}
+
+PUBLIC_CHAT_SYSTEM_PROMPT = """Você é o assistente virtual do AI.arq — uma plataforma brasileira que acelera o levantamento de quantitativos em projetos de arquitetura.
+
+**Sua missão:** responder perguntas de visitantes do site (ai.arq.br) com honestidade e brevidade. Você ajuda a tirar dúvidas sobre o produto, preços e LGPD. Foco em conversão mas SEM vender gordura — o AI.arq é honesto sobre o que faz e o que não faz.
+
+## O QUE O AI.ARQ FAZ
+
+1. **Quantitativo a partir de CAD** — usuário envia PDF/DWG/DXF, IA lê e em ~5 min gera planilha Excel com 18 disciplinas (demolição, alvenaria, elétrica, hidráulica, pintura, pisos, forro, etc). Cada item cita a prancha de origem e tem código de cor:
+   - BRANCO = medido direto do CAD (confiável)
+   - LARANJA = estimado pela IA (revisar antes de usar)
+   - CINZA = metadado do projeto
+   - ROXO = custo indireto / gestão (checklist — não sai no CAD mas toda obra tem)
+
+2. **Memória técnica SINAPI + TCPO BIM** — aba extra na planilha com referência oficial pra cada item (composição + insumos + coeficientes). Base carregada: 10.284 composições SINAPI + 54.529 insumos, e 1.333 composições TCPO BIM + 6.733 insumos.
+
+3. **Comparativo de fornecedores** (opcional) — depois que o usuário recebe propostas dos fornecedores, pode fazer upload das planilhas deles e o AI.arq gera XLSX + PPT executivo com ranking, discrepâncias, itens esquecidos.
+
+4. **PPT com a marca do escritório** — logo e cor do escritório aparecem na apresentação. Envio direto pro cliente final via WhatsApp.
+
+## O QUE O AI.ARQ **NÃO** FAZ
+
+- **NÃO precifica** e **NÃO fecha orçamento** — a planilha sai SEM preços preenchidos. Precificação é trabalho do orçamentista do usuário (humano, não IA).
+- **NÃO substitui profissional habilitado** — é ferramenta de apoio ao levantamento inicial. Revisão por engenheiro/orçamentista é obrigatória.
+- **NÃO adivinha o que não está no CAD** — itens estimados são sinalizados em laranja pra revisão.
+
+## PREÇOS
+
+- **1º projeto: GRÁTIS**
+- **Pequeno** (1-5 pranchas): R$ 97
+- **Médio** (6-10 pranchas): R$ 157 (mais comum — -19% por prancha vs Pequeno)
+- **Grande** (11-20 pranchas): R$ 247 (-36% por prancha)
+- **Acima de 20**: R$ 247 + R$ 10/prancha extra
+- Pagamento via Stripe (cartão/PIX). **Sem mensalidade.** Paga só quando usa.
+- Todas as outras features (memória técnica, comparativo, PPT, cashback) estão INCLUÍDAS no preço do projeto. Sem taxas extras. Cada feature é OPCIONAL — use só se fizer sentido.
+
+## CASHBACK
+
+Programa granular — cada ação que ajuda a calibrar a IA gera crédito automático abatível no próximo projeto:
+- Revisão inline (validar item no navegador): crédito por ação
+- Upload de planilha revisada offline: +R$ 20
+- Upload de cotação de fornecedor: +R$ 5
+- Feedback NPS: crédito ao responder
+
+## LGPD E PRIVACIDADE
+
+- Usuário é controlador LGPD dos dados do cliente final (nome, telefone, endereço). AI.arq é operador.
+- Valores em R$ de cotações **NUNCA** viram referência pra outros projetos. Só métricas adimensionais anônimas (coeficientes de variação, share MAT/MO) alimentam a base de mercado.
+- Dados isolados por projeto. Arquivos processados com criptografia. Transferências internacionais (Anthropic/Supabase/Render/Stripe) com bases legais do art. 33 da LGPD.
+- Detalhes em ai.arq.br/privacidade.html e ai.arq.br/termos.html
+
+## COMO USAR
+
+1. Crie conta (grátis) em ai.arq.br → login
+2. No dashboard: clique "Novo projeto" → faça upload dos PDFs/DWGs
+3. Aguarde ~5 min o processamento
+4. Baixe a planilha ou revise no navegador (ganha cashback)
+5. Mande pros fornecedores, receba as propostas
+6. (Opcional) Faça upload das propostas no projeto → gere comparativo + PPT
+
+## TOM DE VOZ
+
+- Responda em **português brasileiro, informal-profissional**. Sem jargão técnico desnecessário. Sem "caro cliente".
+- Seja **objetivo e curto** (2-4 frases geralmente é o suficiente).
+- Se a dúvida for específica e técnica (ex: "como o piso é calculado?"), explique resumido e aponte pro FAQ completo: ai.arq.br/faq.html
+- Se o usuário quiser testar: direcione pra ai.arq.br → "Comece Grátis"
+- Se não souber a resposta com certeza, DIGA QUE NÃO SABE e sugira contato: contato@ai.arq.br
+
+## NÃO INVENTE
+
+Se perguntarem sobre coisas que você não tem certeza (integrações específicas, recursos futuros, planos corporativos), responda honestamente que não tem essa informação e sugira email de contato. NUNCA invente funcionalidades.
+"""
+
+
+@app.post("/api/public/chat")
+async def public_chat(request: Request):
+    """Chat público do widget no site — sem auth, com rate limit por IP.
+
+    Usado pra visitantes tirarem dúvidas sobre o produto antes de cadastrar.
+    """
+    # Rate limit: 20 msgs / 10min por IP
+    client_ip = (
+        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or request.client.host if request.client else "unknown"
+    )
+    now_ts = datetime.utcnow().timestamp()
+    history = _PUBLIC_CHAT_HITS.get(client_ip, [])
+    history = [t for t in history if now_ts - t < 600]  # últimos 10min
+    if len(history) >= 20:
+        return {
+            "error": "rate_limit",
+            "message": "Muitas mensagens em pouco tempo. Espere uns minutos e tente de novo.",
+        }
+    history.append(now_ts)
+    _PUBLIC_CHAT_HITS[client_ip] = history
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    messages = body.get("messages", [])
+    if not isinstance(messages, list) or not messages:
+        return {"error": "Precisa mandar { messages: [{role, content}, ...] }"}
+
+    # Sanitização: limita tamanho e quantidade de turns
+    messages = messages[-10:]  # só os últimos 10 turns (proteção contra prompt inflation)
+    clean_msgs = []
+    for m in messages:
+        role = m.get("role")
+        content = str(m.get("content", ""))[:2000]  # max 2k chars por msg
+        if role in ("user", "assistant") and content.strip():
+            clean_msgs.append({"role": role, "content": content})
+
+    if not clean_msgs:
+        return {"error": "Nenhuma mensagem válida"}
+
+    # Chama Claude Haiku (mais barato e rápido pra chat de vendas)
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return {"error": "Chat indisponível no momento."}
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=600,
+            system=PUBLIC_CHAT_SYSTEM_PROMPT,
+            messages=clean_msgs,
+        )
+        reply = resp.content[0].text if resp.content else "Desculpe, não consegui responder agora."
+        return {
+            "status": "ok",
+            "reply": reply,
+            "tokens_used": (resp.usage.input_tokens if resp.usage else 0) + (resp.usage.output_tokens if resp.usage else 0),
+        }
+    except Exception as e:
+        print(f"[public_chat] erro: {e}")
+        return {
+            "error": "Erro temporário",
+            "message": "Desculpe, algo deu errado. Tente de novo em instantes ou mande e-mail pra contato@ai.arq.br",
+        }
+
+
+# ═══════════════════════════════════════════════════════════════
 #  COTAÇÕES DE FORNECEDORES (supplier quotes)
 # ═══════════════════════════════════════════════════════════════
 

@@ -130,6 +130,11 @@
       <span>Insights</span>
     </button>
 
+    <button onclick="switchTab('leads')" data-tab="leads" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+      <span>Leads do Chat</span>
+    </button>
+
     <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
       <a href="dashboard.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/></svg>
@@ -664,6 +669,62 @@
         </div>
       </div>
 
+      <!-- ════════════════════════════════════════ -->
+      <!-- TAB: LEADS DO CHAT                     -->
+      <!-- ════════════════════════════════════════ -->
+      <div id="tab-leads" class="tab-content hidden">
+        <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">Leads do Chat</h1>
+            <p class="text-sm text-gray-500 mt-1">Visitantes que começaram conversa pelo widget do site (e ainda não viraram clientes)</p>
+          </div>
+          <button onclick="loadLeads()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Atualizar
+          </button>
+        </div>
+
+        <div class="grid gap-4 sm:grid-cols-3 mb-6">
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-gray-500 mb-1">Total de leads</p>
+            <p id="leads-total" class="text-2xl font-bold text-gray-900">--</p>
+          </div>
+          <div class="rounded-2xl border bg-white p-5 shadow-sm">
+            <p class="text-sm font-medium text-gray-500 mb-1">Este mês</p>
+            <p id="leads-month" class="text-2xl font-bold text-gray-900">--</p>
+          </div>
+          <div class="rounded-2xl border bg-emerald-50 border-emerald-200 p-5 shadow-sm">
+            <p class="text-sm font-medium text-emerald-700 mb-1">Convertidos em cliente</p>
+            <p id="leads-converted" class="text-2xl font-bold text-emerald-900">--</p>
+          </div>
+        </div>
+
+        <div class="rounded-2xl border bg-white overflow-hidden shadow-sm">
+          <div class="px-5 py-4 border-b bg-gray-50">
+            <h3 class="text-sm font-semibold text-gray-700">Lista de leads (mais recentes primeiro)</h3>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
+                <tr>
+                  <th class="px-4 py-3 text-left font-semibold">Data</th>
+                  <th class="px-4 py-3 text-left font-semibold">Nome</th>
+                  <th class="px-4 py-3 text-left font-semibold">E-mail</th>
+                  <th class="px-4 py-3 text-left font-semibold">WhatsApp</th>
+                  <th class="px-4 py-3 text-left font-semibold">Veio de</th>
+                  <th class="px-4 py-3 text-center font-semibold">Msgs</th>
+                  <th class="px-4 py-3 text-left font-semibold">1ª pergunta</th>
+                  <th class="px-4 py-3 text-center font-semibold">Status</th>
+                </tr>
+              </thead>
+              <tbody id="leads-tbody" class="divide-y">
+                <tr><td colspan="8" class="text-center text-sm text-gray-500 py-8">Carregando...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -812,6 +873,60 @@ function switchTab(tabName) {
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
   if (tabName === 'insights') loadInsights();
+  if (tabName === 'leads') loadLeads();
+}
+
+// ══════════════════════════════════════════════
+// LEADS DO CHAT — visitantes que começaram conversa no widget
+// ══════════════════════════════════════════════
+async function loadLeads() {
+  const tbody = document.getElementById('leads-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="text-center text-sm text-gray-500 py-8">Carregando...</td></tr>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/chat/leads?limit=500`);
+    const data = await res.json();
+    const leads = data.leads || [];
+    const now = new Date();
+    const thisMonth = leads.filter(l => {
+      const d = new Date(l.created_at);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    const converted = leads.filter(l => l.converted_user_id);
+
+    document.getElementById('leads-total').textContent = leads.length;
+    document.getElementById('leads-month').textContent = thisMonth.length;
+    document.getElementById('leads-converted').textContent = `${converted.length} (${leads.length ? Math.round(converted.length / leads.length * 100) : 0}%)`;
+
+    if (!leads.length) {
+      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-sm text-gray-400 py-12">Nenhum lead capturado ainda.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = leads.map(l => {
+      const date = new Date(l.last_message_at || l.created_at);
+      const dateStr = date.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const escapeH = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const waLink = l.phone ? `<a href="https://wa.me/55${(l.phone||'').replace(/\\D/g,'')}" target="_blank" class="text-green-600 hover:underline">${escapeH(l.phone)}</a>` : '<span class="text-gray-400">—</span>';
+      const emailLink = `<a href="mailto:${escapeH(l.email)}" class="text-indigo-600 hover:underline">${escapeH(l.email)}</a>`;
+      const statusBadge = l.converted_user_id
+        ? '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">✓ Cliente</span>'
+        : '<span class="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs">Lead</span>';
+      return `
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">${dateStr}</td>
+          <td class="px-4 py-3 font-medium text-gray-800">${escapeH(l.name)}</td>
+          <td class="px-4 py-3">${emailLink}</td>
+          <td class="px-4 py-3">${waLink}</td>
+          <td class="px-4 py-3 text-xs text-gray-500">${escapeH(l.source_page || '—')}</td>
+          <td class="px-4 py-3 text-center text-sm">${l.n_messages || 0}</td>
+          <td class="px-4 py-3 text-xs text-gray-600 max-w-xs truncate" title="${escapeH(l.first_question)}">${escapeH((l.first_question || '').slice(0, 60))}</td>
+          <td class="px-4 py-3 text-center">${statusBadge}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center text-sm text-red-600 py-8">Erro ao carregar leads: ${e.message}</td></tr>`;
+  }
 }
 
 
@@ -1643,5 +1758,6 @@ function esc(str) {
 })();
 </script>
 
+<script src="chat-widget.js" defer></script>
 </body>
 </html>
