@@ -118,6 +118,13 @@
             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           <div id="avatar-menu" class="absolute right-0 top-full mt-2 w-60 rounded-xl border bg-white shadow-lg py-2 hidden z-50">
+            <button onclick="switchTab('home'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-3">
+              <span>🏠</span> <span>Dashboard (Início)</span>
+            </button>
+            <button onclick="switchTab('meus-projetos'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+              <span>📁</span> <span>Meus projetos</span>
+            </button>
+            <div class="border-t my-1"></div>
             <button onclick="switchTab('meu-cadastro'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
               <span>👤</span> <span>Meu cadastro</span>
             </button>
@@ -149,6 +156,18 @@
       </div>
     </div>
   </header>
+
+  <!-- BREADCRUMB (visível em todas as abas exceto Home) -->
+  <div id="tab-breadcrumb" class="hidden bg-white border-b">
+    <div class="mx-auto max-w-7xl px-4 md:px-6 py-2 flex items-center gap-2 text-sm">
+      <button onclick="switchTab('home')" class="inline-flex items-center gap-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 px-2 py-1 rounded-md transition font-medium">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
+        <span>Voltar ao Dashboard</span>
+      </button>
+      <span class="text-gray-300">/</span>
+      <span id="tab-breadcrumb-current" class="text-gray-500">—</span>
+    </div>
+  </div>
 
   <!-- MAIN CONTENT -->
   <main class="flex-1 p-4 md:p-6 lg:p-8">
@@ -963,12 +982,33 @@
   // ══════════════════════════════════════════════
   //  TAB SWITCHING
   // ══════════════════════════════════════════════
+  // Labels amigáveis pro breadcrumb (mapeia tabName -> nome exibido)
+  const TAB_LABELS = {
+    'home': 'Início',
+    'novo-projeto': 'Novo Projeto',
+    'meus-projetos': 'Meus Projetos',
+    'cashback': 'Cashback',
+    'meu-cadastro': 'Meu Cadastro',
+    'meus-pagamentos': 'Meus Pagamentos',
+    'como-funciona': 'Como Funciona',
+  };
+
   function switchTab(tabName) {
     // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     // Show target
     const target = document.getElementById('tab-' + tabName);
     if (target) target.classList.remove('hidden');
+
+    // Breadcrumb: mostra só quando NÃO é home
+    const bc = document.getElementById('tab-breadcrumb');
+    const bcCurrent = document.getElementById('tab-breadcrumb-current');
+    if (tabName && tabName !== 'home') {
+      if (bc) bc.classList.remove('hidden');
+      if (bcCurrent) bcCurrent.textContent = TAB_LABELS[tabName] || tabName;
+    } else {
+      if (bc) bc.classList.add('hidden');
+    }
 
     // Update URL hash pra possibilitar linking direto + botão back do browser
     if (tabName && tabName !== 'home') {
