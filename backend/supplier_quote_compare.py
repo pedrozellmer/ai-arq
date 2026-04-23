@@ -11,11 +11,102 @@ project_items) pra identificar itens que fornecedor esqueceu ou acrescentou.
 """
 import os
 from collections import defaultdict
+from difflib import SequenceMatcher
 from statistics import mean, stdev
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Tuple
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+
+
+# Threshold pra considerar dois textos "o mesmo item" (0-1, maior = mais estrito)
+FUZZY_MATCH_THRESHOLD = 0.78
+
+
+def _similarity(a: str, b: str) -> float:
+    """Similaridade combinada: SequenceMatcher + Jaccard de tokens."""
+    if not a or not b:
+        return 0.0
+    if a == b:
+        return 1.0
+
+    # 1) SequenceMatcher (leva em conta ordem e proximidade)
+    seq = SequenceMatcher(None, a, b).ratio()
+
+    # 2) Jaccard de tokens (palavras comuns / palavras totais)
+    tokens_a = set(a.split())
+    tokens_b = set(b.split())
+    if tokens_a and tokens_b:
+        jaccard = len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
+    else:
+        jaccard = 0.0
+
+    # Mistura — Jaccard captura melhor "mesmo item com ordem diferente"
+    return 0.5 * seq + 0.5 * jaccard
+
+
+def _fuzzy_merge(
+    quotes: List[Dict],
+    threshold: float = FUZZY_MATCH_THRESHOLD,
+) -> List[Dict]:
+    """Merge fuzzy: agrupa itens similares entre fornecedores.
+
+    Estratégia:
+    1) Acumula itens do fornecedor 1 como "âncoras"
+    2) Pra cada item dos fornecedores 2..N, acha a melhor âncora (>=threshold)
+       com MESMA UNIDADE; se achou, vincula. Se não, vira nova âncora.
+    3) Resultado: lista de "buckets" com itens dos 3 fornecedores alinhados.
+    """
+    suppliers = [q["supplier_name"] for q in quotes]
+
+    # Cada bucket: {desc, un, <sup_name>: item_or_None}
+    buckets = []
+
+    for q in quotes:
+        sup = q["supplier_name"]
+        for it in q.get("items", []):
+            if it.get("is_section"):
+                continue
+            if not it.get("un") or not it.get("qtd") or not it.get("total"):
+                continue  # só itens precificados
+            if it["total"] <= 0:
+                continue
+
+            desc_norm = it.get("desc_norm", "")
+            un = (it.get("un") or "").lower()
+            if not desc_norm:
+                continue
+
+            # Procura bucket com maior similaridade (mesma unidade)
+            best_bucket_idx = -1
+            best_score = threshold
+            for idx, b in enumerate(buckets):
+                if b.get(sup) is not None:
+                    continue  # bucket já tem item desse fornecedor
+                if (b.get("un") or "") != un:
+                    continue  # unidade tem que bater
+                score = _similarity(b["desc_norm"], desc_norm)
+                if score > best_score:
+                    best_score = score
+                    best_bucket_idx = idx
+
+            if best_bucket_idx >= 0:
+                buckets[best_bucket_idx][sup] = it
+                # Atualiza desc do bucket pro mais curto/limpo se aplicável
+                if len(it["desc"]) < len(buckets[best_bucket_idx]["desc"]):
+                    buckets[best_bucket_idx]["desc"] = it["desc"]
+            else:
+                # Cria novo bucket
+                new_bucket = {
+                    "desc": it["desc"],
+                    "desc_norm": desc_norm,
+                    "un": un,
+                    **{s: None for s in suppliers},
+                }
+                new_bucket[sup] = it
+                buckets.append(new_bucket)
+
+    return buckets
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -54,33 +145,11 @@ def compare_quotes(quotes: List[Dict],
             "n_items": q["n_items_quoted"],
         }
 
-    # Merge de itens por (desc_norm, un)
-    merged_map = defaultdict(lambda: {sup: None for sup in suppliers})
-    desc_lookup = {}  # guarda desc original + un pra exibição
-    order_seen = []
-
-    for q in quotes:
-        sup = q["supplier_name"]
-        for it in q["items"]:
-            if it.get("is_section") or not it.get("desc_norm"):
-                continue
-            key = (it["desc_norm"], it.get("un", ""))
-            if not it["un"] or not it["qtd"] or not it["total"]:
-                continue  # só mergeia precificados
-            if key not in desc_lookup:
-                desc_lookup[key] = {"desc": it["desc"], "un": it["un"]}
-                order_seen.append(key)
-            if merged_map[key][sup] is None:
-                merged_map[key][sup] = it
-
-    merged = []
-    for key in order_seen:
-        ent = merged_map[key]
-        merged.append({
-            "desc": desc_lookup[key]["desc"],
-            "un": desc_lookup[key]["un"],
-            **{sup: ent[sup] for sup in suppliers},
-        })
+    # Merge FUZZY — usa similaridade de string + Jaccard pra agrupar itens
+    # descritos de formas ligeiramente diferentes entre fornecedores.
+    # Exemplo: "Demolição de drywall em placas" casa com "Demolicao de drywall
+    # com placas" (score ~0.85).
+    merged = _fuzzy_merge(quotes)
 
     # Cobertura: quantos itens únicos cada fornecedor orçou
     n_unique = len(merged)
@@ -485,8 +554,13 @@ def generate_comparative_pptx(analysis: Dict, output_path: str,
                                  project_name: str = "",
                                  architect_name: str = "",
                                  client_name: str = "",
-                                 logo_path: Optional[str] = None) -> str:
-    """Gera PPT executivo com logo do escritório (co-branding)."""
+                                 logo_path: Optional[str] = None,
+                                 brand_color_hex: Optional[str] = None) -> str:
+    """Gera PPT executivo com logo do escritório (co-branding).
+
+    brand_color_hex: cor primária do escritório (#RRGGBB). Se não fornecido,
+    usa azul AI.arq como default.
+    """
     from pptx import Presentation
     from pptx.util import Inches, Pt
     from pptx.dml.color import RGBColor
@@ -497,9 +571,34 @@ def generate_comparative_pptx(analysis: Dict, output_path: str,
     prs.slide_width = Inches(13.33)
     prs.slide_height = Inches(7.5)
 
-    # Paleta
-    AZUL_ESCURO = RGBColor(0x1E, 0x3A, 0x8A)
-    AZUL = RGBColor(0x25, 0x63, 0xEB)
+    def _hex_to_rgb(hex_str):
+        """Converte '#RRGGBB' ou 'RRGGBB' em RGBColor."""
+        if not hex_str:
+            return None
+        s = hex_str.lstrip("#").strip()
+        if len(s) != 6:
+            return None
+        try:
+            return RGBColor(int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+        except ValueError:
+            return None
+
+    # Aplica cor do escritório (se fornecida) em AZUL_ESCURO/AZUL.
+    # Se não, usa azul AI.arq.
+    brand_primary = _hex_to_rgb(brand_color_hex)
+    if brand_primary:
+        AZUL_ESCURO = brand_primary
+        # Deriva versão "clara" (sobe em 25% cada canal pra contraste)
+        r, g, b = brand_primary[0], brand_primary[1], brand_primary[2]
+        AZUL = RGBColor(
+            min(255, int(r * 1.2)),
+            min(255, int(g * 1.2)),
+            min(255, int(b * 1.2)),
+        )
+    else:
+        AZUL_ESCURO = RGBColor(0x1E, 0x3A, 0x8A)
+        AZUL = RGBColor(0x25, 0x63, 0xEB)
+
     VERDE = RGBColor(0x15, 0x80, 0x3D)
     VERMELHO = RGBColor(0xDC, 0x26, 0x26)
     CINZA = RGBColor(0x6B, 0x72, 0x80)

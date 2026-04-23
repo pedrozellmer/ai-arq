@@ -2824,10 +2824,11 @@ async def compare_supplier_quotes(job_id: str, include_reference: int = 1):
                 client_name = f"{client_name} ({cl_data[0]['client_company']})" \
                     if client_name else cl_data[0]["client_company"]
 
-        # Logo do escritório (perfil do dono do projeto)
+        # Logo e cor de marca do escritório (perfil do dono do projeto)
         if project_user_id:
             pr_url = (f"{SUPABASE_URL}/rest/v1/profiles"
-                       f"?user_id=eq.{project_user_id}&select=logo_url,company")
+                       f"?user_id=eq.{project_user_id}"
+                       f"&select=logo_url,company,company_brand_color")
             pr_req = urllib.request.Request(pr_url, method="GET")
             pr_req.add_header("apikey", SUPABASE_KEY)
             pr_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
@@ -2835,10 +2836,15 @@ async def compare_supplier_quotes(job_id: str, include_reference: int = 1):
             pr_data = json.loads(pr_resp.read().decode("utf-8"))
             if pr_data:
                 logo_url = pr_data[0].get("logo_url", "") or ""
+                brand_color = pr_data[0].get("company_brand_color", "") or ""
                 if not architect_name and pr_data[0].get("company"):
                     architect_name = pr_data[0]["company"]
+            else:
+                brand_color = ""
+        else:
+            brand_color = ""
     except Exception:
-        pass
+        brand_color = ""
 
     # Download logo temporariamente pra embutir no PPT
     logo_path = None
@@ -2874,6 +2880,7 @@ async def compare_supplier_quotes(job_id: str, include_reference: int = 1):
             architect_name=architect_name,
             client_name=client_name,
             logo_path=logo_path,
+            brand_color_hex=brand_color,
         )
         pptx_ok = True
     except Exception as e:
@@ -3111,8 +3118,125 @@ def _extract_and_save_heuristics(analysis: dict, typology: str = "office"):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  UPLOAD DE PLANILHA REVISADA (cashback)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/projects/{job_id}/revised-sheet/upload")
+async def upload_revised_sheet(
+    job_id: str,
+    file: UploadFile = File(...),
+    user_id: str = Form(""),
+):
+    """Recebe planilha revisada offline. Salva na pasta do job e dá cashback."""
+    # Salva o arquivo
+    work_dir = os.path.join(WORK_DIR, job_id, "revised")
+    os.makedirs(work_dir, exist_ok=True)
+    dst = os.path.join(work_dir, file.filename)
+    with open(dst, "wb") as f:
+        f.write(await file.read())
+
+    # Evento de cashback (R$ 20)
+    credit_cents = 2000
+    if user_id:
+        try:
+            cb_payload = {
+                "job_id": job_id,
+                "user_id": user_id,
+                "event_type": "planilha_upload",
+                "credit_cents": credit_cents,
+                "description": f"Upload planilha revisada ({file.filename})",
+                "approved_at": datetime.utcnow().isoformat(),
+                "approved_by": "auto",
+            }
+            cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+            cb_body = json.dumps(cb_payload).encode("utf-8")
+            cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
+            cb_req.add_header("apikey", SUPABASE_KEY)
+            cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            cb_req.add_header("Content-Type", "application/json")
+            cb_req.add_header("Prefer", "return=minimal")
+            urllib.request.urlopen(cb_req, timeout=8)
+        except Exception as e:
+            print(f"[revised-sheet] erro cashback: {e}")
+
+    return {
+        "status": "ok",
+        "filename": file.filename,
+        "credit_cents": credit_cents,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 #  CASHBACK EVENTS POR PROJETO
 # ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/user/{user_id}/cashback-all")
+async def get_user_cashback_all(user_id: str):
+    """Retorna cashback agregado de TODOS os projetos do usuário.
+
+    Usa pra mostrar o resumo na tela de cashback (total geral + por projeto).
+    """
+    try:
+        # Busca todos eventos do user
+        url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+               f"?user_id=eq.{user_id}"
+               f"&select=*&order=created_at.desc&limit=1000")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        events = json.loads(resp.read().decode("utf-8"))
+
+        # Busca nome dos projetos envolvidos
+        job_ids = list({e["job_id"] for e in events})
+        projects_map = {}
+        if job_ids:
+            ids_filter = ",".join(f'"{j}"' for j in job_ids)
+            pj_url = (f"{SUPABASE_URL}/rest/v1/projects"
+                      f"?job_id=in.({','.join(job_ids)})&select=job_id,project_name")
+            pj_req = urllib.request.Request(pj_url, method="GET")
+            pj_req.add_header("apikey", SUPABASE_KEY)
+            pj_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            try:
+                pj_resp = urllib.request.urlopen(pj_req, timeout=8)
+                for p in json.loads(pj_resp.read().decode("utf-8")):
+                    projects_map[p["job_id"]] = p.get("project_name", "Projeto sem nome")
+            except Exception:
+                pass
+
+        # Agrupa por projeto
+        from collections import defaultdict
+        by_proj = defaultdict(lambda: {
+            "job_id": "", "project_name": "", "total_cents": 0,
+            "n_events": 0, "event_types": set(),
+        })
+        for e in events:
+            p = by_proj[e["job_id"]]
+            p["job_id"] = e["job_id"]
+            p["project_name"] = projects_map.get(e["job_id"], "Projeto sem nome")
+            p["total_cents"] += e.get("credit_cents", 0)
+            p["n_events"] += 1
+            p["event_types"].add(e.get("event_type", ""))
+
+        by_project_list = []
+        for p in by_proj.values():
+            by_project_list.append({
+                "job_id": p["job_id"],
+                "project_name": p["project_name"],
+                "total_cents": p["total_cents"],
+                "n_events": p["n_events"],
+                "event_types": sorted(p["event_types"]),
+            })
+        by_project_list.sort(key=lambda x: -x["total_cents"])
+
+        return {
+            "total_cents": sum(e.get("credit_cents", 0) for e in events),
+            "n_events": len(events),
+            "by_project": by_project_list,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 
 @app.get("/api/projects/{job_id}/cashback")
 async def get_project_cashback(job_id: str):
