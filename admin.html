@@ -1424,7 +1424,9 @@ document.getElementById('form-new-code').addEventListener('submit', async functi
 // ══════════════════════════════════════════════
 // CALIBRATION — summary cards (todas tipologias)
 // ══════════════════════════════════════════════
-const API_BASE = 'https://ai-arq.onrender.com';
+// (API_BASE já declarado lá em cima — duplicar aqui quebra o script com
+// SyntaxError: "Identifier 'API_BASE' has already been declared" e trava
+// o admin em "Verificando acesso...")
 
 async function loadCalibrationFactors() {
   // Carrega os summary cards usando benchmarks de densidade (todas tipologias)
