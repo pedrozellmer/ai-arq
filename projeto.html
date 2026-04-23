@@ -333,6 +333,19 @@ const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
 if (!jobId) { window.location.href = 'meus-projetos.html'; }
 
+// Helper: fetch com timeout (aborta após X ms pra não travar a UI)
+function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: ctrl.signal })
+    .finally(() => clearTimeout(timer));
+}
+
+// Helper: roda um render protegendo contra exceção (se um quebra, os outros continuam)
+function safeRun(fn, label) {
+  try { fn(); } catch (e) { console.error(`[${label}] erro:`, e); }
+}
+
 (async function init() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = 'login.html'; return; }
@@ -341,27 +354,82 @@ if (!jobId) { window.location.href = 'meus-projetos.html'; }
   document.getElementById('btn-review').href = `revisao.html?job_id=${jobId}`;
   document.getElementById('btn-download').href = `${API_BASE}/api/download/${jobId}`;
 
-  // Carregar dados em paralelo
+  // ── CARREGA DADOS EM PARALELO, cada um com fallback ──
+  // Se qualquer um travar/falhar, os outros ainda rodam.
+  const getProjects = async () => {
+    try {
+      const r = await fetchWithTimeout(`${API_BASE}/api/projects/by-user/${session.user.id}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      }, 15000);
+      return await r.json();
+    } catch (e) {
+      console.error('[projects] erro:', e);
+      return { projects: [] };
+    }
+  };
+  const getItems = async () => {
+    try {
+      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}`, {}, 15000);
+      return await r.json();
+    } catch (e) {
+      console.error('[items] erro:', e);
+      return { items: [] };
+    }
+  };
+  const getReviewState = async () => {
+    try {
+      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}/review-state`, {}, 10000);
+      return await r.json();
+    } catch (e) {
+      console.error('[review-state] erro:', e);
+      return { state: {} };
+    }
+  };
+
   const [userProjectsRes, itemsRes, stateRes] = await Promise.all([
-    authFetch(`${API_BASE}/api/projects/by-user/${session.user.id}`).then(r => r.json()).catch(() => ({projects: []})),
-    fetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()).catch(() => ({items: []})),
-    fetch(`${API_BASE}/api/items/${jobId}/review-state`).then(r => r.json()).catch(() => ({state: {}})),
+    getProjects(), getItems(), getReviewState()
   ]);
 
-  const proj = (userProjectsRes.projects || []).find(p => p.job_id === jobId);
+  const items = itemsRes.items || [];
+  let proj = (userProjectsRes.projects || []).find(p => p.job_id === jobId);
+
+  // Se a lista de projetos falhou mas temos items, sintetiza proj mínimo
+  // pra pelo menos renderizar o que dá (em vez de mostrar "Projeto não encontrado"
+  // e deixar o resto em branco).
+  if (!proj && items.length > 0) {
+    console.warn('[projeto] proj não veio da lista, sintetizando a partir dos items');
+    proj = {
+      job_id: jobId,
+      project_name: 'Projeto',
+      status: 'done',
+      typology: items[0]?.typology || null,
+      files_count: null,
+      items_count: items.length,
+      created_at: null,
+      completed_at: null,
+    };
+  }
+
   if (!proj) {
-    document.querySelector('main').innerHTML = '<div class="text-center py-12 text-gray-500">Projeto não encontrado.</div>';
+    document.querySelector('main').innerHTML = `
+      <div class="text-center py-12">
+        <p class="text-gray-700 font-medium mb-2">Não consegui carregar este projeto.</p>
+        <p class="text-gray-500 text-sm mb-4">Verifique sua conexão ou tente novamente em alguns instantes.</p>
+        <button onclick="location.reload()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">Recarregar</button>
+        <a href="dashboard.html" class="ml-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 no-underline">Voltar ao dashboard</a>
+      </div>`;
     return;
   }
 
-  renderHeader(proj);
-  renderMetrics(proj, itemsRes.items || []);
-  renderWarnings(proj.warnings || []);
-  renderDates(proj);
-  renderFiles(proj, itemsRes.items || []);
-  renderReviewPct(itemsRes.items || [], stateRes.state || {});
+  // Cada render protegido — se um quebrar, os outros continuam
+  safeRun(() => renderHeader(proj), 'renderHeader');
+  safeRun(() => renderMetrics(proj, items), 'renderMetrics');
+  safeRun(() => renderWarnings(proj.warnings || []), 'renderWarnings');
+  safeRun(() => renderDates(proj), 'renderDates');
+  safeRun(() => renderFiles(proj, items), 'renderFiles');
+  safeRun(() => renderReviewPct(items, stateRes.state || {}), 'renderReviewPct');
 
-  // Novos: client info + quotes + cashback
+  // Dados secundários carregam separados (não bloqueiam render principal)
   loadClientData();
   loadQuotes();
   loadProjectCashback();
