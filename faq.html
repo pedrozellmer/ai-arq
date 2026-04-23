@@ -320,13 +320,14 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p>A planilha usa quatro n&iacute;veis de confian&ccedil;a:</p>
+              <p>A planilha usa <strong>4 cores</strong> com significados diferentes (não é uma escala de "pior pra melhor" — cada cor indica um tipo de item):</p>
               <ul class="space-y-2 ml-1 mt-2">
-                <li class="flex items-start gap-2"><span class="text-gray-400 mt-1.5 shrink-0">&bull;</span> <strong>CONFIRMADO (branco):</strong> dado lido diretamente do arquivo (bloco, texto, nota). Usar diretamente.</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-600">CALCULADO (verde):</strong> quantidade computada por geometria (per&iacute;metro &times; p&eacute;-direito, &aacute;rea de hatch). Conferir in loco.</li>
-                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-amber-600">VERIFICAR (laranja):</strong> item presente na legenda mas sem dado exato. Obrigat&oacute;rio confirmar com arquiteto.</li>
-                <li class="flex items-start gap-2"><span class="text-yellow-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-yellow-600">SUGEST&Atilde;O (amarelo):</strong> item que n&atilde;o aparece nas pranchas mas fornecedores tipicamente incluem (equipe, serventia, fee). Avaliar inclus&atilde;o.</li>
+                <li class="flex items-start gap-2"><span class="mt-1.5 h-2 w-2 rounded-full bg-white border border-gray-300 shrink-0"></span> <strong>Branco — CONFIRMADO:</strong> quantidade medida ou contada diretamente do CAD (hachura, bloco, polyline). Confiável, pode ser usada direto.</li>
+                <li class="flex items-start gap-2"><span class="mt-1.5 h-2 w-2 rounded-full bg-orange-300 shrink-0"></span> <strong class="text-orange-600">Laranja — ESTIMADO / VERIFICAR:</strong> quantidade sugerida pela IA (fórmula, ratio de densidade, inferência da legenda). <strong>Revisar antes de usar.</strong></li>
+                <li class="flex items-start gap-2"><span class="mt-1.5 h-2 w-2 rounded-full bg-gray-300 shrink-0"></span> <strong class="text-gray-600">Cinza — METADADO:</strong> informação do projeto (área total, área de layout, postos de trabalho). Não é item orçável — é contexto.</li>
+                <li class="flex items-start gap-2"><span class="mt-1.5 h-2 w-2 rounded-full bg-purple-300 shrink-0"></span> <strong class="text-purple-700">Roxo — CUSTO INDIRETO / GESTÃO:</strong> checklist de itens que não aparecem nas pranchas mas toda obra precisa (gerente de contrato, mestre de obra, seguro, as-built, fee). Você preenche a quantidade conforme o prazo real.</li>
               </ul>
+              <p class="mt-3 text-xs text-gray-500">Obs: a coluna <strong>amarela</strong> (MAT R$ / M.O. R$) é onde você preenche os preços — aparece em todas as linhas, independentemente da cor do item.</p>
             </div>
           </div>
         </div>
@@ -456,7 +457,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Ao revisar e corrigir os quantitativos da planilha gerada pela IA e fazer upload da vers&atilde;o revisada pelo dashboard, voc&ecirc; ganha <strong>R$ 20 de desconto</strong> no pr&oacute;ximo projeto. Suas corre&ccedil;&otilde;es ajudam a calibrar e melhorar a precis&atilde;o da IA para todos os usu&aacute;rios &mdash; todos ganham.
+              Sim. O AI.arq tem programa de cashback granular: cada a&ccedil;&atilde;o que contribui pra calibrar a IA gera cr&eacute;dito autom&aacute;tico, ab&aacute;vel no pr&oacute;ximo projeto. Ex.: upload de planilha revisada d&aacute; <strong>+R$ 20</strong>, upload de cota&ccedil;&atilde;o de fornecedor d&aacute; <strong>+R$ 5</strong>, e revis&otilde;es inline e feedback NPS tamb&eacute;m geram cr&eacute;dito. Veja a aba "Cashback" no seu dashboard pra saldo e hist&oacute;rico. Suas corre&ccedil;&otilde;es ajudam a calibrar a IA &mdash; todos ganham.
             </div>
           </div>
         </div>
@@ -490,7 +491,7 @@
       <div class="space-y-3">
         <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="comparativo fornecedor cotacao orcamento upload planilha excel varios fornecedores comparar analisar ppt apresentacao">
           <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
-            <span class="text-sm font-semibold text-gray-800 pr-4">Como funciona o comparativo de 3 fornecedores?</span>
+            <span class="text-sm font-semibold text-gray-800 pr-4">Como funciona o comparativo de fornecedores?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           <div class="faq-answer px-5">

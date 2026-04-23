@@ -222,7 +222,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # Áreas aparecem na seção PREMISSAS (se extraídas) — não duplicar no subtítulo
     ws.cell(row=2, column=1, value=' | '.join(info_parts) if info_parts else 'Quantitativos de projeto').font = F_N
     ws.merge_cells('A3:I3')
-    ws.cell(row=3, column=1, value='Cores: BRANCO = medido/contado do arquivo (confiável) · LARANJA = sugerido pela IA (confirmar) · CINZA = metadado · ROXO = checklist de indiretos · AMARELO = coluna para preencher preço.').font = F_NOTE
+    ws.cell(row=3, column=1, value='Cores por tipo de item: BRANCO = medido do CAD (confiável) · LARANJA = estimado pela IA (revisar) · CINZA = metadado do projeto · ROXO = custo indireto / gestão (checklist). Coluna AMARELA = preencher preço. Itens em laranja e roxo exigem revisão antes do fechamento do orçamento.').font = F_NOTE
 
     ro = 5
     hdrs = ['ITEM', 'DESCRIÇÃO DO SERVIÇO', 'UN', 'QTDE', 'MAT (R$)', 'M.O. (R$)', 'TOTAL (R$)', 'OBSERVAÇÕES', 'REF.']
