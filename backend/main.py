@@ -2148,6 +2148,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except ImportError:
             pass  # tcpo_matcher opcional
 
+        # Checa heurísticas de mercado (dispersão, cobertura, share MAT/MO)
+        # contra as categorias de cada item. Adiciona alertas nas observations
+        # pra ajudar o cliente a saber onde pedir 3 orçamentos / revisar escopo.
+        # REGRA DURA: heurísticas são agregadas e anônimas — nunca valor
+        # específico de projeto. Vem da tabela market_heuristics.
+        try:
+            from market_heuristics import check_item_anomaly
+            for it in all_items:
+                try:
+                    alertas = check_item_anomaly(it, typology=typology)
+                    if alertas:
+                        sep = " | " if it.observations else ""
+                        it.observations = (it.observations or "") + sep + " ".join(alertas)
+                except Exception:
+                    pass  # alertas são best-effort
+        except ImportError:
+            pass  # market_heuristics opcional
+
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)
 
@@ -2538,6 +2556,58 @@ async def tcpo_details(composicao_id: str):
     if not rows:
         return {"error": "composição não encontrada"}
     return rows[0] if isinstance(rows, list) else rows
+
+
+# ── HEURÍSTICAS DE MERCADO: alertas por categoria ──
+@app.get("/api/heuristics/check")
+async def heuristics_check(description: str, unit: str = "",
+                            typology: str = "office"):
+    """Retorna alertas de heurística pra um item (descrição + unidade).
+
+    Exemplo: /api/heuristics/check?description=demolicao+de+drywall&typology=office
+
+    Retorna: {
+        'category': 'demolicao',
+        'alertas': ['💡 variação 103%...'],
+        'metrics': {'dispersion': {...}, 'mat_mo_share': {...}, 'coverage': {...}}
+    }
+    """
+    try:
+        from market_heuristics import (
+            categorize_item, check_item_anomaly,
+            get_dispersion_for_category, get_mat_mo_share_for_category,
+            get_coverage_pattern_for_category,
+        )
+    except ImportError:
+        return {"error": "market_heuristics indisponível"}
+
+    if not description or len(description.strip()) < 3:
+        return {"error": "descrição muito curta"}
+
+    category = categorize_item(description)
+    item_dict = {"description": description.strip(), "unit": unit.strip()}
+    alertas = check_item_anomaly(item_dict, typology=typology)
+
+    return {
+        "category": category,
+        "typology": typology,
+        "alertas": alertas,
+        "metrics": {
+            "dispersion": get_dispersion_for_category(category, typology),
+            "mat_mo_share": get_mat_mo_share_for_category(category, typology),
+            "coverage": get_coverage_pattern_for_category(category, typology),
+        },
+    }
+
+
+@app.get("/api/heuristics/summary")
+async def heuristics_summary():
+    """Retorna resumo do que tem na base de heurísticas (pra debug/transparência)."""
+    try:
+        from market_heuristics import get_summary
+        return get_summary()
+    except ImportError:
+        return {"error": "market_heuristics indisponível"}
 
 
 # ── STRIPE CHECKOUT ──
@@ -3351,7 +3421,7 @@ async def finalize_review(job_id: str):
         except Exception:
             continue
 
-    # 4) Gerar xlsx revisado — também enriquece com matches TCPO
+    # 4) Gerar xlsx revisado — também enriquece com matches TCPO + heurísticas
     try:
         from tcpo_matcher import match_item, get_insumos
         for it in items:
@@ -3366,6 +3436,21 @@ async def finalize_review(job_id: str):
         pass
 
     typology = proj.get("typology") or "office"
+
+    # Heurísticas de mercado (alertas agregados anônimos)
+    try:
+        from market_heuristics import check_item_anomaly
+        for it in items:
+            try:
+                alertas = check_item_anomaly(it, typology=typology)
+                if alertas:
+                    sep = " | " if it.observations else ""
+                    it.observations = (it.observations or "") + sep + " ".join(alertas)
+            except Exception:
+                pass
+    except ImportError:
+        pass
+
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
     output_path = os.path.join(work_dir, f"orcamento_{job_id}_revisado.xlsx")

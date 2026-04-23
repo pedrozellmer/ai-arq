@@ -264,6 +264,41 @@ def tool_check_density_for_item(job_id: str, item_num: str,
     }
 
 
+def tool_check_market_heuristics(description: str, typology: str = "office") -> dict:
+    """Checa um item contra as heurísticas de mercado (dispersão, cobertura,
+    share MAT/MO) extraídas de orçamentos reais anonimizados.
+
+    Retorna alertas curtos + métricas agregadas. NUNCA valor absoluto.
+    """
+    try:
+        from market_heuristics import (
+            categorize_item, check_item_anomaly,
+            get_dispersion_for_category, get_mat_mo_share_for_category,
+            get_coverage_pattern_for_category,
+        )
+    except ImportError:
+        return {"error": "market_heuristics indisponível"}
+
+    if not description or len(description.strip()) < 3:
+        return {"error": "descrição muito curta"}
+
+    cat = categorize_item(description)
+    alertas = check_item_anomaly({"description": description, "unit": ""},
+                                   typology=typology)
+
+    return {
+        "categoria": cat,
+        "tipologia": typology,
+        "alertas": alertas,
+        "dispersao_mercado": get_dispersion_for_category(cat, typology),
+        "share_mat_mo_tipico": get_mat_mo_share_for_category(cat, typology),
+        "cobertura_tipica": get_coverage_pattern_for_category(cat, typology),
+        "obs": "Heurísticas de mercado anônimas — agregado de orçamentos reais. "
+                "Use pra orientar o cliente sobre variação esperada, NÃO "
+                "como valor de referência pra esse projeto específico.",
+    }
+
+
 def _supabase_select_project(job_id: str) -> Optional[dict]:
     try:
         url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
@@ -349,6 +384,18 @@ TOOLS = [
             "required": ["familia_code"],
         },
     },
+    {
+        "name": "check_market_heuristics",
+        "description": "Checa heurísticas agregadas de mercado (dispersão de preço entre fornecedores, share típico de material vs mão de obra, padrão de cobertura) pra uma categoria de item. Use quando o cliente perguntar 'quanto varia o preço disso?', 'é normal esse item ser 80% material?', 'esse serviço costuma ser esquecido?'. Responde SEM valores absolutos — só ratios e percentuais. Úteis pra orientar a revisão e pra explicar intervalo esperado de cotações. A base é anônima (agregada de orçamentos reais, sem identificar projetos).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "description": {"type": "string", "description": "Descrição do item (ex: 'demolição de drywall', 'luminária LED 60x60')"},
+                "typology": {"type": "string", "description": "office|residential|retail|hospital|educational (default office)"},
+            },
+            "required": ["description"],
+        },
+    },
 ]
 
 
@@ -368,6 +415,11 @@ def _dispatch_tool(name: str, job_id: str, tool_input: dict) -> Any:
             tool_input["familia_code"],
             tool_input.get("query", ""),
             tool_input.get("top_k", 5),
+        )
+    if name == "check_market_heuristics":
+        return tool_check_market_heuristics(
+            tool_input["description"],
+            tool_input.get("typology", "office"),
         )
     return {"error": f"tool '{name}' desconhecida"}
 
