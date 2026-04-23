@@ -124,6 +124,125 @@
     </div>
   </div>
 
+  <!-- Cashback acumulado deste projeto -->
+  <div id="project-cashback-box" class="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 hidden">
+    <div class="flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold text-gray-800 flex items-center gap-2">
+          💰 Cashback deste projeto
+        </h2>
+        <p class="text-xs text-gray-600 mt-1">Crédito acumulado pelas suas ações de revisão. Válido pra abatimento em novos projetos.</p>
+      </div>
+      <div class="text-right">
+        <p id="cashback-total" class="text-3xl font-bold text-amber-700">R$ 0,00</p>
+        <p id="cashback-count" class="text-xs text-gray-500">0 ações</p>
+      </div>
+    </div>
+    <div id="cashback-events-list" class="mt-4 space-y-1 text-sm"></div>
+  </div>
+
+  <!-- Dados do Cliente Final -->
+  <div class="rounded-xl border bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold text-gray-800">📇 Dados do cliente final</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Usado no cabeçalho da planilha e do PPT gerado</p>
+      </div>
+      <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
+    </div>
+    <div id="client-view" class="p-5 text-sm">
+      <div id="client-loading" class="text-gray-400">Carregando...</div>
+      <div id="client-empty" class="text-gray-400 hidden">Nenhum cliente cadastrado. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Adicionar →</button></div>
+      <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
+    </div>
+    <div id="client-edit" class="p-5 hidden">
+      <div class="grid gap-3 md:grid-cols-2">
+        <div>
+          <label class="text-xs font-medium text-gray-500 block mb-1">Nome</label>
+          <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex: Juliana Pereira"/>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 block mb-1">Empresa / Razão Social</label>
+          <input id="c-company" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex: Granado Pharmácias S.A."/>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 block mb-1">E-mail</label>
+          <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="juliana@empresa.com"/>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 block mb-1">Telefone / WhatsApp</label>
+          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(21) 9 9999-9999"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra <span class="text-gray-400">(se diferente do projeto)</span></label>
+          <input id="c-address" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Av. Barão de Tefé, 34 — Rio de Janeiro/RJ"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-400">(só você vê)</span></label>
+          <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
+        </div>
+      </div>
+      <div class="mt-4 flex gap-2 justify-end">
+        <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+        <button onclick="saveClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cotações de Fornecedores -->
+  <div class="rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white overflow-hidden">
+    <div class="px-5 py-4 border-b border-indigo-100 flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold text-gray-800 flex items-center gap-2">
+          📊 Recebeu orçamentos dos fornecedores?
+          <span class="text-xs font-normal px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">NOVO</span>
+        </h2>
+        <p class="text-xs text-gray-600 mt-0.5">Envie as planilhas e o AI.arq gera o comparativo automático + alertas contra o seu quantitativo.</p>
+      </div>
+    </div>
+
+    <!-- Lista de cotações existentes -->
+    <div id="quotes-list" class="divide-y divide-indigo-100"></div>
+
+    <!-- Zona de upload -->
+    <div class="p-5 border-t border-indigo-100 bg-white/60">
+      <div class="grid gap-3 md:grid-cols-3 mb-3">
+        <div class="md:col-span-1">
+          <label class="text-xs font-medium text-gray-500 block mb-1">Nome do fornecedor *</label>
+          <input id="q-supplier-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex: Citrus"/>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs font-medium text-gray-500 block mb-1">Planilha (.xlsx)</label>
+          <input id="q-file" type="file" accept=".xlsx" class="w-full text-sm"/>
+        </div>
+      </div>
+      <div class="flex items-center justify-between">
+        <label class="text-xs text-gray-600 flex items-center gap-2">
+          <input id="q-parser-mode" type="checkbox" checked class="rounded"/>
+          Modo automático (detecta o template)
+        </label>
+        <button onclick="uploadQuote()" id="btn-upload-quote" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">
+          Enviar orçamento
+        </button>
+      </div>
+      <div id="q-status" class="mt-3 text-xs text-gray-500 hidden"></div>
+    </div>
+
+    <!-- Botão de gerar comparativo -->
+    <div id="quotes-compare-box" class="p-5 border-t border-indigo-200 bg-indigo-600/5 hidden">
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-gray-800">📈 Pronto pra comparar?</p>
+          <p class="text-xs text-gray-600 mt-0.5">Gera planilha comparativa com totais, ranking, divergências e análise vs. o seu quantitativo.</p>
+        </div>
+        <button onclick="generateComparison()" id="btn-compare" class="px-5 py-2.5 bg-indigo-700 hover:bg-indigo-800 text-white text-sm rounded-lg font-semibold shadow-sm">
+          Gerar comparativo
+        </button>
+      </div>
+      <div id="compare-result" class="mt-3 hidden"></div>
+    </div>
+  </div>
+
   <!-- Info extra -->
   <div class="grid gap-4 md:grid-cols-2">
     <div class="rounded-xl border bg-white p-5">
@@ -207,7 +326,283 @@ if (!jobId) { window.location.href = 'meus-projetos.html'; }
   renderDates(proj);
   renderFiles(proj, itemsRes.items || []);
   renderReviewPct(itemsRes.items || [], stateRes.state || {});
+
+  // Novos: client info + quotes + cashback
+  loadClientData();
+  loadQuotes();
+  loadProjectCashback();
 })();
+
+async function loadProjectCashback() {
+  try {
+    const res = await fetch(`${API_BASE}/api/projects/${jobId}/cashback`);
+    const data = await res.json();
+    if (!data.events || data.events.length === 0) return;
+    document.getElementById('project-cashback-box').classList.remove('hidden');
+    document.getElementById('cashback-total').textContent =
+      'R$ ' + (data.total_reais || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('cashback-count').textContent =
+      `${data.count} aç${data.count === 1 ? 'ão' : 'ões'}`;
+    const labels = {
+      'inline_review': '✏️ Revisão inline',
+      'planilha_upload': '📤 Upload planilha revisada',
+      'supplier_quote_upload': '📊 Upload cotação fornecedor',
+      'nps_feedback': '💬 Feedback NPS',
+    };
+    document.getElementById('cashback-events-list').innerHTML = data.events.slice(0, 10).map(e => `
+      <div class="flex items-center justify-between py-1 border-b border-amber-100/50">
+        <span class="text-gray-700">${labels[e.event_type] || e.event_type}${e.description ? ' — ' + e.description : ''}</span>
+        <span class="font-medium text-amber-700">+R$ ${(e.credit_cents / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  DADOS DO CLIENTE FINAL
+// ══════════════════════════════════════════════
+async function loadClientData() {
+  try {
+    const res = await fetch(`${API_BASE}/api/projects/${jobId}/client`);
+    const data = await res.json();
+    document.getElementById('client-loading').classList.add('hidden');
+    if (data && data.client_name) {
+      renderClientData(data);
+    } else {
+      document.getElementById('client-empty').classList.remove('hidden');
+    }
+  } catch (e) {
+    console.error('Erro cliente:', e);
+    document.getElementById('client-loading').textContent = 'Erro ao carregar';
+  }
+}
+
+function renderClientData(d) {
+  const dl = document.getElementById('client-data');
+  const rows = [
+    ['Nome', d.client_name],
+    ['Empresa', d.client_company],
+    ['E-mail', d.client_email],
+    ['Telefone', d.client_phone],
+    ['Endereço da obra', d.address_site],
+  ];
+  dl.innerHTML = rows.filter(r => r[1]).map(([k, v]) =>
+    `<div><dt class="text-xs font-medium text-gray-500">${k}</dt><dd class="text-sm text-gray-800">${v}</dd></div>`
+  ).join('') || '<div class="text-gray-400 text-sm md:col-span-2">Nenhum dado preenchido.</div>';
+  dl.classList.remove('hidden');
+  document.getElementById('client-empty').classList.add('hidden');
+}
+
+function openClientEdit() {
+  document.getElementById('client-view').classList.add('hidden');
+  const edit = document.getElementById('client-edit');
+  edit.classList.remove('hidden');
+  // Popular campos com dados atuais se houver
+  fetch(`${API_BASE}/api/projects/${jobId}/client`)
+    .then(r => r.json())
+    .then(d => {
+      if (d) {
+        document.getElementById('c-name').value = d.client_name || '';
+        document.getElementById('c-company').value = d.client_company || '';
+        document.getElementById('c-email').value = d.client_email || '';
+        document.getElementById('c-phone').value = d.client_phone || '';
+        document.getElementById('c-address').value = d.address_site || '';
+        document.getElementById('c-notes').value = d.internal_notes || '';
+      }
+    });
+}
+
+function closeClientEdit() {
+  document.getElementById('client-edit').classList.add('hidden');
+  document.getElementById('client-view').classList.remove('hidden');
+}
+
+document.getElementById('btn-edit-client').addEventListener('click', openClientEdit);
+
+async function saveClient() {
+  const fd = new FormData();
+  fd.append('client_name', document.getElementById('c-name').value);
+  fd.append('client_company', document.getElementById('c-company').value);
+  fd.append('client_email', document.getElementById('c-email').value);
+  fd.append('client_phone', document.getElementById('c-phone').value);
+  fd.append('address_site', document.getElementById('c-address').value);
+  fd.append('internal_notes', document.getElementById('c-notes').value);
+  try {
+    const res = await fetch(`${API_BASE}/api/projects/${jobId}/client`, {
+      method: 'POST', body: fd,
+    });
+    if (res.ok) {
+      closeClientEdit();
+      loadClientData();
+    } else {
+      alert('Erro ao salvar');
+    }
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  }
+}
+
+// ══════════════════════════════════════════════
+//  COTAÇÕES DE FORNECEDORES
+// ══════════════════════════════════════════════
+async function loadQuotes() {
+  try {
+    const res = await fetch(`${API_BASE}/api/projects/${jobId}/quotes`);
+    const data = await res.json();
+    renderQuotes(data.quotes || []);
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderQuotes(quotes) {
+  const list = document.getElementById('quotes-list');
+  if (!quotes.length) {
+    list.innerHTML = '<div class="p-5 text-center text-sm text-gray-400">Nenhuma cotação enviada ainda.</div>';
+    document.getElementById('quotes-compare-box').classList.add('hidden');
+    return;
+  }
+  list.innerHTML = quotes.map(q => `
+    <div class="p-4 flex items-center justify-between gap-4 hover:bg-white">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 mb-1">
+          <span class="font-semibold text-gray-800 truncate">${q.supplier_name}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full ${q.status === 'parsed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}">${q.status === 'parsed' ? '✓ parseado' : q.status}</span>
+          ${q.parser_mode ? `<span class="text-xs text-gray-400">(${q.parser_mode})</span>` : ''}
+        </div>
+        <div class="text-xs text-gray-500 flex gap-3">
+          <span>${q.n_items_quoted} itens</span>
+          <span>Total: R$ ${(q.total_bruto || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
+          <span class="truncate">${q.original_filename}</span>
+        </div>
+      </div>
+      <button onclick="deleteQuote('${q.id}')" class="text-xs text-red-500 hover:text-red-700">Remover</button>
+    </div>
+  `).join('');
+
+  // Mostrar botão comparar se tem 2+ quotes
+  if (quotes.length >= 2) {
+    document.getElementById('quotes-compare-box').classList.remove('hidden');
+  }
+}
+
+async function uploadQuote() {
+  const name = document.getElementById('q-supplier-name').value.trim();
+  const file = document.getElementById('q-file').files[0];
+  const autoMode = document.getElementById('q-parser-mode').checked;
+  const statusDiv = document.getElementById('q-status');
+
+  if (!name) { alert('Informe o nome do fornecedor'); return; }
+  if (!file) { alert('Selecione uma planilha .xlsx'); return; }
+
+  const { data: { session } } = await sb.auth.getSession();
+  const btn = document.getElementById('btn-upload-quote');
+  btn.disabled = true;
+  btn.textContent = 'Enviando...';
+  statusDiv.classList.remove('hidden');
+  statusDiv.textContent = 'Parseando planilha...';
+  statusDiv.className = 'mt-3 text-xs text-gray-500';
+
+  try {
+    const fd = new FormData();
+    fd.append('supplier_name', name);
+    fd.append('file', file);
+    fd.append('parser_mode', autoMode ? 'auto' : 'strict');
+    if (session) fd.append('user_id', session.user.id);
+
+    const res = await fetch(`${API_BASE}/api/projects/${jobId}/quotes/upload`, {
+      method: 'POST', body: fd,
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      statusDiv.className = 'mt-3 text-xs text-emerald-700';
+      statusDiv.textContent = `✓ ${data.n_items_quoted} itens parseados (${data.parser_mode_used}). Total R$ ${data.total_bruto.toLocaleString('pt-BR')}`;
+      document.getElementById('q-supplier-name').value = '';
+      document.getElementById('q-file').value = '';
+      loadQuotes();
+    } else {
+      statusDiv.className = 'mt-3 text-xs text-red-700';
+      statusDiv.textContent = '✗ ' + (data.error || 'erro');
+    }
+  } catch (e) {
+    statusDiv.className = 'mt-3 text-xs text-red-700';
+    statusDiv.textContent = '✗ ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Enviar orçamento';
+  }
+}
+
+async function deleteQuote(quoteId) {
+  if (!confirm('Remover essa cotação?')) return;
+  try {
+    await fetch(`${API_BASE}/api/projects/${jobId}/quotes/${quoteId}`, { method: 'DELETE' });
+    loadQuotes();
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  }
+}
+
+async function generateComparison() {
+  const btn = document.getElementById('btn-compare');
+  const result = document.getElementById('compare-result');
+  btn.disabled = true;
+  btn.textContent = 'Gerando...';
+  result.classList.add('hidden');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/projects/${jobId}/quotes/compare`);
+    const data = await res.json();
+    if (data.status === 'ok') {
+      const s = data.summary;
+      const rankHtml = s.ranking.map((r, i) => `
+        <div class="flex items-center justify-between py-1">
+          <span class="text-sm ${i === 0 ? 'font-semibold text-emerald-700' : 'text-gray-700'}">
+            ${i === 0 ? '🏆 ' : `${i+1}º `}${r.supplier}
+          </span>
+          <span class="text-sm font-mono ${i === 0 ? 'text-emerald-700 font-semibold' : 'text-gray-600'}">
+            R$ ${(r.paired_total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+          </span>
+        </div>
+      `).join('');
+      let refHtml = '';
+      if (s.reference_check_summary) {
+        const rs = s.reference_check_summary;
+        refHtml = `
+          <div class="mt-3 pt-3 border-t text-xs text-gray-600 space-y-1">
+            <p>📋 vs. seu quantitativo AI.arq:</p>
+            ${rs.n_missing ? `<p class="text-red-600">• ${rs.n_missing} itens seus que NENHUM fornecedor cotou</p>` : ''}
+            ${rs.n_extra ? `<p class="text-amber-600">• ${rs.n_extra} itens acrescentados pelos fornecedores</p>` : ''}
+            ${rs.n_qty_divergence ? `<p class="text-amber-600">• ${rs.n_qty_divergence} divergências de quantidade (>20%)</p>` : ''}
+          </div>
+        `;
+      }
+      result.innerHTML = `
+        <div class="p-4 bg-white rounded-lg border">
+          <p class="text-xs text-gray-500 mb-2">Ranking por total pareado:</p>
+          ${rankHtml}
+          ${s.n_discrepancies_above_100pct ? `<p class="mt-2 text-xs text-red-600">⚠ ${s.n_discrepancies_above_100pct} itens com diferença > 100% entre fornecedores</p>` : ''}
+          ${refHtml}
+          <a href="${API_BASE}${data.xlsx_url}" target="_blank" class="mt-3 inline-block px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium no-underline">
+            📥 Baixar comparativo XLSX
+          </a>
+        </div>
+      `;
+      result.classList.remove('hidden');
+    } else {
+      result.innerHTML = `<p class="text-sm text-red-600">${data.error || 'erro'}</p>`;
+      result.classList.remove('hidden');
+    }
+  } catch (e) {
+    result.innerHTML = `<p class="text-sm text-red-600">${e.message}</p>`;
+    result.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gerar comparativo';
+  }
+}
 
 function renderHeader(p) {
   document.getElementById('proj-title').textContent = p.project_name || 'Projeto sem nome';

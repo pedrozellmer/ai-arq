@@ -2610,6 +2610,610 @@ async def heuristics_summary():
         return {"error": "market_heuristics indisponível"}
 
 
+# ═══════════════════════════════════════════════════════════════
+#  COTAÇÕES DE FORNECEDORES (supplier quotes)
+# ═══════════════════════════════════════════════════════════════
+
+@app.post("/api/projects/{job_id}/quotes/upload")
+async def upload_supplier_quote(
+    job_id: str,
+    supplier_name: str = Form(...),
+    file: UploadFile = File(...),
+    parser_mode: str = Form("auto"),
+    user_id: str = Form(""),
+):
+    """Recebe uma planilha de orçamento de fornecedor, parseia e salva no banco."""
+    try:
+        from supplier_quote_parser import parse_supplier_quote
+    except ImportError:
+        return {"error": "supplier_quote_parser indisponível"}
+
+    # Salva temporariamente
+    work_dir = os.path.join(WORK_DIR, job_id, "quotes")
+    os.makedirs(work_dir, exist_ok=True)
+    temp_path = os.path.join(work_dir, file.filename)
+    with open(temp_path, "wb") as f:
+        f.write(await file.read())
+
+    # Parseia
+    parsed = parse_supplier_quote(temp_path, supplier_name, mode=parser_mode)
+    if "error" in parsed:
+        return {"status": "error", "error": parsed["error"]}
+
+    # Grava no Supabase
+    payload = {
+        "job_id": job_id,
+        "supplier_name": supplier_name,
+        "original_filename": file.filename,
+        "storage_path": temp_path,
+        "parser_mode": parsed.get("parser_mode_used", "strict"),
+        "n_items_quoted": parsed["n_items_quoted"],
+        "total_bruto": parsed["total_bruto"],
+        "total_material": parsed["total_material"],
+        "total_mao_obra": parsed["total_mao_obra"],
+        "items": parsed["items"],
+        "status": "parsed",
+        "uploaded_by": user_id or "",
+    }
+
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
+        body = json.dumps(payload, default=str).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Prefer", "return=representation")
+        resp = urllib.request.urlopen(req, timeout=20)
+        inserted = json.loads(resp.read().decode("utf-8"))
+        quote_id = inserted[0]["id"] if inserted else None
+    except Exception as e:
+        return {"status": "error", "error": f"Erro ao gravar: {e}"}
+
+    # Cria evento de cashback
+    if user_id:
+        try:
+            cb_payload = {
+                "job_id": job_id,
+                "user_id": user_id,
+                "event_type": "supplier_quote_upload",
+                "credit_cents": 500,  # R$ 5 por upload de cotação
+                "description": f"Upload cotação {supplier_name}",
+                "ref_id": quote_id,
+                "approved_at": datetime.utcnow().isoformat(),
+                "approved_by": "auto",
+            }
+            cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+            cb_body = json.dumps(cb_payload).encode("utf-8")
+            cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
+            cb_req.add_header("apikey", SUPABASE_KEY)
+            cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            cb_req.add_header("Content-Type", "application/json")
+            cb_req.add_header("Prefer", "return=minimal")
+            urllib.request.urlopen(cb_req, timeout=8)
+        except Exception:
+            pass  # cashback é best-effort
+
+    return {
+        "status": "ok",
+        "quote_id": quote_id,
+        "supplier_name": supplier_name,
+        "n_items_quoted": parsed["n_items_quoted"],
+        "total_bruto": parsed["total_bruto"],
+        "parser_mode_used": parsed.get("parser_mode_used"),
+    }
+
+
+@app.get("/api/projects/{job_id}/quotes")
+async def list_supplier_quotes(job_id: str):
+    """Lista cotações de fornecedores de um projeto."""
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
+               f"?job_id=eq.{job_id}"
+               f"&select=id,supplier_name,original_filename,parser_mode,"
+               f"n_items_quoted,total_bruto,total_material,total_mao_obra,"
+               f"status,uploaded_at"
+               f"&order=uploaded_at.asc")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        return {"quotes": json.loads(resp.read().decode("utf-8"))}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.delete("/api/projects/{job_id}/quotes/{quote_id}")
+async def delete_supplier_quote(job_id: str, quote_id: str):
+    """Remove uma cotação."""
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
+               f"?id=eq.{quote_id}&job_id=eq.{job_id}")
+        req = urllib.request.Request(url, method="DELETE")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        urllib.request.urlopen(req, timeout=8)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.get("/api/projects/{job_id}/quotes/compare")
+async def compare_supplier_quotes(job_id: str, include_reference: int = 1):
+    """Compara todas as cotações de um projeto, gera XLSX+PPT, retorna URLs."""
+    try:
+        from supplier_quote_compare import (compare_quotes,
+                                             generate_comparative_xlsx,
+                                             generate_comparative_pptx)
+    except ImportError:
+        return {"error": "supplier_quote_compare indisponível"}
+
+    # Busca quotes
+    url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
+           f"?job_id=eq.{job_id}&select=*&order=uploaded_at.asc")
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("apikey", SUPABASE_KEY)
+    req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+    try:
+        resp = urllib.request.urlopen(req, timeout=10)
+        quotes_raw = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"error": f"erro buscando quotes: {e}"}
+
+    if len(quotes_raw) < 2:
+        return {"error": "precisa de pelo menos 2 cotações pra comparar"}
+
+    # Converte pra formato esperado pelo compare
+    quotes = []
+    for q in quotes_raw:
+        quotes.append({
+            "supplier_name": q["supplier_name"],
+            "n_items_quoted": q.get("n_items_quoted", 0),
+            "total_bruto": float(q.get("total_bruto") or 0),
+            "total_material": float(q.get("total_material") or 0),
+            "total_mao_obra": float(q.get("total_mao_obra") or 0),
+            "items": q.get("items") or [],
+        })
+
+    # Busca reference items do quantitativo original
+    reference_items = None
+    if include_reference:
+        try:
+            ref_url = (f"{SUPABASE_URL}/rest/v1/project_items"
+                       f"?job_id=eq.{job_id}&select=description,unit,quantity"
+                       f"&limit=500")
+            ref_req = urllib.request.Request(ref_url, method="GET")
+            ref_req.add_header("apikey", SUPABASE_KEY)
+            ref_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            ref_resp = urllib.request.urlopen(ref_req, timeout=10)
+            reference_items = json.loads(ref_resp.read().decode("utf-8"))
+        except Exception:
+            pass
+
+    analysis = compare_quotes(quotes, reference_items=reference_items)
+
+    # Busca project_clients + project data + logo do escritório pro cabeçalho
+    project_name = ""
+    architect_name = ""
+    client_name = ""
+    logo_url = ""
+    project_user_id = ""
+    try:
+        pj_url = (f"{SUPABASE_URL}/rest/v1/projects"
+                  f"?job_id=eq.{job_id}&select=project_name,user_name,user_id")
+        pj_req = urllib.request.Request(pj_url, method="GET")
+        pj_req.add_header("apikey", SUPABASE_KEY)
+        pj_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        pj_resp = urllib.request.urlopen(pj_req, timeout=8)
+        pj_data = json.loads(pj_resp.read().decode("utf-8"))
+        if pj_data:
+            project_name = pj_data[0].get("project_name", "")
+            architect_name = pj_data[0].get("user_name", "")
+            project_user_id = pj_data[0].get("user_id", "")
+
+        cl_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
+                  f"?job_id=eq.{job_id}&select=client_name,client_company")
+        cl_req = urllib.request.Request(cl_url, method="GET")
+        cl_req.add_header("apikey", SUPABASE_KEY)
+        cl_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        cl_resp = urllib.request.urlopen(cl_req, timeout=8)
+        cl_data = json.loads(cl_resp.read().decode("utf-8"))
+        if cl_data:
+            client_name = cl_data[0].get("client_name", "")
+            if cl_data[0].get("client_company"):
+                client_name = f"{client_name} ({cl_data[0]['client_company']})" \
+                    if client_name else cl_data[0]["client_company"]
+
+        # Logo do escritório (perfil do dono do projeto)
+        if project_user_id:
+            pr_url = (f"{SUPABASE_URL}/rest/v1/profiles"
+                       f"?user_id=eq.{project_user_id}&select=logo_url,company")
+            pr_req = urllib.request.Request(pr_url, method="GET")
+            pr_req.add_header("apikey", SUPABASE_KEY)
+            pr_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            pr_resp = urllib.request.urlopen(pr_req, timeout=8)
+            pr_data = json.loads(pr_resp.read().decode("utf-8"))
+            if pr_data:
+                logo_url = pr_data[0].get("logo_url", "") or ""
+                if not architect_name and pr_data[0].get("company"):
+                    architect_name = pr_data[0]["company"]
+    except Exception:
+        pass
+
+    # Download logo temporariamente pra embutir no PPT
+    logo_path = None
+    if logo_url:
+        try:
+            work_dir_lg = os.path.join(WORK_DIR, job_id)
+            os.makedirs(work_dir_lg, exist_ok=True)
+            logo_path = os.path.join(work_dir_lg, "logo_escritorio.png")
+            lg_req = urllib.request.Request(logo_url, method="GET")
+            with urllib.request.urlopen(lg_req, timeout=10) as resp:
+                with open(logo_path, "wb") as f:
+                    f.write(resp.read())
+        except Exception:
+            logo_path = None
+
+    # Gera XLSX
+    work_dir = os.path.join(WORK_DIR, job_id)
+    os.makedirs(work_dir, exist_ok=True)
+    xlsx_path = os.path.join(work_dir, f"comparativo_{job_id}.xlsx")
+    generate_comparative_xlsx(
+        analysis, xlsx_path,
+        project_name=project_name,
+        architect_name=architect_name,
+        client_name=client_name,
+    )
+
+    # Gera PPT
+    pptx_path = os.path.join(work_dir, f"comparativo_{job_id}.pptx")
+    try:
+        generate_comparative_pptx(
+            analysis, pptx_path,
+            project_name=project_name,
+            architect_name=architect_name,
+            client_name=client_name,
+            logo_path=logo_path,
+        )
+        pptx_ok = True
+    except Exception as e:
+        print(f"[quotes/compare] erro PPT: {e}")
+        pptx_ok = False
+
+    # ═══ ALIMENTA MOTOR ANONIMAMENTE ═══
+    # Extrai heurísticas do comparativo (sem dados do projeto) e insere
+    # em market_heuristics. Loop de aprendizado do motor.
+    try:
+        _extract_and_save_heuristics(analysis, "office")
+    except Exception as e:
+        print(f"[quotes/compare] erro extração heurísticas: {e}")
+
+    return {
+        "status": "ok",
+        "xlsx_url": f"/api/projects/{job_id}/quotes/download/xlsx",
+        "pptx_url": f"/api/projects/{job_id}/quotes/download/pptx" if pptx_ok else None,
+        "summary": {
+            "n_suppliers": len(analysis["suppliers"]),
+            "ranking": [{"supplier": s, "paired_total": t}
+                        for s, t in analysis["ranking"]],
+            "n_discrepancies_above_100pct":
+                len([d for d in analysis["biggest_discrepancies"]
+                     if d["pct_diff"] > 100]),
+            "reference_check_summary":
+                analysis.get("reference_check", {}).get("summary")
+                if analysis.get("reference_check") else None,
+        },
+    }
+
+
+@app.get("/api/projects/{job_id}/quotes/download/xlsx")
+async def download_quotes_xlsx(job_id: str):
+    """Baixa o comparativo XLSX gerado."""
+    path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.xlsx")
+    if not os.path.exists(path):
+        return {"error": "comparativo não gerado ainda — chamar /quotes/compare primeiro"}
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        filename=f"comparativo_fornecedores_{job_id}.xlsx",
+    )
+
+
+@app.get("/api/projects/{job_id}/quotes/download/pptx")
+async def download_quotes_pptx(job_id: str):
+    """Baixa o comparativo PPT gerado."""
+    path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.pptx")
+    if not os.path.exists(path):
+        return {"error": "PPT não gerado ainda — chamar /quotes/compare primeiro"}
+    return FileResponse(
+        path,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        filename=f"comparativo_fornecedores_{job_id}.pptx",
+    )
+
+
+def _extract_and_save_heuristics(analysis: dict, typology: str = "office"):
+    """Extrai heurísticas adimensionais do comparativo e salva em market_heuristics.
+
+    REGRA DURA: zero valores absolutos, zero nomes de projeto/fornecedor.
+    Fornecedores são anonimizados como fornecedor_1/2/3 (ordem aleatória).
+
+    Inclui:
+      - dispersion: CV por categoria dos top itens divergentes
+      - coverage_pattern: contagem por categoria (anonimizada)
+      - mat_mo_share: ratio médio MAT/MO por categoria
+    """
+    from collections import defaultdict
+    from statistics import mean, stdev
+    import unicodedata
+    import re as _re
+    import hashlib
+    import random
+
+    def _norm(s):
+        if not s: return ""
+        s = str(s).strip().lower()
+        s = unicodedata.normalize("NFKD", s)
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        s = _re.sub(r"[^\w\s]", " ", s)
+        return _re.sub(r"\s+", " ", s).strip()
+
+    categorias_kw = {
+        "demolicao": ["demolicao", "remocao", "retirada", "demolir"],
+        "drywall": ["drywall", "gesso", "septo", "sept"],
+        "eletrica": ["eletr", "tomada", "interruptor", "luminaria"],
+        "hidraulica": ["hidr", "tubulacao", "bacia", "torneira"],
+        "piso": ["piso", "carpete", "laminado", "vinil"],
+        "pintura": ["pintura", "tinta", "selador", "verniz"],
+        "forro": ["forro"],
+        "esquadria": ["porta", "janela", "esquadria"],
+        "ar_condicionado": ["ar condicionado", "hvac", "condicionado"],
+        "mobiliario": ["mobiliar", "armario", "marcenar"],
+        "preliminares": ["mobilizacao", "canteiro", "tapume", "protecao"],
+    }
+
+    def _cat(desc):
+        n = _norm(desc)
+        for cat, keys in categorias_kw.items():
+            for k in keys:
+                if k in n:
+                    return cat
+        return "outros"
+
+    # Source hash anônimo pra não repetir dados
+    ranking_key = "_".join(sorted(analysis["paired_totals"].keys()))
+    source = "auto_" + hashlib.md5(ranking_key.encode()).hexdigest()[:10]
+
+    rows = []
+    n_sup = len(analysis["suppliers"])
+
+    # 1. Dispersão por categoria
+    cat_disp = defaultdict(list)
+    for d in analysis["biggest_discrepancies"][:30]:
+        cat = _cat(d["desc"])
+        cat_disp[cat].append(d["pct_diff"] / 100)  # normaliza pra 0-1
+
+    for cat, cvs in cat_disp.items():
+        if len(cvs) < 1:
+            continue
+        avg_cv = mean(cvs)
+        if avg_cv < 0.2:
+            continue
+        rows.append({
+            "heuristic_type": "dispersion",
+            "typology": typology,
+            "category": cat,
+            "unit": "",
+            "keywords": "",
+            "metric_name": "cv_total",
+            "metric_value": round(avg_cv, 3),
+            "stddev": round(stdev(cvs), 3) if len(cvs) > 1 else 0,
+            "n_observations": len(cvs),
+            "source_anonimo": source,
+        })
+
+    # 2. Cobertura por categoria (n itens por fornecedor anônimo)
+    cov_by_cat = defaultdict(lambda: defaultdict(int))
+    suppliers_shuffled = list(analysis["suppliers"])
+    random.shuffle(suppliers_shuffled)  # anonimiza posição
+    sup_alias = {s: i + 1 for i, s in enumerate(suppliers_shuffled)}
+
+    for m in analysis["merged_items"]:
+        cat = _cat(m["desc"])
+        for sup in analysis["suppliers"]:
+            if m.get(sup) and m[sup].get("total"):
+                cov_by_cat[cat][sup_alias[sup]] += 1
+
+    for cat, supcov in cov_by_cat.items():
+        cobertura = sum(1 for i in range(1, n_sup + 1) if supcov.get(i, 0) > 0)
+        rows.append({
+            "heuristic_type": "coverage_pattern",
+            "typology": typology,
+            "category": cat,
+            "unit": "",
+            "keywords": "",
+            "metric_name": "cobertura_completa",
+            "metric_value": cobertura,
+            "stddev": 0,
+            "n_observations": n_sup,
+            "source_anonimo": source,
+        })
+
+    # 3. Share MAT/MO por categoria
+    cat_shares = defaultdict(list)
+    for m in analysis["merged_items"]:
+        cat = _cat(m["desc"])
+        for sup in analysis["suppliers"]:
+            it = m.get(sup)
+            if not it or not it.get("qtd"):
+                continue
+            mat = (it.get("unit_mat") or 0) * it["qtd"]
+            mo = (it.get("unit_mo") or 0) * it["qtd"]
+            soma = mat + mo
+            if soma <= 0:
+                continue
+            cat_shares[cat].append(mat / soma)
+
+    for cat, shares in cat_shares.items():
+        if len(shares) < 3:
+            continue
+        share_mat_avg = mean(shares)
+        stddev_mat = stdev(shares) if len(shares) > 1 else 0
+        rows.append({
+            "heuristic_type": "mat_mo_share",
+            "typology": typology,
+            "category": cat,
+            "unit": "",
+            "keywords": "",
+            "metric_name": "share_mat",
+            "metric_value": round(share_mat_avg, 3),
+            "stddev": round(stddev_mat, 3),
+            "n_observations": len(shares),
+            "source_anonimo": source,
+        })
+        rows.append({
+            "heuristic_type": "mat_mo_share",
+            "typology": typology,
+            "category": cat,
+            "unit": "",
+            "keywords": "",
+            "metric_name": "share_mo",
+            "metric_value": round(1 - share_mat_avg, 3),
+            "stddev": 0,
+            "n_observations": len(shares),
+            "source_anonimo": source,
+        })
+
+    if not rows:
+        return
+
+    # Audita antes de inserir
+    for r in rows:
+        v = r.get("metric_value")
+        if v and abs(v) > 100 and r["metric_name"] not in (
+                "cobertura_completa",) and not r["metric_name"].startswith("n_itens"):
+            print(f"[heuristics] ALERTA valor suspeito: {r}")
+            return  # não insere se tem valor absoluto vazado
+
+    # Insere
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/market_heuristics"
+        body = json.dumps(rows).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("Prefer", "return=minimal")
+        urllib.request.urlopen(req, timeout=15)
+        print(f"[heuristics] +{len(rows)} métricas anônimas inseridas")
+    except Exception as e:
+        print(f"[heuristics] erro insert: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CASHBACK EVENTS POR PROJETO
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/projects/{job_id}/cashback")
+async def get_project_cashback(job_id: str):
+    """Retorna eventos de cashback + total acumulado desse projeto."""
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+               f"?job_id=eq.{job_id}"
+               f"&select=*&order=created_at.desc")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        events = json.loads(resp.read().decode("utf-8"))
+        total_cents = sum(e.get("credit_cents", 0) for e in events)
+        return {
+            "events": events,
+            "total_cents": total_cents,
+            "total_reais": total_cents / 100.0,
+            "count": len(events),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  DADOS DO CLIENTE FINAL POR PROJETO
+# ═══════════════════════════════════════════════════════════════
+
+@app.get("/api/projects/{job_id}/client")
+async def get_project_client(job_id: str):
+    """Retorna dados do cliente final de um projeto."""
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/project_clients"
+               f"?job_id=eq.{job_id}&select=*")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        data = json.loads(resp.read().decode("utf-8"))
+        return data[0] if data else {}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+@app.post("/api/projects/{job_id}/client")
+async def upsert_project_client(
+    job_id: str,
+    client_name: str = Form(""),
+    client_company: str = Form(""),
+    client_email: str = Form(""),
+    client_phone: str = Form(""),
+    address_site: str = Form(""),
+    internal_notes: str = Form(""),
+):
+    """Cria ou atualiza dados do cliente final de um projeto."""
+    payload = {
+        "job_id": job_id,
+        "client_name": client_name,
+        "client_company": client_company,
+        "client_email": client_email,
+        "client_phone": client_phone,
+        "address_site": address_site,
+        "internal_notes": internal_notes,
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+    try:
+        # Checa se já existe
+        check_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
+                     f"?job_id=eq.{job_id}&select=id")
+        req = urllib.request.Request(check_url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        existing = json.loads(resp.read().decode("utf-8"))
+
+        if existing:
+            # UPDATE
+            up_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
+                      f"?id=eq.{existing[0]['id']}")
+            body = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(up_url, data=body, method="PATCH")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Prefer", "return=minimal")
+            urllib.request.urlopen(req, timeout=8)
+        else:
+            # INSERT
+            in_url = f"{SUPABASE_URL}/rest/v1/project_clients"
+            body = json.dumps(payload).encode("utf-8")
+            req = urllib.request.Request(in_url, data=body, method="POST")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Content-Type", "application/json")
+            req.add_header("Prefer", "return=minimal")
+            urllib.request.urlopen(req, timeout=8)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 # ── STRIPE CHECKOUT ──
 @app.post("/api/estimate-price")
 async def estimate_price(files: list[UploadFile] = File(...)):

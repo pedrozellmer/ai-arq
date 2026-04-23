@@ -264,6 +264,108 @@ def tool_check_density_for_item(job_id: str, item_num: str,
     }
 
 
+def tool_list_supplier_quotes(job_id: str) -> dict:
+    """Lista cotações de fornecedores submetidas neste projeto.
+    Retorna: [{supplier_name, n_items_quoted, total_bruto, total_material,
+    total_mao_obra}].
+    """
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
+               f"?job_id=eq.{job_id}"
+               f"&select=id,supplier_name,n_items_quoted,total_bruto,"
+               f"total_material,total_mao_obra,status"
+               f"&order=uploaded_at.asc")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        quotes = json.loads(resp.read().decode("utf-8"))
+        return {
+            "job_id": job_id,
+            "n_quotes": len(quotes),
+            "quotes": quotes,
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def tool_compare_supplier_quotes(job_id: str) -> dict:
+    """Compara as cotações de fornecedores deste projeto entre si e contra
+    o quantitativo original do AI.arq.
+
+    Retorna análise completa: ranking por total pareado, cobertura de cada
+    fornecedor, maiores discrepâncias item-a-item, e (se aplicável) itens
+    do quantitativo que fornecedores esqueceram.
+    """
+    try:
+        from supplier_quote_compare import compare_quotes
+    except ImportError:
+        return {"error": "supplier_quote_compare indisponível"}
+
+    # Busca quotes
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
+               f"?job_id=eq.{job_id}&select=*&order=uploaded_at.asc")
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=8)
+        quotes_raw = json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        return {"error": str(e)}
+
+    if len(quotes_raw) < 2:
+        return {"error": "precisa de pelo menos 2 cotações"}
+
+    quotes = [{
+        "supplier_name": q["supplier_name"],
+        "n_items_quoted": q.get("n_items_quoted", 0),
+        "total_bruto": float(q.get("total_bruto") or 0),
+        "total_material": float(q.get("total_material") or 0),
+        "total_mao_obra": float(q.get("total_mao_obra") or 0),
+        "items": q.get("items") or [],
+    } for q in quotes_raw]
+
+    # Busca reference items
+    reference_items = None
+    try:
+        ref_url = (f"{SUPABASE_URL}/rest/v1/project_items"
+                   f"?job_id=eq.{job_id}&select=description,unit,quantity")
+        ref_req = urllib.request.Request(ref_url, method="GET")
+        ref_req.add_header("apikey", SUPABASE_KEY)
+        ref_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        ref_resp = urllib.request.urlopen(ref_req, timeout=8)
+        reference_items = json.loads(ref_resp.read().decode("utf-8"))
+    except Exception:
+        pass
+
+    analysis = compare_quotes(quotes, reference_items=reference_items)
+
+    # Retorna versão compacta (o agente não precisa de tudo)
+    return {
+        "suppliers": analysis["suppliers"],
+        "n_items_comparados": analysis["paired_count"],
+        "ranking": [{"fornecedor": s, "total_pareado": t}
+                    for s, t in analysis["ranking"]],
+        "cobertura_por_fornecedor": {
+            sup: f"{cov['pct']:.0f}% ({cov['n_priced']}/{cov['n_total_unique']})"
+            for sup, cov in analysis["coverage"].items()
+        },
+        "top_10_discrepancias": [
+            {
+                "descricao": d["desc"],
+                "diferenca_pct": f"{d['pct_diff']:.0f}%",
+                "mais_barato": d["cheapest"],
+                "mais_caro": d["most_expensive"],
+                "valores": {k: f"R$ {v:,.2f}" for k, v in d["totals"].items()},
+            }
+            for d in analysis["biggest_discrepancies"][:10]
+        ],
+        "vs_quantitativo_aiarq": analysis.get("reference_check", {}).get("summary")
+            if analysis.get("reference_check") else None,
+    }
+
+
 def tool_check_market_heuristics(description: str, typology: str = "office") -> dict:
     """Checa um item contra as heurísticas de mercado (dispersão, cobertura,
     share MAT/MO) extraídas de orçamentos reais anonimizados.
@@ -385,6 +487,22 @@ TOOLS = [
         },
     },
     {
+        "name": "list_supplier_quotes",
+        "description": "Lista as cotações de fornecedores que o cliente enviou pra este projeto (planilhas de orçamento recebidas dos fornecedores). Use quando o cliente perguntar 'quais fornecedores já mandaram proposta?', 'quantas cotações eu tenho?', 'qual fornecedor é mais barato?' (pra este último, use depois compare_supplier_quotes).",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "compare_supplier_quotes",
+        "description": "Compara todas as cotações de fornecedores submetidas no projeto. Retorna ranking por total pareado (só itens que todos orçaram), cobertura de cada fornecedor, top 10 maiores discrepâncias item-a-item, e verificação contra o quantitativo original (itens esquecidos, divergências de quantidade). Use quando o cliente perguntar 'compara os orçamentos', 'qual o mais caro em elétrica?', 'quem esqueceu ar-condicionado?'.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
         "name": "check_market_heuristics",
         "description": "Checa heurísticas agregadas de mercado (dispersão de preço entre fornecedores, share típico de material vs mão de obra, padrão de cobertura) pra uma categoria de item. Use quando o cliente perguntar 'quanto varia o preço disso?', 'é normal esse item ser 80% material?', 'esse serviço costuma ser esquecido?'. Responde SEM valores absolutos — só ratios e percentuais. Úteis pra orientar a revisão e pra explicar intervalo esperado de cotações. A base é anônima (agregada de orçamentos reais, sem identificar projetos).",
         "input_schema": {
@@ -416,6 +534,10 @@ def _dispatch_tool(name: str, job_id: str, tool_input: dict) -> Any:
             tool_input.get("query", ""),
             tool_input.get("top_k", 5),
         )
+    if name == "list_supplier_quotes":
+        return tool_list_supplier_quotes(job_id)
+    if name == "compare_supplier_quotes":
+        return tool_compare_supplier_quotes(job_id)
     if name == "check_market_heuristics":
         return tool_check_market_heuristics(
             tool_input["description"],
