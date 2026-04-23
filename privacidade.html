@@ -220,6 +220,67 @@
         </div>
       </section>
 
+      <!-- 1-A. Dados de Terceiros (cliente final e fornecedores) -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">1-A. Dados de Terceiros (Cliente Final e Fornecedores)</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-4">
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-4">
+            <p class="text-sm text-amber-900 font-semibold mb-1">🏛️ Papéis LGPD</p>
+            <p class="text-sm text-amber-800 leading-relaxed">Quando você insere dados de terceiros na plataforma (cliente final do seu projeto, fornecedores que lhe enviaram orçamentos), <strong>você assume a posição de controlador</strong> nos termos do art. 5º, VI da LGPD. O AI.arq atua como <strong>operador</strong> (art. 5º, VII), tratando os dados apenas conforme suas instruções e para a finalidade específica da prestação do serviço.</p>
+          </div>
+
+          <div>
+            <p class="text-sm font-semibold text-gray-800 mb-2">Dados do cliente final do seu projeto</p>
+            <p class="text-sm text-gray-600 leading-relaxed mb-2">Nome, empresa, e-mail, telefone/WhatsApp, endereço da obra e notas internas. Usados exclusivamente para:</p>
+            <ul class="ml-4 space-y-1">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Preencher o cabeçalho das planilhas (XLSX) e apresentações (PPT) geradas dentro do próprio projeto.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Facilitar contato via WhatsApp/e-mail (botões abrem aplicativo local com mensagem pré-preenchida — <strong>o AI.arq não envia mensagens automaticamente em seu nome</strong>).</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Isolamento absoluto por projeto: <strong>não são usados para treinamento de IA, não são compartilhados com terceiros e não são visíveis por outros usuários</strong>.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Excluídos automaticamente quando o projeto é arquivado ou por solicitação do usuário.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-sm font-semibold text-gray-800 mb-2">Planilhas de fornecedores (cotações)</p>
+            <ul class="ml-4 space-y-1">
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                <span class="text-sm text-gray-600"><strong>Valores absolutos em R$ NUNCA são utilizados como referência para outros projetos.</strong> Ficam exclusivamente no contexto do seu projeto.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Apenas métricas <strong>adimensionais anonimizadas</strong> (coeficientes de variação, share material/mão-de-obra por categoria, padrões de cobertura) podem alimentar o motor de heurísticas de mercado do AI.arq.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Antes de qualquer inserção nessa base agregada, um processo de auditoria verifica que nenhum valor absoluto, nome de projeto, cliente ou fornecedor vazou.</span>
+              </li>
+              <li class="flex items-start gap-2">
+                <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                <span class="text-sm text-gray-600">Fornecedores são identificados somente como <code>fornecedor_1</code>, <code>fornecedor_2</code>, etc, em ordem aleatória no motor.</span>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="text-sm font-semibold text-gray-800 mb-2">Logotipo e identidade visual</p>
+            <p class="text-sm text-gray-600 leading-relaxed">Armazenado no Supabase Storage em bucket público específico (<code>logos</code>) — acessível apenas via URL direta. Utilizado exclusivamente para inserir nos documentos gerados. Excluível a qualquer momento.</p>
+          </div>
+        </div>
+      </section>
+
       <!-- 2. Finalidade do Uso dos Dados -->
       <section>
         <h2 class="text-xl font-bold text-gray-900 mb-3">2. Finalidade do Uso dos Dados</h2>
@@ -267,7 +328,57 @@
               </div>
               <div>
                 <p class="text-sm font-semibold text-gray-800">Programa Beta e Cashback</p>
-                <p class="text-sm text-gray-600">Gerenciar c&oacute;digos de convite, controlar limites de uso e aplicar descontos do programa de cashback.</p>
+                <p class="text-sm text-gray-600">Gerenciar c&oacute;digos de convite, controlar limites de uso e aplicar descontos do programa de cashback granular (revis&otilde;es inline, upload de planilha corrigida, upload de cota&ccedil;&atilde;o de fornecedor, feedback NPS).</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">6</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Gera&ccedil;&atilde;o de entreg&aacute;veis com identidade visual</p>
+                <p class="text-sm text-gray-600">Utilizar o logotipo e cor de marca fornecidos pelo escrit&oacute;rio para inserir nas planilhas (XLSX) e apresenta&ccedil;&otilde;es (PPTX) do pr&oacute;prio usu&aacute;rio, exclusivamente no contexto dos seus projetos.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">7</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">An&aacute;lise comparativa de or&ccedil;amentos</p>
+                <p class="text-sm text-gray-600">Processar planilhas de fornecedores que voc&ecirc; fez upload no seu projeto para gera&ccedil;&atilde;o de comparativo automatizado. Dados mant&ecirc;m isolamento por projeto.</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3">
+              <div class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 shrink-0 mt-0.5">
+                <span class="text-xs font-bold">8</span>
+              </div>
+              <div>
+                <p class="text-sm font-semibold text-gray-800">Heur&iacute;sticas de mercado anonimizadas</p>
+                <p class="text-sm text-gray-600">Extrair m&eacute;tricas adimensionais (coeficiente de varia&ccedil;&atilde;o, shares MAT/MO por categoria, padr&otilde;es de cobertura) para calibrar alertas de an&aacute;lise. <strong>Nunca inclui valores absolutos em R$ ou identifica&ccedil;&atilde;o de projetos/fornecedores espec&iacute;ficos.</strong></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bases legais LGPD -->
+          <div class="mt-6 border-t pt-5">
+            <p class="text-sm font-semibold text-gray-800 mb-3">Bases legais (art. 7º da LGPD)</p>
+            <div class="grid md:grid-cols-2 gap-3 text-sm">
+              <div class="bg-indigo-50 rounded-lg p-3">
+                <p class="font-semibold text-indigo-800 mb-1">Execução de contrato (inc. V)</p>
+                <p class="text-indigo-700 text-xs leading-relaxed">Processamento de arquivos CAD, geração de planilha, gestão da conta, pagamentos.</p>
+              </div>
+              <div class="bg-emerald-50 rounded-lg p-3">
+                <p class="font-semibold text-emerald-800 mb-1">Consentimento (inc. I)</p>
+                <p class="text-emerald-700 text-xs leading-relaxed">Comunicações de marketing (opt-in), uso de dados revisados para treino da IA.</p>
+              </div>
+              <div class="bg-amber-50 rounded-lg p-3">
+                <p class="font-semibold text-amber-800 mb-1">Legítimo interesse (inc. IX)</p>
+                <p class="text-amber-700 text-xs leading-relaxed">Prevenção de fraude, segurança da plataforma, extração de métricas anonimizadas para calibração.</p>
+              </div>
+              <div class="bg-red-50 rounded-lg p-3">
+                <p class="font-semibold text-red-800 mb-1">Obrigação legal (inc. II)</p>
+                <p class="text-red-700 text-xs leading-relaxed">Retenção fiscal de dados de pagamento; cumprimento de requisições judiciais.</p>
               </div>
             </div>
           </div>
@@ -489,7 +600,58 @@
               <span class="mt-1.5 h-2 w-2 rounded-full bg-gray-400 shrink-0"></span>
               <p class="text-gray-600 text-sm"><strong>localStorage:</strong> permanece no navegador at&eacute; ser limpo pelo usu&aacute;rio ou at&eacute; o logout.</p>
             </div>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-amber-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Dados do cliente final do projeto (nome, e-mail, telefone):</strong> mantidos pelo mesmo prazo que o projeto est&aacute; ativo; exclu&iacute;dos em cascata quando o projeto &eacute; arquivado, em at&eacute; 30 dias ap&oacute;s solicita&ccedil;&atilde;o de elimina&ccedil;&atilde;o LGPD.</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-amber-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Planilhas de cota&ccedil;&otilde;es dos fornecedores:</strong> mantidas por 90 dias ap&oacute;s o upload, depois exclu&iacute;das. Podem ser removidas individualmente a qualquer momento na p&aacute;gina do projeto.</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-emerald-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Heur&iacute;sticas anonimizadas de mercado:</strong> m&eacute;tricas agregadas (adimensionais, sem valor absoluto ou identifica&ccedil;&atilde;o) s&atilde;o mantidas indefinidamente pois formam a base de calibra&ccedil;&atilde;o. Como s&atilde;o 100% anonimizadas antes da inser&ccedil;&atilde;o, n&atilde;o s&atilde;o consideradas dado pessoal nos termos do art. 12 da LGPD.</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-purple-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Logotipo do escrit&oacute;rio:</strong> armazenado enquanto a conta estiver ativa; exclus&atilde;o imediata via "Meu Cadastro" ou em at&eacute; 15 dias ap&oacute;s cancelamento de conta.</p>
+            </div>
+            <div class="flex items-start gap-3">
+              <span class="mt-1.5 h-2 w-2 rounded-full bg-purple-400 shrink-0"></span>
+              <p class="text-gray-600 text-sm"><strong>Eventos de cashback:</strong> mantidos como hist&oacute;rico cont&aacute;bil pelo prazo legal m&iacute;nimo de 5 anos (legisla&ccedil;&atilde;o fiscal), mas sem conter dados do projeto em si &mdash; apenas refer&ecirc;ncia an&ocirc;nima ao evento, valor e data.</p>
+            </div>
           </div>
+        </div>
+      </section>
+
+      <!-- 7-A. Transferência Internacional -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">7-A. Transfer&ecirc;ncia Internacional de Dados</h2>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            Para prestar o servi&ccedil;o, o AI.arq transfere determinados dados para processadores localizados fora do Brasil, nos termos do art. 33 da LGPD:
+          </p>
+          <ul class="space-y-2 ml-4">
+            <li class="flex items-start gap-2">
+              <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+              <span class="text-sm text-gray-700"><strong>Anthropic (Claude AI)</strong> &mdash; datacenter nos EUA. Conte&uacute;do dos arquivos CAD &eacute; enviado via API criptografada para an&aacute;lise pela IA. Anthropic declara <strong>n&atilde;o utilizar</strong> os dados para treinamento de modelos fundamentais. <a href="https://www.anthropic.com/legal/privacy" target="_blank" class="underline text-indigo-600">Privacy Policy</a>.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+              <span class="text-sm text-gray-700"><strong>Supabase</strong> &mdash; banco de dados e storage em datacenter EUA (AWS us-east). Dados pessoais ficam em reposit&oacute;rio criptografado em repouso e em tr&acirc;nsito.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+              <span class="text-sm text-gray-700"><strong>Render</strong> &mdash; servidor de aplica&ccedil;&atilde;o do backend, datacenter EUA.</span>
+            </li>
+            <li class="flex items-start gap-2">
+              <span class="mt-1.5 h-1.5 w-1.5 rounded-full bg-indigo-400 shrink-0"></span>
+              <span class="text-sm text-gray-700"><strong>Stripe</strong> &mdash; processamento de pagamentos (n&atilde;o armazenamos dados do cart&atilde;o).</span>
+            </li>
+          </ul>
+          <p class="text-gray-600 leading-relaxed">
+            Todos os provedores possuem certifica&ccedil;&otilde;es de seguran&ccedil;a (SOC 2, ISO 27001) e oferecem garantias equivalentes &agrave;s da LGPD. A transfer&ecirc;ncia &eacute; realizada com base no art. 33, V (execu&ccedil;&atilde;o de contrato) e VIII (compromisso com n&iacute;vel adequado de prote&ccedil;&atilde;o).
+          </p>
         </div>
       </section>
 

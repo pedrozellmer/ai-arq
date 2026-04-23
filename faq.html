@@ -477,6 +477,144 @@
     </div>
 
     <!-- ================================================ -->
+    <!-- SECTION NOVA: Comparativo de Fornecedores + PPT -->
+    <!-- ================================================ -->
+    <div class="section-group mb-8" data-section="comparativo">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        </div>
+        <h2 class="text-lg font-bold text-gray-900">Comparativo de Fornecedores &amp; PPT</h2>
+      </div>
+
+      <div class="space-y-3">
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="comparativo fornecedor cotacao orcamento upload planilha excel varios fornecedores comparar analisar ppt apresentacao">
+          <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Como funciona o comparativo de 3 fornecedores?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-2">Depois que você gera o quantitativo e manda pros fornecedores, eles devolvem planilhas preenchidas. Dentro do seu projeto no AI.arq, tem o card "Recebeu orçamentos dos fornecedores?" — basta fazer o upload de cada XLSX recebido.</p>
+              <p class="mb-2">Quando você tem 2 ou mais cotações, o botão "Gerar comparativo" produz:</p>
+              <ul class="space-y-1 ml-4 mb-2">
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> XLSX com ranking por <strong>total pareado</strong> (só itens que todos orçaram — comparação justa)</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Cobertura de cada fornecedor (quantos % dos itens ele cotou)</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Top discrepâncias acima de 100% (sinal de escopo diferente)</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Cruzamento com o quantitativo AI.arq original (quem esqueceu o quê)</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> PPT executivo com a logo e cor do seu escritório</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="fornecedor template diferente planilha formato cada um upload automatico fuzzy match parser">
+          <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">E se cada fornecedor usar um template diferente?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p>O parser tem 2 modos: <strong>strict</strong> (assume template padrão) e <strong>fuzzy</strong> (detecta colunas dinamicamente procurando palavras-chave no cabeçalho: "descrição", "unidade", "quantidade", "valor unitário", "total"). Em modo automático, ele tenta strict primeiro e cai pro fuzzy se não reconhecer. O matching entre fornecedores usa similaridade de string + Jaccard de tokens — "Demolição de drywall em placas" casa com "Demolicao de drywall com placas" mesmo sem normalização exata.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="logo escritorio marca ppt apresentacao cor personalizada identidade visual co-branding">
+          <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Posso usar a logo do meu escritório nos PPTs gerados?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-2">Sim. No Dashboard → "Meu Cadastro" → seção "Identidade visual" você sobe o logo (PNG/JPG/SVG, máx 2MB) e escolhe uma cor de marca. A partir daí, todo PPT comparativo sai com:</p>
+              <ul class="space-y-1 ml-4">
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> Logo na capa e em cada slide (canto superior esquerdo)</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> Títulos e cards usando a sua cor primária</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> Rodapé "Análise preparada por [Escritório] — Powered by AI.arq"</li>
+              </ul>
+              <p class="mt-2 text-xs text-gray-500">Ao subir o logo você declara ter os direitos autorais ou autorização de uso (ver <a href="termos.html" class="underline">Termos</a>).</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="dados cliente final nome endereco whatsapp enviar pra quem cadastro projeto">
+          <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Como cadastro dados do meu cliente final?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-2">Dentro do projeto, no card "📇 Dados do cliente final" você preenche nome, empresa, e-mail, WhatsApp e endereço da obra. Esses dados:</p>
+              <ul class="space-y-1 ml-4 mb-2">
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> Aparecem no cabeçalho das planilhas e PPTs gerados</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> Habilitam os botões "📱 WhatsApp" e "✉️ E-mail" pra envio rápido (abre o app com mensagem pronta — o AI.arq não envia sozinho)</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-500 mt-1 shrink-0">•</span> Ficam <strong>isolados por projeto</strong>, não alimentam IA nem são vistos por outros usuários</li>
+              </ul>
+              <p class="text-xs text-gray-500">LGPD: você é o controlador dos dados, o AI.arq é o operador. Detalhes em <a href="privacidade.html" class="underline">Privacidade</a> seção 1-A.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="cashback acao granular revisao inline upload planilha corrigida cotacao fornecedor nps credito desconto">
+          <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Como funciona o cashback granular por ação?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-2">Cada ação que ajuda a calibrar a IA gera crédito automático, visível no próprio projeto e agregado na aba "Cashback":</p>
+              <ul class="space-y-1 ml-4">
+                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Revisão inline</strong> — validar/ajustar itens no navegador: crédito por item revisado</li>
+                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Upload planilha revisada</strong> (.xlsx corrigido offline): <strong>+R$ 20</strong></li>
+                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Upload cotação fornecedor</strong> (por cotação parseada): <strong>+R$ 5</strong></li>
+                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Feedback NPS</strong>: crédito ao responder</li>
+              </ul>
+              <p class="mt-2">O crédito é abatido automaticamente no próximo projeto que você criar.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="memoria tecnica sinapi tcpo bim composicao insumo justificar quantidade codigo referencia oficial">
+          <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">O que é a aba "Memória Técnica" na planilha?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-2">Uma aba verde na planilha gerada que, pra cada item do quantitativo, mostra:</p>
+              <ul class="space-y-1 ml-4 mb-2">
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Código TCPO BIM de referência + descrição oficial da composição</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Lista de insumos esperados (material, mão de obra, equipamento) com coeficiente de consumo</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Similaridade entre descrição do item e a composição (% de compatibilidade)</li>
+              </ul>
+              <p>Serve pra <strong>justificar tecnicamente o quantitativo</strong> pros fornecedores e dar credibilidade à planilha. Base: TCPO BIM 15ª Edição (Pini) + SINAPI (Caixa).</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="motor heuristicas alertas anonimizado dados privacidade fornecedor lgpd outras pessoas ver projeto">
+          <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Meus fornecedores e clientes aparecem pros outros usuários do AI.arq?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              <p class="mb-2"><strong>Não.</strong> Regra dura do sistema:</p>
+              <ul class="space-y-1 ml-4 mb-2">
+                <li class="flex items-start gap-2"><span class="text-red-500 mt-1 shrink-0">✗</span> Valores absolutos em R$ <strong>nunca</strong> são compartilhados entre projetos</li>
+                <li class="flex items-start gap-2"><span class="text-red-500 mt-1 shrink-0">✗</span> Nome do cliente final, fornecedor, endereço da obra — <strong>ficam isolados</strong> por projeto</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Apenas <strong>métricas adimensionais anonimizadas</strong> (CV de preço por categoria, share MAT/MO) vão pro motor de alertas</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">✓</span> Fornecedores entram no motor só como "fornecedor_1/2/3" em ordem aleatória, sem qualquer vínculo rastreável</li>
+              </ul>
+              <p>Antes de qualquer inserção na base anônima, uma auditoria verifica que nenhum valor em R$, nome ou identificador vazou. Detalhes: <a href="privacidade.html" class="underline">Política de Privacidade</a> seção 1-A.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================================================ -->
     <!-- SECTION 5: Seguran&ccedil;a e Privacidade (5 perguntas) -->
     <!-- ================================================ -->
     <div class="section-group mb-8" data-section="seguranca">
