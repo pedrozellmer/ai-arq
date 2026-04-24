@@ -196,6 +196,7 @@
               <p class="text-sm font-medium text-gray-500">Total de Usu&#225;rios</p>
             </div>
             <p id="stat-users" class="text-3xl font-bold text-gray-900">--</p>
+            <p id="stat-users-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
           </div>
 
           <!-- Card: Projetos Processados -->
@@ -247,24 +248,32 @@
           </div>
         </div>
 
+        <!-- Legenda status -->
+        <div class="flex flex-wrap items-center gap-3 mb-3 text-xs">
+          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-green-500"></span> Completo</span>
+          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-yellow-500"></span> Incompleto (s&#243; email)</span>
+          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-400"></span> Email n&#227;o confirmado</span>
+        </div>
+
         <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
           <div class="table-container">
             <table class="w-full text-sm">
               <thead>
                 <tr class="border-b bg-gray-50">
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">Nome</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">Email</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">WhatsApp</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">Empresa</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">&#193;rea</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">Cargo</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">C&#243;digo Beta</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Data Cadastro</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Projetos</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Signup</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">&#218;ltimo login</th>
                 </tr>
               </thead>
               <tbody id="users-table-body">
                 <tr>
-                  <td colspan="8" class="px-4 py-12 text-center text-gray-400">Carregando usu&#225;rios...</td>
+                  <td colspan="9" class="px-4 py-12 text-center text-gray-400">Carregando usu&#225;rios...</td>
                 </tr>
               </tbody>
             </table>
@@ -1276,11 +1285,32 @@ startProjectsAutoRefresh();
 // ══════════════════════════════════════════════
 async function loadDashboardStats() {
   try {
-    // Count users
-    const { count: userCount } = await sbClient
-      .from('profiles')
-      .select('*', { count: 'exact', head: true });
-    document.getElementById('stat-users').textContent = userCount ?? 0;
+    // Count users — via RPC (inclui cadastros incompletos)
+    let total = 0, incomplete = 0, last7 = 0;
+    try {
+      const { data, error } = await sbClient.rpc('admin_list_all_signups');
+      if (error) throw error;
+      const users = data || [];
+      total = users.length;
+      incomplete = users.filter(u => !u.has_profile).length;
+      const sevenAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      last7 = users.filter(u => {
+        const t = u.auth_created_at ? Date.parse(u.auth_created_at) : 0;
+        return t >= sevenAgo;
+      }).length;
+    } catch (e) {
+      // Fallback
+      const { count } = await sbClient.from('profiles').select('*', { count: 'exact', head: true });
+      total = count || 0;
+    }
+    document.getElementById('stat-users').textContent = total;
+    const detailEl = document.getElementById('stat-users-detail');
+    if (detailEl) {
+      const parts = [];
+      if (last7 > 0) parts.push('+' + last7 + ' em 7d');
+      if (incomplete > 0) parts.push(incomplete + ' incompleto(s)');
+      detailEl.textContent = parts.length ? parts.join(' \u00b7 ') : '\u00a0';
+    }
 
     // Count active beta codes
     const { count: betaCount } = await sbClient
@@ -1301,46 +1331,95 @@ let allUsers = [];
 
 async function loadUsers() {
   const tbody = document.getElementById('users-table-body');
-  tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-gray-400">Carregando usu\u00e1rios...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-gray-400">Carregando usu\u00e1rios...</td></tr>';
 
   try {
-    const { data, error } = await sbClient
-      .from('profiles')
-      .select('*')
-      ;
+    // Tenta via RPC (admin-only, inclui auth.users sem profile)
+    const { data, error } = await sbClient.rpc('admin_list_all_signups');
 
-    if (error) throw error;
+    if (error) {
+      // Fallback: profiles table (sem os cadastros incompletos)
+      console.warn('[admin] RPC falhou, caindo pra profiles:', error.message);
+      const r2 = await sbClient.from('profiles').select('*');
+      if (r2.error) throw r2.error;
+      allUsers = (r2.data || []).map(p => ({
+        user_id: p.user_id,
+        email: p.email,
+        full_name: p.full_name,
+        company: p.company,
+        whatsapp: p.whatsapp,
+        user_role: p.role,
+        area: p.area,
+        beta_code: p.beta_code,
+        profile_created_at: p.created_at,
+        auth_created_at: p.created_at,
+        last_sign_in_at: null,
+        email_confirmed_at: p.created_at,
+        has_profile: true,
+        num_projects: 0,
+      }));
+    } else {
+      allUsers = data || [];
+    }
 
-    allUsers = data || [];
     renderUsers(allUsers);
-    document.getElementById('users-count').textContent = allUsers.length + ' usu\u00e1rio(s) encontrado(s)';
+    const complete = allUsers.filter(u => u.has_profile).length;
+    const incomplete = allUsers.length - complete;
+    let msg = allUsers.length + ' usu\u00e1rio(s) — ' + complete + ' completo(s)';
+    if (incomplete > 0) msg += ', ' + incomplete + ' incompleto(s)';
+    document.getElementById('users-count').textContent = msg;
 
   } catch (err) {
     console.error('Error loading users:', err);
-    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-red-400">Erro ao carregar usu\u00e1rios.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-red-400">Erro ao carregar usu\u00e1rios.</td></tr>';
   }
+}
+
+function _statusBadge(u) {
+  if (!u.email_confirmed_at) {
+    return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-medium"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>N\u00e3o confirmado</span>';
+  }
+  if (!u.has_profile) {
+    return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>Incompleto</span>';
+  }
+  return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-medium"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Completo</span>';
+}
+
+function _fmtDate(iso) {
+  if (!iso) return '--';
+  try { return new Date(iso).toLocaleDateString('pt-BR'); } catch (e) { return '--'; }
+}
+
+function _fmtDateTime(iso) {
+  if (!iso) return '--';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) { return '--'; }
 }
 
 function renderUsers(users) {
   const tbody = document.getElementById('users-table-body');
 
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-gray-400">Nenhum usu\u00e1rio encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-gray-400">Nenhum usu\u00e1rio encontrado.</td></tr>';
     return;
   }
 
   tbody.innerHTML = users.map(u => {
-    const date = u.created_at ? new Date(u.created_at).toLocaleDateString('pt-BR') : '--';
+    const rowCls = !u.has_profile ? 'bg-yellow-50/40' : '';
+    const name = u.full_name || '<span class="text-yellow-700 italic text-xs">sem cadastro</span>';
     return `
-      <tr class="border-b hover:bg-gray-50 transition">
-        <td class="px-4 py-3 font-medium text-gray-900">${esc(u.full_name || u.name || '--')}</td>
+      <tr class="border-b hover:bg-gray-50 transition ${rowCls}">
+        <td class="px-4 py-3">${_statusBadge(u)}</td>
+        <td class="px-4 py-3 font-medium text-gray-900">${name === u.full_name ? esc(u.full_name) : name}</td>
         <td class="px-4 py-3 text-gray-600">${esc(u.email || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.whatsapp || u.phone || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.company || u.empresa || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.area || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.role || u.cargo || '--')}</td>
-        <td class="px-4 py-3"><span class="font-mono text-xs bg-gray-100 px-2 py-1 rounded">${esc(u.beta_code || '--')}</span></td>
-        <td class="px-4 py-3 text-gray-500 text-xs">${date}</td>
+        <td class="px-4 py-3 text-gray-600">${esc(u.whatsapp || '--')}</td>
+        <td class="px-4 py-3 text-gray-600">${esc(u.company || '--')}</td>
+        <td class="px-4 py-3 text-gray-600">${esc(u.user_role || '--')}</td>
+        <td class="px-4 py-3 text-gray-600 text-center">${u.num_projects || 0}</td>
+        <td class="px-4 py-3 text-gray-500 text-xs">${_fmtDate(u.auth_created_at || u.profile_created_at)}</td>
+        <td class="px-4 py-3 text-gray-500 text-xs">${_fmtDateTime(u.last_sign_in_at)}</td>
       </tr>
     `;
   }).join('');
@@ -1356,8 +1435,8 @@ document.getElementById('search-users').addEventListener('input', function() {
   }
   const filtered = allUsers.filter(u => {
     const searchable = [
-      u.full_name, u.name, u.email, u.whatsapp, u.phone,
-      u.company, u.empresa, u.area, u.role, u.cargo, u.beta_code
+      u.full_name, u.email, u.whatsapp,
+      u.company, u.area, u.user_role, u.role, u.beta_code
     ].filter(Boolean).join(' ').toLowerCase();
     return searchable.includes(q);
   });
