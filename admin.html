@@ -269,11 +269,12 @@
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">Projetos</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">Signup</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">&#218;ltimo login</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">A&#231;&#245;es</th>
                 </tr>
               </thead>
               <tbody id="users-table-body">
                 <tr>
-                  <td colspan="9" class="px-4 py-12 text-center text-gray-400">Carregando usu&#225;rios...</td>
+                  <td colspan="10" class="px-4 py-12 text-center text-gray-400">Carregando usu&#225;rios...</td>
                 </tr>
               </tbody>
             </table>
@@ -1331,7 +1332,7 @@ let allUsers = [];
 
 async function loadUsers() {
   const tbody = document.getElementById('users-table-body');
-  tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-gray-400">Carregando usu\u00e1rios...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-12 text-center text-gray-400">Carregando usu\u00e1rios...</td></tr>';
 
   try {
     // Tenta via RPC (admin-only, inclui auth.users sem profile)
@@ -1371,7 +1372,7 @@ async function loadUsers() {
 
   } catch (err) {
     console.error('Error loading users:', err);
-    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-red-400">Erro ao carregar usu\u00e1rios.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-12 text-center text-red-400">Erro ao carregar usu\u00e1rios.</td></tr>';
   }
 }
 
@@ -1402,13 +1403,34 @@ function renderUsers(users) {
   const tbody = document.getElementById('users-table-body');
 
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="9" class="px-4 py-12 text-center text-gray-400">Nenhum usu\u00e1rio encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-12 text-center text-gray-400">Nenhum usu\u00e1rio encontrado.</td></tr>';
     return;
   }
 
   tbody.innerHTML = users.map(u => {
     const rowCls = !u.has_profile ? 'bg-yellow-50/40' : '';
     const name = u.full_name || '<span class="text-yellow-700 italic text-xs">sem cadastro</span>';
+    const emailEsc = esc(u.email || '');
+    const actions = u.email
+      ? `
+        <div class="flex items-center gap-1">
+          ${!u.has_profile ? `
+            <button onclick="sendActivationLink('${emailEsc}', this)"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition"
+                    title="Enviar link de login por email (magic link)">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              Reenviar
+            </button>
+          ` : ''}
+          <button onclick="copyEmail('${emailEsc}', this)"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition"
+                  title="Copiar email">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2m0 0h2a2 2 0 012 2v3m-4-6v5a1 1 0 001 1h5"/></svg>
+              Copiar
+          </button>
+        </div>
+      `
+      : '--';
     return `
       <tr class="border-b hover:bg-gray-50 transition ${rowCls}">
         <td class="px-4 py-3">${_statusBadge(u)}</td>
@@ -1420,9 +1442,78 @@ function renderUsers(users) {
         <td class="px-4 py-3 text-gray-600 text-center">${u.num_projects || 0}</td>
         <td class="px-4 py-3 text-gray-500 text-xs">${_fmtDate(u.auth_created_at || u.profile_created_at)}</td>
         <td class="px-4 py-3 text-gray-500 text-xs">${_fmtDateTime(u.last_sign_in_at)}</td>
+        <td class="px-4 py-3">${actions}</td>
       </tr>
     `;
   }).join('');
+}
+
+// Mini toast pra feedback de ações
+function _adminToast(msg, type) {
+  const color = type === 'error' ? 'bg-red-600' : (type === 'warn' ? 'bg-yellow-600' : 'bg-green-600');
+  const el = document.createElement('div');
+  el.className = `fixed bottom-6 right-6 ${color} text-white px-4 py-3 rounded-xl shadow-lg text-sm font-medium z-[9999] transition-opacity`;
+  el.style.maxWidth = '320px';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; }, 3500);
+  setTimeout(() => { el.remove(); }, 4000);
+}
+
+// Envia magic link de login pra email (usa Supabase signInWithOtp).
+// Usuário recebe email com botão "Log in" — ao clicar cai em /login.html autenticado.
+async function sendActivationLink(email, btnEl) {
+  email = String(email || '').trim().toLowerCase();
+  if (!email) return;
+  if (!confirm(`Enviar link de login para ${email}?\n\nO usu\u00e1rio vai receber um email da Supabase com um bot\u00e3o "Log in". Ao clicar, entra direto no site e pode finalizar o cadastro.`)) return;
+
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.style.opacity = '0.6';
+    btnEl.innerHTML = '<span class="text-xs">Enviando...</span>';
+  }
+
+  try {
+    const redirectTo = window.location.origin + '/login.html';
+    const { error } = await sbClient.auth.signInWithOtp({
+      email,
+      options: {
+        emailRedirectTo: redirectTo,
+        shouldCreateUser: false,  // só envia se já existe no auth.users
+      },
+    });
+    if (error) throw error;
+    _adminToast(`Link enviado para ${email} \u2713`, 'success');
+    if (btnEl) btnEl.innerHTML = '<span class="text-xs">Enviado \u2713</span>';
+  } catch (err) {
+    console.error('[sendActivationLink]', err);
+    const msg = (err && err.message) || 'Erro ao enviar link';
+    // Rate-limit da Supabase é comum — informar o admin
+    if (/rate|limit|60 seconds/i.test(msg)) {
+      _adminToast('Aguarde ~60s antes de reenviar (rate limit)', 'warn');
+    } else {
+      _adminToast('Erro: ' + msg, 'error');
+    }
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.style.opacity = '1';
+      btnEl.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>Reenviar';
+    }
+  }
+}
+
+async function copyEmail(email, btnEl) {
+  try {
+    await navigator.clipboard.writeText(email);
+    _adminToast(`${email} copiado`, 'success');
+    if (btnEl) {
+      const orig = btnEl.innerHTML;
+      btnEl.innerHTML = '<span class="text-xs">Copiado \u2713</span>';
+      setTimeout(() => { btnEl.innerHTML = orig; }, 1500);
+    }
+  } catch (err) {
+    _adminToast('Falha ao copiar', 'error');
+  }
 }
 
 // Search filter
