@@ -33,6 +33,9 @@ COMMON_STYLES = '''
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
   html { scroll-behavior: smooth; }
 </style>
 '''
@@ -119,20 +122,28 @@ def _classify_line(line):
 
 
 DOWNLOAD_BUTTONS_HTML = '''
-<div class="my-6 p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-200">
-  <div class="flex flex-wrap items-center justify-center gap-4">
+<div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">
+  <div class="grid gap-3 sm:grid-cols-2">
     <a href="/blog/downloads/memorial-descritivo-obra-modelo.pdf" download
-       class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-sm transition">
-      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"/><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
-      Baixar PDF (modelo)
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 font-bold text-xs">PDF</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo em PDF</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra ler e imprimir · 328 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
     </a>
     <a href="/blog/downloads/memorial-descritivo-obra-modelo.docx" download
-       class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-sm transition">
-      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"/><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
-      Baixar DOCX (editável)
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 font-bold text-xs">DOCX</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo editável (Word)</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra editar no Word/Docs · 40 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
     </a>
   </div>
-  <p class="mt-3 text-xs text-gray-500 text-center">Sem cadastro. Sem captura de email. Use à vontade.</p>
+  <p class="mt-4 text-xs text-gray-500 text-center">Sem cadastro · Sem captura de email · Use à vontade</p>
 </div>
 '''
 
