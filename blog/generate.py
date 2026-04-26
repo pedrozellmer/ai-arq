@@ -36,6 +36,9 @@ COMMON_STYLES = '''
   /* Cards de download: tira sublinhado e força cor do gray-900 */
   .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
   .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
   html { scroll-behavior: smooth; }
 </style>
 '''
@@ -244,9 +247,72 @@ def calc_read_time(post):
     return minutes
 
 
+def render_sources(sources):
+    """Renderiza bloco de fontes no rodapé do post."""
+    if not sources:
+        return ""
+
+    # Agrupa por tipo pra mostrar em seções
+    norms = [s for s in sources if s.get("type") == "norm"]
+    books = [s for s in sources if s.get("type") == "book"]
+    links = [s for s in sources if s.get("type", "link") in ("link", "official")]
+
+    items_html = ""
+
+    if norms:
+        items_html += '<div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Normas ABNT</div><ul class="space-y-1.5 text-sm text-gray-700">'
+        for src in norms:
+            cite = f'<strong>{src["title"]}</strong>'
+            if src.get("description"):
+                cite += f' &mdash; <span class="text-gray-600">{src["description"]}</span>'
+            items_html += f'<li>{cite}</li>'
+        items_html += '</ul></div>'
+
+    if books:
+        items_html += '<div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Livros e Manuais</div><ul class="space-y-1.5 text-sm text-gray-700">'
+        for src in books:
+            cite = f'<strong>{src["title"]}</strong>'
+            if src.get("author"):
+                cite += f' &mdash; {src["author"]}'
+            meta_parts = []
+            if src.get("publisher"):
+                meta_parts.append(src["publisher"])
+            if src.get("year"):
+                meta_parts.append(str(src["year"]))
+            if meta_parts:
+                cite += f' <span class="text-gray-500">({", ".join(meta_parts)})</span>'
+            items_html += f'<li>{cite}</li>'
+        items_html += '</ul></div>'
+
+    if links:
+        items_html += '<div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700">'
+        for src in links:
+            link = f'<a href="{src["url"]}" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">{src["title"]}</a>'
+            if src.get("publisher"):
+                link += f' <span class="text-gray-500">&middot; {src["publisher"]}</span>'
+            items_html += f'<li>{link}</li>'
+        items_html += '</ul></div>'
+
+    return f'''
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      {items_html}
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: {datetime.now().strftime('%d/%m/%Y')}. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    '''
+
+
 def render_post_html(post):
     """Gera HTML completo de um post."""
     sections_html = "".join(render_section(s) for s in post["sections"])
+
+    # Adiciona bloco de fontes no fim, se houver
+    sources_html = render_sources(post.get("sources", []))
 
     # Recalcula tempo de leitura baseado nas palavras reais
     post["estimated_read_min"] = calc_read_time(post)
@@ -378,6 +444,8 @@ def render_post_html(post):
     </a>
     <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão.</p>
   </div>
+
+  {sources_html}
 
   <!-- Voltar ao blog -->
   <div class="mt-12 text-center">
