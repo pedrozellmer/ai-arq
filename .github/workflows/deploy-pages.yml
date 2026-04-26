@@ -70,8 +70,16 @@ jobs:
             -name ".nojekyll" \
           \) -exec cp {} _site/ \;
           # Copia pastas de assets frontend (se existirem)
-          for d in assets img images static fonts frontend instagram_assets; do
+          for d in assets img images static fonts frontend instagram_assets blog; do
             if [ -d "$d" ]; then cp -r "$d" _site/; fi
+          done
+          # Limpa o blog: remove generate.py e posts.json (não devem ir pro deploy)
+          if [ -d "_site/blog" ]; then
+            rm -f _site/blog/generate.py _site/blog/posts.json
+          fi
+          # Copia sitemap.xml e robots.txt (na raiz)
+          for f in sitemap.xml robots.txt; do
+            if [ -f "$f" ]; then cp "$f" _site/; fi
           done
           echo "=== Conteúdo de _site ==="
           ls -la _site/ | head -40

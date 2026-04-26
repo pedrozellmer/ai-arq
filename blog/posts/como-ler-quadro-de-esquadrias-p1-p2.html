@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Como Ler o Quadro de Esquadrias num PDF (P1, P2, J1, J2 Explicados) | AI.arq</title>
+<meta name="description" content="Guia prático pra ler quadro de esquadrias em projeto arquitetônico. P1, P2, J1, J2 — o que cada código significa e como contar corretamente.">
+<meta name="keywords" content="quadro de esquadrias, P1 P2 J1 J2, esquadrias projeto, ler projeto arquitetura, código esquadrias, tipos porta janela">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html">
+<meta property="og:title" content="Como Ler o Quadro de Esquadrias num PDF (P1, P2, J1, J2 Explicados)">
+<meta property="og:description" content="Guia prático pra ler quadro de esquadrias em projeto arquitetônico. P1, P2, J1, J2 — o que cada código significa e como contar corretamente.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-05-27T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Como Ler Projetos">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Como Ler o Quadro de Esquadrias num PDF (P1, P2, J1, J2 Explicados)">
+<meta name="twitter:description" content="Guia prático pra ler quadro de esquadrias em projeto arquitetônico. P1, P2, J1, J2 — o que cada código significa e como contar corretamente.">
+<meta name="twitter:image" content="https://ai.arq.br/og-image.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-05-27">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
+  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como Ler o Quadro de Esquadrias num PDF (P1, P2, J1, J2 Explicados)",
+  "description": "Guia prático pra ler quadro de esquadrias em projeto arquitetônico. P1, P2, J1, J2 — o que cada código significa e como contar corretamente.",
+  "datePublished": "2026-05-27T10:00:00-03:00",
+  "dateModified": "2026-05-27T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/og-image.png",
+  "url": "https://ai.arq.br/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html"
+  },
+  "keywords": "quadro de esquadrias, P1 P2 J1 J2, esquadrias projeto, ler projeto arquitetura, código esquadrias, tipos porta janela",
+  "articleSection": "Como Ler Projetos"
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/#precos" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Como Ler Projetos</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Como Ler Projetos</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Como Ler o Quadro de Esquadrias num PDF (P1, P2, J1, J2 Explicados)</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 27/05/2026</span>
+    <span>·</span>
+    <span>⏱️ 6 min de leitura</span>
+  </div>
+
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">Se você é arquiteto, engenheiro, orçamentista ou está começando na área, em algum momento vai precisar ler um quadro de esquadrias. Aqueles códigos misteriosos — P1, P2, J1, J2 — confundem qualquer um que não foi formalmente apresentado a essa convenção. Vou explicar tudo neste post.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>O que é o quadro de esquadrias</h2><p>Quadro de esquadrias é uma tabela que aparece em pelo menos uma prancha de todo projeto arquitetônico. Ele descreve cada tipo de porta e janela do projeto com suas especificações técnicas.</p><p>Normalmente vem na prancha de arquitetura (A-300, A-400) ou em prancha dedicada chamada "Detalhamento de Esquadrias". Em projetos grandes, pode ocupar prancha inteira A0.</p><h2>O que cada letra significa</h2><p>A convenção brasileira mais comum:</p><ul><li>P = Porta</li><li>J = Janela</li><li>B = Bancada</li><li>L = Louça sanitária</li><li>F = Forro</li><li>E = Esquadria especial (em alguns escritórios)</li></ul><p>A LETRA define o tipo. O NÚMERO depois é só pra diferenciar tipos diferentes do mesmo elemento.</p><p>Exemplos:
+- P1 = Porta tipo 1 (ex: porta de madeira maciça 0,80 × 2,10m)
+- P2 = Porta tipo 2 (ex: porta de vidro 0,90 × 2,30m)
+- J1 = Janela tipo 1 (ex: janela maxim-ar 1,20 × 0,60m)</p><p>IMPORTANTE: o número NÃO é a quantidade de portas! É só um identificador de TIPO.</p><h2>Por que isso importa pra orçamento</h2><p>No quadro, P1 pode ter 8 portas iguais. P2 pode ter 4. P3 pode ter 1 só. Cada tipo tem preço diferente, fornecedor diferente, prazo diferente.</p><p>Quando você faz quantitativo, NÃO basta dizer "30 portas". Você precisa separar por tipo:</p><ul><li>P1 (madeira maciça 0,80×2,10): 8 unidades</li><li>P2 (vidro temperado 0,90×2,30): 4 unidades</li><li>P3 (correr de alumínio 1,20×2,30): 1 unidade</li></ul><p>Senão o orçamentista vai precificar tudo no preço da mais barata, e você descobre o erro só na hora da compra.</p><h2>Estrutura típica do quadro de esquadrias</h2><p>Toda tabela bem feita tem essas colunas:</p><ul><li>TIPO: P1, P2, J1...</li><li>DIMENSÃO: largura × altura (em metros)</li><li>MATERIAL: madeira, alumínio, vidro, aço</li><li>ABERTURA: giro, correr, pivotante, basculante, maxim-ar, fixa</li><li>FOLHA: lisa, almofadada, vidro, veneziana</li><li>FERRAGEM: marca/modelo da fechadura</li><li>ACABAMENTO: pintura, verniz, anodização</li><li>QUANTIDADE: quantas vezes esse tipo aparece no projeto</li><li>LOCAL: ambiente onde fica</li><li>OBSERVAÇÃO: detalhes especiais</li></ul><h2>Como contar esquadrias na planta</h2><p>Depois que você lê o quadro de tipos, vai pra planta e conta quantas vezes cada código aparece marcado.</p><p>Na planta as esquadrias geralmente vem com a sigla escrita ao lado do símbolo gráfico — algo como uma porta com "P1" escrito perto, ou uma janela com "J2" abaixo.</p><p>O trabalho é tedioso: você abre cada prancha, conta cada P1, anota. Conta cada P2, anota. Repete pra J1, J2... Em projeto grande, isso leva HORAS.</p><p>É um dos motivos do AI.arq existir: a gente faz essa contagem automaticamente lendo o CAD.</p><h2>Erros comuns ao ler quadro de esquadrias</h2><p>1. Confundir tipo com quantidade. "P1 a P7" significa 7 TIPOS, não 7 portas.</p><p>2. Não verificar se o quadro está atualizado. Às vezes o desenho mudou mas a tabela não.</p><p>3. Esquecer de descontar esquadrias da pintura. Ninguém pinta vidro de janela.</p><p>4. Não reparar em código não-padrão. Alguns escritórios usam PA, PB, PC em vez de P1, P2, P3.</p><p>5. Esquecer marcas/modelos. Sem essa info, fornecedor não cota com precisão.</p>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Quer parar de contar esquadrias manualmente? O AI.arq lê o quadro e faz a contagem por tipo automaticamente — em 5 minutos. Primeiro projeto grátis em ai.arq.br.</p>
+    <a href="/login.html" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+      Começar grátis
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+    </a>
+    <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão.</p>
+  </div>
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Produto</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/#precos" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Legal</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 AI.arq · Quantitativo com IA pra arquitetos brasileiros
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget (compartilhado com o resto do site) -->
+<script src="/chat-widget.js"></script>
+</body>
+</html>
