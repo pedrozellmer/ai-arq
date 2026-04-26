@@ -43,8 +43,9 @@
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -139,7 +140,7 @@
   <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
     <span>📅 28/06/2026</span>
     <span>·</span>
-    <span>⏱️ 8 min de leitura</span>
+    <span>⏱️ 2 min de leitura</span>
   </div>
 
   <!-- Intro destacada -->
@@ -147,28 +148,7 @@
 
   <!-- Corpo -->
   <div class="prose-aiarq">
-    <h2>O que é retrofit comercial</h2><p>Retrofit é a reforma estratégica de espaço existente. Diferente de obra do zero, retrofit aproveita o esqueleto da edificação (estrutura, fachada, shafts) e renova tudo o que está dentro.</p><p>Retrofit comercial é o tipo mais comum no Brasil — escritórios, lojas, restaurantes, clínicas que mudam de inquilino e precisam ser remodelados pra nova operação.</p><p>Características:
-- Prazo curto (geralmente 60-180 dias)
-- Operação durante obra em andamento
-- Limitações estruturais (paredes que não podem cair, shafts fixos)
-- Mistura de itens novos com existentes</p><h2>As 18 disciplinas em ordem de execução</h2><p>Esta é a ordem típica. Cada item tem sua planilha de quantitativos separada:</p><p>1. Demolição (paredes, forros, pisos antigos)
-2. Estrutura (reforço se necessário)
-3. Alvenaria (paredes novas)
-4. Instalações elétricas (infraestrutura)
-5. Instalações hidráulicas (infraestrutura)
-6. Instalações de esgoto (infraestrutura)
-7. Instalações de climatização HVAC (dutos)
-8. Sprinkler / combate a incêndio
-9. Pisos (assentamento)
-10. Revestimentos (paredes)
-11. Forro (instalação)
-12. Gesso (sancas, decorativo)
-13. Pintura
-14. Esquadrias (portas, divisórias)
-15. Vidros (divisórias, fachadas)
-16. Marcenaria (móveis fixos, marcenaria sob medida)
-17. Marmoraria (bancadas, soleiras)
-18. Acabamentos finais (louças, metais, ferragens, iluminação)</p><h2>Disciplinas que mais geram aditivo</h2><p>Por experiência de mercado, essas são as 5 disciplinas que mais aparecem como "surpresa" no canteiro:</p><p>1. Sprinkler — quase ninguém lembra na fase de orçamento. Aparece quando o bombeiro vistoria.</p><p>2. HVAC — projeto antigo do prédio não suporta a nova carga térmica. Tem que reforçar.</p><p>3. Estrutura — parede que parecia divisória era estrutural. Custou demolir e reforçar.</p><p>4. Esgoto — caimento errado pra nova posição da copa. Refazer todo o ramal.</p><p>5. Marmoraria — cliente decidiu trocar bancada de fórmica pra mármore. Triplicou o custo da copa.</p><h2>Custos indiretos em retrofit comercial</h2><p>Em retrofit comercial, BDI costuma ser MAIOR que obra do zero por causa de:</p><ul><li>Trabalho noturno (operação não pode parar de dia): +20% mão de obra</li><li>Logística complicada (subir material no elevador de carga): +5-10% logística</li><li>Limpeza de obra constante (cliente tá no prédio): +3-5% limpeza</li><li>Coordenação com administração do prédio: +2-3% gestão</li><li>Riscos maiores (achados imprevistos): +5-10% contingência</li></ul><p>BDI típico de retrofit comercial: 25-35%.</p><h2>Como o AI.arq lida com retrofit</h2><p>Quando você sobe um projeto de retrofit no AI.arq, a IA reconhece automaticamente:</p><ul><li>Pranchas de demolição (existente vs novo)</li><li>Pranchas de layout antigo vs layout novo</li><li>Comparação automática (o que sai, o que entra, o que fica)</li><li>Quantificação separada por categoria (demolir + construir)</li><li>Alerta pra disciplinas que normalmente passam batido (sprinkler, HVAC reforço)</li></ul><p>Isso reduz muito o risco de aditivos no canteiro.</p>
+    <h2>O que é retrofit comercial</h2><p>Retrofit é a reforma estratégica de espaço existente. Diferente de obra do zero, retrofit aproveita o esqueleto da edificação (estrutura, fachada, shafts) e renova tudo o que está dentro.</p><p>Retrofit comercial é o tipo mais comum no Brasil — escritórios, lojas, restaurantes, clínicas que mudam de inquilino e precisam ser remodelados pra nova operação.</p><p>Características:</p><ul><li>Prazo curto (geralmente 60-180 dias)</li><li>Operação durante obra em andamento</li><li>Limitações estruturais (paredes que não podem cair, shafts fixos)</li><li>Mistura de itens novos com existentes</li></ul><h2>As 18 disciplinas em ordem de execução</h2><p>Esta é a ordem típica. Cada item tem sua planilha de quantitativos separada:</p><ol><li>Demolição (paredes, forros, pisos antigos)</li><li>Estrutura (reforço se necessário)</li><li>Alvenaria (paredes novas)</li><li>Instalações elétricas (infraestrutura)</li><li>Instalações hidráulicas (infraestrutura)</li><li>Instalações de esgoto (infraestrutura)</li><li>Instalações de climatização HVAC (dutos)</li><li>Sprinkler / combate a incêndio</li><li>Pisos (assentamento)</li><li>Revestimentos (paredes)</li><li>Forro (instalação)</li><li>Gesso (sancas, decorativo)</li><li>Pintura</li><li>Esquadrias (portas, divisórias)</li><li>Vidros (divisórias, fachadas)</li><li>Marcenaria (móveis fixos, marcenaria sob medida)</li><li>Marmoraria (bancadas, soleiras)</li><li>Acabamentos finais (louças, metais, ferragens, iluminação)</li></ol><h2>Disciplinas que mais geram aditivo</h2><p>Por experiência de mercado, essas são as 5 disciplinas que mais aparecem como "surpresa" no canteiro:</p><ol><li>Sprinkler — quase ninguém lembra na fase de orçamento. Aparece quando o bombeiro vistoria.</li><li>HVAC — projeto antigo do prédio não suporta a nova carga térmica. Tem que reforçar.</li><li>Estrutura — parede que parecia divisória era estrutural. Custou demolir e reforçar.</li><li>Esgoto — caimento errado pra nova posição da copa. Refazer todo o ramal.</li><li>Marmoraria — cliente decidiu trocar bancada de fórmica pra mármore. Triplicou o custo da copa.</li></ol><h2>Custos indiretos em retrofit comercial</h2><p>Em retrofit comercial, BDI costuma ser MAIOR que obra do zero por causa de:</p><ul><li>Trabalho noturno (operação não pode parar de dia): +20% mão de obra</li><li>Logística complicada (subir material no elevador de carga): +5-10% logística</li><li>Limpeza de obra constante (cliente tá no prédio): +3-5% limpeza</li><li>Coordenação com administração do prédio: +2-3% gestão</li><li>Riscos maiores (achados imprevistos): +5-10% contingência</li></ul><p>BDI típico de retrofit comercial: 25-35%.</p><h2>Como o AI.arq lida com retrofit</h2><p>Quando você sobe um projeto de retrofit no AI.arq, a IA reconhece automaticamente:</p><ul><li>Pranchas de demolição (existente vs novo)</li><li>Pranchas de layout antigo vs layout novo</li><li>Comparação automática (o que sai, o que entra, o que fica)</li><li>Quantificação separada por categoria (demolir + construir)</li><li>Alerta pra disciplinas que normalmente passam batido (sprinkler, HVAC reforço)</li></ul><p>Isso reduz muito o risco de aditivos no canteiro.</p>
   </div>
 
   <!-- CTA -->

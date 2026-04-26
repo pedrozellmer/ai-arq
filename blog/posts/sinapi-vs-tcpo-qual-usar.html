@@ -43,8 +43,9 @@
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -139,7 +140,7 @@
   <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
     <span>📅 10/05/2026</span>
     <span>·</span>
-    <span>⏱️ 7 min de leitura</span>
+    <span>⏱️ 2 min de leitura</span>
   </div>
 
   <!-- Intro destacada -->
@@ -147,37 +148,7 @@
 
   <!-- Corpo -->
   <div class="prose-aiarq">
-    <h2>O que é SINAPI</h2><p>SINAPI = Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil. É mantido pela Caixa Econômica Federal em parceria com o IBGE.</p><p>Características principais:
-- Atualizado MENSALMENTE com pesquisa de preços real
-- Cobre o Brasil inteiro (preços por estado)
-- Obrigatório em obras públicas federais (Lei 14.133/2021)
-- Tem 10.284 composições (ações construtivas) + 54.529 insumos (materiais e mão de obra)
-- Gratuito e aberto (download em sinapi.caixa.gov.br)</p><p>Por ser oficial e atualizado, o SINAPI virou padrão de mercado. Mesmo no setor privado, projetos médio/grande costumam pedir referência SINAPI.</p><h2>O que é TCPO</h2><p>TCPO = Tabelas de Composições de Preços para Orçamentos. É publicado pela Editora PINI desde 1955 — a base mais antiga do Brasil.</p><p>Características principais:
-- Não é atualizado mensalmente (o livro tem novas edições a cada 2-4 anos)
-- Foca mais em DETALHAMENTO técnico do que em preço
-- Tem versão BIM (TCPO BIM) com 1.333 composições + 6.733 insumos modelados pra Revit/ArchiCAD
-- Pago (livro custa R$300+, software TCPOweb tem assinatura)
-- Privado (Editora PINI)</p><p>Quem usa TCPO geralmente já tem o livro como referência histórica. Em projetos BIM grandes, o TCPO BIM é mais completo que SINAPI no detalhamento.</p><h2>Comparação direta: SINAPI vs TCPO</h2><p>Critério | SINAPI | TCPO
---- | --- | ---
-Foco | Custo (preço) | Composição (técnica)
-Atualização | Mensal | Bianual
-Custo | Grátis | Pago
-Cobertura geográfica | Brasil todo | Brasil todo
-Obras públicas | Obrigatório | Não
-Integração BIM | Limitada | TCPO BIM existe
-Nº de composições | 10.284 | 1.333 (TCPO BIM)
-Nº de insumos | 54.529 | 6.733 (TCPO BIM)</p><h2>Quando usar SINAPI</h2><p>Use SINAPI se:
-- Sua obra é pública (federal, estadual, municipal)
-- Você precisa de preços atualizados pra precificação realista
-- Quer referência aceita por banco em financiamento
-- Trabalha com construtora/incorporadora que usa essa base
-- Não quer pagar pra acessar (orçamento limitado)
-- Precisa de muitas composições (cobertura ampla)</p><h2>Quando usar TCPO</h2><p>Use TCPO se:
-- Trabalha em projeto BIM (Revit/ArchiCAD) e quer mais detalhamento
-- Precisa de composição mais técnica do que comercial
-- Já tem o livro/software (vale a pena consultar)
-- Quer cruzar com SINAPI pra validar discrepâncias
-- Trabalha em obras industriais ou específicas que SINAPI não cobre bem</p><h2>Por que o AI.arq usa as duas</h2><p>No AI.arq a gente decidiu integrar SINAPI E TCPO BIM nas planilhas geradas. Cada item do quantitativo vem com:</p><ul><li>Código SINAPI (pra precificação atualizada e referência oficial)</li><li>Composição TCPO BIM (pra detalhamento técnico e insumos com coeficientes)</li></ul><p>Assim você tem o melhor dos dois mundos numa planilha só. O orçamentista pode escolher qual base usar pra precificar, dependendo do tipo de obra. Tudo isso vem na aba Memória Técnica do XLSX.</p>
+    <h2>O que é SINAPI</h2><p>SINAPI = Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil. É mantido pela Caixa Econômica Federal em parceria com o IBGE.</p><p>Características principais:</p><ul><li>Atualizado MENSALMENTE com pesquisa de preços real</li><li>Cobre o Brasil inteiro (preços por estado)</li><li>Obrigatório em obras públicas federais (Lei 14.133/2021)</li><li>Tem 10.284 composições (ações construtivas) + 54.529 insumos (materiais e mão de obra)</li><li>Gratuito e aberto (download em sinapi.caixa.gov.br)</li></ul><p>Por ser oficial e atualizado, o SINAPI virou padrão de mercado. Mesmo no setor privado, projetos médio/grande costumam pedir referência SINAPI.</p><h2>O que é TCPO</h2><p>TCPO = Tabelas de Composições de Preços para Orçamentos. É publicado pela Editora PINI desde 1955 — a base mais antiga do Brasil.</p><p>Características principais:</p><ul><li>Não é atualizado mensalmente (o livro tem novas edições a cada 2-4 anos)</li><li>Foca mais em DETALHAMENTO técnico do que em preço</li><li>Tem versão BIM (TCPO BIM) com 1.333 composições + 6.733 insumos modelados pra Revit/ArchiCAD</li><li>Pago (livro custa R$300+, software TCPOweb tem assinatura)</li><li>Privado (Editora PINI)</li></ul><p>Quem usa TCPO geralmente já tem o livro como referência histórica. Em projetos BIM grandes, o TCPO BIM é mais completo que SINAPI no detalhamento.</p><h2>Comparação direta: SINAPI vs TCPO</h2><p>Critério | SINAPI | TCPO --- | --- | --- Foco | Custo (preço) | Composição (técnica) Atualização | Mensal | Bianual Custo | Grátis | Pago Cobertura geográfica | Brasil todo | Brasil todo Obras públicas | Obrigatório | Não Integração BIM | Limitada | TCPO BIM existe Nº de composições | 10.284 | 1.333 (TCPO BIM) Nº de insumos | 54.529 | 6.733 (TCPO BIM)</p><h2>Quando usar SINAPI</h2><p>Use SINAPI se:</p><ul><li>Sua obra é pública (federal, estadual, municipal)</li><li>Você precisa de preços atualizados pra precificação realista</li><li>Quer referência aceita por banco em financiamento</li><li>Trabalha com construtora/incorporadora que usa essa base</li><li>Não quer pagar pra acessar (orçamento limitado)</li><li>Precisa de muitas composições (cobertura ampla)</li></ul><h2>Quando usar TCPO</h2><p>Use TCPO se:</p><ul><li>Trabalha em projeto BIM (Revit/ArchiCAD) e quer mais detalhamento</li><li>Precisa de composição mais técnica do que comercial</li><li>Já tem o livro/software (vale a pena consultar)</li><li>Quer cruzar com SINAPI pra validar discrepâncias</li><li>Trabalha em obras industriais ou específicas que SINAPI não cobre bem</li></ul><h2>Por que o AI.arq usa as duas</h2><p>No AI.arq a gente decidiu integrar SINAPI E TCPO BIM nas planilhas geradas. Cada item do quantitativo vem com:</p><ul><li>Código SINAPI (pra precificação atualizada e referência oficial)</li><li>Composição TCPO BIM (pra detalhamento técnico e insumos com coeficientes)</li></ul><p>Assim você tem o melhor dos dois mundos numa planilha só. O orçamentista pode escolher qual base usar pra precificar, dependendo do tipo de obra. Tudo isso vem na aba Memória Técnica do XLSX.</p>
   </div>
 
   <!-- CTA -->
