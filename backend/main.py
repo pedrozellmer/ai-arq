@@ -2719,6 +2719,76 @@ async def admin_list_chat_leads(limit: int = 200):
     except Exception as e:
         return {"error": str(e)}
 
+
+# ══════════════════════════════════════════════════
+#  Formulário de contato (público)
+# ══════════════════════════════════════════════════
+
+@app.post("/api/contact")
+async def submit_contact(request: Request):
+    """Recebe envio do formulário de contato.
+
+    Validações: nome, email, mensagem obrigatórios. Tipo deve ser
+    válido. Captura source_page (referer) e user_agent automaticamente.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"ok": False, "error": "JSON inválido"}
+
+    name    = str(body.get("name", "")).strip()[:200]
+    email   = str(body.get("email", "")).strip().lower()[:200]
+    phone   = str(body.get("phone", "")).strip()[:50]
+    msg_type = str(body.get("type", "duvida")).strip().lower()
+    subject = str(body.get("subject", "")).strip()[:300]
+    message = str(body.get("message", "")).strip()[:5000]
+
+    if not name or not email or not message:
+        return {"ok": False, "error": "Nome, email e mensagem são obrigatórios"}
+    if "@" not in email or "." not in email:
+        return {"ok": False, "error": "Email inválido"}
+    if msg_type not in ("reclamacao", "sugestao", "duvida", "parceria", "elogio", "outro"):
+        msg_type = "outro"
+
+    # Metadados de origem
+    source_page = request.headers.get("referer", "")[:500]
+    user_agent  = request.headers.get("user-agent", "")[:500]
+
+    payload = {
+        "name": name,
+        "email": email,
+        "phone": phone or None,
+        "message_type": msg_type,
+        "subject": subject or None,
+        "message": message,
+        "source_page": source_page or None,
+        "user_agent": user_agent or None,
+        "status": "new",
+    }
+
+    ok = _supabase_insert("contact_messages", payload)
+    if not ok:
+        return {"ok": False, "error": "Falha ao salvar mensagem"}
+
+    print(f"[contact] nova mensagem: {email} ({msg_type}) — {subject[:50]}")
+    return {"ok": True, "message": "Mensagem recebida! Vamos responder em breve."}
+
+
+@app.get("/api/admin/contact-messages")
+async def admin_list_contact_messages(limit: int = 200, status: str = ""):
+    """Lista mensagens de contato pro admin."""
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/contact_messages?select=*&order=created_at.desc&limit={int(limit)}"
+        if status:
+            url += f"&status=eq.{status}"
+        req = urllib.request.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        resp = urllib.request.urlopen(req, timeout=15)
+        return {"messages": json.loads(resp.read().decode("utf-8"))}
+    except Exception as e:
+        return {"error": str(e)}
+
 PUBLIC_CHAT_SYSTEM_PROMPT = """Você é o assistente virtual do AI.arq — uma plataforma brasileira que acelera o levantamento de quantitativos em projetos de arquitetura.
 
 **Sua missão:** responder perguntas de visitantes do site (ai.arq.br) com honestidade e brevidade. Você ajuda a tirar dúvidas sobre o produto, preços e LGPD. Foco em conversão mas SEM vender gordura — o AI.arq é honesto sobre o que faz e o que não faz.
