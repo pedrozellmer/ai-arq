@@ -47,7 +47,23 @@
           "body": "Pra fechar, segue de novo o link de download do modelo. Use à vontade, sem cadastro:\n\n<DOWNLOAD_BUTTONS>\n\nO modelo já vem com a estrutura das 10 seções, instruções de uso, referências às normas ABNT principais, blocos repetíveis por ambiente e bloco de assinatura. Adapte pra realidade do seu projeto, faça revisão final com profissional habilitado (CAU/CREA) e entregue ao destino correspondente (cliente, prefeitura, Caixa, etc.)."
         }
       ],
-      "cta": "Pra acelerar a parte mais chata do memorial — o levantamento dos itens da planta — sobe seu CAD no AI.arq. Em 5 minutos você recebe a planilha de quantitativos completa por disciplina, com referência SINAPI e TCPO já vinculada. Aí o memorial fica praticamente pronto pra preencher. Primeiro projeto é grátis em ai.arq.br."
+      "cta": "Pra acelerar a parte mais chata do memorial — o levantamento dos itens da planta — sobe seu CAD no AI.arq. Em 5 minutos você recebe a planilha de quantitativos completa por disciplina, com referência SINAPI e TCPO já vinculada. Aí o memorial fica praticamente pronto pra preencher. Primeiro projeto é grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "ABNT NBR 13.532:1995", "description": "Elaboração de projetos de edificações — Arquitetura"},
+        {"type": "norm", "title": "ABNT NBR 15575:2021", "description": "Norma de Desempenho de Edificações Habitacionais (revisão 2021)"},
+        {"type": "norm", "title": "ABNT NBR 12721:2006", "description": "Avaliação de custos unitários de construção pra incorporação imobiliária"},
+        {"type": "norm", "title": "ABNT NBR 6118:2014", "description": "Projeto de estruturas de concreto"},
+        {"type": "norm", "title": "ABNT NBR 5410:2004", "description": "Instalações elétricas de baixa tensão"},
+        {"type": "norm", "title": "ABNT NBR 5626:2020", "description": "Sistemas prediais de água fria e água quente"},
+        {"type": "norm", "title": "ABNT NBR 9050:2020", "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos"},
+        {"type": "book", "title": "Manual de Escopo de Projetos e Serviços de Arquitetura", "author": "AsBEA — Associação Brasileira dos Escritórios de Arquitetura", "publisher": "AsBEA", "year": 2014},
+        {"type": "book", "title": "Manual da Construção Industrializada — Conceitos e Etapas", "author": "Comunidade da Construção", "publisher": "ABCP", "year": 2021},
+        {"type": "book", "title": "Construção Civil — Especificação de Materiais e Acabamentos", "author": "Antonio Carlos Sant'Ana", "publisher": "Editora PINI", "year": 2018},
+        {"type": "link", "title": "O que é PCI da Caixa (Proposta de Construção Individual)", "url": "https://sienge.com.br/blog/proposta-de-construcao-individual/", "publisher": "Sienge"},
+        {"type": "link", "title": "Importância do memorial descritivo segundo a NBR 15575", "url": "https://sienge.com.br/blog/memorial-descritivo-nrb-15575/", "publisher": "Sienge"},
+        {"type": "link", "title": "Memorial Descritivo de Arquitetura — Manuais de Escopo", "url": "https://www.manuaisdeescopo.com.br/manual/memorial-descritivo-de-arquitetura/", "publisher": "Manuais de Escopo"},
+        {"type": "link", "title": "Documentos exigidos pela Caixa Econômica pra construção financiada", "url": "https://mestredaobra.com/8-documentos-tecnicos-para-financiamento-imobiliario-na-caixa/", "publisher": "Mestre da Obra"}
+      ]
     },
     {
       "slug": "como-fazer-planilha-de-quantitativos-de-obra",
