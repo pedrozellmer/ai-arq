@@ -43,8 +43,9 @@
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -139,7 +140,7 @@
   <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
     <span>📅 07/06/2026</span>
     <span>·</span>
-    <span>⏱️ 6 min de leitura</span>
+    <span>⏱️ 2 min de leitura</span>
   </div>
 
   <!-- Intro destacada -->
@@ -147,30 +148,7 @@
 
   <!-- Corpo -->
   <div class="prose-aiarq">
-    <h2>O que toda cotação precisa ter</h2><p>Pedido completo pro fornecedor sempre inclui:</p><ul><li>Identificação clara da obra (nome, endereço, tipo)</li><li>Quem é o solicitante (você + escritório + telefone)</li><li>Lista de itens (a planilha de quantitativos)</li><li>Condições de pagamento desejadas (à vista, parcelado, prazo)</li><li>Prazo de entrega esperado</li><li>Data limite pra resposta</li><li>Anexos (planta, especificação técnica, fotos)</li></ul><p>Falta qualquer um desses → o fornecedor liga 5 vezes pra perguntar, ou simplesmente chuta.</p><h2>Template pronto pra usar</h2><p>Copia, cola e adapta:</p><p>Assunto: Solicitação de cotação — [Nome da obra] — [Disciplina]</p><p>Olá [Nome do fornecedor],</p><p>Estamos solicitando cotação pra fornecimento de [disciplina, ex: pisos cerâmicos] na obra [nome].</p><p>Dados da obra:
-- Local: [endereço]
-- Tipo: [residencial / comercial / etc.]
-- Área aproximada: [m²]
-- Início previsto: [data]</p><p>Segue em anexo:
-- Planilha de quantitativos detalhada
-- Especificação técnica
-- Planta de referência</p><p>Pedimos a gentileza de responder com:
-- Preço unitário e total por item
-- Prazo de entrega
-- Condições de pagamento
-- Validade da proposta
-- Garantia</p><p>Prazo pra resposta: até [data].</p><p>Qualquer dúvida, fico à disposição.</p><p>[Seu nome]
-[Telefone]
-[E-mail]</p><h2>5 dicas pra receber proposta melhor</h2><p>1. Mande SEMPRE a planilha de quantitativos junto. Sem ela, o fornecedor estima e o preço varia 30-50% entre cotações.</p><p>2. Especifique a marca/modelo desejado. Se é "genérico", ele cota o mais barato. Se é "Portobello", ele cota Portobello.</p><p>3. Defina prazo de resposta firme. Sem deadline, ele engaveta. Com deadline, ele responde.</p><p>4. Peça pra discriminar mão de obra. Algumas cotações vem só com material — depois aparece o custo de instalação.</p><p>5. Mande pra pelo menos 3 fornecedores. Sempre. Mesmo que você confie no primeiro.</p><h2>Como comparar cotações depois</h2><p>Receber 3 cotações é só metade do trabalho. A outra metade é COMPARAR direito.</p><p>Problemas comuns na comparação:
-- Cotação A discriminou mão de obra. B incluiu junto. C nem mencionou.
-- A usa marca X. B usa marca Y (que não é equivalente).
-- A garante 5 anos. B só 1.
-- A tem prazo de entrega 30 dias. B 90.</p><p>Pra comparar honestamente, você precisa fazer um QUADRO COMPARATIVO — geralmente uma planilha onde cada linha é um item e cada coluna é um fornecedor.</p><h2>Como o AI.arq automatiza isso</h2><p>Depois que o arquiteto manda o quantitativo (gerado pelo AI.arq) e os fornecedores devolvem as cotações, o próprio AI.arq faz o pareamento automático.</p><p>Você sobe os XLSX dos 3-5 fornecedores e o AI.arq:
-- Casa item por item entre as planilhas
-- Calcula preço unitário e total por fornecedor
-- Identifica discrepâncias (preço fora do padrão de mercado)
-- Marca itens que algum fornecedor esqueceu
-- Gera PPT executivo com a marca do escritório</p><p>Pronto pra mandar pro cliente final. Tudo isso já está incluído no preço do projeto, sem cobrança extra.</p>
+    <h2>O que toda cotação precisa ter</h2><p>Pedido completo pro fornecedor sempre inclui:</p><ol><li>Identificação clara da obra (nome, endereço, tipo)</li><li>Quem é o solicitante (você + escritório + telefone)</li><li>Lista de itens (a planilha de quantitativos)</li><li>Condições de pagamento desejadas (à vista, parcelado, prazo)</li><li>Prazo de entrega esperado</li><li>Data limite pra resposta</li><li>Anexos (planta, especificação técnica, fotos)</li></ol><p>Falta qualquer um desses → o fornecedor liga 5 vezes pra perguntar, ou simplesmente chuta.</p><h2>Template pronto pra usar</h2><p>Copia, cola e adapta:</p><p>Assunto: Solicitação de cotação — [Nome da obra] — [Disciplina]</p><p>Olá [Nome do fornecedor],</p><p>Estamos solicitando cotação pra fornecimento de [disciplina, ex: pisos cerâmicos] na obra [nome].</p><p>Dados da obra:</p><ul><li>Local: [endereço]</li><li>Tipo: [residencial / comercial / etc.]</li><li>Área aproximada: [m²]</li><li>Início previsto: [data]</li></ul><p>Segue em anexo:</p><ul><li>Planilha de quantitativos detalhada</li><li>Especificação técnica</li><li>Planta de referência</li></ul><p>Pedimos a gentileza de responder com:</p><ul><li>Preço unitário e total por item</li><li>Prazo de entrega</li><li>Condições de pagamento</li><li>Validade da proposta</li><li>Garantia</li></ul><p>Prazo pra resposta: até [data].</p><p>Qualquer dúvida, fico à disposição.</p><p>[Seu nome] [Telefone] [E-mail]</p><h2>5 dicas pra receber proposta melhor</h2><ol><li>Mande SEMPRE a planilha de quantitativos junto. Sem ela, o fornecedor estima e o preço varia 30-50% entre cotações.</li><li>Especifique a marca/modelo desejado. Se é "genérico", ele cota o mais barato. Se é "Portobello", ele cota Portobello.</li><li>Defina prazo de resposta firme. Sem deadline, ele engaveta. Com deadline, ele responde.</li><li>Peça pra discriminar mão de obra. Algumas cotações vem só com material — depois aparece o custo de instalação.</li><li>Mande pra pelo menos 3 fornecedores. Sempre. Mesmo que você confie no primeiro.</li></ol><h2>Como comparar cotações depois</h2><p>Receber 3 cotações é só metade do trabalho. A outra metade é COMPARAR direito.</p><p>Problemas comuns na comparação:</p><ul><li>Cotação A discriminou mão de obra. B incluiu junto. C nem mencionou.</li><li>A usa marca X. B usa marca Y (que não é equivalente).</li><li>A garante 5 anos. B só 1.</li><li>A tem prazo de entrega 30 dias. B 90.</li></ul><p>Pra comparar honestamente, você precisa fazer um QUADRO COMPARATIVO — geralmente uma planilha onde cada linha é um item e cada coluna é um fornecedor.</p><h2>Como o AI.arq automatiza isso</h2><p>Depois que o arquiteto manda o quantitativo (gerado pelo AI.arq) e os fornecedores devolvem as cotações, o próprio AI.arq faz o pareamento automático.</p><p>Você sobe os XLSX dos 3-5 fornecedores e o AI.arq:</p><ul><li>Casa item por item entre as planilhas</li><li>Calcula preço unitário e total por fornecedor</li><li>Identifica discrepâncias (preço fora do padrão de mercado)</li><li>Marca itens que algum fornecedor esqueceu</li><li>Gera PPT executivo com a marca do escritório</li></ul><p>Pronto pra mandar pro cliente final. Tudo isso já está incluído no preço do projeto, sem cobrança extra.</p>
   </div>
 
   <!-- CTA -->

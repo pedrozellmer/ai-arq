@@ -43,8 +43,9 @@
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -139,7 +140,7 @@
   <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
     <span>📅 03/05/2026</span>
     <span>·</span>
-    <span>⏱️ 10 min de leitura</span>
+    <span>⏱️ 3 min de leitura</span>
   </div>
 
   <!-- Intro destacada -->
@@ -147,30 +148,7 @@
 
   <!-- Corpo -->
   <div class="prose-aiarq">
-    <h2>O que é planilha de quantitativos (e o que NÃO é)</h2><p>Planilha de quantitativos é o documento que lista todos os itens da obra com suas respectivas quantidades — sem preços. Por exemplo: "piso porcelanato 60x60cm: 142 m²", "porta de madeira 0,80x2,10m: 8 unidades", "luminária LED 60x60cm: 24 unidades".</p><p>Não confunda com:
-- Planilha de orçamento: já tem preços. É a quantidade × valor unitário.
-- Memorial descritivo: descreve em texto, não conta.
-- Lista de materiais: pode ser parecida, mas geralmente é por compra (formato comercial), não por levantamento.</p><p>O quantitativo é o INSUMO pro orçamentista trabalhar. Sem ele, qualquer preço é chute.</p><h2>As 18 disciplinas que toda obra precisa considerar</h2><p>Mesmo numa reforma pequena, dificilmente você escapa dessas 18 categorias. Subdimensionar uma disciplina é o erro mais comum no levantamento.</p><p>1. Demolição
-2. Alvenaria
-3. Estrutura
-4. Elétrica
-5. Hidráulica
-6. Esgoto
-7. Pintura
-8. Pisos
-9. Revestimentos
-10. Forro
-11. Gesso
-12. Marcenaria
-13. Esquadrias
-14. Vidros
-15. Marmoraria
-16. Climatização (HVAC)
-17. Sprinkler / combate a incêndio
-18. Acabamentos finais</p><p>Além disso, sempre tem custos indiretos que não aparecem no CAD: BDI, fee de gestão, contingência, taxa de prefeitura. Esses entram numa seção separada chamada de "custos indiretos" ou "despesas gerais".</p><h2>Estrutura da planilha (colunas obrigatórias)</h2><p>Toda planilha profissional tem no mínimo essas colunas:</p><ul><li>ITEM: numeração (1, 1.1, 1.2, 2, etc.) seguindo a hierarquia do SINAPI</li><li>DESCRIÇÃO: o que é, com especificação técnica</li><li>UNIDADE: m², m³, m, un, kg, vb (verba)</li><li>QUANTIDADE: o número levantado</li><li>PREÇO UNITÁRIO: deixar em branco pra orçamentista preencher</li><li>PREÇO TOTAL: fórmula = quantidade × unitário</li><li>REFERÊNCIA: prancha onde foi medido (ex: A-200, A-500)</li><li>OBSERVAÇÃO: detalhes que afetam compra (cor, marca, espessura)</li></ul><p>Dicas de preenchimento:
-- Sempre cite a prancha de origem. Sem isso, não dá pra revisar.
-- Itens medidos do CAD devem estar marcados (cor branca). Itens estimados (laranja).
-- Use unidade SINAPI. Se a base oficial usa m², não invente m linear.</p><h2>Como medir cada disciplina no CAD</h2><p>Manualmente, você abre o DWG/PDF e usa as ferramentas de medição:</p><ul><li>Áreas de piso, forro e revestimento: comando AREA do AutoCAD. Cuidado com vazios e portas.</li><li>Comprimento de paredes: comando DIST. Some todos os trechos pra alvenaria.</li><li>Pontos de elétrica e hidráulica: contagem manual mesmo. Cada símbolo conta como 1.</li><li>Esquadrias: ler do quadro de esquadrias (P1, P2, J1, J2...) e contar quantas vezes cada tipo aparece na planta.</li><li>Volumes: comando VOLUME ou cálculo manual (área × altura).</li></ul><p>Pra projeto pequeno (1 prancha, 1 ambiente), 30min resolve. Pra projeto grande (10+ pranchas comerciais), passa fácil de 8h. É aqui que entra a IA.</p><h2>Modelo grátis: AI.arq faz isso por você em 5 minutos</h2><p>O AI.arq foi feito exatamente pra resolver isso: você sobe o CAD (PDF, DWG ou DXF), a IA lê todas as pranchas, identifica as 18 disciplinas e devolve a planilha completa. Cada item já vem com:</p><ul><li>Numeração SINAPI</li><li>Unidade correta</li><li>Quantidade medida</li><li>Referência à prancha de origem</li><li>Cor BRANCO (medido) ou LARANJA (estimado, revisar)</li><li>Memória técnica (composições + insumos com coeficientes)</li></ul><p>Primeiro projeto é grátis em ai.arq.br. Faça o teste com qualquer projeto seu — se a planilha não te convencer, você não pagou nada.</p>
+    <h2>O que é planilha de quantitativos (e o que NÃO é)</h2><p>Planilha de quantitativos é o documento que lista todos os itens da obra com suas respectivas quantidades — sem preços. Por exemplo: "piso porcelanato 60x60cm: 142 m²", "porta de madeira 0,80x2,10m: 8 unidades", "luminária LED 60x60cm: 24 unidades".</p><p>Não confunda com:</p><ul><li>Planilha de orçamento: já tem preços. É a quantidade × valor unitário.</li><li>Memorial descritivo: descreve em texto, não conta.</li><li>Lista de materiais: pode ser parecida, mas geralmente é por compra (formato comercial), não por levantamento.</li></ul><p>O quantitativo é o INSUMO pro orçamentista trabalhar. Sem ele, qualquer preço é chute.</p><h2>As 18 disciplinas que toda obra precisa considerar</h2><p>Mesmo numa reforma pequena, dificilmente você escapa dessas 18 categorias. Subdimensionar uma disciplina é o erro mais comum no levantamento.</p><ol><li>Demolição</li><li>Alvenaria</li><li>Estrutura</li><li>Elétrica</li><li>Hidráulica</li><li>Esgoto</li><li>Pintura</li><li>Pisos</li><li>Revestimentos</li><li>Forro</li><li>Gesso</li><li>Marcenaria</li><li>Esquadrias</li><li>Vidros</li><li>Marmoraria</li><li>Climatização (HVAC)</li><li>Sprinkler / combate a incêndio</li><li>Acabamentos finais</li></ol><p>Além disso, sempre tem custos indiretos que não aparecem no CAD: BDI, fee de gestão, contingência, taxa de prefeitura. Esses entram numa seção separada chamada de "custos indiretos" ou "despesas gerais".</p><h2>Estrutura da planilha (colunas obrigatórias)</h2><p>Toda planilha profissional tem no mínimo essas colunas:</p><ul><li>ITEM: numeração (1, 1.1, 1.2, 2, etc.) seguindo a hierarquia do SINAPI</li><li>DESCRIÇÃO: o que é, com especificação técnica</li><li>UNIDADE: m², m³, m, un, kg, vb (verba)</li><li>QUANTIDADE: o número levantado</li><li>PREÇO UNITÁRIO: deixar em branco pra orçamentista preencher</li><li>PREÇO TOTAL: fórmula = quantidade × unitário</li><li>REFERÊNCIA: prancha onde foi medido (ex: A-200, A-500)</li><li>OBSERVAÇÃO: detalhes que afetam compra (cor, marca, espessura)</li></ul><p>Dicas de preenchimento:</p><ul><li>Sempre cite a prancha de origem. Sem isso, não dá pra revisar.</li><li>Itens medidos do CAD devem estar marcados (cor branca). Itens estimados (laranja).</li><li>Use unidade SINAPI. Se a base oficial usa m², não invente m linear.</li></ul><h2>Como medir cada disciplina no CAD</h2><p>Manualmente, você abre o DWG/PDF e usa as ferramentas de medição:</p><ul><li>Áreas de piso, forro e revestimento: comando AREA do AutoCAD. Cuidado com vazios e portas.</li><li>Comprimento de paredes: comando DIST. Some todos os trechos pra alvenaria.</li><li>Pontos de elétrica e hidráulica: contagem manual mesmo. Cada símbolo conta como 1.</li><li>Esquadrias: ler do quadro de esquadrias (P1, P2, J1, J2...) e contar quantas vezes cada tipo aparece na planta.</li><li>Volumes: comando VOLUME ou cálculo manual (área × altura).</li></ul><p>Pra projeto pequeno (1 prancha, 1 ambiente), 30min resolve. Pra projeto grande (10+ pranchas comerciais), passa fácil de 8h. É aqui que entra a IA.</p><h2>Modelo grátis: AI.arq faz isso por você em 5 minutos</h2><p>O AI.arq foi feito exatamente pra resolver isso: você sobe o CAD (PDF, DWG ou DXF), a IA lê todas as pranchas, identifica as 18 disciplinas e devolve a planilha completa. Cada item já vem com:</p><ul><li>Numeração SINAPI</li><li>Unidade correta</li><li>Quantidade medida</li><li>Referência à prancha de origem</li><li>Cor BRANCO (medido) ou LARANJA (estimado, revisar)</li><li>Memória técnica (composições + insumos com coeficientes)</li></ul><p>Primeiro projeto é grátis em ai.arq.br. Faça o teste com qualquer projeto seu — se a planilha não te convencer, você não pagou nada.</p>
   </div>
 
   <!-- CTA -->

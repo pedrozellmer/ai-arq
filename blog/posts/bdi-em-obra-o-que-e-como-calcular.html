@@ -43,8 +43,9 @@
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -139,7 +140,7 @@
   <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
     <span>📅 14/06/2026</span>
     <span>·</span>
-    <span>⏱️ 9 min de leitura</span>
+    <span>⏱️ 3 min de leitura</span>
   </div>
 
   <!-- Intro destacada -->
@@ -147,32 +148,7 @@
 
   <!-- Corpo -->
   <div class="prose-aiarq">
-    <h2>O que é BDI</h2><p>BDI = Benefícios e Despesas Indiretas. É o percentual que se soma ao custo direto da obra pra cobrir tudo que NÃO é material e mão de obra direta.</p><p>O custo direto é o que aparece na planilha de quantitativos: tijolo, cimento, pintura, mão de obra do pintor, etc.</p><p>O BDI cobre tudo o que existe pra obra rodar mas não fica visível em cada item:
-- Administração da empresa (escritório, secretária, gerente)
-- Equipamentos do canteiro (betoneira, andaime, container)
-- Seguros e ART/RRT
-- Taxas e impostos (ISS, PIS, COFINS, IRPJ)
-- Lucro do construtor
-- Riscos e imprevistos</p><p>Sem BDI, o construtor trabalha de graça (ou pior, no prejuízo).</p><h2>Como se calcula o BDI</h2><p>A fórmula clássica do BDI é:</p><p>BDI = [(1 + AC + S + R + G) × (1 + DF) × (1 + L)] / (1 - I) - 1</p><p>Onde:
-- AC = Administração Central (% da empresa)
-- S = Seguros
-- R = Riscos
-- G = Garantias
-- DF = Despesas Financeiras
-- L = Lucro
-- I = Impostos sobre faturamento (ISS, PIS, COFINS, IRPJ, CSLL)</p><p>Em vez de fazer a conta toda manualmente, dá pra usar a tabela TCU (Acórdão 2.622/2013) que tem percentuais sugeridos por tipo de obra. É a referência oficial pra obras públicas.</p><h2>Percentuais típicos por tipo de obra</h2><p>Faixas de BDI mais usadas em 2026:</p><ul><li>Edificações verticais: 18% a 25%</li><li>Edificações horizontais: 18% a 23%</li><li>Obras industriais: 15% a 25%</li><li>Reformas residenciais: 20% a 30%</li><li>Obras de infraestrutura: 18% a 28%</li><li>Manutenção / pequenos reparos: 25% a 40%</li></ul><p>BDI varia por:
-- Porte da obra (obras pequenas têm BDI maior)
-- Localização (regiões remotas custam mais logística)
-- Tipo de cliente (público tem regra fixa, privado é negociável)
-- Prazo (curto prazo aumenta riscos)</p><h2>Exemplo prático de cálculo</h2><p>Reforma residencial em São Paulo, custo direto da planilha:</p><p>Materiais: R$ 150.000
-Mão de obra: R$ 100.000
-Custo direto total: R$ 250.000</p><p>Aplicação do BDI 25%:
-BDI = R$ 250.000 × 25% = R$ 62.500</p><p>Valor final do orçamento:
-R$ 250.000 + R$ 62.500 = R$ 312.500</p><p>Esse é o valor que vai pro cliente. Os R$ 62.500 cobrem todos os custos indiretos do construtor.</p><h2>Como o BDI aparece na planilha do AI.arq</h2><p>No AI.arq, o BDI é um dos itens da seção "Custos Indiretos" (cor ROXA na planilha). Não vem preenchido com percentual fixo porque cada projeto tem realidade diferente — quem decide é o orçamentista do escritório.</p><p>O que a gente faz:
-- Reserva uma seção dedicada de Custos Indiretos no fim da planilha
-- Lista os itens típicos: Administração, Lucro, Impostos, Seguros, Riscos, Contingência, ART/RRT, Taxas
-- Deixa os campos em branco pra você preencher conforme o tipo de obra
-- Não calcula automaticamente porque seria estimar — e a gente não estima.</p><h2>Erros comuns sobre BDI</h2><p>1. Confundir BDI com lucro. Lucro é só uma das parcelas do BDI.</p><p>2. Aplicar BDI sobre o BDI. Só sobre o custo direto, nunca sobre outro indireto.</p><p>3. Esquecer impostos sobre faturamento. PIS, COFINS, ISS, IRPJ comem fácil 13% do faturamento.</p><p>4. Usar BDI fixo pra qualquer obra. Cada projeto pede BDI diferente.</p><p>5. Não considerar BDI no comparativo de fornecedores. Se um fornecedor cota com BDI embutido e outro sem, comparação fica injusta.</p>
+    <h2>O que é BDI</h2><p>BDI = Benefícios e Despesas Indiretas. É o percentual que se soma ao custo direto da obra pra cobrir tudo que NÃO é material e mão de obra direta.</p><p>O custo direto é o que aparece na planilha de quantitativos: tijolo, cimento, pintura, mão de obra do pintor, etc.</p><p>O BDI cobre tudo o que existe pra obra rodar mas não fica visível em cada item:</p><ul><li>Administração da empresa (escritório, secretária, gerente)</li><li>Equipamentos do canteiro (betoneira, andaime, container)</li><li>Seguros e ART/RRT</li><li>Taxas e impostos (ISS, PIS, COFINS, IRPJ)</li><li>Lucro do construtor</li><li>Riscos e imprevistos</li></ul><p>Sem BDI, o construtor trabalha de graça (ou pior, no prejuízo).</p><h2>Como se calcula o BDI</h2><p>A fórmula clássica do BDI é:</p><p>BDI = [(1 + AC + S + R + G) × (1 + DF) × (1 + L)] / (1 - I) - 1</p><p>Onde:</p><ul><li>AC = Administração Central (% da empresa)</li><li>S = Seguros</li><li>R = Riscos</li><li>G = Garantias</li><li>DF = Despesas Financeiras</li><li>L = Lucro</li><li>I = Impostos sobre faturamento (ISS, PIS, COFINS, IRPJ, CSLL)</li></ul><p>Em vez de fazer a conta toda manualmente, dá pra usar a tabela TCU (Acórdão 2.622/2013) que tem percentuais sugeridos por tipo de obra. É a referência oficial pra obras públicas.</p><h2>Percentuais típicos por tipo de obra</h2><p>Faixas de BDI mais usadas em 2026:</p><ul><li>Edificações verticais: 18% a 25%</li><li>Edificações horizontais: 18% a 23%</li><li>Obras industriais: 15% a 25%</li><li>Reformas residenciais: 20% a 30%</li><li>Obras de infraestrutura: 18% a 28%</li><li>Manutenção / pequenos reparos: 25% a 40%</li></ul><p>BDI varia por:</p><ul><li>Porte da obra (obras pequenas têm BDI maior)</li><li>Localização (regiões remotas custam mais logística)</li><li>Tipo de cliente (público tem regra fixa, privado é negociável)</li><li>Prazo (curto prazo aumenta riscos)</li></ul><h2>Exemplo prático de cálculo</h2><p>Reforma residencial em São Paulo, custo direto da planilha:</p><p>Materiais: R$ 150.000 Mão de obra: R$ 100.000 Custo direto total: R$ 250.000</p><p>Aplicação do BDI 25%: BDI = R$ 250.000 × 25% = R$ 62.500</p><p>Valor final do orçamento: R$ 250.000 + R$ 62.500 = R$ 312.500</p><p>Esse é o valor que vai pro cliente. Os R$ 62.500 cobrem todos os custos indiretos do construtor.</p><h2>Como o BDI aparece na planilha do AI.arq</h2><p>No AI.arq, o BDI é um dos itens da seção "Custos Indiretos" (cor ROXA na planilha). Não vem preenchido com percentual fixo porque cada projeto tem realidade diferente — quem decide é o orçamentista do escritório.</p><p>O que a gente faz:</p><ul><li>Reserva uma seção dedicada de Custos Indiretos no fim da planilha</li><li>Lista os itens típicos: Administração, Lucro, Impostos, Seguros, Riscos, Contingência, ART/RRT, Taxas</li><li>Deixa os campos em branco pra você preencher conforme o tipo de obra</li><li>Não calcula automaticamente porque seria estimar — e a gente não estima.</li></ul><h2>Erros comuns sobre BDI</h2><ol><li>Confundir BDI com lucro. Lucro é só uma das parcelas do BDI.</li><li>Aplicar BDI sobre o BDI. Só sobre o custo direto, nunca sobre outro indireto.</li><li>Esquecer impostos sobre faturamento. PIS, COFINS, ISS, IRPJ comem fácil 13% do faturamento.</li><li>Usar BDI fixo pra qualquer obra. Cada projeto pede BDI diferente.</li><li>Não considerar BDI no comparativo de fornecedores. Se um fornecedor cota com BDI embutido e outro sem, comparação fica injusta.</li></ol>
   </div>
 
   <!-- CTA -->

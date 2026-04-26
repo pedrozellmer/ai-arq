@@ -43,8 +43,9 @@
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -139,7 +140,7 @@
   <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
     <span>📅 21/06/2026</span>
     <span>·</span>
-    <span>⏱️ 5 min de leitura</span>
+    <span>⏱️ 2 min de leitura</span>
   </div>
 
   <!-- Intro destacada -->
@@ -147,29 +148,7 @@
 
   <!-- Corpo -->
   <div class="prose-aiarq">
-    <h2>Definição rápida</h2><p>QUANTITATIVO = lista de itens com quantidade, SEM preço.
-ORÇAMENTO = quantitativo + preços = valor total.</p><p>O quantitativo é o INSUMO do orçamento. Ou seja, sem quantitativo não dá pra fazer orçamento sério.</p><h2>Exemplo prático</h2><p>Vamos ver na prática como cada um se parece:</p><p>QUANTITATIVO:
-- Piso porcelanato 60x60: 142 m²
-- Porta de madeira P1: 8 unidades
-- Pintura látex parede: 246 m²
-- Tomada 2P+T: 24 unidades</p><p>ORÇAMENTO (mesmos itens, com preço):
-- Piso porcelanato 60x60 — 142 m² × R$ 75 = R$ 10.650
-- Porta de madeira P1 — 8 un × R$ 850 = R$ 6.800
-- Pintura látex parede — 246 m² × R$ 28 = R$ 6.888
-- Tomada 2P+T — 24 un × R$ 95 = R$ 2.280</p><p>TOTAL: R$ 26.618</p><p>Viu a diferença? O quantitativo é trabalho do arquiteto/engenheiro (medir o projeto). O orçamento é trabalho do orçamentista (precificar).</p><h2>Quem faz cada um</h2><p>Quantitativo é geralmente feito por:
-- Arquiteto que projetou
-- Engenheiro de obra
-- Orçamentista júnior
-- IA (como o AI.arq)</p><p>Orçamento é feito por:
-- Orçamentista profissional (com formação em engenharia ou técnico)
-- Construtora (proposta comercial)
-- Equipe de planejamento da empresa</p><p>Esses dois NÃO são a mesma pessoa em obra séria. O arquiteto que projeta NÃO deveria ser o mesmo que precifica — gera viés.</p><h2>Por que separar quantitativo e orçamento</h2><p>Razões técnicas:
-- Quantitativo é medição (matemática, geometria). Orçamento é mercado (preços variam por região, por época, por fornecedor).
-- Errar quantitativo afeta o resto. Errar orçamento afeta só o número final.
-- Quantitativo é estável (a obra é a mesma). Orçamento muda conforme o tempo (preço do cimento sobe).</p><p>Razões comerciais:
-- Quantitativo pode ser mandado pra vários orçamentistas competirem
-- Quantitativo é "propriedade" do projeto. Orçamento é "oferta" do construtor.
-- Sem quantitativo aberto, cliente não consegue comparar propostas com transparência.</p><h2>Posição honesta do AI.arq</h2><p>É exatamente por essa separação que a gente desenhou o AI.arq pra fazer SÓ o quantitativo. Isso é muito importante:</p><p>O AI.arq NÃO precifica. NÃO fecha orçamento. NÃO substitui o orçamentista.</p><p>A gente entrega a planilha de quantitativos confiável (com colunas de preço EM BRANCO) pro seu orçamentista preencher. Ou pra você mandar pra fornecedores cotarem.</p><p>Quem decide preço é humano com experiência local de obra. A IA acelera o trabalho braçal de medir.</p>
+    <h2>Definição rápida</h2><p>QUANTITATIVO = lista de itens com quantidade, SEM preço. ORÇAMENTO = quantitativo + preços = valor total.</p><p>O quantitativo é o INSUMO do orçamento. Ou seja, sem quantitativo não dá pra fazer orçamento sério.</p><h2>Exemplo prático</h2><p>Vamos ver na prática como cada um se parece:</p><p>QUANTITATIVO:</p><ul><li>Piso porcelanato 60x60: 142 m²</li><li>Porta de madeira P1: 8 unidades</li><li>Pintura látex parede: 246 m²</li><li>Tomada 2P+T: 24 unidades</li></ul><p>ORÇAMENTO (mesmos itens, com preço):</p><ul><li>Piso porcelanato 60x60 — 142 m² × R$ 75 = R$ 10.650</li><li>Porta de madeira P1 — 8 un × R$ 850 = R$ 6.800</li><li>Pintura látex parede — 246 m² × R$ 28 = R$ 6.888</li><li>Tomada 2P+T — 24 un × R$ 95 = R$ 2.280</li></ul><p>TOTAL: R$ 26.618</p><p>Viu a diferença? O quantitativo é trabalho do arquiteto/engenheiro (medir o projeto). O orçamento é trabalho do orçamentista (precificar).</p><h2>Quem faz cada um</h2><p>Quantitativo é geralmente feito por:</p><ul><li>Arquiteto que projetou</li><li>Engenheiro de obra</li><li>Orçamentista júnior</li><li>IA (como o AI.arq)</li></ul><p>Orçamento é feito por:</p><ul><li>Orçamentista profissional (com formação em engenharia ou técnico)</li><li>Construtora (proposta comercial)</li><li>Equipe de planejamento da empresa</li></ul><p>Esses dois NÃO são a mesma pessoa em obra séria. O arquiteto que projeta NÃO deveria ser o mesmo que precifica — gera viés.</p><h2>Por que separar quantitativo e orçamento</h2><p>Razões técnicas:</p><ul><li>Quantitativo é medição (matemática, geometria). Orçamento é mercado (preços variam por região, por época, por fornecedor).</li><li>Errar quantitativo afeta o resto. Errar orçamento afeta só o número final.</li><li>Quantitativo é estável (a obra é a mesma). Orçamento muda conforme o tempo (preço do cimento sobe).</li></ul><p>Razões comerciais:</p><ul><li>Quantitativo pode ser mandado pra vários orçamentistas competirem</li><li>Quantitativo é "propriedade" do projeto. Orçamento é "oferta" do construtor.</li><li>Sem quantitativo aberto, cliente não consegue comparar propostas com transparência.</li></ul><h2>Posição honesta do AI.arq</h2><p>É exatamente por essa separação que a gente desenhou o AI.arq pra fazer SÓ o quantitativo. Isso é muito importante:</p><p>O AI.arq NÃO precifica. NÃO fecha orçamento. NÃO substitui o orçamentista.</p><p>A gente entrega a planilha de quantitativos confiável (com colunas de preço EM BRANCO) pro seu orçamentista preencher. Ou pra você mandar pra fornecedores cotarem.</p><p>Quem decide preço é humano com experiência local de obra. A IA acelera o trabalho braçal de medir.</p>
   </div>
 
   <!-- CTA -->

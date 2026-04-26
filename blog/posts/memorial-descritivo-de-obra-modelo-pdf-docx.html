@@ -43,8 +43,9 @@
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -139,7 +140,7 @@
   <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
     <span>📅 26/04/2026</span>
     <span>·</span>
-    <span>⏱️ 8 min de leitura</span>
+    <span>⏱️ 3 min de leitura</span>
   </div>
 
   <!-- Intro destacada -->
@@ -147,21 +148,23 @@
 
   <!-- Corpo -->
   <div class="prose-aiarq">
-    <h2>O que é um memorial descritivo de obra</h2><p>O memorial descritivo é o documento técnico que descreve, em palavras, todas as soluções de projeto e os materiais que serão usados na obra. Diferente da planta (que é gráfica) e da planilha de quantitativos (que é numérica), o memorial é textual — explica para quem lê o que vai ser feito e como.</p><p>Ele funciona como um contrato técnico entre arquiteto, cliente e construtor. Quando bem escrito, evita 80% das discussões na obra do tipo "mas eu pensei que ia ser X".</p><p>Quem normalmente exige memorial descritivo:
-- Prefeituras (no processo de aprovação)
-- Bancos (em financiamento de imóvel)
-- Clientes (como anexo de contrato)
-- Construtoras (pra orçar com precisão)
-- Tribunais (em perícias judiciais)</p><h2>Estrutura padrão do memorial descritivo</h2><p>Não existe lei federal definindo a estrutura exata, mas a maioria das prefeituras brasileiras segue uma ordem parecida. Esta é a estrutura que cobre 95% dos casos:</p><p>1. Identificação do projeto (proprietário, endereço, área, finalidade)
-2. Características gerais da edificação
-3. Sistema construtivo
-4. Especificação por ambiente
-5. Especificação por disciplina
-6. Acabamentos e revestimentos
-7. Instalações (elétrica, hidráulica, esgoto, gás, climatização)
-8. Esquadrias
-9. Pintura
-10. Considerações finais</p><p>Depende muito do escopo do projeto — uma reforma residencial pequena pode ter 4-5 páginas, um corporativo grande passa de 30.</p><h2>Modelo grátis pra baixar (PDF + DOCX)</h2><p>Estamos preparando um modelo editável completo em PDF e Word. Por enquanto, segue a estrutura completa que você pode copiar pro seu próprio documento.</p><p>Quer receber o modelo direto no seu email assim que estiver pronto? Cadastre-se sem custo no AI.arq e a gente te avisa: ai.arq.br</p><h2>Como o memorial descritivo se conecta com a planilha de quantitativos</h2><p>Aqui é onde muita gente perde tempo: refaz duas vezes o mesmo trabalho. Você descreve as paredes no memorial, depois conta as paredes na planilha. Descreve as portas, conta as portas. Descreve o piso, mede o piso.</p><p>O ideal é trabalhar de trás pra frente: gere primeiro o quantitativo (a IA faz isso em 5min lendo seu CAD), e use as informações da planilha pra preencher o memorial automaticamente. Cada disciplina da planilha vira uma seção do memorial.</p><p>É exatamente isso que o AI.arq faz: você sobe o CAD, recebe a planilha de quantitativos com 18 disciplinas e a base SINAPI/TCPO já vinculada. Aí o memorial fica praticamente pronto pra preencher os textos descritivos.</p><h2>Erros comuns no memorial descritivo (e como evitar)</h2><p>1. Genérico demais. Escrever "piso de qualidade" não diz nada. Tem que ser "porcelanato esmaltado retificado, formato 60x60cm, PEI 5, cor a definir pelo cliente".</p><p>2. Esquecer marcas/modelos. Se você especifica uma louça "Deca Vogue VG09", o construtor não pode trocar por uma genérica. Sem marca, ele troca pela mais barata.</p><p>3. Não citar normas. Toda especificação deveria fazer referência à ABNT correspondente (NBR 15575 pra desempenho, NBR 9050 pra acessibilidade, etc.).</p><p>4. Inconsistência com a planta. O memorial diz porta 0,80m, a planta mostra 0,90m. Isso vira disputa no canteiro.</p><p>5. Falta de detalhamento por ambiente. Cada sala/cômodo deveria ter sua especificação separada (paredes, piso, forro, esquadrias, instalações).</p>
+    <h2>O que é um memorial descritivo de obra</h2><p>O memorial descritivo é o documento técnico que descreve, em palavras, todas as soluções de projeto e os materiais que serão usados na obra. Diferente da planta (que é gráfica) e da planilha de quantitativos (que é numérica), o memorial é textual — explica para quem lê o que vai ser feito e como.</p><p>Ele funciona como um contrato técnico entre arquiteto, cliente e construtor. Quando bem escrito, evita 80% das discussões na obra do tipo "mas eu pensei que ia ser X".</p><p>Quem normalmente exige memorial descritivo:</p><ul><li>Prefeituras (no processo de aprovação)</li><li>Bancos (em financiamento de imóvel)</li><li>Clientes (como anexo de contrato)</li><li>Construtoras (pra orçar com precisão)</li><li>Tribunais (em perícias judiciais)</li></ul><h2>Estrutura padrão do memorial descritivo</h2><p>Não existe lei federal definindo a estrutura exata, mas a maioria das prefeituras brasileiras segue uma ordem parecida. Esta é a estrutura que cobre 95% dos casos:</p><ol><li>Identificação do projeto (proprietário, endereço, área, finalidade)</li><li>Características gerais da edificação</li><li>Sistema construtivo</li><li>Especificação por ambiente</li><li>Especificação por disciplina</li><li>Acabamentos e revestimentos</li><li>Instalações (elétrica, hidráulica, esgoto, gás, climatização)</li><li>Esquadrias</li><li>Pintura</li><li>Considerações finais</li></ol><p>Depende muito do escopo do projeto — uma reforma residencial pequena pode ter 4-5 páginas, um corporativo grande passa de 30.</p><h2>Modelo grátis pra baixar (PDF + DOCX)</h2><p>Preparamos um modelo completo de memorial descritivo de obra, com todas as 10 seções estruturadas, campos pra preencher e instruções de uso. Disponível em duas versões — escolha a que prefere:</p>
+<div class="my-6 p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-200">
+  <div class="flex flex-wrap items-center justify-center gap-4">
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.pdf" download
+       class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-sm transition">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"/><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+      Baixar PDF (modelo)
+    </a>
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.docx" download
+       class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-sm transition">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"/><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+      Baixar DOCX (editável)
+    </a>
+  </div>
+  <p class="mt-3 text-xs text-gray-500 text-center">Sem cadastro. Sem captura de email. Use à vontade.</p>
+</div>
+<p>O modelo cobre os tópicos clássicos: identificação do projeto, características gerais, sistema construtivo, especificação por ambiente, especificação por disciplina, instalações (elétrica, hidráulica, esgoto, climatização), esquadrias, pintura e considerações finais.</p><p>Use como ponto de partida e adapte pra realidade do seu projeto. Lembre-se de citar normas ABNT relevantes (NBR 15575, NBR 9050, etc.) onde aplicável e de assinar com profissional habilitado (CAU/CREA).</p><h2>Como o memorial descritivo se conecta com a planilha de quantitativos</h2><p>Aqui é onde muita gente perde tempo: refaz duas vezes o mesmo trabalho. Você descreve as paredes no memorial, depois conta as paredes na planilha. Descreve as portas, conta as portas. Descreve o piso, mede o piso.</p><p>O ideal é trabalhar de trás pra frente: gere primeiro o quantitativo (a IA faz isso em 5min lendo seu CAD), e use as informações da planilha pra preencher o memorial automaticamente. Cada disciplina da planilha vira uma seção do memorial.</p><p>É exatamente isso que o AI.arq faz: você sobe o CAD, recebe a planilha de quantitativos com 18 disciplinas e a base SINAPI/TCPO já vinculada. Aí o memorial fica praticamente pronto pra preencher os textos descritivos.</p><h2>Erros comuns no memorial descritivo (e como evitar)</h2><ol><li>Genérico demais. Escrever "piso de qualidade" não diz nada. Tem que ser "porcelanato esmaltado retificado, formato 60x60cm, PEI 5, cor a definir pelo cliente".</li><li>Esquecer marcas/modelos. Se você especifica uma louça "Deca Vogue VG09", o construtor não pode trocar por uma genérica. Sem marca, ele troca pela mais barata.</li><li>Não citar normas. Toda especificação deveria fazer referência à ABNT correspondente (NBR 15575 pra desempenho, NBR 9050 pra acessibilidade, etc.).</li><li>Inconsistência com a planta. O memorial diz porta 0,80m, a planta mostra 0,90m. Isso vira disputa no canteiro.</li><li>Falta de detalhamento por ambiente. Cada sala/cômodo deveria ter sua especificação separada (paredes, piso, forro, esquadrias, instalações).</li></ol>
   </div>
 
   <!-- CTA -->

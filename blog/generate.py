@@ -27,8 +27,9 @@ COMMON_STYLES = '''
   .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
   .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
   .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
-  .prose-aiarq ul { margin-bottom: 1.5rem; padding-left: 1.5rem; }
-  .prose-aiarq li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
   .prose-aiarq strong { color: #0f172a; font-weight: 600; }
   .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
   .prose-aiarq a:hover { color: #4338ca; }
@@ -100,37 +101,145 @@ FOOTER = '''
 '''
 
 
+import re
+NUMBERED_RE = re.compile(r'^\d+[\.\)]\s+(.+)$')
+BULLET_RE   = re.compile(r'^[\-\u2022]\s+(.+)$')
+
+
+def _classify_line(line):
+    """Retorna ('numbered'|'bullet'|'text', texto_limpo)."""
+    s = line.strip()
+    m = NUMBERED_RE.match(s)
+    if m:
+        return ('numbered', m.group(1))
+    m = BULLET_RE.match(s)
+    if m:
+        return ('bullet', m.group(1))
+    return ('text', s)
+
+
+DOWNLOAD_BUTTONS_HTML = '''
+<div class="my-6 p-6 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-200">
+  <div class="flex flex-wrap items-center justify-center gap-4">
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.pdf" download
+       class="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-sm transition">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"/><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+      Baixar PDF (modelo)
+    </a>
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.docx" download
+       class="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-sm transition">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a2 2 0 00-2 2v8a2 2 0 002 2h6a2 2 0 002-2V6.414A2 2 0 0016.414 5L14 2.586A2 2 0 0012.586 2H9z"/><path d="M3 8a2 2 0 012-2v10h8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z"/></svg>
+      Baixar DOCX (editável)
+    </a>
+  </div>
+  <p class="mt-3 text-xs text-gray-500 text-center">Sem cadastro. Sem captura de email. Use à vontade.</p>
+</div>
+'''
+
+
+def _flush_buffer(buf, kind, body_html):
+    """Empurra o buffer atual como p/ul/ol e zera."""
+    if not buf:
+        return body_html
+    if kind == 'numbered':
+        body_html += "<ol>" + "".join(f"<li>{t}</li>" for t in buf) + "</ol>"
+    elif kind == 'bullet':
+        body_html += "<ul>" + "".join(f"<li>{t}</li>" for t in buf) + "</ul>"
+    else:
+        # Junta as linhas de texto num parágrafo só
+        body_html += "<p>" + " ".join(buf) + "</p>"
+    return body_html
+
+
 def render_section(s):
-    """Renderiza uma seção (h2 + body com parágrafos / listas)."""
+    """Renderiza uma seção (h2 + body).
+
+    Parser:
+    1. Split por \\n\\n (parágrafos visuais)
+    2. Classifica cada parágrafo: text / numbered / bullet / download
+    3. Renderiza, MESCLANDO parágrafos consecutivos do mesmo tipo de lista.
+    4. Texto continua como parágrafos separados (visual normal).
+    """
     body_html = ""
     paragraphs = s["body"].split("\n\n")
+
+    # 1ª passada: classifica cada parágrafo + extrai linhas
+    blocks = []  # lista de tuplas (kind, list_de_textos)
     for p in paragraphs:
-        # detecta lista (linhas começando com - ou número.)
-        lines = p.strip().split("\n")
-        is_list = all(
-            line.strip().startswith(("- ", "• ")) or
-            (line.strip()[:2].rstrip(".").isdigit() and line.strip()[1:3] in (". ", "..", ".)"))
-            for line in lines
-        )
-        if is_list and len(lines) > 1:
-            body_html += "<ul>"
-            for line in lines:
-                clean = line.strip()
-                if clean.startswith(("- ", "• ")):
-                    clean = clean[2:]
-                else:
-                    # numbered
-                    clean = clean.split(".", 1)[1].strip() if "." in clean[:4] else clean
-                body_html += f"<li>{clean}</li>"
-            body_html += "</ul>"
+        if p.strip() == "<DOWNLOAD_BUTTONS>":
+            blocks.append(("download", []))
+            continue
+        lines = [l for l in p.strip().split("\n") if l.strip()]
+        if not lines:
+            continue
+
+        # Classifica cada linha do parágrafo
+        classified = [_classify_line(l) for l in lines]
+        kinds = {k for k, _ in classified}
+
+        if kinds == {'numbered'}:
+            blocks.append(("numbered", [t for _, t in classified]))
+        elif kinds == {'bullet'}:
+            blocks.append(("bullet", [t for _, t in classified]))
         else:
-            body_html += f"<p>{p.strip()}</p>"
+            # Misto ou só texto: subdivide em sub-blocos
+            buf = []
+            cur_kind = None
+            for kind, txt in classified:
+                if cur_kind is None:
+                    cur_kind = kind
+                    buf = [txt]
+                elif kind == cur_kind:
+                    buf.append(txt)
+                else:
+                    blocks.append((cur_kind, buf))
+                    cur_kind = kind
+                    buf = [txt]
+            if buf:
+                blocks.append((cur_kind, buf))
+
+    # 2ª passada: mescla blocos consecutivos de lista da mesma natureza
+    merged = []
+    for kind, items in blocks:
+        if merged and merged[-1][0] == kind and kind in ('numbered', 'bullet'):
+            merged[-1] = (kind, merged[-1][1] + items)
+        else:
+            merged.append((kind, items))
+
+    # 3ª passada: renderiza
+    for kind, items in merged:
+        if kind == "download":
+            body_html += DOWNLOAD_BUTTONS_HTML
+        elif kind == "numbered":
+            body_html += "<ol>" + "".join(f"<li>{t}</li>" for t in items) + "</ol>"
+        elif kind == "bullet":
+            body_html += "<ul>" + "".join(f"<li>{t}</li>" for t in items) + "</ul>"
+        else:
+            # Cada bloco de texto vira um <p> próprio
+            body_html += "<p>" + " ".join(items) + "</p>"
+
     return f"<h2>{s['h2']}</h2>{body_html}"
+
+
+def calc_read_time(post):
+    """Calcula tempo de leitura real baseado em 220 palavras/min."""
+    text = post.get("intro", "") + " "
+    for s in post.get("sections", []):
+        text += s.get("body", "") + " "
+    text += post.get("cta", "")
+    # remove placeholder
+    text = text.replace("<DOWNLOAD_BUTTONS>", "")
+    words = len(text.split())
+    minutes = max(1, round(words / 220))
+    return minutes
 
 
 def render_post_html(post):
     """Gera HTML completo de um post."""
     sections_html = "".join(render_section(s) for s in post["sections"])
+
+    # Recalcula tempo de leitura baseado nas palavras reais
+    post["estimated_read_min"] = calc_read_time(post)
 
     publish_date_iso = f'{post["publish_date"]}T10:00:00-03:00'
     publish_date_br = datetime.fromisoformat(post["publish_date"]).strftime("%d/%m/%Y")
@@ -277,6 +386,10 @@ def render_post_html(post):
 def render_index_html():
     """Gera o index.html do blog que lista todos os posts visíveis."""
     today = date.today().isoformat()
+
+    # Recalcula tempo de leitura de todos
+    for post in POSTS:
+        post["estimated_read_min"] = calc_read_time(post)
 
     # Constrói cards (server-side filtrado por data ainda — JS adiciona filtro extra)
     cards_html = ""
