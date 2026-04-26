@@ -88,6 +88,7 @@ FOOTER = '''
       <ul class="space-y-2 text-sm text-gray-600">
         <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
         <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
       </ul>
     </div>
     <div>
@@ -455,8 +456,9 @@ def render_post_html(post):
 
 {FOOTER}
 
-<!-- Chat widget (compartilhado com o resto do site) -->
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
 <script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
 </body>
 </html>'''
 
@@ -560,8 +562,9 @@ def render_index_html():
 }})();
 </script>
 
-<!-- Chat widget -->
+<!-- Chat widget + Modal de contato -->
 <script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
 </body>
 </html>'''
 
