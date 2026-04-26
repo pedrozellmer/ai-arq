@@ -507,3 +507,136 @@ def start_auto_poster(interval_hours: int = 24):
     thread = threading.Thread(target=_loop, daemon=True)
     thread.start()
     logger.info("Auto-poster iniciado")
+
+
+# ══════════════════════════════════════════════════
+#  Agendador de posts (scheduler)
+#  Lê instagram_scheduled_posts no Supabase e publica posts cujo
+#  publish_at <= now() e status='pending'.
+# ══════════════════════════════════════════════════
+
+import urllib.request
+import urllib.parse
+
+
+def _supa_select(table: str, query: str) -> list:
+    """Helper: SELECT direto via REST API do Supabase."""
+    url = f"{os.getenv('SUPABASE_URL', 'https://kqjabzwgbfuivzlcfvvu.supabase.co')}/rest/v1/{table}?{query}"
+    key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("apikey", key)
+    req.add_header("Authorization", f"Bearer {key}")
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+        return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        logger.error(f"_supa_select erro: {e}")
+        return []
+
+
+def _supa_update(table: str, match_field: str, match_value: str, data: dict) -> bool:
+    """Helper: PATCH via REST API."""
+    url = f"{os.getenv('SUPABASE_URL', 'https://kqjabzwgbfuivzlcfvvu.supabase.co')}/rest/v1/{table}?{match_field}=eq.{urllib.parse.quote(match_value)}"
+    key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+    body = json.dumps(data).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="PATCH")
+    req.add_header("apikey", key)
+    req.add_header("Authorization", f"Bearer {key}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Prefer", "return=minimal")
+    try:
+        urllib.request.urlopen(req, timeout=15)
+        return True
+    except Exception as e:
+        logger.error(f"_supa_update erro: {e}")
+        return False
+
+
+@router.post("/scheduler/tick")
+async def scheduler_tick(force_slot: Optional[str] = None):
+    """Roda 1 ciclo do agendador.
+
+    - Busca posts em 'pending' onde publish_at <= now() (ou força um slot específico via ?force_slot=dia1)
+    - Pra cada um: publica via Meta API, atualiza status
+    - Pode ser chamado por cron externo, pg_cron interno, ou manualmente
+    """
+    api = MetaGraphAPI()
+    if not api.access_token or not api.ig_user_id:
+        return {"ok": False, "error": "META_ACCESS_TOKEN ou IG_USER_ID não configurados"}
+
+    # Busca posts pendentes
+    if force_slot:
+        query = f"slot_key=eq.{force_slot}&status=eq.pending&select=*"
+    else:
+        # publish_at <= now() (urlencoded)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        query = f"status=eq.pending&publish_at=lte.{urllib.parse.quote(now_iso)}&select=*&order=publish_at.asc"
+
+    pending = _supa_select("instagram_scheduled_posts", query)
+
+    if not pending:
+        return {"ok": True, "message": "Nada pra publicar agora", "checked_at": datetime.now(timezone.utc).isoformat()}
+
+    results = []
+    for post in pending[:3]:  # max 3 por tick pra evitar rate limit
+        slot = post["slot_key"]
+        try:
+            # marca como 'publishing' pra evitar race
+            _supa_update("instagram_scheduled_posts", "id", post["id"], {
+                "status": "publishing",
+                "attempts": (post.get("attempts") or 0) + 1,
+            })
+
+            # Cria container de mídia
+            creation_id = api.create_media_container(
+                image_url=post["image_url"],
+                caption=post["caption"],
+            )
+
+            if not creation_id or "error" in str(creation_id).lower():
+                _supa_update("instagram_scheduled_posts", "id", post["id"], {
+                    "status": "failed",
+                    "error_message": f"Container falhou: {creation_id}",
+                })
+                results.append({"slot": slot, "status": "failed", "error": "container"})
+                continue
+
+            # Aguarda processamento (2s) e publica
+            import time
+            time.sleep(3)
+            media_id = api.publish_media(creation_id)
+
+            if media_id and "error" not in str(media_id).lower():
+                _supa_update("instagram_scheduled_posts", "id", post["id"], {
+                    "status": "published",
+                    "media_id": str(media_id),
+                    "published_at": datetime.now(timezone.utc).isoformat(),
+                })
+                results.append({"slot": slot, "status": "published", "media_id": str(media_id)})
+                store.log_activity("scheduled_post_published", {"slot": slot, "media_id": str(media_id)})
+            else:
+                _supa_update("instagram_scheduled_posts", "id", post["id"], {
+                    "status": "failed",
+                    "error_message": f"Publish falhou: {media_id}",
+                })
+                results.append({"slot": slot, "status": "failed", "error": str(media_id)})
+
+        except Exception as e:
+            logger.error(f"scheduler_tick: erro processando {slot}: {e}")
+            _supa_update("instagram_scheduled_posts", "id", post["id"], {
+                "status": "failed",
+                "error_message": str(e)[:500],
+            })
+            results.append({"slot": slot, "status": "failed", "error": str(e)})
+
+    return {"ok": True, "processed": len(results), "results": results}
+
+
+@router.get("/scheduler/list")
+async def scheduler_list():
+    """Lista todos os posts agendados com status atual."""
+    posts = _supa_select(
+        "instagram_scheduled_posts",
+        "select=slot_key,status,publish_at,published_at,attempts,error_message,media_id&order=publish_at.asc",
+    )
+    return {"posts": posts, "now": datetime.now(timezone.utc).isoformat()}

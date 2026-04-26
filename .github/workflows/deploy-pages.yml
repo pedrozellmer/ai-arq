@@ -70,7 +70,7 @@ jobs:
             -name ".nojekyll" \
           \) -exec cp {} _site/ \;
           # Copia pastas de assets frontend (se existirem)
-          for d in assets img images static fonts frontend; do
+          for d in assets img images static fonts frontend instagram_assets; do
             if [ -d "$d" ]; then cp -r "$d" _site/; fi
           done
           echo "=== Conteúdo de _site ==="
