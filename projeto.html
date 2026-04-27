@@ -117,6 +117,22 @@ function smartBack() {
     </a>
   </div>
 
+  <!-- Reportar problema neste projeto -->
+  <div class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      </div>
+      <div>
+        <p class="text-sm font-semibold text-gray-800">Algo errado neste projeto?</p>
+        <p class="text-xs text-gray-500">Reporta pra gente — chega direto no painel admin com o código do projeto.</p>
+      </div>
+    </div>
+    <button id="btn-report-project" type="button" class="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-50 text-orange-700 text-sm font-medium transition">
+      Reportar problema
+    </button>
+  </div>
+
   <!-- Arquivos da prancha -->
   <div class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50">
@@ -360,6 +376,34 @@ function safeRun(fn, label) {
   btnDownload.href = `${API_BASE}/api/download/${jobId}`;
   btnDownload.style.pointerEvents = '';
   btnDownload.style.opacity = '';
+
+  // Botão "Reportar problema" — pré-preenche tudo no contact-modal
+  const btnReport = document.getElementById('btn-report-project');
+  if (btnReport) {
+    btnReport.addEventListener('click', () => {
+      const userMeta = session.user.user_metadata || {};
+      const userName = userMeta.full_name || userMeta.name || '';
+      const userEmail = session.user.email || '';
+      const userPhone = userMeta.whatsapp || userMeta.phone || '';
+      // Tenta pegar o nome do projeto do header se já carregou
+      const projTitleEl = document.getElementById('proj-title');
+      const projName = projTitleEl ? projTitleEl.textContent.trim() : '';
+      const subject = `Projeto ${jobId}${projName ? ' — ' + projName : ''}`;
+      const message = `Olá, gostaria de reportar algo sobre este projeto:\n\nCódigo: ${jobId}${projName ? '\nNome: ' + projName : ''}\nLink: ${window.location.href}\n\n[descreva aqui o que aconteceu]\n`;
+      if (typeof aiArqContactOpen === 'function') {
+        aiArqContactOpen({
+          type: 'reclamacao',
+          subject,
+          message,
+          name: userName,
+          email: userEmail,
+          phone: userPhone,
+        });
+      } else {
+        alert('Modal de contato não carregou. Recarregue a página.');
+      }
+    });
+  }
 
   // ── CARREGA DADOS EM PARALELO, cada um com fallback ──
   // Se qualquer um travar/falhar, os outros ainda rodam.
@@ -952,5 +996,6 @@ function esc(s) {
   </div>
 </footer>
 
+<script src="contact-modal.js" defer></script>
 </body>
 </html>

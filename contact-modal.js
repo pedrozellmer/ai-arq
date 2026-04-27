@@ -151,13 +151,47 @@
   document.body.appendChild(modal);
 
   // ── API global ────────────────────────────────────────────────────
-  window.aiArqContactOpen = function (preselectType) {
+  // Aceita string (compat antigo: tipo só) OU objeto:
+  //   { type, subject, message, name, email, phone }
+  window.aiArqContactOpen = function (opts) {
     modal.classList.add('open');
-    if (preselectType) {
+
+    // Backwards compat: string vira { type: 'xxx' }
+    if (typeof opts === 'string') opts = { type: opts };
+    opts = opts || {};
+
+    if (opts.type) {
       var sel = document.getElementById('aicm-type');
-      if (sel) sel.value = preselectType;
+      if (sel) sel.value = opts.type;
     }
-    setTimeout(function () { document.getElementById('aicm-name').focus(); }, 100);
+    if (opts.subject) {
+      var subj = document.getElementById('aicm-subject');
+      if (subj) subj.value = opts.subject;
+    }
+    if (opts.message) {
+      var msg = document.getElementById('aicm-message');
+      if (msg) msg.value = opts.message;
+    }
+    if (opts.name) {
+      var n = document.getElementById('aicm-name');
+      if (n) n.value = opts.name;
+    }
+    if (opts.email) {
+      var e = document.getElementById('aicm-email');
+      if (e) e.value = opts.email;
+    }
+    if (opts.phone) {
+      var p = document.getElementById('aicm-phone');
+      if (p) p.value = opts.phone;
+    }
+
+    // Foco: vai pra mensagem se já tem nome+email pre-preenchidos, senão pro nome
+    setTimeout(function () {
+      var focusEl = (opts.name && opts.email)
+        ? document.getElementById('aicm-message')
+        : document.getElementById('aicm-name');
+      if (focusEl) focusEl.focus();
+    }, 100);
   };
 
   window.aiArqContactClose = function () {
