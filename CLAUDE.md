@@ -172,6 +172,81 @@ projeto_arq/                          ← raiz do repo (deploy GitHub Pages)
 
 ---
 
+## 🔐 Onde está cada configuração / segredo
+
+> ⚠️ **A maioria das configurações está NA NUVEM**, não no PC do Pedro. Boa notícia pra migração — quase nada precisa ser refeito.
+
+| Config / Segredo | Onde está | Vai junto na cópia? |
+|---|---|---|
+| **ANTHROPIC_API_KEY** | `backend/.env` (local) + Render env vars (cloud) | ✅ Sim, no `.env` |
+| **META_ACCESS_TOKEN** (Instagram) | `backend/.env` + Render env vars | ✅ Sim, no `.env` |
+| **META_APP_SECRET** | `backend/.env` + Render env vars | ✅ Sim, no `.env` |
+| **META_VERIFY_TOKEN** | `backend/.env` + Render env vars | ✅ Sim, no `.env` |
+| **IG_USER_ID** | `backend/.env` + Render env vars | ✅ Sim, no `.env` |
+| **STRIPE_SECRET_KEY** | Render env vars (cloud) | ☁️ Cloud, não precisa migrar |
+| **Supabase URL + anon key** | Hardcoded nos HTMLs (público, OK) | ✅ No código |
+| **Supabase service role** | Render env vars (cloud, sensível) | ☁️ Cloud, não precisa migrar |
+| **Configuração Render** | Painel Render (cloud) | ☁️ Cloud |
+| **Configuração GitHub Pages** | Painel GitHub (cloud) | ☁️ Cloud |
+| **DNS ai.arq.br** | No registrador do domínio (cloud) | ☁️ Cloud |
+| **Configuração Supabase project** | Painel Supabase (cloud) | ☁️ Cloud |
+| **Tabelas + RLS Supabase** | No projeto Supabase | ☁️ Cloud |
+| **Storage bucket Supabase** | No projeto Supabase | ☁️ Cloud |
+| **Credenciais git (push)** | Git Credential Manager / GitHub CLI no PC | 🔄 **Refazer no PC novo** |
+| **Login Claude Code** | Conta Anthropic no PC | 🔄 **Refazer no PC novo** |
+| **Login no navegador (Pedro)** | Browser do PC | 🔄 **Refazer no PC novo** |
+
+### Migração — checklist do PC novo
+
+**Coisas que VÃO automaticamente (com a pasta):**
+- ✅ Todo o código
+- ✅ `backend/.env` com secrets (não está no git, vai como arquivo local)
+- ✅ Histórico git (`.git/` dentro de `projeto_arq/`)
+- ✅ Configuração git do projeto (user.email, user.name)
+
+**Coisas que precisam ser REFEITAS no PC novo:**
+1. **Instalar Claude Code** + login na sua conta Anthropic
+2. **Instalar Git for Windows** se ainda não tem
+3. **Login GitHub via CLI** ou Git Credential Manager:
+   ```bash
+   git config --global user.name "Pedro Zellmer"
+   git config --global user.email "pedro.zellmer@famicapital.com.br"
+   # Pra autenticação: usa o Git Credential Manager (instalado com Git for Windows)
+   # Primeiro push vai abrir browser pra autorizar GitHub
+   ```
+4. **Instalar Python 3.13** (se for rodar scripts locais — `python blog/generate.py`, `gen_*.py`)
+5. **Login no Supabase, Render, GitHub, Stripe** via navegador (conta web do Pedro)
+
+**Coisas que NÃO precisam ser feitas:**
+- ❌ Não precisa reconfigurar Render (já tem env vars lá, deploy é automático)
+- ❌ Não precisa reconfigurar Supabase (banco + storage continuam intactos)
+- ❌ Não precisa reconfigurar GitHub Pages (workflow continua rodando)
+- ❌ Não precisa renovar DNS ou domínio (continua apontando)
+- ❌ Não precisa reinstalar dependências Python (só se for rodar backend local — nunca faz)
+
+### Como verificar tudo OK no PC novo
+
+```bash
+# 1. Pasta tá lá?
+ls "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq"
+
+# 2. backend/.env tá com secrets?
+ls -la "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq/backend/.env"
+
+# 3. Git funciona?
+cd "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq" && git status
+
+# 4. Site tá no ar?
+curl -I https://ai.arq.br
+
+# 5. Backend tá respondendo?
+curl https://ai-arq.onrender.com/health  # ou qualquer endpoint
+```
+
+Se algum falhar, me peça pra investigar.
+
+---
+
 ## 🔌 IDs e endpoints importantes
 
 ### Supabase
