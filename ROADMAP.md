@@ -278,20 +278,62 @@ Identificadas em sessão de 2026-04-24. Estado atual:
 
 ## 🎯 Próximos passos (curto prazo)
 
-**Essa semana:**
-1. Validar que os 7 posts Instagram saem automaticamente (pg_cron rodando)
-2. Pedro escolher foto de perfil Instagram (1-6)
-3. Pedro marcar call com Daniela pra testemunho
+### ✅ Já feito (2026-04-26)
+- Blog `/blog/` no ar com 12 posts agendados (3 meses de conteúdo)
+- 7 posts Instagram agendados via pg_cron, dia1 já publicado
+- Memorial Descritivo com PDF + DOCX baixáveis
+- Modal de contato com modo "ticket" pra projetos
+- Aba "Mensagens" no admin com filtros e ações
 
-**Próximas 2 semanas:**
-4. Implementar "indique e ganhe" no dashboard
-5. Estrutura inicial de blog `/blog/` pra SEO
-6. Primeiros 3 artigos de blog (long-tail)
+### 🔥 Top 5 melhorias do site (priorizadas em 26/04)
+Identificadas em sessão de planejamento. Ordem de impacto:
 
-**Próximo mês:**
-7. Planejar Semana 2 do Instagram (com base no engajamento da semana 1)
-8. Setup email do domínio (Cloudflare Routing)
-9. Renovar token Meta + automatizar renovação
+1. **Indique-e-ganhe** ⭐ — viral loop de baixo custo
+   - Link único no dashboard de cada usuário
+   - Indicado: 1º projeto extra grátis
+   - Indicador: R$ 50 cashback quando indicado pagar 1º projeto
+   - Justificativa: 10x mais barato que Google Ads, 5x mais conversão
+
+2. **Onboarding guiado** ✅ EM ANDAMENTO (escolhido pra fazer 26/04)
+   - Tour overlay no primeiro acesso ao dashboard
+   - Estado salvo em `user_metadata.onboarded`
+   - Reduz dropout do primeiro uso (estimado 30-50% atualmente)
+
+3. **Notificações por email pro usuário**
+   - "Sua planilha está pronta" quando processamento termina
+   - "Você ganhou R$ X de cashback"
+   - "Faz 30 dias sem usar — vamos lá?"
+   - Mantém engajamento sem custo recorrente
+
+4. **WhatsApp como canal de contato**
+   - Botão verde flutuante em todas as páginas
+   - Mensagem pré-preenchida com contexto da página
+   - Brasileiro responde WhatsApp 10x mais rápido que email
+
+5. **Página de cases/depoimento**
+   - `/cases.html` com card da Daniela (após call de testemunho)
+   - Quote, foto, métrica concreta
+   - Sem prova social, todo o resto rende metade
+
+### 🛠️ Quick wins paralelos (1-2h cada)
+- Templates email Supabase em PT-BR (hoje sai em inglês)
+- Linkagem interna entre posts do blog (SEO booster)
+- Calculadora de preço interativa na landing
+- Página `/precos.html` dedicada (hoje misturado na landing)
+- Avatar default colorido (inicial em vez de cinza genérico)
+
+### ⚠️ NÃO fazer agora
+- Mobile app / PWA — exagero pra 3 usuários
+- Programa de afiliados — só faz sentido com 100+ usuários
+- Landing por disciplina — overkill antes de SEO básico validar
+- Pagar Google Ads — antes do PMF não vale
+- Reescrever em React — funciona até fase 3
+- Redesign visual completo — está OK, foco em features
+
+### 🔁 Pendências infra (recorrentes)
+- Renovar token Meta antes de 13/06/2026 (60 dias do gerado em 14/04)
+- Setup email do domínio (Cloudflare Routing — pendente decisão Pedro)
+- Plugar Gemini 2.5 Flash Image (Fase 2 do Instagram)
 
 ---
 
