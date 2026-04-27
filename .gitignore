@@ -1,0 +1,107 @@
+# ────────────────────────────────────────────────────────────────
+# Secrets — nunca subir
+# ────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# API keys e tokens em arquivos avulsos
+*.key
+*.pem
+api.txt
+api_keys.txt
+secrets.json
+credentials.json
+
+# ────────────────────────────────────────────────────────────────
+# Python (backend)
+# ────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+env/
+
+# ────────────────────────────────────────────────────────────────
+# Outputs do backend e arquivos de teste
+# ────────────────────────────────────────────────────────────────
+backend/_preview_*.json
+backend/_temp_*
+backend/_local_*
+TESTE_*.xlsx
+TESTE_*.csv
+quantitativos_aiarq_*.xlsx
+teste_*.xlsx
+teste_*.csv
+
+# Claude Code working files
+.claude/
+HISTORICO_*.md
+
+# Pastas de teste com binários grandes
+*.dwg
+*.dxf
+profiles_template.csv
+profiles_export.csv
+
+# PDF de manuais e referências (não devem ir pro repo)
+"Manual de Elaboração de Orçamentos - Obras.pdf"
+*Manual*.pdf
+
+# ────────────────────────────────────────────────────────────────
+# Frontend / build
+# ────────────────────────────────────────────────────────────────
+node_modules/
+dist/
+build/
+.next/
+.cache/
+.parcel-cache/
+
+# Frontend embedded (foi adicionado por engano)
+frontend/
+
+# ────────────────────────────────────────────────────────────────
+# Editor / IDE
+# ────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ────────────────────────────────────────────────────────────────
+# Sistema operacional
+# ────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# ────────────────────────────────────────────────────────────────
+# Imagens auxiliares (logos, mockups antigos) — não vão pro deploy
+# ────────────────────────────────────────────────────────────────
+logo-instagram.png
+logo-instagram-hd.png
+logo-dark-centralizado.png
+logo-opcao*.png
+
+# ────────────────────────────────────────────────────────────────
+# Arquivos do workflow GitHub Pages que não devem ir pro repo
+# ────────────────────────────────────────────────────────────────
+_site/
+.github/.cache/
