@@ -1,0 +1,338 @@
+# 🤖 Contexto pra Claude — AI.arq
+
+> **Você é Claude trabalhando no projeto AI.arq.** Esse arquivo é a sua orientação inicial. Lê tudo aqui antes de agir. O dono do projeto é o **Pedro Zellmer** (não-técnico, prefere ações em auto mode, fala português brasileiro coloquial).
+>
+> **Última atualização:** 2026-04-26
+
+---
+
+## 📋 Quick start (leia isso primeiro)
+
+Se você é uma sessão nova de Claude lendo isso pela primeira vez:
+
+1. **Leia este arquivo inteiro** (15min) — pega o panorama
+2. **Leia `ROADMAP.md`** (na raiz, mesmo lugar) — visão de longo prazo + decisões
+3. Pra qualquer dúvida específica do código, **leia o arquivo direto** (não confie em memória)
+4. **Auto mode é o padrão** — Pedro prefere que você execute em vez de pedir confirmação. Só pare pra perguntar se for destrutivo.
+5. **Português coloquial** — sem jargão técnico em explicações pro Pedro. Use "você" e seja direto.
+
+---
+
+## 👤 Quem é o usuário
+
+- **Nome:** Pedro Zellmer
+- **Email:** zarelalopes@gmail.com (admin do sistema)
+- **WhatsApp:** (21) 98207-9721
+- **Empresa:** Fami Capital (separado do AI.arq, mas é o mesmo Pedro)
+- **Perfil técnico:** **NÃO é dev**. Não roda comandos, não edita código manualmente. Você executa tudo.
+- **Estilo de trabalho:**
+  - Prefere AUTO MODE (executa sem perguntar)
+  - Manda screenshots pra apontar problemas
+  - Direto e objetivo, gosta de respostas curtas
+  - Português coloquial brasileiro ("né", "tá", "bora")
+  - Não quer relatórios longos, quer ação
+- **Coisas que ele odeia:**
+  - Jargão técnico desnecessário
+  - Promessas vazias ("posso fazer tal coisa") — quer que faça
+  - Texto longo demais quando uma frase resolve
+  - Esquecimento de regras já estabelecidas (especialmente as duras)
+
+---
+
+## 🎯 O que é AI.arq
+
+**SaaS brasileiro pra arquitetos** que gera planilha de quantitativos a partir de CAD (PDF, DWG, DXF). A IA lê as pranchas, identifica 18 disciplinas, e devolve XLSX com referência SINAPI/TCPO.
+
+- **Site:** https://ai.arq.br
+- **Backend:** https://ai-arq.onrender.com (Render)
+- **Tagline atual:** "Quantitativo com IA" (NÃO "Orçamento com IA" — corrigido)
+- **Fase atual:** Fase 1 (quantitativo) do roadmap de 7 fases
+- **Estado:** Beta v0.5.0 · 3 usuários cadastrados (1 ativa: Daniela Teixeira/DTZ Arquitetura)
+
+### Modelo de negócio
+- **1º projeto: GRÁTIS** (sem cartão)
+- R$ 97 (1-5 pranchas) · R$ 157 (6-10) · R$ 247 (11-20) · +R$ 10/prancha extra
+- Sem mensalidade, paga só quando usa
+- Cashback granular: R$0,10/item validado (até R$20) + R$20 upload planilha + R$5 cotação fornecedor
+
+---
+
+## 🚨 Regras DURAS (nunca violar)
+
+Essas 6 regras são intransigíveis. Se você sugerir algo que violar, Pedro vai te corrigir na hora.
+
+1. **🚨 NUNCA estimar como "confirmado"** — só BRANCO (medido) o que veio direto do CAD. Tudo o resto é LARANJA (estimado, revisar). Default sempre `estimado`, nunca `confirmado`.
+
+2. **🚨 Isolamento absoluto de projetos** — cada projeto processado em isolamento. Zero contaminação entre projetos. Zero benchmarks hardcoded. Valor = IA lendo arquivos + lógica geométrica, NÃO memorização.
+
+3. **🚨 Calibração por densidade/ratio (nunca valor absoluto)** — orçamentos antigos alimentam ratios (lum/m², sprinkler/m²) pra ALERTAR anomalias. Nunca copiam valores absolutos pro projeto novo.
+
+4. **🚨 Taxonomia hierárquica, sem achatar** — itens vivem em árvore (folha → família → grupo → capítulo). Cor, PD, tipo específico nunca somem porque afetam compra real.
+
+5. **🚨 NÃO precificar, NÃO substituir profissional** — AI.arq gera **quantitativo**, não orçamento. Quem precifica é o orçamentista. Toda interface deixa isso claro.
+
+6. **🚨 LGPD: usuário = controlador, AI.arq = operador** — dados de cliente final pertencem ao usuário, AI.arq apenas processa.
+
+---
+
+## 🏗️ Arquitetura técnica
+
+| Camada | Tecnologia | Onde fica |
+|---|---|---|
+| **Frontend** | HTML estático + Tailwind CDN + JS vanilla + Supabase JS | GitHub Pages (`ai.arq.br`) — domínio próprio |
+| **Backend** | FastAPI (Python 3.13) + Anthropic Claude (Sonnet 4.5 + Haiku 4.5) | Render (free tier) |
+| **Banco** | Supabase Postgres | Supabase US-West-2 |
+| **Storage de arquivos** | Tempfile no Render (efêmero) + Supabase Storage | Bucket `contact-attachments` |
+| **Pagamentos** | Stripe | — |
+| **Auth** | Supabase Auth (email/senha + Google OAuth) | — |
+| **Email transacional** | Supabase default (`noreply@mail.app.supabase.io`) | Migrar pra Resend ou SMTP custom (pendente) |
+| **Instagram automation** | pg_cron interno (Supabase) + Meta Graph API v21 | `/api/instagram/scheduler/tick` |
+| **Deploy** | GitHub Actions (.github/workflows/deploy-pages.yml) | Push em `main` → deploy automático |
+
+### Por que HTML estático sem framework
+Pedro não é dev → Claude consegue editar direto sem build pipeline. GitHub Pages = R$0. Migração pra React fica pra Fase 4-5 quando interface ficar complexa.
+
+---
+
+## 📁 Estrutura de pastas
+
+```
+projeto_arq/                          ← raiz do repo (deploy GitHub Pages)
+├── CLAUDE.md                         ← este arquivo
+├── ROADMAP.md                        ← visão de longo prazo + decisões
+├── VERSION                           ← v0.5.0
+├── index.html                        ← landing pública
+├── login.html, cadastro.html         ← auth
+├── dashboard.html                    ← área do usuário (com sidebar)
+├── projeto.html                      ← detalhe de um projeto + Reportar problema
+├── revisao.html                      ← interface de revisão dos itens
+├── admin.html                        ← painel admin (Pedro only)
+├── faq.html, termos.html, privacidade.html
+├── chat-widget.js                    ← widget de chat público (lead capture)
+├── contact-modal.js                  ← modal de contato (com modo "ticket")
+├── onboarding-tour.js                ← tour 5 steps pra novo usuário
+├── sitemap.xml, robots.txt           ← SEO
+│
+├── blog/                             ← /blog/ no site
+│   ├── index.html                    ← listagem de posts (filtra por data)
+│   ├── posts.json                    ← FONTE DA VERDADE dos 12 posts
+│   ├── generate.py                   ← gera os HTMLs a partir do JSON
+│   ├── posts/                        ← 12 HTMLs gerados
+│   └── downloads/                    ← Memorial Descritivo PDF + DOCX
+│
+├── instagram_assets/                 ← imagens dos posts IG
+│   └── semana1/                      ← 7 PNGs 1080x1080
+│
+├── backend/                          ← código do backend FastAPI
+│   ├── main.py                       ← endpoint principal (~5000 linhas)
+│   ├── instagram_*.py                ← agente IG (api, agent, store, webhook)
+│   ├── analyzer.py                   ← lê CAD e extrai itens
+│   ├── spreadsheet.py                ← gera XLSX
+│   ├── consolidator.py               ← consolida itens
+│   ├── cashback.py                   ← lógica de cashback
+│   ├── density.py                    ← calibração por densidade
+│   ├── sinapi/, tcpo/                ← bases SINAPI e TCPO carregadas
+│   └── assets/                       ← fontes Montserrat + fotos Unsplash
+│
+├── .github/workflows/                ← deploy automático
+│   └── deploy-pages.yml              ← workflow customizado pra GitHub Pages
+│
+└── HISTORICO_*.md                    ← históricos de sessões antigas
+```
+
+---
+
+## 🔌 IDs e endpoints importantes
+
+### Supabase
+- **Project ID:** `kqjabzwgbfuivzlcfvvu` (nome: ai-arq, US-East-1)
+- **URL:** `https://kqjabzwgbfuivzlcfvvu.supabase.co`
+- **Anon key:** está hardcoded em vários HTMLs (não é segredo, é meant pra ser público)
+- **Service role key:** NÃO usar — backend usa anon key (suficiente pra operação)
+
+### GitHub
+- **Repo:** https://github.com/pedrozellmer/ai-arq
+- **Branch principal:** `main`
+- **Workflow de deploy:** `.github/workflows/deploy-pages.yml`
+
+### Render
+- **Service:** ai-arq-backend
+- **URL:** https://ai-arq.onrender.com
+- **Deploy:** automático em push pro main
+- **Free tier:** o serviço dorme após 15min de inatividade
+
+### Instagram (Meta Graph API v21)
+- **App:** AI.arq-IG (ID: 1421819986294553)
+- **Conta IG:** @ai.arq.br (ID: 17841427729064017)
+- **Token:** META_ACCESS_TOKEN (env Render, expira ~13/06/2026)
+- **Webhook:** https://ai-arq.onrender.com/api/instagram/webhook
+
+### Stripe
+- Configurado, chave em env do Render
+
+---
+
+## 📊 Estado atual das features
+
+### ✅ No ar e funcionando
+- Landing page com hero, recursos, preços, FAQ
+- Cadastro/login (Supabase Auth + Google OAuth)
+- Dashboard do usuário (projetos, cashback, cadastro, pagamentos)
+- Upload de CAD (PDF/DWG/DXF) → processamento → planilha XLSX
+- Sistema de cores (BRANCO medido / LARANJA estimado / CINZA metadado / ROXO indireto)
+- Revisão inline com cashback automático (R$0,10/item até R$20)
+- Comparativo de fornecedores (upload XLSX múltiplos → quadro comparativo)
+- Painel admin (Pedro): usuários, códigos beta, projetos, calibração, NPS, insights, leads chat, mensagens
+- Cadastros incompletos visíveis no admin com botão "Reenviar login" (magic link)
+- Chat widget público (Claude Haiku 4.5, lead capture com nome+email)
+- Modal de contato com modo "ticket" (do projeto: assuntos pré-definidos + upload)
+- Aba "Mensagens" no admin com filtros, badges, ações (responder por email, marcar lida, arquivar, WhatsApp)
+- Onboarding tour 5 steps pro primeiro acesso (auto-trigger se onboarded != true)
+- Blog com 12 posts agendados (1/semana, 26/04 a 12/07/2026), pesquisa profunda + fontes ABNT
+- Memorial Descritivo PDF + DOCX baixáveis no post 1
+- Instagram com 7 posts agendados via pg_cron (dia1 publicado em 26/04)
+- SEO: sitemap.xml, robots.txt, schema.org Article em cada post
+
+### ⏳ Pendente
+- **Indique-e-ganhe** ⭐ TOP PRIORIDADE (viral loop)
+- **Notificações por email** (planilha pronta, cashback ganho, retorno após 30d)
+- **WhatsApp como canal de contato** (botão flutuante)
+- **Página de cases** (após gravar testemunho da Daniela)
+- Templates email Supabase em PT-BR
+- Linkagem interna entre posts do blog
+- Calculadora de preço interativa na landing
+- Página `/precos.html` dedicada
+- Setup email do domínio (Cloudflare Email Routing — pendente decisão Pedro)
+- Renovar token Meta antes de 13/06/2026
+
+### ❌ NÃO fazer agora (decisão tomada)
+- Mobile app / PWA — exagero pra 3 usuários
+- Programa de afiliados — só faz sentido com 100+ usuários
+- Pagar Google/Meta Ads — antes de PMF não vale
+- Reescrever em React — funciona até Fase 3
+- Suportar fora do Brasil — foco BR até Fase 7
+- Concorrer com Trello/Asana em features genéricas
+
+---
+
+## 🎨 Identidade visual
+
+- **Nome:** AI.arq
+- **Cores:**
+  - Indigo `#4F46E5` (primária)
+  - Cyan `#22D3EE` (acento)
+  - Dark Slate `#0F172A` (fundo escuro)
+  - Cream `#FAF7F0` (fundo claro)
+- **Fonte:** Montserrat (Bold, SemiBold, Medium, Regular, Light)
+- **Logo:** texto "AI.arq" em Montserrat Bold (sem bullet/ponto extra)
+- **Foto perfil Instagram:** opção 5 escolhida (`5-inline_dark_tagline.png`)
+
+---
+
+## 🔄 Fluxo de trabalho típico
+
+### Quando Pedro pede algo
+1. **Entenda o pedido** (não invente requisito)
+2. **Execute** — auto mode é o padrão
+3. **Commit + push** — Pedro espera ver no ar (~2min de deploy)
+4. **Comunique resultado** com:
+   - O que mudou (1-2 frases)
+   - Onde testar
+   - Próximos passos opcionais
+
+### Quando alterar HTML do site
+1. Edita o arquivo
+2. `git add` específico (NÃO use `git add -A` — adiciona muita coisa não-desejada)
+3. `git commit -m "msg em pt-br + Co-Authored-By: Claude"`
+4. `git push origin main`
+5. GitHub Pages publica em ~2min
+
+### Quando alterar backend
+1. Edita `backend/main.py` ou outros arquivos
+2. Commit + push
+3. Render faz deploy automático em ~3min
+4. Backend pode dormir (free tier) — primeira request acorda
+
+### Quando criar/alterar tabela Supabase
+1. Use a MCP `mcp__dbd6b42c-...__apply_migration` (DDL) ou `execute_sql` (DML)
+2. Migrations são versionadas automaticamente no projeto Supabase
+3. NÃO crie service role key no frontend
+
+### Quando atualizar blog
+1. Edita `blog/posts.json` (fonte da verdade)
+2. Roda `python blog/generate.py` (regenera todos os HTMLs)
+3. Commit + push (inclui posts/, sitemap.xml, robots.txt)
+4. Sitemap inclui só posts já publicados (filtra por data)
+
+### Quando atualizar Instagram
+1. Use Supabase MCP pra ver/alterar `instagram_scheduled_posts`
+2. Imagens ficam em `instagram_assets/semana1/`
+3. pg_cron roda `/api/instagram/scheduler/tick` a cada 15min automaticamente
+
+---
+
+## 🛠️ Comandos úteis
+
+```bash
+# Ver status do git
+git status --short
+
+# Conferir commit recente
+git log --oneline -5
+
+# Regenerar blog
+cd blog && python generate.py
+
+# Conferir endpoint backend
+curl https://ai-arq.onrender.com/api/instagram/scheduler/list
+
+# Ver post no ar
+curl -I https://ai.arq.br/blog/
+```
+
+---
+
+## 📚 Referências externas (pra Claude consultar)
+
+- **ROADMAP.md** — visão de longo prazo + 7 fases + decisões estratégicas
+- **README.md** (se existir) — overview rápido
+- **HISTORICO_AGENTE_INSTAGRAM.md** — como o agente IG foi configurado
+- **HISTORICO_SESSAO_COMPLETA.md** — registros de sessões antigas
+
+---
+
+## 🚧 Armadilhas conhecidas (pra não cair)
+
+1. **`git add -A`** adiciona arquivos não-desejados (TESTE_*.xlsx, _preview_*.json, etc.) — sempre seja específico nos `git add`
+2. **Render free tier dorme** — primeiro request após 15min inativo demora 30-60s
+3. **GitHub Pages cache** — às vezes precisa hard refresh (Ctrl+Shift+R) pra ver mudança
+4. **Supabase metadata não invalida** após updateUser — usuário precisa re-login pra ver mudanças
+5. **Chrome console errors com `cookieManager`** — são extensão do Chrome, ignorar
+6. **Variável Supabase JS** — em alguns HTMLs é `sb`, em outros é `sbClient`. Sempre confira antes de dar comando ao Pedro
+7. **Tailwind CSS warning no console** — usa CDN em produção, sabido, ignorar
+8. **`onboarding-tour.js`** auto-trigger só dispara se: logado + onboarded != true + (sem hash OU hash=#home)
+
+---
+
+## 💬 Como continuar conversas
+
+### Cenário: PC novo, primeira sessão Claude
+1. Pedro abre Claude Code dentro de `projeto_arq/`
+2. Claude carrega esse `CLAUDE.md` automaticamente (convenção)
+3. Claude responde a primeira pergunta já com contexto
+
+### Cenário: Memória pessoal foi pro PC novo (raro)
+A pasta `~/.claude/projects/.../memory/MEMORY.md` pode não ter sido copiada. Sem problema — esse arquivo aqui é self-contained.
+
+### Cenário: Pedro pergunta algo específico que você não sabe
+**Não invente.** Diga "Não tenho contexto disso na minha sessão. Pode me dar mais detalhes?" ou leia o arquivo relevante antes de responder.
+
+---
+
+## 🎯 Próxima ação recomendada (quando Pedro voltar)
+
+Se Pedro perguntar "o que fazemos agora?", recomenda **Indique-e-ganhe** — é a próxima alavanca de maior impacto/menor custo. Detalhado em `ROADMAP.md`.
+
+---
+
+**Boa sessão! 🚀**
