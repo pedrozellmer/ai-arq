@@ -94,8 +94,38 @@ Pedro não é dev → Claude consegue editar direto sem build pipeline. GitHub P
 
 ---
 
-## 📁 Estrutura de pastas
+## 📁 Estrutura de pastas (DUAS pastas, ambas no Desktop)
 
+> ⚠️ **Importante:** o projeto vive em **DUAS pastas separadas** no Desktop. Qualquer pessoa migrando o projeto precisa copiar AS DUAS.
+
+### `arq/` — working directory (testes + assets gerados)
+```
+arq/                                  ← cwd do shell por convenção
+├── 0326.CGR.14.*.dwg                 ← arquivos DWG de teste (Citrus)
+├── 225.AFS.*.pdf                     ← arquivos PDF de teste (AFS)
+├── *.dwg, *.pdf, *.dxf               ← outros projetos de teste
+├── TESTE_*.xlsx                      ← outputs de teste do backend
+├── quantitativos_aiarq_*.xlsx        ← outputs reais do backend pra inspeção
+│
+├── gen_carrossel_post1.py            ← script que gerou o carrossel IG
+├── gen_semana1.py                    ← script dos 7 posts IG semana 1
+├── gen_profile_pic.py                ← script da foto de perfil IG (6 opções)
+├── gen_roadmap_docx.py               ← script que gerou Roadmap_AIarq.docx
+│
+├── instagram_post1_carousel/         ← 6 PNGs do carrossel "Como funciona"
+├── instagram_semana1/                ← 7 PNGs dos posts semana 1 + LEGENDAS.md
+├── instagram_profile_pic/            ← 6 opções de foto de perfil
+│
+├── Roadmap_AIarq.docx                ← roadmap em Word pra apresentação
+├── cronograma-arquitetura.zip        ← projeto antigo Manus (referência)
+├── cronograma-arquitetura-extracted/ ← extraído do zip pra inspecionar
+│
+└── Manual de Elaboração de Orçamentos - Obras.pdf  ← referência técnica
+```
+
+**Quando usar `arq/`:** rodar scripts de geração, testar com DWG/PDF, guardar outputs do backend pra inspeção. **Não vai pro git.**
+
+### `projeto_arq/` — repositório git (código de produção)
 ```
 projeto_arq/                          ← raiz do repo (deploy GitHub Pages)
 ├── CLAUDE.md                         ← este arquivo
@@ -317,9 +347,17 @@ curl -I https://ai.arq.br/blog/
 ## 💬 Como continuar conversas
 
 ### Cenário: PC novo, primeira sessão Claude
-1. Pedro abre Claude Code dentro de `projeto_arq/`
-2. Claude carrega esse `CLAUDE.md` automaticamente (convenção)
-3. Claude responde a primeira pergunta já com contexto
+1. **Pedro copiou AS DUAS pastas** do Desktop antigo: `arq/` e `projeto_arq/`. Confirme isso antes de assumir tudo está disponível.
+2. Pedro abre Claude Code dentro de `projeto_arq/`
+3. Claude carrega esse `CLAUDE.md` automaticamente (convenção)
+4. Claude responde a primeira pergunta já com contexto
+
+### Como verificar se as duas pastas estão presentes
+```bash
+ls "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/arq" | head -5
+ls "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq" | head -5
+```
+Se uma das duas não tiver, peça pro Pedro copiar do PC antigo.
 
 ### Cenário: Memória pessoal foi pro PC novo (raro)
 A pasta `~/.claude/projects/.../memory/MEMORY.md` pode não ter sido copiada. Sem problema — esse arquivo aqui é self-contained.
