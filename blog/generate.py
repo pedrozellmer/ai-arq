@@ -102,6 +102,7 @@ FOOTER = '''
   <div class="border-t bg-gray-100">
     <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
       &copy; 2026 AI.arq · Quantitativo com IA pra arquitetos brasileiros
+      <span class="ml-2 text-gray-400">· v0.5.0 Beta</span>
     </div>
   </div>
 </footer>
