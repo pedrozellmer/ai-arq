@@ -81,6 +81,15 @@
       background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
       padding: 10px 12px; border-radius: 8px; font-size: 13px; margin-bottom: 12px;
     }
+    .aicm-context-box {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 10px;
+      padding: 12px 14px; margin-bottom: 16px;
+    }
+    .aicm-context-icon { font-size: 20px; line-height: 1; }
+    .aicm-context-text { font-size: 13px; color: #1e1b4b; line-height: 1.5; }
+    .aicm-context-text strong { color: #4f46e5; }
+    .aicm-file-info { font-size: 11px; color: #16a34a; margin-top: 4px; }
   `;
   var style = document.createElement('style');
   style.textContent = css;
@@ -94,51 +103,87 @@
     <div class="aicm-modal" onclick="event.stopPropagation()">
       <div class="aicm-header">
         <div>
-          <h2 class="aicm-title">Fale com a gente</h2>
-          <p class="aicm-subtitle">Dúvida, sugestão, reclamação, parceria — todas chegam aqui.</p>
+          <h2 class="aicm-title" id="aicm-title-h">Fale com a gente</h2>
+          <p class="aicm-subtitle" id="aicm-subtitle-p">Dúvida, sugestão, reclamação, parceria — todas chegam aqui.</p>
         </div>
         <button class="aicm-close" onclick="aiArqContactClose()" aria-label="Fechar">
           <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
       <div class="aicm-body" id="aicm-body">
-        <form id="aicm-form" onsubmit="return aiArqContactSubmit(event)">
+        <form id="aicm-form" onsubmit="return aiArqContactSubmit(event)" enctype="multipart/form-data">
           <div id="aicm-error" class="aicm-error" style="display:none"></div>
-          <div class="aicm-row">
-            <div class="aicm-field">
-              <label class="aicm-label" for="aicm-name">Seu nome *</label>
-              <input class="aicm-input" type="text" id="aicm-name" name="name" required maxlength="200">
+
+          <!-- Box informativo (só aparece em modo ticket de projeto) -->
+          <div id="aicm-context-box" class="aicm-context-box" style="display:none">
+            <div class="aicm-context-icon">📋</div>
+            <div class="aicm-context-text" id="aicm-context-text"></div>
+          </div>
+
+          <!-- Campos de identificação (escondidos em modo ticket) -->
+          <div id="aicm-identity-fields">
+            <div class="aicm-row">
+              <div class="aicm-field">
+                <label class="aicm-label" for="aicm-name">Seu nome *</label>
+                <input class="aicm-input" type="text" id="aicm-name" name="name" required maxlength="200">
+              </div>
+              <div class="aicm-field">
+                <label class="aicm-label" for="aicm-email">Seu email *</label>
+                <input class="aicm-input" type="email" id="aicm-email" name="email" required maxlength="200">
+              </div>
             </div>
-            <div class="aicm-field">
-              <label class="aicm-label" for="aicm-email">Seu email *</label>
-              <input class="aicm-input" type="email" id="aicm-email" name="email" required maxlength="200">
+            <div class="aicm-row">
+              <div class="aicm-field">
+                <label class="aicm-label" for="aicm-phone">WhatsApp (opcional)</label>
+                <input class="aicm-input" type="tel" id="aicm-phone" name="phone" maxlength="50" placeholder="(21) 9 9999-9999">
+              </div>
+              <div class="aicm-field">
+                <label class="aicm-label" for="aicm-type">Tipo *</label>
+                <select class="aicm-select" id="aicm-type" name="type" required>
+                  <option value="duvida">Dúvida</option>
+                  <option value="sugestao">Sugestão</option>
+                  <option value="reclamacao">Reclamação</option>
+                  <option value="parceria">Parceria</option>
+                  <option value="elogio">Elogio</option>
+                  <option value="outro">Outro</option>
+                </select>
+              </div>
             </div>
           </div>
-          <div class="aicm-row">
-            <div class="aicm-field">
-              <label class="aicm-label" for="aicm-phone">WhatsApp (opcional)</label>
-              <input class="aicm-input" type="tel" id="aicm-phone" name="phone" maxlength="50" placeholder="(21) 9 9999-9999">
-            </div>
-            <div class="aicm-field">
-              <label class="aicm-label" for="aicm-type">Tipo *</label>
-              <select class="aicm-select" id="aicm-type" name="type" required>
-                <option value="duvida">Dúvida</option>
-                <option value="sugestao">Sugestão</option>
-                <option value="reclamacao">Reclamação</option>
-                <option value="parceria">Parceria</option>
-                <option value="elogio">Elogio</option>
-                <option value="outro">Outro</option>
-              </select>
-            </div>
-          </div>
-          <div class="aicm-field">
+
+          <!-- Subject livre (modo geral) -->
+          <div id="aicm-subject-free-wrap" class="aicm-field">
             <label class="aicm-label" for="aicm-subject">Assunto (opcional)</label>
             <input class="aicm-input" type="text" id="aicm-subject" name="subject" maxlength="300" placeholder="Ex: Dúvida sobre o cashback">
           </div>
+
+          <!-- Subject pré-definido (modo ticket) -->
+          <div id="aicm-subject-preset-wrap" class="aicm-field" style="display:none">
+            <label class="aicm-label" for="aicm-subject-preset">Sobre o que é? *</label>
+            <select class="aicm-select" id="aicm-subject-preset" name="subject_preset">
+              <option value="item-errado">Item errado ou faltando na planilha</option>
+              <option value="quantidade-incorreta">Quantidade não bate com o projeto</option>
+              <option value="disciplina-nao-detectada">Disciplina não foi detectada</option>
+              <option value="cor-classificacao">Classificação de cor (BRANCO/LARANJA) errada</option>
+              <option value="erro-processamento">Erro durante o processamento</option>
+              <option value="planilha-nao-baixa">Planilha XLSX não baixa</option>
+              <option value="reprocessar">Pedir reprocessamento manual</option>
+              <option value="outro">Outro assunto</option>
+            </select>
+          </div>
+
           <div class="aicm-field">
             <label class="aicm-label" for="aicm-message">Sua mensagem *</label>
             <textarea class="aicm-textarea" id="aicm-message" name="message" required maxlength="5000" placeholder="Conta pra gente o que tá acontecendo..."></textarea>
           </div>
+
+          <!-- Upload de arquivo (sempre disponível, opcional) -->
+          <div class="aicm-field">
+            <label class="aicm-label" for="aicm-file">Anexo (opcional) <span style="font-weight:400;color:#94a3b8">— print, planilha, doc até 10MB</span></label>
+            <input class="aicm-input" type="file" id="aicm-file" name="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.doc,.docx,.txt" style="padding:6px 12px">
+            <p id="aicm-file-info" class="aicm-file-info" style="display:none"></p>
+          </div>
+
           <button type="submit" class="aicm-submit" id="aicm-submit-btn">Enviar mensagem</button>
           <p class="aicm-disclaimer">Resposta em até 24h úteis. Seus dados não são compartilhados.</p>
         </form>
@@ -151,26 +196,24 @@
   document.body.appendChild(modal);
 
   // ── API global ────────────────────────────────────────────────────
-  // Aceita string (compat antigo: tipo só) OU objeto:
-  //   { type, subject, message, name, email, phone }
+  // Modos:
+  //   - geral (default): form completo, pessoa preenche tudo
+  //   - ticket: esconde nome/email/whatsapp/tipo (já temos via session) e mostra
+  //             dropdown de assuntos pré-definidos. Usado dentro de área autenticada
+  //             tipo projeto.html. Usa: opts.mode='ticket', opts.contextLabel,
+  //             opts.contextDetails, opts.name, opts.email, opts.type
   window.aiArqContactOpen = function (opts) {
     modal.classList.add('open');
 
-    // Backwards compat: string vira { type: 'xxx' }
     if (typeof opts === 'string') opts = { type: opts };
     opts = opts || {};
 
+    var isTicket = opts.mode === 'ticket';
+
+    // Pré-preenche campos hidden (sempre, ainda que escondidos)
     if (opts.type) {
       var sel = document.getElementById('aicm-type');
       if (sel) sel.value = opts.type;
-    }
-    if (opts.subject) {
-      var subj = document.getElementById('aicm-subject');
-      if (subj) subj.value = opts.subject;
-    }
-    if (opts.message) {
-      var msg = document.getElementById('aicm-message');
-      if (msg) msg.value = opts.message;
     }
     if (opts.name) {
       var n = document.getElementById('aicm-name');
@@ -184,12 +227,77 @@
       var p = document.getElementById('aicm-phone');
       if (p) p.value = opts.phone;
     }
+    if (opts.subject) {
+      var subj = document.getElementById('aicm-subject');
+      if (subj) subj.value = opts.subject;
+    }
+    if (opts.message) {
+      var msg = document.getElementById('aicm-message');
+      if (msg) msg.value = opts.message;
+    }
 
-    // Foco: vai pra mensagem se já tem nome+email pre-preenchidos, senão pro nome
+    // Modo ticket: simplifica drasticamente o form
+    var identity = document.getElementById('aicm-identity-fields');
+    var subjectFreeWrap = document.getElementById('aicm-subject-free-wrap');
+    var subjectPresetWrap = document.getElementById('aicm-subject-preset-wrap');
+    var contextBox = document.getElementById('aicm-context-box');
+    var contextText = document.getElementById('aicm-context-text');
+    var titleH = document.getElementById('aicm-title-h');
+    var subtitleP = document.getElementById('aicm-subtitle-p');
+
+    if (isTicket) {
+      // Esconde campos de identificação (já temos via session)
+      identity.style.display = 'none';
+      // Esconde subject livre, mostra dropdown
+      subjectFreeWrap.style.display = 'none';
+      subjectPresetWrap.style.display = '';
+      // Pré-seleciona subject preset se passado
+      if (opts.subjectPreset) {
+        var presetSel = document.getElementById('aicm-subject-preset');
+        if (presetSel) presetSel.value = opts.subjectPreset;
+      }
+      // Mostra context box com info do projeto
+      if (opts.contextLabel || opts.contextDetails) {
+        contextBox.style.display = 'flex';
+        var html = '';
+        if (opts.contextLabel) html += '<strong>' + opts.contextLabel + '</strong><br>';
+        if (opts.contextDetails) html += opts.contextDetails;
+        contextText.innerHTML = html;
+      }
+      // Customiza title
+      titleH.textContent = opts.titleOverride || 'Abrir chamado';
+      subtitleP.textContent = opts.subtitleOverride || 'Conta o que aconteceu — a gente responde rapidinho.';
+      // Limpa a mensagem se foi preenchida com template feio
+      // (o modo ticket é mais limpo, usuário escreve o que quiser)
+      if (opts.clearMessageInTicket !== false) {
+        var msgEl = document.getElementById('aicm-message');
+        if (msgEl) msgEl.value = '';
+      }
+    } else {
+      // Modo geral: tudo visível
+      identity.style.display = '';
+      subjectFreeWrap.style.display = '';
+      subjectPresetWrap.style.display = 'none';
+      contextBox.style.display = 'none';
+      titleH.textContent = 'Fale com a gente';
+      subtitleP.textContent = 'Dúvida, sugestão, reclamação, parceria — todas chegam aqui.';
+    }
+
+    // Reset file input (pode ter ficado de envio anterior)
+    var fileEl = document.getElementById('aicm-file');
+    if (fileEl) {
+      fileEl.value = '';
+      var info = document.getElementById('aicm-file-info');
+      if (info) info.style.display = 'none';
+    }
+
+    // Foco: pra ticket vai direto pra mensagem
     setTimeout(function () {
-      var focusEl = (opts.name && opts.email)
+      var focusEl = isTicket
         ? document.getElementById('aicm-message')
-        : document.getElementById('aicm-name');
+        : (opts.name && opts.email)
+          ? document.getElementById('aicm-message')
+          : document.getElementById('aicm-name');
       if (focusEl) focusEl.focus();
     }, 100);
   };
@@ -200,6 +308,18 @@
     if (err) err.style.display = 'none';
   };
 
+  // Mapa de subjects pré-definidos -> texto humano
+  var SUBJECT_PRESETS = {
+    'item-errado':              'Item errado ou faltando na planilha',
+    'quantidade-incorreta':     'Quantidade não bate com o projeto',
+    'disciplina-nao-detectada': 'Disciplina não foi detectada',
+    'cor-classificacao':        'Classificação de cor (BRANCO/LARANJA) errada',
+    'erro-processamento':       'Erro durante o processamento',
+    'planilha-nao-baixa':       'Planilha XLSX não baixa',
+    'reprocessar':              'Pedir reprocessamento manual',
+    'outro':                    'Outro assunto',
+  };
+
   window.aiArqContactSubmit = function (event) {
     event.preventDefault();
     var btn = document.getElementById('aicm-submit-btn');
@@ -208,19 +328,51 @@
     btn.disabled = true;
     btn.textContent = 'Enviando...';
 
-    var data = {
-      name: document.getElementById('aicm-name').value.trim(),
-      email: document.getElementById('aicm-email').value.trim(),
-      phone: document.getElementById('aicm-phone').value.trim(),
-      type: document.getElementById('aicm-type').value,
-      subject: document.getElementById('aicm-subject').value.trim(),
-      message: document.getElementById('aicm-message').value.trim(),
-    };
+    // Detecta se está em modo ticket (subject preset visível)
+    var subjectPresetWrap = document.getElementById('aicm-subject-preset-wrap');
+    var isTicket = subjectPresetWrap && subjectPresetWrap.style.display !== 'none';
+
+    // Monta subject final
+    var subject = '';
+    if (isTicket) {
+      var presetVal = document.getElementById('aicm-subject-preset').value;
+      var presetLabel = SUBJECT_PRESETS[presetVal] || presetVal;
+      // Anexa subject pre-preenchido (ex: "Projeto XYZ — ...") se existir
+      var existing = document.getElementById('aicm-subject').value.trim();
+      subject = existing ? '[' + presetLabel + '] ' + existing : presetLabel;
+    } else {
+      subject = document.getElementById('aicm-subject').value.trim();
+    }
+
+    // Usa FormData pra suportar upload de arquivo
+    var fd = new FormData();
+    fd.append('name',    document.getElementById('aicm-name').value.trim());
+    fd.append('email',   document.getElementById('aicm-email').value.trim());
+    fd.append('phone',   document.getElementById('aicm-phone').value.trim());
+    fd.append('type',    document.getElementById('aicm-type').value);
+    fd.append('subject', subject);
+    fd.append('message', document.getElementById('aicm-message').value.trim());
+
+    var fileEl = document.getElementById('aicm-file');
+    var fileName = '';
+    if (fileEl && fileEl.files && fileEl.files[0]) {
+      var f = fileEl.files[0];
+      if (f.size > 10 * 1024 * 1024) {
+        errorEl.textContent = 'Arquivo grande demais (máx 10MB).';
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Enviar mensagem';
+        return false;
+      }
+      fd.append('file', f, f.name);
+      fileName = f.name;
+    }
+
+    var sentEmail = document.getElementById('aicm-email').value.trim();
 
     fetch(API + '/api/contact', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: fd,  // sem Content-Type — browser seta multipart com boundary
     })
       .then(function (r) { return r.json(); })
       .then(function (res) {
@@ -232,19 +384,20 @@
           return;
         }
         // Sucesso
-        document.getElementById('aicm-body').innerHTML = `
-          <div class="aicm-success">
-            <div class="aicm-success-icon">✓</div>
-            <div class="aicm-success-title">Mensagem enviada!</div>
-            <div class="aicm-success-msg">A gente recebeu sua mensagem e responde em até 24h úteis no email <strong>${data.email}</strong>.</div>
-            <button class="aicm-submit" onclick="aiArqContactClose()" style="max-width:200px;margin:0 auto;">Fechar</button>
-          </div>
-        `;
-        // Reset depois de fechar
+        var emailHtml = sentEmail
+          ? 'A gente responde em até 24h úteis no email <strong>' + sentEmail + '</strong>.'
+          : 'A gente responde em até 24h úteis.';
+        document.getElementById('aicm-body').innerHTML =
+          '<div class="aicm-success">' +
+          '<div class="aicm-success-icon">✓</div>' +
+          '<div class="aicm-success-title">Mensagem enviada!</div>' +
+          '<div class="aicm-success-msg">' + emailHtml + '</div>' +
+          '<button class="aicm-submit" onclick="aiArqContactClose()" style="max-width:200px;margin:0 auto;">Fechar</button>' +
+          '</div>';
         setTimeout(function () {
           var b = document.getElementById('aicm-body');
           if (b && !modal.classList.contains('open')) {
-            location.reload();  // reset simples — recarrega o modal
+            location.reload();
           }
         }, 5000);
       })
@@ -257,6 +410,23 @@
 
     return false;
   };
+
+  // Mostra info do arquivo selecionado
+  document.addEventListener('change', function (ev) {
+    if (ev.target && ev.target.id === 'aicm-file') {
+      var info = document.getElementById('aicm-file-info');
+      if (!info) return;
+      var f = ev.target.files && ev.target.files[0];
+      if (f) {
+        var sizeKB = Math.round(f.size / 1024);
+        var sizeStr = sizeKB > 1024 ? (sizeKB / 1024).toFixed(1) + ' MB' : sizeKB + ' KB';
+        info.textContent = '✓ ' + f.name + ' (' + sizeStr + ')';
+        info.style.display = 'block';
+      } else {
+        info.style.display = 'none';
+      }
+    }
+  });
 
   // ── ESC fecha ─────────────────────────────────────────────────────
   document.addEventListener('keydown', function (e) {

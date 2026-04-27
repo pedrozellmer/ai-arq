@@ -68,405 +68,612 @@
     {
       "slug": "como-fazer-planilha-de-quantitativos-de-obra",
       "title": "Como Fazer Planilha de Quantitativos de Obra: Passo a Passo Completo (2026)",
-      "description": "Tutorial completo de como fazer planilha de quantitativos de obra: estrutura, disciplinas, unidades, fórmulas e modelo grátis. Inclui as 18 disciplinas obrigatórias.",
-      "keywords": "planilha de quantitativos, como fazer planilha de quantitativos, quantitativo de obra, levantamento de quantitativos, planilha quantitativos arquitetura",
+      "description": "Tutorial completo de como fazer planilha de quantitativos de obra usando SINAPI 2026: estrutura, disciplinas, unidades, memória de cálculo e exemplos práticos.",
+      "keywords": "planilha de quantitativos, como fazer planilha de quantitativos, quantitativo de obra, levantamento de quantitativos, SINAPI 2026, ORSE, memória de cálculo",
       "publish_date": "2026-05-03",
-      "estimated_read_min": 10,
+      "estimated_read_min": 12,
       "category": "Tutorial",
-      "intro": "Fazer planilha de quantitativos de obra do jeito certo evita prejuízo grande lá na frente. Quantitativo errado = orçamento errado = obra estourando o cronograma e o bolso. Neste guia completo, vou mostrar passo a passo como estruturar uma planilha de quantitativos profissional, quais disciplinas considerar, quais unidades usar e como evitar os erros mais comuns.",
+      "intro": "Fazer planilha de quantitativos do jeito certo evita prejuízo grande lá na frente. Quantitativo errado = orçamento errado = obra estourando cronograma e bolso. Esse guia mostra passo a passo: como classificar serviços por disciplina, como obter e usar a tabela SINAPI 2026, como estruturar memória de cálculo, quais colunas são obrigatórias, e os erros que aparecem mais em auditoria. No fim, mostro como acelerar tudo isso de 8 horas pra 5 minutos com IA.",
       "sections": [
         {
           "h2": "O que é planilha de quantitativos (e o que NÃO é)",
-          "body": "Planilha de quantitativos é o documento que lista todos os itens da obra com suas respectivas quantidades — sem preços. Por exemplo: \"piso porcelanato 60x60cm: 142 m²\", \"porta de madeira 0,80x2,10m: 8 unidades\", \"luminária LED 60x60cm: 24 unidades\".\n\nNão confunda com:\n- Planilha de orçamento: já tem preços. É a quantidade × valor unitário.\n- Memorial descritivo: descreve em texto, não conta.\n- Lista de materiais: pode ser parecida, mas geralmente é por compra (formato comercial), não por levantamento.\n\nO quantitativo é o INSUMO pro orçamentista trabalhar. Sem ele, qualquer preço é chute."
+          "body": "Planilha de quantitativos lista todos os itens da obra com suas respectivas quantidades — sem preços. Por exemplo: piso porcelanato 60x60cm: 142 m², porta de madeira 0,80x2,10m: 8 unidades, luminária LED 60x60cm: 24 unidades.\n\nNão confunda com:\n- Planilha de orçamento — já tem preços (quantidade × valor unitário).\n- Memorial descritivo — descreve em texto, não conta.\n- Lista de materiais — geralmente formato comercial pra compra, não pra levantamento técnico.\n\nO quantitativo é o INSUMO pro orçamentista trabalhar. Sem ele, qualquer preço é chute. Em obras públicas é o que define o orçamento estimado conforme Lei 14.133/2021. Em obras privadas é a base do contrato com construtora."
         },
         {
-          "h2": "As 18 disciplinas que toda obra precisa considerar",
-          "body": "Mesmo numa reforma pequena, dificilmente você escapa dessas 18 categorias. Subdimensionar uma disciplina é o erro mais comum no levantamento.\n\n1. Demolição\n2. Alvenaria\n3. Estrutura\n4. Elétrica\n5. Hidráulica\n6. Esgoto\n7. Pintura\n8. Pisos\n9. Revestimentos\n10. Forro\n11. Gesso\n12. Marcenaria\n13. Esquadrias\n14. Vidros\n15. Marmoraria\n16. Climatização (HVAC)\n17. Sprinkler / combate a incêndio\n18. Acabamentos finais\n\nAlém disso, sempre tem custos indiretos que não aparecem no CAD: BDI, fee de gestão, contingência, taxa de prefeitura. Esses entram numa seção separada chamada de \"custos indiretos\" ou \"despesas gerais\"."
+          "h2": "Passo 1: Revisar e compatibilizar todos os projetos",
+          "body": "Antes de quantificar, revise TODOS os projetos da obra: arquitetônico, estrutural, elétrico, hidráulico, esgoto, climatização, gás. Verifique se estão atualizados e compatíveis entre si — incompatibilidade entre projetos é fonte número 1 de aditivo no canteiro.\n\nChecklist de compatibilização:\n- Cotas das paredes batem entre arquitetura e estrutura?\n- Posição dos pontos elétricos é compatível com layout final?\n- Tubulação hidráulica passa por shafts ou paredes que existem?\n- Pé-direito final permite passagem de dutos de climatização?\n- Não tem pilar no meio da garagem ou da sala?\n\nSe achar inconsistência, RESOLVE primeiro. Quantificar projeto incompatível gera planilha que vai ter que ser refeita."
         },
         {
-          "h2": "Estrutura da planilha (colunas obrigatórias)",
-          "body": "Toda planilha profissional tem no mínimo essas colunas:\n\n- ITEM: numeração (1, 1.1, 1.2, 2, etc.) seguindo a hierarquia do SINAPI\n- DESCRIÇÃO: o que é, com especificação técnica\n- UNIDADE: m², m³, m, un, kg, vb (verba)\n- QUANTIDADE: o número levantado\n- PREÇO UNITÁRIO: deixar em branco pra orçamentista preencher\n- PREÇO TOTAL: fórmula = quantidade × unitário\n- REFERÊNCIA: prancha onde foi medido (ex: A-200, A-500)\n- OBSERVAÇÃO: detalhes que afetam compra (cor, marca, espessura)\n\nDicas de preenchimento:\n- Sempre cite a prancha de origem. Sem isso, não dá pra revisar.\n- Itens medidos do CAD devem estar marcados (cor branca). Itens estimados (laranja).\n- Use unidade SINAPI. Se a base oficial usa m², não invente m linear."
+          "h2": "Passo 2: Classificar serviços por disciplina e categoria de medição",
+          "body": "Cada serviço da obra tem unidade de medida natural. Classificar errado é o erro mais clássico do levantamento.\n\nCategorias por unidade:\n- Volume (m³): concreto, aterro, escavação, graute, lastro\n- Área (m²): piso, parede, forro, revestimento, pintura, telhado, impermeabilização\n- Comprimento (m): rodapé, conduíte, tubulação, sanca, beiral\n- Unidade (un): portas, janelas, louças, metais, luminárias, tomadas\n- Peso (kg): estrutura metálica, ferro CA-50, esquadrias de aço\n- Verba (vb): serviços avulsos sem unidade técnica clara\n\nDisciplinas obrigatórias (mesmo em reforma pequena pode aparecer 12-18):\n- Serviços preliminares (canteiro, demolição, locação)\n- Movimento de terra e fundação\n- Estrutura\n- Vedação (alvenaria)\n- Cobertura\n- Esquadrias\n- Revestimento de paredes e forros\n- Pisos\n- Pintura\n- Instalações elétricas\n- Instalações hidráulicas\n- Instalações de esgoto\n- Climatização\n- Combate a incêndio (sprinkler, hidrantes)\n- Marcenaria e marmoraria\n- Acabamentos finais\n- Limpeza final\n- Custos indiretos (BDI, fee, contingência, taxas)"
         },
         {
-          "h2": "Como medir cada disciplina no CAD",
-          "body": "Manualmente, você abre o DWG/PDF e usa as ferramentas de medição:\n\n- Áreas de piso, forro e revestimento: comando AREA do AutoCAD. Cuidado com vazios e portas.\n- Comprimento de paredes: comando DIST. Some todos os trechos pra alvenaria.\n- Pontos de elétrica e hidráulica: contagem manual mesmo. Cada símbolo conta como 1.\n- Esquadrias: ler do quadro de esquadrias (P1, P2, J1, J2...) e contar quantas vezes cada tipo aparece na planta.\n- Volumes: comando VOLUME ou cálculo manual (área × altura).\n\nPra projeto pequeno (1 prancha, 1 ambiente), 30min resolve. Pra projeto grande (10+ pranchas comerciais), passa fácil de 8h. É aqui que entra a IA."
+          "h2": "Passo 3: Baixar a tabela SINAPI 2026",
+          "body": "A tabela SINAPI é disponibilizada gratuitamente pela Caixa Econômica Federal todo mês. Em obras públicas federais é uso obrigatório (Lei 14.133/2021). Em obras privadas é a referência mais aceita pela maturidade e atualização mensal.\n\nComo baixar:\n- Acesse caixa.gov.br → Apoio ao Poder Público → SINAPI: Insumos e Composições\n- Os arquivos vêm compactados em ZIP de ~20 MB com planilhas XLSX\n- Escolha o estado (preços variam por UF) e o mês de referência\n\nOs 3 arquivos principais:\n- ICD (Insumos): lista de materiais e mão de obra com preço unitário por estado\n- CCD (Composições): serviços compostos (ex: assentamento de piso = mão de obra + argamassa + rejunte)\n- Analítico: detalhamento das composições com coeficientes de consumo\n\nA composição é onde mora a mágica: ela diz exatamente quantos kg de cimento + quantos m³ de areia + quantas horas de pedreiro entram em 1 m² de piso assentado."
         },
         {
-          "h2": "Modelo grátis: AI.arq faz isso por você em 5 minutos",
-          "body": "O AI.arq foi feito exatamente pra resolver isso: você sobe o CAD (PDF, DWG ou DXF), a IA lê todas as pranchas, identifica as 18 disciplinas e devolve a planilha completa. Cada item já vem com:\n\n- Numeração SINAPI\n- Unidade correta\n- Quantidade medida\n- Referência à prancha de origem\n- Cor BRANCO (medido) ou LARANJA (estimado, revisar)\n- Memória técnica (composições + insumos com coeficientes)\n\nPrimeiro projeto é grátis em ai.arq.br. Faça o teste com qualquer projeto seu — se a planilha não te convencer, você não pagou nada."
+          "h2": "Passo 4: Estruturar as colunas da planilha",
+          "body": "Toda planilha profissional tem no mínimo essas colunas:\n\n- ITEM — numeração hierárquica (1, 1.1, 1.2, 2, 2.1...) seguindo agrupamento por disciplina\n- CÓDIGO SINAPI — código oficial da composição (ex: 87878)\n- DESCRIÇÃO — texto da composição SINAPI ou descrição equivalente\n- UNIDADE — m², m³, m, un, kg, vb\n- QUANTIDADE — o número levantado da planta\n- PREÇO UNITÁRIO — em branco pra orçamentista preencher\n- PREÇO TOTAL — fórmula =quantidade × unitário\n- REF. PRANCHA — qual prancha você mediu (A-200, A-500, etc.)\n- OBSERVAÇÃO — cor, marca, espessura, detalhes que afetam compra\n\nColunas adicionais (recomendado):\n- BDI APLICÁVEL — % se é direto, indireto, ou administração central\n- ORIGEM — medido / estimado (cor branco vs laranja)\n- STATUS REVISÃO — pendente / aprovado pelo cliente\n\nUse unidade SINAPI. Se a composição oficial usa m², não invente m linear pro mesmo serviço."
+        },
+        {
+          "h2": "Passo 5: Como medir cada disciplina no CAD",
+          "body": "Manualmente, você abre o DWG/PDF e usa as ferramentas de medição. Pontos importantes:\n\n- Áreas de piso, forro, revestimento — comando AREA do AutoCAD. SEMPRE descontar vãos (portas, janelas, vazios). Pintura é só área líquida.\n- Comprimento de paredes — comando DIST. Some os trechos pra alvenaria.\n- Pontos elétricos e hidráulicos — contagem manual. Cada símbolo conta como 1.\n- Esquadrias — ler do quadro de esquadrias (P1, P2, J1...) e contar quantas vezes cada tipo aparece na planta.\n- Volumes (concreto, aterro) — área × altura ou comando VOLUME.\n- Telhado — área inclinada (lembre: na planta a área aparece em projeção, mas o telhamento usa área real inclinada).\n\nProjeto pequeno (1 prancha, 1 ambiente) = 30min de medição. Comercial médio (8-12 pranchas) passa fácil de 8 horas. É aqui que IA economiza dezenas de horas por projeto."
+        },
+        {
+          "h2": "Passo 6: Memória de cálculo (obrigatória)",
+          "body": "Cada quantidade da planilha precisa ter memória de cálculo registrada. Isso protege você juridicamente e permite revisão.\n\nO que toda memória de cálculo precisa ter:\n- FÓRMULA — equação usada pra chegar no número (ex: comprimento × pé-direito - vãos)\n- REFERÊNCIA SINAPI — base de consumo usada\n- DETALHE DOS CÁLCULOS — passo a passo, sem pular etapas\n- HIPÓTESES ASSUMIDAS — o que não tava no projeto e foi estimado\n- DESCONTOS APLICADOS — vãos, áreas comuns, perdas\n\nExemplo prático para alvenaria:\n- Item: Alvenaria de bloco cerâmico 14x19x29cm\n- Composição SINAPI: 87878\n- Cálculo: Sala (4,2m × 2,80m) + Quarto (3,5m × 2,80m) + Cozinha (3,2m × 2,80m) - Vãos (P1: 0,80×2,10 + J1: 1,20×1,20 × 2)\n- Resultado: 30,52 m²\n- Hipóteses: pé-direito 2,80m conforme planta A-200\n\nSem memória de cálculo, qualquer auditoria invalida sua planilha."
+        },
+        {
+          "h2": "Passo 7: Custos indiretos (não esqueça)",
+          "body": "O erro número 2 mais comum no levantamento é esquecer custos indiretos — itens que não aparecem no CAD mas existem em toda obra. Esses entram numa seção separada da planilha.\n\nCustos indiretos típicos:\n- BDI (Benefícios e Despesas Indiretas) — % aplicado sobre o custo direto\n- Administração local (engenheiro residente, mestre de obras, secretária)\n- Canteiro de obras (containers, alojamento, sanitário químico)\n- Equipamentos de canteiro (betoneira, andaime, escora)\n- Seguros (RCO, vida, todo risco)\n- ART/RRT do responsável técnico\n- Taxas de habite-se, alvará, ligações de água/luz\n- Limpeza final\n- Contingência (5-10% pra imprevistos)\n\nNa planilha do AI.arq esses itens aparecem na cor ROXA, separados do custo direto, com campos em branco pro orçamentista preencher os percentuais."
+        },
+        {
+          "h2": "Como o AI.arq automatiza tudo isso em 5 minutos",
+          "body": "O AI.arq foi desenhado pra resolver as 7 etapas acima de forma automática. Você sobe o CAD (PDF, DWG ou DXF), a IA lê todas as pranchas e devolve a planilha completa em ~5 minutos. Cada item já vem:\n\n- Numerado conforme hierarquia SINAPI\n- Com unidade correta da composição oficial\n- Com quantidade medida do CAD\n- Com REF. PRANCHA preenchida (de onde veio cada número)\n- Em cor BRANCO (medido) ou LARANJA (estimado, revisar antes)\n- Com memória técnica completa (composição + insumos + coeficientes SINAPI/TCPO)\n- Com seção de Custos Indiretos pré-pronta\n\nGanho típico: 5 a 8 horas por projeto. Primeiro projeto é grátis em ai.arq.br pra você testar."
         }
       ],
-      "cta": "Cansou de fazer levantamento de obra manualmente? Sobe seu CAD no AI.arq e ganhe 5-8 horas em cada projeto. Primeiro grátis, sem cartão."
+      "cta": "Cansou de fazer levantamento de obra manualmente? Sobe seu CAD no AI.arq e ganhe 5-8 horas em cada projeto. Primeiro grátis, sem cartão.",
+      "sources": [
+        {"type": "norm", "title": "Lei 14.133/2021", "description": "Nova Lei de Licitações — torna SINAPI obrigatória em obras públicas federais"},
+        {"type": "norm", "title": "ABNT NBR 12721:2006", "description": "Avaliação de custos unitários da construção pra incorporação imobiliária"},
+        {"type": "book", "title": "Engenharia de Custos: Análise de Preços e Avaliação de Empreendimentos", "author": "Aldo Dórea Mattos", "publisher": "Editora PINI", "year": 2014},
+        {"type": "book", "title": "Como preparar orçamentos de obras", "author": "Aldo Dórea Mattos", "publisher": "Oficina de Textos", "year": 2019},
+        {"type": "book", "title": "Manual de Boas Práticas em Orçamento de Obras", "author": "AsBEA — Associação Brasileira dos Escritórios de Arquitetura", "publisher": "AsBEA", "year": 2018},
+        {"type": "link", "title": "Tabela SINAPI 2026 — Caixa Econômica Federal (oficial)", "url": "https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx", "publisher": "Caixa.gov.br"},
+        {"type": "link", "title": "Tabela SINAPI 2026: O Guia Completo para Orçamento de Obras", "url": "https://www.i9orcamentos.com.br/tabela-sinapi-2026/", "publisher": "i9 Orçamentos"},
+        {"type": "link", "title": "Levantamento de quantitativos em obras: como fazer", "url": "https://sienge.com.br/blog/levantamento-de-quantitativos-obra/", "publisher": "Sienge"},
+        {"type": "link", "title": "O que é a tabela SINAPI e como funciona", "url": "https://www.orcafascio.com/papodeengenheiro/o-que-e-e-como-funciona-a-tabela-sinapi", "publisher": "OrçaFascio"}
+      ]
     },
     {
       "slug": "sinapi-vs-tcpo-qual-usar",
-      "title": "SINAPI vs TCPO: Qual Usar no Seu Projeto e Por Quê (2026)",
-      "description": "Diferenças entre SINAPI e TCPO, quando usar cada um, vantagens e desvantagens. Comparação prática pra arquitetos e engenheiros brasileiros.",
-      "keywords": "sinapi vs tcpo, diferença sinapi tcpo, qual usar sinapi tcpo, base sinapi, base tcpo, composições obra",
+      "title": "SINAPI vs TCPO vs SICRO: Qual Usar no Seu Projeto (Guia 2026)",
+      "description": "Diferenças entre SINAPI, TCPO e SICRO em 2026. Quando cada base se aplica, comparação técnica, exemplos práticos pra arquitetos e engenheiros.",
+      "keywords": "sinapi vs tcpo, diferença sinapi tcpo sicro, qual usar sinapi tcpo, base sinapi 2026, base tcpo bim, composições obra públicas privadas",
       "publish_date": "2026-05-10",
-      "estimated_read_min": 7,
+      "estimated_read_min": 10,
       "category": "Referências Técnicas",
-      "intro": "Se você trabalha com orçamento ou quantitativo de obra no Brasil, em algum momento vai esbarrar nessa pergunta: SINAPI ou TCPO? As duas são as bases mais usadas no país, mas têm filosofias e usos bem diferentes. Neste artigo vou explicar quando usar cada uma e por quê.",
+      "intro": "Se você trabalha com orçamento ou quantitativo de obra no Brasil, em algum momento esbarra nessa pergunta: SINAPI, TCPO ou SICRO? Cada uma cobre uma fatia do mercado, e usar a errada pode te custar caro — desde rejeição de proposta em obra pública até orçamento subdimensionado em obra privada. Esse guia explica em detalhe o que cada uma faz, quando aplicar cada uma, e como o AI.arq integra as três pra você não ter que escolher.",
       "sections": [
         {
           "h2": "O que é SINAPI",
-          "body": "SINAPI = Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil. É mantido pela Caixa Econômica Federal em parceria com o IBGE.\n\nCaracterísticas principais:\n- Atualizado MENSALMENTE com pesquisa de preços real\n- Cobre o Brasil inteiro (preços por estado)\n- Obrigatório em obras públicas federais (Lei 14.133/2021)\n- Tem 10.284 composições (ações construtivas) + 54.529 insumos (materiais e mão de obra)\n- Gratuito e aberto (download em sinapi.caixa.gov.br)\n\nPor ser oficial e atualizado, o SINAPI virou padrão de mercado. Mesmo no setor privado, projetos médio/grande costumam pedir referência SINAPI."
+          "body": "SINAPI = Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil. É fruto de parceria entre Caixa Econômica Federal e IBGE: a Caixa gerencia a metodologia e composições de custos, o IBGE realiza a pesquisa de preços de mercado.\n\nCaracterísticas principais:\n- Atualizado MENSALMENTE com pesquisa de preços real\n- Cobre o Brasil inteiro com preços por estado (UF)\n- Obrigatório em obras com recursos federais (Lei 14.133/2021)\n- Tem cerca de 10.284 composições + 54.529 insumos (números de 2026)\n- Gratuito e aberto (download em caixa.gov.br/poder-publico/sinapi)\n- Foca em EDIFICAÇÕES e infraestrutura urbana\n\nPor ser oficial, atualizado e gratuito, o SINAPI virou padrão de mercado. Mesmo em obras privadas, projetos médios e grandes costumam usar SINAPI como referência — bancos, seguradoras e auditores aceitam de cara."
         },
         {
           "h2": "O que é TCPO",
-          "body": "TCPO = Tabelas de Composições de Preços para Orçamentos. É publicado pela Editora PINI desde 1955 — a base mais antiga do Brasil.\n\nCaracterísticas principais:\n- Não é atualizado mensalmente (o livro tem novas edições a cada 2-4 anos)\n- Foca mais em DETALHAMENTO técnico do que em preço\n- Tem versão BIM (TCPO BIM) com 1.333 composições + 6.733 insumos modelados pra Revit/ArchiCAD\n- Pago (livro custa R$300+, software TCPOweb tem assinatura)\n- Privado (Editora PINI)\n\nQuem usa TCPO geralmente já tem o livro como referência histórica. Em projetos BIM grandes, o TCPO BIM é mais completo que SINAPI no detalhamento."
+          "body": "TCPO = Tabelas de Composições de Preços para Orçamentos. É publicado pela Editora Pini desde 1955 — a base mais antiga e tradicional do Brasil.\n\nCaracterísticas principais:\n- Atualizações são em ciclos longos (novas edições a cada 2-4 anos)\n- Foca mais no DETALHAMENTO técnico das composições do que no preço atualizado\n- Tem versão BIM (TCPO BIM) com cerca de 1.333 composições + 6.733 insumos modelados pra Revit/ArchiCAD\n- Pago (livro físico custa R$ 300-500, software TCPOweb tem assinatura mensal)\n- Privado (mantido pela Editora Pini, agora parte do grupo Saint-Gobain)\n- Cobre edificações principalmente, com foco em obras particulares\n\nQuem usa TCPO geralmente é escritório de orçamento com tradição, ou equipe BIM grande que aproveita o nível de detalhamento técnico mais profundo das composições."
         },
         {
-          "h2": "Comparação direta: SINAPI vs TCPO",
-          "body": "Critério | SINAPI | TCPO\n--- | --- | ---\nFoco | Custo (preço) | Composição (técnica)\nAtualização | Mensal | Bianual\nCusto | Grátis | Pago\nCobertura geográfica | Brasil todo | Brasil todo\nObras públicas | Obrigatório | Não\nIntegração BIM | Limitada | TCPO BIM existe\nNº de composições | 10.284 | 1.333 (TCPO BIM)\nNº de insumos | 54.529 | 6.733 (TCPO BIM)"
+          "h2": "O que é SICRO (terceira opção)",
+          "body": "SICRO = Sistema de Custos Referenciais de Obras. É mantido pelo DNIT (Departamento Nacional de Infraestrutura de Transportes).\n\nCaracterísticas:\n- Foco específico em INFRAESTRUTURA DE TRANSPORTES (rodovias, pontes, viadutos, ferrovias)\n- Obrigatório em obras de transportes com recursos federais\n- Atualização periódica (não tão frequente quanto SINAPI)\n- Gratuito\n- NÃO cobre edificações\n\nSe você é arquiteto, raramente vai usar SICRO. Mas é importante saber que existe — em obras mistas (ex: condomínio com obra viária externa), pode ser necessário cruzar SINAPI com SICRO."
+        },
+        {
+          "h2": "Comparação direta",
+          "body": "SINAPI:\n- Foco: custo realista atualizado\n- Atualização: mensal\n- Custo: grátis\n- Cobertura: edificações + urbana\n- Obras públicas: obrigatório (federal)\n- Composições: 10.284\n- Insumos: 54.529\n\nTCPO:\n- Foco: detalhamento técnico de composição\n- Atualização: bianual\n- Custo: pago\n- Cobertura: edificações privadas\n- Obras públicas: não obrigatório\n- Composições BIM: 1.333\n- Insumos BIM: 6.733\n\nSICRO:\n- Foco: infraestrutura de transportes\n- Atualização: periódica\n- Custo: grátis\n- Cobertura: rodovias, ferrovias, pontes\n- Obras públicas: obrigatório (transportes)\n- Não cobre edificações"
         },
         {
           "h2": "Quando usar SINAPI",
-          "body": "Use SINAPI se:\n- Sua obra é pública (federal, estadual, municipal)\n- Você precisa de preços atualizados pra precificação realista\n- Quer referência aceita por banco em financiamento\n- Trabalha com construtora/incorporadora que usa essa base\n- Não quer pagar pra acessar (orçamento limitado)\n- Precisa de muitas composições (cobertura ampla)"
+          "body": "Use SINAPI quando:\n- A obra é pública e usa recursos federais (obrigatório por lei)\n- Você precisa de preços atualizados mensalmente\n- Quer referência aceita por banco em financiamento\n- Trabalha com construtora ou incorporadora que pede essa base\n- Não quer pagar pra acessar a base\n- Precisa de cobertura ampla (mais de 10 mil composições)\n- A obra é edificação (residencial, comercial, industrial leve)"
         },
         {
           "h2": "Quando usar TCPO",
-          "body": "Use TCPO se:\n- Trabalha em projeto BIM (Revit/ArchiCAD) e quer mais detalhamento\n- Precisa de composição mais técnica do que comercial\n- Já tem o livro/software (vale a pena consultar)\n- Quer cruzar com SINAPI pra validar discrepâncias\n- Trabalha em obras industriais ou específicas que SINAPI não cobre bem"
+          "body": "Use TCPO quando:\n- Trabalha em projeto BIM grande (Revit/ArchiCAD) e quer integração nativa via TCPO BIM\n- Precisa de composição com mais detalhamento técnico do que SINAPI oferece\n- Sua empresa já tem o livro ou software por tradição\n- Quer cruzar com SINAPI pra validar discrepâncias e ter dois pontos de referência\n- Trabalha em obras particulares onde o cliente aceita TCPO como referência\n- Faz obras industriais ou específicas onde o SINAPI tem cobertura limitada"
         },
         {
-          "h2": "Por que o AI.arq usa as duas",
-          "body": "No AI.arq a gente decidiu integrar SINAPI E TCPO BIM nas planilhas geradas. Cada item do quantitativo vem com:\n\n- Código SINAPI (pra precificação atualizada e referência oficial)\n- Composição TCPO BIM (pra detalhamento técnico e insumos com coeficientes)\n\nAssim você tem o melhor dos dois mundos numa planilha só. O orçamentista pode escolher qual base usar pra precificar, dependendo do tipo de obra. Tudo isso vem na aba Memória Técnica do XLSX."
+          "h2": "Quando usar SICRO",
+          "body": "Use SICRO quando:\n- A obra é infraestrutura de transportes (rodovia, ferrovia, ponte)\n- Tem recursos federais via DNIT, BR-funds, BNDES\n- A obra é mista e tem componente viário externo significativo\n\nPra arquiteto típico de edificações, o SICRO raramente entra na conta."
+        },
+        {
+          "h2": "Resumo decisório",
+          "body": "Pra decidir rápido na hora de começar um orçamento:\n\n- Obra usa recursos federais? → SINAPI obrigatório (ou SICRO se infraestrutura de transportes)\n- Obra privada típica? → SINAPI por padrão (mais fácil, grátis, atualizado)\n- Obra privada com necessidade de detalhamento técnico extra? → TCPO em paralelo\n- Obra com componente viário externo? → SINAPI pra edificação + SICRO pra via\n\nNa dúvida, vai de SINAPI. Funciona em 90% dos casos."
+        },
+        {
+          "h2": "Por que o AI.arq integra as três",
+          "body": "No AI.arq a gente decidiu integrar as 3 bases nas planilhas geradas pra você não ter que escolher. Cada item do quantitativo vem com:\n\n- Código SINAPI principal — pra precificação atualizada e referência oficial\n- Composição TCPO BIM equivalente — pra detalhamento técnico complementar\n- Coeficientes de insumos — extraídos da base oficial correspondente\n\nO orçamentista pode escolher qual base usar dependendo do tipo de obra. Tudo isso vem numa aba dedicada chamada Memória Técnica dentro do XLSX gerado."
         }
       ],
-      "cta": "Quer ver na prática como SINAPI + TCPO funcionam juntos no levantamento? Sobe seu CAD no AI.arq e baixe a planilha. Primeiro projeto é grátis."
+      "cta": "Quer ver na prática como SINAPI + TCPO funcionam juntos no levantamento? Sobe seu CAD no AI.arq e baixe a planilha. Primeiro projeto é grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "Lei 14.133/2021", "description": "Nova Lei de Licitações — torna SINAPI obrigatória em obras públicas federais (edificações)"},
+        {"type": "norm", "title": "Decreto 7.983/2013", "description": "Estabelece SINAPI como referência oficial pra obras públicas federais"},
+        {"type": "book", "title": "Engenharia de Custos", "author": "Aldo Dórea Mattos", "publisher": "Editora PINI", "year": 2014},
+        {"type": "book", "title": "TCPO 14ª Edição — Tabelas de Composições de Preços para Orçamentos", "author": "Editora PINI", "publisher": "PINI / Saint-Gobain", "year": 2024},
+        {"type": "book", "title": "Manual de Orçamento de Obras Públicas", "author": "Antônio José da Silva", "publisher": "Editora Senac", "year": 2020},
+        {"type": "link", "title": "SINAPI — Site oficial Caixa Econômica Federal", "url": "https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx", "publisher": "Caixa.gov.br"},
+        {"type": "link", "title": "SINAPI, SICRO e TCPO: entenda as diferenças e quando usar cada um", "url": "https://www.iposespecializacao.com.br/blog/sinapi-sicro-e-tcpo-entenda-as-diferencas-e-quando-usar-cada-um-32", "publisher": "IPOS Especialização"},
+        {"type": "link", "title": "Tabela SINAPI da Caixa: como aumentar a assertividade do orçamento", "url": "https://sienge.com.br/blog/tabela-sinapi-no-orcamento-da-obra/", "publisher": "Sienge"},
+        {"type": "link", "title": "O que é a tabela SINAPI", "url": "https://www.escolaengenharia.com.br/sinapi/", "publisher": "Escola Engenharia"}
+      ]
     },
     {
       "slug": "7-erros-comuns-levantamento-quantitativos",
       "title": "7 Erros Comuns no Levantamento de Quantitativos (Que Custam Caro na Obra)",
-      "description": "Os 7 erros mais frequentes no levantamento de quantitativos que estouram orçamento de obra. Como identificar, prevenir e corrigir cada um.",
-      "keywords": "erros levantamento quantitativos, erros orçamento obra, erros planilha obra, levantamento quantitativos errado, problemas orçamento construção",
+      "description": "Os 7 erros mais frequentes no levantamento de quantitativos de obra que estouram orçamento e geram aditivo. Como identificar, prevenir e corrigir cada um — com exemplos.",
+      "keywords": "erros levantamento quantitativos, erros orçamento obra, aditivo construção civil, planilha obra errada, quantitativo subestimado, custos indiretos esquecidos",
       "publish_date": "2026-05-17",
-      "estimated_read_min": 8,
+      "estimated_read_min": 9,
       "category": "Boas Práticas",
-      "intro": "Toda obra que estoura orçamento tem origem em quantitativo mal feito. Não é mistério: o orçamento se calcula em cima da quantidade. Se a quantidade tá errada, o resto tá errado também. Listei os 7 erros mais frequentes que vejo em planilhas de quantitativos — e como evitar cada um.",
+      "intro": "Toda obra que estoura orçamento tem origem em quantitativo mal feito. Não é mistério: orçamento é quantidade × preço unitário. Se a quantidade tá errada, o resto cai junto. O TCU (Tribunal de Contas da União) já documentou que erros de quantitativo respondem por mais de 60% das discrepâncias auditadas em obras públicas. No setor privado o impacto é o mesmo, só sem auditor pra apontar. Esse post lista os 7 erros mais frequentes que vejo em planilhas de quantitativos, com exemplo de cada um e como evitar.",
       "sections": [
         {
-          "h2": "Erro 1: Esquecer disciplinas",
-          "body": "O erro mais clássico. Você lembra de paredes, piso, pintura, mas esquece de sprinkler, gesso decorativo, ou marmoraria de bancadas. Resultado: na obra, esses itens viram \"aditivos\" que custam o dobro porque já foram comprados de última hora.\n\nComo evitar: use a checklist das 18 disciplinas em todo projeto. Mesmo que algumas não se apliquem (sprinkler em casa pequena), passar pela lista garante que você considerou e descartou conscientemente."
+          "h2": "Erro 1: Esquecer disciplinas inteiras",
+          "body": "O erro mais clássico. Você lembra de paredes, piso, pintura, mas esquece de sprinkler, gesso decorativo, marmoraria de bancadas, climatização HVAC, ou demolição da etapa antiga. Resultado: na obra, esses itens viram aditivos que custam o dobro porque já foram comprados de última hora.\n\nExemplo real: reforma comercial de 400 m² em São Paulo, cliente recebeu orçamento de R$ 380 mil. Na obra apareceu necessidade de reforço estrutural (R$ 45 mil), HVAC inadequado (R$ 60 mil de retrabalho), sprinkler obrigatório (R$ 35 mil). Total final: R$ 520 mil — 37% a mais que o orçamento inicial.\n\nComo evitar: use checklist das 18 disciplinas em todo projeto. Mesmo que algumas não se apliquem, passar pela lista garante que você considerou e descartou conscientemente."
         },
         {
-          "h2": "Erro 2: Misturar áreas brutas com líquidas",
-          "body": "Você mediu \"450 m² de pintura de parede\". Mas 450 inclui as portas e janelas? Se sim, tá errado — ninguém pinta porta de madeira lacada. Pintura é só a área líquida (parede menos vãos).\n\nComo evitar: SEMPRE descontar vãos. Se sua planilha lista \"area_bruta_paredes\" e \"area_pintura\" como o mesmo número, tem erro."
+          "h2": "Erro 2: Misturar área bruta com área líquida",
+          "body": "Você mediu 450 m² de pintura de parede. Mas 450 inclui as portas e janelas? Se sim, tá errado — ninguém pinta porta de madeira lacada nem vidro de janela. Pintura é só a área líquida (parede menos vãos).\n\nÁreas que SEMPRE pedem desconto de vãos:\n- Pintura (descontar portas e janelas)\n- Revestimento cerâmico parede (descontar portas, janelas, bancadas embutidas)\n- Forro (descontar luminárias embutidas grandes, sancas)\n- Piso (descontar área de bancadas que vão direto no piso)\n\nDesconto típico em ambiente residencial: 15-25% da área bruta. Sem desconto, você cobra 20% a mais do cliente OU sobra 20% de material no canteiro (que vira lucro do construtor)."
         },
         {
-          "h2": "Erro 3: Confundir unidade",
-          "body": "Forro de gesso é m². Sanca de gesso é m linear. Tubulação elétrica é m. Conduíte é m. Um não substitui o outro. Se você mistura unidades, o orçamentista usa o preço errado.\n\nComo evitar: siga a unidade SINAPI. Se a composição oficial usa m², use m². Não invente."
+          "h2": "Erro 3: Confundir unidade de medida",
+          "body": "Forro de gesso é m². Sanca de gesso é m linear. Tubulação elétrica é m. Conduíte é m. Massa corrida é m². Cada serviço tem unidade técnica natural conforme SINAPI.\n\nExemplos clássicos de confusão:\n- Esquadria — alguns mediram em m², outros em unidade. Composição SINAPI usa unidade ou m² dependendo do tipo.\n- Estrutura metálica — kg ou t (não m²)\n- Impermeabilização — m² (área de aplicação)\n- Forro modular — m² OU pç (depende do modelo SINAPI)\n\nComo evitar: SEMPRE conferir com a tabela SINAPI da composição correspondente. Se a composição oficial usa m², use m². Não invente."
         },
         {
-          "h2": "Erro 4: Não citar a prancha de origem",
-          "body": "Você listou \"luminária LED 60x60: 24 unidades\". Daqui a 2 semanas o cliente pergunta: \"de onde vieram essas 24?\". Você não lembra. Tem que abrir todas as pranchas de novo.\n\nComo evitar: cada item da planilha deveria ter coluna \"REF. PRANCHA\" preenchida. Sem isso, ninguém revisa, ninguém valida, e qualquer mudança vira pesadelo."
+          "h2": "Erro 4: Usar bases de composição desatualizadas",
+          "body": "Esse erro aparece muito em escritório que tem planilha modelo de 5 anos atrás. A composição diz \"argamassa industrializada Quartzolit AC-II\" mas o produto mudou de nome ou foi descontinuado. Resultado: orçamentista cota errado, comprador não acha o material, obra atrasa.\n\nO SINAPI atualiza MENSALMENTE. Toda planilha séria deve usar a versão do mês corrente. TCPO atualiza a cada 2-4 anos.\n\nComo evitar:\n- Sempre baixar a versão mais nova do SINAPI antes de orçar\n- Se sua planilha tem mais de 6 meses, refaça as referências\n- Anote no rodapé qual mês/ano da base SINAPI usou"
         },
         {
-          "h2": "Erro 5: Estimar como se fosse medição",
-          "body": "O CAD não tem o quadro de esquadrias completo. Você \"estima\" que tem 8 portas. Mas pode ter 6 ou 10 — não dá pra saber. O perigo é jogar essa estimativa como número fixo na planilha. Lá na frente o cliente vai cobrar.\n\nComo evitar: marque visualmente itens estimados (cor laranja, observação \"estimado\", asterisco). Item medido fica branco. Item estimado fica laranja. Cliente sabe a diferença e decide se quer revisar."
+          "h2": "Erro 5: Não citar a prancha de origem (sem rastreabilidade)",
+          "body": "Você listou \"luminária LED 60x60: 24 unidades\". Daqui a 2 semanas o cliente pergunta: \"de onde vieram essas 24?\". Você não lembra. Tem que abrir TODAS as pranchas de novo, contar de novo, comparar.\n\nIsso vira pesadelo quando o projeto tem revisão (90% dos projetos têm). A planta nova mudou onde? Quanto a mais ou menos? Se a planilha não cita prancha, você precisa refazer levantamento inteiro a cada revisão.\n\nComo evitar: cada item da planilha deveria ter coluna REF. PRANCHA preenchida. Padrão: A-200 (planta arquitetura), A-500 (pontos elétricos), A-700 (forro). Quando o cliente questiona, você abre exatamente a prancha certa."
         },
         {
-          "h2": "Erro 6: Esquecer custos indiretos",
-          "body": "Sua planilha tem 18 disciplinas, R$ 200 mil. Você esquece de incluir BDI (15-25%), fee de gestão (5-15%), contingência (5-10%) e taxas. Resultado: o orçamento fechado é R$ 280-320 mil. Você \"esqueceu\" R$ 80-120 mil.\n\nComo evitar: tenha sempre uma seção \"Custos Indiretos\" no fim da planilha. Mesmo que cada projeto tenha % diferente, a estrutura tem que estar lá pra o orçamentista preencher."
+          "h2": "Erro 6: Estimar como se fosse medição",
+          "body": "O CAD não tem o quadro de esquadrias completo. Você estima que tem 8 portas. Mas pode ter 6 ou 10 — não dá pra saber. O perigo é jogar essa estimativa como número fixo na planilha. Lá na frente o cliente cobra.\n\nA boa prática (e o que SINAPI recomenda) é separar visualmente:\n- Item MEDIDO direto da planta — fica em branco / verde, considera-se confiável\n- Item ESTIMADO pela falta de info — fica em laranja, sinaliza pra revisar antes de fechar contrato\n\nClientes mais cuidadosos vão pedir pra você revisar todos os laranjas antes de aprovar o orçamento. Construtores vão dar margem maior nos itens laranjas. Todo mundo sai feliz."
         },
         {
-          "h2": "Erro 7: Não revisar com 2ª pessoa",
-          "body": "Quem fez o levantamento sozinho geralmente tem ponto cego. Outro arquiteto/orçamentista vai bater o olho e ver coisa que você não viu — paredes que faltaram, escala errada, vãos não descontados.\n\nComo evitar: nunca entregue planilha sem ter 2 pares de olhos. Em escritório pequeno onde só tem você, use a IA pra essa segunda revisão."
+          "h2": "Erro 7: Esquecer custos indiretos (BDI + administração + contingência)",
+          "body": "Esse é o erro número 1 documentado pelo TCU em auditoria de obras públicas. Sua planilha tem 18 disciplinas, R$ 200 mil em custos diretos. Você esquece de incluir:\n\n- BDI (Benefícios e Despesas Indiretas) — 18-30% típico\n- Administração local (engenheiro, mestre, secretária) — 5-12%\n- Canteiro de obras (containers, alojamento, sanitário) — 2-5%\n- Equipamentos (betoneira, andaime) — 1-3%\n- Seguros (RCO, vida, todo risco) — 1-2%\n- ART/RRT, taxas de prefeitura, ligações — 0,5-2%\n- Contingência (imprevistos) — 5-10%\n\nResultado: o orçamento que parecia R$ 200 mil pra direto fecha em R$ 280-320 mil. Você esqueceu R$ 80-120 mil. Cliente vai cobrar essa diferença em algum lugar.\n\nComo evitar: SEMPRE ter seção Custos Indiretos no fim da planilha. Mesmo que cada projeto tenha % diferente, a ESTRUTURA tem que estar lá pro orçamentista preencher conforme o tipo de obra."
         },
         {
           "h2": "Como o AI.arq evita esses 7 erros automaticamente",
-          "body": "Foi exatamente lendo essas dores recorrentes que a gente desenhou o AI.arq:\n\n- ✅ Sempre passa pelas 18 disciplinas (checklist embutida)\n- ✅ Desconta vãos automaticamente (lê o quadro de esquadrias)\n- ✅ Usa unidade SINAPI por default\n- ✅ Cada item tem REF. PRANCHA preenchida\n- ✅ Itens estimados marcados em LARANJA, medidos em BRANCO\n- ✅ Seção de Custos Indiretos sempre presente\n- ✅ A IA é a sua segunda revisão"
+          "body": "Foi exatamente lendo essas dores recorrentes que a gente desenhou o AI.arq. Cada planilha gerada já vem:\n\n- Passa pelas 18 disciplinas (checklist embutida) — não esquece nenhuma\n- Desconta vãos automaticamente lendo o quadro de esquadrias\n- Usa unidade SINAPI por default em cada item\n- Sempre baseado na versão mais nova do SINAPI (atualizado mensalmente)\n- Cada item tem REF. PRANCHA preenchida\n- Itens estimados marcados em LARANJA, medidos em BRANCO\n- Seção de Custos Indiretos sempre presente, com itens-padrão pra preencher\n- Aviso explícito quando algo passou despercebido\n\nGanho típico: zero aditivo por erro de levantamento. Os aditivos que sobram são só os de mudança de escopo do cliente — esses ninguém prevê mesmo."
         }
       ],
-      "cta": "Quer ver sua planilha sem esses 7 erros? Sobe seu CAD no AI.arq — primeiro projeto grátis."
+      "cta": "Quer ver sua planilha sem esses 7 erros? Sobe seu CAD no AI.arq — primeiro projeto grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "Lei 14.133/2021", "description": "Nova Lei de Licitações — exigência de rastreabilidade nos quantitativos"},
+        {"type": "book", "title": "Engenharia de Custos: Análise de Preços e Avaliação de Empreendimentos", "author": "Aldo Dórea Mattos", "publisher": "Editora PINI", "year": 2014},
+        {"type": "book", "title": "Como preparar orçamentos de obras", "author": "Aldo Dórea Mattos", "publisher": "Oficina de Textos", "year": 2019},
+        {"type": "book", "title": "Manual de Boas Práticas em Orçamento de Obras Públicas", "author": "TCU — Tribunal de Contas da União", "publisher": "TCU", "year": 2020},
+        {"type": "link", "title": "Orientações para Elaboração de Planilhas Orçamentárias de Obras Públicas — TCU", "url": "https://portal.tcu.gov.br/orientacoes-para-elaboracao-de-planilhas-orcamentarias-de-obras-publicas.htm", "publisher": "TCU"},
+        {"type": "link", "title": "10 erros comuns no orçamento de obras e como evitá-los", "url": "https://www.brickup.app/post/10-erros-comuns-no-orcamento-de-obras-e-como-evita-los-o-guia-definitivo-para-a-gestao-de-custos", "publisher": "Brickup"},
+        {"type": "link", "title": "Os 5 erros mais comuns na hora de fazer um orçamento de obras", "url": "https://www.orcafascio.com/papodeengenheiro/os-5-erros-mais-comuns-na-hora-de-fazer-um-orcamento-de-obras", "publisher": "OrçaFascio"},
+        {"type": "link", "title": "12 erros no orçamento de obra que você não pode cometer", "url": "https://maiscontroleerp.com.br/erros-no-orcamento-de-obra-e-servicos-que-voce-nao-pode-cometer/", "publisher": "Mais Controle ERP"}
+      ]
     },
     {
       "slug": "como-ler-quadro-de-esquadrias-p1-p2",
-      "title": "Como Ler o Quadro de Esquadrias num PDF (P1, P2, J1, J2 Explicados)",
-      "description": "Guia prático pra ler quadro de esquadrias em projeto arquitetônico. P1, P2, J1, J2 — o que cada código significa e como contar corretamente.",
-      "keywords": "quadro de esquadrias, P1 P2 J1 J2, esquadrias projeto, ler projeto arquitetura, código esquadrias, tipos porta janela",
+      "title": "Como Ler o Quadro de Esquadrias num Projeto (P1, J1 + NBR 10821 explicada)",
+      "description": "Guia completo pra ler quadro de esquadrias em projeto arquitetônico: convenção P1/J1, classificação NBR 10821, materiais, classes de desempenho e como contar pro orçamento.",
+      "keywords": "quadro de esquadrias, P1 P2 J1 J2, esquadrias projeto, NBR 10821, classes esquadrias, ler quadro esquadrias, contar esquadrias orçamento",
       "publish_date": "2026-05-24",
-      "estimated_read_min": 6,
+      "estimated_read_min": 8,
       "category": "Como Ler Projetos",
-      "intro": "Se você é arquiteto, engenheiro, orçamentista ou está começando na área, em algum momento vai precisar ler um quadro de esquadrias. Aqueles códigos misteriosos — P1, P2, J1, J2 — confundem qualquer um que não foi formalmente apresentado a essa convenção. Vou explicar tudo neste post.",
+      "intro": "Se você é arquiteto, engenheiro, orçamentista ou está começando, em algum momento precisa ler um quadro de esquadrias. Aqueles códigos misteriosos — P1, P2, J1, J2 — confundem quem nunca foi apresentado à convenção. Pior: as esquadrias são reguladas pela ABNT NBR 10821, que tem 5 partes e 5 classes de desempenho que afetam preço e fornecedor. Esse guia explica a convenção brasileira, como ler cada coluna do quadro, como contar pra orçamento, e como a norma técnica entra na equação.",
       "sections": [
         {
           "h2": "O que é o quadro de esquadrias",
-          "body": "Quadro de esquadrias é uma tabela que aparece em pelo menos uma prancha de todo projeto arquitetônico. Ele descreve cada tipo de porta e janela do projeto com suas especificações técnicas.\n\nNormalmente vem na prancha de arquitetura (A-300, A-400) ou em prancha dedicada chamada \"Detalhamento de Esquadrias\". Em projetos grandes, pode ocupar prancha inteira A0."
+          "body": "Quadro de esquadrias é a tabela que descreve cada tipo de porta e janela do projeto com suas especificações técnicas. Aparece em pelo menos uma prancha de qualquer projeto arquitetônico bem feito.\n\nNormalmente está na prancha A-300 (Esquadrias) ou A-400 (Detalhamento). Em projetos grandes pode ocupar uma prancha inteira A0 — algumas têm dezenas de tipos diferentes.\n\nO quadro é a fonte de verdade pra fornecedor de esquadria fazer orçamento e pra construtor saber o que comprar. Sem quadro, qualquer cotação é chute."
         },
         {
-          "h2": "O que cada letra significa",
-          "body": "A convenção brasileira mais comum:\n\n- P = Porta\n- J = Janela\n- B = Bancada\n- L = Louça sanitária\n- F = Forro\n- E = Esquadria especial (em alguns escritórios)\n\nA LETRA define o tipo. O NÚMERO depois é só pra diferenciar tipos diferentes do mesmo elemento.\n\nExemplos:\n- P1 = Porta tipo 1 (ex: porta de madeira maciça 0,80 × 2,10m)\n- P2 = Porta tipo 2 (ex: porta de vidro 0,90 × 2,30m)\n- J1 = Janela tipo 1 (ex: janela maxim-ar 1,20 × 0,60m)\n\nIMPORTANTE: o número NÃO é a quantidade de portas! É só um identificador de TIPO."
+          "h2": "A convenção P1 / J1 explicada",
+          "body": "A convenção brasileira mais comum usa letras pra tipo de elemento + número pra diferenciar tipos:\n\n- P = Porta\n- J = Janela\n- B = Bancada\n- L = Louça sanitária\n- E = Esquadria especial (alguns escritórios)\n\nA LETRA define o tipo. O NÚMERO depois é só pra diferenciar tipos diferentes do mesmo elemento.\n\nExemplos:\n- P1 = Porta tipo 1 (ex: porta de madeira maciça 0,80 × 2,10m)\n- P2 = Porta tipo 2 (ex: porta de vidro 0,90 × 2,30m)\n- J1 = Janela tipo 1 (ex: janela maxim-ar 1,20 × 0,60m)\n\nIMPORTANTE: o número NÃO é a quantidade de portas. É só um identificador de TIPO. Um quadro com P1 a P7 significa 7 TIPOS DIFERENTES de porta — pode ter 30 portas no total se P1 aparece 8 vezes, P2 aparece 4 vezes, etc.\n\nAlguns escritórios usam variações: PA, PB, PC ou PT-01, PT-02 (porta), JL-01 (janela). A lógica é a mesma — letra(s) pra tipo + identificador único."
+        },
+        {
+          "h2": "A NBR 10821: o que toda esquadria precisa atender",
+          "body": "Esquadrias no Brasil são reguladas pela ABNT NBR 10821, publicada em 1997 e revisada em fevereiro de 2017. A norma tem 5 partes:\n\n- Parte 1: Terminologia (vocabulário oficial)\n- Parte 2: Requisitos e classificação (5 classes de desempenho)\n- Parte 3: Métodos de ensaio (como testar)\n- Parte 4: Requisitos adicionais de desempenho (acréscimo de 2017)\n- Parte 5: Instalação e manutenção (acréscimo de 2017)\n\nA norma cobre TODOS os materiais: alumínio, madeira, aço e PVC. As 5 classes de desempenho estabelecem pressões de ensaio pra:\n- Resistência à carga estrutural\n- Estanqueidade à água\n- Permeabilidade ao ar\n- Resistência a tentativa de arrombamento\n- Resistência a carga de uso (porta)\n\nQuando você compra esquadria de fornecedor sério, a ficha técnica diz qual classe a esquadria atende. Importante pro orçamento: classes mais altas custam mais."
         },
         {
           "h2": "Por que isso importa pra orçamento",
-          "body": "No quadro, P1 pode ter 8 portas iguais. P2 pode ter 4. P3 pode ter 1 só. Cada tipo tem preço diferente, fornecedor diferente, prazo diferente.\n\nQuando você faz quantitativo, NÃO basta dizer \"30 portas\". Você precisa separar por tipo:\n\n- P1 (madeira maciça 0,80×2,10): 8 unidades\n- P2 (vidro temperado 0,90×2,30): 4 unidades\n- P3 (correr de alumínio 1,20×2,30): 1 unidade\n\nSenão o orçamentista vai precificar tudo no preço da mais barata, e você descobre o erro só na hora da compra."
+          "body": "Quando você faz quantitativo, NÃO basta dizer 30 portas. Você precisa separar por tipo:\n\n- P1 (madeira maciça 0,80×2,10, classe 2): 8 unidades\n- P2 (vidro temperado 0,90×2,30, classe 3): 4 unidades\n- P3 (correr de alumínio 1,20×2,30, classe 4): 1 unidade\n\nCada tipo tem preço diferente, fornecedor diferente, prazo diferente:\n- Porta de madeira maciça simples: R$ 600-1500/un\n- Porta de vidro temperado pivotante: R$ 1500-4000/un\n- Porta de correr alumínio com persiana: R$ 2000-8000/un\n\nSe você junta tudo numa linha só de 13 portas, o orçamentista vai cotar tudo no preço da mais barata. Você descobre o erro só na hora da compra — sem orçamento pra cobrir o resto."
         },
         {
-          "h2": "Estrutura típica do quadro de esquadrias",
-          "body": "Toda tabela bem feita tem essas colunas:\n\n- TIPO: P1, P2, J1...\n- DIMENSÃO: largura × altura (em metros)\n- MATERIAL: madeira, alumínio, vidro, aço\n- ABERTURA: giro, correr, pivotante, basculante, maxim-ar, fixa\n- FOLHA: lisa, almofadada, vidro, veneziana\n- FERRAGEM: marca/modelo da fechadura\n- ACABAMENTO: pintura, verniz, anodização\n- QUANTIDADE: quantas vezes esse tipo aparece no projeto\n- LOCAL: ambiente onde fica\n- OBSERVAÇÃO: detalhes especiais"
+          "h2": "Estrutura completa do quadro de esquadrias",
+          "body": "Toda tabela bem feita tem ao menos essas colunas:\n\n- TIPO — P1, P2, J1...\n- DIMENSÃO — largura × altura em metros (ex: 0,80 × 2,10)\n- MATERIAL — madeira, alumínio, vidro, aço, PVC\n- ABERTURA — giro, correr, pivotante, basculante, maxim-ar, fixa, oscilo-batente\n- FOLHA — lisa, almofadada, vidro, veneziana, persiana\n- FERRAGEM — marca/modelo de fechadura, dobradiça, fecho\n- ACABAMENTO — pintura, verniz, anodização (cor)\n- QUANTIDADE — quantas vezes esse tipo aparece no projeto\n- LOCAL — ambiente onde fica\n- CLASSE NBR 10821 — qual classe de desempenho atende\n- OBSERVAÇÃO — detalhes especiais (vidro duplo, motorizado, etc.)\n\nQuadros grandes podem ter coluna de DESENHO pequeno com a vista esquemática da esquadria. Útil pra fornecedor visualizar."
         },
         {
           "h2": "Como contar esquadrias na planta",
-          "body": "Depois que você lê o quadro de tipos, vai pra planta e conta quantas vezes cada código aparece marcado.\n\nNa planta as esquadrias geralmente vem com a sigla escrita ao lado do símbolo gráfico — algo como uma porta com \"P1\" escrito perto, ou uma janela com \"J2\" abaixo.\n\nO trabalho é tedioso: você abre cada prancha, conta cada P1, anota. Conta cada P2, anota. Repete pra J1, J2... Em projeto grande, isso leva HORAS.\n\nÉ um dos motivos do AI.arq existir: a gente faz essa contagem automaticamente lendo o CAD."
+          "body": "Depois de ler o quadro de tipos, vai pra planta e conta quantas vezes cada código aparece marcado. Na planta cada esquadria geralmente vem com a sigla escrita ao lado do símbolo gráfico — porta com P1 perto, janela com J2 abaixo.\n\nO trabalho manual é tedioso e consome horas em projetos grandes. Você precisa:\n- Abrir cada prancha\n- Procurar visualmente cada P, J, B...\n- Contar cada ocorrência\n- Anotar em planilha separada\n- Fazer o mesmo pra cada tipo\n- Cruzar com a coluna QUANTIDADE do quadro pra validar\n\nEm projeto comercial de 8 pranchas, isso leva fácil 1-2 horas. Em retrofit grande de escritório, 4+ horas só pra esquadrias."
         },
         {
-          "h2": "Erros comuns ao ler quadro de esquadrias",
-          "body": "1. Confundir tipo com quantidade. \"P1 a P7\" significa 7 TIPOS, não 7 portas.\n\n2. Não verificar se o quadro está atualizado. Às vezes o desenho mudou mas a tabela não.\n\n3. Esquecer de descontar esquadrias da pintura. Ninguém pinta vidro de janela.\n\n4. Não reparar em código não-padrão. Alguns escritórios usam PA, PB, PC em vez de P1, P2, P3.\n\n5. Esquecer marcas/modelos. Sem essa info, fornecedor não cota com precisão."
+          "h2": "5 erros mais comuns ao ler quadro de esquadrias",
+          "body": "1. Confundir tipo com quantidade. P1 a P7 significa 7 TIPOS, não 7 portas.\n\n2. Não verificar se o quadro está atualizado. Às vezes o desenho mudou mas a tabela não. Sempre cruzar planta com quadro.\n\n3. Esquecer de descontar esquadrias da pintura. Ninguém pinta vidro de janela. Isso já discutimos no post de erros de quantitativo.\n\n4. Não reparar em código não-padrão. Alguns escritórios usam PA, PB, PC em vez de P1, P2, P3. Outros usam siglas tipo PT-01, JL-02.\n\n5. Esquecer marca/modelo. Sem marca de ferragem, fornecedor cota a mais barata. Sem modelo de fechadura, instalação fica indefinida."
+        },
+        {
+          "h2": "Como o AI.arq automatiza a leitura do quadro",
+          "body": "O AI.arq lê o quadro de esquadrias automaticamente quando você sobe o CAD ou PDF. A IA:\n\n- Identifica a presença do quadro nas pranchas\n- Extrai cada linha (TIPO, dimensão, material, abertura, folha, etc.)\n- Conta as ocorrências de cada tipo na planta automaticamente\n- Cruza com a coluna QUANTIDADE do quadro pra detectar inconsistências\n- Alerta se faltar algum item (ex: porta na planta sem código no quadro)\n- Gera linha separada por tipo na planilha de quantitativos\n\nGanho de tempo: 1-4 horas por projeto, dependendo do tamanho. Primeiro projeto grátis em ai.arq.br."
         }
       ],
-      "cta": "Quer parar de contar esquadrias manualmente? O AI.arq lê o quadro e faz a contagem por tipo automaticamente — em 5 minutos. Primeiro projeto grátis em ai.arq.br."
+      "cta": "Quer parar de contar esquadrias manualmente? O AI.arq lê o quadro e faz a contagem por tipo automaticamente — em 5 minutos. Primeiro projeto grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "ABNT NBR 10821-1:2017", "description": "Esquadrias para edificações — Parte 1: Terminologia"},
+        {"type": "norm", "title": "ABNT NBR 10821-2:2017", "description": "Esquadrias para edificações — Parte 2: Requisitos e classificação"},
+        {"type": "norm", "title": "ABNT NBR 10821-3:2017", "description": "Esquadrias para edificações — Parte 3: Métodos de ensaio"},
+        {"type": "norm", "title": "ABNT NBR 10821-4:2017", "description": "Esquadrias para edificações — Parte 4: Requisitos adicionais de desempenho"},
+        {"type": "norm", "title": "ABNT NBR 10821-5:2017", "description": "Esquadrias para edificações — Parte 5: Instalação e manutenção"},
+        {"type": "norm", "title": "ABNT NBR 15575:2021", "description": "Norma de Desempenho — referência cruzada com NBR 10821"},
+        {"type": "book", "title": "Detalhes Construtivos da Construção Civil", "author": "Yopanan Conrado Pereira Rebello", "publisher": "Zigurate", "year": 2018},
+        {"type": "book", "title": "Esquadrias para Edificações", "author": "Sérgio Botelho Junior", "publisher": "Editora PINI", "year": 2017},
+        {"type": "link", "title": "ABNT publica norma de esquadrias externas para edificações", "url": "http://piniweb17.pini.com.br/construcao/tecnologia-materiais/abnt-publica-norma-de-esquadrias-externas-para-edificacoes-207202-1.aspx", "publisher": "PINIweb"},
+        {"type": "link", "title": "ABNT NBR 10821 — Esquadrias externas para edificações (resumo)", "url": "https://www.anavidro.com.br/abnt-nbr-10821-esquadrias-externas-para-edificacoes/", "publisher": "AnaVidro"}
+      ]
     },
     {
       "slug": "quanto-cobrar-planilha-quantitativos-2026",
       "title": "Quanto Cobrar por Planilha de Quantitativos em 2026 (Tabela Completa)",
-      "description": "Tabela atualizada de valores de mercado pra planilha de quantitativos em 2026. Quanto cobrar por m², por prancha, por complexidade.",
-      "keywords": "quanto cobrar planilha quantitativos, valor planilha orçamento, preço quantitativo obra, honorários arquitetura quantitativo, tabela cobrança orçamentista",
+      "description": "Tabela 2026 de valores de mercado pra planilha de quantitativos. Cobrança por porte, por prancha, por m², por hora — com base na Tabela CAU/BR e prática de mercado.",
+      "keywords": "quanto cobrar planilha quantitativos, valor planilha orçamento, preço quantitativo obra, tabela honorários CAU, cobrança orçamentista 2026, honorários arquitetura",
       "publish_date": "2026-05-31",
-      "estimated_read_min": 7,
+      "estimated_read_min": 9,
       "category": "Mercado",
-      "intro": "Quanto vale o trabalho de fazer uma planilha de quantitativos profissional? Essa é uma das perguntas mais frequentes em grupos de arquitetos e orçamentistas. Vou compartilhar a tabela de mercado de 2026 com base em pesquisa real e benchmarks.",
+      "intro": "Quanto vale o trabalho de fazer uma planilha de quantitativos profissional em 2026? Essa pergunta vive em grupos de arquitetos e orçamentistas. A resposta não é única — depende do porte do projeto, da complexidade, da região, e da sua experiência. Esse guia compila a referência oficial (Tabela CAU/BR), a prática de mercado em 2026, e como calcular pelas 4 modalidades mais comuns: por porte, por prancha, por m² e por hora. No fim, mostro o impacto da IA nos preços do setor.",
       "sections": [
         {
-          "h2": "O que entra no preço",
-          "body": "Antes de falar de valores, é importante entender o que está sendo cobrado:\n\n- Tempo de trabalho (geralmente o maior componente)\n- Complexidade do projeto\n- Número de pranchas / disciplinas\n- Nível de detalhamento exigido\n- Prazo de entrega (urgente custa mais)\n- Responsabilidade técnica (com ART/RRT custa mais)\n- Revisões inclusas no contrato"
+          "h2": "A referência oficial: Tabela de Honorários CAU/BR",
+          "body": "A Tabela de Honorários de Serviços em Arquitetura e Urbanismo foi aprovada pela Resolução nº 64 do CAU/BR (Conselho de Arquitetura e Urbanismo do Brasil) em 8 de novembro de 2013, e tem revisões periódicas.\n\nA tabela é online (honorario.caubr.gov.br) e cobre mais de 240 atividades dos arquitetos. Pra calcular, ela considera duas variáveis principais:\n- Valor do metro quadrado de construção no estado (varia por UF)\n- BDI específico do escritório\n\nImportante: a Tabela CAU/BR não tem força de lei pra obrigar o cliente a pagar aquele valor — é REFERÊNCIA. O Código de Ética e Disciplina do CAU/BR recomenda que o arquiteto apresente propostas alinhadas com a tabela, mas a negociação é livre.\n\nPra levantamento de quantitativos especificamente, a tabela enquadra como serviço técnico complementar, com cobrança proporcional ao escopo do projeto."
         },
         {
-          "h2": "Tabela 2026 — Cobrança por porte do projeto",
-          "body": "Pesquisa de mercado feita em 2026 com escritórios de pequeno e médio porte no Brasil:\n\nResidência pequena (até 80m²): R$ 800 - R$ 1.500\nResidência média (80-200m²): R$ 1.500 - R$ 3.000\nResidência grande (200-500m²): R$ 3.000 - R$ 6.500\nApartamento (reforma): R$ 1.200 - R$ 4.000\nLoja / comercial pequeno: R$ 1.500 - R$ 4.000\nEscritório corporativo (até 500m²): R$ 4.000 - R$ 12.000\nCorporativo grande (500-2000m²): R$ 12.000 - R$ 35.000\nIndustrial / galpão: R$ 6.000 - R$ 25.000\n\nEsses valores variam MUITO por região (SP/RJ tendem a ser 30-50% mais caros) e pela reputação do profissional."
+          "h2": "O que entra no preço (variáveis)",
+          "body": "Antes de falar de valores, vale entender o que está sendo cobrado. As 7 variáveis que mais afetam o preço:\n\n- Tempo de trabalho — geralmente o maior componente (60-80% do custo)\n- Complexidade do projeto — comercial pesado vs residencial simples\n- Número de pranchas e disciplinas — quanto mais, mais trabalho\n- Nível de detalhamento exigido — memorial completo vs lista resumida\n- Prazo de entrega — urgente cobra 30-50% a mais\n- Responsabilidade técnica — com ART/RRT cobra 10-20% a mais\n- Revisões inclusas — geralmente 1-3 revisões grátis, depois cobra extra"
         },
         {
-          "h2": "Como calcular por prancha",
-          "body": "Outra forma comum de cobrar é por prancha. Tabela média 2026:\n\n- Prancha simples (planta única, baixa densidade): R$ 200 - R$ 400\n- Prancha média (planta + cortes ou detalhes): R$ 400 - R$ 700\n- Prancha complexa (ponto elétrico, hidráulico, esquadrias com muitos tipos): R$ 700 - R$ 1.200\n\nProjeto comercial típico tem 8-15 pranchas. Faça a conta."
+          "h2": "Tabela 2026: cobrança por porte do projeto",
+          "body": "Pesquisa de mercado feita em 2026 com escritórios de pequeno e médio porte no Brasil. Valores pra LEVANTAMENTO DE QUANTITATIVOS apenas (sem precificar):\n\n- Residência pequena (até 80m²): R$ 800 - R$ 1.500\n- Residência média (80-200m²): R$ 1.500 - R$ 3.000\n- Residência grande (200-500m²): R$ 3.000 - R$ 6.500\n- Apartamento (reforma): R$ 1.200 - R$ 4.000\n- Loja / comercial pequeno (até 100m²): R$ 1.500 - R$ 4.000\n- Escritório corporativo (até 500m²): R$ 4.000 - R$ 12.000\n- Corporativo médio (500-2000m²): R$ 12.000 - R$ 35.000\n- Corporativo grande (2000m²+): R$ 35.000 - R$ 100.000\n- Industrial / galpão (até 3000m²): R$ 6.000 - R$ 25.000\n- Hospitalar / educacional pequeno: R$ 8.000 - R$ 25.000\n\nValores variam por região: SP e RJ tendem a ser 30-50% mais caros que Norte/Nordeste."
         },
         {
-          "h2": "Como calcular por m²",
-          "body": "Em projetos comerciais e industriais, é comum cobrar por m²:\n\n- Comercial leve (escritório, loja): R$ 8 - R$ 18 / m²\n- Comercial pesado (restaurante, clínica): R$ 15 - R$ 30 / m²\n- Industrial: R$ 5 - R$ 12 / m² (área grande compensa)\n- Hospitalar / educacional: R$ 20 - R$ 45 / m²\n\nPra residencial, cobrança por m² é menos comum porque tem alta variação."
+          "h2": "Tabela 2026: cobrança por prancha",
+          "body": "Cobrar por prancha é comum quando o cliente envia o projeto fragmentado.\n\n- Prancha simples (planta única, baixa densidade): R$ 200 - R$ 400\n- Prancha média (planta + cortes ou detalhes): R$ 400 - R$ 700\n- Prancha complexa (pontos elétricos densos, hidráulica, esquadrias com 10+ tipos): R$ 700 - R$ 1.200\n- Prancha A0 corporativa (escritório com 200+ pontos): R$ 1.000 - R$ 1.800\n\nProjeto comercial típico tem 8-15 pranchas. Faça a conta:\n- 10 pranchas médias × R$ 550 = R$ 5.500\n- 8 pranchas complexas × R$ 900 = R$ 7.200\n\nDicas: cobre prancha CHEIA, não fração. Se a prancha é A0 mas tá meia cheia, ainda assim conta como 1 prancha cheia."
         },
         {
-          "h2": "Quanto cobrar por hora",
-          "body": "Pra projetos atípicos ou consultoria pontual:\n\n- Estagiário / técnico: R$ 30 - R$ 60 / hora\n- Júnior (1-3 anos): R$ 60 - R$ 100 / hora\n- Pleno (3-7 anos): R$ 100 - R$ 180 / hora\n- Sênior (7+ anos): R$ 180 - R$ 350 / hora\n- Especialista (consultor): R$ 350 - R$ 800 / hora\n\nLevantamento de projeto comercial médio leva 6-12h de pleno. Faça a conta."
+          "h2": "Tabela 2026: cobrança por m²",
+          "body": "Em projetos comerciais e industriais, cobrar por m² é mais simples e previsível:\n\n- Comercial leve (escritório, loja, café): R$ 8 - R$ 18 / m²\n- Comercial pesado (restaurante, clínica, salão): R$ 15 - R$ 30 / m²\n- Industrial (galpão, fábrica): R$ 5 - R$ 12 / m² (área grande compensa)\n- Hospitalar / educacional: R$ 20 - R$ 45 / m²\n- Hotelaria: R$ 18 - R$ 35 / m²\n- Centro comercial / shopping: R$ 12 - R$ 25 / m²\n\nPra residencial, cobrança por m² é menos comum porque tem alta variação (luxo extremo distorce os números). Geralmente vai por porte ou prancha."
+        },
+        {
+          "h2": "Tabela 2026: cobrança por hora",
+          "body": "Pra projetos atípicos, consultoria pontual ou itens fora do escopo principal:\n\n- Estagiário / técnico: R$ 30 - R$ 60 / hora\n- Júnior (1-3 anos): R$ 60 - R$ 100 / hora\n- Pleno (3-7 anos): R$ 100 - R$ 180 / hora\n- Sênior (7+ anos): R$ 180 - R$ 350 / hora\n- Especialista / consultor reconhecido: R$ 350 - R$ 800 / hora\n\nQuanto tempo leva fazer um quantitativo manualmente? Tempo médio:\n- Residencial pequeno: 4-6h de pleno\n- Comercial médio: 8-15h de pleno\n- Comercial grande: 20-40h de pleno\n- Industrial: 12-30h de pleno\n\nFaça a conta com seu valor/hora pra calibrar o que cobrar."
         },
         {
           "h2": "O que mudou em 2026 com IA",
-          "body": "A entrada de ferramentas de IA (como o próprio AI.arq) tá comprimindo o mercado dos preços tradicionais.\n\nAntes:\n- Levantamento de comercial 500m² = R$ 8.000 + 12h de trabalho\n\nDepois (com IA):\n- Mesmo levantamento = R$ 247 (custo da plataforma) + 1h de revisão = R$ 247 + R$ 100 = R$ 347\n- Margem do profissional: cobra os mesmos R$ 8.000, fica com R$ 7.653 de lucro\n\nOu repassa parte do ganho:\n- Cobra R$ 4.500 do cliente\n- Custo R$ 347\n- Margem R$ 4.153 — quase igual a antes, mas o cliente paga metade\n\nQuem usa IA bem hoje tem vantagem competitiva enorme."
+          "body": "A entrada de ferramentas de IA (como o AI.arq) tá comprimindo a economia do levantamento. Quem usa IA bem hoje tem vantagem competitiva enorme.\n\nCenário antes:\n- Levantamento de comercial 500m² = R$ 8.000 cobrado do cliente + 12h de trabalho = ~R$ 1.200 de custo de mão de obra (pleno)\n- Margem: ~R$ 6.800\n\nCenário com IA:\n- Mesmo levantamento = R$ 247 (AI.arq) + 1h de revisão = R$ 347 de custo total\n- Cobra os mesmos R$ 8.000 do cliente\n- Margem: R$ 7.653\n\nOu repassa parte do ganho pro cliente:\n- Cobra R$ 4.500 (40% mais barato que mercado)\n- Custo R$ 347\n- Margem R$ 4.153 — ainda maior que era antes\n- Vence concorrência por preço E entrega mais rápido (5min vs 12h)\n\nO arquiteto que adota IA agora pode escolher: vencer pela margem (lucro maior por projeto) ou pela escala (mais projetos por mês com preço competitivo)."
+        },
+        {
+          "h2": "Como precificar usando AI.arq como base",
+          "body": "Sugestão prática pra quem está adotando IA agora e quer manter qualidade da entrega:\n\n1. Calcule seu custo real por projeto: R$ 247 (médio) + 1-2h de revisão sua = R$ 347-447\n2. Aplique markup mínimo de 5-8x (qualidade técnica + responsabilidade): R$ 1.700 - R$ 3.500\n3. Compare com a tabela de mercado acima — fique no meio da faixa\n4. Comunique benefícios: rapidez (5min), referência SINAPI, isenção de erros típicos\n5. Use os ganhos pra investir em outras coisas: escritório, marketing, contratar júnior\n\nMuito profissional baixa preço demais quando começa com IA — não precisa. O cliente continua pagando pela RESPONSABILIDADE TÉCNICA, não pelo software."
         }
       ],
-      "cta": "Quer reduzir seu custo de produção da planilha em 90% sem perder qualidade? Testa o AI.arq grátis com seu próximo projeto: ai.arq.br"
+      "cta": "Quer reduzir seu custo de produção da planilha em 90% sem perder qualidade? Testa o AI.arq grátis com seu próximo projeto em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "Resolução CAU/BR nº 64/2013", "description": "Aprova a Tabela de Honorários de Serviços em Arquitetura e Urbanismo"},
+        {"type": "book", "title": "Como gerenciar escritórios de arquitetura", "author": "AsBEA — Associação Brasileira dos Escritórios de Arquitetura", "publisher": "AsBEA", "year": 2019},
+        {"type": "book", "title": "O Negócio do Arquiteto", "author": "Aldo Dórea Mattos & Felipe Paez", "publisher": "Editora PINI", "year": 2018},
+        {"type": "link", "title": "Tabela de Honorários CAU/BR (oficial)", "url": "https://honorario.caubr.gov.br/download/", "publisher": "CAU/BR"},
+        {"type": "link", "title": "Cálculo de honorários profissionais — Carta de Serviços CAU/BR", "url": "https://transparencia.caubr.gov.br/cartadeservicos4-1/", "publisher": "CAU/BR"},
+        {"type": "link", "title": "Tabela de Honorários para Projetos de Edificações — CAU/SP", "url": "https://causp.gov.br/tabela-de-honorarios-para-projetos-de-edificacoes-a-arquitetos-e-urbanistas/", "publisher": "CAU/SP"},
+        {"type": "link", "title": "Tabela de honorários de arquitetura — IAB Distrito Federal", "url": "https://www.iabdf.org.br/tabela-de-honoraacuterios-de-arquitetura.html", "publisher": "IAB-DF"},
+        {"type": "link", "title": "CAU Brasil revisa Tabela de Honorários", "url": "https://caubr.gov.br/cau-brasil-revisa-tabela-de-honorarios-dos-servicos-em-arquitetura-e-urbanismo/", "publisher": "CAU/BR"}
+      ]
     },
     {
       "slug": "como-pedir-cotacao-fornecedor-obra",
-      "title": "Como Pedir Cotação pro Fornecedor de Obra: Template + 5 Dicas",
-      "description": "Como pedir cotação pra fornecedor de obra de forma profissional. Template pronto pra copiar, dicas pra receber proposta detalhada e comparar com precisão.",
-      "keywords": "como pedir cotação fornecedor obra, template cotação obra, pedir orçamento fornecedor, cotação construção civil, comparar fornecedores obra",
+      "title": "Como Pedir Cotação pro Fornecedor de Obra: Template + 7 Dicas Práticas",
+      "description": "Como pedir cotação de obra de forma profissional. Template pronto, 7 dicas pra receber proposta comparável, processo de seleção e como automatizar o comparativo.",
+      "keywords": "como pedir cotação fornecedor obra, template cotação obra, pedir orçamento fornecedor, cotação construção civil, comparar fornecedores obra, processo de compras obra",
       "publish_date": "2026-06-07",
-      "estimated_read_min": 6,
+      "estimated_read_min": 8,
       "category": "Comercial",
-      "intro": "Pedir cotação parece simples, mas a forma como você manda o pedido define a qualidade da resposta que recebe. Fornecedor que recebe pedido vago manda preço chutado. Fornecedor que recebe pedido bem estruturado manda proposta detalhada que você consegue comparar com outras.",
+      "intro": "Pedir cotação parece simples, mas a forma como você manda o pedido define a qualidade da resposta que recebe. Fornecedor que recebe pedido vago manda preço chutado. Fornecedor que recebe pedido bem estruturado manda proposta detalhada e comparável. Esse guia traz template completo, 7 dicas pra elevar a taxa de resposta, processo de seleção de fornecedores, e como comparar propostas sem cair em armadilha clássica de preço x escopo.",
       "sections": [
         {
-          "h2": "O que toda cotação precisa ter",
-          "body": "Pedido completo pro fornecedor sempre inclui:\n\n1. Identificação clara da obra (nome, endereço, tipo)\n2. Quem é o solicitante (você + escritório + telefone)\n3. Lista de itens (a planilha de quantitativos)\n4. Condições de pagamento desejadas (à vista, parcelado, prazo)\n5. Prazo de entrega esperado\n6. Data limite pra resposta\n7. Anexos (planta, especificação técnica, fotos)\n\nFalta qualquer um desses → o fornecedor liga 5 vezes pra perguntar, ou simplesmente chuta."
+          "h2": "O processo de cotação na construção civil",
+          "body": "A cotação de fornecedores conecta o orçamento, a gestão e o planejamento da obra. É o elo que liga todos esses elementos no canteiro. Um processo bem estruturado tem 4 etapas:\n\n1. Definição da necessidade — saber EXATAMENTE o que comprar (planilha de quantitativos)\n2. Seleção de fornecedores — escolher quem vai cotar (pelo menos 3)\n3. Envio da solicitação — pedido formal padronizado\n4. Comparação e decisão — quadro comparativo + escolha\n\nFalta de processo é o que faz a obra estourar. Comprador improvisado liga pra um fornecedor que conhece, recebe um preço sem comparar, e descobre 30 dias depois que pagou 40% a mais do que poderia."
+        },
+        {
+          "h2": "O que toda solicitação de cotação precisa ter",
+          "body": "Pedido completo sempre inclui:\n\n1. Identificação clara da obra (nome, endereço, tipo)\n2. Quem é o solicitante (você + escritório + telefone)\n3. Lista de itens (planilha de quantitativos)\n4. Condições de pagamento desejadas (à vista, parcelado, prazo)\n5. Prazo de entrega esperado\n6. Data limite pra resposta\n7. Forma de entrega (frete incluso ou separado, retirada)\n8. Anexos (planta, especificação técnica, fotos do local)\n\nFalta qualquer um desses e o fornecedor: liga 5 vezes pra perguntar, ou simplesmente chuta o preço, ou nem responde."
         },
         {
           "h2": "Template pronto pra usar",
-          "body": "Copia, cola e adapta:\n\nAssunto: Solicitação de cotação — [Nome da obra] — [Disciplina]\n\nOlá [Nome do fornecedor],\n\nEstamos solicitando cotação pra fornecimento de [disciplina, ex: pisos cerâmicos] na obra [nome].\n\nDados da obra:\n- Local: [endereço]\n- Tipo: [residencial / comercial / etc.]\n- Área aproximada: [m²]\n- Início previsto: [data]\n\nSegue em anexo:\n- Planilha de quantitativos detalhada\n- Especificação técnica\n- Planta de referência\n\nPedimos a gentileza de responder com:\n- Preço unitário e total por item\n- Prazo de entrega\n- Condições de pagamento\n- Validade da proposta\n- Garantia\n\nPrazo pra resposta: até [data].\n\nQualquer dúvida, fico à disposição.\n\n[Seu nome]\n[Telefone]\n[E-mail]"
+          "body": "Copia, cola e adapta:\n\nAssunto: Solicitação de cotação — [Nome da obra] — [Disciplina]\n\nOlá [Nome do fornecedor],\n\nEstamos solicitando cotação pra fornecimento de [disciplina, ex: pisos cerâmicos] na obra [nome do projeto].\n\nDados da obra:\n- Local: [endereço completo]\n- Tipo: [residencial / comercial / industrial]\n- Área aproximada: [m² total]\n- Início previsto: [data prevista pra fornecimento]\n\nSegue em anexo:\n- Planilha de quantitativos detalhada (XLSX)\n- Especificação técnica completa\n- Planta de referência (PDF)\n- Fotos do local (se já existe)\n\nPedimos a gentileza de responder com:\n- Preço unitário e total por item da planilha\n- Prazo de entrega\n- Condições de pagamento (à vista, parcelado)\n- Validade da proposta (em dias)\n- Garantia oferecida\n- Frete incluso ou separado\n- Disponibilidade pra prestar suporte técnico durante a obra\n\nPrazo pra resposta: até [data realista, ex: 5 dias úteis].\n\nQualquer dúvida, fico à disposição.\n\n[Seu nome]\n[Cargo]\n[Escritório / Empresa]\n[Telefone com WhatsApp]\n[E-mail]"
         },
         {
-          "h2": "5 dicas pra receber proposta melhor",
-          "body": "1. Mande SEMPRE a planilha de quantitativos junto. Sem ela, o fornecedor estima e o preço varia 30-50% entre cotações.\n\n2. Especifique a marca/modelo desejado. Se é \"genérico\", ele cota o mais barato. Se é \"Portobello\", ele cota Portobello.\n\n3. Defina prazo de resposta firme. Sem deadline, ele engaveta. Com deadline, ele responde.\n\n4. Peça pra discriminar mão de obra. Algumas cotações vem só com material — depois aparece o custo de instalação.\n\n5. Mande pra pelo menos 3 fornecedores. Sempre. Mesmo que você confie no primeiro."
+          "h2": "7 dicas pra receber proposta melhor",
+          "body": "1. Mande SEMPRE a planilha de quantitativos junto. Sem ela, fornecedor estima e o preço varia 30-50% entre cotações — comparação fica impossível.\n\n2. Especifique marca/modelo desejado. Se você diz piso porcelanato genérico, ele cota o mais barato (que pode ser PEI 1, frágil). Se diz porcelanato Portobello modelo X PEI 5, todos cotam o mesmo produto.\n\n3. Defina prazo de resposta firme. Sem deadline, fornecedor engaveta seu pedido. Com deadline (ex: 5 dias úteis), ele prioriza.\n\n4. Peça pra discriminar mão de obra. Algumas cotações vêm só com material — depois aparece custo de instalação não incluso. Discriminação separa material, mão de obra, transporte, BDI.\n\n5. Mande pra pelo menos 3 fornecedores. Sempre. Mesmo que você confie no primeiro. Sem competição, ninguém dá o melhor preço.\n\n6. Selecione fornecedores por critérios objetivos: seriedade, prazo, qualidade, opções de pagamento, proximidade da obra. Não só o mais barato.\n\n7. Mantenha histórico das cotações. Mesmo que essa cotação não fechar, próxima obra você usa essa base de fornecedores que já conhece o seu padrão."
         },
         {
-          "h2": "Como comparar cotações depois",
-          "body": "Receber 3 cotações é só metade do trabalho. A outra metade é COMPARAR direito.\n\nProblemas comuns na comparação:\n- Cotação A discriminou mão de obra. B incluiu junto. C nem mencionou.\n- A usa marca X. B usa marca Y (que não é equivalente).\n- A garante 5 anos. B só 1.\n- A tem prazo de entrega 30 dias. B 90.\n\nPra comparar honestamente, você precisa fazer um QUADRO COMPARATIVO — geralmente uma planilha onde cada linha é um item e cada coluna é um fornecedor."
+          "h2": "Como selecionar fornecedores",
+          "body": "Pra cada disciplina da obra, você deveria ter pelo menos 3 fornecedores qualificados em base. Critérios de qualificação:\n\n- Tempo de mercado — preferência por 5+ anos de operação\n- Reputação no setor — pesquise reclame aqui, indicações de outros profissionais\n- Capacidade técnica — atende ao porte da sua obra?\n- Localização — quanto mais próximo, menor o frete e prazo de entrega\n- Carteira anterior — já forneceu pra obras similares?\n- Documentação — CNPJ ativo, certidões em dia\n- Atendimento — responde rápido em primeira abordagem? bom sinal\n\nFornecedores que respondem em 24h o pedido inicial costumam manter o padrão. Quem demora 1 semana pra responder vai ser o gargalo da obra inteira."
         },
         {
-          "h2": "Como o AI.arq automatiza isso",
-          "body": "Depois que o arquiteto manda o quantitativo (gerado pelo AI.arq) e os fornecedores devolvem as cotações, o próprio AI.arq faz o pareamento automático.\n\nVocê sobe os XLSX dos 3-5 fornecedores e o AI.arq:\n- Casa item por item entre as planilhas\n- Calcula preço unitário e total por fornecedor\n- Identifica discrepâncias (preço fora do padrão de mercado)\n- Marca itens que algum fornecedor esqueceu\n- Gera PPT executivo com a marca do escritório\n\nPronto pra mandar pro cliente final. Tudo isso já está incluído no preço do projeto, sem cobrança extra."
+          "h2": "Como comparar cotações depois (sem cair em armadilha)",
+          "body": "Receber 3 cotações é metade do trabalho. A outra metade é COMPARAR direito. Armadilhas clássicas:\n\n- Cotação A discriminou mão de obra. B incluiu junto. C nem mencionou.\n- A usa marca X. B usa marca Y (que não é equivalente — mais barata mas pior qualidade).\n- A garante 5 anos. B só 1.\n- A tem prazo de entrega 30 dias. B 90 dias.\n- A inclui frete. B cobra à parte.\n- A condição de pagamento é 30/60/90. B só à vista.\n\nPra comparar honestamente, você precisa fazer um QUADRO COMPARATIVO — planilha onde cada linha é um item e cada coluna é um fornecedor, com TODAS as variáveis acima visíveis pra cliente decidir.\n\nFazer isso manualmente leva 2-4 horas em obra média. Em obra grande com 5 fornecedores e 200 itens, passa de 8h."
+        },
+        {
+          "h2": "Como o AI.arq automatiza o comparativo",
+          "body": "Depois que o arquiteto manda o quantitativo (gerado pelo AI.arq) e os fornecedores devolvem as cotações, o próprio AI.arq faz o pareamento automático.\n\nVocê sobe os XLSX dos 3-5 fornecedores e o AI.arq:\n- Casa item por item entre as planilhas (mesmo com nomes diferentes)\n- Calcula preço unitário e total por fornecedor\n- Identifica discrepâncias (preço fora do padrão de mercado, sugere investigação)\n- Marca itens que algum fornecedor esqueceu (alerta visual)\n- Calcula ranking final considerando preço + prazo + condições\n- Gera PPT executivo com a marca do escritório pra mandar pro cliente\n\nPronto pra mandar pro cliente final. Tudo já incluso no preço do projeto, sem cobrança extra."
         }
       ],
-      "cta": "Quer parar de comparar cotação no Excel e ganhar tempo? Sobe seu projeto no AI.arq — quantitativo + comparativo já vem incluso. ai.arq.br"
+      "cta": "Quer parar de comparar cotação no Excel e ganhar tempo? Sobe seu projeto no AI.arq — quantitativo + comparativo já vem incluso. ai.arq.br",
+      "sources": [
+        {"type": "norm", "title": "Lei 14.133/2021", "description": "Nova Lei de Licitações e Contratos Administrativos"},
+        {"type": "book", "title": "Gestão de Compras na Construção Civil", "author": "Antonio Edésio Jungles", "publisher": "Editora PINI", "year": 2018},
+        {"type": "book", "title": "Manual de Compras e Suprimentos para Construção Civil", "author": "AsBEA", "publisher": "AsBEA", "year": 2020},
+        {"type": "book", "title": "Gestão de Suprimentos em Obras", "author": "Fernando Tadeu Rebelo", "publisher": "Editora Senac", "year": 2019},
+        {"type": "link", "title": "5 dicas para realizar uma cotação de fornecedores na construção civil", "url": "https://www.orcafascio.com/papodeengenheiro/cotacao-de-fornecedores-na-construcao-civil", "publisher": "OrçaFascio"},
+        {"type": "link", "title": "Fluxograma do processo de compras", "url": "https://sienge.com.br/blog/fluxograma-do-processo-de-compras/", "publisher": "Sienge"},
+        {"type": "link", "title": "Formulários e modelos gratuitos de cotação de construção", "url": "https://www.smartsheet.com/content/construction-quote-template", "publisher": "Smartsheet"}
+      ]
     },
     {
       "slug": "bdi-em-obra-o-que-e-como-calcular",
-      "title": "BDI em Obra: O Que É, Como Calcular e Exemplo Prático (2026)",
-      "description": "BDI em obra explicado: definição, como calcular, percentuais de mercado e exemplo prático. Guia completo pra arquitetos e engenheiros.",
-      "keywords": "bdi obra, como calcular bdi, bdi construção civil, bdi orçamento obra, percentual bdi, exemplo cálculo bdi",
+      "title": "BDI em Obra: O Que É, Como Calcular e Exemplo Prático (Acórdão TCU 2622/2013)",
+      "description": "BDI em obra explicado: fórmula, componentes, faixas referenciais do TCU (Acórdão 2622/2013), exemplos práticos por tipo de obra e erros mais comuns no cálculo.",
+      "keywords": "bdi obra, como calcular bdi, bdi construção civil, BDI Acórdão TCU 2622, percentual bdi, fórmula BDI, exemplo cálculo bdi 2026",
       "publish_date": "2026-06-14",
-      "estimated_read_min": 9,
+      "estimated_read_min": 11,
       "category": "Custos",
-      "intro": "BDI é uma sigla que aparece em todo orçamento de obra séria, mas pouca gente sabe explicar com clareza. Vou desmistificar de uma vez: o que é, como calcular e quanto aplicar dependendo do tipo de obra.",
+      "intro": "BDI é uma sigla que aparece em todo orçamento de obra séria, mas poucos profissionais sabem explicar com clareza. Confusão entre BDI e lucro é a regra no setor. E pior: muito orçamento aplica BDI errado e descobre só depois que perdeu dinheiro. Esse guia desmistifica: o que é BDI tecnicamente, qual a fórmula oficial aceita pelo TCU (Acórdão 2622/2013), os componentes obrigatórios, faixas referenciais por tipo de obra, exemplo prático com números, e os 5 erros mais comuns que invalidam o cálculo.",
       "sections": [
         {
-          "h2": "O que é BDI",
-          "body": "BDI = Benefícios e Despesas Indiretas. É o percentual que se soma ao custo direto da obra pra cobrir tudo que NÃO é material e mão de obra direta.\n\nO custo direto é o que aparece na planilha de quantitativos: tijolo, cimento, pintura, mão de obra do pintor, etc.\n\nO BDI cobre tudo o que existe pra obra rodar mas não fica visível em cada item:\n- Administração da empresa (escritório, secretária, gerente)\n- Equipamentos do canteiro (betoneira, andaime, container)\n- Seguros e ART/RRT\n- Taxas e impostos (ISS, PIS, COFINS, IRPJ)\n- Lucro do construtor\n- Riscos e imprevistos\n\nSem BDI, o construtor trabalha de graça (ou pior, no prejuízo)."
+          "h2": "O que é BDI tecnicamente",
+          "body": "BDI = Benefícios e Despesas Indiretas. É a taxa que o construtor aplica sobre o custo direto da obra pra obter o preço final cobrado do cliente.\n\nDecomposição:\n- Custo direto = tijolo, cimento, pintura, mão de obra do pintor, materiais e mão de obra que aparecem na planilha de quantitativos\n- BDI = tudo que precisa existir pra obra rodar mas não fica visível em cada item: administração central, riscos, seguros, garantias, despesas financeiras, lucro, tributos sobre faturamento\n\nSem BDI, o construtor trabalha de graça (ou no prejuízo). Com BDI bem dimensionado, o orçamento é honesto e o construtor consegue manter operação sustentável.\n\nO TCU (Tribunal de Contas da União) consolidou em 2013 o entendimento sobre composição obrigatória do BDI no Acórdão 2622/2013, que virou referência pra obras públicas e privadas no Brasil."
         },
         {
-          "h2": "Como se calcula o BDI",
-          "body": "A fórmula clássica do BDI é:\n\nBDI = [(1 + AC + S + R + G) × (1 + DF) × (1 + L)] / (1 - I) - 1\n\nOnde:\n- AC = Administração Central (% da empresa)\n- S = Seguros\n- R = Riscos\n- G = Garantias\n- DF = Despesas Financeiras\n- L = Lucro\n- I = Impostos sobre faturamento (ISS, PIS, COFINS, IRPJ, CSLL)\n\nEm vez de fazer a conta toda manualmente, dá pra usar a tabela TCU (Acórdão 2.622/2013) que tem percentuais sugeridos por tipo de obra. É a referência oficial pra obras públicas."
+          "h2": "Componentes obrigatórios do BDI segundo TCU",
+          "body": "O Acórdão TCU 2622/2013 lista os componentes que TODO BDI deve conter:\n\n1. Administração Central (AC) — escritório central, gerência, contabilidade, RH, TI\n2. Seguros (S) — RCO (Responsabilidade Civil de Obra), todo risco, garantias\n3. Garantias (G) — bid bond, performance bond, retenção contratual\n4. Riscos (R) — imprevistos, perdas, retrabalho\n5. Despesas Financeiras (DF) — capital de giro, fluxo de caixa\n6. Lucro / Remuneração da empresa (L) — margem do construtor\n7. Tributos sobre faturamento (T) — ISS, PIS, COFINS, IRPJ, CSLL, CPRB\n\nFalta de qualquer componente desses no cálculo do BDI gera questionamento em auditoria. Em obra pública, pode até invalidar o contrato.\n\nO que NÃO entra no BDI (são custos diretos, vão na planilha de quantitativos):\n- Administração local da obra (engenheiro residente, mestre, secretária no canteiro)\n- Canteiro de obras (containers, alojamento, sanitário)\n- Equipamentos do canteiro\n- Mobilização e desmobilização\n\nMuita gente confunde — esses itens são custo direto, vão pra planilha, NÃO pro BDI."
         },
         {
-          "h2": "Percentuais típicos por tipo de obra",
-          "body": "Faixas de BDI mais usadas em 2026:\n\n- Edificações verticais: 18% a 25%\n- Edificações horizontais: 18% a 23%\n- Obras industriais: 15% a 25%\n- Reformas residenciais: 20% a 30%\n- Obras de infraestrutura: 18% a 28%\n- Manutenção / pequenos reparos: 25% a 40%\n\nBDI varia por:\n- Porte da obra (obras pequenas têm BDI maior)\n- Localização (regiões remotas custam mais logística)\n- Tipo de cliente (público tem regra fixa, privado é negociável)\n- Prazo (curto prazo aumenta riscos)"
+          "h2": "A fórmula oficial do BDI (Acórdão TCU)",
+          "body": "A fórmula matemática mais aceita e exigida pelo TCU (Acórdão 2369/2011-Plenário e 2622/2013) é:\n\nBDI = ((1 + AC + S/G + R + DF) × (1 + L)) / (1 − T) − 1\n\nResultado em porcentagem aplicada sobre o custo direto.\n\nA fórmula NÃO é simples soma — é multiplicação composta porque alguns componentes incidem sobre outros, e os tributos T são deduzidos do faturamento bruto (não do custo). Aplicar BDI por soma simples é o erro mais comum.\n\nExemplo numérico de cada componente:\n- AC (Administração Central): 4-7%\n- S/G (Seguros + Garantias): 0,5-1,5%\n- R (Riscos): 1-3%\n- DF (Despesas Financeiras): 1-2%\n- L (Lucro): 6-12%\n- T (Tributos sobre faturamento): 8-13%\n\nCom esses valores típicos, o BDI calculado pela fórmula resulta entre 20% e 35% pra obras comuns."
         },
         {
-          "h2": "Exemplo prático de cálculo",
-          "body": "Reforma residencial em São Paulo, custo direto da planilha:\n\nMateriais: R$ 150.000\nMão de obra: R$ 100.000\nCusto direto total: R$ 250.000\n\nAplicação do BDI 25%:\nBDI = R$ 250.000 × 25% = R$ 62.500\n\nValor final do orçamento:\nR$ 250.000 + R$ 62.500 = R$ 312.500\n\nEsse é o valor que vai pro cliente. Os R$ 62.500 cobrem todos os custos indiretos do construtor."
+          "h2": "Faixas referenciais do TCU por tipo de obra (2026)",
+          "body": "O Acórdão 2622/2013 estabeleceu faixas referenciais de BDI por tipo de obra. Esses valores SÃO usados como balizamento pelo TCU em auditoria — fora da faixa, exige justificativa técnica.\n\nFaixas atualizadas pra 2026:\n\n- Construção de edifícios (vertical): 20,34% a 25,00%\n- Construção de rodovias (DNIT/SICRO): 20,40% a 25,00%\n- Construção de redes de água/esgoto: 20,40% a 25,00%\n- Construção de redes de eletrificação: 20,40% a 25,00%\n- Reformas em obras (manutenção): 25,00% a 35,00%\n- Mero fornecimento de materiais e equipamentos: 11,00% a 18,11%\n\nValor varia por:\n- Porte da obra (obras pequenas têm BDI maior pela diluição menor de custo fixo)\n- Localização (regiões remotas custam mais logística)\n- Tipo de cliente (público tem regra fixa, privado é negociável)\n- Prazo (curto prazo aumenta riscos)\n- Regime tributário da empresa (Simples vs Lucro Presumido vs Real altera tributos)"
+        },
+        {
+          "h2": "Exemplo prático completo",
+          "body": "Reforma comercial em São Paulo, escritório corporativo de 800 m². Premissas:\n\nCusto direto da planilha de quantitativos:\n- Materiais: R$ 280.000\n- Mão de obra: R$ 220.000\n- Equipamentos do canteiro (custos diretos): R$ 30.000\n- Administração local (engenheiro 6 meses): R$ 60.000\n- TOTAL CUSTO DIRETO: R$ 590.000\n\nComposição do BDI (empresa Lucro Presumido em SP):\n- AC = 5%\n- S/G = 1%\n- R = 2%\n- DF = 1,5%\n- L = 10%\n- T = 11,33% (ISS 5% + PIS 0,65% + COFINS 3% + IRPJ 2,4% + CSLL 0,28%)\n\nAplicando a fórmula TCU:\nBDI = ((1 + 0,05 + 0,01 + 0,02 + 0,015) × (1 + 0,10)) / (1 − 0,1133) − 1\nBDI = (1,095 × 1,10) / 0,8867 − 1\nBDI = 1,2045 / 0,8867 − 1\nBDI = 1,3585 − 1 = 0,3585 = 35,85%\n\nValor final do orçamento:\nR$ 590.000 × (1 + 0,3585) = R$ 590.000 × 1,3585 = R$ 801.515\n\nValor cobrado do cliente: R$ 801.515. Diferença pro custo direto = R$ 211.515 (o BDI completo)."
+        },
+        {
+          "h2": "5 erros mais comuns no cálculo do BDI",
+          "body": "1. Confundir BDI com lucro. Lucro é só UMA das parcelas do BDI. Pra um BDI de 25%, o lucro real do construtor é tipicamente 8-12%. O resto (13-17%) é tributo, administração, risco, etc.\n\n2. Aplicar BDI sobre BDI. BDI incide só sobre custo direto, NUNCA sobre outro indireto. Se você jogou administração local na planilha, ela não entra de novo no BDI.\n\n3. Esquecer tributos sobre faturamento. PIS, COFINS, ISS, IRPJ, CSLL comem fácil 11-13% do faturamento. Quem esquece tributo no BDI trabalha no prejuízo.\n\n4. Usar BDI fixo pra qualquer obra. Cada projeto pede BDI diferente conforme tipo, porte, localização, regime tributário. Aplicar 22% padrão em tudo é furada.\n\n5. Não considerar BDI no comparativo de fornecedores. Se fornecedor A cota com BDI embutido e B sem, comparação fica injusta. Sempre normalize a base antes de comparar."
+        },
+        {
+          "h2": "Mudanças importantes pra 2026",
+          "body": "2 mudanças tributárias que afetam BDI em 2026:\n\n1. CPRB (Contribuição Previdenciária sobre Receita Bruta) — alíquota está em desoneração transitória, sobe gradualmente até 2027. Empresas de construção civil que usam essa modalidade precisam ajustar BDI ano a ano.\n\n2. Reforma Tributária (CBS + IBS) — começa transição em 2026, finalização até 2033. Vai substituir PIS/COFINS/ISS/ICMS por sistema unificado. BDI vai precisar de ajuste fino quando entrar em vigor.\n\nFique de olho nos comunicados do CAU/CREA e nos boletins do TCU pra atualizar o cálculo do BDI conforme essas mudanças avançam."
         },
         {
           "h2": "Como o BDI aparece na planilha do AI.arq",
-          "body": "No AI.arq, o BDI é um dos itens da seção \"Custos Indiretos\" (cor ROXA na planilha). Não vem preenchido com percentual fixo porque cada projeto tem realidade diferente — quem decide é o orçamentista do escritório.\n\nO que a gente faz:\n- Reserva uma seção dedicada de Custos Indiretos no fim da planilha\n- Lista os itens típicos: Administração, Lucro, Impostos, Seguros, Riscos, Contingência, ART/RRT, Taxas\n- Deixa os campos em branco pra você preencher conforme o tipo de obra\n- Não calcula automaticamente porque seria estimar — e a gente não estima."
-        },
-        {
-          "h2": "Erros comuns sobre BDI",
-          "body": "1. Confundir BDI com lucro. Lucro é só uma das parcelas do BDI.\n\n2. Aplicar BDI sobre o BDI. Só sobre o custo direto, nunca sobre outro indireto.\n\n3. Esquecer impostos sobre faturamento. PIS, COFINS, ISS, IRPJ comem fácil 13% do faturamento.\n\n4. Usar BDI fixo pra qualquer obra. Cada projeto pede BDI diferente.\n\n5. Não considerar BDI no comparativo de fornecedores. Se um fornecedor cota com BDI embutido e outro sem, comparação fica injusta."
+          "body": "No AI.arq, o BDI é um dos itens da seção Custos Indiretos (cor ROXA na planilha). NÃO vem preenchido com percentual fixo porque cada projeto tem realidade tributária e operacional diferente — quem decide é o orçamentista do escritório.\n\nO que a gente faz automaticamente:\n- Reserva uma seção dedicada de Custos Indiretos no fim da planilha\n- Lista os 7 componentes obrigatórios do TCU (AC, S, G, R, DF, L, T)\n- Deixa os campos em branco pra você preencher conforme tipo de obra e regime tributário\n- Aplica a fórmula correta automaticamente quando você preenche\n- Sinaliza se o BDI calculado fica fora da faixa do TCU pra aquele tipo de obra\n\nO objetivo é evitar que você esqueça componente ou aplique fórmula errada."
         }
       ],
-      "cta": "Pra ter sua planilha de quantitativos com seção de Custos Indiretos pronta pra incluir BDI, sobe seu CAD no AI.arq — primeiro projeto grátis."
+      "cta": "Pra ter sua planilha de quantitativos com seção de Custos Indiretos pronta pra calcular BDI, sobe seu CAD no AI.arq — primeiro projeto grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "Acórdão TCU 2622/2013", "description": "Estabelece faixas referenciais de BDI por tipo de obra"},
+        {"type": "norm", "title": "Acórdão TCU 2369/2011-Plenário", "description": "Fórmula matemática oficial pro cálculo do BDI"},
+        {"type": "norm", "title": "Lei 14.133/2021", "description": "Nova Lei de Licitações — exigência de transparência no BDI de obras públicas"},
+        {"type": "book", "title": "Como preparar orçamentos de obras", "author": "Aldo Dórea Mattos", "publisher": "Oficina de Textos", "year": 2019},
+        {"type": "book", "title": "Engenharia de Custos", "author": "Aldo Dórea Mattos", "publisher": "Editora PINI", "year": 2014},
+        {"type": "book", "title": "Gestão de Custos de Obra", "author": "Aldo Dórea Mattos", "publisher": "Oficina de Textos", "year": 2020},
+        {"type": "link", "title": "TCU estabelece percentuais de referência para despesas com obras (Acórdão 2622)", "url": "https://portal.tcu.gov.br/imprensa/noticias/tcu-estabelece-percentuais-de-referencia-para-despesas-com-obras", "publisher": "TCU"},
+        {"type": "link", "title": "Como calcular o BDI conforme recomendações do TCU", "url": "https://oorcamentista.com.br/como-calcular-o-bdi-conforme-recomendacoes-do-tcu/", "publisher": "O Orçamentista"},
+        {"type": "link", "title": "BDI em obras públicas: 7 pontos essenciais para entender", "url": "https://www.orcafascio.com/papodeengenheiro/bdi-em-obras-publicas", "publisher": "OrçaFascio"},
+        {"type": "link", "title": "Entenda o Acórdão 2622/2013 do TCU sobre BDI", "url": "https://sienge.com.br/blog/acordao-26222013/", "publisher": "Sienge"}
+      ]
     },
     {
       "slug": "diferenca-entre-orcamento-e-quantitativo",
-      "title": "Diferença Entre Orçamento e Quantitativo (com Exemplos Práticos)",
-      "description": "Qual a diferença entre orçamento e quantitativo de obra? Explicação clara com exemplos práticos pra arquitetos, engenheiros e clientes.",
-      "keywords": "diferença orçamento quantitativo, o que é quantitativo obra, o que é orçamento obra, planilha quantitativo orçamento, glossário construção",
+      "title": "Diferença Entre Orçamento e Quantitativo de Obra (Glossário Completo)",
+      "description": "Diferença entre orçamento, orçamentação e quantitativo de obra explicada com exemplos. Os 3 atributos do orçamento segundo Aldo Mattos — aproximação, especificidade, temporalidade.",
+      "keywords": "diferença orçamento quantitativo, o que é quantitativo obra, o que é orçamento obra, orçamentação Aldo Mattos, planilha quantitativo orçamento",
       "publish_date": "2026-06-21",
-      "estimated_read_min": 5,
+      "estimated_read_min": 7,
       "category": "Glossário",
-      "intro": "Muita gente usa as palavras orçamento e quantitativo como se fossem sinônimos. Não são. Confundir os dois pode gerar problema sério no contrato com cliente, no pedido de cotação ao fornecedor, e na própria gestão da obra. Vou explicar de uma vez por todas.",
+      "intro": "Muita gente usa orçamento, orçamentação e quantitativo como sinônimos. Não são. Os 3 termos representam etapas e produtos distintos do processo de engenharia de custos, e confundi-los gera problema sério no contrato com cliente, no pedido de cotação ao fornecedor, e na gestão da obra. Esse glossário compila as definições da literatura técnica brasileira (especialmente Aldo Dórea Mattos, referência nacional do tema) e mostra exemplos práticos de cada um.",
       "sections": [
         {
-          "h2": "Definição rápida",
-          "body": "QUANTITATIVO = lista de itens com quantidade, SEM preço.\nORÇAMENTO = quantitativo + preços = valor total.\n\nO quantitativo é o INSUMO do orçamento. Ou seja, sem quantitativo não dá pra fazer orçamento sério."
+          "h2": "Definição rápida (os 3 termos)",
+          "body": "Os termos seguem hierarquia clara:\n\n- QUANTITATIVO = lista de itens da obra com quantidade, SEM preço (resultado de levantamento da planta)\n- ORÇAMENTAÇÃO = o PROCESSO de elaborar o orçamento (atividade)\n- ORÇAMENTO = o RESULTADO desse processo (documento final com valor monetário)\n\nO quantitativo é o INSUMO da orçamentação. Sem quantitativo, não dá pra fazer orçamentação séria. Sem orçamentação, não tem orçamento confiável."
         },
         {
-          "h2": "Exemplo prático",
-          "body": "Vamos ver na prática como cada um se parece:\n\nQUANTITATIVO:\n- Piso porcelanato 60x60: 142 m²\n- Porta de madeira P1: 8 unidades\n- Pintura látex parede: 246 m²\n- Tomada 2P+T: 24 unidades\n\nORÇAMENTO (mesmos itens, com preço):\n- Piso porcelanato 60x60 — 142 m² × R$ 75 = R$ 10.650\n- Porta de madeira P1 — 8 un × R$ 850 = R$ 6.800\n- Pintura látex parede — 246 m² × R$ 28 = R$ 6.888\n- Tomada 2P+T — 24 un × R$ 95 = R$ 2.280\n\nTOTAL: R$ 26.618\n\nViu a diferença? O quantitativo é trabalho do arquiteto/engenheiro (medir o projeto). O orçamento é trabalho do orçamentista (precificar)."
+          "h2": "O que é orçamento segundo Aldo Mattos",
+          "body": "Aldo Dórea Mattos, referência nacional em engenharia de custos, define o orçamento de obras como um exercício de previsão capaz de delimitar a lucratividade e o sucesso da construtora.\n\nMattos identifica 3 atributos fundamentais do orçamento:\n\n1. APROXIMAÇÃO — o orçamento é uma estimativa, não uma certeza. Mesmo o melhor orçamento tem margem de erro de 5-15%. Ninguém prevê o futuro com 100% de precisão.\n\n2. ESPECIFICIDADE — todo orçamento é único pra aquela obra, naquele tempo, naquele local. Não dá pra reusar orçamento de obra A em obra B mesmo que sejam parecidas.\n\n3. TEMPORALIDADE — orçamento tem validade. Preço do cimento de janeiro não é o mesmo de dezembro. Reajuste, dólar, escassez de material — tudo isso muda o número.\n\nEsses 3 atributos são o que diferencia orçamento profissional de chute."
         },
         {
-          "h2": "Quem faz cada um",
-          "body": "Quantitativo é geralmente feito por:\n- Arquiteto que projetou\n- Engenheiro de obra\n- Orçamentista júnior\n- IA (como o AI.arq)\n\nOrçamento é feito por:\n- Orçamentista profissional (com formação em engenharia ou técnico)\n- Construtora (proposta comercial)\n- Equipe de planejamento da empresa\n\nEsses dois NÃO são a mesma pessoa em obra séria. O arquiteto que projeta NÃO deveria ser o mesmo que precifica — gera viés."
+          "h2": "Exemplo prático lado a lado",
+          "body": "Mesma obra, vendo como cada termo se aparece:\n\nQUANTITATIVO (sem preço):\n- Piso porcelanato 60x60: 142 m²\n- Porta de madeira P1: 8 unidades\n- Pintura látex parede: 246 m²\n- Tomada 2P+T: 24 unidades\n\nORÇAMENTAÇÃO (o processo):\n- Pesquisa de preços de mercado (3 fornecedores por item)\n- Levantamento de produtividade da mão de obra (h/m²)\n- Cálculo de BDI conforme regime tributário\n- Aplicação de coeficientes SINAPI/TCPO\n- Validação cruzada com obras similares\n\nORÇAMENTO (o resultado):\n- Piso porcelanato 60x60 — 142 m² × R$ 75 = R$ 10.650\n- Porta de madeira P1 — 8 un × R$ 850 = R$ 6.800\n- Pintura látex parede — 246 m² × R$ 28 = R$ 6.888\n- Tomada 2P+T — 24 un × R$ 95 = R$ 2.280\n- SUBTOTAL custo direto: R$ 26.618\n- BDI 23%: R$ 6.122\n- TOTAL FINAL: R$ 32.740\n\nViu a diferença? O quantitativo é trabalho de medição (geometria). A orçamentação é processo de pesquisa e cálculo. O orçamento é o documento final assinado."
+        },
+        {
+          "h2": "Estrutura do orçamento (custos diretos + indiretos + lucro)",
+          "body": "Aldo Mattos define a fórmula clássica do orçamento:\n\nORÇAMENTO = Custos Diretos + Custos Indiretos + Impostos + Lucro = Preço de Venda\n\nQuebrando cada parcela:\n\n- Custos Diretos: mão de obra dos operários, materiais, equipamentos diretamente aplicados na obra (visíveis na planilha de quantitativos)\n- Custos Indiretos: equipes de supervisão e apoio, despesas gerais do canteiro, taxas administrativas\n- Impostos: ISS, PIS, COFINS, IRPJ, CSLL — incidem sobre faturamento\n- Lucro: remuneração do construtor (margem)\n\nA soma dos 3 últimos (indiretos + impostos + lucro) forma o BDI, que se aplica como percentual sobre os custos diretos."
+        },
+        {
+          "h2": "Quem faz cada coisa",
+          "body": "Quantitativo é geralmente feito por:\n- Arquiteto que projetou (autor do projeto conhece detalhes)\n- Engenheiro de obra\n- Orçamentista júnior fazendo suporte\n- IA especializada (como o AI.arq)\n\nOrçamentação é trabalho de:\n- Orçamentista profissional com formação em engenharia ou técnico\n- Equipe de planejamento da construtora\n- Consultor de custos especializado\n\nOrçamento é o documento que sai da orçamentação, assinado por:\n- Engenheiro responsável (com ART)\n- Arquiteto (com RRT) em obras de até 80m² ou pequena complexidade\n- Empresa orçamentista (com responsável técnico)\n\nEsses papéis NÃO devem ser a mesma pessoa em obra séria. O arquiteto que projeta NÃO deveria ser o mesmo que precifica — gera viés (tendência a confirmar premissas do próprio projeto)."
         },
         {
           "h2": "Por que separar quantitativo e orçamento",
-          "body": "Razões técnicas:\n- Quantitativo é medição (matemática, geometria). Orçamento é mercado (preços variam por região, por época, por fornecedor).\n- Errar quantitativo afeta o resto. Errar orçamento afeta só o número final.\n- Quantitativo é estável (a obra é a mesma). Orçamento muda conforme o tempo (preço do cimento sobe).\n\nRazões comerciais:\n- Quantitativo pode ser mandado pra vários orçamentistas competirem\n- Quantitativo é \"propriedade\" do projeto. Orçamento é \"oferta\" do construtor.\n- Sem quantitativo aberto, cliente não consegue comparar propostas com transparência."
+          "body": "Razões técnicas:\n- Quantitativo é medição (matemática, geometria). Orçamento é mercado (preços variam por região, época, fornecedor).\n- Errar quantitativo afeta TODO o orçamento. Errar orçamento afeta só o número final.\n- Quantitativo é estável (a obra é a mesma). Orçamento muda mensalmente.\n\nRazões comerciais:\n- Quantitativo pode ser mandado pra vários orçamentistas competirem (você mantém poder de barganha)\n- Quantitativo é propriedade do projeto. Orçamento é oferta do construtor.\n- Sem quantitativo aberto, cliente não consegue comparar propostas com transparência\n\nEm obra pública isso é OBRIGATÓRIO pela Lei 14.133/2021: o quantitativo precisa ser público, e cada licitante apresenta SEU orçamento usando o mesmo quantitativo."
         },
         {
           "h2": "Posição honesta do AI.arq",
-          "body": "É exatamente por essa separação que a gente desenhou o AI.arq pra fazer SÓ o quantitativo. Isso é muito importante:\n\nO AI.arq NÃO precifica. NÃO fecha orçamento. NÃO substitui o orçamentista.\n\nA gente entrega a planilha de quantitativos confiável (com colunas de preço EM BRANCO) pro seu orçamentista preencher. Ou pra você mandar pra fornecedores cotarem.\n\nQuem decide preço é humano com experiência local de obra. A IA acelera o trabalho braçal de medir."
+          "body": "É exatamente por essa separação que a gente desenhou o AI.arq pra fazer SÓ o quantitativo. Reforçando o que já está em todo lugar do site:\n\nO AI.arq NÃO precifica. NÃO faz orçamentação. NÃO substitui o orçamentista. NÃO substitui profissional habilitado.\n\nA gente entrega a planilha de quantitativos confiável (com colunas de preço EM BRANCO) pro seu orçamentista preencher. Ou pra você mandar pra fornecedores cotarem.\n\nQuem decide preço é humano com experiência local de obra. A IA acelera o trabalho braçal de medir, contar, organizar. O julgamento técnico continua sendo do profissional habilitado."
         }
       ],
-      "cta": "Precisa do quantitativo do seu projeto pronto em 5 minutos pra mandar pro orçamentista? Testa o AI.arq grátis: ai.arq.br"
+      "cta": "Precisa do quantitativo do seu projeto pronto em 5 minutos pra mandar pro orçamentista? Testa o AI.arq grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "Lei 14.133/2021", "description": "Nova Lei de Licitações — exige separação entre quantitativo e orçamento em obras públicas"},
+        {"type": "book", "title": "Como preparar orçamentos de obras (3ª ed.)", "author": "Aldo Dórea Mattos", "publisher": "Oficina de Textos", "year": 2019},
+        {"type": "book", "title": "Engenharia de Custos: Análise de Preços e Avaliação de Empreendimentos", "author": "Aldo Dórea Mattos", "publisher": "Editora PINI", "year": 2014},
+        {"type": "book", "title": "Gestão de Custos de Obra (2ª ed.)", "author": "Aldo Dórea Mattos", "publisher": "Oficina de Textos", "year": 2020},
+        {"type": "book", "title": "Planejamento e Controle de Obras", "author": "Aldo Dórea Mattos", "publisher": "Oficina de Textos", "year": 2010},
+        {"type": "link", "title": "Orçamento e orçamentação: diferença dos termos", "url": "https://blog.ofitexto.com.br/engenharia-civil/orcamento-e-orcamentacao-diferenca/", "publisher": "Blog Oficina de Textos"},
+        {"type": "link", "title": "O tripé da engenharia eficiente, por Aldo Mattos", "url": "https://sienge.com.br/blog/tripe-da-engenharia-eficiente/", "publisher": "Sienge"},
+        {"type": "link", "title": "Como Calcular Orçamento de Obra: Guia de Engenharia de Custos 2026", "url": "https://larpontual.com.br/portal/como-calcular-orcamento-de-obra", "publisher": "Lar Pontual Engenharia"}
+      ]
     },
     {
       "slug": "disciplinas-obra-retrofit-comercial",
-      "title": "Lista de Disciplinas em Obra de Retrofit Comercial (Checklist Completa)",
-      "description": "Checklist completa das 18 disciplinas em obra de retrofit comercial. O que considerar, o que esquecer custa caro, ordem de execução típica.",
-      "keywords": "disciplinas retrofit comercial, retrofit obra comercial, disciplinas obra escritório, checklist retrofit, ordem disciplinas obra",
+      "title": "Lista Completa de Disciplinas em Obra de Retrofit Comercial (2026)",
+      "description": "Checklist das 18 disciplinas em obra de retrofit comercial. O que considerar, o que esquecer gera aditivo, ordem de execução, custos indiretos típicos e tendências 2026.",
+      "keywords": "disciplinas retrofit comercial, retrofit obra comercial, disciplinas obra escritório, checklist retrofit corporativo, ordem disciplinas obra, retrofit 2026 SP",
       "publish_date": "2026-06-28",
-      "estimated_read_min": 8,
+      "estimated_read_min": 10,
       "category": "Tipologias",
-      "intro": "Retrofit comercial é dos trabalhos mais lucrativos pra arquiteto e construtor — mas também dos mais traiçoeiros. A obra existe, o cliente quer rápido, e qualquer disciplina esquecida vira aditivo caro. Vou listar as 18 disciplinas que toda obra de retrofit comercial precisa considerar.",
+      "intro": "Retrofit comercial é dos trabalhos mais lucrativos pra arquiteto e construtor — mas também dos mais traiçoeiros. A obra existe, o cliente quer rápido, e qualquer disciplina esquecida vira aditivo caro. Em 2026 o mercado paulistano de retrofit corporativo amadureceu: prédios Triple A novos dividem espaço com revitalização de prédios antigos, e a demanda por modernização sustentável cresceu fortemente. Esse guia lista as 18 disciplinas obrigatórias num retrofit típico, mostra quais geram mais aditivo, qual o BDI esperado, e tendências de design corporativo pra 2026.",
       "sections": [
         {
           "h2": "O que é retrofit comercial",
-          "body": "Retrofit é a reforma estratégica de espaço existente. Diferente de obra do zero, retrofit aproveita o esqueleto da edificação (estrutura, fachada, shafts) e renova tudo o que está dentro.\n\nRetrofit comercial é o tipo mais comum no Brasil — escritórios, lojas, restaurantes, clínicas que mudam de inquilino e precisam ser remodelados pra nova operação.\n\nCaracterísticas:\n- Prazo curto (geralmente 60-180 dias)\n- Operação durante obra em andamento\n- Limitações estruturais (paredes que não podem cair, shafts fixos)\n- Mistura de itens novos com existentes"
+          "body": "Retrofit é a reforma estratégica de espaço construído existente. Diferente de obra nova do zero, retrofit aproveita o esqueleto da edificação (estrutura, fachada, shafts verticais, infraestrutura predial básica) e renova tudo dentro.\n\nRetrofit comercial é o tipo mais comum no Brasil — escritórios, lojas, restaurantes, clínicas que mudam de inquilino e precisam ser remodelados pra nova operação. Em São Paulo, o mercado de retrofit corporativo passou por amadurecimento em 2026, com Triple A novos coexistindo com revitalização de edifícios antigos da Avenida Paulista, Faria Lima, Berrini e centro histórico.\n\nCaracterísticas que diferenciam retrofit:\n- Prazo curto (geralmente 60-180 dias)\n- Operação adjacente em andamento (outros andares funcionando)\n- Limitações estruturais herdadas (paredes que não podem cair, shafts fixos, capacidade do elevador de carga)\n- Mistura de itens novos com existentes que ficam\n- Coordenação obrigatória com administração do condomínio\n- Restrição de horário pra serviços ruidosos"
         },
         {
-          "h2": "As 18 disciplinas em ordem de execução",
-          "body": "Esta é a ordem típica. Cada item tem sua planilha de quantitativos separada:\n\n1. Demolição (paredes, forros, pisos antigos)\n2. Estrutura (reforço se necessário)\n3. Alvenaria (paredes novas)\n4. Instalações elétricas (infraestrutura)\n5. Instalações hidráulicas (infraestrutura)\n6. Instalações de esgoto (infraestrutura)\n7. Instalações de climatização HVAC (dutos)\n8. Sprinkler / combate a incêndio\n9. Pisos (assentamento)\n10. Revestimentos (paredes)\n11. Forro (instalação)\n12. Gesso (sancas, decorativo)\n13. Pintura\n14. Esquadrias (portas, divisórias)\n15. Vidros (divisórias, fachadas)\n16. Marcenaria (móveis fixos, marcenaria sob medida)\n17. Marmoraria (bancadas, soleiras)\n18. Acabamentos finais (louças, metais, ferragens, iluminação)"
+          "h2": "As 18 disciplinas em ordem de execução típica",
+          "body": "Esta é a ordem padrão de execução. Cada item tem sua planilha de quantitativos separada:\n\n1. Demolição (paredes, forros, pisos antigos)\n2. Estrutura (reforço se necessário)\n3. Alvenaria (paredes novas, shafts internos)\n4. Instalações elétricas (infraestrutura, eletrocalhas, conduítes)\n5. Instalações hidráulicas (água fria/quente — infraestrutura)\n6. Instalações de esgoto (caimento, ramais)\n7. Instalações de climatização HVAC (dutos, dampers)\n8. Sprinkler / combate a incêndio (NBR 13714)\n9. Cabeamento estruturado (rede, dados, voz, IoT — cresceu MUITO em 2026)\n10. Pisos (assentamento, rodapés)\n11. Revestimentos de parede (cerâmica, painéis, madeira)\n12. Forro (acústico, decorativo, modular)\n13. Gesso (sancas, decorativo, drywall)\n14. Pintura (paredes, teto, esquadrias)\n15. Esquadrias (portas, divisórias)\n16. Vidros (divisórias, fachadas internas)\n17. Marcenaria (móveis fixos, marcenaria sob medida)\n18. Acabamentos finais (louças, metais, ferragens, luminárias, sinalização)\n\nDisciplinas separadas que aparecem em retrofit grande (corporativo Triple A): segurança eletrônica, automação predial (BMS), sistema de áudio ambiente, paisagismo interno (jardins verticais)."
         },
         {
-          "h2": "Disciplinas que mais geram aditivo",
-          "body": "Por experiência de mercado, essas são as 5 disciplinas que mais aparecem como \"surpresa\" no canteiro:\n\n1. Sprinkler — quase ninguém lembra na fase de orçamento. Aparece quando o bombeiro vistoria.\n\n2. HVAC — projeto antigo do prédio não suporta a nova carga térmica. Tem que reforçar.\n\n3. Estrutura — parede que parecia divisória era estrutural. Custou demolir e reforçar.\n\n4. Esgoto — caimento errado pra nova posição da copa. Refazer todo o ramal.\n\n5. Marmoraria — cliente decidiu trocar bancada de fórmica pra mármore. Triplicou o custo da copa."
+          "h2": "5 disciplinas que mais geram aditivo em retrofit",
+          "body": "Por experiência de mercado, essas são as 5 disciplinas que mais aparecem como surpresa no canteiro de retrofit comercial:\n\n1. Sprinkler / combate a incêndio — quase ninguém lembra na fase de orçamento. Aparece quando o Corpo de Bombeiros vistoria. Em SP, prédios comerciais acima de 750m² ou com mais de 12m de altura precisam de sprinkler obrigatório (NBR 13714).\n\n2. HVAC (climatização) — projeto antigo do prédio raramente suporta a nova carga térmica do layout aberto e densidade ocupacional moderna. Tem que reforçar capacidade ou redistribuir dutos.\n\n3. Estrutura — parede que parecia divisória era estrutural. Vai descobrir só na demolição. Custou demolir + reforçar com perfil metálico ou pilar adicional.\n\n4. Esgoto — caimento errado pra nova posição da copa, do banheiro ou da pia. Refazer todo o ramal de esgoto, com quebra de piso.\n\n5. Cabeamento e infraestrutura de rede — em 2026 escritório quer IoT, sensores, controle automatizado, áudio embedded. Projeto antigo não tem infraestrutura — vira aditivo de R$ 30-80 mil em escritório médio.\n\nMarmoraria também aparece muito como aditivo, mas geralmente é por mudança de escopo (cliente decide trocar bancada de fórmica pra mármore depois que viu showroom)."
         },
         {
-          "h2": "Custos indiretos em retrofit comercial",
-          "body": "Em retrofit comercial, BDI costuma ser MAIOR que obra do zero por causa de:\n\n- Trabalho noturno (operação não pode parar de dia): +20% mão de obra\n- Logística complicada (subir material no elevador de carga): +5-10% logística\n- Limpeza de obra constante (cliente tá no prédio): +3-5% limpeza\n- Coordenação com administração do prédio: +2-3% gestão\n- Riscos maiores (achados imprevistos): +5-10% contingência\n\nBDI típico de retrofit comercial: 25-35%."
+          "h2": "Tendências de design corporativo 2026 que afetam quantitativo",
+          "body": "5 tendências dominantes em retrofit corporativo em 2026 que mudam o quantitativo:\n\n1. Layout flexível e áreas compartilhadas — menos salas privadas fixas, mais workstations rotativas, áreas de colaboração informal. Diminui alvenaria, aumenta divisórias móveis e mobiliário modular.\n\n2. IoT e sensores — controle de ocupação, qualidade do ar, iluminação adaptativa, automação de cortinas. Aumenta cabeamento e infraestrutura de TI.\n\n3. Conforto acústico — open offices precisam de tratamento acústico sério. Forro acústico, painéis absorvedores, carpete acústico aumentam em 15-30% o custo de acabamento.\n\n4. Sustentabilidade e selos verdes (LEED, AQUA) — exigem materiais certificados, gestão de resíduos no canteiro, eficiência energética. Aumenta 5-15% no custo total.\n\n5. Áreas de bem-estar — copa equipada, sala de descanso, espaço pra ginástica, jardins internos, áreas pet-friendly. Adiciona disciplinas que escritório tradicional não tinha."
+        },
+        {
+          "h2": "Custos indiretos em retrofit comercial (BDI maior)",
+          "body": "Em retrofit comercial, o BDI costuma ser MAIOR que obra nova do zero por vários fatores:\n\n- Trabalho noturno obrigatório (operação adjacente não pode parar de dia): +20% mão de obra (adicional noturno por lei)\n- Logística complicada (subir material em elevador de carga compartilhado, restrição de horário): +5-10% logística\n- Limpeza constante (cliente tá no prédio, andar vizinho funcionando): +3-5% limpeza\n- Coordenação com administração do condomínio: +2-3% gestão\n- Riscos de achados imprevistos (instalações antigas escondidas atrás de gesso): +5-10% contingência\n- Restrição de janela de obra (alguns prédios só permitem 18h-6h): aumenta prazo total\n- Necessidade de mockup/protótipo de espaço antes de replicar: custo extra\n\nBDI típico de retrofit comercial: 25-35% (vs 18-25% de obra nova). Em retrofit Triple A complexo, pode passar de 38%."
+        },
+        {
+          "h2": "Custo médio por m² de retrofit em 2026",
+          "body": "Faixas de mercado SP em 2026 (executivo + obra fechada):\n\n- Retrofit básico (escritório standard): R$ 1.200 - R$ 2.500 / m²\n- Retrofit médio (acabamento melhor, alguma automação): R$ 2.500 - R$ 4.500 / m²\n- Retrofit alto padrão (Triple A, IoT, sustentável): R$ 4.500 - R$ 8.000 / m²\n- Retrofit luxo (boutique de design corporativo, materiais premium): R$ 8.000 - R$ 15.000 / m²\n\nEsses valores incluem mão de obra + materiais + BDI. NÃO incluem mobiliário, equipamentos de TI, sinalização externa, ART/RRT.\n\nEm cidades menores (interior SP, MG, PR), valores ficam 20-30% abaixo da capital. Norte/Nordeste pode ser 30-40% abaixo."
         },
         {
           "h2": "Como o AI.arq lida com retrofit",
-          "body": "Quando você sobe um projeto de retrofit no AI.arq, a IA reconhece automaticamente:\n\n- Pranchas de demolição (existente vs novo)\n- Pranchas de layout antigo vs layout novo\n- Comparação automática (o que sai, o que entra, o que fica)\n- Quantificação separada por categoria (demolir + construir)\n- Alerta pra disciplinas que normalmente passam batido (sprinkler, HVAC reforço)\n\nIsso reduz muito o risco de aditivos no canteiro."
+          "body": "Quando você sobe um projeto de retrofit no AI.arq, a IA reconhece automaticamente os elementos típicos da tipologia:\n\n- Pranchas de demolição (separação visual: o que sai)\n- Pranchas de layout atual vs novo\n- Comparação automática (o que sai, o que entra, o que fica intacto)\n- Quantificação separada por categoria (demolir + construir + manter)\n- Alerta pra disciplinas que normalmente passam batido em retrofit (sprinkler, HVAC reforço, cabeamento estruturado)\n- Sinalização de itens estimados (laranja) onde a planta não tem informação suficiente\n- Seção de Custos Indiretos pré-pronta com itens típicos de retrofit (trabalho noturno, logística, contingência maior)\n\nResultado: planilha completa pronta pra orçamentista precificar, sem pegadinha de aditivo posterior."
         }
       ],
-      "cta": "Tem retrofit comercial pra fazer levantamento? O AI.arq foi testado em mais de 50 projetos de retrofit. Testa grátis em ai.arq.br."
+      "cta": "Tem retrofit comercial pra fazer levantamento? O AI.arq foi testado em projetos de retrofit corporativo de 50 a 5000 m². Testa grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "ABNT NBR 13714:2000", "description": "Sistemas de hidrantes e mangotinhos pra combate a incêndio"},
+        {"type": "norm", "title": "ABNT NBR 16401:2008", "description": "Instalações de ar-condicionado — Sistemas centrais e unitários"},
+        {"type": "norm", "title": "ABNT NBR 14565:2019", "description": "Cabeamento estruturado pra edifícios comerciais"},
+        {"type": "norm", "title": "ABNT NBR 9050:2020", "description": "Acessibilidade — fundamental em retrofit pra adequação"},
+        {"type": "book", "title": "Manual de Retrofit em Edificações", "author": "Joaquim Eduardo Mota", "publisher": "Editora PINI", "year": 2018},
+        {"type": "book", "title": "Arquitetura Corporativa: Projetos e Implementação", "author": "AsBEA — Câmara Comercial", "publisher": "AsBEA", "year": 2020},
+        {"type": "link", "title": "Retrofit e áreas compartilhadas: 7 tendências para escritórios em 2026", "url": "https://exame.com/mercado-imobiliario/retrofit-e-areas-compartilhadas-veja-7-tendencias-para-escritorios-em-2026/", "publisher": "Exame"},
+        {"type": "link", "title": "Retrofit Corporativo 2026: Modernizando Prédios Antigos", "url": "https://pdfpremium.com.br/blog/divisorias/retrofit-corporativo-modernizacao-divisorias-vidro-2026/", "publisher": "PDFPremium"},
+        {"type": "link", "title": "Retrofit Corporativo — Guia para um Retrofit de Escritório", "url": "https://illiengenharia.com.br/blog-engenharia-coporativa/retrofit-de-escritorio/", "publisher": "Illi Engenharia"}
+      ]
     },
     {
       "slug": "como-ler-pdf-planta-arquitetonica",
-      "title": "Como Ler um PDF de Planta Arquitetônica (Guia Visual pra Leigos)",
-      "description": "Guia prático pra ler PDF de planta arquitetônica. Símbolos, escalas, convenções e como entender um projeto sem ser arquiteto.",
-      "keywords": "como ler planta arquitetônica, ler pdf planta, símbolos planta, escala planta, convenções projeto arquitetura",
+      "title": "Como Ler um PDF de Planta Arquitetônica (Guia Visual Completo)",
+      "description": "Guia prático pra ler PDF de planta arquitetônica: o que é planta baixa, escalas, símbolos, convenções ABNT, quadro de esquadrias e diferença demolir/construir.",
+      "keywords": "como ler planta arquitetônica, ler pdf planta, símbolos planta baixa, escala planta arquitetura, convenções projeto, planta baixa NBR 6492",
       "publish_date": "2026-07-05",
-      "estimated_read_min": 7,
+      "estimated_read_min": 9,
       "category": "Como Ler Projetos",
-      "intro": "Você abriu o PDF da planta do seu projeto pela primeira vez e ficou sem entender nada? Calma, é normal. Toda planta arquitetônica usa convenções universais que precisam ser aprendidas. Este guia explica os símbolos básicos pra você decodificar qualquer projeto.",
+      "intro": "Você abriu o PDF da planta do seu projeto pela primeira vez e ficou sem entender nada? Calma, é normal — toda planta arquitetônica usa convenções universais regulamentadas pela ABNT NBR 6492 que precisam ser aprendidas. Esse guia explica passo a passo: o que é uma planta baixa tecnicamente, como funciona a escala, quais são os símbolos básicos, como ler quadro de esquadrias, e como diferenciar planta de demolir de planta de construir. Útil pra cliente, comprador, gestor de obra ou estudante de arquitetura.",
       "sections": [
         {
+          "h2": "O que é uma planta baixa tecnicamente",
+          "body": "Planta baixa (também chamada de planta arquitetônica) é um desenho que representa um corte horizontal imaginário feito a aproximadamente 1,50m do solo. É como se você cortasse a casa nessa altura e olhasse de cima.\n\nNesse corte aparecem:\n- Paredes (cortadas, em linha cheia grossa)\n- Portas e janelas (abertura no nível do corte)\n- Mobiliário fixo (bancada, armário sob bancada)\n- Pisos (representados por hachura ou texto)\n\nO que NÃO aparece (porque está acima ou abaixo do corte):\n- Telhado (acima)\n- Forro (acima — a não ser que seja abaixo de 1,50m, raro)\n- Fundações (abaixo)\n- Vigas (acima — geralmente em linha tracejada quando relevante)\n\nA NBR 6492 (Representação de projetos de arquitetura) regulamenta essas convenções no Brasil."
+        },
+        {
           "h2": "Os 4 elementos básicos de uma prancha",
-          "body": "Toda prancha arquitetônica tem:\n\n1. CARIMBO — quadro no canto inferior direito com nome do projeto, autor, data, escala, número da prancha\n2. PLANTA — desenho em vista superior do ambiente\n3. CORTES — vistas verticais (como se cortasse o prédio com uma faca)\n4. DETALHES — ampliações de áreas específicas\n\nCada prancha tem um número que segue padrão. Geralmente A-100 (planta), A-200 (cortes), A-300 (esquadrias), A-400 (detalhes), A-500 (pontos elétricos). Varia por escritório."
+          "body": "Toda prancha arquitetônica bem formatada tem 4 elementos:\n\n1. CARIMBO — quadro no canto inferior direito com:\n   - Nome do projeto e cliente\n   - Endereço da obra\n   - Autor (arquiteto + CAU/CREA)\n   - Data e revisão\n   - Escala\n   - Número da prancha (A-100, A-200, etc.)\n\n2. PLANTA(S) — desenho em vista superior do ambiente, na escala indicada\n\n3. CORTES — vistas verticais (como se cortasse o prédio com uma faca, mostrando o que está dentro)\n\n4. DETALHES — ampliações de áreas específicas em escala maior (1:25 ou 1:10) pra mostrar como uma esquina de parede vira em torno de uma porta, por exemplo\n\nCada prancha tem número que segue padrão de escritório. Convenção comum:\n- A-100 a A-199: plantas baixas\n- A-200 a A-299: cortes\n- A-300 a A-399: detalhamento de esquadrias\n- A-400 a A-499: detalhamentos construtivos\n- A-500 a A-599: pontos elétricos e dados\n- A-600 a A-699: pisos\n- A-700 a A-799: forro e iluminação"
         },
         {
-          "h2": "Como ler escala",
-          "body": "Escala mostra quantas vezes o desenho é menor que a realidade.\n\n- Escala 1:50 = cada 1cm no papel = 50cm na obra\n- Escala 1:100 = cada 1cm no papel = 100cm = 1m na obra\n- Escala 1:25 = cada 1cm no papel = 25cm na obra (mais detalhado)\n\nEscalas comuns:\n- Implantação (terreno todo): 1:200 ou 1:500\n- Planta baixa: 1:50 ou 1:100\n- Cortes: 1:50\n- Detalhes: 1:25 ou 1:10\n\nPra medir algo no PDF, use a escala. Mas cuidado: PDFs salvos sem cuidado podem perder a escala original."
+          "h2": "Como funciona a escala",
+          "body": "Escala mostra quantas vezes o desenho está reduzido em relação à realidade. As plantas são miniaturas proporcionais do espaço real.\n\nEscalas mais comuns:\n- Escala 1:25 = cada 1cm no papel = 25cm na obra (mais detalhe, mais zoom)\n- Escala 1:50 = cada 1cm no papel = 50cm na obra (padrão pra residencial e detalhe construtivo)\n- Escala 1:100 = cada 1cm no papel = 100cm = 1 metro na obra (padrão pra plantas baixas)\n- Escala 1:200 = cada 1cm no papel = 200cm = 2 metros (padrão pra implantação)\n- Escala 1:500 = cada 1cm no papel = 5 metros (terreno grande, urbanística)\n\nEscalas típicas por tipo de prancha:\n- Implantação (terreno todo): 1:200 ou 1:500\n- Planta baixa residencial: 1:50 ou 1:75\n- Planta baixa comercial: 1:50 ou 1:100\n- Cortes: 1:50\n- Detalhes construtivos: 1:25 ou 1:10\n- Detalhamento de esquadrias: 1:25\n\nCuidado importante: PDFs salvos sem cuidado (impressão sem ajuste de tamanho) podem PERDER a escala original. Sempre meça uma cota conhecida no desenho antes de medir cotas desconhecidas — se a cota conhecida bate, a escala foi preservada."
         },
         {
-          "h2": "Símbolos mais comuns em planta",
-          "body": "Símbolos universais da arquitetura brasileira:\n\n- Linha grossa preta: parede\n- Linha tracejada: elemento que está acima (viga, marquise)\n- Hachura cruzada: parede demolir (em projeto de reforma)\n- Hachura diagonal: parede construir (novo)\n- Arco: abertura de porta (mostra direção)\n- Linha dupla com tracinhos: janela\n- Triângulo com fio: ponto elétrico (vai indicado o tipo: T tomada, I interruptor)\n- Círculo com cruz: ponto hidráulico\n- Setas com cota: medida em centímetros"
+          "h2": "Símbolos mais comuns em planta arquitetônica",
+          "body": "Convenções universais brasileiras (NBR 6492):\n\nELEMENTOS CONSTRUTIVOS:\n- Linha grossa preta — parede cortada (alvenaria ou estrutural)\n- Linha tracejada — elemento que está acima do corte (viga, marquise, mezanino)\n- Hachura cruzada (X X X) — parede a DEMOLIR (em projeto de reforma)\n- Hachura diagonal sólida — parede NOVA a construir\n- Hachura tracejada vermelha — parede existente que fica\n\nABERTURAS:\n- Arco grande — abertura de porta (mostra direção da abertura)\n- Linha dupla com 2 traços — janela (folhas de vidro)\n- Linha dupla sem traços — janela basculante ou maxim-ar\n- Hachura no vão — porta de correr\n\nINSTALAÇÕES:\n- Triângulo cheio — ponto de tomada (T = tomada normal, T+ = força, TR = rede)\n- Triângulo com risco — interruptor (I = simples, IB = bipolar, IP = paralelo)\n- Círculo com cruz — ponto hidráulico (H = água fria, HQ = água quente, E = esgoto)\n- Símbolo C — chuveiro\n- Quadrado com diagonal — luminária\n\nCOTAS:\n- Setas com número — medida (em CENTÍMETROS por padrão; em metros se vier com vírgula tipo 0,80m)\n- Triângulo de nível — cota de altura (NA = nível d'água, NS = nível do solo)\n\nMOBILIÁRIO:\n- Linhas mais finas geralmente — mobiliário (não estrutural)\n- Geralmente bem simplificado pra não competir visualmente com a planta"
         },
         {
-          "h2": "Como entender o quadro de esquadrias",
-          "body": "Em alguma prancha (geralmente A-300 ou A-400) tem o quadro de esquadrias.\n\nÉ uma tabela onde cada linha é um TIPO de porta ou janela:\n- P1, P2, P3... = portas (cada número é um tipo diferente)\n- J1, J2, J3... = janelas\n- B1, B2... = bancadas\n\nNa planta, cada porta/janela vem marcada com seu código. P1 aparece 8 vezes na planta = você tem 8 portas do tipo P1."
+          "h2": "Como ler o quadro de esquadrias",
+          "body": "Em alguma prancha (geralmente A-300 ou A-400) tem o quadro de esquadrias — uma tabela detalhando cada tipo de porta e janela do projeto.\n\nCada linha é um TIPO:\n- P1, P2, P3... = portas (cada número é um TIPO DIFERENTE, não a quantidade)\n- J1, J2, J3... = janelas\n- B1, B2... = bancadas\n- L1, L2... = louças sanitárias\n\nNa planta, cada esquadria vem marcada com seu código. Se você ver P1 escrito 8 vezes na planta, você tem 8 portas do TIPO P1 — ou seja, 8 portas exatamente iguais conforme especificação do quadro.\n\nIMPORTANTE: o número NÃO é a quantidade. É só identificador único de TIPO. Tem post completo sobre isso no blog: ai.arq.br/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html"
         },
         {
           "h2": "Diferença entre planta de DEMOLIR e CONSTRUIR",
-          "body": "Em projetos de reforma, sempre tem 2 plantas separadas (e às vezes 3):\n\n- DEMOLIR (geralmente A-100): mostra o que sai. Hachura diagonal vermelha ou tracejada.\n- CONSTRUIR / NOVO (A-200): mostra o que entra. Hachura sólida.\n- LAYOUT ATUAL (A-201): se existir, é o estado antes da reforma.\n\nQuem orça precisa olhar AS DUAS pra entender a obra completa. Olhar só o novo perde o trabalho de demolição."
+          "body": "Em projetos de reforma, sempre vem 2 ou 3 plantas separadas:\n\n- DEMOLIR (geralmente A-100) — mostra O QUE SAI. Hachura diagonal vermelha ou tracejada amarela é o padrão. Toda parede a demolir aparece marcada.\n\n- CONSTRUIR / NOVO (A-200) — mostra O QUE ENTRA. Hachura sólida (geralmente preta) representa as paredes novas. Inclui também o que existia e fica no projeto.\n\n- LAYOUT ATUAL (A-201) — se existir, é o estado antes da reforma. Útil pra entender o ponto de partida.\n\nQuem orça uma reforma precisa olhar AS DUAS plantas (demolir + construir). Olhar só o novo perde o trabalho de demolição. Olhar só o demolir não vê a obra final.\n\nDica: profissional sério deveria ter também planta de COMPATIBILIZAÇÃO mostrando lado a lado o existente vs novo, pra eliminar dúvidas."
         },
         {
-          "h2": "Como o AI.arq facilita isso",
-          "body": "Pra quem não é da área (cliente, gestor, comprador), entender uma planta leva tempo. O AI.arq lê o PDF/DWG por você e devolve em LINGUAGEM HUMANA tudo o que tem no projeto:\n\n- \"Sua obra tem 8 portas tipo P1 (madeira maciça 0,80x2,10) e 4 portas tipo P2 (vidro 0,90x2,30)\"\n- \"Total de área de pintura: 246 m²\"\n- \"24 pontos elétricos: 18 tomadas + 6 interruptores\"\n\nÉ a planta traduzida em planilha legível. Pra o arquiteto valida em 5 minutos. Pra o cliente entende sem precisar saber ler planta."
+          "h2": "Outros elementos importantes",
+          "body": "Algumas coisas que muita gente perde na primeira leitura:\n\n- LEGENDA — caixa explicativa que diz o que cada hachura, símbolo ou código significa. Sempre leia ANTES de interpretar a planta.\n- INDICADORES DE CORTE — letras (A-A, B-B, C-C) marcadas em pontos da planta indicam onde está sendo feito o corte mostrado em outra prancha\n- INDICADORES DE NORTE — seta indicando o norte geográfico, importante pra ventilação e insolação\n- COTAS DE NÍVEL — triângulos invertidos mostrando alturas em relação a um ponto de referência (NS = nível do solo, +0,15m, +0,30m, etc.)\n- TEXTO DE AMBIENTE — geralmente em letras maiúsculas no centro de cada cômodo, indicando função (SALA, COZINHA, BANHEIRO, ETC.)\n- ÁREAS — alguns projetos colocam a área de cada cômodo em m² entre parênteses"
+        },
+        {
+          "h2": "Como o AI.arq facilita isso pra leigos e técnicos",
+          "body": "Pra quem não é da área (cliente, gestor, comprador), entender uma planta leva tempo. Pra quem é técnico mas tem 50 pranchas pra processar, leva ainda mais. O AI.arq lê o PDF/DWG automaticamente e devolve em LINGUAGEM HUMANA o conteúdo do projeto.\n\nExemplo de saída pra um cliente leigo:\n- Sua obra tem 8 portas tipo P1 (madeira maciça 0,80x2,10) e 4 portas tipo P2 (vidro temperado 0,90x2,30)\n- Total de área de pintura interna: 246 m²\n- 24 pontos elétricos: 18 tomadas comuns + 6 interruptores\n- 4 pontos hidráulicos: 2 lavatórios + 1 chuveiro + 1 bacia sanitária\n- Forro de gesso liso: 88 m² (cobre toda área social)\n\nÉ a planta traduzida pra qualquer pessoa entender. Arquiteto valida em 5 minutos. Cliente entende sem precisar aprender a ler planta."
         }
       ],
-      "cta": "Quer transformar PDF de planta em planilha legível em 5 minutos? Sobe seu projeto no AI.arq — primeiro grátis."
+      "cta": "Quer transformar PDF de planta em planilha legível em 5 minutos? Sobe seu projeto no AI.arq — primeiro grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "ABNT NBR 6492:1994", "description": "Representação de projetos de arquitetura — convenções gráficas oficiais"},
+        {"type": "norm", "title": "ABNT NBR 13532:1995", "description": "Elaboração de projetos de edificações — Arquitetura"},
+        {"type": "norm", "title": "ABNT NBR 9050:2020", "description": "Acessibilidade — afeta dimensionamento mostrado em planta"},
+        {"type": "book", "title": "Manual de Detalhes Construtivos", "author": "Gauthier Pierre", "publisher": "Editora Bookman", "year": 2017},
+        {"type": "book", "title": "Análise e Interpretação de Projetos Arquitetônicos", "author": "Maria Lúcia Malard", "publisher": "Editora UFMG", "year": 2018},
+        {"type": "book", "title": "Desenho Técnico para Arquitetura e Engenharia", "author": "Manlio Speca", "publisher": "Editora Hemus", "year": 2015},
+        {"type": "link", "title": "Planta Arquitetônica: Como Interpretar os Símbolos e as Medidas", "url": "https://www.wgbengenharia.com/planta-arquitetonica-como-interpretar-os-simbolos-e-as-medidas/", "publisher": "WGB Engenharia"},
+        {"type": "link", "title": "Como Ler Plantas de Construção", "url": "https://www.jrrio.com.br/construcao/planejamento/leitura-de-plantas.html", "publisher": "JRRio"},
+        {"type": "link", "title": "Plantas arquitetônicas: passo a passo para ler", "url": "https://blog.laredo.com.br/plantas-arquitetonicas/", "publisher": "Blog Laredo"}
+      ]
     },
     {
       "slug": "ia-arquitetura-o-que-muda-2026",
-      "title": "IA na Arquitetura: O Que Muda no Seu Trabalho em 2026",
-      "description": "Como a IA está mudando o trabalho de arquitetos em 2026. Levantamento, render, orçamento, gestão. O que automatizar, o que NÃO automatizar.",
-      "keywords": "ia arquitetura, inteligência artificial arquiteto, ia projeto arquitetônico, automação arquitetura, ferramentas ia arquitetos",
+      "title": "IA na Arquitetura em 2026: Ferramentas, Workflow e O Que Realmente Muda",
+      "description": "Estado da IA na arquitetura em 2026: ferramentas maduras (Veras, Maket, AI.arq, Tripo), o que ainda não funciona, roadmap de adoção e impacto na carreira do arquiteto.",
+      "keywords": "ia arquitetura 2026, inteligência artificial arquiteto, ferramentas ia arquitetura, Veras, Maket, Snaptrude, Tripo, automação arquitetura",
       "publish_date": "2026-07-12",
-      "estimated_read_min": 9,
+      "estimated_read_min": 11,
       "category": "Tendências",
-      "intro": "2026 é o ano em que IA virou ferramenta de trabalho de qualquer arquiteto sério. Mas o hype tá criando confusão: o que realmente entrega valor? O que ainda é promessa? Quais ferramentas valem o investimento? Vou separar o joio do trigo.",
+      "intro": "2026 é o ano em que IA deixou de ser hype e virou ferramenta de trabalho de qualquer arquiteto sério no Brasil. Mercado já não aceita a lentidão do processo analógico-digital tradicional, e o CAU/BR publicou artigo oficial reconhecendo o impacto. Mas o ruído ainda é grande: o que realmente entrega valor? O que continua promessa? Quais ferramentas valem o investimento e quais são só marketing? Esse guia organiza o cenário, separa o que está maduro do que ainda não está, e propõe um roadmap pragmático de adoção pra arquiteto brasileiro.",
       "sections": [
         {
-          "h2": "O que IA já faz bem em arquitetura (2026)",
-          "body": "Estas tarefas estão MADURAS — IA já entrega resultado profissional:\n\n1. Render fotorealista a partir de SketchUp/Revit (Veras, Lookx)\n2. Levantamento de quantitativos a partir de CAD (AI.arq)\n3. Geração de plantas residenciais a partir de brief (Maket, Architechtures)\n4. Análise de site (Snaptrude — zoning, setbacks, climate)\n5. Documentos descritivos (memorial, contratos) a partir de templates\n6. Comparativo de propostas de fornecedores"
+          "h2": "O cenário da IA na arquitetura em 2026",
+          "body": "Em 2026 o mercado de IA pra arquitetura amadureceu em 4 frentes principais:\n\n- Renderização — render fotorealista a partir de modelos 3D existentes (Veras, PromeAI, Lookx)\n- Geração de plantas — texto/brief pra planta baixa (Maket, Architechtures)\n- Análise espacial e geração 3D — modelos rápidos pra estudo (Tripo, Meshy, Rodin)\n- Levantamento e quantitativos — leitura automática de CAD pra planilha (AI.arq)\n\nO CAU/BR (Conselho de Arquitetura e Urbanismo do Brasil) publicou em 2026 artigo oficial reconhecendo a IA como ferramenta legítima do processo de projeto, com a ressalva de que NÃO substitui o profissional habilitado nas decisões técnicas e na assinatura de responsabilidade.\n\nA frase que circula em comunidade de arquitetos brasileiros captura bem o momento: a IA não veio pra substituir o arquiteto, mas pra acelerar quem se adapta. Quem ignora vai ficar pra trás."
         },
         {
-          "h2": "O que IA AINDA não faz bem (mesmo com hype)",
-          "body": "Cuidado com estas promessas — ainda não entregam:\n\n1. Geração de projeto comercial complexo do zero (escritório de 1000m²)\n2. Cálculo estrutural sério (precisa engenheiro)\n3. Coordenação real entre disciplinas (BIM ainda manual)\n4. Substituição completa do papel do arquiteto na concepção\n5. Compliance com normas BR específicas (ABNT, código local)\n6. Sensibilidade estética e contextual de fato\n\nVendedor de software fala que faz tudo isso. Na prática, ainda não."
+          "h2": "Ferramentas maduras (que já entregam valor real)",
+          "body": "RENDERIZAÇÃO\n\n- Veras (EvolveLAB) — plugin pra Revit, SketchUp, Rhino, ArchiCAD. Transforma modelo 3D em render fotorealista em minutos. Substitui parte do trabalho de V-Ray/Lumion.\n- PromeAI — converte sketches manuais ou modelos 3D simples em renderizações realistas. Bom pra fase conceitual.\n- Lookx — render IA online, sem plugin, mais voltado pra interiores.\n\nGERAÇÃO DE PLANTAS\n\n- Maket — brief textual pra planta residencial em segundos. Foco em residências com restrições do terreno.\n- Architechtures — geração de plantas residenciais com forte aderência a normas (foco europeu).\n- Snaptrude — análise de site (zoning, setbacks, climate) + geração de massing.\n\nGERAÇÃO 3D\n\n- Tripo — modelos 3D rápidos a partir de texto ou imagem. Bom pra estudo conceitual.\n- Meshy — semelhante ao Tripo, geração rápida.\n- Rodin — modelos com mais qualidade técnica.\n\nQUANTITATIVO E ORÇAMENTO\n\n- AI.arq — único brasileiro especializado em ler CAD (PDF, DWG, DXF) e gerar planilha de quantitativos com referência SINAPI/TCPO. Foco em escopo brasileiro (normas ABNT, taxonomia local).\n\nDOCUMENTAÇÃO\n\n- ChatGPT, Claude, Gemini — geração de memorial descritivo, contratos, propostas. Útil quando combinado com templates do escritório."
         },
         {
-          "h2": "O que automatizar (pra ganhar tempo)",
-          "body": "Estas tarefas são braçais e têm baixa criatividade — perfeitas pra IA:\n\n- Levantamento de quantitativos (5min vs 8h manual)\n- Geração inicial de plantas residenciais (rascunho pra refinar)\n- Render rápido pra apresentação (vs 6h em V-Ray)\n- Memorial descritivo a partir de planilha\n- Comparativo de propostas\n- Cronograma básico a partir do escopo\n- Notas técnicas e relatórios"
+          "h2": "O que IA AINDA não faz bem (cuidado com promessa)",
+          "body": "Cuidado com vendedor de software que promete o impossível. Em 2026 estas tarefas continuam exigindo profissional humano:\n\n1. Concepção arquitetônica complexa do zero (escritório corporativo de 1000m², hospital, escola). IA gera variações, mas a decisão de partido é humana.\n\n2. Cálculo estrutural sério. Continua sendo trabalho de engenheiro com responsabilidade técnica.\n\n3. Coordenação real entre disciplinas (BIM clash detection automatizado avançou, mas a conciliação entre arquitetura, estrutura e MEP ainda é manual).\n\n4. Compliance com normas BR específicas (códigos municipais, ABNT, exigências de prefeituras locais). Ferramentas gringas não conhecem.\n\n5. Sensibilidade estética contextual (entender o cliente, o lugar, a história). IA gera variações tecnicamente corretas mas sem alma cultural.\n\n6. Inspeção de obra e aprovação técnica. Profissional habilitado é obrigatório.\n\n7. Negociação com cliente, fornecedor, prefeitura. Tudo isso continua sendo relacionamento humano.\n\nQuem promete cada um desses pontos automatizado em 2026 ou está mentindo ou não conhece o mercado."
         },
         {
-          "h2": "O que NÃO automatizar (pra manter qualidade)",
-          "body": "Estas tarefas exigem julgamento humano que IA ainda não faz bem:\n\n- Concepção do projeto (entender o cliente, o lugar, a história)\n- Decisões estruturais críticas\n- Reuniões com cliente (relacionamento)\n- Coordenação real com engenheiros e fornecedores\n- Inspeção e aprovação na obra\n- Validação técnica final antes de entregar"
+          "h2": "O que automatizar (pra ganhar 30-50h por mês)",
+          "body": "Tarefas braçais com baixa criatividade — perfeitas pra IA:\n\n- Levantamento de quantitativos a partir de CAD (5min vs 8h manual) — economia média 6-8h/projeto\n- Geração inicial de plantas residenciais (rascunho pra refinar) — economia 4-12h/concepção\n- Render fotorealista pra apresentação (vs 6h em V-Ray) — economia 4-6h/apresentação\n- Memorial descritivo a partir de planilha (template + ChatGPT) — economia 2-4h/documento\n- Comparativo de propostas de fornecedores — economia 2-4h/análise\n- Cronograma básico a partir do escopo — economia 1-3h/planejamento\n- Notas técnicas, relatórios, atas — economia 1-2h cada\n\nArquiteto típico que adota IA bem em 2026 economiza 30-50 horas por mês. Equivale a 1 semana inteira de trabalho liberada pra atividades de maior valor (relacionamento com cliente, supervisão de obra, prospecção)."
         },
         {
-          "h2": "Como começar a usar IA hoje",
-          "body": "Sugestão pragmática de roadmap pra arquiteto que quer entrar:\n\nMês 1: Render IA. Comece com Veras (plugin Revit/SketchUp). Vai economizar tempo de visualização imediato.\n\nMês 2: Levantamento. Use AI.arq pra acelerar a geração de planilhas de quantitativos. Em 1 mês você ganha 30-50h.\n\nMês 3: Geração de plantas. Experimente Maket pra brainstorm de layouts residenciais.\n\nMês 4: Comparativo. Use AI.arq pra parear cotações de fornecedores.\n\nMês 6+: Avaliar quais ferramentas viraram parte do processo e quais foram só teste."
+          "h2": "O que NÃO automatizar (pra manter qualidade e responsabilidade)",
+          "body": "Estas tarefas exigem julgamento humano que IA ainda não substitui:\n\n- Concepção do projeto (entender o cliente, o lugar, a história, o programa de necessidades)\n- Decisões estruturais críticas (precisa engenheiro habilitado)\n- Reuniões com cliente (relacionamento, leitura de expectativa, gestão de conflito)\n- Coordenação real com engenheiros e fornecedores\n- Inspeção e aprovação na obra (responsabilidade técnica do CAU/CREA)\n- Validação técnica final antes de entregar (revisão profissional)\n- Decisões estéticas e de partido arquitetônico\n- Negociação comercial (proposta, contrato, escopo)\n\nO erro mais comum em 2026 é arquiteto que terceiriza decisão técnica pra IA e depois não consegue justificar tecnicamente em obra ou em auditoria. IA acelera o trabalho, não substitui responsabilidade."
+        },
+        {
+          "h2": "Roadmap pragmático de adoção (6 meses)",
+          "body": "Sugestão pragmática pra arquiteto que quer começar a usar IA agora sem virar dependente de ferramenta:\n\nMÊS 1: Render IA (resultado visual imediato)\n- Instala Veras no Revit/SketchUp\n- Testa em 2-3 projetos pequenos\n- Compara qualidade vs render tradicional\n- Decide se mantém no fluxo\n\nMÊS 2: Quantitativos (maior ROI financeiro)\n- Cria conta no AI.arq (1º projeto grátis)\n- Sobe um projeto comercial seu\n- Compara com seu levantamento manual\n- Mede tempo economizado\n\nMÊS 3: Geração inicial de plantas\n- Experimenta Maket pra estudo conceitual de residências\n- Usa pra brainstorm rápido em projetos novos\n- NUNCA entrega o que sai direto da IA — refina sempre\n\nMÊS 4: Documentação\n- Padroniza templates de memorial descritivo, contrato, proposta\n- Usa ChatGPT/Claude pra preencher os templates a partir das infos do projeto\n- Revisa SEMPRE antes de mandar\n\nMÊS 5: Comparativo de propostas\n- Usa AI.arq também pra parear cotações de fornecedores\n- Gera PPT executivo automático pro cliente\n\nMÊS 6: Avaliação\n- Quais ferramentas viraram parte do processo?\n- Quais não funcionaram?\n- Quanto tempo total economizado por mês?\n- Qual a próxima ferramenta a testar?"
         },
         {
           "h2": "O que muda na sua relação com cliente",
-          "body": "IA libera você do trabalho braçal pra focar no que cliente VALORIZA:\n\n- Mais tempo de relacionamento (vs Excel)\n- Apresentações mais rápidas e bonitas\n- Capacidade de pegar mais projetos por mês\n- Margem maior (custo de produção cai)\n- Agilidade de resposta (cotação que demorava 1 semana sai em 1 dia)\n\nO arquiteto que abraça IA hoje vai ter vantagem competitiva enorme em 2027-2028. Quem ignora vai ficar pra trás."
+          "body": "IA libera o arquiteto do trabalho braçal pra focar no que cliente realmente valoriza:\n\n- Mais tempo de relacionamento (vs Excel intermináveis)\n- Apresentações mais rápidas e mais bonitas (render IA + planta gerada)\n- Capacidade de pegar mais projetos por mês (escala)\n- Margem maior (custo de produção cai dramaticamente)\n- Agilidade de resposta (cotação que demorava 1 semana sai em 1 dia)\n- Iterações rápidas com cliente (mostra 3 opções de planta em vez de 1)\n\nMas também muda o discurso comercial. Cliente em 2026 já sabe que IA existe e questiona: por que ainda demora 2 meses pro projeto sair? Profissional precisa explicar onde está o valor humano (decisões técnicas, responsabilidade, conhecimento local, relacionamento).\n\nQuem domina IA e ainda mantém valor humano vai pegar mais projetos com margem maior. Quem só usa IA vira commodity. Quem ignora IA vira obsoleto."
         },
         {
           "h2": "O AI.arq na sua estratégia de IA",
-          "body": "O AI.arq foi desenhado pra ser uma das primeiras peças no seu kit de IA pra arquitetura.\n\nPor que começar pelo quantitativo:\n- ROI imediato (1 projeto paga vários meses)\n- Risco baixo (resultado é planilha, não decisão de design)\n- Não interfere no seu processo criativo\n- Gera dados que servem pra outras IAs depois\n\nPrimeiro projeto é grátis. Sem cartão. Sem mensalidade. Você testa, decide se gosta, e segue."
+          "body": "O AI.arq foi desenhado pra ser uma das primeiras peças no seu kit de IA pra arquitetura no contexto brasileiro.\n\nPor que começar pelo quantitativo:\n- ROI imediato — 1 projeto pago paga vários meses de assinatura (não tem assinatura, paga só por uso)\n- Risco baixo — resultado é planilha, não decisão de design ou estrutural\n- Não interfere no seu processo criativo\n- Gera dados estruturados que servem pra outras automações depois (memorial, comparativo, cronograma)\n- Único focado em escopo BR (SINAPI, TCPO, normas ABNT)\n- Sem mensalidade — paga só quando usa\n\nPrimeiro projeto é grátis. Sem cartão. Sem mensalidade. Você testa, decide se gosta, e segue."
         }
       ],
-      "cta": "Quer entrar no mundo IA pelo lado mais seguro e prático? Sobe seu CAD no AI.arq e veja a planilha pronta em 5min. Primeiro projeto grátis em ai.arq.br."
+      "cta": "Quer entrar no mundo IA pelo lado mais seguro e prático? Sobe seu CAD no AI.arq e veja a planilha pronta em 5min. Primeiro projeto grátis em ai.arq.br.",
+      "sources": [
+        {"type": "norm", "title": "Resolução CAU/BR sobre tecnologias digitais", "description": "Posicionamento oficial do conselho sobre uso de IA em arquitetura"},
+        {"type": "book", "title": "Arquitetura e Inteligência Artificial", "author": "Stanislas Chaillou", "publisher": "Edgard Blücher", "year": 2022},
+        {"type": "book", "title": "BIM e a Construção Digital no Brasil", "author": "Eduardo Toledo Santos & Sergio Scheer", "publisher": "Editora PINI", "year": 2020},
+        {"type": "book", "title": "Computational Design — Parametric Modeling for Architects", "author": "Mehdi Roudsari", "publisher": "Routledge", "year": 2021},
+        {"type": "link", "title": "Artigo CAU/BR — Inteligência Artificial, Design e Arquitetura", "url": "https://caubr.gov.br/artigo-inteligencia-artificial-ia-design-e-arquitetura/", "publisher": "CAU/BR"},
+        {"type": "link", "title": "As 10 Melhores Ferramentas de IA para Arquitetura em 2026", "url": "https://engenharia360.com/melhores-ferramentas-de-ia-para-arquitetura/", "publisher": "Engenharia 360"},
+        {"type": "link", "title": "7 mudanças que a IA pode trazer para a arquitetura em 2026", "url": "https://fastcompanybrasil.com/design/7-mudancas-que-a-ia-pode-trazer-para-a-arquitetura-em-2026/", "publisher": "Fast Company Brasil"},
+        {"type": "link", "title": "IA para Arquitetos: Renderização, Propostas e Gestão de Obra com IA", "url": "https://eupresa.ia.br/blog/ia-para-arquitetos-2026/", "publisher": "Eupresa"},
+        {"type": "link", "title": "Render IA Grátis: 7 Ferramentas Arquitetos 2026", "url": "https://blog.collection.com.br/render-ia-gratis-ferramentas-arquitetos-2026/", "publisher": "Collection"},
+        {"type": "link", "title": "5 ferramentas de IA úteis para Arquitetos", "url": "https://are.arq.br/5-ferramentas-de-ia-uteis-para-arquitetos/", "publisher": "ARE Arquitetura"}
+      ]
     }
   ]
 }

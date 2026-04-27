@@ -2726,15 +2726,38 @@ async def admin_list_chat_leads(limit: int = 200):
 
 @app.post("/api/contact")
 async def submit_contact(request: Request):
-    """Recebe envio do formulário de contato.
+    """Recebe envio do formulário de contato (JSON ou multipart/form-data).
 
-    Validações: nome, email, mensagem obrigatórios. Tipo deve ser
-    válido. Captura source_page (referer) e user_agent automaticamente.
+    Aceita arquivo opcional (campo 'file', máx 10MB) que vai pro Supabase
+    Storage no bucket 'contact-attachments'. URL pública é salva junto.
     """
-    try:
-        body = await request.json()
-    except Exception:
-        return {"ok": False, "error": "JSON inválido"}
+    content_type = (request.headers.get("content-type") or "").lower()
+    upload_file = None
+    upload_filename = None
+
+    # Parse: JSON ou multipart
+    if "multipart/form-data" in content_type:
+        try:
+            form = await request.form()
+        except Exception as e:
+            return {"ok": False, "error": f"Form inválido: {e}"}
+        body = dict(form)
+        # Extrai arquivo se vier
+        file_obj = form.get("file")
+        if file_obj is not None and hasattr(file_obj, "read"):
+            try:
+                upload_filename = (getattr(file_obj, "filename", "") or "anexo.bin")[:200]
+                upload_file = await file_obj.read()
+                if len(upload_file) > 10 * 1024 * 1024:
+                    return {"ok": False, "error": "Arquivo grande demais (máx 10MB)"}
+            except Exception as e:
+                print(f"[contact] erro lendo arquivo: {e}")
+                upload_file = None
+    else:
+        try:
+            body = await request.json()
+        except Exception:
+            return {"ok": False, "error": "JSON inválido"}
 
     name    = str(body.get("name", "")).strip()[:200]
     email   = str(body.get("email", "")).strip().lower()[:200]
@@ -2754,6 +2777,42 @@ async def submit_contact(request: Request):
     source_page = request.headers.get("referer", "")[:500]
     user_agent  = request.headers.get("user-agent", "")[:500]
 
+    # Upload do anexo (se houver) pro Supabase Storage
+    attachment_url = None
+    attachment_size_kb = None
+    if upload_file and upload_filename:
+        try:
+            import uuid as _uuid
+            ext = ""
+            if "." in upload_filename:
+                ext = "." + upload_filename.rsplit(".", 1)[-1][:10]
+            object_key = f"contact/{datetime.utcnow().strftime('%Y%m')}/{_uuid.uuid4()}{ext}"
+
+            up_url = f"{SUPABASE_URL}/storage/v1/object/contact-attachments/{object_key}"
+            req = urllib.request.Request(up_url, data=upload_file, method="POST")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            # Detecta content type básico
+            ct_map = {
+                ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+                ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".xls": "application/vnd.ms-excel", ".csv": "text/csv",
+                ".doc": "application/msword",
+                ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".txt": "text/plain",
+            }
+            req.add_header("Content-Type", ct_map.get(ext.lower(), "application/octet-stream"))
+            req.add_header("x-upsert", "true")
+            urllib.request.urlopen(req, timeout=30)
+
+            attachment_url = f"{SUPABASE_URL}/storage/v1/object/public/contact-attachments/{object_key}"
+            attachment_size_kb = round(len(upload_file) / 1024)
+            print(f"[contact] anexo enviado: {attachment_url}")
+        except Exception as e:
+            print(f"[contact] erro upload Storage: {e}")
+            # Não falha a request por causa do anexo — segue sem ele
+
     payload = {
         "name": name,
         "email": email,
@@ -2764,6 +2823,9 @@ async def submit_contact(request: Request):
         "source_page": source_page or None,
         "user_agent": user_agent or None,
         "status": "new",
+        "attachment_url": attachment_url,
+        "attachment_filename": upload_filename if attachment_url else None,
+        "attachment_size_kb": attachment_size_kb,
     }
 
     ok = _supabase_insert("contact_messages", payload)

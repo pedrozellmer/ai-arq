@@ -125,7 +125,7 @@ function smartBack() {
       </div>
       <div>
         <p class="text-sm font-semibold text-gray-800">Algo errado neste projeto?</p>
-        <p class="text-xs text-gray-500">Reporta pra gente — chega direto no painel admin com o código do projeto.</p>
+        <p class="text-xs text-gray-500">Reporta pra gente que a gente responde rapidinho.</p>
       </div>
     </div>
     <button id="btn-report-project" type="button" class="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-50 text-orange-700 text-sm font-medium transition">
@@ -377,27 +377,30 @@ function safeRun(fn, label) {
   btnDownload.style.pointerEvents = '';
   btnDownload.style.opacity = '';
 
-  // Botão "Reportar problema" — pré-preenche tudo no contact-modal
+  // Botão "Reportar problema" — abre em modo TICKET (campos reduzidos)
   const btnReport = document.getElementById('btn-report-project');
   if (btnReport) {
     btnReport.addEventListener('click', () => {
       const userMeta = session.user.user_metadata || {};
-      const userName = userMeta.full_name || userMeta.name || '';
+      const userName = userMeta.full_name || userMeta.name || session.user.email || 'Cliente';
       const userEmail = session.user.email || '';
       const userPhone = userMeta.whatsapp || userMeta.phone || '';
-      // Tenta pegar o nome do projeto do header se já carregou
       const projTitleEl = document.getElementById('proj-title');
       const projName = projTitleEl ? projTitleEl.textContent.trim() : '';
-      const subject = `Projeto ${jobId}${projName ? ' — ' + projName : ''}`;
-      const message = `Olá, gostaria de reportar algo sobre este projeto:\n\nCódigo: ${jobId}${projName ? '\nNome: ' + projName : ''}\nLink: ${window.location.href}\n\n[descreva aqui o que aconteceu]\n`;
+      const projSubject = `Projeto ${jobId}${projName ? ' — ' + projName : ''}`;
+      const contextDetails = `Código: <strong>${jobId}</strong>${projName ? ' · ' + projName : ''}`;
       if (typeof aiArqContactOpen === 'function') {
         aiArqContactOpen({
+          mode: 'ticket',
           type: 'reclamacao',
-          subject,
-          message,
+          subject: projSubject,         // vai como prefixo "[label] Projeto XYZ"
           name: userName,
           email: userEmail,
           phone: userPhone,
+          contextLabel: 'Reportando problema neste projeto',
+          contextDetails: contextDetails,
+          titleOverride: 'Reportar problema',
+          subtitleOverride: 'Conta o que aconteceu — a gente responde rapidinho.',
         });
       } else {
         alert('Modal de contato não carregou. Recarregue a página.');
