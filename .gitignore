@@ -46,8 +46,18 @@ quantitativos_aiarq_*.xlsx
 teste_*.xlsx
 teste_*.csv
 
-# Claude Code working files
-.claude/
+# Claude Code — bloqueia tudo, mas LIBERA configs de equipe (vão pro git)
+.claude/*
+!.claude/agents/
+!.claude/commands/
+!.claude/skills/
+!.claude/hooks/
+!.claude/settings.json
+!.claude/*.md
+!.claude/*.example
+.claude/settings.local.json
+.claude/cache/
+.claude/logs/
 HISTORICO_*.md
 
 # Pastas de teste com binários grandes

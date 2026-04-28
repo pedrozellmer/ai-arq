@@ -1,0 +1,9 @@
+{
+  "_comment": "TEMPLATE — copie pra .claude/settings.local.json (gitignored) e preencha. Local-only.",
+  "env": {
+    "TELEGRAM_BOT_TOKEN": "",
+    "TELEGRAM_CHAT_ID": "",
+    "RESEND_API_KEY": "",
+    "EMAIL_TO": ""
+  }
+}

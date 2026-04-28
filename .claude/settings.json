@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "_comment": "Settings de equipe — vai pro git. Pra overrides locais use settings.local.json (gitignored).",
+
+  "hooks": {
+    "PreToolUse": [
+      {
+        "_comment": "Pre-commit secret scanner — bloqueia git commit se detectar API keys ou tokens.",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'git commit'; then python .claude/hooks/scan_secrets.py; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "_comment": "Quando editar blog/posts.json, regenera os HTMLs automaticamente",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'blog/posts.json'; then echo '🔄 posts.json mudou — regenerando blog...' && cd blog && python generate.py; fi"
+          }
+        ]
+      },
+      {
+        "_comment": "Após git push, notifica que deploy foi disparado (terminal + opcionalmente Telegram)",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -q 'git push'; then python .claude/hooks/notify_deploy.py; fi"
+          }
+        ]
+      }
+    ]
+  },
+
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(python:*)",
+      "Bash(curl:*)",
+      "Bash(ls:*)",
+      "Bash(cd:*)",
+      "Bash(grep:*)",
+      "Bash(cat:*)"
+    ]
+  }
+}

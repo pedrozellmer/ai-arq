@@ -6,6 +6,37 @@
 
 ---
 
+## 🛠️ Recursos Claude Code disponíveis (use!)
+
+Esse projeto tem configurações prontas em `.claude/`. Use proativamente.
+
+### Subagents (`.claude/agents/`)
+- **`seo-auditor-br`** — audita post de blog antes de publicar (keyword, densidade, schema, fontes). Use quando editar `blog/posts.json` ou criar post novo.
+- **`copywriter-br`** — revisa copy do site pra soar natural/coloquial brasileiro. Use quando editar texto de landing/FAQ/email.
+- **`security-reviewer`** — revisão de segurança focada em SaaS (RLS, secrets, LGPD). Use antes de cada deploy ou ao mexer em auth/RLS/uploads.
+- **`marketing-strategist`** — análise de métricas e ações de growth. Use quando Pedro perguntar sobre crescimento.
+
+### Slash commands (`.claude/commands/`)
+- **`/deploy`** — commit + push pro main com mensagem padronizada
+- **`/regenblog`** — roda `python blog/generate.py` pra recriar os HTMLs
+- **`/checksite`** — health check (site, backend, IG, DB) em paralelo
+
+### Hooks (`.claude/settings.json` + `.claude/hooks/`)
+- **Pre-commit secret scanner** — bloqueia commits com API keys, tokens, .env
+- **On-save blog regen** — quando `blog/posts.json` muda, regenera HTMLs automaticamente
+- **Post-push deploy notify** — após `git push`, mostra resumo no terminal (opcional: Telegram)
+
+### Skills (`.claude/skills/`)
+- **`seo-pt-br`** — gera/otimiza conteúdo SEO em PT-BR (posts, landing, meta description)
+
+### MCP servers já conectados
+- **Supabase MCP** — `mcp__dbd6b42c-...` — query banco direto, criar tabelas, executar SQL
+
+### MCP servers ativáveis (TODO)
+- **Stripe MCP** — relatórios financeiros direto pelo Claude. Setup em `.claude/STRIPE_MCP_SETUP.md`. Ativar quando 30+ usuários ativos.
+
+---
+
 ## 📋 Quick start (leia isso primeiro)
 
 Se você é uma sessão nova de Claude lendo isso pela primeira vez:
