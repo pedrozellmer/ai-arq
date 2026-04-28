@@ -587,11 +587,24 @@ async def scheduler_tick(force_slot: Optional[str] = None):
                 "attempts": (post.get("attempts") or 0) + 1,
             })
 
-            # Cria container de mídia
-            creation_id = api.create_media_container(
-                image_url=post["image_url"],
-                caption=post["caption"],
-            )
+            # Cria container de mídia conforme media_type
+            media_type = post.get("media_type") or "feed"
+            if media_type == "reel":
+                creation_id = api.create_reel_container(
+                    video_url=post.get("video_url") or "",
+                    caption=post["caption"],
+                    thumbnail_url=post.get("thumbnail_url"),
+                    share_to_feed=True,
+                )
+            elif media_type == "story":
+                creation_id = api.create_story_container(
+                    image_url=post["image_url"],
+                )
+            else:  # feed (default)
+                creation_id = api.create_media_container(
+                    image_url=post["image_url"],
+                    caption=post["caption"],
+                )
 
             if not creation_id or "error" in str(creation_id).lower():
                 _supa_update("instagram_scheduled_posts", "id", post["id"], {
@@ -601,9 +614,10 @@ async def scheduler_tick(force_slot: Optional[str] = None):
                 results.append({"slot": slot, "status": "failed", "error": "container"})
                 continue
 
-            # Aguarda processamento (2s) e publica
+            # Aguarda processamento (Reels precisam mais tempo)
             import time
-            time.sleep(3)
+            wait_seconds = 15 if media_type == "reel" else 3
+            time.sleep(wait_seconds)
             media_id = api.publish_media(creation_id)
 
             if media_id and "error" not in str(media_id).lower():
@@ -637,6 +651,41 @@ async def scheduler_list():
     """Lista todos os posts agendados com status atual."""
     posts = _supa_select(
         "instagram_scheduled_posts",
-        "select=slot_key,status,publish_at,published_at,attempts,error_message,media_id&order=publish_at.asc",
+        "select=slot_key,status,media_type,publish_at,published_at,attempts,error_message,media_id,video_url,image_url&order=publish_at.asc",
     )
     return {"posts": posts, "now": datetime.now(timezone.utc).isoformat()}
+
+
+@router.post("/scheduler/approve")
+async def scheduler_approve(slot_key: str, action: str = "approve"):
+    """Aprova ou rejeita post em pending_approval (geralmente Reel).
+
+    action='approve' -> status vira 'pending' (tick vai publicar)
+    action='reject'  -> status vira 'canceled'
+    """
+    if action not in ("approve", "reject"):
+        return {"ok": False, "error": "action deve ser 'approve' ou 'reject'"}
+
+    posts = _supa_select(
+        "instagram_scheduled_posts",
+        f"slot_key=eq.{urllib.parse.quote(slot_key)}&select=*",
+    )
+    if not posts:
+        return {"ok": False, "error": f"slot {slot_key} não encontrado"}
+
+    post = posts[0]
+    if post["status"] not in ("pending_approval",):
+        return {
+            "ok": False,
+            "error": f"slot está com status '{post['status']}' (esperado pending_approval)",
+        }
+
+    new_status = "pending" if action == "approve" else "canceled"
+    _supa_update("instagram_scheduled_posts", "id", post["id"], {"status": new_status})
+
+    return {
+        "ok": True,
+        "slot_key": slot_key,
+        "previous_status": "pending_approval",
+        "new_status": new_status,
+    }
