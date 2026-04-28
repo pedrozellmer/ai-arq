@@ -68,12 +68,12 @@ class MetaGraphAPI:
         caption: str,
         media_type: str = "IMAGE",
     ) -> Optional[str]:
-        """Cria container de midia (passo 1 da publicacao).
+        """Cria container de midia (passo 1 da publicacao). Pra IMAGE/STORIES.
 
         Args:
             image_url: URL publica da imagem
             caption: Legenda do post
-            media_type: IMAGE, CAROUSEL_ALBUM, STORIES, REELS
+            media_type: IMAGE, CAROUSEL_ALBUM, STORIES
         """
         url = f"{GRAPH_API_BASE}/{self.ig_user_id}/media"
         payload = {
@@ -82,7 +82,53 @@ class MetaGraphAPI:
         }
         if media_type == "STORIES":
             payload["media_type"] = "STORIES"
+            # Stories nao tem caption (ignorada pelo Meta)
 
+        resp = self._request("POST", url, json=payload)
+        return resp.get("id")
+
+    def create_reel_container(
+        self,
+        video_url: str,
+        caption: str,
+        thumbnail_url: Optional[str] = None,
+        share_to_feed: bool = True,
+    ) -> Optional[str]:
+        """Cria container de Reel (MP4 vertical 9:16).
+
+        Args:
+            video_url: URL publica do MP4 (deve ser .mp4, max 100MB, 15-90s)
+            caption: Legenda do Reel (max 2200 chars)
+            thumbnail_url: URL publica da imagem de capa (opcional)
+            share_to_feed: Se True, Reel tambem aparece no feed (recomendado)
+        """
+        url = f"{GRAPH_API_BASE}/{self.ig_user_id}/media"
+        payload = {
+            "media_type": "REELS",
+            "video_url": video_url,
+            "caption": caption[:2200],
+            "share_to_feed": share_to_feed,
+        }
+        if thumbnail_url:
+            payload["cover_url"] = thumbnail_url
+
+        resp = self._request("POST", url, json=payload)
+        return resp.get("id")
+
+    def create_story_container(
+        self,
+        image_url: str,
+    ) -> Optional[str]:
+        """Cria container de Story (imagem 1080x1920 vertical 9:16).
+
+        Args:
+            image_url: URL publica da imagem (PNG/JPG, max 8MB)
+        """
+        url = f"{GRAPH_API_BASE}/{self.ig_user_id}/media"
+        payload = {
+            "image_url": image_url,
+            "media_type": "STORIES",
+        }
         resp = self._request("POST", url, json=payload)
         return resp.get("id")
 
