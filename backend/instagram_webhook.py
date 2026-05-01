@@ -718,9 +718,15 @@ async def insights_sync(force: bool = False):
         slot_key = post.get("slot_key")
         if not media_id:
             continue
-        insights = api.get_media_insights(media_id)
+        media_type = post.get("media_type") or "feed"
+        insights = api.get_media_insights(media_id, media_type=media_type)
         if "error" in insights:
-            errors.append({"slot": slot_key, "error": str(insights.get("error"))[:200]})
+            errors.append({
+                "slot": slot_key,
+                "media_type": media_type,
+                "error": str(insights.get("error"))[:120],
+                "details": str(insights.get("details", ""))[:300],
+            })
             continue
         row = {
             "media_id": media_id,

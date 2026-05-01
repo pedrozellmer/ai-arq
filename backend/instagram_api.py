@@ -147,22 +147,24 @@ class MetaGraphAPI:
         return resp.get("status_code", "UNKNOWN")
 
     # ── Insights ──
-    def get_media_insights(self, media_id: str, metrics: Optional[list[str]] = None) -> dict:
+    def get_media_insights(self, media_id: str, media_type: str = "feed", metrics: Optional[list[str]] = None) -> dict:
         """Busca insights de um post publicado (likes, reach, saves, etc).
 
         Args:
             media_id: ID retornado por publish_media
-            metrics: lista de métricas. Default cobre feed/reel/story.
+            media_type: feed | reel | story (define quais métricas são válidas)
+            metrics: lista explícita (sobrescreve default por tipo)
 
         Returns:
-            dict com {metric_name: value, ...} ou {"error": "..."}
+            dict com {metric_name: value, ...} ou {"error": "...", "details": "..."}
         """
         if not metrics:
-            # Métricas universais que funcionam pra IMAGE/CAROUSEL/REELS na IG Login API v21
-            metrics = [
-                "reach", "likes", "comments", "saves", "shares",
-                "total_interactions", "views",
-            ]
+            if media_type == "reel":
+                metrics = ["reach", "likes", "comments", "saves", "shares", "total_interactions", "views"]
+            elif media_type == "story":
+                metrics = ["reach", "replies", "shares", "total_interactions"]
+            else:  # feed (IMAGE/CAROUSEL)
+                metrics = ["reach", "likes", "comments", "saves", "shares", "total_interactions"]
         url = f"{GRAPH_API_BASE}/{media_id}/insights"
         params = {"metric": ",".join(metrics)}
         resp = self._request("GET", url, params=params)
@@ -218,7 +220,7 @@ class MetaGraphAPI:
             except httpx.HTTPStatusError as e:
                 logger.error(f"Meta API erro {e.response.status_code}: {e.response.text}")
                 if attempt == 2:
-                    return {"error": str(e), "status_code": e.response.status_code}
+                    return {"error": str(e), "status_code": e.response.status_code, "details": e.response.text[:500]}
             except Exception as e:
                 logger.error(f"Meta API request falhou: {e}")
                 if attempt == 2:
