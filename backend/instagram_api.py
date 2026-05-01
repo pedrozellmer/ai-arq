@@ -146,6 +146,36 @@ class MetaGraphAPI:
         resp = self._request("GET", url, params=params)
         return resp.get("status_code", "UNKNOWN")
 
+    # ── Insights ──
+    def get_media_insights(self, media_id: str, metrics: Optional[list[str]] = None) -> dict:
+        """Busca insights de um post publicado (likes, reach, saves, etc).
+
+        Args:
+            media_id: ID retornado por publish_media
+            metrics: lista de métricas. Default cobre feed/reel/story.
+
+        Returns:
+            dict com {metric_name: value, ...} ou {"error": "..."}
+        """
+        if not metrics:
+            # Métricas universais que funcionam pra IMAGE/CAROUSEL/REELS na IG Login API v21
+            metrics = [
+                "reach", "likes", "comments", "saves", "shares",
+                "total_interactions", "views",
+            ]
+        url = f"{GRAPH_API_BASE}/{media_id}/insights"
+        params = {"metric": ",".join(metrics)}
+        resp = self._request("GET", url, params=params)
+        if "error" in resp:
+            return resp
+        out = {}
+        for m in resp.get("data", []):
+            name = m.get("name")
+            values = m.get("values") or []
+            if values:
+                out[name] = values[0].get("value", 0)
+        return out
+
     # ── Token ──
     def refresh_long_lived_token(self) -> Optional[str]:
         """Renova token de longa duracao (valido por 60 dias)."""

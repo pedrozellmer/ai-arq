@@ -534,6 +534,24 @@ def _supa_select(table: str, query: str) -> list:
         return []
 
 
+def _supa_upsert(table: str, data: dict, on_conflict: str) -> bool:
+    """Helper: UPSERT via REST API (insere ou atualiza por on_conflict)."""
+    url = f"{os.getenv('SUPABASE_URL', 'https://kqjabzwgbfuivzlcfvvu.supabase.co')}/rest/v1/{table}?on_conflict={on_conflict}"
+    key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+    body = json.dumps(data).encode("utf-8")
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("apikey", key)
+    req.add_header("Authorization", f"Bearer {key}")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Prefer", "resolution=merge-duplicates,return=minimal")
+    try:
+        urllib.request.urlopen(req, timeout=15)
+        return True
+    except Exception as e:
+        logger.error(f"_supa_upsert erro: {e}")
+        return False
+
+
 def _supa_update(table: str, match_field: str, match_value: str, data: dict) -> bool:
     """Helper: PATCH via REST API."""
     url = f"{os.getenv('SUPABASE_URL', 'https://kqjabzwgbfuivzlcfvvu.supabase.co')}/rest/v1/{table}?{match_field}=eq.{urllib.parse.quote(match_value)}"
@@ -654,6 +672,89 @@ async def scheduler_list():
         "select=slot_key,status,media_type,publish_at,published_at,attempts,error_message,media_id,video_url,image_url&order=publish_at.asc",
     )
     return {"posts": posts, "now": datetime.now(timezone.utc).isoformat()}
+
+
+@router.post("/insights/sync")
+async def insights_sync(force: bool = False):
+    """Sincroniza insights (likes/reach/saves/etc) dos posts publicados.
+
+    - Cache de 5min: se sincronizou recentemente, retorna do banco direto
+    - Use ?force=true pra forçar re-sync ignorando cache
+    """
+    # Cache: se synced_at mais recente < 5min, retorna do DB
+    if not force:
+        recent = _supa_select(
+            "instagram_post_insights",
+            "select=synced_at&order=synced_at.desc&limit=1",
+        )
+        if recent and recent[0].get("synced_at"):
+            try:
+                last = datetime.fromisoformat(recent[0]["synced_at"].replace("Z", "+00:00"))
+                age_sec = (datetime.now(timezone.utc) - last).total_seconds()
+                if age_sec < 300:
+                    cached = _supa_select(
+                        "instagram_post_insights",
+                        "select=*&order=synced_at.desc",
+                    )
+                    return {"ok": True, "cached": True, "age_seconds": int(age_sec), "insights": cached}
+            except Exception:
+                pass
+
+    api = MetaGraphAPI()
+    if not api.access_token:
+        return {"ok": False, "error": "META_ACCESS_TOKEN não configurado"}
+
+    published = _supa_select(
+        "instagram_scheduled_posts",
+        "status=eq.published&select=slot_key,media_id,media_type&order=published_at.desc",
+    )
+    if not published:
+        return {"ok": True, "synced": 0, "message": "Nenhum post publicado ainda"}
+
+    synced = 0
+    errors = []
+    for post in published:
+        media_id = post.get("media_id")
+        slot_key = post.get("slot_key")
+        if not media_id:
+            continue
+        insights = api.get_media_insights(media_id)
+        if "error" in insights:
+            errors.append({"slot": slot_key, "error": str(insights.get("error"))[:200]})
+            continue
+        row = {
+            "media_id": media_id,
+            "slot_key": slot_key,
+            "reach": insights.get("reach", 0),
+            "likes": insights.get("likes", 0),
+            "comments": insights.get("comments", 0),
+            "saves": insights.get("saves", 0),
+            "shares": insights.get("shares", 0),
+            "total_interactions": insights.get("total_interactions", 0),
+            "views": insights.get("views", 0),
+            "raw_data": insights,
+            "synced_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if _supa_upsert("instagram_post_insights", row, "media_id"):
+            synced += 1
+        else:
+            errors.append({"slot": slot_key, "error": "upsert failed"})
+
+    fresh = _supa_select(
+        "instagram_post_insights",
+        "select=*&order=synced_at.desc",
+    )
+    return {"ok": True, "synced": synced, "errors": errors, "insights": fresh}
+
+
+@router.get("/insights/list")
+async def insights_list():
+    """Retorna últimos insights salvos no banco (não chama Graph API)."""
+    rows = _supa_select(
+        "instagram_post_insights",
+        "select=*&order=synced_at.desc",
+    )
+    return {"insights": rows, "count": len(rows)}
 
 
 @router.post("/scheduler/approve")
