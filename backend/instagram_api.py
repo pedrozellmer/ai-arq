@@ -160,11 +160,11 @@ class MetaGraphAPI:
         """
         if not metrics:
             if media_type == "reel":
-                metrics = ["reach", "likes", "comments", "saves", "shares", "total_interactions", "views"]
+                metrics = ["reach", "likes", "comments", "saved", "shares", "total_interactions", "views", "plays"]
             elif media_type == "story":
                 metrics = ["reach", "replies", "shares", "total_interactions"]
             else:  # feed (IMAGE/CAROUSEL)
-                metrics = ["reach", "likes", "comments", "saves", "shares", "total_interactions"]
+                metrics = ["reach", "likes", "comments", "saved", "shares", "total_interactions", "follows", "profile_visits"]
         url = f"{GRAPH_API_BASE}/{media_id}/insights"
         params = {"metric": ",".join(metrics)}
         resp = self._request("GET", url, params=params)
