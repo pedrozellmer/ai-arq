@@ -618,6 +618,42 @@ async def scheduler_tick(force_slot: Optional[str] = None):
                 creation_id = api.create_story_container(
                     image_url=post["image_url"],
                 )
+            elif media_type == "carousel":
+                # Carrossel: cria 1 item container por imagem, depois parent CAROUSEL
+                image_urls = post.get("image_urls") or []
+                if isinstance(image_urls, str):
+                    try:
+                        image_urls = json.loads(image_urls)
+                    except Exception:
+                        image_urls = []
+                if not image_urls or len(image_urls) < 2:
+                    _supa_update("instagram_scheduled_posts", "id", post["id"], {
+                        "status": "failed",
+                        "error_message": "Carrossel precisa de 2+ imagens em image_urls",
+                    })
+                    results.append({"slot": slot, "status": "failed", "error": "no_images"})
+                    continue
+                # cria todos os filhos
+                children_ids = []
+                child_error = None
+                for url in image_urls[:10]:
+                    cid = api.create_carousel_item(image_url=url)
+                    if not cid or "error" in str(cid).lower():
+                        child_error = f"item falhou: {cid}"
+                        break
+                    children_ids.append(cid)
+                if child_error or not children_ids:
+                    _supa_update("instagram_scheduled_posts", "id", post["id"], {
+                        "status": "failed",
+                        "error_message": child_error or "nenhum item criado",
+                    })
+                    results.append({"slot": slot, "status": "failed", "error": child_error})
+                    continue
+                # cria parent
+                creation_id = api.create_carousel_container(
+                    children_ids=children_ids,
+                    caption=post["caption"],
+                )
             else:  # feed (default)
                 creation_id = api.create_media_container(
                     image_url=post["image_url"],
@@ -632,9 +668,9 @@ async def scheduler_tick(force_slot: Optional[str] = None):
                 results.append({"slot": slot, "status": "failed", "error": "container"})
                 continue
 
-            # Aguarda processamento (Reels precisam mais tempo)
+            # Aguarda processamento (Reels precisam mais tempo, carousel também)
             import time
-            wait_seconds = 15 if media_type == "reel" else 3
+            wait_seconds = 15 if media_type == "reel" else (8 if media_type == "carousel" else 3)
             time.sleep(wait_seconds)
             media_id = api.publish_media(creation_id)
 

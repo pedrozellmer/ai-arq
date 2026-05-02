@@ -115,6 +115,43 @@ class MetaGraphAPI:
         resp = self._request("POST", url, json=payload)
         return resp.get("id")
 
+    def create_carousel_item(
+        self,
+        image_url: str,
+    ) -> Optional[str]:
+        """Cria container de item filho de carrossel (passo 1a por item).
+
+        Args:
+            image_url: URL pública da imagem do slide
+        """
+        url = f"{GRAPH_API_BASE}/{self.ig_user_id}/media"
+        payload = {
+            "image_url": image_url,
+            "is_carousel_item": True,
+        }
+        resp = self._request("POST", url, json=payload)
+        return resp.get("id")
+
+    def create_carousel_container(
+        self,
+        children_ids: list[str],
+        caption: str,
+    ) -> Optional[str]:
+        """Cria container parent de carrossel (passo 2 — depois de criar todos os filhos).
+
+        Args:
+            children_ids: lista de creation_ids dos itens (até 10)
+            caption: legenda do carrossel
+        """
+        url = f"{GRAPH_API_BASE}/{self.ig_user_id}/media"
+        payload = {
+            "media_type": "CAROUSEL",
+            "caption": caption[:2200],
+            "children": ",".join(children_ids),
+        }
+        resp = self._request("POST", url, json=payload)
+        return resp.get("id")
+
     def create_story_container(
         self,
         image_url: str,
