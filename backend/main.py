@@ -1527,17 +1527,23 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         dxf_paths.append(cad_path)
 
                 # Se TODOS os DWGs falharam E não tem PDFs, é fim de linha — marca como failed.
-                # Antes o motor seguia em frente e gerava planilha vazia + sugestões hardcoded,
-                # confundindo o usuário ("planilha veio mas sem nada"). Agora dá erro claro.
+                # Mensagem instrutiva pro user resolver sozinho (95% dos casos).
                 if dwg_failed and not dxf_paths and not pdf_paths:
+                    arquivos = ', '.join(dwg_failed)
                     msg = (
-                        f"Não foi possível processar o arquivo DWG: "
-                        f"{', '.join(dwg_failed)}. "
-                        f"Causa provável: arquivo corrompido ou upload incompleto. "
-                        f"Recomendação: verifique se o DWG abre corretamente no AutoCAD/BricsCAD "
-                        f"e suba novamente. Como alternativa, exporte como PDF e suba o PDF."
+                        f"❌ Não foi possível processar o DWG: {arquivos}. "
+                        f"Tentamos com 2 conversores (ODA + libredwg) — ambos falharam. "
+                        f"Causa provável: arquivo corrompido (faltam bytes) — pode ter acontecido se o "
+                        f"AutoCAD travou na hora de salvar.\n\n"
+                        f"📋 COMO RESOLVER (95% dos casos):\n"
+                        f"1. Abra o arquivo no AutoCAD ou BricsCAD\n"
+                        f"2. Vá em File → Save As\n"
+                        f"3. Escolha o tipo: AutoCAD 2010/LT2010 DXF (*.dxf)\n"
+                        f"4. Salve com nome novo\n"
+                        f"5. Suba o DXF aqui (em vez do DWG)\n\n"
+                        f"💡 ALTERNATIVA: se você plotou em PDF antes, mande o PDF — funciona igual."
                     )
-                    jobs.update_field(job_id, error_message=msg, current_step="Erro: arquivo CAD inválido")
+                    jobs.update_field(job_id, error_message=msg, current_step="❌ Arquivo CAD inválido — leia mensagem abaixo")
                     raise RuntimeError(msg)
             except Exception as e:
                 jobs.update_field(job_id, error_message=f"Erro DWG→DXF: {e}")

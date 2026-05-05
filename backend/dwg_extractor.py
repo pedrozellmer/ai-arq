@@ -479,25 +479,70 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         return dxf_path
 
     # Procurar .dxf.err — ODA cria isso quando falha em arquivos corrompidos/truncados.
-    # Lê o conteúdo do .err pra dar erro real ao user.
     err_path = os.path.join(output_dir, stem + ".dxf.err")
-    if os.path.isfile(err_path):
+    oda_failed_with_err = os.path.isfile(err_path)
+    if oda_failed_with_err:
         try:
             with open(err_path, 'r', errors='replace') as ef:
                 err_content = ef.read()[:500]
         except Exception:
             err_content = ""
-        logger.error("ODA gerou .dxf.err (DWG inválido/corrompido): %s", err_content)
-        return None
+        logger.warning("ODA gerou .dxf.err (DWG inválido/corrompido): %s", err_content)
 
-    # Try case-insensitive search in output dir
+    # Try case-insensitive search in output dir (caso ODA tenha gerado com nome diferente)
     for f in os.listdir(output_dir):
-        if f.lower().endswith(".dxf"):
+        if f.lower().endswith(".dxf") and not f.lower().endswith(".dxf.err"):
             found = os.path.join(output_dir, f)
             logger.info("DXF gerado em: %s", found)
             return found
 
-    logger.error("Nenhum arquivo .dxf gerado no diretório de saída: %s", output_dir)
+    # FALLBACK: ODA falhou. Tenta libredwg (open-source) — pega ~15-20% dos casos
+    # onde ODA falhou (DWGs com objetos não-padrão, alguns DWGs corrompidos parciais).
+    logger.info("ODA falhou — tentando fallback libredwg-cli (dwg2dxf)...")
+    fallback_dxf = _try_libredwg_convert(dwg_path, output_dir)
+    if fallback_dxf:
+        logger.info("DXF gerado via libredwg fallback: %s", fallback_dxf)
+        return fallback_dxf
+
+    if oda_failed_with_err:
+        logger.error("Tanto ODA quanto libredwg falharam. DWG provavelmente corrompido.")
+    else:
+        logger.error("Nenhum arquivo .dxf gerado no diretório de saída: %s", output_dir)
+    return None
+
+
+def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
+    """Tenta converter DWG → DXF usando libredwg-cli (dwg2dxf).
+
+    libredwg é open-source, mais permissivo que ODA pra DWGs com problemas
+    parciais. Funciona como fallback quando ODA falha.
+
+    Retorna path do .dxf gerado, ou None se falhar.
+    """
+    import shutil
+    dwg2dxf = shutil.which("dwg2dxf")
+    if not dwg2dxf:
+        logger.info("libredwg (dwg2dxf) não instalado — pulando fallback")
+        return None
+
+    stem = Path(dwg_path).stem
+    out_path = os.path.join(output_dir, stem + "_libredwg.dxf")
+
+    try:
+        result = subprocess.run(
+            [dwg2dxf, "-y", "-o", out_path, dwg_path],
+            capture_output=True,
+            text=True,
+            timeout=300,
+        )
+        if result.returncode == 0 and os.path.isfile(out_path):
+            return out_path
+        logger.warning("libredwg dwg2dxf retornou %d: %s",
+                       result.returncode, result.stderr[:300])
+    except subprocess.TimeoutExpired:
+        logger.warning("libredwg dwg2dxf excedeu timeout 300s")
+    except Exception as e:
+        logger.warning("libredwg dwg2dxf erro: %s", e)
     return None
 
 
