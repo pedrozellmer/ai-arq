@@ -63,11 +63,11 @@ def _style_row(ws, row, font, fill=None, align=None, cols=9):
 
 
 _TYPOLOGY_LABEL = {
-    "office":      "REFORMA DE ESCRITÓRIO",
-    "residential": "REFORMA RESIDENCIAL",
-    "retail":      "REFORMA COMERCIAL / VAREJO",
-    "hospital":    "REFORMA HOSPITALAR / SAÚDE",
-    "educational": "REFORMA EDUCACIONAL",
+    "office":      "ESCRITÓRIO / CORPORATIVO",
+    "residential": "RESIDENCIAL",
+    "retail":      "COMERCIAL / VAREJO",
+    "hospital":    "HOSPITALAR / SAÚDE",
+    "educational": "EDUCACIONAL",
 }
 
 
@@ -116,8 +116,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         c.alignment = AL
         r += 1
 
-    _titulo = _TYPOLOGY_LABEL.get(typology, "REFORMA / INTERIORES")
-    add_title(f'ANÁLISE COMPARATIVA — {_titulo}')
+    _titulo = _TYPOLOGY_LABEL.get(typology, "INTERIORES")
+    add_title(f'QUANTITATIVO — {_titulo}')
     r += 1
     if project.name:
         add_line(f'Projeto: {project.name}', bold=True)
@@ -144,12 +144,17 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         add_line(f'Posições de trabalho: {project.workstations}')
     r += 1
 
-    # Nota de contexto (só fala de "andar" em office — residencial é reforma de casa/ap)
-    if typology == "residential":
-        add_line('ATENÇÃO: Reforma residencial. Quantitativos consideram apenas o que MUDA.', bold=True)
-    else:
-        add_line('ATENÇÃO: Reforma de andar existente. Quantitativos consideram apenas o que MUDA.', bold=True)
-    r += 1
+    # Aviso "considera apenas o que MUDA" só faz sentido em REFORMA.
+    # Detectamos reforma pela presença de notas de demolição. Se não tem
+    # demolição, é provavelmente obra nova — tirar o aviso.
+    if project.demolition_notes:
+        if typology == "residential":
+            add_line('ATENÇÃO: Reforma residencial. Quantitativos consideram apenas o que MUDA.', bold=True)
+        elif typology == "office":
+            add_line('ATENÇÃO: Reforma de andar existente. Quantitativos consideram apenas o que MUDA.', bold=True)
+        else:
+            add_line('ATENÇÃO: Esta é uma reforma. Quantitativos consideram apenas o que MUDA.', bold=True)
+        r += 1
 
     # "DEPARTAMENTOS" só faz sentido em escritório/educacional; em residencial
     # o conceito é "AMBIENTES". Gate por tipologia pra evitar titular uma

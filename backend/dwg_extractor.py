@@ -448,7 +448,7 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
             cmd,
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,  # 5min — DWGs grandes com imagens embutidas precisam mais
             env=env,
         )
         # Salvar log do ODA num arquivo pra poder ler via API
@@ -468,7 +468,7 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         logger.error("Executável ODA não acessível: %s", oda_exe)
         return None
     except subprocess.TimeoutExpired:
-        logger.error("Conversão DWG excedeu o tempo limite de 120s.")
+        logger.error("Conversão DWG excedeu o tempo limite de 300s — arquivo grande demais ou complexo.")
         return None
 
     # Look for the converted file
@@ -477,6 +477,18 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
     if os.path.isfile(dxf_path):
         logger.info("DXF gerado em: %s", dxf_path)
         return dxf_path
+
+    # Procurar .dxf.err — ODA cria isso quando falha em arquivos corrompidos/truncados.
+    # Lê o conteúdo do .err pra dar erro real ao user.
+    err_path = os.path.join(output_dir, stem + ".dxf.err")
+    if os.path.isfile(err_path):
+        try:
+            with open(err_path, 'r', errors='replace') as ef:
+                err_content = ef.read()[:500]
+        except Exception:
+            err_content = ""
+        logger.error("ODA gerou .dxf.err (DWG inválido/corrompido): %s", err_content)
+        return None
 
     # Try case-insensitive search in output dir
     for f in os.listdir(output_dir):

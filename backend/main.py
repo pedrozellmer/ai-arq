@@ -415,17 +415,40 @@ _PRANCHA_MIME = {
 }
 
 
+def _sanitize_filename_for_storage(filename: str) -> str:
+    """Remove acentos e caracteres especiais que quebram upload pro Supabase Storage.
+
+    Bug detectado: PDF com nome 'Planta 1 - Galpão.pdf' dava HTTP 400 no upload
+    mesmo com URL-encoding correto (Galp%C3%A3o). O Storage rejeita certos
+    bytes UTF-8 multi-byte. Solução: ASCII-only filename pro storage.
+    """
+    import unicodedata
+    # Decompõe acentos (ã = a + ̃) e remove os combinadores
+    nfkd = unicodedata.normalize("NFKD", filename)
+    ascii_only = "".join(c for c in nfkd if not unicodedata.combining(c))
+    # Mantém só ASCII printáveis seguros pra URL
+    safe = "".join(c if (c.isalnum() or c in " ._-()") else "_" for c in ascii_only)
+    # Compacta múltiplos underscores
+    while "__" in safe:
+        safe = safe.replace("__", "_")
+    return safe.strip("_ ") or "file"
+
+
 def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str) -> bool:
     """Upload de prancha (PDF, PNG, JPG) pro bucket aiarq-pranchas.
-    Key: {job_id}/{filename}. Content-Type derivado da extensão."""
+    Key: {job_id}/{filename_sanitizado}. Content-Type derivado da extensão.
+
+    Filename é sanitizado pra remover acentos/especiais — Supabase Storage
+    rejeita certos UTF-8 multi-byte mesmo URL-encoded."""
     import urllib.request, urllib.error
     try:
         with open(local_path, "rb") as f:
             body = f.read()
         import urllib.parse as _up
-        remote_key = f"{job_id}/{_up.quote(filename)}"
+        safe_name = _sanitize_filename_for_storage(filename)
+        remote_key = f"{job_id}/{_up.quote(safe_name)}"
         url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{remote_key}"
-        ext = os.path.splitext(filename.lower())[1]
+        ext = os.path.splitext(safe_name.lower())[1]
         mime = _PRANCHA_MIME.get(ext, "application/octet-stream")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
@@ -433,6 +456,8 @@ def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str
         req.add_header("Content-Type", mime)
         req.add_header("x-upsert", "true")
         urllib.request.urlopen(req, timeout=60)
+        if safe_name != filename:
+            _supa_log(f"STORAGE upload prancha OK (saneado: '{filename}' → '{safe_name}')")
         return True
     except Exception as e:
         _supa_log(f"STORAGE upload prancha {filename} ERR {type(e).__name__}: {e}")
@@ -1484,6 +1509,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 from dwg_extractor import extract_from_file, generate_budget_data, convert_dwg_to_dxf
                 n_cad = len(cad_paths)
                 conv_span = conv_end_pct - 5  # ex.: 15 ou 10 pts
+                dwg_failed = []  # acumular DWGs que falharam pra reportar erro real depois
                 for ci, cad_path in enumerate(cad_paths):
                     base = 5 + int((ci / max(n_cad, 1)) * conv_span)
                     ext = cad_path.lower().rsplit('.', 1)[-1]
@@ -1495,9 +1521,24 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             dxf_paths.append(dxf_path)
                             jobs.update_field(job_id, current_step=f"DWG convertido: {os.path.basename(dxf_path)}")
                         else:
+                            dwg_failed.append(os.path.basename(cad_path))
                             jobs.update_field(job_id, current_step=f"Falha ao converter DWG: {os.path.basename(cad_path)} (seguindo sem)")
                     else:
                         dxf_paths.append(cad_path)
+
+                # Se TODOS os DWGs falharam E não tem PDFs, é fim de linha — marca como failed.
+                # Antes o motor seguia em frente e gerava planilha vazia + sugestões hardcoded,
+                # confundindo o usuário ("planilha veio mas sem nada"). Agora dá erro claro.
+                if dwg_failed and not dxf_paths and not pdf_paths:
+                    msg = (
+                        f"Não foi possível processar o arquivo DWG: "
+                        f"{', '.join(dwg_failed)}. "
+                        f"Causa provável: arquivo corrompido ou upload incompleto. "
+                        f"Recomendação: verifique se o DWG abre corretamente no AutoCAD/BricsCAD "
+                        f"e suba novamente. Como alternativa, exporte como PDF e suba o PDF."
+                    )
+                    jobs.update_field(job_id, error_message=msg, current_step="Erro: arquivo CAD inválido")
+                    raise RuntimeError(msg)
             except Exception as e:
                 jobs.update_field(job_id, error_message=f"Erro DWG→DXF: {e}")
                 raise
@@ -2288,15 +2329,40 @@ async def process_files(
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     for upload_file, user_st, user_amb in valid_pairs:
         file_path = os.path.join(work_dir, upload_file.filename)
+        content = await upload_file.read()
+
+        # Validação de integridade (Bug Rafael 2026-05-04: DWG chegou
+        # truncado e backend processou sem detectar, gerando planilha vazia)
+        if upload_file.size and len(content) != upload_file.size:
+            raise HTTPException(
+                400,
+                f"Arquivo '{upload_file.filename}' chegou incompleto: "
+                f"recebido {len(content)} de {upload_file.size} bytes. "
+                f"Provável conexão instável durante upload — tente de novo."
+            )
+        ext = upload_file.filename.lower().rsplit('.', 1)[-1]
+        if ext == "dwg":
+            if len(content) < 100:
+                raise HTTPException(
+                    400,
+                    f"DWG '{upload_file.filename}' muito pequeno ({len(content)} bytes) — "
+                    f"provavelmente corrompido. Verifique se o arquivo abre no AutoCAD."
+                )
+            if content[:2] != b"AC":
+                raise HTTPException(
+                    400,
+                    f"DWG '{upload_file.filename}' não tem assinatura válida "
+                    f"(esperado iniciar com 'AC10xx'). Arquivo corrompido — "
+                    f"verifique no AutoCAD ou exporte como PDF e suba o PDF."
+                )
+
         with open(file_path, "wb") as f:
-            content = await upload_file.read()
             f.write(content)
         file_paths.append(file_path)
         if user_st:
             user_sheet_types[file_path] = user_st
         if user_amb:
             user_ambientes[file_path] = user_amb
-        ext = upload_file.filename.lower().rsplit('.', 1)[-1]
         file_types[ext] = file_types.get(ext, 0) + 1
 
     # Resumo de tipos recebidos
