@@ -13,9 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     xvfb \
     xauth \
+    libredwg-tools \
     && rm -rf /var/lib/apt/lists/* \
     || (apt-get update && apt-get install -y --no-install-recommends \
-    wget libgl1 libglib2.0-0 xvfb \
+    wget libgl1 libglib2.0-0 xvfb libredwg-tools \
     && rm -rf /var/lib/apt/lists/*)
 
 # Baixar e instalar ODA File Converter
