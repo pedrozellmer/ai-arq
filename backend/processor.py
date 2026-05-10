@@ -38,7 +38,16 @@ SHEET_PATTERNS = {
                              r"banc(?:ada|ão)\s+(?:em|de)\s+granito"],
     SheetType.MOBILIARIO:   [r"(?:^|[^a-z])mobili[áa]rio(?:[^a-z]|$)", r"(?:^|[^a-z])mobili(?:[^a-z]|$)"],
     SheetType.ARQUITETURA:  [r"arquitetur", r"planta[\s_]*baixa"],
-    SheetType.PONTOS:       [r"(?:^|[^a-z])pontos?(?:[^a-z]|$)", r"el[ée]trica", r"el[ée]trico", r"hidr[áa]ulica", r"instala[çc][õo]es"],
+    SheetType.PONTOS:       [
+        r"(?:^|[^a-z])pontos?(?:[^a-z]|$)",
+        r"el[ée]trica", r"el[ée]trico",
+        r"hidr[áa]ulica", r"hidro[\s_\-]?sanit", r"hidrosanit",  # hidrosanitario
+        r"[áa]gua[\s_\-]+fria", r"[áa]gua[\s_\-]+quente",  # PROJETO agua fria
+        r"esgoto", r"pluvi(?:al|ais)?",  # sanitário/pluvial
+        r"instala[çc][õo]es",
+        r"prevent[ií]vo|inc[êe]ndio|sprinkler",  # sistema de incêndio
+        r"g[áa]s",  # tubulação gás
+    ],
     SheetType.PISO:         [r"(?:^|[^a-z])pisos?(?:[^a-z]|$)", r"(?:^|[^a-z])rodap"],
     SheetType.FORRO:        [r"(?:^|[^a-z])forros?(?:[^a-z]|$)", r"ilumina[çc][aã]o", r"lumin[áa]ria"],
     SheetType.LAYOUT_NOVO:  [r"layout[_\s-]*novo", r"(?:^|[^a-z])novo(?:[^a-z]|$)"],
