@@ -452,50 +452,107 @@ Extrair as ÁREAS informadas NA PLANTA/LEGENDA deste arquivo: perímetro externo
 Retorne JSON com items + project_data. Se uma área não está especificada na planta, deixe o campo vazio."""
 
 
-PROMPT_PONTOS = """Analise DETALHADAMENTE estas imagens da prancha de PONTOS ELÉTRICOS.
+PROMPT_PONTOS = """Analise DETALHADAMENTE estas imagens de PRANCHA DE PONTOS (ELÉTRICOS, HIDRÁULICOS, GÁS, INCÊNDIO ou MISTAS).
 
-## REGRA DURA DE ISOLAMENTO
-**Extraia APENAS o que APARECE EXPLICITAMENTE NA LEGENDA / QUADRO DE CARGAS / PLANTA deste arquivo.**
-Não gere item por "tipicamente tem em projeto assim". Se a legenda não lista um ponto específico, ele NÃO entra. Se você não consegue ler a legenda, retorne items=[] em vez de chutar.
+Esta prancha pode ser:
+- PONTOS ELÉTRICOS (tomadas, interruptores, luminárias, quadro)
+- ÁGUA FRIA / ÁGUA QUENTE (pontos AF, AQ, tubulação)
+- ESGOTO / SANITÁRIO (pontos ES, AP, ralos, bacia, lavatório)
+- HIDROSSANITÁRIO (água + esgoto na mesma prancha)
+- GÁS (tubulação GLP/GN)
+- INCÊNDIO (sprinkler, hidrante, alarme)
+- Combinada (várias disciplinas na mesma prancha)
 
-## LEGENDA DE SÍMBOLOS ≠ LISTA DE ITENS
-**CRÍTICO**: uma LEGENDA de símbolos (retângulo explicando "○ = tomada 2P+T, ● = ponto de dados, △ = interruptor, etc.") **NÃO é uma lista de itens a orçar**. É só referência visual. Você só deve criar um item de orçamento quando:
-- O símbolo aparece contado na planta (ex: você consegue contar 15 tomadas desenhadas)
-- OU o quadro de cargas dá o TOTAL explícito ("Tomadas 2P+T: 15 un")
+Identifique qual(is) ela contém pela legenda + simbologia e siga as regras abaixo.
 
-Se você só vê a entrada na legenda sem conseguir contar ocorrências na planta NEM ver número total, NÃO crie o item. É pior incluir item com qty=1 genérica ("água fria = 1 un") do que omitir.
+## REGRA DURA DE EXTRAÇÃO — CONTE O QUE VÊ (NÃO ZERE)
 
-Exemplo ERRADO (não fazer):
-- "Água fria — 1 un — conforme legenda" ← a legenda só explica o símbolo ◐
-- "Disjuntor 1×16 — 1 un — conforme legenda" ← legenda de quadro elétrico
-- "Espelho 4×2 — 1 un" ← "4×2" é caixa elétrica 10×5cm, NÃO é espelho real
+**Mudou em 2026-05-10**: a regra antiga "se não tem certeza, omita" gerou planilhas vazias e usuários frustrados. Agora:
 
-Exemplo CORRETO:
-- "Tomada 2P+T 10A h=30cm — 15 un — contadas na planta de pontos" (com contagem de verdade)
+✅ **Se você IDENTIFICOU símbolos repetidos na planta, CONTE-OS** — mesmo que com erro. Marque "estimado". O usuário corrige. É MUITO MELHOR que qty=0 ou item omitido.
+✅ **Se viu UM símbolo + legenda explicativa**: mínimo 1 un (estimado). Não zere.
+✅ **Se viu tubulação desenhada**: estime metragem pelo bbox dos cômodos × pavimentos. Sempre estimado.
 
-## DESAMBIGUAÇÃO DE NOTAÇÕES
-- **Caixa elétrica "4×2"**: padrão brasileiro (~10cm×5cm). Nunca confunda com dimensões de mobiliário, espelho ou quadro.
-- **Caixa "4×4"**: padrão (~10cm×10cm), idem.
-- **Disjuntor "1×16"** ou "2×25": "1×" é número de polos, "16" é amperagem. Não é quantidade.
+❌ qty=0 só é aceitável quando o símbolo aparece SÓ na legenda explicativa e NÃO na planta de pontos.
 
-## ELÉTRICA (discipline: "Instalações Elétricas e Dados")
-Pra cada símbolo elétrico desenhado na planta OU listado na legenda (tomadas, interruptores, pontos de dados, caixas de saída, sensores):
-- Copiar a descrição EXATA como está na legenda (tensão, amperagem, altura, localização)
-- Agrupar por tipo/código
-- Quantidade: contagem objetiva dos símbolos no layer correspondente ou total do quadro de cargas
-- Altura de instalação: só se estiver escrita na planta/legenda
+## SEÇÃO ELÉTRICA (discipline: "Instalações Elétricas e Dados")
 
-## SEGURANÇA (discipline: "Incêndio e Segurança")
-Só incluir itens de segurança se aparecerem EXPLICITAMENTE na legenda deste arquivo (ex: sprinkler, detector de fumaça, alarme, extintor, CFTV). NÃO presumir controle de acesso, fechadura eletromagnética, câmera etc se a planta não mostra.
+Símbolos típicos a procurar e CONTAR:
+- ⊙ ou ○ ou ⊕ → ponto de luz no teto (luminária)
+- ⌒ ou ↻ → interruptor (simples, paralelo, intermediário)
+- ◓ ou ⊠ ou retângulo dividido → tomada (2P+T 10A, 20A, etc)
+- △ ou ▽ → ponto de dados / RJ45
+- □ grande no rodapé → quadro de distribuição (QD)
+- Caixas "4×2" e "4×4" → caixas de embutir padrão (NÃO confundir com mobiliário)
+- Linhas com bolinha numerada → circuitos (C1, C2, etc)
 
-## QUANDO NÃO TEM LEGENDA LEGÍVEL
-Se a imagem não tem legenda legível e você só vê planta de pontos sem tags claras:
-- Retorne APENAS os tipos que consegue identificar com certeza absoluta pelo símbolo desenhado
-- Marque todos como "estimado"
-- NÃO preencha lista genérica do tipo "projeto corporativo típico"
+Pra cada símbolo identificado:
+1. CONTE quantos aparecem na planta
+2. Veja se há quadro de cargas listando totais — use esse total se confiável
+3. Marque "confirmado" se totalmente claro, "estimado" se for contagem visual
+4. Descrição: copiar da legenda quando houver (tensão, amperagem, altura)
+
+## SEÇÃO HIDRÁULICA (discipline: "Instalações Hidráulicas")
+
+Símbolos típicos:
+- AF / AF1 / AF2 → ponto de água fria (cada número = circuito independente)
+- AQ / AQ1 → ponto de água quente
+- ES / ES1 → ponto de esgoto primário
+- AP → ponto de esgoto pluvial
+- GV → gordura / cozinha
+- LV → lavatório (bacia da pia)
+- VS → vaso sanitário
+- CH → chuveiro / ducha
+- TQ → tanque (lavanderia)
+- DESC → descarga / caixa acoplada
+- Tubulação geralmente identificada por diâmetro (25mm, 32mm, 40mm, 50mm, 75mm, 100mm)
+
+Pra cada símbolo identificado:
+1. CONTE pontos visíveis na planta
+2. ESTIME tubulação por metragem do recinto × pavimentos quando houver indicação de diâmetro
+3. Itens contáveis sempre devem ter quantidade ≥ 1 (não zerar)
+4. Marcar "estimado" — IA tem dificuldade em contar 100% certo em hidráulica
+
+Estimativa de tubulação típica residencial (use como ordem de grandeza):
+- 32mm (ramal principal): ~20-30m por pavimento
+- 25mm (ramais secundários): ~30-50m por pavimento
+- Esgoto 100mm: ~10-15m por pavimento
+- Esgoto 50mm: ~10-20m por pavimento
+
+## SEÇÃO GÁS / INCÊNDIO (discipline: "Incêndio e Segurança")
+
+Inclua apenas se EXPLICITAMENTE na legenda/planta:
+- Sprinkler (contar bicos visíveis)
+- Hidrante (caixa de hidrante)
+- Detector de fumaça / alarme
+- Extintor (com classe)
+- Tubulação gás (estimar metragem)
+
+## DESAMBIGUAÇÃO IMPORTANTE
+- **"4×2" / "4×4"**: caixa elétrica padrão (~10×5cm / 10×10cm). Nunca confunda com mobiliário/espelho.
+- **"1×16" / "2×25"**: número de polos × amperagem do disjuntor. Não é quantidade.
+- **AF1, AF2** etc: são CIRCUITOS independentes. Cada um pode ter vários pontos.
+
+## LEGENDA ≠ LISTA DE ITENS — MAS USE A LEGENDA COMO GUIA
+
+Legenda explica o que cada símbolo SIGNIFICA. Pra item de orçamento real, você precisa:
+- VER o símbolo desenhado na planta (não só na legenda)
+- CONTAR quantas ocorrências
+- Se viu pelo menos 1 ocorrência → vira item com qty ≥ 1 estimado
+- Se SÓ a legenda mostra (e zero ocorrência na planta) → omita o item
 
 ## REFORMA — O QUE MUDA
 Se a planta separa "pontos existentes" de "pontos novos/remanejados", SÓ orçar os novos/remanejados.
+
+## SAÍDA ESPERADA
+
+Pra cada item, retornar:
+- description: copiada da legenda quando houver, descritiva caso contrário
+- discipline: "Instalações Elétricas e Dados" / "Instalações Hidráulicas" / "Incêndio e Segurança"
+- unit: un (pontos), m (tubulação), m² (área especial)
+- quantity: contagem visual (estimado) OU total do quadro (confirmado) — NUNCA zere se viu símbolo
+- confidence: "confirmado" se quadro lista total / "estimado" se contagem visual
+- observations: "Contagem visual: X símbolos identificados" ou "Conforme quadro de cargas"
 
 Retorne JSON com items."""
 
