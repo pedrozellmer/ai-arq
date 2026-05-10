@@ -1253,7 +1253,112 @@ def _consolidate_items(items: list) -> list:
         )
         pass5.append(consolidated)
 
-    return pass5
+    # ═══════════════════════════════════════════════════════════════
+    #  PASSADA 6 — DEDUP CROSS-PRANCHA (mesmo elemento em pranchas diferentes)
+    # ═══════════════════════════════════════════════════════════════
+    # Caso real Weslei (2026-05-08): "Escada metálica" apareceu 2 vezes:
+    #   - "PROJETO AMPLIACAO" → qty=8.6, unit=m² (medida REAL da legenda)
+    #   - "eletrico.pdf" → qty=1, unit=un (vista da mesma escada na elétrica)
+    # Resultado: usuário recebia 2 escadas, sendo a mesma física.
+    #
+    # Regra: agrupar por (primary_noun, discipline). Pra grupos com 2+ itens
+    # vindos de pranchas DIFERENTES (ref_sheet) — provável duplicação.
+    # Mantém o item de MAIOR ESPECIFICIDADE (qty>0 vence qty=0, m²>m>un>vb,
+    # confirmado vence estimado).
+
+    # Prioridade de unidade (maior = mais específica). m²/m³ vencem un/vb.
+    _UNIT_PRIORITY = {
+        "m²": 100, "m2": 100, "m³": 100, "m3": 100,
+        "m": 80, "ml": 80,
+        "kg": 60,
+        "un": 40, "cj": 35,
+        "mês": 30, "dia": 25,
+        "vb": 10, "%": 5,
+    }
+
+    def _unit_priority(u: str) -> int:
+        return _UNIT_PRIORITY.get((u or "").lower().strip(), 50)
+
+    def _item_score(it) -> tuple:
+        """Pra ordenar candidatos a manter — maior = melhor."""
+        try:
+            qty = float(it.quantity or 0)
+        except Exception:
+            qty = 0.0
+        return (
+            1 if qty > 0 else 0,                          # qty>0 vence qty=0
+            1 if it.confidence == Confidence("confirmado") else 0,
+            _unit_priority(it.unit),                       # m² vence un vence vb
+            qty,                                           # qty maior desempata
+            len(it.description or ""),                     # descrição mais completa
+        )
+
+    buckets_p6: dict[tuple, list] = {}
+    for it in pass5:
+        noun = _primary_noun(it.description or "")
+        if not noun:
+            buckets_p6.setdefault(("__solo__", id(it)), []).append(it)
+            continue
+        key = (noun, it.discipline or "")
+        buckets_p6.setdefault(key, []).append(it)
+
+    pass6 = []
+    for key, group in buckets_p6.items():
+        if key[0] == "__solo__" or len(group) == 1:
+            pass6.extend(group)
+            continue
+
+        # Pra grupo com 2+ itens, verificar se vêm de pranchas diferentes
+        ref_sheets = set((it.ref_sheet or "").strip().lower() for it in group)
+        if len(ref_sheets) < 2:
+            # Mesma prancha — não é cross-prancha (provavelmente passadas anteriores
+            # já trataram). Manter como está.
+            pass6.extend(group)
+            continue
+
+        # Verificar similaridade de descrições (overlap >= 2 tokens)
+        descs_keys = [set(_normalize_description_key(it.description or "").split()) for it in group]
+        # Pra todos do grupo, ver se há overlap forte entre TODOS pares
+        # (alternativa simplificada: ver se o primary_noun é o mesmo + alguma palavra
+        # significativa em comum entre todos)
+        common_tokens = set.intersection(*descs_keys) if descs_keys else set()
+        sig_common = {t for t in common_tokens if len(t) > 3}  # ignora "de", "e", etc
+
+        if not sig_common:
+            # Mesmo noun mas sem outras palavras significativas em comum — provavelmente
+            # itens distintos (ex: "porta" em 2 pranchas diferentes = 2 portas diferentes)
+            pass6.extend(group)
+            continue
+
+        # Confirmada duplicação cross-prancha. Manter o item de MAIOR especificidade.
+        winner = max(group, key=_item_score)
+        losers = [it for it in group if id(it) != id(winner)]
+        total_pranchas = len(ref_sheets)
+
+        # Anota no obs do vencedor que dedupliquei
+        loser_summary = "; ".join(
+            f"{it.quantity} {it.unit} ({it.ref_sheet[:30] if it.ref_sheet else 'sem ref'})"
+            for it in losers
+        )
+        merged_obs = (winner.observations or "").rstrip(". ") + (". " if winner.observations else "")
+        merged_obs += (
+            f"Deduplicado: este item aparecia em {total_pranchas} pranchas diferentes "
+            f"do mesmo projeto. Versões descartadas: {loser_summary}. "
+            f"Versão mantida tem maior especificidade (unidade física, qty>0)."
+        )
+        merged_item = BudgetItem(
+            item_num=winner.item_num,
+            description=winner.description,
+            unit=winner.unit,
+            quantity=winner.quantity,
+            observations=merged_obs,
+            ref_sheet=winner.ref_sheet,
+            confidence=winner.confidence,
+            discipline=winner.discipline,
+        )
+        pass6.append(merged_item)
+
+    return pass6
 
 
 # Ranges plausíveis por unidade — valores fora disso indicam erro provável.
