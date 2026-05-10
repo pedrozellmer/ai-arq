@@ -42,35 +42,203 @@ def _supabase_rpc(fname: str, params: dict) -> list:
         return []
 
 
+# Termos genéricos que NÃO devem ser usados como query principal sozinhos
+# (resultam em matches imprecisos — "Ponto" → "Tratamento de ralo" SINAPI 106110)
+_GENERIC_TERMS = {
+    'ponto', 'sistema', 'instalação', 'instalacao', 'fornecimento',
+    'aplicação', 'aplicacao', 'execução', 'execucao', 'serviço', 'servico',
+    'conjunto', 'kit', 'unidade', 'peça', 'peca', 'item', 'material',
+}
+
+
+def _extract_bitola(description: str) -> str:
+    """Detecta bitola/dimensão de TUBO/CABO/ELETRODUTO na descrição.
+
+    Bitola SÓ faz sentido pra tubulação, cabo elétrico, eletroduto.
+    Pra outros itens (escada com 30cm de pisante, p. ex.), "30cm" NÃO é bitola
+    e anexar isso na query polui o match SINAPI.
+
+    Retorna string normalizada (32MM, 2.5MM2) só se a descrição contém palavra
+    de contexto adequado (tubo/cabo/fio/eletroduto/tubulação).
+    """
+    import re
+    desc_low = description.lower()
+    # Só extrai bitola se há contexto de tubo/cabo/eletroduto
+    bitola_context = any(t in desc_low for t in [
+        'tubulação', 'tubulacao', 'tubo', 'cabo', 'fio',
+        'eletroduto', 'ramal', 'cabeamento'
+    ])
+    if not bitola_context:
+        return ''
+
+    # Bitola elétrica primeiro (mais específica): "2,5mm²", "4mm²", "6mm²"
+    m = re.search(r'(\d+(?:,\d+)?)\s*mm[²2]', description)
+    if m:
+        return f'{m.group(1).replace(",", ".")}MM2'
+    # Bitola hidráulica: 25mm, 32mm, 50mm, 100mm
+    m = re.search(r'\b(\d+)\s*mm\b', description, re.I)
+    if m:
+        return f'{m.group(1)}MM'
+    # Polegadas: 1/2", 3/4"
+    m = re.search(r'(\d+/\d+)\s*["\']', description)
+    if m:
+        return f'{m.group(1)}"'
+    return ''
+
+
+# Tradução PRÉ-busca: termo coloquial → termo SINAPI oficial
+# Aplicado na keyword query antes da RPC (não como fallback)
+_PRE_TRANSLATE = {
+    'tubulação':   'tubo pvc soldável',
+    'tubulacao':   'tubo pvc soldável',
+    'cabo':        'cabo de cobre flexível isolado',
+    'cabeamento':  'cabo de cobre flexível isolado',
+    'eletroduto':  'eletroduto flexível corrugado',
+    'luz':         'luminária led',
+    'iluminação':  'luminária led',
+    'iluminacao':  'luminária led',
+}
+
+
+def _apply_pre_translation(query: str) -> str:
+    """Substitui termos coloquiais por equivalentes SINAPI oficiais.
+
+    Ex: 'Tubulação 32MM' → 'tubo pvc soldável 32MM'
+    """
+    import re
+    q = query
+    for coloquial, sinapi in _PRE_TRANSLATE.items():
+        # Substitui só word boundary (não pega "tubulação" dentro de outras palavras)
+        pattern = r'\b' + re.escape(coloquial) + r'\b'
+        q = re.sub(pattern, sinapi, q, flags=re.I)
+    return q.strip()
+
+
 def _extract_keywords(description: str, n: int = 3) -> str:
     """Extrai N palavras-chave essenciais (filtra conectores e códigos).
 
-    Ex: 'Lavatório LV com ponto hidráulico e ramal de água fria 25mm'
-        → n=1: 'Lavatório'
-        → n=3: 'Lavatório ponto hidráulico'
+    - Ignora termos genéricos ("Ponto", "Sistema") como primeira palavra
+    - Inclui bitola/dimensão (32mm, 1/2") se detectada — melhora match preciso
+
+    Ex: 'Tubulação água fria 32mm' → n=1: 'Tubulação 32MM'
+        'Lavatório LV com ponto hidráulico' → n=1: 'Lavatório'
+        'Ponto de tomada 2P+T 10A' → n=1: 'tomada' (pula "Ponto")
     """
     import re
     text = description.strip()
-    # Limpa parênteses e códigos curtos (LV, AF1, AQ, ES, VS, etc)
     text = re.sub(r'\([^)]*\)', '', text)
-    text = re.sub(r'\b(LV|AF\d?|AQ\d?|ES\d?|AP|VS|CH|TQ|LM\d+|QD|PVC|CPVC)\b', '', text, flags=re.I)
-    # Remove conectores
-    text = re.sub(r'\b(com|para|de|em|e|ou|por|do|da|no|na|um|uma|sobre|entre|sem|tipo|conforme)\b', ' ', text, flags=re.I)
+    # Códigos elétricos/hidráulicos a remover
+    text = re.sub(r'\b(LV|AF\d?|AQ\d?|ES\d?|AP|VS|CH|TQ|LM\d+|QD|PVC|CPVC|2P\+T)\b', '', text, flags=re.I)
+    # Conectores
+    text = re.sub(r'\b(com|para|de|em|e|ou|por|do|da|no|na|um|uma|sobre|entre|sem|tipo|conforme|qual)\b', ' ', text, flags=re.I)
     text = ' '.join(text.split())
-    # Pega N primeiras palavras com 3+ chars
-    words = [w for w in text.split() if len(w) >= 3 and not w.replace(',','').replace('.','').isdigit()]
-    return ' '.join(words[:n]).strip()
+
+    # Filtra palavras: 3+ chars, não-numérica
+    words = []
+    for w in text.split():
+        wl = w.lower().strip('.,;:!?')
+        if len(wl) >= 3 and not wl.replace(',', '').replace('.', '').isdigit():
+            words.append(w)
+
+    # PULA termos genéricos no início — usa a próxima palavra significativa
+    # Ex: "Ponto de luz" → keywords vira ["Ponto", "luz"]; pula "Ponto", retorna "luz"
+    while words and words[0].lower().strip('.,;:!?') in _GENERIC_TERMS:
+        words.pop(0)
+
+    result = ' '.join(words[:n]).strip()
+
+    # Se tem bitola na descrição, anexa pra busca SINAPI mais precisa
+    bitola = _extract_bitola(description)
+    if bitola and bitola not in result.upper():
+        result = f'{result} {bitola}'.strip()
+
+    return result
+
+
+# Dicionário de sinônimos PT-BR pra termos de construção civil
+# Mapeamento: termo coloquial → termo usado no SINAPI/Caixa
+# Quando query falha com palavra original, tenta com cada sinônimo até achar.
+_SYNONYMS_BR = {
+    # ─── Hidráulica / Esgoto ──────────────────────
+    'cisterna':       ['reservatório', 'reservatório de água'],
+    'tubulação':      ['tubo pvc soldável', 'tubo'],
+    'tubulacao':      ['tubo pvc soldável', 'tubo'],
+    'lavanderia':     ['tanque', 'área de serviço'],
+    'lavatório':      ['lavatório de louça', 'pia de banheiro'],
+    'lavabo':         ['lavatório', 'pia'],
+    'banheira':       ['banheira de hidromassagem', 'cuba'],
+    'ducha':          ['chuveiro'],
+    'esgoto':         ['tubo pvc esgoto'],
+    'pluvial':        ['águas pluviais'],
+    # ─── Cozinha / Áreas molhadas ─────────────────
+    'cooktop':        ['fogão'],
+    'gourmet':        ['churrasqueira', 'área de serviço'],
+    # ─── Marcenaria / Mobília ─────────────────────
+    'closet':         ['guarda-roupa', 'armário'],
+    'redário':        ['rede'],
+    'redario':        ['rede'],
+    'pufe':           ['banco'],
+    'painel':         ['marcenaria', 'tampo'],
+    # ─── Iluminação ───────────────────────────────
+    'spot':           ['luminária', 'ponto de luz'],
+    'plafonier':      ['luminária'],
+    'plafom':         ['luminária'],
+    'arandela':       ['luminária'],
+    'lustre':         ['luminária'],
+    'pendente':       ['luminária pendente'],
+    # ─── Elétrica ─────────────────────────────────
+    'cftv':           ['câmera de segurança', 'cftv'],
+    'alarme':         ['sistema de alarme'],
+    'antena':         ['antena televisão'],
+    'tomadas':        ['tomada'],
+    'cabo':           ['cabo de cobre flexível', 'cabo cobre isolado'],
+    'cabos':          ['cabo de cobre flexível'],
+    'cabeamento':     ['cabo de cobre flexível'],
+    'eletroduto':     ['eletroduto flexível corrugado pvc', 'eletroduto pvc'],
+    'eletrodutos':    ['eletroduto flexível corrugado pvc'],
+    'luz':            ['luminária led', 'luminária'],
+    'fio':            ['cabo de cobre flexível'],
+    'disjuntor':      ['disjuntor tipo din'],
+    # ─── Esquadrias / Ferragens ───────────────────
+    'maçaneta':       ['ferragens'],
+    'dobradiça':      ['ferragens'],
+    'corrimão':       ['corrimão metálico', 'guarda-corpo'],
+    # ─── Forros / Acabamentos ─────────────────────
+    'sancas':         ['rebaixo', 'forro de gesso'],
+    'sanca':          ['rebaixo', 'forro de gesso'],
+    'amenities':      ['guarnição', 'acabamento'],
+    'rasante':        ['raspagem'],
+    # ─── Serviços preliminares ────────────────────
+    'administração':  ['encarregado geral', 'mestre de obras'],
+    'fee':            ['encarregado geral'],
+    'mobilização':    ['canteiro', 'instalação de canteiro'],
+    'mob':            ['canteiro'],
+    'as-built':       ['as built'],
+    # ─── Incêndio ─────────────────────────────────
+    'sprinkler':      ['sprinkler', 'sistema sprinkler'],
+    'hidrante':       ['hidrante de incêndio'],
+    'extintor':       ['extintor incêndio'],
+    # ─── Estrutura ────────────────────────────────
+    'pilar':          ['pilar concreto'],
+    'viga':           ['viga concreto'],
+    'laje':           ['laje concreto'],
+    # ─── Ar-condicionado ──────────────────────────
+    'split':          ['ar condicionado split'],
+    'vrf':            ['ar condicionado vrf'],
+    'fancoil':        ['fan coil'],
+}
 
 
 def match_item(description: str, limit: int = 3) -> List[Dict]:
     """Busca composições SINAPI que matcham a descrição do item.
 
-    Estratégia progressiva de fallback:
+    Estratégia progressiva de fallback (4 níveis):
     1) Query completa (descrição original)
     2) Top 3 palavras-chave (sem conectores/códigos)
     3) Top 1 palavra-chave (substantivo principal)
+    4) Sinônimo do termo principal (dicionário PT-BR)
 
-    Cada nível mais ampla. Marca matches via fallback com flag.
+    Marca matches via fallback com flag _match_level.
     """
     if not description or len(description.strip()) < 3:
         return []
@@ -83,27 +251,43 @@ def match_item(description: str, limit: int = 3) -> List[Dict]:
     if valid:
         return valid
 
-    # 2) Top 3 palavras-chave
+    # 2) Top 3 palavras-chave (com pré-tradução de termos coloquiais)
     q3 = _extract_keywords(desc, n=3)
+    q3_translated = _apply_pre_translation(q3)
     if q3 and q3 != desc:
-        results = _supabase_rpc("search_sinapi", {"p_query": q3, "p_limit": limit})
+        results = _supabase_rpc("search_sinapi", {"p_query": q3_translated, "p_limit": limit})
         valid = [r for r in results if r.get("similarity", 0) >= MIN_SIMILARITY]
         if valid:
             for r in valid:
                 r["_match_level"] = "simplified_3"
-                r["_match_query"] = q3
+                r["_match_query"] = q3_translated
             return valid
 
-    # 3) Top 1 palavra-chave (substantivo principal)
+    # 3) Top 1 palavra-chave (com pré-tradução)
     q1 = _extract_keywords(desc, n=1)
+    q1_translated = _apply_pre_translation(q1)
     if q1 and q1 != desc and q1 != q3:
-        results = _supabase_rpc("search_sinapi", {"p_query": q1, "p_limit": limit})
+        results = _supabase_rpc("search_sinapi", {"p_query": q1_translated, "p_limit": limit})
         valid = [r for r in results if r.get("similarity", 0) >= MIN_SIMILARITY]
         if valid:
             for r in valid:
                 r["_match_level"] = "simplified_1"
-                r["_match_query"] = q1
+                r["_match_query"] = q1_translated
             return valid
+
+    # 4) Fallback de sinônimo (último recurso) — pra termos onde nosso vocabulário
+    # difere do SINAPI (ex: "cisterna" → SINAPI usa "reservatório").
+    if q1:
+        synonyms = _SYNONYMS_BR.get(q1.lower(), [])
+        for syn in synonyms:
+            results = _supabase_rpc("search_sinapi", {"p_query": syn, "p_limit": limit})
+            valid = [r for r in results if r.get("similarity", 0) >= MIN_SIMILARITY]
+            if valid:
+                for r in valid:
+                    r["_match_level"] = "synonym"
+                    r["_match_query"] = syn
+                    r["_match_original_query"] = q1
+                return valid
 
     return []
 
