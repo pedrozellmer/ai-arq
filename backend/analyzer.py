@@ -69,11 +69,30 @@ REGRAS OBRIGATÓRIAS:
 - Só use "vb" pra itens que GENUINAMENTE não se medem (mobilização, ADM local, seguro).
 - **NÃO** use "vb" como fuga quando você não conseguiu quantificar um item
   mensurável. Ex: "Instalação de ar-condicionado" NÃO é vb — tem N equipamentos
-  a instalar; "Pintura" NÃO é vb — tem m². Se você não conseguiu medir um item
-  que OBVIAMENTE tem unidade (un/m²/ml), marque com a unidade correta e
-  `quantity=0` (orçamentista preenche) em vez de forçar "vb=1".
+  a instalar; "Pintura" NÃO é vb — tem m².
 - Unidade "vb=1" com descrição genérica tipo "acabamentos diversos" é red flag
   de item-lixo — só gere se for verba-real que aparece na planta/memorial.
+
+## REGRA DO QUANTITY=0 (CRÍTICA — fonte: feedback de usuário 2026-05-08)
+
+quantity=0 é experiência **horrível** pra usuário ("a IA não pegou as metragens").
+USE quantity=0 SOMENTE quando você literalmente NÃO ENCONTROU o elemento na planta.
+
+**Se você DETECTOU o símbolo/elemento mas tem dúvida na contagem:**
+- CONTE os símbolos que viu (mesmo que com erro) e marque "estimado"
+- É melhor 5 lavatórios com confidence=estimado que 0 com obs="confirmar"
+- Adicione observação tipo: "Contagem visual: 5 símbolos LV identificados. Confirmar com quadro de esquadrias se houver."
+
+**Se você IDENTIFICOU um item mas a unidade pede medida que você não calculou:**
+- ESTIME pela ordem de grandeza (não retorne 0)
+- Ex: "Tubulação 25mm detectada — estimativa: 50m pra 1 pavimento típico" (estimado)
+- Ex: "Eletroduto detectado — estimativa: 80m pra residência de 150m²" (estimado)
+- O usuário CORRIGE a estimativa, mas tem ponto de partida
+
+**quantity=0 só é aceitável quando:**
+- Item é mencionado por completude (ex: "Pintura externa") mas projeto é só interno
+- Símbolo aparece na legenda mas NÃO na planta
+- Você quer marcar "necessário projeto complementar" (vb=0 melhor que un=0)
 
 ## CONVENÇÕES DE DESENHO TÉCNICO BR
 Regras consolidadas de NBR 6492:2021 (representação de projetos arquitetônicos),
