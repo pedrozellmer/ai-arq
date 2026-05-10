@@ -2285,20 +2285,34 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 print(f"[area-consensus] {_fld}: leituras={_reads} → "
                       f"escolhido={getattr(project_data, _fld)}")
 
-        # Enriquece itens com matches TCPO (base técnica de composições).
-        # Serve como referência de insumos esperados — não preço.
+        # Enriquece itens com matches SINAPI (Caixa) + TCPO BIM (Pini).
+        # SINAPI = referência principal (preço oficial gov BR, atualizado mensal).
+        # TCPO = referência técnica complementar (insumos detalhados).
+        # Ambos best-effort, nunca bloqueiam planilha.
         try:
-            from tcpo_matcher import match_item, get_insumos
+            from sinapi_matcher import match_item as match_sinapi
             for it in all_items:
                 try:
-                    ms = match_item(it.description, limit=3)
+                    ms = match_sinapi(it.description, limit=3)
+                    if ms:
+                        it.sinapi_matches = ms
+                except Exception:
+                    pass
+        except ImportError:
+            pass
+
+        try:
+            from tcpo_matcher import match_item as match_tcpo, get_insumos
+            for it in all_items:
+                try:
+                    ms = match_tcpo(it.description, limit=3)
                     if ms:
                         ms[0]['insumos'] = get_insumos(ms[0]['id'])
                         it.tcpo_matches = ms
-                except Exception as _e:
-                    pass  # matching é best-effort, nunca bloqueia planilha
+                except Exception:
+                    pass
         except ImportError:
-            pass  # tcpo_matcher opcional
+            pass
 
         # Checa heurísticas de mercado (dispersão, cobertura, share MAT/MO)
         # contra as categorias de cada item. Adiciona alertas nas observations

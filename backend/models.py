@@ -34,10 +34,11 @@ class BudgetItem(BaseModel):
     ref_sheet: str = ""
     confidence: Confidence = Confidence.ESTIMADO
     discipline: str = ""
+    # Matches da base SINAPI (Caixa). Preenchido pelo sinapi_matcher antes
+    # da geração da planilha. Formato: lista de dicts com codigo, descricao,
+    # unidade, familia_id, similarity, opcionalmente _match_level/_match_query.
+    sinapi_matches: list = []
     # Matches da base TCPO BIM (composições técnicas de referência).
-    # Preenchido opcionalmente pelo tcpo_matcher antes da geração da planilha.
-    # Formato: lista de dicts com chaves codigo_bim, descricao, unidade,
-    # sistema, similarity, e opcionalmente 'insumos'.
     tcpo_matches: list[dict] = []
 
 
