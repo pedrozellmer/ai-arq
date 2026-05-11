@@ -259,13 +259,13 @@ projeto_arq/                          ← raiz do repo (deploy GitHub Pages)
 
 ```bash
 # 1. Pasta tá lá?
-ls "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq"
+ls "C:/Users/admin/Desktop/arq/projeto_arq"
 
 # 2. backend/.env tá com secrets?
-ls -la "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq/backend/.env"
+ls -la "C:/Users/admin/Desktop/arq/projeto_arq/backend/.env"
 
 # 3. Git funciona?
-cd "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq" && git status
+cd "C:/Users/admin/Desktop/arq/projeto_arq" && git status
 
 # 4. Site tá no ar?
 curl -I https://ai.arq.br
@@ -401,9 +401,17 @@ Se algum falhar, me peça pra investigar.
 4. Sitemap inclui só posts já publicados (filtra por data)
 
 ### Quando atualizar Instagram
-1. Use Supabase MCP pra ver/alterar `instagram_scheduled_posts`
-2. Imagens ficam em `instagram_assets/semana1/`
-3. pg_cron roda `/api/instagram/scheduler/tick` a cada 15min automaticamente
+
+🚨 **ANTES DE QUALQUER POST, LEIA `.claude/GRADE_INSTAGRAM.md`** — grade fixa
+por dia da semana, regras duras de marca, convenção de slot_key.
+
+1. Cada dia tem rubrica fixa (Bastidor seg, Erro caro ter, AIrnaldo qua, etc)
+2. AIrnaldo posta SOMENTE quarta. Nunca outro dia.
+3. NUNCA citar dia da semana na legenda sem o post estar travado nesse dia
+4. Use Supabase MCP pra ver/alterar `instagram_scheduled_posts`
+5. Imagens ficam em `instagram_assets/semana1/` (semana1) ou nomes equivalentes
+6. pg_cron roda `/api/instagram/scheduler/tick` a cada 15min automaticamente
+7. Convenção slot_key: `feed_<dia>_w<n>` (ex: `feed_qua_w2`, `airnaldo_w3`)
 
 ---
 
@@ -460,8 +468,8 @@ curl -I https://ai.arq.br/blog/
 
 ### Como verificar se as duas pastas estão presentes
 ```bash
-ls "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/arq" | head -5
-ls "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq" | head -5
+ls "C:/Users/admin/Desktop/arq/arq" | head -5
+ls "C:/Users/admin/Desktop/arq/projeto_arq" | head -5
 ```
 Se uma das duas não tiver, peça pro Pedro copiar do PC antigo.
 
