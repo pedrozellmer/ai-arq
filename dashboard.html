@@ -2959,9 +2959,13 @@
   });
 
   async function loadCashbackAggregated() {
-    // Busca agregado por user_id no backend
+    // Busca agregado por user_id no backend (exige Bearer — saldo é PII financeira)
     try {
-      const res = await fetch(`${API_BASE}/api/user/${currentUser.id}/cashback-all`);
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session) return;  // não logado, não tem o que mostrar
+      const res = await fetch(`${API_BASE}/api/user/${currentUser.id}/cashback-all`, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+      });
       const data = await res.json();
       const totalEl = document.getElementById('cb-total-all');
       const countEl = document.getElementById('cb-events-count');
