@@ -13,11 +13,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     xvfb \
     xauth \
-    libredwg-tools \
     && rm -rf /var/lib/apt/lists/* \
     || (apt-get update && apt-get install -y --no-install-recommends \
-    wget libgl1 libglib2.0-0 xvfb libredwg-tools \
+    wget libgl1 libglib2.0-0 xvfb \
     && rm -rf /var/lib/apt/lists/*)
+
+# libredwg-tools (fallback open-source pro ODA File Converter) — OPCIONAL.
+# Se instalação falhar (ex. pacote indisponível no mirror), build continua;
+# código Python (dwg_extractor._try_libredwg_convert) já usa shutil.which
+# e pula fallback se binário ausente.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libredwg-tools \
+    && rm -rf /var/lib/apt/lists/* \
+    || echo "libredwg-tools install failed — fallback DWG converter unavailable"
 
 # Baixar e instalar ODA File Converter
 RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_8.3dll_27.1.deb" && \
