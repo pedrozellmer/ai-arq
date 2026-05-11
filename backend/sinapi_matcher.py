@@ -259,26 +259,31 @@ def _rerank_by_specs(results: List[Dict], description: str) -> List[Dict]:
     # Cada pattern é uma regex que casa o número COM separador opcional na unidade
     target_patterns: List[str] = []
 
-    # Amperagem (10A, 16A, 25A...) — só se contexto disjuntor/DR/DPS
+    # Amperagem (10A, 16A, 25A...) — só se contexto disjuntor/DR/DPS.
+    # findall pra suportar queries multi-spec ("Disjuntor 10A / 16A / 20A").
     if any(t in desc_low for t in ['disjuntor', 'dr', 'dps', 'idr']):
-        m = re.search(r'\b(\d+)\s*a\b', description, re.I)
-        if m:
-            n = m.group(1)
+        for n in re.findall(r'\b(\d+)\s*a\b', description, re.I):
             # Casa "10A", "10 A", "DE 10A", mas NÃO "100A" nem "210A"
             target_patterns.append(rf'(?<!\d){re.escape(n)}\s*A\b')
 
-    # mm² (1,5mm², 2,5mm², 4mm²) — bitola de cabo elétrico
-    m = re.search(r'(\d+(?:[,.]\d+)?)\s*mm[²2]', description)
-    if m:
-        v = m.group(1).replace('.', ',')  # SINAPI usa vírgula: "1,5 MM²"
-        # Casa "1,5 MM²", "1,5MM2", "1,5 MM2"
-        target_patterns.append(rf'(?<!\d){re.escape(v)}\s*MM[²2]')
+    # mm² (1,5mm², 2,5mm², 4mm²) — bitola de cabo elétrico.
+    # findall pra suportar "Cabo 4-6mm²" → matcha 4 OU 6.
+    for v in re.findall(r'(\d+(?:[,.]\d+)?)\s*mm[²2]', description):
+        v_norm = v.replace('.', ',')  # SINAPI usa vírgula: "1,5 MM²"
+        target_patterns.append(rf'(?<!\d){re.escape(v_norm)}\s*MM[²2]')
 
-    # Bitola hidráulica (25mm, 32mm, 50mm) — só se contexto de tubo/cabo
+    # Captura também ranges como "Cabo 4-6mm²" — gera matchers pros 2 valores.
+    range_match = re.search(r'(\d+(?:[,.]\d+)?)\s*-\s*(\d+(?:[,.]\d+)?)\s*mm[²2]', description)
+    if range_match:
+        for v in (range_match.group(1), range_match.group(2)):
+            v_norm = v.replace('.', ',')
+            pat = rf'(?<!\d){re.escape(v_norm)}\s*MM[²2]'
+            if pat not in target_patterns:
+                target_patterns.append(pat)
+
+    # Bitola hidráulica (25mm, 32mm, 50mm) — só se contexto de tubo/cabo.
     if any(t in desc_low for t in ['tubo', 'tubulação', 'eletroduto']):
-        m = re.search(r'\b(\d+)\s*mm\b', description, re.I)
-        if m:
-            n = m.group(1)
+        for n in re.findall(r'\b(\d+)\s*mm\b', description, re.I):
             # Casa "32MM", "DE 32 MM", mas NÃO "320MM"
             target_patterns.append(rf'(?<!\d){re.escape(n)}\s*MM\b(?!²|2)')
 
