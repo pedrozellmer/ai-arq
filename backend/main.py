@@ -434,6 +434,30 @@ def _sanitize_filename_for_storage(filename: str) -> str:
     return safe.strip("_ ") or "file"
 
 
+def _safe_local_filename(filename: str) -> str:
+    """Sanitiza filename pra uso em os.path.join local — anti-traversal.
+
+    Aplica _sanitize_filename_for_storage E garante que o resultado:
+    - É só basename (sem barras / nem backslashes)
+    - Não é '.' nem '..' nem começa com '.'
+    - Não é vazio (fallback 'upload')
+
+    Use isso em TODO os.path.join(dir, filename) onde filename vem
+    de UploadFile.filename. Sem isso, cliente manda '../../etc/passwd'
+    e escreve fora do work_dir.
+    """
+    import os as _os
+    if not filename:
+        return "upload"
+    # Pega só o último componente (cobre '/foo/bar' e '\\foo\\bar')
+    base = _os.path.basename(filename.replace("\\", "/"))
+    safe = _sanitize_filename_for_storage(base)
+    # Rejeita resultados que ainda seriam traversal ou vazios
+    if not safe or safe in (".", "..") or safe.startswith("."):
+        return "upload"
+    return safe
+
+
 def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str) -> bool:
     """Upload de prancha (PDF, PNG, JPG) pro bucket aiarq-pranchas.
     Key: {job_id}/{filename_sanitizado}. Content-Type derivado da extensão.
@@ -2393,6 +2417,7 @@ _VALID_TYPOLOGIES = {"office", "residential", "retail", "hospital", "educational
 
 @app.post("/api/process")
 async def process_files(
+    request: Request,
     background_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     sheet_types: list[str] = Form(default=[]),
@@ -2416,11 +2441,22 @@ async def process_files(
       densidade pra comparar o projeto com padrões da mesma categoria.
     - `project_name` (opcional): apelido amigável dado pelo cliente.
     - `user_id` (opcional): se informado, vincula o projeto ao usuário e
-      permite consumo/crédito.
+      permite consumo/crédito. Validado contra JWT — não dá pra criar
+      projeto em nome de outro usuário.
     - `credits_to_consume_cents` (opcional): se > 0, consome esse valor
       de créditos do user (usado quando checkout retornou is_free=true
       por saldo suficiente).
     """
+    # AUTORIZAÇÃO: se o Form passou user_id (não-anônimo), tem que ter JWT
+    # correspondente. Sem isso, atacante manda user_id de outro user e
+    # cria projeto+consome créditos no nome dele.
+    if user_id and user_id != "anonymous":
+        jwt_user = _get_user_from_request(request)
+        if not jwt_user:
+            raise HTTPException(401, "Autenticação requerida quando user_id é informado")
+        if jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+            raise HTTPException(403, "user_id não corresponde ao token de autenticação")
+
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
     if not files:
@@ -2453,7 +2489,9 @@ async def process_files(
     user_ambientes: dict[str, str] = {}
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     for upload_file, user_st, user_amb in valid_pairs:
-        file_path = os.path.join(work_dir, upload_file.filename)
+        # Anti path-traversal: nunca confiar em upload_file.filename
+        safe_name = _safe_local_filename(upload_file.filename)
+        file_path = os.path.join(work_dir, safe_name)
         content = await upload_file.read()
 
         # Validação de integridade (Bug Rafael 2026-05-04: DWG chegou
@@ -2538,9 +2576,13 @@ async def process_files(
 
 
 @app.get("/api/debug/supa-log")
-async def debug_supa_log(tail: int = 50):
+async def debug_supa_log(request: Request, tail: int = 50):
     """Últimas N linhas do log de operações Supabase — pra investigar por que
-    updates silenciosos falham sem ter acesso direto ao log do Render."""
+    updates silenciosos falham sem ter acesso direto ao log do Render.
+
+    Restrito a admin (vaza queries internas com payloads e IDs).
+    """
+    _require_admin(request)
     try:
         if not os.path.exists(_SUPA_LOG_PATH):
             return {"status": "ok", "lines": [], "note": "log vazio ou ainda não criado"}
@@ -2554,8 +2596,9 @@ async def debug_supa_log(tail: int = 50):
 
 
 @app.get("/api/debug/dwg")
-async def debug_dwg():
-    """Diagnóstico do suporte DWG."""
+async def debug_dwg(request: Request):
+    """Diagnóstico do suporte DWG. Restrito a admin (revela paths do FS)."""
+    _require_admin(request)
     import shutil
     result = {
         "oda_which": shutil.which("ODAFileConverter"),
@@ -2576,21 +2619,21 @@ async def debug_dwg():
         result["dwg_extractor_import"] = False
         result["dwg_extractor_error"] = str(e)
 
-    # Listar binários ODA
-    try:
-        import subprocess
-        find_result = subprocess.run(["find", "/", "-name", "ODAFileConverter*", "-type", "f"],
-                                     capture_output=True, text=True, timeout=5)
-        result["oda_files_found"] = find_result.stdout.strip().split("\n") if find_result.stdout.strip() else []
-    except:
-        result["oda_files_found"] = "find failed"
+    # libredwg (fallback open-source — opcional)
+    result["libredwg_dwg2dxf"] = shutil.which("dwg2dxf")
+    # Removido o find recursivo: caro (timeout) e revelador de layout do FS.
 
     return result
 
 
 @app.get("/api/debug/oda-log/{job_id}")
-async def get_oda_log(job_id: str):
-    """Retorna o log do ODA File Converter para um job."""
+async def get_oda_log(request: Request, job_id: str):
+    """Retorna o log do ODA File Converter para um job.
+
+    Restrito ao dono do projeto (ou admin) — log pode revelar nomes de
+    arquivos enviados pelo usuário.
+    """
+    _require_project_owner(request, job_id)
     log_path = os.path.join(WORK_DIR, job_id, "_oda_log.txt")
     if os.path.exists(log_path):
         with open(log_path, 'r') as f:
@@ -3191,22 +3234,38 @@ async def public_chat(request: Request):
 
 @app.post("/api/projects/{job_id}/quotes/upload")
 async def upload_supplier_quote(
+    request: Request,
     job_id: str,
     supplier_name: str = Form(...),
     file: UploadFile = File(...),
     parser_mode: str = Form("auto"),
     user_id: str = Form(""),
 ):
-    """Recebe uma planilha de orçamento de fornecedor, parseia e salva no banco."""
+    """Recebe uma planilha de orçamento de fornecedor, parseia e salva no banco.
+
+    Quem chama tem que ser o dono do projeto (ou admin) — senão atacante
+    sobe cotação no projeto alheio + ganha R$5 de cashback no nome dele.
+    """
+    # Valida que JWT == dono do projeto (ou admin)
+    _require_project_owner(request, job_id)
+    # Se passou user_id no Form, ele tem que casar com o JWT (cashback fica
+    # registrado no nome certo, não no que o atacante quiser)
+    if user_id:
+        jwt_user = _get_user_from_request(request)
+        if jwt_user and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+            if jwt_user.get("id") != user_id:
+                raise HTTPException(403, "user_id não corresponde ao token")
+
     try:
         from supplier_quote_parser import parse_supplier_quote
     except ImportError:
         return {"error": "supplier_quote_parser indisponível"}
 
-    # Salva temporariamente
+    # Salva temporariamente (anti path-traversal)
     work_dir = os.path.join(WORK_DIR, job_id, "quotes")
     os.makedirs(work_dir, exist_ok=True)
-    temp_path = os.path.join(work_dir, file.filename)
+    safe_name = _safe_local_filename(file.filename)
+    temp_path = os.path.join(work_dir, safe_name)
     with open(temp_path, "wb") as f:
         f.write(await file.read())
 
@@ -3698,15 +3757,28 @@ def _extract_and_save_heuristics(analysis: dict, typology: str = "office"):
 
 @app.post("/api/projects/{job_id}/revised-sheet/upload")
 async def upload_revised_sheet(
+    request: Request,
     job_id: str,
     file: UploadFile = File(...),
     user_id: str = Form(""),
 ):
-    """Recebe planilha revisada offline. Salva na pasta do job e dá cashback."""
-    # Salva o arquivo
+    """Recebe planilha revisada offline. Salva na pasta do job e dá cashback.
+
+    Dono do projeto (ou admin) apenas — senão atacante ganha R$20 de
+    cashback no nome de outro user.
+    """
+    _require_project_owner(request, job_id)
+    if user_id:
+        jwt_user = _get_user_from_request(request)
+        if jwt_user and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+            if jwt_user.get("id") != user_id:
+                raise HTTPException(403, "user_id não corresponde ao token")
+
+    # Salva o arquivo (anti path-traversal)
     work_dir = os.path.join(WORK_DIR, job_id, "revised")
     os.makedirs(work_dir, exist_ok=True)
-    dst = os.path.join(work_dir, file.filename)
+    safe_name = _safe_local_filename(file.filename)
+    dst = os.path.join(work_dir, safe_name)
     with open(dst, "wb") as f:
         f.write(await file.read())
 
@@ -3746,11 +3818,17 @@ async def upload_revised_sheet(
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/user/{user_id}/cashback-all")
-async def get_user_cashback_all(user_id: str):
+async def get_user_cashback_all(request: Request, user_id: str):
     """Retorna cashback agregado de TODOS os projetos do usuário.
 
     Usa pra mostrar o resumo na tela de cashback (total geral + por projeto).
+    Só dono (ou admin) — saldo de cashback é dado financeiro.
     """
+    jwt_user = _get_user_from_request(request)
+    if not jwt_user:
+        raise HTTPException(401, "Autenticação requerida")
+    if jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+        raise HTTPException(403, "Só é possível consultar seu próprio cashback")
     try:
         # Busca todos eventos do user
         url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
@@ -3929,7 +4007,8 @@ async def estimate_price(files: list[UploadFile] = File(...)):
         for f in files:
             if not f.filename:
                 continue
-            p = os.path.join(tmp_dir, f.filename)
+            safe_name = _safe_local_filename(f.filename)
+            p = os.path.join(tmp_dir, safe_name)
             with open(p, "wb") as out:
                 out.write(await f.read())
             saved_paths.append(p)
@@ -4213,7 +4292,8 @@ async def cashback_upload(
 
     tmp_dir = os.path.join(WORK_DIR, "_density_tmp")
     os.makedirs(tmp_dir, exist_ok=True)
-    revised_path = os.path.join(tmp_dir, f"cashback_{job_id}_{file.filename}")
+    safe_name = _safe_local_filename(file.filename)
+    revised_path = os.path.join(tmp_dir, f"cashback_{job_id}_{safe_name}")
     try:
         content = await file.read()
         with open(revised_path, "wb") as f:
@@ -4322,7 +4402,8 @@ async def calibration_ingest_density(
 
     tmp_dir = os.path.join(WORK_DIR, "_density_tmp")
     os.makedirs(tmp_dir, exist_ok=True)
-    xlsx_path = os.path.join(tmp_dir, f"ingest_{xlsx.filename}")
+    safe_name = _safe_local_filename(xlsx.filename)
+    xlsx_path = os.path.join(tmp_dir, f"ingest_{safe_name}")
     try:
         content = await xlsx.read()
         with open(xlsx_path, "wb") as f:
@@ -4404,7 +4485,8 @@ async def calibration_ingest_from_review(
 
     tmp_dir = os.path.join(WORK_DIR, "_density_tmp")
     os.makedirs(tmp_dir, exist_ok=True)
-    xlsx_path = os.path.join(tmp_dir, f"review_{job_id}_{xlsx.filename}")
+    safe_name = _safe_local_filename(xlsx.filename)
+    xlsx_path = os.path.join(tmp_dir, f"review_{job_id}_{safe_name}")
     try:
         content = await xlsx.read()
         with open(xlsx_path, "wb") as f:
