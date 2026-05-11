@@ -683,8 +683,9 @@ async function uploadQuote() {
     fd.append('parser_mode', autoMode ? 'auto' : 'strict');
     if (session) fd.append('user_id', session.user.id);
 
+    const headers = session ? { 'Authorization': `Bearer ${session.access_token}` } : {};
     const res = await fetch(`${API_BASE}/api/projects/${jobId}/quotes/upload`, {
-      method: 'POST', body: fd,
+      method: 'POST', body: fd, headers,
     });
     const data = await res.json();
     if (data.status === 'ok') {
@@ -742,6 +743,7 @@ async function uploadRevisedSheet() {
 
     const res = await fetch(`${API_BASE}/api/projects/${jobId}/revised-sheet/upload`, {
       method: 'POST', body: fd,
+      headers: { 'Authorization': `Bearer ${session.access_token}` },
     });
     const data = await res.json();
     if (data.status === 'ok') {
