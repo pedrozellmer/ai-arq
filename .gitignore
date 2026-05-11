@@ -46,6 +46,11 @@ quantitativos_aiarq_*.xlsx
 teste_*.xlsx
 teste_*.csv
 
+# Pastas locais (testes, scripts de uso único, frontend antigo Next.js)
+_local/
+frontend/
+_frontend_legado/
+
 # Claude Code — bloqueia tudo, mas LIBERA configs de equipe (vão pro git)
 .claude/*
 !.claude/agents/

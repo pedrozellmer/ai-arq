@@ -440,8 +440,8 @@ curl -I https://ai.arq.br/blog/
 
 - **ROADMAP.md** — visão de longo prazo + 7 fases + decisões estratégicas
 - **README.md** (se existir) — overview rápido
-- **HISTORICO_AGENTE_INSTAGRAM.md** — como o agente IG foi configurado
-- **HISTORICO_SESSAO_COMPLETA.md** — registros de sessões antigas
+- **docs/HISTORICO_AGENTE_INSTAGRAM.md** — como o agente IG foi configurado (movido pra docs/ em 10/05/2026)
+- **docs/HISTORICO_SESSAO_COMPLETA.md** — registros de sessões antigas (movido pra docs/ em 10/05/2026)
 
 ---
 
