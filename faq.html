@@ -122,7 +122,7 @@
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               O AI.arq &eacute; uma plataforma que cobre o <strong>ciclo de quantitativo, comparativo e apresenta&ccedil;&atilde;o</strong> (sem precificar &mdash; isso fica com seu or&ccedil;amentista):
               <br>(1) <strong>L&ecirc; o CAD</strong> &mdash; voc&ecirc; envia PDF, DWG ou DXF e a IA gera a planilha de quantitativos (itens, unidades e quantidades &mdash; <strong>sem pre&ccedil;os</strong>) em poucos minutos.
-              <br>(2) <strong>Mem&oacute;ria t&eacute;cnica</strong> &mdash; cada item vem com refer&ecirc;ncia oficial SINAPI e TCPO BIM (insumos esperados com coeficientes), pra justificar o quantitativo aos fornecedores.
+              <br>(2) <strong>Refer&ecirc;ncias SINAPI-TCPO</strong> &mdash; cada item vem com c&oacute;digo oficial SINAPI e composi&ccedil;&atilde;o TCPO BIM (insumos esperados com coeficientes), pra justificar o quantitativo aos fornecedores.
               <br>(3) <strong>Compara propostas</strong> &mdash; quando os fornecedores devolvem as cota&ccedil;&otilde;es, voc&ecirc; sobe as planilhas e o AI.arq gera o comparativo pareado (ranking, discrep&acirc;ncias, cobertura).
               <br>(4) <strong>Apresenta pro cliente final</strong> &mdash; com um clique, XLSX e PPT executivo saem com a <strong>logo e cor do seu escrit&oacute;rio</strong>, prontos pra enviar por WhatsApp ou e-mail.
             </div>
@@ -258,7 +258,7 @@
               <ul class="space-y-2 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Aba 1 &mdash; Resumo Comparativo:</strong> an&aacute;lise do que sai, entra e permanece (especialmente &uacute;til em reformas).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Aba 2 &mdash; Or&ccedil;amento:</strong> itens organizados em at&eacute; 18 disciplinas (Servi&ccedil;os Preliminares, Demoli&ccedil;&atilde;o, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divis&oacute;rias, Persianas, Ilumina&ccedil;&atilde;o, El&eacute;trica, <strong>Hidr&aacute;ulica</strong>, <strong>G&aacute;s</strong>, AC, Inc&ecirc;ndio, Marcenaria, Mobili&aacute;rio, Complementares). &Eacute; nesta aba que voc&ecirc; ou o or&ccedil;amentista preenche os pre&ccedil;os unit&aacute;rios para compor o or&ccedil;amento.</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-700">Aba 3 &mdash; Mem&oacute;ria T&eacute;cnica</strong> (quando h&aacute; matches): para cada item do quantitativo, traz refer&ecirc;ncia oficial SINAPI e TCPO BIM, com os insumos esperados (material/m&atilde;o-de-obra/equipamento) e seus coeficientes de consumo. Serve pra justificar tecnicamente o quantitativo aos fornecedores.</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-700">Aba 3 &mdash; Refer&ecirc;ncias SINAPI-TCPO</strong> (quando h&aacute; matches): para cada item do quantitativo, traz c&oacute;digo oficial SINAPI e composi&ccedil;&atilde;o TCPO BIM, com os insumos esperados (material/m&atilde;o-de-obra/equipamento) e seus coeficientes de consumo. Serve pra justificar tecnicamente o quantitativo aos fornecedores.</li>
               </ul>
               <p class="mt-3 mb-2 font-medium text-gray-700">Recursos transversais:</p>
               <ul class="space-y-1 ml-1">
@@ -286,7 +286,7 @@
                 <li><strong>Extra&ccedil;&atilde;o do CAD:</strong> DWG/DXF &mdash; dados geom&eacute;tricos extra&iacute;dos direto (blocos, polylines, hachuras). PDF &mdash; texto extra&iacute;do e imagens recortadas por regi&atilde;o de legenda.</li>
                 <li><strong>An&aacute;lise com IA:</strong> cada prancha vai para a IA (Claude), que aplica conven&ccedil;&otilde;es NBR e identifica itens, materiais, quantidades e especifica&ccedil;&otilde;es.</li>
                 <li><strong>Calibra&ccedil;&atilde;o por densidade:</strong> ratios hist&oacute;ricos de projetos similares sinalizam itens fora do padr&atilde;o (alertas de anomalia).</li>
-                <li><strong>Enriquecimento com SINAPI/TCPO:</strong> cada item ganha refer&ecirc;ncia oficial na aba "Mem&oacute;ria T&eacute;cnica" (composi&ccedil;&atilde;o + insumos com coeficientes).</li>
+                <li><strong>Enriquecimento com SINAPI/TCPO:</strong> cada item ganha refer&ecirc;ncia oficial na aba "Refer&ecirc;ncias SINAPI-TCPO" (composi&ccedil;&atilde;o + insumos com coeficientes).</li>
                 <li><strong>Gera&ccedil;&atilde;o:</strong> itens consolidados em planilha .xlsx com f&oacute;rmulas de subtotal, BDI e conting&ecirc;ncia prontas.</li>
                 <li><strong>Revis&atilde;o:</strong> voc&ecirc; revisa no navegador (aprovar/editar/comentar item a item) ou baixa e corrige offline.</li>
                 <li><strong>Comparativo de or&ccedil;amentos (opcional):</strong> quando os fornecedores devolvem, voc&ecirc; faz upload das planilhas e o AI.arq gera XLSX + PPT executivo com sua marca.</li>
@@ -512,10 +512,10 @@
               <ul class="space-y-1.5 ml-1 mt-2">
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só quantitativo?</strong> Ok — você gera a planilha e usa do jeito que quiser, em qualquer ferramenta.</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só comparativo de fornecedores?</strong> Em breve disponibilizamos página standalone. Hoje, o comparativo aparece dentro do projeto (mesmo que você não use o quantitativo do AI.arq como base).</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só memória técnica (SINAPI/TCPO)?</strong> Ela vem junto com o quantitativo automaticamente quando há matches — não é cobrada separada.</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só referências SINAPI-TCPO?</strong> Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada.</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só PPT com sua marca?</strong> Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte.</li>
               </ul>
-              <p class="mt-3">Você paga só pelo <strong>processamento do quantitativo</strong> (preço por faixa de pranchas — veja "Preços e Pagamento"). Todo o resto (memória técnica, comparativo, PPT, cashback, agente de chat) está incluído, sem taxa extra e sem obrigatoriedade de uso.</p>
+              <p class="mt-3">Você paga só pelo <strong>processamento do quantitativo</strong> (preço por faixa de pranchas — veja "Preços e Pagamento"). Todo o resto (referências SINAPI-TCPO, comparativo, PPT, cashback, agente de chat) está incluído, sem taxa extra e sem obrigatoriedade de uso.</p>
             </div>
           </div>
         </div>
@@ -597,30 +597,31 @@
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p class="mb-2">Cada ação que ajuda a calibrar a IA gera crédito automático, visível no próprio projeto e agregado na aba "Cashback":</p>
               <ul class="space-y-1 ml-4">
-                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Revisão inline</strong> — validar/ajustar itens no navegador: crédito por item revisado</li>
+                <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Revisão inline</strong> — R$ 0,10 por item revisado, até <strong>R$ 20</strong> por projeto</li>
                 <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Upload planilha revisada</strong> (.xlsx corrigido offline): <strong>+R$ 20</strong></li>
                 <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Upload cotação fornecedor</strong> (por cotação parseada): <strong>+R$ 5</strong></li>
                 <li class="flex items-start gap-2"><span class="text-amber-500 mt-1 shrink-0">•</span> <strong>Feedback NPS</strong>: crédito ao responder</li>
               </ul>
-              <p class="mt-2">O crédito é abatido automaticamente no próximo projeto que você criar.</p>
+              <p class="mt-2">Total possível: <strong>até R$ 45 de cashback por projeto</strong>. O crédito é abatido automaticamente no próximo projeto que você criar.</p>
             </div>
           </div>
         </div>
 
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="memoria tecnica sinapi tcpo bim composicao insumo justificar quantidade codigo referencia oficial">
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="referencias sinapi tcpo bim composicao insumo justificar quantidade codigo oficial memoria tecnica">
           <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
-            <span class="text-sm font-semibold text-gray-800 pr-4">O que é a aba "Memória Técnica" na planilha?</span>
+            <span class="text-sm font-semibold text-gray-800 pr-4">O que é a aba "Referências SINAPI-TCPO" na planilha?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p class="mb-2">Uma aba verde na planilha gerada que, pra cada item do quantitativo, mostra:</p>
               <ul class="space-y-1 ml-4 mb-2">
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Código TCPO BIM de referência + descrição oficial da composição</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Código SINAPI (Caixa) sugerido + descrição padronizada e unidade</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Código TCPO BIM (quando há match) + descrição oficial da composição</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Lista de insumos esperados (material, mão de obra, equipamento) com coeficiente de consumo</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Similaridade entre descrição do item e a composição (% de compatibilidade)</li>
               </ul>
-              <p>Serve pra <strong>justificar tecnicamente o quantitativo</strong> pros fornecedores e dar credibilidade à planilha. Base: TCPO BIM 15ª Edição (Pini) + SINAPI (Caixa).</p>
+              <p>Serve pra <strong>justificar tecnicamente o quantitativo</strong> pros fornecedores e dar credibilidade à planilha. Base: SINAPI (10.284 composições da Caixa, atualizado mensalmente) + TCPO BIM 15ª Edição (Pini).</p>
             </div>
           </div>
         </div>
@@ -824,10 +825,15 @@
         <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
         <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
       </div>
-      <div class="flex gap-6 text-sm text-gray-500">
+      <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
+        <a href="precos.html" class="hover:text-gray-900 transition">Preços</a>
         <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
         <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
         <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
+        <a href="https://www.instagram.com/ai.arq.br/" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 hover:text-gray-900 transition" aria-label="Instagram @ai.arq.br">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+          @ai.arq.br
+        </a>
       </div>
       <p class="text-sm text-gray-400">&copy; 2026 AI.arq. Todos os direitos reservados.</p>
     </div>

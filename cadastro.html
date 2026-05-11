@@ -123,6 +123,26 @@
           </select>
         </div>
 
+        <!-- Onde nos conheceu? -->
+        <div>
+          <label for="referral_source" class="block text-sm font-medium text-gray-700 mb-1">Como nos conheceu?</label>
+          <select id="referral_source" name="referral_source" required
+            class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition bg-white appearance-none"
+            style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22%3E%3Cpath stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;">
+            <option value="" disabled selected>Selecione</option>
+            <option value="instagram">Instagram (@ai.arq.br)</option>
+            <option value="indicacao">Indica&#231;&#227;o de algu&#233;m</option>
+            <option value="google">Pesquisa no Google</option>
+            <option value="linkedin">LinkedIn</option>
+            <option value="blog">Blog / artigo</option>
+            <option value="evento">Evento / palestra</option>
+            <option value="outro">Outro</option>
+          </select>
+          <input type="text" id="referral_detail" name="referral_detail"
+            class="hidden mt-2 w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+            placeholder="Quem indicou? / Conta mais">
+        </div>
+
         <!-- Codigo de convite (beta) -->
         <div>
           <label for="beta_code" class="block text-sm font-medium text-gray-700 mb-1">C&#243;digo de convite (opcional)</label>
@@ -171,10 +191,15 @@
         <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
         <span class="font-bold text-gray-900 text-sm">AI<span class="gradient-text">.arq</span></span>
       </div>
-      <div class="flex gap-6 text-xs text-gray-400">
+      <div class="flex flex-wrap items-center justify-center gap-6 text-xs text-gray-400">
+        <a href="precos.html" class="hover:text-gray-900 transition">Preços</a>
         <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
         <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
         <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
+        <a href="https://www.instagram.com/ai.arq.br/" target="_blank" rel="noopener" class="inline-flex items-center gap-1 hover:text-gray-900 transition" aria-label="Instagram @ai.arq.br">
+          <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/></svg>
+          @ai.arq.br
+        </a>
       </div>
       <p class="text-xs text-gray-300">&copy; 2026 AI.arq. Todos os direitos reservados.</p>
     </div>
@@ -208,6 +233,22 @@
   const betaCodeInput = document.getElementById('beta_code');
   const betaCodeError = document.getElementById('beta-code-error');
   const betaCodeSuccess = document.getElementById('beta-code-success');
+  const referralSourceSelect = document.getElementById('referral_source');
+  const referralDetailInput = document.getElementById('referral_detail');
+
+  // Mostra campo "detalhe" só pra indicação / outro (precisa de contexto)
+  referralSourceSelect.addEventListener('change', function () {
+    const v = this.value;
+    if (v === 'indicacao' || v === 'outro') {
+      referralDetailInput.classList.remove('hidden');
+      referralDetailInput.placeholder = (v === 'indicacao')
+        ? 'Quem indicou? (nome ou @ no Instagram)'
+        : 'Conta mais — onde nos viu?';
+    } else {
+      referralDetailInput.classList.add('hidden');
+      referralDetailInput.value = '';
+    }
+  });
 
   let currentUser = null;
   let validatedBetaCode = null; // will hold the beta_codes row if valid
@@ -346,6 +387,12 @@
       return;
     }
 
+    if (!referralSourceSelect.value) {
+      showError('Por favor, informe como nos conheceu.');
+      referralSourceSelect.focus();
+      return;
+    }
+
     if (!aceitaTermos.checked) {
       showError('Voc\u00ea precisa aceitar os Termos de Uso e a Pol\u00edtica de Privacidade para continuar.');
       return;
@@ -401,7 +448,9 @@
         company: empresa,
         role: cargo,
         area: area,
-        accept_marketing: aceitaMarketing.checked
+        accept_marketing: aceitaMarketing.checked,
+        referral_source: referralSourceSelect.value || null,
+        referral_detail: referralDetailInput.value.trim() || null
       };
 
       // Add beta_code to profile if validated
