@@ -77,7 +77,7 @@ Se você é uma sessão nova de Claude lendo isso pela primeira vez:
 - **Site:** https://ai.arq.br
 - **Backend:** https://ai-arq.onrender.com (Render)
 - **Tagline atual:** "Quantitativo com IA" (NÃO "Orçamento com IA" — corrigido)
-- **Fase atual:** Fase 1 (quantitativo) do roadmap de 7 fases
+- **Fase atual:** Fase 1 (quantitativo) do roadmap de 8 fases — Fase 2 (Cronograma) em construção
 - **Estado:** Beta v0.5.0 · 3 usuários cadastrados (1 ativa: Daniela Teixeira/DTZ Arquitetura)
 
 ### Modelo de negócio
@@ -346,7 +346,7 @@ Se algum falhar, me peça pra investigar.
 - Programa de afiliados — só faz sentido com 100+ usuários
 - Pagar Google/Meta Ads — antes de PMF não vale
 - Reescrever em React — funciona até Fase 3
-- Suportar fora do Brasil — foco BR até Fase 7
+- Suportar fora do Brasil — foco BR até Fase 8
 - Concorrer com Trello/Asana em features genéricas
 
 ---
@@ -438,7 +438,8 @@ curl -I https://ai.arq.br/blog/
 
 ## 📚 Referências externas (pra Claude consultar)
 
-- **ROADMAP.md** — visão de longo prazo + 7 fases + decisões estratégicas
+- **ROADMAP.md** — visão de longo prazo + 8 fases + decisões estratégicas (Fase 2 atual: Cronograma)
+- **docs/INDEX.md** — mapa de contexto: índice de todos os históricos, regras duras, decisões importantes
 - **README.md** (se existir) — overview rápido
 - **docs/HISTORICO_AGENTE_INSTAGRAM.md** — como o agente IG foi configurado (movido pra docs/ em 10/05/2026)
 - **docs/HISTORICO_SESSAO_COMPLETA.md** — registros de sessões antigas (movido pra docs/ em 10/05/2026)

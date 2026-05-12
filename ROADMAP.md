@@ -60,11 +60,54 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 
 ---
 
-### **FASE 2 — Comparativo de propostas de fornecedores**
-**Status:** 🟡 Já existe parcialmente · refinar
-**Estimativa:** 6-12 meses (depois Fase 1 madura)
+### **FASE 2 — Cronograma físico-financeiro automático** ⭐ (mudou em 12/05/2026)
+**Status:** 🟢 Em construção — agent `cronograma-gerador` rascunhado
+**Estimativa:** 4-8 semanas pra MVP
 
-**Lógica:** Depois do quantitativo, arquiteto manda pros fornecedores. Volta com várias planilhas de cotação.
+**Por que veio pra Fase 2 (antes era Fase 3):** Comparativo de fornecedores (antiga Fase 2) depende de cotação externa — gargalo no mundo real. Cronograma só precisa do que JÁ temos (planilha quantitativa). Reuso direto, tração mais rápida.
+
+**Lógica:** Cliente recebe quantitativo + 1 clique gera Gantt + .mpp + curva S. Sem precificar — só distribui esforço no tempo.
+
+- Endpoint `/api/cronograma/generate` que recebe `job_id` + duração total + tipologia
+- Distribui 18 disciplinas no calendário por sequenciamento padrão BR
+- Output: Gantt PNG + cronograma XLSX + curva S + memorial breve
+- Agent `.claude/agents/cronograma-gerador.md` já criado
+- Ressalva obrigatória: "validar com engenheiro responsável"
+
+**Decisão registrada em [docs/HISTORICO_SESSAO_2026-05-10_a_12.md](docs/HISTORICO_SESSAO_2026-05-10_a_12.md).**
+
+**Métrica de saída pra Fase 3:** 30+ cronogramas gerados + 50+ usuários com MRR R$ 3k+.
+
+---
+
+### **FASE 3 — Memorial descritivo + RRT + Caderno de acabamentos** ⭐ (consolidada em 12/05/2026)
+**Status:** 🔵 Planejado
+**Estimativa:** 8-16 semanas (depois Fase 2 estável)
+
+**Lógica:** Cobrir o resto do ciclo CAU/prefeitura. Reusa quantitativo + adiciona texto/escolha.
+
+**3a — Memorial descritivo + RRT**
+- AI.arq escreve memorial PDF formato CAU/prefeitura (PMSP/PMRJ/POA)
+- Cruza disciplinas do quantitativo com NBR 13532
+- Pré-preenche RRT (arquiteto só assina)
+- Checklist de documentos pra protocolo
+- Agents base inspirados: `42-NBR-13532`, `08-projeto-legal-aprovacao-prefeitura`, `56-RRT-CAU`
+- Preço: R$ 80 extra ou bundle
+
+**3b — Caderno de acabamentos (FF&E)**
+- Cliente escolhe fabricante BR pra cada item (Portobello/Eliane/Decortiles/Deca/Suvinil)
+- Saída XLSX por ambiente com código fabricante + preço referência + link ficha técnica + prazo entrega
+- Banco de SKUs (500-1000 produtos) + matcher
+- **Monetização B2B possível:** comissão de afiliado dos fabricantes (em vez de cobrar do arquiteto)
+- Agent base inspirado: `26-especificacao-acabamentos-caderno`
+
+---
+
+### **FASE 4 — Comparativo de propostas de fornecedores** (era Fase 2)
+**Status:** 🟡 Já existe parcialmente · refinar
+**Estimativa:** depois Fase 3 estável
+
+**Lógica:** Depois do quantitativo + cronograma + memorial, arquiteto manda pros fornecedores. Volta com várias planilhas de cotação.
 
 - Upload de XLSX dos fornecedores (parser strict + fuzzy)
 - Comparativo pareado item-a-item (ranking, discrepâncias, itens esquecidos)
@@ -72,28 +115,11 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 - Envio direto pro cliente final via WhatsApp
 - Heurísticas de mercado pra alertar discrepância (% de variação suspeita, share MAT/MO atípico)
 
-**Métrica de saída pra Fase 3:** 200+ usuários com MRR R$10k+.
+**Por que foi pra Fase 4:** depende do mundo real (fornecedores enviarem orçamento). Cronograma + memorial entregam valor sem essa dependência externa.
 
 ---
 
-### **FASE 3 — Cronograma de obra**
-**Status:** 🔵 Planejado
-**Estimativa:** 12-24 meses
-
-**Lógica:** Do quantitativo + cotação aprovada nasce naturalmente "quando começa cada etapa".
-
-- Gantt simples por projeto (já tinha protótipo no `cronograma-arquitetura` antigo)
-- Gera cronograma a partir das disciplinas do quantitativo (heurísticas de duração)
-- Dependências entre tarefas (não pode pintar antes de assentar piso)
-- Datas planejadas vs reais
-- Considera dias úteis e feriados nacionais BR
-- Notificações de vencimento
-
-**Diferencial vs Trello/MS Project:** já vem com as etapas certas porque conhece o quantitativo.
-
----
-
-### **FASE 4 — ERP do escritório (financeiro + CRM + galeria)**
+### **FASE 5 — ERP do escritório (financeiro + CRM + galeria)**
 **Status:** 🔵 Planejado
 **Estimativa:** 24-36 meses
 
@@ -109,7 +135,7 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 
 ---
 
-### **FASE 5 — CAD 2D → 3D massing automático**
+### **FASE 6 — CAD 2D → 3D massing automático**
 **Status:** 🔵 Planejado
 **Estimativa:** 12-18 meses
 
@@ -124,7 +150,7 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 
 ---
 
-### **FASE 6 — Texto → planta + 3D + quantitativo (generativo BR)**
+### **FASE 7 — Texto → planta + 3D + quantitativo (generativo BR)**
 **Status:** 🔵 Visão
 **Estimativa:** 24 meses
 
@@ -141,7 +167,7 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 
 ---
 
-### **FASE 7 — Sistema operacional do escritório BR**
+### **FASE 8 — Sistema operacional do escritório BR**
 **Status:** 🔵 Visão de longo prazo
 **Estimativa:** 36 meses
 
@@ -253,7 +279,7 @@ Identificadas em sessão de 2026-04-24. Estado atual:
 - ❌ **Vender mensalidade** — modelo é pay-as-you-use
 - ❌ **Vender carbono** ou outras "extensões éticas" sem product-market-fit
 - ❌ **Reescrever em React agora** — HTML estático funciona até pelo menos Fase 3
-- ❌ **Suportar fora do Brasil agora** — foco BR até Fase 7
+- ❌ **Suportar fora do Brasil agora** — foco BR até Fase 8
 - ❌ **Concorrer com Trello/Asana** em features genéricas — só features específicas pra arq
 
 ---
