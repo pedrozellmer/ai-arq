@@ -12,13 +12,37 @@
 3. **Horário fixo por dia** (ver tabela abaixo). Não improvisar.
 4. **Validação no `slot_key`**: o `<dia>` do slot tem que casar com o `dow` (day-of-week) do `publish_at`. Scheduler tem que rejeitar antes de publicar se não bater.
 
+### 🚫 Regra 5 — VOZ DO CLIENTE, NÃO VOZ INTERNA (anti-bizarrice)
+
+Aprendido em 11/05/2026 da pior forma: o Bastidor da semana w20 saiu com "8 furos de segurança fechados", "41/41 matches SINAPI", "100% sem erro em maio". Cliente arquiteto leu e pensou "esse sistema tinha falha?". Auto-sabotagem.
+
+**Banido nas legendas:**
+- "motor", "match", "deploy", "rerank", "endpoint", "API", "RLS"
+- "X furos de segurança fechados"
+- "X% sem erro" (implica que antes tinha erro)
+- "X/Y matches" (jargão de relevância textual)
+- "fechamos N issues / bugs"
+- Qualquer métrica interna que cliente não usa no dia-a-dia
+- Auto-críticas que ele não pediu pra ouvir
+
+**O que vai no lugar:**
+- Linguagem de obra: prancha, planta, BDI, SINAPI, fornecedor, aditivo, orçamento, prazo
+- Resultado prático pro cliente: "planilha mais precisa", "5 minutos em vez de 8h", "menos linha laranja"
+- Bastidor da OBRA do cliente, não do código (ex: "3 projetos diferentes essa semana", "1 retrofit comercial que pegou todo mundo de surpresa")
+- Especificidade técnica QUE O CLIENTE USA (NBR, IT-25, Acórdão TCU 2622/2013)
+
+**Antes de publicar QUALQUER post, perguntar:**
+> Um arquiteto de 12 anos de experiência lendo isso ia pensar "que legal" ou "que estranho"?
+
+Se a resposta tem "que estranho", reescrever.
+
 ---
 
 ## 🗓️ Grade fixa (uma rubrica por dia)
 
 | Dia    | Rubrica            | Horário BRT | Formato       | Tema                                                                 |
 |--------|--------------------|-------------|---------------|----------------------------------------------------------------------|
-| SEG    | **Bastidor**       | 19:00       | Feed single   | Número da semana, melhoria nova, prova de progresso                  |
+| SEG    | **Bastidor**       | 19:00       | Feed single   | Bastidor de OBRA do cliente, não de código (ex: 3 tipos de projeto que rodaram, 1 disciplina que apareceu em todos, 1 pergunta que o chat mais recebeu). NUNCA falar de bug fixado, deploy, "X furos fechados". |
 | TER    | **Erro caro**      | 19:00       | Carrossel 4-6 | 1 erro comum de orçamento c/ gancho TCU/SINAPI                       |
 | QUA    | **Quarta do AIrnaldo** | **19:00** | Feed single   | Personagem fala BDI / SINAPI / prancha — voz funcional, sem biografia |
 | QUI    | **Pergunta da semana** | 19:00   | Carrossel/single | FAQ respondida c/ CTA pro chat ou login                            |
