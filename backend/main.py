@@ -4693,6 +4693,67 @@ class CronogramaPayload(BaseModel):
     duracao_meses: int     # 1..36
 
 
+@app.get("/api/cronograma/{job_id}/sugestao")
+async def cronograma_sugestao(job_id: str):
+    """Sugere duração de obra baseada em tipologia + área + n disciplinas
+    detectadas. Chamado pelo frontend ANTES do "Gerar cronograma" pra
+    preencher o slider com valor inteligente.
+    """
+    import urllib.request, json as _json
+
+    # Busca o projeto pra pegar typology + area + files_count
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+               "&select=typology,layout_area,total_area,files_count")
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Accept', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=10)
+        rows = _json.loads(resp.read().decode('utf-8'))
+        if not rows:
+            raise HTTPException(404, "Projeto não encontrado")
+        proj = rows[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar projeto: {e}")
+
+    # Busca disciplinas ativas via items
+    try:
+        url2 = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+        body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
+        req2 = urllib.request.Request(url2, data=body, method='POST')
+        req2.add_header('apikey', SUPABASE_KEY)
+        req2.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req2.add_header('Content-Type', 'application/json')
+        resp2 = urllib.request.urlopen(req2, timeout=15)
+        items = _json.loads(resp2.read().decode('utf-8'))
+    except Exception:
+        items = []
+
+    disciplinas = set()
+    for it in items:
+        d = (it.get('discipline') or '').strip().upper()
+        if d and 'PREMISSA' not in d:
+            disciplinas.add(d)
+    n_disc = len(disciplinas)
+
+    # Aplica heurística
+    from cronograma import sugerir_duracao
+    typology = proj.get('typology')
+    area = proj.get('layout_area') or proj.get('total_area') or 0
+    files_count = proj.get('files_count') or 0
+
+    sugestao = sugerir_duracao(
+        typology=typology,
+        area_m2=area,
+        files_count=files_count,
+        n_disciplinas=n_disc,
+    )
+    return {"status": "ok", "job_id": job_id, **sugestao}
+
+
 @app.post("/api/cronograma/{job_id}/generate")
 async def generate_cronograma(job_id: str, payload: CronogramaPayload):
     """Gera cronograma físico-financeiro a partir do quantitativo do projeto.
