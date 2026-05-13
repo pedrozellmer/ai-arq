@@ -4693,6 +4693,14 @@ class CronogramaPayload(BaseModel):
     duracao_meses: int     # 1..36
 
 
+class CronogramaSavePayload(BaseModel):
+    data_inicio: str
+    duracao_meses: int
+    k_sigmoid: Optional[int] = 10
+    fases_custom: Optional[list] = []   # array de {label, inicio, fim, cor?, ambiente?, ordem?, manual?}
+    notas: Optional[str] = ""
+
+
 @app.get("/api/cronograma/{job_id}/sugestao")
 async def cronograma_sugestao(job_id: str):
     """Sugere duração de obra baseada em tipologia + área + n disciplinas
@@ -4805,6 +4813,189 @@ async def generate_cronograma(job_id: str, payload: CronogramaPayload):
         print(f"[cronograma] erro: {e}")
         print(traceback.format_exc())
         raise HTTPException(500, f"Erro ao gerar cronograma: {e}")
+
+
+def _supabase_get_cronograma(job_id: str) -> Optional[dict]:
+    """Busca cronograma salvo do job. Retorna None se não existir."""
+    import urllib.request, json as _json
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/cronogramas"
+               f"?job_id=eq.{job_id}&select=*&limit=1")
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Accept', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=10)
+        rows = _json.loads(resp.read().decode('utf-8'))
+        return rows[0] if rows else None
+    except Exception as e:
+        print(f"[cronograma get] erro: {e}")
+        return None
+
+
+def _supabase_upsert_cronograma(job_id: str, data: dict) -> bool:
+    """Insere ou atualiza cronograma. Usa Prefer: resolution=merge-duplicates."""
+    import urllib.request, json as _json
+    payload = {"job_id": job_id, **data}
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/cronogramas"
+        body = _json.dumps(payload, default=str).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Prefer', 'resolution=merge-duplicates,return=minimal')
+        urllib.request.urlopen(req, timeout=10)
+        return True
+    except Exception as e:
+        print(f"[cronograma upsert] erro: {e}")
+        return False
+
+
+@app.get("/api/cronograma/{job_id}")
+async def get_cronograma(job_id: str):
+    """Retorna cronograma salvo do projeto (config + fases custom se houver).
+
+    Se não houver salvo, devolve sugestão de duração + flag indicando que
+    cliente ainda não gerou cronograma. Frontend usa essa info pra decidir
+    se mostra inputs (gerar primeiro) ou já renderiza o salvo.
+    """
+    saved = _supabase_get_cronograma(job_id)
+    if not saved:
+        return {"status": "empty", "job_id": job_id, "saved": None}
+    return {"status": "ok", "job_id": job_id, "saved": saved}
+
+
+@app.post("/api/cronograma/{job_id}/save")
+async def save_cronograma(job_id: str, payload: CronogramaSavePayload):
+    """Salva (upsert) cronograma com config + fases editadas."""
+    # Valida data
+    try:
+        from datetime import date as _date
+        _date.fromisoformat(payload.data_inicio)
+    except Exception:
+        raise HTTPException(400, "data_inicio deve estar no formato YYYY-MM-DD")
+    if payload.duracao_meses < 1 or payload.duracao_meses > 60:
+        raise HTTPException(400, "duracao_meses entre 1 e 60")
+
+    data = {
+        "data_inicio": payload.data_inicio,
+        "duracao_meses": payload.duracao_meses,
+        "k_sigmoid": payload.k_sigmoid or 10,
+        "fases_custom": payload.fases_custom or [],
+        "notas": payload.notas or "",
+        "updated_at": "now()",
+    }
+    ok = _supabase_upsert_cronograma(job_id, data)
+    if not ok:
+        raise HTTPException(500, "Erro ao salvar no banco")
+    return {"status": "ok", "job_id": job_id}
+
+
+def _build_cronograma_for_export(job_id: str) -> tuple:
+    """Monta o JSON do cronograma usando fases_custom se houver, senão gera
+    automaticamente. Retorna (cronograma_dict, titulo)."""
+    import urllib.request, json as _json
+    saved = _supabase_get_cronograma(job_id)
+
+    # Busca nome do projeto pra título
+    titulo = f'Projeto {job_id}'
+    try:
+        purl = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                "&select=project_name&limit=1")
+        preq = urllib.request.Request(purl, method='GET')
+        preq.add_header('apikey', SUPABASE_KEY)
+        preq.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        presp = urllib.request.urlopen(preq, timeout=8)
+        prows = _json.loads(presp.read().decode('utf-8'))
+        if prows and prows[0].get('project_name'):
+            titulo = prows[0]['project_name']
+    except Exception:
+        pass
+
+    from cronograma import gerar_cronograma, gerar_cronograma_de_fases_custom
+
+    if saved and saved.get('fases_custom'):
+        # Usa fases editadas pelo cliente
+        cron = gerar_cronograma_de_fases_custom(
+            fases_custom=saved['fases_custom'],
+            data_inicio=str(saved['data_inicio']),
+            duracao_meses=saved['duracao_meses'],
+        )
+    else:
+        # Gera automaticamente a partir dos items
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+            body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
+            req = urllib.request.Request(url, data=body, method='POST')
+            req.add_header('apikey', SUPABASE_KEY)
+            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Content-Type', 'application/json')
+            resp = urllib.request.urlopen(req, timeout=15)
+            items = _json.loads(resp.read().decode('utf-8'))
+        except Exception as e:
+            raise HTTPException(500, f"Erro ao buscar items: {e}")
+
+        if not items:
+            raise HTTPException(404, "Projeto sem itens")
+
+        # Se há config salva mas sem fases_custom, usa config; senão default
+        if saved:
+            data_inicio = str(saved['data_inicio'])
+            duracao = saved['duracao_meses']
+        else:
+            from datetime import date as _date, timedelta as _td
+            data_inicio = (_date.today() + _td(days=30)).isoformat()
+            duracao = 6
+        cron = gerar_cronograma(items, data_inicio, duracao)
+
+    return cron, titulo
+
+
+@app.get("/api/cronograma/{job_id}/export/pdf")
+async def export_cronograma_pdf(job_id: str):
+    """Exporta cronograma como PDF (capa + Gantt + Curva S + caminho crítico + marcos)."""
+    import tempfile, os
+    from fastapi.responses import FileResponse
+    cron, titulo = _build_cronograma_for_export(job_id)
+    try:
+        from cronograma_export import exportar_pdf
+        tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+        tmp.close()
+        exportar_pdf(cron, tmp.name, titulo=titulo, job_id=job_id)
+        return FileResponse(
+            tmp.name,
+            media_type='application/pdf',
+            filename=f'cronograma_{job_id}.pdf',
+        )
+    except Exception as e:
+        import traceback
+        print(f"[export pdf] erro: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(500, f"Erro ao gerar PDF: {e}")
+
+
+@app.get("/api/cronograma/{job_id}/export/pptx")
+async def export_cronograma_pptx(job_id: str):
+    """Exporta cronograma como PPTX (5 slides executivos pra apresentar ao cliente)."""
+    import tempfile
+    from fastapi.responses import FileResponse
+    cron, titulo = _build_cronograma_for_export(job_id)
+    try:
+        from cronograma_export import exportar_pptx
+        tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+        tmp.close()
+        exportar_pptx(cron, tmp.name, titulo=titulo, job_id=job_id)
+        return FileResponse(
+            tmp.name,
+            media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            filename=f'cronograma_{job_id}.pptx',
+        )
+    except Exception as e:
+        import traceback
+        print(f"[export pptx] erro: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(500, f"Erro ao gerar PPTX: {e}")
 
 
 class ReviewPayload(BaseModel):
