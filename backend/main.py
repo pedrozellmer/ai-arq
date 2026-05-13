@@ -103,7 +103,12 @@ def _supabase_update(table, match_field, match_value, data):
     import urllib.request, urllib.error, json
 
     # Caminho especial: atualizar projects por job_id via RPC.
+    # Roteia conforme os campos sendo atualizados:
+    # - meta editável (project_name/typology/address/phase) → update_project_meta
+    # - status/area/warnings/etc → update_project_status (legado)
     if table == "projects" and match_field == "job_id":
+        if any(k in _META_FIELDS for k in data.keys()):
+            return _rpc_update_project_meta(match_value, data)
         return _rpc_update_project_status(match_value, data)
 
     try:
@@ -364,6 +369,61 @@ def _rpc_update_project_status(job_id: str, data: dict) -> bool:
         msg = f"RPC update_project_status job_id={job_id} ERR {type(e).__name__}: {e}  data={json.dumps(data)[:200]}"
         print(f"[supabase] RPC err: {e}")
         _supa_log(msg)
+        return False
+
+
+# Campos editáveis via update_project_meta (RPC criada na migration
+# add_project_address_phase_and_meta_rpc_v2). Mantém alinhado com a RPC.
+_META_FIELDS = {"project_name", "typology", "address", "phase"}
+
+
+def _rpc_update_project_meta(job_id: str, data: dict) -> bool:
+    """Atualiza metadados editáveis (project_name/typology/address/phase) via
+    RPC `update_project_meta`. Mesmo padrão da update_project_status.
+    Retorna True só se rows_updated >= 1."""
+    import urllib.request, urllib.error, json
+    payload = {
+        "p_job_id":       job_id,
+        "p_project_name": data.get("project_name"),
+        "p_typology":     data.get("typology"),
+        "p_address":      data.get("address"),
+        "p_phase":        data.get("phase"),
+    }
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/update_project_meta"
+        body = json.dumps(payload).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=20)
+        resp_body = resp.read().decode('utf-8', errors='replace')
+        rows = 0
+        try:
+            rows = int(resp_body.strip())
+        except (ValueError, TypeError):
+            try:
+                parsed = json.loads(resp_body)
+                if isinstance(parsed, int):
+                    rows = parsed
+                elif isinstance(parsed, list) and parsed:
+                    rows = int(parsed[0]) if isinstance(parsed[0], int) else 0
+            except Exception:
+                pass
+        if rows >= 1:
+            _supa_log(f"RPC update_project_meta job_id={job_id} OK rows={rows}  data={json.dumps(data)[:200]}")
+            return True
+        _supa_log(f"RPC update_project_meta job_id={job_id} ZERO_ROWS  data={json.dumps(data)[:200]}")
+        return False
+    except urllib.error.HTTPError as e:
+        try:
+            resp_body = e.read().decode('utf-8', errors='replace')[:500]
+        except Exception:
+            resp_body = '(unreadable)'
+        _supa_log(f"RPC update_project_meta job_id={job_id} HTTP {e.code}: {resp_body}  data={json.dumps(data)[:200]}")
+        return False
+    except Exception as e:
+        _supa_log(f"RPC update_project_meta job_id={job_id} ERR {type(e).__name__}: {e}  data={json.dumps(data)[:200]}")
         return False
 
 # ═══════════════════════════════════════════════════════════════
@@ -3934,6 +3994,48 @@ async def get_project_client(job_id: str):
         return {"error": str(e)}
 
 
+class ProjectMetaPayload(BaseModel):
+    project_name: Optional[str] = None
+    typology: Optional[str] = None
+    address: Optional[str] = None
+    phase: Optional[str] = None
+
+
+@app.post("/api/projects/{job_id}/meta")
+async def update_project_meta(job_id: str, payload: ProjectMetaPayload, request: Request):
+    """Edita metadados do projeto: nome amigável, tipologia, endereço, fase.
+
+    Só dono do projeto (ou admin) pode editar. Validação de tipologia, e
+    aceita campos opcionais — só atualiza o que foi informado.
+    """
+    _require_project_owner(request, job_id)
+
+    updates: dict = {}
+    if payload.project_name is not None:
+        name = payload.project_name.strip()
+        if not name:
+            raise HTTPException(400, "Nome do projeto não pode ser vazio")
+        if len(name) > 120:
+            raise HTTPException(400, "Nome do projeto excede 120 caracteres")
+        updates["project_name"] = name
+    if payload.typology is not None:
+        if payload.typology not in _VALID_TYPOLOGIES:
+            raise HTTPException(400, f"Tipologia inválida. Aceitas: {sorted(_VALID_TYPOLOGIES)}")
+        updates["typology"] = payload.typology
+    if payload.address is not None:
+        updates["address"] = (payload.address or "").strip()[:240]
+    if payload.phase is not None:
+        updates["phase"] = (payload.phase or "").strip()[:60]
+
+    if not updates:
+        raise HTTPException(400, "Nenhum campo a atualizar")
+
+    ok = _supabase_update("projects", "job_id", job_id, updates)
+    if not ok:
+        raise HTTPException(500, "Erro ao salvar no banco")
+    return {"status": "ok", "job_id": job_id, "updated": list(updates.keys())}
+
+
 @app.post("/api/projects/{job_id}/client")
 async def upsert_project_client(
     job_id: str,
@@ -5001,6 +5103,30 @@ async def save_cronograma(job_id: str, payload: CronogramaSavePayload):
     if not ok:
         raise HTTPException(500, "Erro ao salvar no banco")
     return {"status": "ok", "job_id": job_id}
+
+
+@app.get("/api/cronograma/{job_id}/full")
+async def get_cronograma_full(job_id: str):
+    """Retorna o cronograma já renderizado (Gantt+CurvaS+Matriz+PPC) pra
+    abrir a página sem precisar clicar em 'Gerar'.
+
+    Se o cliente já salvou (com ou sem fases_custom), reusa a config salva.
+    Se não há salvo, retorna 404 — frontend mostra o form pra gerar pela
+    primeira vez.
+    """
+    saved = _supabase_get_cronograma(job_id)
+    if not saved:
+        raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
+    try:
+        cron, _branding = _build_cronograma_for_export(job_id)
+        return cron
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[cronograma full] erro: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(500, f"Erro ao montar cronograma: {e}")
 
 
 def _build_cronograma_for_export(job_id: str) -> tuple:

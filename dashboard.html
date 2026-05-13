@@ -551,21 +551,23 @@
 
         <div id="projects-loading" class="text-center py-12 text-sm text-gray-500">Carregando projetos...</div>
 
-        <div id="projects-table-wrap" class="hidden rounded-2xl border bg-white shadow-sm overflow-hidden">
-          <table class="w-full text-sm">
-            <thead class="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-              <tr>
-                <th class="text-left px-4 py-3">Projeto</th>
-                <th class="text-left px-4 py-3">Tipologia</th>
-                <th class="text-left px-4 py-3">Itens</th>
-                <th class="text-left px-4 py-3">Arquivos</th>
-                <th class="text-left px-4 py-3">Status</th>
-                <th class="text-left px-4 py-3">Criado</th>
-                <th class="text-right px-4 py-3">A&#231;&#245;es</th>
-              </tr>
-            </thead>
-            <tbody id="projects-tbody" class="divide-y"></tbody>
-          </table>
+        <!-- Busca rapida -->
+        <div id="projects-search-wrap" class="hidden mb-4">
+          <div class="relative">
+            <input id="projects-search" type="text"
+                   class="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                   placeholder="Buscar por nome, tipologia ou codigo..."/>
+            <svg class="w-4 h-4 absolute left-3.5 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <span id="projects-search-count" class="hidden absolute right-3 top-3 text-xs text-gray-400"></span>
+          </div>
+        </div>
+
+        <!-- Grid de cards -->
+        <div id="projects-table-wrap" class="hidden">
+          <div id="projects-grid" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"></div>
+          <div id="projects-no-match" class="hidden text-center py-10 text-sm text-gray-400">
+            Nenhum projeto encontrado pra essa busca.
+          </div>
         </div>
 
         <!-- Empty state -->
@@ -2669,19 +2671,24 @@
     btn.textContent = 'Salvar Alterações';
   });
 
+  // Cache de projetos pra filtro de busca
+  let __projectsCache = [];
+
   async function renderProjectHistory() {
     const loadingEl = document.getElementById('projects-loading');
     const tableWrap = document.getElementById('projects-table-wrap');
-    const tbody = document.getElementById('projects-tbody');
+    const grid = document.getElementById('projects-grid');
+    const searchWrap = document.getElementById('projects-search-wrap');
     const emptyEl = document.getElementById('projects-empty');
 
     // Reset
     emptyEl.classList.add('hidden');
     tableWrap.classList.add('hidden');
+    searchWrap.classList.add('hidden');
     loadingEl.classList.remove('hidden');
 
     if (!currentUser || !currentUser.id) {
-      loadingEl.innerHTML = '<p class="text-red-500">Usu&aacute;rio n&atilde;o autenticado</p>';
+      loadingEl.innerHTML = '<p class="text-red-500">Usuario nao autenticado</p>';
       return;
     }
 
@@ -2697,12 +2704,24 @@
         return;
       }
 
+      __projectsCache = projects;
       tableWrap.classList.remove('hidden');
-      tbody.innerHTML = projects.map(p => renderProjectRow(p)).join('');
+      // Mostra busca só com 4+ projetos (não polui no início)
+      if (projects.length >= 4) {
+        searchWrap.classList.remove('hidden');
+        // Liga listener agora que o input está visível
+        const inp = document.getElementById('projects-search');
+        if (inp && !inp.__bound) {
+          inp.addEventListener('input', filterProjects);
+          inp.__bound = true;
+        }
+      }
+      grid.innerHTML = projects.map(p => renderProjectCard(p)).join('');
 
-      // Badge de % revisado (carregado em background sem bloquear)
+      // Badge de % revisado + cronograma (carregados em background, sem bloquear)
       projects.forEach(p => {
         if (p.status !== 'done') return;
+        // % revisado
         (async () => {
           try {
             const r = await fetch(`${API_BASE}/api/items/${p.job_id}/review-state`);
@@ -2710,11 +2729,22 @@
             const reviewed = d.count || 0;
             const total = p.items_count || 1;
             const pct = Math.round((reviewed / total) * 100);
-            const cell = document.querySelector(`tr[data-job="${p.job_id}"] .review-pct`);
-            if (cell && reviewed > 0) {
-              cell.innerHTML = reviewed >= total
-                ? '<span class="text-xs text-emerald-600 block mt-0.5">100% revisado</span>'
-                : `<span class="text-xs text-indigo-600 block mt-0.5">${pct}% revisado</span>`;
+            const el = document.querySelector(`[data-job="${p.job_id}"] .review-pct`);
+            if (el && reviewed > 0) {
+              el.innerHTML = reviewed >= total
+                ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">✓ 100% revisado</span>'
+                : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-semibold">${pct}% revisado</span>`;
+            }
+          } catch (e) {}
+        })();
+        // Cronograma gerado?
+        (async () => {
+          try {
+            const r = await fetch(`${API_BASE}/api/cronograma/${p.job_id}`);
+            const d = await r.json();
+            const el = document.querySelector(`[data-job="${p.job_id}"] .cron-badge`);
+            if (el && d && d.status === 'ok' && d.saved) {
+              el.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 text-[10px] font-semibold">📅 Cronograma</span>';
             }
           } catch (e) {}
         })();
@@ -2724,59 +2754,129 @@
     }
   }
 
-  function renderProjectRow(p) {
+  function renderProjectCard(p) {
     const created = p.created_at ? new Date(p.created_at).toLocaleString('pt-BR', {
-      day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit'
+      day:'2-digit', month:'2-digit', year:'numeric'
     }) : '--';
-    const statusBadge = {
-      'done':       '<span class="inline-block px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">Conclu&iacute;do</span>',
-      'error':      '<span class="inline-block px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-medium">Erro</span>',
-      'queued':     '<span class="inline-block px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-medium">Na fila</span>',
-      'processing': '<span class="inline-block px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">Processando</span>',
-    }[p.status] || p.status;
+
+    const STATUS_LABEL = {
+      'done':       { label: 'Pronto',      cls: 'bg-emerald-100 text-emerald-700' },
+      'error':      { label: 'Erro',        cls: 'bg-red-100 text-red-700' },
+      'queued':     { label: 'Na fila',     cls: 'bg-amber-100 text-amber-700' },
+      'processing': { label: 'Processando', cls: 'bg-blue-100 text-blue-700' },
+    };
+    const s = STATUS_LABEL[p.status] || { label: p.status || '—', cls: 'bg-gray-100 text-gray-600' };
+    const statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${s.cls} text-[10px] font-semibold uppercase tracking-wide">${s.label}</span>`;
 
     const isArchived = p.archived === true;
     const archivedBadge = isArchived
-      ? '<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 text-xs font-medium">Arquivado (90d)</div>'
+      ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold">Arquivado</span>'
       : '';
-
     const warnings = Array.isArray(p.warnings) ? p.warnings : [];
     const warningBadge = warnings.length
-      ? `<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-medium cursor-help" title="${escProj(warnings.join(' | '))}">&#9888; ${warnings.length} aviso${warnings.length>1?'s':''}</div>`
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold cursor-help" title="${escProj(warnings.join(' | '))}">⚠ ${warnings.length}</span>`
       : '';
 
-    const actions = (p.status === 'done' && !isArchived) ? `
-      <a href="projeto.html?job_id=${p.job_id}" onclick="event.stopPropagation()" class="text-indigo-600 hover:text-indigo-800 font-medium">Abrir</a>
-      <a href="revisao.html?job_id=${p.job_id}" onclick="event.stopPropagation()" class="ml-3 text-amber-600 hover:text-amber-800 font-medium">Revisar</a>
-      <a href="${API_BASE}/api/download/${p.job_id}" onclick="event.stopPropagation()" target="_blank" class="ml-3 text-emerald-600 hover:text-emerald-800 font-medium">Baixar</a>
-    ` : isArchived
-      ? '<span class="text-xs text-gray-400">arquivos expirados</span>'
-      : (p.status === 'error' ? '<span class="text-red-500 text-xs">ver erro</span>' : '&mdash;');
+    const clickable = (p.status === 'done' && !isArchived);
+    const cardCls = clickable
+      ? 'group cursor-pointer rounded-2xl border-2 border-gray-100 hover:border-indigo-300 hover:shadow-lg bg-white p-5 transition'
+      : 'rounded-2xl border-2 border-gray-100 bg-white p-5 opacity-90';
 
-    const rowClass = (p.status === 'done' && !isArchived)
-      ? 'hover:bg-indigo-50 cursor-pointer transition'
-      : 'hover:bg-gray-50';
-    const rowClick = (p.status === 'done' && !isArchived)
-      ? `onclick="window.location.href='projeto.html?job_id=${escProj(p.job_id)}'"`
+    const onclickAttr = clickable
+      ? `onclick="if(!event.target.closest('a,button')){window.location.href='projeto.html?job_id=${escProj(p.job_id)}'}"`
       : '';
+
+    const tipologia = p.typology
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold uppercase tracking-wide">${escProj(p.typology)}</span>`
+      : '';
+
+    const actions = clickable ? `
+      <div class="flex items-center gap-3 mt-4 pt-3 border-t border-gray-100">
+        <a href="projeto.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
+           class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 no-underline">Abrir</a>
+        <a href="revisao.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
+           class="text-xs font-semibold text-amber-600 hover:text-amber-800 no-underline">Revisar</a>
+        <a href="${API_BASE}/api/download/${escProj(p.job_id)}" target="_blank" onclick="event.stopPropagation()"
+           class="text-xs font-semibold text-emerald-600 hover:text-emerald-800 no-underline">Baixar XLSX</a>
+      </div>
+    ` : isArchived ? `
+      <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">Arquivos expirados (90 dias)</div>
+    ` : p.status === 'error' ? `
+      <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-red-500">Falha no processamento</div>
+    ` : '';
 
     return `
-      <tr class="${rowClass}" ${rowClick} data-job="${escProj(p.job_id)}">
-        <td class="px-4 py-3">
-          <p class="font-medium text-gray-800">${escProj(p.project_name || 'Sem nome')}</p>
-          <p class="text-xs text-gray-400 font-mono">${escProj(p.job_id)}</p>
+      <article class="${cardCls}" ${onclickAttr} data-job="${escProj(p.job_id)}">
+        <div class="flex items-start justify-between gap-2 mb-3">
+          <div class="min-w-0 flex-1">
+            <h3 class="font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition">${escProj(p.project_name || 'Projeto sem nome')}</h3>
+            <p class="text-[11px] text-gray-400 font-mono mt-0.5">${escProj(p.job_id)}</p>
+          </div>
+          ${statusBadge}
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5 mb-3">
+          ${tipologia}
+          <span class="review-pct"></span>
+          <span class="cron-badge"></span>
           ${warningBadge}
           ${archivedBadge}
-        </td>
-        <td class="px-4 py-3 text-gray-600 capitalize">${escProj(p.typology || '--')}</td>
-        <td class="px-4 py-3 text-gray-700">${p.items_count || '--'} <span class="review-pct block"></span></td>
-        <td class="px-4 py-3 text-gray-600">${p.files_count || 0}</td>
-        <td class="px-4 py-3">${statusBadge}</td>
-        <td class="px-4 py-3 text-gray-500 text-xs">${created}</td>
-        <td class="px-4 py-3 text-right text-sm">${actions}</td>
-      </tr>
+        </div>
+        <div class="grid grid-cols-3 gap-2 text-center mt-3">
+          <div class="rounded-lg bg-gray-50 py-2">
+            <p class="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Itens</p>
+            <p class="text-base font-bold text-gray-800">${p.items_count || '—'}</p>
+          </div>
+          <div class="rounded-lg bg-gray-50 py-2">
+            <p class="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Arquivos</p>
+            <p class="text-base font-bold text-gray-800">${p.files_count || 0}</p>
+          </div>
+          <div class="rounded-lg bg-gray-50 py-2">
+            <p class="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Criado</p>
+            <p class="text-xs font-semibold text-gray-700 mt-0.5">${created}</p>
+          </div>
+        </div>
+        ${actions}
+      </article>
     `;
   }
+
+  // Filtro de busca client-side
+  function filterProjects() {
+    const q = (document.getElementById('projects-search')?.value || '').toLowerCase().trim();
+    const grid = document.getElementById('projects-grid');
+    const noMatch = document.getElementById('projects-no-match');
+    const countEl = document.getElementById('projects-search-count');
+    if (!grid) return;
+    if (!q) {
+      grid.innerHTML = __projectsCache.map(p => renderProjectCard(p)).join('');
+      noMatch.classList.add('hidden');
+      countEl.classList.add('hidden');
+      return;
+    }
+    const filtered = __projectsCache.filter(p => {
+      const hay = `${p.project_name || ''} ${p.typology || ''} ${p.job_id || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+    if (!filtered.length) {
+      grid.innerHTML = '';
+      noMatch.classList.remove('hidden');
+    } else {
+      grid.innerHTML = filtered.map(p => renderProjectCard(p)).join('');
+      noMatch.classList.add('hidden');
+    }
+    countEl.textContent = `${filtered.length} de ${__projectsCache.length}`;
+    countEl.classList.remove('hidden');
+  }
+  // Liga listener de busca uma vez. O script roda depois do DOM, então não
+  // precisa esperar DOMContentLoaded — mas o input pode estar dentro de uma
+  // tab oculta. Tenta agora e tolera ausência.
+  (function bindProjectsSearch() {
+    const inp = document.getElementById('projects-search');
+    if (inp && !inp.__bound) {
+      inp.addEventListener('input', filterProjects);
+      inp.__bound = true;
+    }
+  })();
 
   function escProj(s) {
     return String(s || '').replace(/[&<>"']/g, c =>
