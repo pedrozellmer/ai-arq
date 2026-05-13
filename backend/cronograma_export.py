@@ -1,19 +1,40 @@
 # -*- coding: utf-8 -*-
-"""Exportação do cronograma pra PNG / PDF / PPTX.
+"""Exportação profissional do cronograma — PDF + PPTX.
 
-Funções puras que recebem o JSON do gerar_cronograma() e produzem arquivo.
+Aplica princípios de diagramação profissional:
+- Hierarquia visual (F1 hero / F2 apoio / F3 diagramas / F4 texto)
+- Grid 12-col com margens 2cm
+- Tipografia hierárquica (H1 36 / H2 18 / body 10 / caption 8)
+- Paleta AI.arq consistente (indigo + cyan + dark + cream)
+- Espaço em branco generoso
+- Cards / boxes pra agrupar info
+- Carimbo de prancha (nº + data + autoria)
 """
 import os
 import tempfile
+from datetime import datetime as _dt, date as _date
 from typing import Dict, Optional
-from datetime import datetime as _dt
+
+
+# Paleta AI.arq (hex)
+COLOR_INDIGO = '#4F46E5'
+COLOR_INDIGO_DARK = '#3730A3'
+COLOR_CYAN = '#06B6D4'
+COLOR_DARK = '#0F172A'
+COLOR_DARK_2 = '#1E293B'
+COLOR_GRAY_TX = '#475569'
+COLOR_GRAY_LIGHT = '#94A3B8'
+COLOR_BORDER = '#E2E8F0'
+COLOR_CREAM = '#FAF7F0'
+COLOR_WHITE = '#FFFFFF'
+COLOR_AMBER = '#F59E0B'
 
 
 # ─── PNGs auxiliares (Gantt + Curva S) ────────────────────────────
 
 def gerar_gantt_png(cronograma: Dict, output_path: str,
-                     titulo: str = 'Cronograma da obra') -> str:
-    """Gera Gantt visual PNG via matplotlib."""
+                     titulo: str = '') -> str:
+    """Gantt profissional. Sem título embutido (vai no layout do PDF/PPT)."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -23,51 +44,65 @@ def gerar_gantt_png(cronograma: Dict, output_path: str,
     if not fases:
         fig, ax = plt.subplots(figsize=(12, 4))
         ax.text(0.5, 0.5, 'Cronograma sem fases', ha='center', va='center',
-                fontsize=14, color='#94A3B8')
+                fontsize=14, color=COLOR_GRAY_LIGHT)
         ax.axis('off')
-        plt.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')
+        plt.savefig(output_path, dpi=160, bbox_inches='tight',
+                    facecolor='white', edgecolor='none')
         plt.close()
         return output_path
 
-    fig, ax = plt.subplots(figsize=(14, max(5, len(fases) * 0.55)))
+    h = max(4.5, len(fases) * 0.45)
+    fig, ax = plt.subplots(figsize=(14, h))
+    fig.patch.set_facecolor('white')
+
     for i, f in enumerate(fases):
         ini = _dt.fromisoformat(f['inicio'])
         fim = _dt.fromisoformat(f['fim'])
-        cor = f.get('cor', '#4F46E5')
+        cor = f.get('cor', COLOR_INDIGO)
+        # Barra com borda suave
         ax.barh(i, (fim - ini).days, left=mdates.date2num(ini),
-                color=cor, alpha=0.88, edgecolor='white', linewidth=1.2)
+                color=cor, alpha=0.95, edgecolor='white',
+                linewidth=1.5, height=0.65)
+        # Label dias dentro
         meio = ini + (fim - ini) / 2
-        ax.text(mdates.date2num(meio), i, f"{f['dur_dias']}d",
-                ha='center', va='center', color='white',
-                fontsize=9, fontweight='bold')
+        dur_txt = f"{f['dur_dias']}d"
+        # Só mostra se barra suficientemente larga
+        if (fim - ini).days >= 14:
+            ax.text(mdates.date2num(meio), i, dur_txt,
+                    ha='center', va='center', color='white',
+                    fontsize=10, fontweight='600',
+                    family='sans-serif')
 
     ax.set_yticks(list(range(len(fases))))
-    ax.set_yticklabels([f['label'] for f in fases], fontsize=10)
+    ax.set_yticklabels([f['label'] for f in fases], fontsize=11,
+                       color=COLOR_DARK, family='sans-serif')
     ax.invert_yaxis()
     ax.xaxis_date()
     ax.xaxis.set_major_locator(mdates.MonthLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
+    ax.tick_params(axis='x', colors=COLOR_GRAY_TX, labelsize=10)
+    ax.tick_params(axis='y', colors=COLOR_DARK, labelsize=10)
 
-    resumo = cronograma.get('resumo', {})
-    sub = (f"Início: {resumo.get('data_inicio', '')} · "
-           f"Término: {resumo.get('data_fim', '')} · "
-           f"Duração: {resumo.get('duracao_dias_reais', '')} dias")
-    ax.set_title(f'{titulo}\n{sub}', fontsize=13, fontweight='bold', pad=15)
-    ax.grid(axis='x', alpha=0.3, linestyle='--')
+    # Remove spines
+    for spine in ['top', 'right']:
+        ax.spines[spine].set_visible(False)
+    ax.spines['left'].set_color(COLOR_BORDER)
+    ax.spines['bottom'].set_color(COLOR_BORDER)
+
+    # Grid suave só horizontal
+    ax.grid(axis='x', alpha=0.25, linestyle='-', linewidth=0.6,
+            color=COLOR_GRAY_LIGHT)
     ax.set_axisbelow(True)
-    fig.text(0.99, 0.01,
-              'gerado por AI.arq · validar com engenheiro responsável',
-              ha='right', va='bottom', fontsize=8, color='#94A3B8',
-              style='italic')
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')
+    plt.savefig(output_path, dpi=160, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close()
     return output_path
 
 
 def gerar_curva_s_png(cronograma: Dict, output_path: str) -> str:
-    """Curva S sigmoidal PNG."""
+    """Curva S sigmoidal profissional."""
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
@@ -77,49 +112,62 @@ def gerar_curva_s_png(cronograma: Dict, output_path: str) -> str:
     if not curva:
         fig, ax = plt.subplots(figsize=(12, 6))
         ax.text(0.5, 0.5, 'Sem curva S', ha='center', va='center',
-                fontsize=14, color='#94A3B8')
+                fontsize=14, color=COLOR_GRAY_LIGHT)
         ax.axis('off')
-        plt.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')
+        plt.savefig(output_path, dpi=160, bbox_inches='tight',
+                    facecolor='white', edgecolor='none')
         plt.close()
         return output_path
 
-    fig, ax = plt.subplots(figsize=(12, 6))
+    fig, ax = plt.subplots(figsize=(13, 6))
+    fig.patch.set_facecolor('white')
+
     datas = [_dt.fromisoformat(p['data_fim_mes']) for p in curva]
     pcts = [p['pct_acumulado'] for p in curva]
-    ax.plot(datas, pcts, color='#4F46E5', linewidth=3, label='Avanço previsto')
-    ax.fill_between(datas, pcts, alpha=0.15, color='#4F46E5')
 
+    # Linha + área
+    ax.fill_between(datas, pcts, alpha=0.12, color=COLOR_INDIGO)
+    ax.plot(datas, pcts, color=COLOR_INDIGO, linewidth=3,
+            solid_joinstyle='round', solid_capstyle='round')
+
+    # Marcos com anotação
     for pct_alvo in (25, 50, 75, 100):
         for i, p in enumerate(pcts):
             if p >= pct_alvo:
-                ax.axhline(pct_alvo, color='#94A3B8', alpha=0.3,
-                           linestyle=':', linewidth=1)
-                ax.scatter([datas[i]], [pct_alvo], color='#22D3EE',
-                           s=70, zorder=5)
-                ax.annotate(f'{pct_alvo}%', xy=(datas[i], pct_alvo),
-                            xytext=(6, -16), textcoords='offset points',
-                            fontsize=9, color='#1E40AF', fontweight='bold')
+                ax.axhline(pct_alvo, color=COLOR_BORDER, alpha=0.5,
+                           linestyle='-', linewidth=0.8, zorder=0)
+                ax.scatter([datas[i]], [pct_alvo], color=COLOR_CYAN,
+                           s=90, zorder=5, edgecolor='white', linewidth=2)
+                ax.annotate(f'{pct_alvo}%',
+                            xy=(datas[i], pct_alvo),
+                            xytext=(8, -16), textcoords='offset points',
+                            fontsize=10, color=COLOR_INDIGO_DARK,
+                            fontweight='bold', family='sans-serif')
                 break
 
-    ax.set_ylabel('% Avanço acumulado', fontsize=11)
-    ax.set_title('Curva S de Avanço Previsto (modelo sigmoidal)',
-                 fontsize=13, fontweight='bold', pad=15)
+    ax.set_ylabel('% Avanço acumulado', fontsize=11, color=COLOR_GRAY_TX,
+                  family='sans-serif')
     ax.xaxis.set_major_locator(mdates.MonthLocator())
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%b/%y'))
-    ax.grid(alpha=0.3, linestyle='--')
+    ax.tick_params(axis='x', colors=COLOR_GRAY_TX, labelsize=10)
+    ax.tick_params(axis='y', colors=COLOR_GRAY_TX, labelsize=10)
+    for spine in ['top', 'right']:
+        ax.spines[spine].set_visible(False)
+    ax.spines['left'].set_color(COLOR_BORDER)
+    ax.spines['bottom'].set_color(COLOR_BORDER)
     ax.set_ylim(0, 105)
     ax.set_axisbelow(True)
-    fig.text(0.99, 0.01, 'gerado por AI.arq', ha='right', va='bottom',
-             fontsize=8, color='#94A3B8', style='italic')
+    ax.grid(alpha=0.15, linestyle='-', linewidth=0.6,
+            color=COLOR_GRAY_LIGHT)
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=120, bbox_inches='tight', facecolor='white')
+    plt.savefig(output_path, dpi=160, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
     plt.close()
     return output_path
 
 
 def _format_br(iso_date: Optional[str]) -> str:
-    """ISO YYYY-MM-DD → DD/MM/YYYY."""
     if not iso_date or not isinstance(iso_date, str):
         return ''
     parts = iso_date.split('-')
@@ -128,105 +176,365 @@ def _format_br(iso_date: Optional[str]) -> str:
     return iso_date
 
 
-# ─── PDF ──────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════
+#  PDF — Layout profissional A4 paisagem
+# ═════════════════════════════════════════════════════════════════
 
 def exportar_pdf(cronograma: Dict, output_path: str, titulo: str,
                   job_id: str = '') -> str:
-    """Gera PDF executivo com capa + Gantt + Curva S + caminho crítico + marcos."""
+    """PDF executivo com diagramação profissional.
+
+    Estrutura:
+      - Página 1: Capa fullbleed (indigo) com hero + dados
+      - Página 2: Gantt (foco principal F1)
+      - Página 3: Curva S de avanço previsto
+      - Página 4: Caminho crítico (tabela executiva)
+      - Página 5: Marcos normativos + ressalvas
+    """
     from reportlab.lib.pagesizes import A4, landscape
-    from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer,
-                                     Image, PageBreak, Table, TableStyle)
+    from reportlab.platypus import (BaseDocTemplate, Frame, PageTemplate,
+                                     Paragraph, Spacer, Image, PageBreak,
+                                     Table, TableStyle, KeepTogether,
+                                     FrameBreak, NextPageTemplate)
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_LEFT, TA_RIGHT, TA_CENTER
     from reportlab.lib import colors
-    from reportlab.lib.units import cm
+    from reportlab.lib.units import cm, mm
+    from reportlab.pdfgen import canvas
 
     tmp_dir = tempfile.mkdtemp()
     gantt_png = os.path.join(tmp_dir, 'gantt.png')
     curva_png = os.path.join(tmp_dir, 'curva.png')
-    gerar_gantt_png(cronograma, gantt_png, titulo=titulo)
+    gerar_gantt_png(cronograma, gantt_png)
     gerar_curva_s_png(cronograma, curva_png)
 
-    doc = SimpleDocTemplate(output_path, pagesize=landscape(A4),
-                            leftMargin=2*cm, rightMargin=2*cm,
-                            topMargin=1.5*cm, bottomMargin=1.5*cm)
+    resumo = cronograma.get('resumo', {})
+    data_emissao = _dt.now().strftime('%d/%m/%Y')
+
+    # Tamanho A4 paisagem
+    PAGE_W, PAGE_H = landscape(A4)
+    MARGIN = 2 * cm
+
+    # Tipografia — defino estilos antes
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('TitleAIarq', parent=styles['Title'],
-                                  fontSize=20,
-                                  textColor=colors.HexColor('#0F172A'),
-                                  spaceAfter=12, alignment=0)
-    h2_style = ParagraphStyle('H2AIarq', parent=styles['Heading2'],
-                               fontSize=13,
-                               textColor=colors.HexColor('#4F46E5'),
-                               spaceAfter=8, spaceBefore=12)
-    body_style = ParagraphStyle('BodyAIarq', parent=styles['BodyText'],
-                                 fontSize=10,
-                                 textColor=colors.HexColor('#334155'),
-                                 leading=14)
-    small_style = ParagraphStyle('SmallAIarq', parent=styles['BodyText'],
-                                  fontSize=8,
-                                  textColor=colors.HexColor('#94A3B8'),
-                                  leading=11)
+    s_title = ParagraphStyle('T', parent=styles['Title'], fontName='Helvetica-Bold',
+                              fontSize=32, leading=38,
+                              textColor=colors.HexColor(COLOR_WHITE),
+                              alignment=TA_LEFT, spaceAfter=0)
+    s_subtitle = ParagraphStyle('ST', parent=styles['Heading2'],
+                                 fontName='Helvetica', fontSize=15, leading=20,
+                                 textColor=colors.HexColor('#C7D2FE'),
+                                 alignment=TA_LEFT, spaceAfter=0)
+    s_capa_meta = ParagraphStyle('CM', parent=styles['BodyText'],
+                                  fontName='Helvetica', fontSize=11, leading=16,
+                                  textColor=colors.HexColor('#E0E7FF'),
+                                  alignment=TA_LEFT)
+    s_h1 = ParagraphStyle('H1', parent=styles['Heading1'],
+                           fontName='Helvetica-Bold', fontSize=24, leading=30,
+                           textColor=colors.HexColor(COLOR_DARK),
+                           alignment=TA_LEFT, spaceAfter=4, spaceBefore=0)
+    s_eyebrow = ParagraphStyle('EB', parent=styles['BodyText'],
+                                fontName='Helvetica-Bold', fontSize=9, leading=12,
+                                textColor=colors.HexColor(COLOR_INDIGO),
+                                alignment=TA_LEFT, spaceAfter=4)
+    s_body = ParagraphStyle('B', parent=styles['BodyText'],
+                             fontName='Helvetica', fontSize=10, leading=15,
+                             textColor=colors.HexColor(COLOR_DARK_2),
+                             alignment=TA_LEFT)
+    s_caption = ParagraphStyle('CAP', parent=styles['BodyText'],
+                                fontName='Helvetica-Oblique', fontSize=8,
+                                leading=11,
+                                textColor=colors.HexColor(COLOR_GRAY_LIGHT),
+                                alignment=TA_LEFT)
+    s_meta_val = ParagraphStyle('MV', parent=styles['BodyText'],
+                                 fontName='Helvetica-Bold', fontSize=18,
+                                 leading=22,
+                                 textColor=colors.HexColor(COLOR_DARK),
+                                 alignment=TA_LEFT)
+    s_meta_lbl = ParagraphStyle('ML', parent=styles['BodyText'],
+                                 fontName='Helvetica', fontSize=9, leading=11,
+                                 textColor=colors.HexColor(COLOR_GRAY_TX),
+                                 alignment=TA_LEFT)
+
+    # ─── Header/Footer helpers (canvas) ──
+    def header_footer(canv, doc):
+        canv.saveState()
+        # Footer linha sutil
+        canv.setStrokeColor(colors.HexColor(COLOR_BORDER))
+        canv.setLineWidth(0.4)
+        canv.line(MARGIN, MARGIN - 6*mm, PAGE_W - MARGIN, MARGIN - 6*mm)
+        # Logo texto AI.arq (header)
+        canv.setFont('Helvetica-Bold', 11)
+        canv.setFillColor(colors.HexColor(COLOR_INDIGO))
+        canv.drawString(MARGIN, PAGE_H - MARGIN + 3*mm, 'AI.arq')
+        canv.setFont('Helvetica', 9)
+        canv.setFillColor(colors.HexColor(COLOR_GRAY_TX))
+        canv.drawString(MARGIN + 17*mm, PAGE_H - MARGIN + 3*mm,
+                        '· Cronograma da obra')
+        # Carimbo direita topo
+        canv.setFont('Helvetica', 8)
+        canv.setFillColor(colors.HexColor(COLOR_GRAY_LIGHT))
+        carimbo = f'ai.arq.br  ·  emitido {data_emissao}'
+        if job_id:
+            carimbo += f'  ·  ref {job_id}'
+        canv.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN + 3*mm, carimbo)
+        # Footer: nº página
+        page_num = canv.getPageNumber()
+        canv.setFont('Helvetica', 9)
+        canv.setFillColor(colors.HexColor(COLOR_GRAY_LIGHT))
+        canv.drawRightString(PAGE_W - MARGIN, MARGIN - 12*mm,
+                             f'{page_num}')
+        canv.drawString(MARGIN, MARGIN - 12*mm, titulo[:70])
+        canv.restoreState()
+
+    def capa_canvas(canv, doc):
+        """Capa fullbleed indigo gradient simulado."""
+        canv.saveState()
+        # Background indigo sólido
+        canv.setFillColor(colors.HexColor(COLOR_INDIGO))
+        canv.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
+        # Faixa cyan no topo
+        canv.setFillColor(colors.HexColor(COLOR_CYAN))
+        canv.rect(0, PAGE_H - 8*mm, PAGE_W, 8*mm, fill=1, stroke=0)
+        # Logo AI.arq no canto
+        canv.setFillColor(colors.white)
+        canv.setFont('Helvetica-Bold', 14)
+        canv.drawString(MARGIN, PAGE_H - MARGIN, 'AI.arq')
+        canv.setFont('Helvetica', 10)
+        canv.setFillColor(colors.HexColor('#C7D2FE'))
+        canv.drawString(MARGIN + 22*mm, PAGE_H - MARGIN,
+                        'Cronograma físico-financeiro')
+        # Carimbo
+        canv.setFont('Helvetica', 9)
+        canv.setFillColor(colors.HexColor('#A5B4FC'))
+        carimbo = f'emitido {data_emissao}'
+        if job_id:
+            carimbo += f'  ·  ref {job_id}'
+        canv.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN, carimbo)
+        # Rodapé capa
+        canv.setFont('Helvetica', 9)
+        canv.setFillColor(colors.HexColor('#A5B4FC'))
+        canv.drawString(MARGIN, MARGIN - 6*mm,
+                        'ai.arq.br · Quantitativo com IA pra arquitetos brasileiros')
+        canv.drawRightString(PAGE_W - MARGIN, MARGIN - 6*mm,
+                             'Página 1 de 5')
+        canv.restoreState()
+
+    # ─── Doc com 2 page templates ──
+    doc = BaseDocTemplate(
+        output_path, pagesize=landscape(A4),
+        leftMargin=MARGIN, rightMargin=MARGIN,
+        topMargin=MARGIN + 8*mm, bottomMargin=MARGIN + 6*mm,
+        title='Cronograma da obra — AI.arq', author='AI.arq')
+
+    frame_capa = Frame(MARGIN, MARGIN + 10*mm,
+                       PAGE_W - 2*MARGIN, PAGE_H - 2*MARGIN - 20*mm,
+                       id='capa', showBoundary=0,
+                       leftPadding=0, rightPadding=0,
+                       topPadding=0, bottomPadding=0)
+    frame_normal = Frame(MARGIN, MARGIN,
+                         PAGE_W - 2*MARGIN, PAGE_H - 2*MARGIN - 6*mm,
+                         id='normal', showBoundary=0,
+                         leftPadding=0, rightPadding=0,
+                         topPadding=0, bottomPadding=0)
+
+    tpl_capa = PageTemplate(id='capa', frames=[frame_capa],
+                             onPage=capa_canvas)
+    tpl_normal = PageTemplate(id='normal', frames=[frame_normal],
+                               onPage=header_footer)
+    doc.addPageTemplates([tpl_capa, tpl_normal])
 
     story = []
-    resumo = cronograma.get('resumo', {})
 
-    story.append(Paragraph('Cronograma da obra', title_style))
-    story.append(Paragraph(titulo, h2_style))
-    story.append(Paragraph(
-        f"<b>Início:</b> {_format_br(resumo.get('data_inicio'))} &nbsp;·&nbsp; "
-        f"<b>Término previsto:</b> {_format_br(resumo.get('data_fim'))} &nbsp;·&nbsp; "
-        f"<b>Duração:</b> {resumo.get('duracao_dias_reais', '?')} dias &nbsp;·&nbsp; "
-        f"<b>Fases:</b> {resumo.get('n_fases', 0)}",
-        body_style))
-    story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph('Gantt', h2_style))
-    story.append(Image(gantt_png, width=25*cm, height=12*cm, kind='proportional'))
-    story.append(PageBreak())
-    story.append(Paragraph('Curva S de Avanço Previsto', h2_style))
-    story.append(Image(curva_png, width=25*cm, height=12*cm, kind='proportional'))
-    story.append(Spacer(1, 0.3*cm))
-    story.append(Paragraph(
-        'Modelo sigmoidal (logístico, k=10). Distribuição real de obra: '
-        'arranque suave, pico no meio, finalização gradual.',
-        small_style))
+    # ═══ PÁGINA 1 — CAPA ═══
+    # Espaço pra empurrar título pro meio
+    story.append(Spacer(1, 6*cm))
+    story.append(Paragraph('CRONOGRAMA', s_title))
+    story.append(Paragraph('DA OBRA', s_title))
+    story.append(Spacer(1, 0.6*cm))
+    story.append(Paragraph(titulo or 'Projeto', s_subtitle))
+    story.append(Spacer(1, 1.4*cm))
+
+    # Mini cards de meta na capa
+    meta_html = (
+        f'<font color="{COLOR_WHITE}" size="22"><b>'
+        f"{_format_br(resumo.get('data_inicio'))} </b></font><br/>"
+        f'<font color="#A5B4FC" size="10">INÍCIO PREVISTO</font>'
+    )
+    meta2_html = (
+        f'<font color="{COLOR_WHITE}" size="22"><b>'
+        f"{_format_br(resumo.get('data_fim'))} </b></font><br/>"
+        f'<font color="#A5B4FC" size="10">TÉRMINO PREVISTO</font>'
+    )
+    meta3_html = (
+        f'<font color="{COLOR_WHITE}" size="22"><b>'
+        f"{resumo.get('duracao_dias_reais', '—')} dias</b></font><br/>"
+        f'<font color="#A5B4FC" size="10">DURAÇÃO TOTAL</font>'
+    )
+    meta4_html = (
+        f'<font color="{COLOR_WHITE}" size="22"><b>'
+        f"{resumo.get('n_fases', 0)} fases</b></font><br/>"
+        f'<font color="#A5B4FC" size="10">DISCIPLINAS</font>'
+    )
+    meta_table = Table([
+        [Paragraph(meta_html, s_capa_meta), Paragraph(meta2_html, s_capa_meta),
+         Paragraph(meta3_html, s_capa_meta), Paragraph(meta4_html, s_capa_meta)]
+    ], colWidths=[6.2*cm, 6.2*cm, 6.2*cm, 6.2*cm])
+    meta_table.setStyle(TableStyle([
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
+        ('TOPPADDING', (0, 0), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+    ]))
+    story.append(meta_table)
+
+    # ═══ PÁGINA 2 — GANTT ═══
+    # Muda pro template normal (insere ANTES do PageBreak)
+    story.append(NextPageTemplate('normal'))
     story.append(PageBreak())
 
+    story.append(Paragraph('GANTT', s_eyebrow))
+    story.append(Paragraph('Cronograma físico das disciplinas', s_h1))
+    story.append(Spacer(1, 0.3*cm))
+    # Imagem Gantt
+    gantt_w = PAGE_W - 2*MARGIN
+    story.append(Image(gantt_png, width=gantt_w, height=PAGE_H - 7*cm,
+                       kind='proportional'))
+    story.append(Spacer(1, 0.4*cm))
+    story.append(Paragraph(
+        '<b>Como ler:</b> cada barra representa uma disciplina; a posição '
+        'horizontal mostra início e fim previstos; a largura indica duração '
+        'em dias. Cores diferenciam categorias construtivas. Atraso em '
+        'fases do caminho crítico atrasa a obra inteira (ver página 4).',
+        s_caption))
+
+    # ═══ PÁGINA 3 — CURVA S ═══
+    story.append(PageBreak())
+    story.append(Paragraph('CURVA S · AVANÇO PREVISTO', s_eyebrow))
+    story.append(Paragraph('Como a obra progride no tempo', s_h1))
+    story.append(Spacer(1, 0.3*cm))
+    story.append(Image(curva_png, width=gantt_w, height=PAGE_H - 7.5*cm,
+                       kind='proportional'))
+    story.append(Spacer(1, 0.4*cm))
+    story.append(Paragraph(
+        '<b>Modelo sigmoidal (logístico, k=10).</b> Reflete distribuição real '
+        'de obra — arranque suave (canteiro+fundação), pico de execução no '
+        'meio (estrutura+vedação+instalações), finalização gradual '
+        '(acabamentos). Marcos 25/50/75/100% sinalizados pra acompanhamento '
+        'mensal (Lei 14.133 Art 117).',
+        s_caption))
+
+    # ═══ PÁGINA 4 — CAMINHO CRÍTICO ═══
     cc = resumo.get('caminho_critico', [])
     if cc:
-        story.append(Paragraph('Caminho crítico — Top 5 fases mais longas', h2_style))
-        rows = [['Posição', 'Fase', 'Duração (dias)']]
+        story.append(PageBreak())
+        story.append(Paragraph('CAMINHO CRÍTICO', s_eyebrow))
+        story.append(Paragraph('Top 5 fases mais longas', s_h1))
+        story.append(Spacer(1, 0.1*cm))
+        story.append(Paragraph(
+            'Atraso em qualquer dessas fases atrasa a obra inteira. '
+            'Priorize fornecedor, equipe e gestão de risco aqui.',
+            s_body))
+        story.append(Spacer(1, 0.5*cm))
+
+        rows = [['#', 'Disciplina', 'Duração']]
         for i, item in enumerate(cc, 1):
-            rows.append([str(i), item.get('label', ''),
-                         str(item.get('dur_dias', ''))])
-        t = Table(rows, colWidths=[2.5*cm, 18*cm, 4*cm])
+            rows.append([
+                str(i),
+                item.get('label', ''),
+                f"{item.get('dur_dias', '?')} dias"
+            ])
+        t = Table(rows, colWidths=[1.5*cm, 18*cm, 4*cm])
         t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#4F46E5')),
+            # Header
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor(COLOR_INDIGO)),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-            ('FONTSIZE', (0, 0), (-1, -1), 10),
-            ('PADDING', (0, 0), (-1, -1), 8),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#CBD5E1')),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 10),
+            ('ALIGN', (0, 0), (0, 0), 'CENTER'),
+            ('ALIGN', (-1, 0), (-1, 0), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
+            # Body
+            ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+            ('FONTSIZE', (0, 1), (-1, -1), 12),
+            ('TEXTCOLOR', (0, 1), (-1, -1), colors.HexColor(COLOR_DARK)),
+            ('ALIGN', (0, 1), (0, -1), 'CENTER'),
+            ('ALIGN', (-1, 1), (-1, -1), 'CENTER'),
+            ('FONTNAME', (-1, 1), (-1, -1), 'Helvetica-Bold'),
+            ('TEXTCOLOR', (-1, 1), (-1, -1), colors.HexColor(COLOR_INDIGO)),
+            ('TOPPADDING', (0, 1), (-1, -1), 12),
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 12),
+            ('LEFTPADDING', (1, 0), (1, -1), 14),
+            ('LINEBELOW', (0, 0), (-1, -2), 0.5,
+             colors.HexColor(COLOR_BORDER)),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1),
              [colors.HexColor('#F8FAFC'), colors.white]),
         ]))
         story.append(t)
-        story.append(Spacer(1, 0.5*cm))
+
+    # ═══ PÁGINA 5 — MARCOS NORMATIVOS + RESSALVAS ═══
+    story.append(PageBreak())
+    story.append(Paragraph('REFERÊNCIAS', s_eyebrow))
+    story.append(Paragraph('Marcos normativos e ressalvas', s_h1))
+    story.append(Spacer(1, 0.5*cm))
 
     marcos = cronograma.get('marcos_legais', [])
     if marcos:
-        story.append(Paragraph('Marcos normativos considerados', h2_style))
-        for m in marcos:
-            story.append(Paragraph(f'▸ {m}', body_style))
-        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph(
+            '<b>Marcos considerados na elaboração deste cronograma:</b>',
+            s_body))
+        story.append(Spacer(1, 0.2*cm))
+        # Tabela com 2 colunas de marcos
+        n = len(marcos)
+        mid = (n + 1) // 2
+        col1 = marcos[:mid]
+        col2 = marcos[mid:]
+        # Empareia até maior tamanho
+        rows = []
+        for i in range(max(len(col1), len(col2))):
+            a = col1[i] if i < len(col1) else ''
+            b = col2[i] if i < len(col2) else ''
+            rows.append([
+                Paragraph(f'▸ {a}', s_body) if a else '',
+                Paragraph(f'▸ {b}', s_body) if b else '',
+            ])
+        marc_table = Table(rows, colWidths=[12*cm, 12*cm])
+        marc_table.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 8),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(marc_table)
+        story.append(Spacer(1, 0.8*cm))
 
-    ressalva = cronograma.get('ressalva', '')
-    if ressalva:
-        story.append(Paragraph('Ressalvas', h2_style))
-        story.append(Paragraph(ressalva, body_style))
+    # Box ressalva amarelo
+    story.append(Paragraph('<b>Ressalvas</b>', s_body))
+    story.append(Spacer(1, 0.2*cm))
+    ressalva_text = cronograma.get('ressalva', '')
+    ressalva_box = Table(
+        [[Paragraph(f'<b>⚠ Cronograma de referência.</b> {ressalva_text}',
+                    s_body)]],
+        colWidths=[PAGE_W - 2*MARGIN])
+    ressalva_box.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#FEF3C7')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor(COLOR_AMBER)),
+        ('LEFTPADDING', (0, 0), (-1, -1), 16),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 16),
+        ('TOPPADDING', (0, 0), (-1, -1), 14),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 14),
+    ]))
+    story.append(ressalva_box)
+    story.append(Spacer(1, 1*cm))
 
-    story.append(Spacer(1, 0.8*cm))
+    # Linha fim
     story.append(Paragraph(
-        f'Gerado por AI.arq · ai.arq.br · job {job_id}', small_style))
+        'Gerado por AI.arq · ai.arq.br · Quantitativo com IA pra '
+        'arquitetos brasileiros', s_caption))
 
     doc.build(story)
 
@@ -237,21 +545,23 @@ def exportar_pdf(cronograma: Dict, output_path: str, titulo: str,
     return output_path
 
 
-# ─── PPTX ─────────────────────────────────────────────────────────
+# ═════════════════════════════════════════════════════════════════
+#  PPTX — Layout executivo 16:9
+# ═════════════════════════════════════════════════════════════════
 
 def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
                    job_id: str = '') -> str:
-    """PPT executivo com 5 slides."""
+    """PPT 16:9 com 5 slides executivos limpos."""
     from pptx import Presentation
-    from pptx.util import Inches, Pt
+    from pptx.util import Inches, Pt, Emu
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_SHAPE
-    from pptx.enum.text import PP_ALIGN
+    from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
 
     tmp_dir = tempfile.mkdtemp()
     gantt_png = os.path.join(tmp_dir, 'gantt.png')
     curva_png = os.path.join(tmp_dir, 'curva.png')
-    gerar_gantt_png(cronograma, gantt_png, titulo=titulo)
+    gerar_gantt_png(cronograma, gantt_png)
     gerar_curva_s_png(cronograma, curva_png)
 
     prs = Presentation()
@@ -259,15 +569,32 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
     prs.slide_height = Inches(7.5)
     blank = prs.slide_layouts[6]
 
-    INDIGO = RGBColor(0x4F, 0x46, 0xE5)
-    DARK = RGBColor(0x0F, 0x17, 0x2A)
-    GRAY = RGBColor(0x64, 0x74, 0x8B)
+    # Paleta como RGBColor
+    rgb_indigo = RGBColor(0x4F, 0x46, 0xE5)
+    rgb_indigo_dark = RGBColor(0x37, 0x30, 0xA3)
+    rgb_cyan = RGBColor(0x06, 0xB6, 0xD4)
+    rgb_dark = RGBColor(0x0F, 0x17, 0x2A)
+    rgb_dark2 = RGBColor(0x1E, 0x29, 0x3B)
+    rgb_gray = RGBColor(0x47, 0x55, 0x69)
+    rgb_gray_light = RGBColor(0x94, 0xA3, 0xB8)
+    rgb_white = RGBColor(0xFF, 0xFF, 0xFF)
+    rgb_indigo_text = RGBColor(0xC7, 0xD2, 0xFE)
+    rgb_border = RGBColor(0xE2, 0xE8, 0xF0)
+    rgb_amber_bg = RGBColor(0xFE, 0xF3, 0xC7)
+
+    resumo = cronograma.get('resumo', {})
+    data_emissao = _dt.now().strftime('%d/%m/%Y')
 
     def add_text(slide, text, left, top, width, height, size=14, bold=False,
-                  color=DARK, align='left'):
+                  color=rgb_dark, align='left', font='Calibri',
+                  anchor='top'):
         tb = slide.shapes.add_textbox(left, top, width, height)
         tf = tb.text_frame
         tf.word_wrap = True
+        tf.vertical_anchor = {
+            'top': MSO_ANCHOR.TOP, 'middle': MSO_ANCHOR.MIDDLE,
+            'bottom': MSO_ANCHOR.BOTTOM
+        }[anchor]
         p = tf.paragraphs[0]
         p.alignment = {'left': PP_ALIGN.LEFT, 'center': PP_ALIGN.CENTER,
                        'right': PP_ALIGN.RIGHT}[align]
@@ -276,85 +603,210 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
         run.font.size = Pt(size)
         run.font.bold = bold
         run.font.color.rgb = color
-        run.font.name = 'Calibri'
+        run.font.name = font
         return tb
 
-    resumo = cronograma.get('resumo', {})
+    def add_rect(slide, left, top, width, height, fill_rgb, line=False):
+        shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE,
+                                        left, top, width, height)
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = fill_rgb
+        if not line:
+            shape.line.fill.background()
+        return shape
 
-    # SLIDE 1 — Capa
+    def add_header(slide):
+        """Header com logo AI.arq no canto + carimbo direita."""
+        add_text(slide, 'AI.arq', Inches(0.5), Inches(0.25),
+                  Inches(2), Inches(0.4), size=14, bold=True,
+                  color=rgb_indigo)
+        add_text(slide, '· Cronograma da obra',
+                  Inches(1.45), Inches(0.27),
+                  Inches(5), Inches(0.4), size=11, color=rgb_gray)
+        carimbo = f'ai.arq.br · emitido {data_emissao}'
+        if job_id:
+            carimbo += f' · ref {job_id}'
+        add_text(slide, carimbo, Inches(0.5), Inches(0.27),
+                  Inches(12.3), Inches(0.4), size=9, color=rgb_gray_light,
+                  align='right')
+
+    def add_footer(slide, n_slide):
+        # Linha sutil
+        line = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE,
+                                       Inches(0.5), Inches(7.0),
+                                       Inches(12.3), Inches(0.01))
+        line.fill.solid()
+        line.fill.fore_color.rgb = rgb_border
+        line.line.fill.background()
+        add_text(slide, titulo[:70], Inches(0.5), Inches(7.1),
+                  Inches(10), Inches(0.3), size=9, color=rgb_gray_light)
+        add_text(slide, f'{n_slide} / 5', Inches(0.5), Inches(7.1),
+                  Inches(12.3), Inches(0.3), size=9, color=rgb_gray_light,
+                  align='right')
+
+    # ═══ SLIDE 1 — CAPA ═══
     s1 = prs.slides.add_slide(blank)
-    bg = s1.shapes.add_shape(MSO_SHAPE.RECTANGLE, 0, 0,
-                              prs.slide_width, prs.slide_height)
-    bg.fill.solid()
-    bg.fill.fore_color.rgb = INDIGO
-    bg.line.fill.background()
-    add_text(s1, 'CRONOGRAMA DA OBRA', Inches(0.6), Inches(2.5),
-              Inches(12), Inches(1.2), size=44, bold=True,
-              color=RGBColor(255, 255, 255))
-    add_text(s1, titulo, Inches(0.6), Inches(3.8),
-              Inches(12), Inches(1), size=22, color=RGBColor(220, 230, 255))
-    add_text(s1,
-              f"Início {_format_br(resumo.get('data_inicio'))}  ·  "
-              f"Término {_format_br(resumo.get('data_fim'))}  ·  "
-              f"{resumo.get('n_fases', 0)} fases",
-              Inches(0.6), Inches(5.5), Inches(12), Inches(0.6), size=16,
-              color=RGBColor(190, 210, 250))
-    add_text(s1, 'Gerado por AI.arq · ai.arq.br',
-              Inches(0.6), Inches(6.9), Inches(12), Inches(0.4), size=10,
-              color=RGBColor(160, 180, 230))
+    add_rect(s1, 0, 0, prs.slide_width, prs.slide_height, rgb_indigo)
+    # Faixa cyan no topo
+    add_rect(s1, 0, 0, prs.slide_width, Inches(0.25), rgb_cyan)
+    # Logo + carimbo
+    add_text(s1, 'AI.arq', Inches(0.6), Inches(0.55),
+              Inches(2), Inches(0.4), size=16, bold=True, color=rgb_white)
+    add_text(s1, 'Cronograma físico-financeiro',
+              Inches(2), Inches(0.6), Inches(8), Inches(0.4),
+              size=11, color=rgb_indigo_text)
+    carimbo = f'emitido {data_emissao}'
+    if job_id:
+        carimbo += f' · ref {job_id}'
+    add_text(s1, carimbo, Inches(0.6), Inches(0.6),
+              Inches(12.1), Inches(0.4), size=10, color=rgb_indigo_text,
+              align='right')
 
-    # SLIDE 2 — Gantt
+    # Título principal centralizado vertical
+    add_text(s1, 'CRONOGRAMA', Inches(0.6), Inches(2.4),
+              Inches(12), Inches(1), size=52, bold=True, color=rgb_white)
+    add_text(s1, 'DA OBRA', Inches(0.6), Inches(3.3),
+              Inches(12), Inches(1), size=52, bold=True, color=rgb_white)
+    add_text(s1, titulo, Inches(0.6), Inches(4.5),
+              Inches(12.1), Inches(0.6), size=20, color=rgb_indigo_text)
+
+    # Metadados em 4 colunas
+    metas = [
+        (_format_br(resumo.get('data_inicio')), 'INÍCIO PREVISTO'),
+        (_format_br(resumo.get('data_fim')), 'TÉRMINO PREVISTO'),
+        (f"{resumo.get('duracao_dias_reais', '—')} dias", 'DURAÇÃO TOTAL'),
+        (f"{resumo.get('n_fases', 0)} fases", 'DISCIPLINAS'),
+    ]
+    for i, (val, lbl) in enumerate(metas):
+        x = Inches(0.6 + i * 3.05)
+        add_text(s1, val, x, Inches(5.6), Inches(3), Inches(0.6),
+                  size=22, bold=True, color=rgb_white)
+        add_text(s1, lbl, x, Inches(6.2), Inches(3), Inches(0.4),
+                  size=9, bold=True, color=rgb_indigo_text)
+
+    # Footer capa
+    add_text(s1, 'ai.arq.br · Quantitativo com IA pra arquitetos brasileiros',
+              Inches(0.6), Inches(7.1), Inches(10), Inches(0.3),
+              size=9, color=RGBColor(0xA5, 0xB4, 0xFC))
+    add_text(s1, '1 / 5', Inches(0.6), Inches(7.1),
+              Inches(12.1), Inches(0.3), size=9,
+              color=RGBColor(0xA5, 0xB4, 0xFC), align='right')
+
+    # ═══ SLIDE 2 — GANTT ═══
     s2 = prs.slides.add_slide(blank)
-    add_text(s2, 'Gantt', Inches(0.5), Inches(0.3),
-              Inches(12), Inches(0.6), size=24, bold=True, color=INDIGO)
-    s2.shapes.add_picture(gantt_png, Inches(0.5), Inches(1.0),
+    add_header(s2)
+    add_text(s2, 'GANTT', Inches(0.5), Inches(0.85),
+              Inches(4), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+    add_text(s2, 'Cronograma físico das disciplinas',
+              Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
+              size=24, bold=True, color=rgb_dark)
+    s2.shapes.add_picture(gantt_png, Inches(0.5), Inches(2.0),
                            width=Inches(12.3))
+    add_text(s2,
+              'Cada barra = uma disciplina. Posição horizontal = início/fim. '
+              'Largura = duração. Cores diferenciam categorias.',
+              Inches(0.5), Inches(6.7), Inches(12.3), Inches(0.3),
+              size=9, color=rgb_gray_light)
+    add_footer(s2, 2)
 
-    # SLIDE 3 — Curva S
+    # ═══ SLIDE 3 — CURVA S ═══
     s3 = prs.slides.add_slide(blank)
-    add_text(s3, 'Curva S de Avanço Previsto', Inches(0.5), Inches(0.3),
-              Inches(12), Inches(0.6), size=24, bold=True, color=INDIGO)
-    s3.shapes.add_picture(curva_png, Inches(0.5), Inches(1.0),
+    add_header(s3)
+    add_text(s3, 'CURVA S · AVANÇO PREVISTO', Inches(0.5), Inches(0.85),
+              Inches(8), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+    add_text(s3, 'Como a obra progride no tempo',
+              Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
+              size=24, bold=True, color=rgb_dark)
+    s3.shapes.add_picture(curva_png, Inches(0.5), Inches(2.0),
                            width=Inches(12.3))
+    add_text(s3,
+              'Modelo sigmoidal (k=10). Reflete distribuição real de obra: '
+              'arranque suave, pico no meio, finalização gradual.',
+              Inches(0.5), Inches(6.7), Inches(12.3), Inches(0.3),
+              size=9, color=rgb_gray_light)
+    add_footer(s3, 3)
 
-    # SLIDE 4 — Caminho crítico
+    # ═══ SLIDE 4 — CAMINHO CRÍTICO ═══
     s4 = prs.slides.add_slide(blank)
-    add_text(s4, 'Caminho crítico', Inches(0.5), Inches(0.3),
-              Inches(12), Inches(0.6), size=24, bold=True, color=INDIGO)
-    add_text(s4, 'Top 5 fases mais longas — atraso aqui atrasa a obra inteira',
-              Inches(0.5), Inches(1.0), Inches(12), Inches(0.4), size=12,
-              color=GRAY)
-    cc = resumo.get('caminho_critico', [])
-    y = Inches(1.8)
-    for i, item in enumerate(cc, 1):
-        add_text(s4, f'{i}.', Inches(0.7), y, Inches(0.5), Inches(0.5),
-                  size=18, bold=True, color=INDIGO)
-        add_text(s4, item.get('label', ''), Inches(1.3), y, Inches(8.5),
-                  Inches(0.5), size=16, bold=True, color=DARK)
-        add_text(s4, f"{item.get('dur_dias', '?')} dias",
-                  Inches(10), y, Inches(2.5), Inches(0.5), size=14, color=GRAY)
-        y += Inches(0.75)
+    add_header(s4)
+    add_text(s4, 'CAMINHO CRÍTICO', Inches(0.5), Inches(0.85),
+              Inches(6), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+    add_text(s4, 'Top 5 fases mais longas',
+              Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
+              size=24, bold=True, color=rgb_dark)
+    add_text(s4,
+              'Atraso em qualquer dessas fases atrasa a obra inteira. '
+              'Priorize fornecedor, equipe e gestão de risco aqui.',
+              Inches(0.5), Inches(1.85), Inches(12), Inches(0.4),
+              size=12, color=rgb_gray)
 
-    # SLIDE 5 — Marcos + Ressalva
+    cc = resumo.get('caminho_critico', [])
+    y = Inches(2.6)
+    for i, item in enumerate(cc, 1):
+        # Card row
+        card = add_rect(s4, Inches(0.5), y, Inches(12.3), Inches(0.75),
+                         RGBColor(0xF8, 0xFA, 0xFC) if i % 2 == 0
+                         else rgb_white)
+        # Borda
+        card.line.color.rgb = rgb_border
+        card.line.width = Pt(0.5)
+        # Número grande
+        add_text(s4, str(i), Inches(0.7), y, Inches(0.8), Inches(0.75),
+                  size=24, bold=True, color=rgb_indigo, anchor='middle')
+        # Label
+        add_text(s4, item.get('label', ''),
+                  Inches(1.6), y, Inches(8.5), Inches(0.75),
+                  size=16, bold=True, color=rgb_dark, anchor='middle')
+        # Duração à direita
+        add_text(s4, f"{item.get('dur_dias', '?')} dias",
+                  Inches(0.5), y, Inches(12.3), Inches(0.75),
+                  size=14, bold=True, color=rgb_indigo,
+                  align='right', anchor='middle')
+        y += Inches(0.85)
+
+    add_footer(s4, 4)
+
+    # ═══ SLIDE 5 — MARCOS + RESSALVAS ═══
     s5 = prs.slides.add_slide(blank)
-    add_text(s5, 'Marcos normativos & ressalvas', Inches(0.5), Inches(0.3),
-              Inches(12), Inches(0.6), size=24, bold=True, color=INDIGO)
-    y = Inches(1.2)
-    add_text(s5, 'Marcos normativos considerados:',
-              Inches(0.5), y, Inches(12), Inches(0.5), size=14, bold=True,
-              color=DARK)
-    y += Inches(0.5)
-    for m in cronograma.get('marcos_legais', []):
-        add_text(s5, f'▸ {m}', Inches(0.7), y, Inches(12), Inches(0.4),
-                  size=11, color=DARK)
-        y += Inches(0.35)
-    y += Inches(0.3)
-    add_text(s5, 'Ressalvas:',
-              Inches(0.5), y, Inches(12), Inches(0.4), size=14, bold=True,
-              color=DARK)
-    y += Inches(0.5)
+    add_header(s5)
+    add_text(s5, 'REFERÊNCIAS', Inches(0.5), Inches(0.85),
+              Inches(6), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+    add_text(s5, 'Marcos normativos e ressalvas',
+              Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
+              size=24, bold=True, color=rgb_dark)
+
+    # Marcos em 2 colunas
+    marcos = cronograma.get('marcos_legais', [])
+    add_text(s5, 'Marcos considerados:',
+              Inches(0.5), Inches(2.05), Inches(12), Inches(0.4),
+              size=13, bold=True, color=rgb_dark)
+    n = len(marcos)
+    mid = (n + 1) // 2
+    y_col = Inches(2.55)
+    for i, m in enumerate(marcos):
+        col = 0 if i < mid else 1
+        idx_in_col = i if col == 0 else i - mid
+        x = Inches(0.7 + col * 6.4)
+        y = y_col + Inches(idx_in_col * 0.35)
+        add_text(s5, f'▸ {m}', x, y, Inches(6), Inches(0.35),
+                  size=10, color=rgb_dark2)
+
+    # Box ressalva amarela
+    y_ressalva = Inches(5.0)
+    ressalva_box = add_rect(s5, Inches(0.5), y_ressalva,
+                             Inches(12.3), Inches(1.6), rgb_amber_bg)
+    ressalva_box.line.color.rgb = RGBColor(0xF5, 0x9E, 0x0B)
+    ressalva_box.line.width = Pt(1)
+    add_text(s5, '⚠ Cronograma de referência',
+              Inches(0.75), y_ressalva + Inches(0.15),
+              Inches(11.8), Inches(0.4),
+              size=13, bold=True, color=RGBColor(0x92, 0x40, 0x0E))
     add_text(s5, cronograma.get('ressalva', ''),
-              Inches(0.5), y, Inches(12.3), Inches(2), size=11, color=GRAY)
+              Inches(0.75), y_ressalva + Inches(0.55),
+              Inches(11.8), Inches(1.0),
+              size=10, color=RGBColor(0x78, 0x35, 0x0F))
+
+    add_footer(s5, 5)
 
     prs.save(output_path)
     try:

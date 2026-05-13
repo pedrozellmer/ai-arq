@@ -4,7 +4,7 @@
 Recebe lista de disciplinas (extraída do project_items) + data início + duração.
 Devolve JSON com fases + Gantt + curva S, pronto pra renderizar no frontend.
 
-Sequenciamento alinhado com padrão Sienge (16 etapas oficiais BR):
+Sequenciamento alinhado com convenção de mercado BR (16 etapas construtivas):
 SERVIÇOS INICIAIS → MOVIMENTAÇÃO DE TERRA → FUNDAÇÃO → ESTRUTURA → PAREDE →
 ESQUADRIAS → COBERTURA → IMPERMEABILIZAÇÃO → REVESTIMENTOS → PREVENTIVO →
 ELÉTRICO → HIDROSSANITÁRIO → LOUÇAS E METAIS → SERVIÇOS COMPLEMENTARES →
@@ -379,7 +379,7 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
         'ressalva': (
             'Cronograma referência baseado em produtividade típica de mercado '
             '(construtora médio porte) + sequenciamento construtivo padrão BR '
-            '(16 etapas Sienge) + curva S sigmoidal. '
+            '(16 etapas construtivas, alinhado NBR 16636) + curva S sigmoidal. '
             'Validar com engenheiro responsável (CREA/CAU) antes de comprometer '
             'prazo com cliente. Variáveis específicas (sondagem, fornecedor de '
             'pré-fabricado, restrição climática, condicionantes do canteiro, '
