@@ -567,7 +567,7 @@ function safeRun(fn, label) {
 async function carregarStatsEntregas() {
   // ── Quantitativo: items detectados + revisados ──
   try {
-    const r = await fetch(`${API_BASE}/api/items/${jobId}`);
+    const r = await authFetch(`${API_BASE}/api/items/${jobId}`);
     if (r.ok) {
       const d = await r.json();
       const items = d.items || [];
@@ -590,7 +590,7 @@ async function carregarStatsEntregas() {
 
   // ── Cronograma: tem ou não? PPC + duração ──
   try {
-    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}`);
+    const r = await authFetch(`${API_BASE}/api/cronograma/${jobId}`);
     if (r.ok) {
       const d = await r.json();
       const badge = document.getElementById('entrega-cron-badge');
@@ -633,7 +633,7 @@ async function carregarStatsEntregas() {
 
   // ── Comparativo: tem cotações? ──
   try {
-    const r = await fetch(`${API_BASE}/api/projects/${jobId}/quotes`);
+    const r = await authFetch(`${API_BASE}/api/projects/${jobId}/quotes`);
     if (r.ok) {
       const d = await r.json();
       const badge = document.getElementById('entrega-comp-badge');
@@ -750,7 +750,9 @@ async function carregarStatsEntregas() {
   };
   const getItems = async () => {
     try {
-      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}`, {}, 15000);
+      const { data: { session } } = await sb.auth.getSession();
+      const headers = session ? { 'Authorization': `Bearer ${session.access_token}` } : {};
+      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}`, { headers }, 15000);
       return await r.json();
     } catch (e) {
       console.error('[items] erro:', e);
@@ -759,7 +761,9 @@ async function carregarStatsEntregas() {
   };
   const getReviewState = async () => {
     try {
-      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}/review-state`, {}, 10000);
+      const { data: { session } } = await sb.auth.getSession();
+      const headers = session ? { 'Authorization': `Bearer ${session.access_token}` } : {};
+      const r = await fetchWithTimeout(`${API_BASE}/api/items/${jobId}/review-state`, { headers }, 10000);
       return await r.json();
     } catch (e) {
       console.error('[review-state] erro:', e);
@@ -874,7 +878,7 @@ async function loadProjectCashback() {
 // ══════════════════════════════════════════════
 async function loadClientData() {
   try {
-    const res = await fetch(`${API_BASE}/api/projects/${jobId}/client`);
+    const res = await authFetch(`${API_BASE}/api/projects/${jobId}/client`);
     const data = await res.json() || {};
     document.getElementById('client-loading').classList.add('hidden');
 
@@ -955,7 +959,7 @@ function openClientEdit() {
   document.getElementById('p-phase').value = window.__projPhase || '';
 
   // Popula CLIENTE a partir do endpoint /client
-  fetch(`${API_BASE}/api/projects/${jobId}/client`)
+  authFetch(`${API_BASE}/api/projects/${jobId}/client`)
     .then(r => r.json())
     .then(d => {
       if (d) {
@@ -1039,7 +1043,7 @@ async function saveProjectAndClient() {
   fd.append('internal_notes', document.getElementById('c-notes').value);
   let clienteOk = true;
   try {
-    const res = await fetch(`${API_BASE}/api/projects/${jobId}/client`, {
+    const res = await authFetch(`${API_BASE}/api/projects/${jobId}/client`, {
       method: 'POST', body: fd,
     });
     if (!res.ok) clienteOk = false;
@@ -1073,7 +1077,7 @@ window.saveClient = saveProjectAndClient;
 // ══════════════════════════════════════════════
 async function loadQuotes() {
   try {
-    const res = await fetch(`${API_BASE}/api/projects/${jobId}/quotes`);
+    const res = await authFetch(`${API_BASE}/api/projects/${jobId}/quotes`);
     const data = await res.json();
     renderQuotes(data.quotes || []);
   } catch (e) {
@@ -1163,7 +1167,7 @@ async function uploadQuote() {
 async function deleteQuote(quoteId) {
   if (!confirm('Remover essa cotação?')) return;
   try {
-    await fetch(`${API_BASE}/api/projects/${jobId}/quotes/${quoteId}`, { method: 'DELETE' });
+    await authFetch(`${API_BASE}/api/projects/${jobId}/quotes/${quoteId}`, { method: 'DELETE' });
     loadQuotes();
   } catch (e) {
     alert('Erro: ' + e.message);
@@ -1225,7 +1229,7 @@ async function generateComparison() {
   result.classList.add('hidden');
 
   try {
-    const res = await fetch(`${API_BASE}/api/projects/${jobId}/quotes/compare`);
+    const res = await authFetch(`${API_BASE}/api/projects/${jobId}/quotes/compare`);
     const data = await res.json();
     if (data.status === 'ok') {
       const s = data.summary;

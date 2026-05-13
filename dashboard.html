@@ -2724,7 +2724,7 @@
         // % revisado
         (async () => {
           try {
-            const r = await fetch(`${API_BASE}/api/items/${p.job_id}/review-state`);
+            const r = await authFetch(`${API_BASE}/api/items/${p.job_id}/review-state`);
             const d = await r.json();
             const reviewed = d.count || 0;
             const total = p.items_count || 1;
@@ -2740,7 +2740,7 @@
         // Cronograma gerado?
         (async () => {
           try {
-            const r = await fetch(`${API_BASE}/api/cronograma/${p.job_id}`);
+            const r = await authFetch(`${API_BASE}/api/cronograma/${p.job_id}`);
             const d = await r.json();
             const el = document.querySelector(`[data-job="${p.job_id}"] .cron-badge`);
             if (el && d && d.status === 'ok' && d.saved) {
