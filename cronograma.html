@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cronograma — AI.arq</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Inter', -apple-system, sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  /* Gantt bar hover */
+  .gantt-bar { transition: opacity .15s ease; cursor: pointer; }
+  .gantt-bar:hover { opacity: 0.85; }
+  /* Slider customizado */
+  input[type="range"].calc-slider {
+    -webkit-appearance: none; appearance: none;
+    width: 100%; height: 8px; border-radius: 9999px;
+    background: linear-gradient(to right, #4f46e5 0%, #06b6d4 var(--pct, 0%), #e5e7eb var(--pct, 0%), #e5e7eb 100%);
+    outline: none;
+  }
+  input[type="range"].calc-slider::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: white; border: 3px solid #4f46e5; cursor: pointer;
+    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+  }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Loading gate -->
+<div id="gate" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+  <div class="text-center">
+    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto"></div>
+    <p class="mt-3 text-sm text-gray-500">Carregando projeto...</p>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="bg-white border-b sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+    <button onclick="smartBack()" class="text-gray-400 hover:text-indigo-600" title="Voltar">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    </button>
+    <div class="flex-1 min-w-0">
+      <nav class="text-[11px] text-gray-400 flex items-center gap-1">
+        <a href="dashboard.html" class="hover:text-indigo-600">Início</a>
+        <span>›</span>
+        <a id="back-projeto" href="#" class="hover:text-indigo-600">Projeto</a>
+        <span>›</span>
+        <span class="text-gray-500">Cronograma</span>
+      </nav>
+      <h1 class="font-semibold text-gray-800 truncate leading-tight">
+        Cronograma <span class="text-gray-400 font-normal text-sm">· físico-financeiro</span>
+      </h1>
+    </div>
+    <span class="hidden md:inline-flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+      Beta · Fase 2
+    </span>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- Sem itens? -->
+  <div id="no-items" class="hidden rounded-2xl border-2 border-amber-200 bg-amber-50 p-6">
+    <h3 class="font-semibold text-amber-900 mb-1">Esse projeto ainda não tem itens</h3>
+    <p class="text-sm text-amber-800">Gere a planilha de quantitativos primeiro. Depois o cronograma sai com base nas disciplinas detectadas.</p>
+    <a id="link-projeto" href="#" class="inline-block mt-3 text-sm font-medium text-indigo-600 hover:underline">← Voltar pro projeto</a>
+  </div>
+
+  <!-- Inputs -->
+  <div id="inputs-card" class="hidden rounded-2xl bg-white border-2 border-indigo-100 shadow-lg p-6">
+    <div class="grid gap-6 md:grid-cols-3 items-end">
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">Início da obra</label>
+        <input id="data-inicio" type="date"
+               class="w-full rounded-lg border-2 border-gray-200 px-4 py-3 text-base font-medium focus:border-indigo-500 focus:outline-none transition" />
+        <p class="text-xs text-gray-400 mt-1">Geralmente ~30 dias após contratação</p>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">
+          Duração: <span id="dur-val" class="text-indigo-600 font-bold">4</span> meses
+        </label>
+        <input id="dur-slider" type="range" min="1" max="36" value="4" class="calc-slider w-full" />
+        <div class="flex justify-between mt-1 text-xs text-gray-400">
+          <span>1m</span><span>12m</span><span>24m</span><span>36m</span>
+        </div>
+      </div>
+      <div>
+        <button id="btn-gerar"
+                class="w-full py-3 rounded-lg gradient-main text-white font-semibold shadow-lg hover:scale-[1.02] transition disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100">
+          Gerar cronograma
+        </button>
+      </div>
+    </div>
+    <div id="info-banner" class="hidden mt-4 rounded-lg bg-blue-50 border border-blue-200 p-3 text-sm text-blue-800"></div>
+    <div id="error-banner" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700"></div>
+  </div>
+
+  <!-- Loading durante geração -->
+  <div id="loading-result" class="hidden text-center py-12">
+    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+    <p class="mt-3 text-sm text-gray-500">Gerando cronograma...</p>
+  </div>
+
+  <!-- Resultado -->
+  <div id="result" class="hidden space-y-6">
+
+    <!-- Resumo -->
+    <div class="grid gap-4 md:grid-cols-4">
+      <div class="rounded-xl border bg-white p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Início</p>
+        <p id="r-inicio" class="text-lg font-bold text-gray-900">--</p>
+      </div>
+      <div class="rounded-xl border bg-white p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Término previsto</p>
+        <p id="r-fim" class="text-lg font-bold text-gray-900">--</p>
+      </div>
+      <div class="rounded-xl border bg-white p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Disciplinas no cronograma</p>
+        <p id="r-fases" class="text-lg font-bold text-gray-900">--</p>
+      </div>
+      <div class="rounded-xl border bg-white p-4">
+        <p class="text-xs font-medium text-gray-500 mb-1">Duração total</p>
+        <p id="r-duracao" class="text-lg font-bold text-gray-900">--</p>
+      </div>
+    </div>
+
+    <!-- Gantt visual -->
+    <div class="rounded-2xl bg-white border shadow-sm p-6">
+      <div class="flex items-baseline justify-between mb-4">
+        <h2 class="text-lg font-bold text-gray-900">Gantt</h2>
+        <p class="text-xs text-gray-500">Cada barra mostra a duração estimada (dias) e o período da fase</p>
+      </div>
+      <div id="gantt" class="overflow-x-auto"></div>
+    </div>
+
+    <!-- Curva S -->
+    <div class="rounded-2xl bg-white border shadow-sm p-6">
+      <div class="flex items-baseline justify-between mb-4">
+        <h2 class="text-lg font-bold text-gray-900">Curva S — Avanço previsto</h2>
+        <p class="text-xs text-gray-500">% acumulado por mês</p>
+      </div>
+      <div id="curva-s" class="overflow-x-auto"></div>
+    </div>
+
+    <!-- Matriz % por mês -->
+    <div class="rounded-2xl bg-white border shadow-sm p-6">
+      <div class="flex items-baseline justify-between mb-4">
+        <h2 class="text-lg font-bold text-gray-900">Distribuição por mês</h2>
+        <p class="text-xs text-gray-500">% de cada disciplina executado em cada mês</p>
+      </div>
+      <div id="matriz" class="overflow-x-auto"></div>
+    </div>
+
+    <!-- Caminho crítico -->
+    <div class="rounded-2xl bg-amber-50 border-2 border-amber-200 p-6">
+      <h2 class="text-base font-bold text-amber-900 mb-3">⚡ Caminho crítico</h2>
+      <p class="text-xs text-amber-700 mb-3">As 5 fases mais longas — atraso nelas atrasa a obra inteira</p>
+      <ol id="caminho-critico" class="space-y-1.5 text-sm text-amber-900"></ol>
+    </div>
+
+    <!-- Ressalva legal -->
+    <div class="rounded-xl bg-gray-50 border p-5">
+      <p class="text-xs text-gray-600 leading-relaxed">
+        <strong class="text-gray-800">⚠️ Cronograma de referência.</strong> Baseado em produtividade típica de mercado (construtora médio porte) e sequenciamento construtivo padrão BR (16 etapas Sienge). <strong>Valide com seu engenheiro responsável antes de comprometer prazo com cliente.</strong> Variáveis específicas (sondagem do terreno, fornecedor de pré-fabricado, restrição climática regional, condicionantes do canteiro) podem alterar significativamente.
+      </p>
+    </div>
+
+  </div>
+</main>
+
+<script>
+const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
+const API_BASE = 'https://ai-arq.onrender.com';
+const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// Pega job_id da URL: ?job=abc123
+const params = new URLSearchParams(window.location.search);
+const jobId = params.get('job') || '';
+
+if (!jobId) {
+  document.body.innerHTML = '<div class="p-8 text-center text-gray-600">Falta job_id. Volte ao <a href="dashboard.html" class="text-indigo-600 underline">dashboard</a> e abra um projeto.</div>';
+  throw new Error('no job');
+}
+
+function smartBack() {
+  if (document.referrer.startsWith(window.location.origin) && window.history.length > 1) {
+    window.history.back();
+  } else {
+    window.location.href = `projeto.html?job=${jobId}`;
+  }
+}
+
+// Link de volta pro projeto
+document.getElementById('back-projeto').href = `projeto.html?job=${jobId}`;
+document.getElementById('link-projeto').href = `projeto.html?job=${jobId}`;
+
+// ─── Setup inicial: data default = hoje + 30 dias ──
+function defaultDate() {
+  const d = new Date();
+  d.setDate(d.getDate() + 30);
+  return d.toISOString().slice(0, 10);
+}
+document.getElementById('data-inicio').value = defaultDate();
+
+// Slider de duração — atualiza label + estilo
+const durSlider = document.getElementById('dur-slider');
+const durVal = document.getElementById('dur-val');
+function updateSliderUI() {
+  const v = parseInt(durSlider.value);
+  durVal.textContent = v;
+  const pct = ((v - 1) / 35) * 100;
+  durSlider.style.setProperty('--pct', pct + '%');
+}
+durSlider.addEventListener('input', updateSliderUI);
+updateSliderUI();
+
+// ─── Carrega projeto e items pra decidir se mostra UI ──
+async function init() {
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (!session) {
+    window.location.href = `login.html?redirect=cronograma.html?job=${jobId}`;
+    return;
+  }
+
+  try {
+    // Busca items pra confirmar que projeto existe e tem disciplinas
+    const r = await fetch(`${API_BASE}/api/items/${jobId}`);
+    const data = await r.json();
+    const items = data.items || [];
+
+    if (items.length === 0) {
+      document.getElementById('no-items').classList.remove('hidden');
+      document.getElementById('gate').classList.add('hidden');
+      return;
+    }
+
+    // Quantas disciplinas?
+    const disciplinas = new Set(
+      items.map(it => (it.discipline || '').trim().toUpperCase())
+           .filter(d => d && !d.includes('PREMISSA'))
+    );
+    if (disciplinas.size === 0) {
+      document.getElementById('no-items').classList.remove('hidden');
+      document.getElementById('gate').classList.add('hidden');
+      return;
+    }
+
+    // Info banner: quantas disciplinas vão entrar
+    const info = document.getElementById('info-banner');
+    info.textContent = `Detectadas ${disciplinas.size} disciplina(s) nesse projeto. Vão entrar no cronograma após "Gerar".`;
+    info.classList.remove('hidden');
+
+    document.getElementById('inputs-card').classList.remove('hidden');
+    document.getElementById('gate').classList.add('hidden');
+  } catch (e) {
+    document.getElementById('no-items').classList.remove('hidden');
+    document.getElementById('gate').classList.add('hidden');
+  }
+}
+
+// ─── Gera cronograma ──
+async function gerarCronograma() {
+  const btn = document.getElementById('btn-gerar');
+  btn.disabled = true;
+  btn.textContent = 'Gerando...';
+  document.getElementById('result').classList.add('hidden');
+  document.getElementById('loading-result').classList.remove('hidden');
+  document.getElementById('error-banner').classList.add('hidden');
+
+  const dataInicio = document.getElementById('data-inicio').value;
+  const duracao = parseInt(document.getElementById('dur-slider').value);
+
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+    if (session) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/generate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ data_inicio: dataInicio, duracao_meses: duracao }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+    const cronog = await r.json();
+
+    renderResumo(cronog);
+    renderGantt(cronog);
+    renderCurvaS(cronog);
+    renderMatriz(cronog);
+    renderCaminhoCritico(cronog);
+
+    document.getElementById('result').classList.remove('hidden');
+  } catch (e) {
+    const err = document.getElementById('error-banner');
+    err.textContent = `Erro: ${e.message}`;
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Gerar cronograma';
+    document.getElementById('loading-result').classList.add('hidden');
+  }
+}
+document.getElementById('btn-gerar').addEventListener('click', gerarCronograma);
+
+// ─── Renderização ──
+function formatDateBR(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function renderResumo(c) {
+  const r = c.resumo;
+  document.getElementById('r-inicio').textContent = formatDateBR(r.data_inicio);
+  document.getElementById('r-fim').textContent = formatDateBR(r.data_fim);
+  document.getElementById('r-fases').textContent = `${r.n_fases} de ${r.n_disciplinas_quantitativo}`;
+  const dias = r.duracao_dias_reais;
+  const meses_reais = Math.round(dias / 30 * 10) / 10;
+  document.getElementById('r-duracao').textContent = `${dias} dias (~${meses_reais}m)`;
+}
+
+function renderGantt(c) {
+  const fases = c.fases;
+  if (fases.length === 0) {
+    document.getElementById('gantt').innerHTML = '<p class="text-sm text-gray-500">Sem fases.</p>';
+    return;
+  }
+  const data_inicio = new Date(c.resumo.data_inicio);
+  const data_fim = new Date(c.resumo.data_fim);
+  const total_dias = Math.max(1, (data_fim - data_inicio) / (1000 * 60 * 60 * 24));
+
+  const W = 1000;          // largura útil
+  const LABEL_W = 220;     // largura do label à esquerda
+  const ROW_H = 36;
+  const H = fases.length * ROW_H + 50;
+  const CHART_W = W - LABEL_W - 20;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="min-width: 700px">`;
+
+  // Linhas de mês (verticais)
+  c.meses.forEach((m, i) => {
+    const m_ini = new Date(m.inicio);
+    const x = LABEL_W + Math.max(0, (m_ini - data_inicio) / (1000 * 60 * 60 * 24)) / total_dias * CHART_W;
+    if (x >= LABEL_W && x <= W) {
+      svg += `<line x1="${x}" y1="0" x2="${x}" y2="${H - 30}" stroke="#E2E8F0" stroke-dasharray="2,2"/>`;
+      svg += `<text x="${x + 4}" y="${H - 8}" fill="#94A3B8" font-size="11">${m.label}</text>`;
+    }
+  });
+
+  // Barras
+  fases.forEach((f, i) => {
+    const f_ini = new Date(f.inicio);
+    const f_fim = new Date(f.fim);
+    const x = LABEL_W + (f_ini - data_inicio) / (1000 * 60 * 60 * 24) / total_dias * CHART_W;
+    const w = Math.max(20, (f_fim - f_ini) / (1000 * 60 * 60 * 24) / total_dias * CHART_W);
+    const y = i * ROW_H + 8;
+    const h = ROW_H - 14;
+
+    // Label
+    svg += `<text x="${LABEL_W - 10}" y="${y + h / 2 + 4}" fill="#0F172A" font-size="12" text-anchor="end" font-weight="500">${escapeHtml(f.label)}</text>`;
+    // Bar
+    svg += `<rect class="gantt-bar" x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${f.cor}">
+      <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)} (${f.dur_dias}d)</title>
+    </rect>`;
+    // Dias dentro da barra (se couber)
+    if (w > 40) {
+      svg += `<text x="${x + w / 2}" y="${y + h / 2 + 4}" fill="white" font-size="11" font-weight="bold" text-anchor="middle" pointer-events="none">${f.dur_dias}d</text>`;
+    }
+  });
+
+  svg += `</svg>`;
+  document.getElementById('gantt').innerHTML = svg;
+}
+
+function renderCurvaS(c) {
+  const curva = c.curva_s;
+  if (curva.length === 0) {
+    document.getElementById('curva-s').innerHTML = '';
+    return;
+  }
+  const W = 1000;
+  const H = 280;
+  const PAD_L = 50, PAD_R = 30, PAD_T = 20, PAD_B = 40;
+  const chart_w = W - PAD_L - PAD_R;
+  const chart_h = H - PAD_T - PAD_B;
+  const n = curva.length;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" class="w-full" style="min-width: 600px">`;
+
+  // Grid horizontal: 0, 25, 50, 75, 100
+  [0, 25, 50, 75, 100].forEach(p => {
+    const y = PAD_T + (100 - p) / 100 * chart_h;
+    svg += `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#E2E8F0" stroke-dasharray="2,2"/>`;
+    svg += `<text x="${PAD_L - 8}" y="${y + 4}" fill="#94A3B8" font-size="11" text-anchor="end">${p}%</text>`;
+  });
+
+  // Path da curva
+  const pontos = curva.map((p, i) => {
+    const x = PAD_L + i / Math.max(1, n - 1) * chart_w;
+    const y = PAD_T + (100 - p.pct_acumulado) / 100 * chart_h;
+    return { x, y, ...p };
+  });
+
+  // Área embaixo da curva
+  let path = `M ${pontos[0].x} ${PAD_T + chart_h} L ${pontos.map(p => `${p.x} ${p.y}`).join(' L ')} L ${pontos[pontos.length - 1].x} ${PAD_T + chart_h} Z`;
+  svg += `<path d="${path}" fill="#4F46E5" fill-opacity="0.12"/>`;
+
+  // Linha
+  let line = `M ${pontos.map(p => `${p.x} ${p.y}`).join(' L ')}`;
+  svg += `<path d="${line}" stroke="#4F46E5" stroke-width="2.5" fill="none"/>`;
+
+  // Pontos
+  pontos.forEach(p => {
+    svg += `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#06B6D4"/>`;
+  });
+
+  // Labels de mês (eixo X)
+  pontos.forEach((p, i) => {
+    if (i % Math.ceil(n / 8) === 0 || i === n - 1) {
+      svg += `<text x="${p.x}" y="${H - 12}" fill="#94A3B8" font-size="11" text-anchor="middle">${p.mes_label}</text>`;
+    }
+  });
+
+  // Anota o 100%
+  const ult = pontos[pontos.length - 1];
+  svg += `<text x="${ult.x - 6}" y="${ult.y - 10}" fill="#4F46E5" font-size="11" font-weight="bold" text-anchor="end">${ult.pct_acumulado}%</text>`;
+
+  svg += `</svg>`;
+  document.getElementById('curva-s').innerHTML = svg;
+}
+
+function renderMatriz(c) {
+  const meses = c.meses;
+  const matriz = c.matriz_pct;
+  let html = '<table class="w-full text-sm border-collapse"><thead><tr>';
+  html += `<th class="text-left bg-indigo-600 text-white px-3 py-2 sticky left-0 z-10" style="min-width: 220px">DISCIPLINA</th>`;
+  meses.forEach(m => {
+    html += `<th class="bg-indigo-600 text-white text-center px-2 py-2 text-xs" style="min-width: 64px">${m.label}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  matriz.forEach((row, idx) => {
+    const bg = idx % 2 === 0 ? 'bg-slate-50' : 'bg-white';
+    html += `<tr class="${bg}"><td class="px-3 py-2 font-medium text-gray-800 border-b sticky left-0 ${bg}" style="min-width: 220px">
+      <span class="inline-block w-3 h-3 rounded-sm align-middle mr-2" style="background:${row.cor}"></span>
+      ${escapeHtml(row.label)}
+    </td>`;
+    row.percentuais_por_mes.forEach(p => {
+      if (p > 0) {
+        html += `<td class="text-center px-2 py-2 text-white text-xs font-bold border-b" style="background:${row.cor};opacity:0.92">${p}%</td>`;
+      } else {
+        html += `<td class="text-center px-2 py-2 text-gray-300 text-xs border-b">·</td>`;
+      }
+    });
+    html += '</tr>';
+  });
+  // Linha avanço acumulado
+  html += `<tr class="bg-gray-50"><td class="px-3 py-2 font-bold text-indigo-700 border-b sticky left-0 bg-gray-50" style="min-width: 220px">
+    AVANÇO ACUMULADO
+  </td>`;
+  c.curva_s.forEach(p => {
+    html += `<td class="text-center px-2 py-2 text-indigo-700 text-xs font-bold border-b">${p.pct_acumulado}%</td>`;
+  });
+  html += '</tr></tbody></table>';
+  document.getElementById('matriz').innerHTML = html;
+}
+
+function renderCaminhoCritico(c) {
+  const items = c.resumo.caminho_critico || [];
+  const html = items.map((it, i) =>
+    `<li><span class="font-bold mr-2">${i + 1}.</span><strong>${escapeHtml(it.label)}</strong> <span class="text-amber-700">— ${it.dur_dias} dias</span></li>`
+  ).join('');
+  document.getElementById('caminho-critico').innerHTML = html || '<li class="text-amber-700">--</li>';
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+init();
+</script>
+
+<script src="chat-widget.js" defer></script>
+</body>
+</html>

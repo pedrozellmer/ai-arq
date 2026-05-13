@@ -4684,6 +4684,68 @@ async def get_project_items(job_id: str):
         raise HTTPException(500, f"Erro ao buscar itens: {str(e)}")
 
 
+# ═══════════════════════════════════════════════════════════════
+#  CRONOGRAMA FÍSICO-FINANCEIRO (Fase 2 do roadmap)
+# ═══════════════════════════════════════════════════════════════
+
+class CronogramaPayload(BaseModel):
+    data_inicio: str       # ISO YYYY-MM-DD
+    duracao_meses: int     # 1..36
+
+
+@app.post("/api/cronograma/{job_id}/generate")
+async def generate_cronograma(job_id: str, payload: CronogramaPayload):
+    """Gera cronograma físico-financeiro a partir do quantitativo do projeto.
+
+    Devolve JSON com fases + Gantt + curva S, pronto pra renderizar no
+    frontend. Não persiste (recalcula a cada chamada — UX live).
+
+    NÃO precifica. Distribui esforço no tempo seguindo sequenciamento
+    construtivo padrão BR (16 etapas Sienge).
+    """
+    # 1. Busca os items do projeto via mesma RPC do get_project_items
+    import urllib.request, json as _json
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+        body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=15)
+        items = _json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar itens do projeto: {e}")
+
+    if not items:
+        raise HTTPException(404, "Projeto sem itens — gere a planilha primeiro.")
+
+    # 2. Valida inputs
+    try:
+        from datetime import date as _date
+        _date.fromisoformat(payload.data_inicio)
+    except Exception:
+        raise HTTPException(400, "data_inicio deve estar no formato YYYY-MM-DD")
+
+    if payload.duracao_meses < 1 or payload.duracao_meses > 60:
+        raise HTTPException(400, "duracao_meses deve estar entre 1 e 60")
+
+    # 3. Gera cronograma
+    try:
+        from cronograma import gerar_cronograma
+        resultado = gerar_cronograma(
+            items=items,
+            data_inicio=payload.data_inicio,
+            duracao_meses=payload.duracao_meses,
+        )
+        return {"status": "ok", "job_id": job_id, **resultado}
+    except Exception as e:
+        import traceback
+        print(f"[cronograma] erro: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(500, f"Erro ao gerar cronograma: {e}")
+
+
 class ReviewPayload(BaseModel):
     action: str                              # 'approve' | 'reject' | 'edit'
     edits: Optional[dict] = None             # {description?, unit?, quantity?, discipline?, observations?}
