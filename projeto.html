@@ -100,12 +100,21 @@ function smartBack() {
   </div>
 
   <!-- Ações principais -->
-  <div class="grid gap-3 md:grid-cols-2">
+  <div class="grid gap-3 md:grid-cols-3">
     <a id="btn-review" href="#" aria-label="Revisar itens no navegador" style="pointer-events:none;opacity:0.6" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl p-5 flex items-center gap-3 no-underline transition">
       <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
       <div>
         <p class="font-semibold">Revisar no navegador</p>
         <p class="text-xs text-indigo-100 mt-0.5"><span id="rev-pct">--</span></p>
+      </div>
+    </a>
+    <a id="btn-cronograma" href="#" aria-label="Gerar cronograma físico-financeiro"
+       style="pointer-events:none;opacity:0.6;background:linear-gradient(135deg,#0891B2 0%,#06B6D4 100%)"
+       class="rounded-xl p-5 flex items-center gap-3 no-underline transition text-white hover:brightness-110">
+      <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      <div>
+        <p class="font-semibold">Cronograma físico-financeiro</p>
+        <p class="text-xs text-cyan-100 mt-0.5">Gantt + Curva S · Novo</p>
       </div>
     </a>
     <a id="btn-download" href="#" target="_blank" rel="noopener" aria-label="Baixar planilha XLSX" style="pointer-events:none;opacity:0.6" class="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl p-5 flex items-center gap-3 no-underline transition">
@@ -370,12 +379,18 @@ function safeRun(fn, label) {
   // Habilita botões agora que jobId tá disponível (placeholder pointer-events:none removido)
   const btnReview = document.getElementById('btn-review');
   const btnDownload = document.getElementById('btn-download');
+  const btnCronograma = document.getElementById('btn-cronograma');
   btnReview.href = `revisao.html?job_id=${jobId}`;
   btnReview.style.pointerEvents = '';
   btnReview.style.opacity = '';
   btnDownload.href = `${API_BASE}/api/download/${jobId}`;
   btnDownload.style.pointerEvents = '';
   btnDownload.style.opacity = '';
+  if (btnCronograma) {
+    btnCronograma.href = `cronograma.html?job=${jobId}`;
+    btnCronograma.style.pointerEvents = '';
+    btnCronograma.style.opacity = '';
+  }
 
   // Botão "Reportar problema" — abre em modo TICKET (campos reduzidos)
   const btnReport = document.getElementById('btn-report-project');
