@@ -13,6 +13,7 @@
 | [`../CLAUDE.md`](../CLAUDE.md) | **Quick-start pra qualquer sessão Claude.** Quem é Pedro, regras duras, arquitetura, IDs/endpoints, estrutura de pastas, fluxo de trabalho. |
 | [`../ROADMAP.md`](../ROADMAP.md) | **Visão de longo prazo (3-5 anos).** 10 fases (era 7 — adicionadas Cronograma, Pré-projeto, Conformidade NBR), princípios fundamentais, posicionamento competitivo, decisões já tomadas. |
 | **[`ATLAS_FEATURES.md`](ATLAS_FEATURES.md)** ⭐ | **Atlas de ~140 features** mapeadas de 3 fontes externas (Bravy 114, Prevision 50, Amanda 10X 20) + roadmap próprio. **Documento canônico de visão "ERP completo".** Posicionamento competitivo (Flowup, Vobi, Sienge). Sequenciamento sugerido. |
+| **[`ESTUDO_PROFUNDO_2026-05-13.md`](ESTUDO_PROFUNDO_2026-05-13.md)** ⭐ | **Pesquisa profunda 13/05/2026.** Mercado BR 2026 (PIB +3.5%, dores), concorrência detalhada (Sienge/Vobi/Flowup/Maket/Finch/Hypar), gap NBR 9050/15575 (sem verificador AI no Brasil!), caso real Last Planner BR (R$3 mi economia, 4 meses). Conclui com 5 decisões críticas + backlog 6 meses priorizado. |
 | [`../.claude/GRADE_INSTAGRAM.md`](../.claude/GRADE_INSTAGRAM.md) | **Grade editorial fixa do Instagram.** Rubrica por dia, horários travados, regras de voz, convenção slot_key. **LER ANTES de criar qualquer post.** |
 | [`../../MAPA.md`](../../MAPA.md) | **Mapa das pastas no Desktop.** Onde achar projeto, working dir, archive. |
 
