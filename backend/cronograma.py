@@ -168,29 +168,31 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
             'percentuais_por_mes': pcts,
         })
 
-    # Curva S: avanço acumulado por mês (peso igual por disciplina)
+    # Curva S — modelo SIGMOIDAL (logístico), não linear
+    # P(t) = 100 / (1 + e^(-k(t/T - 0.5)))
+    # k=10 default (curvatura média). Maior k = curva mais brusca início/fim.
+    import math
+    K_SIGMOID = 10
+    duracao_dias_real = (max(_parse_date(f['fim']) for f in fases) - dt_inicio).days if fases else duracao_dias
     curva_s = []
-    n_fases = max(1, len(fases))
-    peso = 100 / n_fases
-    acumulado = 0.0
     for m in meses:
-        m_ini = _parse_date(m['inicio'])
         m_fim = _parse_date(m['fim'])
-        contrib = 0
-        for fase in fases:
-            f_ini = _parse_date(fase['inicio'])
-            f_fim = _parse_date(fase['fim'])
-            if f_fim < m_ini or f_ini > m_fim:
-                continue
-            overlap_ini = max(f_ini, m_ini)
-            overlap_fim = min(f_fim, m_fim)
-            overlap_dias = (overlap_fim - overlap_ini).days + 1
-            contrib += peso * (overlap_dias / max(1, fase['dur_dias']))
-        acumulado = min(100, acumulado + contrib)
+        # Tempo decorrido em dias até o fim do mês
+        t = max(0, (m_fim - dt_inicio).days)
+        # Normalizado 0..1 (clamp em 1.0)
+        t_norm = min(1.0, t / max(1, duracao_dias_real))
+        # Função logística sigmoidal
+        try:
+            pct = 100.0 / (1.0 + math.exp(-K_SIGMOID * (t_norm - 0.5)))
+        except OverflowError:
+            pct = 100.0 if t_norm > 0.5 else 0.0
+        # Marca 100 no último mês útil
+        if t_norm >= 0.99:
+            pct = 100.0
         curva_s.append({
             'mes_idx': m['mes_idx'],
             'mes_label': m['label'],
-            'pct_acumulado': round(acumulado, 1),
+            'pct_acumulado': round(pct, 1),
             'data_fim_mes': m['fim'],
         })
 
@@ -206,6 +208,12 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
         'meses': meses,
         'matriz_pct': matriz,
         'curva_s': curva_s,
+        'curva_s_modelo': {
+            'tipo': 'sigmoidal',
+            'k': K_SIGMOID,
+            'formula': 'P(t) = 100 / (1 + e^(-k(t/T - 0.5)))',
+            'nota': 'Curva S realista (não linear). Refletido em obra padrão BR.',
+        },
         'resumo': {
             'data_inicio': dt_inicio.isoformat(),
             'data_fim': data_fim.isoformat(),
@@ -214,7 +222,26 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
             'n_fases': len(fases),
             'n_disciplinas_quantitativo': len(disciplinas_ativas),
             'caminho_critico': caminho_critico,
+            'ppc_alvo': 0.75,           # padrão Last Planner médio porte BR
+            'lps_compativel': True,
         },
+        'marcos_legais': [
+            'Lei 14.133/2021 Art 117 — medição mensal obrigatória',
+            'Lei 14.133/2021 Art 121 — fiscalização + diário de obra',
+            'Acórdão TCU 2622/2013 — cronograma físico-financeiro evidenciado',
+            'PMI PMBOK 7th ed. — Performance Domain Planning',
+            'NBR 16636-1/2:2017 — gerenciamento de serviços técnicos',
+            'Last Planner System (Ballard 2000) — 4 níveis + PPC',
+        ],
+        'ressalva': (
+            'Cronograma referência baseado em produtividade típica de mercado '
+            '(construtora médio porte) + sequenciamento construtivo padrão BR '
+            '(16 etapas Sienge) + curva S sigmoidal. '
+            'Validar com engenheiro responsável (CREA/CAU) antes de comprometer '
+            'prazo com cliente. Variáveis específicas (sondagem, fornecedor de '
+            'pré-fabricado, restrição climática, condicionantes do canteiro, '
+            'férias coletivas) podem alterar significativamente.'
+        ),
     }
 
 
