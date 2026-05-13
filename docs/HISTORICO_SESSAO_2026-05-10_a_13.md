@@ -259,17 +259,82 @@ Pedro pediu pra catalogar TUDO que recebemos (Bravy 114 + Prevision 50 + Amanda 
 - prevision/ (50 prompts ChatGPT)
 - arquiteto10x/ (apostila 51 páginas, 20 skills)
 
+### Tarde do dia 13/05 — Cronograma evoluiu de Gantt simples → produto completo
+
+**Sessão muito densa.** 10 commits no dia, da Fase 2 v1 até cards de entregas refatorados.
+
+**Commits-chave do dia 13:**
+- `7097456` — Cronograma físico-financeiro no site (backend + frontend MVP)
+- `5b5b7ad` — Sugestão automática de duração (por tipologia + área + n disciplinas)
+- `ef8a777` — Agent v2 LPS-inspired, curva S sigmoidal, marcos legais
+- `7481325` — Cronograma editável + persistência + exports PDF/PPTX
+- `e656003` — PDF/PPT profissional Bravy Arq 53 + remove menção Sienge
+- `69e20db` — Co-branding cobranded (logo escritório + cor + cliente final)
+- `c6ad0d0` — projeto.html refatorado em 6 cards de entregas
+
+**Co-branding implementado (padrão pro site todo):**
+- Helper `_get_branding_context(job_id)` puxa project_name + architect + client + logo + brand_color
+- Filename amigável: `cronograma_Ampliacao_Weslei.pdf` (não mais hash)
+- Capa PDF com cor do escritório, logo, nome cliente final
+- "powered by AI.arq" discreto
+
+**% de execução (Last Planner PPC) implementado:**
+- Campo `pct_executado` (0-100) por fase no editor
+- Card "Avanço real (PPC)" no resumo
+- Categoria auto-detectada
+- Curva S realizada baseada em pct_executado
+
+**projeto.html refatorado:**
+- 6 cards de entregas (Quantitativo, Cronograma, Comparativo, Memorial, Caderno, BDI)
+- Badges dinâmicos (PRONTO / NÃO GERADO / EM BREVE)
+- Stats por card (items revisados, PPC, n cotações)
+
 ---
 
 ## 📌 Pendências carregadas pra próxima sessão
 
-- [ ] Mandar planilha v8 do Weslei via WhatsApp (`arq/projetos_clientes/weslei_ghisleri/quantitativo_weslei_v8_RERANK.xlsx`)
-- [ ] Pedir testemunho da Daniela (DTZ) em vídeo (1 min)
-- [ ] **Cronograma como aba na planilha gerada** — terminar `adicionar_aba_cronograma_weslei.py` (fórmulas Excel, recalcula com mudança da data início)
-- [ ] Backend endpoint `/api/cronograma/generate` + integração com agente
-- [ ] **Atualizar `cronograma-gerador.md`** com as 16 etapas oficiais Sienge (em vez das 18 que eu chutei): SERVIÇOS INICIAIS → MOVIMENTAÇÃO DE TERRA → FUNDAÇÃO → ESTRUTURA CA → PAREDE → ESQUADRIAS → COBERTURA → IMPERMEABILIZAÇÃO → REVESTIMENTOS → PREVENTIVO INCÊNDIO → PROJETO ELÉTRICO → PROJETO HIDROSSANITÁRIO → LOUÇAS E METAIS → SERVIÇOS COMPLEMENTARES → PINTURAS → RETIRADA DE ENTULHO
-- [ ] **Validar nosso SINAPI** contra os 8.868 da planilha Sienge 2025
-- [ ] Gerar 7 imagens da semana w21 (18-24/05) seguindo grade nova (Bastidor da OBRA, não do código)
+### 🎯 Prioridade alta (continuar Fase 2)
+- [ ] PDF/PPT — adicionar **página "Resumo executivo"** entre capa e Gantt: 4 KPIs grandes + pie chart de % por categoria + stacked bar mensal + top 3 disciplinas críticas
+- [ ] **Comparativo previsto vs realizado** quando há pct_executado: curva S sobreposta (prevista vs realizada) + status "Em dia / Adiantada / Atrasada"
+- [ ] **Drag-drop** pra reordenar fases no editor (Sortable.js)
+- [ ] **Link público read-only** do cronograma pro cliente final do arquiteto ver
+
+### 🟡 Prioridade média
+- [ ] Refatorar `dashboard.html` (lista de projetos) seguindo mesmo padrão de cards
+- [ ] **Fase 3d Orçamento por Ambiente** (quick win — view nova da planilha agrupada por cômodo)
+- [ ] Mandar v8 do Weslei via WhatsApp
+- [ ] Pedir testemunho da Daniela (DTZ) em vídeo (1min)
+- [ ] Gerar 7 imagens semana w21 (18-24/05) seguindo grade IG nova
+
+### 🔵 Prioridade baixa (radar)
+- [ ] Validar nosso SINAPI (10.284) vs Sienge 2025 (8.868)
+- [ ] DELETE 19 stories canceled no instagram_scheduled_posts
+- [ ] Avaliar parceria Bravy / ASV Digital
+- [ ] Lookahead 6 semanas + PPC tracker semanal (LPS real)
+- [ ] EVM completo (CPI/SPI/EAC quando há AC)
+
+---
+
+## 🎯 Estado do produto AI.arq (13/05/2026 fim do dia)
+
+```
+FASE 1 Quantitativo:         🟢 PRODUÇÃO (100% maio sem erro)
+FASE 2 Cronograma:           🟢 PRODUÇÃO v3 (editável + PDF/PPT cobranded + PPC)
+FASE 3 Documentação:         ⚪ Planejado
+FASE 4 Comparativo:          🟡 Parcial
+FASE 5 ERP (Manus 60%):      ⚪ Esperando 50+ usuários
+FASE 6 Pré-projeto:          ⚪ Radar
+FASE 7 3D + render:          ⏳ Longo prazo
+FASE 8 Conformidade NBR:     ⚪ Radar (GAP COMPETITIVO)
+FASE 9 Generativo:           ⏳ Visão
+FASE 10 SO completo:         ⏳ Visão 3 anos
+```
+
+**Métricas:**
+- 8 usuários cadastrados (3 ativos: Daniela, Rafael, Sidnei, Weslei)
+- 64 projetos processados
+- 100% sucesso em maio (vs 27% abril)
+- 0 incidentes segurança em produção
 - [ ] Avaliar se rola parceria com Bravy / ASV Digital (cross-sell mútuo)
 - [ ] Pendência futura: cancelados (19 stories status=canceled poluindo histórico) — pedir aprovação Pedro pra DELETE em massa
 
