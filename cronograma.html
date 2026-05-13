@@ -113,6 +113,20 @@
   <!-- Resultado -->
   <div id="result" class="hidden space-y-6">
 
+    <!-- Banner de "gerado automaticamente" (some quando user clica Regerar/Salvar) -->
+    <div id="auto-gerado-banner" class="hidden rounded-xl bg-gradient-to-r from-indigo-50 to-cyan-50 border-2 border-indigo-200 p-4 flex items-start gap-3">
+      <span class="text-2xl shrink-0">✨</span>
+      <div class="flex-1 text-sm">
+        <p class="font-semibold text-gray-800">Cronograma gerado automaticamente</p>
+        <p class="text-xs text-gray-600 mt-0.5">
+          Baseado em <span id="ag-n-disciplinas" class="font-semibold">--</span> disciplinas detectadas e <span id="ag-duracao" class="font-semibold">--</span> meses de duração sugerida. Pra ajustar, mude a duração acima e clique em <strong>Regerar</strong>, ou clique em <strong>Editar fases</strong> pra refinar manualmente.
+        </p>
+      </div>
+      <button onclick="document.getElementById('auto-gerado-banner').classList.add('hidden')" class="text-gray-400 hover:text-gray-700 shrink-0" title="Fechar">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+
     <!-- Barra de ações (Salvar / Editar / Exportar) -->
     <div class="rounded-xl bg-white border-2 border-indigo-100 p-4 flex flex-wrap items-center gap-3">
       <button id="btn-edit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition flex items-center gap-2">
@@ -337,11 +351,23 @@ async function init() {
     document.getElementById('inputs-card').classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
 
-    carregarSugestao();
+    // 3) Auto-gera na primeira visita: pega sugestão (tipologia + área + nº
+    //    disciplinas) e dispara /generate sozinho. Usuário entra e já vê o
+    //    cronograma — só ajusta duração + Regerar se quiser mudar.
+    //    Banner explícito deixa claro que é geração automática.
+    await carregarSugestao();
+    autoGerarPrimeiraVisita();
   } catch (e) {
     document.getElementById('no-items').classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
   }
+}
+
+async function autoGerarPrimeiraVisita() {
+  // Marca que esta geração veio do auto-trigger pra mostrar banner explícito
+  // depois de renderizar. gerarCronograma trata como qualquer outra geração.
+  window.__autoGerou = true;
+  await gerarCronograma();
 }
 
 async function tentarCarregarCronogramaPronto() {
@@ -663,6 +689,23 @@ async function gerarCronograma() {
 
     document.getElementById('result').classList.remove('hidden');
 
+    // Botão "Gerar" vira "Regerar" depois da primeira geração — a ação muda
+    // de semântica (não está mais gerando do zero, está regerando com nova config).
+    document.getElementById('btn-gerar').textContent = 'Regerar cronograma';
+
+    // Mostra banner de "gerado automaticamente" só na primeira visita
+    if (window.__autoGerou) {
+      const banner = document.getElementById('auto-gerado-banner');
+      if (banner) {
+        const nFases = (cronog.fases || []).length;
+        const dur = parseInt(document.getElementById('dur-slider').value);
+        document.getElementById('ag-n-disciplinas').textContent = nFases;
+        document.getElementById('ag-duracao').textContent = dur;
+        banner.classList.remove('hidden');
+      }
+      window.__autoGerou = false;
+    }
+
     // Auto-save: persiste config + fases imediatamente após gerar.
     // Garante que, ao voltar pra página, o cronograma já aparece sem clicar
     // em "Gerar" de novo. Falha silenciosa — não interrompe o fluxo do user.
@@ -675,7 +718,9 @@ async function gerarCronograma() {
     err.classList.remove('hidden');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Gerar cronograma';
+    // Se já há resultado na tela, mantém "Regerar". Senão volta pra "Gerar"
+    const temResultado = !document.getElementById('result').classList.contains('hidden');
+    btn.textContent = temResultado ? 'Regerar cronograma' : 'Gerar cronograma';
     document.getElementById('loading-result').classList.add('hidden');
   }
 }
