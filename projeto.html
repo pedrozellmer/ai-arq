@@ -99,32 +99,164 @@ function smartBack() {
     </button>
   </div>
 
-  <!-- Ações principais -->
-  <div class="grid gap-3 md:grid-cols-3">
-    <a id="btn-review" href="#" aria-label="Revisar itens no navegador" style="pointer-events:none;opacity:0.6" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl p-5 flex items-center gap-3 no-underline transition">
-      <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-      <div>
-        <p class="font-semibold">Revisar no navegador</p>
-        <p class="text-xs text-indigo-100 mt-0.5"><span id="rev-pct">--</span></p>
+  <!-- ═════════════════════════════════════════════════════════════════ -->
+  <!-- ENTREGAS DO PROJETO — cards expandíveis (cada um é uma fase do roadmap) -->
+  <!-- ═════════════════════════════════════════════════════════════════ -->
+  <section>
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-lg font-bold text-gray-900">Entregas do projeto</h2>
+      <p class="text-xs text-gray-500">Cada entrega é uma etapa do ciclo de quantificação → cronograma → documentação</p>
+    </div>
+    <div class="grid gap-4 md:grid-cols-2">
+
+      <!-- CARD 1: QUANTITATIVO / ORÇAMENTO (Fase 1 — sempre disponível) -->
+      <div class="rounded-2xl border-2 border-indigo-200 bg-white p-5 hover:shadow-lg transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <div>
+              <p class="font-bold text-gray-900">Quantitativo / Orçamento</p>
+              <p class="text-xs text-gray-500">Planilha por disciplina + SINAPI</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">PRONTO</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
+          <div class="rounded-lg bg-gray-50 px-3 py-2">
+            <p class="text-gray-500">Itens detectados</p>
+            <p id="entrega-q-items" class="font-bold text-gray-900 text-lg leading-tight">--</p>
+          </div>
+          <div class="rounded-lg bg-gray-50 px-3 py-2">
+            <p class="text-gray-500">Revisados</p>
+            <p id="entrega-q-revisados" class="font-bold text-gray-900 text-lg leading-tight">--</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <a id="btn-review" href="#" style="pointer-events:none;opacity:0.6"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold no-underline transition">
+            Revisar
+          </a>
+          <a id="btn-download" href="#" target="_blank" rel="noopener" style="pointer-events:none;opacity:0.6"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-sm font-semibold no-underline transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3"/></svg>
+            XLSX
+          </a>
+        </div>
       </div>
-    </a>
-    <a id="btn-cronograma" href="#" aria-label="Gerar cronograma físico-financeiro"
-       style="pointer-events:none;opacity:0.6;background:linear-gradient(135deg,#0891B2 0%,#06B6D4 100%)"
-       class="rounded-xl p-5 flex items-center gap-3 no-underline transition text-white hover:brightness-110">
-      <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-      <div>
-        <p class="font-semibold">Cronograma físico-financeiro</p>
-        <p class="text-xs text-cyan-100 mt-0.5">Gantt + Curva S · Novo</p>
+
+      <!-- CARD 2: CRONOGRAMA (Fase 2 — sempre disponível) -->
+      <div class="rounded-2xl border-2 border-cyan-200 bg-white p-5 hover:shadow-lg transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            </div>
+            <div>
+              <p class="font-bold text-gray-900">Cronograma</p>
+              <p class="text-xs text-gray-500">Gantt + Curva S + PPC</p>
+            </div>
+          </div>
+          <span id="entrega-cron-badge" class="text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-700">--</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
+          <div class="rounded-lg bg-gray-50 px-3 py-2">
+            <p class="text-gray-500">Duração prevista</p>
+            <p id="entrega-cron-dur" class="font-bold text-gray-900 text-lg leading-tight">--</p>
+          </div>
+          <div class="rounded-lg bg-gray-50 px-3 py-2">
+            <p class="text-gray-500">Avanço real (PPC)</p>
+            <p id="entrega-cron-ppc" class="font-bold text-gray-900 text-lg leading-tight">--</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <a id="btn-cronograma" href="#" style="pointer-events:none;opacity:0.6"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-semibold no-underline transition hover:brightness-110"
+             style="pointer-events:none;opacity:0.6;background:linear-gradient(135deg,#0891B2 0%,#06B6D4 100%)">
+            Abrir cronograma
+          </a>
+          <a id="btn-cron-pdf" href="#" target="_blank" rel="noopener" style="pointer-events:none;opacity:0.6"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-semibold no-underline transition">PDF</a>
+          <a id="btn-cron-pptx" href="#" target="_blank" rel="noopener" style="pointer-events:none;opacity:0.6"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-semibold no-underline transition">PPT</a>
+        </div>
       </div>
-    </a>
-    <a id="btn-download" href="#" target="_blank" rel="noopener" aria-label="Baixar planilha XLSX" style="pointer-events:none;opacity:0.6" class="bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl p-5 flex items-center gap-3 no-underline transition">
-      <svg class="w-7 h-7 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      <div>
-        <p class="font-semibold">Baixar planilha .xlsx</p>
-        <p class="text-xs text-emerald-100 mt-0.5">Versão atual (com revisões)</p>
+
+      <!-- CARD 3: COMPARATIVO DE FORNECEDORES (Fase 4 — já parcial) -->
+      <div class="rounded-2xl border bg-white p-5 hover:shadow-md transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-purple-100 text-purple-700">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            </div>
+            <div>
+              <p class="font-bold text-gray-900">Comparativo de fornecedores</p>
+              <p class="text-xs text-gray-500">Sobe propostas, vê o melhor</p>
+            </div>
+          </div>
+          <span id="entrega-comp-badge" class="text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-700">--</span>
+        </div>
+        <p class="text-xs text-gray-600 mb-4">Receba cotações dos seus fornecedores, suba aqui e o AI.arq mostra ranking + discrepâncias + itens esquecidos.</p>
+        <a id="btn-quotes" href="#cotacoes-section"
+           class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-purple-300 bg-purple-50 hover:bg-purple-100 text-purple-700 text-sm font-semibold no-underline transition">
+          Gerenciar cotações
+        </a>
       </div>
-    </a>
-  </div>
+
+      <!-- CARD 4: MEMORIAL DESCRITIVO (Fase 3a — em breve) -->
+      <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-5 hover:bg-gray-50 transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <div>
+              <p class="font-bold text-gray-700">Memorial descritivo</p>
+              <p class="text-xs text-gray-500">NBR 13531/13532 · RRT/CAU</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">EM BREVE</span>
+        </div>
+        <p class="text-xs text-gray-600">Memorial PDF pronto pra protocolar na prefeitura. RRT pré-preenchido. Checklist de documentos.</p>
+      </div>
+
+      <!-- CARD 5: CADERNO DE ACABAMENTOS (Fase 3b — em breve) -->
+      <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-5 hover:bg-gray-50 transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+            </div>
+            <div>
+              <p class="font-bold text-gray-700">Caderno de acabamentos</p>
+              <p class="text-xs text-gray-500">Portobello / Deca / Suvinil</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">EM BREVE</span>
+        </div>
+        <p class="text-xs text-gray-600">FF&E por ambiente com fabricante BR + código + preço referência + link da ficha.</p>
+      </div>
+
+      <!-- CARD 6: BDI HELPER (Fase 3c — em breve) -->
+      <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-5 hover:bg-gray-50 transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
+            </div>
+            <div>
+              <p class="font-bold text-gray-700">BDI Helper</p>
+              <p class="text-xs text-gray-500">Acórdão TCU 2622/2013</p>
+            </div>
+          </div>
+          <span class="text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700">EM BREVE</span>
+        </div>
+        <p class="text-xs text-gray-600">Sugestão de BDI calibrado por tipo de obra. Adm + Despesas + Lucro + Tributos editável.</p>
+      </div>
+
+    </div>
+  </section>
 
   <!-- Reportar problema neste projeto -->
   <div class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
@@ -371,26 +503,119 @@ function safeRun(fn, label) {
   try { fn(); } catch (e) { console.error(`[${label}] erro:`, e); }
 }
 
+// Preenche os stats dos cards de entregas (Quantitativo + Cronograma)
+async function carregarStatsEntregas() {
+  // ── Quantitativo: items detectados + revisados ──
+  try {
+    const r = await fetch(`${API_BASE}/api/items/${jobId}`);
+    if (r.ok) {
+      const d = await r.json();
+      const items = d.items || [];
+      const elItems = document.getElementById('entrega-q-items');
+      if (elItems) elItems.textContent = items.length.toString();
+      // Revisados = items com confidence != 'estimado' OU com review feito
+      // Simplificação: usa o campo de revisão se vier; senão estima 0
+      const revisados = items.filter(i => i.review_status === 'approved' || i.confidence === 'confirmado').length;
+      const elRev = document.getElementById('entrega-q-revisados');
+      if (elRev) {
+        if (items.length) {
+          const pct = Math.round(100 * revisados / items.length);
+          elRev.innerHTML = `${revisados} <span class="text-xs font-normal text-gray-500">(${pct}%)</span>`;
+        } else {
+          elRev.textContent = '0';
+        }
+      }
+    }
+  } catch (e) { console.warn('items stats:', e); }
+
+  // ── Cronograma: tem ou não? PPC + duração ──
+  try {
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}`);
+    if (r.ok) {
+      const d = await r.json();
+      const badge = document.getElementById('entrega-cron-badge');
+      const durEl = document.getElementById('entrega-cron-dur');
+      const ppcEl = document.getElementById('entrega-cron-ppc');
+      if (d.status === 'ok' && d.saved) {
+        // Tem cronograma salvo
+        if (badge) {
+          badge.textContent = 'PRONTO';
+          badge.className = 'text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700';
+        }
+        if (durEl) durEl.textContent = `${d.saved.duracao_meses}m`;
+        // PPC do JSONB fases_custom
+        const fases = d.saved.fases_custom || [];
+        if (fases.length) {
+          const totalDur = fases.reduce((s, f) => {
+            const ini = new Date(f.inicio), fim = new Date(f.fim);
+            return s + Math.max(7, Math.round((fim - ini) / 86400000));
+          }, 0) || 1;
+          const ppcWeighted = fases.reduce((s, f) => {
+            const ini = new Date(f.inicio), fim = new Date(f.fim);
+            const dur = Math.max(7, Math.round((fim - ini) / 86400000));
+            return s + (f.pct_executado || 0) * dur;
+          }, 0);
+          const ppc = Math.round(ppcWeighted / totalDur);
+          if (ppcEl) ppcEl.textContent = `${ppc}%`;
+        } else if (ppcEl) {
+          ppcEl.textContent = '—';
+        }
+      } else {
+        if (badge) {
+          badge.textContent = 'NÃO GERADO';
+          badge.className = 'text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600';
+        }
+        if (durEl) durEl.textContent = '—';
+        if (ppcEl) ppcEl.textContent = '—';
+      }
+    }
+  } catch (e) { console.warn('cronograma stats:', e); }
+
+  // ── Comparativo: tem cotações? ──
+  try {
+    const r = await fetch(`${API_BASE}/api/projects/${jobId}/quotes`);
+    if (r.ok) {
+      const d = await r.json();
+      const badge = document.getElementById('entrega-comp-badge');
+      const n = (d.quotes || []).length;
+      if (badge) {
+        if (n >= 2) {
+          badge.textContent = `${n} COTAÇÕES`;
+          badge.className = 'text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700';
+        } else if (n === 1) {
+          badge.textContent = '1 COTAÇÃO';
+          badge.className = 'text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700';
+        } else {
+          badge.textContent = 'AGUARDANDO';
+          badge.className = 'text-[10px] font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600';
+        }
+      }
+    }
+  } catch (e) { console.warn('quotes stats:', e); }
+}
+
 (async function init() {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = 'login.html'; return; }
   document.getElementById('gate').classList.add('hidden');
 
-  // Habilita botões agora que jobId tá disponível (placeholder pointer-events:none removido)
-  const btnReview = document.getElementById('btn-review');
-  const btnDownload = document.getElementById('btn-download');
-  const btnCronograma = document.getElementById('btn-cronograma');
-  btnReview.href = `revisao.html?job_id=${jobId}`;
-  btnReview.style.pointerEvents = '';
-  btnReview.style.opacity = '';
-  btnDownload.href = `${API_BASE}/api/download/${jobId}`;
-  btnDownload.style.pointerEvents = '';
-  btnDownload.style.opacity = '';
-  if (btnCronograma) {
-    btnCronograma.href = `cronograma.html?job=${jobId}`;
-    btnCronograma.style.pointerEvents = '';
-    btnCronograma.style.opacity = '';
-  }
+  // Habilita botões dos CARDS de entregas (placeholder pointer-events:none removido)
+  const enableLink = (id, href, isExternal = false) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.href = href;
+    el.style.pointerEvents = '';
+    el.style.opacity = '';
+    if (isExternal) el.setAttribute('target', '_blank');
+  };
+  enableLink('btn-review', `revisao.html?job_id=${jobId}`);
+  enableLink('btn-download', `${API_BASE}/api/download/${jobId}`, true);
+  enableLink('btn-cronograma', `cronograma.html?job=${jobId}`);
+  enableLink('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, true);
+  enableLink('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, true);
+
+  // Preenche stats dos cards (entrega-q-* e entrega-cron-*)
+  carregarStatsEntregas();
 
   // Botão "Reportar problema" — abre em modo TICKET (campos reduzidos)
   const btnReport = document.getElementById('btn-report-project');

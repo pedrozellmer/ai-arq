@@ -161,7 +161,7 @@
     </div>
 
     <!-- Resumo -->
-    <div class="grid gap-4 md:grid-cols-4">
+    <div class="grid gap-4 md:grid-cols-5">
       <div class="rounded-xl border bg-white p-4">
         <p class="text-xs font-medium text-gray-500 mb-1">Início</p>
         <p id="r-inicio" class="text-lg font-bold text-gray-900">--</p>
@@ -171,12 +171,17 @@
         <p id="r-fim" class="text-lg font-bold text-gray-900">--</p>
       </div>
       <div class="rounded-xl border bg-white p-4">
-        <p class="text-xs font-medium text-gray-500 mb-1">Disciplinas no cronograma</p>
+        <p class="text-xs font-medium text-gray-500 mb-1">Disciplinas</p>
         <p id="r-fases" class="text-lg font-bold text-gray-900">--</p>
       </div>
       <div class="rounded-xl border bg-white p-4">
         <p class="text-xs font-medium text-gray-500 mb-1">Duração total</p>
         <p id="r-duracao" class="text-lg font-bold text-gray-900">--</p>
+      </div>
+      <div id="r-ppc-card" class="hidden rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4">
+        <p class="text-xs font-medium text-emerald-700 mb-1">Avanço real (PPC)</p>
+        <p id="r-ppc" class="text-lg font-bold text-emerald-900">--</p>
+        <p id="r-ppc-sub" class="text-[10px] text-emerald-700 mt-0.5">--</p>
       </div>
     </div>
 
@@ -418,14 +423,20 @@ function addFaseRowEditor(fase, idx) {
   const row = document.createElement('div');
   row.className = 'flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-slate-50';
   row.dataset.idx = idx;
+  const pctExec = fase.pct_executado != null ? fase.pct_executado : 0;
   row.innerHTML = `
-    <input type="color" value="${fase.cor || '#4F46E5'}" class="fase-cor w-10 h-10 rounded cursor-pointer border" />
-    <input type="text" value="${escapeAttr(fase.label || '')}" placeholder="Nome da disciplina" class="fase-label flex-1 min-w-[200px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
-    <input type="text" value="${escapeAttr(fase.ambiente || '')}" placeholder="Ambiente (opcional)" class="fase-ambiente w-40 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
-    <input type="date" value="${fase.inicio || ''}" class="fase-inicio rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+    <input type="color" value="${fase.cor || '#4F46E5'}" class="fase-cor w-10 h-10 rounded cursor-pointer border shrink-0" title="Cor" />
+    <input type="text" value="${escapeAttr(fase.label || '')}" placeholder="Disciplina" class="fase-label flex-1 min-w-[180px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+    <input type="text" value="${escapeAttr(fase.ambiente || '')}" placeholder="Ambiente" class="fase-ambiente w-32 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" title="Ambiente (opcional)" />
+    <input type="date" value="${fase.inicio || ''}" class="fase-inicio rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" title="Início" />
     <span class="text-gray-400 text-xs">→</span>
-    <input type="date" value="${fase.fim || ''}" class="fase-fim rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
-    <button class="btn-del-fase text-red-500 hover:text-red-700 p-1" title="Remover">
+    <input type="date" value="${fase.fim || ''}" class="fase-fim rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" title="Fim" />
+    <div class="flex items-center gap-1 shrink-0" title="% executado">
+      <input type="number" min="0" max="100" step="5" value="${pctExec}"
+             class="fase-pct w-16 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-2 text-sm font-semibold text-emerald-700 focus:border-emerald-500 focus:outline-none text-center" />
+      <span class="text-xs text-emerald-700 font-semibold">%</span>
+    </div>
+    <button class="btn-del-fase text-red-500 hover:text-red-700 p-1 shrink-0" title="Remover">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
     </button>
   `;
@@ -465,10 +476,13 @@ function aplicarEdits() {
     const fim = row.querySelector('.fase-fim').value;
     const cor = row.querySelector('.fase-cor').value;
     const ambiente = row.querySelector('.fase-ambiente').value.trim() || null;
+    const pctExecRaw = row.querySelector('.fase-pct').value;
+    const pctExec = Math.max(0, Math.min(100, parseInt(pctExecRaw) || 0));
     if (!label || !inicio || !fim) { invalido++; return; }
     fasesEditadas.push({
       label, inicio, fim, cor,
       ambiente: ambiente || undefined,
+      pct_executado: pctExec,
       ordem: idx,
       manual: true,
     });
@@ -495,7 +509,18 @@ function aplicarEdits() {
     ...f,
     dur_dias: Math.max(7, Math.round((new Date(f.fim) - new Date(f.inicio)) / 86400000)),
     cor: f.cor || '#4F46E5',
+    pct_executado: f.pct_executado,
   }));
+  // Recalcula PPC local
+  const totalDur = cronogramaAtual.fases.reduce((s, f) => s + f.dur_dias, 0) || 1;
+  const ppcWeighted = cronogramaAtual.fases.reduce((s, f) => s + (f.pct_executado || 0) * f.dur_dias, 0);
+  cronogramaAtual.ppc = {
+    ppc_pct: Math.round(ppcWeighted / totalDur * 10) / 10,
+    avanco_real_pct: Math.round(ppcWeighted / totalDur * 10) / 10,
+    n_executadas: cronogramaAtual.fases.filter(f => (f.pct_executado || 0) >= 100).length,
+    n_em_andamento: cronogramaAtual.fases.filter(f => (f.pct_executado || 0) > 0 && (f.pct_executado || 0) < 100).length,
+    n_nao_iniciadas: cronogramaAtual.fases.filter(f => (f.pct_executado || 0) === 0).length,
+  };
   cronogramaAtual.resumo.data_fim = fasesEditadas.reduce((max, f) => f.fim > max ? f.fim : max, fasesEditadas[0].fim);
   cronogramaAtual.resumo.n_fases = fasesEditadas.length;
   cronogramaAtual.resumo.editado_manualmente = true;
@@ -529,6 +554,8 @@ async function salvarCronograma() {
       fim: f.fim,
       cor: f.cor,
       ambiente: f.ambiente,
+      pct_executado: f.pct_executado != null ? f.pct_executado : 0,
+      categoria: f.categoria,
       ordem: f.ordem !== undefined ? f.ordem : i,
       manual: !!f.manual,
     }));
@@ -636,10 +663,24 @@ function renderResumo(c) {
   const r = c.resumo;
   document.getElementById('r-inicio').textContent = formatDateBR(r.data_inicio);
   document.getElementById('r-fim').textContent = formatDateBR(r.data_fim);
-  document.getElementById('r-fases').textContent = `${r.n_fases} de ${r.n_disciplinas_quantitativo}`;
+  document.getElementById('r-fases').textContent = `${r.n_fases} ${r.n_fases === 1 ? 'fase' : 'fases'}`;
   const dias = r.duracao_dias_reais;
   const meses_reais = Math.round(dias / 30 * 10) / 10;
   document.getElementById('r-duracao').textContent = `${dias} dias (~${meses_reais}m)`;
+  // PPC: só mostra se há fases com pct_executado > 0
+  const ppc = c.ppc;
+  const card = document.getElementById('r-ppc-card');
+  if (ppc && (ppc.n_executadas > 0 || ppc.n_em_andamento > 0)) {
+    document.getElementById('r-ppc').textContent = `${ppc.avanco_real_pct}%`;
+    const partes = [];
+    if (ppc.n_executadas) partes.push(`${ppc.n_executadas} ✓`);
+    if (ppc.n_em_andamento) partes.push(`${ppc.n_em_andamento} em andamento`);
+    if (ppc.n_nao_iniciadas) partes.push(`${ppc.n_nao_iniciadas} não iniciada(s)`);
+    document.getElementById('r-ppc-sub').textContent = partes.join(' · ');
+    card.classList.remove('hidden');
+  } else {
+    card.classList.add('hidden');
+  }
 }
 
 function renderGantt(c) {
