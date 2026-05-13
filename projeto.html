@@ -110,7 +110,7 @@ function smartBack() {
     <div class="grid gap-4 md:grid-cols-2">
 
       <!-- CARD 1: QUANTITATIVO / ORÇAMENTO (Fase 1 — sempre disponível) -->
-      <div class="rounded-2xl border-2 border-indigo-200 bg-white p-5 hover:shadow-lg transition">
+      <div class="card-clickable-review rounded-2xl border-2 border-indigo-200 bg-white p-5 hover:shadow-lg hover:border-indigo-300 transition">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
             <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-100 text-indigo-700">
@@ -147,7 +147,7 @@ function smartBack() {
       </div>
 
       <!-- CARD 2: CRONOGRAMA (Fase 2 — sempre disponível) -->
-      <div class="rounded-2xl border-2 border-cyan-200 bg-white p-5 hover:shadow-lg transition">
+      <div class="card-clickable-cron rounded-2xl border-2 border-cyan-200 bg-white p-5 hover:shadow-lg hover:border-cyan-300 transition">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
             <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-100 text-cyan-700">
@@ -171,7 +171,7 @@ function smartBack() {
           </div>
         </div>
         <div class="flex flex-wrap gap-2">
-          <a id="btn-cronograma" href="#" style="pointer-events:none;opacity:0.6"
+          <a id="btn-cronograma" href="#"
              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-semibold no-underline transition hover:brightness-110"
              style="pointer-events:none;opacity:0.6;background:linear-gradient(135deg,#0891B2 0%,#06B6D4 100%)">
             Abrir cronograma
@@ -302,24 +302,62 @@ function smartBack() {
     <div id="cashback-events-list" class="mt-4 space-y-1 text-sm"></div>
   </div>
 
-  <!-- Dados do Cliente Final -->
+  <!-- Dados do Projeto + Cliente Final (editável em 1 lugar só) -->
   <div class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
       <div>
-        <h2 class="font-semibold text-gray-800">📇 Dados do cliente final</h2>
-        <p class="text-xs text-gray-500 mt-0.5">Usado no cabeçalho da planilha e do PPT gerado</p>
+        <h2 class="font-semibold text-gray-800">📇 Dados do projeto e cliente</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Aparecem no cabeçalho da planilha, no PDF do cronograma e nos PPTs gerados</p>
       </div>
       <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
     </div>
     <div id="client-view" class="p-5 text-sm">
       <div id="client-loading" class="text-gray-400">Carregando...</div>
-      <div id="client-empty" class="text-gray-400 hidden">Nenhum cliente cadastrado. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Adicionar →</button></div>
+      <div id="client-empty" class="text-gray-400 hidden">Nenhum dado preenchido. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Preencher agora →</button></div>
       <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
     </div>
     <div id="client-edit" class="p-5 hidden">
+
+      <!-- Seção 1: DADOS DO PROJETO -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do projeto</p>
+      <div class="grid gap-3 md:grid-cols-2 mb-5">
+        <div class="md:col-span-2">
+          <label class="text-xs font-medium text-gray-500 block mb-1">Nome do projeto</label>
+          <input id="p-name" type="text" maxlength="120" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex.: Escritório Regional Americana"/>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 block mb-1">Tipologia</label>
+          <select id="p-typology" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="office">Corporativo / Escritório</option>
+            <option value="residential">Residencial</option>
+            <option value="retail">Varejo / Comércio</option>
+            <option value="hospital">Hospital / Saúde</option>
+            <option value="educational">Educacional</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-medium text-gray-500 block mb-1">Fase do projeto</label>
+          <select id="p-phase" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="Estudo preliminar">Estudo preliminar</option>
+            <option value="Anteprojeto">Anteprojeto</option>
+            <option value="Projeto legal">Projeto legal</option>
+            <option value="Projeto executivo">Projeto executivo</option>
+            <option value="Reforma">Reforma</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra</label>
+          <input id="p-address" type="text" maxlength="240" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
+        </div>
+      </div>
+
+      <!-- Seção 2: DADOS DO CLIENTE FINAL -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 mt-2">Cliente final do projeto</p>
       <div class="grid gap-3 md:grid-cols-2">
         <div>
-          <label class="text-xs font-medium text-gray-500 block mb-1">Nome</label>
+          <label class="text-xs font-medium text-gray-500 block mb-1">Nome do contato</label>
           <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Nome do cliente final"/>
         </div>
         <div>
@@ -331,12 +369,12 @@ function smartBack() {
           <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="email@empresa.com"/>
         </div>
         <div>
-          <label class="text-xs font-medium text-gray-500 block mb-1">Telefone / WhatsApp</label>
-          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 0 0000-0000"/>
+          <label class="text-xs font-medium text-gray-500 block mb-1">WhatsApp / Telefone</label>
+          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 9 0000-0000"/>
         </div>
-        <div class="md:col-span-2">
-          <label class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra <span class="text-gray-400">(se diferente do projeto)</span></label>
-          <input id="c-address" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
+        <div class="md:col-span-2 hidden">
+          <!-- Mantido por compat com fluxo antigo; agora endereço fica em p-address -->
+          <input id="c-address" type="hidden"/>
         </div>
         <div class="md:col-span-2">
           <label class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-400">(só você vê)</span></label>
@@ -344,52 +382,46 @@ function smartBack() {
         </div>
       </div>
       <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" class="underline hover:text-gray-700">Privacidade</a>.</p>
+      <div id="edit-status" class="mt-2 text-xs hidden"></div>
       <div class="mt-4 flex gap-2 justify-end">
         <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-        <button onclick="saveClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar</button>
+        <button onclick="saveProjectAndClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar tudo</button>
       </div>
     </div>
   </div>
 
-  <!-- Upload de Planilha Revisada (cashback) -->
-  <div class="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white overflow-hidden">
-    <div class="px-5 py-4 border-b border-amber-100 flex items-center justify-between">
-      <div>
-        <h2 class="font-semibold text-gray-800 flex items-center gap-2">
-          ✏️ Revisou a planilha offline?
-          <span class="text-xs font-normal px-2 py-0.5 bg-amber-200 text-amber-800 rounded-full">+R$ 20 cashback</span>
-        </h2>
-        <p class="text-xs text-gray-600 mt-0.5">Baixou, corrigiu no Excel e quer subir? Envia aqui que a gente atualiza e ganha crédito pelo feedback.</p>
-      </div>
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ENVIAR ARQUIVOS — sub-tabs (sua planilha revisada × cotações)    -->
+  <!-- Antes eram 2 caixas separadas, gerava confusão "ambas são .xlsx" -->
+  <!-- Agora 1 caixa com 2 abas claras: o que enviar e por que          -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <section id="cotacoes-section" class="rounded-xl border bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50">
+      <h2 class="font-semibold text-gray-800">📤 Enviar planilhas deste projeto</h2>
+      <p class="text-xs text-gray-500 mt-0.5">Dois fluxos diferentes — escolha a aba certa</p>
     </div>
-    <div class="p-5 bg-white/60">
-      <div class="grid gap-3 md:grid-cols-3 mb-3">
-        <div class="md:col-span-2">
-          <label class="text-xs font-medium text-gray-500 block mb-1">Planilha corrigida (.xlsx)</label>
-          <input id="rev-file" type="file" accept=".xlsx,.xls" class="w-full text-sm"/>
-        </div>
-        <div class="flex items-end">
-          <button onclick="uploadRevisedSheet()" id="btn-upload-rev" class="w-full px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded-lg font-semibold">
-            Enviar planilha
-          </button>
-        </div>
-      </div>
-      <p class="text-xs text-gray-500">Ao enviar, você concorda com os <a href="termos.html" target="_blank" class="underline hover:text-gray-700">Termos de Uso</a> e a <a href="privacidade.html" target="_blank" class="underline hover:text-gray-700">Política de Privacidade</a>. Os quantitativos revisados podem ser usados de forma <strong>anonimizada</strong> pra calibrar a IA.</p>
-      <div id="rev-status" class="mt-2 text-xs hidden"></div>
-    </div>
-  </div>
 
-  <!-- Cotações de Fornecedores -->
-  <div class="rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white overflow-hidden">
-    <div class="px-5 py-4 border-b border-indigo-100 flex items-center justify-between">
-      <div>
-        <h2 class="font-semibold text-gray-800 flex items-center gap-2">
-          📊 Recebeu orçamentos dos fornecedores?
-          <span class="text-xs font-normal px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">NOVO</span>
-        </h2>
-        <p class="text-xs text-gray-600 mt-0.5">Envie as planilhas e o AI.arq gera o comparativo automático + alertas contra o seu quantitativo.</p>
-      </div>
+    <!-- Tabs -->
+    <div class="flex border-b text-sm">
+      <button id="tab-btn-cotacoes" type="button" onclick="switchUploadTab('cotacoes')"
+              class="flex-1 px-5 py-3 font-medium border-b-2 border-indigo-600 text-indigo-700 bg-white">
+        <span class="block text-[11px] uppercase tracking-wide text-indigo-500">Comparar fornecedores</span>
+        <span class="block">📊 Cotações de fornecedores</span>
+      </button>
+      <button id="tab-btn-revisada" type="button" onclick="switchUploadTab('revisada')"
+              class="flex-1 px-5 py-3 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50">
+        <span class="block text-[11px] uppercase tracking-wide text-gray-400">Ganhar cashback</span>
+        <span class="block">✏️ Minha planilha revisada</span>
+      </button>
     </div>
+
+    <!-- TAB 1: Cotações de Fornecedores (ativo por default) -->
+    <div id="tab-cotacoes" class="upload-tab">
+      <div class="px-5 py-4 bg-indigo-50/40 border-b border-indigo-100">
+        <p class="text-sm text-gray-700">
+          <strong>Recebeu orçamento dos seus fornecedores?</strong> Suba aqui pra o AI.arq comparar item a item, gerar ranking e apontar divergências contra o seu quantitativo.
+        </p>
+      </div>
 
     <!-- Lista de cotações existentes -->
     <div id="quotes-list" class="divide-y divide-indigo-100"></div>
@@ -432,7 +464,35 @@ function smartBack() {
       </div>
       <div id="compare-result" class="mt-3 hidden"></div>
     </div>
-  </div>
+    </div>
+    <!-- /tab-cotacoes -->
+
+    <!-- TAB 2: Minha planilha revisada (escondida por default) -->
+    <div id="tab-revisada" class="upload-tab hidden">
+      <div class="px-5 py-4 bg-amber-50/40 border-b border-amber-100">
+        <p class="text-sm text-gray-700">
+          <strong>Baixou a planilha e corrigiu offline no Excel?</strong> Suba a versão revisada — você ganha
+          <span class="font-semibold text-amber-700">R$ 20 de cashback</span> e ajuda a calibrar o motor. Os quantitativos revisados podem ser usados de forma anonimizada.
+        </p>
+      </div>
+      <div class="p-5">
+        <div class="grid gap-3 md:grid-cols-3 mb-3">
+          <div class="md:col-span-2">
+            <label class="text-xs font-medium text-gray-500 block mb-1">Sua planilha corrigida (.xlsx)</label>
+            <input id="rev-file" type="file" accept=".xlsx,.xls" class="w-full text-sm"/>
+          </div>
+          <div class="flex items-end">
+            <button onclick="uploadRevisedSheet()" id="btn-upload-rev" class="w-full px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded-lg font-semibold">
+              Enviar e ganhar R$ 20
+            </button>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500">Ao enviar, você concorda com os <a href="termos.html" target="_blank" class="underline hover:text-gray-700">Termos de Uso</a> e a <a href="privacidade.html" target="_blank" class="underline hover:text-gray-700">Política de Privacidade</a>.</p>
+        <div id="rev-status" class="mt-2 text-xs hidden"></div>
+      </div>
+    </div>
+    <!-- /tab-revisada -->
+  </section>
 
   <!-- Info extra -->
   <div class="grid gap-4 md:grid-cols-2">
@@ -599,13 +659,17 @@ async function carregarStatsEntregas() {
   if (!session) { window.location.href = 'login.html'; return; }
   document.getElementById('gate').classList.add('hidden');
 
-  // Habilita botões dos CARDS de entregas (placeholder pointer-events:none removido)
+  // Habilita botões dos CARDS de entregas IMEDIATAMENTE após o auth.
+  // Não esperar Promise.all dos dados — se o Render dormiu (free tier, 15min
+  // ocioso), o cold-start demora 30-60s e o usuário fica olhando botão
+  // morto sem entender. Os links são estáticos (só job_id), podem ir já.
   const enableLink = (id, href, isExternal = false) => {
     const el = document.getElementById(id);
     if (!el) return;
     el.href = href;
     el.style.pointerEvents = '';
     el.style.opacity = '';
+    el.style.cursor = 'pointer';
     if (isExternal) el.setAttribute('target', '_blank');
   };
   enableLink('btn-review', `revisao.html?job_id=${jobId}`);
@@ -613,6 +677,29 @@ async function carregarStatsEntregas() {
   enableLink('btn-cronograma', `cronograma.html?job=${jobId}`);
   enableLink('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, true);
   enableLink('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, true);
+
+  // Torna os cards de entregas inteiros clicáveis (mãozinha em toda área).
+  // O <a> interno continua sendo o destino — clique em qualquer lugar do card
+  // dispara navegação. Cards "EM BREVE" não viram clicáveis (descartados).
+  const cardClickable = (cardSelector, btnId) => {
+    const cards = document.querySelectorAll(cardSelector);
+    cards.forEach(card => {
+      const btn = card.querySelector(`#${btnId}`);
+      if (!btn || !btn.href || btn.href.endsWith('#')) return;
+      card.style.cursor = 'pointer';
+      card.addEventListener('click', (e) => {
+        // Se clicou num botão/link específico, deixa o comportamento default
+        if (e.target.closest('a, button')) return;
+        if (btn.target === '_blank') {
+          window.open(btn.href, '_blank', 'noopener');
+        } else {
+          window.location.href = btn.href;
+        }
+      });
+    });
+  };
+  cardClickable('.card-clickable-review', 'btn-review');
+  cardClickable('.card-clickable-cron', 'btn-cronograma');
 
   // Preenche stats dos cards (entrega-q-* e entrega-cron-*)
   carregarStatsEntregas();
@@ -729,6 +816,32 @@ async function carregarStatsEntregas() {
   loadProjectCashback();
 })();
 
+// Alterna entre as 2 sub-tabs do bloco "Enviar planilhas" (Cotações × Revisada)
+function switchUploadTab(name) {
+  const tabs = ['cotacoes', 'revisada'];
+  tabs.forEach(t => {
+    const panel = document.getElementById('tab-' + t);
+    const btn = document.getElementById('tab-btn-' + t);
+    if (!panel || !btn) return;
+    const active = (t === name);
+    panel.classList.toggle('hidden', !active);
+    if (active) {
+      btn.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:bg-gray-50');
+      // Cor depende da tab — indigo pra cotações, amber pra revisada
+      if (t === 'cotacoes') {
+        btn.classList.add('border-indigo-600', 'text-indigo-700', 'bg-white');
+      } else {
+        btn.classList.add('border-amber-600', 'text-amber-700', 'bg-white');
+      }
+    } else {
+      btn.classList.remove('border-indigo-600', 'text-indigo-700', 'border-amber-600', 'text-amber-700', 'bg-white');
+      btn.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:bg-gray-50');
+    }
+  });
+}
+// Disponibiliza global pro onclick inline
+window.switchUploadTab = switchUploadTab;
+
 async function loadProjectCashback() {
   try {
     const res = await fetch(`${API_BASE}/api/projects/${jobId}/cashback`);
@@ -762,9 +875,16 @@ async function loadProjectCashback() {
 async function loadClientData() {
   try {
     const res = await fetch(`${API_BASE}/api/projects/${jobId}/client`);
-    const data = await res.json();
+    const data = await res.json() || {};
     document.getElementById('client-loading').classList.add('hidden');
-    if (data && data.client_name) {
+
+    // Mostra a view se há QUALQUER coisa preenchida: cliente OU dados do projeto
+    const projTitle = document.getElementById('proj-title')?.textContent.trim() || '';
+    const projTitleValid = projTitle && projTitle !== 'Projeto' && projTitle !== 'Sem nome';
+    const temCliente = !!data.client_name;
+    const temProjeto = projTitleValid || window.__projAddress || window.__projPhase;
+
+    if (temCliente || temProjeto) {
       renderClientData(data);
     } else {
       document.getElementById('client-empty').classList.remove('hidden');
@@ -777,15 +897,23 @@ async function loadClientData() {
 
 function renderClientData(d) {
   const dl = document.getElementById('client-data');
+  // Endereço da obra vem do projeto (proj.address) — fallback no address_site do cliente
+  const enderecoObra = window.__projAddress || d.address_site || '';
+  const projName = document.getElementById('proj-title')?.textContent.trim() || '';
+  const projTyp = window.__projTypologyRaw || '';
+  const projPhase = window.__projPhase || '';
   const rows = [
-    ['Nome', d.client_name],
+    ['Nome do projeto', projName && projName !== 'Projeto' ? projName : ''],
+    ['Tipologia', projTyp],
+    ['Fase', projPhase],
+    ['Endereço da obra', enderecoObra],
+    ['Cliente final', d.client_name],
     ['Empresa', d.client_company],
     ['E-mail', d.client_email],
-    ['Telefone', d.client_phone],
-    ['Endereço da obra', d.address_site],
+    ['WhatsApp / Telefone', d.client_phone],
   ];
   let html = rows.filter(r => r[1]).map(([k, v]) =>
-    `<div><dt class="text-xs font-medium text-gray-500">${k}</dt><dd class="text-sm text-gray-800">${v}</dd></div>`
+    `<div><dt class="text-xs font-medium text-gray-500">${k}</dt><dd class="text-sm text-gray-800">${esc(v)}</dd></div>`
   ).join('');
   // Ações (mail + whatsapp)
   const actions = [];
@@ -810,7 +938,23 @@ function openClientEdit() {
   document.getElementById('client-view').classList.add('hidden');
   const edit = document.getElementById('client-edit');
   edit.classList.remove('hidden');
-  // Popular campos com dados atuais se houver
+
+  // Popula dados do PROJETO a partir do que já está no header/renderHeader
+  // (proj.project_name, typology, address, phase).
+  const projTitle = document.getElementById('proj-title')?.textContent.trim() || '';
+  const projTypology = document.getElementById('m-typology')?.textContent.trim() || '';
+  document.getElementById('p-name').value = projTitle && projTitle !== 'Projeto' ? projTitle : '';
+  // Tipologia vem normalizada do backend (office/residential/etc)
+  const validTyp = ['office','residential','retail','hospital','educational'];
+  const typLower = (window.__projTypologyRaw || '').toLowerCase();
+  if (validTyp.includes(typLower)) {
+    document.getElementById('p-typology').value = typLower;
+  }
+  // Endereço e fase ficam guardados na resposta do /by-user — usa o que vier
+  document.getElementById('p-address').value = window.__projAddress || '';
+  document.getElementById('p-phase').value = window.__projPhase || '';
+
+  // Popula CLIENTE a partir do endpoint /client
   fetch(`${API_BASE}/api/projects/${jobId}/client`)
     .then(r => r.json())
     .then(d => {
@@ -819,7 +963,10 @@ function openClientEdit() {
         document.getElementById('c-company').value = d.client_company || '';
         document.getElementById('c-email').value = d.client_email || '';
         document.getElementById('c-phone').value = d.client_phone || '';
-        document.getElementById('c-address').value = d.address_site || '';
+        // Endereço único — espelha em p-address se vier do client e p-address vazio
+        if (!document.getElementById('p-address').value && d.address_site) {
+          document.getElementById('p-address').value = d.address_site;
+        }
         document.getElementById('c-notes').value = d.internal_notes || '';
       }
     });
@@ -828,32 +975,98 @@ function openClientEdit() {
 function closeClientEdit() {
   document.getElementById('client-edit').classList.add('hidden');
   document.getElementById('client-view').classList.remove('hidden');
+  const st = document.getElementById('edit-status');
+  if (st) st.classList.add('hidden');
 }
 
 document.getElementById('btn-edit-client').addEventListener('click', openClientEdit);
 
-async function saveClient() {
+function showEditStatus(msg, kind) {
+  const el = document.getElementById('edit-status');
+  if (!el) return;
+  const cls = {
+    success: 'text-emerald-700',
+    error: 'text-red-700',
+    info: 'text-gray-500',
+  }[kind] || 'text-gray-500';
+  el.className = `mt-2 text-xs ${cls}`;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function saveProjectAndClient() {
+  showEditStatus('Salvando...', 'info');
+
+  // 1) Dados do PROJETO (project_name, typology, address, phase) via /meta
+  //    Endpoint exige JWT do dono — usa authFetch.
+  const projetoPayload = {};
+  const pname = document.getElementById('p-name').value.trim();
+  const ptyp  = document.getElementById('p-typology').value;
+  const padd  = document.getElementById('p-address').value.trim();
+  const pphase = document.getElementById('p-phase').value;
+  if (pname) projetoPayload.project_name = pname;
+  if (ptyp)  projetoPayload.typology = ptyp;
+  if (padd !== undefined) projetoPayload.address = padd;
+  if (pphase) projetoPayload.phase = pphase;
+
+  let projetoOk = true;
+  if (Object.keys(projetoPayload).length > 0) {
+    try {
+      const r = await authFetch(`${API_BASE}/api/projects/${jobId}/meta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projetoPayload),
+      });
+      if (!r.ok) {
+        projetoOk = false;
+        const errTxt = await r.text();
+        console.warn('Falha ao salvar metadados do projeto:', r.status, errTxt);
+      }
+    } catch (e) {
+      projetoOk = false;
+      console.warn('Erro de rede em /meta:', e);
+    }
+  }
+
+  // 2) Dados do CLIENTE (endpoint legado, sem JWT obrigatório)
   const fd = new FormData();
   fd.append('client_name', document.getElementById('c-name').value);
   fd.append('client_company', document.getElementById('c-company').value);
   fd.append('client_email', document.getElementById('c-email').value);
   fd.append('client_phone', document.getElementById('c-phone').value);
-  fd.append('address_site', document.getElementById('c-address').value);
+  // Endereço único — mesmo valor do projeto vai pra address_site do cliente
+  fd.append('address_site', padd);
   fd.append('internal_notes', document.getElementById('c-notes').value);
+  let clienteOk = true;
   try {
     const res = await fetch(`${API_BASE}/api/projects/${jobId}/client`, {
       method: 'POST', body: fd,
     });
-    if (res.ok) {
+    if (!res.ok) clienteOk = false;
+  } catch (e) {
+    clienteOk = false;
+  }
+
+  if (projetoOk && clienteOk) {
+    showEditStatus('✓ Dados salvos', 'success');
+    setTimeout(() => {
       closeClientEdit();
       loadClientData();
-    } else {
-      alert('Erro ao salvar');
-    }
-  } catch (e) {
-    alert('Erro: ' + e.message);
+      // Atualiza título no header se mudou
+      if (pname) {
+        const t = document.getElementById('proj-title');
+        if (t) t.textContent = pname;
+      }
+    }, 600);
+  } else if (clienteOk && !projetoOk) {
+    showEditStatus('Cliente salvo. Os dados do projeto ainda não puderam ser persistidos (aguardando ativação no servidor).', 'info');
+  } else {
+    showEditStatus('Erro ao salvar. Tente novamente.', 'error');
   }
 }
+
+// Mantém compat com chamadas antigas
+window.saveClient = saveProjectAndClient;
 
 // ══════════════════════════════════════════════
 //  COTAÇÕES DE FORNECEDORES
@@ -1131,6 +1344,12 @@ function renderMetrics(p, items) {
   document.getElementById('m-area').textContent = area;
   document.getElementById('m-files').textContent = p.files_count || items.length || '--';
   document.getElementById('m-items').textContent = p.items_count || items.length || '--';
+
+  // Guarda valores pra o modal de edição (project_name, typology, address, phase)
+  // O modal lê window.__projTypologyRaw/Address/Phase pra pré-preencher.
+  window.__projTypologyRaw = p.typology || '';
+  window.__projAddress = p.address || '';
+  window.__projPhase = p.phase || '';
 }
 
 function renderWarnings(warnings) {

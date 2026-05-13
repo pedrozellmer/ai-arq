@@ -298,8 +298,18 @@ async function init() {
     return;
   }
 
+  // 1) PRIMEIRO: tenta carregar cronograma já salvo (renderiza direto).
+  //    Endpoint /full devolve 200 com o cronograma pronto, ou 404 se nunca foi
+  //    gerado. Quem já gerou antes vê o cronograma na hora — sem precisar
+  //    clicar em "Gerar" de novo.
+  const carregouSalvo = await tentarCarregarCronogramaPronto();
+  if (carregouSalvo) {
+    document.getElementById('gate').classList.add('hidden');
+    return;
+  }
+
+  // 2) Se não tem salvo: confere se o projeto tem items pra mostrar o form
   try {
-    // Busca items pra confirmar que projeto existe e tem disciplinas
     const r = await fetch(`${API_BASE}/api/items/${jobId}`);
     const data = await r.json();
     const items = data.items || [];
@@ -310,7 +320,6 @@ async function init() {
       return;
     }
 
-    // Quantas disciplinas?
     const disciplinas = new Set(
       items.map(it => (it.discipline || '').trim().toUpperCase())
            .filter(d => d && !d.includes('PREMISSA'))
@@ -321,7 +330,6 @@ async function init() {
       return;
     }
 
-    // Info banner: quantas disciplinas vão entrar
     const info = document.getElementById('info-banner');
     info.textContent = `Detectadas ${disciplinas.size} disciplina(s) nesse projeto. Vão entrar no cronograma após "Gerar".`;
     info.classList.remove('hidden');
@@ -329,38 +337,51 @@ async function init() {
     document.getElementById('inputs-card').classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
 
-    // Busca sugestão de duração baseada no projeto
     carregarSugestao();
-
-    // Tenta carregar cronograma salvo (se já tiver)
-    carregarCronogramaSalvo();
   } catch (e) {
     document.getElementById('no-items').classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
   }
 }
 
-async function carregarCronogramaSalvo() {
+async function tentarCarregarCronogramaPronto() {
+  // Busca o cronograma já renderizado (config salva + fases) num único call.
+  // Se 404, retorna false → fluxo segue pro form de geração.
   try {
-    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}`);
-    if (!r.ok) return;
-    const data = await r.json();
-    if (data.status !== 'ok' || !data.saved) return;
-    const saved = data.saved;
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/full`);
+    if (r.status === 404) return false;
+    if (!r.ok) return false;
+    const cron = await r.json();
+    if (!cron || !cron.resumo || !cron.fases) return false;
 
-    // Setta inputs com valores salvos
-    document.getElementById('data-inicio').value = saved.data_inicio;
-    document.getElementById('dur-slider').value = saved.duracao_meses;
-    updateSliderUI();
+    cronogramaAtual = cron;
 
-    // Se tem fases custom, dispara geração com elas
-    if (saved.fases_custom && saved.fases_custom.length) {
-      showSaveStatus('Cronograma salvo encontrado — carregando última versão editada...', 'info');
-      // Pega o JSON computado direto do backend (que vai usar fases_custom)
-      await gerarCronograma();  // backend ainda usa /generate, mas salvar já registrou config
+    // Restaura inputs com a config persistida
+    if (cron.resumo.data_inicio) {
+      document.getElementById('data-inicio').value = cron.resumo.data_inicio;
     }
+    // Pode vir 'duracao_meses' do resumo ou ser inferido
+    if (cron.resumo.duracao_meses) {
+      document.getElementById('dur-slider').value = cron.resumo.duracao_meses;
+      updateSliderUI();
+    }
+
+    // Render direto + revela área de resultado
+    document.getElementById('inputs-card').classList.remove('hidden');
+    atualizarLinksExport();
+    renderResumo(cron);
+    renderGantt(cron);
+    renderCurvaS(cron);
+    renderMatriz(cron);
+    renderCaminhoCritico(cron);
+    renderMarcosLegais(cron);
+    renderRessalva(cron);
+    document.getElementById('result').classList.remove('hidden');
+
+    return true;
   } catch (e) {
-    console.warn('Carga de cronograma salvo falhou:', e);
+    console.warn('Carga /full falhou:', e);
+    return false;
   }
 }
 
@@ -641,6 +662,13 @@ async function gerarCronograma() {
     renderRessalva(cronog);
 
     document.getElementById('result').classList.remove('hidden');
+
+    // Auto-save: persiste config + fases imediatamente após gerar.
+    // Garante que, ao voltar pra página, o cronograma já aparece sem clicar
+    // em "Gerar" de novo. Falha silenciosa — não interrompe o fluxo do user.
+    autoSaveCronograma(cronog).catch(err => {
+      console.warn('Auto-save falhou (não crítico):', err);
+    });
   } catch (e) {
     const err = document.getElementById('error-banner');
     err.textContent = `Erro: ${e.message}`;
@@ -650,6 +678,39 @@ async function gerarCronograma() {
     btn.textContent = 'Gerar cronograma';
     document.getElementById('loading-result').classList.add('hidden');
   }
+}
+
+async function autoSaveCronograma(cron) {
+  // Salva a config + fases atuais sem feedback visual. Diferente de
+  // salvarCronograma() (botão "Salvar"), aqui o user nem precisa saber.
+  if (!cron || !cron.fases) return;
+  const { data: { session } } = await sbClient.auth.getSession();
+  const headers = {'Content-Type': 'application/json'};
+  if (session) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+  const fases = cron.fases.map((f, i) => ({
+    label: f.label,
+    inicio: f.inicio,
+    fim: f.fim,
+    cor: f.cor,
+    ambiente: f.ambiente,
+    pct_executado: f.pct_executado != null ? f.pct_executado : 0,
+    categoria: f.categoria,
+    ordem: f.ordem !== undefined ? f.ordem : i,
+    manual: !!f.manual,
+  }));
+
+  await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      data_inicio: document.getElementById('data-inicio').value,
+      duracao_meses: parseInt(document.getElementById('dur-slider').value),
+      k_sigmoid: 10,
+      fases_custom: fases,
+      notas: '',
+    }),
+  });
 }
 document.getElementById('btn-gerar').addEventListener('click', gerarCronograma);
 
