@@ -227,6 +227,40 @@ Bugs identificados:
 
 ---
 
+### 13/05 — Atlas completo + visão ERP
+
+Pedro pediu pra catalogar TUDO que recebemos (Bravy 114 + Prevision 50 + Amanda 10X 20) num roadmap unificado pensando ERP completo. Concorrência mapeada:
+
+- **Flowup** (1.000+ escritórios BR, parceiro ASBEA/CREA): ERP gestão+financeiro, sem IA técnica, não lê CAD
+- **Vobi** (Y Combinator, R$5B obras/ano): foco construtora, 3 agents IA (Financeiro/Compras/Diário) mas IA é assistência, não leitura de CAD
+- **Sienge**: 12 módulos, caro, foco incorporadora
+- **Projetools, GestãoClick**: pequenos
+- **Amanda 10X**: curso, não SaaS — não é concorrente, é gerador de lead aquecido
+
+**Vantagem AI.arq defensável:** leitura de binário (DWG/PDF) + IA específica de arquitetura. Flowup/Vobi não vão entrar nessa briga sem refazer stack.
+
+**Criado `docs/ATLAS_FEATURES.md`** — documento canônico com ~140 features mapeadas de 3 fontes + roadmap próprio, organizadas em 10 fases. Posicionamento competitivo. Sequenciamento sugerido.
+
+**ROADMAP reestruturado pra 10 fases:**
+- Fase 1: Quantitativo (HOJE)
+- Fase 2: Cronograma (CONSTRUINDO)
+- Fase 3: Documentação técnica (a, b, c, d, e — Memorial, Caderno, BDI, **Orçamento por Ambiente** quick win, outros)
+- Fase 4: Comparativo fornecedor
+- Fase 5: ERP escritório (60% pronto via Manus)
+- Fase 6: **Pré-projeto + viabilidade urbana** (NOVA — captura no funil cedo, inspirada Amanda 10X)
+- Fase 7: CAD 2D → 3D + render
+- Fase 8: **Conformidade NBR** (NOVA — diferencial competitivo, nenhum BR faz)
+- Fase 9: Generativo (texto → projeto)
+- Fase 10: SO escritório completo + pós-obra
+
+**5 fontes externas catalogadas e organizadas em `arq/_archive/templates_referencia/`:**
+- bravy/ (114 agents + CATALOGO.md)
+- sienge/ (4 planilhas — orçamento, BDI, SINAPI 2025)
+- prevision/ (50 prompts ChatGPT)
+- arquiteto10x/ (apostila 51 páginas, 20 skills)
+
+---
+
 ## 📌 Pendências carregadas pra próxima sessão
 
 - [ ] Mandar planilha v8 do Weslei via WhatsApp (`arq/projetos_clientes/weslei_ghisleri/quantitativo_weslei_v8_RERANK.xlsx`)

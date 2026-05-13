@@ -1,9 +1,11 @@
 # 🗺️ Roadmap AI.arq
 
-> **Última atualização:** 2026-04-26
-> **Versão:** 1.0 — consolidação inicial das fases planejadas
+> **Última atualização:** 2026-05-13
+> **Versão:** 2.0 — visão ERP completo + catalogação de ~140 features externas
 
 Este documento consolida a visão de longo prazo do AI.arq: onde estamos hoje, pra onde vamos, e o que evitamos no caminho. Vive em `ROADMAP.md` na raiz do repo (não vai pro GitHub Pages — é doc interno).
+
+> **🗺️ Atlas completo de features:** [`docs/ATLAS_FEATURES.md`](docs/ATLAS_FEATURES.md) — ~140 features mapeadas de 3 fontes externas (Bravy 114, Prevision 50, Amanda 10X 20) + roadmap próprio. Posicionamento competitivo (Flowup, Vobi, Sienge). **Documento canônico da visão de longo prazo.**
 
 ---
 
@@ -109,6 +111,18 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 - **Template pronto:** [Sienge — Cálculo de BDI](../../arq/_archive/templates_referencia/sienge/materiais-sienge-planilha-calculo-de-bdi-2-0.xlsx). Copiar estrutura.
 - Respeita regra dura: AI.arq SUGERE BDI, orçamentista DECIDE. Sugestão tem aviso "validar com seu orçamentista".
 
+**3d — Orçamento por Ambiente** ⚡ (adicionado em 13/05/2026)
+- View nova da planilha: organiza por **cômodo** (cozinha, banheiro, sala) em vez de por disciplina
+- Resumo executivo: top 5 ambientes mais caros + custo por m² de cada
+- Permite cliente decidir o que cortar quando orçamento não fecha
+- **Quick win:** dados já existem na planilha, só nova view — 1 semana de dev
+- Inspiração: Skill 4.4 do Arquiteto 10X (@amandag.ia)
+
+**3e — Outros documentos técnicos** (radar)
+- Memorial AVCB (agent Arq 31), Memorial SPDA (Eng 12), EIV (Arq 33)
+- Relatório de visita técnica (Skill 4.6 / Arq 28)
+- Orçamento sintético + analítico SINAPI (Eng 29 + 30)
+
 ---
 
 ### **FASE 4 — Comparativo de propostas de fornecedores** (era Fase 2)
@@ -148,7 +162,25 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 
 ---
 
-### **FASE 6 — CAD 2D → 3D massing automático**
+### **FASE 6 — Pré-projeto + viabilidade urbana** ⭐ (adicionado em 13/05/2026)
+**Status:** ⚪ Radar
+**Estimativa:** depois Fase 5 ter tração
+
+**Lógica:** Entrar **antes** do CAD. Captura cliente no estágio mais cedo do funil (ele ainda nem desenhou). Diferencial vs Flowup/Vobi: eles não cobrem pré-projeto, só execução.
+
+- **Estudo de Viabilidade Urbana** — 8 itens: taxa de ocupação, coef. aproveitamento, gabarito, recuos, permeabilidade, vagas, uso, restrições especiais. Cruza com código local do município. Devolve VIÁVEL / VIÁVEL COM AJUSTES / INVIÁVEL.
+- **Análise de terreno** — planialtimétrico + insolação + ventos
+- **Programa de Necessidades** — zonas funcionais + hierarquia (essencial/importante/desejo)
+- **Moodboard conceitual** — IA generativa pra referência visual
+- **Estudo preliminar** (residencial / comercial) — partido + estudo de massas
+
+**Agents base inspirados:** Skill 3.1-3.4 do Arquiteto 10X · Arq 01-07 Bravy
+
+**Diferencial:** captura o lead **antes** do projeto existir. Aluno do curso Amanda 10X aprende a fazer Briefing → AI.arq entrega Briefing pronto.
+
+---
+
+### **FASE 7 — CAD 2D → 3D massing automático**
 **Status:** 🔵 Planejado
 **Estimativa:** 12-18 meses
 
@@ -158,12 +190,32 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 - Texturização básica (paredes, vidros, pisos)
 - Export GLB/GLTF pra renders externos (Veras, etc.) ou web viewer embutido
 - Integração futura com Hunyuan3D-2 (open-source) ou Tripo (API)
+- **Renders 3D Interno + Externo** (Skill 5.2 e 5.3 do Arquiteto 10X)
+- **Planta humanizada** (Skill 5.1)
 
 **Por que esperar:** tecnologia ainda imatura pra arquitetura pesada. Concorrentes (Finch3D, Hypar, Maket) têm 3-5 anos de vantagem técnica. Mas em 2027-2028 o open-source 3D vai amadurecer.
 
 ---
 
-### **FASE 7 — Texto → planta + 3D + quantitativo (generativo BR)**
+### **FASE 8 — Conformidade e auditoria normativa** ⭐ (adicionado em 13/05/2026)
+**Status:** ⚪ Radar
+**Estimativa:** depois Fase 3 estável
+
+**Lógica:** Diferencial competitivo enorme. **Nenhum concorrente BR faz auditoria automática de NBR** — nem Flowup, nem Vobi, nem Sienge. A gente já tem o pipeline de leitura de CAD (Fase 1) — aproveita pra adicionar verificação normativa.
+
+- **Verificador NBR 9050** (acessibilidade) — 7 categorias: portas/circulações, banheiros acessíveis, cozinhas adaptáveis, alturas, sinalização, estacionamento. Output em quadro-resumo ✅/⚠/❌
+- **Verificador NBR 15575** (desempenho) — categorias estrutural/térmico/acústico/lumínico
+- **Verificador NBR 9077** (saídas de emergência)
+- **Análise de código local** — cruza projeto vs lei municipal vigente
+- **Compatibilização Arq × Engenharias** — confronta arquitetura, estrutural, hidro, elétrico → lista de conflitos
+
+**Agents base:** Skill 6.1-6.4 do Arquiteto 10X · Arq 32, 38, 39, 50 Bravy
+
+**Monetização:** módulo premium. Arquiteto entrega projeto pra cliente comercial/público sabendo que tá conforme. Vale R$ 50-100 por auditoria.
+
+---
+
+### **FASE 9 — Texto → planta + 3D + quantitativo (generativo BR)**
 **Status:** 🔵 Visão
 **Estimativa:** 24 meses
 
@@ -180,17 +232,32 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 
 ---
 
-### **FASE 8 — Sistema operacional do escritório BR**
+### **FASE 10 — Sistema operacional do escritório BR**
 **Status:** 🔵 Visão de longo prazo
-**Estimativa:** 36 meses
+**Estimativa:** 36+ meses
 
-Tudo das Fases 1-6 + integrações:
+Tudo das Fases 1-9 + integrações + pós-obra:
 - Marketplace de orçamentistas (parceiros)
 - Marketplace de fornecedores
 - Tabela SINAPI ao vivo + alertas de variação
 - Integração com Receita Federal pra emissão automática de NF
 - API pra ERPs maiores (TOTVS, SAP)
+- **Pós-obra:** Habite-se, Averbação cartório (RGI), Regularização REURB, INSS/CNO/CEI, Manual do proprietário (NBR 14037)
 - Versão internacional (México, Argentina, Portugal)
+
+---
+
+## 🧭 Posicionamento competitivo (atualizado 13/05/2026)
+
+| Player | Cobertura | Vantagem AI.arq |
+|---|---|---|
+| **[Flowup](https://www.flowup.me/)** (1.000+ escritórios BR) | ERP projeto+financeiro+equipe. Parceiro ASBEA/CREA | **Não lê CAD. Não gera quantitativo. Sem IA técnica.** |
+| **[Vobi](https://www.vobi.com.br/)** (Y Combinator, R$5B obras/ano) | Gestão de obra completa. 3 agents IA (Financeiro, Compras, Diário) | **Foco construtora, não escritório. IA é assistência, não leitura de CAD.** |
+| **[Sienge](https://www.sienge.com.br/)** | 12 módulos, construtora grande | **Caro. Foco incorporadora.** |
+| **[Projetools](https://www.projetools.com.br)** | Gestão escritório arq | **Pequeno, sem IA.** |
+| **[Arquiteto 10X](https://amandag.ia)** (curso) | 20 skills Claude pra arquiteto BR | **É curso, não SaaS. Cliente dele é nosso lead aquecido.** |
+
+**Aposta dura:** **leitura de binário (DWG/PDF) + IA específica de arquitetura** é nossa vantagem defensável. Flowup/Vobi não vão entrar nessa briga sem refazer stack inteiro. Tempo é nosso aliado.
 
 ---
 
@@ -316,7 +383,7 @@ Identificadas em sessão de 2026-04-24. Estado atual:
 - ❌ **Vender mensalidade** — modelo é pay-as-you-use
 - ❌ **Vender carbono** ou outras "extensões éticas" sem product-market-fit
 - ❌ **Reescrever em React agora** — HTML estático funciona até pelo menos Fase 3
-- ❌ **Suportar fora do Brasil agora** — foco BR até Fase 8
+- ❌ **Suportar fora do Brasil agora** — foco BR até Fase 10
 - ❌ **Concorrer com Trello/Asana** em features genéricas — só features específicas pra arq
 
 ---

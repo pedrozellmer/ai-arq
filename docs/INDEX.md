@@ -11,7 +11,8 @@
 | Arquivo | O que tem |
 |---|---|
 | [`../CLAUDE.md`](../CLAUDE.md) | **Quick-start pra qualquer sessão Claude.** Quem é Pedro, regras duras, arquitetura, IDs/endpoints, estrutura de pastas, fluxo de trabalho. |
-| [`../ROADMAP.md`](../ROADMAP.md) | **Visão de longo prazo (3-5 anos).** 7 fases, princípios fundamentais, posicionamento competitivo, decisões já tomadas. |
+| [`../ROADMAP.md`](../ROADMAP.md) | **Visão de longo prazo (3-5 anos).** 10 fases (era 7 — adicionadas Cronograma, Pré-projeto, Conformidade NBR), princípios fundamentais, posicionamento competitivo, decisões já tomadas. |
+| **[`ATLAS_FEATURES.md`](ATLAS_FEATURES.md)** ⭐ | **Atlas de ~140 features** mapeadas de 3 fontes externas (Bravy 114, Prevision 50, Amanda 10X 20) + roadmap próprio. **Documento canônico de visão "ERP completo".** Posicionamento competitivo (Flowup, Vobi, Sienge). Sequenciamento sugerido. |
 | [`../.claude/GRADE_INSTAGRAM.md`](../.claude/GRADE_INSTAGRAM.md) | **Grade editorial fixa do Instagram.** Rubrica por dia, horários travados, regras de voz, convenção slot_key. **LER ANTES de criar qualquer post.** |
 | [`../../MAPA.md`](../../MAPA.md) | **Mapa das pastas no Desktop.** Onde achar projeto, working dir, archive. |
 
@@ -25,7 +26,7 @@ Cada sessão grande vira um arquivo aqui. Em vez de carregar 50+ MB de transcrip
 |---|---|---|
 | 14/04/2026 | [`HISTORICO_AGENTE_INSTAGRAM.md`](HISTORICO_AGENTE_INSTAGRAM.md) | Criação do agente IG: backend (4 módulos), Meta Graph API v21, automação de posts |
 | 2026-04 inicial | [`HISTORICO_SESSAO_COMPLETA.md`](HISTORICO_SESSAO_COMPLETA.md) | Fase 1 do produto: leitura CAD, geração planilha, configuração dominio/Render/Supabase, primeira UI |
-| **10-12/05/2026** | [`HISTORICO_SESSAO_2026-05-10_a_12.md`](HISTORICO_SESSAO_2026-05-10_a_12.md) | **Sessão pesada 3 dias:** SINAPI rerank, 8 furos de segurança, página /precos, audit site, reorg pastas, grade IG, análise 114 agents → 3 produtos novos |
+| **10-13/05/2026** | [`HISTORICO_SESSAO_2026-05-10_a_13.md`](HISTORICO_SESSAO_2026-05-10_a_13.md) | **Sessão pesada 4 dias:** SINAPI rerank, 8 furos de segurança, página /precos, audit site, reorg pastas, grade IG, análise de 5 fontes externas (Bravy 114 / Prevision 50 / Amanda 20 / Sienge 4 / Manus base) → roadmap reestruturado pra 10 fases + visão ERP completo + Atlas de ~140 features |
 
 ---
 
@@ -56,6 +57,15 @@ Arquivos externos guardados localmente em `arq/_archive/` (não vão pro git por
 - Valor real: **catálogo de 50 temas** que mercado BR procura. Identificados 8 não cobertos pelos Bravy:
   fast-tracking, Lean Construction, Last Planner System, planejamento reverso, férias coletivas BR,
   concretagens, ciclos repetitivos, plano de transição entre fases. Candidatos pra Fase 2+ do roadmap.
+
+### Arquiteto 10X — Apostila com 20 skills (em `arq/_archive/templates_referencia/arquiteto10x/`)
+- Curso da @amandag.ia ensinando arquiteto BR a usar Claude (mesma stack que nós)
+- 20 skills em 5 módulos: Cliente novo (M2) · Pré-projeto (M3) · **Documentação técnica (M4) ⭐** · Visualização (M5) · Conformidade (M6)
+- Qualidade ALTA — cita NBR 13531/13532, NBR 9050, fabricantes BR, parâmetros urbanísticos
+- Ela mesma marca M4 (Memorial + Caderno + Quantitativo + Orçamento por Ambiente + Texto Prefeitura + Visita Técnica) como "módulo de MAIOR percepção de valor" — **confirma nosso nicho**
+- 2 features NOVAS pegas dela e entraram no roadmap: **Orçamento por Ambiente** (quick win, Fase 3d) + **Estudo de Viabilidade Urbana** (Fase 6)
+- Não somos concorrente direto — ela vende curso ($), nós vendemos SaaS ($). Aluno dela é nosso lead aquecido.
+- Detalhes completos em [`ATLAS_FEATURES.md`](ATLAS_FEATURES.md)
 
 ---
 

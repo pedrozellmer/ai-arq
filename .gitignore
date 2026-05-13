@@ -64,9 +64,10 @@ _frontend_legado/
 .claude/cache/
 .claude/logs/
 HISTORICO_*.md
-# Mas LIBERA históricos em /docs (mapa de contexto pra outras sessões Claude acharem)
+# Mas LIBERA históricos + atlas em /docs (mapa de contexto pra outras sessões Claude acharem)
 !docs/HISTORICO_*.md
 !docs/INDEX.md
+!docs/ATLAS_FEATURES.md
 
 # Pastas de teste com binários grandes
 *.dwg
