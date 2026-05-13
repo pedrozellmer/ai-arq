@@ -91,6 +91,7 @@
         <div class="flex justify-between mt-1 text-xs text-gray-400">
           <span>1m</span><span>12m</span><span>24m</span><span>36m</span>
         </div>
+        <p id="dur-sugestao" class="hidden mt-2 text-xs leading-relaxed text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2"></p>
       </div>
       <div>
         <button id="btn-gerar"
@@ -261,9 +262,36 @@ async function init() {
 
     document.getElementById('inputs-card').classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
+
+    // Busca sugestão de duração baseada no projeto
+    carregarSugestao();
   } catch (e) {
     document.getElementById('no-items').classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
+  }
+}
+
+async function carregarSugestao() {
+  try {
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/sugestao`);
+    if (!r.ok) return;
+    const s = await r.json();
+
+    // Atualiza slider pro valor sugerido
+    const slider = document.getElementById('dur-slider');
+    slider.value = s.duracao_meses;
+    updateSliderUI();
+
+    // Mostra banner explicativo
+    const banner = document.getElementById('dur-sugestao');
+    banner.innerHTML = `
+      <strong>💡 Sugestão: ${s.duracao_meses} meses</strong>
+      <span class="text-indigo-600">· faixa típica ${s.faixa_min}-${s.faixa_max}m</span><br>
+      <span class="text-xs text-indigo-600">${escapeHtml(s.raciocinio)}</span>
+    `;
+    banner.classList.remove('hidden');
+  } catch (e) {
+    console.warn('Sugestão de duração indisponível:', e);
   }
 }
 

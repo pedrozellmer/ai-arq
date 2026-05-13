@@ -218,6 +218,127 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
     }
 
 
+def sugerir_duracao(typology: Optional[str], area_m2: Optional[float],
+                    files_count: int = 0, n_disciplinas: int = 0) -> Dict:
+    """Sugere duração de obra em meses baseado em tipologia + área + complexidade.
+
+    Heurística calibrada com produtividade típica de mercado BR — construtora
+    médio porte, sem condicionantes especiais.
+
+    Retorna {duracao_meses, faixa_min, faixa_max, raciocinio, detalhes}.
+    """
+    typology = (typology or '').lower().strip()
+    area = float(area_m2 or 0)
+
+    # Categorias por tipologia (faixas em meses)
+    # Format: (cond, base_min, base_max, m2_por_mes_extra, label)
+    if typology in ('residential', 'residencial'):
+        if area <= 200:
+            base_min, base_max, default = 6, 9, 7
+            label = 'Residencial 1 pav até 200 m²'
+        elif area <= 400:
+            base_min, base_max, default = 10, 14, 12
+            label = 'Residencial 2-3 pav (200-400 m²)'
+        elif area <= 1000:
+            base_min, base_max, default = 14, 20, 17
+            label = 'Residencial alto padrão (400-1000 m²)'
+        else:
+            base_min, base_max, default = 18, 28, 22
+            label = 'Residencial multifamiliar grande (1000+ m²)'
+
+    elif typology in ('retail', 'comercial', 'varejo'):
+        if area <= 200:
+            base_min, base_max, default = 3, 5, 4
+            label = 'Comercial pequeno até 200 m²'
+        elif area <= 500:
+            base_min, base_max, default = 4, 7, 5
+            label = 'Comercial médio (200-500 m²)'
+        elif area <= 1000:
+            base_min, base_max, default = 6, 10, 8
+            label = 'Comercial grande (500-1000 m²)'
+        else:
+            base_min, base_max, default = 10, 16, 13
+            label = 'Comercial 1000+ m²'
+
+    elif typology in ('office', 'escritorio', 'corporativo'):
+        if area <= 300:
+            base_min, base_max, default = 3, 6, 4
+            label = 'Escritório pequeno até 300 m²'
+        elif area <= 800:
+            base_min, base_max, default = 5, 8, 6
+            label = 'Andar corporativo médio (300-800 m²)'
+        else:
+            base_min, base_max, default = 8, 14, 11
+            label = 'Andar corporativo grande (800+ m²)'
+
+    elif typology in ('hospital', 'clinica', 'clínica', 'saude', 'saúde'):
+        if area <= 300:
+            base_min, base_max, default = 5, 8, 6
+            label = 'Clínica/consultório pequeno (RDC ANVISA 50)'
+        elif area <= 1000:
+            base_min, base_max, default = 8, 14, 11
+            label = 'Clínica média (300-1000 m²)'
+        else:
+            base_min, base_max, default = 18, 30, 22
+            label = 'Hospital / clínica grande (1000+ m²)'
+
+    elif typology in ('educational', 'educacional', 'escola'):
+        if area <= 500:
+            base_min, base_max, default = 6, 10, 8
+            label = 'Educacional pequeno até 500 m²'
+        else:
+            base_min, base_max, default = 12, 18, 14
+            label = 'Educacional médio/grande'
+
+    else:
+        # Sem tipologia identificada — chuta pela área
+        if area <= 100:
+            base_min, base_max, default = 3, 5, 4
+            label = 'Obra pequena (~até 100 m²)'
+        elif area <= 500:
+            base_min, base_max, default = 5, 9, 6
+            label = 'Obra média (até 500 m²)'
+        elif area <= 1500:
+            base_min, base_max, default = 8, 14, 11
+            label = 'Obra grande (500-1500 m²)'
+        else:
+            base_min, base_max, default = 12, 22, 16
+            label = 'Obra muito grande (1500+ m²)'
+
+    # Ajuste por complexidade — mais disciplinas = mais coordenação
+    if n_disciplinas >= 12:
+        default = min(base_max, default + 2)
+        complexidade = 'alta (12+ disciplinas)'
+    elif n_disciplinas >= 8:
+        default = min(base_max, default + 1)
+        complexidade = 'média (8-11 disciplinas)'
+    else:
+        complexidade = f'baixa ({n_disciplinas} disciplinas)' if n_disciplinas else 'não estimada'
+
+    # Raciocínio textual
+    raciocinio_partes = [label]
+    if area > 0:
+        raciocinio_partes.append(f'~{int(area)} m²')
+    if n_disciplinas:
+        raciocinio_partes.append(f'{n_disciplinas} disciplina(s)')
+    raciocinio = ' · '.join(raciocinio_partes)
+
+    return {
+        'duracao_meses': default,
+        'faixa_min': base_min,
+        'faixa_max': base_max,
+        'raciocinio': raciocinio,
+        'complexidade': complexidade,
+        'detalhes': {
+            'typology': typology or 'não informada',
+            'area_m2': area,
+            'files_count': files_count,
+            'n_disciplinas': n_disciplinas,
+            'label_categoria': label,
+        },
+    }
+
+
 def _mes_label_pt(d: date) -> str:
     """jun/26, jul/26, ago/26 — abreviação PT-BR."""
     meses_br = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
