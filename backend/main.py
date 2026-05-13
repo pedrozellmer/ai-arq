@@ -3367,29 +3367,50 @@ async def upload_supplier_quote(
     except Exception as e:
         return {"status": "error", "error": f"Erro ao gravar: {e}"}
 
-    # Cria evento de cashback
+    # Cria evento de cashback: R$ 10 por cotação, MAX 3 cotações por projeto.
+    # Política nova (2026-05-13): subiu de R$ 5 → R$ 10 mas com cap de 3 — incentiva
+    # diversificação de cotações sem virar farm.
+    cashback_status = None
     if user_id:
+        # Conta quantos uploads já tiveram cashback nesse projeto
         try:
-            cb_payload = {
-                "job_id": job_id,
-                "user_id": user_id,
-                "event_type": "supplier_quote_upload",
-                "credit_cents": 500,  # R$ 5 por upload de cotação
-                "description": f"Upload cotação {supplier_name}",
-                "ref_id": quote_id,
-                "approved_at": datetime.utcnow().isoformat(),
-                "approved_by": "auto",
-            }
-            cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
-            cb_body = json.dumps(cb_payload).encode("utf-8")
-            cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
-            cb_req.add_header("apikey", SUPABASE_KEY)
-            cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            cb_req.add_header("Content-Type", "application/json")
-            cb_req.add_header("Prefer", "return=minimal")
-            urllib.request.urlopen(cb_req, timeout=8)
+            cnt_url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+                       f"?job_id=eq.{job_id}"
+                       f"&event_type=eq.supplier_quote_upload"
+                       f"&select=id")
+            cnt_req = urllib.request.Request(cnt_url, method="GET")
+            cnt_req.add_header("apikey", SUPABASE_KEY)
+            cnt_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            cnt_resp = urllib.request.urlopen(cnt_req, timeout=8)
+            existing_count = len(json.loads(cnt_resp.read().decode("utf-8")))
         except Exception:
-            pass  # cashback é best-effort
+            existing_count = 0
+
+        if existing_count >= 3:
+            cashback_status = "capped"
+        else:
+            try:
+                cb_payload = {
+                    "job_id": job_id,
+                    "user_id": user_id,
+                    "event_type": "supplier_quote_upload",
+                    "credit_cents": 1000,  # R$ 10 por cotação (max 3 = R$ 30)
+                    "description": f"Upload cotação {supplier_name}",
+                    "ref_id": quote_id,
+                    "approved_at": datetime.utcnow().isoformat(),
+                    "approved_by": "auto",
+                }
+                cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
+                cb_body = json.dumps(cb_payload).encode("utf-8")
+                cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
+                cb_req.add_header("apikey", SUPABASE_KEY)
+                cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+                cb_req.add_header("Content-Type", "application/json")
+                cb_req.add_header("Prefer", "return=minimal")
+                urllib.request.urlopen(cb_req, timeout=8)
+                cashback_status = "credited"
+            except Exception:
+                cashback_status = "error"  # best-effort, não bloqueia upload
 
     return {
         "status": "ok",
@@ -3398,6 +3419,7 @@ async def upload_supplier_quote(
         "n_items_quoted": parsed["n_items_quoted"],
         "total_bruto": parsed["total_bruto"],
         "parser_mode_used": parsed.get("parser_mode_used"),
+        "cashback": cashback_status,  # 'credited' | 'capped' | 'error' | None
     }
 
 
@@ -3850,8 +3872,9 @@ async def upload_revised_sheet(
     with open(dst, "wb") as f:
         f.write(await file.read())
 
-    # Evento de cashback (R$ 20)
-    credit_cents = 2000
+    # Evento de cashback: R$ 30 (2026-05-13: subiu de R$ 20 → R$ 30 pra
+    # incentivar mais uploads de planilha revisada — feedback alimenta calibração)
+    credit_cents = 3000
     if user_id:
         try:
             cb_payload = {
@@ -6001,8 +6024,16 @@ async def finalize_review(job_id: str, request: Request):
         body = {}
     user_id = body.get("user_id", "")
 
+    # Cashback inline removido em 2026-05-13. Política nova:
+    # - Revisar itens dentro do site: agradecimento, sem cashback (treinava IA
+    #   mas era cognição confusa: R$ 0,10/item raramente atingia o teto).
+    # - Cashback fica concentrado em ações de MAIOR sinal pra IA:
+    #     * Upload de planilha revisada offline → R$ 30
+    #     * Upload de cotação de fornecedor → R$ 10 (max 3 = R$ 30)
+    # Total possível por projeto: R$ 60.
     try:
-        # Conta reviews desse job
+        # Ainda conta reviews pra retornar n_actions ao frontend (pra UI mostrar
+        # progresso do usuário), mas não cria evento de cashback.
         rv_url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
                   f"?job_id=eq.{job_id}&select=item_id&limit=5000")
         req = urllib.request.Request(rv_url, method="GET")
@@ -6012,58 +6043,14 @@ async def finalize_review(job_id: str, request: Request):
         reviews = json.loads(resp.read().decode("utf-8"))
         n_actions = len({r["item_id"] for r in reviews if r.get("item_id")})
     except Exception as e:
-        return {"error": f"erro contando reviews: {e}"}
-
-    # Cashback: R$ 0,10 por ação (item revisado), teto R$ 20,00 (200 ações)
-    credit_cents = min(n_actions * 10, 2000)
-
-    # Checa se já tem cashback do tipo inline_review pra esse job (não duplicar)
-    try:
-        chk_url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
-                   f"?job_id=eq.{job_id}&event_type=eq.inline_review&select=id")
-        chk_req = urllib.request.Request(chk_url, method="GET")
-        chk_req.add_header("apikey", SUPABASE_KEY)
-        chk_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        chk_resp = urllib.request.urlopen(chk_req, timeout=8)
-        existing = json.loads(chk_resp.read().decode("utf-8"))
-    except Exception:
-        existing = []
-
-    if existing:
-        return {
-            "status": "ok",
-            "already_credited": True,
-            "n_actions": n_actions,
-            "message": "Cashback dessa revisão já foi creditado anteriormente.",
-        }
-
-    if user_id and credit_cents > 0:
-        try:
-            cb_payload = {
-                "job_id": job_id,
-                "user_id": user_id,
-                "event_type": "inline_review",
-                "credit_cents": credit_cents,
-                "description": f"Revisão inline: {n_actions} itens",
-                "approved_at": datetime.utcnow().isoformat(),
-                "approved_by": "auto",
-            }
-            cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
-            cb_body = json.dumps(cb_payload).encode("utf-8")
-            cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
-            cb_req.add_header("apikey", SUPABASE_KEY)
-            cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            cb_req.add_header("Content-Type", "application/json")
-            cb_req.add_header("Prefer", "return=minimal")
-            urllib.request.urlopen(cb_req, timeout=8)
-        except Exception as e:
-            print(f"[review-finalize] erro cashback: {e}")
+        n_actions = 0
 
     return {
         "status": "ok",
         "n_actions": n_actions,
-        "credit_cents": credit_cents,
-        "credit_brl": credit_cents / 100.0,
+        "credit_cents": 0,
+        "credit_brl": 0.0,
+        "message": "Obrigado pela revisão — suas correções treinam a IA pro próximo projeto.",
     }
 
 
