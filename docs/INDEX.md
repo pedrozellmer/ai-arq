@@ -31,11 +31,28 @@ Cada sessão grande vira um arquivo aqui. Em vez de carregar 50+ MB de transcrip
 
 ## 🔧 Materiais técnicos de referência
 
-PDFs e docs externos guardados localmente (não vão pro git por tamanho):
+Arquivos externos guardados localmente em `arq/_archive/` (não vão pro git por tamanho/licença):
 
+### PDFs (em `projeto_arq/docs/`, gitignored)
 - `Manual de Elaboração de Orçamentos - Obras.pdf` — manual público do TCU
 - `guia_planilha_orcamentaria_obra_privada.pdf` — referência de estrutura
-- Os 114 agents ASV/Bravy (`/c/Users/admin/Desktop/arq/57 Agents *.zip`) — atlas da jornada do arquiteto BR
+
+### 114 agents ASV/Bravy (em `arq/57 Agents *.zip`)
+- 57 agents Arquitetura + 57 agents Engenharia
+- Atlas da jornada de 14 etapas do arquiteto BR
+- Inspiração pra produtos novos do AI.arq (Cronograma, Memorial, Caderno, BDI Helper)
+
+### 4 planilhas Sienge (em `arq/_archive/templates_referencia/sienge/`)
+- **`materiais-sienge-planilha-orcamento-de-obra-3.xlsx`** (2019) — estrutura padrão antiga, 18 etapas + analítica SINAPI
+- **`materiais-sienge-planilha-de-orcamento-de-obra-4-1.xlsx`** (2024) — versão modernizada (abas sin/cpe/ana/rel/das/com)
+- **`Planilha-de-Orcamento-de-Obras-5.0-2-3.xlsx`** (2025) — **SINAPI 2025 com 8.868 composições** (validar contra nosso banco de 10.284)
+- **`materiais-sienge-planilha-calculo-de-bdi-2-0.xlsx`** — **template completo de BDI** (Adm Central + Adm Local + Indiretas + Financeira + Lucro + Tributos). Base pro futuro agent `bdi-helper` (Fase 3).
+
+### Prevision — 50 prompts ChatGPT (em `arq/_archive/templates_referencia/prevision/`)
+- Qualidade média (templates pra usuário colar no ChatGPT, não agents)
+- Valor real: **catálogo de 50 temas** que mercado BR procura. Identificados 8 não cobertos pelos Bravy:
+  fast-tracking, Lean Construction, Last Planner System, planejamento reverso, férias coletivas BR,
+  concretagens, ciclos repetitivos, plano de transição entre fases. Candidatos pra Fase 2+ do roadmap.
 
 ---
 

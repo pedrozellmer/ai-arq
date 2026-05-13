@@ -101,6 +101,14 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 - **Monetização B2B possível:** comissão de afiliado dos fabricantes (em vez de cobrar do arquiteto)
 - Agent base inspirado: `26-especificacao-acabamentos-caderno`
 
+**3c — BDI Helper**
+- Cliente recebe quantitativo + sugestão de BDI calibrado por tipo de obra (residencial/comercial/pública/retrofit)
+- Decomposição: Adm Central (4-7%) + Adm Local + Despesas Indiretas + Despesa Financeira (1-2%) + Lucro (6-12%) + Tributos (8-13%)
+- Editável célula a célula no XLSX (UX: amarelo % vs azul R$)
+- Agent base: `31-BDI-Acordao-2622-TCU` (Bravy)
+- **Template pronto:** [Sienge — Cálculo de BDI](../../arq/_archive/templates_referencia/sienge/materiais-sienge-planilha-calculo-de-bdi-2-0.xlsx). Copiar estrutura.
+- Respeita regra dura: AI.arq SUGERE BDI, orçamentista DECIDE. Sugestão tem aviso "validar com seu orçamentista".
+
 ---
 
 ### **FASE 4 — Comparativo de propostas de fornecedores** (era Fase 2)
@@ -120,8 +128,8 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 ---
 
 ### **FASE 5 — ERP do escritório (financeiro + CRM + galeria)**
-**Status:** 🔵 Planejado
-**Estimativa:** 24-36 meses
+**Status:** 🟢 Esqueleto **60% pronto** (descoberto em 12/05/2026 — projeto Manus antigo)
+**Estimativa:** 12-18 meses (antes era 24-36 — código antigo encurta)
 
 **Lógica:** Cliente já confia no AI.arq pra projeto. Hora de virar "tudo num só lugar".
 
@@ -131,7 +139,12 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 - **Notificações unificadas:** vencimentos financeiros + tarefas de cronograma
 - **Dashboard executivo do escritório:** receita prevista, projetos ativos, próximos vencimentos
 
-**Inspiração:** o protótipo `cronograma-arquitetura` que já existiu (Manus.im) — mas refeito no stack do AI.arq.
+**📦 Código base existente** (descoberto em 12/05/2026):
+- Localização: `arq/_archive/cronograma-arquitetura-extracted/`
+- Stack: React + tRPC + Drizzle (MySQL) — migrar pra Supabase quando ativar a Fase
+- Já tem: Tasks/Timeline, CRM Notes, Financeiro (entrada+parcelas+edição), Galeria, AI Chat Box, Dashboards (Cash flow, CRM, Financial), Mapa de projeto
+- **Falta:** integrar com motor AI.arq atual + 114 agents Bravy
+- Decisão: NÃO migrar agora (estamos com 8 usuários). Quando atingir 50+ usuários ativos, pegar o código antigo + reusar UI/lógica.
 
 ---
 
@@ -178,6 +191,30 @@ Tudo das Fases 1-6 + integrações:
 - Integração com Receita Federal pra emissão automática de NF
 - API pra ERPs maiores (TOTVS, SAP)
 - Versão internacional (México, Argentina, Portugal)
+
+---
+
+## 🧭 Features candidatas (radar pós-Fase 4)
+
+Mapeado em 12/05/2026 a partir das 50 prompts Prevision + 114 agents Bravy. Não tem timing definido, mas é o que mercado BR procura e não está coberto hoje:
+
+### Adjacentes ao Cronograma (Fase 2)
+- **Fast-tracking** — plano de aceleração de obra quando atraso já aconteceu
+- **Lean Construction + Last Planner System** — pull planning + lookahead 6 semanas
+- **Planejamento reverso** — do final pro início, tipo Goldratt
+- **Concretagens** — datas precisas de concretagem com curva de cura
+- **Ciclos repetitivos** — pavtipo a pavtipo em multifamiliar
+
+### Operacional (Fase 5 ERP)
+- **Cenários de atraso** — simulador "e se isso der errado?"
+- **Plano de transição entre fases** — handoff entre estrutura → vedação → acabamento
+- **Férias coletivas BR** — peculiaridade local que ninguém cobre (~22/12 a 03/01)
+
+### Validação técnica
+- **Conformidade com normas** (NBR 9050 acessibilidade, NBR 15575 desempenho) — auditoria automática do CAD
+- **Análise de restrições ambientais** — terreno × CONAMA × outorga ANA
+
+Fontes: Prevision 50 prompts + Bravy 114 agents.
 
 ---
 

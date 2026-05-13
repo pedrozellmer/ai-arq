@@ -168,11 +168,73 @@ Pedro mandou 2 zips: `57 Agents Arquitetura.zip` + `57 Agents Engenharia.zip`. A
 
 ---
 
+### Final do dia 12 — descobertas estratégicas
+
+**🏗️ Projeto Manus antigo localizado: 60% da Fase 5 já existe**
+
+Pedro lembrou do projeto `cronograma-arquitetura-extracted` no `_archive`. Análise rápida revelou:
+
+- Stack: React + tRPC + Drizzle (MySQL)
+- Módulos prontos: Projetos, Tasks/Timeline (com dias úteis), CRM Notes, Financeiro (entrada %/fixa + parcelas auto + edição), Galeria (PDF/DWG/plantas), AI Chat Box, Dashboards (CashFlow/CRM/Financial/General), Mapa
+- Cobre Fase 5 do roadmap (ERP do escritório) em ~60%
+- **Decisão:** NÃO migrar agora (8 usuários, prematuro). Quando virar Fase 5 (>50 usuários), aproveitar código existente. Encurta de 24-36 meses pra 12-18.
+- ROADMAP atualizado com nota dessa descoberta na Fase 5
+
+**📊 5 planilhas de referência adicionadas (movidas pra `arq/_archive/templates_referencia/`)**
+
+| Planilha | Valor | Próxima ação |
+|---|---|---|
+| Sienge Orçamento v3 (2019) | Estrutura padrão BR antiga | Referência |
+| Sienge Orçamento v4 (2024) | Layout modernizado | Referência |
+| Sienge Orçamento v5.0 (2025) | SINAPI 2025 com 8.868 composições | TODO: validar contra nosso banco de 10.284 |
+| **Sienge BDI** | Template completo (Adm Central, Adm Local, Indiretas, Financeira, Lucro, Tributos) com fórmulas | **Base do agent `bdi-helper` da Fase 3c** |
+| Prevision (50 prompts) | Qualidade média mas catálogo de temas BR | 8 temas únicos viraram "Features candidatas pós-Fase 4" |
+
+**📋 ROADMAP reestruturado**
+
+- **Fase 3c — BDI Helper** adicionada (era só Memorial + Caderno). Reusa template Sienge BDI como base. Respeita regra dura "não precificar" — sugere BDI mas orçamentista decide.
+- **Fase 5 — código Manus 60% pronto** anotado. Estimativa cai de 24-36 pra 12-18 meses.
+- **Seção "Features candidatas (radar pós-Fase 4)"** com 11 features mapeadas das 5 planilhas:
+  - Adjacentes ao Cronograma: Fast-tracking, Lean+Last Planner, Planejamento reverso, Concretagens, Ciclos repetitivos
+  - Operacional Fase 5: Cenários de atraso, Transição entre fases, Férias coletivas BR
+  - Validação técnica: Conformidade NBR 9050/15575, Restrições ambientais
+
+**🕵️ Análise externa — orbit-o-r.com**
+
+Pedro mostrou landing page vendendo "Ultimate Guide AI for Architects" + "ARQYN APP" por £12.50.
+
+Veredito: scam ou info-product de baixíssimo valor.
+- "ARQYN APP" não existe nos rankings de AI tools pra arquitetura (ferramentas reais: ArchSynth, ArchiVinci, mbue, Rayon, MyArchitectAI)
+- orbit-o-r.com sem reviews, sem CNPJ, sem refund policy, preço em £
+- Conteúdo prometido (Midjourney pra arquitetos) tem TUDO de graça em Archgyan, Educasium, Aituts
+
+**Insight estratégico:** existe mercado pagando £12.50 por PDF de prompt. Confirma que arquiteto BR paga por IA aplicada. Nosso 1º projeto grátis entrega valor maior que esses scams — só precisa entregar.
+
+**🎨 Cronograma Weslei (POC do agent `cronograma-gerador`)**
+
+Tentei rodar o agent no projeto real do Weslei pra demo. Geramos:
+- Gantt PNG (7 fases mapeadas das 8 disciplinas)
+- Curva S PNG (25/50/75/100% com datas)
+- Cronograma XLSX (com bugs visuais — duplicação Jul/26 e "0%" azul poluindo)
+- Memorial MD
+
+Bugs identificados:
+- Calendário usando +30 dias em vez de mês civil (jul/26 aparece 2x)
+- "0%" em células vazias deveria ficar em branco
+- Texto "produtividade média BR" inferiorizante — virou "produtividade típica de mercado"
+
+**Pivot do Pedro:** em vez de PNG/PPT separado, melhor virar **aba dentro da planilha gerada** com fórmulas Excel — cliente muda data início, tudo recalcula. Script `adicionar_aba_cronograma_weslei.py` iniciado mas não finalizado nessa sessão (continua próxima).
+
+---
+
 ## 📌 Pendências carregadas pra próxima sessão
 
 - [ ] Mandar planilha v8 do Weslei via WhatsApp (`arq/projetos_clientes/weslei_ghisleri/quantitativo_weslei_v8_RERANK.xlsx`)
 - [ ] Pedir testemunho da Daniela (DTZ) em vídeo (1 min)
-- [ ] Cronograma — backend endpoint `/api/cronograma/generate` + integração com agente
+- [ ] **Cronograma como aba na planilha gerada** — terminar `adicionar_aba_cronograma_weslei.py` (fórmulas Excel, recalcula com mudança da data início)
+- [ ] Backend endpoint `/api/cronograma/generate` + integração com agente
+- [ ] **Atualizar `cronograma-gerador.md`** com as 16 etapas oficiais Sienge (em vez das 18 que eu chutei): SERVIÇOS INICIAIS → MOVIMENTAÇÃO DE TERRA → FUNDAÇÃO → ESTRUTURA CA → PAREDE → ESQUADRIAS → COBERTURA → IMPERMEABILIZAÇÃO → REVESTIMENTOS → PREVENTIVO INCÊNDIO → PROJETO ELÉTRICO → PROJETO HIDROSSANITÁRIO → LOUÇAS E METAIS → SERVIÇOS COMPLEMENTARES → PINTURAS → RETIRADA DE ENTULHO
+- [ ] **Validar nosso SINAPI** contra os 8.868 da planilha Sienge 2025
 - [ ] Gerar 7 imagens da semana w21 (18-24/05) seguindo grade nova (Bastidor da OBRA, não do código)
 - [ ] Avaliar se rola parceria com Bravy / ASV Digital (cross-sell mútuo)
 - [ ] Pendência futura: cancelados (19 stories status=canceled poluindo histórico) — pedir aprovação Pedro pra DELETE em massa
