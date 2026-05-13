@@ -4815,6 +4815,117 @@ async def generate_cronograma(job_id: str, payload: CronogramaPayload):
         raise HTTPException(500, f"Erro ao gerar cronograma: {e}")
 
 
+def _get_branding_context(job_id: str) -> dict:
+    """Padrão de co-branding pra TODAS as exportações (PDF/PPTX/XLSX).
+
+    Centraliza a busca de:
+    - project_name (sempre amigável, nunca o hash do job_id)
+    - architect_name (do projeto OU company do profile)
+    - client_name (project_clients.client_name + client_company)
+    - logo_url + logo_local_path (baixa pra arquivo temp pra embedar)
+    - brand_color (hex; default = indigo AI.arq se vazio)
+    - company (nome do escritório)
+
+    Retorna dict pronto pra passar pra funções de export.
+    """
+    import urllib.request, json as _json
+    import tempfile
+
+    ctx = {
+        'job_id': job_id,
+        'project_name': '',
+        'architect_name': '',
+        'client_name': '',
+        'company': '',
+        'logo_url': '',
+        'logo_local_path': None,
+        'brand_color': '#4F46E5',  # default indigo AI.arq
+    }
+
+    project_user_id = ''
+
+    # 1. projects: nome amigável + arquiteto
+    try:
+        pj_url = (f"{SUPABASE_URL}/rest/v1/projects"
+                  f"?job_id=eq.{job_id}&select=project_name,user_name,user_id")
+        pj_req = urllib.request.Request(pj_url, method="GET")
+        pj_req.add_header("apikey", SUPABASE_KEY)
+        pj_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        pj_resp = urllib.request.urlopen(pj_req, timeout=8)
+        pj_data = _json.loads(pj_resp.read().decode("utf-8"))
+        if pj_data:
+            ctx['project_name'] = (pj_data[0].get('project_name') or '').strip()
+            ctx['architect_name'] = (pj_data[0].get('user_name') or '').strip()
+            project_user_id = pj_data[0].get('user_id') or ''
+    except Exception as e:
+        print(f"[branding] erro projects: {e}")
+
+    # 2. project_clients: cliente final
+    try:
+        cl_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
+                  f"?job_id=eq.{job_id}&select=client_name,client_company")
+        cl_req = urllib.request.Request(cl_url, method="GET")
+        cl_req.add_header("apikey", SUPABASE_KEY)
+        cl_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        cl_resp = urllib.request.urlopen(cl_req, timeout=8)
+        cl_data = _json.loads(cl_resp.read().decode("utf-8"))
+        if cl_data:
+            cn = (cl_data[0].get('client_name') or '').strip()
+            cc = (cl_data[0].get('client_company') or '').strip()
+            if cn and cc:
+                ctx['client_name'] = f"{cn} ({cc})"
+            else:
+                ctx['client_name'] = cn or cc
+    except Exception as e:
+        print(f"[branding] erro project_clients: {e}")
+
+    # 3. profiles: logo + cor + company
+    if project_user_id:
+        try:
+            pr_url = (f"{SUPABASE_URL}/rest/v1/profiles"
+                      f"?user_id=eq.{project_user_id}"
+                      f"&select=logo_url,company,company_brand_color")
+            pr_req = urllib.request.Request(pr_url, method="GET")
+            pr_req.add_header("apikey", SUPABASE_KEY)
+            pr_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            pr_resp = urllib.request.urlopen(pr_req, timeout=8)
+            pr_data = _json.loads(pr_resp.read().decode("utf-8"))
+            if pr_data:
+                ctx['logo_url'] = (pr_data[0].get('logo_url') or '').strip()
+                ctx['company'] = (pr_data[0].get('company') or '').strip()
+                bc = (pr_data[0].get('company_brand_color') or '').strip()
+                if bc and bc.startswith('#') and len(bc) in (4, 7):
+                    ctx['brand_color'] = bc
+                if not ctx['architect_name'] and ctx['company']:
+                    ctx['architect_name'] = ctx['company']
+        except Exception as e:
+            print(f"[branding] erro profiles: {e}")
+
+    # 4. Fallback project_name
+    if not ctx['project_name']:
+        ctx['project_name'] = 'Projeto sem nome'
+
+    # 5. Baixa logo pra arquivo temp (se houver)
+    if ctx['logo_url']:
+        try:
+            req = urllib.request.Request(ctx['logo_url'], method="GET",
+                                          headers={'User-Agent': 'AI.arq/1.0'})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+            ext = '.png'
+            if '.jpg' in ctx['logo_url'].lower() or '.jpeg' in ctx['logo_url'].lower():
+                ext = '.jpg'
+            tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+            tmp.write(data)
+            tmp.close()
+            ctx['logo_local_path'] = tmp.name
+        except Exception as e:
+            print(f"[branding] erro download logo: {e}")
+            ctx['logo_local_path'] = None
+
+    return ctx
+
+
 def _supabase_get_cronograma(job_id: str) -> Optional[dict]:
     """Busca cronograma salvo do job. Retorna None se não existir."""
     import urllib.request, json as _json
@@ -4894,24 +5005,12 @@ async def save_cronograma(job_id: str, payload: CronogramaSavePayload):
 
 def _build_cronograma_for_export(job_id: str) -> tuple:
     """Monta o JSON do cronograma usando fases_custom se houver, senão gera
-    automaticamente. Retorna (cronograma_dict, titulo)."""
+    automaticamente. Retorna (cronograma_dict, branding_context)."""
     import urllib.request, json as _json
     saved = _supabase_get_cronograma(job_id)
 
-    # Busca nome do projeto pra título
-    titulo = f'Projeto {job_id}'
-    try:
-        purl = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                "&select=project_name&limit=1")
-        preq = urllib.request.Request(purl, method='GET')
-        preq.add_header('apikey', SUPABASE_KEY)
-        preq.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
-        presp = urllib.request.urlopen(preq, timeout=8)
-        prows = _json.loads(presp.read().decode('utf-8'))
-        if prows and prows[0].get('project_name'):
-            titulo = prows[0]['project_name']
-    except Exception:
-        pass
+    # Branding co-branded (nome projeto + cliente + logo + cor + arquiteto)
+    branding = _get_branding_context(job_id)
 
     from cronograma import gerar_cronograma, gerar_cronograma_de_fases_custom
 
@@ -4949,25 +5048,32 @@ def _build_cronograma_for_export(job_id: str) -> tuple:
             duracao = 6
         cron = gerar_cronograma(items, data_inicio, duracao)
 
-    return cron, titulo
+    return cron, branding
+
+
+def _slug_filename(name: str) -> str:
+    """Converte nome do projeto pra filename amigável (sem acentos/especiais)."""
+    import re, unicodedata
+    s = unicodedata.normalize('NFKD', name)
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r'[^a-zA-Z0-9_-]+', '_', s).strip('_')
+    return s[:60] or 'cronograma'
 
 
 @app.get("/api/cronograma/{job_id}/export/pdf")
 async def export_cronograma_pdf(job_id: str):
-    """Exporta cronograma como PDF (capa + Gantt + Curva S + caminho crítico + marcos)."""
+    """Exporta cronograma como PDF co-branded (logo + cor + nome cliente)."""
     import tempfile, os
     from fastapi.responses import FileResponse
-    cron, titulo = _build_cronograma_for_export(job_id)
+    cron, branding = _build_cronograma_for_export(job_id)
     try:
         from cronograma_export import exportar_pdf
         tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
         tmp.close()
-        exportar_pdf(cron, tmp.name, titulo=titulo, job_id=job_id)
-        return FileResponse(
-            tmp.name,
-            media_type='application/pdf',
-            filename=f'cronograma_{job_id}.pdf',
-        )
+        exportar_pdf(cron, tmp.name, branding=branding)
+        fname = f"cronograma_{_slug_filename(branding['project_name'])}.pdf"
+        return FileResponse(tmp.name, media_type='application/pdf',
+                             filename=fname)
     except Exception as e:
         import traceback
         print(f"[export pdf] erro: {e}")
@@ -4977,20 +5083,20 @@ async def export_cronograma_pdf(job_id: str):
 
 @app.get("/api/cronograma/{job_id}/export/pptx")
 async def export_cronograma_pptx(job_id: str):
-    """Exporta cronograma como PPTX (5 slides executivos pra apresentar ao cliente)."""
+    """Exporta cronograma como PPTX co-branded (5 slides pra apresentar)."""
     import tempfile
     from fastapi.responses import FileResponse
-    cron, titulo = _build_cronograma_for_export(job_id)
+    cron, branding = _build_cronograma_for_export(job_id)
     try:
         from cronograma_export import exportar_pptx
         tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
         tmp.close()
-        exportar_pptx(cron, tmp.name, titulo=titulo, job_id=job_id)
+        exportar_pptx(cron, tmp.name, branding=branding)
+        fname = f"cronograma_{_slug_filename(branding['project_name'])}.pptx"
         return FileResponse(
             tmp.name,
             media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            filename=f'cronograma_{job_id}.pptx',
-        )
+            filename=fname)
     except Exception as e:
         import traceback
         print(f"[export pptx] erro: {e}")
