@@ -37,10 +37,13 @@ Arquivos externos guardados localmente em `arq/_archive/` (não vão pro git por
 - `Manual de Elaboração de Orçamentos - Obras.pdf` — manual público do TCU
 - `guia_planilha_orcamentaria_obra_privada.pdf` — referência de estrutura
 
-### 114 agents ASV/Bravy (em `arq/57 Agents *.zip`)
+### 114 agents ASV/Bravy (em `arq/_archive/templates_referencia/bravy/`)
 - 57 agents Arquitetura + 57 agents Engenharia
 - Atlas da jornada de 14 etapas do arquiteto BR
-- Inspiração pra produtos novos do AI.arq (Cronograma, Memorial, Caderno, BDI Helper)
+- **Catálogo mapeando cada um pra fase do nosso roadmap:** `arq/_archive/templates_referencia/bravy/CATALOGO.md`
+- Já usado de inspiração em: `cronograma-gerador.md` (baseado no Eng 32)
+- Próximos usos previstos: Eng 31 (BDI Fase 3c), Arq 42 + 08 + 56 (Memorial Fase 3a), Arq 26 (Caderno Fase 3b)
+- **NÃO instalar todos em `.claude/agents/`** — extrair pontualmente quando começar cada fase
 
 ### 4 planilhas Sienge (em `arq/_archive/templates_referencia/sienge/`)
 - **`materiais-sienge-planilha-orcamento-de-obra-3.xlsx`** (2019) — estrutura padrão antiga, 18 etapas + analítica SINAPI
