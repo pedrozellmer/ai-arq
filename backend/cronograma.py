@@ -100,17 +100,23 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
         if dur_dias <= 0:
             dur_dias = 7
             fim = ini + timedelta(days=7)
+        label = f.get('label', 'Sem nome')
+        cat = f.get('categoria') or categoria_da_disciplina(label)
+        pct_exec = float(f.get('pct_executado', 0) or 0)
+        pct_exec = max(0.0, min(100.0, pct_exec))
         fases.append({
-            'label': f.get('label', 'Sem nome'),
+            'label': label,
             'inicio': ini.isoformat(),
             'fim': fim.isoformat(),
             'dur_dias': dur_dias,
             'offset_pct': 0,
             'dur_pct': 0,
-            'cor': f.get('cor') or _cor_da_disciplina(f.get('label', '')),
+            'cor': f.get('cor') or _cor_da_disciplina(label),
             'ambiente': f.get('ambiente'),
             'ordem': f.get('ordem'),
             'manual': bool(f.get('manual', False)),
+            'categoria': cat,
+            'pct_executado': pct_exec,
         })
 
     fases.sort(key=lambda x: (x.get('ordem') or 0, x['inicio']))
@@ -182,16 +188,24 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
     caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
     caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias']} for f in caminho_critico]
 
+    # NOVO: PPC + distribuição categoria + curva realizada
+    ppc = calcular_ppc(fases)
+    distrib_cat = distribuicao_por_categoria(fases)
+    curva_real = curva_s_realizada(fases, meses, dt_inicio.isoformat())
+
     return {
         'fases': fases,
         'meses': meses,
         'matriz_pct': matriz,
         'curva_s': curva_s,
+        'curva_s_realizada': curva_real,
         'curva_s_modelo': {
             'tipo': 'sigmoidal',
             'k': K_SIGMOID,
             'formula': 'P(t) = 100 / (1 + e^(-k(t/T - 0.5)))',
         },
+        'distribuicao_categoria': distrib_cat,
+        'ppc': ppc,
         'resumo': {
             'data_inicio': dt_inicio.isoformat(),
             'data_fim': data_fim.isoformat(),
@@ -203,6 +217,7 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             'ppc_alvo': 0.75,
             'lps_compativel': True,
             'editado_manualmente': True,
+            'avanco_real_pct': ppc['avanco_real_pct'],
         },
         'marcos_legais': [
             'Lei 14.133/2021 Art 117 — medição mensal obrigatória',
@@ -507,6 +522,160 @@ def sugerir_duracao(typology: Optional[str], area_m2: Optional[float],
             'label_categoria': label,
         },
     }
+
+
+def categoria_da_disciplina(label: str) -> str:
+    """Agrupa disciplina em macro-categoria. Útil pra pie chart e stacked bar."""
+    l = label.lower()
+    if any(t in l for t in ['preliminar', 'mobiliza', 'canteiro', 'demoli',
+                              'movimento', 'terra']):
+        return 'preliminares'
+    if any(t in l for t in ['fundação', 'fundacao', 'estrutura', 'concreto',
+                              'pilar', 'viga', 'laje']):
+        return 'estrutura'
+    if any(t in l for t in ['fechamento', 'alvenaria', 'parede', 'vedação',
+                              'vedacao', 'cobertura', 'impermeabil',
+                              'esquadria']):
+        return 'vedacoes'
+    if any(t in l for t in ['elétric', 'eletric', 'hidráulic', 'hidraulic',
+                              'gás', 'gas', 'incêndio', 'incendio',
+                              'condicionado', 'spda', 'cabeamento',
+                              'dados', 'instal']):
+        return 'instalacoes'
+    if any(t in l for t in ['revestimento', 'piso', 'forro', 'pintura',
+                              'marcenaria', 'louças', 'loucas', 'lou',
+                              'metais', 'mobili']):
+        return 'acabamentos'
+    if any(t in l for t in ['limpeza', 'entulho', 'entrega']):
+        return 'entrega'
+    return 'complementares'
+
+
+CATEGORIA_COR = {
+    'preliminares':   '#94A3B8',
+    'estrutura':      '#1E40AF',
+    'vedacoes':       '#4338CA',
+    'instalacoes':    '#0891B2',
+    'acabamentos':    '#9333EA',
+    'entrega':        '#10B981',
+    'complementares': '#64748B',
+}
+
+CATEGORIA_LABEL = {
+    'preliminares':   'Preliminares',
+    'estrutura':      'Estrutura',
+    'vedacoes':       'Vedações + Cobertura',
+    'instalacoes':    'Instalações',
+    'acabamentos':    'Acabamentos',
+    'entrega':        'Entrega',
+    'complementares': 'Complementares',
+}
+
+
+def calcular_ppc(fases: List[Dict]) -> Dict:
+    """PPC (Percent Plan Complete) — Last Planner.
+
+    PPC global = (soma pct_executado de cada fase ponderado pela duração) / 100
+
+    Devolve {ppc_pct, n_executadas, n_em_andamento, n_nao_iniciadas}.
+    """
+    if not fases:
+        return {'ppc_pct': 0, 'n_executadas': 0, 'n_em_andamento': 0,
+                'n_nao_iniciadas': 0, 'avanco_real_pct': 0}
+
+    soma_pct = 0
+    soma_dur = 0
+    n_exec = 0
+    n_and = 0
+    n_nao = 0
+    for f in fases:
+        pct = float(f.get('pct_executado', 0) or 0)
+        pct = max(0, min(100, pct))
+        dur = float(f.get('dur_dias', 1) or 1)
+        soma_pct += pct * dur
+        soma_dur += dur
+        if pct >= 100:
+            n_exec += 1
+        elif pct > 0:
+            n_and += 1
+        else:
+            n_nao += 1
+    avanco_real = round(soma_pct / max(1, soma_dur), 1)
+    return {
+        'ppc_pct': avanco_real,
+        'n_executadas': n_exec,
+        'n_em_andamento': n_and,
+        'n_nao_iniciadas': n_nao,
+        'avanco_real_pct': avanco_real,
+    }
+
+
+def distribuicao_por_categoria(fases: List[Dict]) -> List[Dict]:
+    """Pra pie chart: % de esforço (dias totais) por macro-categoria."""
+    if not fases:
+        return []
+    total = sum(f.get('dur_dias', 0) for f in fases) or 1
+    por_cat = {}
+    for f in fases:
+        cat = f.get('categoria') or categoria_da_disciplina(f.get('label', ''))
+        por_cat[cat] = por_cat.get(cat, 0) + f.get('dur_dias', 0)
+    out = []
+    for cat, dias in sorted(por_cat.items(), key=lambda x: -x[1]):
+        out.append({
+            'categoria': cat,
+            'label': CATEGORIA_LABEL.get(cat, cat.title()),
+            'cor': CATEGORIA_COR.get(cat, '#64748B'),
+            'dias': dias,
+            'pct': round(100 * dias / total, 1),
+        })
+    return out
+
+
+def curva_s_realizada(fases: List[Dict], meses: List[Dict],
+                       data_inicio_iso: str) -> List[Dict]:
+    """Curva S REALIZADA baseada em pct_executado de cada fase.
+
+    Pra cada mês: soma (overlap_dias / total_dias_fase) * pct_executado_fase
+    ponderado pela duração da fase no projeto.
+
+    Devolve lista por mês com pct_acumulado_realizado.
+    """
+    if not fases:
+        return []
+    dt_inicio = _parse_date(data_inicio_iso)
+    total_dur = sum(f.get('dur_dias', 1) for f in fases) or 1
+
+    out = []
+    for m in meses:
+        m_ini = _parse_date(m['inicio'])
+        m_fim = _parse_date(m['fim'])
+        acumulado = 0.0
+        for f in fases:
+            f_ini = _parse_date(f['inicio'])
+            f_fim = _parse_date(f['fim'])
+            # Considera só dias da fase até FIM do mês atual (acumulado)
+            if f_ini > m_fim:
+                continue  # fase nem começou nesse mês
+            # pct executado proporcional ao tempo decorrido na fase
+            # Simplificação: aplica pct uniforme da fase
+            pct_fase = float(f.get('pct_executado', 0) or 0)
+            # Quanto da fase aconteceu até m_fim?
+            if f_fim <= m_fim:
+                # Fase inteira já no passado/presente — usa pct_executado direto
+                contrib_dur = f.get('dur_dias', 1)
+            else:
+                # Fase ainda rolando — só a parte já decorrida
+                contrib_dur = max(0, (m_fim - f_ini).days + 1)
+            contrib_dias_real = contrib_dur * (pct_fase / 100.0)
+            acumulado += contrib_dias_real
+        acumulado_pct = round(100 * acumulado / total_dur, 1)
+        out.append({
+            'mes_idx': m['mes_idx'],
+            'mes_label': m['label'],
+            'pct_realizado': min(100.0, acumulado_pct),
+            'data_fim_mes': m['fim'],
+        })
+    return out
 
 
 def _mes_label_pt(d: date) -> str:

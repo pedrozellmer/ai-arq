@@ -180,12 +180,33 @@ def _format_br(iso_date: Optional[str]) -> str:
 #  PDF — Layout profissional A4 paisagem
 # ═════════════════════════════════════════════════════════════════
 
-def exportar_pdf(cronograma: Dict, output_path: str, titulo: str,
-                  job_id: str = '') -> str:
-    """PDF executivo com diagramação profissional.
+def _hex_to_rgb01(hex_color: str) -> tuple:
+    """#4F46E5 → (0.31, 0.27, 0.90) pra reportlab/colors."""
+    h = (hex_color or '#4F46E5').lstrip('#')
+    if len(h) == 3:
+        h = ''.join(c*2 for c in h)
+    return tuple(int(h[i:i+2], 16)/255.0 for i in (0, 2, 4))
+
+
+def _hex_to_rgb_int(hex_color: str) -> tuple:
+    """#4F46E5 → (79, 70, 229) pra pptx."""
+    h = (hex_color or '#4F46E5').lstrip('#')
+    if len(h) == 3:
+        h = ''.join(c*2 for c in h)
+    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+
+
+def exportar_pdf(cronograma: Dict, output_path: str,
+                  branding: Optional[Dict] = None,
+                  # compat antiga
+                  titulo: str = '', job_id: str = '') -> str:
+    """PDF executivo CO-BRANDED (logo + cor do escritório + nome cliente).
+
+    branding dict (preferido): {project_name, architect_name, client_name,
+      company, logo_local_path, brand_color, job_id}
 
     Estrutura:
-      - Página 1: Capa fullbleed (indigo) com hero + dados
+      - Página 1: Capa cor da marca + hero + dados
       - Página 2: Gantt (foco principal F1)
       - Página 3: Curva S de avanço previsto
       - Página 4: Caminho crítico (tabela executiva)
@@ -201,6 +222,16 @@ def exportar_pdf(cronograma: Dict, output_path: str, titulo: str,
     from reportlab.lib import colors
     from reportlab.lib.units import cm, mm
     from reportlab.pdfgen import canvas
+
+    # Normaliza branding (compat com chamada antiga só com titulo+job_id)
+    b = branding or {}
+    project_name = b.get('project_name') or titulo or 'Projeto sem nome'
+    architect_name = b.get('architect_name', '')
+    client_name = b.get('client_name', '')
+    company = b.get('company', '')
+    logo_path = b.get('logo_local_path')
+    brand_color = b.get('brand_color') or COLOR_INDIGO
+    ref_job = b.get('job_id') or job_id
 
     tmp_dir = tempfile.mkdtemp()
     gantt_png = os.path.join(tmp_dir, 'gantt.png')
@@ -256,68 +287,111 @@ def exportar_pdf(cronograma: Dict, output_path: str, titulo: str,
                                  textColor=colors.HexColor(COLOR_GRAY_TX),
                                  alignment=TA_LEFT)
 
-    # ─── Header/Footer helpers (canvas) ──
+    # ─── Header/Footer helpers (canvas) — usam branding ──
+    def _draw_logo(canv, x, y, max_w=40*mm, max_h=8*mm):
+        """Desenha logo do escritório se houver, senão texto 'AI.arq'."""
+        if logo_path and os.path.exists(logo_path):
+            try:
+                from reportlab.lib.utils import ImageReader
+                img = ImageReader(logo_path)
+                iw, ih = img.getSize()
+                # Mantém aspect ratio dentro do max_w/max_h
+                ratio = min(max_w/iw, max_h/ih)
+                w, h = iw*ratio, ih*ratio
+                canv.drawImage(logo_path, x, y - h/2 + 2*mm,
+                                width=w, height=h, mask='auto',
+                                preserveAspectRatio=True)
+                return w
+            except Exception:
+                pass
+        # Fallback texto
+        canv.setFont('Helvetica-Bold', 11)
+        canv.setFillColor(colors.HexColor(brand_color))
+        canv.drawString(x, y, company or 'AI.arq')
+        return canv.stringWidth(company or 'AI.arq', 'Helvetica-Bold', 11)
+
     def header_footer(canv, doc):
         canv.saveState()
         # Footer linha sutil
         canv.setStrokeColor(colors.HexColor(COLOR_BORDER))
         canv.setLineWidth(0.4)
         canv.line(MARGIN, MARGIN - 6*mm, PAGE_W - MARGIN, MARGIN - 6*mm)
-        # Logo texto AI.arq (header)
-        canv.setFont('Helvetica-Bold', 11)
-        canv.setFillColor(colors.HexColor(COLOR_INDIGO))
-        canv.drawString(MARGIN, PAGE_H - MARGIN + 3*mm, 'AI.arq')
+        # Logo escritório à esquerda topo
+        logo_w = _draw_logo(canv, MARGIN, PAGE_H - MARGIN + 3*mm,
+                            max_w=35*mm, max_h=7*mm)
+        # Tagline depois do logo
         canv.setFont('Helvetica', 9)
         canv.setFillColor(colors.HexColor(COLOR_GRAY_TX))
-        canv.drawString(MARGIN + 17*mm, PAGE_H - MARGIN + 3*mm,
+        canv.drawString(MARGIN + logo_w + 6*mm,
+                        PAGE_H - MARGIN + 3*mm,
                         '· Cronograma da obra')
         # Carimbo direita topo
         canv.setFont('Helvetica', 8)
         canv.setFillColor(colors.HexColor(COLOR_GRAY_LIGHT))
-        carimbo = f'ai.arq.br  ·  emitido {data_emissao}'
-        if job_id:
-            carimbo += f'  ·  ref {job_id}'
+        carimbo = f'emitido {data_emissao}'
+        if architect_name:
+            carimbo = f'{architect_name}  ·  {carimbo}'
         canv.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN + 3*mm, carimbo)
-        # Footer: nº página
-        page_num = canv.getPageNumber()
+        # Footer: título projeto + nº página
         canv.setFont('Helvetica', 9)
         canv.setFillColor(colors.HexColor(COLOR_GRAY_LIGHT))
-        canv.drawRightString(PAGE_W - MARGIN, MARGIN - 12*mm,
-                             f'{page_num}')
-        canv.drawString(MARGIN, MARGIN - 12*mm, titulo[:70])
+        canv.drawString(MARGIN, MARGIN - 12*mm, project_name[:70])
+        page_num = canv.getPageNumber()
+        canv.drawRightString(PAGE_W - MARGIN, MARGIN - 12*mm, f'{page_num}')
+        # "Powered by AI.arq" discreto no centro
+        canv.setFont('Helvetica-Oblique', 7)
+        canv.setFillColor(colors.HexColor(COLOR_GRAY_LIGHT))
+        canv.drawCentredString(PAGE_W/2, MARGIN - 12*mm,
+                                'powered by AI.arq · ai.arq.br')
         canv.restoreState()
 
     def capa_canvas(canv, doc):
-        """Capa fullbleed indigo gradient simulado."""
+        """Capa fullbleed com COR DO ESCRITÓRIO + logo."""
         canv.saveState()
-        # Background indigo sólido
-        canv.setFillColor(colors.HexColor(COLOR_INDIGO))
+        # Background com cor da marca do escritório
+        canv.setFillColor(colors.HexColor(brand_color))
         canv.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-        # Faixa cyan no topo
+        # Faixa decorativa no topo (versão clara da cor)
         canv.setFillColor(colors.HexColor(COLOR_CYAN))
         canv.rect(0, PAGE_H - 8*mm, PAGE_W, 8*mm, fill=1, stroke=0)
-        # Logo AI.arq no canto
-        canv.setFillColor(colors.white)
-        canv.setFont('Helvetica-Bold', 14)
-        canv.drawString(MARGIN, PAGE_H - MARGIN, 'AI.arq')
-        canv.setFont('Helvetica', 10)
-        canv.setFillColor(colors.HexColor('#C7D2FE'))
-        canv.drawString(MARGIN + 22*mm, PAGE_H - MARGIN,
-                        'Cronograma físico-financeiro')
-        # Carimbo
+        # Logo escritório no canto (versão branca/clara)
+        if logo_path and os.path.exists(logo_path):
+            try:
+                from reportlab.lib.utils import ImageReader
+                img = ImageReader(logo_path)
+                iw, ih = img.getSize()
+                max_w, max_h = 60*mm, 14*mm
+                ratio = min(max_w/iw, max_h/ih)
+                w, h = iw*ratio, ih*ratio
+                canv.drawImage(logo_path, MARGIN, PAGE_H - MARGIN - 4*mm,
+                                width=w, height=h, mask='auto',
+                                preserveAspectRatio=True)
+            except Exception:
+                canv.setFont('Helvetica-Bold', 16)
+                canv.setFillColor(colors.white)
+                canv.drawString(MARGIN, PAGE_H - MARGIN, company or 'AI.arq')
+        else:
+            canv.setFont('Helvetica-Bold', 16)
+            canv.setFillColor(colors.white)
+            canv.drawString(MARGIN, PAGE_H - MARGIN, company or 'AI.arq')
+        # Carimbo direita
         canv.setFont('Helvetica', 9)
-        canv.setFillColor(colors.HexColor('#A5B4FC'))
+        canv.setFillColor(colors.HexColor('#FFFFFF'))
+        canv.setFillAlpha(0.7)
         carimbo = f'emitido {data_emissao}'
-        if job_id:
-            carimbo += f'  ·  ref {job_id}'
+        if architect_name:
+            carimbo = f'{architect_name}  ·  {carimbo}'
         canv.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN, carimbo)
+        canv.setFillAlpha(1.0)
         # Rodapé capa
         canv.setFont('Helvetica', 9)
-        canv.setFillColor(colors.HexColor('#A5B4FC'))
+        canv.setFillColor(colors.HexColor('#FFFFFF'))
+        canv.setFillAlpha(0.7)
         canv.drawString(MARGIN, MARGIN - 6*mm,
-                        'ai.arq.br · Quantitativo com IA pra arquitetos brasileiros')
+                        'powered by AI.arq  ·  ai.arq.br')
         canv.drawRightString(PAGE_W - MARGIN, MARGIN - 6*mm,
                              'Página 1 de 5')
+        canv.setFillAlpha(1.0)
         canv.restoreState()
 
     # ─── Doc com 2 page templates ──
@@ -348,12 +422,21 @@ def exportar_pdf(cronograma: Dict, output_path: str, titulo: str,
 
     # ═══ PÁGINA 1 — CAPA ═══
     # Espaço pra empurrar título pro meio
-    story.append(Spacer(1, 6*cm))
+    story.append(Spacer(1, 5*cm))
     story.append(Paragraph('CRONOGRAMA', s_title))
     story.append(Paragraph('DA OBRA', s_title))
     story.append(Spacer(1, 0.6*cm))
-    story.append(Paragraph(titulo or 'Projeto', s_subtitle))
-    story.append(Spacer(1, 1.4*cm))
+    story.append(Paragraph(project_name, s_subtitle))
+    if client_name:
+        story.append(Spacer(1, 0.2*cm))
+        # Cliente final
+        s_cliente = ParagraphStyle('CL', parent=s_capa_meta,
+                                    fontSize=12, textColor=colors.HexColor('#FFFFFF'))
+        story.append(Paragraph(
+            f'<font size="9" color="#C7D2FE">Cliente final</font><br/>'
+            f'<b>{client_name}</b>',
+            s_cliente))
+    story.append(Spacer(1, 1.2*cm))
 
     # Mini cards de meta na capa
     meta_html = (
@@ -549,14 +632,25 @@ def exportar_pdf(cronograma: Dict, output_path: str, titulo: str,
 #  PPTX — Layout executivo 16:9
 # ═════════════════════════════════════════════════════════════════
 
-def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
-                   job_id: str = '') -> str:
-    """PPT 16:9 com 5 slides executivos limpos."""
+def exportar_pptx(cronograma: Dict, output_path: str,
+                   branding: Optional[Dict] = None,
+                   # compat antiga
+                   titulo: str = '', job_id: str = '') -> str:
+    """PPT 16:9 CO-BRANDED com 5 slides executivos."""
     from pptx import Presentation
     from pptx.util import Inches, Pt, Emu
     from pptx.dml.color import RGBColor
     from pptx.enum.shapes import MSO_SHAPE
     from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+
+    b = branding or {}
+    project_name = b.get('project_name') or titulo or 'Projeto sem nome'
+    architect_name = b.get('architect_name', '')
+    client_name = b.get('client_name', '')
+    company = b.get('company', '')
+    logo_path = b.get('logo_local_path')
+    brand_color_hex = b.get('brand_color') or COLOR_INDIGO
+    ref_job = b.get('job_id') or job_id
 
     tmp_dir = tempfile.mkdtemp()
     gantt_png = os.path.join(tmp_dir, 'gantt.png')
@@ -569,7 +663,9 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
     prs.slide_height = Inches(7.5)
     blank = prs.slide_layouts[6]
 
-    # Paleta como RGBColor
+    # Paleta como RGBColor — usa brand_color do escritório
+    _r, _g, _b = _hex_to_rgb_int(brand_color_hex)
+    rgb_brand = RGBColor(_r, _g, _b)
     rgb_indigo = RGBColor(0x4F, 0x46, 0xE5)
     rgb_indigo_dark = RGBColor(0x37, 0x30, 0xA3)
     rgb_cyan = RGBColor(0x06, 0xB6, 0xD4)
@@ -616,16 +712,30 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
         return shape
 
     def add_header(slide):
-        """Header com logo AI.arq no canto + carimbo direita."""
-        add_text(slide, 'AI.arq', Inches(0.5), Inches(0.25),
-                  Inches(2), Inches(0.4), size=14, bold=True,
-                  color=rgb_indigo)
+        """Header com logo escritório no canto + carimbo direita."""
+        # Logo do escritório (se houver)
+        if logo_path and os.path.exists(logo_path):
+            try:
+                slide.shapes.add_picture(logo_path, Inches(0.5),
+                                          Inches(0.22), height=Inches(0.45))
+                txt_x = Inches(2.3)
+            except Exception:
+                add_text(slide, company or 'AI.arq', Inches(0.5),
+                          Inches(0.25), Inches(2), Inches(0.4),
+                          size=14, bold=True, color=rgb_brand)
+                txt_x = Inches(2)
+        else:
+            add_text(slide, company or 'AI.arq', Inches(0.5),
+                      Inches(0.25), Inches(2.5), Inches(0.4),
+                      size=14, bold=True, color=rgb_brand)
+            txt_x = Inches(2.5)
         add_text(slide, '· Cronograma da obra',
-                  Inches(1.45), Inches(0.27),
+                  txt_x, Inches(0.27),
                   Inches(5), Inches(0.4), size=11, color=rgb_gray)
-        carimbo = f'ai.arq.br · emitido {data_emissao}'
-        if job_id:
-            carimbo += f' · ref {job_id}'
+        # Carimbo: arquiteto + data
+        carimbo = f'emitido {data_emissao}'
+        if architect_name:
+            carimbo = f'{architect_name} · {carimbo}'
         add_text(slide, carimbo, Inches(0.5), Inches(0.27),
                   Inches(12.3), Inches(0.4), size=9, color=rgb_gray_light,
                   align='right')
@@ -638,37 +748,59 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
         line.fill.solid()
         line.fill.fore_color.rgb = rgb_border
         line.line.fill.background()
-        add_text(slide, titulo[:70], Inches(0.5), Inches(7.1),
-                  Inches(10), Inches(0.3), size=9, color=rgb_gray_light)
+        add_text(slide, project_name[:70], Inches(0.5), Inches(7.1),
+                  Inches(8), Inches(0.3), size=9, color=rgb_gray_light)
+        add_text(slide, 'powered by AI.arq · ai.arq.br',
+                  Inches(0.5), Inches(7.1), Inches(12.3), Inches(0.3),
+                  size=8, color=rgb_gray_light, align='center')
         add_text(slide, f'{n_slide} / 5', Inches(0.5), Inches(7.1),
                   Inches(12.3), Inches(0.3), size=9, color=rgb_gray_light,
                   align='right')
 
-    # ═══ SLIDE 1 — CAPA ═══
+    # ═══ SLIDE 1 — CAPA (cor da marca do escritório) ═══
     s1 = prs.slides.add_slide(blank)
-    add_rect(s1, 0, 0, prs.slide_width, prs.slide_height, rgb_indigo)
-    # Faixa cyan no topo
+    add_rect(s1, 0, 0, prs.slide_width, prs.slide_height, rgb_brand)
+    # Faixa decorativa no topo
     add_rect(s1, 0, 0, prs.slide_width, Inches(0.25), rgb_cyan)
-    # Logo + carimbo
-    add_text(s1, 'AI.arq', Inches(0.6), Inches(0.55),
-              Inches(2), Inches(0.4), size=16, bold=True, color=rgb_white)
-    add_text(s1, 'Cronograma físico-financeiro',
-              Inches(2), Inches(0.6), Inches(8), Inches(0.4),
-              size=11, color=rgb_indigo_text)
+
+    # Logo do escritório no canto (se houver) OU texto company/AI.arq
+    if logo_path and os.path.exists(logo_path):
+        try:
+            s1.shapes.add_picture(logo_path, Inches(0.6), Inches(0.55),
+                                   height=Inches(0.7))
+        except Exception:
+            add_text(s1, company or 'AI.arq', Inches(0.6), Inches(0.55),
+                      Inches(4), Inches(0.4), size=18, bold=True,
+                      color=rgb_white)
+    else:
+        add_text(s1, company or 'AI.arq', Inches(0.6), Inches(0.55),
+                  Inches(4), Inches(0.4), size=18, bold=True,
+                  color=rgb_white)
+
+    # Carimbo direita
     carimbo = f'emitido {data_emissao}'
-    if job_id:
-        carimbo += f' · ref {job_id}'
+    if architect_name:
+        carimbo = f'{architect_name} · {carimbo}'
     add_text(s1, carimbo, Inches(0.6), Inches(0.6),
               Inches(12.1), Inches(0.4), size=10, color=rgb_indigo_text,
               align='right')
 
-    # Título principal centralizado vertical
+    # Título principal
     add_text(s1, 'CRONOGRAMA', Inches(0.6), Inches(2.4),
               Inches(12), Inches(1), size=52, bold=True, color=rgb_white)
     add_text(s1, 'DA OBRA', Inches(0.6), Inches(3.3),
               Inches(12), Inches(1), size=52, bold=True, color=rgb_white)
-    add_text(s1, titulo, Inches(0.6), Inches(4.5),
+    add_text(s1, project_name, Inches(0.6), Inches(4.5),
               Inches(12.1), Inches(0.6), size=20, color=rgb_indigo_text)
+
+    # Cliente final (se houver)
+    if client_name:
+        add_text(s1, 'CLIENTE FINAL', Inches(0.6), Inches(5.1),
+                  Inches(8), Inches(0.3), size=9, bold=True,
+                  color=RGBColor(0xA5, 0xB4, 0xFC))
+        add_text(s1, client_name, Inches(0.6), Inches(5.35),
+                  Inches(12.1), Inches(0.5), size=14, bold=True,
+                  color=rgb_white)
 
     # Metadados em 4 colunas
     metas = [
@@ -685,7 +817,7 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
                   size=9, bold=True, color=rgb_indigo_text)
 
     # Footer capa
-    add_text(s1, 'ai.arq.br · Quantitativo com IA pra arquitetos brasileiros',
+    add_text(s1, 'powered by AI.arq · ai.arq.br',
               Inches(0.6), Inches(7.1), Inches(10), Inches(0.3),
               size=9, color=RGBColor(0xA5, 0xB4, 0xFC))
     add_text(s1, '1 / 5', Inches(0.6), Inches(7.1),
@@ -696,7 +828,7 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
     s2 = prs.slides.add_slide(blank)
     add_header(s2)
     add_text(s2, 'GANTT', Inches(0.5), Inches(0.85),
-              Inches(4), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+              Inches(4), Inches(0.4), size=10, bold=True, color=rgb_brand)
     add_text(s2, 'Cronograma físico das disciplinas',
               Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
               size=24, bold=True, color=rgb_dark)
@@ -713,7 +845,7 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
     s3 = prs.slides.add_slide(blank)
     add_header(s3)
     add_text(s3, 'CURVA S · AVANÇO PREVISTO', Inches(0.5), Inches(0.85),
-              Inches(8), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+              Inches(8), Inches(0.4), size=10, bold=True, color=rgb_brand)
     add_text(s3, 'Como a obra progride no tempo',
               Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
               size=24, bold=True, color=rgb_dark)
@@ -730,7 +862,7 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
     s4 = prs.slides.add_slide(blank)
     add_header(s4)
     add_text(s4, 'CAMINHO CRÍTICO', Inches(0.5), Inches(0.85),
-              Inches(6), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+              Inches(6), Inches(0.4), size=10, bold=True, color=rgb_brand)
     add_text(s4, 'Top 5 fases mais longas',
               Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
               size=24, bold=True, color=rgb_dark)
@@ -752,7 +884,7 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
         card.line.width = Pt(0.5)
         # Número grande
         add_text(s4, str(i), Inches(0.7), y, Inches(0.8), Inches(0.75),
-                  size=24, bold=True, color=rgb_indigo, anchor='middle')
+                  size=24, bold=True, color=rgb_brand, anchor='middle')
         # Label
         add_text(s4, item.get('label', ''),
                   Inches(1.6), y, Inches(8.5), Inches(0.75),
@@ -760,7 +892,7 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
         # Duração à direita
         add_text(s4, f"{item.get('dur_dias', '?')} dias",
                   Inches(0.5), y, Inches(12.3), Inches(0.75),
-                  size=14, bold=True, color=rgb_indigo,
+                  size=14, bold=True, color=rgb_brand,
                   align='right', anchor='middle')
         y += Inches(0.85)
 
@@ -770,7 +902,7 @@ def exportar_pptx(cronograma: Dict, output_path: str, titulo: str,
     s5 = prs.slides.add_slide(blank)
     add_header(s5)
     add_text(s5, 'REFERÊNCIAS', Inches(0.5), Inches(0.85),
-              Inches(6), Inches(0.4), size=10, bold=True, color=rgb_indigo)
+              Inches(6), Inches(0.4), size=10, bold=True, color=rgb_brand)
     add_text(s5, 'Marcos normativos e ressalvas',
               Inches(0.5), Inches(1.15), Inches(12), Inches(0.6),
               size=24, bold=True, color=rgb_dark)
