@@ -77,6 +77,149 @@ def _extract_disciplinas(items: List[Dict]) -> set:
     return out
 
 
+def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
+                                       duracao_meses: int) -> Dict:
+    """Gera cronograma JSON a partir de lista de fases EDITADAS pelo cliente.
+
+    Cada fase em fases_custom: {label, inicio, fim, dur_dias?, cor?, ambiente?, ordem?}
+    inicio e fim em ISO YYYY-MM-DD.
+
+    Pula a etapa de mapear disciplina→sequenciamento (já vem mastigado).
+    """
+    import math
+    dt_inicio = _parse_date(data_inicio)
+
+    fases = []
+    for f in fases_custom:
+        try:
+            ini = _parse_date(f['inicio'])
+            fim = _parse_date(f['fim'])
+        except (KeyError, ValueError):
+            continue
+        dur_dias = (fim - ini).days
+        if dur_dias <= 0:
+            dur_dias = 7
+            fim = ini + timedelta(days=7)
+        fases.append({
+            'label': f.get('label', 'Sem nome'),
+            'inicio': ini.isoformat(),
+            'fim': fim.isoformat(),
+            'dur_dias': dur_dias,
+            'offset_pct': 0,
+            'dur_pct': 0,
+            'cor': f.get('cor') or _cor_da_disciplina(f.get('label', '')),
+            'ambiente': f.get('ambiente'),
+            'ordem': f.get('ordem'),
+            'manual': bool(f.get('manual', False)),
+        })
+
+    fases.sort(key=lambda x: (x.get('ordem') or 0, x['inicio']))
+    data_fim = max((_parse_date(f['fim']) for f in fases), default=dt_inicio)
+    duracao_dias_real = max(1, (data_fim - dt_inicio).days)
+
+    # Meses calendário
+    meses = []
+    cursor = date(dt_inicio.year, dt_inicio.month, 1)
+    n_meses_grid = max(duracao_meses + 2, math.ceil(duracao_dias_real / 30) + 1)
+    for mes_idx in range(n_meses_grid):
+        if cursor.month == 12:
+            prox = date(cursor.year + 1, 1, 1)
+        else:
+            prox = date(cursor.year, cursor.month + 1, 1)
+        ultimo = prox - timedelta(days=1)
+        meses.append({
+            'mes_idx': mes_idx,
+            'label': _mes_label_pt(cursor),
+            'inicio': cursor.isoformat(),
+            'fim': ultimo.isoformat(),
+        })
+        cursor = prox
+
+    # Matriz % por disciplina × mês
+    matriz = []
+    for fase in fases:
+        f_ini = _parse_date(fase['inicio'])
+        f_fim = _parse_date(fase['fim'])
+        f_dur = fase['dur_dias']
+        pcts = []
+        for m in meses:
+            m_ini = _parse_date(m['inicio'])
+            m_fim = _parse_date(m['fim'])
+            if f_fim < m_ini or f_ini > m_fim:
+                pcts.append(0)
+                continue
+            overlap_ini = max(f_ini, m_ini)
+            overlap_fim = min(f_fim, m_fim)
+            overlap_dias = (overlap_fim - overlap_ini).days + 1
+            pct = round(100 * overlap_dias / max(1, f_dur))
+            pcts.append(max(0, min(100, pct)))
+        matriz.append({
+            'label': fase['label'],
+            'cor': fase['cor'],
+            'percentuais_por_mes': pcts,
+        })
+
+    # Curva S sigmoidal
+    K_SIGMOID = 10
+    curva_s = []
+    for m in meses:
+        m_fim = _parse_date(m['fim'])
+        t = max(0, (m_fim - dt_inicio).days)
+        t_norm = min(1.0, t / duracao_dias_real)
+        try:
+            pct = 100.0 / (1.0 + math.exp(-K_SIGMOID * (t_norm - 0.5)))
+        except OverflowError:
+            pct = 100.0 if t_norm > 0.5 else 0.0
+        if t_norm >= 0.99:
+            pct = 100.0
+        curva_s.append({
+            'mes_idx': m['mes_idx'],
+            'mes_label': m['label'],
+            'pct_acumulado': round(pct, 1),
+            'data_fim_mes': m['fim'],
+        })
+
+    caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
+    caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias']} for f in caminho_critico]
+
+    return {
+        'fases': fases,
+        'meses': meses,
+        'matriz_pct': matriz,
+        'curva_s': curva_s,
+        'curva_s_modelo': {
+            'tipo': 'sigmoidal',
+            'k': K_SIGMOID,
+            'formula': 'P(t) = 100 / (1 + e^(-k(t/T - 0.5)))',
+        },
+        'resumo': {
+            'data_inicio': dt_inicio.isoformat(),
+            'data_fim': data_fim.isoformat(),
+            'duracao_meses': duracao_meses,
+            'duracao_dias_reais': duracao_dias_real,
+            'n_fases': len(fases),
+            'n_disciplinas_quantitativo': len(fases),
+            'caminho_critico': caminho_critico,
+            'ppc_alvo': 0.75,
+            'lps_compativel': True,
+            'editado_manualmente': True,
+        },
+        'marcos_legais': [
+            'Lei 14.133/2021 Art 117 — medição mensal obrigatória',
+            'Lei 14.133/2021 Art 121 — fiscalização + diário de obra',
+            'Acórdão TCU 2622/2013 — cronograma físico-financeiro evidenciado',
+            'PMI PMBOK 7th ed. — Performance Domain Planning',
+            'NBR 16636-1/2:2017 — gerenciamento de serviços técnicos',
+            'Last Planner System (Ballard 2000) — 4 níveis + PPC',
+        ],
+        'ressalva': (
+            'Cronograma editado manualmente pelo usuário. '
+            'Validar com engenheiro responsável (CREA/CAU) antes de comprometer '
+            'prazo com cliente.'
+        ),
+    }
+
+
 def gerar_cronograma(items: List[Dict], data_inicio: str,
                      duracao_meses: int) -> Dict:
     """Gera cronograma JSON-serializable.

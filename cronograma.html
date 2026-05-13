@@ -113,6 +113,53 @@
   <!-- Resultado -->
   <div id="result" class="hidden space-y-6">
 
+    <!-- Barra de ações (Salvar / Editar / Exportar) -->
+    <div class="rounded-xl bg-white border-2 border-indigo-100 p-4 flex flex-wrap items-center gap-3">
+      <button id="btn-edit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        Editar fases
+      </button>
+      <button id="btn-save" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        Salvar
+      </button>
+      <div class="flex-1"></div>
+      <a id="btn-export-pdf" href="#" target="_blank" class="px-4 py-2 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-semibold no-underline transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+        PDF
+      </a>
+      <a id="btn-export-pptx" href="#" target="_blank" class="px-4 py-2 rounded-lg border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-semibold no-underline transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 7h-4v6h4v-6z"/></svg>
+        PowerPoint
+      </a>
+    </div>
+
+    <div id="save-status" class="hidden rounded-lg p-3 text-sm"></div>
+
+    <!-- EDITOR (inicialmente escondido) -->
+    <div id="editor" class="hidden rounded-2xl bg-white border-2 border-indigo-200 shadow-lg p-6">
+      <div class="flex items-baseline justify-between mb-4">
+        <div>
+          <h2 class="text-lg font-bold text-gray-900">Editar fases</h2>
+          <p class="text-xs text-gray-500 mt-1">Edite labels, datas, cores ou adicione novas disciplinas. Salve no fim.</p>
+        </div>
+        <button id="btn-add-fase" class="text-sm px-3 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-medium transition flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Adicionar disciplina
+        </button>
+      </div>
+      <div id="fases-editor" class="space-y-2"></div>
+      <div class="mt-4 flex items-center gap-2">
+        <button id="btn-apply-edits" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">
+          Aplicar mudanças
+        </button>
+        <button id="btn-cancel-edits" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium text-gray-700 transition">
+          Cancelar
+        </button>
+        <span class="text-xs text-gray-500 ml-3">Depois clique em <strong>Salvar</strong> pra persistir.</span>
+      </div>
+    </div>
+
     <!-- Resumo -->
     <div class="grid gap-4 md:grid-cols-4">
       <div class="rounded-xl border bg-white p-4">
@@ -279,9 +326,36 @@ async function init() {
 
     // Busca sugestão de duração baseada no projeto
     carregarSugestao();
+
+    // Tenta carregar cronograma salvo (se já tiver)
+    carregarCronogramaSalvo();
   } catch (e) {
     document.getElementById('no-items').classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
+  }
+}
+
+async function carregarCronogramaSalvo() {
+  try {
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}`);
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.status !== 'ok' || !data.saved) return;
+    const saved = data.saved;
+
+    // Setta inputs com valores salvos
+    document.getElementById('data-inicio').value = saved.data_inicio;
+    document.getElementById('dur-slider').value = saved.duracao_meses;
+    updateSliderUI();
+
+    // Se tem fases custom, dispara geração com elas
+    if (saved.fases_custom && saved.fases_custom.length) {
+      showSaveStatus('Cronograma salvo encontrado — carregando última versão editada...', 'info');
+      // Pega o JSON computado direto do backend (que vai usar fases_custom)
+      await gerarCronograma();  // backend ainda usa /generate, mas salvar já registrou config
+    }
+  } catch (e) {
+    console.warn('Carga de cronograma salvo falhou:', e);
   }
 }
 
@@ -307,6 +381,198 @@ async function carregarSugestao() {
   } catch (e) {
     console.warn('Sugestão de duração indisponível:', e);
   }
+}
+
+// ─── Estado global do cronograma editável ──
+let cronogramaAtual = null;  // último JSON retornado pelo backend
+
+// ─── Salvar + Editar + Exportar ──
+document.getElementById('btn-save').addEventListener('click', salvarCronograma);
+document.getElementById('btn-edit').addEventListener('click', toggleEditor);
+document.getElementById('btn-add-fase').addEventListener('click', () => adicionarFaseEditor());
+document.getElementById('btn-apply-edits').addEventListener('click', aplicarEdits);
+document.getElementById('btn-cancel-edits').addEventListener('click', () => {
+  document.getElementById('editor').classList.add('hidden');
+});
+
+function toggleEditor() {
+  const ed = document.getElementById('editor');
+  const aberto = !ed.classList.contains('hidden');
+  if (aberto) {
+    ed.classList.add('hidden');
+    return;
+  }
+  if (!cronogramaAtual) {
+    showSaveStatus('Gere um cronograma primeiro', 'error');
+    return;
+  }
+  // Popula editor com fases atuais
+  const cont = document.getElementById('fases-editor');
+  cont.innerHTML = '';
+  cronogramaAtual.fases.forEach((f, idx) => addFaseRowEditor(f, idx));
+  ed.classList.remove('hidden');
+}
+
+function addFaseRowEditor(fase, idx) {
+  const cont = document.getElementById('fases-editor');
+  const row = document.createElement('div');
+  row.className = 'flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-slate-50';
+  row.dataset.idx = idx;
+  row.innerHTML = `
+    <input type="color" value="${fase.cor || '#4F46E5'}" class="fase-cor w-10 h-10 rounded cursor-pointer border" />
+    <input type="text" value="${escapeAttr(fase.label || '')}" placeholder="Nome da disciplina" class="fase-label flex-1 min-w-[200px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+    <input type="text" value="${escapeAttr(fase.ambiente || '')}" placeholder="Ambiente (opcional)" class="fase-ambiente w-40 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+    <input type="date" value="${fase.inicio || ''}" class="fase-inicio rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+    <span class="text-gray-400 text-xs">→</span>
+    <input type="date" value="${fase.fim || ''}" class="fase-fim rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" />
+    <button class="btn-del-fase text-red-500 hover:text-red-700 p-1" title="Remover">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+    </button>
+  `;
+  row.querySelector('.btn-del-fase').addEventListener('click', () => row.remove());
+  cont.appendChild(row);
+}
+
+function adicionarFaseEditor() {
+  // Sugere datas: depois da última fase atual
+  let inicioDefault = document.getElementById('data-inicio').value;
+  let fimDefault = inicioDefault;
+  const ultimoFim = document.querySelectorAll('.fase-fim');
+  if (ultimoFim.length) {
+    inicioDefault = ultimoFim[ultimoFim.length - 1].value || inicioDefault;
+  }
+  const d = new Date(inicioDefault);
+  d.setDate(d.getDate() + 14);
+  fimDefault = d.toISOString().slice(0, 10);
+
+  const idx = document.querySelectorAll('#fases-editor [data-idx]').length;
+  addFaseRowEditor({
+    label: 'Nova disciplina',
+    inicio: inicioDefault,
+    fim: fimDefault,
+    cor: '#4F46E5',
+    manual: true,
+  }, idx);
+}
+
+function aplicarEdits() {
+  const rows = document.querySelectorAll('#fases-editor [data-idx]');
+  const fasesEditadas = [];
+  let invalido = 0;
+  rows.forEach((row, idx) => {
+    const label = row.querySelector('.fase-label').value.trim();
+    const inicio = row.querySelector('.fase-inicio').value;
+    const fim = row.querySelector('.fase-fim').value;
+    const cor = row.querySelector('.fase-cor').value;
+    const ambiente = row.querySelector('.fase-ambiente').value.trim() || null;
+    if (!label || !inicio || !fim) { invalido++; return; }
+    fasesEditadas.push({
+      label, inicio, fim, cor,
+      ambiente: ambiente || undefined,
+      ordem: idx,
+      manual: true,
+    });
+  });
+  if (invalido > 0) {
+    showSaveStatus(`${invalido} fase(s) com campos vazios — preencha label e datas`, 'error');
+    return;
+  }
+  if (!fasesEditadas.length) {
+    showSaveStatus('Cronograma vazio — adicione ao menos 1 fase', 'error');
+    return;
+  }
+
+  // Recalcula curva S + duração baseado nas novas fases
+  // Backend faz isso via gerar_cronograma_de_fases_custom. Vamos chamar /save pra
+  // persistir + /generate? Simpler: chama /save com fases_custom e depois faz /get
+  // pra recarregar. Mas pra UX em tempo real, monta JSON localmente:
+
+  const dataInicio = document.getElementById('data-inicio').value;
+  const duracao = parseInt(document.getElementById('dur-slider').value);
+
+  // Atualiza estado local
+  cronogramaAtual.fases = fasesEditadas.map(f => ({
+    ...f,
+    dur_dias: Math.max(7, Math.round((new Date(f.fim) - new Date(f.inicio)) / 86400000)),
+    cor: f.cor || '#4F46E5',
+  }));
+  cronogramaAtual.resumo.data_fim = fasesEditadas.reduce((max, f) => f.fim > max ? f.fim : max, fasesEditadas[0].fim);
+  cronogramaAtual.resumo.n_fases = fasesEditadas.length;
+  cronogramaAtual.resumo.editado_manualmente = true;
+
+  // Re-render
+  renderResumo(cronogramaAtual);
+  renderGantt(cronogramaAtual);
+  renderMatriz(cronogramaAtual);
+  renderCaminhoCritico(cronogramaAtual);
+
+  document.getElementById('editor').classList.add('hidden');
+  showSaveStatus('Mudanças aplicadas. Clique em "Salvar" pra persistir no servidor.', 'success');
+}
+
+async function salvarCronograma() {
+  if (!cronogramaAtual) {
+    showSaveStatus('Gere um cronograma primeiro', 'error');
+    return;
+  }
+  const btn = document.getElementById('btn-save');
+  btn.disabled = true;
+  btn.textContent = 'Salvando...';
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    const headers = {'Content-Type': 'application/json'};
+    if (session) headers['Authorization'] = `Bearer ${session.access_token}`;
+
+    const fasesEditadas = (cronogramaAtual.fases || []).map((f, i) => ({
+      label: f.label,
+      inicio: f.inicio,
+      fim: f.fim,
+      cor: f.cor,
+      ambiente: f.ambiente,
+      ordem: f.ordem !== undefined ? f.ordem : i,
+      manual: !!f.manual,
+    }));
+
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        data_inicio: document.getElementById('data-inicio').value,
+        duracao_meses: parseInt(document.getElementById('dur-slider').value),
+        k_sigmoid: 10,
+        fases_custom: fasesEditadas,
+        notas: '',
+      }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
+    showSaveStatus('Cronograma salvo. Botões PDF/PPT já podem ser usados.', 'success');
+  } catch (e) {
+    showSaveStatus(`Erro ao salvar: ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Salvar';
+  }
+}
+
+function showSaveStatus(msg, type) {
+  const el = document.getElementById('save-status');
+  el.textContent = msg;
+  el.className = `rounded-lg p-3 text-sm border ${
+    type === 'success' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' :
+    type === 'error' ? 'bg-red-50 border-red-200 text-red-700' :
+    'bg-blue-50 border-blue-200 text-blue-800'
+  }`;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 5000);
+}
+
+function escapeAttr(s) {
+  return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function atualizarLinksExport() {
+  document.getElementById('btn-export-pdf').href = `${API_BASE}/api/cronograma/${jobId}/export/pdf`;
+  document.getElementById('btn-export-pptx').href = `${API_BASE}/api/cronograma/${jobId}/export/pptx`;
 }
 
 // ─── Gera cronograma ──
@@ -335,6 +601,9 @@ async function gerarCronograma() {
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     const cronog = await r.json();
+
+    cronogramaAtual = cronog;
+    atualizarLinksExport();
 
     renderResumo(cronog);
     renderGantt(cronog);
