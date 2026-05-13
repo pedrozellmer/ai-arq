@@ -575,6 +575,7 @@ def render_sitemap():
     today = date.today().isoformat()
     urls = [
         (f"{SITE_URL}/", "1.0", "weekly"),
+        (f"{SITE_URL}/precos.html", "0.9", "weekly"),
         (f"{SITE_URL}/blog/", "0.9", "weekly"),
         (f"{SITE_URL}/faq.html", "0.7", "monthly"),
         (f"{SITE_URL}/termos.html", "0.3", "yearly"),
