@@ -151,6 +151,26 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         c.alignment = AL
         r += 1
 
+    # Disclaimer obrigatório na A1 (regras duras #1 e #5):
+    # cliente vê SEMPRE no topo, mesmo se rolar pra baixo perde de vista.
+    # Cor amarela forte pra não passar batido. Antes ficava só no email/site —
+    # quando a planilha era reencaminhada pro orçamentista/cliente final, a
+    # ressalva sumia.
+    from openpyxl.styles import PatternFill as _PF
+    _disclaimer_fill = _PF(start_color='FFF7CC', end_color='FFF7CC', fill_type='solid')
+    ws1.merge_cells(f'A{r}:B{r}')
+    _cell_disc = ws1.cell(row=r, column=1, value=(
+        '⚠️ Quantitativo gerado por IA. NÃO é orçamento. '
+        'Revisão por arquiteto ou engenheiro habilitado é obrigatória antes do uso. '
+        'Itens em LARANJA são sugestões da IA — confira contra o projeto antes de mandar pros fornecedores.'
+    ))
+    _cell_disc.font = Font(name='Arial', bold=True, size=10, color='8B4A0F')
+    _cell_disc.fill = _disclaimer_fill
+    _cell_disc.alignment = ALT
+    ws1.row_dimensions[r].height = 48
+    r += 1
+    r += 1  # respiro visual
+
     _titulo = _TYPOLOGY_LABEL.get(typology, "INTERIORES")
     add_title(f'QUANTITATIVO — {_titulo}')
     r += 1
