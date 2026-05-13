@@ -2710,7 +2710,8 @@ async def get_status(job_id: str):
 
 
 @app.get("/api/download/{job_id}")
-async def download_file(job_id: str):
+async def download_file(job_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Baixa a planilha gerada. Tenta cache local primeiro; se sumiu
     (Render redeploy), busca no Supabase Storage."""
     # Suaviza a checagem de job — se o JSON foi limpo no restart mas o
@@ -3000,8 +3001,9 @@ async def save_chat_lead(request: Request):
 
 
 @app.get("/api/admin/chat/leads")
-async def admin_list_chat_leads(limit: int = 200):
+async def admin_list_chat_leads(request: Request, limit: int = 200):
     """Lista leads do chat pra painel admin. Requer auth admin."""
+    _require_admin(request)
     try:
         url = (f"{SUPABASE_URL}/rest/v1/chat_leads"
                f"?select=*&order=last_message_at.desc&limit={int(limit)}")
@@ -3131,8 +3133,9 @@ async def submit_contact(request: Request):
 
 
 @app.get("/api/admin/contact-messages")
-async def admin_list_contact_messages(limit: int = 200, status: str = ""):
-    """Lista mensagens de contato pro admin."""
+async def admin_list_contact_messages(request: Request, limit: int = 200, status: str = ""):
+    """Lista mensagens de contato pro admin. Requer auth admin."""
+    _require_admin(request)
     try:
         url = f"{SUPABASE_URL}/rest/v1/contact_messages?select=*&order=created_at.desc&limit={int(limit)}"
         if status:
@@ -3399,7 +3402,8 @@ async def upload_supplier_quote(
 
 
 @app.get("/api/projects/{job_id}/quotes")
-async def list_supplier_quotes(job_id: str):
+async def list_supplier_quotes(job_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Lista cotações de fornecedores de um projeto."""
     try:
         url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
@@ -3418,7 +3422,8 @@ async def list_supplier_quotes(job_id: str):
 
 
 @app.delete("/api/projects/{job_id}/quotes/{quote_id}")
-async def delete_supplier_quote(job_id: str, quote_id: str):
+async def delete_supplier_quote(job_id: str, quote_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Remove uma cotação."""
     try:
         url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
@@ -3433,7 +3438,8 @@ async def delete_supplier_quote(job_id: str, quote_id: str):
 
 
 @app.get("/api/projects/{job_id}/quotes/compare")
-async def compare_supplier_quotes(job_id: str, include_reference: int = 1):
+async def compare_supplier_quotes(job_id: str, request: Request, include_reference: int = 1):
+    _require_project_owner(request, job_id)
     """Compara todas as cotações de um projeto, gera XLSX+PPT, retorna URLs."""
     try:
         from supplier_quote_compare import (compare_quotes,
@@ -3608,7 +3614,8 @@ async def compare_supplier_quotes(job_id: str, include_reference: int = 1):
 
 
 @app.get("/api/projects/{job_id}/quotes/download/xlsx")
-async def download_quotes_xlsx(job_id: str):
+async def download_quotes_xlsx(job_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Baixa o comparativo XLSX gerado."""
     path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.xlsx")
     if not os.path.exists(path):
@@ -3621,7 +3628,8 @@ async def download_quotes_xlsx(job_id: str):
 
 
 @app.get("/api/projects/{job_id}/quotes/download/pptx")
-async def download_quotes_pptx(job_id: str):
+async def download_quotes_pptx(job_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Baixa o comparativo PPT gerado."""
     path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.pptx")
     if not os.path.exists(path):
@@ -3979,8 +3987,13 @@ async def get_project_cashback(job_id: str):
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/projects/{job_id}/client")
-async def get_project_client(job_id: str):
-    """Retorna dados do cliente final de um projeto."""
+async def get_project_client(job_id: str, request: Request):
+    """Retorna dados do cliente final de um projeto.
+
+    LGPD: project_clients contém PII (nome, email, telefone, endereço).
+    Só o dono do projeto (ou admin) pode ler.
+    """
+    _require_project_owner(request, job_id)
     try:
         url = (f"{SUPABASE_URL}/rest/v1/project_clients"
                f"?job_id=eq.{job_id}&select=*")
@@ -3991,7 +4004,8 @@ async def get_project_client(job_id: str):
         data = json.loads(resp.read().decode("utf-8"))
         return data[0] if data else {}
     except Exception as e:
-        return {"error": str(e)}
+        print(f"[get_project_client] erro: {e}")
+        return {"error": "Falha interna ao buscar cliente"}
 
 
 class ProjectMetaPayload(BaseModel):
@@ -4039,6 +4053,7 @@ async def update_project_meta(job_id: str, payload: ProjectMetaPayload, request:
 @app.post("/api/projects/{job_id}/client")
 async def upsert_project_client(
     job_id: str,
+    request: Request,
     client_name: str = Form(""),
     client_company: str = Form(""),
     client_email: str = Form(""),
@@ -4046,7 +4061,12 @@ async def upsert_project_client(
     address_site: str = Form(""),
     internal_notes: str = Form(""),
 ):
-    """Cria ou atualiza dados do cliente final de um projeto."""
+    """Cria ou atualiza dados do cliente final de um projeto.
+
+    LGPD: só o dono do projeto (ou admin) pode escrever — antes era aberto,
+    qualquer atacante podia sobrescrever PII alheia conhecendo o job_id.
+    """
+    _require_project_owner(request, job_id)
     payload = {
         "job_id": job_id,
         "client_name": client_name,
@@ -4222,7 +4242,7 @@ async def credits_balance(user_id: str):
 
 
 @app.post("/api/checkout")
-async def create_checkout(num_pranchas: int = 1, num_files: int = 0,
+async def create_checkout(request: Request, num_pranchas: int = 1, num_files: int = 0,
                           user_id: str = ""):
     """Cria sessão de pagamento no Stripe baseado em PRANCHAS REAIS.
 
@@ -4232,7 +4252,18 @@ async def create_checkout(num_pranchas: int = 1, num_files: int = 0,
 
     Aceita `num_pranchas` (preferido — vem de /api/estimate-price). Mantém
     `num_files` como fallback compatibilidade.
+
+    Auth: se `user_id` é informado e não é 'anonymous', exige JWT do dono.
+    Senão atacante consome créditos da vítima via `_total_available_credit`.
     """
+    # Validação JWT vs user_id (mesmo padrão do /api/process)
+    if user_id and user_id != "anonymous":
+        jwt_user = _get_user_from_request(request)
+        if not jwt_user:
+            raise HTTPException(401, "Autenticação requerida quando user_id é informado")
+        if jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+            raise HTTPException(403, "user_id não corresponde ao token de autenticação")
+
     import stripe
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
     if not stripe.api_key:
@@ -4352,6 +4383,7 @@ async def verify_payment(session_id: str):
 
 @app.post("/api/cashback/upload")
 async def cashback_upload(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     job_id: str = "",
@@ -4369,6 +4401,7 @@ async def cashback_upload(
         raise HTTPException(400, "Arquivo deve ser .xlsx")
     if not job_id:
         raise HTTPException(400, "job_id é obrigatório")
+    _require_project_owner(request, job_id)
     if not HAS_DENSITY_CAL:
         raise HTTPException(500, "Módulo density_calibration não carregado")
 
@@ -4636,6 +4669,7 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
         raise HTTPException(400, "job_id obrigatório")
     if not question or len(question.strip()) < 2:
         raise HTTPException(400, "pergunta vazia")
+    _require_project_owner(request, job_id)
 
     # History opcional via JSON body
     history = None
@@ -4658,7 +4692,12 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
 
 
 @app.get("/api/agent/conversations")
-async def agent_conversations(job_id: Optional[str] = None, limit: int = 50):
+async def agent_conversations(request: Request, job_id: Optional[str] = None, limit: int = 50):
+    # Se passou job_id, valida ownership; senão, exige admin (lista global de conversas)
+    if job_id:
+        _require_project_owner(request, job_id)
+    else:
+        _require_admin(request)
     """Lista conversas do agente — usado pelo admin pra acompanhar uso."""
     try:
         import urllib.request as _ur
@@ -4768,9 +4807,10 @@ async def calibration_benchmarks(typology: Optional[str] = None):
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/items/{job_id}")
-async def get_project_items(job_id: str):
+async def get_project_items(job_id: str, request: Request):
     """Retorna lista de itens individuais de um job pra revisão inline.
     Usa RPC `list_project_items` pra bypassar RLS."""
+    _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
@@ -4804,7 +4844,8 @@ class CronogramaSavePayload(BaseModel):
 
 
 @app.get("/api/cronograma/{job_id}/sugestao")
-async def cronograma_sugestao(job_id: str):
+async def cronograma_sugestao(job_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Sugere duração de obra baseada em tipologia + área + n disciplinas
     detectadas. Chamado pelo frontend ANTES do "Gerar cronograma" pra
     preencher o slider com valor inteligente.
@@ -4865,7 +4906,8 @@ async def cronograma_sugestao(job_id: str):
 
 
 @app.post("/api/cronograma/{job_id}/generate")
-async def generate_cronograma(job_id: str, payload: CronogramaPayload):
+async def generate_cronograma(job_id: str, payload: CronogramaPayload, request: Request):
+    _require_project_owner(request, job_id)
     """Gera cronograma físico-financeiro a partir do quantitativo do projeto.
 
     Devolve JSON com fases + Gantt + curva S, pronto pra renderizar no
@@ -5066,13 +5108,14 @@ def _supabase_upsert_cronograma(job_id: str, data: dict) -> bool:
 
 
 @app.get("/api/cronograma/{job_id}")
-async def get_cronograma(job_id: str):
+async def get_cronograma(job_id: str, request: Request):
     """Retorna cronograma salvo do projeto (config + fases custom se houver).
 
     Se não houver salvo, devolve sugestão de duração + flag indicando que
     cliente ainda não gerou cronograma. Frontend usa essa info pra decidir
     se mostra inputs (gerar primeiro) ou já renderiza o salvo.
     """
+    _require_project_owner(request, job_id)
     saved = _supabase_get_cronograma(job_id)
     if not saved:
         return {"status": "empty", "job_id": job_id, "saved": None}
@@ -5080,8 +5123,9 @@ async def get_cronograma(job_id: str):
 
 
 @app.post("/api/cronograma/{job_id}/save")
-async def save_cronograma(job_id: str, payload: CronogramaSavePayload):
+async def save_cronograma(job_id: str, payload: CronogramaSavePayload, request: Request):
     """Salva (upsert) cronograma com config + fases editadas."""
+    _require_project_owner(request, job_id)
     # Valida data
     try:
         from datetime import date as _date
@@ -5106,7 +5150,7 @@ async def save_cronograma(job_id: str, payload: CronogramaSavePayload):
 
 
 @app.get("/api/cronograma/{job_id}/full")
-async def get_cronograma_full(job_id: str):
+async def get_cronograma_full(job_id: str, request: Request):
     """Retorna o cronograma já renderizado (Gantt+CurvaS+Matriz+PPC) pra
     abrir a página sem precisar clicar em 'Gerar'.
 
@@ -5114,6 +5158,7 @@ async def get_cronograma_full(job_id: str):
     Se não há salvo, retorna 404 — frontend mostra o form pra gerar pela
     primeira vez.
     """
+    _require_project_owner(request, job_id)
     saved = _supabase_get_cronograma(job_id)
     if not saved:
         raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
@@ -5187,8 +5232,9 @@ def _slug_filename(name: str) -> str:
 
 
 @app.get("/api/cronograma/{job_id}/export/pdf")
-async def export_cronograma_pdf(job_id: str):
+async def export_cronograma_pdf(job_id: str, request: Request):
     """Exporta cronograma como PDF co-branded (logo + cor + nome cliente)."""
+    _require_project_owner(request, job_id)
     import tempfile, os
     from fastapi.responses import FileResponse
     cron, branding = _build_cronograma_for_export(job_id)
@@ -5208,8 +5254,9 @@ async def export_cronograma_pdf(job_id: str):
 
 
 @app.get("/api/cronograma/{job_id}/export/pptx")
-async def export_cronograma_pptx(job_id: str):
+async def export_cronograma_pptx(job_id: str, request: Request):
     """Exporta cronograma como PPTX co-branded (5 slides pra apresentar)."""
+    _require_project_owner(request, job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = _build_cronograma_for_export(job_id)
@@ -5238,7 +5285,8 @@ class ReviewPayload(BaseModel):
 
 
 @app.post("/api/items/{job_id}/review/{item_id}")
-async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload):
+async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, request: Request):
+    _require_project_owner(request, job_id)
     """Registra uma revisão pra um item específico.
     Se action='edit', também aplica os edits à row em project_items.
     Insere sempre uma linha em item_reviews pra histórico/aprendizado."""
@@ -5295,7 +5343,8 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload):
 
 
 @app.post("/api/items/{job_id}/finalize")
-async def finalize_review(job_id: str):
+async def finalize_review(job_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Regenera o .xlsx com as revisões aplicadas e sobe pro Storage.
     Busca items atuais do Supabase (já com edits/rejects aplicados) e
     passa pro generate_spreadsheet. Retorna URL de download."""
@@ -5481,7 +5530,8 @@ async def save_item_note(job_id: str, item_id: str, payload: NotePayload, reques
 
 
 @app.get("/api/items/{job_id}/notes")
-async def list_job_notes(job_id: str):
+async def list_job_notes(job_id: str, request: Request):
+    _require_project_owner(request, job_id)
     """Lista todas as notas de itens de um job — restaura estado na revisão."""
     import urllib.request, urllib.error, json
     try:
@@ -6018,12 +6068,13 @@ async def finalize_review(job_id: str, request: Request):
 
 
 @app.get("/api/items/{job_id}/review-state")
-async def get_review_state(job_id: str):
+async def get_review_state(job_id: str, request: Request):
     """Retorna as revisões já feitas nesse job pra restaurar o estado no
     browser quando o user volta pra terminar depois.
 
     Retorna mapa {item_id: {action, edits, comment, reviewed_at}} com a
     última review de cada item."""
+    _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     try:
         url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
@@ -6190,9 +6241,11 @@ def _supabase_storage_list(bucket: str, prefix: str) -> list:
 
 
 @app.get("/api/admin/cleanup-secret-check")
-async def cleanup_secret_check():
-    """Debug: mostra se CLEANUP_SECRET está configurado no Render (sem expor
-    o valor). Útil pra diagnosticar 401 no workflow."""
+async def cleanup_secret_check(request: Request):
+    """Debug: confirma se CLEANUP_SECRET está configurado no Render (sem
+    expor o valor). Requer auth admin — anteriormente vazava first_4/last_4
+    do segredo, reduzindo entropia pra brute-force do header X-Cleanup-Secret."""
+    _require_admin(request)
     if not CLEANUP_SECRET:
         return {
             "configured": False,
@@ -6202,10 +6255,7 @@ async def cleanup_secret_check():
     return {
         "configured": True,
         "length": len(CLEANUP_SECRET),
-        "first_4": CLEANUP_SECRET[:4],
-        "last_4": CLEANUP_SECRET[-4:],
-        "message": "Secret configurada. Compare first_4/last_4 com o que você "
-                   "colou no GitHub Secrets."
+        "message": "Secret configurada no Render."
     }
 
 

@@ -220,6 +220,17 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const API_BASE = 'https://ai-arq.onrender.com';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Helper: fetch com Bearer do Supabase. Backend exige JWT em endpoints
+// /api/items/* (ownership check).
+async function authFetch(url, options = {}) {
+  const { data: { session } } = await sb.auth.getSession();
+  const headers = Object.assign({}, options.headers || {});
+  if (session && session.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+  return fetch(url, Object.assign({}, options, { headers }));
+}
+
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
 if (!jobId) { alert('job_id não informado na URL'); window.location.href = 'dashboard.html'; }
@@ -249,8 +260,8 @@ async function loadItems() {
   try {
     // Carrega itens + state de revisão em paralelo
     const [itemsRes, stateRes] = await Promise.all([
-      fetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()),
-      fetch(`${API_BASE}/api/items/${jobId}/review-state`).then(r => r.json()).catch(() => ({state: {}})),
+      authFetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()),
+      authFetch(`${API_BASE}/api/items/${jobId}/review-state`).then(r => r.json()).catch(() => ({state: {}})),
     ]);
     items = itemsRes.items || [];
     // Restaura state persistido: aprovar/remover/editar anteriores
@@ -390,7 +401,7 @@ async function review(itemId, action) {
   reviewState[itemId] = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited';
   render();
   try {
-    await fetch(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
+    await authFetch(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -434,7 +445,7 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
   closeEditModal();
   render();
   try {
-    await fetch(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
+    await authFetch(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -465,7 +476,7 @@ async function submitComment() {
   const saved = commentingItem.id;
   closeCommentModal();
   try {
-    await fetch(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
+    await authFetch(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -503,7 +514,7 @@ document.getElementById('btn-export').addEventListener('click', async () => {
   btn.disabled = true;
   btn.innerHTML = '<svg class="animate-spin w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582M20 20v-5h-.581M20 4l-5 5m-6 6l-5 5m14-14a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Gerando...';
   try {
-    await fetch(`${API_BASE}/api/items/${jobId}/finalize`, { method: 'POST' });
+    await authFetch(`${API_BASE}/api/items/${jobId}/finalize`, { method: 'POST' });
     // Redireciona pra download
     window.location.href = `${API_BASE}/api/download/${jobId}`;
   } catch (e) {
@@ -535,7 +546,7 @@ async function markExistente(itemId) {
   reviewState[itemId] = 'edited';
   render();
   try {
-    await fetch(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
+    await authFetch(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -576,7 +587,7 @@ async function bulkReview(section, action) {
   for (let i = 0; i < secItems.length; i += limit) {
     const batch = secItems.slice(i, i + limit);
     await Promise.all(batch.map(it =>
-      fetch(`${API_BASE}/api/items/${jobId}/review/${it.id}`, {
+      authFetch(`${API_BASE}/api/items/${jobId}/review/${it.id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -751,7 +762,7 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
   btn.textContent = 'Concluindo...';
   try {
     // Marca revisão como concluída (endpoint POST — best-effort)
-    await fetch(`${API_BASE}/api/items/${jobId}/review-finalize`, {
+    await authFetch(`${API_BASE}/api/items/${jobId}/review-finalize`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ user_id: window.currentUserId || '' }),

@@ -324,7 +324,9 @@ async function init() {
 
   // 2) Se não tem salvo: confere se o projeto tem items pra mostrar o form
   try {
-    const r = await fetch(`${API_BASE}/api/items/${jobId}`);
+    const { data: { session: s2 } } = await sbClient.auth.getSession();
+    const h2 = s2 ? { 'Authorization': `Bearer ${s2.access_token}` } : {};
+    const r = await fetch(`${API_BASE}/api/items/${jobId}`, { headers: h2 });
     const data = await r.json();
     const items = data.items || [];
 
@@ -374,7 +376,9 @@ async function tentarCarregarCronogramaPronto() {
   // Busca o cronograma já renderizado (config salva + fases) num único call.
   // Se 404, retorna false → fluxo segue pro form de geração.
   try {
-    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/full`);
+    const { data: { session } } = await sbClient.auth.getSession();
+    const headers = session ? { 'Authorization': `Bearer ${session.access_token}` } : {};
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/full`, { headers });
     if (r.status === 404) return false;
     if (!r.ok) return false;
     const cron = await r.json();
@@ -413,7 +417,9 @@ async function tentarCarregarCronogramaPronto() {
 
 async function carregarSugestao() {
   try {
-    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/sugestao`);
+    const { data: { session } } = await sbClient.auth.getSession();
+    const headers = session ? { 'Authorization': `Bearer ${session.access_token}` } : {};
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/sugestao`, { headers });
     if (!r.ok) return;
     const s = await r.json();
 
