@@ -4620,75 +4620,10 @@ def _get_project_from_supabase(job_id: str) -> dict:
         return {}
 
 
-@app.post("/api/calibration/ingest-from-review")
-async def calibration_ingest_from_review(
-    xlsx: UploadFile = File(...),
-    job_id: str = "",
-):
-    """Cashback: cliente sobe a planilha revisada do próprio projeto e o
-    backend alimenta os benchmarks de densidade da mesma tipologia. Nunca
-    copia valores absolutos pra outros projetos — só aprende proporções
-    típicas pra sinalizar anomalias futuras.
-
-    Resolve tipologia + área consultando o `projects` no Supabase pelo
-    `job_id` do projeto original.
-    """
-    if not HAS_DENSITY_CAL:
-        raise HTTPException(500, "Módulo density_calibration não carregado")
-    if not job_id:
-        raise HTTPException(400, "job_id obrigatório")
-
-    project = _get_project_from_supabase(job_id)
-    if not project:
-        raise HTTPException(404, f"Projeto não encontrado pro job_id={job_id}")
-
-    typology = project.get("typology") or "office"
-    ref_area = project.get("layout_area") or project.get("total_area") or 0
-    try:
-        ref_area = float(ref_area or 0)
-    except Exception:
-        ref_area = 0
-    if ref_area <= 0:
-        raise HTTPException(
-            400,
-            "Projeto não tem área de referência (layout_area ou total_area). "
-            "A calibração precisa da área pra computar densidades.",
-        )
-
-    label = (project.get("project_name") or f"job_{job_id}")[:100]
-
-    tmp_dir = os.path.join(WORK_DIR, "_density_tmp")
-    os.makedirs(tmp_dir, exist_ok=True)
-    safe_name = _safe_local_filename(xlsx.filename)
-    xlsx_path = os.path.join(tmp_dir, f"review_{job_id}_{safe_name}")
-    try:
-        content = await xlsx.read()
-        with open(xlsx_path, "wb") as f:
-            f.write(content)
-
-        from density_calibration import ingest_budget as _ingest
-        summary = _ingest(
-            xlsx_path, area_m2=ref_area, typology=typology, project_label=label,
-        )
-        return {
-            "status": "ok",
-            "source": "cashback",
-            "job_id": job_id,
-            "typology": typology,
-            "area_m2": ref_area,
-            "project_label": label,
-            **summary,
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Erro na ingestão da revisão: {str(e)}")
-    finally:
-        if os.path.exists(xlsx_path):
-            try:
-                os.remove(xlsx_path)
-            except Exception:
-                pass
+# REMOVIDO 2026-05-14: /api/calibration/ingest-from-review era duplicata
+# zumbi de /api/cashback/upload (mesma lógica de calibração por densidade).
+# O frontend nunca chamou /calibration/ingest-from-review — só usa o
+# /cashback/upload. Eliminado pra reduzir surface area e clarear o código.
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -6140,12 +6075,34 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar reviews: {e}")
 
-    # 2) Enrich com descrição original do item (se ainda existe)
+    # 2) Enrich com descrição original do item (se ainda existe).
+    # FIX 2026-05-14: N+1 eliminado — antes fazia 1 GET por review (até 1000
+    # requests sequenciais ao Supabase, timeout em pico). Agora 1 GET batch
+    # com `item_id=in.(id1,id2,...)`. Reduz pra 1 chamada (até 100 ids).
     from collections import Counter
-    rejected_patterns = Counter()       # descrição normalizada → contagem de rejects
-    edit_patterns = Counter()           # (campo editado) → contagem
-    comments = []                       # textos de comentário
-    by_typology = Counter()             # typology → contagem total reviews
+    rejected_patterns = Counter()
+    edit_patterns = Counter()
+    comments = []
+    by_typology = Counter()
+
+    # Pré-busca descrições em batch
+    item_descs = {}
+    item_ids_uniq = [r.get("item_id") for r in reviews if r.get("item_id")]
+    item_ids_uniq = list({i for i in item_ids_uniq if i})
+    for i in range(0, len(item_ids_uniq), 100):
+        chunk = item_ids_uniq[i:i+100]
+        try:
+            ids_csv = ",".join(str(x) for x in chunk)
+            durl = (f"{SUPABASE_URL}/rest/v1/project_items"
+                    f"?id=in.({ids_csv})&select=id,description,discipline")
+            dreq = urllib.request.Request(durl, method="GET")
+            dreq.add_header("apikey", SUPABASE_KEY)
+            dreq.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            dresp = urllib.request.urlopen(dreq, timeout=10)
+            for row in json.loads(dresp.read().decode('utf-8')):
+                item_descs[row.get("id")] = row.get("description", "")
+        except Exception:
+            pass
 
     for r in reviews:
         action = r.get("action", "")
@@ -6158,23 +6115,8 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
                 "at": r.get("reviewed_at"),
             })
 
-        # Pra rejects/edits: tenta buscar a row original (pode ter sido deletada
-        # se action=reject, então guardamos na própria review)
         item_id = r.get("item_id")
-        item_desc = None
-        if item_id:
-            try:
-                durl = (f"{SUPABASE_URL}/rest/v1/project_items"
-                        f"?id=eq.{item_id}&select=description,discipline")
-                dreq = urllib.request.Request(durl, method="GET")
-                dreq.add_header("apikey", SUPABASE_KEY)
-                dreq.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-                dresp = urllib.request.urlopen(dreq, timeout=5)
-                drows = json.loads(dresp.read().decode('utf-8'))
-                if drows:
-                    item_desc = drows[0].get("description", "")
-            except Exception:
-                pass
+        item_desc = item_descs.get(item_id) if item_id else None
 
         if action == "reject" and item_desc:
             # Normaliza pra primeiras 3 palavras significativas

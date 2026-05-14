@@ -2,7 +2,11 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -47,7 +51,7 @@
 <header class="bg-white border-b sticky top-0 z-40">
   <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
     <div class="flex items-center gap-3">
-      <a href="dashboard.html" class="text-gray-400 hover:text-indigo-600">
+      <a href="dashboard.html" class="text-gray-500 hover:text-indigo-600">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
       </a>
       <div>
@@ -121,7 +125,7 @@
   <div class="bg-white rounded-xl max-w-md w-full p-5">
     <div class="flex items-center justify-between mb-4">
       <h3 class="font-semibold text-gray-800">Editar item</h3>
-      <button onclick="closeEditModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+      <button onclick="closeEditModal()" class="text-gray-500 hover:text-gray-600">✕</button>
     </div>
     <form id="edit-form" class="space-y-3">
       <div>
@@ -163,7 +167,7 @@
   <div class="bg-white rounded-xl max-w-md w-full p-5">
     <div class="flex items-center justify-between mb-4">
       <h3 class="font-semibold text-gray-800">Comentário sobre este item</h3>
-      <button onclick="closeCommentModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+      <button onclick="closeCommentModal()" class="text-gray-500 hover:text-gray-600">✕</button>
     </div>
     <p class="text-xs text-gray-500 mb-3">O que está errado, faltando ou confuso? Sua correção treina a IA pro próximo projeto.</p>
     <textarea id="comment-text" rows="4" class="w-full px-3 py-2 border rounded text-sm" placeholder="Ex.: a IA esqueceu os 4 armários aéreos da cozinha"></textarea>
@@ -181,9 +185,9 @@
   <div class="bg-white rounded-xl max-w-lg w-full p-6">
     <div class="flex items-center justify-between mb-4">
       <h3 class="font-semibold text-gray-800">Atalhos de teclado</h3>
-      <button onclick="closeHelpModal()" class="text-gray-400 hover:text-gray-600">✕</button>
+      <button onclick="closeHelpModal()" class="text-gray-500 hover:text-gray-600">✕</button>
     </div>
-    <div class="grid grid-cols-2 gap-3 text-sm">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
       <div class="flex items-center gap-2"><kbd>↑</kbd> ou <kbd>K</kbd><span class="text-gray-600">Item anterior</span></div>
       <div class="flex items-center gap-2"><kbd>↓</kbd> ou <kbd>J</kbd><span class="text-gray-600">Próximo item</span></div>
       <div class="flex items-center gap-2"><kbd>A</kbd><span class="text-gray-600">Aprovar item</span></div>
@@ -348,7 +352,7 @@ function renderItem(it, localIndex) {
                      !/^Pr\.|^DXF/i.test(it.ref_sheet));
   return `
     <div class="item-row ${state} px-4 py-3 flex items-start gap-4" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
-      <div class="flex-shrink-0 w-14 text-xs text-gray-400 pt-1">${escapeHtml(it.item_num || '')}</div>
+      <div class="flex-shrink-0 w-14 text-xs text-gray-500 pt-1">${escapeHtml(it.item_num || '')}</div>
       <div class="flex-1 min-w-0">
         <p class="text-sm text-gray-800 ${isOrange ? '' : 'font-medium'}">${escapeHtml(it.description)}</p>
         <p class="text-xs text-gray-500 mt-1">
@@ -357,7 +361,7 @@ function renderItem(it, localIndex) {
           </span>
           <span class="ml-2">${it.quantity || 0} ${escapeHtml(it.unit)}</span>
           ${it.ref_sheet ? `<span class="ml-2 text-indigo-500">📄 ${escapeHtml(it.ref_sheet).slice(0,50)}</span>` : ''}
-          ${it.observations ? `<span class="ml-2 text-gray-400">· ${escapeHtml(it.observations).slice(0,60)}</span>` : ''}
+          ${it.observations ? `<span class="ml-2 text-gray-500">· ${escapeHtml(it.observations).slice(0,60)}</span>` : ''}
         </p>
       </div>
       <div class="flex-shrink-0 flex items-center gap-1">
@@ -796,7 +800,7 @@ function escapeHtml(s) {
       <a href="dashboard.html" class="hover:text-gray-800 transition">Dashboard</a>
     </div>
   </div>
-  <p class="text-center text-[11px] text-gray-400 mt-3 px-4">
+  <p class="text-center text-[11px] text-gray-500 mt-3 px-4">
     Ao revisar itens e salvar alterações, você concorda com os <a href="termos.html" class="underline">Termos</a> e a <a href="privacidade.html" class="underline">Privacidade</a>. As correções podem ser usadas de forma anonimizada pra calibrar a IA.
   </p>
 </footer>
