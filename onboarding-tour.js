@@ -212,13 +212,35 @@
     overlay.classList.remove('open');
   };
 
-  // Salva no Supabase Auth metadata que o usuário já fez o onboarding
+  // Salva no Supabase Auth metadata que o usuário já fez o onboarding.
+  // FIX 2026-05-14: HTMLs declaram `const sbClient = ...` no topo do script,
+  // que NÃO vai pro window (especificação ES — const/let têm script-scope).
+  // Resultado: nenhuma das duas branches abaixo executava, tour reaparecia
+  // infinitamente. Fix: criar o client localmente usando o SDK Supabase já
+  // carregado via CDN (window.supabase.createClient).
+  function getSupabaseClient() {
+    if (window.sb && window.sb.auth) return window.sb;
+    if (window.sbClient && window.sbClient.auth) return window.sbClient;
+    // Fallback: cria localmente usando o SDK Supabase global
+    if (window.supabase && typeof window.supabase.createClient === 'function') {
+      try {
+        var SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
+        var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
+        window.__tourSb = window.__tourSb || window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        return window.__tourSb;
+      } catch (e) { return null; }
+    }
+    return null;
+  }
+
   function markOnboarded() {
+    // Atalho local pra não pedir o tour de novo nesta sessão, mesmo se o
+    // updateUser falhar (sem rede, sessão expirada, etc).
+    try { localStorage.setItem('aiarq_onboarded', 'true'); } catch (e) {}
     try {
-      if (window.sb && window.sb.auth && typeof window.sb.auth.updateUser === 'function') {
-        window.sb.auth.updateUser({ data: { onboarded: true } }).catch(function () {});
-      } else if (window.sbClient && window.sbClient.auth && typeof window.sbClient.auth.updateUser === 'function') {
-        window.sbClient.auth.updateUser({ data: { onboarded: true } }).catch(function () {});
+      var sb = getSupabaseClient();
+      if (sb && sb.auth && typeof sb.auth.updateUser === 'function') {
+        sb.auth.updateUser({ data: { onboarded: true } }).catch(function () {});
       }
     } catch (e) { /* silenciar */ }
   }
@@ -227,7 +249,9 @@
   // Espera a sessão Supabase carregar e checa se é primeira vez
   function tryAutoStart(attempts) {
     attempts = attempts || 0;
-    var sb = window.sb || window.sbClient;
+    // FIX 2026-05-14: usa o helper que tem fallback de criar o client
+    // se nem window.sb nem window.sbClient estiverem disponíveis.
+    var sb = getSupabaseClient();
     if (!sb || !sb.auth) {
       if (attempts < 30) {
         setTimeout(function () { tryAutoStart(attempts + 1); }, 200);
@@ -240,6 +264,11 @@
       var meta = session.user.user_metadata || {};
       // Se já fez onboarding, não mostra de novo
       if (meta.onboarded === true) return;
+      // Fallback local: se markOnboarded() salvou no localStorage mas o
+      // updateUser não persistiu (sem rede etc), respeita mesmo assim.
+      try {
+        if (localStorage.getItem('aiarq_onboarded') === 'true') return;
+      } catch (e) {}
       // Não mostra se a URL tem hash específica (ex: usuário clicou em link de aba)
       if (window.location.hash && window.location.hash !== '#home') return;
       // Espera 800ms pra dashboard carregar visualmente

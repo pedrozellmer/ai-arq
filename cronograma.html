@@ -276,13 +276,13 @@ function smartBack() {
   if (document.referrer.startsWith(window.location.origin) && window.history.length > 1) {
     window.history.back();
   } else {
-    window.location.href = `projeto.html?job=${jobId}`;
+    window.location.href = `projeto.html?job_id=${jobId}`;
   }
 }
 
 // Link de volta pro projeto
-document.getElementById('back-projeto').href = `projeto.html?job=${jobId}`;
-document.getElementById('link-projeto').href = `projeto.html?job=${jobId}`;
+document.getElementById('back-projeto').href = `projeto.html?job_id=${jobId}`;
+document.getElementById('link-projeto').href = `projeto.html?job_id=${jobId}`;
 
 // ─── Setup inicial: data default = hoje + 30 dias ──
 function defaultDate() {
