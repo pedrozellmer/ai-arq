@@ -1298,7 +1298,11 @@ async function generateComparison() {
 
 function renderHeader(p) {
   document.getElementById('proj-title').textContent = p.project_name || 'Projeto sem nome';
-  document.getElementById('proj-id').textContent = `Código: ${p.job_id}`;
+  // FIX 2026-05-14: elemento #proj-id foi removido do header (código mostrado
+  // só no card "Identificação" agora — #d-jobid). Sem este guard, a função
+  // quebrava no safeRun e nem o badge de status era setado.
+  const projIdEl = document.getElementById('proj-id');
+  if (projIdEl) projIdEl.textContent = `Código: ${p.job_id}`;
   const badges = {
     'done':       '<span class="inline-block px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">Concluído</span>',
     'error':      '<span class="inline-block px-3 py-1 rounded-full bg-red-100 text-red-700 text-xs font-medium">Erro</span>',
@@ -1448,7 +1452,11 @@ function renderReviewPct(items, state) {
               reviewed === 0 ? `0 de ${total} revisados` :
               reviewed >= total ? '100% revisado ✓' :
               `${pct}% revisado · ${reviewed}/${total}`;
-  document.getElementById('rev-pct').textContent = txt;
+  // FIX 2026-05-14: elemento #rev-pct foi removido (% de revisão agora aparece
+  // dentro do card de entregas, em #entrega-q-revisados via carregarStatsEntregas).
+  // Esse render legado era no-op, mas quebrava em safeRun.
+  const revPctEl = document.getElementById('rev-pct');
+  if (revPctEl) revPctEl.textContent = txt;
 }
 
 function esc(s) {
