@@ -12,6 +12,7 @@ Esse projeto tem configurações prontas em `.claude/`. Use proativamente.
 
 ### Subagents (`.claude/agents/`)
 - **`seo-auditor-br`** — audita post de blog antes de publicar (keyword, densidade, schema, fontes). Use quando editar `blog/posts.json` ou criar post novo.
+- **⭐ `coo-conector`** — Chief Operating Officer. Conecta as 8 áreas (Produto, Marketing IG/Blog/Email, Jurídico, SEO, CS, Finanças, Conhecimento). Quando uma mudança rola (feature nova, pricing, fix de segurança), checa o que cada área precisa fazer e executa ou delega. Garante que nada escape. **Invoque depois de cada commit grande OU diga "COO, rolar feature X".**
 - **`copywriter-br`** — revisa copy do site pra soar natural/coloquial brasileiro. Use quando editar texto de landing/FAQ/email.
 - **`security-reviewer`** — revisão de segurança focada em SaaS (RLS, secrets, LGPD). Use antes de cada deploy ou ao mexer em auth/RLS/uploads.
 - **`marketing-strategist`** — análise de métricas e ações de growth. Use quando Pedro perguntar sobre crescimento.
