@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Cronograma físico-financeiro de obra: como montar (com modelo Excel grátis) | AI.arq</title>
+<meta name="description" content="Guia completo pra montar cronograma físico-financeiro de obra: EAP/WBS, durações, dependências, curva S e distribuição do valor no tempo. Modelo Excel gratuito incluso.">
+<meta name="keywords" content="cronograma físico-financeiro, cronograma físico-financeiro Excel, curva S obra, EAP WBS arquitetura, cronograma de obra, planejamento de obra, modelo cronograma Excel">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html">
+<meta property="og:title" content="Cronograma físico-financeiro de obra: como montar (com modelo Excel grátis)">
+<meta property="og:description" content="Guia completo pra montar cronograma físico-financeiro de obra: EAP/WBS, durações, dependências, curva S e distribuição do valor no tempo. Modelo Excel gratuito incluso.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-08-02T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Cronograma">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Cronograma físico-financeiro de obra: como montar (com modelo Excel grátis)">
+<meta name="twitter:description" content="Guia completo pra montar cronograma físico-financeiro de obra: EAP/WBS, durações, dependências, curva S e distribuição do valor no tempo. Modelo Excel gratuito incluso.">
+<meta name="twitter:image" content="https://ai.arq.br/og-image.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-08-02">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Cronograma físico-financeiro de obra: como montar (com modelo Excel grátis)",
+  "description": "Guia completo pra montar cronograma físico-financeiro de obra: EAP/WBS, durações, dependências, curva S e distribuição do valor no tempo. Modelo Excel gratuito incluso.",
+  "datePublished": "2026-08-02T10:00:00-03:00",
+  "dateModified": "2026-08-02T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/og-image.png",
+  "url": "https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/cronograma-fisico-financeiro-obra-modelo.html"
+  },
+  "keywords": "cronograma físico-financeiro, cronograma físico-financeiro Excel, curva S obra, EAP WBS arquitetura, cronograma de obra, planejamento de obra, modelo cronograma Excel",
+  "articleSection": "Cronograma"
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/#precos" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Cronograma</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Cronograma</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Cronograma físico-financeiro de obra: como montar (com modelo Excel grátis)</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 02/08/2026</span>
+    <span>·</span>
+    <span>⏱️ 11 min de leitura</span>
+  </div>
+
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">Toda obra que passa de R$ 200 mil precisa de cronograma físico-financeiro — pra negociar com cliente, liberar crédito no banco, cobrar adiantamento do empreiteiro ou prestar contas em obra pública. O problema é que poucos profissionais foram ensinados a montar do zero: o cronograma vira um Gantt bonito sem amarração com o desembolso real. Esse guia traz o passo a passo: quebrar a obra em Estrutura Analítica do Projeto (EAP/WBS), estimar duração e dependência por atividade, construir a curva S e distribuir o valor total mês a mês por disciplina. Tem também modelo Excel gratuito pra baixar e adaptar — sem cadastro.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>Baixe o modelo Excel agora</h2><p>Antes da teoria, segue o modelo pronto pra editar. Sem cadastro, sem captura de email.</p>
+<div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">
+  <div class="grid gap-3 sm:grid-cols-2">
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.pdf" download
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 font-bold text-xs">PDF</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo em PDF</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra ler e imprimir · 328 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    </a>
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.docx" download
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 font-bold text-xs">DOCX</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo editável (Word)</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra editar no Word/Docs · 40 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    </a>
+  </div>
+</div>
+<p>O arquivo tem duas abas amarradas:</p><ol><li>Aba FÍSICO — Gantt com 12 disciplinas típicas (serviços preliminares, fundação, estrutura, alvenaria, cobertura, esquadrias, elétrica, hidráulica, revestimentos, pisos, pintura, limpeza final), barra de avanço por mês e percentual de conclusão por linha.</li><li>Aba FINANCEIRO — matriz mês × disciplina. Você lança o valor total de cada disciplina e a planilha distribui automaticamente conforme o percentual da aba físico. Gera o desembolso mensal, o acumulado e a curva S.</li></ol><p>O modelo NÃO traz preços. Quem entrega o valor por disciplina é o arquiteto, o orçamentista ou a planilha de quantitativos — o cronograma só distribui esse valor no tempo. Essa separação segue o princípio que a ABNT NBR 12721:2006 usa pra Custo Unitário Básico: orçamento e cronograma são camadas distintas.</p><h2>O que é cronograma físico-financeiro, juridicamente</h2><p>Cronograma físico-financeiro é o documento que cruza duas informações: o avanço da obra no tempo (físico) e o desembolso financeiro correspondente (financeiro). Em uma única tabela, você vê quanto vai estar pronto em cada mês e quanto vai ter sido gasto até ali.</p><p>A parte FÍSICA responde: em que mês a fundação estará concluída? Quando a alvenaria começa? Quando a pintura termina? Geralmente é representada por um diagrama de Gantt — barras horizontais por atividade ao longo dos meses.</p><p>A parte FINANCEIRA responde: quanto sai do caixa em cada mês? Qual o desembolso acumulado até o mês 6? Quando bate o pico de gasto? Geralmente é representada pela curva S — gráfico do desembolso acumulado em formato de S alongado.</p><p>O cronograma físico-financeiro é exigido por:</p><ul><li>Caixa Econômica Federal — anexo obrigatório da Proposta de Construção Individual (PCI) pra liberação de crédito imobiliário, na forma da Planilha Financeira de Unidade Individual (PFUI)</li><li>Obras públicas — exigência da Lei 14.133/2021 (Nova Lei de Licitações), art. 6º, inciso XXV, que define o projeto básico incluindo cronograma físico-financeiro</li><li>TCU/TCE — fiscalização exige curva S em obras públicas conforme Acórdão TCU 2622/2013, que padroniza a análise de aditivos contratuais por curva</li><li>Contratos privados de obra — base pra liberação de parcelas e medições</li><li>Construtoras e incorporadoras — controle de fluxo de caixa do empreendimento</li></ul><p>Em obra pública, cronograma mal feito gera glosa: o TCU compara o avanço previsto com o realizado por curva S e, se a defasagem for relevante, suspende o pagamento ou exige justificativa técnica.</p><h2>Passo 1 — Estrutura Analítica do Projeto (EAP/WBS)</h2><p>Antes de pensar em prazo, você precisa quebrar a obra em partes. Esse é o trabalho da EAP — Estrutura Analítica do Projeto, em inglês WBS (Work Breakdown Structure). O conceito vem do PMBOK (Guia do PMI — Project Management Institute, 7ª edição), referência mundial em gestão de projetos.</p><p>A EAP é uma decomposição hierárquica do escopo em pacotes de trabalho menores. Cada folha da árvore é uma atividade mensurável, com início, fim e responsável. Em obra de edificação típica, a EAP tem 3 níveis:</p><p>Nível 1 — a obra inteira (raiz) Nível 2 — disciplinas (serviços preliminares, fundação, estrutura, alvenaria, instalações, acabamento) Nível 3 — atividades por disciplina (escavação, armação, concretagem, cura)</p><p>Exemplo de EAP pra obra residencial pequena:</p><ol><li>Serviços preliminares (canteiro, locação, tapume)</li><li>Fundação (escavação, sapatas, baldrames, impermeabilização)</li><li>Estrutura (pilares, vigas, lajes)</li><li>Alvenaria de vedação</li><li>Cobertura (estrutura, telhamento, calhas, rufos)</li><li>Esquadrias</li><li>Instalações elétricas</li><li>Instalações hidráulicas</li><li>Revestimentos de parede</li><li>Pisos</li><li>Pintura</li><li>Limpeza final e entrega</li></ol><p>Regra do PMBOK: cada item precisa ser pequeno o suficiente pra ter duração estimável em dias e responsável único. Se passa de 4 semanas e envolve várias equipes, quebre em sub-itens.</p><p>Você também pode adotar a estrutura SINAPI como base — o sistema da Caixa traz cerca de 20 grandes grupos de serviço pra edificação, virando ponto de partida pronto.</p><h2>Passo 2 — Estimar duração por atividade</h2><p>Com a EAP montada, próximo passo é estimar quanto tempo cada atividade leva. Existem três caminhos clássicos — o livro do Aldo Mattos (Planejamento e controle de obras, Editora Pini, 2010) detalha cada um:</p><ol><li>Por produtividade — divide o quantitativo da atividade pela produtividade da equipe. Exemplo: 200 m² de alvenaria, equipe faz 12 m²/dia, então duração = 200/12 ≈ 17 dias úteis. As tabelas SINAPI trazem produtividades de referência.</li><li>Por analogia — usa a duração histórica de obra parecida. Bom pra atividades repetitivas. Risco: cada obra tem nuance própria.</li><li>Por três pontos (PERT) — estima cenário otimista, provável e pessimista, e calcula duração = (O + 4M + P) / 6. Bom pra atividades de incerteza alta.</li></ol><p>Referências típicas em obra residencial pequena:</p><ul><li>Serviços preliminares: 5 a 10 dias</li><li>Fundação (sapata isolada): 15 a 25 dias</li><li>Estrutura concreto armado: 30 a 60 dias por pavimento</li><li>Alvenaria de vedação: 20 a 40 dias</li><li>Cobertura: 10 a 20 dias</li><li>Instalações: 15 a 30 dias cada, sobrepostas com alvenaria/revestimento</li><li>Revestimento e pintura: 20 a 40 dias cada</li></ul><h2>Passo 3 — Mapear dependências entre atividades</h2><p>Atividades de obra não acontecem em paralelo livre — algumas só podem começar depois que outras avançam. Esse é o mapeamento de dependências, base do método do Caminho Crítico (CPM — Critical Path Method) descrito no PMBOK.</p><p>Quatro tipos de dependência:</p><ol><li>Término-Início (TI) — a mais comum. B só começa depois que A terminou. Ex: a estrutura só começa depois da fundação.</li><li>Início-Início (II) — B começa quando A começa, com defasagem. Ex: alvenaria interna começa 15 dias depois que a externa começou.</li><li>Término-Término (TT) — B termina quando A termina. Pouco usado em edificação.</li><li>Início-Término (IT) — raro, usado em transições de turno em obra industrial.</li></ol><p>Na prática, 90% das dependências em obra residencial são Término-Início. Regras de bom senso:</p><ul><li>Fundação antes da estrutura</li><li>Estrutura antes da alvenaria</li><li>Infraestrutura elétrica/hidráulica DENTRO da alvenaria (sobreposição)</li><li>Chapisco antes do emboço, emboço antes do reboco</li><li>Reboco antes do revestimento cerâmico</li><li>Esquadrias antes da pintura final</li><li>Limpeza final por último</li></ul><p>Quando todas as dependências entram no cronograma, surge o caminho crítico — a sequência que define o prazo total da obra. Atraso em qualquer atividade do caminho crítico atrasa a obra inteira.</p><h2>Passo 4 — Montar o Gantt físico</h2><p>Com EAP + durações + dependências em mãos, agora você monta o diagrama de Gantt. É a representação visual do cronograma — barras horizontais que mostram quando cada atividade começa, quanto dura e quando termina.</p><p>Pra obra pequena/média, o Gantt no Excel resolve bem. Estrutura básica:</p><ul><li>Linhas: as atividades da EAP (uma por linha, em geral 15 a 30 linhas em obra residencial)</li><li>Colunas: os meses do prazo total da obra (8, 12, 18 meses)</li><li>Células: marcação visual da barra de execução (cor de fundo na célula correspondente ao mês em que a atividade ocorre)</li></ul><p>Dicas pra ficar legível:</p><ul><li>Use formatação condicional em vez de mesclar células — fica mais fácil de editar depois</li><li>Inclua coluna de percentual previsto de avanço por mês (ex: alvenaria mês 3 = 40%, mês 4 = 60%)</li><li>Inclua coluna de duração total em dias úteis</li><li>Reserve linhas separadas pra marcos (entrega da fundação, aceite da estrutura, recebimento provisório)</li><li>Use cores diferentes por disciplina pra leitura rápida</li></ul><p>Obra acima de R$ 2 milhões justifica software dedicado (MS Project, Primavera, Asana, Trello especializado), mas pra obra residencial e comercial pequena/média o Excel atende em geral 95% dos casos.</p><h2>Passo 5 — Distribuir o valor total no tempo (financeiro)</h2><p>Aqui entra a parte mais subestimada do cronograma — e a mais política. O FÍSICO mostra quando a obra avança, o FINANCEIRO mostra quando o dinheiro sai. E os dois quase nunca coincidem no mesmo mês.</p><p>Como o desembolso financeiro segue o avanço físico (com defasagens conhecidas):</p><ul><li>Materiais entregues antes da execução geram pagamento antes da medição (impacto no fluxo de caixa)</li><li>Mão de obra é paga semanalmente ou quinzenalmente conforme o avanço</li><li>Subempreitadas geralmente têm parcela de entrada + medições mensais + retenção final</li><li>Impostos e encargos têm vencimento próprio (FGTS, INSS, ISS)</li></ul><p>A forma padrão de montar o financeiro é uma matriz mês × disciplina. Você pega o valor total de cada disciplina (vem do orçamento) e distribui ao longo dos meses em que aquela disciplina é executada, proporcional ao avanço físico.</p><p>Exemplo simplificado:</p><ul><li>Disciplina ESTRUTURA com valor total R$ 90.000</li><li>Execução prevista pra mês 2 (30%), mês 3 (50%) e mês 4 (20%)</li><li>Distribuição financeira: mês 2 = R$ 27 mil, mês 3 = R$ 45 mil, mês 4 = R$ 18 mil</li></ul><p>Repete o mesmo raciocínio pra cada disciplina e soma a coluna do mês — vira o desembolso mensal total. A soma acumulada de mês a mês forma a curva S, que é o coração do controle financeiro.</p><p>IMPORTANTE: o cronograma físico-financeiro NÃO calcula o valor da obra. Quem calcula o valor é a planilha de orçamento, que parte da planilha de quantitativos (lista de itens) multiplicada pelos preços (SINAPI, SBC, cotação local). O cronograma só recebe esse valor pronto e distribui no tempo. Misturar os dois numa planilha só é fonte clássica de erro.</p><h2>Passo 6 — A curva S e por que ela importa</h2><p>A curva S é o gráfico do desembolso financeiro acumulado em função do tempo. O nome vem do formato — costuma lembrar um S alongado: começa devagar, acelera no meio, desacelera no fim.</p><p>Visualmente, é uma linha que sai de 0% no mês inicial e chega a 100% no mês final (ex: 10% no mês 3, 50% no mês 7, 90% no mês 11).</p><p>Por que tem formato de S?</p><ul><li>INÍCIO (suave) — mobilização, canteiro, fundação, poucas equipes, desembolso baixo</li><li>MEIO (íngreme) — estrutura, alvenaria, instalações em paralelo, pico de desembolso</li><li>FIM (suave) — acabamento, pintura, limpeza, equipes diminuindo</li></ul><p>A curva S serve pra três coisas práticas:</p><ol><li>Negociar liberação de parcelas com banco/cliente baseada no avanço acumulado previsto.</li><li>Comparar previsto vs realizado mês a mês — duas curvas no mesmo gráfico. A defasagem entre elas é o termômetro da obra.</li><li>Justificar aditivos contratuais — o Acórdão TCU 2622/2013 define como interpretar desvios de curva S pra decidir se um aditivo é legítimo em obra pública.</li></ol><p>Pra obra pública, curva S não é opcional — é peça obrigatória do projeto básico pela Lei 14.133/2021 e foco de auditoria do tribunal de contas. Pra obra privada, é a ferramenta mais útil de diálogo com o cliente.</p><h2>Erros comuns que invalidam o cronograma</h2><ol><li>Não amarrar o financeiro ao físico. Cronograma com aba financeiro feita por chute, sem relação com o avanço, é planilha de fluxo de caixa — não é cronograma físico-financeiro. Não passa em auditoria e não convence banco.</li><li>Duração otimista demais. Erro clássico de iniciante: comprimir prazos pra agradar o cliente. Resultado: cronograma estoura em 30-50% e o profissional perde credibilidade. Use produtividades SINAPI como referência mínima e adicione 10-15% de folga.</li><li>Esquecer dependências básicas. Pintar antes de instalar esquadria, revestir antes de passar instalação — erros bobos que aparecem em cronograma apressado. Revise o mapa de dependências antes de fechar o Gantt.</li><li>Ignorar marcos contratuais. Entrega da estrutura no mês 4 pro cliente? Vistoria do banco no mês 6? Esses marcos precisam aparecer no cronograma com folga estratégica antes deles.</li><li>Não atualizar mensalmente. Cronograma sem revisão vira ficção. A boa prática (PMBOK e Aldo Mattos) é medir o avanço real toda semana ou mês e atualizar a curva realizada.</li><li>Confundir cronograma com orçamento. O cronograma DISTRIBUI o valor no tempo — ele NÃO calcula o valor. O orçamento é peça separada, produzida a partir da planilha de quantitativos. Essa separação é tradição de mercado e implícita na ABNT NBR 12721:2006.</li></ol><h2>Quanto detalhamento é necessário (por porte da obra)</h2><p>Não tem regra única — o detalhamento depende do porte e da complexidade. Diretrizes práticas, adaptadas do manual CBIC de planejamento:</p><p>Reforma residencial pequena (até R$ 300 mil) — cronograma de 1 página, 10 a 15 disciplinas, granularidade mensal. Excel resolve.</p><p>Residencial padrão (R$ 300 mil a R$ 1,5 milhão) — 15 a 25 disciplinas, granularidade quinzenal pras atividades críticas, curva S obrigatória. Excel ainda resolve.</p><p>Comercial / multifamiliar médio (R$ 1,5 milhão a R$ 10 milhões) — cronograma detalhado por subatividade, 50 a 100 linhas, granularidade semanal pras críticas. Migra pra MS Project ou similar.</p><p>Obra pública / grande incorporação (acima de R$ 10 milhões) — 500+ atividades, método CPM, curvas S por disciplina, equipe dedicada de planejamento. Primavera P6 é padrão de mercado.</p><p>O modelo Excel liberado aqui atende confortavelmente os dois primeiros portes. O fator que mais define o detalhamento: quantas equipes operam em paralelo. Obra com 3 equipes cabe em Excel. Obra com 15 equipes simultâneas precisa de software de planejamento de verdade.</p><h2>Modelo Excel — link novamente</h2><p>Pra fechar, segue de novo o link do modelo:</p>
+<div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">
+  <div class="grid gap-3 sm:grid-cols-2">
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.pdf" download
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 font-bold text-xs">PDF</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo em PDF</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra ler e imprimir · 328 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    </a>
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.docx" download
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 font-bold text-xs">DOCX</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo editável (Word)</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra editar no Word/Docs · 40 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    </a>
+  </div>
+</div>
+<p>O arquivo já vem com:</p><ul><li>Aba FÍSICO com 12 disciplinas pré-cadastradas, Gantt de 18 meses, fórmula de avanço acumulado por linha</li><li>Aba FINANCEIRO com matriz mês × disciplina, desembolso mensal, acumulado e gráfico de curva S vinculado</li><li>Aba INSTRUÇÕES com explicação passo a passo de cada campo</li></ul><p>Você preenche 3 coisas: (1) durações no Gantt físico, (2) valor total de cada disciplina no financeiro (vem do seu orçamento) e (3) opcionalmente, ajuste da distribuição mensal por disciplina se ela não for linear. O resto a planilha calcula — incluindo a curva S.</p><p>Adapte pra realidade do seu projeto e faça revisão final com profissional habilitado (CAU/CREA) antes de entregar ao destinatário (cliente, banco, prefeitura, tribunal de contas).</p>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Pra acelerar a montagem do cronograma físico, sobe o CAD do seu projeto no AI.arq. Em poucos minutos a IA lê todas as pranchas e devolve a planilha de quantitativos completa por disciplina — que vira a EAP/WBS do seu cronograma quase pronta. Você cola as 12 disciplinas no modelo Excel, define as durações e dependências, e na aba financeiro coloca o valor total de cada disciplina (vindo do seu orçamento). A curva S sai automática. O AI.arq não precifica e não calcula o cronograma — entrega o esqueleto físico (quantitativos + classificação por disciplina) pra você completar com prazos e valor. Primeiro projeto é grátis em ai.arq.br.</p>
+    <a href="/login.html" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+      Começar grátis
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+    </a>
+    <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Normas ABNT</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>ABNT NBR 12721:2006</strong> &mdash; <span class="text-gray-600">Avaliação de custos unitários de construção pra incorporação imobiliária</span></li><li><strong>Lei 14.133/2021</strong> &mdash; <span class="text-gray-600">Nova Lei de Licitações e Contratos Administrativos — art. 6º inciso XXV define o projeto básico incluindo cronograma físico-financeiro</span></li><li><strong>Acórdão TCU 2622/2013 — Plenário</strong> &mdash; <span class="text-gray-600">Padroniza a análise de aditivos contratuais em obras públicas usando curva S e parâmetros de desvio físico-financeiro</span></li></ul></div><div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Livros e Manuais</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>Planejamento e Controle de Obras</strong> &mdash; Aldo Dórea Mattos <span class="text-gray-500">(Editora PINI, 2010)</span></li><li><strong>Guia PMBOK — Um Guia do Conhecimento em Gerenciamento de Projetos</strong> &mdash; Project Management Institute (PMI) <span class="text-gray-500">(PMI, 2021)</span></li><li><strong>Manual de Planejamento e Controle de Obras</strong> &mdash; CBIC — Câmara Brasileira da Indústria da Construção <span class="text-gray-500">(CBIC, 2016)</span></li><li><strong>Como Preparar Orçamentos de Obras — Dicas pra Orçamentistas, Estudo de Caso, Exemplos</strong> &mdash; Aldo Dórea Mattos <span class="text-gray-500">(Editora PINI, 2014)</span></li><li><strong>Gerenciamento de Obras — Da Concepção à Pós-Ocupação</strong> &mdash; Mário Mendonça <span class="text-gray-500">(Editora PINI, 2015)</span></li></ul></div><div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Sistema SINAPI — Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil</a> <span class="text-gray-500">&middot; Caixa Econômica Federal</span></li><li><a href="https://sienge.com.br/blog/proposta-de-construcao-individual/" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Proposta de Construção Individual (PCI) — documentação Caixa</a> <span class="text-gray-500">&middot; Sienge</span></li><li><a href="https://sienge.com.br/blog/curva-s-construcao-civil/" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">O que é curva S e como montar pra obra de construção civil</a> <span class="text-gray-500">&middot; Sienge</span></li><li><a href="https://blog.aecweb.com.br/eap-estrutura-analitica-de-projeto/" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Como elaborar EAP (Estrutura Analítica do Projeto) em obras</a> <span class="text-gray-500">&middot; AECweb</span></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 14/05/2026. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Produto</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/#precos" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Legal</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 AI.arq · Quantitativo com IA pra arquitetos brasileiros
+      <span class="ml-2 text-gray-400">· v0.5.0 Beta</span>
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
+<script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
+</body>
+</html>

@@ -55,31 +55,29 @@
         <p id="project-meta" class="text-xs text-gray-500">Carregando...</p>
       </div>
     </div>
-    <div class="flex items-center gap-3">
+    <!-- Em mobile: stacka ações com flex-wrap e esconde labels dos botões pra
+         não estourar 375px (3 botões grandes lado a lado quebravam o header) -->
+    <div class="flex items-center gap-2 flex-wrap justify-end">
       <div class="hidden md:flex items-center gap-3 text-xs text-gray-600">
         <span><span id="count-approved" class="font-semibold text-green-600">0</span> aprovados</span>
         <span><span id="count-rejected" class="font-semibold text-red-600">0</span> removidos</span>
         <span><span id="count-edited"   class="font-semibold text-amber-600">0</span> editados</span>
         <span><span id="count-pending"  class="font-semibold text-gray-600">0</span> pendentes</span>
       </div>
-      <!-- (Pill de cashback inline removido em 2026-05-13: revisão dentro do
-           site não gera mais crédito — concentrado em uploads de planilha
-           revisada / cotação) -->
       <div id="cashback-session-pill" class="hidden"></div>
-      <button id="btn-save-later" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-        title="Salvar progresso e continuar depois em Meus Projetos">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-        Salvar e terminar depois
+      <button id="btn-save-later" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+        title="Salvar progresso e continuar depois em Meus Projetos" aria-label="Salvar e terminar depois">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        <span class="hidden sm:inline">Salvar e terminar depois</span>
       </button>
-      <button id="btn-export" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        Exportar .xlsx
+      <button id="btn-export" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2" aria-label="Exportar planilha .xlsx">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <span class="hidden sm:inline">Exportar .xlsx</span>
       </button>
-      <!-- Botão Concluir revisão — fica destacado quando não há pendentes -->
-      <button id="btn-finish" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 opacity-50 cursor-not-allowed" disabled
-        title="Conclua todos os itens pra finalizar">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-        Concluir revisão
+      <button id="btn-finish" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 opacity-50 cursor-not-allowed" disabled
+        title="Conclua todos os itens pra finalizar" aria-label="Concluir revisão">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        <span class="hidden sm:inline">Concluir revisão</span>
       </button>
     </div>
   </div>
@@ -739,15 +737,16 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
     rejected: items.filter(it => reviewState[it.id] === 'rejected').length,
     edited: items.filter(it => reviewState[it.id] === 'edited').length,
   };
-  const total = counts.approved + counts.rejected + counts.edited;
-  const cashback = (total * 0.10).toFixed(2).replace('.', ',');
+  // Cashback inline removido em 2026-05-13. A revisão dentro do site não
+  // gera mais crédito — mensagem agora explica que o cashback vem do upload
+  // da planilha revisada offline ou de cotações de fornecedor.
   const ok = confirm(
     `Concluir revisão de ${items.length} itens?\n\n` +
     `✓ ${counts.approved} aprovados\n` +
     `✗ ${counts.rejected} removidos\n` +
     `✎ ${counts.edited} editados\n\n` +
-    `💰 Cashback estimado: R$ ${cashback} (creditado automaticamente)\n\n` +
-    `Depois de concluir, você pode exportar a planilha final.`
+    `Suas correções treinam a IA pro próximo projeto.\n` +
+    `Pra ganhar cashback (R$ 30): baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto.`
   );
   if (!ok) return;
 
