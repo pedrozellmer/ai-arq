@@ -2,6 +2,10 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
 <!-- Anti-cache pra evitar que testadores fiquem presos em versão antiga
      (GitHub Pages cacheia 10min por default; meta abaixo força revalidação) -->
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -12,7 +16,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI.arq - Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   body { font-family: 'Inter', sans-serif; }
@@ -106,9 +110,9 @@
         <!-- Avatar com dropdown -->
         <div class="relative" id="avatar-wrapper">
           <button onclick="toggleAvatarMenu()" class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-100 transition">
-            <img id="user-avatar" src="" alt="Avatar" class="h-8 w-8 rounded-full object-cover border border-gray-200 shrink-0">
+            <img id="user-avatar" src="" alt="Avatar" class="h-8 w-8 rounded-full object-cover border border-gray-200 shrink-0" loading="lazy">
             <span id="user-name" class="hidden md:inline text-sm font-medium text-gray-700 max-w-[140px] truncate"></span>
-            <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+            <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           <div id="avatar-menu" class="absolute right-0 top-full mt-2 w-60 rounded-xl border bg-white shadow-lg py-2 hidden z-50">
             <button onclick="switchTab('home'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm font-semibold text-indigo-700 hover:bg-indigo-50 flex items-center gap-3">
@@ -266,7 +270,7 @@
             <button onclick="switchTab('meus-projetos')" class="text-xs text-indigo-600 hover:text-indigo-800">ver todos →</button>
           </div>
           <div id="home-recent" class="divide-y">
-            <div class="p-6 text-center text-sm text-gray-400">Carregando...</div>
+            <div class="p-6 text-center text-sm text-gray-500">Carregando...</div>
           </div>
         </div>
 
@@ -291,8 +295,8 @@
                 </p>
                 <a href="termos.html" class="text-xs text-amber-600 hover:text-amber-800 underline mt-1 inline-block">Ver Termos de Uso completos</a>
               </div>
-              <button onclick="dismissWarning()" class="text-amber-400 hover:text-amber-600 transition shrink-0 p-1">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <button onclick="dismissWarning()" class="text-amber-400 hover:text-amber-600 transition shrink-0 p-1" aria-label="Fechar aviso">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
           </div>
@@ -343,7 +347,7 @@
               <option value="hospital">Hospitalar / Cl&iacute;nicas</option>
               <option value="educational">Educacional</option>
             </select>
-            <p class="text-xs text-gray-400 mt-1.5">Usado pra comparar seu projeto com padr&otilde;es t&iacute;picos da mesma tipologia e sinalizar poss&iacute;veis anomalias.</p>
+            <p class="text-xs text-gray-500 mt-1.5">Usado pra comparar seu projeto com padr&otilde;es t&iacute;picos da mesma tipologia e sinalizar poss&iacute;veis anomalias.</p>
           </div>
           <!-- Drop Zone -->
           <div id="drop-zone" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
@@ -351,7 +355,7 @@
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             </div>
             <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os arquivos do projeto aqui</p>
-            <p class="text-sm text-gray-400 mb-3">ou clique para selecionar</p>
+            <p class="text-sm text-gray-500 mb-3">ou clique para selecionar</p>
             <p class="text-xs text-gray-300">PDF, DWG ou DXF — sem limite de arquivos</p>
             <input type="file" id="file-input" multiple accept=".pdf,.dwg,.dxf" class="hidden">
           </div>
@@ -410,7 +414,7 @@
             </div>
 
             <!-- Time estimate -->
-            <p id="time-estimate" class="text-xs text-gray-400 text-center mt-3"></p>
+            <p id="time-estimate" class="text-xs text-gray-500 text-center mt-3"></p>
           </div>
         </div>
 
@@ -477,7 +481,7 @@
                 <p class="text-xs text-gray-500 mt-0.5">Ex.: "Por que tem 222 m de LED no item 4.1?" &middot; "E o item 6.3?" &middot; "Tem alguma anomalia?"</p>
               </div>
               <button id="btn-agent-clear" title="Limpar conversa e come&ccedil;ar do zero"
-                class="text-xs text-gray-400 hover:text-indigo-600 transition px-2 py-1 rounded">
+                class="text-xs text-gray-500 hover:text-indigo-600 transition px-2 py-1 rounded">
                 Limpar
               </button>
             </div>
@@ -512,7 +516,7 @@
                 Perguntar
               </button>
             </div>
-            <p class="text-[11px] text-gray-400 mt-2">A IA l&ecirc; sua planilha, busca itens, e cita a fonte de cada quantidade. Respostas em ~5-10s.</p>
+            <p class="text-[11px] text-gray-500 mt-2">A IA l&ecirc; sua planilha, busca itens, e cita a fonte de cada quantidade. Respostas em ~5-10s.</p>
           </div>
         </div>
 
@@ -557,15 +561,15 @@
             <input id="projects-search" type="text"
                    class="w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
                    placeholder="Buscar por nome, tipologia ou codigo..."/>
-            <svg class="w-4 h-4 absolute left-3.5 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-            <span id="projects-search-count" class="hidden absolute right-3 top-3 text-xs text-gray-400"></span>
+            <svg class="w-4 h-4 absolute left-3.5 top-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+            <span id="projects-search-count" class="hidden absolute right-3 top-3 text-xs text-gray-500"></span>
           </div>
         </div>
 
         <!-- Grid de cards -->
         <div id="projects-table-wrap" class="hidden">
           <div id="projects-grid" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"></div>
-          <div id="projects-no-match" class="hidden text-center py-10 text-sm text-gray-400">
+          <div id="projects-no-match" class="hidden text-center py-10 text-sm text-gray-500">
             Nenhum projeto encontrado pra essa busca.
           </div>
         </div>
@@ -573,11 +577,11 @@
         <!-- Empty state -->
         <div id="projects-empty" class="hidden">
           <div class="rounded-2xl border bg-white p-12 text-center shadow-gradient">
-            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-400 mb-6">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-500 mb-6">
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
             </div>
             <h2 class="text-lg font-semibold text-gray-700 mb-2">Nenhum projeto ainda</h2>
-            <p class="text-sm text-gray-400 mb-6">Comece enviando suas pranchas!</p>
+            <p class="text-sm text-gray-500 mb-6">Comece enviando suas pranchas!</p>
             <button onclick="switchTab('novo-projeto')" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition text-sm">
               Criar Primeiro Projeto
             </button>
@@ -635,7 +639,7 @@
         <div class="rounded-2xl border bg-white p-6 mb-6">
           <h3 class="text-base font-semibold text-gray-900 mb-4">Cashback por projeto</h3>
           <div id="cb-projects-list" class="divide-y">
-            <div class="p-6 text-center text-sm text-gray-400">Carregando...</div>
+            <div class="p-6 text-center text-sm text-gray-500">Carregando...</div>
           </div>
         </div>
 
@@ -665,7 +669,7 @@
             <select id="cashback-project-select" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none">
               <option value="">Selecione o projeto</option>
             </select>
-            <p class="text-xs text-gray-400 mt-1">Selecione o projeto correspondente &agrave; planilha que voc&ecirc; revisou</p>
+            <p class="text-xs text-gray-500 mt-1">Selecione o projeto correspondente &agrave; planilha que voc&ecirc; revisou</p>
           </div>
 
           <div id="cashback-drop-zone" class="drop-zone rounded-xl bg-gray-50 p-8 text-center cursor-pointer">
@@ -673,7 +677,7 @@
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             </div>
             <p class="text-sm font-medium text-gray-600 mb-1">Arraste a planilha corrigida aqui</p>
-            <p class="text-xs text-gray-400">Formato aceito: .xlsx</p>
+            <p class="text-xs text-gray-500">Formato aceito: .xlsx</p>
             <input type="file" id="cashback-file-input" accept=".xlsx,.xls" class="hidden">
           </div>
           <div id="cashback-file-name" class="mt-3 text-sm text-gray-600 hidden"></div>
@@ -687,7 +691,7 @@
           <h3 class="text-base font-semibold text-gray-900 mb-4">Revis&#245;es pendentes</h3>
           <div id="pending-reviews"></div>
           <div id="no-reviews" class="text-center py-6">
-            <p class="text-sm text-gray-400">Nenhuma revis&#227;o pendente.</p>
+            <p class="text-sm text-gray-500">Nenhuma revis&#227;o pendente.</p>
           </div>
         </div>
           </div>
@@ -713,42 +717,42 @@
               <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">1</div>
               <div>
                 <p class="text-sm font-semibold text-gray-800">Fa&#231;a upload dos arquivos do projeto (PDF, DWG ou DXF)</p>
-                <p class="text-xs text-gray-400 mt-0.5">Planta baixa, layout, demoli&#231;&#227;o, forro, pontos etc.</p>
+                <p class="text-xs text-gray-500 mt-0.5">Planta baixa, layout, demoli&#231;&#227;o, forro, pontos etc.</p>
               </div>
             </div>
             <div class="flex items-start gap-4">
               <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">2</div>
               <div>
                 <p class="text-sm font-semibold text-gray-800">Nossa IA analisa cada prancha</p>
-                <p class="text-xs text-gray-400 mt-0.5">Legendas, portas, lumin&#225;rias, pontos el&#233;tricos, revestimentos</p>
+                <p class="text-xs text-gray-500 mt-0.5">Legendas, portas, lumin&#225;rias, pontos el&#233;tricos, revestimentos</p>
               </div>
             </div>
             <div class="flex items-start gap-4">
               <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">3</div>
               <div>
                 <p class="text-sm font-semibold text-gray-800">Comparamos layout atual vs novo</p>
-                <p class="text-xs text-gray-400 mt-0.5">Em projetos de reforma, identificamos o que muda</p>
+                <p class="text-xs text-gray-500 mt-0.5">Em projetos de reforma, identificamos o que muda</p>
               </div>
             </div>
             <div class="flex items-start gap-4">
               <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">4</div>
               <div>
                 <p class="text-sm font-semibold text-gray-800">Geramos a planilha com 18 disciplinas e ~200 itens</p>
-                <p class="text-xs text-gray-400 mt-0.5">Demoli&#231;&#227;o, alvenaria, gesso, el&#233;trica, hidr&#225;ulica e mais</p>
+                <p class="text-xs text-gray-500 mt-0.5">Demoli&#231;&#227;o, alvenaria, gesso, el&#233;trica, hidr&#225;ulica e mais</p>
               </div>
             </div>
             <div class="flex items-start gap-4">
               <div class="flex h-8 w-8 items-center justify-center rounded-full bg-amber-500 text-white text-sm font-bold shrink-0">5</div>
               <div>
                 <p class="text-sm font-semibold text-gray-800">Revise os itens em laranja</p>
-                <p class="text-xs text-gray-400 mt-0.5">Quantidades estimadas que precisam de verifica&#231;&#227;o profissional</p>
+                <p class="text-xs text-gray-500 mt-0.5">Quantidades estimadas que precisam de verifica&#231;&#227;o profissional</p>
               </div>
             </div>
             <div class="flex items-start gap-4">
               <div class="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white text-sm font-bold shrink-0">6</div>
               <div>
                 <p class="text-sm font-semibold text-gray-800">Envie aos fornecedores para or&#231;amento</p>
-                <p class="text-xs text-gray-400 mt-0.5">Planilha pronta para cota&#231;&#227;o</p>
+                <p class="text-xs text-gray-500 mt-0.5">Planilha pronta para cota&#231;&#227;o</p>
               </div>
             </div>
           </div>
@@ -824,8 +828,8 @@
         <h1 class="text-2xl font-bold text-gray-900">Meus Pagamentos</h1>
         <p class="text-gray-500 mt-1 mb-6">Hist&oacute;rico de pagamentos realizados</p>
 
-        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="rounded-2xl border bg-white shadow-sm overflow-x-auto">
+          <table class="w-full text-sm min-w-[640px]">
             <thead class="bg-gray-50 border-b">
               <tr>
                 <th class="text-left px-6 py-3 font-medium text-gray-500">Data</th>
@@ -838,7 +842,7 @@
             <tbody id="payments-list">
             </tbody>
           </table>
-          <div id="payments-empty" class="text-center py-12 text-gray-400">
+          <div id="payments-empty" class="text-center py-12 text-gray-500">
             <span class="text-4xl block mb-3">&#128179;</span>
             <p class="font-medium">Nenhum pagamento realizado</p>
             <p class="text-xs mt-1">Seu primeiro projeto &eacute; gr&aacute;tis!</p>
@@ -852,7 +856,7 @@
         <p class="text-gray-500 mt-1 mb-6">Seus dados pessoais e profissionais</p>
 
         <div class="rounded-2xl border bg-white p-6 md:p-8 shadow-sm">
-          <div id="profile-loading" class="text-center py-8 text-gray-400">Carregando dados...</div>
+          <div id="profile-loading" class="text-center py-8 text-gray-500">Carregando dados...</div>
           <div id="profile-data" class="hidden space-y-4">
             <div class="grid md:grid-cols-2 gap-4">
               <div>
@@ -915,12 +919,12 @@
               <p class="text-xs text-gray-500 mb-3">Aparece nas planilhas e apresentações PPT que o AI.arq gera. Ajuda você a entregar material com a sua marca.</p>
               <div class="flex items-center gap-4">
                 <div id="logo-preview-box" class="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50 overflow-hidden">
-                  <img id="logo-preview" src="" class="max-w-full max-h-full hidden"/>
-                  <span id="logo-placeholder" class="text-xs text-gray-400 text-center px-2">Nenhuma logo</span>
+                  <img id="logo-preview" src="" class="max-w-full max-h-full hidden"/ loading="lazy">
+                  <span id="logo-placeholder" class="text-xs text-gray-500 text-center px-2">Nenhuma logo</span>
                 </div>
                 <div class="flex-1">
                   <input id="logo-file-input" type="file" accept="image/png,image/jpeg,image/svg+xml" class="text-sm"/>
-                  <p class="text-xs text-gray-400 mt-1">PNG, JPG ou SVG (máx 2MB). Fundo transparente recomendado.</p>
+                  <p class="text-xs text-gray-500 mt-1">PNG, JPG ou SVG (máx 2MB). Fundo transparente recomendado.</p>
                   <div class="mt-2 flex gap-2">
                     <button onclick="uploadLogo()" id="btn-upload-logo" class="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Enviar logo</button>
                     <button onclick="removeLogo()" id="btn-remove-logo" class="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg hidden">Remover</button>
@@ -931,7 +935,7 @@
               <div class="mt-4 flex items-center gap-3">
                 <label class="text-xs font-medium text-gray-600">Cor principal:</label>
                 <input id="prof-brand-color" type="color" value="#1E3A8A" class="h-10 w-16 border rounded cursor-pointer"/>
-                <span class="text-xs text-gray-400">Aparece nos títulos e destaques dos PPTs gerados.</span>
+                <span class="text-xs text-gray-500">Aparece nos títulos e destaques dos PPTs gerados.</span>
               </div>
               <p class="mt-3 text-xs text-gray-500">Ao enviar a logo, você declara ter os direitos autorais ou a autorização pra usá-la. Concorda com os <a href="termos.html" target="_blank" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" class="underline hover:text-gray-700">Privacidade</a>.</p>
             </div>
@@ -957,7 +961,7 @@
           <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
           <span class="font-bold text-gray-900 text-sm">AI<span class="gradient-text">.arq</span></span>
         </div>
-        <div class="flex gap-6 text-xs text-gray-400">
+        <div class="flex gap-6 text-xs text-gray-500">
           <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
           <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
           <a href="mailto:contato@ai.arq.br" class="hover:text-gray-900 transition">Contato</a>
@@ -1116,7 +1120,7 @@
       const recent = projects.slice(0, 5);
       const recentEl = document.getElementById('home-recent');
       if (!recent.length) {
-        recentEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-400">Nenhum projeto ainda. <button onclick="switchTab(\'novo-projeto\')" class="text-indigo-600 hover:underline font-medium">Criar primeiro →</button></div>';
+        recentEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-500">Nenhum projeto ainda. <button onclick="switchTab(\'novo-projeto\')" class="text-indigo-600 hover:underline font-medium">Criar primeiro →</button></div>';
       } else {
         recentEl.innerHTML = recent.map(p => {
           const when = p.created_at ? new Date(p.created_at).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
@@ -1127,9 +1131,9 @@
               </div>
               <div class="flex-1 min-w-0">
                 <p class="font-medium text-gray-800 truncate">${escapeH(p.project_name || 'Sem nome')}</p>
-                <p class="text-xs text-gray-400">${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>
+                <p class="text-xs text-gray-500">${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>
               </div>
-              <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </a>
           `;
         }).join('');
@@ -1502,7 +1506,7 @@
     const breakdown = (est.breakdown || []).filter(b => b.pranchas > 1);
     let detail = '';
     if (breakdown.length) {
-      detail = ' <span class="text-xs text-gray-400">(' +
+      detail = ' <span class="text-xs text-gray-500">(' +
         breakdown.map(b => `${b.filename.slice(0, 25)}: ${b.pranchas}p`).join(', ') +
         ')</span>';
     }
@@ -1512,17 +1516,17 @@
     if (unlimited) {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
     } else if (free) {
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
     } else if (betaFree) {
       const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} projeto${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} projeto${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}</span>`;
     } else if (betaOverLimit) {
       const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span> <span class="text-xs text-amber-600">(Beta libera at\u00e9 ${betaMaxPranchas} pranchas; este tem ${n})</span>`;
     } else if (creditCoversAll) {
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="text-green-600 font-bold">COBERTO pelo cr\u00e9dito</span> <span class="text-xs">(R$ ${(creditApplicable/100).toFixed(2)} do seu saldo)</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="text-green-600 font-bold">COBERTO pelo cr\u00e9dito</span> <span class="text-xs">(R$ ${(creditApplicable/100).toFixed(2)} do seu saldo)</span>`;
     } else if (creditApplicable > 0) {
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-400">R$ ${price}</span> <span class="font-bold text-indigo-600">R$ ${(finalCents/100).toFixed(2)}</span> <span class="text-xs text-emerald-600">(R$ ${(creditApplicable/100).toFixed(2)} de cr\u00e9dito aplicado)</span>`;
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="font-bold text-indigo-600">R$ ${(finalCents/100).toFixed(2)}</span> <span class="text-xs text-emerald-600">(R$ ${(creditApplicable/100).toFixed(2)} de cr\u00e9dito aplicado)</span>`;
     } else {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span>`;
     }
@@ -1555,7 +1559,7 @@
     const priceLabel = document.getElementById('price-label');
     const nFiles = selectedFiles.length;
     priceInfo.classList.remove('hidden');
-    priceLabel.innerHTML = `<span class="text-gray-400">Calculando pre\u00e7o real…</span>`;
+    priceLabel.innerHTML = `<span class="text-gray-500">Calculando pre\u00e7o real…</span>`;
 
     // Dispara estimate em background (sem bloquear UI). Ignora resposta
     // antiga se o usuário trocou os arquivos enquanto isso.
@@ -1670,7 +1674,7 @@
         <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         <div class="min-w-0 flex-1">
           <p class="text-sm font-medium text-gray-800 truncate">${file.name}</p>
-          <p class="text-xs text-gray-400">${formatSize(file.size)}</p>
+          <p class="text-xs text-gray-500">${formatSize(file.size)}</p>
         </div>
         <select data-idx="${idx}" class="file-type-select text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none max-w-xs">
           <option value="" ${!guessed ? 'selected' : ''}>Tipo da prancha</option>
@@ -1690,7 +1694,7 @@
             ${ambienteOpts}
           </optgroup>
         </select>
-        <button data-idx="${idx}" class="btn-remove-file text-gray-400 hover:text-red-500 transition p-1 shrink-0">
+        <button data-idx="${idx}" class="btn-remove-file text-gray-500 hover:text-red-500 transition p-1 shrink-0">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       `;
@@ -1818,19 +1822,19 @@
         } else {
           statusIcon = '<span class="text-gray-300">&#9208;</span>';
           statusText = 'Aguardando';
-          statusClass = 'text-gray-400';
+          statusClass = 'text-gray-500';
         }
       } else {
         statusIcon = '<span class="text-gray-300">&#9208;</span>';
         statusText = 'Aguardando';
-        statusClass = 'text-gray-400';
+        statusClass = 'text-gray-500';
       }
 
       const shortName = file.name.replace(/\.(pdf|dwg|dxf)$/i, '');
       html += `
         <div class="file-progress-item flex items-center justify-between py-2.5 px-3 rounded-lg ${idx === currentFileIndex ? 'bg-indigo-50' : 'bg-gray-50'}">
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
-            <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
             <span class="text-sm text-gray-700 truncate">${shortName}</span>
           </div>
           <div class="flex items-center gap-2 shrink-0 ml-3">
@@ -2135,6 +2139,11 @@
       if (remaining > 5) {
         const timeStr = mins > 0 ? `~${mins}min ${secs}s` : `~${secs}s`;
         timeEstimate.textContent = `${themed}  ·  ${timeStr}`;
+      } else if (elapsed < 90 && realProgress < 5) {
+        // Render free tier dorme após 15min de inatividade — primeira request
+        // demora 30-60s pra acordar. Antes a barra mentia (chegava em 95% rapidão
+        // e ficava parada). Agora avisa explicitamente que está acordando.
+        timeEstimate.textContent = 'Acordando o motor (servidor estava em standby) — pode levar 30 a 60 segundos no primeiro acesso do dia.';
       } else {
         // Passou do tempo estimado — só a mensagem temática, sem contador
         timeEstimate.textContent = themed;
@@ -2793,7 +2802,7 @@
            class="text-xs font-semibold text-emerald-600 hover:text-emerald-800 no-underline">Baixar XLSX</a>
       </div>
     ` : isArchived ? `
-      <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-400">Arquivos expirados (90 dias)</div>
+      <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">Arquivos expirados (90 dias)</div>
     ` : p.status === 'error' ? `
       <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-red-500">Falha no processamento</div>
     ` : '';
@@ -2803,7 +2812,7 @@
         <div class="flex items-start justify-between gap-2 mb-3">
           <div class="min-w-0 flex-1">
             <h3 class="font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition">${escProj(p.project_name || 'Projeto sem nome')}</h3>
-            <p class="text-[11px] text-gray-400 font-mono mt-0.5">${escProj(p.job_id)}</p>
+            <p class="text-[11px] text-gray-500 font-mono mt-0.5">${escProj(p.job_id)}</p>
           </div>
           ${statusBadge}
         </div>
@@ -2816,15 +2825,15 @@
         </div>
         <div class="grid grid-cols-3 gap-2 text-center mt-3">
           <div class="rounded-lg bg-gray-50 py-2">
-            <p class="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Itens</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Itens</p>
             <p class="text-base font-bold text-gray-800">${p.items_count || '—'}</p>
           </div>
           <div class="rounded-lg bg-gray-50 py-2">
-            <p class="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Arquivos</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Arquivos</p>
             <p class="text-base font-bold text-gray-800">${p.files_count || 0}</p>
           </div>
           <div class="rounded-lg bg-gray-50 py-2">
-            <p class="text-[10px] uppercase tracking-wide text-gray-400 font-medium">Criado</p>
+            <p class="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Criado</p>
             <p class="text-xs font-semibold text-gray-700 mt-0.5">${created}</p>
           </div>
         </div>
@@ -3071,7 +3080,7 @@
       if (!listEl) return;
       const byProject = data.by_project || [];
       if (byProject.length === 0) {
-        listEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-400">Nenhum cashback acumulado ainda. Entre num projeto e faça uma revisão pra ganhar crédito.</div>';
+        listEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-500">Nenhum cashback acumulado ainda. Entre num projeto e faça uma revisão pra ganhar crédito.</div>';
         return;
       }
       listEl.innerHTML = byProject.map(p => `
@@ -3082,7 +3091,7 @@
           </div>
           <div class="text-right shrink-0 ml-4">
             <p class="font-bold text-amber-700">R$ ${(p.total_cents / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</p>
-            <p class="text-xs text-gray-400">ver projeto →</p>
+            <p class="text-xs text-gray-500">ver projeto →</p>
           </div>
         </a>
       `).join('');
@@ -3132,13 +3141,13 @@
         ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pendente</span>'
         : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Aprovada</span>';
       const calibrationInfo = r.itemsCompared
-        ? `<p class="text-xs text-gray-400">${r.itemsCompared} itens comparados | desvio m\u00e9dio ${Math.abs(r.avgDeviation || 0).toFixed(1)}%</p>`
+        ? `<p class="text-xs text-gray-500">${r.itemsCompared} itens comparados | desvio m\u00e9dio ${Math.abs(r.avgDeviation || 0).toFixed(1)}%</p>`
         : '';
       html += `
         <div class="flex items-center justify-between py-2.5 px-3 bg-gray-50 rounded-lg">
           <div class="min-w-0">
             <p class="text-sm font-medium text-gray-700 truncate">${r.fileName}</p>
-            <p class="text-xs text-gray-400">${r.dateFormatted}</p>
+            <p class="text-xs text-gray-500">${r.dateFormatted}</p>
             ${calibrationInfo}
           </div>
           ${statusBadge}
@@ -3188,14 +3197,14 @@
           <p class="text-sm font-semibold text-gray-800">Rápido feedback?</p>
           <p class="text-xs text-gray-500 mt-0.5">Qual a chance de recomendar o AI.arq para um colega arquiteto?</p>
         </div>
-        <button onclick="document.getElementById('nps-widget').remove()" class="text-gray-400 hover:text-gray-600 -mt-1 -mr-1">&times;</button>
+        <button onclick="document.getElementById('nps-widget').remove()" class="text-gray-500 hover:text-gray-600 -mt-1 -mr-1">&times;</button>
       </div>
       <div class="flex gap-1 justify-between mb-1" id="nps-scores">
         ${Array.from({length: 11}, (_, i) => `
           <button data-score="${i}" class="nps-score w-8 h-8 rounded border border-gray-200 text-xs hover:bg-indigo-50 hover:border-indigo-400">${i}</button>
         `).join('')}
       </div>
-      <div class="flex justify-between text-xs text-gray-400 mb-3">
+      <div class="flex justify-between text-xs text-gray-500 mb-3">
         <span>Nada provável</span>
         <span>Extremamente</span>
       </div>

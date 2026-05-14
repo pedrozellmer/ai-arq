@@ -84,7 +84,7 @@ Se você é uma sessão nova de Claude lendo isso pela primeira vez:
 - **1º projeto: GRÁTIS** (sem cartão)
 - R$ 97 (1-5 pranchas) · R$ 157 (6-10) · R$ 247 (11-20) · +R$ 10/prancha extra
 - Sem mensalidade, paga só quando usa
-- Cashback granular: R$0,10/item validado (até R$20) + R$20 upload planilha + R$5 cotação fornecedor
+- Cashback (vigente desde 2026-05-13): R$30 upload planilha revisada + R$10/cotação fornecedor (cap 3 = R$30) = até R$60/projeto. Revisão inline não gera mais cashback — só treina a IA.
 
 ---
 
@@ -316,7 +316,7 @@ Se algum falhar, me peça pra investigar.
 - Dashboard do usuário (projetos, cashback, cadastro, pagamentos)
 - Upload de CAD (PDF/DWG/DXF) → processamento → planilha XLSX
 - Sistema de cores (BRANCO medido / LARANJA estimado / CINZA metadado / ROXO indireto)
-- Revisão inline com cashback automático (R$0,10/item até R$20)
+- Revisão inline (sem cashback — alimenta calibração da IA pro próximo projeto)
 - Comparativo de fornecedores (upload XLSX múltiplos → quadro comparativo)
 - Painel admin (Pedro): usuários, códigos beta, projetos, calibração, NPS, insights, leads chat, mensagens
 - Cadastros incompletos visíveis no admin com botão "Reenviar login" (magic link)
@@ -359,8 +359,9 @@ Se algum falhar, me peça pra investigar.
   - Cyan `#22D3EE` (acento)
   - Dark Slate `#0F172A` (fundo escuro)
   - Cream `#FAF7F0` (fundo claro)
-- **Fonte:** Montserrat (Bold, SemiBold, Medium, Regular, Light)
-- **Logo:** texto "AI.arq" em Montserrat Bold (sem bullet/ponto extra)
+- **Fonte do site:** **Inter** (4 pesos: 400, 500, 600, 700) via Google Fonts com `display=swap`. Atualizado 2026-05-14 — antes este doc dizia Montserrat mas o site sempre usou Inter. Inter foi mantida porque já está em produção e é mais legível em telas pequenas.
+- **Fonte de assets gerados** (PNGs do Instagram, capas de PDF): Montserrat (Bold/SemiBold/Regular). Arquivos em `backend/assets/` e `arq/_scripts/`.
+- **Logo:** texto "AI.arq" em Inter Bold no site, Montserrat Bold em PNGs/PDFs
 - **Foto perfil Instagram:** opção 5 escolhida (`5-inline_dark_tagline.png`)
 
 ---

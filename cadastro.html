@@ -2,6 +2,10 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
@@ -10,7 +14,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI.arq - Complete seu cadastro</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   body { font-family: 'Inter', sans-serif; }
@@ -149,7 +153,7 @@
           <input type="text" id="beta_code" name="beta_code"
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
             placeholder="Ex: BETA-AI.ARQ-SEUNOME">
-          <p class="text-xs text-gray-400 mt-1">Tem um c&#243;digo beta? Insira para acesso gratuito</p>
+          <p class="text-xs text-gray-500 mt-1">Tem um c&#243;digo beta? Insira para acesso gratuito</p>
           <div id="beta-code-error" class="hidden mt-1 text-xs text-red-500"></div>
           <div id="beta-code-success" class="hidden mt-1 text-xs text-green-600"></div>
         </div>
@@ -191,7 +195,7 @@
         <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
         <span class="font-bold text-gray-900 text-sm">AI<span class="gradient-text">.arq</span></span>
       </div>
-      <div class="flex flex-wrap items-center justify-center gap-6 text-xs text-gray-400">
+      <div class="flex flex-wrap items-center justify-center gap-6 text-xs text-gray-500">
         <a href="precos.html" class="hover:text-gray-900 transition">Preços</a>
         <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
         <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
@@ -279,7 +283,8 @@
         .maybeSingle();
 
       if (profile) {
-        localStorage.setItem('aiarq_profile_complete', 'true');
+        clearDraft();
+          localStorage.setItem('aiarq_profile_complete', 'true');
         window.location.href = 'dashboard.html';
         return;
       }
@@ -340,6 +345,67 @@
   function hideError() {
     formError.classList.add('hidden');
   }
+
+  // ══════════════════════════════════════════════
+  //  AUTO-SAVE NO LOCALSTORAGE
+  //  Backup local pra não perder o que digitou se fechar a aba sem submit.
+  //  Restaura na próxima abertura. Limpa depois de submit bem-sucedido.
+  // ══════════════════════════════════════════════
+  const DRAFT_KEY = 'aiarq_cadastro_draft';
+  const DRAFT_FIELDS = ['nome', 'whatsapp', 'cpf_cnpj', 'empresa', 'area', 'cargo', 'referral_source', 'referral_detail', 'beta_code'];
+
+  function saveDraft() {
+    try {
+      const data = {};
+      DRAFT_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) data[id] = el.value;
+      });
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+    } catch (e) { /* localStorage full ou disabled — ignora */ }
+  }
+
+  function restoreDraft() {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      let restored = 0;
+      DRAFT_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el && data[id] && !el.value) {
+          el.value = data[id];
+          restored++;
+        }
+      });
+      if (restored > 0 && typeof showError === 'function') {
+        // Mostra dica em verde (reusa elemento de erro mas com cor positiva)
+        const tip = document.createElement('div');
+        tip.className = 'rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700 mb-4';
+        tip.textContent = `✓ Restauramos ${restored} campo(s) do seu cadastro anterior. Continue de onde parou.`;
+        form.parentElement.insertBefore(tip, form);
+        setTimeout(() => tip.remove(), 8000);
+      }
+    } catch (e) { /* JSON inválido ou storage erro — ignora */ }
+  }
+
+  function clearDraft() {
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  }
+
+  // Restaura na carga
+  restoreDraft();
+  // Salva quando user digita ou seleciona (debounced)
+  let saveTimer = null;
+  DRAFT_FIELDS.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const evt = el.tagName === 'SELECT' ? 'change' : 'input';
+    el.addEventListener(evt, () => {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveDraft, 500);
+    });
+  });
 
   // ══════════════════════════════════════════════
   //  FORM SUBMIT
@@ -463,6 +529,7 @@
       if (error) {
         // Handle duplicate key (profile already exists)
         if (error.code === '23505') {
+          clearDraft();
           localStorage.setItem('aiarq_profile_complete', 'true');
           window.location.href = 'dashboard.html';
           return;
@@ -481,7 +548,8 @@
       }
 
       // Success
-      localStorage.setItem('aiarq_profile_complete', 'true');
+      clearDraft();
+          localStorage.setItem('aiarq_profile_complete', 'true');
       window.location.href = 'dashboard.html';
 
     } catch (err) {
