@@ -1146,8 +1146,16 @@ async function uploadQuote() {
     });
     const data = await res.json();
     if (data.status === 'ok') {
+      // Mensagem deixa explícito o status do cashback (cap de 3 cotações):
+      // 'credited' = R$10 creditado · 'capped' = atingiu o limite · null = sem user
+      let cashbackMsg = '';
+      if (data.cashback === 'credited') {
+        cashbackMsg = ' · +R$ 10 de cashback adicionado';
+      } else if (data.cashback === 'capped') {
+        cashbackMsg = ' · cashback não creditado (limite de 3 cotações/projeto atingido)';
+      }
       statusDiv.className = 'mt-3 text-xs text-emerald-700';
-      statusDiv.textContent = `✓ ${data.n_items_quoted} itens parseados (${data.parser_mode_used}). Total R$ ${data.total_bruto.toLocaleString('pt-BR')}`;
+      statusDiv.textContent = `✓ ${data.n_items_quoted} itens parseados (${data.parser_mode_used}). Total R$ ${data.total_bruto.toLocaleString('pt-BR')}${cashbackMsg}`;
       document.getElementById('q-supplier-name').value = '';
       document.getElementById('q-file').value = '';
       loadQuotes();

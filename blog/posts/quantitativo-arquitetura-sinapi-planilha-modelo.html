@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Quantitativo arquitetura SINAPI: planilha modelo XLSX por disciplina | AI.arq</title>
+<meta name="description" content="Planilha modelo de quantitativos com códigos SINAPI organizada por 18 disciplinas. Entenda o que é o SINAPI, diferença entre composição e insumo, e como montar XLSX pra orçamentista cotar.">
+<meta name="keywords" content="quantitativo SINAPI, planilha SINAPI XLSX, modelo planilha quantitativos, composições SINAPI, SINAPI Caixa, quantitativo arquitetura, planilha orçamento obra, composições e insumos SINAPI">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/quantitativo-arquitetura-sinapi-planilha-modelo.html">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/quantitativo-arquitetura-sinapi-planilha-modelo.html">
+<meta property="og:title" content="Quantitativo arquitetura SINAPI: planilha modelo XLSX por disciplina">
+<meta property="og:description" content="Planilha modelo de quantitativos com códigos SINAPI organizada por 18 disciplinas. Entenda o que é o SINAPI, diferença entre composição e insumo, e como montar XLSX pra orçamentista cotar.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-08-23T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Quantitativos">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Quantitativo arquitetura SINAPI: planilha modelo XLSX por disciplina">
+<meta name="twitter:description" content="Planilha modelo de quantitativos com códigos SINAPI organizada por 18 disciplinas. Entenda o que é o SINAPI, diferença entre composição e insumo, e como montar XLSX pra orçamentista cotar.">
+<meta name="twitter:image" content="https://ai.arq.br/og-image.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-08-23">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Quantitativo arquitetura SINAPI: planilha modelo XLSX por disciplina",
+  "description": "Planilha modelo de quantitativos com códigos SINAPI organizada por 18 disciplinas. Entenda o que é o SINAPI, diferença entre composição e insumo, e como montar XLSX pra orçamentista cotar.",
+  "datePublished": "2026-08-23T10:00:00-03:00",
+  "dateModified": "2026-08-23T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/og-image.png",
+  "url": "https://ai.arq.br/blog/posts/quantitativo-arquitetura-sinapi-planilha-modelo.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/quantitativo-arquitetura-sinapi-planilha-modelo.html"
+  },
+  "keywords": "quantitativo SINAPI, planilha SINAPI XLSX, modelo planilha quantitativos, composições SINAPI, SINAPI Caixa, quantitativo arquitetura, planilha orçamento obra, composições e insumos SINAPI",
+  "articleSection": "Quantitativos"
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/#precos" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Quantitativos</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Quantitativos</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Quantitativo arquitetura SINAPI: planilha modelo XLSX por disciplina</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 23/08/2026</span>
+    <span>·</span>
+    <span>⏱️ 10 min de leitura</span>
+  </div>
+
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">Toda planilha de quantitativos de obra brasileira termina em algum momento batendo no SINAPI. Seja porque o cliente exige (obra pública sempre exige), seja porque o orçamentista pediu (precisa de código pra cotar), seja porque o financiamento da Caixa pede. Mas dois mitos atrapalham muita gente: achar que SINAPI é tabela de preço pronta pra copiar, e achar que dá pra ignorar o sistema e inventar códigos próprios. Esse guia explica em detalhe o que é o SINAPI, qual a diferença entre composição e insumo, quais são as 18 disciplinas típicas que entram numa planilha de arquitetura, como organizar o XLSX pro orçamentista preencher preço sem caos, e libera um modelo editável pra você baixar agora.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>Baixe o modelo XLSX agora</h2><p>Antes de explicar a teoria, segue o modelo pronto pra editar. É um XLSX com as 18 disciplinas separadas por aba, cabeçalho padronizado (código SINAPI, descrição, unidade, quantidade, colunas em branco pra preço unitário e total), célula de totalização por disciplina e aba final de consolidação. Sem cadastro, sem captura de email.</p>
+<div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">
+  <div class="grid gap-3 sm:grid-cols-2">
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.pdf" download
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 font-bold text-xs">PDF</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo em PDF</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra ler e imprimir · 328 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    </a>
+    <a href="/blog/downloads/memorial-descritivo-obra-modelo.docx" download
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 font-bold text-xs">DOCX</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Modelo editável (Word)</div>
+        <div class="text-xs text-gray-500 mt-0.5">Pra editar no Word/Docs · 40 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    </a>
+  </div>
+</div>
+<p>O modelo já vem com exemplos de códigos SINAPI mais usados em cada disciplina (alvenaria, contrapiso, revestimento cerâmico, pintura, instalações). Substitua pelos códigos correspondentes ao seu projeto e preencha as quantidades extraídas da planta. As colunas de preço ficam em branco de propósito — quem precifica é o orçamentista, não a planilha.</p><h2>O que é o SINAPI, em uma página</h2><p>SINAPI é a sigla pra Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil. É um banco de dados público mantido em parceria entre a Caixa Econômica Federal e o IBGE, com atualização mensal. Existe desde 1969, foi reformulado em 2013 com nova metodologia estatística, e hoje é a principal referência de custos pra construção civil no Brasil.</p><p>O SINAPI publica três tipos de dados diferentes:</p><ol><li>Insumos — itens básicos isolados (saco de cimento 50kg, m³ de areia, hora de pedreiro, m² de telha cerâmica). Cada insumo tem um código numérico, descrição padronizada e preço médio pesquisado em cada estado.</li><li>Composições — junções de insumos que formam um serviço completo (1 m² de alvenaria de bloco cerâmico = X tijolos + Y kg de argamassa + Z horas de pedreiro + W horas de servente). Cada composição também tem código, descrição, unidade de medida e custo unitário resultante.</li><li>Índices — coeficientes estatísticos que mostram variação de custo regional e temporal (CUB, índice geral, índices por etapa de obra).</li></ol><p>A Caixa publica todo mês um relatório com mais de 11 mil composições e 25 mil insumos, separados por unidade da federação. O download é gratuito no site da Caixa, na seção SINAPI. Existe versão desonerada (sem encargos sociais sobre folha) e não-desonerada (com encargos cheios). Misturar as duas no mesmo orçamento é erro clássico, falaremos disso adiante.</p><h2>Diferença entre insumo, composição e cotação direta</h2><p>Essa confusão derruba muita planilha. Vamos separar:</p><p>Insumo é o material ou mão de obra isolada. Exemplo: insumo SINAPI 1106 = cimento Portland CP II-32, saco de 50 kg. O preço pesquisado é o preço médio do saco no estado X, em mês Y. Não inclui transporte interno na obra, perdas, mão de obra pra aplicar nem encargos.</p><p>Composição é o serviço pronto. Exemplo: composição SINAPI 87905 = alvenaria de vedação com blocos cerâmicos furados na horizontal de 9x14x19 cm, espessura de 9 cm. Inclui o bloco, a argamassa de assentamento, a mão de obra de pedreiro e servente, perdas e produtividade média. Resultado: R$ X por m².</p><p>A composição é o que vai na planilha de quantitativos do arquiteto — você quantifica m² de parede, não saco de cimento. O orçamentista pode depois abrir cada composição em insumos pra cotar diferente, mas isso é função dele, não sua.</p><p>Cotação direta é quando o item não tem composição SINAPI compatível (exemplo: revestimento de pedra natural específico, marcenaria sob medida, esquadrias importadas). Nesses casos, a planilha mantém linha aberta com descrição clara e o orçamentista cota com fornecedor. Convenção comum: marcar essas linhas como COT (cotação) na coluna de código.</p><h2>SINAPI é referência, não verdade absoluta</h2><p>Aqui mora o erro mais comum: tratar o preço SINAPI como o preço real da obra. Não é. O SINAPI é uma média estatística pesquisada em fornecedores selecionados, em uma data específica, em um estado específico. O preço real depende de:</p><ul><li>BDI da empresa contratada (Benefícios e Despesas Indiretas) — costuma variar de 20% a 35% sobre o custo direto, conforme o porte da obra e a região</li><li>Logística do canteiro — obra em local de difícil acesso tem custo maior de transporte</li><li>Escala da compra — quantidade grande negocia melhor que quantidade pequena</li><li>Marca/qualidade exigida — SINAPI assume marca de mercado médio; se você especifica marca premium, o custo sobe</li><li>Sazonalidade — preço de cimento sobe em janeiro/fevereiro, telha de cerâmica varia com chuva</li><li>Encargos sociais aplicáveis — desonerada x não-desonerada faz diferença de 15-25% na linha de mão de obra</li></ul><p>Por isso a planilha de quantitativos do arquiteto deve trazer o código SINAPI como referência de COMPOSIÇÃO e DESCRIÇÃO técnica padronizada, mas deixar as colunas de preço unitário e total em branco. Quem preenche é o orçamentista profissional, que aplica BDI, ajusta preço regional e considera o cenário específico do canteiro.</p><p>O Acórdão 2622/2013 do Tribunal de Contas da União reforça que o SINAPI é referencial, não vinculante: o gestor público pode usar outra fonte se justificar tecnicamente. Em obra privada, a liberdade é ainda maior.</p><h2>Quando a lei obriga uso do SINAPI</h2><p>Em obra privada, o SINAPI é opcional — virou padrão de mercado, mas ninguém te obriga a usar. Em obra pública é diferente.</p><p>A Lei 14.133/2021 (Nova Lei de Licitações) estabelece no Art. 23 que o valor estimado de obras e serviços de engenharia em licitação pública deve ser calculado com base em sistemas de referência oficiais. Para a União, o sistema obrigatório é o SINAPI (mantido pela Caixa Econômica Federal e IBGE). Para estados e municípios, geralmente o SINAPI também, podendo ser complementado por sistemas regionais (SICRO pra rodovias, ORSE-SE no Sergipe, SCO-RJ no Rio).</p><p>Na prática, isso significa que todo projeto que vai concorrer em licitação pública precisa entregar planilha orçamentária com referência SINAPI obrigatoriamente. O Acórdão TCU 2622/2013 detalha o uso e admite desvios desde que justificados em memória técnica.</p><p>Obras financiadas pela Caixa Econômica Federal (PCI — Proposta de Construção Individual) também exigem referência SINAPI no orçamento anexo. A norma ABNT NBR 12721:2006, que rege incorporação imobiliária, recomenda referência SINAPI ou CUB regional pra base de cálculo do custo unitário básico.</p><h2>As 18 disciplinas típicas de uma planilha de arquitetura</h2><p>Uma planilha de quantitativos completa de obra residencial ou comercial costuma se organizar em torno destas 18 disciplinas principais (a ordem segue a lógica construtiva, de baixo pra cima, do bruto pro acabamento):</p><ol><li>Serviços preliminares e administração de obra — placa, barracão, ligações provisórias</li><li>Movimento de terra e contenções — escavação, aterro, bota-fora, compactação</li><li>Fundações — sapatas, baldrames, estacas (capítulo SINAPI 03)</li><li>Estrutura — concreto armado, alvenaria estrutural, estrutura metálica (capítulo SINAPI 04)</li><li>Vedações verticais — alvenaria, drywall, paredes pré-moldadas (capítulo SINAPI 05)</li><li>Cobertura — estrutura de telhado, telhamento, calhas, rufos (capítulo SINAPI 06)</li><li>Impermeabilizações — manta asfáltica, argamassa polimérica, pintura impermeabilizante</li><li>Esquadrias — portas, janelas, alumínio, ferro, madeira (capítulo SINAPI 08)</li><li>Vidros e ferragens — vidro temperado, laminado, fechaduras, dobradiças</li><li>Revestimentos internos — chapisco, emboço, reboco, gesso, cerâmica, porcelanato</li><li>Revestimentos externos — fachada, texturas, painéis, pedras</li><li>Forros — gesso acartonado, PVC, madeira, fibra mineral</li><li>Pisos — contrapiso, regularização, porcelanato, laminado, madeira, vinílico</li><li>Pinturas — látex PVA, acrílica, esmalte sintético, verniz</li><li>Instalações hidrossanitárias — água fria, água quente, esgoto, ventilação (capítulo SINAPI 11)</li><li>Instalações elétricas e telecom — força, iluminação, lógica, TV, alarme (capítulo SINAPI 12)</li><li>Instalações de AVAC e exaustão — ar-condicionado, ventilação mecânica, coifa</li><li>Serviços complementares e limpeza final — paisagismo, comunicação visual, limpeza pós-obra</li></ol><p>Projetos menores (reformas) podem agrupar várias disciplinas. Projetos maiores (multifamiliar, comercial corporativo) podem subdividir mais (separar prevenção de incêndio do elétrico, separar lógica do telefone). O modelo XLSX baixável traz as 18 disciplinas em abas separadas e você adapta.</p><h2>Como organizar a planilha — colunas padrão</h2><p>A estrutura de colunas mais usada no mercado segue o padrão de planilhas SEINFRA, SICRO e Caixa. Cada linha de item deve conter:</p><ol><li>ITEM — numeração hierárquica (1.1, 1.2, 1.2.1) seguindo a divisão de capítulos</li><li>CÓDIGO — código SINAPI da composição (ex: 87905) ou COT pra cotação direta</li><li>DESCRIÇÃO — descrição técnica do serviço; copiar exatamente do banco SINAPI quando aplicável, pra evitar interpretação</li><li>UNIDADE — m, m², m³, kg, un, h, vb (verba) — sempre a mesma unidade da composição SINAPI referenciada</li><li>QUANTIDADE — número extraído da planta pelo arquiteto/projetista</li><li>PREÇO UNITÁRIO — EM BRANCO pra orçamentista preencher</li><li>PREÇO TOTAL — fórmula =QUANTIDADE*PREÇO UNITÁRIO, fica zero até preencher</li><li>OBSERVAÇÕES — opcional, pra notas sobre interpretação, marca exigida, premissa adotada</li></ol><p>No final de cada disciplina (aba ou bloco) entra uma linha de subtotal. Numa aba final "Consolidação" entra a tabela resumo com 1 linha por disciplina + linha de BDI (% a aplicar) + linha de total geral. Essa aba consolidada é a que o cliente costuma olhar primeiro.</p><p>O formato XLSX (Excel) é mais usado que ODS ou CSV porque suporta fórmulas, validação de dados e formatação condicional. Mas evite macros complexas: dificulta abrir em LibreOffice, Google Sheets e clientes corporativos com TI restritiva.</p><h2>Tabela de codificação por capítulo SINAPI</h2><p>O SINAPI organiza suas composições em capítulos numerados. Saber em qual capítulo procurar economiza muito tempo. Os capítulos mais usados em quantitativos de arquitetura:</p><p>| Capítulo | Tema | Exemplos de código | | --- | --- | --- | | 01 | Serviços técnicos | 90778 sondagem, 99835 placa de obra | | 02 | Movimento de terra | 93358 escavação manual | | 03 | Fundações | 96527 sapata corrida concreto | | 04 | Estruturas de concreto | 92778 forma de chapa de madeira | | 05 | Estruturas metálicas | 102219 pilar metálico | | 06 | Cobertura | 94217 telha cerâmica capa e canal | | 07 | Vedações | 87905 alvenaria bloco cerâmico 9 cm | | 08 | Esquadrias | 91306 porta de madeira 80x210 | | 09 | Revestimentos | 87529 chapisco; 87544 emboço | | 10 | Pisos | 87263 contrapiso; 87251 porcelanato | | 11 | Pintura | 88489 látex acrílica | | 12 | Hidrossanitário | 89446 tubo PVC soldável 25mm | | 13 | Elétrico | 91926 eletroduto PVC 3/4 | | 14 | Esgoto e drenagem | 89712 caixa de inspeção | | 15 | Serviços diversos | 73807 limpeza geral |</p><p>Os códigos acima são exemplos comuns na revisão SINAPI vigente, mas mudam a cada atualização (especialmente após grandes revisões). Sempre consulte a versão do mês correspondente no relatório oficial da Caixa antes de fechar a planilha. O download do relatório completo é gratuito em caixa.gov.br seção SINAPI.</p><h2>Cinco erros que invalidam a planilha</h2><ol><li>Copiar o preço SINAPI direto sem aplicar BDI. SINAPI publica custo direto. Sem BDI (lucro + impostos + despesas indiretas + risco), o orçamento fica subdimensionado em 25-35%. Em obra pública, é causa de aditivo. Em obra privada, é frustração com o cliente.</li><li>Misturar versões desonerada e não-desonerada na mesma planilha. A versão desonerada considera redução de encargos sobre folha (Lei 12.546/2011, sucessivas prorrogações). A não-desonerada inclui INSS cheio. A diferença na mão de obra é grande. Use uma das duas pra planilha inteira, declare qual no cabeçalho.</li><li>Usar código SINAPI desatualizado. A Caixa renumera composições periodicamente. Código que existia em 2020 pode ter mudado em 2024. Sempre baixe o relatório do mês de referência do orçamento.</li><li>Confundir unidades. Composição de alvenaria é em m², não m³. Composição de pintura geralmente em m² (uma demão), não em galão. Conferir a unidade SINAPI antes de multiplicar pela quantidade.</li><li>Não documentar a premissa. Toda planilha deveria ter um cabeçalho declarando: data de referência SINAPI, estado de referência, versão (desonerada ou não), BDI aplicado (se aplicado), critério de cotação direta. Sem isso, em qualquer auditoria fica impossível reconstruir o raciocínio.</li></ol><h2>Como acelerar a montagem da planilha</h2><p>O trabalho mais demorado da planilha de quantitativos não é organizar colunas — é levantar quantidades. Contar área de alvenaria, metragem linear de rodapé, número de tomadas, m² de cobertura, m³ de concreto. Tudo isso vem da planta, e medir manualmente em PDF ou DWG leva horas.</p><p>Workflow que economiza tempo:</p><ol><li>Antes de abrir o Excel, organize o CAD com todas as pranchas necessárias (arquitetônico, hidráulico, elétrico, estrutural se houver).</li><li>Use ferramenta de medição automatizada pra extrair áreas, comprimentos e contagens por categoria — uma ferramenta que ofereça classificação SINAPI já entrega o código vinculado.</li><li>Cole os números na planilha modelo, conferindo unidade.</li><li>Marque com cor as linhas que são extração direta da planta (CONFIRMADO) e as que são suposição/sugestão (ESTIMADO), pra que o orçamentista saiba onde revisar com mais cuidado.</li><li>Mande pro orçamentista preencher os preços e calcular BDI.</li></ol><p>É exatamente esse workflow que o AI.arq automatiza nas etapas 1 a 3. Você sobe o CAD em PDF, DWG ou DXF e a plataforma lê todas as pranchas, identifica os elementos, conta e mede automaticamente, e devolve a planilha XLSX já organizada em 18 disciplinas com referência SINAPI vinculada por linha. Tempo típico de processamento: ~5 minutos por projeto residencial padrão.</p><p>Reforço importante: a planilha gerada é um ponto de partida revisável, não verdade absoluta. O arquiteto/projetista revisa premissas, ajusta o que a IA não enxergou, e o orçamentista profissional aplica preço regional e BDI antes de fechar com o cliente. Quem precifica é gente, não software.</p>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Pra economizar as 6 a 12 horas que se gasta levantando quantidades manualmente, sobe seu CAD no AI.arq. Em ~5 minutos você baixa a planilha XLSX com as 18 disciplinas separadas e código SINAPI vinculado por linha — pronta pra revisão técnica e pro orçamentista preencher preço com BDI regional. Primeiro projeto é grátis em ai.arq.br.</p>
+    <a href="/login.html" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+      Começar grátis
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+    </a>
+    <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Normas ABNT</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>ABNT NBR 12721:2006</strong> &mdash; <span class="text-gray-600">Avaliação de custos unitários de construção pra incorporação imobiliária</span></li></ul></div><div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Livros e Manuais</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>Como Preparar Orçamentos de Obras — Dicas pra Orçamentistas</strong> &mdash; Aldo Dórea Mattos <span class="text-gray-500">(Editora PINI, 2014)</span></li><li><strong>TCPO 14 — Tabelas de Composições de Preços pra Orçamentos</strong> &mdash; PINI (organização) <span class="text-gray-500">(Editora PINI, 2012)</span></li></ul></div><div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://www.caixa.gov.br/site/Paginas/downloads.aspx#categoria_653" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">SINAPI — Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil</a> <span class="text-gray-500">&middot; Caixa Econômica Federal</span></li><li><a href="https://www.ibge.gov.br/estatisticas/economicas/precos-e-custos/9270-sistema-nacional-de-pesquisa-de-custos-e-indices-da-construcao-civil.html" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Metodologia SINAPI — IBGE</a> <span class="text-gray-500">&middot; IBGE</span></li><li><a href="https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Lei 14.133/2021 — Nova Lei de Licitações e Contratos Administrativos (Art. 23)</a> <span class="text-gray-500">&middot; Presidência da República</span></li><li><a href="https://pesquisa.apps.tcu.gov.br/documento/acordao-completo/2622%252F2013/%2520/DTRELEVANCIA%2520desc/0/%2520" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Acórdão TCU 2622/2013 — Diretrizes sobre uso do SINAPI em obras públicas</a> <span class="text-gray-500">&middot; Tribunal de Contas da União</span></li><li><a href="https://www.caixa.gov.br/Downloads/sinapi-metodologias-e-conceitos/SINAPI_Metodologias_e_Conceitos_v9.pdf" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Manual de Metodologias e Conceitos SINAPI (PDF público)</a> <span class="text-gray-500">&middot; Caixa Econômica Federal</span></li><li><a href="https://sienge.com.br/blog/desoneracao-da-folha-de-pagamento/" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Diferença entre desoneração e não-desoneração na folha de pagamento da construção civil</a> <span class="text-gray-500">&middot; Sienge</span></li><li><a href="https://www.caixa.gov.br/voce/habitacao/construcao/Paginas/default.aspx" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">PCI Caixa — Proposta de Construção Individual e anexos</a> <span class="text-gray-500">&middot; Caixa Econômica Federal</span></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 14/05/2026. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Produto</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/#precos" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Legal</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 AI.arq · Quantitativo com IA pra arquitetos brasileiros
+      <span class="ml-2 text-gray-400">· v0.5.0 Beta</span>
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
+<script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
+</body>
+</html>
