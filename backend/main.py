@@ -2763,12 +2763,15 @@ async def health():
     except:
         pass
 
-    # Contar totais
+    # Contar totais via Supabase count=exact.
+    # FIX 2026-05-14: antes usava locals()[var_name] = ... que é noop em
+    # CPython (locals() não tem write-back). Resultava em total_projects=0
+    # e total_users=0 sempre, quebrando dashboard de métrica admin.
     total_projects = 0
     total_users = 0
     try:
         import urllib.request, json
-        for table, var_name in [('projects', 'total_projects'), ('profiles', 'total_users')]:
+        def _count_table(table):
             url = f"{SUPABASE_URL}/rest/v1/{table}?select=id"
             req = urllib.request.Request(url)
             req.add_header('apikey', SUPABASE_KEY)
@@ -2777,10 +2780,13 @@ async def health():
             resp = urllib.request.urlopen(req, timeout=3)
             count_header = resp.headers.get('content-range', '')
             if '/' in count_header:
-                locals()[var_name] = int(count_header.split('/')[1])
-            else:
-                locals()[var_name] = len(json.loads(resp.read()))
-    except:
+                return int(count_header.split('/')[1])
+            return len(json.loads(resp.read()))
+        try: total_projects = _count_table('projects')
+        except Exception: pass
+        try: total_users = _count_table('profiles')
+        except Exception: pass
+    except Exception:
         pass
 
     return {
@@ -3227,10 +3233,10 @@ async def public_chat(request: Request):
     Usado pra visitantes tirarem dúvidas sobre o produto antes de cadastrar.
     """
     # Rate limit: 20 msgs / 10min por IP
-    client_ip = (
-        request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-        or request.client.host if request.client else "unknown"
-    )
+    # FIX 2026-05-14: parênteses pra precedência correta de `or ... if ... else`
+    # (antes parseava como `(A or B) if C else D` e podia explodir quando request.client é None).
+    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    client_ip = fwd or (request.client.host if request.client else "unknown")
     now_ts = datetime.utcnow().timestamp()
     history = _PUBLIC_CHAT_HITS.get(client_ip, [])
     history = [t for t in history if now_ts - t < 600]  # últimos 10min
@@ -3241,6 +3247,16 @@ async def public_chat(request: Request):
         }
     history.append(now_ts)
     _PUBLIC_CHAT_HITS[client_ip] = history
+
+    # FIX 2026-05-14: anti memory-leak. Periodicamente limpa IPs cuja última
+    # hit foi há mais de 10min. Sem isso, o dict cresce pra sempre (cada IP
+    # novo = entrada nova nunca limpa) e esgota RAM do Render free tier.
+    # Trigger barato: 1× a cada ~50 requests.
+    if len(_PUBLIC_CHAT_HITS) > 50 and (int(now_ts) % 50) == 0:
+        stale = [ip for ip, hits in _PUBLIC_CHAT_HITS.items()
+                 if not hits or (now_ts - max(hits)) > 600]
+        for ip in stale:
+            _PUBLIC_CHAT_HITS.pop(ip, None)
 
     try:
         body = await request.json()
@@ -4743,9 +4759,11 @@ async def agent_conversations(request: Request, job_id: Optional[str] = None, li
 async def agent_stats():
     """Estatísticas agregadas do uso do agente — pra dashboard admin."""
     try:
+        # FIX 2026-05-14: antes definia URL pra RPC `agent_stats_summary` e
+        # sobrescrevia logo na linha seguinte com fallback. RPC nunca era
+        # chamada. Mantém apenas o select agregado (consistente com a RPC
+        # se um dia existir).
         import urllib.request as _ur
-        url = (f"{SUPABASE_URL}/rest/v1/rpc/agent_stats_summary")
-        # Fallback: faz a agregação aqui via select básico
         url = (f"{SUPABASE_URL}/rest/v1/agent_conversations"
                "?select=id,iterations,duration_ms,error,job_id,created_at")
         req = _ur.Request(url, method="GET")
@@ -4774,11 +4792,14 @@ async def agent_stats():
 
 @app.post("/api/calibration/reclassify-raws")
 async def calibration_reclassify_raws(
+    request: Request,
     typology: Optional[str] = None,
     limit: Optional[int] = None,
     only_unclassified: bool = True,
 ):
     """Classifica linhas raw existentes via LLM e recompila benchmarks.
+
+    Requer auth admin — chamadas em massa consomem créditos Anthropic.
 
     Útil pra "ativar" raws antigos ingeridos antes do classificador
     existir. Idempotente: por padrão só toca raws sem familia_id.
@@ -4786,6 +4807,7 @@ async def calibration_reclassify_raws(
     Cada raw vira ~3s (chamada Claude Haiku). Lote de 264 leva ~10min
     e custa ~$0.50. Use `limit` pra testar incrementalmente.
     """
+    _require_admin(request)
     if not HAS_DENSITY_CAL:
         raise HTTPException(500, "Módulo density_calibration não carregado")
     try:

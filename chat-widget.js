@@ -283,9 +283,9 @@
         <p id="aiarq-lead-error" style="font-size:11px;color:#dc2626;margin:0;display:none;"></p>
         <p style="font-size:10px;color:#9ca3af;text-align:center;margin:8px 0 0 0;line-height:1.5;">
           Ao continuar, você concorda com os
-          <a href="termos.html" target="_blank" style="color:#6b7280;text-decoration:underline;">Termos</a>
+          <a href="/termos.html" target="_blank" style="color:#6b7280;text-decoration:underline;">Termos</a>
           e a
-          <a href="privacidade.html" target="_blank" style="color:#6b7280;text-decoration:underline;">Política de Privacidade</a>.
+          <a href="/privacidade.html" target="_blank" style="color:#6b7280;text-decoration:underline;">Política de Privacidade</a>.
         </p>
       </div>
     </div>
