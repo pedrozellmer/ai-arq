@@ -1445,6 +1445,175 @@ def _consolidate_items(items: list) -> list:
     return pass6
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  REGRAS PÓS-CONSOLIDAÇÃO (fixes aplicados em 2026-05-17 após auditoria
+#  do projeto do Yuri / job b82a72ed):
+#
+#  🅐 Detector multifamiliar — flag quando contar 5+ bacias OU porta-elevador
+#     OU porta corta-fogo, sinaliza no warning do projeto pra cliente decidir.
+#  🅑 Dedup por layer m² — se 2+ itens m² compartilham o mesmo layer fonte,
+#     mantém só o de maior qty (que representa o total do layer) e marca os
+#     outros como estimado + warning de possível sobreposição.
+#  🅒 "Conforme projeto" / "a definir" → estimado obrigatório (regra dura #1).
+#  🅓 "Fundido"/"Consolidado de N entradas" / "(várias variantes)" → estimado
+#     obrigatório quando ainda está confirmado.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_LAYER_RE = _re.compile(r"layer\s+'?([A-Z][A-Z0-9_-]+)'?", _re.IGNORECASE)
+
+
+def _extract_layer_from_obs(obs: str) -> str:
+    """Extrai o nome do layer CAD da observação (ex.: 'A-FLOR-PATT'). Vazio se não achar."""
+    if not obs:
+        return ""
+    m = _LAYER_RE.search(obs)
+    return m.group(1).upper() if m else ""
+
+
+def _detect_multifamiliar_signal(items: list, current_typology: str) -> tuple[bool, list]:
+    """Retorna (is_multifamiliar_provavel, lista_de_evidencias).
+
+    Triggers — qualquer um basta:
+      - 5+ bacias sanitárias (residência unifamiliar tem 2-4 max)
+      - Porta de elevador OU bloco 'elevador' detectado
+      - 3+ portas corta-fogo (sinal de escada de incêndio = prédio)
+      - 6+ portas-janela de correr OU 15+ janelas (multi-pavimento)
+    """
+    from collections import Counter
+    if (current_typology or "").lower() != "residential":
+        return False, []  # Só dispara o aviso pra residential — outras já não confundem
+
+    bacia_count = 0
+    porta_corta_fogo_count = 0
+    elevador_detected = False
+    janela_count = 0
+    porta_janela_count = 0
+
+    for it in items:
+        desc = (it.description or "").lower()
+        obs = (it.observations or "").lower()
+        try:
+            qty = float(it.quantity or 0)
+        except Exception:
+            qty = 0.0
+
+        if "bacia sanit" in desc or "bacia sanit" in obs:
+            bacia_count += qty
+        if "elevador" in desc or "elevador" in obs:
+            elevador_detected = True
+        if "corta-fogo" in desc or "corta fogo" in desc or ("rf-60" in desc or "rf 60" in desc):
+            porta_corta_fogo_count += qty
+        if "janela" in desc and "porta" not in desc:
+            janela_count += qty
+        if "porta-janela" in desc or "porta janela" in desc:
+            porta_janela_count += qty
+
+    evidencias = []
+    if bacia_count >= 5:
+        evidencias.append(f"{int(bacia_count)} bacias sanitárias detectadas")
+    if elevador_detected:
+        evidencias.append("elevador detectado nas plantas")
+    if porta_corta_fogo_count >= 3:
+        evidencias.append(f"{int(porta_corta_fogo_count)} portas corta-fogo (escada de incêndio)")
+    if porta_janela_count >= 6:
+        evidencias.append(f"{int(porta_janela_count)} portas-janela de correr")
+    if janela_count >= 15:
+        evidencias.append(f"{int(janela_count)} janelas")
+
+    return (len(evidencias) >= 1, evidencias)
+
+
+def _apply_post_consolidation_rules(items: list) -> tuple[list, int]:
+    """Aplica regras 🅑+🅒+🅓 nos items pós-consolidate.
+
+    Retorna (items_modificados, n_alterados).
+    Mutate os items in-place (mais simples — preserva referências).
+    """
+    from models import Confidence
+    n_changed = 0
+
+    # ── 🅒 + 🅓: forçar estimado quando vago ou somatório ──
+    VAGUE_MARKERS = (
+        "conforme projeto", "conforme especifica", "especificação a definir",
+        "a definir", "por definir", "conforme detalhe",
+    )
+    FUSED_MARKERS = (
+        "fundido de", "consolidado de", "(várias variantes)", "(varias variantes)",
+        "várias variações", "varias variacoes", "(várias variações)",
+        "contagem de blocos",  # quando obs diz "contagem de blocos X (várias variações)"
+    )
+
+    for it in items:
+        if not it:
+            continue
+        desc = (it.description or "").lower()
+        obs = (it.observations or "").lower()
+        text = f"{desc} {obs}"
+
+        is_vague = any(m in text for m in VAGUE_MARKERS)
+        is_fused = any(m in text for m in FUSED_MARKERS)
+
+        try:
+            current_conf = str(it.confidence) if it.confidence else "estimado"
+        except Exception:
+            current_conf = "estimado"
+
+        if current_conf == "confirmado" and (is_vague or is_fused):
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            tag = []
+            if is_vague:
+                tag.append("descrição genérica")
+            if is_fused:
+                tag.append("agregação de variantes")
+            it.observations = (
+                (it.observations or "") +
+                f" | ⚠ Estimado: {', '.join(tag)} — confirmar contra projeto"
+            ).strip(" |")
+            n_changed += 1
+
+    # ── 🅑 Dedup por layer m² ──
+    by_layer: dict[str, list] = {}
+    for it in items:
+        if (it.unit or "").lower() not in ("m²", "m2", "m³", "m3"):
+            continue
+        layer = _extract_layer_from_obs(it.observations or "")
+        if not layer:
+            continue
+        by_layer.setdefault(layer, []).append(it)
+
+    for layer, group in by_layer.items():
+        if len(group) < 2:
+            continue
+        # Mantém o de maior qty como "principal"; os outros viram estimado com warning
+        sorted_g = sorted(group, key=lambda x: float(x.quantity or 0), reverse=True)
+        winner = sorted_g[0]
+        others = sorted_g[1:]
+        other_summary = "; ".join(
+            f"{round(float(it.quantity or 0), 2)} {it.unit}" for it in others
+        )
+        for it in others:
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            it.observations = (
+                (it.observations or "") +
+                f" | ⚠ Possível sobreposição: outro item ({round(float(winner.quantity or 0),2)} {winner.unit}) "
+                f"compartilha o mesmo layer '{layer}'. Verifique se não há duplicação."
+            ).strip(" |")
+            n_changed += 1
+        # Marca o winner também com aviso (mais brando — informativo)
+        winner.observations = (
+            (winner.observations or "") +
+            f" | ⚠ {len(others)} outros itens m² do mesmo layer '{layer}' marcados como estimado (possível sobreposição: {other_summary})"
+        ).strip(" |")
+
+    return items, n_changed
+
+
 # Ranges plausíveis por unidade — valores fora disso indicam erro provável.
 # Valores em contexto de reforma de escritório corporativo (nosso nicho atual).
 _PLAUSIBILITY_RANGES = {
@@ -2288,6 +2457,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
         n_after = len(all_items)
         if n_before != n_after:
             print(f"[consolidação] {n_before} → {n_after} itens ({n_before - n_after} consolidados)")
+
+        # ── Regras pós-consolidação (auditoria 2026-05-17 — projeto Yuri) ──
+        # 🅑 Dedup m² por layer (evita pisos duplicados somando > área do projeto)
+        # 🅒 "Conforme projeto" / "a definir" → estimado obrigatório (regra dura #1)
+        # 🅓 "Fundido"/"Consolidado de N entradas" → estimado obrigatório
+        all_items, n_post_changed = _apply_post_consolidation_rules(all_items)
+        if n_post_changed > 0:
+            print(f"[pós-consolidação] {n_post_changed} itens marcados como estimado por regras 🅑+🅒+🅓")
+
+        # 🅐 Detector multifamiliar — sinaliza warning visível pro cliente
+        is_multi, evidencias = _detect_multifamiliar_signal(all_items, typology)
+        if is_multi:
+            multi_warning = (
+                "Tipologia salva como 'residential' mas as plantas indicam projeto MULTIFAMILIAR. "
+                f"Detectado: {', '.join(evidencias)}. "
+                "Recomendo trocar a tipologia em 'Dados do projeto' pra que a calibração compare "
+                "com benchmarks corretos. Sem isso, alertas de quantitativo podem estar errados."
+            )
+            project_data.warnings = (project_data.warnings or []) + [multi_warning]
+            print(f"[multifamiliar] sinal detectado: {evidencias}")
 
         # ── Validação de plausibilidade ──
         # Detecta disciplina×unidade mismatch, range absurdo, área > laje×1.5.
