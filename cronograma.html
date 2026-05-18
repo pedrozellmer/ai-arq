@@ -267,6 +267,40 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const API_BASE = 'https://ai-arq.onrender.com';
 const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// Baixa endpoint protegido enviando Authorization header.
+// Bug 2026-05-18 (Daniela): <a href> / window.open NÃO enviam headers customizados
+// → backend retorna 401. Solução: fetch com Bearer token, blob, download programático.
+async function downloadProtected(url, filename) {
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (!session) {
+    alert('Sua sessão expirou. Faça login de novo pra baixar.');
+    window.location.href = 'login.html';
+    return;
+  }
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!resp.ok) {
+      let detail = `HTTP ${resp.status}`;
+      try { const j = await resp.json(); detail = j.detail || detail; } catch {}
+      alert(`Não consegui baixar o arquivo: ${detail}`);
+      return;
+    }
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename || 'cronograma';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (e) {
+    alert('Erro de rede ao baixar: ' + e.message);
+  }
+}
+
 // Pega job_id da URL: ?job=abc123
 const params = new URLSearchParams(window.location.search);
 const jobId = params.get('job') || '';
@@ -657,8 +691,23 @@ function escapeAttr(s) {
 }
 
 function atualizarLinksExport() {
-  document.getElementById('btn-export-pdf').href = `${API_BASE}/api/cronograma/${jobId}/export/pdf`;
-  document.getElementById('btn-export-pptx').href = `${API_BASE}/api/cronograma/${jobId}/export/pptx`;
+  // Endpoints protegidos: registrar handler que dispara fetch+blob em vez de
+  // .href direto (bug Daniela 2026-05-18: <a href> não envia Authorization).
+  const wireExport = (id, url, filename) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.removeAttribute('target');
+    el.setAttribute('href', 'javascript:void(0)');
+    // Remove listeners antigos clonando o nó (atualizarLinksExport pode ser chamado várias vezes)
+    const clone = el.cloneNode(true);
+    el.parentNode.replaceChild(clone, el);
+    clone.addEventListener('click', (e) => {
+      e.preventDefault();
+      downloadProtected(url, filename);
+    });
+  };
+  wireExport('btn-export-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
+  wireExport('btn-export-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
 }
 
 // ─── Gera cronograma ──

@@ -1181,6 +1181,43 @@
     return fetch(url, Object.assign({}, options, { headers }));
   }
 
+  // Baixa endpoint protegido enviando Authorization header.
+  // Bug 2026-05-18 (Daniela): window.open / <a href> NÃO enviam headers
+  // customizados → backend retorna 401. Solução: fetch com Bearer token,
+  // converter resposta em blob, disparar download programático.
+  async function downloadProtected(url, filename) {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) {
+      alert('Sua sessão expirou. Faça login de novo pra baixar.');
+      window.location.href = 'login.html';
+      return;
+    }
+    try {
+      const resp = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (!resp.ok) {
+        let detail = `HTTP ${resp.status}`;
+        try { const j = await resp.json(); detail = j.detail || detail; } catch {}
+        alert(`Não consegui baixar a planilha: ${detail}`);
+        return;
+      }
+      const blob = await resp.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || 'planilha.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    } catch (e) {
+      alert('Erro de rede ao baixar: ' + e.message);
+    }
+  }
+  // Exposta globalmente pra ser chamada via onclick em templates HTML inline.
+  window.aiArqDownloadProtected = downloadProtected;
+
   // ══════════════════════════════════════════════
   //  STATE
   // ══════════════════════════════════════════════
@@ -2248,7 +2285,9 @@
   // ══════════════════════════════════════════════
   btnDownload.addEventListener('click', () => {
     if (currentJobId) {
-      window.open(`${API_BASE}/api/download/${currentJobId}`, '_blank');
+      // Download protegido: window.open NÃO enviaria o Authorization header
+      // → backend retornaria 401 (bug Daniela 2026-05-18).
+      downloadProtected(`${API_BASE}/api/download/${currentJobId}`, `quantitativos_aiarq_${currentJobId}.xlsx`);
       // Dispara NPS widget 10s depois do download (momento de valor entregue)
       setTimeout(() => window.__maybeShowNPS && window.__maybeShowNPS('after_download'), 10000);
     }
@@ -2798,7 +2837,7 @@
            class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 no-underline">Abrir</a>
         <a href="revisao.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
            class="text-xs font-semibold text-amber-600 hover:text-amber-800 no-underline">Revisar</a>
-        <a href="${API_BASE}/api/download/${escProj(p.job_id)}" target="_blank" onclick="event.stopPropagation()"
+        <a href="javascript:void(0)" onclick="event.stopPropagation();window.aiArqDownloadProtected('${API_BASE}/api/download/${escProj(p.job_id)}','quantitativos_aiarq_${escProj(p.job_id)}.xlsx')"
            class="text-xs font-semibold text-emerald-600 hover:text-emerald-800 no-underline">Baixar XLSX</a>
       </div>
     ` : isArchived ? `

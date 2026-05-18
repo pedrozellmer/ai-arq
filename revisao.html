@@ -232,6 +232,41 @@ async function authFetch(url, options = {}) {
   return fetch(url, Object.assign({}, options, { headers }));
 }
 
+// Baixa endpoint protegido enviando Authorization header.
+// Bug 2026-05-18 (Daniela): window.location.href / window.open / <a href>
+// NÃO enviam headers customizados → backend retorna 401. Solução: fetch com
+// Bearer token, converter resposta em blob, disparar download programático.
+async function downloadProtected(url, filename) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    alert('Sua sessão expirou. Faça login de novo pra baixar.');
+    window.location.href = 'login.html';
+    return;
+  }
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!resp.ok) {
+      let detail = `HTTP ${resp.status}`;
+      try { const j = await resp.json(); detail = j.detail || detail; } catch {}
+      alert(`Não consegui baixar a planilha: ${detail}`);
+      return;
+    }
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename || 'planilha.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (e) {
+    alert('Erro de rede ao baixar: ' + e.message);
+  }
+}
+
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
 if (!jobId) { alert('job_id não informado na URL'); window.location.href = 'dashboard.html'; }
@@ -516,8 +551,9 @@ document.getElementById('btn-export').addEventListener('click', async () => {
   btn.innerHTML = '<svg class="animate-spin w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582M20 20v-5h-.581M20 4l-5 5m-6 6l-5 5m14-14a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Gerando...';
   try {
     await authFetch(`${API_BASE}/api/items/${jobId}/finalize`, { method: 'POST' });
-    // Redireciona pra download
-    window.location.href = `${API_BASE}/api/download/${jobId}`;
+    // Download protegido: usa fetch com Authorization. window.location.href NÃO
+    // enviaria o JWT → backend retornaria 401 (bug Daniela 2026-05-18).
+    await downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
   } catch (e) {
     toast('Erro ao exportar: ' + e.message);
   } finally {

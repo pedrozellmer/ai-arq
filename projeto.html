@@ -550,6 +550,41 @@ async function authFetch(url, options = {}) {
   return fetch(url, Object.assign({}, options, { headers }));
 }
 
+// Baixa endpoint protegido enviando Authorization header.
+// Bug 2026-05-18 (Daniela): <a href> / window.open / window.location.href
+// NÃO enviam headers customizados → backend retorna 401. Solução: fetch com
+// Bearer token, converter resposta em blob, disparar download programático.
+async function downloadProtected(url, filename) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    alert('Sua sessão expirou. Faça login de novo pra baixar.');
+    window.location.href = 'login.html';
+    return;
+  }
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!resp.ok) {
+      let detail = `HTTP ${resp.status}`;
+      try { const j = await resp.json(); detail = j.detail || detail; } catch {}
+      alert(`Não consegui baixar a planilha: ${detail}`);
+      return;
+    }
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = filename || 'planilha.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  } catch (e) {
+    alert('Erro de rede ao baixar: ' + e.message);
+  }
+}
+
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
 if (!jobId) { window.location.href = 'meus-projetos.html'; }
@@ -677,10 +712,39 @@ async function carregarStatsEntregas() {
     if (isExternal) el.setAttribute('target', '_blank');
   };
   enableLink('btn-review', `revisao.html?job_id=${jobId}`);
-  enableLink('btn-download', `${API_BASE}/api/download/${jobId}`, true);
+  // btn-download: NÃO usa enableLink porque <a href> não envia Authorization
+  // header → backend retorna 401 (bug Daniela 2026-05-18). Habilitamos o botão
+  // e disparamos download programático via fetch+blob.
+  const btnDownload = document.getElementById('btn-download');
+  if (btnDownload) {
+    btnDownload.style.pointerEvents = '';
+    btnDownload.style.opacity = '';
+    btnDownload.style.cursor = 'pointer';
+    btnDownload.removeAttribute('target');
+    btnDownload.setAttribute('href', 'javascript:void(0)');
+    btnDownload.addEventListener('click', (e) => {
+      e.preventDefault();
+      downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
+    });
+  }
   enableLink('btn-cronograma', `cronograma.html?job=${jobId}`);
-  enableLink('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, true);
-  enableLink('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, true);
+  // btn-cron-pdf e btn-cron-pptx: endpoints protegidos. Mesmo bug do download:
+  // <a href> não envia Authorization → 401. Habilita botão e dispara via fetch.
+  const wireCronExport = (id, url, filename) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.pointerEvents = '';
+    el.style.opacity = '';
+    el.style.cursor = 'pointer';
+    el.removeAttribute('target');
+    el.setAttribute('href', 'javascript:void(0)');
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      downloadProtected(url, filename);
+    });
+  };
+  wireCronExport('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
+  wireCronExport('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
 
   // Torna os cards de entregas inteiros clicáveis (mãozinha em toda área).
   // O <a> interno continua sendo o destino — clique em qualquer lugar do card
