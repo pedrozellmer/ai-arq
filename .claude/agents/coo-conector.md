@@ -104,6 +104,7 @@ Formato no fim deste arquivo (seção "Output padrão").
 | Área | Ação |
 |---|---|
 | Produto | Confirmar que endpoint protegido + frontend manda Bearer (authFetch). |
+| **Smoke test** | **🚨 OBRIGATÓRIO antes de marcar como pronto:** rodar `python .github/scripts/smoke_test_production.py` com SMOKE_USER_EMAIL+SMOKE_USER_PASSWORD setados pra validar que o caminho do USUÁRIO LOGADO ainda funciona. **Adicionar `_require_project_owner`/`_require_admin` em endpoint sem testar com credencial real é a causa nº 1 de regressão silenciosa.** Aprendizagem do bug de 2026-05-18 (Daniela 404 no download). |
 | Marketing | NÃO mexe (não comunicar publicamente bug fix — voz interna baniada). |
 | Jurídico | Se mudou tratamento de dado: privacidade.html atualizada (retenção, finalidade, base legal). |
 | SEO | NÃO mexe. |
@@ -111,6 +112,14 @@ Formato no fim deste arquivo (seção "Output padrão").
 | Finanças | NÃO mexe. |
 | Operações | Adicionar regra duradoura no `security-reviewer` agent OU em `feedback_security.md` da memória. |
 | Conhecimento | Memória ganha entry sobre o fix. |
+
+#### 🚨 Checklist específico de "ownership na RLS"
+
+Quando adicionar `_require_project_owner` em um endpoint NOVO:
+1. **NÃO basta passar `request: Request`** — a função `_get_project_owner` precisa achar o projeto. Se você adicionou tabela nova OU mudou o caminho de leitura, confirme que a RPC `get_project_owner(p_job_id)` (SECURITY DEFINER) cobre o caso, ou crie RPC equivalente.
+2. **TESTE com usuário REAL logado**, não anon. RLS bloqueia anon de ler `projects` com `user_id` não-nulo. O sintoma é falso 404 "Projeto não encontrado".
+3. **Frontend precisa mandar Bearer JWT** — confira que toda chamada usa `authFetch()` em vez de `fetch()`. O fix de Wave B (2026-05-13) cobriu projeto/dashboard/cronograma/revisao, mas chamadas novas escapam fácil.
+4. **Rode smoke test nível 2 antes de marcar como pronto**.
 
 ### 📜 Mudança de regra dura (uma das 6)
 
@@ -231,6 +240,7 @@ ESCOPO: [1 frase do que mudou]
 - **NÃO inventar conteúdo de blog** sem o copywriter-br ou agente de redação ter validado as fontes
 - **NÃO chamar 10 subagentes em paralelo** — gasta token. Só delega quando o trabalho REALMENTE exige especialista
 - **NÃO substituir Pedro nas 3 decisões estratégicas** (Fase 5 ERP, Indique-e-ganhe, tier PJ Corporativo)
+- **NÃO marcar fix de segurança como "pronto" sem rodar smoke test nível 2** — Daniela ficou 5 dias sem conseguir baixar planilha por causa disso (bug de 2026-05-18). Sempre validar com credencial de usuário REAL antes de declarar OK.
 
 ## 💭 Tom da comunicação
 

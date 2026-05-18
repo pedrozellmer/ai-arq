@@ -1,0 +1,56 @@
+name: Smoke Test (produção)
+
+# Roda 2 minutos após cada push pro main (dá tempo do Render deployar)
+# + cron diário às 9h UTC (6h Brasília) pra pegar regressões silenciosas.
+#
+# Nível 1 (sempre): valida endpoints públicos sem credencial.
+# Nível 2 (se SMOKE_USER_EMAIL+SMOKE_USER_PASSWORD setados nos Secrets):
+#   loga via Supabase Auth, baixa planilha de um job real, valida 200.
+#   Esse é o nível que pega bug tipo o da Daniela (2026-05-18).
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Aguarda Render deploy concluir (2min)
+        if: github.event_name == 'push'
+        run: |
+          echo "Render free tier demora 2-4min pra rebuild + start após push."
+          echo "Aguardando 120s antes de testar..."
+          sleep 120
+
+      - name: Acorda backend (Render free tier pode estar dormindo)
+        run: |
+          curl -sS -o /dev/null -w "HTTP %{http_code} em %{time_total}s\n" \
+            https://ai-arq.onrender.com/ || true
+
+      - name: Rodar smoke test
+        env:
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+        run: python .github/scripts/smoke_test_production.py
+
+      - name: Notifica em caso de falha
+        if: failure()
+        run: |
+          echo "::error::Smoke test falhou — verifique deploy do Render e endpoints protegidos"
+          echo "Possíveis causas:"
+          echo "  - Render free tier não acordou (dormiu mais de 15min)"
+          echo "  - Endpoint protegido com regressão de RLS/JWT"
+          echo "  - Migration de banco esperando aplicação"
