@@ -2354,7 +2354,10 @@
   async function loadAgentConversation(jobId) {
     if (!jobId) return;
     try {
-      const res = await fetch(`${API_BASE}/api/agent/conversations?job_id=${jobId}&limit=20`);
+      // authFetch obrigatório: endpoint exige _require_project_owner quando passa job_id.
+      // Antes (até 2026-05-18): fetch() sem Bearer → 401 silencioso → conversas
+      // antigas nunca carregavam de volta pro user.
+      const res = await authFetch(`${API_BASE}/api/agent/conversations?job_id=${jobId}&limit=20`);
       if (!res.ok) return;
       const data = await res.json();
       const convs = (data.conversations || []).reverse();  // mais antiga primeiro
@@ -3004,7 +3007,10 @@
       formData.append('file', cashbackFile);
       formData.append('job_id', jobId);
 
-      const res = await fetch(`${API_BASE}/api/cashback/upload?job_id=${encodeURIComponent(jobId)}`, {
+      // authFetch obrigatório: endpoint exige _require_project_owner.
+      // Antes (até 2026-05-18): fetch() sem Bearer → 401 → usuário tentava subir
+      // planilha revisada, recebia erro e NÃO ganhava R$30 de cashback.
+      const res = await authFetch(`${API_BASE}/api/cashback/upload?job_id=${encodeURIComponent(jobId)}`, {
         method: 'POST',
         body: formData,
       });
