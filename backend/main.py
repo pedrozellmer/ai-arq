@@ -183,19 +183,42 @@ def _require_admin(request):
 
 
 def _get_project_owner(job_id: str):
-    """Retorna o user_id registrado no projeto (ou None se não existe)."""
+    """Retorna o user_id registrado no projeto (ou None se não existe).
+
+    Usa RPC `get_project_owner` (SECURITY DEFINER) pra bypassar RLS.
+    Antes (até 2026-05-17) chamava REST /projects?job_id=eq.X com a anon key,
+    mas a RLS de SELECT só autoriza 'auth.uid() = user_id' OU admin. Anon ficava
+    sem autorização e retornava 0 rows, levando ao falso 404 'Projeto não
+    encontrado' em todos os endpoints que chamavam _require_project_owner —
+    download, items, cronograma, quotes, agent/ask, projects/{id}/client.
+    Bug detectado pela Daniela em 2026-05-18 ao tentar baixar a planilha.
+    """
     import urllib.request, urllib.error, json as _j
     try:
-        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=user_id"
-        req = urllib.request.Request(url, method="GET")
+        url = f"{SUPABASE_URL}/rest/v1/rpc/get_project_owner"
+        body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
+        req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
         req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
-        rows = _j.loads(resp.read().decode("utf-8"))
-        if not rows:
+        result = _j.loads(resp.read().decode("utf-8"))
+        # RPC SQL retorna text — pode vir como string direto, null, ou list[str]
+        if result is None:
             return None
-        return rows[0].get("user_id") or "anonymous"
-    except Exception:
+        if isinstance(result, str):
+            return result or "anonymous"
+        if isinstance(result, list) and result:
+            return (result[0] or "anonymous") if isinstance(result[0], str) else None
+        return None
+    except urllib.error.HTTPError as e:
+        try:
+            print(f"[get_project_owner] HTTP {e.code}: {e.read().decode('utf-8', errors='replace')[:200]}")
+        except Exception:
+            pass
+        return None
+    except Exception as e:
+        print(f"[get_project_owner] erro: {type(e).__name__}: {e}")
         return None
 
 
