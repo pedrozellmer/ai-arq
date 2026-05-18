@@ -119,7 +119,8 @@ Quando adicionar `_require_project_owner` em um endpoint NOVO:
 1. **NÃO basta passar `request: Request`** — a função `_get_project_owner` precisa achar o projeto. Se você adicionou tabela nova OU mudou o caminho de leitura, confirme que a RPC `get_project_owner(p_job_id)` (SECURITY DEFINER) cobre o caso, ou crie RPC equivalente.
 2. **TESTE com usuário REAL logado**, não anon. RLS bloqueia anon de ler `projects` com `user_id` não-nulo. O sintoma é falso 404 "Projeto não encontrado".
 3. **Frontend precisa mandar Bearer JWT** — confira que toda chamada usa `authFetch()` em vez de `fetch()`. O fix de Wave B (2026-05-13) cobriu projeto/dashboard/cronograma/revisao, mas chamadas novas escapam fácil.
-4. **Rode smoke test nível 2 antes de marcar como pronto**.
+4. **🚨 ENDPOINT DE DOWNLOAD/ARQUIVO PROTEGIDO NÃO PODE SER ACESSADO VIA NAVEGAÇÃO DIRETA.** O browser NÃO envia headers customizados (Authorization) em `<a href>`, `window.open()` ou `window.location.href` — só em `fetch()` explícito. Resultado: backend retorna 401 mesmo com sessão válida. Quando proteger um endpoint que devolve arquivo (XLSX, PDF, PPTX), o frontend tem que usar o helper `downloadProtected(url, filename)` (presente em revisao/projeto/dashboard/cronograma.html desde 2026-05-18) — que faz fetch com Bearer, recebe blob, e dispara `<a>` programático com `download=`. Aprendizagem do bug Daniela 2026-05-18 ("Autenticação requerida para acessar este projeto" no download).
+5. **Rode smoke test nível 2 antes de marcar como pronto**.
 
 ### 📜 Mudança de regra dura (uma das 6)
 
