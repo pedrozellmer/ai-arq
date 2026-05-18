@@ -6,7 +6,11 @@ name: Smoke Test (produção)
 # Nível 1 (sempre): valida endpoints públicos sem credencial.
 # Nível 2 (se SMOKE_USER_EMAIL+SMOKE_USER_PASSWORD setados nos Secrets):
 #   loga via Supabase Auth, baixa planilha de um job real, valida 200.
-#   Esse é o nível que pega bug tipo o da Daniela (2026-05-18).
+# Nível 3 (Playwright, mesmas credenciais): browser real headless faz login,
+#   abre projeto, clica em "Baixar XLSX" e confirma download. PEGA o bug que
+#   o nível 2 NÃO pega: <a href> / window.open / window.location.href NÃO
+#   enviam Authorization header → backend 401 mesmo com sessão válida.
+#   Capítulo 2 do bug Daniela (2026-05-18) — esse nível teria pego em 1min.
 
 on:
   push:
@@ -40,11 +44,26 @@ jobs:
           curl -sS -o /dev/null -w "HTTP %{http_code} em %{time_total}s\n" \
             https://ai-arq.onrender.com/ || true
 
-      - name: Rodar smoke test
+      - name: Rodar smoke test (níveis 1 + 2 — HTTP puro)
         env:
           SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
           SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
         run: python .github/scripts/smoke_test_production.py
+
+      # Instala Playwright + Chromium pro nível 3 (browser real headless).
+      # ~1 min de overhead — vale demais quando o cron diário descobre
+      # regressão silenciosa só visível no navegador real (ex: bug Daniela).
+      - name: Instalar Playwright
+        run: |
+          pip install playwright==1.48.0
+          playwright install --with-deps chromium
+
+      - name: Rodar smoke test E2E (nível 3 — browser real)
+        env:
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+          SMOKE_SITE_BASE: https://ai.arq.br
+        run: python .github/scripts/smoke_test_e2e.py
 
       - name: Notifica em caso de falha
         if: failure()
@@ -54,3 +73,4 @@ jobs:
           echo "  - Render free tier não acordou (dormiu mais de 15min)"
           echo "  - Endpoint protegido com regressão de RLS/JWT"
           echo "  - Migration de banco esperando aplicação"
+          echo "  - Frontend usando navegação direta em endpoint protegido (nível 3)"
