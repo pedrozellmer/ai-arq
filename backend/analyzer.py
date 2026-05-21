@@ -637,6 +637,50 @@ Listar departamentos que aparecem na legenda/quadro de cores desta prancha, com 
 Para CADA sala nova indicada na planta, gerar objeto: `{"name": "<nome da sala>", "ceiling_height": "<PD da legenda>", "area": <m²>}`.
 Se um campo não constar na planta, DEIXAR VAZIO em vez de inventar. Não assumir PD "padrão" — ler do projeto atual.
 
+## LEVANTAMENTO CONSTRUTIVO — MEÇA A PARTIR DAS COTAS
+A planta de layout é COTADA (dimensões em metros nas linhas de cota). Quando o
+cliente envia só o layout, ELE é a base do quantitativo — NÃO devolva apenas
+itens genéricos. MEÇA o que a planta permite medir. Item construtivo com
+quantity=0 ou unidade "vb" genérica, havendo cotas na planta, é ERRO grave
+(ver a regra do QUANTITY=0 no system).
+
+Trabalhe AMBIENTE POR AMBIENTE. Para CADA ambiente nomeado na planta:
+1. Leia as cotas dos lados do ambiente.
+2. Calcule a área de piso = largura × comprimento (m²).
+3. Calcule o perímetro = soma dos lados (m).
+
+### PISOS E RODAPÉS (discipline: "Pisos e Rodapés")
+- Item de PISO por ambiente (ou agrupando ambientes de mesmo uso), unit=m²,
+  quantity = área medida. Descrição: "Piso — <ambiente(s)>" (sem legenda de
+  acabamento o material é desconhecido; o orçamentista especifica depois).
+- RODAPÉ: unit=ml, quantity = perímetro do ambiente menos a largura dos vãos
+  de porta.
+
+### FECHAMENTOS VERTICAIS E DIVISÓRIAS
+- Meça o comprimento total de paredes/divisórias (linhas grossas contínuas —
+  ver convenções de linha no system). Área = comprimento × pé-direito.
+- Se o PD não consta na planta, adote 2,80 m e DECLARE isso na observação.
+- unit=m². Alvenaria/drywall → "Fechamentos Verticais". Divisória de vidro
+  (salas de reunião envidraçadas) → "Divisórias e Vidros".
+
+### PORTAS (discipline: "Portas e Ferragens")
+- CONTE os arcos de abertura de porta na planta (cada arco = 1 porta).
+  unit=un, quantity = contagem. Nunca retorne 0 havendo portas visíveis.
+
+### FORRO E PINTURA
+- Forro (discipline "Forros"): área ≈ soma das áreas de piso. unit=m².
+- Pintura de parede (discipline "Revestimentos"): área das paredes medidas;
+  massa corrida/selador acompanham, mesma área. unit=m².
+
+### CONTAGENS VISÍVEIS NO LAYOUT
+- Estações/postos de trabalho: conte as mesas de trabalho desenhadas.
+- Sanitários/louças, vagas de garagem: conte os símbolos visíveis.
+
+🚨 TODO item medido do layout sai com confidence="estimado": o layout não
+tem legendas de acabamento, então tipo/material/cor serão confirmados depois
+pelo orçamentista. A QUANTIDADE, porém, DEVE ser medida de verdade pelas
+cotas — nunca deixar em branco quando a planta permite medir.
+
 ## SERVIÇOS PRELIMINARES (discipline: "Serviços Preliminares")
 Itens padrão de obra (sempre incluir, marcando "estimado" — quantidade a confirmar pelo orçamentista):
 - Mobilização e desmobilização de obra (un: vb)
