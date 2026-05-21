@@ -50,8 +50,15 @@ SHEET_PATTERNS = {
     ],
     SheetType.PISO:         [r"(?:^|[^a-z])pisos?(?:[^a-z]|$)", r"(?:^|[^a-z])rodap"],
     SheetType.FORRO:        [r"(?:^|[^a-z])forros?(?:[^a-z]|$)", r"ilumina[çc][aã]o", r"lumin[áa]ria"],
-    SheetType.LAYOUT_NOVO:  [r"layout[_\s-]*novo", r"(?:^|[^a-z])novo(?:[^a-z]|$)"],
-    SheetType.LAYOUT_ATUAL: [r"layout[_\s-]*atual", r"(?:^|[^a-z])atual(?:[^a-z]|$)", r"(?:^|[^a-z])existente(?:[^a-z]|$)", r"(?:^|[^a-z])layout(?:[^a-z]|$)"],
+    # LAYOUT_ATUAL é avaliado ANTES de LAYOUT_NOVO de propósito: precisa casar
+    # "layout atual"/"existente" antes que o pattern genérico "layout" (em
+    # LAYOUT_NOVO) o capture.
+    SheetType.LAYOUT_ATUAL: [r"layout[_\s-]*atual", r"(?:^|[^a-z])atual(?:[^a-z]|$)", r"(?:^|[^a-z])existente(?:[^a-z]|$)"],
+    # "layout" genérico (sem "novo"/"atual") = projeto A ORÇAR — vai pra
+    # LAYOUT_NOVO, cujo prompt extrai `items`. Bug Vinícius (2026-05-21):
+    # "LAYOUT ATENDAS rev 01.pdf" caía em LAYOUT_ATUAL, cujo prompt só lista
+    # ambientes existentes (kept_elements) e NÃO pede items → planilha vazia.
+    SheetType.LAYOUT_NOVO:  [r"layout[_\s-]*novo", r"(?:^|[^a-z])novo(?:[^a-z]|$)", r"(?:^|[^a-z])layout(?:[^a-z]|$)"],
 }
 
 
