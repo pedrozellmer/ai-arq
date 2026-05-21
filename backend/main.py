@@ -2284,6 +2284,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
         crops_dir = os.path.join(work_dir, "crops")
         os.makedirs(crops_dir, exist_ok=True)
 
+        # Coleta erros de IA por prancha. analyze_sheet NÃO lança exceção quando
+        # a chamada Claude falha (timeout/sobrecarga/JSON inválido) — retorna
+        # {"items": [], "error": "..."}. Sem coletar isso aqui, o job terminava
+        # "done" com planilha vazia e o usuário não sabia que houve falha.
+        # Bug Vinícius (2026-05-21): PDF processou em 17s, 0 itens, status done.
+        sheet_errors: list[str] = []
+
         # Ordenar PDFs por prioridade (layout primeiro)
         priority = {"layout_novo": 0, "layout_atual": 1, "demolir": 2, "arquitetura": 3,
                      "forro": 4, "piso": 5, "pontos": 6, "mobiliario": 7, "marcenaria": 8,
@@ -2373,6 +2380,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 siblings = [s for s in _siblings_map[amb_for_sheet] if s != filename]
             result = analyze_sheet(client, sheet, typology=typology,
                                    ambiente=amb_for_sheet, siblings=siblings)
+
+            # 3b. Capturar falha de IA nesta prancha (não interrompe o loop —
+            # outras pranchas podem ter sucesso — mas registra pra decidir o
+            # status final do job se nada for extraído).
+            if result.get("error"):
+                err_msg = str(result.get("error"))[:200]
+                sheet_errors.append(f"{filename}: {err_msg}")
+                print(f"[analyze-erro] {filename}: {err_msg}")
 
             # 4. Extrair dados do projeto
             if "project_data" in result:
@@ -2551,6 +2566,37 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     print(f"[densidade] {density_flagged} itens fora do padrão histórico")
             except Exception as e:
                 print(f"[densidade] Erro no check de anomalia: {e}")
+
+        # ── Resultado vazio: NÃO marcar "done" silencioso ──
+        # Bug Vinícius (2026-05-21): 1 PDF processou em 17s, 0 itens, status
+        # done. Usuário (1º projeto, grátis) recebeu planilha vazia achando
+        # que "concluiu". Planilha com 0 itens é SEMPRE falha — qualquer
+        # prancha de arquitetura real tem ao menos paredes/piso/forro.
+        # Distingue 2 causas pra orientar o usuário com mensagem certa:
+        if len(all_items) == 0:
+            if sheet_errors:
+                # A IA falhou em ao menos uma prancha — erro técnico, vale
+                # reprocessar (pode ter sido sobrecarga/timeout passageiro).
+                raise RuntimeError(
+                    "A IA não conseguiu analisar as pranchas — provável "
+                    "sobrecarga temporária do servidor de análise. Nenhum "
+                    "item foi extraído. Reprocesse o projeto (é grátis). "
+                    f"Detalhe técnico: {sheet_errors[0]}"
+                )
+            else:
+                # A IA rodou sem erro mas não achou nada quantificável.
+                # Reprocessar o MESMO arquivo daria o mesmo resultado —
+                # a mensagem orienta a trocar o arquivo de entrada.
+                raise RuntimeError(
+                    "Nenhum item quantificável foi identificado neste "
+                    "arquivo. Causas mais comuns: (1) o PDF é uma imagem "
+                    "escaneada ou fotografada — o motor lê PDF vetorial "
+                    "exportado direto do CAD (AutoCAD/Revit); (2) a prancha "
+                    "tem só o desenho de layout, sem quadros de áreas, "
+                    "legendas ou especificações. Reenvie a planta "
+                    "arquitetônica completa exportada do CAD, ou fale com "
+                    "o suporte pelo botão 'Reportar problema'."
+                )
 
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
