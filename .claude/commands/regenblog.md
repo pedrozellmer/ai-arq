@@ -14,7 +14,7 @@ Roda `python blog/generate.py` pra recriar:
 ## Sequência
 
 ```bash
-cd "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq/blog" && python generate.py
+cd "C:/Users/admin/Desktop/arq/projeto_arq/blog" && python generate.py
 ```
 
 ## Validação pós-geração

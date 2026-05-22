@@ -10,7 +10,7 @@ Você vai fazer um commit e push do estado atual do projeto. Siga esta sequênci
 ## 1. Status check
 
 ```bash
-cd "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq" && git status --short
+cd "C:/Users/admin/Desktop/arq/projeto_arq" && git status --short
 ```
 
 Se não tiver nada modificado, avise o Pedro e pare.
@@ -18,7 +18,7 @@ Se não tiver nada modificado, avise o Pedro e pare.
 ## 2. Análise rápida das mudanças
 
 ```bash
-cd "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq" && git diff --stat
+cd "C:/Users/admin/Desktop/arq/projeto_arq" && git diff --stat
 ```
 
 Identifica:
@@ -67,7 +67,7 @@ EOF
 ## 5. Push
 
 ```bash
-cd "C:/Users/PedroZellmer/OneDrive - FAMICAPITAL/Desktop/projeto_arq" && git push origin main
+cd "C:/Users/admin/Desktop/arq/projeto_arq" && git push origin main
 ```
 
 ## 6. Confirma deploy automático
