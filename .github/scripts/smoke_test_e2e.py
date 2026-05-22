@@ -75,16 +75,31 @@ def main() -> int:
             failures.append(f"login não redirecionou pra dashboard em 20s; URL final={page.url}")
             return _close_and_report(browser, failures)
 
-        # ── 2. Pegar 1º projeto via página "Meus projetos" ───────
+        # ── 2. Pegar 1º projeto na aba "Meus projetos" do dashboard ───────
+        # meus-projetos.html é só um redirect legado — a lista de projetos é
+        # uma ABA dentro do dashboard, e os cards são carregados via fetch
+        # async (não basta networkidle; é preciso esperar o seletor surgir).
         try:
-            page.goto(f"{SITE}/meus-projetos.html", wait_until="networkidle", timeout=30_000)
+            page.goto(f"{SITE}/dashboard.html#meus-projetos", wait_until="networkidle", timeout=30_000)
         except PlaywrightTimeoutError:
-            # Render free tier pode estar dormindo — segue pro fallback
-            print("[e2e] meus-projetos demorou; tentando seguir", flush=True)
+            print("[e2e] dashboard demorou; tentando seguir", flush=True)
 
-        first = page.locator('a[href*="projeto.html?job_id="]').first
+        proj_selector = 'a[href*="projeto.html?job_id="]'
+        try:
+            # Espera os cards de projeto renderizarem (fetch ao backend pode
+            # demorar se o Render estava dormindo).
+            page.wait_for_selector(proj_selector, timeout=30_000)
+        except PlaywrightTimeoutError:
+            failures.append(
+                "nenhum projeto apareceu no dashboard em 30s — a conta de "
+                "teste precisa de ao menos 1 projeto processado, ou o "
+                "carregamento da lista quebrou"
+            )
+            return _close_and_report(browser, failures)
+
+        first = page.locator(proj_selector).first
         if first.count() == 0:
-            print("[skip-e2e] conta sem projetos — pulando teste de download", flush=True)
+            failures.append("seletor de projeto não encontrou nenhum card no dashboard")
             return _close_and_report(browser, failures)
 
         href = first.get_attribute("href") or ""
