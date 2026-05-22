@@ -10,25 +10,43 @@
 
 Esse projeto tem configurações prontas em `.claude/`. Use proativamente.
 
-### Subagents (`.claude/agents/`)
-- **`seo-auditor-br`** — audita post de blog antes de publicar (keyword, densidade, schema, fontes). Use quando editar `blog/posts.json` ou criar post novo.
-- **⭐ `coo-conector`** — Chief Operating Officer. Conecta as 8 áreas (Produto, Marketing IG/Blog/Email, Jurídico, SEO, CS, Finanças, Conhecimento). Quando uma mudança rola (feature nova, pricing, fix de segurança), checa o que cada área precisa fazer e executa ou delega. Garante que nada escape. **Invoque depois de cada commit grande OU diga "COO, rolar feature X".**
-- **`copywriter-br`** — revisa copy do site pra soar natural/coloquial brasileiro. Use quando editar texto de landing/FAQ/email.
-- **`security-reviewer`** — revisão de segurança focada em SaaS (RLS, secrets, LGPD). Use antes de cada deploy ou ao mexer em auth/RLS/uploads.
-- **`marketing-strategist`** — análise de métricas e ações de growth. Use quando Pedro perguntar sobre crescimento.
+### Subagents (`.claude/agents/`) — 21 agents
+**Orquestração e produto:**
+- **⭐ `coo-conector`** — Chief Operating Officer. Conecta as 8 áreas (Produto, Marketing IG/Blog/Email, Jurídico, SEO, CS, Finanças, Conhecimento). Quando uma mudança rola, checa o que cada área precisa e executa ou delega. **Invoque depois de cada commit grande OU diga "COO, rolar feature X".**
+- **`product-strategist`** — comitê de produto/roadmap; avalia ideias contra ROADMAP + regras duras + wedge strategy.
+- **`planner`** (ECC) — quebra feature/refactor complexo em fases entregáveis com arquivos e riscos.
+
+**Revisão técnica (adotados do ECC — use ao mexer no backend):**
+- **`silent-failure-hunter`** — caça erro engolido, fallback perigoso, exceção silenciosa.
+- **`fastapi-reviewer`** — revisa app FastAPI (async, DI, Pydantic, segurança, OpenAPI).
+- **`python-reviewer`** — revisão geral de Python (PEP8, type hints, segurança).
+- **`database-reviewer`** — PostgreSQL/Supabase: query, índice, RLS com `(SELECT auth.uid())`.
+- **`security-reviewer`** — segurança SaaS em PT-BR (RLS, secrets, LGPD). Use antes de cada deploy. (Mantido o próprio — melhor que o do ECC.)
+
+**Conteúdo e marketing (PT-BR):** `seo-auditor-br`, `copywriter-br`, `marketing-strategist`, `instagram-caption-br`, `reels-script-writer`, `stories-daily-br`, `linkedin-outreach-br`, `email-transacional-br`
+
+**Inteligência de mercado:** `community-listener-br`, `competitor-watcher`, `market-analyst-br`, `trend-scout-ai`
+
+**Especialista:** `cronograma-gerador` — planejamento de obra (cronograma físico-financeiro).
 
 ### Slash commands (`.claude/commands/`)
 - **`/deploy`** — commit + push pro main com mensagem padronizada
 - **`/regenblog`** — roda `python blog/generate.py` pra recriar os HTMLs
 - **`/checksite`** — health check (site, backend, IG, DB) em paralelo
+- **`/save-session`, `/resume-session`** (ECC) — salva/recarrega estado da sessão (o que funcionou, o que falhou, próximo passo).
 
 ### Hooks (`.claude/settings.json` + `.claude/hooks/`)
 - **Pre-commit secret scanner** — bloqueia commits com API keys, tokens, .env
 - **On-save blog regen** — quando `blog/posts.json` muda, regenera HTMLs automaticamente
 - **Post-push deploy notify** — após `git push`, mostra resumo no terminal (opcional: Telegram)
 
-### Skills (`.claude/skills/`)
-- **`seo-pt-br`** — gera/otimiza conteúdo SEO em PT-BR (posts, landing, meta description)
+### Skills (`.claude/skills/`) — 24 skills
+- **Próprias:** `seo-pt-br` (conteúdo SEO PT-BR), `content-calendar` (calendário editorial).
+- **Backend (ECC):** `fastapi-patterns`, `python-patterns`, `python-testing`, `postgres-patterns`, `database-migrations`.
+- **Motor/IA (ECC):** `regex-vs-llm-structured-text`, `cost-aware-llm-pipeline`, `content-hash-cache-pattern`, `nutrient-document-processing` (OCR PDF), `eval-harness`, `ai-regression-testing`.
+- **Qualidade/segurança (ECC):** `error-handling`, `verification-loop`, `santa-method` (verificação dupla), `production-audit`, `security-review`.
+- **UX/produto (ECC):** `accessibility` (WCAG — 🎨 Pedro é daltônico), `make-interfaces-feel-better`, `product-lens`, `market-research`.
+- **Processo (ECC):** `agentic-engineering`, `knowledge-ops`.
 
 ### MCP servers já conectados
 - **Supabase MCP** — `mcp__dbd6b42c-...` — query banco direto, criar tabelas, executar SQL
@@ -80,7 +98,7 @@ Se você é uma sessão nova de Claude lendo isso pela primeira vez:
 - **Backend:** https://ai-arq.onrender.com (Render)
 - **Tagline atual:** "Quantitativo com IA" (NÃO "Orçamento com IA" — corrigido)
 - **Fase atual:** Fase 1 (quantitativo) do roadmap de 10 fases — Fase 2 (Cronograma) em construção
-- **Estado:** Beta v0.5.0 · 3 usuários cadastrados (1 ativa: Daniela Teixeira/DTZ Arquitetura)
+- **Estado:** Beta v0.5.0 · ~8 usuários cadastrados (Daniela Teixeira/DTZ Arquitetura é a mais ativa; também Yuri, Wilker, Vinícius, Rafael, Sidnei, Wesley). Crescendo — cada usuário ainda conta muito.
 
 ### Modelo de negócio
 - **1º projeto: GRÁTIS** (sem cartão)
@@ -460,6 +478,9 @@ curl -I https://ai.arq.br/blog/
 6. **Variável Supabase JS** — em alguns HTMLs é `sb`, em outros é `sbClient`. Sempre confira antes de dar comando ao Pedro
 7. **Tailwind CSS warning no console** — usa CDN em produção, sabido, ignorar
 8. **`onboarding-tour.js`** auto-trigger só dispara se: logado + onboarded != true + (sem hash OU hash=#home)
+9. **Endpoint protegido que devolve arquivo NÃO pode ser baixado via navegação direta** — `<a href>`, `window.open()` e `window.location.href` NÃO enviam o header `Authorization`. Só `fetch()` envia. Resultado: 401 mesmo com sessão válida. Sempre use o helper `downloadProtected(url, filename)` (em projeto/dashboard/revisao/cronograma.html). Bug Daniela 2026-05-18.
+10. **0 itens extraídos = SEMPRE falha** — o motor nunca deve marcar `done` com planilha vazia. Qualquer prancha de arquitetura real tem ao menos paredes/piso/forro. Se `all_items` vazio, vira erro com mensagem clara. Bug Vinícius 2026-05-21.
+11. **`analyze_sheet` não lança exceção em falha de IA** — retorna `{"items": [], "error": ...}`. Quem chama TEM que checar `result.get("error")`, senão o erro é engolido e vira planilha vazia silenciosa.
 
 ---
 
