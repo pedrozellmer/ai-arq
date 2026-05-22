@@ -282,7 +282,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # Áreas aparecem na seção PREMISSAS (se extraídas) — não duplicar no subtítulo
     ws.cell(row=2, column=1, value=' | '.join(info_parts) if info_parts else 'Quantitativos de projeto').font = F_N
     ws.merge_cells('A3:I3')
-    ws.cell(row=3, column=1, value='Cores por tipo de item: BRANCO = medido do CAD (confiável) · LARANJA = estimado pela IA (revisar) · CINZA = metadado do projeto · ROXO = custo indireto / gestão (checklist). Coluna AMARELA = preencher preço. Itens em laranja e roxo exigem revisão antes do fechamento do orçamento.').font = F_NOTE
+    ws.cell(row=3, column=1, value='Cada item traz na coluna OBSERVAÇÕES um selo de status: "✓ MEDIDO do CAD" (confiável) ou "⚠ ESTIMADO — revisar". A cor é só reforço — fundo BRANCO = medido · LARANJA = estimado · CINZA = metadado · ROXO = custo indireto/gestão. Coluna AMARELA = preencher preço. Itens ⚠ ESTIMADO e os roxos exigem revisão antes de fechar o orçamento.').font = F_NOTE
 
     ro = 5
     hdrs = ['ITEM', 'DESCRIÇÃO DO SERVIÇO', 'UN', 'QTDE', 'MAT (R$)', 'M.O. (R$)', 'TOTAL (R$)', 'OBSERVAÇÕES', 'REF.']
@@ -368,7 +368,13 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=5).font = F_BLUE; ws.cell(row=ro, column=5).fill = P_YEL
             ws.cell(row=ro, column=6).font = F_BLUE; ws.cell(row=ro, column=6).fill = P_YEL
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
-            ws.cell(row=ro, column=8, value=item.observations).font = F_N
+            # Selo de status TEXTUAL na observação. A cor (laranja/branco)
+            # sozinha não basta — usuário daltônico não distingue. Cor + ícone
+            # + texto (regra de acessibilidade 2026-05-21).
+            _selo = ('⚠ ESTIMADO — revisar' if item.confidence in [Confidence.ESTIMADO, Confidence.VERIFICAR]
+                     else '✓ MEDIDO do CAD')
+            _obs = f'{_selo}. {item.observations}' if item.observations else _selo
+            ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
             ref_text = _build_ref_text(item)
             ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Arial', size=7)
@@ -419,7 +425,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=5).font = F_BLUE; ws.cell(row=ro, column=5).fill = P_YEL
             ws.cell(row=ro, column=6).font = F_BLUE; ws.cell(row=ro, column=6).fill = P_YEL
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
-            ws.cell(row=ro, column=8, value=item.observations).font = F_N
+            # Selo de status TEXTUAL na observação (cor + ícone + texto)
+            _selo = ('⚠ ESTIMADO — revisar' if item.confidence in [Confidence.ESTIMADO, Confidence.VERIFICAR]
+                     else '✓ MEDIDO do CAD')
+            _obs = f'{_selo}. {item.observations}' if item.observations else _selo
+            ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
             ref_text = _build_ref_text(item)
             ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Arial', size=7)
