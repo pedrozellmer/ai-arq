@@ -358,7 +358,7 @@ Se algum falhar, me peça pra investigar.
 - Linkagem interna entre posts do blog
 - Calculadora de preço interativa na landing
 - Página `/precos.html` dedicada
-- Setup email do domínio (Cloudflare Email Routing — pendente decisão Pedro)
+- Setup email do domínio `pedro@ai.arq.br` via **Zoho Mail** (decidido 2026-05-21 — Google Workspace descartado: exige CNPJ, que o AI.arq não tem; Zoho aceita pessoa física). Pendente Pedro criar a conta + colar registros DNS no Registro.br.
 - Renovar token Meta antes de 13/06/2026
 
 ### ❌ NÃO fazer agora (decisão tomada)
