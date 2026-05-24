@@ -99,6 +99,10 @@
   var modal = document.createElement('div');
   modal.className = 'aicm-overlay';
   modal.id = 'aicm-overlay';
+  // Semântica de diálogo modal — aria-modal + role + labelledby
+  modal.setAttribute('role', 'dialog');
+  modal.setAttribute('aria-modal', 'true');
+  modal.setAttribute('aria-labelledby', 'aicm-title-h');
   modal.innerHTML = `
     <div class="aicm-modal" onclick="event.stopPropagation()">
       <div class="aicm-header">
@@ -202,8 +206,16 @@
   //             dropdown de assuntos pré-definidos. Usado dentro de área autenticada
   //             tipo projeto.html. Usa: opts.mode='ticket', opts.contextLabel,
   //             opts.contextDetails, opts.name, opts.email, opts.type
+  // Guarda quem tinha foco antes de abrir, pra devolver no close.
+  var _aicmRestoreFocus = null;
+  // Handler de Escape pra fechar o modal — registrado só enquanto aberto.
+  var _aicmEscHandler = function (e) {
+    if (e.key === 'Escape') aiArqContactClose();
+  };
   window.aiArqContactOpen = function (opts) {
+    _aicmRestoreFocus = document.activeElement;
     modal.classList.add('open');
+    document.addEventListener('keydown', _aicmEscHandler);
 
     if (typeof opts === 'string') opts = { type: opts };
     opts = opts || {};
@@ -304,8 +316,14 @@
 
   window.aiArqContactClose = function () {
     modal.classList.remove('open');
+    document.removeEventListener('keydown', _aicmEscHandler);
     var err = document.getElementById('aicm-error');
     if (err) err.style.display = 'none';
+    // Devolve foco pra origem (botão que abriu).
+    if (_aicmRestoreFocus) {
+      try { _aicmRestoreFocus.focus(); } catch (_) {}
+      _aicmRestoreFocus = null;
+    }
   };
 
   // Mapa de subjects pré-definidos -> texto humano
