@@ -602,12 +602,29 @@ def render_sitemap():
 
 
 def render_robots():
+    # Auditoria SEO 2026-05-23: páginas auth não devem indexar (canibalizam
+    # home com thin content). Páginas pós-login expostas no robots não
+    # acrescentam nada porque exigem JWT.
     return f'''User-agent: *
 Allow: /
+
+# Páginas pós-login: não indexar (thin content, exigem auth)
 Disallow: /admin.html
+Disallow: /admin/
 Disallow: /dashboard.html
 Disallow: /projeto.html
 Disallow: /revisao.html
+Disallow: /cronograma.html
+Disallow: /meus-projetos.html
+Disallow: /visualizar-prancha.html
+
+# Páginas de autenticação: não indexar (canibalizam home)
+Disallow: /login.html
+Disallow: /cadastro.html
+
+# Diretórios técnicos
+Disallow: /_*
+Disallow: /backend/
 
 Sitemap: {SITE_URL}/sitemap.xml
 '''

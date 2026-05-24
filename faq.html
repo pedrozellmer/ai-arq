@@ -23,7 +23,79 @@
 <meta property="og:image" content="https://ai.arq.br/og-image.png">
 <meta property="og:locale" content="pt_BR">
 
-<!-- Schema.org FAQPage será preenchido após render -->
+<!-- Schema.org FAQPage — perguntas-chave para rich snippets do Google -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "O que é o AI.arq?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Plataforma brasileira que usa IA para extrair quantitativos de obra a partir de plantas em CAD (PDF, DWG ou DXF). Em cerca de 5 minutos, gera uma planilha XLSX por disciplina (18 categorias) com referência SINAPI. Não precifica — é uma ferramenta de apoio para orçamentistas e arquitetos."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais formatos de arquivo são aceitos?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "PDF, DWG (AutoCAD) e DXF. O ideal é PDF vetorial exportado diretamente do CAD ou o próprio DWG. PDFs escaneados (foto da planta impressa) não funcionam — a IA precisa enxergar as cotas, blocos e textos vetoriais."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quanto custa o AI.arq?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O primeiro projeto é gratuito, sem cartão. Depois, R$ 97 para projetos de 1 a 5 pranchas, R$ 157 para 6 a 10 pranchas, R$ 247 para 11 a 20 pranchas e + R$ 10 por prancha adicional. Sem mensalidade — você paga apenas quando usa."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quanto tempo leva o processamento?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Em média, 1 a 2 minutos por prancha. Um projeto típico com 10 pranchas leva cerca de 10 minutos. O resultado é uma planilha XLSX por disciplina, pronta para download."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq substitui o orçamentista?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não. O AI.arq entrega o LEVANTAMENTO QUANTITATIVO (o que e quanto), mas não precifica. A precificação, o BDI e o fechamento do orçamento são trabalho do orçamentista. A planilha sai sem preços preenchidos, com itens estimados marcados em laranja para revisão."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como funciona o cashback?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O AI.arq devolve crédito automático em ações que ajudam a calibrar a IA: + R$ 30 ao subir a planilha revisada offline e + R$ 10 por cotação de fornecedor (limite de 3 por projeto). Máximo de R$ 60 por projeto, abatido no próximo."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Meus dados de projeto estão seguros?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. Conformidade com LGPD: você é o controlador dos dados; o AI.arq atua como operador, apenas processando. Comunicação criptografada (TLS) e dados em repouso criptografados no banco. Plantas CAD não treinam IA pública sem autorização explícita."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "E se o sistema não conseguir ler meu arquivo?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Quando o sistema não consegue extrair itens de uma prancha, ele avisa de forma clara — não entrega planilha vazia. Causas comuns: PDF escaneado em vez de vetorial, arquivo incompleto no envio ou prancha apenas de layout sem cotas. A solução é reenviar PDF vetorial exportado do CAD, em conexão estável."
+      }
+    }
+  ]
+}
+</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -495,14 +567,14 @@
         </div>
 
         <!-- Q18 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="programa cashback desconto revisar corrigir quantitativos upload versao corrigida calibrar melhorar precisao 20 porcento">
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="programa cashback desconto revisar corrigir quantitativos upload versao corrigida calibrar melhorar precisao planilha cotacao fornecedor">
           <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">O que &eacute; o programa de Cashback?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Sim. O AI.arq tem programa de cashback granular: cada a&ccedil;&atilde;o que contribui pra calibrar a IA gera cr&eacute;dito autom&aacute;tico, ab&aacute;vel no pr&oacute;ximo projeto. Ex.: upload de planilha revisada d&aacute; <strong>+R$ 20</strong>, upload de cota&ccedil;&atilde;o de fornecedor d&aacute; <strong>+R$ 5</strong>, e revis&otilde;es inline e feedback NPS tamb&eacute;m geram cr&eacute;dito. Veja a aba "Cashback" no seu dashboard pra saldo e hist&oacute;rico. Suas corre&ccedil;&otilde;es ajudam a calibrar a IA &mdash; todos ganham.
+              O AI.arq devolve cr&eacute;dito autom&aacute;tico em a&ccedil;&otilde;es que ajudam a calibrar a IA, abatido no pr&oacute;ximo projeto: <strong>+R$ 30</strong> ao subir a planilha revisada offline e <strong>+R$ 10</strong> por cota&ccedil;&atilde;o de fornecedor (limite de 3 cota&ccedil;&otilde;es por projeto). M&aacute;ximo de <strong>R$ 60</strong> por projeto. Revis&atilde;o inline n&atilde;o gera mais cashback &mdash; ela continua treinando a IA, mas o cr&eacute;dito agora vem s&oacute; das duas a&ccedil;&otilde;es acima. Saldo e hist&oacute;rico ficam na aba "Cashback" do seu dashboard.
             </div>
           </div>
         </div>
