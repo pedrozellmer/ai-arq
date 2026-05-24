@@ -18,10 +18,13 @@
     body { font-family: 'Inter', -apple-system, sans-serif; }
     .section-header { background: linear-gradient(135deg,#4f46e5,#06b6d4); }
     .item-row { transition: all 0.15s; }
-    .item-row.approved { background-color:#f0fdf4; border-left:4px solid #22c55e; }
-    .item-row.rejected { background-color:#fef2f2; border-left:4px solid #ef4444; opacity: 0.6; text-decoration: line-through; }
-    .item-row.edited   { background-color:#fffbeb; border-left:4px solid #f59e0b; }
-    .item-row.pending  { border-left:4px solid transparent; }
+    /* Estados de revisão usam cor + espessura/estilo de borda + badge
+       textual (renderizado no JS). Pedro é daltônico — verde vs âmbar
+       seriam quase iguais só pela cor. */
+    .item-row.approved { background-color:#f0fdf4; border-left:6px solid #22c55e; }
+    .item-row.rejected { background-color:#fef2f2; border-left:6px double #ef4444; opacity: 0.6; text-decoration: line-through; }
+    .item-row.edited   { background-color:#fffbeb; border-left:6px dashed #f59e0b; }
+    .item-row.pending  { border-left:6px solid transparent; }
     .item-row.focused  { outline: 2px solid #4f46e5; outline-offset: -2px; background-color: #eef2ff; }
     kbd {
       display: inline-block; padding: 2px 6px; font-family: monospace;
@@ -385,6 +388,14 @@ function renderItem(it, localIndex) {
   const isOrange = it.confidence === 'estimado' || it.confidence === 'verificar';
   const hasSheet = !!(it.ref_sheet && it.ref_sheet.trim() &&
                      !/^Pr\.|^DXF/i.test(it.ref_sheet));
+  // Badge TEXTUAL do estado de revisão. Cor sozinha não basta — Pedro é
+  // daltônico (regra de acessibilidade). Cor + ícone + texto.
+  const stateChip = {
+    approved: '<span class="chip bg-green-100 text-green-700 ml-2"><span aria-hidden="true">✓</span> aprovado</span>',
+    edited:   '<span class="chip bg-amber-100 text-amber-800 ml-2"><span aria-hidden="true">✎</span> editado</span>',
+    rejected: '<span class="chip bg-red-100 text-red-700 ml-2"><span aria-hidden="true">✗</span> removido</span>',
+    pending:  '',
+  }[state] || '';
   return `
     <div class="item-row ${state} px-4 py-3 flex items-start gap-4" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
       <div class="flex-shrink-0 w-14 text-xs text-gray-500 pt-1">${escapeHtml(it.item_num || '')}</div>
@@ -393,7 +404,7 @@ function renderItem(it, localIndex) {
         <p class="text-xs text-gray-500 mt-1">
           <span class="chip ${isOrange ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}">
             ${isOrange ? '⚠ estimado' : '✓ confirmado'}
-          </span>
+          </span>${stateChip}
           <span class="ml-2">${it.quantity || 0} ${escapeHtml(it.unit)}</span>
           ${it.ref_sheet ? `<span class="ml-2 text-indigo-500">📄 ${escapeHtml(it.ref_sheet).slice(0,50)}</span>` : ''}
           ${it.observations ? `<span class="ml-2 text-gray-500">· ${escapeHtml(it.observations).slice(0,60)}</span>` : ''}

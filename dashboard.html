@@ -521,7 +521,7 @@
         </div>
 
         <!-- STATE: ERROR -->
-        <div id="state-error" class="hidden">
+        <div id="state-error" class="hidden" role="alert" aria-live="assertive">
           <div class="rounded-2xl border border-red-200 bg-white p-8 md:p-10 shadow-gradient text-center">
             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100 text-red-500 mb-6">
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
@@ -929,7 +929,7 @@
                     <button onclick="uploadLogo()" id="btn-upload-logo" class="px-3 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Enviar logo</button>
                     <button onclick="removeLogo()" id="btn-remove-logo" class="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-lg hidden">Remover</button>
                   </div>
-                  <p id="logo-status" class="mt-2 text-xs hidden"></p>
+                  <p id="logo-status" role="status" aria-live="polite" class="mt-2 text-xs hidden"></p>
                 </div>
               </div>
               <div class="mt-4 flex items-center gap-3">
@@ -941,7 +941,7 @@
             </div>
 
             <div class="pt-4 flex items-center justify-between">
-              <span id="prof-status" class="text-sm text-green-600 hidden">Dados salvos com sucesso!</span>
+              <span id="prof-status" role="status" aria-live="polite" class="text-sm text-green-600 hidden"><span aria-hidden="true">✓</span> Dados salvos com sucesso!</span>
               <button id="btn-save-profile" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition hover:opacity-90">
                 Salvar Altera&ccedil;&otilde;es
               </button>
@@ -2553,15 +2553,17 @@
       const files = p.fileCount || p.files || '—';
       const isFree = p.free || p.price === 0;
       const price = isFree ? 'Gr\u00e1tis' : (p.price ? `R$ ${p.price}` : '—');
+      // Cor + \u00edcone + texto: cor sozinha n\u00e3o basta (Pedro \u00e9 dalt\u00f4nico).
       const statusClass = isFree ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700';
-      const statusText = isFree ? 'Gr\u00e1tis' : 'Pago';
+      const statusIcon  = isFree ? '\ud83c\udf81' : '\ud83d\udcb3';
+      const statusText  = isFree ? 'Gr\u00e1tis' : 'Pago';
       // Escape em name (vem de localStorage, mas defesa em profundidade).
       return `<tr class="border-b hover:bg-gray-50">
         <td class="px-6 py-4 text-gray-600">${escapeH(date)}</td>
         <td class="px-6 py-4 font-medium text-gray-900">${escapeH(name)}</td>
         <td class="px-6 py-4 text-gray-600">${escapeH(files)}</td>
         <td class="px-6 py-4 text-gray-900 font-medium">${escapeH(price)}</td>
-        <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs font-medium ${statusClass}">${statusText}</span></td>
+        <td class="px-6 py-4"><span class="px-2 py-1 rounded-full text-xs font-medium ${statusClass}"><span aria-hidden="true">${statusIcon}</span> ${statusText}</span></td>
       </tr>`;
     }).join('');
   }
@@ -2711,11 +2713,13 @@
       .update(updates).eq('user_id', currentUser.id);
 
     if (error) {
-      status.textContent = 'Erro ao salvar. Tente novamente.';
+      status.innerHTML = '<span aria-hidden="true">✗</span> Erro ao salvar. Tente novamente.';
       status.className = 'text-sm text-red-600';
+      status.setAttribute('role', 'alert');
     } else {
-      status.textContent = 'Dados salvos com sucesso!';
+      status.innerHTML = '<span aria-hidden="true">✓</span> Dados salvos com sucesso!';
       status.className = 'text-sm text-green-600';
+      status.setAttribute('role', 'status');
     }
     status.classList.remove('hidden');
     btn.disabled = false;
@@ -2810,14 +2814,15 @@
       day:'2-digit', month:'2-digit', year:'numeric'
     }) : '--';
 
+    // Cada badge tem ícone + texto além da cor — Pedro é daltônico, cor sozinha não basta.
     const STATUS_LABEL = {
-      'done':       { label: 'Pronto',      cls: 'bg-emerald-100 text-emerald-700' },
-      'error':      { label: 'Erro',        cls: 'bg-red-100 text-red-700' },
-      'queued':     { label: 'Na fila',     cls: 'bg-amber-100 text-amber-700' },
-      'processing': { label: 'Processando', cls: 'bg-blue-100 text-blue-700' },
+      'done':       { label: 'Pronto',      icon: '✓', cls: 'bg-emerald-100 text-emerald-700' },
+      'error':      { label: 'Erro',        icon: '✗', cls: 'bg-red-100 text-red-700' },
+      'queued':     { label: 'Na fila',     icon: '⏳', cls: 'bg-amber-100 text-amber-700' },
+      'processing': { label: 'Processando', icon: '⚙', cls: 'bg-blue-100 text-blue-700' },
     };
-    const s = STATUS_LABEL[p.status] || { label: p.status || '—', cls: 'bg-gray-100 text-gray-600' };
-    const statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${s.cls} text-[10px] font-semibold uppercase tracking-wide">${s.label}</span>`;
+    const s = STATUS_LABEL[p.status] || { label: p.status || '—', icon: '•', cls: 'bg-gray-100 text-gray-600' };
+    const statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${s.cls} text-[10px] font-semibold uppercase tracking-wide"><span aria-hidden="true">${s.icon}</span> ${s.label}</span>`;
 
     const isArchived = p.archived === true;
     const archivedBadge = isArchived
@@ -3192,9 +3197,10 @@
     noReviews.classList.add('hidden');
     let html = '<div class="space-y-2">';
     reviews.forEach(r => {
+      // Cor + ícone + texto (Pedro é daltônico).
       const statusBadge = r.status === 'pending'
-        ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pendente</span>'
-        : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Aprovada</span>';
+        ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-700"><span aria-hidden="true">⏳</span> Pendente</span>'
+        : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700"><span aria-hidden="true">✓</span> Aprovada</span>';
       const calibrationInfo = r.itemsCompared
         ? `<p class="text-xs text-gray-500">${r.itemsCompared} itens comparados | desvio m\u00e9dio ${Math.abs(r.avgDeviation || 0).toFixed(1)}%</p>`
         : '';
