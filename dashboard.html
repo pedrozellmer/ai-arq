@@ -954,6 +954,30 @@
     </div>
   </main>
 
+  <!-- Modal: pedir CPF/CNPJ antes do pagamento ─────────────────────
+       Cadastro novo é em 2 etapas: usuário entra sem CPF (atrito baixo),
+       experimenta o projeto grátis, e só fornece CPF se for pagar. Antes
+       do checkout Stripe, esse modal aparece se cpf_cnpj estiver vazio. -->
+  <div id="modal-cpf" role="dialog" aria-modal="true" aria-labelledby="modal-cpf-title"
+       class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 id="modal-cpf-title" class="font-semibold text-gray-900">Falta só uma coisa pro pagamento</h3>
+        <button type="button" id="modal-cpf-close" aria-label="Fechar" class="text-gray-400 hover:text-gray-600">✕</button>
+      </div>
+      <p class="text-sm text-gray-600 mb-4">Pra emitir o recibo do pagamento, a gente precisa do seu CPF ou CNPJ. Pedimos só agora — o cadastro inicial é sem CPF.</p>
+      <label for="modal-cpf-input" class="block text-xs font-medium text-gray-500 mb-1">CPF ou CNPJ</label>
+      <input id="modal-cpf-input" type="text" inputmode="numeric" maxlength="18"
+             class="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500"
+             placeholder="000.000.000-00">
+      <p id="modal-cpf-error" class="hidden mt-2 text-xs text-red-600" role="alert"></p>
+      <div class="mt-5 flex gap-2 justify-end">
+        <button type="button" id="modal-cpf-cancel" class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+        <button type="button" id="modal-cpf-save" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg">Salvar e continuar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <footer class="border-t bg-gray-50 py-8">
     <div class="max-w-4xl mx-auto px-4">
@@ -1194,6 +1218,80 @@
     info:  (m) => (window.toast ? window.toast.info(m)  : alert(m)),
     ok:    (m) => (window.toast ? window.toast.success(m) : alert(m)),
   };
+
+  // ── Cadastro 2 etapas: garante CPF/CNPJ antes do checkout ─────────
+  // Lê o profile, valida o que tiver; se vazio mostra modal. Devolve
+  // Promise<bool>: true = pode prosseguir, false = usuário cancelou.
+  function _isValidCpfOrCnpj(raw) {
+    // Validação leve: 11 dígitos = CPF, 14 dígitos = CNPJ. Aceita
+    // formatado ou não. Não rejeita por dígito verificador (Stripe e
+    // contabilidade depois fazem a checagem dura).
+    const digits = String(raw || '').replace(/\D/g, '');
+    return digits.length === 11 || digits.length === 14;
+  }
+  async function ensureCpfBeforeCheckout() {
+    try {
+      const { data: profile } = await sbClient
+        .from('profiles')
+        .select('cpf_cnpj')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      if (profile && _isValidCpfOrCnpj(profile.cpf_cnpj)) return true;
+    } catch (e) {
+      console.warn('profile cpf check falhou:', e);
+    }
+    // Abre o modal e espera resposta
+    return new Promise((resolve) => {
+      const modal = document.getElementById('modal-cpf');
+      const input = document.getElementById('modal-cpf-input');
+      const err   = document.getElementById('modal-cpf-error');
+      const save  = document.getElementById('modal-cpf-save');
+      const cancel = document.getElementById('modal-cpf-cancel');
+      const closeX = document.getElementById('modal-cpf-close');
+      err.classList.add('hidden');
+      input.value = '';
+      modal.classList.remove('hidden');
+      setTimeout(() => input.focus(), 0);
+
+      const cleanup = (result) => {
+        modal.classList.add('hidden');
+        save.removeEventListener('click', onSave);
+        cancel.removeEventListener('click', onCancel);
+        closeX.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onCancel = () => cleanup(false);
+      const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+      const onSave = async () => {
+        const val = input.value.trim();
+        if (!_isValidCpfOrCnpj(val)) {
+          err.textContent = 'Informe um CPF (11 dígitos) ou CNPJ (14 dígitos) válido.';
+          err.classList.remove('hidden');
+          input.focus();
+          return;
+        }
+        save.disabled = true;
+        save.textContent = 'Salvando...';
+        try {
+          await sbClient.from('profiles')
+            .update({ cpf_cnpj: val })
+            .eq('user_id', currentUser.id);
+          cleanup(true);
+        } catch (e) {
+          err.textContent = 'Erro ao salvar: ' + (e.message || e);
+          err.classList.remove('hidden');
+          save.disabled = false;
+          save.textContent = 'Salvar e continuar';
+        }
+      };
+      save.addEventListener('click', onSave);
+      cancel.addEventListener('click', onCancel);
+      closeX.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+    });
+  }
+
   async function downloadProtected(url, filename) {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) {
@@ -2027,7 +2125,14 @@
       // Projeto gratuito (primeiro / beta / ilimitado / coberto por crédito) — processa direto
       startProcessing();
     } else {
-      // Precisa pagar — abrir Stripe Checkout
+      // Precisa pagar — pede CPF/CNPJ se ainda não tiver (cadastro 2 etapas).
+      const cpfOk = await ensureCpfBeforeCheckout();
+      if (!cpfOk) {
+        btnProcess.disabled = false;
+        btnProcess.innerHTML = '<svg class="w-5 h-5 animate-spin-slow" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg> Processar Projeto';
+        return;
+      }
+      // Abrir Stripe Checkout
       btnProcess.disabled = true;
       btnProcess.textContent = 'Redirecionando para pagamento...';
 
