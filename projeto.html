@@ -916,7 +916,9 @@ window.switchUploadTab = switchUploadTab;
 
 async function loadProjectCashback() {
   try {
-    const res = await fetch(`${API_BASE}/api/projects/${jobId}/cashback`);
+    // authFetch: endpoint trata PII financeira do projeto; sem Bearer, qualquer
+    // um que adivinhar o job_id veria o saldo (auditoria 2026-05-23).
+    const res = await authFetch(`${API_BASE}/api/projects/${jobId}/cashback`);
     const data = await res.json();
     if (!data.events || data.events.length === 0) return;
     document.getElementById('project-cashback-box').classList.remove('hidden');
@@ -930,9 +932,10 @@ async function loadProjectCashback() {
       'supplier_quote_upload': '📊 Upload cotação fornecedor',
       'nps_feedback': '💬 Feedback NPS',
     };
+    // Escapar e.description (vem do backend mas pode propagar input do user).
     document.getElementById('cashback-events-list').innerHTML = data.events.slice(0, 10).map(e => `
       <div class="flex items-center justify-between py-1 border-b border-amber-100/50">
-        <span class="text-gray-700">${labels[e.event_type] || e.event_type}${e.description ? ' — ' + e.description : ''}</span>
+        <span class="text-gray-700">${esc(labels[e.event_type] || e.event_type)}${e.description ? ' — ' + esc(e.description) : ''}</span>
         <span class="font-medium text-amber-700">+R$ ${(e.credit_cents / 100).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
       </div>
     `).join('');
@@ -1160,21 +1163,25 @@ function renderQuotes(quotes) {
     document.getElementById('quotes-compare-box').classList.add('hidden');
     return;
   }
+  // Escape em TODOS os campos vindos da API — supplier_name e original_filename
+  // são input direto do usuário no upload; sem esc() viraria XSS stored
+  // (auditoria de segurança 2026-05-23). q.id usado em onclick precisa de
+  // escape pra evitar quebra de string JS quando o id contiver aspas.
   list.innerHTML = quotes.map(q => `
     <div class="p-4 flex items-center justify-between gap-4 hover:bg-white">
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
-          <span class="font-semibold text-gray-800 truncate">${q.supplier_name}</span>
-          <span class="text-xs px-2 py-0.5 rounded-full ${q.status === 'parsed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}">${q.status === 'parsed' ? '✓ parseado' : q.status}</span>
-          ${q.parser_mode ? `<span class="text-xs text-gray-500">(${q.parser_mode})</span>` : ''}
+          <span class="font-semibold text-gray-800 truncate">${esc(q.supplier_name)}</span>
+          <span class="text-xs px-2 py-0.5 rounded-full ${q.status === 'parsed' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-600'}">${q.status === 'parsed' ? '✓ parseado' : esc(q.status)}</span>
+          ${q.parser_mode ? `<span class="text-xs text-gray-500">(${esc(q.parser_mode)})</span>` : ''}
         </div>
         <div class="text-xs text-gray-500 flex gap-3">
           <span>${q.n_items_quoted} itens</span>
           <span>Total: R$ ${(q.total_bruto || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>
-          <span class="truncate">${q.original_filename}</span>
+          <span class="truncate">${esc(q.original_filename)}</span>
         </div>
       </div>
-      <button onclick="deleteQuote('${q.id}')" class="text-xs text-red-500 hover:text-red-700">Remover</button>
+      <button onclick="deleteQuote('${esc(q.id)}')" class="text-xs text-red-500 hover:text-red-700">Remover</button>
     </div>
   `).join('');
 
