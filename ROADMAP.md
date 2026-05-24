@@ -403,6 +403,8 @@ Identificadas em sessão de 2026-04-24. Estado atual:
 | 2026-04-24 | Admin com cadastros incompletos visíveis | Recuperar leads mornos |
 | 2026-04-26 | Engajadora Instagram via pg_cron + Meta API | Eliminar dependência de cron-job.org |
 | 2026-04-26 | Roadmap formalizado neste arquivo | Memória institucional |
+| 2026-05-24 | Hero focado no wedge (quantitativo do CAD), comparativo/PPT viram bônus | Promessa central afiada, conversão maior |
+| 2026-05-24 | Cadastro em 2 etapas — CPF só antes do 1º pagamento | CPF no cadastro era atrito alto pra testar o gratuito |
 
 ---
 

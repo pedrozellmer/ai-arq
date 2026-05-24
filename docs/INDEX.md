@@ -104,11 +104,14 @@ Pra não perder regra que já foi discutida:
 
 ### Decisões de marca / posicionamento
 
-- Tagline correta: **"Quantitativo com IA"** (NÃO "Orçamento com IA")
+- Tagline descritivo: **"Quantitativo com IA"** (NÃO "Orçamento com IA")
+- H1 da landing (desde 24/05/2026): "Levantamento de quantitativos da sua prancha em minutos, não em dias" — wedge focado, comparativo/PPT são bônus
 - Sem rosto / voz do Pedro no marketing — usar mascote AIrnaldo, testemunho Daniela, ou narrativa 3ª pessoa
 - AIrnaldo: mascote funcional (fala BDI/SINAPI), SEM biografia inventada
 - IG: rubrica fixa por dia, horários travados, voz do cliente (não voz interna)
-- Cashback total max: R$ 45/projeto (R$ 20 inline + R$ 20 planilha + R$ 5 cotação)
+- Cashback total max: **R$ 60/projeto** (R$ 30 planilha revisada + R$ 10/cotação cap 3, desde 13/05/2026)
+- 🎨 Daltonismo: cor + ícone + texto sempre (Pedro é daltônico)
+- CPF/CNPJ: só antes do 1º pagamento, opcional no cadastro inicial (desde 24/05/2026)
 
 ### Decisões estratégicas (sessão 12/05)
 

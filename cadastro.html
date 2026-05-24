@@ -441,9 +441,12 @@
       return;
     }
 
+    // CPF/CNPJ \u00e9 opcional no cadastro (pedido antes do 1\u00ba pagamento via
+    // ensureCpfBeforeCheckout no dashboard). Mas se o usu\u00e1rio digitar
+    // algo, validamos o formato pra n\u00e3o salvar lixo no profile.
     const cpfCnpjDigits = cpfCnpj.replace(/\D/g, '');
-    if (!cpfCnpjDigits || (cpfCnpjDigits.length !== 11 && cpfCnpjDigits.length !== 14)) {
-      showError('Por favor, informe um CPF (11 d\u00edgitos) ou CNPJ (14 d\u00edgitos) v\u00e1lido.');
+    if (cpfCnpjDigits && cpfCnpjDigits.length !== 11 && cpfCnpjDigits.length !== 14) {
+      showError('CPF tem 11 d\u00edgitos e CNPJ tem 14. Voc\u00ea pode deixar em branco e preencher antes do 1\u00ba pagamento.');
       cpfCnpjInput.focus();
       return;
     }
