@@ -239,10 +239,17 @@ async function authFetch(url, options = {}) {
 // Bug 2026-05-18 (Daniela): window.location.href / window.open / <a href>
 // NÃO enviam headers customizados → backend retorna 401. Solução: fetch com
 // Bearer token, converter resposta em blob, disparar download programático.
+// Shim: toast quando disponível, alert como fallback.
+const notify = {
+  warn:  (m) => (window.toast ? window.toast.warn(m)  : alert(m)),
+  error: (m) => (window.toast ? window.toast.error(m) : alert(m)),
+  info:  (m) => (window.toast ? window.toast.info(m)  : alert(m)),
+  ok:    (m) => (window.toast ? window.toast.success(m) : alert(m)),
+};
 async function downloadProtected(url, filename) {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
-    alert('Sua sessão expirou. Faça login de novo pra baixar.');
+    notify.warn('Sua sessão expirou. Faça login de novo pra baixar.');
     window.location.href = 'login.html';
     return;
   }
@@ -253,7 +260,7 @@ async function downloadProtected(url, filename) {
     if (!resp.ok) {
       let detail = `HTTP ${resp.status}`;
       try { const j = await resp.json(); detail = j.detail || detail; } catch {}
-      alert(`Não consegui baixar a planilha: ${detail}`);
+      notify.error(`Não consegui baixar a planilha: ${detail}`);
       return;
     }
     const blob = await resp.blob();
@@ -266,13 +273,13 @@ async function downloadProtected(url, filename) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (e) {
-    alert('Erro de rede ao baixar: ' + e.message);
+    notify.error('Erro de rede ao baixar: ' + e.message);
   }
 }
 
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
-if (!jobId) { alert('job_id não informado na URL'); window.location.href = 'dashboard.html'; }
+if (!jobId) { notify.warn('job_id não informado na URL'); window.location.href = 'dashboard.html'; }
 
 let currentUser = null;
 let items = [];                    // Itens carregados
@@ -318,7 +325,7 @@ async function loadItems() {
       (alreadyReviewed ? ` · ${alreadyReviewed} já revisados` : '');
     render();
   } catch (e) {
-    toast('Erro ao carregar: ' + e.message);
+    flashToast('Erro ao carregar: ' + e.message);
   }
 }
 
@@ -456,9 +463,9 @@ async function review(itemId, action) {
         reviewed_by: currentUser?.email || '',
       })
     });
-    toast(action === 'approve' ? '✓ Aprovado' : action === 'reject' ? '✗ Removido' : 'Editado');
+    flashToast(action === 'approve' ? '✓ Aprovado' : action === 'reject' ? '✗ Removido' : 'Editado');
   } catch (e) {
-    toast('Erro ao salvar: ' + e.message);
+    flashToast('Erro ao salvar: ' + e.message);
   }
 }
 
@@ -501,9 +508,9 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
         reviewed_by: currentUser?.email || '',
       })
     });
-    toast('✎ Salvo');
+    flashToast('✎ Salvo');
   } catch (e) {
-    toast('Erro: ' + e.message);
+    flashToast('Erro: ' + e.message);
   }
 });
 
@@ -532,9 +539,9 @@ async function submitComment() {
         reviewed_by: currentUser?.email || '',
       })
     });
-    toast('💬 Comentário enviado');
+    flashToast('💬 Comentário enviado');
   } catch (e) {
-    toast('Erro: ' + e.message);
+    flashToast('Erro: ' + e.message);
   }
 }
 
@@ -549,11 +556,11 @@ document.getElementById('btn-save-later').addEventListener('click', () => {
   const msg = pending > 0
     ? `Progresso salvo! Você ainda tem ${pending} itens pendentes.\n\nVoltar pra "Meus Projetos" — você pode terminar a revisão depois.`
     : 'Progresso salvo! Voltando pra "Meus Projetos".';
-  toast('✓ Progresso salvo');
-  setTimeout(() => {
-    alert(msg);
-    window.location.href = 'meus-projetos.html';
-  }, 600);
+  // Toast inline some em 2.5s. Mostra a mensagem completa via notify e
+  // redireciona em seguida — sem alert bloqueante.
+  flashToast('✓ Progresso salvo');
+  notify.ok(msg);
+  setTimeout(() => { window.location.href = 'meus-projetos.html'; }, 1200);
 });
 
 document.getElementById('btn-export').addEventListener('click', async () => {
@@ -566,7 +573,7 @@ document.getElementById('btn-export').addEventListener('click', async () => {
     // enviaria o JWT → backend retornaria 401 (bug Daniela 2026-05-18).
     await downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
   } catch (e) {
-    toast('Erro ao exportar: ' + e.message);
+    flashToast('Erro ao exportar: ' + e.message);
   } finally {
     setTimeout(() => {
       btn.disabled = false;
@@ -604,9 +611,9 @@ async function markExistente(itemId) {
         reviewed_by: currentUser?.email || '',
       })
     });
-    toast('🔄 Marcado como existente (sem custo)');
+    flashToast('🔄 Marcado como existente (sem custo)');
   } catch (e) {
-    toast('Erro: ' + e.message);
+    flashToast('Erro: ' + e.message);
   }
 }
 
@@ -617,7 +624,11 @@ async function bulkReview(section, action) {
   const msg = action === 'approve'
     ? `Aprovar todos os itens de "${section}"?`
     : `Remover todos os itens de "${section}"? Eles vão sair da planilha.`;
-  if (!confirm(msg)) return;
+  const okLabel = action === 'approve' ? 'Aprovar todos' : 'Remover todos';
+  const ok = window.toast
+    ? await window.toast.confirm(msg, { ok: okLabel, cancel: 'Cancelar' })
+    : confirm(msg);
+  if (!ok) return;
 
   const secItems = items.filter(it => (it.section || 'Outros') === section);
   if (!secItems.length) return;
@@ -627,7 +638,7 @@ async function bulkReview(section, action) {
     reviewState[it.id] = action === 'approve' ? 'approved' : 'rejected';
   });
   render();
-  toast(`${action === 'approve' ? 'Aprovando' : 'Removendo'} ${secItems.length} itens...`);
+  flashToast(`${action === 'approve' ? 'Aprovando' : 'Removendo'} ${secItems.length} itens...`);
 
   // Dispara requests em paralelo (limita a 5 simultâneas pra não saturar)
   const limit = 5;
@@ -645,7 +656,7 @@ async function bulkReview(section, action) {
       }).catch(() => {}).finally(() => done++)
     ));
   }
-  toast(`${action === 'approve' ? '✓' : '✗'} ${done} itens processados`);
+  flashToast(`${action === 'approve' ? '✓' : '✗'} ${done} itens processados`);
 }
 
 // ═══════════════════════════════════════════════
@@ -654,7 +665,7 @@ async function bulkReview(section, action) {
 function openSheet(itemId) {
   const it = items.find(x => x.id === itemId);
   if (!it || !it.ref_sheet) {
-    toast('Prancha não disponível');
+    flashToast('Prancha não disponível');
     return;
   }
   // Abre o viewer HTML que embeda o PDF num iframe — evita que o
@@ -791,14 +802,14 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
   // Cashback inline removido em 2026-05-13. A revisão dentro do site não
   // gera mais crédito — mensagem agora explica que o cashback vem do upload
   // da planilha revisada offline ou de cotações de fornecedor.
-  const ok = confirm(
-    `Concluir revisão de ${items.length} itens?\n\n` +
-    `✓ ${counts.approved} aprovados\n` +
-    `✗ ${counts.rejected} removidos\n` +
-    `✎ ${counts.edited} editados\n\n` +
-    `Suas correções treinam a IA pro próximo projeto.\n` +
-    `Pra ganhar cashback (R$ 30): baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto.`
-  );
+  const finishMsg =
+    `Concluir revisão de ${items.length} itens? ` +
+    `✓ ${counts.approved} aprovados · ✗ ${counts.rejected} removidos · ✎ ${counts.edited} editados. ` +
+    `Suas correções treinam a IA pro próximo projeto. ` +
+    `Pra ganhar cashback (R$ 30): baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto.`;
+  const ok = window.toast
+    ? await window.toast.confirm(finishMsg, { ok: 'Concluir revisão', cancel: 'Continuar revisando' })
+    : confirm(finishMsg);
   if (!ok) return;
 
   const btn = document.getElementById('btn-finish');
@@ -811,18 +822,21 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ user_id: window.currentUserId || '' }),
     }).catch(() => {});
-    toast('✓ Revisão concluída! Cashback será creditado.');
+    flashToast('✓ Revisão concluída! Cashback será creditado.');
     // Redireciona pra página do projeto após 1.5s
     setTimeout(() => {
       window.location.href = `projeto.html?job_id=${jobId}`;
     }, 1500);
   } catch (e) {
-    toast('Erro: ' + e.message);
+    flashToast('Erro: ' + e.message);
     btn.disabled = false;
     btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> Concluir revisão';
   }
 });
-function toast(msg) {
+// Mini-toast inline antigo (badge fixo #toast no canto). Renomeado pra
+// flashToast pra não colidir com o window.toast global de toast.js, que é
+// um objeto com {success,error,warn,info,confirm}.
+function flashToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.remove('hidden');
@@ -852,6 +866,7 @@ function escapeHtml(s) {
   </p>
 </footer>
 
+<script src="toast.js" defer></script>
 <script src="contact-modal.js" defer></script>
 </body>
 </html>
