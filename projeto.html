@@ -554,10 +554,17 @@ async function authFetch(url, options = {}) {
 // Bug 2026-05-18 (Daniela): <a href> / window.open / window.location.href
 // NÃO enviam headers customizados → backend retorna 401. Solução: fetch com
 // Bearer token, converter resposta em blob, disparar download programático.
+// Shim: toast quando disponível, alert como fallback.
+const notify = {
+  warn:  (m) => (window.toast ? window.toast.warn(m)  : alert(m)),
+  error: (m) => (window.toast ? window.toast.error(m) : alert(m)),
+  info:  (m) => (window.toast ? window.toast.info(m)  : alert(m)),
+  ok:    (m) => (window.toast ? window.toast.success(m) : alert(m)),
+};
 async function downloadProtected(url, filename) {
   const { data: { session } } = await sb.auth.getSession();
   if (!session) {
-    alert('Sua sessão expirou. Faça login de novo pra baixar.');
+    notify.warn('Sua sessão expirou. Faça login de novo pra baixar.');
     window.location.href = 'login.html';
     return;
   }
@@ -568,7 +575,7 @@ async function downloadProtected(url, filename) {
     if (!resp.ok) {
       let detail = `HTTP ${resp.status}`;
       try { const j = await resp.json(); detail = j.detail || detail; } catch {}
-      alert(`Não consegui baixar a planilha: ${detail}`);
+      notify.error(`Não consegui baixar a planilha: ${detail}`);
       return;
     }
     const blob = await resp.blob();
@@ -581,7 +588,7 @@ async function downloadProtected(url, filename) {
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (e) {
-    alert('Erro de rede ao baixar: ' + e.message);
+    notify.error('Erro de rede ao baixar: ' + e.message);
   }
 }
 
@@ -799,7 +806,7 @@ async function carregarStatsEntregas() {
           subtitleOverride: 'Conta o que aconteceu — a gente responde rapidinho.',
         });
       } else {
-        alert('Modal de contato não carregou. Recarregue a página.');
+        notify.error('Modal de contato não carregou. Recarregue a página.');
       }
     });
   }
@@ -1198,8 +1205,8 @@ async function uploadQuote() {
   const autoMode = document.getElementById('q-parser-mode').checked;
   const statusDiv = document.getElementById('q-status');
 
-  if (!name) { alert('Informe o nome do fornecedor'); return; }
-  if (!file) { alert('Selecione uma planilha .xlsx'); return; }
+  if (!name) { notify.warn('Informe o nome do fornecedor'); return; }
+  if (!file) { notify.warn('Selecione uma planilha .xlsx'); return; }
 
   const { data: { session } } = await sb.auth.getSession();
   const btn = document.getElementById('btn-upload-quote');
@@ -1249,12 +1256,16 @@ async function uploadQuote() {
 }
 
 async function deleteQuote(quoteId) {
-  if (!confirm('Remover essa cotação?')) return;
+  // toast.confirm devolve Promise — fica acessível no leitor de tela
+  const ok = window.toast
+    ? await window.toast.confirm('Remover essa cotação?', { ok: 'Remover', cancel: 'Cancelar' })
+    : confirm('Remover essa cotação?');
+  if (!ok) return;
   try {
     await authFetch(`${API_BASE}/api/projects/${jobId}/quotes/${quoteId}`, { method: 'DELETE' });
     loadQuotes();
   } catch (e) {
-    alert('Erro: ' + e.message);
+    notify.error('Erro: ' + e.message);
   }
 }
 
@@ -1266,10 +1277,10 @@ async function uploadRevisedSheet() {
   const statusEl = document.getElementById('rev-status');
   const btn = document.getElementById('btn-upload-rev');
 
-  if (!file) { alert('Selecione a planilha .xlsx corrigida'); return; }
+  if (!file) { notify.warn('Selecione a planilha .xlsx corrigida'); return; }
 
   const { data: { session } } = await sb.auth.getSession();
-  if (!session) { alert('Faça login pra enviar'); return; }
+  if (!session) { notify.warn('Faça login pra enviar'); return; }
 
   btn.disabled = true;
   btn.textContent = 'Enviando...';
@@ -1403,26 +1414,31 @@ function renderHeader(p) {
         'Este projeto já foi reprocessado 1×. Para rodar de novo, crie um <a href="dashboard.html" class="text-indigo-600 underline">novo projeto</a> com os mesmos arquivos.';
     } else {
       btnReprocess.addEventListener('click', async () => {
-        if (!confirm('Reprocessar este projeto com a última versão do motor?\n\nA planilha atual será substituída. Itens já revisados ficam junto ao projeto original.\n\nNota: você tem 1 reprocessamento grátis por projeto.')) return;
+        const ok = window.toast
+          ? await window.toast.confirm(
+              'Reprocessar este projeto com a última versão do motor? A planilha atual será substituída. Itens já revisados ficam junto ao projeto original. Você tem 1 reprocessamento grátis por projeto.',
+              { ok: 'Reprocessar', cancel: 'Cancelar' })
+          : confirm('Reprocessar este projeto com a última versão do motor? A planilha atual será substituída. Você tem 1 reprocessamento grátis por projeto.');
+        if (!ok) return;
         btnReprocess.disabled = true;
         btnReprocess.innerHTML = '<svg class="animate-spin w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reprocessando...';
         try {
           const res = await authFetch(`${API_BASE}/api/project/${jobId}/reprocess`, {method: 'POST'});
           const data = await res.json();
           if (res.status === 402) {
-            alert(data.detail || 'Limite de reprocessamento atingido.');
+            notify.warn(data.detail || 'Limite de reprocessamento atingido.');
             btnReprocess.disabled = true;
             btnReprocess.textContent = 'Limite atingido';
             return;
           }
           if (!res.ok) throw new Error(data.detail || 'Erro');
-          alert('Reprocessamento iniciado. O novo código é ' + (data.new_job_id || jobId) + '. Vou redirecionar em 5s.');
+          notify.ok('Reprocessamento iniciado. O novo código é ' + (data.new_job_id || jobId) + '. Vou redirecionar em 5s.');
           setTimeout(() => {
             if (data.new_job_id) window.location.href = `projeto.html?job_id=${data.new_job_id}`;
             else window.location.reload();
           }, 5000);
         } catch (e) {
-          alert('Erro ao reprocessar: ' + e.message);
+          notify.error('Erro ao reprocessar: ' + e.message);
           btnReprocess.disabled = false;
           btnReprocess.textContent = 'Reprocessar';
         }
@@ -1557,6 +1573,7 @@ function esc(s) {
   </div>
 </footer>
 
+<script src="toast.js" defer></script>
 <script src="contact-modal.js" defer></script>
 </body>
 </html>

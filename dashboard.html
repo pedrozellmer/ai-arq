@@ -1185,10 +1185,18 @@
   // Bug 2026-05-18 (Daniela): window.open / <a href> NÃO enviam headers
   // customizados → backend retorna 401. Solução: fetch com Bearer token,
   // converter resposta em blob, disparar download programático.
+  // Shim: toast quando disponível, alert como fallback. toast.js carrega
+  // via defer — em scripts inline antes do DOMContentLoaded usa alert.
+  const notify = {
+    warn:  (m) => (window.toast ? window.toast.warn(m)  : alert(m)),
+    error: (m) => (window.toast ? window.toast.error(m) : alert(m)),
+    info:  (m) => (window.toast ? window.toast.info(m)  : alert(m)),
+    ok:    (m) => (window.toast ? window.toast.success(m) : alert(m)),
+  };
   async function downloadProtected(url, filename) {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) {
-      alert('Sua sessão expirou. Faça login de novo pra baixar.');
+      notify.warn('Sua sessão expirou. Faça login de novo pra baixar.');
       window.location.href = 'login.html';
       return;
     }
@@ -1199,7 +1207,7 @@
       if (!resp.ok) {
         let detail = `HTTP ${resp.status}`;
         try { const j = await resp.json(); detail = j.detail || detail; } catch {}
-        alert(`Não consegui baixar a planilha: ${detail}`);
+        notify.error(`Não consegui baixar a planilha: ${detail}`);
         return;
       }
       const blob = await resp.blob();
@@ -1212,7 +1220,7 @@
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch (e) {
-      alert('Erro de rede ao baixar: ' + e.message);
+      notify.error('Erro de rede ao baixar: ' + e.message);
     }
   }
   // Exposta globalmente pra ser chamada via onclick em templates HTML inline.
@@ -1987,7 +1995,7 @@
 
     const termsCheckbox = document.getElementById('terms-checkbox');
     if (termsCheckbox && !termsCheckbox.checked) {
-      alert('Você precisa aceitar os Termos de Uso e a Política de Privacidade antes de processar.');
+      notify.warn('Você precisa aceitar os Termos de Uso e a Política de Privacidade antes de processar.');
       return;
     }
 
@@ -2047,7 +2055,7 @@
         console.error('Erro checkout:', err);
         btnProcess.disabled = false;
         btnProcess.innerHTML = '<svg class="w-5 h-5 animate-spin-slow" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955a1.126 1.126 0 011.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25"/></svg> Processar Projeto';
-        alert('Erro ao iniciar pagamento. Tente novamente.');
+        notify.error('Erro ao iniciar pagamento. Tente novamente.');
       }
     }
   });
@@ -2060,7 +2068,7 @@
     // Limpar URL
     window.history.replaceState({}, document.title, 'dashboard.html');
     // Mostrar mensagem e pedir pra enviar arquivos novamente
-    alert('Pagamento aprovado! Envie as pranchas novamente para processar.');
+    notify.ok('Pagamento aprovado! Envie as pranchas novamente para processar.');
   }
   if (urlParams.get('payment') === 'cancelled') {
     window.history.replaceState({}, document.title, 'dashboard.html');
@@ -2409,7 +2417,7 @@
   }
 
   async function askAgent() {
-    if (!currentJobId) { alert('Sem projeto ativo.'); return; }
+    if (!currentJobId) { notify.warn('Sem projeto ativo.'); return; }
     const q = agentInput.value.trim();
     if (q.length < 2) return;
     hideAgentSuggestions();
@@ -2632,8 +2640,8 @@
     const input = document.getElementById('logo-file-input');
     const statusEl = document.getElementById('logo-status');
     const file = input.files[0];
-    if (!file) { alert('Selecione um arquivo de imagem'); return; }
-    if (file.size > 2 * 1024 * 1024) { alert('Arquivo maior que 2MB'); return; }
+    if (!file) { notify.warn('Selecione um arquivo de imagem'); return; }
+    if (file.size > 2 * 1024 * 1024) { notify.warn('Arquivo maior que 2MB'); return; }
 
     const btn = document.getElementById('btn-upload-logo');
     btn.disabled = true;
@@ -2679,7 +2687,10 @@
   };
 
   window.removeLogo = async function() {
-    if (!confirm('Remover a logo atual?')) return;
+    const ok = window.toast
+      ? await window.toast.confirm('Remover a logo atual?', { ok: 'Remover', cancel: 'Cancelar' })
+      : confirm('Remover a logo atual?');
+    if (!ok) return;
     try {
       await sbClient.from('profiles').update({ logo_url: null }).eq('user_id', currentUser.id);
       const img = document.getElementById('logo-preview');
@@ -2688,7 +2699,7 @@
       document.getElementById('logo-placeholder').classList.remove('hidden');
       document.getElementById('btn-remove-logo').classList.add('hidden');
     } catch (e) {
-      alert('Erro: ' + (e.message || e));
+      notify.error('Erro: ' + (e.message || e));
     }
   };
 
@@ -2995,7 +3006,7 @@
     // Validar que selecionou um projeto
     const projectSelect = document.getElementById('cashback-project-select');
     if (!projectSelect.value && projectSelect.options.length > 1) {
-      alert('Por favor, selecione o projeto que voc\u00ea est\u00e1 revisando.');
+      notify.warn('Por favor, selecione o projeto que voc\u00ea est\u00e1 revisando.');
       projectSelect.focus();
       return;
     }
@@ -3079,7 +3090,8 @@
       } else {
         msg += 'Cashback n\u00e3o foi liberado (revis\u00e3o duplicada ou sem linhas v\u00e1lidas).';
       }
-      alert(msg);
+      // Cashback é mensagem longa de sucesso — info (não bloqueia, fecha sozinho)
+      notify.ok(msg);
 
     } catch (err) {
       console.error('Cashback upload error:', err);
@@ -3104,7 +3116,7 @@
         }
       }
 
-      alert('Revis\u00e3o salva localmente. A calibra\u00e7\u00e3o ser\u00e1 processada quando o servidor estiver dispon\u00edvel.\n\nO cr\u00e9dito de cashback ser\u00e1 aplicado no pr\u00f3ximo projeto.');
+      notify.warn('Revis\u00e3o salva localmente. A calibra\u00e7\u00e3o ser\u00e1 processada quando o servidor estiver dispon\u00edvel. O cr\u00e9dito de cashback ser\u00e1 aplicado no pr\u00f3ximo projeto.');
     }
 
     // Reset
@@ -3353,6 +3365,7 @@
 })();
 </script>
 
+<script src="toast.js" defer></script>
 <script src="contact-modal.js" defer></script>
 <script src="onboarding-tour.js" defer></script>
 </body>
