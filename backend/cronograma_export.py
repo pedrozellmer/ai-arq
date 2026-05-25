@@ -16,18 +16,26 @@ from datetime import datetime as _dt, date as _date
 from typing import Dict, Optional
 
 
-# Paleta AI.arq (hex)
-COLOR_INDIGO = '#4F46E5'
-COLOR_INDIGO_DARK = '#3730A3'
-COLOR_CYAN = '#06B6D4'
-COLOR_DARK = '#0F172A'
-COLOR_DARK_2 = '#1E293B'
-COLOR_GRAY_TX = '#475569'
-COLOR_GRAY_LIGHT = '#94A3B8'
-COLOR_BORDER = '#E2E8F0'
-COLOR_CREAM = '#FAF7F0'
+# Paleta sóbria — alinhada com o frontend (2026-05-25).
+# Antes era indigo/cyan/amber gritante (parecia material de apresentação
+# escolar). Agora é escala slate puro com 1 cor de acento sutil baseada
+# na cor de marca do escritório (que entra como hairline ou label, não
+# como faixa fullbleed). Mais profissional, mais respeitoso ao conteúdo
+# técnico do cronograma.
+COLOR_DARK = '#0F172A'        # slate-900 — títulos
+COLOR_DARK_2 = '#1E293B'      # slate-800 — body forte
+COLOR_GRAY_TX = '#475569'     # slate-600 — body suave
+COLOR_GRAY_MID = '#64748B'    # slate-500 — secundário
+COLOR_GRAY_LIGHT = '#94A3B8'  # slate-400 — caption
+COLOR_BORDER = '#E2E8F0'      # slate-200 — divisores
+COLOR_BG_SOFT = '#F8FAFC'     # slate-50 — fundo sutil pra cards
+COLOR_CREAM = '#FAF7F0'       # cream — capa
 COLOR_WHITE = '#FFFFFF'
-COLOR_AMBER = '#F59E0B'
+# Acentos mantidos só pra retrocompat (alguns lugares ainda referenciam)
+COLOR_INDIGO = '#475569'      # remapeado pra slate-600 (era #4F46E5)
+COLOR_INDIGO_DARK = '#334155' # slate-700 (era #3730A3)
+COLOR_CYAN = '#64748B'        # slate-500 (era #06B6D4 vibrante)
+COLOR_AMBER = '#92400E'       # amber-800 (era #F59E0B saturado)
 
 
 # ─── PNGs auxiliares (Gantt + Curva S) ────────────────────────────
@@ -252,13 +260,16 @@ def exportar_pdf(cronograma: Dict, output_path: str,
                               fontSize=32, leading=38,
                               textColor=colors.HexColor(COLOR_WHITE),
                               alignment=TA_LEFT, spaceAfter=0)
+    # Subtítulo + capa-meta: cores ajustadas pra capa BRANCA (não mais
+    # fullbleed colorida). Antes era lavanda (#C7D2FE/#E0E7FF) — só
+    # funcionava com fundo indigo. Agora slate suave.
     s_subtitle = ParagraphStyle('ST', parent=styles['Heading2'],
                                  fontName='Helvetica', fontSize=15, leading=20,
-                                 textColor=colors.HexColor('#C7D2FE'),
+                                 textColor=colors.HexColor(COLOR_GRAY_TX),
                                  alignment=TA_LEFT, spaceAfter=0)
     s_capa_meta = ParagraphStyle('CM', parent=styles['BodyText'],
                                   fontName='Helvetica', fontSize=11, leading=16,
-                                  textColor=colors.HexColor('#E0E7FF'),
+                                  textColor=colors.HexColor(COLOR_GRAY_MID),
                                   alignment=TA_LEFT)
     s_h1 = ParagraphStyle('H1', parent=styles['Heading1'],
                            fontName='Helvetica-Bold', fontSize=24, leading=30,
@@ -346,52 +357,87 @@ def exportar_pdf(cronograma: Dict, output_path: str,
         canv.restoreState()
 
     def capa_canvas(canv, doc):
-        """Capa fullbleed com COR DO ESCRITÓRIO + logo."""
+        """Capa minimal — fundo branco, tipografia generosa, hairline da
+        cor da marca como acento. Profissional, sem fullbleed colorido.
+
+        Estrutura:
+        - Topo: hairline horizontal cor da marca (6pt)
+        - Logo no canto sup esq + carimbo no canto sup dir
+        - Centro-baixo: "Cronograma da obra" (eyebrow) + nome do projeto
+          (display tipográfico grande) + cliente
+        - Footer: linha + powered by + página
+        """
         canv.saveState()
-        # Background com cor da marca do escritório
+        # Fundo branco (não preencher — default já é branco)
+        # Hairline da cor da marca no topo (só accent)
         canv.setFillColor(colors.HexColor(brand_color))
-        canv.rect(0, 0, PAGE_W, PAGE_H, fill=1, stroke=0)
-        # Faixa decorativa no topo (versão clara da cor)
-        canv.setFillColor(colors.HexColor(COLOR_CYAN))
-        canv.rect(0, PAGE_H - 8*mm, PAGE_W, 8*mm, fill=1, stroke=0)
-        # Logo escritório no canto (versão branca/clara)
+        canv.rect(0, PAGE_H - 6, PAGE_W, 6, fill=1, stroke=0)
+
+        # Logo escritório (canto sup esq) — em cor preta/escura
         if logo_path and os.path.exists(logo_path):
             try:
                 from reportlab.lib.utils import ImageReader
                 img = ImageReader(logo_path)
                 iw, ih = img.getSize()
-                max_w, max_h = 60*mm, 14*mm
+                max_w, max_h = 50*mm, 12*mm
                 ratio = min(max_w/iw, max_h/ih)
                 w, h = iw*ratio, ih*ratio
-                canv.drawImage(logo_path, MARGIN, PAGE_H - MARGIN - 4*mm,
+                canv.drawImage(logo_path, MARGIN,
+                                PAGE_H - MARGIN - h + 4*mm,
                                 width=w, height=h, mask='auto',
                                 preserveAspectRatio=True)
             except Exception:
-                canv.setFont('Helvetica-Bold', 16)
-                canv.setFillColor(colors.white)
+                canv.setFont('Helvetica-Bold', 13)
+                canv.setFillColor(colors.HexColor(COLOR_DARK))
                 canv.drawString(MARGIN, PAGE_H - MARGIN, company or 'AI.arq')
         else:
-            canv.setFont('Helvetica-Bold', 16)
-            canv.setFillColor(colors.white)
+            canv.setFont('Helvetica-Bold', 13)
+            canv.setFillColor(colors.HexColor(COLOR_DARK))
             canv.drawString(MARGIN, PAGE_H - MARGIN, company or 'AI.arq')
-        # Carimbo direita
+
+        # Carimbo direita (data + arquiteto) — slate suave
         canv.setFont('Helvetica', 9)
-        canv.setFillColor(colors.HexColor('#FFFFFF'))
-        canv.setFillAlpha(0.7)
-        carimbo = f'emitido {data_emissao}'
+        canv.setFillColor(colors.HexColor(COLOR_GRAY_TX))
+        carimbo = f'Emitido em {data_emissao}'
         if architect_name:
             carimbo = f'{architect_name}  ·  {carimbo}'
         canv.drawRightString(PAGE_W - MARGIN, PAGE_H - MARGIN, carimbo)
-        canv.setFillAlpha(1.0)
-        # Rodapé capa
-        canv.setFont('Helvetica', 9)
-        canv.setFillColor(colors.HexColor('#FFFFFF'))
-        canv.setFillAlpha(0.7)
-        canv.drawString(MARGIN, MARGIN - 6*mm,
-                        'powered by AI.arq  ·  ai.arq.br')
-        canv.drawRightString(PAGE_W - MARGIN, MARGIN - 6*mm,
-                             'Página 1 de 5')
-        canv.setFillAlpha(1.0)
+
+        # Conteúdo principal — eyebrow + título do projeto
+        # Eyebrow pequeno (letterspaced)
+        canv.setFont('Helvetica-Bold', 9)
+        canv.setFillColor(colors.HexColor(brand_color))
+        canv.drawString(MARGIN, PAGE_H/2 + 30*mm, 'CRONOGRAMA FÍSICO-FINANCEIRO')
+
+        # Hairline divider sutil abaixo do eyebrow
+        canv.setStrokeColor(colors.HexColor(COLOR_BORDER))
+        canv.setLineWidth(0.5)
+        canv.line(MARGIN, PAGE_H/2 + 25*mm, MARGIN + 60*mm, PAGE_H/2 + 25*mm)
+
+        # Nome do projeto — display grande, cor escura
+        canv.setFont('Helvetica-Bold', 36)
+        canv.setFillColor(colors.HexColor(COLOR_DARK))
+        # Trunca se for muito longo
+        proj_display = project_name if len(project_name) <= 50 else project_name[:48] + '…'
+        canv.drawString(MARGIN, PAGE_H/2 + 5*mm, proj_display)
+
+        # Cliente (se houver) — label + valor abaixo do título
+        if client_name:
+            canv.setFont('Helvetica', 9)
+            canv.setFillColor(colors.HexColor(COLOR_GRAY_LIGHT))
+            canv.drawString(MARGIN, PAGE_H/2 - 12*mm, 'CLIENTE')
+            canv.setFont('Helvetica', 16)
+            canv.setFillColor(colors.HexColor(COLOR_DARK_2))
+            canv.drawString(MARGIN, PAGE_H/2 - 20*mm, client_name)
+
+        # Footer — linha + powered by + página
+        canv.setStrokeColor(colors.HexColor(COLOR_BORDER))
+        canv.setLineWidth(0.4)
+        canv.line(MARGIN, MARGIN - 6*mm, PAGE_W - MARGIN, MARGIN - 6*mm)
+        canv.setFont('Helvetica', 8)
+        canv.setFillColor(colors.HexColor(COLOR_GRAY_LIGHT))
+        canv.drawString(MARGIN, MARGIN - 12*mm, 'powered by AI.arq · ai.arq.br')
+        canv.drawRightString(PAGE_W - MARGIN, MARGIN - 12*mm, 'Página 1 de 5')
         canv.restoreState()
 
     # ─── Doc com 2 page templates ──
@@ -604,8 +650,11 @@ def exportar_pdf(cronograma: Dict, output_path: str,
                     s_body)]],
         colWidths=[PAGE_W - 2*MARGIN])
     ressalva_box.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#FEF3C7')),
-        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor(COLOR_AMBER)),
+        # Box sóbrio: fundo cinza muito claro + borda slate (era amarelo
+        # gritante FEF3C7 + amber F59E0B — colorido demais pro contexto)
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor(COLOR_BG_SOFT)),
+        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor(COLOR_BORDER)),
+        ('LINEBEFORE', (0, 0), (0, -1), 3, colors.HexColor(COLOR_GRAY_TX)),
         ('LEFTPADDING', (0, 0), (-1, -1), 16),
         ('RIGHTPADDING', (0, 0), (-1, -1), 16),
         ('TOPPADDING', (0, 0), (-1, -1), 14),
@@ -663,20 +712,25 @@ def exportar_pptx(cronograma: Dict, output_path: str,
     prs.slide_height = Inches(7.5)
     blank = prs.slide_layouts[6]
 
-    # Paleta como RGBColor — usa brand_color do escritório
+    # Paleta como RGBColor — sóbria, slate puro. rgb_brand vem da config
+    # do escritório (cor de identidade do user) e entra só como acento
+    # (hairline da capa, eyebrow), nunca como background fullbleed.
     _r, _g, _b = _hex_to_rgb_int(brand_color_hex)
     rgb_brand = RGBColor(_r, _g, _b)
-    rgb_indigo = RGBColor(0x4F, 0x46, 0xE5)
-    rgb_indigo_dark = RGBColor(0x37, 0x30, 0xA3)
-    rgb_cyan = RGBColor(0x06, 0xB6, 0xD4)
+    # Tons slate (substituem indigo/cyan/amber gritantes do design antigo)
+    rgb_indigo = RGBColor(0x47, 0x55, 0x69)        # slate-600 (era 4F46E5)
+    rgb_indigo_dark = RGBColor(0x33, 0x41, 0x55)   # slate-700 (era 3730A3)
+    rgb_cyan = RGBColor(0x64, 0x74, 0x8B)          # slate-500 (era 06B6D4)
     rgb_dark = RGBColor(0x0F, 0x17, 0x2A)
     rgb_dark2 = RGBColor(0x1E, 0x29, 0x3B)
     rgb_gray = RGBColor(0x47, 0x55, 0x69)
     rgb_gray_light = RGBColor(0x94, 0xA3, 0xB8)
+    rgb_gray_mid = RGBColor(0x64, 0x74, 0x8B)
     rgb_white = RGBColor(0xFF, 0xFF, 0xFF)
-    rgb_indigo_text = RGBColor(0xC7, 0xD2, 0xFE)
+    rgb_indigo_text = RGBColor(0x64, 0x74, 0x8B)   # slate-500 (era C7D2FE)
     rgb_border = RGBColor(0xE2, 0xE8, 0xF0)
-    rgb_amber_bg = RGBColor(0xFE, 0xF3, 0xC7)
+    rgb_bg_soft = RGBColor(0xF8, 0xFA, 0xFC)       # slate-50 — cards
+    rgb_amber_bg = RGBColor(0xF5, 0xF5, 0xF4)      # stone-100 (era FEF3C7 amarelo gritante)
 
     resumo = cronograma.get('resumo', {})
     data_emissao = _dt.now().strftime('%d/%m/%Y')
@@ -757,50 +811,63 @@ def exportar_pptx(cronograma: Dict, output_path: str,
                   Inches(12.3), Inches(0.3), size=9, color=rgb_gray_light,
                   align='right')
 
-    # ═══ SLIDE 1 — CAPA (cor da marca do escritório) ═══
+    # ═══ SLIDE 1 — CAPA MINIMAL ═══
+    # Refatorada 2026-05-25: antes era fullbleed colorido + faixa cyan
+    # (visual carnavalesco). Agora é capa branca minimal com hairline da
+    # cor da marca + tipografia generosa + cliente discreto.
     s1 = prs.slides.add_slide(blank)
-    add_rect(s1, 0, 0, prs.slide_width, prs.slide_height, rgb_brand)
-    # Faixa decorativa no topo
-    add_rect(s1, 0, 0, prs.slide_width, Inches(0.25), rgb_cyan)
 
-    # Logo do escritório no canto (se houver) OU texto company/AI.arq
+    # Hairline horizontal no topo (cor da marca, fina) — single accent
+    add_rect(s1, 0, 0, prs.slide_width, Emu(60000), rgb_brand)
+
+    # Logo escritório (canto sup esq) em escala discreta
     if logo_path and os.path.exists(logo_path):
         try:
-            s1.shapes.add_picture(logo_path, Inches(0.6), Inches(0.55),
-                                   height=Inches(0.7))
+            s1.shapes.add_picture(logo_path, Inches(0.6), Inches(0.6),
+                                   height=Inches(0.55))
         except Exception:
             add_text(s1, company or 'AI.arq', Inches(0.6), Inches(0.55),
-                      Inches(4), Inches(0.4), size=18, bold=True,
-                      color=rgb_white)
+                      Inches(4), Inches(0.4), size=13, bold=True,
+                      color=rgb_dark)
     else:
         add_text(s1, company or 'AI.arq', Inches(0.6), Inches(0.55),
-                  Inches(4), Inches(0.4), size=18, bold=True,
-                  color=rgb_white)
+                  Inches(4), Inches(0.4), size=13, bold=True,
+                  color=rgb_dark)
 
-    # Carimbo direita
-    carimbo = f'emitido {data_emissao}'
+    # Carimbo direita — slate suave
+    carimbo = f'Emitido em {data_emissao}'
     if architect_name:
         carimbo = f'{architect_name} · {carimbo}'
     add_text(s1, carimbo, Inches(0.6), Inches(0.6),
-              Inches(12.1), Inches(0.4), size=10, color=rgb_indigo_text,
+              Inches(12.1), Inches(0.4), size=10, color=rgb_gray,
               align='right')
 
-    # Título principal
-    add_text(s1, 'CRONOGRAMA', Inches(0.6), Inches(2.4),
-              Inches(12), Inches(1), size=52, bold=True, color=rgb_white)
-    add_text(s1, 'DA OBRA', Inches(0.6), Inches(3.3),
-              Inches(12), Inches(1), size=52, bold=True, color=rgb_white)
-    add_text(s1, project_name, Inches(0.6), Inches(4.5),
-              Inches(12.1), Inches(0.6), size=20, color=rgb_indigo_text)
+    # Eyebrow letterspaced — usa cor da marca como única identidade visual
+    add_text(s1, 'CRONOGRAMA FÍSICO-FINANCEIRO', Inches(0.6), Inches(3.0),
+              Inches(12), Inches(0.4), size=10, bold=True, color=rgb_brand)
 
-    # Cliente final (se houver)
+    # Hairline divider abaixo do eyebrow
+    line = s1.shapes.add_shape(MSO_SHAPE.RECTANGLE,
+                                Inches(0.6), Inches(3.45),
+                                Inches(2), Emu(8000))
+    line.fill.solid()
+    line.fill.fore_color.rgb = rgb_border
+    line.line.fill.background()
+
+    # Nome do projeto — display grande slate escuro
+    proj_display = project_name if len(project_name) <= 50 else project_name[:48] + '…'
+    add_text(s1, proj_display, Inches(0.6), Inches(3.7),
+              Inches(12.1), Inches(1.2), size=44, bold=True,
+              color=rgb_dark)
+
+    # Cliente (se houver) — label + valor
     if client_name:
-        add_text(s1, 'CLIENTE FINAL', Inches(0.6), Inches(5.1),
+        add_text(s1, 'CLIENTE', Inches(0.6), Inches(5.4),
                   Inches(8), Inches(0.3), size=9, bold=True,
-                  color=RGBColor(0xA5, 0xB4, 0xFC))
-        add_text(s1, client_name, Inches(0.6), Inches(5.35),
-                  Inches(12.1), Inches(0.5), size=14, bold=True,
-                  color=rgb_white)
+                  color=rgb_gray_light)
+        add_text(s1, client_name, Inches(0.6), Inches(5.7),
+                  Inches(12.1), Inches(0.5), size=18, bold=True,
+                  color=rgb_dark2)
 
     # Metadados em 4 colunas
     metas = [
