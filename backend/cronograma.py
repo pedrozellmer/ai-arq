@@ -551,14 +551,18 @@ def categoria_da_disciplina(label: str) -> str:
     return 'complementares'
 
 
+# Paleta sóbria — alinhada com identidade AI.arq (indigo + slate + cyan).
+# Atualizada 2026-05-25 — antes havia 20 cores saturadas tipo carnaval.
+# Agora: 7 tons dessaturados que mantêm diferenciação por categoria sem
+# parecer dashboard de criança. Verde só pra "Entrega" (marco de sucesso).
 CATEGORIA_COR = {
-    'preliminares':   '#94A3B8',
-    'estrutura':      '#1E40AF',
-    'vedacoes':       '#4338CA',
-    'instalacoes':    '#0891B2',
-    'acabamentos':    '#9333EA',
-    'entrega':        '#10B981',
-    'complementares': '#64748B',
+    'preliminares':   '#94A3B8',  # slate-400 — neutro, fase inicial
+    'estrutura':      '#334155',  # slate-700 — pesado, escuro
+    'vedacoes':       '#475569',  # slate-600 — fechamentos
+    'instalacoes':    '#4F46E5',  # indigo-600 — accent principal da marca
+    'acabamentos':    '#0E7490',  # cyan-700 — accent secundário da marca
+    'entrega':        '#059669',  # emerald-600 — único toque de sucesso
+    'complementares': '#64748B',  # slate-500 — neutro
 }
 
 CATEGORIA_LABEL = {
@@ -685,26 +689,39 @@ def _mes_label_pt(d: date) -> str:
 
 
 def _cor_da_disciplina(label: str) -> str:
-    """Cor hex pra cada disciplina. Mapping consistente com identidade AI.arq."""
+    """Cor hex pra cada disciplina.
+
+    Atualizada 2026-05-25: removido o mapping de 20 cores saturadas
+    (rosa, laranja, marrom, vermelho fogo) que faziam o cronograma parecer
+    dashboard infantil. Agora cada disciplina ganha a cor da CATEGORIA
+    a que pertence — 7 tons sóbrios alinhados com indigo + slate + cyan
+    da identidade da marca. Pedro é daltônico (regra dura): cores não
+    podem ser único diferenciador — o cronograma já leva texto/ícone
+    junto, então cor é só apoio visual.
+    """
     l = label.lower()
-    if 'preliminar' in l: return '#94A3B8'
-    if 'estrutura' in l: return '#1E40AF'
-    if 'fechamento' in l or 'alvenaria' in l: return '#3730A3'
-    if 'cobertura' in l: return '#4338CA'
-    if 'esquadria' in l: return '#5B21B6'
-    if 'piso' in l: return '#7C3AED'
-    if 'revestimento' in l: return '#9333EA'
-    if 'forro' in l: return '#A855F7'
-    if 'pintura' in l: return '#C026D3'
-    if 'elétric' in l or 'eletric' in l: return '#DB2777'
-    if 'hidráulic' in l or 'hidraulic' in l: return '#0891B2'
-    if 'incêndio' in l or 'incendio' in l: return '#DC2626'
-    if 'condicionado' in l: return '#0EA5E9'
-    if 'gás' in l or 'gas' in l: return '#F59E0B'
-    if 'marcenaria' in l: return '#A16207'
-    if 'mobili' in l: return '#78350F'
-    if 'lou' in l: return '#06B6D4'
-    if 'impermeabil' in l: return '#0D9488'
-    if 'complementar' in l: return '#64748B'
-    if 'limpeza' in l or 'entulho' in l: return '#10B981'
-    return '#6366F1'
+    # Preliminares e canteiro
+    if any(k in l for k in ['preliminar', 'canteiro', 'demoli']):
+        return CATEGORIA_COR['preliminares']
+    # Estrutura (fundação + lajes + pilares)
+    if any(k in l for k in ['estrutura', 'fundac', 'fundaç', 'sapata', 'pilar', 'viga', 'laje']):
+        return CATEGORIA_COR['estrutura']
+    # Vedações e cobertura
+    if any(k in l for k in ['fechamento', 'alvenaria', 'vedaç', 'vedac', 'cobertura', 'telhado', 'esquadria', 'impermeabil']):
+        return CATEGORIA_COR['vedacoes']
+    # Instalações (elétrica, hidráulica, gás, ar, incêndio)
+    if any(k in l for k in ['elétric', 'eletric', 'hidráulic', 'hidraulic', 'incêndio', 'incendio',
+                            'condicionado', 'climati', 'gás', ' gas', 'instalaç', 'instalac', 'lógic', 'logic']):
+        return CATEGORIA_COR['instalacoes']
+    # Acabamentos (piso, revestimento, forro, pintura, marcenaria, louça, mobiliário)
+    if any(k in l for k in ['piso', 'revestimento', 'forro', 'pintura', 'marcenaria',
+                            'mobili', 'lou', 'acabamento']):
+        return CATEGORIA_COR['acabamentos']
+    # Entrega e limpeza final
+    if any(k in l for k in ['entrega', 'limpeza', 'entulho', 'vistoria', 'habite']):
+        return CATEGORIA_COR['entrega']
+    # Complementares / demais
+    if any(k in l for k in ['complementar', 'paisag', 'sinalizaç', 'sinalizac']):
+        return CATEGORIA_COR['complementares']
+    # Default — slate neutro
+    return CATEGORIA_COR['complementares']
