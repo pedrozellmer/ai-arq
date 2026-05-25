@@ -6101,19 +6101,36 @@ async def reprocess_project(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json, shutil
 
-    # 1) Buscar projeto original + checar contador
+    # 1) Buscar projeto original + checar contador.
+    # Bug fix 2026-05-25: antes a query usava anon key como Bearer e RLS
+    # bloqueava (a tabela projects exige auth.uid() = user_id). Resultado:
+    # rows=[] → falso 404 "Projeto original não encontrado", mesmo o usuário
+    # sendo dono. Agora usa o JWT do request (mesmo padrão dos endpoints
+    # outros que sofreram do mesmo problema na onda Daniela 2026-05-18).
+    auth_header = request.headers.get("Authorization", "") or request.headers.get("authorization", "")
+    user_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None
     try:
         url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
         req = urllib.request.Request(url, method='GET')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        # JWT do user quando disponível (passa RLS); anon como fallback pra
+        # projetos legados anônimos.
+        req.add_header('Authorization', f'Bearer {user_token or SUPABASE_KEY}')
         resp = urllib.request.urlopen(req, timeout=15)
         projects = json.loads(resp.read().decode('utf-8'))
         if not projects:
-            raise HTTPException(404, "Projeto original não encontrado")
+            # Diagnóstico extra: se _require_project_owner passou mas a query
+            # devolveu vazio, é quase certamente bug de RLS — não "não existe".
+            print(f"[reprocess] /projects?job_id={job_id} vazio com token={'sim' if user_token else 'nao'}")
+            raise HTTPException(404, "Projeto original não encontrado no banco. Se o erro persistir, recarregue a página (Ctrl+Shift+R) e tente de novo.")
         orig = projects[0]
     except urllib.error.HTTPError as e:
-        raise HTTPException(500, f"Erro ao buscar projeto: {e}")
+        try:
+            body = e.read().decode('utf-8', errors='replace')[:300]
+        except Exception:
+            body = ''
+        print(f"[reprocess] /projects HTTP {e.code}: {body}")
+        raise HTTPException(500, f"Erro ao buscar projeto: HTTP {e.code}")
 
     # Política: 1 reprocessamento grátis por projeto
     current_count = int(orig.get("reprocess_count") or 0)
