@@ -950,10 +950,13 @@ function renderGantt(c) {
     }
   });
 
-  // Barras — clicáveis (Onda 1, 2026-05-25): clicar foca a fase no editor.
-  // Cada barra ganha data-fase-idx pra o listener saber qual fase é, cursor
-  // pointer pra indicar interatividade, e o label do lado esquerdo também
-  // vira clicável.
+  // Barras — clicáveis E ARRASTÁVEIS (Onda 1+2, 2026-05-25):
+  // - Clicar (sem mover) foca a fase no editor
+  // - Arrastar corpo da barra horizontalmente: move início+fim
+  // - Arrastar borda esquerda (8px): muda só o início
+  // - Arrastar borda direita (8px): muda só o fim
+  // - Arrastar verticalmente (>= ROW_H): reordena fase
+  // Hitboxes (resize handles) ficam transparentes mas captam pointer events.
   fases.forEach((f, i) => {
     const f_ini = new Date(f.inicio);
     const f_fim = new Date(f.fim);
@@ -961,16 +964,24 @@ function renderGantt(c) {
     const w = Math.max(20, (f_fim - f_ini) / (1000 * 60 * 60 * 24) / total_dias * CHART_W);
     const y = i * ROW_H + 8;
     const h = ROW_H - 14;
+    const HANDLE_W = 8;  // largura dos resize handles
 
     // Label — clicável
     svg += `<text class="gantt-label" data-fase-idx="${i}" x="${LABEL_W - 10}" y="${y + h / 2 + 4}" fill="#334155" font-size="12" text-anchor="end" font-weight="500" style="cursor:pointer">${escapeHtml(f.label)}</text>`;
-    // Bar — clicável
-    svg += `<rect class="gantt-bar" data-fase-idx="${i}" x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${f.cor}" style="cursor:pointer">
-      <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)} (${f.dur_dias}d) · clique pra editar</title>
+    // Barra (corpo) — move
+    svg += `<rect class="gantt-bar" data-fase-idx="${i}" data-drag-mode="move" x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${f.cor}" style="cursor:grab">
+      <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)} (${f.dur_dias}d) · arraste pra mover, bordas pra redimensionar</title>
     </rect>`;
     // Dias dentro da barra (se couber)
     if (w > 40) {
       svg += `<text x="${x + w / 2}" y="${y + h / 2 + 4}" fill="white" font-size="11" font-weight="bold" text-anchor="middle" pointer-events="none">${f.dur_dias}d</text>`;
+    }
+    // Handles de resize (só se barra >= 20px pra caber 2 handles)
+    if (w >= 20) {
+      // Esquerda
+      svg += `<rect class="gantt-resize-left" data-fase-idx="${i}" data-drag-mode="resize-left" x="${x}" y="${y}" width="${HANDLE_W}" height="${h}" fill="transparent" style="cursor:ew-resize"/>`;
+      // Direita
+      svg += `<rect class="gantt-resize-right" data-fase-idx="${i}" data-drag-mode="resize-right" x="${x + w - HANDLE_W}" y="${y}" width="${HANDLE_W}" height="${h}" fill="transparent" style="cursor:ew-resize"/>`;
     }
   });
 
@@ -978,14 +989,216 @@ function renderGantt(c) {
   const ganttEl = document.getElementById('gantt');
   ganttEl.innerHTML = svg;
 
-  // Onda 1: clicar barra/label do Gantt foca a fase no editor.
-  // Usa event delegation (1 listener no container) pra economizar handlers.
+  // Pré-calcula contexto pro drag (Onda 2): qualquer handler precisa saber
+  // converter pixels → dias e localizar o SVG.
+  const dragCtx = {
+    cronograma: c,
+    data_inicio,
+    total_dias,
+    CHART_W,
+    LABEL_W,
+    ROW_H,
+    svgEl: ganttEl.querySelector('svg'),
+  };
+
+  // Onda 1: clicar (sem arrastar) foca fase no editor.
+  // Onda 2: arrastar move/redimensiona/reordena.
+  // Distingue click vs drag: se pointer moveu < 4px entre down/up, é click.
   ganttEl.querySelectorAll('[data-fase-idx]').forEach(el => {
-    el.addEventListener('click', (e) => {
-      const idx = parseInt(e.currentTarget.getAttribute('data-fase-idx'));
-      focarFaseNoEditor(idx);
-    });
+    const mode = el.getAttribute('data-drag-mode');  // null pra labels (só click)
+    if (mode) {
+      el.addEventListener('pointerdown', (e) => iniciarDrag(e, mode, dragCtx));
+    } else {
+      // Label: só click
+      el.addEventListener('click', (e) => {
+        const idx = parseInt(e.currentTarget.getAttribute('data-fase-idx'));
+        focarFaseNoEditor(idx);
+      });
+    }
   });
+}
+
+// ─── Onda 2: drag-and-drop no Gantt ─────────────────────────────────
+// Estado do drag em curso (null quando ninguém está arrastando).
+let _dragState = null;
+
+function iniciarDrag(e, mode, ctx) {
+  // Só botão esquerdo do mouse (button=0) ou touch (button=-1/undefined)
+  if (e.button !== undefined && e.button !== 0) return;
+  e.preventDefault();
+  const target = e.currentTarget;
+  const idx = parseInt(target.getAttribute('data-fase-idx'));
+  const fase = ctx.cronograma.fases[idx];
+  if (!fase) return;
+
+  // Captura o pointer pra continuar recebendo events mesmo fora do alvo
+  try { target.setPointerCapture(e.pointerId); } catch {}
+
+  // Coordenadas SVG (não viewport)
+  const ptStart = svgPoint(ctx.svgEl, e.clientX, e.clientY);
+
+  _dragState = {
+    mode,                                  // 'move' | 'resize-left' | 'resize-right'
+    idx,
+    target,
+    ctx,
+    startX: ptStart.x,                     // x SVG inicial
+    startY: ptStart.y,                     // y SVG inicial
+    inicioOrig: fase.inicio,               // ISO date string
+    fimOrig: fase.fim,
+    durDiasOrig: Math.round((new Date(fase.fim) - new Date(fase.inicio)) / 86400000),
+    moveuMais4px: false,                   // pra distinguir click de drag
+    rectEl: ctx.svgEl.querySelector(`.gantt-bar[data-fase-idx="${idx}"]`),
+    leftHandleEl: ctx.svgEl.querySelector(`.gantt-resize-left[data-fase-idx="${idx}"]`),
+    rightHandleEl: ctx.svgEl.querySelector(`.gantt-resize-right[data-fase-idx="${idx}"]`),
+  };
+
+  // Listeners no window (não no target) pra capturar drag mesmo se sair do svg
+  window.addEventListener('pointermove', _onDragMove);
+  window.addEventListener('pointerup', _onDragEnd);
+  window.addEventListener('pointercancel', _onDragEnd);
+
+  // Cursor "grabbing" no body durante drag
+  if (mode === 'move') document.body.style.cursor = 'grabbing';
+  else if (mode.startsWith('resize')) document.body.style.cursor = 'ew-resize';
+}
+
+function _onDragMove(e) {
+  if (!_dragState) return;
+  const s = _dragState;
+  const pt = svgPoint(s.ctx.svgEl, e.clientX, e.clientY);
+  const dx = pt.x - s.startX;
+  const dy = pt.y - s.startY;
+
+  // Detecta se virou drag real (passou de 4px de movimento)
+  if (!s.moveuMais4px && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+    s.moveuMais4px = true;
+  }
+  if (!s.moveuMais4px) return;
+
+  // Pixels → dias
+  const pxPorDia = s.ctx.CHART_W / s.ctx.total_dias;
+  const deltaDias = Math.round(dx / pxPorDia);
+
+  if (s.mode === 'move') {
+    // Move início e fim juntos
+    const novoInicio = addDays(s.inicioOrig, deltaDias);
+    const novoFim = addDays(s.fimOrig, deltaDias);
+    atualizarBarraVisual(s, novoInicio, novoFim);
+
+    // Reorder vertical: se moveu mais que ROW_H pra cima/baixo, troca linhas
+    const linhaAtual = Math.floor((s.startY - 8) / s.ctx.ROW_H);
+    const novaLinha = Math.max(0, Math.min(
+      s.ctx.cronograma.fases.length - 1,
+      Math.floor((pt.y - 8) / s.ctx.ROW_H)
+    ));
+    if (novaLinha !== linhaAtual && !s._reordered) {
+      // Marca que reordenou pra não fazer 2x na mesma drag
+      reordenarFaseDuranteDrag(s.idx, novaLinha);
+      s._reordered = true;
+      s._reorderedTo = novaLinha;
+    }
+  } else if (s.mode === 'resize-right') {
+    // Aumenta/diminui fim, mantém início. Mínimo 1 dia.
+    const novoFim = addDays(s.fimOrig, deltaDias);
+    if (diffDays(s.inicioOrig, novoFim) < 1) return;
+    atualizarBarraVisual(s, s.inicioOrig, novoFim);
+  } else if (s.mode === 'resize-left') {
+    // Aumenta/diminui início, mantém fim. Mínimo 1 dia.
+    const novoInicio = addDays(s.inicioOrig, deltaDias);
+    if (diffDays(novoInicio, s.fimOrig) < 1) return;
+    atualizarBarraVisual(s, novoInicio, s.fimOrig);
+  }
+}
+
+function _onDragEnd(e) {
+  if (!_dragState) return;
+  const s = _dragState;
+  document.body.style.cursor = '';
+  window.removeEventListener('pointermove', _onDragMove);
+  window.removeEventListener('pointerup', _onDragEnd);
+  window.removeEventListener('pointercancel', _onDragEnd);
+
+  // Se não moveu (foi click puro): foca fase no editor
+  if (!s.moveuMais4px) {
+    focarFaseNoEditor(s.idx);
+    _dragState = null;
+    return;
+  }
+
+  // Sincroniza inputs do editor com a posição final da barra
+  const rect = s.rectEl;
+  if (rect) {
+    const pxPorDia = s.ctx.CHART_W / s.ctx.total_dias;
+    const x = parseFloat(rect.getAttribute('x'));
+    const w = parseFloat(rect.getAttribute('width'));
+    const diasOffset = (x - s.ctx.LABEL_W) / pxPorDia;
+    const diasDuracao = w / pxPorDia;
+    const novoInicio = addDays(s.ctx.cronograma.resumo.data_inicio, Math.round(diasOffset));
+    const novoFim = addDays(novoInicio, Math.round(diasDuracao));
+
+    // Pega o índice ATUAL no editor (pode ter sido reordenado)
+    const idxFinal = s._reordered ? s._reorderedTo : s.idx;
+    const rows = document.querySelectorAll('#fases-editor .fase-row');
+    const row = rows[idxFinal];
+    if (row) {
+      row.querySelector('.fase-inicio').value = novoInicio;
+      row.querySelector('.fase-fim').value = novoFim;
+    }
+  }
+  _dragState = null;
+
+  // Dispara re-render completo (Gantt + Matriz + Curva) lendo do editor
+  scheduleLiveApply();
+}
+
+// Atualiza visualmente a barra durante o drag — sem re-renderizar o SVG inteiro.
+function atualizarBarraVisual(s, novoInicioIso, novoFimIso) {
+  const pxPorDia = s.ctx.CHART_W / s.ctx.total_dias;
+  const dInicio = new Date(novoInicioIso);
+  const dFim = new Date(novoFimIso);
+  const x = s.ctx.LABEL_W + (dInicio - s.ctx.data_inicio) / 86400000 * pxPorDia;
+  const w = Math.max(20, (dFim - dInicio) / 86400000 * pxPorDia);
+  if (s.rectEl) { s.rectEl.setAttribute('x', x); s.rectEl.setAttribute('width', w); }
+  if (s.leftHandleEl) { s.leftHandleEl.setAttribute('x', x); }
+  if (s.rightHandleEl) { s.rightHandleEl.setAttribute('x', x + w - 8); }
+}
+
+// Reordena fase no editor (e no estado em memória) durante drag vertical.
+function reordenarFaseDuranteDrag(idxOrig, novoIdx) {
+  const rows = document.querySelectorAll('#fases-editor .fase-row');
+  if (idxOrig === novoIdx || !rows[idxOrig]) return;
+  const cont = rows[idxOrig].parentNode;
+  const targetRow = rows[idxOrig];
+  if (novoIdx > idxOrig) {
+    // Move pra baixo: insere depois da nova posição
+    cont.insertBefore(targetRow, rows[novoIdx].nextSibling);
+  } else {
+    // Move pra cima: insere antes da nova posição
+    cont.insertBefore(targetRow, rows[novoIdx]);
+  }
+  // Re-numera data-idx
+  cont.querySelectorAll('.fase-row').forEach((r, i) => r.dataset.idx = i);
+}
+
+// Helpers ─────────────────────────────────────────────────────────────
+// Converte coordenada de viewport (clientX/Y) pra coordenada SVG.
+// Sem isso o drag fica errado quando a viewport tem scroll/zoom.
+function svgPoint(svgEl, clientX, clientY) {
+  const pt = svgEl.createSVGPoint();
+  pt.x = clientX;
+  pt.y = clientY;
+  return pt.matrixTransform(svgEl.getScreenCTM().inverse());
+}
+
+function addDays(iso, days) {
+  const d = new Date(iso);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function diffDays(isoA, isoB) {
+  return Math.round((new Date(isoB) - new Date(isoA)) / 86400000);
 }
 
 // Onda 1: rola o editor até a fase clicada e foca o input do label.
