@@ -551,18 +551,20 @@ def categoria_da_disciplina(label: str) -> str:
     return 'complementares'
 
 
-# Paleta sóbria — alinhada com identidade AI.arq (indigo + slate + cyan).
-# Atualizada 2026-05-25 — antes havia 20 cores saturadas tipo carnaval.
-# Agora: 7 tons dessaturados que mantêm diferenciação por categoria sem
-# parecer dashboard de criança. Verde só pra "Entrega" (marco de sucesso).
+# Paleta SUPER sóbria — escala monocromática slate, sem indigo/cyan/verde.
+# Atualizada 2026-05-25 (2ª iteração): Pedro pediu mais seriedade. Agora é
+# 100% escala de cinza-azulado. Diferenciação por categoria vem do tom
+# (claro vs escuro), não da cor. Resultado: planta arquitetônica em vez
+# de dashboard infantil. Daltonismo do Pedro também agradece — escala
+# monocromática é a mais acessível possível.
 CATEGORIA_COR = {
-    'preliminares':   '#94A3B8',  # slate-400 — neutro, fase inicial
-    'estrutura':      '#334155',  # slate-700 — pesado, escuro
-    'vedacoes':       '#475569',  # slate-600 — fechamentos
-    'instalacoes':    '#4F46E5',  # indigo-600 — accent principal da marca
-    'acabamentos':    '#0E7490',  # cyan-700 — accent secundário da marca
-    'entrega':        '#059669',  # emerald-600 — único toque de sucesso
-    'complementares': '#64748B',  # slate-500 — neutro
+    'preliminares':   '#CBD5E1',  # slate-300 — bem claro, fase inicial leve
+    'estrutura':      '#334155',  # slate-700 — escuro, peso da estrutura
+    'vedacoes':       '#475569',  # slate-600 — médio-escuro, fechamentos
+    'instalacoes':    '#64748B',  # slate-500 — médio
+    'acabamentos':    '#94A3B8',  # slate-400 — médio-claro
+    'entrega':        '#1E293B',  # slate-800 — quase preto, marco final
+    'complementares': '#71717A',  # zinc-500 — leve calor pra diferenciar de slate
 }
 
 CATEGORIA_LABEL = {

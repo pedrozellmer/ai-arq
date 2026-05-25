@@ -131,51 +131,47 @@
       </button>
     </div>
 
-    <!-- Barra de ações (Salvar / Editar / Exportar) -->
-    <div class="rounded-xl bg-white border-2 border-indigo-100 p-4 flex flex-wrap items-center gap-3">
-      <button id="btn-edit" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition flex items-center gap-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-        Editar fases
-      </button>
-      <button id="btn-save" class="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold transition flex items-center gap-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+    <!-- Barra de ações (Salvar / Toggle Editor / Exportar). Visual sóbrio: -->
+    <!-- bordas slate, sem cores gritantes, indigo só pra ação primária. -->
+    <div class="rounded-xl bg-white border border-slate-200 p-4 flex flex-wrap items-center gap-3">
+      <button id="btn-save" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         Salvar
       </button>
+      <button id="btn-edit" class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium transition flex items-center gap-2" title="Esconder/mostrar a lista de fases">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        <span id="btn-edit-label">Recolher fases</span>
+      </button>
       <div class="flex-1"></div>
-      <a id="btn-export-pdf" href="#" target="_blank" class="px-4 py-2 rounded-lg border-2 border-red-300 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-semibold no-underline transition flex items-center gap-2">
-        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z"/></svg>
+      <a id="btn-export-pdf" href="#" target="_blank" class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium no-underline transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         PDF
       </a>
-      <a id="btn-export-pptx" href="#" target="_blank" class="px-4 py-2 rounded-lg border-2 border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-semibold no-underline transition flex items-center gap-2">
-        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 7h-4v6h4v-6z"/></svg>
+      <a id="btn-export-pptx" href="#" target="_blank" class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium no-underline transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         PowerPoint
       </a>
     </div>
 
     <div id="save-status" class="hidden rounded-lg p-3 text-sm"></div>
 
-    <!-- EDITOR (inicialmente escondido) -->
-    <div id="editor" class="hidden rounded-2xl bg-white border-2 border-indigo-200 shadow-lg p-6">
+    <!-- EDITOR — sempre aberto após geração (Onda 1, 2026-05-25). Render é
+         live: mudou input, Gantt/Matriz/Curva S atualizam em 250ms. Antes
+         estava escondido atrás de "Editar fases" + lista separada — passava
+         sensação de cronograma estático. -->
+    <div id="editor" class="rounded-2xl bg-white border border-slate-200 shadow-sm p-6">
       <div class="flex items-baseline justify-between mb-4">
         <div>
-          <h2 class="text-lg font-bold text-gray-900">Editar fases</h2>
-          <p class="text-xs text-gray-500 mt-1">Edite labels, datas, cores ou adicione novas disciplinas. Salve no fim.</p>
+          <h2 class="text-lg font-bold text-slate-900">Fases do cronograma</h2>
+          <p class="text-xs text-slate-500 mt-1">Edite labels, datas, cores ou % executado — o Gantt atualiza enquanto você digita. Use as setas <span aria-hidden="true">↑↓</span> pra reordenar.</p>
         </div>
-        <button id="btn-add-fase" class="text-sm px-3 py-2 rounded-lg bg-cyan-500 hover:bg-cyan-600 text-white font-medium transition flex items-center gap-1">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <button id="btn-add-fase" class="text-sm px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium transition flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           Adicionar disciplina
         </button>
       </div>
       <div id="fases-editor" class="space-y-2"></div>
-      <div class="mt-4 flex items-center gap-2">
-        <button id="btn-apply-edits" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">
-          Aplicar mudanças
-        </button>
-        <button id="btn-cancel-edits" class="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm font-medium text-gray-700 transition">
-          Cancelar
-        </button>
-        <span class="text-xs text-gray-500 ml-3">Depois clique em <strong>Salvar</strong> pra persistir.</span>
-      </div>
+      <p class="mt-4 text-xs text-slate-500">Mudanças ficam no navegador. Clique em <strong class="text-slate-700">Salvar</strong> no topo pra persistir no servidor (e habilitar PDF/PPT).</p>
     </div>
 
     <!-- Resumo -->
@@ -451,6 +447,7 @@ async function tentarCarregarCronogramaPronto() {
     renderCaminhoCritico(cron);
     renderMarcosLegais(cron);
     renderRessalva(cron);
+    popularEditor();  // Onda 1: editor aberto por default
     document.getElementById('result').classList.remove('hidden');
 
     return true;
@@ -489,31 +486,42 @@ async function carregarSugestao() {
 // ─── Estado global do cronograma editável ──
 let cronogramaAtual = null;  // último JSON retornado pelo backend
 
-// ─── Salvar + Editar + Exportar ──
+// ─── Salvar + Toggle editor + Exportar ──
 document.getElementById('btn-save').addEventListener('click', salvarCronograma);
 document.getElementById('btn-edit').addEventListener('click', toggleEditor);
 document.getElementById('btn-add-fase').addEventListener('click', () => adicionarFaseEditor());
-document.getElementById('btn-apply-edits').addEventListener('click', aplicarEdits);
-document.getElementById('btn-cancel-edits').addEventListener('click', () => {
-  document.getElementById('editor').classList.add('hidden');
-});
 
+// Editor agora vive aberto por default depois de gerar. O botão "Recolher
+// fases" só esconde o editor pra quem quer ver Gantt em tela cheia.
+// Não há mais botão "Aplicar mudanças" — render é live (250ms debounced).
 function toggleEditor() {
   const ed = document.getElementById('editor');
+  const label = document.getElementById('btn-edit-label');
+  const arrow = document.querySelector('#btn-edit svg path');
   const aberto = !ed.classList.contains('hidden');
   if (aberto) {
     ed.classList.add('hidden');
-    return;
+    if (label) label.textContent = 'Mostrar fases';
+    if (arrow) arrow.setAttribute('d', 'M5 15l7-7 7 7');  // seta pra cima
+  } else {
+    if (!cronogramaAtual) {
+      showSaveStatus('Gere um cronograma primeiro', 'error');
+      return;
+    }
+    popularEditor();
+    ed.classList.remove('hidden');
+    if (label) label.textContent = 'Recolher fases';
+    if (arrow) arrow.setAttribute('d', 'M19 9l-7 7-7-7');  // seta pra baixo
   }
-  if (!cronogramaAtual) {
-    showSaveStatus('Gere um cronograma primeiro', 'error');
-    return;
-  }
-  // Popula editor com fases atuais
+}
+
+// Popula o editor com as fases atuais do cronograma. Chamado depois de
+// gerar/regerar/carregar projeto salvo.
+function popularEditor() {
+  if (!cronogramaAtual || !cronogramaAtual.fases) return;
   const cont = document.getElementById('fases-editor');
   cont.innerHTML = '';
   cronogramaAtual.fases.forEach((f, idx) => addFaseRowEditor(f, idx));
-  ed.classList.remove('hidden');
 }
 
 function addFaseRowEditor(fase, idx) {
@@ -684,8 +692,11 @@ function aplicarEdits(opts) {
   renderMatriz(cronogramaAtual);
   renderCaminhoCritico(cronogramaAtual);
 
-  document.getElementById('editor').classList.add('hidden');
-  showSaveStatus('Mudanças aplicadas. Clique em "Salvar" pra persistir no servidor.', 'success');
+  // Editor fica visível (não esconde mais). Só mostra status no modo
+  // não-silencioso pra não poluir UI durante render live.
+  if (!silencioso) {
+    showSaveStatus('Mudanças aplicadas. Clique em "Salvar" pra persistir no servidor.', 'success');
+  }
 }
 
 async function salvarCronograma() {
@@ -807,6 +818,7 @@ async function gerarCronograma() {
     renderCaminhoCritico(cronog);
     renderMarcosLegais(cronog);
     renderRessalva(cronog);
+    popularEditor();  // Onda 1: editor aberto por default
 
     document.getElementById('result').classList.remove('hidden');
 
@@ -938,7 +950,10 @@ function renderGantt(c) {
     }
   });
 
-  // Barras
+  // Barras — clicáveis (Onda 1, 2026-05-25): clicar foca a fase no editor.
+  // Cada barra ganha data-fase-idx pra o listener saber qual fase é, cursor
+  // pointer pra indicar interatividade, e o label do lado esquerdo também
+  // vira clicável.
   fases.forEach((f, i) => {
     const f_ini = new Date(f.inicio);
     const f_fim = new Date(f.fim);
@@ -947,11 +962,11 @@ function renderGantt(c) {
     const y = i * ROW_H + 8;
     const h = ROW_H - 14;
 
-    // Label
-    svg += `<text x="${LABEL_W - 10}" y="${y + h / 2 + 4}" fill="#0F172A" font-size="12" text-anchor="end" font-weight="500">${escapeHtml(f.label)}</text>`;
-    // Bar
-    svg += `<rect class="gantt-bar" x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${f.cor}">
-      <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)} (${f.dur_dias}d)</title>
+    // Label — clicável
+    svg += `<text class="gantt-label" data-fase-idx="${i}" x="${LABEL_W - 10}" y="${y + h / 2 + 4}" fill="#334155" font-size="12" text-anchor="end" font-weight="500" style="cursor:pointer">${escapeHtml(f.label)}</text>`;
+    // Bar — clicável
+    svg += `<rect class="gantt-bar" data-fase-idx="${i}" x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${f.cor}" style="cursor:pointer">
+      <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)} (${f.dur_dias}d) · clique pra editar</title>
     </rect>`;
     // Dias dentro da barra (se couber)
     if (w > 40) {
@@ -960,7 +975,35 @@ function renderGantt(c) {
   });
 
   svg += `</svg>`;
-  document.getElementById('gantt').innerHTML = svg;
+  const ganttEl = document.getElementById('gantt');
+  ganttEl.innerHTML = svg;
+
+  // Onda 1: clicar barra/label do Gantt foca a fase no editor.
+  // Usa event delegation (1 listener no container) pra economizar handlers.
+  ganttEl.querySelectorAll('[data-fase-idx]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      const idx = parseInt(e.currentTarget.getAttribute('data-fase-idx'));
+      focarFaseNoEditor(idx);
+    });
+  });
+}
+
+// Onda 1: rola o editor até a fase clicada e foca o input do label.
+// Também destaca a row com um ring pra dar feedback visual.
+function focarFaseNoEditor(idx) {
+  // Se o editor estiver recolhido, abre.
+  const ed = document.getElementById('editor');
+  if (ed.classList.contains('hidden')) toggleEditor();
+
+  const rows = document.querySelectorAll('#fases-editor .fase-row');
+  if (idx < 0 || idx >= rows.length) return;
+  const row = rows[idx];
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const labelInput = row.querySelector('.fase-label');
+  if (labelInput) setTimeout(() => labelInput.focus(), 250);
+  // Destaque visual (ring desaparece em 1.2s)
+  row.classList.add('ring-2', 'ring-slate-400');
+  setTimeout(() => row.classList.remove('ring-2', 'ring-slate-400'), 1200);
 }
 
 function renderCurvaS(c) {
