@@ -527,34 +527,62 @@ function popularEditor() {
 function addFaseRowEditor(fase, idx) {
   const cont = document.getElementById('fases-editor');
   const row = document.createElement('div');
-  row.className = 'fase-row flex flex-wrap items-center gap-2 p-3 rounded-lg border bg-slate-50 transition';
+  row.className = 'fase-row p-3 rounded-lg border border-slate-200 bg-slate-50 transition';
   row.dataset.idx = idx;
   const pctExec = fase.pct_executado != null ? fase.pct_executado : 0;
-  // Mobile-first: cada controle vira full-width em telas pequenas; em sm+
-  // volta pra layout inline. Antes `min-w-[180px]` forçava overflow em 375px.
+  const isMilestone = !!fase.is_milestone;
+  // Onda 3 (2026-05-25): linha 1 = controles principais (label/datas/etc).
+  // Linha 2 = depende de + grupo pai + checkbox marco. Linha 2 fica retraída
+  // por default e expande clicando "Avançado" — não bagunça a UI básica.
   row.innerHTML = `
-    <div class="flex flex-col gap-0.5 shrink-0" aria-label="Reordenar fase">
-      <button class="btn-up text-gray-400 hover:text-indigo-600 leading-none" title="Mover pra cima" aria-label="Mover fase pra cima">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7"/></svg>
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-col gap-0.5 shrink-0" aria-label="Reordenar fase">
+        <button class="btn-up text-slate-400 hover:text-slate-700 leading-none" title="Mover pra cima" aria-label="Mover fase pra cima">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 15l7-7 7 7"/></svg>
+        </button>
+        <button class="btn-down text-slate-400 hover:text-slate-700 leading-none" title="Mover pra baixo" aria-label="Mover fase pra baixo">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+      </div>
+      <input type="color" value="${fase.cor || '#64748B'}" class="fase-cor w-10 h-10 rounded cursor-pointer border shrink-0" title="Cor" aria-label="Cor da fase" />
+      <input type="text" value="${escapeAttr(fase.label || '')}" placeholder="Disciplina" class="fase-label basis-full sm:basis-auto sm:flex-1 sm:min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none" aria-label="Nome da disciplina" />
+      <input type="text" value="${escapeAttr(fase.ambiente || '')}" placeholder="Ambiente" class="fase-ambiente basis-full sm:basis-auto sm:w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none" title="Ambiente (opcional)" aria-label="Ambiente (opcional)" />
+      <input type="date" value="${fase.inicio || ''}" class="fase-inicio rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none" title="Início" aria-label="Data de início" />
+      <span class="text-slate-400 text-xs hidden sm:inline" aria-hidden="true">→</span>
+      <input type="date" value="${fase.fim || ''}" class="fase-fim rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none ${isMilestone ? 'opacity-50' : ''}" title="Fim" aria-label="Data de fim" ${isMilestone ? 'disabled' : ''} />
+      <div class="flex items-center gap-1 shrink-0" title="% executado">
+        <input type="number" min="0" max="100" step="5" value="${pctExec}"
+               class="fase-pct w-16 rounded-lg border border-slate-300 bg-slate-100 px-2 py-2 text-sm font-semibold text-slate-700 focus:border-slate-500 focus:outline-none text-center" aria-label="Percentual executado" />
+        <span class="text-xs text-slate-500 font-semibold" aria-hidden="true">%</span>
+      </div>
+      <button class="btn-adv text-slate-400 hover:text-slate-700 p-1 shrink-0" title="Mostrar opções avançadas (dependências, grupo, marco)" aria-label="Avançado" aria-expanded="false">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
       </button>
-      <button class="btn-down text-gray-400 hover:text-indigo-600 leading-none" title="Mover pra baixo" aria-label="Mover fase pra baixo">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+      <button class="btn-del-fase text-slate-400 hover:text-red-600 p-1 shrink-0" title="Remover fase" aria-label="Remover fase">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
       </button>
     </div>
-    <input type="color" value="${fase.cor || '#4F46E5'}" class="fase-cor w-10 h-10 rounded cursor-pointer border shrink-0" title="Cor" aria-label="Cor da fase" />
-    <input type="text" value="${escapeAttr(fase.label || '')}" placeholder="Disciplina" class="fase-label basis-full sm:basis-auto sm:flex-1 sm:min-w-[180px] rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" aria-label="Nome da disciplina" />
-    <input type="text" value="${escapeAttr(fase.ambiente || '')}" placeholder="Ambiente" class="fase-ambiente basis-full sm:basis-auto sm:w-32 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" title="Ambiente (opcional)" aria-label="Ambiente (opcional)" />
-    <input type="date" value="${fase.inicio || ''}" class="fase-inicio rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" title="Início" aria-label="Data de início" />
-    <span class="text-gray-500 text-xs hidden sm:inline" aria-hidden="true">→</span>
-    <input type="date" value="${fase.fim || ''}" class="fase-fim rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none" title="Fim" aria-label="Data de fim" />
-    <div class="flex items-center gap-1 shrink-0" title="% executado">
-      <input type="number" min="0" max="100" step="5" value="${pctExec}"
-             class="fase-pct w-16 rounded-lg border border-emerald-300 bg-emerald-50 px-2 py-2 text-sm font-semibold text-emerald-700 focus:border-emerald-500 focus:outline-none text-center" aria-label="Percentual executado" />
-      <span class="text-xs text-emerald-700 font-semibold" aria-hidden="true">%</span>
+    <div class="fase-advanced hidden mt-3 pt-3 border-t border-slate-200 grid gap-2 sm:grid-cols-3 text-xs">
+      <label class="flex flex-col gap-1">
+        <span class="text-slate-500 font-medium">Depende de (FS)</span>
+        <select class="fase-depends rounded-lg border border-slate-300 px-2 py-1.5 bg-white" multiple size="3" aria-label="Fases predecessoras"></select>
+        <span class="text-slate-400 text-[10px]">Esta fase começa quando as selecionadas terminarem. Segura Ctrl/Cmd pra múltiplas.</span>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-slate-500 font-medium">Grupo pai</span>
+        <select class="fase-parent rounded-lg border border-slate-300 px-2 py-1.5 bg-white" aria-label="Grupo pai">
+          <option value="">— sem grupo —</option>
+        </select>
+        <span class="text-slate-400 text-[10px]">Esta fase é parte de um grupo maior. Datas do pai = min/max dos filhos.</span>
+      </label>
+      <label class="flex flex-col gap-1">
+        <span class="text-slate-500 font-medium">Tipo</span>
+        <label class="inline-flex items-center gap-2 mt-1">
+          <input type="checkbox" class="fase-milestone rounded border-slate-300" ${isMilestone ? 'checked' : ''} aria-label="É marco/milestone" />
+          <span class="text-slate-700">Marco (sem duração, vira ♦ no Gantt)</span>
+        </label>
+      </label>
     </div>
-    <button class="btn-del-fase text-red-500 hover:text-red-700 p-1 shrink-0" title="Remover fase" aria-label="Remover fase">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
-    </button>
   `;
   row.querySelector('.btn-del-fase').addEventListener('click', () => {
     row.remove();
@@ -562,15 +590,78 @@ function addFaseRowEditor(fase, idx) {
   });
   row.querySelector('.btn-up').addEventListener('click', () => moverRow(row, -1));
   row.querySelector('.btn-down').addEventListener('click', () => moverRow(row, +1));
-  // Render live: cada alteração de input dispara re-render automático
+  // Botão "Avançado": expande/recolhe a 2ª linha com dependências/grupo/marco
+  row.querySelector('.btn-adv').addEventListener('click', () => {
+    const adv = row.querySelector('.fase-advanced');
+    const btn = row.querySelector('.btn-adv');
+    const arrow = btn.querySelector('svg path');
+    const aberto = !adv.classList.contains('hidden');
+    if (aberto) {
+      adv.classList.add('hidden');
+      btn.setAttribute('aria-expanded', 'false');
+      if (arrow) arrow.setAttribute('d', 'M19 9l-7 7-7-7');
+    } else {
+      adv.classList.remove('hidden');
+      btn.setAttribute('aria-expanded', 'true');
+      if (arrow) arrow.setAttribute('d', 'M5 15l7-7 7 7');
+      // Popula dropdowns "Depende de" e "Grupo pai" só agora (lazy)
+      popularDropdownsRow(row, idx);
+      // Restaura valores selecionados se a fase já tinha
+      restaurarValoresAvancados(row, fase);
+    }
+  });
+  // Render live: cada alteração de input/select dispara re-render automático
   // (debounced em 250ms pra não engasgar enquanto o user digita data/label).
-  row.querySelectorAll('input').forEach(inp => {
+  row.querySelectorAll('input, select').forEach(inp => {
     inp.addEventListener('change', scheduleLiveApply);
     if (inp.type === 'text' || inp.type === 'number') {
       inp.addEventListener('input', scheduleLiveApply);
     }
   });
+  // Checkbox milestone: desabilita campo fim quando marcado (marco = sem duração)
+  row.querySelector('.fase-milestone').addEventListener('change', (e) => {
+    const fim = row.querySelector('.fase-fim');
+    if (e.target.checked) {
+      fim.value = row.querySelector('.fase-inicio').value;
+      fim.disabled = true;
+      fim.classList.add('opacity-50');
+    } else {
+      fim.disabled = false;
+      fim.classList.remove('opacity-50');
+    }
+  });
   cont.appendChild(row);
+}
+
+// Popula os <select> de "Depende de" e "Grupo pai" com TODAS as outras fases
+// do editor (exceto a própria). Chamado quando o usuário expande o "Avançado".
+function popularDropdownsRow(row, idx) {
+  const dependsSel = row.querySelector('.fase-depends');
+  const parentSel = row.querySelector('.fase-parent');
+  if (!dependsSel || !parentSel) return;
+  const todasRows = Array.from(document.querySelectorAll('#fases-editor .fase-row'));
+  // Limpa opções antigas (mantém "— sem grupo —" no parent)
+  dependsSel.innerHTML = '';
+  parentSel.innerHTML = '<option value="">— sem grupo —</option>';
+  todasRows.forEach((r, i) => {
+    if (i === idx) return;
+    const label = r.querySelector('.fase-label').value || `Fase ${i + 1}`;
+    dependsSel.innerHTML += `<option value="${i}">${escapeHtml(label)}</option>`;
+    parentSel.innerHTML += `<option value="${i}">${escapeHtml(label)}</option>`;
+  });
+}
+
+function restaurarValoresAvancados(row, fase) {
+  const dependsSel = row.querySelector('.fase-depends');
+  const parentSel = row.querySelector('.fase-parent');
+  if (dependsSel && Array.isArray(fase.depends_on)) {
+    Array.from(dependsSel.options).forEach(opt => {
+      opt.selected = fase.depends_on.includes(parseInt(opt.value));
+    });
+  }
+  if (parentSel && fase.parent_ordem != null) {
+    parentSel.value = String(fase.parent_ordem);
+  }
 }
 
 // Move uma fase pra cima (delta=-1) ou pra baixo (delta=+1) na lista do editor.
@@ -639,12 +730,23 @@ function aplicarEdits(opts) {
     const pctExecRaw = row.querySelector('.fase-pct').value;
     const pctExec = Math.max(0, Math.min(100, parseInt(pctExecRaw) || 0));
     if (!label || !inicio || !fim) { invalido++; return; }
+    // Onda 3: campos avançados (depends_on, is_milestone, parent_ordem)
+    const isMilestone = !!row.querySelector('.fase-milestone')?.checked;
+    const dependsSel = row.querySelector('.fase-depends');
+    const dependsOn = dependsSel
+      ? Array.from(dependsSel.selectedOptions).map(o => parseInt(o.value))
+      : [];
+    const parentVal = row.querySelector('.fase-parent')?.value;
+    const parentOrdem = parentVal === '' || parentVal == null ? null : parseInt(parentVal);
     fasesEditadas.push({
       label, inicio, fim, cor,
       ambiente: ambiente || undefined,
       pct_executado: pctExec,
       ordem: idx,
       manual: true,
+      depends_on: dependsOn,
+      is_milestone: isMilestone,
+      parent_ordem: parentOrdem,
     });
   });
   // Em modo silencioso (live), campos vazios são ignorados sem alerta — o
@@ -722,6 +824,10 @@ async function salvarCronograma() {
       categoria: f.categoria,
       ordem: f.ordem !== undefined ? f.ordem : i,
       manual: !!f.manual,
+      // Onda 3
+      depends_on: Array.isArray(f.depends_on) ? f.depends_on : [],
+      is_milestone: !!f.is_milestone,
+      parent_ordem: f.parent_ordem != null ? f.parent_ordem : null,
     }));
 
     const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
@@ -876,6 +982,9 @@ async function autoSaveCronograma(cron) {
     categoria: f.categoria,
     ordem: f.ordem !== undefined ? f.ordem : i,
     manual: !!f.manual,
+    depends_on: Array.isArray(f.depends_on) ? f.depends_on : [],
+    is_milestone: !!f.is_milestone,
+    parent_ordem: f.parent_ordem != null ? f.parent_ordem : null,
   }));
 
   await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
@@ -950,39 +1059,94 @@ function renderGantt(c) {
     }
   });
 
+  // Posições calculadas pra cada fase (pra desenhar setas FS depois)
+  const posFases = [];
+
   // Barras — clicáveis E ARRASTÁVEIS (Onda 1+2, 2026-05-25):
   // - Clicar (sem mover) foca a fase no editor
   // - Arrastar corpo da barra horizontalmente: move início+fim
   // - Arrastar borda esquerda (8px): muda só o início
   // - Arrastar borda direita (8px): muda só o fim
   // - Arrastar verticalmente (>= ROW_H): reordena fase
-  // Hitboxes (resize handles) ficam transparentes mas captam pointer events.
+  // Onda 3:
+  // - Marcos (is_milestone) viram diamantes ♦
+  // - Grupos (is_group) viram barras finas no topo com stroke
+  // - Setas FS desenhadas entre fim da predecessora e início da sucessora
   fases.forEach((f, i) => {
     const f_ini = new Date(f.inicio);
     const f_fim = new Date(f.fim);
     const x = LABEL_W + (f_ini - data_inicio) / (1000 * 60 * 60 * 24) / total_dias * CHART_W;
-    const w = Math.max(20, (f_fim - f_ini) / (1000 * 60 * 60 * 24) / total_dias * CHART_W);
+    const isMilestone = !!f.is_milestone;
+    const isGroup = !!f.is_group;
+    const w = isMilestone
+      ? 0
+      : Math.max(20, (f_fim - f_ini) / (1000 * 60 * 60 * 24) / total_dias * CHART_W);
     const y = i * ROW_H + 8;
     const h = ROW_H - 14;
-    const HANDLE_W = 8;  // largura dos resize handles
+    const HANDLE_W = 8;
+    posFases.push({ idx: i, x, w, y, h, mid_y: y + h / 2, isMilestone });
 
-    // Label — clicável
-    svg += `<text class="gantt-label" data-fase-idx="${i}" x="${LABEL_W - 10}" y="${y + h / 2 + 4}" fill="#334155" font-size="12" text-anchor="end" font-weight="500" style="cursor:pointer">${escapeHtml(f.label)}</text>`;
-    // Barra (corpo) — move
-    svg += `<rect class="gantt-bar" data-fase-idx="${i}" data-drag-mode="move" x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${f.cor}" style="cursor:grab">
-      <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)} (${f.dur_dias}d) · arraste pra mover, bordas pra redimensionar</title>
-    </rect>`;
-    // Dias dentro da barra (se couber)
-    if (w > 40) {
-      svg += `<text x="${x + w / 2}" y="${y + h / 2 + 4}" fill="white" font-size="11" font-weight="bold" text-anchor="middle" pointer-events="none">${f.dur_dias}d</text>`;
+    // Label — clicável (estilo bold se for grupo)
+    const labelWeight = isGroup ? '700' : '500';
+    svg += `<text class="gantt-label" data-fase-idx="${i}" x="${LABEL_W - 10}" y="${y + h / 2 + 4}" fill="#334155" font-size="12" text-anchor="end" font-weight="${labelWeight}" style="cursor:pointer">${escapeHtml(f.label)}</text>`;
+
+    if (isMilestone) {
+      // ♦ Diamante (rotated square) — marca pontual
+      const cx = x;
+      const cy = y + h / 2;
+      const r = h / 2;
+      svg += `<polygon class="gantt-bar" data-fase-idx="${i}" data-drag-mode="move"
+              points="${cx},${cy - r} ${cx + r},${cy} ${cx},${cy + r} ${cx - r},${cy}"
+              fill="${f.cor}" stroke="#1E293B" stroke-width="1.5" style="cursor:grab">
+        <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} · marco</title>
+      </polygon>`;
+    } else if (isGroup) {
+      // Barra-grupo: mais fina, com bracket nas pontas (estilo MS Project)
+      const gh = 6;
+      const gy = y + (h - gh) / 2;
+      svg += `<rect class="gantt-bar" data-fase-idx="${i}" data-drag-mode="move"
+              x="${x}" y="${gy}" width="${w}" height="${gh}" fill="#1E293B" style="cursor:grab">
+        <title>${escapeHtml(f.label)} — grupo · ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)}</title>
+      </rect>`;
+      // Brackets nas pontas
+      svg += `<polygon points="${x},${gy} ${x + 5},${gy} ${x},${gy + gh + 4}" fill="#1E293B"/>`;
+      svg += `<polygon points="${x + w},${gy} ${x + w - 5},${gy} ${x + w},${gy + gh + 4}" fill="#1E293B"/>`;
+    } else {
+      // Barra normal
+      svg += `<rect class="gantt-bar" data-fase-idx="${i}" data-drag-mode="move" x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${f.cor}" style="cursor:grab">
+        <title>${escapeHtml(f.label)} — ${formatDateBR(f.inicio)} a ${formatDateBR(f.fim)} (${f.dur_dias}d) · arraste pra mover, bordas pra redimensionar</title>
+      </rect>`;
+      if (w > 40) {
+        svg += `<text x="${x + w / 2}" y="${y + h / 2 + 4}" fill="white" font-size="11" font-weight="bold" text-anchor="middle" pointer-events="none">${f.dur_dias}d</text>`;
+      }
+      // Handles de resize
+      if (w >= 20) {
+        svg += `<rect class="gantt-resize-left" data-fase-idx="${i}" data-drag-mode="resize-left" x="${x}" y="${y}" width="${HANDLE_W}" height="${h}" fill="transparent" style="cursor:ew-resize"/>`;
+        svg += `<rect class="gantt-resize-right" data-fase-idx="${i}" data-drag-mode="resize-right" x="${x + w - HANDLE_W}" y="${y}" width="${HANDLE_W}" height="${h}" fill="transparent" style="cursor:ew-resize"/>`;
+      }
     }
-    // Handles de resize (só se barra >= 20px pra caber 2 handles)
-    if (w >= 20) {
-      // Esquerda
-      svg += `<rect class="gantt-resize-left" data-fase-idx="${i}" data-drag-mode="resize-left" x="${x}" y="${y}" width="${HANDLE_W}" height="${h}" fill="transparent" style="cursor:ew-resize"/>`;
-      // Direita
-      svg += `<rect class="gantt-resize-right" data-fase-idx="${i}" data-drag-mode="resize-right" x="${x + w - HANDLE_W}" y="${y}" width="${HANDLE_W}" height="${h}" fill="transparent" style="cursor:ew-resize"/>`;
-    }
+  });
+
+  // Setas FS — pra cada fase com depends_on, desenha conector da extremidade
+  // direita da predecessora até a esquerda da sucessora. Setas slate sutis.
+  fases.forEach((f, i) => {
+    const deps = f.depends_on || [];
+    deps.forEach(predIdx => {
+      if (predIdx < 0 || predIdx >= posFases.length) return;
+      const pred = posFases[predIdx];
+      const succ = posFases[i];
+      if (!pred || !succ) return;
+      const startX = pred.x + pred.w;
+      const startY = pred.mid_y;
+      const endX = succ.x;
+      const endY = succ.mid_y;
+      // Linha em L com curva — sai da direita do pred, sobe/desce, entra esquerda do succ
+      const midX = Math.max(startX + 8, endX - 8);
+      const path = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX - 6} ${endY}`;
+      svg += `<path d="${path}" fill="none" stroke="#94A3B8" stroke-width="1.2" stroke-dasharray="3,2"/>`;
+      // Cabeça da seta
+      svg += `<polygon points="${endX},${endY} ${endX - 6},${endY - 3} ${endX - 6},${endY + 3}" fill="#94A3B8"/>`;
+    });
   });
 
   svg += `</svg>`;

@@ -81,8 +81,16 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
                                        duracao_meses: int) -> Dict:
     """Gera cronograma JSON a partir de lista de fases EDITADAS pelo cliente.
 
-    Cada fase em fases_custom: {label, inicio, fim, dur_dias?, cor?, ambiente?, ordem?}
+    Cada fase em fases_custom: {label, inicio, fim, dur_dias?, cor?, ambiente?, ordem?,
+                                 depends_on?, is_milestone?, parent_ordem?}
     inicio e fim em ISO YYYY-MM-DD.
+
+    Onda 3 (2026-05-25):
+    - depends_on: lista de ordens das fases predecessoras (FS — Finish-Start).
+      Se preenchido, o início da fase é forçado pro dia seguinte ao fim da
+      última predecessora terminar. Cascade automático.
+    - is_milestone: marco pontual (dur_dias = 0, renderizado como diamante).
+    - parent_ordem: ordem da fase-grupo pai (se a fase é filha de um grupo).
 
     Pula a etapa de mapear disciplina→sequenciamento (já vem mastigado).
     """
@@ -96,14 +104,31 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             fim = _parse_date(f['fim'])
         except (KeyError, ValueError):
             continue
+        is_milestone = bool(f.get('is_milestone', False))
         dur_dias = (fim - ini).days
-        if dur_dias <= 0:
+        if is_milestone:
+            # Marcos têm duração 0 — fim = início
+            fim = ini
+            dur_dias = 0
+        elif dur_dias <= 0:
             dur_dias = 7
             fim = ini + timedelta(days=7)
         label = f.get('label', 'Sem nome')
         cat = f.get('categoria') or categoria_da_disciplina(label)
         pct_exec = float(f.get('pct_executado', 0) or 0)
         pct_exec = max(0.0, min(100.0, pct_exec))
+        # Normaliza depends_on: aceita None, lista vazia, lista de int
+        deps_raw = f.get('depends_on') or []
+        if isinstance(deps_raw, list):
+            depends_on = [int(d) for d in deps_raw if d is not None]
+        else:
+            depends_on = []
+        parent_ordem = f.get('parent_ordem')
+        if parent_ordem is not None:
+            try:
+                parent_ordem = int(parent_ordem)
+            except (TypeError, ValueError):
+                parent_ordem = None
         fases.append({
             'label': label,
             'inicio': ini.isoformat(),
@@ -117,9 +142,16 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             'manual': bool(f.get('manual', False)),
             'categoria': cat,
             'pct_executado': pct_exec,
+            'depends_on': depends_on,
+            'is_milestone': is_milestone,
+            'parent_ordem': parent_ordem,
         })
 
     fases.sort(key=lambda x: (x.get('ordem') or 0, x['inicio']))
+    # Aplica cascade FS — fases com depends_on começam após predecessoras terminarem
+    fases = _aplicar_dependencias_fs(fases)
+    # Re-agrega datas dos grupos pai = min(filhos.inicio) e max(filhos.fim)
+    fases = _agregar_grupos(fases)
     data_fim = max((_parse_date(f['fim']) for f in fases), default=dt_inicio)
     duracao_dias_real = max(1, (data_fim - dt_inicio).days)
 
@@ -727,3 +759,116 @@ def _cor_da_disciplina(label: str) -> str:
         return CATEGORIA_COR['complementares']
     # Default — slate neutro
     return CATEGORIA_COR['complementares']
+
+
+# ─── Onda 3 (2026-05-25): dependências FS + grupos ─────────────────────
+
+def _aplicar_dependencias_fs(fases: List[Dict]) -> List[Dict]:
+    """Aplica cascade Finish-Start.
+
+    Pra cada fase com depends_on, força inicio = max(predecessoras.fim) + 1 dia,
+    e ajusta fim mantendo a duração original (dur_dias).
+
+    Detecta ciclos via DFS. Se encontrar, ignora a dependência problemática
+    e segue (não trava o cronograma inteiro).
+
+    Grupos (fases que SÃO pai — têm filhos) não têm cascade aplicado direto;
+    suas datas são agregadas em _agregar_grupos depois.
+
+    Retorna a mesma lista de fases (mutável) com datas atualizadas.
+    """
+    if not fases:
+        return fases
+
+    # Mapeia índice → fase pra lookup rápido
+    n = len(fases)
+
+    # Detecta grupos (que TÊM filhos) — não cascateamos eles, deixamos
+    # pro agregar_grupos. Filhos sim, cascateamos.
+    grupos = {f.get('parent_ordem') for f in fases if f.get('parent_ordem') is not None}
+
+    # Topological sort respeitando depends_on
+    def _has_cycle_from(start_idx: int, visiting: set) -> bool:
+        if start_idx in visiting:
+            return True
+        if start_idx < 0 or start_idx >= n:
+            return False
+        visiting.add(start_idx)
+        for dep_idx in fases[start_idx].get('depends_on', []) or []:
+            if _has_cycle_from(dep_idx, visiting):
+                return True
+        visiting.remove(start_idx)
+        return False
+
+    # Para cada fase, em ordem (já vem ordenada por ordem/inicio), aplica cascade
+    for i, f in enumerate(fases):
+        if i in grupos:
+            continue  # grupo pai, datas vêm dos filhos
+        deps = f.get('depends_on') or []
+        deps_validos = []
+        for d in deps:
+            if d < 0 or d >= n or d == i:
+                continue
+            # Ciclo? Pula a dependência problemática
+            if _has_cycle_from(d, {i}):
+                continue
+            deps_validos.append(d)
+        if not deps_validos:
+            continue
+        # max fim das predecessoras + 1 dia
+        try:
+            max_fim = max(_parse_date(fases[d]['fim']) for d in deps_validos)
+        except (KeyError, ValueError):
+            continue
+        novo_inicio = max_fim + timedelta(days=1)
+        dur = f.get('dur_dias', 7)
+        if f.get('is_milestone'):
+            f['inicio'] = novo_inicio.isoformat()
+            f['fim'] = novo_inicio.isoformat()
+            f['dur_dias'] = 0
+        else:
+            f['inicio'] = novo_inicio.isoformat()
+            f['fim'] = (novo_inicio + timedelta(days=dur)).isoformat()
+            # Recalcula dur (caso novo_inicio == ini original, dur intacto)
+            f['dur_dias'] = (_parse_date(f['fim']) - _parse_date(f['inicio'])).days
+        f['depends_on'] = deps_validos  # remove deps inválidos da output
+
+    return fases
+
+
+def _agregar_grupos(fases: List[Dict]) -> List[Dict]:
+    """Pra cada fase-pai (que tem filhos com parent_ordem apontando pra ela),
+    força inicio = min(filhos.inicio) e fim = max(filhos.fim).
+
+    Permite que o usuário defina grupos como "Estrutura" cujas datas
+    espelham automaticamente as fases filhas.
+    """
+    if not fases:
+        return fases
+    # Mapeia ordem → idx (a partir de "ordem" se setado, senão idx posicional)
+    n = len(fases)
+
+    # Pais identificados por parent_ordem apontando pra esse idx
+    # parent_ordem é INDEX posicional na lista (0-based)
+    filhos_por_pai = {}
+    for i, f in enumerate(fases):
+        p = f.get('parent_ordem')
+        if p is None:
+            continue
+        if not isinstance(p, int) or p < 0 or p >= n or p == i:
+            continue
+        filhos_por_pai.setdefault(p, []).append(i)
+
+    for pai_idx, filhos_idx in filhos_por_pai.items():
+        pai = fases[pai_idx]
+        try:
+            inicios = [_parse_date(fases[ci]['inicio']) for ci in filhos_idx]
+            fins = [_parse_date(fases[ci]['fim']) for ci in filhos_idx]
+        except (KeyError, ValueError):
+            continue
+        pai['inicio'] = min(inicios).isoformat()
+        pai['fim'] = max(fins).isoformat()
+        pai['dur_dias'] = (max(fins) - min(inicios)).days
+        pai['is_group'] = True  # flag pro frontend renderizar diferente
+
+    return fases
