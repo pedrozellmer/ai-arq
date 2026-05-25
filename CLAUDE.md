@@ -2,7 +2,7 @@
 
 > **Você é Claude trabalhando no projeto AI.arq.** Esse arquivo é a sua orientação inicial. Lê tudo aqui antes de agir. O dono do projeto é o **Pedro Zellmer** (não-técnico, prefere ações em auto mode, fala português brasileiro coloquial).
 >
-> **Última atualização:** 2026-04-26
+> **Última atualização:** 2026-05-25 (Fase 5 redesenhada após análise Braxio)
 
 ---
 
@@ -97,13 +97,13 @@ Se você é uma sessão nova de Claude lendo isso pela primeira vez:
 - **Site:** https://ai.arq.br
 - **Backend:** https://ai-arq.onrender.com (Render)
 - **Tagline atual:** "Quantitativo com IA" (NÃO "Orçamento com IA" — corrigido)
-- **Fase atual:** Fase 1 (quantitativo) do roadmap de 10 fases — Fase 2 (Cronograma) em construção
+- **Fase atual:** Fase 1 (quantitativo) do roadmap de 10 fases — Fase 2 (Cronograma) em construção. **Fase 5 (ERP focado) redesenhada em 2026-05-25** — só 5 módulos, não ERP completo. Detalhes em `ROADMAP.md` e `docs/ANALISE_BRAXIO.md`.
 - **Estado:** Beta v0.5.0 · ~8 usuários cadastrados (Daniela Teixeira/DTZ Arquitetura é a mais ativa; também Yuri, Wilker, Vinícius, Rafael, Sidnei, Wesley). Crescendo — cada usuário ainda conta muito.
 
 ### Modelo de negócio
 - **1º projeto: GRÁTIS** (sem cartão)
 - R$ 97 (1-5 pranchas) · R$ 157 (6-10) · R$ 247 (11-20) · +R$ 10/prancha extra
-- Sem mensalidade, paga só quando usa
+- **Híbrido (desde 2026-05-25):** avulso continua pro quantitativo (porta de entrada). Mensalidade entra só pro módulo ERP da Fase 5 (Cliente+Projeto+Orç+RT+Portal) — R$79-149/mês, a definir. Revoga decisão antiga "não vender mensalidade".
 - Cashback (vigente desde 2026-05-13): R$30 upload planilha revisada + R$10/cotação fornecedor (cap 3 = R$30) = até R$60/projeto. Revisão inline não gera mais cashback — só treina a IA.
 
 ---

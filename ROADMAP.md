@@ -1,7 +1,7 @@
 # 🗺️ Roadmap AI.arq
 
-> **Última atualização:** 2026-05-13
-> **Versão:** 2.0 — visão ERP completo + catalogação de ~140 features externas
+> **Última atualização:** 2026-05-25
+> **Versão:** 2.1 — Fase 5 redesenhada (ERP focado, não completo) após análise Braxio
 
 Este documento consolida a visão de longo prazo do AI.arq: onde estamos hoje, pra onde vamos, e o que evitamos no caminho. Vive em `ROADMAP.md` na raiz do repo (não vai pro GitHub Pages — é doc interno).
 
@@ -141,24 +141,68 @@ Estas regras orientam toda decisão de produto e nunca devem ser violadas:
 
 ---
 
-### **FASE 5 — ERP do escritório (financeiro + CRM + galeria)**
-**Status:** 🟢 Esqueleto **60% pronto** (descoberto em 12/05/2026 — projeto Manus antigo)
-**Estimativa:** 12-18 meses (antes era 24-36 — código antigo encurta)
+### **FASE 5 — ERP focado do escritório** ⭐ (redesenhada 25/05/2026 após análise Braxio)
+**Status:** 🟢 Esqueleto **60% pronto** (código Manus antigo) · escopo redesenhado em 25/05/2026
+**Estimativa:** 6-9 meses pro core (era 12-18 com escopo cheio)
 
-**Lógica:** Cliente já confia no AI.arq pra projeto. Hora de virar "tudo num só lugar".
+**Decisão estratégica (25/05/2026):** depois de analisar a central de ajuda completa do Braxio (92 docs, 17 áreas), redefinimos Fase 5 pra **escopo focado** em vez de "ERP completo". A maioria do Braxio é commodity bem feita (NFSe, OFX, agenda, biblioteca de produtos) que custaria 18 meses construindo pra empatar. Vamos focar nas 5 peças que amarram o wedge técnico (quantitativo+cronograma) ao dia-a-dia do escritório.
 
-- **Financeiro do projeto:** receitas + despesas, parcelas, fluxo de caixa, alertas de vencimento, dashboard consolidado de todos os projetos
-- **CRM:** anotações de interação com cliente, tags, histórico
-- **Galeria:** upload S3 de plantas/PDFs/renders/documentos, organização por categoria
-- **Notificações unificadas:** vencimentos financeiros + tarefas de cronograma
-- **Dashboard executivo do escritório:** receita prevista, projetos ativos, próximos vencimentos
+#### 🎯 ESCOPO DA FASE 5 (só esses 5 módulos)
 
-**📦 Código base existente** (descoberto em 12/05/2026):
+1. **Cliente / CRM básico** — cadastro PF/PJ, pipeline 5 status, ficha completa, anotações, importação de planilha
+2. **Projeto consolidado** — cabeçalho (cliente/área/endereço/equipe) + abas Tarefas/Cronograma/Orçamento/Financeiro/Arquivos. NÃO replicar todas as 10 abas do Braxio — só as que conectam com nosso motor
+3. **Orçamento operacional** — herda a planilha do quantitativo (já gerada pela Fase 1!), adiciona cotações múltiplas por fornecedor, status (Pendente/Cotado/Aprovado/Comprado/Recusado). **Aqui é o diferencial:** Braxio começa do zero, a gente começa populado do CAD.
+4. **🔥 Reserva Técnica (RT) automatizada** — feature-âncora do ERP. Compra na cotação vira receita no DRE em 1 clique. **Esse é o gancho emocional que faz arquiteto aceitar pagar mensalidade.** Ninguém mais no mercado faz fluido.
+5. **Portal Cliente granular** — 6 controles finos (esconde preço, fornecedor, pendência, responsável, datas reais, fase). NÃO é só "galeria de arquivos" — é portal de obra vivo. Subestimar isso entrega portal inferior ao do Braxio.
+
+#### 🚫 O QUE NÃO ENTRA NA FASE 5 (intencional)
+
+- **NFSe completa** — 18 meses de trabalho regulatório/municipal. Parceria com Conta Azul ou similar faz mais sentido.
+- **OFX banco a banco** — commodity (8 bancos BR). Integração via Pluggy ou Belvo se virar prioridade.
+- **DRE completo + Fluxo de Caixa** — versão simplificada por projeto OK, DRE global do escritório fica fora.
+- **Agenda + Google/iCloud sync** — commodity. Usuário usa Google Calendar próprio.
+- **Biblioteca de produtos** — temos SINAPI/TCPO (melhor!). Não duplicar.
+- **NFSe, recibos, custos fixos recorrentes** — tudo pertence ao parceiro fiscal.
+
+#### 🛡️ Permissões e multiusuário — DAY 1, não "depois"
+
+Lição dura da análise Braxio: escritório de 5+ pessoas exige permissões granulares no dia 1. Refatorar autenticação depois custa caro (refactor de RLS no Supabase, migração de dados, regenerar tokens).
+
+- 5 cargos: Proprietário, Sócio, Admin, Coordenador, Colaborador
+- 4 níveis por módulo: Completo / Visualizar / Atribuído / Sem acesso
+- Aplicar via Supabase RLS desde a 1ª query da Fase 5
+
+#### 💰 Modelo de preço — HÍBRIDO (decisão dura, 25/05/2026)
+
+**Avulso continua** (R$97-247 por projeto) como porta de entrada pelo wedge. Cliente paga R$97 pelo quantitativo, vira lead.
+
+**Mensalidade só pro módulo ERP** — quem ativa CRM+Projeto+Orçamento+RT+Portal paga mensalidade tipo R$79-149/mês (a definir; menor que Braxio R$119 pra estar abaixo da concorrência inicialmente). Não substitui avulso, soma.
+
+Isso revoga a decisão antiga "NÃO vender mensalidade — modelo é pay-as-you-use". A regra agora é: **avulso pra quantitativo, mensalidade pra ERP. Híbrido.**
+
+#### 📦 Código base existente
+
 - Localização: `arq/_archive/cronograma-arquitetura-extracted/`
 - Stack: React + tRPC + Drizzle (MySQL) — migrar pra Supabase quando ativar a Fase
 - Já tem: Tasks/Timeline, CRM Notes, Financeiro (entrada+parcelas+edição), Galeria, AI Chat Box, Dashboards (Cash flow, CRM, Financial), Mapa de projeto
 - **Falta:** integrar com motor AI.arq atual + 114 agents Bravy
-- Decisão: NÃO migrar agora (estamos com 8 usuários). Quando atingir 50+ usuários ativos, pegar o código antigo + reusar UI/lógica.
+- **Próximo passo (quando ativar Fase 5):** auditar quais das 5 peças do escopo já têm esqueleto no código herdado. Cliente/CRM e Financeiro provavelmente sim. RT e Portal granular provavelmente não.
+
+#### 📅 Quando começar
+
+Quando atingir **50+ usuários ativos** (hoje ~8). Não antes — esticaria produto fino sobre fundação rasa.
+
+#### 🎯 5 lacunas do Braxio que a Fase 5 defende
+
+Mapeadas na análise de 25/05/2026 — ao construir Fase 5, manter essas vantagens visíveis em todo lugar:
+
+1. **Lemos CAD/DWG/PDF.** Braxio aceita upload mas trata como blob.
+2. **Orçamento já populado do CAD.** No Braxio o cara digita item por item, manual.
+3. **Comparativo de fornecedor automatizado** com IA sugerindo equivalentes e alertando preço fora da curva.
+4. **Versionamento automático de arquivos.** Braxio confessa na ajuda: "ainda não cria histórico automático de versões".
+5. **IA que faz o trabalho.** A "IA" do Braxio é assistente que responde "quais projetos atrasados?". A nossa gera planilha.
+
+**Fonte completa:** análise de 92 docs da central de ajuda Braxio em 25/05/2026 — relatório em `docs/ANALISE_BRAXIO.md` (se criado posteriormente).
 
 ---
 
@@ -249,15 +293,18 @@ Tudo das Fases 1-9 + integrações + pós-obra:
 
 ## 🧭 Posicionamento competitivo (atualizado 13/05/2026)
 
-| Player | Cobertura | Vantagem AI.arq |
-|---|---|---|
-| **[Flowup](https://www.flowup.me/)** (1.000+ escritórios BR) | ERP projeto+financeiro+equipe. Parceiro ASBEA/CREA | **Não lê CAD. Não gera quantitativo. Sem IA técnica.** |
-| **[Vobi](https://www.vobi.com.br/)** (Y Combinator, R$5B obras/ano) | Gestão de obra completa. 3 agents IA (Financeiro, Compras, Diário) | **Foco construtora, não escritório. IA é assistência, não leitura de CAD.** |
-| **[Sienge](https://www.sienge.com.br/)** | 12 módulos, construtora grande | **Caro. Foco incorporadora.** |
-| **[Projetools](https://www.projetools.com.br)** | Gestão escritório arq | **Pequeno, sem IA.** |
-| **[Arquiteto 10X](https://amandag.ia)** (curso) | 20 skills Claude pra arquiteto BR | **É curso, não SaaS. Cliente dele é nosso lead aquecido.** |
+| Player | Cobertura | Preço | Vantagem AI.arq |
+|---|---|---|---|
+| **[Braxio](https://www.braxio.com.br/)** ⭐ benchmark detalhado | ERP completo: CRM, Propostas, Projetos com 10 abas, Tarefas+workflows, Horas, Orçamentos com cotações múltiplas, **Reserva Técnica → DRE**, Obras (execução+visitas+pendências+Gantt+PDF), Financeiro completo, **NFSe completa (A1+LC116+reforma tributária)**, **OFX 8 bancos BR**, Portal Cliente com 6 controles granulares, Arquivos com pastas padrão, Biblioteca, Fornecedores, Agenda+Google/iCloud, Equipe+5 cargos+permissões | R$119 / R$199 / R$319 / mês | **Não lê CAD. Aceita DWG mas trata como blob. Orçamento começa do zero (manual). Sem versionamento automático de arquivos (confessam na ajuda). IA é só assistente operacional, não faz o trabalho.** Análise completa: 92 docs lidos em 25/05/2026. |
+| **[Flowup](https://www.flowup.me/)** (1.000+ escritórios BR) | ERP projeto+financeiro+equipe. Parceiro ASBEA/CREA | sob consulta | **Não lê CAD. Não gera quantitativo. Sem IA técnica.** |
+| **[Vobi](https://www.vobi.com.br/)** (Y Combinator, R$5B obras/ano) | Gestão de obra completa. 3 agents IA (Financeiro, Compras, Diário) | sob consulta | **Foco construtora, não escritório. IA é assistência, não leitura de CAD.** |
+| **[Sienge](https://www.sienge.com.br/)** | 12 módulos, construtora grande | caro | **Caro. Foco incorporadora.** |
+| **[Projetools](https://www.projetools.com.br)** | Gestão escritório arq | — | **Pequeno, sem IA.** |
+| **[Arquiteto 10X](https://amandag.ia)** (curso) | 20 skills Claude pra arquiteto BR | — | **É curso, não SaaS. Cliente dele é nosso lead aquecido.** |
 
-**Aposta dura:** **leitura de binário (DWG/PDF) + IA específica de arquitetura** é nossa vantagem defensável. Flowup/Vobi não vão entrar nessa briga sem refazer stack inteiro. Tempo é nosso aliado.
+**Aposta dura:** **leitura de binário (DWG/PDF) + IA específica de arquitetura** é nossa vantagem defensável. Flowup/Vobi/Braxio não vão entrar nessa briga sem refazer stack inteiro. Tempo é nosso aliado.
+
+**Sobre o Braxio especificamente:** é o produto mais maduro pra o nosso público-alvo. NÃO é concorrente direto hoje (eles cobrem admin, a gente cobre técnico), mas se entrarmos na Fase 5 viramos sobrepostos. Estratégia: defender o wedge técnico que eles não têm + replicar só as 5 peças que conectam (CRM+Projeto+Orç+RT+Portal). Resto não vale o tempo.
 
 ---
 
@@ -380,11 +427,12 @@ Identificadas em sessão de 2026-04-24. Estado atual:
 - ❌ **Precificar itens** — fica pro orçamentista
 - ❌ **Substituir profissional habilitado** — sempre revisar
 - ❌ **Reaproveitar dados de cliente A no projeto B** — isolamento absoluto
-- ❌ **Vender mensalidade** — modelo é pay-as-you-use
+- ✏️ **~~Vender mensalidade~~ → REVOGADO em 25/05/2026.** Agora é HÍBRIDO: avulso pro quantitativo (porta de entrada), mensalidade só pro módulo ERP (Fase 5).
 - ❌ **Vender carbono** ou outras "extensões éticas" sem product-market-fit
 - ❌ **Reescrever em React agora** — HTML estático funciona até pelo menos Fase 3
 - ❌ **Suportar fora do Brasil agora** — foco BR até Fase 10
 - ❌ **Concorrer com Trello/Asana** em features genéricas — só features específicas pra arq
+- ❌ **NFSe completa, OFX banco a banco, DRE global do escritório, agenda com sync, biblioteca de produtos** — commodity bem feita por parceiros (Conta Azul, Pluggy, Belvo). Não replicar Braxio aqui. Decidido 25/05/2026.
 
 ---
 
@@ -405,6 +453,12 @@ Identificadas em sessão de 2026-04-24. Estado atual:
 | 2026-04-26 | Roadmap formalizado neste arquivo | Memória institucional |
 | 2026-05-24 | Hero focado no wedge (quantitativo do CAD), comparativo/PPT viram bônus | Promessa central afiada, conversão maior |
 | 2026-05-24 | Cadastro em 2 etapas — CPF só antes do 1º pagamento | CPF no cadastro era atrito alto pra testar o gratuito |
+| 2026-05-25 | Análise competitiva profunda do Braxio (92 docs lidos) | Pedro decidiu seguir visão ERP, precisava de benchmark real |
+| 2026-05-25 | Fase 5 redesenhada: ERP focado em 5 módulos (Cliente+Projeto+Orç+RT+Portal), não ERP completo | Replicar tudo do Braxio = 18 meses pra empatar. Focar onde wedge se amplifica. |
+| 2026-05-25 | Reserva Técnica é feature-âncora da Fase 5 | É o gancho emocional que faz arquiteto aceitar mensalidade. Nenhum concorrente faz fluido. |
+| 2026-05-25 | Modelo de preço vira HÍBRIDO: avulso continua, mensalidade entra só pra módulo ERP | Revoga decisão "não vender mensalidade". Avulso = porta de entrada (wedge), mensalidade = retenção (Fase 5). |
+| 2026-05-25 | Permissões por cargo (5 cargos × 4 níveis) são DAY 1 da Fase 5 | Lição do Braxio: refactor de auth depois custa caro. Escritório 5+ pessoas exige no dia 1. |
+| 2026-05-25 | NÃO replicar: NFSe completa, OFX, DRE escritório, agenda, biblioteca produtos | Commodity bem feita pelos parceiros (Conta Azul, Pluggy). Foco nosso é técnico, não admin. |
 
 ---
 
