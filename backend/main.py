@@ -4337,17 +4337,24 @@ async def get_user_cashback_all(request: Request, user_id: str):
 
 
 @app.get("/api/projects/{job_id}/cashback")
-async def get_project_cashback(job_id: str):
-    """Retorna eventos de cashback + total acumulado desse projeto."""
+async def get_project_cashback(job_id: str, request: Request):
+    """Retorna eventos de cashback + total acumulado desse projeto.
+
+    Ownership check adicionado em 2026-05-27: antes o endpoint ficava
+    aberto — qualquer um com job_id válido lia o saldo. Não é PII forte,
+    mas vazava histórico financeiro do projeto. Bug bônus achado durante
+    auditoria RLS/REST (commit b5ddd07).
+    """
+    _require_project_owner(request, job_id)
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
-               f"?job_id=eq.{job_id}"
-               f"&select=*&order=created_at.desc")
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=8)
-        events = json.loads(resp.read().decode("utf-8"))
+        status, events = _supa_rest_as_user(
+            request, "GET",
+            f"project_cashback_events?job_id=eq.{job_id}"
+            f"&select=*&order=created_at.desc"
+        )
+        if status >= 400 or events is None:
+            return {"error": f"HTTP {status}", "events": [], "total_cents": 0,
+                    "total_reais": 0.0, "count": 0}
         total_cents = sum(e.get("credit_cents", 0) for e in events)
         return {
             "events": events,
