@@ -182,6 +182,101 @@ def _require_admin(request):
     return user
 
 
+def _supa_rest_as_user(request, method: str, path: str, body=None, params=None,
+                       prefer: str = None, timeout: int = 15):
+    """Faz uma chamada Supabase REST repassando o JWT do usuário.
+
+    Substitui o padrão antigo `Authorization: Bearer SUPABASE_KEY` (anon),
+    que causa dois problemas:
+      1) RLS bloqueia: anon não casa com `auth.uid()` → rows=[] mesmo com
+         usuário autorizado (bug Daniela 2026-05-18 download, Pedro 2026-05-25
+         reprocessar);
+      2) RLS permissiva: anon vaza dado de outros usuários se a policy de
+         SELECT for ampla demais.
+
+    Comportamento:
+      - `apikey` SEMPRE é SUPABASE_KEY (PostgREST exige).
+      - Authorization usa o Bearer do header do request. Se ausente, cai pra
+         SUPABASE_KEY (anon) — preserva compat com projetos `user_id='anonymous'`
+         onde o JWT pode não vir.
+      - `path` deve começar com `/rest/v1/...` ou só com a tabela (ex:
+         `project_clients?job_id=eq.X`); prefixo é adicionado se faltar.
+      - `body` pode ser dict ou lista; serializa pra JSON. None = sem body.
+      - `params` é dict opcional → query string adicional (concatenado).
+      - `prefer` é o header Prefer do PostgREST (ex: `return=representation`,
+         `return=minimal`, `resolution=merge-duplicates`).
+
+    Retorna tupla (status_code, parsed_json_or_None). Erros HTTP devolvem
+    (code, None) com log. Falha total devolve (0, None).
+    """
+    import urllib.request, urllib.error, json as _j
+
+    # Monta URL
+    if path.startswith("http"):
+        url = path
+    else:
+        if not path.startswith("/"):
+            path = "/" + path
+        if not path.startswith("/rest/v1/"):
+            path = "/rest/v1" + path
+        url = f"{SUPABASE_URL}{path}"
+
+    if params:
+        from urllib.parse import urlencode
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}{urlencode(params)}"
+
+    # Extrai Bearer do request (fallback anon)
+    user_token = None
+    try:
+        auth_header = request.headers.get("Authorization", "") or \
+                       request.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            tok = auth_header[7:].strip()
+            if tok:
+                user_token = tok
+    except Exception:
+        user_token = None
+
+    bearer = user_token or SUPABASE_KEY
+
+    # Serializa body se houver
+    data_bytes = None
+    if body is not None:
+        data_bytes = _j.dumps(body, default=str).encode("utf-8")
+
+    try:
+        req = urllib.request.Request(url, data=data_bytes, method=method.upper())
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {bearer}")
+        if data_bytes is not None:
+            req.add_header("Content-Type", "application/json")
+        if prefer:
+            req.add_header("Prefer", prefer)
+        resp = urllib.request.urlopen(req, timeout=timeout)
+        status = resp.getcode()
+        raw = resp.read()
+        if not raw:
+            return status, None
+        try:
+            return status, _j.loads(raw.decode("utf-8"))
+        except Exception:
+            # PATCH/DELETE com Prefer:return=minimal pode devolver texto vazio
+            return status, None
+    except urllib.error.HTTPError as e:
+        try:
+            resp_body = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            resp_body = "(unreadable)"
+        _supa_log(f"REST_AS_USER {method} {path} HTTP {e.code}: {resp_body}")
+        print(f"[supa_rest_as_user] HTTP {e.code} {method} {path}: {resp_body}")
+        return e.code, None
+    except Exception as e:
+        _supa_log(f"REST_AS_USER {method} {path} ERR {type(e).__name__}: {e}")
+        print(f"[supa_rest_as_user] err {method} {path}: {type(e).__name__}: {e}")
+        return 0, None
+
+
 def _get_project_owner(job_id: str):
     """Retorna o user_id registrado no projeto (ou None se não existe).
 
@@ -3628,15 +3723,13 @@ async def upload_supplier_quote(
     }
 
     try:
-        url = f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
-        body = json.dumps(payload, default=str).encode("utf-8")
-        req = urllib.request.Request(url, data=body, method="POST")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        req.add_header("Content-Type", "application/json")
-        req.add_header("Prefer", "return=representation")
-        resp = urllib.request.urlopen(req, timeout=20)
-        inserted = json.loads(resp.read().decode("utf-8"))
+        st, inserted = _supa_rest_as_user(
+            request, "POST",
+            "/project_supplier_quotes",
+            body=payload, prefer="return=representation", timeout=20,
+        )
+        if st >= 400 or inserted is None:
+            return {"status": "error", "error": f"Erro ao gravar (status {st})"}
         quote_id = inserted[0]["id"] if inserted else None
     except Exception as e:
         return {"status": "error", "error": f"Erro ao gravar: {e}"}
@@ -3648,15 +3741,13 @@ async def upload_supplier_quote(
     if user_id:
         # Conta quantos uploads já tiveram cashback nesse projeto
         try:
-            cnt_url = (f"{SUPABASE_URL}/rest/v1/project_cashback_events"
-                       f"?job_id=eq.{job_id}"
-                       f"&event_type=eq.supplier_quote_upload"
-                       f"&select=id")
-            cnt_req = urllib.request.Request(cnt_url, method="GET")
-            cnt_req.add_header("apikey", SUPABASE_KEY)
-            cnt_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            cnt_resp = urllib.request.urlopen(cnt_req, timeout=8)
-            existing_count = len(json.loads(cnt_resp.read().decode("utf-8")))
+            _, cnt_rows = _supa_rest_as_user(
+                request, "GET",
+                f"/project_cashback_events?job_id=eq.{job_id}"
+                f"&event_type=eq.supplier_quote_upload&select=id",
+                timeout=8,
+            )
+            existing_count = len(cnt_rows or [])
         except Exception:
             existing_count = 0
 
@@ -3674,15 +3765,12 @@ async def upload_supplier_quote(
                     "approved_at": datetime.utcnow().isoformat(),
                     "approved_by": "auto",
                 }
-                cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
-                cb_body = json.dumps(cb_payload).encode("utf-8")
-                cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
-                cb_req.add_header("apikey", SUPABASE_KEY)
-                cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-                cb_req.add_header("Content-Type", "application/json")
-                cb_req.add_header("Prefer", "return=minimal")
-                urllib.request.urlopen(cb_req, timeout=8)
-                cashback_status = "credited"
+                cb_st, _ = _supa_rest_as_user(
+                    request, "POST",
+                    "/project_cashback_events",
+                    body=cb_payload, prefer="return=minimal", timeout=8,
+                )
+                cashback_status = "credited" if cb_st < 400 else "error"
             except Exception:
                 cashback_status = "error"  # best-effort, não bloqueia upload
 
@@ -3702,17 +3790,16 @@ async def list_supplier_quotes(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     """Lista cotações de fornecedores de um projeto."""
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
-               f"?job_id=eq.{job_id}"
-               f"&select=id,supplier_name,original_filename,parser_mode,"
-               f"n_items_quoted,total_bruto,total_material,total_mao_obra,"
-               f"status,uploaded_at"
-               f"&order=uploaded_at.asc")
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=8)
-        return {"quotes": json.loads(resp.read().decode("utf-8"))}
+        _, rows = _supa_rest_as_user(
+            request, "GET",
+            f"/project_supplier_quotes?job_id=eq.{job_id}"
+            f"&select=id,supplier_name,original_filename,parser_mode,"
+            f"n_items_quoted,total_bruto,total_material,total_mao_obra,"
+            f"status,uploaded_at"
+            f"&order=uploaded_at.asc",
+            timeout=8,
+        )
+        return {"quotes": rows or []}
     except Exception as e:
         return {"error": str(e)}
 
@@ -3722,12 +3809,13 @@ async def delete_supplier_quote(job_id: str, quote_id: str, request: Request):
     _require_project_owner(request, job_id)
     """Remove uma cotação."""
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
-               f"?id=eq.{quote_id}&job_id=eq.{job_id}")
-        req = urllib.request.Request(url, method="DELETE")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        urllib.request.urlopen(req, timeout=8)
+        st, _ = _supa_rest_as_user(
+            request, "DELETE",
+            f"/project_supplier_quotes?id=eq.{quote_id}&job_id=eq.{job_id}",
+            timeout=8,
+        )
+        if st >= 400:
+            return {"error": f"Falha ao remover (status {st})"}
         return {"status": "ok"}
     except Exception as e:
         return {"error": str(e)}
@@ -3745,14 +3833,14 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
         return {"error": "supplier_quote_compare indisponível"}
 
     # Busca quotes
-    url = (f"{SUPABASE_URL}/rest/v1/project_supplier_quotes"
-           f"?job_id=eq.{job_id}&select=*&order=uploaded_at.asc")
-    req = urllib.request.Request(url, method="GET")
-    req.add_header("apikey", SUPABASE_KEY)
-    req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
     try:
-        resp = urllib.request.urlopen(req, timeout=10)
-        quotes_raw = json.loads(resp.read().decode("utf-8"))
+        _, quotes_raw = _supa_rest_as_user(
+            request, "GET",
+            f"/project_supplier_quotes?job_id=eq.{job_id}"
+            f"&select=*&order=uploaded_at.asc",
+            timeout=10,
+        )
+        quotes_raw = quotes_raw or []
     except Exception as e:
         return {"error": f"erro buscando quotes: {e}"}
 
@@ -3775,14 +3863,12 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
     reference_items = None
     if include_reference:
         try:
-            ref_url = (f"{SUPABASE_URL}/rest/v1/project_items"
-                       f"?job_id=eq.{job_id}&select=description,unit,quantity"
-                       f"&limit=500")
-            ref_req = urllib.request.Request(ref_url, method="GET")
-            ref_req.add_header("apikey", SUPABASE_KEY)
-            ref_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            ref_resp = urllib.request.urlopen(ref_req, timeout=10)
-            reference_items = json.loads(ref_resp.read().decode("utf-8"))
+            _, reference_items = _supa_rest_as_user(
+                request, "GET",
+                f"/project_items?job_id=eq.{job_id}"
+                f"&select=description,unit,quantity&limit=500",
+                timeout=10,
+            )
         except Exception:
             pass
 
@@ -3795,25 +3881,23 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
     logo_url = ""
     project_user_id = ""
     try:
-        pj_url = (f"{SUPABASE_URL}/rest/v1/projects"
-                  f"?job_id=eq.{job_id}&select=project_name,user_name,user_id")
-        pj_req = urllib.request.Request(pj_url, method="GET")
-        pj_req.add_header("apikey", SUPABASE_KEY)
-        pj_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        pj_resp = urllib.request.urlopen(pj_req, timeout=8)
-        pj_data = json.loads(pj_resp.read().decode("utf-8"))
+        _, pj_data = _supa_rest_as_user(
+            request, "GET",
+            f"/projects?job_id=eq.{job_id}&select=project_name,user_name,user_id",
+            timeout=8,
+        )
+        pj_data = pj_data or []
         if pj_data:
             project_name = pj_data[0].get("project_name", "")
             architect_name = pj_data[0].get("user_name", "")
             project_user_id = pj_data[0].get("user_id", "")
 
-        cl_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
-                  f"?job_id=eq.{job_id}&select=client_name,client_company")
-        cl_req = urllib.request.Request(cl_url, method="GET")
-        cl_req.add_header("apikey", SUPABASE_KEY)
-        cl_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        cl_resp = urllib.request.urlopen(cl_req, timeout=8)
-        cl_data = json.loads(cl_resp.read().decode("utf-8"))
+        _, cl_data = _supa_rest_as_user(
+            request, "GET",
+            f"/project_clients?job_id=eq.{job_id}&select=client_name,client_company",
+            timeout=8,
+        )
+        cl_data = cl_data or []
         if cl_data:
             client_name = cl_data[0].get("client_name", "")
             if cl_data[0].get("client_company"):
@@ -3822,14 +3906,13 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
 
         # Logo e cor de marca do escritório (perfil do dono do projeto)
         if project_user_id:
-            pr_url = (f"{SUPABASE_URL}/rest/v1/profiles"
-                       f"?user_id=eq.{project_user_id}"
-                       f"&select=logo_url,company,company_brand_color")
-            pr_req = urllib.request.Request(pr_url, method="GET")
-            pr_req.add_header("apikey", SUPABASE_KEY)
-            pr_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            pr_resp = urllib.request.urlopen(pr_req, timeout=8)
-            pr_data = json.loads(pr_resp.read().decode("utf-8"))
+            _, pr_data = _supa_rest_as_user(
+                request, "GET",
+                f"/profiles?user_id=eq.{project_user_id}"
+                f"&select=logo_url,company,company_brand_color",
+                timeout=8,
+            )
+            pr_data = pr_data or []
             if pr_data:
                 logo_url = pr_data[0].get("logo_url", "") or ""
                 brand_color = pr_data[0].get("company_brand_color", "") or ""
@@ -4160,14 +4243,11 @@ async def upload_revised_sheet(
                 "approved_at": datetime.utcnow().isoformat(),
                 "approved_by": "auto",
             }
-            cb_url = f"{SUPABASE_URL}/rest/v1/project_cashback_events"
-            cb_body = json.dumps(cb_payload).encode("utf-8")
-            cb_req = urllib.request.Request(cb_url, data=cb_body, method="POST")
-            cb_req.add_header("apikey", SUPABASE_KEY)
-            cb_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            cb_req.add_header("Content-Type", "application/json")
-            cb_req.add_header("Prefer", "return=minimal")
-            urllib.request.urlopen(cb_req, timeout=8)
+            _supa_rest_as_user(
+                request, "POST",
+                "/project_cashback_events",
+                body=cb_payload, prefer="return=minimal", timeout=8,
+            )
         except Exception as e:
             print(f"[revised-sheet] erro cashback: {e}")
 
@@ -4292,13 +4372,13 @@ async def get_project_client(job_id: str, request: Request):
     """
     _require_project_owner(request, job_id)
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/project_clients"
-               f"?job_id=eq.{job_id}&select=*")
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=8)
-        data = json.loads(resp.read().decode("utf-8"))
+        status, data = _supa_rest_as_user(
+            request, "GET",
+            f"/project_clients?job_id=eq.{job_id}&select=*",
+            timeout=8,
+        )
+        if status >= 400 or data is None:
+            return {} if status == 200 else {"error": "Falha interna ao buscar cliente"}
         return data[0] if data else {}
     except Exception as e:
         print(f"[get_project_client] erro: {e}")
@@ -4376,35 +4456,31 @@ async def upsert_project_client(
     }
     try:
         # Checa se já existe
-        check_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
-                     f"?job_id=eq.{job_id}&select=id")
-        req = urllib.request.Request(check_url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=8)
-        existing = json.loads(resp.read().decode("utf-8"))
+        status, existing = _supa_rest_as_user(
+            request, "GET",
+            f"/project_clients?job_id=eq.{job_id}&select=id",
+            timeout=8,
+        )
+        existing = existing or []
 
         if existing:
             # UPDATE
-            up_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
-                      f"?id=eq.{existing[0]['id']}")
-            body = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(up_url, data=body, method="PATCH")
-            req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            req.add_header("Content-Type", "application/json")
-            req.add_header("Prefer", "return=minimal")
-            urllib.request.urlopen(req, timeout=8)
+            up_status, _ = _supa_rest_as_user(
+                request, "PATCH",
+                f"/project_clients?id=eq.{existing[0]['id']}",
+                body=payload, prefer="return=minimal", timeout=8,
+            )
+            if up_status >= 400:
+                return {"error": "Falha ao atualizar cliente"}
         else:
             # INSERT
-            in_url = f"{SUPABASE_URL}/rest/v1/project_clients"
-            body = json.dumps(payload).encode("utf-8")
-            req = urllib.request.Request(in_url, data=body, method="POST")
-            req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            req.add_header("Content-Type", "application/json")
-            req.add_header("Prefer", "return=minimal")
-            urllib.request.urlopen(req, timeout=8)
+            ins_status, _ = _supa_rest_as_user(
+                request, "POST",
+                "/project_clients",
+                body=payload, prefer="return=minimal", timeout=8,
+            )
+            if ins_status >= 400:
+                return {"error": "Falha ao gravar cliente"}
         return {"status": "ok"}
     except Exception as e:
         return {"error": str(e)}
@@ -5092,14 +5168,13 @@ async def cronograma_sugestao(job_id: str, request: Request):
 
     # Busca o projeto pra pegar typology + area + files_count
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-               "&select=typology,layout_area,total_area,files_count")
-        req = urllib.request.Request(url, method='GET')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
-        req.add_header('Accept', 'application/json')
-        resp = urllib.request.urlopen(req, timeout=10)
-        rows = _json.loads(resp.read().decode('utf-8'))
+        _, rows = _supa_rest_as_user(
+            request, "GET",
+            f"/projects?job_id=eq.{job_id}"
+            "&select=typology,layout_area,total_area,files_count",
+            timeout=10,
+        )
+        rows = rows or []
         if not rows:
             raise HTTPException(404, "Projeto não encontrado")
         proj = rows[0]
@@ -5197,7 +5272,7 @@ async def generate_cronograma(job_id: str, payload: CronogramaPayload, request: 
         raise HTTPException(500, f"Erro ao gerar cronograma: {e}")
 
 
-def _get_branding_context(job_id: str) -> dict:
+def _get_branding_context(job_id: str, request=None) -> dict:
     """Padrão de co-branding pra TODAS as exportações (PDF/PPTX/XLSX).
 
     Centraliza a busca de:
@@ -5208,9 +5283,13 @@ def _get_branding_context(job_id: str) -> dict:
     - brand_color (hex; default = indigo AI.arq se vazio)
     - company (nome do escritório)
 
+    `request` é opcional — se passado, repassa o JWT do user pras queries
+    REST (respeita RLS). Sem request, usa anon key (caso de uso interno
+    quando RLS já foi validada upstream).
+
     Retorna dict pronto pra passar pra funções de export.
     """
-    import urllib.request, json as _json
+    import urllib.request as _urlreq, json as _json
     import tempfile
 
     ctx = {
@@ -5226,15 +5305,26 @@ def _get_branding_context(job_id: str) -> dict:
 
     project_user_id = ''
 
+    def _fetch(path):
+        """Helper local: usa o JWT do request se houver, senão anon."""
+        if request is not None:
+            _, data = _supa_rest_as_user(request, "GET", path, timeout=8)
+            return data or []
+        # fallback anon
+        try:
+            url = f"{SUPABASE_URL}/rest/v1{path if path.startswith('/') else '/' + path}"
+            req_ = _urlreq.Request(url, method="GET")
+            req_.add_header("apikey", SUPABASE_KEY)
+            req_.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            resp_ = _urlreq.urlopen(req_, timeout=8)
+            return _json.loads(resp_.read().decode("utf-8"))
+        except Exception:
+            return []
+
     # 1. projects: nome amigável + arquiteto
     try:
-        pj_url = (f"{SUPABASE_URL}/rest/v1/projects"
-                  f"?job_id=eq.{job_id}&select=project_name,user_name,user_id")
-        pj_req = urllib.request.Request(pj_url, method="GET")
-        pj_req.add_header("apikey", SUPABASE_KEY)
-        pj_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        pj_resp = urllib.request.urlopen(pj_req, timeout=8)
-        pj_data = _json.loads(pj_resp.read().decode("utf-8"))
+        pj_data = _fetch(f"/projects?job_id=eq.{job_id}"
+                          "&select=project_name,user_name,user_id")
         if pj_data:
             ctx['project_name'] = (pj_data[0].get('project_name') or '').strip()
             ctx['architect_name'] = (pj_data[0].get('user_name') or '').strip()
@@ -5244,13 +5334,8 @@ def _get_branding_context(job_id: str) -> dict:
 
     # 2. project_clients: cliente final
     try:
-        cl_url = (f"{SUPABASE_URL}/rest/v1/project_clients"
-                  f"?job_id=eq.{job_id}&select=client_name,client_company")
-        cl_req = urllib.request.Request(cl_url, method="GET")
-        cl_req.add_header("apikey", SUPABASE_KEY)
-        cl_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        cl_resp = urllib.request.urlopen(cl_req, timeout=8)
-        cl_data = _json.loads(cl_resp.read().decode("utf-8"))
+        cl_data = _fetch(f"/project_clients?job_id=eq.{job_id}"
+                          "&select=client_name,client_company")
         if cl_data:
             cn = (cl_data[0].get('client_name') or '').strip()
             cc = (cl_data[0].get('client_company') or '').strip()
@@ -5264,14 +5349,8 @@ def _get_branding_context(job_id: str) -> dict:
     # 3. profiles: logo + cor + company
     if project_user_id:
         try:
-            pr_url = (f"{SUPABASE_URL}/rest/v1/profiles"
-                      f"?user_id=eq.{project_user_id}"
-                      f"&select=logo_url,company,company_brand_color")
-            pr_req = urllib.request.Request(pr_url, method="GET")
-            pr_req.add_header("apikey", SUPABASE_KEY)
-            pr_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            pr_resp = urllib.request.urlopen(pr_req, timeout=8)
-            pr_data = _json.loads(pr_resp.read().decode("utf-8"))
+            pr_data = _fetch(f"/profiles?user_id=eq.{project_user_id}"
+                              "&select=logo_url,company,company_brand_color")
             if pr_data:
                 ctx['logo_url'] = (pr_data[0].get('logo_url') or '').strip()
                 ctx['company'] = (pr_data[0].get('company') or '').strip()
@@ -5308,29 +5387,50 @@ def _get_branding_context(job_id: str) -> dict:
     return ctx
 
 
-def _supabase_get_cronograma(job_id: str) -> Optional[dict]:
-    """Busca cronograma salvo do job. Retorna None se não existir."""
+def _supabase_get_cronograma(job_id: str, request=None) -> Optional[dict]:
+    """Busca cronograma salvo do job. Retorna None se não existir.
+
+    `request` opcional repassa JWT pra respeitar RLS quando chamado por endpoint."""
     import urllib.request, json as _json
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/cronogramas"
-               f"?job_id=eq.{job_id}&select=*&limit=1")
-        req = urllib.request.Request(url, method='GET')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
-        req.add_header('Accept', 'application/json')
-        resp = urllib.request.urlopen(req, timeout=10)
-        rows = _json.loads(resp.read().decode('utf-8'))
+        if request is not None:
+            _, rows = _supa_rest_as_user(
+                request, "GET",
+                f"/cronogramas?job_id=eq.{job_id}&select=*&limit=1",
+                timeout=10,
+            )
+            rows = rows or []
+        else:
+            url = (f"{SUPABASE_URL}/rest/v1/cronogramas"
+                   f"?job_id=eq.{job_id}&select=*&limit=1")
+            req = urllib.request.Request(url, method='GET')
+            req.add_header('apikey', SUPABASE_KEY)
+            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Accept', 'application/json')
+            resp = urllib.request.urlopen(req, timeout=10)
+            rows = _json.loads(resp.read().decode('utf-8'))
         return rows[0] if rows else None
     except Exception as e:
         print(f"[cronograma get] erro: {e}")
         return None
 
 
-def _supabase_upsert_cronograma(job_id: str, data: dict) -> bool:
-    """Insere ou atualiza cronograma. Usa Prefer: resolution=merge-duplicates."""
+def _supabase_upsert_cronograma(job_id: str, data: dict, request=None) -> bool:
+    """Insere ou atualiza cronograma. Usa Prefer: resolution=merge-duplicates.
+
+    `request` opcional repassa JWT pra respeitar RLS."""
     import urllib.request, json as _json
     payload = {"job_id": job_id, **data}
     try:
+        if request is not None:
+            st, _ = _supa_rest_as_user(
+                request, "POST",
+                "/cronogramas",
+                body=payload,
+                prefer="resolution=merge-duplicates,return=minimal",
+                timeout=10,
+            )
+            return st < 400
         url = f"{SUPABASE_URL}/rest/v1/cronogramas"
         body = _json.dumps(payload, default=str).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
@@ -5354,7 +5454,7 @@ async def get_cronograma(job_id: str, request: Request):
     se mostra inputs (gerar primeiro) ou já renderiza o salvo.
     """
     _require_project_owner(request, job_id)
-    saved = _supabase_get_cronograma(job_id)
+    saved = _supabase_get_cronograma(job_id, request=request)
     if not saved:
         return {"status": "empty", "job_id": job_id, "saved": None}
     return {"status": "ok", "job_id": job_id, "saved": saved}
@@ -5381,7 +5481,7 @@ async def save_cronograma(job_id: str, payload: CronogramaSavePayload, request: 
         "notas": payload.notas or "",
         "updated_at": "now()",
     }
-    ok = _supabase_upsert_cronograma(job_id, data)
+    ok = _supabase_upsert_cronograma(job_id, data, request=request)
     if not ok:
         raise HTTPException(500, "Erro ao salvar no banco")
     return {"status": "ok", "job_id": job_id}
@@ -5401,7 +5501,7 @@ async def get_cronograma_full(job_id: str, request: Request):
     if not saved:
         raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
     try:
-        cron, _branding = _build_cronograma_for_export(job_id)
+        cron, _branding = _build_cronograma_for_export(job_id, request=request)
         return cron
     except HTTPException:
         raise
@@ -5412,14 +5512,18 @@ async def get_cronograma_full(job_id: str, request: Request):
         raise HTTPException(500, f"Erro ao montar cronograma: {e}")
 
 
-def _build_cronograma_for_export(job_id: str) -> tuple:
+def _build_cronograma_for_export(job_id: str, request=None) -> tuple:
     """Monta o JSON do cronograma usando fases_custom se houver, senão gera
-    automaticamente. Retorna (cronograma_dict, branding_context)."""
+    automaticamente. Retorna (cronograma_dict, branding_context).
+
+    `request` é opcional — quando passado, repassa o JWT do user pras
+    leituras REST (RLS). Sem request, usa anon key (compat legado).
+    """
     import urllib.request, json as _json
-    saved = _supabase_get_cronograma(job_id)
+    saved = _supabase_get_cronograma(job_id, request=request)
 
     # Branding co-branded (nome projeto + cliente + logo + cor + arquiteto)
-    branding = _get_branding_context(job_id)
+    branding = _get_branding_context(job_id, request=request)
 
     from cronograma import gerar_cronograma, gerar_cronograma_de_fases_custom
 
@@ -5475,7 +5579,7 @@ async def export_cronograma_pdf(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     import tempfile, os
     from fastapi.responses import FileResponse
-    cron, branding = _build_cronograma_for_export(job_id)
+    cron, branding = _build_cronograma_for_export(job_id, request=request)
     try:
         from cronograma_export import exportar_pdf
         tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
@@ -5497,7 +5601,7 @@ async def export_cronograma_pptx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     import tempfile
     from fastapi.responses import FileResponse
-    cron, branding = _build_cronograma_for_export(job_id)
+    cron, branding = _build_cronograma_for_export(job_id, request=request)
     try:
         from cronograma_export import exportar_pptx
         tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
@@ -5592,19 +5696,21 @@ async def finalize_review(job_id: str, request: Request):
 
     # 1) Buscar project metadata
     try:
-        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
-        req = urllib.request.Request(url, method='GET')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
-        resp = urllib.request.urlopen(req, timeout=15)
-        projects = json.loads(resp.read().decode('utf-8'))
+        _, projects = _supa_rest_as_user(
+            request, "GET",
+            f"/projects?job_id=eq.{job_id}&select=*",
+            timeout=15,
+        )
+        projects = projects or []
         if not projects:
             raise HTTPException(404, "Projeto não encontrado")
         proj = projects[0]
+    except HTTPException:
+        raise
     except urllib.error.HTTPError as e:
         raise HTTPException(500, f"Erro Supabase: {e}")
 
-    # 2) Buscar items atuais (já revisados)
+    # 2) Buscar items atuais (já revisados) — RPC SECURITY DEFINER, anon ok
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
         body = json.dumps({"p_job_id": job_id}).encode('utf-8')
@@ -5733,27 +5839,25 @@ async def save_item_note(job_id: str, item_id: str, payload: NotePayload, reques
     try:
         if not text:
             # Delete
-            url = f"{SUPABASE_URL}/rest/v1/item_notes?item_id=eq.{item_id}"
-            req = urllib.request.Request(url, method='DELETE')
-            req.add_header('apikey', SUPABASE_KEY)
-            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
-            urllib.request.urlopen(req, timeout=10)
+            _supa_rest_as_user(
+                request, "DELETE",
+                f"/item_notes?item_id=eq.{item_id}",
+                timeout=10,
+            )
             return {"status": "ok", "deleted": True}
 
         # Upsert: try update first, insert on 0 rows
-        url = f"{SUPABASE_URL}/rest/v1/item_notes?item_id=eq.{item_id}"
-        body = json.dumps({
+        patch_body = {
             "note": text,
             "author": payload.author or "",
             "updated_at": datetime.utcnow().isoformat(),
-        }).encode('utf-8')
-        req = urllib.request.Request(url, data=body, method='PATCH')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
-        req.add_header('Content-Type', 'application/json')
-        req.add_header('Prefer', 'return=representation')
-        resp = urllib.request.urlopen(req, timeout=10)
-        rows = json.loads(resp.read().decode('utf-8') or '[]')
+        }
+        _, rows = _supa_rest_as_user(
+            request, "PATCH",
+            f"/item_notes?item_id=eq.{item_id}",
+            body=patch_body, prefer="return=representation", timeout=10,
+        )
+        rows = rows or []
         if not rows:
             # Insert novo
             _supabase_insert("item_notes", {
@@ -6266,13 +6370,12 @@ async def finalize_review(job_id: str, request: Request):
     try:
         # Ainda conta reviews pra retornar n_actions ao frontend (pra UI mostrar
         # progresso do usuário), mas não cria evento de cashback.
-        rv_url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
-                  f"?job_id=eq.{job_id}&select=item_id&limit=5000")
-        req = urllib.request.Request(rv_url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=10)
-        reviews = json.loads(resp.read().decode("utf-8"))
+        _, reviews = _supa_rest_as_user(
+            request, "GET",
+            f"/item_reviews?job_id=eq.{job_id}&select=item_id&limit=5000",
+            timeout=10,
+        )
+        reviews = reviews or []
         n_actions = len({r["item_id"] for r in reviews if r.get("item_id")})
     except Exception as e:
         n_actions = 0
@@ -6296,15 +6399,14 @@ async def get_review_state(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
-               f"?job_id=eq.{job_id}"
-               f"&select=item_id,action,edits,comment,reviewed_at"
-               f"&order=reviewed_at.desc&limit=2000")
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=15)
-        reviews = json.loads(resp.read().decode("utf-8"))
+        _, reviews = _supa_rest_as_user(
+            request, "GET",
+            f"/item_reviews?job_id=eq.{job_id}"
+            f"&select=item_id,action,edits,comment,reviewed_at"
+            f"&order=reviewed_at.desc&limit=2000",
+            timeout=15,
+        )
+        reviews = reviews or []
         # Manter só a MAIS RECENTE por item (supabase retorna ordenado desc)
         state = {}
         for r in reviews:
@@ -6338,15 +6440,15 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
 
     # 1) Busca reviews recentes (com JOIN manual pra pegar description do item)
     try:
-        url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
-               f"?select=id,job_id,item_id,action,edits,comment,reviewed_at"
-               f"&reviewed_at=gte.{(datetime.utcnow() - timedelta(days=days)).isoformat()}"
-               f"&order=reviewed_at.desc&limit=1000")
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=20)
-        reviews = json.loads(resp.read().decode('utf-8'))
+        _, reviews = _supa_rest_as_user(
+            request, "GET",
+            f"/item_reviews"
+            f"?select=id,job_id,item_id,action,edits,comment,reviewed_at"
+            f"&reviewed_at=gte.{(datetime.utcnow() - timedelta(days=days)).isoformat()}"
+            f"&order=reviewed_at.desc&limit=1000",
+            timeout=20,
+        )
+        reviews = reviews or []
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar reviews: {e}")
 
@@ -6368,13 +6470,13 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
         chunk = item_ids_uniq[i:i+100]
         try:
             ids_csv = ",".join(str(x) for x in chunk)
-            durl = (f"{SUPABASE_URL}/rest/v1/project_items"
-                    f"?id=in.({ids_csv})&select=id,description,discipline")
-            dreq = urllib.request.Request(durl, method="GET")
-            dreq.add_header("apikey", SUPABASE_KEY)
-            dreq.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
-            dresp = urllib.request.urlopen(dreq, timeout=10)
-            for row in json.loads(dresp.read().decode('utf-8')):
+            _, rows_ = _supa_rest_as_user(
+                request, "GET",
+                f"/project_items?id=in.({ids_csv})"
+                f"&select=id,description,discipline",
+                timeout=10,
+            )
+            for row in (rows_ or []):
                 item_descs[row.get("id")] = row.get("description", "")
         except Exception:
             pass
