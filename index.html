@@ -620,11 +620,10 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
 <script>
-  const sbClient = window.supabase.createClient(
-    'https://kqjabzwgbfuivzlcfvvu.supabase.co',
-    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI'
-  );
+  // sbClient vem de aiarq-utils.js
+  const sbClient = window.sbClient;
   (async () => {
     const { data: { session } } = await sbClient.auth.getSession();
     if (session) {
@@ -645,5 +644,6 @@
 <script src="chat-widget.js" defer></script>
 <script src="contact-modal.js" defer></script>
 <script src="onboarding-tour.js" defer></script>
+<script src="cookie-consent.js" defer></script>
 </body>
 </html>

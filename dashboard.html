@@ -1005,9 +1005,17 @@
 
 </div>
 
-<!-- supabase-js movido do <head> pra cá: não bloqueia o render inicial -->
+<!-- supabase-js + utils compartilhados (sb, sbClient, authFetch, downloadProtected, escapeHtml, API_BASE) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
 <script>
+  // ══════════════════════════════════════════════
+  //  HELPERS GLOBAIS — vêm de aiarq-utils.js
+  // ══════════════════════════════════════════════
+  // Reimporta como const locais pra evitar TDZ em funções declaradas abaixo.
+  const API_BASE = window.API_BASE;
+  const sbClient = window.sbClient;
+
   // ══════════════════════════════════════════════
   //  TAB SWITCHING
   // ══════════════════════════════════════════════
@@ -1197,36 +1205,9 @@
   }
 
   // ══════════════════════════════════════════════
-  //  CONFIG
+  //  CONFIG — agora vem de aiarq-utils.js (sbClient, authFetch, API_BASE, notify)
   // ══════════════════════════════════════════════
-  const API_BASE = 'https://ai-arq.onrender.com';
-  const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
-  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
-
-  const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-  // Helper: fetch com Bearer token do Supabase (pra endpoints com ownership)
-  async function authFetch(url, options = {}) {
-    const { data: { session } } = await sbClient.auth.getSession();
-    const headers = Object.assign({}, options.headers || {});
-    if (session && session.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
-    }
-    return fetch(url, Object.assign({}, options, { headers }));
-  }
-
-  // Baixa endpoint protegido enviando Authorization header.
-  // Bug 2026-05-18 (Daniela): window.open / <a href> NÃO enviam headers
-  // customizados → backend retorna 401. Solução: fetch com Bearer token,
-  // converter resposta em blob, disparar download programático.
-  // Shim: toast quando disponível, alert como fallback. toast.js carrega
-  // via defer — em scripts inline antes do DOMContentLoaded usa alert.
-  const notify = {
-    warn:  (m) => (window.toast ? window.toast.warn(m)  : alert(m)),
-    error: (m) => (window.toast ? window.toast.error(m) : alert(m)),
-    info:  (m) => (window.toast ? window.toast.info(m)  : alert(m)),
-    ok:    (m) => (window.toast ? window.toast.success(m) : alert(m)),
-  };
+  const notify = window.aiArqNotify;
 
   // ── Cadastro 2 etapas: garante CPF/CNPJ antes do checkout ─────────
   // Lê o profile, valida o que tiver; se vazio mostra modal. Devolve
@@ -1301,38 +1282,7 @@
     });
   }
 
-  async function downloadProtected(url, filename) {
-    const { data: { session } } = await sbClient.auth.getSession();
-    if (!session) {
-      notify.warn('Sua sessão expirou. Faça login de novo pra baixar.');
-      window.location.href = 'login.html';
-      return;
-    }
-    try {
-      const resp = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${session.access_token}` }
-      });
-      if (!resp.ok) {
-        let detail = `HTTP ${resp.status}`;
-        try { const j = await resp.json(); detail = j.detail || detail; } catch {}
-        notify.error(`Não consegui baixar a planilha: ${detail}`);
-        return;
-      }
-      const blob = await resp.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = blobUrl;
-      a.download = filename || 'planilha.xlsx';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-    } catch (e) {
-      notify.error('Erro de rede ao baixar: ' + e.message);
-    }
-  }
-  // Exposta globalmente pra ser chamada via onclick em templates HTML inline.
-  window.aiArqDownloadProtected = downloadProtected;
+  // downloadProtected + window.aiArqDownloadProtected vêm de aiarq-utils.js (como globals)
 
   // ══════════════════════════════════════════════
   //  STATE
@@ -2466,9 +2416,7 @@
     agentChatHistory.scrollTop = agentChatHistory.scrollHeight;
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[c]));
-  }
+  // escapeHtml é fornecido como global por aiarq-utils.js (window.escapeHtml)
 
   function resetAgentConversation() {
     agentConversation = [];

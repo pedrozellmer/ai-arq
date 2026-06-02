@@ -17,6 +17,7 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
 <style>
   body { font-family: 'Inter', sans-serif; }
   .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
@@ -842,24 +843,14 @@
 
 <script>
 // ══════════════════════════════════════════════
-// SUPABASE CONFIG
+// SUPABASE CONFIG — vem de aiarq-utils.js (sbClient, authFetch, API_BASE)
 // ══════════════════════════════════════════════
-// TODO: mover pra fetch inicial de config endpoint
-const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
-const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
+// API_BASE precisa ser declarado aqui no topo porque funções abaixo
+// (loadNPSData, loadCalibrationFactors, loadInsights) referenciam ele.
+// Em <script> top-level, `const` em ponto mais embaixo causaria TDZ se
+// uma dessas funções fosse chamada antes da linha do `const`.
+const API_BASE = window.API_BASE;
 const ADMIN_EMAIL = 'zarelalopes@gmail.com';
-
-// Helper: fetch com Bearer token do Supabase pra endpoints /api/admin/*
-async function authFetch(url, options = {}) {
-  const { data: { session } } = await sbClient.auth.getSession();
-  const headers = Object.assign({}, options.headers || {});
-  if (session && session.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
-  }
-  return fetch(url, Object.assign({}, options, { headers }));
-}
 
 // ══════════════════════════════════════════════
 // ACCESS CONTROL
@@ -1258,7 +1249,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ══════════════════════════════════════════════
 // NPS — métricas e respostas recentes
 // ══════════════════════════════════════════════
-const API_BASE = 'https://ai-arq.onrender.com';
+// (API_BASE já declarado lá em cima depois da SUPABASE CONFIG)
 
 async function loadNPSData() {
   const periodSel = document.getElementById('nps-period');

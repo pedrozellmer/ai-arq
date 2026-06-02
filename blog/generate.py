@@ -464,6 +464,7 @@ def render_post_html(post):
 <!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
 <script src="/chat-widget.js"></script>
 <script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
 </body>
 </html>'''
 
@@ -574,6 +575,7 @@ def render_index_html():
 <!-- Chat widget + Modal de contato -->
 <script src="/chat-widget.js"></script>
 <script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
 </body>
 </html>'''
 

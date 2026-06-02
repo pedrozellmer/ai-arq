@@ -6128,9 +6128,15 @@ def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
 
 
 @app.get("/api/sheet/{job_id}")
-async def get_sheet_pdf(job_id: str, ref: str = ""):
+async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
     """Serve a prancha (PDF, PNG, etc) inline pro viewer. Pra DWG/DXF
-    tenta servir o PNG renderizado (render server-side) antes."""
+    tenta servir o PNG renderizado (render server-side) antes.
+
+    Segurança: exige que quem chama seja dono do projeto (ou admin).
+    Antes (até 2026-06-02) o endpoint era público — qualquer um com job_id
+    válido baixava a prancha. Fix IDOR aplicado adicionando
+    _require_project_owner."""
+    _require_project_owner(request, job_id)
     from fastapi.responses import Response
 
     if not ref:
