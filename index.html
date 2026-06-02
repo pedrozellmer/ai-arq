@@ -6,9 +6,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://cdn.tailwindcss.com">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -47,9 +44,18 @@
   .card-hover { transition: all 0.3s ease; }
   .card-hover:hover { box-shadow: 0 0 0 2px transparent; background-image: linear-gradient(white, white), linear-gradient(135deg, #4f46e5, #06b6d4); background-origin: border-box; background-clip: padding-box, border-box; border-color: transparent; }
   html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 </style>
 </head>
 <body class="bg-white text-gray-900 antialiased">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
 
 <!-- NAVBAR -->
 <nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
@@ -67,7 +73,7 @@
     </div>
     <div id="nav-auth" class="flex items-center gap-3">
       <a href="login.html" id="nav-login" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
-      <a href="login.html" id="nav-cta" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+      <a href="cadastro.html" id="nav-cta" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
       <!-- Mostrado quando logado -->
       <div id="nav-user" class="hidden flex items-center gap-3">
         <img id="nav-avatar" src="" alt="" class="w-8 h-8 rounded-full" loading="lazy">
@@ -80,6 +86,7 @@
 
 <!-- HERO — foco no wedge: quantitativo do CAD. Comparativo e PPT são bônus
      que aparecem mais abaixo, não competem com a promessa central. -->
+<main id="main">
 <section class="gradient-hero relative overflow-hidden py-20 md:py-32">
   <div class="relative mx-auto max-w-6xl px-4 text-center">
     <span class="inline-block mb-6 bg-indigo-100 text-indigo-700 text-sm font-medium px-4 py-1.5 rounded-full">
@@ -92,7 +99,7 @@
       Sobe PDF, DWG ou DXF — a IA lê e devolve a planilha por disciplina com a fonte de cada item citada. Sem preços, sem inventar: quem precifica é seu orçamentista.
     </p>
     <div class="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-      <a href="login.html" class="gradient-main text-white text-lg font-semibold px-8 py-4 rounded-xl shadow-btn transition flex items-center gap-2 no-underline">
+      <a href="cadastro.html" class="gradient-main text-white text-lg font-semibold px-8 py-4 rounded-xl shadow-btn transition flex items-center gap-2 no-underline">
         Comece Grátis
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
       </a>
@@ -433,7 +440,7 @@
         <div class="mt-5"><span class="text-4xl font-bold text-gray-900">R$ 97</span><span class="text-gray-500">/projeto</span></div>
         <p class="text-xs text-gray-500 mt-1">R$ 19,40 por prancha</p>
         <p class="mt-6 text-sm text-gray-600 flex-1 leading-relaxed">Para <strong>residencial</strong>, <strong>loja</strong> ou <strong>escritório simples</strong> com poucas pranchas (layout, pontos, forro).</p>
-        <a href="login.html" class="mt-6 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
+        <a href="cadastro.html" class="mt-6 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
       </div>
 
       <!-- Médio - destaque -->
@@ -450,7 +457,7 @@
         <div class="mt-5"><span class="text-4xl font-bold text-gray-900">R$ 157</span><span class="text-gray-500">/projeto</span></div>
         <p class="text-xs text-emerald-600 mt-1 font-medium">R$ 15,70 por prancha · economia de 19%</p>
         <p class="mt-6 text-sm text-gray-600 flex-1 leading-relaxed"><strong>Reforma comercial</strong> ou escritório médio com várias disciplinas (arquitetura, piso, forro, elétrica, marcenaria).</p>
-        <a href="login.html" class="mt-6 w-full py-3 rounded-lg gradient-main text-white font-medium transition block text-center no-underline">Começar</a>
+        <a href="cadastro.html" class="mt-6 w-full py-3 rounded-lg gradient-main text-white font-medium transition block text-center no-underline">Começar</a>
       </div>
 
       <!-- Grande -->
@@ -460,7 +467,7 @@
         <div class="mt-5"><span class="text-4xl font-bold text-gray-900">R$ 247</span><span class="text-gray-500">/projeto</span></div>
         <p class="text-xs text-emerald-600 mt-1 font-medium">R$ 12,35 por prancha · economia de 36%</p>
         <p class="mt-6 text-sm text-gray-600 flex-1 leading-relaxed"><strong>Andar corporativo</strong>, <strong>hotel</strong>, <strong>escola</strong> ou <strong>clínica</strong> — projetos com elétrica, dados, AC, incêndio e detalhamento extensivo.</p>
-        <a href="login.html" class="mt-6 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
+        <a href="cadastro.html" class="mt-6 w-full py-3 rounded-lg border border-gray-300 font-medium text-gray-700 hover:bg-gray-50 transition block text-center no-underline">Começar</a>
       </div>
     </div>
 
@@ -577,12 +584,13 @@
   <div class="mx-auto max-w-4xl px-4 text-center">
     <h2 class="text-3xl font-bold text-white md:text-4xl">Pronto para economizar dias de trabalho?</h2>
     <p class="mt-4 text-indigo-100 text-lg max-w-2xl mx-auto">Primeiro projeto é grátis. Envie suas pranchas e receba a planilha de quantitativos pronta para enviar aos fornecedores.</p>
-    <a href="login.html" class="mt-8 inline-flex bg-white text-indigo-600 hover:bg-indigo-50 text-lg font-semibold px-8 py-4 rounded-xl shadow-lg transition items-center gap-2 no-underline">
+    <a href="cadastro.html" class="mt-8 inline-flex bg-white text-indigo-600 hover:bg-indigo-50 text-lg font-semibold px-8 py-4 rounded-xl shadow-lg transition items-center gap-2 no-underline">
       Testar Grátis
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
     </a>
   </div>
 </section>
+</main>
 
 <!-- FOOTER -->
 <footer class="border-t bg-gray-50 py-12">
@@ -605,7 +613,7 @@
       </div>
       <p class="text-sm text-gray-500">
         &copy; 2026 AI.arq · Todos os direitos reservados
-        <span class="block md:inline md:ml-2 text-xs text-gray-300">v0.5.0 · Beta</span>
+        <span class="block md:inline md:ml-2 text-xs text-gray-600">v0.5.0 · Beta</span>
       </p>
     </div>
   </div>

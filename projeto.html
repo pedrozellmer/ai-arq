@@ -6,17 +6,15 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://cdn.tailwindcss.com">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-  <meta http-equiv="Pragma" content="no-cache">
-  <meta http-equiv="Expires" content="0">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Projeto — AI.arq</title>
+  <meta name="robots" content="noindex,follow">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>body { font-family: 'Inter', -apple-system, sans-serif; }</style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
 
 <div id="gate" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
   <div class="text-center">
@@ -58,7 +56,7 @@ function smartBack() {
 }
 </script>
 
-<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+<main id="main" class="max-w-6xl mx-auto px-4 py-6 space-y-6">
 
   <!-- Warnings do motor -->
   <div id="proj-warnings" class="hidden rounded-xl border-2 border-amber-200 bg-amber-50 p-5" role="alert" aria-live="polite">
@@ -385,7 +383,7 @@ function smartBack() {
           <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
         </div>
       </div>
-      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" class="underline hover:text-gray-700">Privacidade</a>.</p>
+      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>.</p>
       <div id="edit-status" class="mt-2 text-xs hidden"></div>
       <div class="mt-4 flex gap-2 justify-end">
         <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
@@ -451,7 +449,7 @@ function smartBack() {
           Enviar orçamento
         </button>
       </div>
-      <p class="mt-3 text-xs text-gray-500">Ao subir uma cotação, você confirma que tem autorização do fornecedor pra usar esse material aqui. Ao aceitar, você concorda com os <a href="termos.html" target="_blank" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" class="underline hover:text-gray-700">Privacidade</a>. Valores <strong>nunca</strong> viram referência pra outros projetos — só ratios adimensionais anônimos alimentam o motor.</p>
+      <p class="mt-3 text-xs text-gray-500">Ao subir uma cotação, você confirma que tem autorização do fornecedor pra usar esse material aqui. Ao aceitar, você concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>. Valores <strong>nunca</strong> viram referência pra outros projetos — só ratios adimensionais anônimos alimentam o motor.</p>
       <div id="q-status" class="mt-3 text-xs text-gray-500 hidden"></div>
     </div>
 
@@ -491,7 +489,7 @@ function smartBack() {
             </button>
           </div>
         </div>
-        <p class="text-xs text-gray-500">Ao enviar, você concorda com os <a href="termos.html" target="_blank" class="underline hover:text-gray-700">Termos de Uso</a> e a <a href="privacidade.html" target="_blank" class="underline hover:text-gray-700">Política de Privacidade</a>.</p>
+        <p class="text-xs text-gray-500">Ao enviar, você concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos de Uso</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Política de Privacidade</a>.</p>
         <div id="rev-status" class="mt-2 text-xs hidden"></div>
       </div>
     </div>
@@ -534,6 +532,8 @@ function smartBack() {
 
 </main>
 
+<!-- supabase-js movido do <head> pra cá: não bloqueia o render inicial -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
@@ -589,6 +589,38 @@ async function downloadProtected(url, filename) {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   } catch (e) {
     notify.error('Erro de rede ao baixar: ' + e.message);
+  }
+}
+
+// FIX bug Daniela 2026-06-02: endpoint protegido NÃO pode ser aberto via
+// <a href>/target="_blank" — o browser não envia Authorization. Esse
+// helper faz fetch com Bearer, gera blob URL e abre em nova aba (em vez
+// de forçar download como o downloadProtected). Use pra "Abrir PDF".
+async function openPdfProtected(url) {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) {
+    notify.warn('Sua sessão expirou. Faça login de novo pra abrir.');
+    window.location.href = 'login.html';
+    return;
+  }
+  try {
+    const resp = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!resp.ok) {
+      let detail = `HTTP ${resp.status}`;
+      try { const j = await resp.json(); detail = j.detail || detail; } catch {}
+      notify.error(`Não consegui abrir o PDF: ${detail}`);
+      return;
+    }
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    // Abre em nova aba. revokeObjectURL depois de 60s pra dar tempo
+    // do browser carregar o PDF.
+    window.open(blobUrl, '_blank', 'noopener');
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (e) {
+    notify.error('Erro de rede ao abrir: ' + e.message);
   }
 }
 
@@ -1004,7 +1036,7 @@ function renderClientData(d) {
     const phoneClean = d.client_phone.replace(/\D/g, '');
     const waNum = phoneClean.length >= 10 ? (phoneClean.startsWith('55') ? phoneClean : '55' + phoneClean) : phoneClean;
     const msg = encodeURIComponent(`Olá${d.client_name ? ' ' + d.client_name.split(' ')[0] : ''}! Segue o comparativo de fornecedores do projeto.`);
-    actions.push(`<a href="https://wa.me/${waNum}?text=${msg}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg no-underline font-medium">📱 WhatsApp</a>`);
+    actions.push(`<a href="https://wa.me/${waNum}?text=${msg}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg no-underline font-medium">📱 WhatsApp</a>`);
   }
   if (d.client_email) {
     actions.push(`<a href="mailto:${d.client_email}?subject=Comparativo de Orçamentos" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg no-underline font-medium">✉️ E-mail</a>`);
@@ -1351,7 +1383,7 @@ async function generateComparison() {
         `;
       }
       const pptxBtn = data.pptx_url ? `
-        <a href="${API_BASE}${data.pptx_url}" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-sm rounded-lg font-medium no-underline">
+        <a href="${API_BASE}${data.pptx_url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-sm rounded-lg font-medium no-underline">
           📊 Baixar apresentação PPT
         </a>
       ` : '';
@@ -1362,7 +1394,7 @@ async function generateComparison() {
           ${s.n_discrepancies_above_100pct ? `<p class="mt-2 text-xs text-red-600">⚠ ${s.n_discrepancies_above_100pct} itens com diferença > 100% entre fornecedores</p>` : ''}
           ${refHtml}
           <div class="mt-4 flex flex-wrap gap-2">
-            <a href="${API_BASE}${data.xlsx_url}" target="_blank" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium no-underline">
+            <a href="${API_BASE}${data.xlsx_url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium no-underline">
               📥 Baixar comparativo XLSX
             </a>
             ${pptxBtn}
@@ -1519,7 +1551,15 @@ function renderFiles(proj, items) {
       const btnIcon = isPdf
         ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M14 10l7-7M10 21H5a2 2 0 01-2-2v-5m0-4V5a2 2 0 012-2h4"/>'
         : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>';
-      const downloadAttr = isPdf ? '' : `download="${esc(fname)}"`;
+      // FIX bug Daniela 2026-06-02: endpoint protegido /api/sheet exige Bearer
+      // token. <a href target="_blank"> NÃO envia Authorization → 401. Usamos
+      // os helpers via onclick: PDF → openPdfProtected (abre em nova aba),
+      // DWG/DXF → downloadProtected (força download).
+      const safeUrl = directUrl.replace(/'/g, "\\'");
+      const safeFname = String(fname).replace(/'/g, "\\'");
+      const onclickAttr = isPdf
+        ? `onclick="openPdfProtected('${safeUrl}'); return false;"`
+        : `onclick="downloadProtected('${safeUrl}', '${safeFname}'); return false;"`;
       return `
         <div class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50">
           <span class="text-xl shrink-0">${icon}</span>
@@ -1527,7 +1567,7 @@ function renderFiles(proj, items) {
             <p class="text-sm font-medium text-gray-800 truncate">${esc(fname)}</p>
             <p class="text-xs text-gray-500">${count} ${count === 1 ? 'item extraído' : 'itens extraídos'}</p>
           </div>
-          <a href="${directUrl}" target="_blank" ${downloadAttr} class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 no-underline">
+          <a href="#" ${onclickAttr} class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 no-underline cursor-pointer">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">${btnIcon}</svg>
             ${btnLabel}
           </a>
