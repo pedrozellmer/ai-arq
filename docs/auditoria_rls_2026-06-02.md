@@ -270,3 +270,22 @@ CREATE POLICY user_credits_select_own ON public.user_credits
 3. **Rotacionar a anon key** depois dos fixes, porque a chave antiga pode estar vazada em algum lugar (frontend antigo, screenshot, log).
 4. **Auditar nas próximas semanas** as outras tabelas (`project_items`, `cronogramas`, `agent_conversations`, etc.) com o mesmo padrão.
 5. **Considerar coluna `owner_user_id` redundante** em tabelas filhas (`project_items`, `cronogramas`, etc.) pra evitar JOIN em toda policy — melhora performance e simplifica RLS.
+
+---
+
+## 🟡 Status Fase 2 (2026-06-02) — BLOQUEADO
+
+**Tentativa de aplicar `migrations_rls_planejadas.sql` em branch isolada:** abortada.
+
+- **Erro:** `PaymentRequiredException — Branching is supported only on the Pro plan or above`.
+- **Projeto:** `kqjabzwgbfuivzlcfvvu` está em plano Free; branching só no Pro ($25/mês).
+- **Migrations aplicadas:** 0 de 38. Banco de produção intacto.
+- **Smoke a-e:** não executado (rodar smoke direto em `main` sem branch isolada é destrutivo em produção).
+
+### Caminhos pro Pedro decidir
+
+1. **Upgrade Supabase Pro** ($25/mês) → criar branch → aplicar plano original com isolamento. Mais seguro.
+2. **Smoke direto em produção com rollback pronto** → aplicar `migrations_rls_planejadas.sql` no projeto principal em janela de baixo tráfego (madrugada), com SQL de rollback pré-pronto pra reverter em ~30s se quebrar.
+3. **Validar SQL offline + aplicar direto** → confirmar via curl que o backend Render usa `SUPABASE_SERVICE_ROLE_KEY` numa rota autenticada (tarefa #16 marcada como concluída — convém checar antes), aplicar no main em janela calma, smoke pós-aplicação.
+
+**Status do arquivo `migrations_rls_planejadas.sql`:** pronto e idempotente (38 policies, DROP IF EXISTS + CREATE), aguardando decisão.
