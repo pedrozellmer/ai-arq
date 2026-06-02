@@ -264,54 +264,15 @@
   </div>
 </main>
 
-<!-- supabase-js movido do <head> pra cá: não bloqueia o render inicial -->
+<!-- supabase-js + utils compartilhados (sbClient, downloadProtected, escapeHtml, API_BASE) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
 <script>
-const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
-const API_BASE = 'https://ai-arq.onrender.com';
-const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Baixa endpoint protegido enviando Authorization header.
-// Bug 2026-05-18 (Daniela): <a href> / window.open NÃO enviam headers customizados
-// → backend retorna 401. Solução: fetch com Bearer token, blob, download programático.
-// Shim: toast quando disponível, alert como fallback.
-const notify = {
-  warn:  (m) => (window.toast ? window.toast.warn(m)  : alert(m)),
-  error: (m) => (window.toast ? window.toast.error(m) : alert(m)),
-  info:  (m) => (window.toast ? window.toast.info(m)  : alert(m)),
-  ok:    (m) => (window.toast ? window.toast.success(m) : alert(m)),
-};
-async function downloadProtected(url, filename) {
-  const { data: { session } } = await sbClient.auth.getSession();
-  if (!session) {
-    notify.warn('Sua sessão expirou. Faça login de novo pra baixar.');
-    window.location.href = 'login.html';
-    return;
-  }
-  try {
-    const resp = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${session.access_token}` }
-    });
-    if (!resp.ok) {
-      let detail = `HTTP ${resp.status}`;
-      try { const j = await resp.json(); detail = j.detail || detail; } catch {}
-      notify.error(`Não consegui baixar o arquivo: ${detail}`);
-      return;
-    }
-    const blob = await resp.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename || 'cronograma';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-  } catch (e) {
-    notify.error('Erro de rede ao baixar: ' + e.message);
-  }
-}
+// Helpers globais (sbClient, downloadProtected, escapeHtml, API_BASE, aiArqNotify)
+// vêm de aiarq-utils.js. Reimportamos como const locais.
+const API_BASE = window.API_BASE;
+const sbClient = window.sbClient;
+const notify   = window.aiArqNotify;
 
 // Pega job_id da URL: ?job=abc123
 const params = new URLSearchParams(window.location.search);
@@ -1506,9 +1467,7 @@ function renderRessalva(c) {
   if (el) el.textContent = ' ' + (c.ressalva || '');
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+// escapeHtml vem de aiarq-utils.js
 
 init();
 </script>

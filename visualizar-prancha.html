@@ -11,6 +11,7 @@
   <meta name="robots" content="noindex,follow">
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="aiarq-utils.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', -apple-system, sans-serif; margin: 0; overflow: hidden; }
@@ -43,10 +44,9 @@
 </div>
 
 <script>
-const API_BASE = 'https://ai-arq.onrender.com';
-const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
-const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+// API_BASE + sbClient vêm de aiarq-utils.js
+const API_BASE = window.API_BASE;
+const sbClient = window.sbClient;
 
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');

@@ -216,66 +216,15 @@
 <!-- ═════════════════════════════════════════════════════════════ -->
 <div id="toast" class="hidden fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg text-sm z-50"></div>
 
-<!-- supabase-js movido do <head> pra cá: não bloqueia o render inicial -->
+<!-- supabase-js + utils compartilhados (sb, authFetch, downloadProtected, escapeHtml, API_BASE) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
 <script>
-const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
-const API_BASE = 'https://ai-arq.onrender.com';
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Helper: fetch com Bearer do Supabase. Backend exige JWT em endpoints
-// /api/items/* (ownership check).
-async function authFetch(url, options = {}) {
-  const { data: { session } } = await sb.auth.getSession();
-  const headers = Object.assign({}, options.headers || {});
-  if (session && session.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
-  }
-  return fetch(url, Object.assign({}, options, { headers }));
-}
-
-// Baixa endpoint protegido enviando Authorization header.
-// Bug 2026-05-18 (Daniela): window.location.href / window.open / <a href>
-// NÃO enviam headers customizados → backend retorna 401. Solução: fetch com
-// Bearer token, converter resposta em blob, disparar download programático.
-// Shim: toast quando disponível, alert como fallback.
-const notify = {
-  warn:  (m) => (window.toast ? window.toast.warn(m)  : alert(m)),
-  error: (m) => (window.toast ? window.toast.error(m) : alert(m)),
-  info:  (m) => (window.toast ? window.toast.info(m)  : alert(m)),
-  ok:    (m) => (window.toast ? window.toast.success(m) : alert(m)),
-};
-async function downloadProtected(url, filename) {
-  const { data: { session } } = await sb.auth.getSession();
-  if (!session) {
-    notify.warn('Sua sessão expirou. Faça login de novo pra baixar.');
-    window.location.href = 'login.html';
-    return;
-  }
-  try {
-    const resp = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${session.access_token}` }
-    });
-    if (!resp.ok) {
-      let detail = `HTTP ${resp.status}`;
-      try { const j = await resp.json(); detail = j.detail || detail; } catch {}
-      notify.error(`Não consegui baixar a planilha: ${detail}`);
-      return;
-    }
-    const blob = await resp.blob();
-    const blobUrl = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = filename || 'planilha.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-  } catch (e) {
-    notify.error('Erro de rede ao baixar: ' + e.message);
-  }
-}
+// Helpers globais (sb, authFetch, downloadProtected, escapeHtml, API_BASE,
+// aiArqNotify) vêm de aiarq-utils.js. Reimportamos como const locais.
+const API_BASE = window.API_BASE;
+const sb       = window.sb;
+const notify   = window.aiArqNotify;
 
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
@@ -887,10 +836,7 @@ function flashToast(msg) {
   t.classList.remove('hidden');
   setTimeout(() => t.classList.add('hidden'), 2500);
 }
-function escapeHtml(s) {
-  return String(s || '').replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+// escapeHtml vem de aiarq-utils.js
 </script>
 
 <footer class="mt-10 border-t bg-white py-6">
