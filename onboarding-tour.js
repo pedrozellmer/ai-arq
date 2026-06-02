@@ -35,14 +35,14 @@
     {
       icon: '✏️',
       title: '3 · Revise e baixe',
-      body: 'Itens em <strong style="color:#16a34a">VERDE</strong> foram medidos do CAD (confiável). Itens em <strong style="color:#ea580c">LARANJA</strong> foram estimados (revisar antes de usar). Cada item validado vira <strong>R$ 0,10 de cashback</strong> (até R$ 20).',
+      body: 'Itens em <strong style="color:#0f172a;background:#f8fafc;padding:1px 6px;border-radius:4px;border:1px solid #cbd5e1">BRANCO</strong> foram medidos do CAD (confia). Itens em <strong style="color:#ea580c">LARANJA</strong> são estimativa da IA (revisa antes de mandar). Você ganha <strong>R$ 30</strong> subindo a planilha revisada e <strong>R$ 10</strong> por cotação de fornecedor (até <strong>R$ 60</strong> abatidos no próximo).',
       cta: 'Próximo',
     },
     {
       icon: '🎁',
       title: 'Lembrete importante',
       body: 'Seu <strong>1º projeto é 100% grátis</strong>. Sem cartão, sem mensalidade. Se gostar, paga só pelos próximos. Bora?',
-      cta: 'Subir meu CAD agora',
+      cta: 'Bora subir o primeiro projeto',
       ctaAction: 'goToUpload',
     },
   ];
@@ -129,6 +129,10 @@
   var overlay = document.createElement('div');
   overlay.className = 'aiqt-overlay';
   overlay.id = 'aiqt-overlay';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-labelledby', 'aiqt-title');
+  overlay.setAttribute('aria-describedby', 'aiqt-body-text');
   overlay.innerHTML = `
     <div class="aiqt-card" onclick="event.stopPropagation()">
       <div class="aiqt-progress"><div class="aiqt-progress-bar" id="aiqt-progress-bar" style="width:0%"></div></div>

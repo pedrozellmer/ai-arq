@@ -6,10 +6,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://cdn.tailwindcss.com">
-<meta http-equiv="Cache-Control" content="no-cache">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Prancha — AI.arq</title>
+  <meta name="robots" content="noindex,follow">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', -apple-system, sans-serif; margin: 0; overflow: hidden; }
@@ -43,28 +44,84 @@
 
 <script>
 const API_BASE = 'https://ai-arq.onrender.com';
+const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
+const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 const urlParams = new URLSearchParams(window.location.search);
 const jobId = urlParams.get('job_id');
 const ref = urlParams.get('ref');
+
+let currentBlobUrl = null;  // referência pra revogar no unload
 
 if (!jobId || !ref) {
   document.body.innerHTML = '<div style="padding:40px;font-family:Inter;text-align:center;">Parâmetros ausentes (?job_id=...&ref=...)</div>';
 } else {
   const pdfUrl = `${API_BASE}/api/sheet/${jobId}?ref=${encodeURIComponent(ref)}`;
   document.getElementById('filename').textContent = decodeURIComponent(ref);
-  document.getElementById('pdf-frame').src = pdfUrl;
 
   // Ajustar título da aba com nome do arquivo
   document.title = decodeURIComponent(ref) + ' — AI.arq';
 
-  window.downloadPdf = function() {
+  // FIX bug Daniela 2026-06-02: iframe.src={endpoint protegido} NÃO envia
+  // Authorization → 401. Solução: fetch com Bearer, gerar blob URL, atribuir
+  // ao iframe. CLAUDE.md item 9.
+  async function loadPdfIntoFrame() {
+    try {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session) {
+        document.body.innerHTML = '<div style="padding:40px;font-family:Inter;text-align:center;"><p>Sua sessão expirou. <a href="login.html" style="color:#4f46e5;text-decoration:underline">Entrar de novo</a> e voltar.</p></div>';
+        return;
+      }
+      const resp = await fetch(pdfUrl, {
+        headers: { 'Authorization': `Bearer ${session.access_token}` }
+      });
+      if (!resp.ok) {
+        let detail = `HTTP ${resp.status}`;
+        try { const j = await resp.json(); detail = j.detail || detail; } catch {}
+        document.body.innerHTML = `<div style="padding:40px;font-family:Inter;text-align:center;"><p>Não consegui abrir a prancha: ${detail}</p><p style="margin-top:16px"><a href="dashboard.html" style="color:#4f46e5;text-decoration:underline">Voltar pro dashboard</a></p></div>`;
+        return;
+      }
+      const blob = await resp.blob();
+      currentBlobUrl = URL.createObjectURL(blob);
+      document.getElementById('pdf-frame').src = currentBlobUrl;
+    } catch (e) {
+      document.body.innerHTML = `<div style="padding:40px;font-family:Inter;text-align:center;"><p>Erro de rede ao carregar: ${e.message}</p><p style="margin-top:16px"><a href="dashboard.html" style="color:#4f46e5;text-decoration:underline">Voltar pro dashboard</a></p></div>`;
+    }
+  }
+  loadPdfIntoFrame();
+
+  window.downloadPdf = async function() {
+    // Se já temos blob carregado, usa direto. Senão refaz o fetch.
+    if (currentBlobUrl) {
+      const a = document.createElement('a');
+      a.href = currentBlobUrl;
+      a.download = decodeURIComponent(ref);
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return;
+    }
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (!session) { window.location.href = 'login.html'; return; }
+    const resp = await fetch(pdfUrl, {
+      headers: { 'Authorization': `Bearer ${session.access_token}` }
+    });
+    if (!resp.ok) return;
+    const blob = await resp.blob();
+    const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = pdfUrl;
+    a.href = blobUrl;
     a.download = decodeURIComponent(ref);
     document.body.appendChild(a);
     a.click();
     a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
   };
+
+  window.addEventListener('beforeunload', () => {
+    if (currentBlobUrl) URL.revokeObjectURL(currentBlobUrl);
+  });
 }
 </script>
 

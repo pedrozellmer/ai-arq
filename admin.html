@@ -13,6 +13,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI.arq - Admin</title>
+<meta name="robots" content="noindex,follow">
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1076,7 +1077,7 @@ function renderMessages() {
           </a>
           ${m.status === 'new' ? `<button onclick="markMsgStatus('${m.id}', 'read')" class="px-3 py-1.5 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium transition">Marcar como lida</button>` : ''}
           ${m.status !== 'archived' ? `<button onclick="markMsgStatus('${m.id}', 'archived')" class="px-3 py-1.5 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 text-gray-500 text-xs font-medium transition">Arquivar</button>` : ''}
-          ${m.phone ? `<a href="https://wa.me/55${m.phone.replace(/\\D/g,'')}" target="_blank" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold no-underline transition">📱 WhatsApp</a>` : ''}
+          ${m.phone ? `<a href="https://wa.me/55${m.phone.replace(/\\D/g,'')}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold no-underline transition">📱 WhatsApp</a>` : ''}
         </div>
       </div>
     `;
@@ -1128,7 +1129,7 @@ async function loadLeads() {
       const date = new Date(l.last_message_at || l.created_at);
       const dateStr = date.toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
       const escapeH = (s) => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-      const waLink = l.phone ? `<a href="https://wa.me/55${(l.phone||'').replace(/\\D/g,'')}" target="_blank" class="text-green-600 hover:underline">${escapeH(l.phone)}</a>` : '<span class="text-gray-500">—</span>';
+      const waLink = l.phone ? `<a href="https://wa.me/55${(l.phone||'').replace(/\\D/g,'')}" target="_blank" rel="noopener noreferrer" class="text-green-600 hover:underline">${escapeH(l.phone)}</a>` : '<span class="text-gray-500">—</span>';
       const emailLink = `<a href="mailto:${escapeH(l.email)}" class="text-indigo-600 hover:underline">${escapeH(l.email)}</a>`;
       const statusBadge = l.converted_user_id
         ? '<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">✓ Cliente</span>'

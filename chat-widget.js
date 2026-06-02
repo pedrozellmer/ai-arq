@@ -236,12 +236,15 @@
 
   const panel = document.createElement('div');
   panel.id = 'aiarq-chat-panel';
+  panel.setAttribute('role', 'dialog');
+  panel.setAttribute('aria-modal', 'true');
+  panel.setAttribute('aria-labelledby', 'aiarq-chat-title');
   panel.innerHTML = `
     <div id="aiarq-chat-header">
       <div class="title">
         <div class="avatar">AI</div>
         <div>
-          <div style="font-weight:600;font-size:14px">AI.arq · Suporte</div>
+          <div id="aiarq-chat-title" style="font-weight:600;font-size:14px">AI.arq · Suporte</div>
           <div class="status">online agora</div>
         </div>
       </div>
@@ -283,15 +286,15 @@
         <p id="aiarq-lead-error" style="font-size:11px;color:#dc2626;margin:0;display:none;"></p>
         <p style="font-size:10px;color:#9ca3af;text-align:center;margin:8px 0 0 0;line-height:1.5;">
           Ao continuar, você concorda com os
-          <a href="/termos.html" target="_blank" style="color:#6b7280;text-decoration:underline;">Termos</a>
+          <a href="/termos.html" target="_blank" rel="noopener noreferrer" style="color:#6b7280;text-decoration:underline;">Termos</a>
           e a
-          <a href="/privacidade.html" target="_blank" style="color:#6b7280;text-decoration:underline;">Política de Privacidade</a>.
+          <a href="/privacidade.html" target="_blank" rel="noopener noreferrer" style="color:#6b7280;text-decoration:underline;">Política de Privacidade</a>.
         </p>
       </div>
     </div>
 
     <!-- CHAT (mostrado só DEPOIS do lead ser capturado) -->
-    <div id="aiarq-chat-messages" style="display:none;"></div>
+    <div id="aiarq-chat-messages" role="log" aria-live="polite" aria-atomic="false" style="display:none;"></div>
     <div id="aiarq-chat-input-wrap" style="display:none;">
       <textarea id="aiarq-chat-input" rows="1" placeholder="Digite sua dúvida..."></textarea>
       <button id="aiarq-chat-send" aria-label="Enviar">
@@ -315,7 +318,7 @@
       // Converte links markdown/url simples e **bold**
       let html = escapeHtml(m.content)
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/(https?:\/\/\S+|ai\.arq\.br\/\S+)/g, '<a href="$1" target="_blank">$1</a>')
+        .replace(/(https?:\/\/\S+|ai\.arq\.br\/\S+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
         .replace(/\n/g, '<br>');
       return `<div class="aiarq-msg ${m.role}">${html}</div>`;
     }).join('');

@@ -52,13 +52,13 @@ NAV = '''
     </a>
     <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
       <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
-      <a href="/#precos" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
       <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
       <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
     </div>
     <div class="flex items-center gap-3">
       <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
-      <a href="/login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+      <a href="/cadastro.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
     </div>
   </div>
 </nav>
@@ -79,7 +79,7 @@ FOOTER = '''
       <ul class="space-y-2 text-sm text-gray-600">
         <li><a href="/" class="hover:text-indigo-600">Início</a></li>
         <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
-        <li><a href="/#precos" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
         <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
       </ul>
     </div>
@@ -351,6 +351,10 @@ def render_post_html(post):
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
+
 <title>{post["title"]} | AI.arq</title>
 <meta name="description" content="{post["description"]}">
 <meta name="keywords" content="{post["keywords"]}">
@@ -381,7 +385,7 @@ def render_post_html(post):
 <meta name="publish-date" content="{post["publish_date"]}">
 
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 {COMMON_STYLES}
 
 <script type="application/ld+json">
@@ -440,7 +444,7 @@ def render_post_html(post):
   <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
     <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
     <p class="text-gray-700 mb-5">{post["cta"]}</p>
-    <a href="/login.html" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+    <a href="/cadastro.html" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
       Começar grátis
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
     </a>
@@ -497,6 +501,10 @@ def render_index_html():
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
+
 <title>Blog AI.arq | Conteúdo prático sobre quantitativos, orçamento e IA na arquitetura</title>
 <meta name="description" content="Artigos práticos sobre planilha de quantitativos, SINAPI, TCPO, BDI, memorial descritivo e IA aplicada à arquitetura. Conteúdo gratuito pra arquitetos e engenheiros brasileiros.">
 <meta name="keywords" content="blog arquitetura, planilha quantitativos, sinapi, tcpo, bdi, memorial descritivo, ia arquitetura">
@@ -511,7 +519,7 @@ def render_index_html():
 <meta property="og:image" content="{SITE_URL}/og-image.png">
 
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 {COMMON_STYLES}
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased">

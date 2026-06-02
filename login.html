@@ -6,9 +6,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.jsdelivr.net">
 <link rel="preconnect" href="https://cdn.tailwindcss.com">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -18,7 +15,6 @@
 <link rel="canonical" href="https://ai.arq.br/login.html">
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   body { font-family: 'Inter', sans-serif; }
   .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
@@ -128,6 +124,11 @@
   </div>
 </footer>
 
+<!-- supabase-js movido do <head> pra cá: não bloqueia o render inicial -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- toast.js: usar window.toast.error em vez de alert() pra UX consistente.
+     Defer pra carregar em paralelo sem bloquear o render. -->
+<script src="toast.js" defer></script>
 <script>
   const SUPABASE_URL = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
@@ -153,7 +154,8 @@
     });
     if (error) {
       console.error('Erro ao fazer login:', error.message);
-      alert('Erro ao iniciar login. Tente novamente.');
+      const msg = 'Não rolou o login com Google. Tenta de novo ou usa e-mail/senha logo abaixo.';
+      (window.toast?.error(msg) || alert(msg));
     }
   });
 

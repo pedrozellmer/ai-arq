@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.tailwindcss.com">
+
 <title>Blog AI.arq | Conteúdo prático sobre quantitativos, orçamento e IA na arquitetura</title>
 <meta name="description" content="Artigos práticos sobre planilha de quantitativos, SINAPI, TCPO, BDI, memorial descritivo e IA aplicada à arquitetura. Conteúdo gratuito pra arquitetos e engenheiros brasileiros.">
 <meta name="keywords" content="blog arquitetura, planilha quantitativos, sinapi, tcpo, bdi, memorial descritivo, ia arquitetura">
@@ -18,7 +22,7 @@
 <meta property="og:image" content="https://ai.arq.br/og-image.png">
 
 <script src="https://cdn.tailwindcss.com"></script>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 
 <style>
   body { font-family: 'Inter', sans-serif; }
@@ -44,6 +48,7 @@
 
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
 
 
 <nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
@@ -54,13 +59,13 @@
     </a>
     <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
       <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
-      <a href="/#precos" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
       <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
       <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
     </div>
     <div class="flex items-center gap-3">
       <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
-      <a href="/login.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+      <a href="/cadastro.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
     </div>
   </div>
 </nav>
@@ -76,7 +81,7 @@
 </header>
 
 <!-- Listagem -->
-<main class="mx-auto max-w-6xl px-4 py-12">
+<main id="main" class="mx-auto max-w-6xl px-4 py-12">
   <div id="post-grid" class="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
     
         <article data-future="true" style="display:none" class="post-card group rounded-2xl border bg-white p-6 shadow-sm hover:shadow-lg transition cursor-pointer" data-publish-date="2026-09-06" onclick="window.location='/blog/posts/memorial-a-partir-do-quantitativo-caminho-inverso.html'">
@@ -219,7 +224,7 @@
           </div>
         </article>
         
-        <article data-future="true" style="display:none" class="post-card group rounded-2xl border bg-white p-6 shadow-sm hover:shadow-lg transition cursor-pointer" data-publish-date="2026-05-31" onclick="window.location='/blog/posts/quanto-cobrar-planilha-quantitativos-2026.html'">
+        <article class="post-card group rounded-2xl border bg-white p-6 shadow-sm hover:shadow-lg transition cursor-pointer" data-publish-date="2026-05-31" onclick="window.location='/blog/posts/quanto-cobrar-planilha-quantitativos-2026.html'">
           <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Mercado</span>
           <h2 class="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition leading-tight">Quanto Cobrar por Planilha de Quantitativos em 2026 (Tabela Completa)</h2>
           <p class="text-sm text-gray-600 leading-relaxed mb-4">Tabela 2026 de valores de mercado pra planilha de quantitativos. Cobrança por porte, por prancha, por m², por hora — com base na Tabela CAU/BR e prática de mercado.</p>
@@ -302,7 +307,7 @@
       <ul class="space-y-2 text-sm text-gray-600">
         <li><a href="/" class="hover:text-indigo-600">Início</a></li>
         <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
-        <li><a href="/#precos" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
         <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
       </ul>
     </div>
