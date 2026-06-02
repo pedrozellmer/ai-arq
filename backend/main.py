@@ -38,13 +38,32 @@ from instagram_webhook import router as instagram_router
 # densidade (density_calibration.py) e só gera alertas.
 
 # Supabase client para salvar projetos
-# Env vars recomendados no Render: SUPABASE_URL, SUPABASE_KEY (ou SUPABASE_ANON_KEY)
-# Fallbacks hardcoded temporários — remover após confirmar env vars em produção.
+# Env vars recomendados no Render:
+#   - SUPABASE_URL
+#   - SUPABASE_KEY (ou SUPABASE_ANON_KEY) — usada APENAS como `apikey` no header
+#     do PostgREST (exigência do gateway). Não deve mais ir no Authorization.
+#   - SUPABASE_SERVICE_ROLE_KEY — usada em queries não autenticadas (webhook,
+#     jobs background, contato, leads, admin). Bypassa RLS. NUNCA no frontend.
+# Decidido 2026-06-02 após auditoria RLS revelar policies abertas pra anon.
+# Fluxo atualizado:
+#   - JWT do user → _supa_rest_as_user(request, ...) — pra queries onde o user
+#     é dono dos dados (RLS valida `auth.uid() = user_id`).
+#   - service_role → _supa_rest_service(...) — pra queries sem request (jobs
+#     background, webhooks, formulários públicos, admin RPCs etc.).
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kqjabzwgbfuivzlcfvvu.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY")
 if not SUPABASE_KEY:
     print("[WARN] SUPABASE_KEY não configurado no ambiente — usando fallback hardcoded (remover em breve)")
     SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+
+# Service role key pra queries não autenticadas. Fallback pra SUPABASE_KEY
+# (anon) com WARN — mantém compat enquanto o Render não tem a env setada.
+# Quando a env for setada e a Onda B do RLS aplicada, anon não passa mais por
+# nenhuma policy (revoga GRANT pra anon nas tabelas internas).
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
+if SUPABASE_SERVICE_ROLE_KEY == SUPABASE_KEY:
+    print("[WARN] SUPABASE_SERVICE_ROLE_KEY não setada — usando anon como fallback. "
+          "Setar em Render env vars antes de aplicar a migration que revoga anon.")
 
 # Email do admin (tem acesso a /api/admin/*). Pode ser overridado por env.
 ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "zarelalopes@gmail.com").lower()
@@ -70,7 +89,7 @@ def _supabase_insert(table, data):
         body = json.dumps(data).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=20)
@@ -116,7 +135,7 @@ def _supabase_update(table, match_field, match_value, data):
         body = json.dumps(data).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='PATCH')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=20)
@@ -180,6 +199,85 @@ def _require_admin(request):
     if user.get("email", "").lower() != ADMIN_EMAIL:
         raise HTTPException(403, "Acesso restrito a administradores")
     return user
+
+
+def _supa_rest_service(method: str, path: str, body=None, params=None,
+                        prefer: str = None, timeout: int = 15):
+    """Faz uma chamada Supabase REST usando a SERVICE_ROLE_KEY (bypassa RLS).
+
+    Use SOMENTE em rotas/funções não autenticadas, onde não há JWT do user:
+      - Webhooks (Meta/Instagram, Stripe etc.)
+      - Jobs background (recovery de jobs travados, cleanup, processamento)
+      - Formulários públicos (contato, leads do chat widget)
+      - Admin/RPCs que já têm checagem própria (_require_admin)
+      - Helpers internos chamados de threads sem `request` em escopo
+
+    Para queries onde o user é dono dos dados e o request está em escopo, use
+    `_supa_rest_as_user(request, ...)` — preserva RLS por usuário.
+
+    Comportamento:
+      - `apikey` sempre é SUPABASE_KEY (PostgREST exige).
+      - `Authorization: Bearer <service_role>` bypassa toda RLS.
+      - `path` aceita formato absoluto (`/rest/v1/...`) ou só a tabela
+        (ex.: `chat_leads?email=eq.X`); prefixo é adicionado se faltar.
+      - `body` aceita dict/list; serializa pra JSON. None = sem body.
+      - `params` é dict opcional → query string (concatenado).
+      - `prefer` é o header Prefer (`return=minimal`, `resolution=...`, etc.).
+
+    Retorna tupla (status_code, parsed_json_or_None). Erros HTTP devolvem
+    (code, None) com log. Falha total devolve (0, None).
+    """
+    import urllib.request, urllib.error, json as _j
+
+    # Monta URL
+    if path.startswith("http"):
+        url = path
+    else:
+        if not path.startswith("/"):
+            path = "/" + path
+        if not path.startswith("/rest/v1/") and not path.startswith("/storage/"):
+            path = "/rest/v1" + path
+        url = f"{SUPABASE_URL}{path}"
+
+    if params:
+        from urllib.parse import urlencode
+        sep = "&" if "?" in url else "?"
+        url = f"{url}{sep}{urlencode(params)}"
+
+    # Serializa body se houver
+    data_bytes = None
+    if body is not None:
+        data_bytes = _j.dumps(body, default=str).encode("utf-8")
+
+    try:
+        req = urllib.request.Request(url, data=data_bytes, method=method.upper())
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        if data_bytes is not None:
+            req.add_header("Content-Type", "application/json")
+        if prefer:
+            req.add_header("Prefer", prefer)
+        resp = urllib.request.urlopen(req, timeout=timeout)
+        status = resp.getcode()
+        raw = resp.read()
+        if not raw:
+            return status, None
+        try:
+            return status, _j.loads(raw.decode("utf-8"))
+        except Exception:
+            return status, None
+    except urllib.error.HTTPError as e:
+        try:
+            resp_body = e.read().decode("utf-8", errors="replace")[:300]
+        except Exception:
+            resp_body = "(unreadable)"
+        _supa_log(f"REST_SERVICE {method} {path} HTTP {e.code}: {resp_body}")
+        print(f"[supa_rest_service] HTTP {e.code} {method} {path}: {resp_body}")
+        return e.code, None
+    except Exception as e:
+        _supa_log(f"REST_SERVICE {method} {path} ERR {type(e).__name__}: {e}")
+        print(f"[supa_rest_service] err {method} {path}: {type(e).__name__}: {e}")
+        return 0, None
 
 
 def _supa_rest_as_user(request, method: str, path: str, body=None, params=None,
@@ -294,6 +392,10 @@ def _get_project_owner(job_id: str):
         body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
+        # _get_project_owner usa RPC SECURITY DEFINER — bypassa RLS sem precisar
+        # de service_role. Mantém anon como Bearer por contrato (a RPC checa
+        # internamente; mudar pra service_role aqui é desnecessário e arrisca
+        # mascarar bugs de policy).
         req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
@@ -405,7 +507,7 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
         body = json.dumps(rows).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=30)
@@ -447,7 +549,7 @@ def _rpc_update_project_status(job_id: str, data: dict) -> bool:
         body = json.dumps(payload).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=20)
         resp_body = resp.read().decode('utf-8', errors='replace')
@@ -512,7 +614,7 @@ def _rpc_update_project_meta(job_id: str, data: dict) -> bool:
         body = json.dumps(payload).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=20)
         resp_body = resp.read().decode('utf-8', errors='replace')
@@ -562,7 +664,7 @@ def _supabase_storage_upload(local_path: str, remote_key: str) -> bool:
         url = f"{SUPABASE_URL}/storage/v1/object/{PLANILHAS_BUCKET}/{remote_key}"
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type",
                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         req.add_header("x-upsert", "true")
@@ -654,7 +756,7 @@ def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str
         mime = _PRANCHA_MIME.get(ext, "application/octet-stream")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", mime)
         req.add_header("x-upsert", "true")
         urllib.request.urlopen(req, timeout=60)
@@ -679,7 +781,7 @@ def _supabase_storage_download_prancha(job_id: str, filename: str) -> Optional[b
         url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{remote_key}"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=30)
         return resp.read()
     except Exception as e:
@@ -698,7 +800,7 @@ def _supabase_storage_download(remote_key: str, local_path: str) -> bool:
         url = f"{SUPABASE_URL}/storage/v1/object/{PLANILHAS_BUCKET}/{remote_key}"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=30)
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         with open(local_path, "wb") as f:
@@ -819,7 +921,7 @@ def _recover_stuck_jobs_on_startup():
         body = json.dumps({"p_older_than_minutes": RECOVERY_GRACE_MIN}).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=15)
         rows = json.loads(resp.read().decode("utf-8"))
@@ -3105,7 +3207,7 @@ async def health():
         url = f"{SUPABASE_URL}/rest/v1/projects?select=id&created_at=gte.{datetime.utcnow().strftime('%Y-%m-%d')}T00:00:00"
         req = urllib.request.Request(url)
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Prefer', 'count=exact')
         resp = urllib.request.urlopen(req, timeout=3)
         count_header = resp.headers.get('content-range', '')
@@ -3128,7 +3230,7 @@ async def health():
             url = f"{SUPABASE_URL}/rest/v1/{table}?select=id"
             req = urllib.request.Request(url)
             req.add_header('apikey', SUPABASE_KEY)
-            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
             req.add_header('Prefer', 'count=exact')
             resp = urllib.request.urlopen(req, timeout=3)
             count_header = resp.headers.get('content-range', '')
@@ -3302,7 +3404,7 @@ async def save_chat_lead(request: Request):
                     f"?email=eq.{_up.quote(email)}&select=id,n_messages")
         req = urllib.request.Request(find_url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=8)
         existing = json.loads(resp.read().decode("utf-8"))
 
@@ -3324,7 +3426,7 @@ async def save_chat_lead(request: Request):
             body_bytes = json.dumps(upd_payload).encode("utf-8")
             upd_req = urllib.request.Request(upd_url, data=body_bytes, method="PATCH")
             upd_req.add_header("apikey", SUPABASE_KEY)
-            upd_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            upd_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             upd_req.add_header("Content-Type", "application/json")
             upd_req.add_header("Prefer", "return=minimal")
             urllib.request.urlopen(upd_req, timeout=8)
@@ -3344,7 +3446,7 @@ async def save_chat_lead(request: Request):
         body_bytes = json.dumps(ins_payload).encode("utf-8")
         ins_req = urllib.request.Request(ins_url, data=body_bytes, method="POST")
         ins_req.add_header("apikey", SUPABASE_KEY)
-        ins_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        ins_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         ins_req.add_header("Content-Type", "application/json")
         ins_req.add_header("Prefer", "return=representation")
         ins_resp = urllib.request.urlopen(ins_req, timeout=8)
@@ -3368,7 +3470,7 @@ async def admin_list_chat_leads(request: Request, limit: int = 200):
                f"?select=*&order=last_message_at.desc&limit={int(limit)}")
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=15)
         return {"leads": json.loads(resp.read().decode("utf-8"))}
     except Exception as e:
@@ -3446,7 +3548,7 @@ async def submit_contact(request: Request):
             up_url = f"{SUPABASE_URL}/storage/v1/object/contact-attachments/{object_key}"
             req = urllib.request.Request(up_url, data=upload_file, method="POST")
             req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             # Detecta content type básico
             ct_map = {
                 ".pdf": "application/pdf", ".png": "image/png", ".jpg": "image/jpeg",
@@ -3501,7 +3603,7 @@ async def admin_list_contact_messages(request: Request, limit: int = 200, status
             url += f"&status=eq.{status}"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=15)
         return {"messages": json.loads(resp.read().decode("utf-8"))}
     except Exception as e:
@@ -4189,7 +4291,7 @@ def _extract_and_save_heuristics(analysis: dict, typology: str = "office"):
         body = json.dumps(rows).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         req.add_header("Prefer", "return=minimal")
         urllib.request.urlopen(req, timeout=15)
@@ -4281,7 +4383,7 @@ async def get_user_cashback_all(request: Request, user_id: str):
                f"&select=*&order=created_at.desc&limit=1000")
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=8)
         events = json.loads(resp.read().decode("utf-8"))
 
@@ -4294,7 +4396,7 @@ async def get_user_cashback_all(request: Request, user_id: str):
                       f"?job_id=in.({','.join(job_ids)})&select=job_id,project_name")
             pj_req = urllib.request.Request(pj_url, method="GET")
             pj_req.add_header("apikey", SUPABASE_KEY)
-            pj_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            pj_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             try:
                 pj_resp = urllib.request.urlopen(pj_req, timeout=8)
                 for p in json.loads(pj_resp.read().decode("utf-8")):
@@ -4543,7 +4645,7 @@ def _get_available_credits(user_id: str) -> list[dict]:
         url = f"{SUPABASE_URL}/rest/v1/user_credits?{query}"
         req = _ur.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = _ur.urlopen(req, timeout=8)
         rows = _json.loads(resp.read().decode("utf-8"))
@@ -4597,7 +4699,7 @@ def _consume_credits(user_id: str, amount_cents: int, job_id: str) -> int:
             body = _json.dumps({"used_at": now_iso, "used_on_job_id": job_id}).encode("utf-8")
             req = _ur.Request(url, data=body, method="PATCH")
             req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             req.add_header("Content-Type", "application/json")
             req.add_header("Prefer", "return=minimal")
             _ur.urlopen(req, timeout=8)
@@ -4951,7 +5053,7 @@ def _get_project_from_supabase(job_id: str) -> dict:
         url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=8)
         rows = _json.loads(resp.read().decode("utf-8"))
@@ -5022,7 +5124,7 @@ async def agent_conversations(request: Request, job_id: Optional[str] = None, li
         url = f"{SUPABASE_URL}/rest/v1/agent_conversations?{query}"
         req = _ur.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = _ur.urlopen(req, timeout=10)
         rows = _json.loads(resp.read().decode("utf-8"))
@@ -5044,7 +5146,7 @@ async def agent_stats():
                "?select=id,iterations,duration_ms,error,job_id,created_at")
         req = _ur.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = _ur.urlopen(req, timeout=10)
         rows = _json.loads(resp.read().decode("utf-8"))
@@ -5138,7 +5240,7 @@ async def get_project_items(job_id: str, request: Request):
         body = json.dumps({"p_job_id": job_id}).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         items = json.loads(resp.read().decode('utf-8'))
@@ -5196,7 +5298,7 @@ async def cronograma_sugestao(job_id: str, request: Request):
         body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
         req2 = urllib.request.Request(url2, data=body, method='POST')
         req2.add_header('apikey', SUPABASE_KEY)
-        req2.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req2.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req2.add_header('Content-Type', 'application/json')
         resp2 = urllib.request.urlopen(req2, timeout=15)
         items = _json.loads(resp2.read().decode('utf-8'))
@@ -5243,7 +5345,7 @@ async def generate_cronograma(job_id: str, payload: CronogramaPayload, request: 
         body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         items = _json.loads(resp.read().decode('utf-8'))
@@ -5313,16 +5415,18 @@ def _get_branding_context(job_id: str, request=None) -> dict:
     project_user_id = ''
 
     def _fetch(path):
-        """Helper local: usa o JWT do request se houver, senão anon."""
+        """Helper local: usa o JWT do request se houver, senão service_role
+        (bypassa RLS) — caso de uso interno quando branding é montado fora de
+        um endpoint autenticado."""
         if request is not None:
             _, data = _supa_rest_as_user(request, "GET", path, timeout=8)
             return data or []
-        # fallback anon
+        # fallback service_role (bypassa RLS)
         try:
             url = f"{SUPABASE_URL}/rest/v1{path if path.startswith('/') else '/' + path}"
             req_ = _urlreq.Request(url, method="GET")
             req_.add_header("apikey", SUPABASE_KEY)
-            req_.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req_.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             resp_ = _urlreq.urlopen(req_, timeout=8)
             return _json.loads(resp_.read().decode("utf-8"))
         except Exception:
@@ -5412,7 +5516,7 @@ def _supabase_get_cronograma(job_id: str, request=None) -> Optional[dict]:
                    f"?job_id=eq.{job_id}&select=*&limit=1")
             req = urllib.request.Request(url, method='GET')
             req.add_header('apikey', SUPABASE_KEY)
-            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
             req.add_header('Accept', 'application/json')
             resp = urllib.request.urlopen(req, timeout=10)
             rows = _json.loads(resp.read().decode('utf-8'))
@@ -5442,7 +5546,7 @@ def _supabase_upsert_cronograma(job_id: str, data: dict, request=None) -> bool:
         body = _json.dumps(payload, default=str).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'resolution=merge-duplicates,return=minimal')
         urllib.request.urlopen(req, timeout=10)
@@ -5548,7 +5652,7 @@ def _build_cronograma_for_export(job_id: str, request=None) -> tuple:
             body = _json.dumps({"p_job_id": job_id}).encode('utf-8')
             req = urllib.request.Request(url, data=body, method='POST')
             req.add_header('apikey', SUPABASE_KEY)
-            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
             req.add_header('Content-Type', 'application/json')
             resp = urllib.request.urlopen(req, timeout=15)
             items = _json.loads(resp.read().decode('utf-8'))
@@ -5669,7 +5773,7 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
                 body = json.dumps(safe_edits).encode('utf-8')
                 req = urllib.request.Request(url, data=body, method='PATCH')
                 req.add_header('apikey', SUPABASE_KEY)
-                req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+                req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
                 req.add_header('Content-Type', 'application/json')
                 req.add_header('Prefer', 'return=minimal')
                 urllib.request.urlopen(req, timeout=15)
@@ -5682,7 +5786,7 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
             url = f"{SUPABASE_URL}/rest/v1/project_items?id=eq.{item_id}"
             req = urllib.request.Request(url, method='DELETE')
             req.add_header('apikey', SUPABASE_KEY)
-            req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+            req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
             req.add_header('Prefer', 'return=minimal')
             urllib.request.urlopen(req, timeout=15)
         except Exception as e:
@@ -5723,7 +5827,7 @@ async def finalize_review(job_id: str, request: Request):
         body = json.dumps({"p_job_id": job_id}).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         rows = json.loads(resp.read().decode('utf-8'))
@@ -5824,7 +5928,7 @@ async def update_project_user_status(job_id: str, payload: StatusPayload, reques
         }).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         return {"status": "ok", "user_status": payload.user_status}
@@ -5888,7 +5992,7 @@ async def list_job_notes(job_id: str, request: Request):
         body = json.dumps({"p_job_id": job_id}).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         notes = json.loads(resp.read().decode('utf-8'))
@@ -5922,7 +6026,7 @@ async def list_my_projects(user_id: str, request: Request):
         body = json.dumps({"p_user_id": user_id}).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         projects = json.loads(resp.read().decode('utf-8'))
@@ -5978,7 +6082,7 @@ async def should_show_nps(user_id: str):
                f"&order=created_at.desc&limit=1")
         req = urllib.request.Request(url, method='GET')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         resp = urllib.request.urlopen(req, timeout=10)
         rows = json.loads(resp.read().decode('utf-8'))
         if not rows:
@@ -6006,7 +6110,7 @@ async def admin_nps_summary(request: Request, days: int = 30):
         body = json.dumps({"p_days": days}).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=10)
         rows = json.loads(resp.read().decode('utf-8'))
@@ -6025,7 +6129,7 @@ async def admin_nps_responses(request: Request, limit: int = 50):
         body = json.dumps({"p_limit": limit}).encode('utf-8')
         req = urllib.request.Request(url, data=body, method='POST')
         req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=10)
         return {"responses": json.loads(resp.read().decode('utf-8'))}
@@ -6070,7 +6174,7 @@ def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
             body = _j.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
             req = urllib.request.Request(url, data=body, method="POST")
             req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             req.add_header("Content-Type", "application/json")
             resp = urllib.request.urlopen(req, timeout=10)
             files = _j.loads(resp.read().decode("utf-8"))
@@ -6097,7 +6201,7 @@ def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
         body = _j2.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
         for f in _j2.loads(resp.read().decode("utf-8")):
@@ -6230,9 +6334,10 @@ async def reprocess_project(job_id: str, request: Request):
         url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
         req = urllib.request.Request(url, method='GET')
         req.add_header('apikey', SUPABASE_KEY)
-        # JWT do user quando disponível (passa RLS); anon como fallback pra
-        # projetos legados anônimos.
-        req.add_header('Authorization', f'Bearer {user_token or SUPABASE_KEY}')
+        # JWT do user quando disponível (passa RLS por auth.uid()); service_role
+        # como fallback pra projetos legados anônimos (bypassa RLS). _require_project_owner
+        # já validou ownership upstream — fallback aqui só serve pra ler row anônima.
+        req.add_header('Authorization', f'Bearer {user_token or SUPABASE_SERVICE_ROLE_KEY}')
         resp = urllib.request.urlopen(req, timeout=15)
         projects = json.loads(resp.read().decode('utf-8'))
         if not projects:
@@ -6266,7 +6371,7 @@ async def reprocess_project(job_id: str, request: Request):
         body = json.dumps({"prefix": f"{job_id}/", "limit": 100}).encode("utf-8")
         req = urllib.request.Request(list_url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=20)
         storage_files = json.loads(resp.read().decode("utf-8"))
@@ -6335,7 +6440,7 @@ async def reprocess_project(job_id: str, request: Request):
         inc_body = json.dumps({"p_job_id": job_id}).encode('utf-8')
         inc_req = urllib.request.Request(inc_url, data=inc_body, method='POST')
         inc_req.add_header('apikey', SUPABASE_KEY)
-        inc_req.add_header('Authorization', f'Bearer {SUPABASE_KEY}')
+        inc_req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         inc_req.add_header('Content-Type', 'application/json')
         urllib.request.urlopen(inc_req, timeout=10)
     except Exception as _inc_e:
@@ -6551,7 +6656,7 @@ def _supabase_storage_delete(bucket: str, object_path: str) -> bool:
         url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{object_path}"
         req = urllib.request.Request(url, method="DELETE")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         urllib.request.urlopen(req, timeout=15)
         return True
     except urllib.error.HTTPError as e:
@@ -6571,7 +6676,7 @@ def _supabase_storage_list(bucket: str, prefix: str) -> list:
         body = _j.dumps({"prefix": prefix, "limit": 500}).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=15)
         files = _j.loads(resp.read().decode("utf-8"))
@@ -6630,7 +6735,7 @@ async def cleanup_old_projects(request: Request):
         body = _j.dumps({"p_days": days}).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=15)
         expired = _j.loads(resp.read().decode("utf-8"))
@@ -6671,7 +6776,7 @@ async def cleanup_old_projects(request: Request):
             mark_body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
             mark_req = urllib.request.Request(mark_url, data=mark_body, method="POST")
             mark_req.add_header("apikey", SUPABASE_KEY)
-            mark_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            mark_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             mark_req.add_header("Content-Type", "application/json")
             urllib.request.urlopen(mark_req, timeout=10)
             stats["archived"] += 1
@@ -6709,7 +6814,7 @@ async def admin_cleanup_log(request: Request, limit: int = 30):
         body = _j.dumps({"p_limit": limit}).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
         return {"runs": _j.loads(resp.read().decode("utf-8"))}

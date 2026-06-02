@@ -304,7 +304,9 @@ Se algum falhar, me peça pra investigar.
 - **Project ID:** `kqjabzwgbfuivzlcfvvu` (nome: ai-arq, US-East-1)
 - **URL:** `https://kqjabzwgbfuivzlcfvvu.supabase.co`
 - **Anon key:** está hardcoded em vários HTMLs (não é segredo, é meant pra ser público)
-- **Service role key:** NÃO usar — backend usa anon key (suficiente pra operação)
+- **Service role key:** USADA pelo backend pra rotas não autenticadas (webhook IG, contato, leads, jobs, admin). Setada na env do Render como SUPABASE_SERVICE_ROLE_KEY. NUNCA no frontend. Decidido em 2026-06-02 após auditoria RLS revelar policies abertas pra anon.
+- **Anon key:** só no frontend (em aiarq-utils.js, pública por design)
+- **JWT do user:** backend usa via _supa_rest_as_user(request, ...) pra queries onde user é dono dos dados (commit b5ddd07)
 
 ### GitHub
 - **Repo:** https://github.com/pedrozellmer/ai-arq
@@ -481,6 +483,7 @@ curl -I https://ai.arq.br/blog/
 9. **Endpoint protegido que devolve arquivo NÃO pode ser baixado via navegação direta** — `<a href>`, `window.open()` e `window.location.href` NÃO enviam o header `Authorization`. Só `fetch()` envia. Resultado: 401 mesmo com sessão válida. Sempre use o helper `downloadProtected(url, filename)` (em projeto/dashboard/revisao/cronograma.html). Bug Daniela 2026-05-18.
 10. **0 itens extraídos = SEMPRE falha** — o motor nunca deve marcar `done` com planilha vazia. Qualquer prancha de arquitetura real tem ao menos paredes/piso/forro. Se `all_items` vazio, vira erro com mensagem clara. Bug Vinícius 2026-05-21.
 11. **`analyze_sheet` não lança exceção em falha de IA** — retorna `{"items": [], "error": ...}`. Quem chama TEM que checar `result.get("error")`, senão o erro é engolido e vira planilha vazia silenciosa.
+12. **RLS Supabase teve auditoria em 2026-06-02** — `project_cashback_events`, `user_credits`, `project_clients` etc. estavam abertos pra anon. Plano de fix em `docs/migrations_rls_planejadas.sql`. Aplicar SÓ depois do backend deployar com SUPABASE_SERVICE_ROLE_KEY no Render. Auditoria completa em `docs/auditoria_rls_2026-06-02.md`.
 
 ---
 
