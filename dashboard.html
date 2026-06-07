@@ -1824,10 +1824,81 @@
       if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || f.name.toLowerCase().endsWith('.dwg') || f.name.toLowerCase().endsWith('.dxf')) {
         if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) {
           selectedFiles.push(f);
+          // Aviso preventivo (2026-06-02): detecta PDF vetorial sem texto extraível
+          // e sugere DWG/DXF. Sem bloquear upload — só alerta o usuário pra precisão.
+          // Caso Daniela Granado: PDFs exportados do CAD em modo desenho viraram
+          // 30 itens com qty=0 em divisórias. DWG resolveu (qty>0 em 100% das linhas).
+          if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
+            checkPdfTextAndWarn(f).catch(err => console.warn('PDF check falhou:', err));
+          }
         }
       }
     }
     renderFiles();
+  }
+
+  // ══════════════════════════════════════════════
+  //  AVISO PREVENTIVO: PDF SEM TEXTO EXTRAÍVEL
+  // ══════════════════════════════════════════════
+  // Carrega pdf.js (Mozilla) sob demanda na primeira vez que o user adiciona PDF.
+  // Se o PDF não tem texto extraível nas 3 primeiras páginas (vetorial puro do
+  // CAD), mostra toast sugerindo subir DWG/DXF original pra precisão máxima.
+  let _pdfjsLib = null;
+  let _pdfjsLoading = null;
+  // Limite: se as 3 primeiras páginas têm menos que 150 chars (sem whitespace),
+  // o PDF foi exportado sem camada de texto — cotas viraram desenho.
+  const PDF_TEXT_THRESHOLD = 150;
+  const PDF_WARNED_FILES = new Set();  // não spamma se user adiciona vários PDFs
+
+  async function loadPdfJs() {
+    if (_pdfjsLib) return _pdfjsLib;
+    if (_pdfjsLoading) return _pdfjsLoading;
+    _pdfjsLoading = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+      s.onload = () => {
+        if (!window.pdfjsLib) { reject(new Error('pdfjsLib indef')); return; }
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+        _pdfjsLib = window.pdfjsLib;
+        resolve(_pdfjsLib);
+      };
+      s.onerror = () => reject(new Error('falha pdf.js'));
+      document.head.appendChild(s);
+    });
+    return _pdfjsLoading;
+  }
+
+  async function checkPdfTextAndWarn(file) {
+    if (PDF_WARNED_FILES.has(file.name)) return;
+    PDF_WARNED_FILES.add(file.name);
+    try {
+      const pdfjs = await loadPdfJs();
+      const buffer = await file.arrayBuffer();
+      const pdf = await pdfjs.getDocument({ data: buffer }).promise;
+      const maxPages = Math.min(pdf.numPages, 3);
+      let totalChars = 0;
+      for (let i = 1; i <= maxPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const txt = content.items.map(it => it.str || '').join('');
+        totalChars += txt.replace(/\s+/g, '').length;
+      }
+      // Acima do limite: PDF tem texto, tudo bem
+      if (totalChars >= PDF_TEXT_THRESHOLD) return;
+      // Abaixo: aviso amigável, daltônico-safe (cor + ícone + texto)
+      const msg = `⚠ "${file.name}" parece ser PDF vetorial sem cotas extraíveis (${totalChars} caracteres lidos). Pra precisão nas divisórias, suba o DWG/DXF original. O quantitativo sai com itens identificados mas com quantidade em branco.`;
+      if (window.toast) {
+        window.toast.warn(msg, { duration: 0 });  // duration:0 = fica até user fechar
+      } else {
+        // Fallback se toast.js ainda não carregou (defer)
+        setTimeout(() => window.toast?.warn(msg, { duration: 0 }) || console.warn(msg), 500);
+      }
+    } catch (e) {
+      // Falha de leitura do PDF (corrompido / criptografado / pdf.js offline) →
+      // não opina. User continua o fluxo normal.
+      console.warn('Não consegui avaliar texto do PDF:', e);
+    }
   }
 
   // ══════════════════════════════════════════════
