@@ -1393,7 +1393,8 @@ async function loadProjects() {
     // Stats (sempre sobre o conjunto completo, não filtrado)
     const running = allProjects.filter(p => (p.status === 'queued' || p.status === 'processing')).length;
     const stuck = allProjects.filter(p => (p.status === 'queued' || p.status === 'processing')
-                                        && minutesSince(p.created_at) > STUCK_MINUTES).length;
+                                        && minutesSince(p.created_at) > STUCK_MINUTES
+                                        && !((p.reprocess_count || 0) > 0)).length;  // retomado != travado
     const doneToday = allProjects.filter(p => p.status === 'done'
                                              && p.completed_at
                                              && new Date(p.completed_at) >= today0).length;
@@ -1424,12 +1425,17 @@ async function loadProjects() {
 
     tbody.innerHTML = projects.map(p => {
       const mins = minutesSince(p.created_at);
-      const isStuck = (p.status === 'queued' || p.status === 'processing') && mins > STUCK_MINUTES;
+      const isActive = (p.status === 'queued' || p.status === 'processing');
+      // Job auto-retomado pelo recovery (reprocess_count subiu) está sendo
+      // reprocessado — NÃO é "travado". Mostra "reprocessando" (azul + ícone).
+      const isResuming = isActive && (p.reprocess_count || 0) > 0;
+      const isStuck = isActive && mins > STUCK_MINUTES && !isResuming;
       let statusColor = 'text-yellow-700 bg-yellow-50';
       if (p.status === 'done') statusColor = 'text-green-700 bg-green-50';
       else if (p.status === 'error') statusColor = 'text-red-700 bg-red-50';
+      else if (isResuming) statusColor = 'text-blue-700 bg-blue-50';
       else if (isStuck) statusColor = 'text-red-700 bg-red-100 animate-pulse';
-      const statusLabel = isStuck ? 'TRAVADO' : (p.status || '--');
+      const statusLabel = isResuming ? '↻ reprocessando' : (isStuck ? '⚠ TRAVADO' : (p.status || '--'));
 
       let dateFmt = '--';
       if (p.created_at) {
