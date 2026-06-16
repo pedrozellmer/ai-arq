@@ -908,6 +908,7 @@ jobs = JobsStore()
 # ═══════════════════════════════════════════════════════════════
 
 RECOVERY_GRACE_MIN = 3  # minutos: jobs mais novos que isso são ignorados
+RECOVERY_SWEEP_MIN = 5  # minutos: intervalo da varredura periódica de recovery
 
 
 def _retomar_job_do_storage(job_id: str, typology: str = "office") -> bool:
@@ -975,6 +976,17 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office") -> bool:
             urllib.request.urlopen(inc_req, timeout=10)
         except Exception as _ie:
             print(f"[recovery-retomar] {job_id}: falha ao incrementar contador: {_ie}")
+        # Re-semeia a entrada local (o JSON volátil foi zerado no restart) pra
+        # que /api/status volte a responder a barra de progresso durante o
+        # resume — sem isso o usuário via 404/"não encontrado" no meio.
+        try:
+            jobs[job_id] = ProcessingStatus(
+                job_id=job_id, status="queued", progress=0,
+                current_step="Retomando após reinício do servidor...",
+                total_steps=3,
+            )
+        except Exception as _se:
+            print(f"[recovery-retomar] {job_id}: falha ao semear status local: {_se}")
         import threading as _t
         _t.Thread(target=_process_job_throttled,
                   args=(job_id, file_paths, work_dir),
@@ -986,11 +998,18 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office") -> bool:
         return False
 
 
-def _recover_stuck_jobs_on_startup():
-    """RESILIÊNCIA: no startup, varre jobs em queued/processing que
-    sobreviveram ao restart e tenta RETOMAR (baixa do Storage + reprocessa).
-    Só marca 'error' se não houver arquivo no Storage (job antigo) ou se já
-    auto-retomou antes (proteção anti-loop via reprocess_count).
+def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
+    """RESILIÊNCIA: varre jobs em queued/processing que sobreviveram a um
+    restart e tenta RETOMAR (baixa do Storage + reprocessa). Só marca 'error'
+    se não houver arquivo no Storage (job antigo) ou se já auto-retomou antes
+    (proteção anti-loop via reprocess_count).
+
+    Roda em 2 modos:
+    - startup (skip_local_active=False): no boot, o JobsStore local está vazio.
+    - periódico (skip_local_active=True): a cada RECOVERY_SWEEP_MIN; pula jobs
+      que ESTE processo já está tocando (entrada viva no JobsStore) pra não
+      reprocessar em dobro. Pega o caso raro de job que encalhou entre dois
+      restarts (ex.: restart dentro da janela de graça).
 
     Usa RPC `list_stuck_jobs` (SECURITY DEFINER) pra enxergar rows de
     qualquer usuário — o SELECT direto via anon esbarra em RLS."""
@@ -1035,6 +1054,16 @@ def _recover_stuck_jobs_on_startup():
                     continue
         except Exception:
             pass  # se data malformada, marca como erro mesmo assim
+
+        # Modo periódico: se ESTE processo já cuida do job (entrada viva no
+        # JobsStore local), não mexe — evita reprocessar em dobro um job que
+        # está rodando aqui agora. No startup o store local está vazio (passa).
+        if skip_local_active:
+            try:
+                if job_id in jobs and getattr(jobs[job_id], "status", None) in ("queued", "processing"):
+                    continue
+            except Exception:
+                pass
 
         # RESILIÊNCIA (16/06): tenta RETOMAR antes de marcar erro.
         # Busca reprocess_count + typology do job (proteção anti-loop:
@@ -1085,12 +1114,30 @@ def _recover_stuck_jobs_on_startup():
 
 @app.on_event("startup")
 async def _on_startup_recover_jobs():
-    """Hook de startup do FastAPI: limpa jobs travados do redeploy anterior."""
+    """Hook de startup do FastAPI: (1) recupera jobs travados do redeploy
+    anterior e (2) sobe uma varredura periódica que pega jobs encalhados
+    entre dois restarts (ex.: restart dentro da janela de graça)."""
     try:
         _recover_stuck_jobs_on_startup()
     except Exception as e:
         # Nunca deixar o startup falhar por causa da recuperação
         print(f"[recovery] exceção não-fatal no startup: {e}")
+
+    # Varredura periódica (modo skip_local_active: não toca em job que este
+    # processo já está rodando). Thread daemon — morre junto com o processo.
+    def _periodic_recovery_loop():
+        while True:
+            try:
+                time.sleep(RECOVERY_SWEEP_MIN * 60)
+                _recover_stuck_jobs_on_startup(skip_local_active=True)
+            except Exception as _e:
+                print(f"[recovery] varredura periódica falhou (segue ativa): {_e}")
+    try:
+        import threading as _tr
+        _tr.Thread(target=_periodic_recovery_loop, daemon=True).start()
+        print(f"[recovery] varredura periódica ativa (a cada {RECOVERY_SWEEP_MIN}min)")
+    except Exception as _e:
+        print(f"[recovery] não subiu a varredura periódica: {_e}")
 
 
 # Regras determinísticas de unidade por tipo de serviço (pós-IA).
