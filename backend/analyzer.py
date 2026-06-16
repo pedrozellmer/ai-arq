@@ -1036,7 +1036,7 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         response = call_with_retry(
             client,
             tag=f"analyzer:{sheet.filename}",
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=8000,
             temperature=0,
             system=SYSTEM_PROMPT,

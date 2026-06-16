@@ -181,7 +181,7 @@ def generate_dm_reply(
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=500,
             temperature=0.7,
             system=SYSTEM_PROMPT_DM,
@@ -223,7 +223,7 @@ Retorne APENAS o JSON, sem markdown, sem explicacao."""
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-6",
             max_tokens=2000,
             temperature=0.8,
             system=SYSTEM_PROMPT_CONTENT,

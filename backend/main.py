@@ -2392,7 +2392,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         response = _llm_retry(
                             dxf_client,
                             tag=f"dxf:{os.path.basename(dxf_path)}",
-                            model="claude-sonnet-4-20250514",
+                            model="claude-sonnet-4-6",
                             max_tokens=16000,  # aumentado pra caber raciocínio (CoT) + JSON
                             temperature=0,
                             system=SYSTEM_PROMPT,
