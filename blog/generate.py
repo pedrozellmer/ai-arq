@@ -309,12 +309,69 @@ def render_sources(sources):
     '''
 
 
+def pick_related_posts(post, n=3):
+    """Escolhe até n posts relacionados pra linkar no fim de um post.
+
+    Regra:
+    1. Só posts JÁ publicados (publish_date <= hoje) — links pra posts futuros
+       seriam redirecionados pelo guard JS, viram link morto pro SEO.
+    2. Nunca o próprio post.
+    3. Prioriza a MESMA categoria, do mais recente pro mais antigo.
+    4. Se a categoria não tem n posts, completa com os mais recentes de
+       qualquer categoria.
+    """
+    today = date.today().isoformat()
+    candidates = [
+        p for p in POSTS
+        if p["slug"] != post["slug"] and p["publish_date"] <= today
+    ]
+    # Mais recente primeiro
+    candidates.sort(key=lambda p: p["publish_date"], reverse=True)
+
+    same_cat = [p for p in candidates if p["category"] == post["category"]]
+    others = [p for p in candidates if p["category"] != post["category"]]
+
+    ordered = same_cat + others
+    return ordered[:n]
+
+
+def render_related_posts(post):
+    """Renderiza o bloco 'Leia também' com links reais pra posts irmãos."""
+    related = pick_related_posts(post, 3)
+    if not related:
+        return ""
+
+    cards = ""
+    for rp in related:
+        rp_url = f"/blog/posts/{rp['slug']}.html"
+        cards += f'''
+        <a href="{rp_url}" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">{rp["category"]}</span>
+          <div class="font-semibold text-gray-900 leading-snug">{rp["title"]}</div>
+        </a>'''
+
+    return f'''
+    <section class="aiarq-related mt-16 pt-8 border-t border-gray-200">
+      <h2 class="flex items-center gap-2 text-lg font-bold text-gray-900 mb-5">
+        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Leia também
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        {cards}
+      </div>
+    </section>
+    '''
+
+
 def render_post_html(post):
     """Gera HTML completo de um post."""
     sections_html = "".join(render_section(s) for s in post["sections"])
 
     # Adiciona bloco de fontes no fim, se houver
     sources_html = render_sources(post.get("sources", []))
+
+    # Bloco "Leia também" — internal linking entre posts irmãos (SEO)
+    related_html = render_related_posts(post)
 
     # Recalcula tempo de leitura baseado nas palavras reais
     post["estimated_read_min"] = calc_read_time(post)
@@ -453,6 +510,9 @@ def render_post_html(post):
 
   {sources_html}
 
+  <!-- Leia também (posts relacionados) -->
+  {related_html}
+
   <!-- Voltar ao blog -->
   <div class="mt-12 text-center">
     <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
@@ -506,8 +566,8 @@ def render_index_html():
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdn.tailwindcss.com">
 
-<title>Blog AI.arq | Conteúdo prático sobre quantitativos, orçamento e IA na arquitetura</title>
-<meta name="description" content="Artigos práticos sobre planilha de quantitativos, SINAPI, TCPO, BDI, memorial descritivo e IA aplicada à arquitetura. Conteúdo gratuito pra arquitetos e engenheiros brasileiros.">
+<title>Blog AI.arq — Quantitativos, SINAPI e BDI pra arquitetos</title>
+<meta name="description" content="Artigos práticos sobre planilha de quantitativos, SINAPI, TCPO, BDI e memorial descritivo. Conteúdo gratuito pra arquitetos e engenheiros brasileiros.">
 <meta name="keywords" content="blog arquitetura, planilha quantitativos, sinapi, tcpo, bdi, memorial descritivo, ia arquitetura">
 
 <link rel="canonical" href="{SITE_URL}/blog/">

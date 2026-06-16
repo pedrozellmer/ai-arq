@@ -1942,6 +1942,23 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
     return current_unit, False
 
 
+# ─── Throttle de processamento concorrente ──────────────────────────
+# Cada upload dispara process_job() numa thread daemon. SEM limite, 2-3
+# projetos processando ao mesmo tempo somam picos de RAM (render PDF +
+# Vision + listas de itens + XLSX) e estouram os 2GB do Render → OOM +
+# restart → derruba quem está processando. Foi o que pegou o Adriano em
+# 16/06/2026. O semáforo força 1 job por vez: quem chega depois espera na
+# fila em vez de competir por memória. Reduz o pico de ~2GB pra 400-600MB.
+import threading as _threading_sem
+_JOB_SEMAPHORE = _threading_sem.Semaphore(1)
+
+
+def _process_job_throttled(*args, **kwargs):
+    """Wrapper que serializa process_job via semáforo (1 por vez)."""
+    with _JOB_SEMAPHORE:
+        process_job(*args, **kwargs)
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -2129,6 +2146,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
         # Extrair dados de DXF e enviar pro Claude interpretar
         dxf_items = []
+        # Coleta falha de IA por DXF (mesmo papel que sheet_errors no caminho
+        # PDF). A interpretação Claude do DXF pode falhar por sobrecarga/timeout/
+        # JSON inválido — sem registrar isso aqui, um projeto SÓ-DXF cuja única
+        # chamada de IA falha cai no guard de 0-itens com a mensagem ERRADA
+        # ("troque o arquivo / PDF escaneado") em vez de "IA sobrecarregada,
+        # reprocesse grátis". Declarado ANTES do loop pra estar em escopo no
+        # except da IA (armadilha #11 do CLAUDE.md reaparecendo no caminho DXF).
+        dxf_errors: list[str] = []
         if dxf_paths:
             # Análise DXF começa onde a conversão termina
             extract_start = conv_end_pct
@@ -2462,7 +2487,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
 
                     except Exception as e:
-                        jobs.update_field(job_id, current_step=f"Erro IA (DXF): {str(e)[:200]}")
+                        # Falha de IA neste DXF (sobrecarga/timeout/JSON inválido).
+                        # Registra em dxf_errors pra o guard de 0-itens distinguir
+                        # "IA falhou (reprocessável grátis)" de "arquivo sem
+                        # conteúdo medível" — espelha o tratamento do caminho PDF.
+                        err_msg = str(e)[:200]
+                        dxf_errors.append(f"{os.path.basename(dxf_path)}: {err_msg}")
+                        jobs.update_field(job_id, current_step=f"Erro IA (DXF): {err_msg}")
                         print(f"Erro Claude DXF: {e}")
 
                     del structured_text
@@ -2771,14 +2802,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # prancha de arquitetura real tem ao menos paredes/piso/forro.
         # Distingue 2 causas pra orientar o usuário com mensagem certa:
         if len(all_items) == 0:
-            if sheet_errors:
-                # A IA falhou em ao menos uma prancha — erro técnico, vale
+            # Considera falhas dos DOIS caminhos: PDF (sheet_errors) e DXF
+            # (dxf_errors). Um projeto só-DXF cuja IA falhou tem dxf_errors mas
+            # sheet_errors vazio — sem somar aqui, cairia na mensagem errada
+            # de "troque o arquivo".
+            ai_errors = sheet_errors + dxf_errors
+            if ai_errors:
+                # A IA falhou em ao menos uma prancha/DXF — erro técnico, vale
                 # reprocessar (pode ter sido sobrecarga/timeout passageiro).
                 raise RuntimeError(
                     "A IA não conseguiu analisar as pranchas — provável "
                     "sobrecarga temporária do servidor de análise. Nenhum "
                     "item foi extraído. Reprocesse o projeto (é grátis). "
-                    f"Detalhe técnico: {sheet_errors[0]}"
+                    f"Detalhe técnico: {ai_errors[0]}"
                 )
             else:
                 # A IA rodou sem erro mas não achou nada quantificável.
@@ -3074,10 +3110,12 @@ async def process_files(
         consumed = _consume_credits(user_id, credits_to_consume_cents, job_id)
         print(f"[credits] job={job_id} user={user_id} consumed={consumed}/{credits_to_consume_cents}")
 
-    # Iniciar processamento em thread separada (não bloqueia HTTP)
+    # Iniciar processamento em thread separada (não bloqueia HTTP).
+    # Usa _process_job_throttled (semáforo 1-por-vez) pra não estourar RAM
+    # com jobs concorrentes — ver _JOB_SEMAPHORE acima.
     import threading
     t = threading.Thread(
-        target=process_job,
+        target=_process_job_throttled,
         args=(job_id, file_paths, work_dir),
         kwargs={"typology": typology,
                 "user_sheet_types": user_sheet_types,
@@ -6446,10 +6484,10 @@ async def reprocess_project(job_id: str, request: Request):
     except Exception as _inc_e:
         print(f"[reprocess] Erro ao incrementar contador: {_inc_e}")
 
-    # 5) Disparar em thread
+    # 5) Disparar em thread (throttled pelo semáforo — 1 job por vez)
     import threading
     t = threading.Thread(
-        target=process_job,
+        target=_process_job_throttled,
         args=(new_job_id, new_file_paths, new_work_dir),
         kwargs={"typology": typology},
         daemon=True,

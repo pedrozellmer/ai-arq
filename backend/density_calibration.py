@@ -14,6 +14,7 @@ Tabela Supabase `density_benchmarks`:
   mean, stddev, min_value, max_value, n_projects, updated_at
 """
 import json
+import os
 import re
 import time
 import statistics
@@ -24,8 +25,12 @@ from typing import Optional
 from openpyxl import load_workbook
 
 
+# `apikey` continua sendo a anon (PostgREST exige). O `Authorization: Bearer`
+# usa a service_role pra escrever em density_benchmarks depois que a RLS fechar
+# pra anon. service_role roda só server-side, nunca exposta ao frontend.
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
 
 _benchmarks_cache = {"data": None, "timestamp": 0}
 _CACHE_TTL = 300  # 5 min
@@ -139,7 +144,7 @@ def _supabase_upsert(table: str, record: dict, on_conflict: str) -> bool:
         body = json.dumps(record).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         req.add_header("Prefer", "resolution=merge-duplicates,return=minimal")
         urllib.request.urlopen(req, timeout=10)
@@ -154,7 +159,7 @@ def _supabase_select(table: str, query: str = "select=*") -> list[dict]:
         url = f"{SUPABASE_URL}/rest/v1/{table}?{query}"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
         return json.loads(resp.read().decode("utf-8"))
@@ -409,7 +414,7 @@ def reclassify_raws(typology: Optional[str] = None,
             body = json.dumps(patch).encode("utf-8")
             req = urllib.request.Request(url, data=body, method="PATCH")
             req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             req.add_header("Content-Type", "application/json")
             req.add_header("Prefer", "return=minimal")
             urllib.request.urlopen(req, timeout=15)

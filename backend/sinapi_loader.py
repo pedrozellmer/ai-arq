@@ -16,8 +16,12 @@ from pathlib import Path
 from openpyxl import load_workbook
 
 
+# `apikey` continua sendo a anon (PostgREST exige). O `Authorization: Bearer`
+# usa a service_role pra fazer upsert em sinapi_composicao depois que a RLS
+# fechar pra anon. service_role roda só server-side, nunca exposta ao frontend.
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
 
 
 def _supabase_bulk_upsert(table: str, rows: list[dict], on_conflict: str,
@@ -31,7 +35,7 @@ def _supabase_bulk_upsert(table: str, rows: list[dict], on_conflict: str,
             body = json.dumps(batch).encode("utf-8")
             req = urllib.request.Request(url, data=body, method="POST")
             req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             req.add_header("Content-Type", "application/json")
             req.add_header("Prefer", "resolution=merge-duplicates,return=minimal")
             urllib.request.urlopen(req, timeout=30)

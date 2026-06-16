@@ -18,8 +18,12 @@ import urllib.request
 from typing import Optional
 
 
+# `apikey` continua sendo a anon (PostgREST exige). O `Authorization: Bearer`
+# usa a service_role pra ler/escrever em catalog_* depois que a RLS fechar pra
+# anon. service_role roda só server-side, nunca exposta ao frontend.
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
 
 _families_cache = {"data": None, "timestamp": 0}
 _CACHE_TTL = 600  # 10 min
@@ -30,7 +34,7 @@ def _supabase_select(table: str, query: str) -> list[dict]:
         url = f"{SUPABASE_URL}/rest/v1/{table}?{query}"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
         return json.loads(resp.read().decode("utf-8"))
@@ -266,7 +270,7 @@ def suggest_sinapi(description: str, unit: str = "", top_k: int = 1) -> list[dic
                    f"&descricao=ilike.*{urllib.request.quote(kw)}*&limit=20")
             req = urllib.request.Request(url, method="GET")
             req.add_header("apikey", SUPABASE_KEY)
-            req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             req.add_header("Accept", "application/json")
             resp = urllib.request.urlopen(req, timeout=10)
             rows = json.loads(resp.read().decode("utf-8"))
