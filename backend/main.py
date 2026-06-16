@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """API Backend AI.arq — Processamento de pranchas de arquitetura."""
 import os
+import time
 import uuid
 import shutil
 import asyncio
@@ -909,9 +910,71 @@ jobs = JobsStore()
 RECOVERY_GRACE_MIN = 3  # minutos: jobs mais novos que isso são ignorados
 
 
+def _retomar_job_do_storage(job_id: str, typology: str = "office") -> bool:
+    """RESILIÊNCIA (16/06): RETOMA um job interrompido por restart.
+
+    Baixa os arquivos originais do Storage (que agora sobem no upload, antes
+    de processar), limpa itens parciais (idempotência) e re-dispara o
+    processamento. Retorna True se conseguiu re-disparar; False se não há
+    arquivos no Storage (job antigo, pré-resiliência) — aí o caller marca erro.
+
+    Antes (bug que derrubou o Adriano 2x): qualquer restart no meio do
+    processamento matava o job pra sempre — 92% dos erros históricos."""
+    import urllib.request, json as _j
+    from urllib.parse import unquote
+    try:
+        list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        body = _j.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
+        req = urllib.request.Request(list_url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        resp = urllib.request.urlopen(req, timeout=15)
+        objs = _j.loads(resp.read().decode("utf-8"))
+        names = [unquote(o.get("name", "")) for o in objs if o.get("name")]
+        names = [n for n in names if n.lower().endswith(('.pdf', '.dwg', '.dxf'))]
+        if not names:
+            return False
+        work_dir = os.path.join(WORK_DIR, job_id)
+        os.makedirs(work_dir, exist_ok=True)
+        file_paths = []
+        for n in names:
+            data = _supabase_storage_download_prancha(job_id, os.path.basename(n))
+            if not data:
+                continue
+            lp = os.path.join(work_dir, os.path.basename(n))
+            with open(lp, "wb") as f:
+                f.write(data)
+            file_paths.append(lp)
+        if not file_paths:
+            return False
+        # Idempotência: limpa itens parciais antes de reprocessar (DELETE REST)
+        try:
+            del_url = f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
+            del_req = urllib.request.Request(del_url, method="DELETE")
+            del_req.add_header("apikey", SUPABASE_KEY)
+            del_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            urllib.request.urlopen(del_req, timeout=15)
+        except Exception as _de:
+            print(f"[recovery-retomar] limpeza itens {job_id}: {_de}")
+        _supabase_update("projects", "job_id", job_id,
+                         {"status": "queued", "error_message": None})
+        import threading as _t
+        _t.Thread(target=_process_job_throttled,
+                  args=(job_id, file_paths, work_dir),
+                  kwargs={"typology": typology}, daemon=True).start()
+        print(f"[recovery-retomar] {job_id}: RETOMADO com {len(file_paths)} arquivo(s)")
+        return True
+    except Exception as e:
+        print(f"[recovery-retomar] {job_id} falhou: {e}")
+        return False
+
+
 def _recover_stuck_jobs_on_startup():
-    """Marca como 'error' qualquer projeto no Supabase ainda em queued/processing
-    que tenha sobrevivido ao redeploy. Roda uma vez no startup do FastAPI.
+    """RESILIÊNCIA: no startup, varre jobs em queued/processing que
+    sobreviveram ao restart e tenta RETOMAR (baixa do Storage + reprocessa).
+    Só marca 'error' se não houver arquivo no Storage (job antigo) ou se já
+    auto-retomou antes (proteção anti-loop via reprocess_count).
 
     Usa RPC `list_stuck_jobs` (SECURITY DEFINER) pra enxergar rows de
     qualquer usuário — o SELECT direto via anon esbarra em RLS."""
@@ -957,7 +1020,35 @@ def _recover_stuck_jobs_on_startup():
         except Exception:
             pass  # se data malformada, marca como erro mesmo assim
 
-        # Marca como erro
+        # RESILIÊNCIA (16/06): tenta RETOMAR antes de marcar erro.
+        # Busca reprocess_count + typology do job (proteção anti-loop:
+        # só auto-retoma 1 vez; se crashar de novo, aí sim vira erro).
+        prev_count = 0
+        typ = "office"
+        try:
+            q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                 f"&select=reprocess_count,typology")
+            qreq = urllib.request.Request(q, method="GET")
+            qreq.add_header("apikey", SUPABASE_KEY)
+            qreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            prow = json.loads(urllib.request.urlopen(qreq, timeout=10).read().decode("utf-8"))
+            if prow:
+                prev_count = int(prow[0].get("reprocess_count") or 0)
+                typ = prow[0].get("typology") or "office"
+        except Exception:
+            pass
+
+        if prev_count < 1 and _retomar_job_do_storage(job_id, typ):
+            # Marca que auto-retomou (não retoma de novo se crashar)
+            try:
+                _supabase_update("projects", "job_id", job_id,
+                                 {"reprocess_count": prev_count + 1})
+            except Exception:
+                pass
+            recovered += 1
+            continue
+
+        # Não deu pra retomar (sem arquivo no Storage ou já retomou): marca erro
         ok = _supabase_update("projects", "job_id", job_id, {
             "status": "error",
             "error_message": "Processamento interrompido por reinício do servidor. Reenvie o projeto.",
@@ -2017,22 +2108,25 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
         # Persistir TODOS os arquivos originais (PDF + DWG + DXF) no Storage.
-        # Serve pra 2 coisas:
+        # Serve pra 3 coisas:
         # 1. Botão 👁 "Ver prancha" na revisão inline
         # 2. Reprocessar projeto com motor atualizado (baixa originais, roda de novo)
-        # Roda em background pra não atrasar o processamento.
-        def _upload_pranchas_bg():
-            for _p in file_paths:
-                try:
-                    _fname = os.path.basename(_p)
-                    _supabase_storage_upload_prancha(_p, job_id, _fname)
-                except Exception as _e:
-                    print(f"[upload-pranchas] erro {_fname}: {_e}")
-        try:
-            import threading as _t
-            _t.Thread(target=_upload_pranchas_bg, daemon=True).start()
-        except Exception:
-            pass
+        # 3. RESILIÊNCIA (16/06): se o servidor reiniciar no meio do
+        #    processamento (deploy/OOM/idle), o recovery encontra os arquivos
+        #    aqui e RETOMA o job. Por isso o upload é SÍNCRONO e a PRIMEIRA
+        #    coisa do processamento — antes era background e se perdia no
+        #    crash (caso Adriano: 2 falhas, arquivo sumiu nas duas).
+        _t0_upload = time.time()
+        _n_ok = 0
+        for _p in file_paths:
+            try:
+                _fname = os.path.basename(_p)
+                if _supabase_storage_upload_prancha(_p, job_id, _fname):
+                    _n_ok += 1
+            except Exception as _e:
+                print(f"[upload-pranchas] erro {os.path.basename(_p)}: {_e}")
+        print(f"[upload-pranchas] {_n_ok}/{len(file_paths)} no Storage "
+              f"em {time.time()-_t0_upload:.1f}s (antes de processar)")
 
         # Render DWG/DXF → PNG pra preview na revisão (opção 1 acordada).
         # Só roda se tem CAD no projeto. Matplotlib é pesado, por isso
