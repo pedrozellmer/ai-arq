@@ -2042,7 +2042,7 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
 # fila em vez de competir por memória. Reduz o pico de ~2GB pra 400-600MB.
 import threading as _threading_sem
 _JOB_SEMAPHORE = _threading_sem.Semaphore(1)
-# redeploy marker 2026-06-16: validação do recovery que retoma job após restart
+# redeploy marker 2026-06-16 (2): validação do recovery que retoma job após restart
 
 
 def _process_job_throttled(*args, **kwargs):
