@@ -16,8 +16,12 @@ import urllib.parse
 from openpyxl import load_workbook
 
 # ── Supabase config (same as main.py) ──
+# `apikey` continua sendo a anon (PostgREST exige). O `Authorization: Bearer`
+# usa a service_role pra escrever em density_benchmarks/catalog_* depois que a
+# RLS fechar pra anon. service_role roda só server-side, nunca exposta ao frontend.
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
 
 # ── In-memory cache for correction factors ──
 _factors_cache = {"data": None, "timestamp": 0}
@@ -256,7 +260,7 @@ def _supabase_insert(table: str, data: dict) -> bool:
         body = json.dumps(data).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         req.add_header("Prefer", "return=minimal")
         urllib.request.urlopen(req, timeout=5)
@@ -317,7 +321,7 @@ def get_correction_factors() -> dict:
         url = f"{SUPABASE_URL}/rest/v1/calibration_factors?select=*"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
         rows = json.loads(resp.read().decode("utf-8"))

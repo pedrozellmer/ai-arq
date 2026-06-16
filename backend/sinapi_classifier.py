@@ -18,8 +18,12 @@ import urllib.request
 from typing import Optional
 
 
+# `apikey` continua sendo a anon (PostgREST exige). O `Authorization: Bearer`
+# usa a service_role pra ler/atualizar sinapi_composicao/catalog_* depois que a
+# RLS fechar pra anon. service_role roda só server-side, nunca exposta ao frontend.
 SUPABASE_URL = "https://kqjabzwgbfuivzlcfvvu.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
 
 
 def _supabase_get(query: str, paginate: bool = False, page_size: int = 1000) -> list[dict]:
@@ -29,7 +33,7 @@ def _supabase_get(query: str, paginate: bool = False, page_size: int = 1000) -> 
         url = f"{SUPABASE_URL}/rest/v1/{query}"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=20)
         return json.loads(resp.read().decode("utf-8"))
@@ -40,7 +44,7 @@ def _supabase_get(query: str, paginate: bool = False, page_size: int = 1000) -> 
         url = f"{SUPABASE_URL}/rest/v1/{query}"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         req.add_header("Range-Unit", "items")
         req.add_header("Range", f"{offset}-{offset+page_size-1}")
@@ -61,7 +65,7 @@ def _supabase_patch(query: str, data: dict) -> bool:
         body = json.dumps(data).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="PATCH")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         req.add_header("Prefer", "return=minimal")
         urllib.request.urlopen(req, timeout=15)

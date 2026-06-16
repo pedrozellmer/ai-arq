@@ -98,7 +98,7 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
     dt_inicio = _parse_date(data_inicio)
 
     fases = []
-    for f in fases_custom:
+    for orig_idx, f in enumerate(fases_custom):
         try:
             ini = _parse_date(f['inicio'])
             fim = _parse_date(f['fim'])
@@ -145,13 +145,36 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             'depends_on': depends_on,
             'is_milestone': is_milestone,
             'parent_ordem': parent_ordem,
+            # Índice posicional ORIGINAL (na lista fases_custom enviada pelo
+            # frontend). depends_on/parent_ordem foram gravados pelo front
+            # como índices nessa lista, então guardamos a referência estável
+            # pra remapear após o sort abaixo. Bug P0 2026-06-09: o sort
+            # reordenava as fases mas deixava os índices apontando pra fase
+            # errada.
+            '_orig_idx': orig_idx,
         })
 
     fases.sort(key=lambda x: (x.get('ordem') or 0, x['inicio']))
+
+    # Remapeia depends_on/parent_ordem (índices da ordem ORIGINAL do frontend)
+    # pra nova posição após o sort. Sem isso, o sort faz os índices apontarem
+    # pra fase errada (P0-2 da auditoria 2026-06-09). Índices que apontam pra
+    # uma fase que foi descartada (data inválida) ou inexistente viram None/
+    # removidos — não viram dependência fantasma.
+    remap = {f['_orig_idx']: novo_idx for novo_idx, f in enumerate(fases)}
+    for f in fases:
+        f['depends_on'] = [remap[d] for d in f['depends_on'] if d in remap]
+        p = f.get('parent_ordem')
+        f['parent_ordem'] = remap.get(p) if p is not None else None
+
     # Aplica cascade FS — fases com depends_on começam após predecessoras terminarem
-    fases = _aplicar_dependencias_fs(fases)
+    fases, warnings_ciclo = _aplicar_dependencias_fs(fases)
     # Re-agrega datas dos grupos pai = min(filhos.inicio) e max(filhos.fim)
     fases = _agregar_grupos(fases)
+
+    # _orig_idx era só auxiliar do remap — não vaza pro JSON de saída.
+    for f in fases:
+        f.pop('_orig_idx', None)
     data_fim = max((_parse_date(f['fim']) for f in fases), default=dt_inicio)
     duracao_dias_real = max(1, (data_fim - dt_inicio).days)
 
@@ -238,6 +261,10 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
         },
         'distribuicao_categoria': distrib_cat,
         'ppc': ppc,
+        # Avisos não-fatais pro frontend exibir (ex.: dependência circular
+        # ignorada). Lista de strings já formatadas em PT-BR. Vazia quando
+        # nada foi descartado.
+        'warnings': warnings_ciclo,
         'resumo': {
             'data_inicio': dt_inicio.isoformat(),
             'data_fim': data_fim.isoformat(),
@@ -593,10 +620,14 @@ CATEGORIA_COR = {
     'preliminares':   '#CBD5E1',  # slate-300 — bem claro, fase inicial leve
     'estrutura':      '#334155',  # slate-700 — escuro, peso da estrutura
     'vedacoes':       '#475569',  # slate-600 — médio-escuro, fechamentos
-    'instalacoes':    '#64748B',  # slate-500 — médio
-    'acabamentos':    '#94A3B8',  # slate-400 — médio-claro
+    'instalacoes':    '#64748B',  # slate-500 — médio (lum ~114)
+    'acabamentos':    '#94A3B8',  # slate-400 — médio-claro (lum ~161)
     'entrega':        '#1E293B',  # slate-800 — quase preto, marco final
-    'complementares': '#71717A',  # zinc-500 — leve calor pra diferenciar de slate
+    # Fix 2026-06-09 (daltonismo): era zinc-500 #71717A (lum ~114), idêntico
+    # ao instalacoes — indistinguível. Movido pra zinc-300 claro (lum ~189),
+    # ~28 de gap pra acabamentos e ~22 pra preliminares. Tom levemente quente
+    # (R=G<B) pra não colidir com o slate-300 frio de preliminares.
+    'complementares': '#BCBCC4',  # zinc-300 claro quente — fase de apoio leve
 }
 
 CATEGORIA_LABEL = {
@@ -763,59 +794,116 @@ def _cor_da_disciplina(label: str) -> str:
 
 # ─── Onda 3 (2026-05-25): dependências FS + grupos ─────────────────────
 
-def _aplicar_dependencias_fs(fases: List[Dict]) -> List[Dict]:
-    """Aplica cascade Finish-Start.
+def _aplicar_dependencias_fs(fases: List[Dict]):
+    """Aplica cascade Finish-Start respeitando ordenação topológica.
 
     Pra cada fase com depends_on, força inicio = max(predecessoras.fim) + 1 dia,
     e ajusta fim mantendo a duração original (dur_dias).
 
-    Detecta ciclos via DFS. Se encontrar, ignora a dependência problemática
-    e segue (não trava o cronograma inteiro).
+    P0-1 da auditoria 2026-06-09: antes o cascade percorria as fases na ordem
+    da lista. Se uma sucessora aparecia ANTES da predecessora, ela lia a data
+    velha da predecessora (que ainda não tinha sido recalculada). Agora a
+    ordem de processamento é definida por um topological sort (Kahn): toda
+    predecessora é recalculada antes da sucessora, então o cascade propaga
+    em uma passada só.
+
+    Ciclos: dependências que fazem parte de um ciclo são descartadas (a aresta
+    "de volta" é removida) e um aviso em PT-BR é acumulado pra devolver ao
+    frontend. Não trava o cronograma — só ignora a dependência circular.
 
     Grupos (fases que SÃO pai — têm filhos) não têm cascade aplicado direto;
     suas datas são agregadas em _agregar_grupos depois.
 
-    Retorna a mesma lista de fases (mutável) com datas atualizadas.
+    Retorna (fases, warnings): mesma lista (mutada) + lista de strings de aviso.
     """
+    warnings: List[str] = []
     if not fases:
-        return fases
+        return fases, warnings
 
-    # Mapeia índice → fase pra lookup rápido
     n = len(fases)
 
     # Detecta grupos (que TÊM filhos) — não cascateamos eles, deixamos
     # pro agregar_grupos. Filhos sim, cascateamos.
     grupos = {f.get('parent_ordem') for f in fases if f.get('parent_ordem') is not None}
 
-    # Topological sort respeitando depends_on
-    def _has_cycle_from(start_idx: int, visiting: set) -> bool:
-        if start_idx in visiting:
-            return True
-        if start_idx < 0 or start_idx >= n:
-            return False
-        visiting.add(start_idx)
-        for dep_idx in fases[start_idx].get('depends_on', []) or []:
-            if _has_cycle_from(dep_idx, visiting):
-                return True
-        visiting.remove(start_idx)
-        return False
-
-    # Para cada fase, em ordem (já vem ordenada por ordem/inicio), aplica cascade
+    # 1) Saneia depends_on: descarta índice fora de faixa e auto-referência.
+    #    deps_por_fase[i] = lista de predecessoras válidas (estruturalmente).
+    deps_por_fase: List[List[int]] = []
     for i, f in enumerate(fases):
-        if i in grupos:
-            continue  # grupo pai, datas vêm dos filhos
-        deps = f.get('depends_on') or []
-        deps_validos = []
-        for d in deps:
+        validos = []
+        for d in (f.get('depends_on') or []):
+            if not isinstance(d, int):
+                continue
             if d < 0 or d >= n or d == i:
                 continue
-            # Ciclo? Pula a dependência problemática
-            if _has_cycle_from(d, {i}):
-                continue
-            deps_validos.append(d)
+            if d not in validos:
+                validos.append(d)
+        deps_por_fase.append(validos)
+
+    def _label(idx: int) -> str:
+        return fases[idx].get('label', f'fase {idx + 1}')
+
+    # 2) Quebra ciclos: faz um DFS marcando cor (0=branco,1=cinza,2=preto).
+    #    Aresta i→d que aponta pra um nó "cinza" (no stack atual) é uma aresta
+    #    de retorno → remove e gera aviso. Resultado: grafo acíclico (DAG).
+    BRANCO, CINZA, PRETO = 0, 1, 2
+    cor = [BRANCO] * n
+
+    def _dfs(i: int):
+        cor[i] = CINZA
+        sobreviventes = []
+        for d in deps_por_fase[i]:
+            if cor[d] == CINZA:
+                # aresta de retorno → ciclo entre i e d
+                warnings.append(
+                    f'Dependência circular ignorada entre "{_label(i)}" e '
+                    f'"{_label(d)}".'
+                )
+                continue  # descarta esta aresta
+            if cor[d] == BRANCO:
+                _dfs(d)
+            sobreviventes.append(d)
+        deps_por_fase[i] = sobreviventes
+        cor[i] = PRETO
+
+    for i in range(n):
+        if cor[i] == BRANCO:
+            _dfs(i)
+
+    # 3) Kahn: ordena topologicamente o DAG (predecessoras antes de sucessoras).
+    #    grau de entrada = nº de predecessoras de cada fase.
+    indeg = [0] * n
+    sucessores: List[List[int]] = [[] for _ in range(n)]
+    for i in range(n):
+        for d in deps_por_fase[i]:
+            indeg[i] += 1
+            sucessores[d].append(i)
+
+    from collections import deque
+    fila = deque(i for i in range(n) if indeg[i] == 0)
+    ordem_topo: List[int] = []
+    while fila:
+        i = fila.popleft()
+        ordem_topo.append(i)
+        for s in sucessores[i]:
+            indeg[s] -= 1
+            if indeg[s] == 0:
+                fila.append(s)
+    # Salvaguarda: se sobrou algo (não deveria, já é DAG), anexa na ordem atual.
+    if len(ordem_topo) < n:
+        restantes = [i for i in range(n) if i not in set(ordem_topo)]
+        ordem_topo.extend(restantes)
+
+    # 4) Aplica cascade na ordem topológica.
+    for i in ordem_topo:
+        if i in grupos:
+            continue  # grupo pai, datas vêm dos filhos
+        f = fases[i]
+        deps_validos = deps_por_fase[i]
+        # Propaga a lista saneada pra saída (frontend desenha as setas daqui).
+        f['depends_on'] = deps_validos
         if not deps_validos:
             continue
-        # max fim das predecessoras + 1 dia
         try:
             max_fim = max(_parse_date(fases[d]['fim']) for d in deps_validos)
         except (KeyError, ValueError):
@@ -831,9 +919,8 @@ def _aplicar_dependencias_fs(fases: List[Dict]) -> List[Dict]:
             f['fim'] = (novo_inicio + timedelta(days=dur)).isoformat()
             # Recalcula dur (caso novo_inicio == ini original, dur intacto)
             f['dur_dias'] = (_parse_date(f['fim']) - _parse_date(f['inicio'])).days
-        f['depends_on'] = deps_validos  # remove deps inválidos da output
 
-    return fases
+    return fases, warnings
 
 
 def _agregar_grupos(fases: List[Dict]) -> List[Dict]:

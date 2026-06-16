@@ -23,6 +23,10 @@ from openpyxl import load_workbook
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kqjabzwgbfuivzlcfvvu.supabase.co")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
+# `apikey` continua sendo a anon (PostgREST exige). O `Authorization: Bearer`
+# usa a service_role pra ler project_items/agent_conversations etc. depois que a
+# RLS fechar pra anon. service_role roda só server-side, nunca exposta ao frontend.
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or SUPABASE_KEY
 
 WORK_DIR = os.path.join(os.environ.get("TMPDIR", "/tmp"), "aiarq_jobs")
 
@@ -185,7 +189,7 @@ def tool_get_sinapi_codes(familia_code: str, query: str = "",
                f"?select=id,name&code=eq.{familia_code}")
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
         fams = json.loads(resp.read().decode("utf-8"))
@@ -200,7 +204,7 @@ def tool_get_sinapi_codes(familia_code: str, query: str = "",
                f"&limit=50")
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=10)
         rows = json.loads(resp.read().decode("utf-8"))
@@ -277,7 +281,7 @@ def tool_list_supplier_quotes(job_id: str) -> dict:
                f"&order=uploaded_at.asc")
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=8)
         quotes = json.loads(resp.read().decode("utf-8"))
         return {
@@ -308,7 +312,7 @@ def tool_compare_supplier_quotes(job_id: str) -> dict:
                f"?job_id=eq.{job_id}&select=*&order=uploaded_at.asc")
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         resp = urllib.request.urlopen(req, timeout=8)
         quotes_raw = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
@@ -333,7 +337,7 @@ def tool_compare_supplier_quotes(job_id: str) -> dict:
                    f"?job_id=eq.{job_id}&select=description,unit,quantity")
         ref_req = urllib.request.Request(ref_url, method="GET")
         ref_req.add_header("apikey", SUPABASE_KEY)
-        ref_req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        ref_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         ref_resp = urllib.request.urlopen(ref_req, timeout=8)
         reference_items = json.loads(ref_resp.read().decode("utf-8"))
     except Exception:
@@ -406,7 +410,7 @@ def _supabase_select_project(job_id: str) -> Optional[dict]:
         url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
         req = urllib.request.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Accept", "application/json")
         resp = urllib.request.urlopen(req, timeout=8)
         rows = json.loads(resp.read().decode("utf-8"))
@@ -583,7 +587,7 @@ def _log_conversation(job_id: str, question: str, answer: str,
         body = json.dumps(record, default=str, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_KEY}")
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         req.add_header("Prefer", "return=minimal")
         urllib.request.urlopen(req, timeout=8)
@@ -647,7 +651,7 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
                 client,
                 tag=f"agent:job={job_id}",
                 max_retries=3,
-                model="claude-sonnet-4-6",
+                model="claude-sonnet-4-20250514",
                 max_tokens=2000,
                 system=SYSTEM_PROMPT.format(job_id=job_id),
                 tools=TOOLS,

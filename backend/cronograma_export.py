@@ -430,6 +430,29 @@ def exportar_pdf(cronograma: Dict, output_path: str,
             canv.setFillColor(colors.HexColor(COLOR_DARK_2))
             canv.drawString(MARGIN, PAGE_H/2 - 20*mm, client_name)
 
+        # Mini cards de meta (4 números-chave do resumo).
+        # Fix 2026-06-09 (P0): antes eram desenhados no `story` em branco
+        # (#FFFFFF) sobre fundo branco = invisíveis, com rótulos lavanda
+        # (#A5B4FC/#C7D2FE) resíduo do design fullbleed antigo. Agora vão
+        # aqui no canvas, posicionados abaixo do bloco cliente, em slate
+        # escuro legível (valor) + slate-600 (rótulo).
+        meta_y = (PAGE_H/2 - 34*mm) if client_name else (PAGE_H/2 - 16*mm)
+        metas = [
+            (f"{_format_br(resumo.get('data_inicio'))}", 'INÍCIO PREVISTO'),
+            (f"{_format_br(resumo.get('data_fim'))}", 'TÉRMINO PREVISTO'),
+            (f"{resumo.get('duracao_dias_reais', '—')} dias", 'DURAÇÃO TOTAL'),
+            (f"{resumo.get('n_fases', 0)} fases", 'DISCIPLINAS'),
+        ]
+        col_w = 62 * mm
+        for i, (val, lbl) in enumerate(metas):
+            cx = MARGIN + i * col_w
+            canv.setFont('Helvetica-Bold', 20)
+            canv.setFillColor(colors.HexColor(COLOR_DARK))
+            canv.drawString(cx, meta_y, str(val))
+            canv.setFont('Helvetica', 9)
+            canv.setFillColor(colors.HexColor(COLOR_GRAY_MID))
+            canv.drawString(cx, meta_y - 7*mm, lbl)
+
         # Footer — linha + powered by + página
         canv.setStrokeColor(colors.HexColor(COLOR_BORDER))
         canv.setLineWidth(0.4)
@@ -467,56 +490,13 @@ def exportar_pdf(cronograma: Dict, output_path: str,
     story = []
 
     # ═══ PÁGINA 1 — CAPA ═══
-    # Espaço pra empurrar título pro meio
-    story.append(Spacer(1, 5*cm))
-    story.append(Paragraph('CRONOGRAMA', s_title))
-    story.append(Paragraph('DA OBRA', s_title))
-    story.append(Spacer(1, 0.6*cm))
-    story.append(Paragraph(project_name, s_subtitle))
-    if client_name:
-        story.append(Spacer(1, 0.2*cm))
-        # Cliente final
-        s_cliente = ParagraphStyle('CL', parent=s_capa_meta,
-                                    fontSize=12, textColor=colors.HexColor('#FFFFFF'))
-        story.append(Paragraph(
-            f'<font size="9" color="#C7D2FE">Cliente final</font><br/>'
-            f'<b>{client_name}</b>',
-            s_cliente))
-    story.append(Spacer(1, 1.2*cm))
-
-    # Mini cards de meta na capa
-    meta_html = (
-        f'<font color="{COLOR_WHITE}" size="22"><b>'
-        f"{_format_br(resumo.get('data_inicio'))} </b></font><br/>"
-        f'<font color="#A5B4FC" size="10">INÍCIO PREVISTO</font>'
-    )
-    meta2_html = (
-        f'<font color="{COLOR_WHITE}" size="22"><b>'
-        f"{_format_br(resumo.get('data_fim'))} </b></font><br/>"
-        f'<font color="#A5B4FC" size="10">TÉRMINO PREVISTO</font>'
-    )
-    meta3_html = (
-        f'<font color="{COLOR_WHITE}" size="22"><b>'
-        f"{resumo.get('duracao_dias_reais', '—')} dias</b></font><br/>"
-        f'<font color="#A5B4FC" size="10">DURAÇÃO TOTAL</font>'
-    )
-    meta4_html = (
-        f'<font color="{COLOR_WHITE}" size="22"><b>'
-        f"{resumo.get('n_fases', 0)} fases</b></font><br/>"
-        f'<font color="#A5B4FC" size="10">DISCIPLINAS</font>'
-    )
-    meta_table = Table([
-        [Paragraph(meta_html, s_capa_meta), Paragraph(meta2_html, s_capa_meta),
-         Paragraph(meta3_html, s_capa_meta), Paragraph(meta4_html, s_capa_meta)]
-    ], colWidths=[6.2*cm, 6.2*cm, 6.2*cm, 6.2*cm])
-    meta_table.setStyle(TableStyle([
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('LEFTPADDING', (0, 0), (-1, -1), 0),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 12),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]))
-    story.append(meta_table)
+    # Fix 2026-06-09 (P0): TODO o conteúdo visível da capa (eyebrow, título do
+    # projeto, cliente e os 4 meta cards) é desenhado por `capa_canvas` em
+    # slate escuro, com posicionamento absoluto. Antes o `story` redesenhava
+    # título/cliente em branco por cima (texto duplicado/borrado) e os 4
+    # números em branco-sobre-branco (invisíveis). Aqui só fica um Spacer pra
+    # o frame da capa não ficar vazio (Platypus exige conteúdo no frame).
+    story.append(Spacer(1, PAGE_H - 2*MARGIN - 20*mm))
 
     # ═══ PÁGINA 2 — GANTT ═══
     # Muda pro template normal (insere ANTES do PageBreak)
@@ -870,6 +850,11 @@ def exportar_pptx(cronograma: Dict, output_path: str,
                   color=rgb_dark2)
 
     # Metadados em 4 colunas
+    # Fix 2026-06-09 (P0): os 4 valores eram desenhados em rgb_white (branco)
+    # sobre o slide branco = invisíveis, resíduo do design fullbleed antigo.
+    # Agora vão em slate escuro (valor) + slate-500 (rótulo) e descem pra
+    # Inches(6.0) pra não sobrepor o bloco cliente (que vai até ~5.7).
+    meta_top = 6.0 if client_name else 5.5
     metas = [
         (_format_br(resumo.get('data_inicio')), 'INÍCIO PREVISTO'),
         (_format_br(resumo.get('data_fim')), 'TÉRMINO PREVISTO'),
@@ -878,18 +863,18 @@ def exportar_pptx(cronograma: Dict, output_path: str,
     ]
     for i, (val, lbl) in enumerate(metas):
         x = Inches(0.6 + i * 3.05)
-        add_text(s1, val, x, Inches(5.6), Inches(3), Inches(0.6),
-                  size=22, bold=True, color=rgb_white)
-        add_text(s1, lbl, x, Inches(6.2), Inches(3), Inches(0.4),
-                  size=9, bold=True, color=rgb_indigo_text)
+        add_text(s1, val, x, Inches(meta_top), Inches(3), Inches(0.5),
+                  size=22, bold=True, color=rgb_dark)
+        add_text(s1, lbl, x, Inches(meta_top + 0.5), Inches(3), Inches(0.35),
+                  size=9, bold=True, color=rgb_gray_mid)
 
-    # Footer capa
+    # Footer capa — slate suave (era lavanda #A5B4FC invisível/baixo contraste)
     add_text(s1, 'powered by AI.arq · ai.arq.br',
               Inches(0.6), Inches(7.1), Inches(10), Inches(0.3),
-              size=9, color=RGBColor(0xA5, 0xB4, 0xFC))
+              size=9, color=rgb_gray_light)
     add_text(s1, '1 / 5', Inches(0.6), Inches(7.1),
               Inches(12.1), Inches(0.3), size=9,
-              color=RGBColor(0xA5, 0xB4, 0xFC), align='right')
+              color=rgb_gray_light, align='right')
 
     # ═══ SLIDE 2 — GANTT ═══
     s2 = prs.slides.add_slide(blank)
