@@ -959,6 +959,22 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office") -> bool:
             print(f"[recovery-retomar] limpeza itens {job_id}: {_de}")
         _supabase_update("projects", "job_id", job_id,
                          {"status": "queued", "error_message": None})
+        # Anti-loop: incrementa reprocess_count ANTES de disparar, via a RPC
+        # atômica `increment_reprocess_count` (a mesma do reprocessar manual).
+        # CRÍTICO: NÃO usar _supabase_update aqui — ele roteia pro RPC
+        # update_project_status, que NÃO tem a coluna reprocess_count e
+        # descartava o incremento em silêncio → o anti-loop nunca disparava
+        # e um arquivo que sempre crasha seria retomado em todo restart (loop).
+        try:
+            inc_url = f"{SUPABASE_URL}/rest/v1/rpc/increment_reprocess_count"
+            inc_body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
+            inc_req = urllib.request.Request(inc_url, data=inc_body, method="POST")
+            inc_req.add_header("apikey", SUPABASE_KEY)
+            inc_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            inc_req.add_header("Content-Type", "application/json")
+            urllib.request.urlopen(inc_req, timeout=10)
+        except Exception as _ie:
+            print(f"[recovery-retomar] {job_id}: falha ao incrementar contador: {_ie}")
         import threading as _t
         _t.Thread(target=_process_job_throttled,
                   args=(job_id, file_paths, work_dir),
@@ -1039,12 +1055,8 @@ def _recover_stuck_jobs_on_startup():
             pass
 
         if prev_count < 1 and _retomar_job_do_storage(job_id, typ):
-            # Marca que auto-retomou (não retoma de novo se crashar)
-            try:
-                _supabase_update("projects", "job_id", job_id,
-                                 {"reprocess_count": prev_count + 1})
-            except Exception:
-                pass
+            # _retomar já incrementou reprocess_count (anti-loop, via RPC
+            # atômica) e re-disparou o processamento.
             recovered += 1
             continue
 
@@ -2042,7 +2054,6 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
 # fila em vez de competir por memória. Reduz o pico de ~2GB pra 400-600MB.
 import threading as _threading_sem
 _JOB_SEMAPHORE = _threading_sem.Semaphore(1)
-# redeploy marker 2026-06-16 (2): validação do recovery que retoma job após restart
 
 
 def _process_job_throttled(*args, **kwargs):
