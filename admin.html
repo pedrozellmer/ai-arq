@@ -263,9 +263,9 @@
 
         <!-- Legenda status -->
         <div class="flex flex-wrap items-center gap-3 mb-3 text-xs">
-          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-green-500"></span> Completo</span>
-          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-yellow-500"></span> Incompleto (s&#243; email)</span>
-          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-gray-400"></span> Email n&#227;o confirmado</span>
+          <span class="inline-flex items-center gap-1.5"><span class="text-green-600 font-bold">&#10003;</span> Completo</span>
+          <span class="inline-flex items-center gap-1.5"><span class="text-yellow-600 font-bold">!</span> Incompleto (s&#243; email)</span>
+          <span class="inline-flex items-center gap-1.5"><span class="text-gray-500 font-bold">&#9675;</span> Email n&#227;o confirmado</span>
         </div>
 
         <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -1292,6 +1292,8 @@ async function loadNPSData() {
     } else {
       container.innerHTML = list.map(r => {
         const color = r.category === 'promoter' ? 'emerald' : r.category === 'passive' ? 'gray' : 'red';
+        // Daltonismo: além da cor do círculo, rótulo + ícone (▲/●/▼).
+        const catLabel = r.category === 'promoter' ? '▲ Promotor' : r.category === 'passive' ? '● Neutro' : '▼ Detrator';
         const when = r.created_at ? new Date(r.created_at).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
         const ctx = {
           'after_download': 'Após download',
@@ -1302,8 +1304,11 @@ async function loadNPSData() {
         return `
           <div class="p-4 hover:bg-gray-50">
             <div class="flex items-start gap-3">
-              <div class="flex-shrink-0 w-12 h-12 rounded-full bg-${color}-100 text-${color}-700 flex items-center justify-center font-bold text-lg">
-                ${r.score}
+              <div class="flex-shrink-0 flex flex-col items-center gap-1">
+                <div class="w-12 h-12 rounded-full bg-${color}-100 text-${color}-700 flex items-center justify-center font-bold text-lg">
+                  ${r.score}
+                </div>
+                <span class="text-[10px] font-semibold text-${color}-700 whitespace-nowrap">${catLabel}</span>
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 text-xs text-gray-500">
@@ -1435,7 +1440,15 @@ async function loadProjects() {
       else if (p.status === 'error') statusColor = 'text-red-700 bg-red-50';
       else if (isResuming) statusColor = 'text-blue-700 bg-blue-50';
       else if (isStuck) statusColor = 'text-red-700 bg-red-100 animate-pulse';
-      const statusLabel = isResuming ? '↻ reprocessando' : (isStuck ? '⚠ TRAVADO' : (p.status || '--'));
+      // Daltonismo (regra dura): cor + ícone + texto PT-BR — nunca só cor.
+      let statusLabel;
+      if (isResuming) statusLabel = '↻ reprocessando';
+      else if (isStuck) statusLabel = '⚠ TRAVADO';
+      else if (p.status === 'done') statusLabel = '✓ Concluído';
+      else if (p.status === 'error') statusLabel = '✗ Erro';
+      else if (p.status === 'processing') statusLabel = '⚙ Processando';
+      else if (p.status === 'queued') statusLabel = '⏳ Na fila';
+      else statusLabel = p.status || '--';
 
       let dateFmt = '--';
       if (p.created_at) {
@@ -1447,9 +1460,12 @@ async function loadProjects() {
         const mi = String(d.getMinutes()).padStart(2, '0');
         dateFmt = `${dd}/${mm}/${yy} ${hh}:${mi}`;
       }
-      const elapsed = (p.status === 'done')
-        ? humanElapsed(p.created_at, p.completed_at)
-        : (p.status === 'error' ? humanElapsed(p.created_at, p.created_at) : humanElapsed(p.created_at, null));
+      // Bug fix: no ramo de erro usava humanElapsed(created,created) → sempre "0s".
+      // Agora mostra o tempo real até falhar (completed_at), ou "—" se não houver.
+      let elapsed;
+      if (p.status === 'done') elapsed = humanElapsed(p.created_at, p.completed_at);
+      else if (p.status === 'error') elapsed = p.completed_at ? humanElapsed(p.created_at, p.completed_at) : '—';
+      else elapsed = humanElapsed(p.created_at, null);
 
       const types = p.file_types ? Object.entries(p.file_types).filter(([k,v])=>v>0).map(([k,v])=>v+' '+k.toUpperCase()).join(', ') : '--';
       let userLabel = 'An\u00f4nimo';
@@ -1792,8 +1808,8 @@ function renderBetaCodes(codes) {
         <td class="px-4 py-3 text-gray-600">${esc(c.used_by || '--')}</td>
         <td class="px-4 py-3">
           ${isActive
-            ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">Ativo</span>'
-            : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">Inativo</span>'
+            ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">✓ Ativo</span>'
+            : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">✗ Inativo</span>'
           }
         </td>
         <td class="px-4 py-3 text-gray-500 text-xs">${expires}</td>
