@@ -899,6 +899,21 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
         return False
 
 
+# Alertas internos pro Pedro (novo cliente / novo projeto) — vão pro gmail
+# pessoal dele. Configurável por env; default é o pessoal informado.
+NOTIFY_EMAIL = os.getenv("NOTIFY_EMAIL", "pedro.zellmer@gmail.com")
+
+
+def _notify_admin(subject: str, body_html: str) -> bool:
+    """Alerta interno simples pro Pedro. Best-effort (não derruba nada)."""
+    return _send_email_smtp(
+        NOTIFY_EMAIL, f"[AI.arq] {subject}",
+        '<div style="font-family:Arial,sans-serif;font-size:15px;color:#0F172A;line-height:1.6;">'
+        + body_html +
+        '<div style="margin-top:16px;color:#94a3b8;font-size:12px;">Alerta automático do AI.arq '
+        '&middot; ai.arq.br</div></div>')
+
+
 def _saudacao() -> str:
     """bom dia / boa tarde / boa noite no horário de Brasília (UTC-3)."""
     h = (datetime.utcnow().hour - 3) % 24
@@ -922,6 +937,7 @@ def _greeting_line(full_name: str) -> str:
 
 
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
+                badge_color: str = "green",
                 reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.") -> str:
     """Layout moderno e acessível dos emails (table-based + estilo inline, do
     jeito que Gmail/Outlook exigem). Logo = ícone hospedado em ai.arq.br."""
@@ -934,8 +950,9 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
                f'{cta_text} &rarr;</a></td></tr>')
     badge_html = ""
     if badge:
+        _bbg, _bfg = ("#fef3c7", "#b45309") if badge_color == "amber" else ("#dcfce7", "#15803d")
         badge_html = ('<tr><td style="padding:18px 30px 0;"><span style="display:inline-block;'
-                      'background:#dcfce7;color:#15803d;font-size:12px;font-weight:700;'
+                      f'background:{_bbg};color:{_bfg};font-size:12px;font-weight:700;'
                       'font-family:Arial,sans-serif;padding:4px 10px;border-radius:20px;">'
                       f'{badge}</span></td></tr>')
     return (
@@ -3246,6 +3263,35 @@ bloco — só cite os que estão no inventário deste arquivo."""
             "error_message": str(e)[:500],
         })
 
+        # Email "deu um problema, reprocesse" pro cliente (best-effort; sem
+        # jargão técnico — o detalhe fica no admin, não no email do cliente).
+        try:
+            import html as _h2, urllib.request as _ur3
+            _q3 = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                   f"&select=user_email,user_name,project_name")
+            _rq3 = _ur3.Request(_q3, method="GET")
+            _rq3.add_header("apikey", SUPABASE_KEY)
+            _rq3.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _rows3 = _json.loads(_ur3.urlopen(_rq3, timeout=10).read().decode("utf-8"))
+            _pe3 = (_rows3[0].get("user_email") if _rows3 else "") or ""
+            if _pe3:
+                _pn3 = _h2.escape(_rows3[0].get("project_name") or "seu projeto")
+                _greet3 = _greeting_line(_h2.escape(_rows3[0].get("user_name") or ""))
+                _body3 = (f"{_greet3}<br><br>"
+                          f"Tivemos um problema ao processar o projeto <b>{_pn3}</b> e ele não "
+                          f"foi concluído. Quase sempre é coisa passageira e <b>reprocessar "
+                          f"resolve</b> — e o reprocessamento é grátis.<br><br>"
+                          f"Se continuar dando problema, é só responder este e-mail que a gente "
+                          f"te ajuda pessoalmente. 🙂")
+                _send_email_smtp(
+                    _pe3, "Tivemos um problema com seu projeto no AI.arq",
+                    _email_wrap("Não conseguimos concluir seu projeto", _body3,
+                                "Reprocessar no painel", "https://ai.arq.br/dashboard.html",
+                                badge="⚠ Precisa reprocessar", badge_color="amber",
+                                reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq."))
+        except Exception as _ee3:
+            print(f"[email] erro-cliente nao enviado (nao-fatal): {_ee3}")
+
 
 @app.get("/")
 async def root():
@@ -3413,6 +3459,18 @@ async def process_files(
     )
     t.start()
 
+    # Alerta interno pro Pedro: novo projeto entrou (em thread — não atrasa a resposta)
+    try:
+        import html as _h4, threading as _th4
+        _types_str = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
+        _alert_body = (f"<b>Usuário:</b> {_h4.escape(user_name or '—')} &lt;{_h4.escape(user_email or 'anônimo')}&gt;<br>"
+                       f"<b>Projeto:</b> {_h4.escape(project_name or '(sem nome)')}<br>"
+                       f"<b>Arquivos:</b> {len(file_paths)} ({_types_str})<br>"
+                       f"<b>Código:</b> {job_id}")
+        _th4.Thread(target=_notify_admin, args=("Novo projeto recebido", _alert_body), daemon=True).start()
+    except Exception as _na:
+        print(f"[notify] alerta novo-projeto falhou: {_na}")
+
     return {"job_id": job_id, "files_received": len(file_paths),
             "file_types": file_types, "status": "queued", "typology": typology}
 
@@ -3509,37 +3567,49 @@ async def download_file(job_id: str, request: Request):
     )
 
 
-@app.get("/api/debug/email-test")
-async def debug_email_test(to: str, token: str = "", type: str = "welcome", name: str = "Pedro Zellmer"):
-    """TEMPORÁRIO: dispara um email de teste pra validar o SMTP. Gated por
-    token. type=welcome (boas-vindas) ou done (planilha pronta). REMOVER depois."""
-    if token != "aiarq-mailtest-3Qv9Kx7Lp2":
-        raise HTTPException(403, "token inválido")
-    import html as _h
-    greet = _greeting_line(_h.escape(name))
-    if type == "done":
-        body = (f"{greet}<br><br>"
-                "O quantitativo do projeto <b>Residencial Vila Nova</b> terminou de processar "
-                "(<b>56 itens</b> identificados). É só acessar seu painel pra revisar os "
-                "itens e baixar a planilha.")
-        sent = _send_email_smtp(
-            to, "Sua planilha do AI.arq está pronta",
-            _email_wrap("Sua planilha está pronta", body,
-                        "Ver minha planilha", "https://ai.arq.br/dashboard.html",
-                        badge="&#10003; Concluído",
-                        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq."))
-    else:
-        body = (f"{greet}<br><br>"
-                "Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
-                "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
-                "que normalmente leva horas no Excel.<br><br>"
-                "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
-        sent = _send_email_smtp(
-            to, "Bem-vindo ao AI.arq",
-            _email_wrap("Bem-vindo ao AI.arq", body,
-                        "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
-                        reason="Você está recebendo este e-mail porque criou sua conta no AI.arq."))
-    return {"sent": sent, "to": to, "type": type}
+@app.post("/api/notify/welcome")
+async def notify_welcome(request: Request):
+    """Boas-vindas no cadastro. Manda o email SÓ pro email do próprio JWT
+    (não dá pra spammar terceiros) e avisa o Pedro de novo cliente.
+    Chamado pelo frontend logo após o signUp."""
+    user = _get_user_from_request(request)
+    if not user or not user.get("email"):
+        raise HTTPException(401, "Autenticação requerida")
+    email = user["email"]
+    # Nome do profile (pode não existir ainda — cadastro em 2 etapas)
+    name = ""
+    try:
+        import urllib.request as _urw
+        _qw = f"{SUPABASE_URL}/rest/v1/profiles?user_id=eq.{user['id']}&select=full_name"
+        _rw = _urw.Request(_qw, method="GET")
+        _rw.add_header("apikey", SUPABASE_KEY)
+        _rw.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _rows = _json.loads(_urw.urlopen(_rw, timeout=8).read().decode("utf-8"))
+        if _rows:
+            name = _rows[0].get("full_name") or ""
+    except Exception:
+        pass
+    import html as _hw
+    greet = _greeting_line(_hw.escape(name))
+    body = (f"{greet}<br><br>"
+            "Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
+            "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
+            "que normalmente leva horas no Excel.<br><br>"
+            "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
+    sent = _send_email_smtp(
+        email, "Bem-vindo ao AI.arq",
+        _email_wrap("Bem-vindo ao AI.arq", body,
+                    "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
+                    reason="Você está recebendo este e-mail porque criou sua conta no AI.arq."))
+    # Alerta interno pro Pedro: novo cliente (em thread)
+    try:
+        import threading as _thw
+        _ab = (f"<b>Novo cadastro! 🎉</b><br><b>Email:</b> {_hw.escape(email)}<br>"
+               f"<b>Nome:</b> {_hw.escape(name or '(ainda não preencheu)')}")
+        _thw.Thread(target=_notify_admin, args=("Novo cliente cadastrado", _ab), daemon=True).start()
+    except Exception:
+        pass
+    return {"status": "ok", "sent": sent}
 
 
 @app.get("/api/health")
