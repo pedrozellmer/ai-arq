@@ -899,6 +899,28 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
         return False
 
 
+def _saudacao() -> str:
+    """bom dia / boa tarde / boa noite no horário de Brasília (UTC-3)."""
+    h = (datetime.utcnow().hour - 3) % 24
+    if 5 <= h < 12:
+        return "bom dia"
+    if 12 <= h < 18:
+        return "boa tarde"
+    return "boa noite"
+
+
+def _first_name(full: str) -> str:
+    full = (full or "").strip()
+    return full.split(" ")[0] if full else ""
+
+
+def _greeting_line(full_name: str) -> str:
+    """'Fulano, boa noite,' — com nome; ou 'Boa noite,' sem nome."""
+    fn = _first_name(full_name)
+    s = _saudacao()
+    return f"{fn}, {s}," if fn else f"{s.capitalize()},"
+
+
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
                 reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.") -> str:
     """Layout moderno e acessível dos emails (table-based + estilo inline, do
@@ -3192,7 +3214,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             import html as _html, urllib.request as _ur2
             _q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                  f"&select=user_email,project_name")
+                  f"&select=user_email,user_name,project_name")
             _rq = _ur2.Request(_q, method="GET")
             _rq.add_header("apikey", SUPABASE_KEY)
             _rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -3200,7 +3222,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pe = (_rows[0].get("user_email") if _rows else "") or ""
             if _pe:
                 _pn = _html.escape(_rows[0].get("project_name") or "seu projeto")
-                _body = (f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
+                _greet = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
+                _body = (f"{_greet}<br><br>"
+                         f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
                          f"({len(all_items)} itens). Acesse seu painel pra revisar e baixar a planilha.")
                 _send_email_smtp(
                     _pe, "Sua planilha do AI.arq está pronta",
@@ -3486,13 +3510,16 @@ async def download_file(job_id: str, request: Request):
 
 
 @app.get("/api/debug/email-test")
-async def debug_email_test(to: str, token: str = "", type: str = "welcome"):
+async def debug_email_test(to: str, token: str = "", type: str = "welcome", name: str = "Pedro Zellmer"):
     """TEMPORÁRIO: dispara um email de teste pra validar o SMTP. Gated por
     token. type=welcome (boas-vindas) ou done (planilha pronta). REMOVER depois."""
     if token != "aiarq-mailtest-3Qv9Kx7Lp2":
         raise HTTPException(403, "token inválido")
+    import html as _h
+    greet = _greeting_line(_h.escape(name))
     if type == "done":
-        body = ("O quantitativo do projeto <b>Residencial Vila Nova</b> terminou de processar "
+        body = (f"{greet}<br><br>"
+                "O quantitativo do projeto <b>Residencial Vila Nova</b> terminou de processar "
                 "(<b>56 itens</b> identificados). É só acessar seu painel pra revisar os "
                 "itens e baixar a planilha.")
         sent = _send_email_smtp(
@@ -3502,7 +3529,8 @@ async def debug_email_test(to: str, token: str = "", type: str = "welcome"):
                         badge="&#10003; Concluído",
                         reason="Você está recebendo este e-mail porque processou um projeto no AI.arq."))
     else:
-        body = ("Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
+        body = (f"{greet}<br><br>"
+                "Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
                 "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
                 "que normalmente leva horas no Excel.<br><br>"
                 "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
