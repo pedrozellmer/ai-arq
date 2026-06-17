@@ -5192,6 +5192,7 @@ except ImportError:
 
 @app.post("/api/calibration/ingest")
 async def calibration_ingest_density(
+    request: Request,
     xlsx: UploadFile = File(...),
     area_m2: float = 0,
     typology: str = "office",
@@ -5204,6 +5205,7 @@ async def calibration_ingest_density(
     Benchmarks são agregados por (typology, item_type, unit) — projetos
     novos só recebem ALERTAS, nunca valores copiados.
     """
+    _require_admin(request)  # escreve no motor de TODOS os projetos — só admin
     if not HAS_DENSITY_CAL:
         raise HTTPException(500, "Módulo density_calibration não carregado")
     if area_m2 <= 0:
@@ -5394,10 +5396,11 @@ async def calibration_reclassify_raws(
 
 
 @app.get("/api/calibration/benchmarks")
-async def calibration_benchmarks(typology: Optional[str] = None):
+async def calibration_benchmarks(request: Request, typology: Optional[str] = None):
     """Lista os benchmarks de densidade agregados (mean ± stddev por
     tipologia × item_type × unit). Usado pelo admin pra auditar os
     padrões aprendidos."""
+    _require_admin(request)
     if not HAS_DENSITY_CAL:
         raise HTTPException(500, "Módulo density_calibration não carregado")
     try:

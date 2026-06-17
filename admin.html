@@ -2004,7 +2004,7 @@ document.getElementById('form-new-code').addEventListener('submit', async functi
 async function loadCalibrationFactors() {
   // Carrega os summary cards usando benchmarks de densidade (todas tipologias)
   try {
-    const res = await fetch(`${API_BASE}/api/calibration/benchmarks`);
+    const res = await authFetch(`${API_BASE}/api/calibration/benchmarks`);
     if (!res.ok) throw new Error('Erro ' + res.status);
     const data = await res.json();
     const rows = data.benchmarks || [];
@@ -2054,7 +2054,7 @@ async function uploadDensityIngest() {
       typology: typology,
       project_label: label || file.name,
     });
-    const res = await fetch(`${API_BASE}/api/calibration/ingest?${params}`, {
+    const res = await authFetch(`${API_BASE}/api/calibration/ingest?${params}`, {
       method: 'POST',
       body: formData,
     });
@@ -2092,7 +2092,7 @@ async function loadBenchmarks() {
   box.classList.remove('hidden');
   box.innerHTML = '<p class="text-gray-500">Carregando benchmarks…</p>';
   try {
-    const res = await fetch(`${API_BASE}/api/calibration/benchmarks?typology=${encodeURIComponent(typology)}`);
+    const res = await authFetch(`${API_BASE}/api/calibration/benchmarks?typology=${encodeURIComponent(typology)}`);
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || 'Erro ao carregar');
     const rows = data.benchmarks || [];
