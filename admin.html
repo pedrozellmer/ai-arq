@@ -2123,7 +2123,7 @@ async function loadBenchmarks() {
 async function loadAgentData() {
   // Stats
   try {
-    const sres = await fetch(`${API_BASE}/api/agent/stats`);
+    const sres = await authFetch(`${API_BASE}/api/agent/stats`);
     const s = await sres.json();
     document.getElementById('ag-total').textContent = s.total_conversations ?? '--';
     document.getElementById('ag-jobs').textContent = s.unique_jobs ?? '--';
@@ -2140,7 +2140,7 @@ async function loadAgentData() {
     const filterJob = document.getElementById('ag-filter-job').value.trim();
     let url = `${API_BASE}/api/agent/conversations?limit=100`;
     if (filterJob) url += `&job_id=${encodeURIComponent(filterJob)}`;
-    const res = await fetch(url);
+    const res = await authFetch(url);
     const data = await res.json();
     const convs = data.conversations || [];
     document.getElementById('ag-count').textContent = `${convs.length} conversa(s)`;
