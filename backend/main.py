@@ -861,6 +861,86 @@ def _save_jobs(jobs_dict):
             _json.dump(jobs_dict, f)
     except: pass
 
+# ─── Email transacional (SMTP — Google Workspace) ───────────────────
+# Configurado por env vars SMTP_* no Render. Se não estiver configurado,
+# vira no-op silencioso (loga e segue) — NUNCA derruba o fluxo que chamou.
+def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "") -> bool:
+    host = os.getenv("SMTP_HOST", "")
+    user = os.getenv("SMTP_USER", "")
+    password = os.getenv("SMTP_PASSWORD", "")
+    if not (host and user and password and to_email):
+        print(f"[email] SMTP não configurado ou sem destino — pulando '{subject}'")
+        return False
+    port = int(os.getenv("SMTP_PORT", "587"))
+    from_name = os.getenv("SMTP_FROM_NAME", "AI.arq")
+    from_email = os.getenv("SMTP_FROM", user)
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.utils import formataddr
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = formataddr((from_name, from_email))
+        msg["To"] = to_email
+        msg["Reply-To"] = from_email
+        if text_body:
+            msg.attach(MIMEText(text_body, "plain", "utf-8"))
+        msg.attach(MIMEText(html_body, "html", "utf-8"))
+        with smtplib.SMTP(host, port, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.login(user, password)
+            server.sendmail(from_email, [to_email], msg.as_string())
+        print(f"[email] OK -> {to_email}: {subject}")
+        return True
+    except Exception as e:
+        print(f"[email] FALHA -> {to_email}: {type(e).__name__}: {e}")
+        return False
+
+
+def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "") -> str:
+    """Layout moderno e acessível dos emails (table-based + estilo inline, do
+    jeito que Gmail/Outlook exigem). Logo = ícone hospedado em ai.arq.br."""
+    cta = ""
+    if cta_text and cta_url:
+        cta = ('<tr><td style="padding:22px 30px 30px;">'
+               f'<a href="{cta_url}" style="background:#4F46E5;color:#ffffff;text-decoration:none;'
+               'padding:14px 26px;border-radius:10px;font-size:15px;font-weight:600;'
+               'font-family:Arial,sans-serif;display:inline-block;">'
+               f'{cta_text} &rarr;</a></td></tr>')
+    badge_html = ""
+    if badge:
+        badge_html = ('<tr><td style="padding:18px 30px 0;"><span style="display:inline-block;'
+                      'background:#dcfce7;color:#15803d;font-size:12px;font-weight:700;'
+                      'font-family:Arial,sans-serif;padding:4px 10px;border-radius:20px;">'
+                      f'{badge}</span></td></tr>')
+    return (
+        '<div style="background:#eaeef3;padding:28px 14px;font-family:Arial,sans-serif;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="max-width:520px;margin:0 auto;"><tr><td>'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
+        'style="background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">'
+        '<tr><td style="height:5px;background:#4F46E5;background:linear-gradient(90deg,#4F46E5,#22D3EE);'
+        'font-size:0;line-height:0;">&nbsp;</td></tr>'
+        '<tr><td style="padding:26px 30px 4px;"><table role="presentation" cellpadding="0" cellspacing="0"><tr>'
+        '<td><img src="https://ai.arq.br/apple-touch-icon.png" width="46" height="46" alt="AI.arq" '
+        'style="border-radius:12px;display:block;"></td>'
+        '<td style="padding-left:12px;font-size:21px;font-weight:700;color:#0F172A;'
+        'letter-spacing:-.3px;font-family:Arial,sans-serif;">AI.arq</td></tr></table></td></tr>'
+        f'{badge_html}'
+        f'<tr><td style="padding:16px 30px 0;font-size:22px;font-weight:700;color:#0F172A;'
+        f'line-height:1.3;font-family:Arial,sans-serif;">{title}</td></tr>'
+        f'<tr><td style="padding:12px 30px 4px;font-size:15px;line-height:1.65;color:#475569;'
+        f'font-family:Arial,sans-serif;">{body_html}</td></tr>'
+        f'{cta}'
+        '</table>'
+        '<div style="text-align:center;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif;'
+        'padding:14px 8px;">AI.arq &middot; Quantitativos de CAD com IA &middot; ai.arq.br</div>'
+        '</td></tr></table></div>'
+    )
+
+
 class JobsStore:
     """Armazena jobs em arquivo JSON."""
     def __getitem__(self, key):
@@ -3102,6 +3182,28 @@ bloco — só cite os que estão no inventário deste arquivo."""
               f"total_area={project_data.total_area} layout_area={project_data.layout_area} "
               f"ok={_supa_ok}")
 
+        # Email "planilha pronta" pro usuário (best-effort; falha não derruba o job)
+        try:
+            import html as _html, urllib.request as _ur2
+            _q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                  f"&select=user_email,project_name")
+            _rq = _ur2.Request(_q, method="GET")
+            _rq.add_header("apikey", SUPABASE_KEY)
+            _rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _rows = _json.loads(_ur2.urlopen(_rq, timeout=10).read().decode("utf-8"))
+            _pe = (_rows[0].get("user_email") if _rows else "") or ""
+            if _pe:
+                _pn = _html.escape(_rows[0].get("project_name") or "seu projeto")
+                _body = (f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
+                         f"({len(all_items)} itens). Acesse seu painel pra revisar e baixar a planilha.")
+                _send_email_smtp(
+                    _pe, "Sua planilha do AI.arq está pronta",
+                    _email_wrap("Sua planilha está pronta", _body,
+                                "Ver minha planilha", "https://ai.arq.br/dashboard.html",
+                                badge="&#10003; Concluído"))
+        except Exception as _ee:
+            print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
+
     except Exception as e:
         jobs.update_field(job_id, status="error")
         jobs.update_field(job_id, error_message=str(e))
@@ -3374,6 +3476,23 @@ async def download_file(job_id: str, request: Request):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         filename=f"quantitativos_aiarq_{job_id}.xlsx",
     )
+
+
+@app.get("/api/debug/email-test")
+async def debug_email_test(to: str, token: str = ""):
+    """TEMPORÁRIO: dispara um email de teste pra validar o SMTP. Gated por
+    token. REMOVER depois de confirmar o envio."""
+    if token != "aiarq-mailtest-3Qv9Kx7Lp2":
+        raise HTTPException(403, "token inválido")
+    body = ("Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
+            "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
+            "que normalmente leva horas no Excel.<br><br>"
+            "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
+    sent = _send_email_smtp(
+        to, "Bem-vindo ao AI.arq",
+        _email_wrap("Bem-vindo ao AI.arq", body,
+                    "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html"))
+    return {"sent": sent, "to": to}
 
 
 @app.get("/api/health")
