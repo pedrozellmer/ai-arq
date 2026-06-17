@@ -3479,20 +3479,30 @@ async def download_file(job_id: str, request: Request):
 
 
 @app.get("/api/debug/email-test")
-async def debug_email_test(to: str, token: str = ""):
+async def debug_email_test(to: str, token: str = "", type: str = "welcome"):
     """TEMPORÁRIO: dispara um email de teste pra validar o SMTP. Gated por
-    token. REMOVER depois de confirmar o envio."""
+    token. type=welcome (boas-vindas) ou done (planilha pronta). REMOVER depois."""
     if token != "aiarq-mailtest-3Qv9Kx7Lp2":
         raise HTTPException(403, "token inválido")
-    body = ("Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
-            "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
-            "que normalmente leva horas no Excel.<br><br>"
-            "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
-    sent = _send_email_smtp(
-        to, "Bem-vindo ao AI.arq",
-        _email_wrap("Bem-vindo ao AI.arq", body,
-                    "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html"))
-    return {"sent": sent, "to": to}
+    if type == "done":
+        body = ("O quantitativo do projeto <b>Residencial Vila Nova</b> terminou de processar "
+                "(<b>56 itens</b> identificados). É só acessar seu painel pra revisar os "
+                "itens e baixar a planilha.")
+        sent = _send_email_smtp(
+            to, "Sua planilha do AI.arq está pronta",
+            _email_wrap("Sua planilha está pronta", body,
+                        "Ver minha planilha", "https://ai.arq.br/dashboard.html",
+                        badge="&#10003; Concluído"))
+    else:
+        body = ("Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
+                "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
+                "que normalmente leva horas no Excel.<br><br>"
+                "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
+        sent = _send_email_smtp(
+            to, "Bem-vindo ao AI.arq",
+            _email_wrap("Bem-vindo ao AI.arq", body,
+                        "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html"))
+    return {"sent": sent, "to": to, "type": type}
 
 
 @app.get("/api/health")
