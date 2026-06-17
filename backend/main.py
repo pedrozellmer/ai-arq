@@ -2279,17 +2279,19 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 if dwg_failed and not dxf_paths and not pdf_paths:
                     arquivos = ', '.join(dwg_failed)
                     msg = (
-                        f"❌ Não foi possível processar o DWG: {arquivos}. "
-                        f"Tentamos com 2 conversores (ODA + libredwg) — ambos falharam. "
-                        f"Causa provável: arquivo corrompido (faltam bytes) — pode ter acontecido se o "
-                        f"AutoCAD travou na hora de salvar.\n\n"
-                        f"📋 COMO RESOLVER (95% dos casos):\n"
+                        f"⚠ Não conseguimos abrir automaticamente este(s) DWG: {arquivos}. "
+                        f"Isso costuma acontecer com DWG salvo numa versão muito recente do "
+                        f"AutoCAD, ou com objetos especiais (comum em projetos de incêndio, "
+                        f"hidráulica e elétrica feitos em software MEP). Não quer dizer que "
+                        f"seu arquivo está com defeito.\n\n"
+                        f"📋 COMO RESOLVER (resolve quase sempre):\n"
                         f"1. Abra o arquivo no AutoCAD ou BricsCAD\n"
-                        f"2. Vá em File → Save As\n"
-                        f"3. Escolha o tipo: AutoCAD 2010/LT2010 DXF (*.dxf)\n"
-                        f"4. Salve com nome novo\n"
-                        f"5. Suba o DXF aqui (em vez do DWG)\n\n"
-                        f"💡 ALTERNATIVA: se você plotou em PDF antes, mande o PDF — funciona igual."
+                        f"2. Vá em Arquivo → Salvar Como\n"
+                        f"3. Escolha o tipo: AutoCAD 2013 DXF (*.dxf) — ou 2010, se tiver\n"
+                        f"4. Salve com um nome novo\n"
+                        f"5. Suba o DXF aqui (no lugar do DWG)\n\n"
+                        f"💡 ALTERNATIVA mais rápida: se você já plotou esse desenho em PDF, "
+                        f"mande o PDF — funciona igual."
                     )
                     jobs.update_field(job_id, error_message=msg, current_step="❌ Arquivo CAD inválido — leia mensagem abaixo")
                     raise RuntimeError(msg)
@@ -2964,10 +2966,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # A IA falhou em ao menos uma prancha/DXF — erro técnico, vale
                 # reprocessar (pode ter sido sobrecarga/timeout passageiro).
                 raise RuntimeError(
-                    "A IA não conseguiu analisar as pranchas — provável "
-                    "sobrecarga temporária do servidor de análise. Nenhum "
-                    "item foi extraído. Reprocesse o projeto (é grátis). "
-                    f"Detalhe técnico: {ai_errors[0]}"
+                    "⚠ Os servidores de IA estavam sobrecarregados neste "
+                    "momento — é um problema temporário do provedor, NÃO do "
+                    "seu arquivo. O sistema já tentou sozinho várias vezes "
+                    "(alguns minutos) antes de desistir. É só reprocessar daqui "
+                    "a alguns minutos — é grátis e não conta no seu limite."
                 )
             else:
                 # A IA rodou sem erro mas não achou nada quantificável.
