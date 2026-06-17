@@ -871,7 +871,10 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
     if not (host and user and password and to_email):
         print(f"[email] SMTP não configurado ou sem destino — pulando '{subject}'")
         return False
-    port = int(os.getenv("SMTP_PORT", "587"))
+    try:
+        port = int(os.getenv("SMTP_PORT", "587") or "587")
+    except ValueError:
+        port = 587
     from_name = os.getenv("SMTP_FROM_NAME", "AI.arq")
     from_email = os.getenv("SMTP_FROM", user)
     try:
@@ -938,12 +941,18 @@ def _greeting_line(full_name: str) -> str:
 
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
                 badge_color: str = "green",
-                reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.") -> str:
+                reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.",
+                signoff: bool = True) -> str:
     """Layout moderno e acessível dos emails (table-based + estilo inline, do
-    jeito que Gmail/Outlook exigem). Logo = ícone hospedado em ai.arq.br."""
+    jeito que Gmail/Outlook exigem). Logo = ícone hospedado em ai.arq.br.
+
+    Assinatura e rodapé ficam DENTRO do card (contíguos ao conteúdo) de
+    propósito: quando o rodapé é um bloco solto no fim, o Gmail o reconhece
+    como boilerplate repetido e colapsa atrás do "•••". Integrado, não colapsa.
+    """
     cta = ""
     if cta_text and cta_url:
-        cta = ('<tr><td style="padding:22px 30px 30px;">'
+        cta = ('<tr><td style="padding:22px 30px 8px;">'
                f'<a href="{cta_url}" style="background:#4F46E5;color:#ffffff;text-decoration:none;'
                'padding:14px 26px;border-radius:10px;font-size:15px;font-weight:600;'
                'font-family:Arial,sans-serif;display:inline-block;">'
@@ -955,6 +964,16 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
                       f'background:{_bbg};color:{_bfg};font-size:12px;font-weight:700;'
                       'font-family:Arial,sans-serif;padding:4px 10px;border-radius:20px;">'
                       f'{badge}</span></td></tr>')
+    # Assinatura pessoal (dentro do card)
+    sig_html = ""
+    if signoff:
+        sig_html = ('<tr><td style="padding:22px 30px 0;">'
+                    '<div style="border-top:1px solid #eef2f7;padding-top:18px;font-size:15px;'
+                    'line-height:1.55;color:#475569;font-family:Arial,sans-serif;">'
+                    'Um abraço,<br>'
+                    '<span style="font-weight:700;color:#0F172A;">Pedro</span><br>'
+                    '<span style="color:#94a3b8;font-size:13px;">AI.arq &middot; ai.arq.br</span>'
+                    '</div></td></tr>')
     return (
         '<div style="background:#eaeef3;padding:28px 14px;font-family:Arial,sans-serif;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
@@ -974,16 +993,92 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
         f'<tr><td style="padding:12px 30px 4px;font-size:15px;line-height:1.65;color:#475569;'
         f'font-family:Arial,sans-serif;">{body_html}</td></tr>'
         f'{cta}'
-        '</table>'
-        '<div style="text-align:center;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif;'
-        'padding:16px 12px;line-height:1.65;">'
+        f'{sig_html}'
+        # Rodapé LGPD DENTRO do card (contíguo -> não vira "•••")
+        '<tr><td style="padding:18px 30px 24px;">'
+        '<div style="border-top:1px solid #eef2f7;padding-top:14px;font-size:11px;color:#aab4c0;'
+        'line-height:1.6;font-family:Arial,sans-serif;">'
         f'{reason}<br>'
-        '<a href="https://ai.arq.br/privacidade.html" style="color:#6366f1;text-decoration:none;">Política de Privacidade</a>'
-        ' &middot; <a href="https://ai.arq.br" style="color:#6366f1;text-decoration:none;">ai.arq.br</a><br>'
-        '<span style="color:#cbd5e1;">Dúvidas ou remoção dos seus dados? É só responder este e-mail.</span>'
-        '</div>'
+        '<a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;text-decoration:none;">Política de Privacidade</a>'
+        ' &middot; <a href="https://ai.arq.br" style="color:#8b93f6;text-decoration:none;">ai.arq.br</a>'
+        ' &middot; Para remover seus dados, é só responder este e-mail.'
+        '</div></td></tr>'
+        '</table>'
         '</td></tr></table></div>'
     )
+
+
+# Dedup em memória (vida do processo) pra não mandar 2x o email de falha do
+# MESMO job — ex.: except do process_job + recovery no boot. Em produção o
+# disco é efêmero; isto cobre o processo atual, e o parent_job_id cobre os
+# reprocessamentos manuais (que criam job novo com pai).
+_falha_emailed = set()
+
+
+def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
+    """Avisa o cliente que o projeto falhou. Best-effort, NUNCA levanta.
+
+    - reprocessavel=True  -> falha passageira (IA sobrecarregada / reinício do
+      servidor / erro técnico): "reprocessar resolve, é grátis".
+    - reprocessavel=False -> arquivo não-quantificável (PDF escaneado, prancha
+      só de layout, vetorial sem texto): reprocessar o MESMO arquivo NÃO
+      resolve -> orienta a reenviar a planta completa exportada do CAD.
+
+    Dedup: pula se já avisou este job_id neste processo, ou se o job é fruto de
+    reprocessamento (parent_job_id setado -> o job-pai já avisou)."""
+    try:
+        if job_id in _falha_emailed:
+            return False
+        import html as _hf, urllib.request as _urf
+        _qf = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+               f"&select=user_email,user_name,project_name,parent_job_id")
+        _rf = _urf.Request(_qf, method="GET")
+        _rf.add_header("apikey", SUPABASE_KEY)
+        _rf.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _rows = _json.loads(_urf.urlopen(_rf, timeout=10).read().decode("utf-8"))
+        if not _rows:
+            return False
+        _email = _rows[0].get("user_email") or ""
+        if not _email:
+            return False
+        if _rows[0].get("parent_job_id"):
+            _falha_emailed.add(job_id)  # filho de reprocessamento: pai já avisou
+            return False
+        _pn = _hf.escape(_rows[0].get("project_name") or "seu projeto")
+        _greet = _greeting_line(_hf.escape(_rows[0].get("user_name") or ""))
+        if reprocessavel:
+            _body = (f"{_greet}<br><br>"
+                     f"Tivemos um problema ao processar o projeto <b>{_pn}</b> e ele não "
+                     f"foi concluído. Quase sempre é coisa passageira e <b>reprocessar "
+                     f"resolve</b> — e o reprocessamento é grátis.<br><br>"
+                     f"Se continuar dando problema, é só responder este e-mail que a gente "
+                     f"te ajuda pessoalmente. 🙂")
+            _subject = "Tivemos um problema com seu projeto no AI.arq"
+            _html = _email_wrap("Não conseguimos concluir seu projeto", _body,
+                                "Reprocessar no painel", "https://ai.arq.br/dashboard.html",
+                                badge="⚠ Precisa reprocessar", badge_color="amber",
+                                reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+        else:
+            _body = (f"{_greet}<br><br>"
+                     f"Recebemos o projeto <b>{_pn}</b>, mas não conseguimos ler as "
+                     f"quantidades nesse arquivo — então <b>reprocessar não vai resolver</b>.<br><br>"
+                     f"Quase sempre é porque o PDF é uma imagem escaneada/fotografada, ou a "
+                     f"prancha tem só o desenho, sem cotas e quadros de áreas. O ideal é "
+                     f"<b>reenviar a planta completa exportada direto do CAD</b> (PDF vetorial, "
+                     f"DWG ou DXF).<br><br>"
+                     f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
+                     f"preparar. 🙂")
+            _subject = "Sobre o seu projeto no AI.arq — precisamos de outro arquivo"
+            _html = _email_wrap("Precisamos de outro arquivo pra continuar", _body,
+                                "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
+                                badge="⚠ Revisar o arquivo", badge_color="amber",
+                                reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+        ok = _send_email_smtp(_email, _subject, _html)
+        _falha_emailed.add(job_id)
+        return ok
+    except Exception as _e:
+        print(f"[email] falha-cliente nao enviado (nao-fatal): {_e}")
+        return False
 
 
 class JobsStore:
@@ -1229,6 +1324,12 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
                                        status="error",
                                        error_message="Processamento interrompido por reinício do servidor.",
                                        current_step="Erro: reinício do servidor")
+            except Exception:
+                pass
+            # Avisa o cliente que o projeto falhou por reinício (reprocessar
+            # resolve). Best-effort; o helper tem dedup interno por job.
+            try:
+                _email_falha_cliente(job_id, reprocessavel=True)
             except Exception:
                 pass
 
@@ -3263,32 +3364,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
             "error_message": str(e)[:500],
         })
 
-        # Email "deu um problema, reprocesse" pro cliente (best-effort; sem
-        # jargão técnico — o detalhe fica no admin, não no email do cliente).
+        # Email pro cliente (best-effort; sem jargão técnico). Distingue falha
+        # passageira (reprocessar resolve) de arquivo não-quantificável (trocar
+        # o arquivo) pela mensagem da exceção — a mesma distinção feita lá no
+        # raise de "0 itens". O helper faz dedup pra não repetir por job.
         try:
-            import html as _h2, urllib.request as _ur3
-            _q3 = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                   f"&select=user_email,user_name,project_name")
-            _rq3 = _ur3.Request(_q3, method="GET")
-            _rq3.add_header("apikey", SUPABASE_KEY)
-            _rq3.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-            _rows3 = _json.loads(_ur3.urlopen(_rq3, timeout=10).read().decode("utf-8"))
-            _pe3 = (_rows3[0].get("user_email") if _rows3 else "") or ""
-            if _pe3:
-                _pn3 = _h2.escape(_rows3[0].get("project_name") or "seu projeto")
-                _greet3 = _greeting_line(_h2.escape(_rows3[0].get("user_name") or ""))
-                _body3 = (f"{_greet3}<br><br>"
-                          f"Tivemos um problema ao processar o projeto <b>{_pn3}</b> e ele não "
-                          f"foi concluído. Quase sempre é coisa passageira e <b>reprocessar "
-                          f"resolve</b> — e o reprocessamento é grátis.<br><br>"
-                          f"Se continuar dando problema, é só responder este e-mail que a gente "
-                          f"te ajuda pessoalmente. 🙂")
-                _send_email_smtp(
-                    _pe3, "Tivemos um problema com seu projeto no AI.arq",
-                    _email_wrap("Não conseguimos concluir seu projeto", _body3,
-                                "Reprocessar no painel", "https://ai.arq.br/dashboard.html",
-                                badge="⚠ Precisa reprocessar", badge_color="amber",
-                                reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq."))
+            _reproc = "Nenhum item quantificável" not in str(e)
+            _email_falha_cliente(job_id, reprocessavel=_reproc)
         except Exception as _ee3:
             print(f"[email] erro-cliente nao enviado (nao-fatal): {_ee3}")
 
@@ -3576,19 +3658,34 @@ async def notify_welcome(request: Request):
     if not user or not user.get("email"):
         raise HTTPException(401, "Autenticação requerida")
     email = user["email"]
-    # Nome do profile (pode não existir ainda — cadastro em 2 etapas)
+    # Nome + idade do profile. O disparo vem do 1º load do dashboard, mas o
+    # guard no frontend é localStorage (por-browser): sem este gate, os
+    # usuários ANTIGOS receberiam boas-vindas + gerariam alerta FALSO de "novo
+    # cliente" no próximo acesso (poluindo a métrica de crescimento). Só trata
+    # como NOVO quem criou o perfil agora há pouco — o perfil nasce no cadastro,
+    # momentos antes deste 1º load; perfis antigos têm created_at de dias atrás.
     name = ""
+    is_new = False
     try:
         import urllib.request as _urw
-        _qw = f"{SUPABASE_URL}/rest/v1/profiles?user_id=eq.{user['id']}&select=full_name"
+        _qw = f"{SUPABASE_URL}/rest/v1/profiles?user_id=eq.{user['id']}&select=full_name,created_at"
         _rw = _urw.Request(_qw, method="GET")
         _rw.add_header("apikey", SUPABASE_KEY)
         _rw.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         _rows = _json.loads(_urw.urlopen(_rw, timeout=8).read().decode("utf-8"))
         if _rows:
             name = _rows[0].get("full_name") or ""
+            try:
+                from datetime import datetime as _dtw, timezone as _tzw, timedelta as _tdw
+                _cad = _dtw.fromisoformat((_rows[0].get("created_at") or "").replace("Z", "+00:00"))
+                is_new = (_dtw.now(_tzw.utc) - _cad) <= _tdw(hours=1)
+            except Exception:
+                is_new = False
     except Exception:
         pass
+    # Cliente antigo (ou perfil sem data confiável): não manda nada.
+    if not is_new:
+        return {"status": "ok", "sent": False, "reason": "not_new"}
     import html as _hw
     greet = _greeting_line(_hw.escape(name))
     body = (f"{greet}<br><br>"
