@@ -11,9 +11,13 @@ chamam `client.messages.create(...)` devem usar `call_with_retry(client, ...)`
 pra herdar o comportamento.
 
 Política:
-- 429 / 529 / timeout: retry com backoff exponencial (2s, 4s, 8s, 16s, 32s).
+- 429 / 529 / timeout: retry com backoff exponencial (2s, 4s, 8s, 16s, 32s,
+  64s, 90s, 90s) — cobre ~5min de sobrecarga (529 "overloaded" da Anthropic
+  costuma durar minutos; cobertura curta fazia o projeto inteiro falhar e o
+  usuário re-subir na mão. Caso ivaldogss 16/06: só funcionou na 4ª tentativa
+  manual em ~5min — agora a 1ª já aguenta).
 - Outros erros: não retenta (erro de prompt, API key inválida, etc).
-- Máximo 5 tentativas por padrão.
+- Máximo 8 tentativas por padrão.
 - Respeita o header `retry-after` quando presente.
 
 Observação sobre Anthropic SDK:
@@ -84,9 +88,9 @@ def _extract_retry_after(exc: Exception) -> float | None:
 def call_with_retry(
     client: Any,
     *,
-    max_retries: int = 5,
+    max_retries: int = 8,
     base_delay: float = 2.0,
-    max_delay: float = 60.0,
+    max_delay: float = 90.0,
     tag: str = "anthropic",
     **kwargs: Any,
 ) -> Any:
@@ -94,7 +98,7 @@ def call_with_retry(
 
     Args:
         client: instância de `anthropic.Anthropic`.
-        max_retries: tentativas adicionais além da 1ª (default 5 → até 6 chamadas).
+        max_retries: tentativas adicionais além da 1ª (default 8 → até 9 chamadas).
         base_delay: delay inicial em segundos (dobra a cada tentativa).
         max_delay: teto do backoff.
         tag: string pra log identificar qual chamada tá retentando.
