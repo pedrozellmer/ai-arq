@@ -1359,6 +1359,16 @@
       return;
     }
 
+    // Boas-vindas (1x por usuário, no 1º acesso ao painel): dispara o email
+    // de boas-vindas e avisa o Pedro do novo cliente. Seta o flag ANTES de
+    // chamar pra não enviar duplicado num reload rápido.
+    if (!localStorage.getItem('aiarq_welcomed')) {
+      localStorage.setItem('aiarq_welcomed', 'true');
+      fetch(`${API_BASE}/api/notify/welcome`, {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + accessToken }
+      }).catch(e => console.warn('welcome notify:', e));
+    }
+
     userName.textContent = meta.full_name || meta.name || user.email;
     userAvatar.src = meta.avatar_url || meta.picture || '';
     if (!userAvatar.src) {
