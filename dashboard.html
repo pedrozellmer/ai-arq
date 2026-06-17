@@ -2037,8 +2037,11 @@
   //  PROCESS PROJECT
   // ══════════════════════════════════════════════
   // Check if first project (free)
+  // BUG FIX: lia 'aiarq_projects' (chave que NUNCA é escrita) → retornava
+  // sempre true → todo projeto saía como "1º grátis". O histórico real é
+  // gravado em 'aiarq_project_history' (ver saveProjectToHistory).
   function isFirstProject() {
-    const history = JSON.parse(localStorage.getItem('aiarq_projects') || '[]');
+    const history = JSON.parse(localStorage.getItem('aiarq_project_history') || '[]');
     return history.length === 0;
   }
 
@@ -2127,6 +2130,13 @@
     }
   });
 
+  // ── BETA: enquanto true, projeto do 2º em diante NÃO cobra — mostra um
+  // aviso "ainda é beta, continua grátis" e processa. Vira false (1 linha)
+  // pra LIGAR a cobrança via Stripe quando o produto estiver redondo.
+  // ⚠ Isto é só o gate do frontend (burlável). A trava de verdade no
+  // servidor é flip-day (ver docs/COBRANCA_FLIP_DAY.md).
+  const BETA_FREE = true;
+
   btnProcess.addEventListener('click', async () => {
     if (selectedFiles.length === 0) return;
 
@@ -2161,6 +2171,13 @@
         window.__creditsToConsumeCents = 0;
       }
       // Projeto gratuito (primeiro / beta / ilimitado / coberto por crédito) — processa direto
+      startProcessing();
+    } else if (BETA_FREE) {
+      // 2º projeto (ou mais) DURANTE O BETA: em vez de cobrar, avisamos que
+      // continua grátis e processamos. Quando ligar a cobrança, é só pôr
+      // BETA_FREE=false que este ramo some e cai no checkout abaixo.
+      window.__creditsToConsumeCents = 0;
+      notify.ok('🎉 Ainda estamos em beta — seu projeto continua GRÁTIS! Aproveite enquanto dura. 🙌');
       startProcessing();
     } else {
       // Precisa pagar — pede CPF/CNPJ se ainda não tiver (cadastro 2 etapas).
