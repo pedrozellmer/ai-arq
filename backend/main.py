@@ -5328,8 +5328,9 @@ async def agent_conversations(request: Request, job_id: Optional[str] = None, li
 
 
 @app.get("/api/agent/stats")
-async def agent_stats():
+async def agent_stats(request: Request):
     """Estatísticas agregadas do uso do agente — pra dashboard admin."""
+    _require_admin(request)
     try:
         # FIX 2026-05-14: antes definia URL pra RPC `agent_stats_summary` e
         # sobrescrevia logo na linha seguinte com fallback. RPC nunca era
