@@ -271,20 +271,17 @@
               <thead>
                 <tr class="border-b bg-gray-50">
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">Status</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Nome</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Email</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">WhatsApp</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Empresa</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Cargo</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Projetos</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Signup</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">&#218;ltimo login</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Usu&#225;rio</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Empresa / cargo</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Como conheceu</th>
+                  <th class="text-center px-4 py-3 font-semibold text-gray-600">Projetos</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Cadastro</th>
                   <th class="text-left px-4 py-3 font-semibold text-gray-600">A&#231;&#245;es</th>
                 </tr>
               </thead>
               <tbody id="users-table-body">
                 <tr>
-                  <td colspan="10" class="px-4 py-12 text-center text-gray-500">Carregando usu&#225;rios...</td>
+                  <td colspan="7" class="px-4 py-12 text-center text-gray-500">Carregando usu&#225;rios...</td>
                 </tr>
               </tbody>
             </table>
@@ -1617,7 +1614,7 @@ let allUsers = [];
 
 async function loadUsers() {
   const tbody = document.getElementById('users-table-body');
-  tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-12 text-center text-gray-500">Carregando usu\u00e1rios...</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">Carregando usu\u00e1rios...</td></tr>';
 
   try {
     // Tenta via RPC (admin-only, inclui auth.users sem profile)
@@ -1637,6 +1634,8 @@ async function loadUsers() {
         user_role: p.role,
         area: p.area,
         beta_code: p.beta_code,
+        referral_source: p.referral_source,
+        referral_detail: p.referral_detail,
         profile_created_at: p.created_at,
         auth_created_at: p.created_at,
         last_sign_in_at: null,
@@ -1657,7 +1656,7 @@ async function loadUsers() {
 
   } catch (err) {
     console.error('Error loading users:', err);
-    tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-12 text-center text-red-400">Erro ao carregar usu\u00e1rios.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-red-400">Erro ao carregar usu\u00e1rios.</td></tr>';
   }
 }
 
@@ -1669,6 +1668,22 @@ function _statusBadge(u) {
     return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>Incompleto</span>';
   }
   return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-medium"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>Completo</span>';
+}
+
+// "Como conheceu o AI.arq" — referral_source do cadastro + detalhe livre.
+function _referralLabel(u) {
+  const src = u.referral_source;
+  if (!src) return '<span class="text-gray-400 text-xs">--</span>';
+  const map = {
+    google: '🔍 Google', instagram: '📷 Instagram', facebook: '📘 Facebook',
+    linkedin: '💼 LinkedIn', indicacao: '🤝 Indicação', evento: '🎤 Evento',
+    blog: '📝 Blog', anuncio: '📢 Anúncio', youtube: '▶️ YouTube', outro: '✏️ Outro'
+  };
+  const label = map[src] || ('✏️ ' + esc(String(src)));
+  const detail = u.referral_detail
+    ? `<div class="text-xs text-gray-500 italic max-w-[200px] truncate" title="${esc(u.referral_detail)}">&ldquo;${esc(u.referral_detail)}&rdquo;</div>`
+    : '';
+  return `<div class="text-sm text-gray-700 whitespace-nowrap">${label}</div>${detail}`;
 }
 
 function _fmtDate(iso) {
@@ -1688,7 +1703,7 @@ function renderUsers(users) {
   const tbody = document.getElementById('users-table-body');
 
   if (!users.length) {
-    tbody.innerHTML = '<tr><td colspan="10" class="px-4 py-12 text-center text-gray-500">Nenhum usu\u00e1rio encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">Nenhum usu\u00e1rio encontrado.</td></tr>';
     return;
   }
 
@@ -1718,16 +1733,23 @@ function renderUsers(users) {
       : '--';
     return `
       <tr class="border-b hover:bg-gray-50 transition ${rowCls}">
-        <td class="px-4 py-3">${_statusBadge(u)}</td>
-        <td class="px-4 py-3 font-medium text-gray-900">${name === u.full_name ? esc(u.full_name) : name}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.email || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.whatsapp || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.company || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(u.user_role || '--')}</td>
-        <td class="px-4 py-3 text-gray-600 text-center">${u.num_projects || 0}</td>
-        <td class="px-4 py-3 text-gray-500 text-xs">${_fmtDate(u.auth_created_at || u.profile_created_at)}</td>
-        <td class="px-4 py-3 text-gray-500 text-xs">${_fmtDateTime(u.last_sign_in_at)}</td>
-        <td class="px-4 py-3">${actions}</td>
+        <td class="px-4 py-3 align-top">${_statusBadge(u)}</td>
+        <td class="px-4 py-3 align-top">
+          <div class="font-medium text-gray-900">${name === u.full_name ? esc(u.full_name) : name}</div>
+          <div class="text-xs text-gray-500">${esc(u.email || '--')}</div>
+          ${u.whatsapp ? `<div class="text-xs text-gray-400">${esc(u.whatsapp)}</div>` : ''}
+        </td>
+        <td class="px-4 py-3 align-top text-gray-600">
+          <div>${esc(u.company || '--')}</div>
+          ${u.user_role ? `<div class="text-xs text-gray-400">${esc(u.user_role)}</div>` : ''}
+        </td>
+        <td class="px-4 py-3 align-top">${_referralLabel(u)}</td>
+        <td class="px-4 py-3 align-top text-center text-gray-700 font-medium">${u.num_projects || 0}</td>
+        <td class="px-4 py-3 align-top text-gray-500 text-xs">
+          ${_fmtDate(u.auth_created_at || u.profile_created_at)}
+          ${u.last_sign_in_at ? `<div class="text-gray-400">entrou ${_fmtDate(u.last_sign_in_at)}</div>` : ''}
+        </td>
+        <td class="px-4 py-3 align-top">${actions}</td>
       </tr>
     `;
   }).join('');
@@ -1812,7 +1834,8 @@ document.getElementById('search-users').addEventListener('input', function() {
   const filtered = allUsers.filter(u => {
     const searchable = [
       u.full_name, u.email, u.whatsapp,
-      u.company, u.area, u.user_role, u.role, u.beta_code
+      u.company, u.area, u.user_role, u.role, u.beta_code,
+      u.referral_source, u.referral_detail
     ].filter(Boolean).join(' ').toLowerCase();
     return searchable.includes(q);
   });
