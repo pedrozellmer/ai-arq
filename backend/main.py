@@ -899,7 +899,8 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
         return False
 
 
-def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "") -> str:
+def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
+                reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.") -> str:
     """Layout moderno e acessível dos emails (table-based + estilo inline, do
     jeito que Gmail/Outlook exigem). Logo = ícone hospedado em ai.arq.br."""
     cta = ""
@@ -936,7 +937,12 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
         f'{cta}'
         '</table>'
         '<div style="text-align:center;font-size:12px;color:#94a3b8;font-family:Arial,sans-serif;'
-        'padding:14px 8px;">AI.arq &middot; Quantitativos de CAD com IA &middot; ai.arq.br</div>'
+        'padding:16px 12px;line-height:1.65;">'
+        f'{reason}<br>'
+        '<a href="https://ai.arq.br/privacidade.html" style="color:#6366f1;text-decoration:none;">Política de Privacidade</a>'
+        ' &middot; <a href="https://ai.arq.br" style="color:#6366f1;text-decoration:none;">ai.arq.br</a><br>'
+        '<span style="color:#cbd5e1;">Dúvidas ou remoção dos seus dados? É só responder este e-mail.</span>'
+        '</div>'
         '</td></tr></table></div>'
     )
 
@@ -3200,7 +3206,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _pe, "Sua planilha do AI.arq está pronta",
                     _email_wrap("Sua planilha está pronta", _body,
                                 "Ver minha planilha", "https://ai.arq.br/dashboard.html",
-                                badge="&#10003; Concluído"))
+                                badge="&#10003; Concluído",
+                                reason="Você está recebendo este e-mail porque processou um projeto no AI.arq."))
         except Exception as _ee:
             print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
 
@@ -3492,7 +3499,8 @@ async def debug_email_test(to: str, token: str = "", type: str = "welcome"):
             to, "Sua planilha do AI.arq está pronta",
             _email_wrap("Sua planilha está pronta", body,
                         "Ver minha planilha", "https://ai.arq.br/dashboard.html",
-                        badge="&#10003; Concluído"))
+                        badge="&#10003; Concluído",
+                        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq."))
     else:
         body = ("Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
                 "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
@@ -3501,7 +3509,8 @@ async def debug_email_test(to: str, token: str = "", type: str = "welcome"):
         sent = _send_email_smtp(
             to, "Bem-vindo ao AI.arq",
             _email_wrap("Bem-vindo ao AI.arq", body,
-                        "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html"))
+                        "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
+                        reason="Você está recebendo este e-mail porque criou sua conta no AI.arq."))
     return {"sent": sent, "to": to, "type": type}
 
 
