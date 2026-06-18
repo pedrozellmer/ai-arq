@@ -3753,6 +3753,34 @@ async def admin_send_welcome(request: Request):
     return {"status": "ok", "sent": sent, "email": email, "name": name}
 
 
+@app.get("/api/debug/service-role")
+async def debug_service_role():
+    """Diagnóstico (sem PII): confirma se a service_role consegue ler dados
+    protegidos por RLS (profiles). Se 'service_role_reads_profiles' for false,
+    os emails automáticos pra usuário REAL (welcome/planilha-pronta/erro) não
+    funcionam — falta setar SUPABASE_SERVICE_ROLE_KEY no Render. Retorna só
+    booleans."""
+    import urllib.request as _urd
+
+    def _can_read(key):
+        try:
+            _r = _urd.Request(f"{SUPABASE_URL}/rest/v1/profiles?select=user_id&limit=1", method="GET")
+            _r.add_header("apikey", SUPABASE_KEY)
+            _r.add_header("Authorization", f"Bearer {key}")
+            _rows = _json.loads(_urd.urlopen(_r, timeout=8).read().decode("utf-8"))
+            return len(_rows) > 0
+        except Exception:
+            return False
+
+    service_ok = _can_read(SUPABASE_SERVICE_ROLE_KEY)
+    return {
+        "service_role_set": SUPABASE_SERVICE_ROLE_KEY != SUPABASE_KEY,
+        "service_role_reads_profiles": service_ok,
+        "anon_reads_profiles": _can_read(SUPABASE_KEY),
+        "emails_to_real_users_ok": service_ok,
+    }
+
+
 @app.get("/api/health")
 async def health():
     """Health check com métricas do sistema."""
