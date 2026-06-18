@@ -3727,23 +3727,28 @@ async def admin_send_welcome(request: Request):
     except Exception:
         _data = {}
     uid = ((_data or {}).get("user_id") or "").strip()
-    if not uid:
-        raise HTTPException(400, "user_id requerido")
-    name, email = "", ""
-    try:
-        import urllib.request as _ura
-        _qa = f"{SUPABASE_URL}/rest/v1/profiles?user_id=eq.{uid}&select=full_name,email"
-        _ra = _ura.Request(_qa, method="GET")
-        _ra.add_header("apikey", SUPABASE_KEY)
-        _ra.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        _rows = _json.loads(_ura.urlopen(_ra, timeout=8).read().decode("utf-8"))
-        if _rows:
-            name = _rows[0].get("full_name") or ""
-            email = _rows[0].get("email") or ""
-    except Exception as _e:
-        raise HTTPException(500, f"Erro lendo perfil: {_e}")
+    # Preferimos o email/nome vindos do admin: a lista de usuários do admin lê
+    # via RPC SECURITY DEFINER (enxerga tudo), então sempre tem o dado correto.
+    # Isso funciona mesmo sem SUPABASE_SERVICE_ROLE_KEY (o endpoint é admin-only).
+    email = ((_data or {}).get("email") or "").strip()
+    name = (_data or {}).get("name") or ""
+    # Fallback: se o admin não mandou email, tenta ler do profiles direto
+    # (precisa service_role setada — senão o RLS bloqueia e volta vazio).
+    if not email and uid:
+        try:
+            import urllib.request as _ura
+            _qa = f"{SUPABASE_URL}/rest/v1/profiles?user_id=eq.{uid}&select=full_name,email"
+            _ra = _ura.Request(_qa, method="GET")
+            _ra.add_header("apikey", SUPABASE_KEY)
+            _ra.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _rows = _json.loads(_ura.urlopen(_ra, timeout=8).read().decode("utf-8"))
+            if _rows:
+                name = name or (_rows[0].get("full_name") or "")
+                email = _rows[0].get("email") or ""
+        except Exception as _e:
+            raise HTTPException(500, f"Erro lendo perfil: {_e}")
     if not email:
-        raise HTTPException(404, "Usuário sem email no perfil")
+        raise HTTPException(400, "Sem email pra enviar (mande 'email' no corpo ou configure a service_role)")
     sent = _send_welcome_email(email, name)
     return {"status": "ok", "sent": sent, "email": email, "name": name}
 

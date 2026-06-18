@@ -1830,10 +1830,13 @@ async function sendWelcomeEmail(userId, email, btnEl) {
     btnEl.innerHTML = '<span class="text-xs">Enviando...</span>';
   }
   try {
+    // O admin já tem nome/email na lista (RPC que enxerga tudo) — manda junto,
+    // pra não depender do backend conseguir ler o profiles (RLS).
+    const u = (typeof allUsers !== 'undefined' ? allUsers : []).find(x => x.user_id === userId) || {};
     const res = await authFetch(`${API_BASE}/api/admin/send-welcome`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: userId }),
+      body: JSON.stringify({ user_id: userId, email: email, name: u.full_name || '' }),
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok || !d.sent) throw new Error((d && d.detail) || 'Falha no envio (SMTP)');
