@@ -1722,6 +1722,14 @@ function renderUsers(users) {
               Reenviar
             </button>
           ` : ''}
+          ${u.has_profile ? `
+            <button onclick="sendWelcomeEmail('${u.user_id || ''}', '${emailEsc}', this)"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition"
+                    title="Reenviar email de boas-vindas (pra quem se cadastrou antes do welcome existir)">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+              Boas-vindas
+            </button>
+          ` : ''}
           <button onclick="copyEmail('${emailEsc}', this)"
                   class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition"
                   title="Copiar email">
@@ -1805,6 +1813,39 @@ async function sendActivationLink(email, btnEl) {
       btnEl.disabled = false;
       btnEl.style.opacity = '1';
       btnEl.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>Reenviar';
+    }
+  }
+}
+
+async function sendWelcomeEmail(userId, email, btnEl) {
+  userId = String(userId || '').trim();
+  email = String(email || '').trim();
+  if (!userId) { _adminToast('Usuário sem ID (cadastro incompleto)', 'warn'); return; }
+  if (!confirm(`Enviar o email de boas-vindas do AI.arq para ${email}?\n\nÉ o mesmo email bonito que os novos recebem (logo, assinatura). Útil pra quem se cadastrou antes do welcome existir.`)) return;
+
+  const _orig = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) {
+    btnEl.disabled = true;
+    btnEl.style.opacity = '0.6';
+    btnEl.innerHTML = '<span class="text-xs">Enviando...</span>';
+  }
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/send-welcome`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.sent) throw new Error((d && d.detail) || 'Falha no envio (SMTP)');
+    _adminToast(`Boas-vindas enviado para ${d.email || email} ✓`, 'success');
+    if (btnEl) btnEl.innerHTML = '<span class="text-xs">Enviado ✓</span>';
+  } catch (err) {
+    console.error('[sendWelcomeEmail]', err);
+    _adminToast((err && err.message) || 'Erro ao enviar boas-vindas', 'error');
+    if (btnEl) {
+      btnEl.disabled = false;
+      btnEl.style.opacity = '1';
+      btnEl.innerHTML = _orig;
     }
   }
 }

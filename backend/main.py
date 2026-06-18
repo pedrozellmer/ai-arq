@@ -1081,6 +1081,23 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
         return False
 
 
+def _send_welcome_email(email: str, name: str = "") -> bool:
+    """Monta + envia o email de boas-vindas. Usado no 1º acesso ao dashboard
+    (gated por created_at) e no reenvio manual pelo admin. Best-effort."""
+    import html as _hw
+    greet = _greeting_line(_hw.escape(name or ""))
+    body = (f"{greet}<br><br>"
+            "Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
+            "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
+            "que normalmente leva horas no Excel.<br><br>"
+            "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
+    return _send_email_smtp(
+        email, "Bem-vindo ao AI.arq",
+        _email_wrap("Bem-vindo ao AI.arq", body,
+                    "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
+                    reason="Você está recebendo este e-mail porque criou sua conta no AI.arq."))
+
+
 class JobsStore:
     """Armazena jobs em arquivo JSON."""
     def __getitem__(self, key):
@@ -3687,17 +3704,7 @@ async def notify_welcome(request: Request):
     if not is_new:
         return {"status": "ok", "sent": False, "reason": "not_new"}
     import html as _hw
-    greet = _greeting_line(_hw.escape(name))
-    body = (f"{greet}<br><br>"
-            "Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
-            "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
-            "que normalmente leva horas no Excel.<br><br>"
-            "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
-    sent = _send_email_smtp(
-        email, "Bem-vindo ao AI.arq",
-        _email_wrap("Bem-vindo ao AI.arq", body,
-                    "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
-                    reason="Você está recebendo este e-mail porque criou sua conta no AI.arq."))
+    sent = _send_welcome_email(email, name)
     # Alerta interno pro Pedro: novo cliente (em thread)
     try:
         import threading as _thw
@@ -3707,6 +3714,38 @@ async def notify_welcome(request: Request):
     except Exception:
         pass
     return {"status": "ok", "sent": sent}
+
+
+@app.post("/api/admin/send-welcome")
+async def admin_send_welcome(request: Request):
+    """Reenvia o email de boas-vindas pra um usuário específico (admin-only).
+    Para quem se cadastrou ANTES do welcome existir. NÃO dispara o alerta de
+    'novo cliente' (não é cadastro novo) e ignora o gate de created_at."""
+    _require_admin(request)
+    try:
+        _data = await request.json()
+    except Exception:
+        _data = {}
+    uid = ((_data or {}).get("user_id") or "").strip()
+    if not uid:
+        raise HTTPException(400, "user_id requerido")
+    name, email = "", ""
+    try:
+        import urllib.request as _ura
+        _qa = f"{SUPABASE_URL}/rest/v1/profiles?user_id=eq.{uid}&select=full_name,email"
+        _ra = _ura.Request(_qa, method="GET")
+        _ra.add_header("apikey", SUPABASE_KEY)
+        _ra.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _rows = _json.loads(_ura.urlopen(_ra, timeout=8).read().decode("utf-8"))
+        if _rows:
+            name = _rows[0].get("full_name") or ""
+            email = _rows[0].get("email") or ""
+    except Exception as _e:
+        raise HTTPException(500, f"Erro lendo perfil: {_e}")
+    if not email:
+        raise HTTPException(404, "Usuário sem email no perfil")
+    sent = _send_welcome_email(email, name)
+    return {"status": "ok", "sent": sent, "email": email, "name": name}
 
 
 @app.get("/api/health")
