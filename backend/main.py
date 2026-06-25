@@ -1098,6 +1098,57 @@ def _send_welcome_email(email: str, name: str = "") -> bool:
                     reason="Você está recebendo este e-mail porque criou sua conta no AI.arq."))
 
 
+def _generate_magic_link(email: str, redirect_to: str = "https://ai.arq.br/login.html") -> str:
+    """Gera um link de login de 1 clique (magic link) via admin API do GoTrue.
+    Precisa SUPABASE_SERVICE_ROLE_KEY. Retorna o link ou "" se falhar."""
+    try:
+        import urllib.request as _urm
+        _payload = _json.dumps({
+            "type": "magiclink",
+            "email": email,
+            "redirect_to": redirect_to,
+        }).encode("utf-8")
+        _r = _urm.Request(f"{SUPABASE_URL}/auth/v1/admin/generate_link", data=_payload, method="POST")
+        _r.add_header("apikey", SUPABASE_KEY)
+        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _r.add_header("Content-Type", "application/json")
+        _resp = _json.loads(_urm.urlopen(_r, timeout=10).read().decode("utf-8"))
+        return (_resp.get("action_link")
+                or (_resp.get("properties") or {}).get("action_link")
+                or "")
+    except Exception as _e:
+        print(f"[magiclink] falha pra {email}: {_e}")
+        return ""
+
+
+def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool:
+    """Email de lembrete com login de 1 clique. kind:
+    - 'cadastro'   -> incompleto: 'falta pouco, termine o cadastro'.
+    - 'onboarding' -> tem conta mas 0 projetos: 'vem subir sua 1ª prancha'."""
+    import html as _hn
+    greet = _greeting_line(_hn.escape(name or ""))
+    if kind == "cadastro":
+        title = "Falta pouco pra começar"
+        body = (f"{greet}<br><br>Você começou seu cadastro no AI.arq mas não chegou a terminar — "
+                f"e falta <b>só um passo</b>. Termine pra subir sua primeira prancha: o "
+                f"levantamento de quantitativos sai em minutos, e o <b>primeiro projeto é por "
+                f"nossa conta</b>.<br><br>É só clicar abaixo pra entrar direto, sem precisar de senha:")
+        cta = "Terminar meu cadastro"
+        subject = "Falta pouco pra terminar seu cadastro no AI.arq"
+    else:
+        title = "Vem subir sua primeira prancha"
+        body = (f"{greet}<br><br>Você já tem conta no AI.arq, mas ainda não testou com uma prancha. "
+                f"Que tal agora? Manda um PDF, DWG ou DXF e em minutos você recebe a planilha de "
+                f"quantitativos — e o <b>primeiro projeto é por nossa conta</b>.<br><br>"
+                f"Clica abaixo pra entrar direto e subir:")
+        cta = "Subir minha primeira prancha"
+        subject = "Sua primeira prancha no AI.arq é por nossa conta"
+    return _send_email_smtp(
+        email, subject,
+        _email_wrap(title, body, cta, magic_link,
+                    reason="Você está recebendo este e-mail porque criou uma conta no AI.arq."))
+
+
 class JobsStore:
     """Armazena jobs em arquivo JSON."""
     def __getitem__(self, key):
@@ -3751,6 +3802,30 @@ async def admin_send_welcome(request: Request):
         raise HTTPException(400, "Sem email pra enviar (mande 'email' no corpo ou configure a service_role)")
     sent = _send_welcome_email(email, name)
     return {"status": "ok", "sent": sent, "email": email, "name": name}
+
+
+@app.post("/api/admin/send-nudge")
+async def admin_send_nudge(request: Request):
+    """Lembrete (admin-only) com login de 1 clique. kind='cadastro' pra quem
+    ficou incompleto; kind='onboarding' pra quem tem conta mas 0 projetos.
+    Email vem da lista do admin (não depende de ler profiles)."""
+    _require_admin(request)
+    try:
+        _data = await request.json()
+    except Exception:
+        _data = {}
+    email = ((_data or {}).get("email") or "").strip()
+    name = (_data or {}).get("name") or ""
+    kind = ((_data or {}).get("kind") or "cadastro").strip()
+    if not email:
+        raise HTTPException(400, "email requerido")
+    if kind not in ("cadastro", "onboarding"):
+        raise HTTPException(400, "kind inválido (use 'cadastro' ou 'onboarding')")
+    link = _generate_magic_link(email)
+    if not link:
+        raise HTTPException(502, "Não consegui gerar o link de login (verifique a service_role)")
+    sent = _send_nudge_email(email, name, kind, link)
+    return {"status": "ok", "sent": sent, "email": email, "kind": kind}
 
 
 @app.get("/api/debug/service-role")
