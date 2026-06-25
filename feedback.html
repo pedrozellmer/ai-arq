@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Avalie seu projeto — AI.arq</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="favicon.ico">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+  <script src="aiarq-utils.js" defer></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .star { font-size: 30px; line-height: 1; cursor: pointer; color: #cbd5e1; transition: color .12s, transform .12s; }
+    .star:hover { transform: scale(1.12); }
+    .star.on { color: #f59e0b; }
+    .nps-btn { transition: all .12s; }
+    .nps-btn.on { background: #4F46E5; color: #fff; border-color: #4F46E5; transform: translateY(-1px); }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen flex items-start justify-center py-8 px-4">
+  <div class="w-full max-w-xl">
+
+    <!-- Loading -->
+    <div id="state-loading" class="bg-white rounded-2xl border border-slate-200 p-10 text-center text-slate-500">
+      Carregando…
+    </div>
+
+    <!-- Sem sessão -->
+    <div id="state-noauth" class="hidden bg-white rounded-2xl border border-slate-200 p-8 text-center">
+      <div class="text-lg font-semibold text-slate-900 mb-2">Entre para avaliar</div>
+      <p class="text-sm text-slate-500 mb-5">Abra esta página pelo link do e-mail que enviamos (ele já te conecta), ou faça login.</p>
+      <a href="login.html" class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">Fazer login</a>
+    </div>
+
+    <!-- Formulário -->
+    <div id="state-form" class="hidden bg-white rounded-2xl border border-slate-200 overflow-hidden">
+      <div style="height:5px;background:linear-gradient(90deg,#4F46E5,#22D3EE)"></div>
+      <div class="p-7 sm:p-9">
+        <div class="flex items-center gap-3 mb-1">
+          <div class="w-10 h-10 rounded-xl text-white font-bold flex items-center justify-center" style="background:linear-gradient(135deg,#4F46E5,#22D3EE)">AI</div>
+          <span class="text-lg font-bold text-slate-900">AI.arq</span>
+        </div>
+        <h1 class="text-2xl font-bold text-slate-900 mt-4">Como foi seu projeto?</h1>
+        <p class="text-slate-500 text-sm mt-1.5" id="hello">Sua opinião ajuda a deixar o AI.arq melhor. Leva 1 minutinho.</p>
+
+        <!-- Etapas -->
+        <div class="mt-7 space-y-5" id="stages"></div>
+
+        <!-- Recomendaria -->
+        <div class="mt-8 pt-6 border-t border-slate-100">
+          <div class="font-semibold text-slate-800 text-[15px]">De 0 a 10, o quanto você recomendaria o AI.arq a outro arquiteto?</div>
+          <div class="flex flex-wrap gap-1.5 mt-3" id="nps-row"></div>
+          <div class="flex justify-between text-[11px] text-slate-400 mt-1.5 px-0.5">
+            <span>Não recomendaria</span><span>Recomendaria muito</span>
+          </div>
+        </div>
+
+        <!-- Comentário -->
+        <div class="mt-7">
+          <label class="font-semibold text-slate-800 text-[15px]" for="comment">Quer deixar um comentário? <span class="text-slate-400 font-normal text-sm">(opcional)</span></label>
+          <textarea id="comment" rows="3" maxlength="2000" placeholder="O que ajudou, o que faltou, o que melhorar…"
+                    class="mt-2 w-full px-3.5 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"></textarea>
+        </div>
+
+        <button id="submit" class="mt-7 w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl transition disabled:opacity-50">
+          Enviar avaliação
+        </button>
+        <p id="form-error" class="hidden text-sm text-amber-700 mt-3 text-center"></p>
+      </div>
+    </div>
+
+    <!-- Obrigado -->
+    <div id="state-thanks" class="hidden bg-white rounded-2xl border border-slate-200 p-10 text-center">
+      <div class="text-4xl mb-3">🙏</div>
+      <div class="text-xl font-bold text-slate-900 mb-2">Valeu pelo feedback!</div>
+      <p class="text-slate-500 text-sm mb-6">Sua avaliação foi registrada. Cada resposta ajuda a gente a melhorar o AI.arq de verdade.</p>
+      <a href="dashboard.html" class="inline-block bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold">Ir pro meu painel</a>
+    </div>
+
+    <p class="text-center text-xs text-slate-400 mt-5">AI.arq · ai.arq.br</p>
+  </div>
+
+  <script defer>
+    (function () {
+      'use strict';
+      const STAGES = [
+        { key: 'upload',   label: 'Subir a prancha',          hint: 'Foi fácil enviar seu arquivo?' },
+        { key: 'tempo',    label: 'Tempo de processamento',   hint: 'A planilha ficou pronta rápido o suficiente?' },
+        { key: 'precisao', label: 'Precisão do quantitativo', hint: 'Os números bateram com a realidade da obra?' },
+        { key: 'planilha', label: 'A planilha',               hint: 'Organizada e fácil de usar?' },
+      ];
+      const ratings = {};   // key -> 1..5
+      let npsScore = null;  // 0..10
+
+      function show(id) {
+        ['state-loading', 'state-noauth', 'state-form', 'state-thanks']
+          .forEach(s => document.getElementById(s).classList.toggle('hidden', s !== id));
+      }
+
+      function renderStages() {
+        const root = document.getElementById('stages');
+        root.innerHTML = STAGES.map(s => `
+          <div data-stage="${s.key}">
+            <div class="font-semibold text-slate-800 text-[15px]">${s.label}</div>
+            <div class="text-xs text-slate-400 mb-1">${s.hint}</div>
+            <div class="flex gap-1 items-center" role="radiogroup" aria-label="${s.label}">
+              ${[1,2,3,4,5].map(n => `<span class="star" data-v="${n}" role="radio" aria-label="${n} de 5" title="${n} de 5">☆</span>`).join('')}
+              <span class="ml-2 text-xs text-slate-400 stage-txt"></span>
+            </div>
+          </div>`).join('');
+        root.querySelectorAll('[data-stage]').forEach(block => {
+          const key = block.getAttribute('data-stage');
+          const stars = block.querySelectorAll('.star');
+          const txt = block.querySelector('.stage-txt');
+          const LABELS = { 1: 'Ruim', 2: 'Fraco', 3: 'Ok', 4: 'Bom', 5: 'Ótimo' };
+          stars.forEach(star => {
+            star.addEventListener('click', () => {
+              const v = parseInt(star.getAttribute('data-v'), 10);
+              ratings[key] = v;
+              stars.forEach(s2 => {
+                const on = parseInt(s2.getAttribute('data-v'), 10) <= v;
+                s2.textContent = on ? '★' : '☆';
+                s2.classList.toggle('on', on);
+              });
+              txt.textContent = LABELS[v] || '';
+            });
+          });
+        });
+      }
+
+      function renderNps() {
+        const row = document.getElementById('nps-row');
+        row.innerHTML = [0,1,2,3,4,5,6,7,8,9,10].map(n =>
+          `<button type="button" class="nps-btn w-9 h-9 rounded-lg border border-slate-300 text-sm font-medium hover:border-indigo-400" data-n="${n}">${n}</button>`
+        ).join('');
+        row.querySelectorAll('.nps-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            npsScore = parseInt(btn.getAttribute('data-n'), 10);
+            row.querySelectorAll('.nps-btn').forEach(b => b.classList.toggle('on', b === btn));
+          });
+        });
+      }
+
+      async function getSessionRetry() {
+        // O magic link processa a sessão a partir do hash da URL de forma
+        // assíncrona — tenta algumas vezes antes de desistir.
+        for (let i = 0; i < 6; i++) {
+          const { data: { session } } = await window.sbClient.auth.getSession();
+          if (session) return session;
+          await new Promise(r => setTimeout(r, 400));
+        }
+        return null;
+      }
+
+      async function init() {
+        if (!window.sbClient || !window.authFetch) {
+          setTimeout(init, 200); return;   // utils ainda carregando
+        }
+        renderStages();
+        renderNps();
+        const session = await getSessionRetry();
+        if (!session) { show('state-noauth'); return; }
+        const nm = (session.user && session.user.user_metadata &&
+                    (session.user.user_metadata.full_name || session.user.user_metadata.name)) || '';
+        if (nm) document.getElementById('hello').textContent =
+          `${nm.split(' ')[0]}, sua opinião ajuda a deixar o AI.arq melhor. Leva 1 minutinho.`;
+        show('state-form');
+
+        document.getElementById('submit').addEventListener('click', submit);
+      }
+
+      async function submit() {
+        const btn = document.getElementById('submit');
+        const err = document.getElementById('form-error');
+        err.classList.add('hidden');
+        if (npsScore === null) {
+          err.textContent = 'Dá uma nota de 0 a 10 na pergunta de recomendação 🙂';
+          err.classList.remove('hidden');
+          return;
+        }
+        btn.disabled = true; btn.textContent = 'Enviando…';
+        try {
+          const res = await window.authFetch(`${window.API_BASE}/api/nps/detailed`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recommend: npsScore, stage_ratings: ratings, comment: document.getElementById('comment').value || '' }),
+          });
+          const d = await res.json().catch(() => ({}));
+          if (!res.ok || d.status !== 'ok') throw new Error((d && d.detail) || 'Falha ao enviar');
+          show('state-thanks');
+        } catch (e) {
+          err.textContent = (e && e.message) || 'Não consegui enviar. Tenta de novo?';
+          err.classList.remove('hidden');
+          btn.disabled = false; btn.textContent = 'Enviar avaliação';
+        }
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>
