@@ -1015,6 +1015,41 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
 _falha_emailed = set()
 
 
+def _build_falha_email(name: str, project_name: str, reprocessavel: bool):
+    """Monta (subject, html) do email de falha. Separado pra reuso no preview."""
+    import html as _hf
+    pn = _hf.escape(project_name or "seu projeto")
+    greet = _greeting_line(_hf.escape(name or ""))
+    if reprocessavel:
+        body = (f"{greet}<br><br>"
+                f"Tivemos um problema ao processar o projeto <b>{pn}</b> e ele não "
+                f"foi concluído. Quase sempre é coisa passageira e <b>reprocessar "
+                f"resolve</b> — e o reprocessamento é grátis.<br><br>"
+                f"Se continuar dando problema, é só responder este e-mail que a gente "
+                f"te ajuda pessoalmente. 🙂")
+        subject = "Tivemos um problema com seu projeto no AI.arq"
+        html = _email_wrap("Não conseguimos concluir seu projeto", body,
+                           "Reprocessar no painel", "https://ai.arq.br/dashboard.html",
+                           badge="⚠ Precisa reprocessar", badge_color="amber",
+                           reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+    else:
+        body = (f"{greet}<br><br>"
+                f"Recebemos o projeto <b>{pn}</b>, mas não conseguimos ler as "
+                f"quantidades nesse arquivo — então <b>reprocessar não vai resolver</b>.<br><br>"
+                f"Quase sempre é porque o PDF é uma imagem escaneada/fotografada, ou a "
+                f"prancha tem só o desenho, sem cotas e quadros de áreas. O ideal é "
+                f"<b>reenviar a planta completa exportada direto do CAD</b> (PDF vetorial, "
+                f"DWG ou DXF).<br><br>"
+                f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
+                f"preparar. 🙂")
+        subject = "Sobre o seu projeto no AI.arq — precisamos de outro arquivo"
+        html = _email_wrap("Precisamos de outro arquivo pra continuar", body,
+                           "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
+                           badge="⚠ Revisar o arquivo", badge_color="amber",
+                           reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+    return subject, html
+
+
 def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
     """Avisa o cliente que o projeto falhou. Best-effort, NUNCA levanta.
 
@@ -1044,35 +1079,10 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
         if _rows[0].get("parent_job_id"):
             _falha_emailed.add(job_id)  # filho de reprocessamento: pai já avisou
             return False
-        _pn = _hf.escape(_rows[0].get("project_name") or "seu projeto")
-        _greet = _greeting_line(_hf.escape(_rows[0].get("user_name") or ""))
-        if reprocessavel:
-            _body = (f"{_greet}<br><br>"
-                     f"Tivemos um problema ao processar o projeto <b>{_pn}</b> e ele não "
-                     f"foi concluído. Quase sempre é coisa passageira e <b>reprocessar "
-                     f"resolve</b> — e o reprocessamento é grátis.<br><br>"
-                     f"Se continuar dando problema, é só responder este e-mail que a gente "
-                     f"te ajuda pessoalmente. 🙂")
-            _subject = "Tivemos um problema com seu projeto no AI.arq"
-            _html = _email_wrap("Não conseguimos concluir seu projeto", _body,
-                                "Reprocessar no painel", "https://ai.arq.br/dashboard.html",
-                                badge="⚠ Precisa reprocessar", badge_color="amber",
-                                reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
-        else:
-            _body = (f"{_greet}<br><br>"
-                     f"Recebemos o projeto <b>{_pn}</b>, mas não conseguimos ler as "
-                     f"quantidades nesse arquivo — então <b>reprocessar não vai resolver</b>.<br><br>"
-                     f"Quase sempre é porque o PDF é uma imagem escaneada/fotografada, ou a "
-                     f"prancha tem só o desenho, sem cotas e quadros de áreas. O ideal é "
-                     f"<b>reenviar a planta completa exportada direto do CAD</b> (PDF vetorial, "
-                     f"DWG ou DXF).<br><br>"
-                     f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
-                     f"preparar. 🙂")
-            _subject = "Sobre o seu projeto no AI.arq — precisamos de outro arquivo"
-            _html = _email_wrap("Precisamos de outro arquivo pra continuar", _body,
-                                "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
-                                badge="⚠ Revisar o arquivo", badge_color="amber",
-                                reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
+        _subject, _html = _build_falha_email(
+            _rows[0].get("user_name") or "",
+            _rows[0].get("project_name") or "seu projeto",
+            reprocessavel)
         ok = _send_email_smtp(_email, _subject, _html)
         _falha_emailed.add(job_id)
         return ok
@@ -1135,7 +1145,7 @@ def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool
                 f"nossa conta</b>.<br><br>É só clicar abaixo pra entrar direto, sem precisar de senha:")
         cta = "Terminar meu cadastro"
         subject = "Falta pouco pra terminar seu cadastro no AI.arq"
-    else:
+    elif kind == "onboarding":
         title = "Vem subir sua primeira prancha"
         body = (f"{greet}<br><br>Você já tem conta no AI.arq, mas ainda não testou com uma prancha. "
                 f"Que tal agora? Manda um PDF, DWG ou DXF e em minutos você recebe a planilha de "
@@ -1143,6 +1153,15 @@ def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool
                 f"Clica abaixo pra entrar direto e subir:")
         cta = "Subir minha primeira prancha"
         subject = "Sua primeira prancha no AI.arq é por nossa conta"
+    else:  # feedback
+        title = "Como foi seu projeto no AI.arq?"
+        body = (f"{greet}<br><br>Vi que você usou o AI.arq pra levantar quantitativos — e eu "
+                f"queria muito saber: <b>como foi?</b> O que ajudou, o que faltou, o que te "
+                f"deixou na dúvida.<br><br>Tô construindo isso com cuidado e o seu feedback "
+                f"vale ouro. É só <b>responder este e-mail</b> que eu leio (e respondo) "
+                f"pessoalmente. 🙂")
+        cta = ""
+        subject = "Como foi seu projeto no AI.arq?"
     return _send_email_smtp(
         email, subject,
         _email_wrap(title, body, cta, magic_link,
@@ -3819,11 +3838,13 @@ async def admin_send_nudge(request: Request):
     kind = ((_data or {}).get("kind") or "cadastro").strip()
     if not email:
         raise HTTPException(400, "email requerido")
-    if kind not in ("cadastro", "onboarding"):
-        raise HTTPException(400, "kind inválido (use 'cadastro' ou 'onboarding')")
-    link = _generate_magic_link(email)
-    if not link:
-        raise HTTPException(502, "Não consegui gerar o link de login (verifique a service_role)")
+    if kind not in ("cadastro", "onboarding", "feedback"):
+        raise HTTPException(400, "kind inválido (use 'cadastro', 'onboarding' ou 'feedback')")
+    link = ""
+    if kind in ("cadastro", "onboarding"):
+        link = _generate_magic_link(email)
+        if not link:
+            raise HTTPException(502, "Não consegui gerar o link de login (verifique a service_role)")
     sent = _send_nudge_email(email, name, kind, link)
     return {"status": "ok", "sent": sent, "email": email, "kind": kind}
 
@@ -3854,6 +3875,25 @@ async def debug_service_role():
         "anon_reads_profiles": _can_read(SUPABASE_KEY),
         "emails_to_real_users_ok": service_ok,
     }
+
+
+@app.get("/api/debug/email-preview")
+async def email_preview():
+    """Manda 1 amostra de cada email transacional pro NOTIFY_EMAIL (pessoal do
+    dono) pra pré-visualizar o layout. Recipiente FIXO -> não dá pra spammar
+    terceiros. Dados de exemplo ('Residencial Vila Nova', 'Pedro')."""
+    to = NOTIFY_EMAIL
+    fake_link = "https://ai.arq.br/login.html"
+    out = {}
+    out["1_boas_vindas"] = _send_welcome_email(to, "Pedro")
+    _s1, _h1 = _build_falha_email("Pedro", "Residencial Vila Nova", True)
+    out["2_erro_reprocessar"] = _send_email_smtp(to, _s1, _h1)
+    _s2, _h2 = _build_falha_email("Pedro", "Residencial Vila Nova", False)
+    out["3_erro_trocar_arquivo"] = _send_email_smtp(to, _s2, _h2)
+    out["4_nudge_cadastro"] = _send_nudge_email(to, "Pedro", "cadastro", fake_link)
+    out["5_nudge_onboarding"] = _send_nudge_email(to, "Pedro", "onboarding", fake_link)
+    out["6_feedback"] = _send_nudge_email(to, "Pedro", "feedback", "")
+    return {"to": to, "sent": out, "obs": "planilha-pronta voce ja viu (projeto Template Novo)"}
 
 
 @app.get("/api/health")
