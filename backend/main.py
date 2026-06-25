@@ -1175,12 +1175,12 @@ def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool
     else:  # feedback
         title = "Como foi seu projeto no AI.arq?"
         body = (f"{greet}<br><br>Vi que você usou o AI.arq pra levantar quantitativos — e eu "
-                f"queria muito saber: <b>como foi?</b> O que ajudou, o que faltou, o que te "
-                f"deixou na dúvida.<br><br>Tô construindo isso com cuidado e o seu feedback "
-                f"vale ouro. É só <b>responder este e-mail</b> que eu leio (e respondo) "
-                f"pessoalmente. 🙂")
-        cta = ""
-        subject = "Como foi seu projeto no AI.arq?"
+                f"queria muito saber a sua opinião. Leva <b>1 minutinho</b>: você dá uma nota "
+                f"pra cada etapa (subir a prancha, processamento, precisão, a planilha) e "
+                f"deixa um comentário, se quiser.<br><br>Seu feedback vale ouro pra deixar o "
+                f"AI.arq cada vez melhor. 🙂")
+        cta = "Avaliar meu projeto"
+        subject = "Como foi seu projeto no AI.arq? (1 min)"
     return _send_email_smtp(
         email, subject,
         _email_wrap(title, body, cta, magic_link,
@@ -3865,11 +3865,10 @@ async def admin_send_nudge(request: Request):
         name = _name_from_auth(uid)
     if kind not in ("cadastro", "onboarding", "feedback"):
         raise HTTPException(400, "kind inválido (use 'cadastro', 'onboarding' ou 'feedback')")
-    link = ""
-    if kind in ("cadastro", "onboarding"):
-        link = _generate_magic_link(email)
-        if not link:
-            raise HTTPException(502, "Não consegui gerar o link de login (verifique a service_role)")
+    redirect = "https://ai.arq.br/feedback.html" if kind == "feedback" else "https://ai.arq.br/login.html"
+    link = _generate_magic_link(email, redirect)
+    if not link:
+        raise HTTPException(502, "Não consegui gerar o link de login (verifique a service_role)")
     sent = _send_nudge_email(email, name, kind, link)
     return {"status": "ok", "sent": sent, "email": email, "kind": kind}
 
@@ -6792,6 +6791,13 @@ class NPSPayload(BaseModel):
     job_id: Optional[str] = ""
 
 
+class NPSDetailedPayload(BaseModel):
+    recommend: int                           # 0-10 (NPS clássico)
+    stage_ratings: dict = {}                 # {"upload":1-5, "tempo":1-5, "precisao":1-5, "planilha":1-5}
+    comment: Optional[str] = ""
+    job_id: Optional[str] = ""
+
+
 @app.post("/api/nps")
 async def submit_nps(payload: NPSPayload):
     """Registra uma resposta NPS. Score 0-10 obrigatório, comentário opcional."""
@@ -6812,6 +6818,39 @@ async def submit_nps(payload: NPSPayload):
     ok = _supabase_insert("nps_responses", row)
     category = "promoter" if payload.score >= 9 else "passive" if payload.score >= 7 else "detractor"
     return {"status": "ok" if ok else "error", "category": category}
+
+
+_NPS_STAGES = ("upload", "tempo", "precisao", "planilha")
+
+
+@app.post("/api/nps/detailed")
+async def submit_nps_detailed(payload: NPSDetailedPayload, request: Request):
+    """Feedback detalhado: nota 0-10 (recomendaria) + nota 1-5 por etapa +
+    comentário. Autenticado (JWT) — só grava no nome do próprio usuário."""
+    user = _get_user_from_request(request)
+    if not user or not user.get("id"):
+        raise HTTPException(401, "Autenticação requerida")
+    if payload.recommend < 0 or payload.recommend > 10:
+        raise HTTPException(400, "recommend deve estar entre 0 e 10")
+    stages = {}
+    for k in _NPS_STAGES:
+        v = (payload.stage_ratings or {}).get(k)
+        if isinstance(v, (int, float)) and 1 <= int(v) <= 5:
+            stages[k] = int(v)
+    cat = "promoter" if payload.recommend >= 9 else "passive" if payload.recommend >= 7 else "detractor"
+    row = {
+        "user_id": user["id"],
+        "user_email": user.get("email", ""),
+        "user_name": _name_from_auth(user["id"]),
+        "score": int(payload.recommend),
+        "category": cat,
+        "comment": (payload.comment or "")[:2000],
+        "context": "feedback_detailed",
+        "job_id": payload.job_id or "",
+        "stage_ratings": stages,
+    }
+    ok = _supabase_insert("nps_responses", row)
+    return {"status": "ok" if ok else "error", "category": cat}
 
 
 @app.get("/api/nps/check/{user_id}")
