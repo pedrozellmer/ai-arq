@@ -6838,12 +6838,13 @@ async def submit_nps_detailed(payload: NPSDetailedPayload, request: Request):
         if isinstance(v, (int, float)) and 1 <= int(v) <= 5:
             stages[k] = int(v)
     cat = "promoter" if payload.recommend >= 9 else "passive" if payload.recommend >= 7 else "detractor"
+    # OBS: NÃO incluir 'category' — é coluna GERADA (o banco calcula do score).
+    # Inserir valor nela faz o insert inteiro falhar.
     row = {
         "user_id": user["id"],
         "user_email": user.get("email", ""),
         "user_name": _name_from_auth(user["id"]),
         "score": int(payload.recommend),
-        "category": cat,
         "comment": (payload.comment or "")[:2000],
         "context": "feedback_detailed",
         "job_id": payload.job_id or "",
