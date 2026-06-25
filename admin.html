@@ -1888,7 +1888,7 @@ async function sendNudge(email, kind, btnEl) {
     const res = await authFetch(`${API_BASE}/api/admin/send-nudge`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, name: u.full_name || '', kind }),
+      body: JSON.stringify({ email, name: u.full_name || '', kind, user_id: u.user_id || '' }),
     });
     const d = await res.json().catch(() => ({}));
     if (!res.ok || !d.sent) throw new Error((d && d.detail) || 'Falha no envio');
