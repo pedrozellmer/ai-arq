@@ -1717,9 +1717,15 @@ function renderUsers(users) {
           ${!u.has_profile ? `
             <button onclick="sendActivationLink('${emailEsc}', this)"
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition"
-                    title="Enviar link de login por email (magic link)">
+                    title="Enviar link de login por email (magic link cru da Supabase)">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
               Reenviar
+            </button>
+            <button onclick="sendNudge('${emailEsc}', 'cadastro', this)"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium transition"
+                    title="Email 'falta pouco' (nosso, bonito) com login de 1 clique pra terminar o cadastro">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+              Lembrar cadastro
             </button>
           ` : ''}
           ${u.has_profile ? `
@@ -1728,6 +1734,14 @@ function renderUsers(users) {
                     title="Reenviar email de boas-vindas (pra quem se cadastrou antes do welcome existir)">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
               Boas-vindas
+            </button>
+          ` : ''}
+          ${u.has_profile && !u.num_projects ? `
+            <button onclick="sendNudge('${emailEsc}', 'onboarding', this)"
+                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-medium transition"
+                    title="Email convidando a subir a 1ª prancha (login de 1 clique)">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+              Lembrar de subir
             </button>
           ` : ''}
           <button onclick="copyEmail('${emailEsc}', this)"
@@ -1850,6 +1864,32 @@ async function sendWelcomeEmail(userId, email, btnEl) {
       btnEl.style.opacity = '1';
       btnEl.innerHTML = _orig;
     }
+  }
+}
+
+async function sendNudge(email, kind, btnEl) {
+  email = String(email || '').trim();
+  if (!email) return;
+  const u = (typeof allUsers !== 'undefined' ? allUsers : []).find(x => x.email === email) || {};
+  const label = kind === 'cadastro' ? 'lembrete pra terminar o cadastro' : 'convite pra subir a 1ª prancha';
+  if (!confirm(`Enviar ${label} para ${email}?\n\nVai um email nosso (logo + assinatura) com login de 1 clique — ele entra direto, sem senha.`)) return;
+
+  const _orig = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = '0.6'; btnEl.innerHTML = '<span class="text-xs">Enviando...</span>'; }
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/send-nudge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, name: u.full_name || '', kind }),
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || !d.sent) throw new Error((d && d.detail) || 'Falha no envio');
+    _adminToast(`Enviado para ${email} ✓`, 'success');
+    if (btnEl) btnEl.innerHTML = '<span class="text-xs">Enviado ✓</span>';
+  } catch (err) {
+    console.error('[sendNudge]', err);
+    _adminToast((err && err.message) || 'Erro ao enviar', 'error');
+    if (btnEl) { btnEl.disabled = false; btnEl.style.opacity = '1'; btnEl.innerHTML = _orig; }
   }
 }
 
