@@ -1131,6 +1131,25 @@ def _generate_magic_link(email: str, redirect_to: str = "https://ai.arq.br/login
         return ""
 
 
+def _name_from_auth(user_id: str) -> str:
+    """Pega o nome do metadata do auth (full_name/name) por user_id. Útil pra
+    incompletos: deram o nome no cadastro mas não criaram o profile. Precisa
+    service_role. Retorna "" se não achar."""
+    if not user_id:
+        return ""
+    try:
+        import urllib.request as _urn
+        _r = _urn.Request(f"{SUPABASE_URL}/auth/v1/admin/users/{user_id}", method="GET")
+        _r.add_header("apikey", SUPABASE_KEY)
+        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _u = _json.loads(_urn.urlopen(_r, timeout=8).read().decode("utf-8"))
+        _m = _u.get("user_metadata") or _u.get("raw_user_meta_data") or {}
+        return (_m.get("full_name") or _m.get("name") or "").strip()
+    except Exception as _e:
+        print(f"[name] auth lookup falhou pra {user_id}: {_e}")
+        return ""
+
+
 def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool:
     """Email de lembrete com login de 1 clique. kind:
     - 'cadastro'   -> incompleto: 'falta pouco, termine o cadastro'.
@@ -3819,6 +3838,8 @@ async def admin_send_welcome(request: Request):
             raise HTTPException(500, f"Erro lendo perfil: {_e}")
     if not email:
         raise HTTPException(400, "Sem email pra enviar (mande 'email' no corpo ou configure a service_role)")
+    if not name.strip() and uid:
+        name = _name_from_auth(uid)
     sent = _send_welcome_email(email, name)
     return {"status": "ok", "sent": sent, "email": email, "name": name}
 
@@ -3836,8 +3857,12 @@ async def admin_send_nudge(request: Request):
     email = ((_data or {}).get("email") or "").strip()
     name = (_data or {}).get("name") or ""
     kind = ((_data or {}).get("kind") or "cadastro").strip()
+    uid = ((_data or {}).get("user_id") or "").strip()
     if not email:
         raise HTTPException(400, "email requerido")
+    # Sempre tenta nome: se o profile não tinha, puxa do metadata do auth.
+    if not name.strip() and uid:
+        name = _name_from_auth(uid)
     if kind not in ("cadastro", "onboarding", "feedback"):
         raise HTTPException(400, "kind inválido (use 'cadastro', 'onboarding' ou 'feedback')")
     link = ""
