@@ -1641,7 +1641,7 @@ async function loadUsers() {
         last_sign_in_at: null,
         email_confirmed_at: p.created_at,
         has_profile: true,
-        num_projects: 0,
+        num_projects: null,   // desconhecido neste fallback (sem a RPC que conta)
       }));
     } else {
       allUsers = data || [];
@@ -1711,6 +1711,9 @@ function renderUsers(users) {
     const rowCls = !u.has_profile ? 'bg-yellow-50/40' : '';
     const name = u.full_name || '<span class="text-yellow-700 italic text-xs">sem cadastro</span>';
     const emailEsc = esc(u.email || '');
+    // nº de projetos conhecido (null = desconhecido, ex.: fallback sem a RPC) —
+    // evita mostrar botão de ação errado quando a contagem não carregou.
+    const np = (u.num_projects == null) ? null : Number(u.num_projects);
     const actions = u.email
       ? `
         <div class="flex items-center gap-1">
@@ -1736,7 +1739,7 @@ function renderUsers(users) {
               Boas-vindas
             </button>
           ` : ''}
-          ${u.has_profile && !u.num_projects ? `
+          ${u.has_profile && np === 0 ? `
             <button onclick="sendNudge('${emailEsc}', 'onboarding', this)"
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-medium transition"
                     title="Email convidando a subir a 1ª prancha (login de 1 clique)">
@@ -1744,7 +1747,7 @@ function renderUsers(users) {
               Lembrar de subir
             </button>
           ` : ''}
-          ${u.has_profile && u.num_projects ? `
+          ${u.has_profile && np > 0 ? `
             <button onclick="sendNudge('${emailEsc}', 'feedback', this)"
                     class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-medium transition"
                     title="Perguntar 'como foi?' pra pegar feedback (cliente responde o email)">
@@ -1774,7 +1777,7 @@ function renderUsers(users) {
           ${u.user_role ? `<div class="text-xs text-gray-400">${esc(u.user_role)}</div>` : ''}
         </td>
         <td class="px-4 py-3 align-top">${_referralLabel(u)}</td>
-        <td class="px-4 py-3 align-top text-center text-gray-700 font-medium">${u.num_projects || 0}</td>
+        <td class="px-4 py-3 align-top text-center text-gray-700 font-medium">${np == null ? '—' : np}</td>
         <td class="px-4 py-3 align-top text-gray-500 text-xs">
           ${_fmtDate(u.auth_created_at || u.profile_created_at)}
           ${u.last_sign_in_at ? `<div class="text-gray-400">entrou ${_fmtDate(u.last_sign_in_at)}</div>` : ''}
