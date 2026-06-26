@@ -254,21 +254,31 @@ def render_sources(sources):
     if not sources:
         return ""
 
-    # Agrupa por tipo pra mostrar em seções
+    # Agrupa por tipo pra mostrar em seções. "norm" cobre tanto NBR ABNT quanto
+    # leis/acórdãos/resoluções — separados em dois blocos pra não rotular tudo
+    # como "Normas ABNT" (que estaria errado pra uma Lei ou Acórdão).
     norms = [s for s in sources if s.get("type") == "norm"]
+    abnt = [s for s in norms if "NBR" in (s.get("title", "") or "").upper()]
+    legal = [s for s in norms if s not in abnt]
     books = [s for s in sources if s.get("type") == "book"]
     links = [s for s in sources if s.get("type", "link") in ("link", "official")]
 
     items_html = ""
 
-    if norms:
-        items_html += '<div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Normas ABNT</div><ul class="space-y-1.5 text-sm text-gray-700">'
-        for src in norms:
+    def _render_norm_group(group, header):
+        out = f'<div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{header}</div><ul class="space-y-1.5 text-sm text-gray-700">'
+        for src in group:
             cite = f'<strong>{src["title"]}</strong>'
             if src.get("description"):
                 cite += f' &mdash; <span class="text-gray-600">{src["description"]}</span>'
-            items_html += f'<li>{cite}</li>'
-        items_html += '</ul></div>'
+            out += f'<li>{cite}</li>'
+        out += '</ul></div>'
+        return out
+
+    if abnt:
+        items_html += _render_norm_group(abnt, "Normas ABNT")
+    if legal:
+        items_html += _render_norm_group(legal, "Leis e Atos Normativos")
 
     if books:
         items_html += '<div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Livros e Manuais</div><ul class="space-y-1.5 text-sm text-gray-700">'
