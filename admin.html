@@ -605,6 +605,20 @@
           </div>
         </div>
 
+        <!-- Feedback detalhado: média por etapa -->
+        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden mb-6">
+          <div class="px-6 py-4 border-b bg-gray-50 flex items-center justify-between gap-3">
+            <div>
+              <h3 class="font-semibold text-gray-800">Avaliação por etapa</h3>
+              <p class="text-xs text-gray-500 mt-0.5">Média do formulário detalhado (1 a 5 estrelas por etapa)</p>
+            </div>
+            <span id="stages-count" class="text-xs text-gray-500 text-right whitespace-nowrap">--</span>
+          </div>
+          <div id="nps-stages" class="grid gap-px bg-gray-100 sm:grid-cols-2 lg:grid-cols-4">
+            <div class="bg-white p-8 text-center text-sm text-gray-400 sm:col-span-2 lg:col-span-4">Carregando...</div>
+          </div>
+        </div>
+
         <!-- Lista de respostas recentes -->
         <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b bg-gray-50">
@@ -1251,9 +1265,10 @@ async function loadNPSData() {
   const periodSel = document.getElementById('nps-period');
   const days = parseInt((periodSel && periodSel.value) || '30');
   try {
-    const [sumRes, respRes] = await Promise.all([
+    const [sumRes, respRes, stagesRes] = await Promise.all([
       authFetch(`${API_BASE}/api/admin/nps/summary?days=${days}`).then(r => r.json()),
       authFetch(`${API_BASE}/api/admin/nps/responses?limit=100`).then(r => r.json()),
+      authFetch(`${API_BASE}/api/admin/nps/stages`).then(r => r.json()).catch(() => ({})),
     ]);
 
     // Summary
@@ -1279,6 +1294,9 @@ async function loadNPSData() {
       score >= 0  ? 'text-indigo-600' :
       'text-red-600'
     );
+
+    // Médias por etapa (feedback detalhado)
+    renderNpsStages(stagesRes || {});
 
     // Respostas
     const list = (respRes && respRes.responses) || [];
@@ -1326,6 +1344,43 @@ async function loadNPSData() {
     document.getElementById('nps-responses').innerHTML =
       '<div class="text-center text-sm text-red-500 py-12">Erro ao carregar: ' + esc(e.message) + '</div>';
   }
+}
+
+// Médias por etapa do feedback detalhado (estrelas + número — acessível p/ daltônico)
+function renderNpsStages(data) {
+  const META = [
+    { key: 'upload',   label: 'Subir a prancha' },
+    { key: 'tempo',    label: 'Tempo' },
+    { key: 'precisao', label: 'Precisão' },
+    { key: 'planilha', label: 'A planilha' },
+  ];
+  const stages = data.stages || {};
+  const counts = data.counts || {};
+  const total = data.total || 0;
+  const cntEl = document.getElementById('stages-count');
+  if (cntEl) cntEl.textContent = total
+    ? `${total} resposta(s)` + (data.recommend_avg != null ? ` · recomenda ${data.recommend_avg}/10` : '')
+    : 'sem respostas';
+  const el = document.getElementById('nps-stages');
+  if (!el) return;
+  if (!total) {
+    el.innerHTML = '<div class="bg-white p-8 text-center text-sm text-gray-400 sm:col-span-2 lg:col-span-4">Nenhum feedback detalhado ainda.</div>';
+    return;
+  }
+  el.innerHTML = META.map(m => {
+    const avg = stages[m.key];
+    const n = counts[m.key] || 0;
+    const full = (avg != null) ? Math.round(avg) : 0;
+    const stars = [1,2,3,4,5].map(i =>
+      `<span class="${i <= full ? 'text-amber-400' : 'text-gray-300'}">★</span>`).join('');
+    return `
+      <div class="bg-white p-5 text-center">
+        <p class="text-xs font-medium text-gray-500 mb-1">${m.label}</p>
+        <p class="text-3xl font-bold text-gray-900">${avg != null ? avg.toFixed(1) : '--'}</p>
+        <div class="text-base leading-none mt-1">${stars}</div>
+        <p class="text-[11px] text-gray-400 mt-1.5">${n} nota(s)</p>
+      </div>`;
+  }).join('');
 }
 
 function esc(s) {
