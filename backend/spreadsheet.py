@@ -371,8 +371,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             # Selo de status TEXTUAL na observação. A cor (laranja/branco)
             # sozinha não basta — usuário daltônico não distingue. Cor + ícone
             # + texto (regra de acessibilidade 2026-05-21).
-            _selo = ('⚠ ESTIMADO — revisar' if item.confidence in [Confidence.ESTIMADO, Confidence.VERIFICAR]
-                     else '✓ MEDIDO do CAD')
+            # FAIL-SAFE: só CONFIRMADO vira branco/MEDIDO; todo o resto laranja.
+            # E item de origem 'vision_pdf' NUNCA é "medido do CAD" — Vision lê
+            # número numa imagem, não mede geometria.
+            _medido = (item.confidence == Confidence.CONFIRMADO
+                       and getattr(item, 'origem', '') != 'vision_pdf')
+            _selo = ('✓ MEDIDO do CAD' if _medido else '⚠ ESTIMADO — revisar')
             _obs = f'{_selo}. {item.observations}' if item.observations else _selo
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
@@ -387,8 +391,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             for c in [5, 6, 7]:
                 ws.cell(row=ro, column=c).number_format = '#,##0.00'
 
-            # Marcar itens estimados em laranja
-            if item.confidence in [Confidence.ESTIMADO, Confidence.VERIFICAR]:
+            # Marcar itens não-medidos (estimados) em laranja
+            if not _medido:
                 for c in [1, 2, 3, 4]:
                     ws.cell(row=ro, column=c).fill = P_ORANGE
 
@@ -425,9 +429,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=5).font = F_BLUE; ws.cell(row=ro, column=5).fill = P_YEL
             ws.cell(row=ro, column=6).font = F_BLUE; ws.cell(row=ro, column=6).fill = P_YEL
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
-            # Selo de status TEXTUAL na observação (cor + ícone + texto)
-            _selo = ('⚠ ESTIMADO — revisar' if item.confidence in [Confidence.ESTIMADO, Confidence.VERIFICAR]
-                     else '✓ MEDIDO do CAD')
+            # Selo de status TEXTUAL na observação (cor + ícone + texto).
+            # Fail-safe: só CONFIRMADO+geometria vira branco; resto laranja.
+            _medido = (item.confidence == Confidence.CONFIRMADO
+                       and getattr(item, 'origem', '') != 'vision_pdf')
+            _selo = ('✓ MEDIDO do CAD' if _medido else '⚠ ESTIMADO — revisar')
             _obs = f'{_selo}. {item.observations}' if item.observations else _selo
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
