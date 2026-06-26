@@ -888,13 +888,6 @@
         },
         {
           "type": "book",
-          "title": "Engenharia de Custos: Análise de Preços e Avaliação de Empreendimentos",
-          "author": "Aldo Dórea Mattos",
-          "publisher": "Editora PINI",
-          "year": 2014
-        },
-        {
-          "type": "book",
           "title": "Gestão de Custos de Obra (2ª ed.)",
           "author": "Aldo Dórea Mattos",
           "publisher": "Oficina de Textos",
@@ -2146,15 +2139,15 @@
         },
         {
           "h2": "Por que essa separação é mais que técnica — é jurídica",
-          "body": "A Lei 14.133/2021 (Nova Lei de Licitações), no artigo 6º, item XXIV, define orçamento estimativo como \"o orçamento detalhado em planilhas que expressem a composição de todos os seus custos unitários\". No artigo 18, parágrafo 3º, a lei é categórica: o orçamento estimativo precisa estar pronto antes da licitação e é vinculante na definição do valor da contratação.\n\nNa prática, isso significa que orçamento de obra pública tem natureza jurídica de documento técnico autônomo, com responsabilidade técnica registrada via ART do orçamentista. O Acórdão TCU 2622/2013 reforça essa visão: o tribunal entende que a inadequação do orçamento, especialmente do BDI, é uma das principais causas de sobrepreço em obras públicas, e responsabiliza o profissional que elaborou o orçamento de forma autônoma em relação ao projetista.\n\nNo lado privado, a situação é parecida em essência. Se o arquiteto entrega ao cliente uma planilha intitulada \"orçamento\" e a obra estoura, ele assume responsabilidade técnica pelo valor — mesmo que tenha pego preços aleatórios de loja. Já se entrega \"quantitativo\" claramente identificado como tal, com observação de que a precificação será feita por orçamentista profissional, a responsabilidade fica delimitada à parte técnica do projeto."
+          "body": "A Lei 14.133/2021 (Nova Lei de Licitações) trata o orçamento estimado como documento próprio da fase de planejamento da contratação, distinto do quantitativo. No artigo 23, ao tratar de obras e serviços de engenharia, a lei manda definir o valor estimado a partir de parâmetros de custo referenciais — em especial a composição de custos unitários do SINAPI (ou do SICRO, no caso de infraestrutura de transportes). Ou seja: a própria lei separa o levantamento de quantidades da formação do preço, e amarra a precificação a referenciais técnicos e à responsabilidade de quem a elabora.\n\nNa prática, isso significa que orçamento de obra pública tem natureza jurídica de documento técnico autônomo, com responsabilidade técnica registrada via ART do orçamentista. O Acórdão TCU 2622/2013 reforça essa visão: o tribunal entende que a inadequação do orçamento, especialmente do BDI, é uma das principais causas de sobrepreço em obras públicas, e responsabiliza o profissional que elaborou o orçamento de forma autônoma em relação ao projetista.\n\nNo lado privado, a situação é parecida em essência. Se o arquiteto entrega ao cliente uma planilha intitulada \"orçamento\" e a obra estoura, ele assume responsabilidade técnica pelo valor — mesmo que tenha pego preços aleatórios de loja. Já se entrega \"quantitativo\" claramente identificado como tal, com observação de que a precificação será feita por orçamentista profissional, a responsabilidade fica delimitada à parte técnica do projeto."
         },
         {
           "h2": "O que está na tabela CAU/BR — e por que a maioria ignora",
-          "body": "A Resolução CAU/BR 35/2012 (e revisões posteriores via Resolução 193/2020) estabelece a tabela de honorários referenciais pros serviços de arquitetura e urbanismo no Brasil. A tabela é dividida em fases do trabalho arquitetônico, cada fase com seu percentual de honorários sobre o custo da obra.\n\nDuas fases importantes pro nosso tema:\n\n- Projeto Executivo (PE) — inclui especificação técnica, memorial descritivo, quadro de áreas, caderno de detalhamento e, sim, planilha de quantitativos. É a fase em que o autor do projeto explicita o que será construído, em que magnitude, com quais materiais.\n\n- Coordenação e Compatibilização de Projetos (CC) — articulação entre disciplinas (arquitetura, estrutura, elétrica, hidráulica, AVAC), garantindo que tudo se sobreponha sem conflito.\n\nO que NÃO está nessa tabela como obrigação do arquiteto: orçamento detalhado de obra. A elaboração de orçamento é classificada pelo CAU como \"serviço complementar\" ou \"serviço especial\", com honorários adicionais e contratação opcional. Quando o cliente quer o orçamento junto, o arquiteto pode contratar um orçamentista parceiro (engenheiro civil com formação em custos, normalmente) e repassar — ou cobrar como item separado, com honorário próprio.\n\nA maioria dos escritórios pequenos ignora essa estrutura e entrega \"um Excel com valores estimados\" como parte do projeto, gratuitamente. Resultado típico: arquiteto trabalhando de graça em algo que não é o seu ofício, e ainda assumindo risco técnico que não devia."
+          "body": "A Resolução CAU/BR nº 64/2013 aprovou a Tabela de Honorários de Serviços de Arquitetura e Urbanismo no Brasil — em cumprimento ao art. 28 da Lei 12.378/2010, que regulamenta a profissão. A tabela é organizada por fases do trabalho arquitetônico, cada fase com seu percentual de honorários sobre o custo da obra.\n\nDuas fases importantes pro nosso tema:\n\n- Projeto Executivo (PE) — inclui especificação técnica, memorial descritivo, quadro de áreas, caderno de detalhamento e, sim, planilha de quantitativos. É a fase em que o autor do projeto explicita o que será construído, em que magnitude, com quais materiais.\n\n- Coordenação e Compatibilização de Projetos (CC) — articulação entre disciplinas (arquitetura, estrutura, elétrica, hidráulica, AVAC), garantindo que tudo se sobreponha sem conflito.\n\nO que NÃO está nessa tabela como obrigação do arquiteto: orçamento detalhado de obra. A elaboração de orçamento é classificada pelo CAU como \"serviço complementar\" ou \"serviço especial\", com honorários adicionais e contratação opcional. Quando o cliente quer o orçamento junto, o arquiteto pode contratar um orçamentista parceiro (engenheiro civil com formação em custos, normalmente) e repassar — ou cobrar como item separado, com honorário próprio.\n\nA maioria dos escritórios pequenos ignora essa estrutura e entrega \"um Excel com valores estimados\" como parte do projeto, gratuitamente. Resultado típico: arquiteto trabalhando de graça em algo que não é o seu ofício, e ainda assumindo risco técnico que não devia."
         },
         {
           "h2": "Os 4 erros clássicos quando arquiteto tenta virar orçamentista",
-          "body": "Paulo Roberto Tisaka, em \"Engenharia de Custos\" (Pini), elenca diversos vícios típicos do orçamento elaborado por não-especialistas. Adaptando à realidade dos escritórios de arquitetura, aparecem 4 erros recorrentes:\n\n1. Cotação desatualizada ou regionalizada errada. O arquiteto pega o preço do porcelanato da loja em que comprou pra obra do tio em 2024 e usa no orçamento de 2026. A SINAPI publica atualização mensal, com diferenciação por estado, justamente porque preço de insumo varia 10-30% por ano e 15-40% entre regiões. Sem usar referencial atualizado, o orçamento já sai errado.\n\n2. BDI mal aplicado ou confuso. BDI é a sigla pra Bonificação e Despesas Indiretas, e inclui despesas administrativas, despesas financeiras, riscos, tributos, lucro. O Acórdão TCU 2622/2013 estabelece faixas referenciais de BDI por tipologia de obra (edificações, rodovias, saneamento, etc.), com limites máximo e mínimo. Arquiteto sem formação em custos costuma aplicar BDI \"chutado\" — 20% no improviso — sem distinguir tributos cumulativos, lucro presumido versus real, ou específicos da obra.\n\n3. Esquecimento de disciplinas complementares. O orçamento do arquiteto frequentemente lista só arquitetura: pisos, revestimentos, esquadrias, pintura. Esquece elétrica detalhada, hidrossanitário, sistema de combate a incêndio, climatização, automação. Em obra residencial de médio padrão, esses itens podem chegar a 25-35% do custo total. Cliente recebe orçamento subdimensionado e leva susto na execução.\n\n4. Confusão entre composição e cotação direta. Composição de custo é uma equação técnica que detalha quanto entra de cada insumo (material, mão de obra, equipamento) e respectivos coeficientes pra produzir uma unidade do serviço. SINAPI e TCPO publicam essas composições. Já cotação direta é o preço final cobrado por fornecedor. Misturar os dois métodos no mesmo orçamento (alguns itens compostos, outros cotados) leva a inconsistência grave, com perda de rastreabilidade."
+          "body": "Maçahico Tisaka, em \"Orçamento na Construção Civil\" (Pini, 2006), elenca diversos vícios típicos do orçamento elaborado por não-especialistas. Adaptando à realidade dos escritórios de arquitetura, aparecem 4 erros recorrentes:\n\n1. Cotação desatualizada ou regionalizada errada. O arquiteto pega o preço do porcelanato da loja em que comprou pra obra do tio em 2024 e usa no orçamento de 2026. A SINAPI publica atualização mensal, com diferenciação por estado, justamente porque preço de insumo varia 10-30% por ano e 15-40% entre regiões. Sem usar referencial atualizado, o orçamento já sai errado.\n\n2. BDI mal aplicado ou confuso. BDI é a sigla pra Bonificação e Despesas Indiretas, e inclui despesas administrativas, despesas financeiras, riscos, tributos, lucro. O Acórdão TCU 2622/2013 estabelece faixas referenciais de BDI por tipologia de obra (edificações, rodovias, saneamento, etc.), com limites máximo e mínimo. Arquiteto sem formação em custos costuma aplicar BDI \"chutado\" — 20% no improviso — sem distinguir tributos cumulativos, lucro presumido versus real, ou específicos da obra.\n\n3. Esquecimento de disciplinas complementares. O orçamento do arquiteto frequentemente lista só arquitetura: pisos, revestimentos, esquadrias, pintura. Esquece elétrica detalhada, hidrossanitário, sistema de combate a incêndio, climatização, automação. Em obra residencial de médio padrão, esses itens podem chegar a 25-35% do custo total. Cliente recebe orçamento subdimensionado e leva susto na execução.\n\n4. Confusão entre composição e cotação direta. Composição de custo é uma equação técnica que detalha quanto entra de cada insumo (material, mão de obra, equipamento) e respectivos coeficientes pra produzir uma unidade do serviço. SINAPI e TCPO publicam essas composições. Já cotação direta é o preço final cobrado por fornecedor. Misturar os dois métodos no mesmo orçamento (alguns itens compostos, outros cotados) leva a inconsistência grave, com perda de rastreabilidade."
         },
         {
           "h2": "O que o orçamentista profissional faz que o arquiteto não consegue fazer",
@@ -2181,17 +2174,17 @@
       "sources": [
         {
           "type": "book",
-          "title": "Como preparar orçamentos de obras: dicas para orçamentistas, estudos de caso, exemplos",
+          "title": "Como preparar orçamentos de obras: dicas para orçamentistas, estudos de caso, exemplos (3ª ed.)",
           "author": "Aldo Dórea Mattos",
-          "publisher": "Editora PINI",
+          "publisher": "Editora Oficina de Textos",
           "year": 2019
         },
         {
           "type": "book",
-          "title": "Engenharia de Custos: uma metodologia de orçamentação para obras civis",
-          "author": "Paulo Roberto Vilela Dias / Paulo Roberto Tisaka",
+          "title": "Orçamento na Construção Civil: Consultoria, Projeto e Execução",
+          "author": "Maçahico Tisaka",
           "publisher": "Editora PINI",
-          "year": 2014
+          "year": 2006
         },
         {
           "type": "norm",
@@ -2201,12 +2194,12 @@
         {
           "type": "norm",
           "title": "Lei Federal 14.133/2021",
-          "description": "Nova Lei de Licitações e Contratos Administrativos — art. 6º (definições) e art. 18 §3º (orçamento estimativo vinculante)"
+          "description": "Nova Lei de Licitações e Contratos Administrativos — art. 6º (definições) e art. 23 (parâmetros do valor estimado, com referenciais de custo SINAPI/SICRO)"
         },
         {
           "type": "norm",
-          "title": "Resolução CAU/BR 35/2012 (atualizada pela Resolução 193/2020)",
-          "description": "Tabela de honorários referenciais de serviços de Arquitetura e Urbanismo — separação entre Projeto Executivo e serviços complementares de orçamento"
+          "title": "Resolução CAU/BR 64/2013",
+          "description": "Aprova a Tabela de Honorários de Serviços de Arquitetura e Urbanismo (art. 28 da Lei 12.378/2010) — separação entre Projeto Executivo e serviços complementares de orçamento"
         },
         {
           "type": "norm",
