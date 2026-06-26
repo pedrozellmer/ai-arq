@@ -72,8 +72,11 @@
       <a href="faq.html" class="hover:text-indigo-600 transition">FAQ</a>
     </div>
     <div id="nav-auth" class="flex items-center gap-3">
-      <a href="login.html" id="nav-login" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="login.html" id="nav-login" class="hidden md:inline-block text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
       <a href="cadastro.html" id="nav-cta" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+      <button id="nav-burger" type="button" aria-label="Abrir menu" aria-expanded="false" class="md:hidden -mr-1 p-2 rounded-lg text-gray-600 hover:bg-gray-100">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
       <!-- Mostrado quando logado -->
       <div id="nav-user" class="hidden flex items-center gap-3">
         <img id="nav-avatar" src="" alt="" class="w-8 h-8 rounded-full" loading="lazy">
@@ -82,7 +85,32 @@
       </div>
     </div>
   </div>
+  <!-- Menu mobile (sanfona) -->
+  <div id="nav-mobile" class="hidden md:hidden border-t bg-white">
+    <div class="mx-auto max-w-6xl px-4 py-3 flex flex-col gap-1 text-gray-700">
+      <a href="#como-funciona" class="px-3 py-2 rounded-lg hover:bg-gray-100">Como Funciona</a>
+      <a href="#raio-x" class="px-3 py-2 rounded-lg hover:bg-gray-100">O raio-x</a>
+      <a href="#recursos" class="px-3 py-2 rounded-lg hover:bg-gray-100">Recursos</a>
+      <a href="precos.html" class="px-3 py-2 rounded-lg hover:bg-gray-100">Preços</a>
+      <a href="blog/" class="px-3 py-2 rounded-lg hover:bg-gray-100">Blog</a>
+      <a href="faq.html" class="px-3 py-2 rounded-lg hover:bg-gray-100">FAQ</a>
+      <a href="login.html" class="px-3 py-2 rounded-lg hover:bg-gray-100">Entrar</a>
+    </div>
+  </div>
 </nav>
+<script>
+  (function () {
+    var b = document.getElementById('nav-burger'), m = document.getElementById('nav-mobile');
+    if (!b || !m) return;
+    b.addEventListener('click', function () {
+      var visible = m.classList.toggle('hidden') === false;
+      b.setAttribute('aria-expanded', visible ? 'true' : 'false');
+    });
+    m.querySelectorAll('a').forEach(function (a) {
+      a.addEventListener('click', function () { m.classList.add('hidden'); b.setAttribute('aria-expanded', 'false'); });
+    });
+  })();
+</script>
 
 <!-- HERO — foco no wedge: quantitativo do CAD. Comparativo e PPT são bônus
      que aparecem mais abaixo, não competem com a promessa central. -->
