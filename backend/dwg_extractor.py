@@ -125,6 +125,23 @@ class DXFExtraction:
                 lines.append(f"  {k}: {v}")
             lines.append("")
 
+        # Avisos de qualidade da extração — a IA DEVE reagir marcando 'estimado'.
+        if self.metadata.get("extracao_esteril"):
+            lines.append("⚠ ATENÇÃO: a extração geométrica veio VAZIA (0 blocos/paredes/áreas/cotas). "
+                         "NÃO gere itens de práxis como se fossem medidos — marque tudo que sugerir como "
+                         "'estimado' (laranja). O arquivo pode estar sem geometria legível (xref, paperspace).")
+            lines.append("")
+        if self.metadata.get("xref_nao_resolvido"):
+            lines.append(f"⚠ ATENÇÃO: este DXF referencia arquivo(s) externo(s) não carregado(s) (xref): "
+                         f"{self.metadata['xref_nao_resolvido']}. A geometria do arquitetônico pode estar nesse "
+                         f"xref e NÃO foi lida — trate as quantidades como 'estimado'.")
+            lines.append("")
+        if self.metadata.get("unidade_suspeita"):
+            lines.append(f"⚠ ATENÇÃO: a unidade do desenho está suspeita ({self.metadata['unidade_suspeita']}). "
+                         f"Comprimentos/áreas podem estar com a escala errada — marque os itens medidos como "
+                         f"'estimado' até o usuário confirmar a unidade.")
+            lines.append("")
+
         # Layers — com xref prefix removido e deduplicado pra não poluir o prompt
         clean_layers = set()
         for layer in self.layers:
@@ -336,6 +353,20 @@ def _validate_unit_factor(doc, unit_factor: float) -> tuple[float, list[str]]:
                 converted = raw_len * unit_factor
                 if converted > max_len:
                     max_len = converted
+            except Exception:
+                continue
+
+        # Também amostra LWPOLYLINE — arquivo só com polilinha/bloco passava sem
+        # amostra nenhuma (a checagem só via LINE não detectava unidade errada).
+        for ent in msp.query("LWPOLYLINE")[:100]:
+            try:
+                pts = [(p[0], p[1]) for p in ent.get_points()]
+                for i in range(len(pts) - 1):
+                    dx = pts[i + 1][0] - pts[i][0]
+                    dy = pts[i + 1][1] - pts[i][1]
+                    converted = ((dx * dx + dy * dy) ** 0.5) * unit_factor
+                    if converted > max_len:
+                        max_len = converted
             except Exception:
                 continue
 
@@ -1167,6 +1198,25 @@ def extract_dxf(filepath: str) -> DXFExtraction:
                 dims.append((label, label))
         except Exception:
             continue
+
+    # ── Sinais de qualidade da extração (#6 estéril/xref + #4 unidade) ──
+    # Mede se a extração realmente leu geometria. Se ZERO, a IA NÃO deve
+    # "preencher" com itens de práxis como se fossem medidos sem o usuário saber.
+    measured_signal = len(blocks) + len(walls) + len(hatches) + len(dims)
+    metadata["sinal_medido"] = measured_signal
+    if measured_signal == 0:
+        metadata["extracao_esteril"] = True
+    # xref: layers vêm com prefixo "arquivo|layer". Se há xref referenciado mas
+    # quase nenhuma geometria, a referência externa provavelmente NÃO foi
+    # resolvida (ezdxf não carrega xref externo) — o arquitetônico pode estar lá.
+    try:
+        _xref_files = sorted({ln.split("|", 1)[0] for ln in layer_names if "|" in ln})
+    except Exception:
+        _xref_files = []
+    if _xref_files and measured_signal < 5:
+        metadata["xref_nao_resolvido"] = "; ".join(_xref_files[:5])
+    if unit_warnings:
+        metadata["unidade_suspeita"] = " | ".join(unit_warnings)
 
     return DXFExtraction(
         filename=os.path.basename(filepath),
