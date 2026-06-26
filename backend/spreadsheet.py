@@ -62,6 +62,22 @@ def _style_row(ws, row, font, fill=None, align=None, cols=9):
         cell.border = BD
 
 
+def _unit_family(u: str) -> str:
+    """Família da unidade, pra checar compatibilidade item × código SINAPI.
+    Retorna '' quando a unidade é desconhecida (aí não flaga divergência)."""
+    if not u:
+        return ''
+    u = u.strip().lower().replace('²', '2').replace('³', '3')
+    if u in ('m2', 'm²'): return 'area'
+    if u in ('m3',): return 'volume'
+    if u in ('m', 'ml', 'metro', 'mlinear'): return 'linear'
+    if u in ('un', 'und', 'unid', 'pç', 'pc', 'peca', 'peça', 'cj', 'conj', 'cjto'): return 'cont'
+    if u in ('kg', 't', 'ton'): return 'peso'
+    if u in ('vb', 'verba'): return 'verba'
+    if u in ('l', 'lt', 'litro'): return 'liquido'
+    return ''
+
+
 def _build_ref_text(item) -> str:
     """Monta texto da coluna REF combinando código SINAPI/TCPO + ref do projeto.
 
@@ -78,7 +94,15 @@ def _build_ref_text(item) -> str:
         if cod:
             level = m.get('_match_level', 'full')
             mark = '~' if level.startswith('simplified') else ''
-            parts.append(f'SINAPI {mark}{cod}')
+            # Confiança do match na própria linha (não só na aba técnica): código
+            # errado induz o orçamentista, então o nível precisa estar visível.
+            sim = m.get('similarity', 0) or 0
+            conf_lbl = 'conf. alta' if sim >= 0.7 else ('conf. média' if sim >= 0.45 else 'conf. baixa')
+            # Aviso de unidade incompatível (piso m² × código em metro linear).
+            sinapi_unit = (m.get('unidade') or '').strip()
+            fi, fs = _unit_family(item.unit), _unit_family(sinapi_unit)
+            unit_warn = f' ⚠ unidade difere (item {item.unit} × SINAPI {sinapi_unit})' if (fi and fs and fi != fs) else ''
+            parts.append(f'SINAPI {mark}{cod} ({conf_lbl}){unit_warn}')
 
     # TCPO BIM (referência técnica complementar)
     tcpo_matches = getattr(item, 'tcpo_matches', None) or []
