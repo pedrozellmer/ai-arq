@@ -6920,6 +6920,46 @@ async def admin_nps_responses(request: Request, limit: int = 50):
         raise HTTPException(500, f"Erro: {e}")
 
 
+@app.get("/api/admin/nps/stages")
+async def admin_nps_stages(request: Request):
+    """Médias por etapa do feedback detalhado (upload, tempo, precisão, planilha).
+    Lê as respostas e agrega em Python (volume pequeno)."""
+    _require_admin(request)
+    import urllib.request as _urs
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/nps_responses"
+               f"?context=eq.feedback_detailed&select=stage_ratings,score,comment,user_name,created_at"
+               f"&order=created_at.desc")
+        req = _urs.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _json.loads(_urs.urlopen(req, timeout=15).read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
+    stages = ("upload", "tempo", "precisao", "planilha")
+    sums = {k: 0.0 for k in stages}
+    counts = {k: 0 for k in stages}
+    rec_sum, rec_n = 0.0, 0
+    for r in rows:
+        sr = r.get("stage_ratings") or {}
+        for k in stages:
+            v = sr.get(k)
+            if isinstance(v, (int, float)):
+                sums[k] += v
+                counts[k] += 1
+        sc = r.get("score")
+        if isinstance(sc, (int, float)):
+            rec_sum += sc
+            rec_n += 1
+    avgs = {k: (round(sums[k] / counts[k], 2) if counts[k] else None) for k in stages}
+    return {
+        "total": len(rows),
+        "stages": avgs,
+        "counts": counts,
+        "recommend_avg": round(rec_sum / rec_n, 2) if rec_n else None,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════
 #  SERVIR PRANCHA (pra revisão inline abrir em nova aba)
 # ═══════════════════════════════════════════════════════════════
