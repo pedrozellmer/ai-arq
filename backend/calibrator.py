@@ -353,13 +353,15 @@ def get_correction_factors() -> dict:
 # ═══════════════════════════════════════════════
 
 def apply_corrections(items: list, factors: dict) -> list:
-    """Apply calibration corrections to a list of BudgetItem objects.
+    """Sinaliza (NÃO altera) anomalias de quantidade com base na calibração.
 
-    For each item, tries to match item_type by normalizing its description.
-    If a match is found AND data_points >= 2, multiplies quantity by the
-    correction factor and updates observations/confidence.
+    Para cada item, tenta casar o item_type normalizando a descrição. Se casar
+    E data_points >= 2, grava um ALERTA na observação comparando a quantidade
+    medida com a ordem de grandeza que o histórico sugere. NUNCA multiplica a
+    quantidade — a quantidade medida do CAD é intocável (regra dura de
+    isolamento entre projetos). O ratio do histórico só serve pra alertar.
 
-    Returns the modified items list.
+    Returns the items list (só observações podem mudar, nunca quantity).
     """
     if not factors:
         return items
@@ -380,14 +382,17 @@ def apply_corrections(items: list, factors: dict) -> list:
         if 0.98 <= factor_val <= 1.02:
             continue
 
-        # Apply correction
+        # ⚠ ISOLAMENTO (regra dura): NUNCA multiplicar a quantidade medida por
+        # fator de OUTROS projetos — isso contamina o projeto atual. A calibração
+        # por ratio serve SÓ pra ALERTAR anomalia, não pra copiar/ajustar valor.
+        # Mantemos a quantidade medida INTACTA e gravamos um alerta pra revisão.
         original_qty = item.quantity
-        item.quantity = round(item.quantity * factor_val, 2)
+        sugerido = round(item.quantity * factor_val, 2)
 
-        # Update observations
         cal_note = (
-            f"Corrigido por calibracao "
-            f"({f['data_points']} projetos, fator {factor_val:.2f})"
+            f"⚠ Calibracao: o historico ({f['data_points']} projetos) sugere ordem "
+            f"de ~{sugerido} pra este tipo (fator {factor_val:.2f}); confira se a "
+            f"quantidade medida ({original_qty}) faz sentido. Quantidade NAO alterada."
         )
         if item.observations:
             item.observations = f"{item.observations} | {cal_note}"
@@ -402,6 +407,6 @@ def apply_corrections(items: list, factors: dict) -> list:
         corrections_applied += 1
 
     if corrections_applied > 0:
-        print(f"[calibrator] Applied {corrections_applied} corrections from calibration data.")
+        print(f"[calibrator] Flagged {corrections_applied} possible anomalies (quantities NOT changed).")
 
     return items
