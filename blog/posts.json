@@ -2237,6 +2237,92 @@
           "publisher": "CBIC / Sinduscon"
         }
       ]
+    },
+    {
+      "slug": "por-que-nao-entregamos-o-preco-da-sua-obra",
+      "title": "Por que não te entregamos o preço da obra — e por que isso te protege",
+      "description": "Por que o AI.arq não dá preço de obra com IA: entregamos o quantitativo medido (raio-x da prancha) e deixamos a precificação com o orçamentista habilitado.",
+      "keywords": "ia orçamento de obra, ia preço de obra, por que ia não dá preço, estimativa de obra com ia, quantitativo com ia confiável, raio-x da prancha, precificação responsabilidade orçamentista",
+      "category": "IA e Confiança",
+      "publish_date": "2026-09-13",
+      "intro": "A pergunta mais comum que recebemos é direta: \"se a IA já leu meu projeto, por que ela não me dá logo o preço da obra?\" Tecnicamente, a gente poderia mostrar um número na tela. Mas decidimos, de propósito, não fazer isso. Este texto explica o porquê — não como desculpa, e sim como decisão de produto. A resposta curta: uma estimativa que parece verdade é mais perigosa do que nenhuma. A resposta longa está abaixo.",
+      "sections": [
+        {
+          "h2": "O que a gente entrega — e o que a gente não entrega",
+          "body": "Vamos ser transparentes sobre a linha que traçamos. O AI.arq lê seus arquivos CAD (DWG, DXF, PDF) e devolve o quantitativo: as quantidades de cada item levantadas a partir do desenho — áreas, comprimentos, contagens. Isso é o levantamento de quantitativos, que Aldo Dórea Mattos descreve como a etapa de medir e contar o que está no projeto, distinta da orçamentação propriamente dita (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019).\n\nO que a gente não entrega é o preço. As colunas de valor unitário e total saem em branco na planilha, prontas para o orçamentista preencher. Não é uma limitação que pedimos desculpa por ter — é a fronteira correta entre o que uma máquina pode medir e o que um profissional habilitado precisa julgar."
+        },
+        {
+          "h2": "Uma estimativa que parece verdade é pior que nenhuma",
+          "body": "Esse é o coração da nossa tese. Um número de preço gerado automaticamente carrega um problema embutido: ele parece preciso. A tela mostra um total fechado, com centavos, e isso transmite uma confiança que o número não tem como sustentar.\n\nO problema é o que esse número vira depois. Mesmo com toda ressalva de \"valor aproximado\", uma estimativa numérica funciona como âncora: ela fixa uma expectativa na cabeça do cliente e vira, na prática, um compromisso. Quando a obra executa e o custo real aparece diferente, a conversa difícil sobra para o profissional que apresentou o número.\n\nE orçamento, por natureza, é estimativa com margem, não verdade exata. A própria orientação técnica IBRAOP OT-IBR 004/2012 (Precisão do orçamento de obras públicas) reconhece que existe um desvio esperado entre o custo estimado nas fases de projeto e o orçamento real da obra. Ou seja: a incerteza é parte legítima do orçamento. Aparentar precisão exata não elimina essa incerteza — só a esconde de quem mais precisa enxergá-la."
+        },
+        {
+          "h2": "Preço é específico daquela obra (e a gente não conhece o seu mercado)",
+          "body": "Mattos chama isso de especificidade: o preço não é universal, ele é daquela obra, naquele local, naquele momento (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019). O mesmo item de serviço custa diferente conforme o estado, o fornecedor, o acesso ao canteiro e as condições locais.\n\nIsso não é só teoria. O SINAPI, mantido por Caixa e IBGE, é divulgado de forma diferenciada por estado — porque o custo de fato varia por UF. O CUB/m², calculado pelos Sinduscons com a metodologia da NBR 12721:2006, é uma média regional, não o custo da sua obra específica.\n\nSe o custo de referência já muda de estado para estado nas próprias bases oficiais, não faz sentido uma IA carimbar um número \"universal\" lendo só o seu desenho. Quem conhece o mercado da sua cidade, seus fornecedores e suas condições de canteiro é você e o orçamentista local — não a gente."
+        },
+        {
+          "h2": "Preço perece no tempo (o número certo de hoje vence em semanas)",
+          "body": "O outro atributo que Mattos aponta é a temporalidade: o orçamento tem prazo de validade. Um preço correto hoje pode estar errado em poucas semanas (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019).\n\nDe novo, as bases oficiais confirmam isso na prática. O SINAPI tem atualização mensal. O CUB/m² é divulgado mensalmente pelos Sinduscons. Esses sistemas se atualizam todo mês justamente porque o custo de insumos e mão de obra se move o tempo todo.\n\nPor isso a coluna de preço sai em branco no AI.arq. Fixar um valor que vence seria entregar um número com data de validade escondida. O quantitativo medido na sua prancha, ao contrário, não perece: a área de um piso é a mesma hoje e daqui a seis meses. Faz sentido a máquina entregar o que é estável (a quantidade) e o humano aplicar o que muda (o preço do dia)."
+        },
+        {
+          "h2": "Preço carrega responsabilidade técnica — e máquina não assina RRT",
+          "body": "Tem um motivo que vai além de matemática: orçamento é um juízo profissional que se registra. A Lei Federal 12.378/2010, que regulamenta o exercício da Arquitetura e Urbanismo e cria o CAU, instituiu o RRT (Registro de Responsabilidade Técnica), que define quem responde tecnicamente por cada serviço.\n\nDefinir BDI, escolher o regime tributário, selecionar fornecedor, decidir margens — isso é julgamento de gente habilitada, com nome e responsabilidade atrelados. O Acórdão TCU 2622/2013 – Plenário, que trata de faixas referenciais de BDI por tipologia, relaciona a inadequação do orçamento e do BDI ao sobrepreço e à responsabilidade técnica do orçamentista.\n\nUma IA não tem registro profissional, não assume responsabilidade técnica e não responde por nada. Colocar um preço na boca dela seria pedir que ela assinasse um documento que, por lei, é de um profissional. A gente prefere deixar essa assinatura com quem de direito."
+        },
+        {
+          "h2": "O que a gente entrega no lugar: o raio-x da prancha",
+          "body": "Se a gente não dá o preço, o que dá? A gente dá honestidade sobre cada número do levantamento — o que chamamos de raio-x da prancha. Cada item do quantitativo vem marcado por origem, com texto e símbolo (não só cor, porque cor sozinha exclui quem não a enxerga):\n\n- Medido (✓): a quantidade foi de fato extraída da geometria do seu CAD — uma área calculada do polígono, um comprimento lido da linha, uma contagem feita dos blocos. É número com lastro no desenho.\n- Estimativa (⚠): a quantidade é uma sugestão a revisar, porque o desenho não trouxe a informação medível (por exemplo, um PDF vetorial sem texto de cota, em que a geometria não pôde ser lida). É um ponto de partida, marcado para você conferir, não um fato.\n\nE as colunas de preço unitário e total ficam em branco, prontas para o orçamentista. A planilha sai com a estrutura pronta para precificar, mas sem nenhum valor sem responsável técnico ocupando o lugar do julgamento profissional.\n\nO ponto: a gente não esconde a incerteza atrás de um total fechado. Mostra exatamente o que é chão firme (medido ✓) e o que pede revisão (estimativa ⚠). Honestidade sobre a origem do número é o recurso, não a falha."
+        },
+        {
+          "h2": "Por que isso te dá poder — e te protege",
+          "body": "Terminar sem preço não é ficar de mãos vazias. É ficar com a parte mais trabalhosa já pronta e auditável, do seu jeito.\n\n1. Poder de barganha. Com o quantitativo medido em mãos, você manda a mesma planilha para vários orçamentistas e compara propostas item a item, na mesma base. Quem controla o quantitativo controla a cotação.\n2. Proteção jurídica e profissional. O preço sai de quem tem registro para precificar e assume a responsabilidade técnica por ele (Lei 12.378/2010). Você não apresenta ao cliente um número gerado por máquina que teria de defender depois.\n3. Tempo no lugar certo. A IA tira de você as horas de medir e contar — a parte mecânica e cansativa. Sobra tempo para o que é seu de verdade: projetar, e revisar o que está marcado como estimativa (⚠).\n\nQuantitativo e orçamento são coisas distintas — a NBR 12721:2006 e a Lei 14.133/2021 (art. 6º, nas definições) tratam um e outro separadamente. A gente fica, com convicção, do lado do quantitativo medido. No blog há um glossário dos termos (quantitativo, orçamentação e orçamento) e um texto sobre a divisão de papéis entre projetista e orçamentista, se quiser se aprofundar."
+        }
+      ],
+      "cta": "Quer ver o raio-x da sua própria prancha? Suba um projeto em ai.arq.br e receba o quantitativo com cada item marcado como medido (✓) ou estimativa a revisar (⚠), com as colunas de preço em branco para o seu orçamentista. O primeiro projeto é grátis e sem cartão — estamos em beta e queremos seu feedback de arquiteto de verdade. A gente mede a prancha; o preço, com responsabilidade técnica, continua sendo seu.",
+      "sources": [
+        {
+          "type": "book",
+          "title": "Como preparar orçamentos de obras",
+          "author": "Aldo Dórea Mattos",
+          "publisher": "Editora Oficina de Textos",
+          "year": 2019
+        },
+        {
+          "type": "norm",
+          "title": "ABNT NBR 12721:2006 — Avaliação de custos unitários de construção para incorporação imobiliária e outras disposições para condomínios edilícios — Procedimento",
+          "description": "Edição de 21.08.2006; base metodológica do cálculo do CUB. Trata quantitativo e orçamento como conceitos distintos."
+        },
+        {
+          "type": "norm",
+          "title": "Lei Federal 14.133/2021 — Nova Lei de Licitações e Contratos",
+          "description": "Art. 6º traz as definições, incluindo orçamento estimado e preços unitários referenciais, tratando quantitativo e orçamento de forma distinta."
+        },
+        {
+          "type": "norm",
+          "title": "Lei Federal 12.378/2010",
+          "description": "Regulamenta o exercício da Arquitetura e Urbanismo, cria o CAU e institui o RRT (Registro de Responsabilidade Técnica), que define os responsáveis técnicos pelos serviços."
+        },
+        {
+          "type": "norm",
+          "title": "Acórdão TCU 2622/2013 – Plenário",
+          "description": "Estabelece faixas referenciais de BDI por tipologia de obra e relaciona a inadequação do orçamento e do BDI ao sobrepreço e à responsabilidade técnica do orçamentista."
+        },
+        {
+          "type": "norm",
+          "title": "IBRAOP OT-IBR 004/2012 — Precisão do orçamento de obras públicas",
+          "description": "Reconhece o desvio esperado entre o custo estimado nas fases de projeto e o orçamento real da obra."
+        },
+        {
+          "type": "link",
+          "title": "SINAPI — Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil",
+          "url": "https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx",
+          "publisher": "Caixa Econômica Federal / IBGE"
+        },
+        {
+          "type": "link",
+          "title": "CUB/m² — Custo Unitário Básico da Construção",
+          "url": "https://www.cub.org.br/",
+          "publisher": "CBIC / Sinduscon"
+        }
+      ]
     }
   ]
 }
