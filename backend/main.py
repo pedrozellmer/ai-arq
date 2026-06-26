@@ -2967,6 +2967,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     ref_sheet="DXF",
                                     confidence=Confidence(conf),
                                     discipline=discipline,
+                                    origem="dxf_geom",  # medido por geometria ezdxf
                                 )
                                 dxf_items.append(item)
                             except: continue
@@ -3143,6 +3144,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     if discipline not in valid_disciplines: discipline = "Complementares"
                     conf = item_data.get("confidence", "estimado")
                     if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
+                    # PDF/Vision NÃO mede geometria — só lê número numa imagem.
+                    # Pela regra dura, "medido do CAD" (branco) vem só de geometria
+                    # (ezdxf). "confirmado" vindo de PDF é rebaixado pra estimado.
+                    _pdf_downgrade = (conf == "confirmado")
+                    if _pdf_downgrade:
+                        conf = "estimado"
                     qty_raw = item_data.get("quantity", 0)
                     qty = sf(qty_raw) if qty_raw else 0
                     # qty=0 permitido em "estimado" (usuário preenche); forçar 1 só em confirmado
@@ -3159,6 +3166,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         conf = "estimado"
                         obs_raw = (f"{obs_raw} | Unidade ajustada de {original_unit} "
                                    f"para {normalized_unit}").strip(" |")
+                    if _pdf_downgrade:
+                        obs_raw = (f"{obs_raw} | Estimativa: lido de PDF, não medido em "
+                                   f"geometria — envie DWG/DXF pra medir").strip(" |")
 
                     # ref_sheet SEMPRE tem o filename real pra que o botão
                     # "Ver prancha" na revisão inline funcione. Hint da IA
@@ -3177,6 +3187,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         ref_sheet=_ref,
                         confidence=Confidence(conf),
                         discipline=discipline,
+                        origem="vision_pdf",  # lido por Vision, não medido em geometria
                     )
                     all_items.append(item)
                 except: continue

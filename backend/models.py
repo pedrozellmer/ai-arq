@@ -33,6 +33,10 @@ class BudgetItem(BaseModel):
     observations: str = ""
     ref_sheet: str = ""
     confidence: Confidence = Confidence.ESTIMADO
+    # Origem do dado: 'dxf_geom' (medido por geometria ezdxf) ou 'vision_pdf'
+    # (lido pela IA numa imagem de PDF). Só 'dxf_geom' pode receber o selo
+    # BRANCO/MEDIDO na planilha — Vision nunca mede geometria de verdade.
+    origem: str = ""
     discipline: str = ""
     # Matches da base SINAPI (Caixa). Preenchido pelo sinapi_matcher antes
     # da geração da planilha. Formato: lista de dicts com codigo, descricao,
