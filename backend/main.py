@@ -3330,6 +3330,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     "o suporte pelo botão 'Reportar problema'."
                 )
 
+        # ── Falha PARCIAL: vieram itens, mas pranchas/DXF falharam ──
+        # O guard acima só pega o caso de ZERO itens. Se sobram itens mas uma
+        # disciplina inteira caiu por um pico passageiro da IA, o usuário recebia
+        # planilha que PARECE completa (bug Vinícius ainda meio aberto).
+        partial_errors = (sheet_errors or []) + (dxf_errors or [])
+        partial_failure = bool(partial_errors)
+        if partial_failure:
+            _falhos = "; ".join(e.split(":")[0] for e in partial_errors)
+            _aviso_cob = (f"⚠ {len(partial_errors)} prancha(s)/arquivo(s) falharam e NÃO "
+                          f"entraram nesta planilha — ela pode estar INCOMPLETA. "
+                          f"Reprocesse (grátis) pra tentar completar. Faltaram: {_falhos[:280]}")
+            project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [_aviso_cob]
+
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
         jobs.update_field(job_id, current_step=f"Gerando planilha com {len(all_items)} itens...")
@@ -3458,9 +3471,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if _pe:
                 _pn = _html.escape(_rows[0].get("project_name") or "seu projeto")
                 _greet = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
+                _aviso_html = ""
+                if partial_failure:
+                    _aviso_html = (f"<br><br><b>&#9888; Atenção:</b> {len(partial_errors)} prancha(s) "
+                                   f"falharam no processamento e podem não ter entrado — a planilha "
+                                   f"pode estar incompleta. Reprocessar é grátis e tenta completar.")
                 _body = (f"{_greet}<br><br>"
                          f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
-                         f"({len(all_items)} itens). Acesse seu painel pra revisar e baixar a planilha.")
+                         f"({len(all_items)} itens). Acesse seu painel pra revisar e baixar a planilha."
+                         f"{_aviso_html}")
                 _send_email_smtp(
                     _pe, "Sua planilha do AI.arq está pronta",
                     _email_wrap("Sua planilha está pronta", _body,
