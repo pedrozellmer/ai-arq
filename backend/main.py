@@ -3524,12 +3524,17 @@ async def process_files(
     # AUTORIZAÇÃO: se o Form passou user_id (não-anônimo), tem que ter JWT
     # correspondente. Sem isso, atacante manda user_id de outro user e
     # cria projeto+consome créditos no nome dele.
-    if user_id and user_id != "anonymous":
-        jwt_user = _get_user_from_request(request)
-        if not jwt_user:
-            raise HTTPException(401, "Autenticação requerida quando user_id é informado")
-        if jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
-            raise HTTPException(403, "user_id não corresponde ao token de autenticação")
+    # Processar EXIGE login sempre — fecha a "porta dos fundos": impede chamada
+    # anônima direta na API (por fora do site) que dispararia IA cara sem dono.
+    # O painel já loga e manda o Bearer, então não muda nada pro usuário real.
+    jwt_user = _get_user_from_request(request)
+    if not jwt_user:
+        raise HTTPException(401, "Faça login para enviar um projeto.")
+    if user_id and user_id != "anonymous" and jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+        raise HTTPException(403, "user_id não corresponde ao token de autenticação")
+    # Dono autoritativo vem do token (não confia só no parâmetro).
+    if not user_id or user_id == "anonymous":
+        user_id = jwt_user.get("id") or user_id
 
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
