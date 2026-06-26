@@ -315,7 +315,13 @@ def _rerank_by_specs(results: List[Dict], description: str) -> List[Dict]:
             r['_demolition_penalty'] = True
 
     # Reordena por similaridade ajustada
-    return sorted(results, key=lambda x: x.get('similarity', 0), reverse=True)
+    ranked = sorted(results, key=lambda x: x.get('similarity', 0), reverse=True)
+    # Capa o score exibido em 100%. O boost por spec (0.5 * matches) serve só
+    # pra RANKEAR, não pra inflar a confiança — score de 133%/122% na planilha
+    # detonava a credibilidade (matemática impossível pra similaridade).
+    for _r in ranked:
+        _r['similarity'] = max(0.0, min(1.0, _r.get('similarity', 0)))
+    return ranked
 
 
 def match_item(description: str, limit: int = 3) -> List[Dict]:
