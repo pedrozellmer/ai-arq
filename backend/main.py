@@ -3874,7 +3874,8 @@ async def admin_send_nudge(request: Request):
 
 
 @app.get("/api/debug/service-role")
-async def debug_service_role():
+async def debug_service_role(request: Request):
+    _require_admin(request)
     """Diagnóstico (sem PII): confirma se a service_role consegue ler dados
     protegidos por RLS (profiles). Se 'service_role_reads_profiles' for false,
     os emails automáticos pra usuário REAL (welcome/planilha-pronta/erro) não
@@ -3902,10 +3903,10 @@ async def debug_service_role():
 
 
 @app.get("/api/debug/email-preview")
-async def email_preview():
+async def email_preview(request: Request):
     """Manda 1 amostra de cada email transacional pro NOTIFY_EMAIL (pessoal do
-    dono) pra pré-visualizar o layout. Recipiente FIXO -> não dá pra spammar
-    terceiros. Dados de exemplo ('Residencial Vila Nova', 'Pedro')."""
+    dono) pra pré-visualizar o layout. Admin-only. Recipiente FIXO."""
+    _require_admin(request)
     to = NOTIFY_EMAIL
     fake_link = "https://ai.arq.br/login.html"
     out = {}
