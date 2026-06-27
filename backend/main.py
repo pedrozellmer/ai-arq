@@ -119,6 +119,21 @@ def _supabase_insert(table, data):
         return False
 
 
+def _log_error(stage, message, job_id=None, severity="error"):
+    """Grava um erro técnico do motor na tabela error_log do Supabase, pra ser
+    lido via MCP/admin SEM precisar abrir o log do Render. Best-effort, NUNCA
+    levanta (não pode atrapalhar quem já está num except)."""
+    try:
+        _supabase_insert("error_log", {
+            "stage": str(stage)[:80],
+            "message": str(message)[:2000],
+            "job_id": (str(job_id)[:40] if job_id else None),
+            "severity": severity,
+        })
+    except Exception:
+        pass
+
+
 def _supabase_update(table, match_field, match_value, data):
     """Atualiza registro no Supabase via REST API.
 
@@ -3123,6 +3138,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         dxf_errors.append(f"{os.path.basename(dxf_path)}: {err_msg}")
                         jobs.update_field(job_id, current_step=f"Erro IA (DXF): {err_msg}")
                         print(f"Erro Claude DXF: {e}")
+                        _log_error("dxf:claude", f"{os.path.basename(dxf_path)}: {e}", job_id)
 
                     del structured_text
                     gc.collect()
@@ -3245,6 +3261,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 err_msg = str(result.get("error"))[:200]
                 sheet_errors.append(f"{filename}: {err_msg}")
                 print(f"[analyze-erro] {filename}: {err_msg}")
+                _log_error("pdf:analyze", f"{filename}: {err_msg}", job_id)
 
             # 4. Extrair dados do projeto
             if "project_data" in result:
@@ -3671,6 +3688,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         jobs.update_field(job_id, status="error")
         jobs.update_field(job_id, error_message=str(e))
         jobs.update_field(job_id, current_step=f"Erro: {str(e)[:200]}")
+        import traceback as _tb_err
+        _log_error("process_job", f"{type(e).__name__}: {e}\n{_tb_err.format_exc()[:1500]}", job_id)
 
         # Atualizar erro no Supabase
         _supabase_update("projects", "job_id", job_id, {

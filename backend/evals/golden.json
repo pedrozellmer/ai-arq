@@ -1,0 +1,29 @@
+{
+  "smoke_dwg": {
+    "description": "smoke-test (1 DWG arquitetura) — sanidade básica do motor",
+    "min_items": 8,
+    "max_items": 60,
+    "not_all_zero": true,
+    "max_zero_ratio": 0.6
+  },
+  "arch_dwg_grande": {
+    "description": "DWG de arquitetura grande (referência caso Ademir, ~74-103 itens)",
+    "min_items": 40,
+    "max_items": 140,
+    "not_all_zero": true
+  },
+  "arch_pdf": {
+    "description": "PDF de arquitetura (referência caso Vinicius, ~78 itens; PDF = tudo estimativa)",
+    "min_items": 25,
+    "max_items": 130,
+    "not_all_zero": true
+  },
+  "estrutural_dwg": {
+    "description": "projeto estrutural em DWG (referência caso Luciano)",
+    "project_type": "estrutura",
+    "min_items": 8,
+    "max_items": 90,
+    "must_have_disciplines": ["Estrutura"],
+    "steel_must_be_kg": true
+  }
+}
