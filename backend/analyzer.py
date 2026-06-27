@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 import anthropic
 from models import SheetType, SheetInfo, BudgetItem, ProjectData, Confidence
-from llm_retry import call_with_retry
+from llm_retry import call_with_retry, call_with_retry_stream
 
 
 def _normalize_br_number(s: str) -> str:
@@ -970,6 +970,59 @@ _TYPOLOGY_HINT = {
 }
 
 
+def _extract_balanced_obj(s, start):
+    """Do índice de um '{', retorna (objeto JSON balanceado, índice após). Se não
+    fechar (truncado), retorna (None, start). Respeita strings e escapes."""
+    depth = 0; in_str = False; esc = False; i = start; n = len(s)
+    while i < n:
+        c = s[i]
+        if in_str:
+            if esc: esc = False
+            elif c == '\\': esc = True
+            elif c == '"': in_str = False
+        else:
+            if c == '"': in_str = True
+            elif c == '{': depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return s[start:i + 1], i + 1
+        i += 1
+    return None, start
+
+
+def _salvage_truncated_json(s):
+    """Recupera os itens COMPLETOS de um JSON truncado (resposta cortada no teto
+    de tokens numa prancha complexa). Nunca lança."""
+    import json as _json
+    out = {"items": []}
+    try:
+        pi = s.index('"project_data"'); bstart = s.index('{', pi)
+        pd_obj, _ = _extract_balanced_obj(s, bstart)
+        if pd_obj:
+            out["project_data"] = _json.loads(pd_obj)
+    except Exception:
+        pass
+    try:
+        ii = s.index('"items"'); astart = s.index('[', ii); i = astart + 1; n = len(s)
+        while i < n:
+            while i < n and s[i] not in '{]':
+                i += 1
+            if i >= n or s[i] == ']':
+                break
+            obj, end = _extract_balanced_obj(s, i)
+            if not obj:
+                break
+            try:
+                out["items"].append(_json.loads(obj))
+            except Exception:
+                pass
+            i = end
+    except Exception:
+        pass
+    return out
+
+
 def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                   typology: str = "office",
                   ambiente: str = "",
@@ -1033,11 +1086,14 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
     content.append({"type": "text", "text": prompt})
 
     try:
-        response = call_with_retry(
+        # STREAMING + teto maior + salvage: prancha de arquitetura complexa gerava
+        # resposta > max_tokens (8000), truncava o JSON e caía em {items:[]} ->
+        # "IA sobrecarregada" enganoso (mesmo bug do caminho DXF). Caso Luciano.
+        response = call_with_retry_stream(
             client,
             tag=f"analyzer:{sheet.filename}",
             model="claude-sonnet-4-6",
-            max_tokens=8000,
+            max_tokens=16000,
             temperature=0,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content}],
@@ -1051,7 +1107,15 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         else:
             json_str = text.strip()
 
-        return json.loads(json_str)
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError:
+            # JSON truncado (resposta cortada no teto) — recupera os itens completos
+            _salv = _salvage_truncated_json(json_str)
+            if _salv.get("items"):
+                print(f"PDF JSON truncado em {sheet.filename}; salvados {len(_salv['items'])} itens")
+                return _salv
+            raise
 
     except json.JSONDecodeError as e:
         print(f"Erro JSON para {sheet.filename}: {e}")
