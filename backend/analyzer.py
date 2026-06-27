@@ -1005,7 +1005,7 @@ REGRA DURA — MEDIDO (confirmado) vs ESTIMADO — NUNCA INVENTAR
   - peso de aço calculado pela tabela quando NÃO há quadro de aço na prancha.
 NA DÚVIDA, "estimado". JAMAIS invente bitola, fck, dimensão ou peso que não esteja na prancha — sem o número escrito, o item é "estimado" e a observação deve dizer que foi derivado. Você NÃO precifica.
 
-Responda no MESMO formato pedido (raciocínio + bloco ```json com array "items", cada item: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline="Estrutura")."""
+Responda no MESMO formato pedido: o raciocínio e DEPOIS um bloco ```json contendo um OBJETO no formato {"items": [ ... ]} — NUNCA um array solto. Cada item: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline="Estrutura"."""
 
 
 def _extract_balanced_obj(s, start):
@@ -1158,14 +1158,23 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
             json_str = text.strip()
 
         try:
-            return json.loads(json_str)
+            _parsed = json.loads(json_str)
         except json.JSONDecodeError:
             # JSON truncado (resposta cortada no teto) — recupera os itens completos
-            _salv = _salvage_truncated_json(json_str)
-            if _salv.get("items"):
-                print(f"PDF JSON truncado em {sheet.filename}; salvados {len(_salv['items'])} itens")
-                return _salv
-            raise
+            _parsed = _salvage_truncated_json(json_str)
+            if _parsed.get("items"):
+                print(f"PDF JSON truncado em {sheet.filename}; salvados {len(_parsed['items'])} itens")
+            else:
+                raise
+        # Robustez: a IA às vezes devolve um array cru [...] em vez de
+        # {"items": [...]} (mais comum no prompt estrutural). Sem embrulhar, o
+        # caller faz result.get(...) num list e derruba o job inteiro
+        # ('list' object has no attribute 'get').
+        if isinstance(_parsed, list):
+            _parsed = {"items": _parsed}
+        elif not isinstance(_parsed, dict):
+            _parsed = {"items": [], "error": f"formato inesperado: {type(_parsed).__name__}"}
+        return _parsed
 
     except json.JSONDecodeError as e:
         print(f"Erro JSON para {sheet.filename}: {e}")

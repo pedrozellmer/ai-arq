@@ -3043,6 +3043,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             print(f"DXF JSON truncado ({type(_je).__name__}: {_je}); "
                                   f"salvados {len(result.get('items', []))} itens")
 
+                        # Robustez: array cru [...] vira {"items":[...]} (a IA às
+                        # vezes devolve só o array, mais comum no prompt estrutural).
+                        if isinstance(result, list):
+                            result = {"items": result}
+                        elif not isinstance(result, dict):
+                            result = {"items": []}
+
                         # Extrair project_data
                         if "project_data" in result:
                             pd = result["project_data"]
