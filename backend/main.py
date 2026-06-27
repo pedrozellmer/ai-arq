@@ -451,6 +451,7 @@ def _require_project_owner(request, job_id: str):
 
 
 _DISCIPLINE_TO_SECTION = {
+    "Estrutura":                   "0. Estrutura",
     "Serviços Preliminares":       "1. Serviços Preliminares",
     "Demolição e Remoção":         "2. Demolição e Remoção",
     "Fechamentos Verticais":       "3. Fechamentos Verticais",
@@ -1264,7 +1265,7 @@ RECOVERY_GRACE_MIN = 3  # minutos: jobs mais novos que isso são ignorados
 RECOVERY_SWEEP_MIN = 5  # minutos: intervalo da varredura periódica de recovery
 
 
-def _retomar_job_do_storage(job_id: str, typology: str = "office") -> bool:
+def _retomar_job_do_storage(job_id: str, typology: str = "office", project_type: str = "arquitetura") -> bool:
     """RESILIÊNCIA (16/06): RETOMA um job interrompido por restart.
 
     Baixa os arquivos originais do Storage (que agora sobem no upload, antes
@@ -1343,7 +1344,7 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office") -> bool:
         import threading as _t
         _t.Thread(target=_process_job_throttled,
                   args=(job_id, file_paths, work_dir),
-                  kwargs={"typology": typology}, daemon=True).start()
+                  kwargs={"typology": typology, "project_type": project_type}, daemon=True).start()
         print(f"[recovery-retomar] {job_id}: RETOMADO com {len(file_paths)} arquivo(s)")
         return True
     except Exception as e:
@@ -1423,9 +1424,10 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
         # só auto-retoma 1 vez; se crashar de novo, aí sim vira erro).
         prev_count = 0
         typ = "office"
+        ptype = "arquitetura"
         try:
             q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                 f"&select=reprocess_count,typology")
+                 f"&select=reprocess_count,typology,project_type")
             qreq = urllib.request.Request(q, method="GET")
             qreq.add_header("apikey", SUPABASE_KEY)
             qreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -1433,10 +1435,11 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
             if prow:
                 prev_count = int(prow[0].get("reprocess_count") or 0)
                 typ = prow[0].get("typology") or "office"
+                ptype = prow[0].get("project_type") or "arquitetura"
         except Exception:
             pass
 
-        if prev_count < 1 and _retomar_job_do_storage(job_id, typ):
+        if prev_count < 1 and _retomar_job_do_storage(job_id, typ, ptype):
             # _retomar já incrementou reprocess_count (anti-loop, via RPC
             # atômica) e re-disparou o processamento.
             recovered += 1
@@ -2540,7 +2543,8 @@ def _process_job_throttled(*args, **kwargs):
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
-                user_ambientes: dict[str, str] | None = None):
+                user_ambientes: dict[str, str] | None = None,
+                project_type: str = "arquitetura"):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
 
     `typology` alimenta a camada de calibração por densidade — alertas
@@ -2556,6 +2560,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
     etc). Injeta contexto específico no prompt da IA."""
     user_sheet_types = user_sheet_types or {}
     user_ambientes = user_ambientes or {}
+    # Projeto ESTRUTURAL (concreto armado) vs arquitetura — define qual
+    # SYSTEM_PROMPT e quais unidades o motor usa. Vem do seletor do upload,
+    # persistido em projects.project_type (sobrevive a restart/recovery).
+    is_structural = (project_type or "").strip().lower() == "estrutura"
     import gc
     import anthropic
     from processor import identify_sheet_type, extract_text, render_crops
@@ -2744,7 +2752,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
             jobs.update_field(job_id, current_step="Extraindo geometria dos DXF...")
             try:
                 from dwg_extractor import extract_from_file
-                from analyzer import SYSTEM_PROMPT
+                from analyzer import SYSTEM_PROMPT, SYSTEM_PROMPT_ESTRUTURA
                 import json as _j
 
                 n_dxf = len(dxf_paths)
@@ -2767,10 +2775,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Nossa IA está analisando os dados extraídos...")
                     dxf_client = anthropic.Anthropic(api_key=api_key)
 
-                    dxf_prompt = f"""Analise os dados extraídos de um arquivo DXF de projeto de arquitetura.
+                    _proj_kind = "ESTRUTURA (concreto armado)" if is_structural else "arquitetura"
+                    _estrutura_directive = (
+                        "\n⚠ PROJETO ESTRUTURAL: gere quantitativo de ESTRUTURA — CONCRETO em m³, "
+                        "FÔRMA em m², AÇO/ARMADURA/ESTRIBO em kg (nunca m²/m/un), discipline='Estrutura'. "
+                        "Se houver quadro/resumo de aço nos dados, use o peso de lá (medido). Volume/área/"
+                        "peso que você calcular é 'estimado'. Não invente bitola/fck.\n"
+                    ) if is_structural else ""
+                    dxf_prompt = f"""Analise os dados extraídos de um arquivo DXF de projeto de {_proj_kind}.
 Os dados abaixo foram extraídos automaticamente do arquivo CAD (blocos, textos, layers, comprimentos, áreas).
 Gere itens quantitativos (descrição + unidade + quantidade, SEM preço) com base nesses dados.
-
+{_estrutura_directive}
 {structured_text}
 
 ════════════════════════════════════════════════════════
@@ -2984,7 +2999,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             tag=f"dxf:{os.path.basename(dxf_path)}",
                             model=_dxf_model,
                             max_tokens=32000,  # CoT + JSON de planta GRANDE (16k truncava o JSON -> 0 itens)
-                            system=SYSTEM_PROMPT,
+                            system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
                             messages=[{"role": "user", "content": dxf_prompt}],
                         )
                         if not any(_t in _dxf_model for _t in ("opus-4-8", "opus-4-7", "fable")):
@@ -3209,7 +3224,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if amb_for_sheet and amb_for_sheet in _siblings_map:
                 siblings = [s for s in _siblings_map[amb_for_sheet] if s != filename]
             result = analyze_sheet(client, sheet, typology=typology,
-                                   ambiente=amb_for_sheet, siblings=siblings)
+                                   ambiente=amb_for_sheet, siblings=siblings,
+                                   is_structural=is_structural)
 
             # 3b. Capturar falha de IA nesta prancha (não interrompe o loop —
             # outras pranchas podem ter sucesso — mas registra pra decidir o
@@ -3248,7 +3264,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 "Instalações Elétricas e Dados",
                 "Instalações Hidráulicas", "Instalações de Gás",
                 "Ar-Condicionado", "Incêndio e Segurança",
-                "Marcenaria", "Mobiliário", "Complementares"
+                "Marcenaria", "Mobiliário", "Estrutura", "Complementares"
             ]
             for item_data in result.get("items", []):
                 try:
@@ -3641,6 +3657,7 @@ async def process_files(
     sheet_types: list[str] = Form(default=[]),
     sheet_ambientes: list[str] = Form(default=[]),
     typology: str = "office",
+    project_type: str = "arquitetura",
     project_name: str = "",
     user_id: str = "",
     user_email: str = "",
@@ -3682,6 +3699,10 @@ async def process_files(
 
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
+    # Tipo de projeto escolhido no upload: roteia o motor (arquitetura vs estrutura)
+    project_type = (project_type or "arquitetura").strip().lower()
+    if project_type not in ("arquitetura", "estrutura"):
+        project_type = "arquitetura"
     if not files:
         raise HTTPException(400, "Nenhum arquivo enviado")
 
@@ -3771,6 +3792,7 @@ async def process_files(
         "user_name": user_name or "",
         "project_name": project_name or "Sem nome",
         "typology": typology,
+        "project_type": project_type,
         "files_count": len(file_paths),
         "file_types": file_types,
         "status": "queued",
@@ -3791,7 +3813,8 @@ async def process_files(
         args=(job_id, file_paths, work_dir),
         kwargs={"typology": typology,
                 "user_sheet_types": user_sheet_types,
-                "user_ambientes": user_ambientes},
+                "user_ambientes": user_ambientes,
+                "project_type": project_type},
         daemon=True,
     )
     t.start()
@@ -3809,7 +3832,8 @@ async def process_files(
         print(f"[notify] alerta novo-projeto falhou: {_na}")
 
     return {"job_id": job_id, "files_received": len(file_paths),
-            "file_types": file_types, "status": "queued", "typology": typology}
+            "file_types": file_types, "status": "queued", "typology": typology,
+            "project_type": project_type}
 
 
 @app.get("/api/debug/supa-log")
