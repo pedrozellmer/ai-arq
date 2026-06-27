@@ -140,3 +140,51 @@ def call_with_retry(
     if last_exc:
         raise last_exc
     raise RuntimeError("call_with_retry: loop terminou sem exception nem retorno")
+
+
+def call_with_retry_stream(
+    client: Any,
+    *,
+    max_retries: int = 8,
+    base_delay: float = 2.0,
+    max_delay: float = 90.0,
+    tag: str = "anthropic-stream",
+    **kwargs: Any,
+) -> Any:
+    """Igual a call_with_retry, mas via STREAMING (client.messages.stream).
+
+    Por quê: chamada NÃO-streaming com max_tokens alto (ex.: 16000) numa planta
+    grande gera uma resposta longa que estoura o timeout da requisição — o erro
+    vinha mascarado como "IA sobrecarregada" (timeout é retryable, então tentava
+    ~5min e desistia, sempre). Streaming mantém a conexão viva recebendo a
+    resposta aos poucos, então não estoura timeout em geração longa.
+
+    Retorna o Message FINAL (mesmo formato de messages.create — .content[0].text).
+    """
+    last_exc: Exception | None = None
+    delay = base_delay
+
+    for attempt in range(max_retries + 1):
+        try:
+            with client.messages.stream(**kwargs) as stream:
+                return stream.get_final_message()
+        except Exception as e:
+            last_exc = e
+
+            if not _is_retryable(e) or attempt >= max_retries:
+                raise
+
+            sleep_for = _extract_retry_after(e) or delay
+            sleep_for = min(max_delay, sleep_for) + random.uniform(0, 0.5)
+
+            status = getattr(e, "status_code", "?")
+            print(f"[llm_retry_stream:{tag}] tentativa {attempt + 1}/{max_retries + 1} "
+                  f"falhou ({type(e).__name__} status={status}); "
+                  f"dormindo {sleep_for:.1f}s antes de retentar")
+
+            time.sleep(sleep_for)
+            delay = min(max_delay, delay * 2)
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError("call_with_retry_stream: loop terminou sem exception nem retorno")

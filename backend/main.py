@@ -2875,7 +2875,10 @@ do layer '<nome_layer_real>' = <valor> m²". Nunca invente nomes de layer ou
 bloco — só cite os que estão no inventário deste arquivo."""
 
                     try:
-                        from llm_retry import call_with_retry as _llm_retry
+                        # STREAMING: resposta longa (CoT + JSON grande de planta
+                        # grande) estourava o timeout no modo create() não-streaming
+                        # e falhava como "IA sobrecarregada". Stream não estoura.
+                        from llm_retry import call_with_retry_stream as _llm_retry
                         response = _llm_retry(
                             dxf_client,
                             tag=f"dxf:{os.path.basename(dxf_path)}",
