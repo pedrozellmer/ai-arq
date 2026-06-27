@@ -1066,7 +1066,7 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             return False
         import html as _hf, urllib.request as _urf
         _qf = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-               f"&select=user_email,user_name,project_name,parent_job_id")
+               f"&select=user_email,user_name,project_name,parent_job_id,created_at")
         _rf = _urf.Request(_qf, method="GET")
         _rf.add_header("apikey", SUPABASE_KEY)
         _rf.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -1079,6 +1079,33 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
         if _rows[0].get("parent_job_id"):
             _falha_emailed.add(job_id)  # filho de reprocessamento: pai já avisou
             return False
+        # Freio anti-spam PERSISTENTE (sobrevive a restart — o dedup em memoria
+        # furava quando um deploy reiniciava o processo e o cliente levava varios
+        # "falhou" no mesmo incidente, caso Luciano). Como o semaforo processa 1
+        # por vez na ORDEM, basta avisar a falha MAIS ANTIGA do usuario na janela:
+        # se ja existe um projeto DESTE usuario que falhou ANTES deste (criado
+        # antes) nos ultimos 15 min, aquele ja avisou -> nao manda de novo.
+        try:
+            from urllib.parse import quote as _quote
+            from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+            _self_created = _rows[0].get("created_at") or ""
+            _since = (_dt.now(_tz.utc) - _td(minutes=15)).isoformat()
+            if _self_created:
+                _tq = (f"{SUPABASE_URL}/rest/v1/projects"
+                       f"?user_email=eq.{_quote(_email, safe='')}"
+                       f"&status=eq.error"
+                       f"&created_at=lt.{_quote(_self_created, safe='')}"
+                       f"&created_at=gte.{_quote(_since, safe='')}"
+                       f"&job_id=neq.{job_id}&select=job_id&limit=1")
+                _tr = _urf.Request(_tq, method="GET")
+                _tr.add_header("apikey", SUPABASE_KEY)
+                _tr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                if _json.loads(_urf.urlopen(_tr, timeout=8).read().decode("utf-8")):
+                    _falha_emailed.add(job_id)
+                    print(f"[email] falha-cliente FREADO ({_email}: ja avisado nesta janela de 15min)")
+                    return False
+        except Exception as _te:
+            print(f"[email] checagem de freio falhou (segue e manda): {_te}")
         _subject, _html = _build_falha_email(
             _rows[0].get("user_name") or "",
             _rows[0].get("project_name") or "seu projeto",
