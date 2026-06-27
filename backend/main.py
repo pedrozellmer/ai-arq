@@ -3559,12 +3559,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                    f"pode estar incompleta. Reprocessar é grátis e tenta completar.")
                 _body = (f"{_greet}<br><br>"
                          f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
-                         f"({len(all_items)} itens). Acesse seu painel pra revisar e baixar a planilha."
+                         f"({len(all_items)} itens). Abra seu projeto pra revisar e baixar a planilha."
                          f"{_aviso_html}")
                 _send_email_smtp(
                     _pe, "Sua planilha do AI.arq está pronta",
                     _email_wrap("Sua planilha está pronta", _body,
-                                "Ver minha planilha", "https://ai.arq.br/dashboard.html",
+                                "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
                                 badge="&#10003; Concluído",
                                 reason="Você está recebendo este e-mail porque processou um projeto no AI.arq."))
         except Exception as _ee:
