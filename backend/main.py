@@ -2948,15 +2948,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # grande) estourava o timeout no modo create() não-streaming
                         # e falhava como "IA sobrecarregada". Stream não estoura.
                         from llm_retry import call_with_retry_stream as _llm_retry
-                        response = _llm_retry(
-                            dxf_client,
+                        # Modelo da extração configurável via env (A/B sem deploy).
+                        # Default Opus 4.8 (teste de precisão vs Sonnet 4.6). Atenção:
+                        # Opus 4.7/4.8 e Fable NÃO aceitam `temperature` (dá 400) —
+                        # só mando pros modelos que aceitam (Sonnet/Haiku).
+                        _dxf_model = os.environ.get("DXF_EXTRACT_MODEL", "claude-opus-4-8")
+                        _dxf_kwargs = dict(
                             tag=f"dxf:{os.path.basename(dxf_path)}",
-                            model="claude-sonnet-4-6",
+                            model=_dxf_model,
                             max_tokens=32000,  # CoT + JSON de planta GRANDE (16k truncava o JSON -> 0 itens)
-                            temperature=0,
                             system=SYSTEM_PROMPT,
                             messages=[{"role": "user", "content": dxf_prompt}],
                         )
+                        if not any(_t in _dxf_model for _t in ("opus-4-8", "opus-4-7", "fable")):
+                            _dxf_kwargs["temperature"] = 0  # determinismo (Sonnet/Haiku aceitam)
+                        response = _llm_retry(dxf_client, **_dxf_kwargs)
 
                         text = response.content[0].text
                         # Parser robusto: agora o Claude pode retornar raciocínio ANTES do JSON (CoT).
