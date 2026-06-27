@@ -8,6 +8,11 @@ from pathlib import Path
 import anthropic
 from models import SheetType, SheetInfo, BudgetItem, ProjectData, Confidence
 from llm_retry import call_with_retry, call_with_retry_stream
+from engine_rules import (
+    salvage_truncated_json as _salvage_truncated_json,
+    extract_balanced_obj as _extract_balanced_obj,
+    normalize_items_payload as _normalize_items_payload,
+)
 
 
 def _normalize_br_number(s: str) -> str:
@@ -1008,57 +1013,8 @@ NA DÚVIDA, "estimado". JAMAIS invente bitola, fck, dimensão ou peso que não e
 Responda no MESMO formato pedido: o raciocínio e DEPOIS um bloco ```json contendo um OBJETO no formato {"items": [ ... ]} — NUNCA um array solto. Cada item: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline="Estrutura"."""
 
 
-def _extract_balanced_obj(s, start):
-    """Do índice de um '{', retorna (objeto JSON balanceado, índice após). Se não
-    fechar (truncado), retorna (None, start). Respeita strings e escapes."""
-    depth = 0; in_str = False; esc = False; i = start; n = len(s)
-    while i < n:
-        c = s[i]
-        if in_str:
-            if esc: esc = False
-            elif c == '\\': esc = True
-            elif c == '"': in_str = False
-        else:
-            if c == '"': in_str = True
-            elif c == '{': depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    return s[start:i + 1], i + 1
-        i += 1
-    return None, start
-
-
-def _salvage_truncated_json(s):
-    """Recupera os itens COMPLETOS de um JSON truncado (resposta cortada no teto
-    de tokens numa prancha complexa). Nunca lança."""
-    import json as _json
-    out = {"items": []}
-    try:
-        pi = s.index('"project_data"'); bstart = s.index('{', pi)
-        pd_obj, _ = _extract_balanced_obj(s, bstart)
-        if pd_obj:
-            out["project_data"] = _json.loads(pd_obj)
-    except Exception:
-        pass
-    try:
-        ii = s.index('"items"'); astart = s.index('[', ii); i = astart + 1; n = len(s)
-        while i < n:
-            while i < n and s[i] not in '{]':
-                i += 1
-            if i >= n or s[i] == ']':
-                break
-            obj, end = _extract_balanced_obj(s, i)
-            if not obj:
-                break
-            try:
-                out["items"].append(_json.loads(obj))
-            except Exception:
-                pass
-            i = end
-    except Exception:
-        pass
-    return out
+# _extract_balanced_obj e _salvage_truncated_json movidos pra engine_rules.py
+# (fonte única; testados em tests/test_engine_rules.py). Importados no topo.
 
 
 def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
@@ -1166,15 +1122,8 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                 print(f"PDF JSON truncado em {sheet.filename}; salvados {len(_parsed['items'])} itens")
             else:
                 raise
-        # Robustez: a IA às vezes devolve um array cru [...] em vez de
-        # {"items": [...]} (mais comum no prompt estrutural). Sem embrulhar, o
-        # caller faz result.get(...) num list e derruba o job inteiro
-        # ('list' object has no attribute 'get').
-        if isinstance(_parsed, list):
-            _parsed = {"items": _parsed}
-        elif not isinstance(_parsed, dict):
-            _parsed = {"items": [], "error": f"formato inesperado: {type(_parsed).__name__}"}
-        return _parsed
+        # Robustez: array cru [...] vira {"items":[...]} (engine_rules, testado).
+        return _normalize_items_payload(_parsed)
 
     except json.JSONDecodeError as e:
         print(f"Erro JSON para {sheet.filename}: {e}")
