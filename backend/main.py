@@ -1472,6 +1472,75 @@ async def _on_startup_recover_jobs():
         print(f"[recovery] não subiu a varredura periódica: {_e}")
 
 
+def _extract_balanced_obj(s: str, start: int):
+    """Do índice de um '{', retorna (substring do objeto JSON balanceado, índice
+    após o '}'). Se não fechar (resposta truncada), retorna (None, start).
+    Respeita strings e escapes pra não contar chaves dentro de aspas."""
+    depth = 0
+    in_str = False
+    esc = False
+    i = start
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == '\\':
+                esc = True
+            elif c == '"':
+                in_str = False
+        else:
+            if c == '"':
+                in_str = True
+            elif c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    return s[start:i + 1], i + 1
+        i += 1
+    return None, start
+
+
+def _salvage_truncated_json(s: str) -> dict:
+    """Recupera o que der de um JSON truncado (resposta da IA cortada no teto de
+    tokens numa planta grande). Extrai project_data (se completo) e os itens
+    COMPLETOS do array "items", ignorando o último item cortado. Nunca lança —
+    no pior caso retorna {'items': []}."""
+    import json as _json
+    out = {"items": []}
+    try:
+        pi = s.index('"project_data"')
+        bstart = s.index('{', pi)
+        pd_obj, _ = _extract_balanced_obj(s, bstart)
+        if pd_obj:
+            out["project_data"] = _json.loads(pd_obj)
+    except Exception:
+        pass
+    try:
+        ii = s.index('"items"')
+        astart = s.index('[', ii)
+        i = astart + 1
+        n = len(s)
+        while i < n:
+            while i < n and s[i] not in '{]':
+                i += 1
+            if i >= n or s[i] == ']':
+                break
+            obj, end = _extract_balanced_obj(s, i)
+            if not obj:
+                break  # item truncado — para aqui (recupera os anteriores)
+            try:
+                out["items"].append(_json.loads(obj))
+            except Exception:
+                pass
+            i = end
+    except Exception:
+        pass
+    return out
+
+
 # Regras determinísticas de unidade por tipo de serviço (pós-IA).
 # Se a IA retornar unidade errada pra descrição específica, o código força a
 # unidade correta e marca o item como "estimado" (laranja) pra o usuário revisar.
@@ -2883,7 +2952,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             dxf_client,
                             tag=f"dxf:{os.path.basename(dxf_path)}",
                             model="claude-sonnet-4-6",
-                            max_tokens=16000,  # aumentado pra caber raciocínio (CoT) + JSON
+                            max_tokens=32000,  # CoT + JSON de planta GRANDE (16k truncava o JSON -> 0 itens)
                             temperature=0,
                             system=SYSTEM_PROMPT,
                             messages=[{"role": "user", "content": dxf_prompt}],
@@ -2915,7 +2984,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         if not json_str:
                             json_str = text.strip()
 
-                        result = _j.loads(json_str)
+                        try:
+                            result = _j.loads(json_str)
+                        except Exception as _je:
+                            # JSON truncado (resposta cortada no teto de tokens numa
+                            # planta grande): em vez de perder TUDO, recupera os itens
+                            # completos. Antes isso virava 0 itens + erro "sobrecarregada"
+                            # enganoso (caso Ademir, DWG de prédio público).
+                            result = _salvage_truncated_json(json_str)
+                            print(f"DXF JSON truncado ({type(_je).__name__}: {_je}); "
+                                  f"salvados {len(result.get('items', []))} itens")
 
                         # Extrair project_data
                         if "project_data" in result:
