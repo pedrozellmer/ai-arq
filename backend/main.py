@@ -2952,7 +2952,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # Default Opus 4.8 (teste de precisão vs Sonnet 4.6). Atenção:
                         # Opus 4.7/4.8 e Fable NÃO aceitam `temperature` (dá 400) —
                         # só mando pros modelos que aceitam (Sonnet/Haiku).
-                        _dxf_model = os.environ.get("DXF_EXTRACT_MODEL", "claude-opus-4-8")
+                        _dxf_model = os.environ.get("DXF_EXTRACT_MODEL", "claude-sonnet-4-6")
                         _dxf_kwargs = dict(
                             tag=f"dxf:{os.path.basename(dxf_path)}",
                             model=_dxf_model,
