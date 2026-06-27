@@ -376,6 +376,12 @@
             <input type="file" id="file-input" multiple accept=".pdf,.dwg,.dxf" class="hidden">
           </label>
 
+          <!-- Dica de upload: DWG/DXF medem, PDF estima (honesto; cor+ícone+texto p/ daltonismo) -->
+          <div class="mt-3 flex items-start gap-2.5 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 text-xs text-indigo-900">
+            <svg class="w-4 h-4 shrink-0 mt-0.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            <span><b>Melhor resultado: DWG ou DXF</b> &mdash; a gente mede a geometria de verdade. PDF a gente l&ecirc;, mas sai tudo como <b>estimativa</b> pra conferir. <a href="/faq.html" class="underline font-medium hover:text-indigo-700">Como exportar &rarr;</a></span>
+          </div>
+
           <!-- File List -->
           <div id="file-list" class="mt-4 space-y-2 hidden"></div>
 
