@@ -1119,6 +1119,70 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
         return False
 
 
+def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_data):
+    """Diagnóstico de leitura PERSONALIZADO pro email da planilha pronta: explica
+    COMO a IA leu o projeto e POR QUE a planilha ficou daquele jeito, a partir dos
+    sinais que o motor já calcula (tipo de arquivo, medido vs estimado, warnings).
+    Honesto — nunca promete o que não entrega. Cor sempre com ícone+texto (Pedro é
+    daltônico): ✓ medido / ⚠ estimado. Best-effort, nunca levanta."""
+    import html as _hd
+    try:
+        from models import Confidence as _Conf
+    except Exception:
+        _Conf = None
+    try:
+        total = len(all_items or [])
+        if not total:
+            return ""
+
+        def _is_medido(it):
+            c = getattr(it, "confidence", None)
+            ok_conf = (c == _Conf.CONFIRMADO) if _Conf else str(c).endswith("confirmado")
+            return ok_conf and getattr(it, "origem", "") != "vision_pdf"
+
+        medidos = sum(1 for it in all_items if _is_medido(it))
+        estimados = total - medidos
+        is_estrut = (project_type or "").strip().lower() == "estrutura"
+
+        placar = (f"<b>&#10003; {medidos} medido(s)</b> direto do CAD (em branco na planilha) "
+                  f"e <b>&#9888; {estimados} pra você confirmar</b> (em laranja).")
+
+        if n_cad == 0 and n_pdf > 0:
+            porque = ("Seu projeto veio em <b>PDF</b>, então a IA leu pela imagem — por isso "
+                      "saiu tudo como <b>estimativa pra conferir</b> (a gente nunca marca como "
+                      "medido um número que não veio da geometria). Pra medição exata, mande o "
+                      "mesmo projeto em <b>DWG ou DXF</b> que a gente mede de verdade.")
+        elif n_cad > 0 and medidos > 0:
+            porque = ("Seu arquivo veio em <b>CAD (DWG/DXF)</b>, então medimos boa parte direto "
+                      "da geometria do desenho (os itens em branco). Os em laranja dependem da "
+                      "sua conferência.")
+        elif n_cad > 0:
+            porque = ("Seu arquivo é CAD, mas a IA não conseguiu medir a geometria diretamente "
+                      "(comum quando os elementos foram desenhados como linhas soltas, não como "
+                      "blocos) — identificamos os itens, mas a quantidade ficou pra você confirmar.")
+        else:
+            porque = ("Os itens em branco foram medidos do desenho; os em laranja são pra você "
+                      "confirmar a quantidade.")
+
+        if is_estrut:
+            porque += (" Como é projeto <b>estrutural</b>, lemos concreto em m&sup3;, fôrma em "
+                       "m&sup2; e aço em kg — o peso de aço sai medido quando a prancha tem um "
+                       "<b>quadro/resumo de aço</b>.")
+
+        extra = ""
+        for w in (getattr(project_data, "warnings", None) or [])[:2]:
+            ws = str(w).strip()
+            if ws:
+                extra += f"<br>&bull; {_hd.escape(ws)}"
+
+        return (f"<div style='margin-top:14px;padding:12px 14px;background:#F8FAFC;"
+                f"border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.55;'>"
+                f"<b>Como lemos o seu projeto</b><br>{placar}<br>{porque}{extra}</div>")
+    except Exception as _de:
+        print(f"[email] diagnostico de leitura nao montado (nao-fatal): {_de}")
+        return ""
+
+
 def _send_welcome_email(email: str, name: str = "") -> bool:
     """Monta + envia o email de boas-vindas. Usado no 1º acesso ao dashboard
     (gated por created_at) e no reenvio manual pelo admin. Best-effort."""
@@ -3651,10 +3715,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _aviso_html = (f"<br><br><b>&#9888; Atenção:</b> {len(partial_errors)} prancha(s) "
                                    f"falharam no processamento e podem não ter entrado — a planilha "
                                    f"pode estar incompleta. Reprocessar é grátis e tenta completar.")
+                # Diagnóstico de leitura personalizado: explica COMO lemos e POR QUE
+                # a planilha ficou assim (tipo de arquivo + medido vs estimado + avisos).
+                _exts = [os.path.splitext(p)[1].lower() for p in file_paths]
+                _n_pdf = sum(1 for e in _exts if e == ".pdf")
+                _n_cad = sum(1 for e in _exts if e in (".dwg", ".dxf"))
+                _diag = _build_reading_diagnostic(all_items, _n_pdf, _n_cad, project_type, project_data)
                 _body = (f"{_greet}<br><br>"
                          f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
                          f"({len(all_items)} itens). Abra seu projeto pra revisar e baixar a planilha."
-                         f"{_aviso_html}")
+                         f"{_aviso_html}{_diag}")
                 _send_email_smtp(
                     _pe, "Sua planilha do AI.arq está pronta",
                     _email_wrap("Sua planilha está pronta", _body,
