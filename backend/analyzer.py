@@ -970,6 +970,44 @@ _TYPOLOGY_HINT = {
 }
 
 
+SYSTEM_PROMPT_ESTRUTURA = """Você é um engenheiro de custos especialista em leitura de PROJETOS ESTRUTURAIS de concreto armado brasileiros (NBR 6118) e levantamento quantitativo de estrutura.
+
+Você lê plantas de fôrma, detalhamentos de armadura, fundações (sapatas, blocos, estacas) e quadros/resumos de aço. Seu trabalho é gerar um quantitativo de ESTRUTURA — NÃO de arquitetura. Não cite acabamentos, mobiliário ou pintura.
+
+════════════════════════════════════════════════════════
+OS 3 SERVIÇOS-BASE DA ESTRUTURA E SUAS UNIDADES (FIXAS, NÃO NEGOCIÁVEIS)
+════════════════════════════════════════════════════════
+1. CONCRETO ARMADO  → unidade SEMPRE "m³" (volume). Pilar, viga, laje, sapata, bloco.
+2. FÔRMA (madeira/compensado) → unidade SEMPRE "m²" (área da superfície em contato com o concreto).
+3. ARMADURA / AÇO / FERRAGEM / ESTRIBO → unidade SEMPRE "kg" (peso).
+   NUNCA marque aço em "m²", "m" ou "un". Aço é SEMPRE "kg".
+
+A disciplina (campo "discipline") de TODO item estrutural é exatamente "Estrutura".
+
+════════════════════════════════════════════════════════
+O QUADRO / RESUMO DE AÇO É A FONTE PRIMÁRIA DO PESO
+════════════════════════════════════════════════════════
+Se a prancha trouxer um "QUADRO DE FERRAGENS" / "RESUMO DE AÇO" (tabela com bitola, comprimento e peso por bitola/total), ESSE é o número oficial — copie de lá (é medido).
+Tabela bitola → massa linear, CA-50 (NBR 7480:2007):
+  6.3mm=0,245 kg/m · 8.0mm=0,395 · 10.0mm=0,617 · 12.5mm=0,963 · 16.0mm=1,578 · 20.0mm=2,466 · 25.0mm=3,853.
+  (fórmula geral: kg/m = d² × 0,00617, com d em mm). Peso de uma bitola = comprimento_total(m) × massa_linear.
+
+════════════════════════════════════════════════════════
+REGRA DURA — MEDIDO (confirmado) vs ESTIMADO — NUNCA INVENTAR
+════════════════════════════════════════════════════════
+"confirmado" SÓ quando o número foi LIDO direto da prancha:
+  - peso de aço copiado do quadro/resumo de aço;
+  - dimensão (base × altura × comprimento) lida de COTA explícita;
+  - bitola, fck ou classe de aço que estão ESCRITOS.
+"estimado" para tudo que você DERIVOU/calculou:
+  - volume de concreto calculado por L×A×H a partir de cotas;
+  - área de fôrma derivada do perímetro × altura;
+  - peso de aço calculado pela tabela quando NÃO há quadro de aço na prancha.
+NA DÚVIDA, "estimado". JAMAIS invente bitola, fck, dimensão ou peso que não esteja na prancha — sem o número escrito, o item é "estimado" e a observação deve dizer que foi derivado. Você NÃO precifica.
+
+Responda no MESMO formato pedido (raciocínio + bloco ```json com array "items", cada item: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline="Estrutura")."""
+
+
 def _extract_balanced_obj(s, start):
     """Do índice de um '{', retorna (objeto JSON balanceado, índice após). Se não
     fechar (truncado), retorna (None, start). Respeita strings e escapes."""
@@ -1026,9 +1064,21 @@ def _salvage_truncated_json(s):
 def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
                   typology: str = "office",
                   ambiente: str = "",
-                  siblings: list = None) -> dict:
+                  siblings: list = None,
+                  is_structural: bool = False) -> dict:
     base_prompt = PROMPTS_POR_TIPO.get(sheet.sheet_type, "Analise esta prancha de arquitetura e extraia todos os itens para orçamento. Retorne JSON com array 'items', cada item com: item_num, description, unit, quantity, observations, ref_sheet, confidence, discipline.")
     siblings = siblings or []
+
+    # Projeto ESTRUTURAL: o usuário marcou no upload. Reforça o contexto no
+    # prompt do usuário (o SYSTEM_PROMPT_ESTRUTURA já troca o papel global).
+    if is_structural:
+        base_prompt = (
+            "⚠ ESTE É UM PROJETO ESTRUTURAL (concreto armado). Gere quantitativo de "
+            "ESTRUTURA: concreto em m³, fôrma em m², aço/armadura/estribo em kg "
+            "(NUNCA m²/m/un), e discipline='Estrutura' em todos os itens. Use o "
+            "quadro/resumo de aço como fonte do peso (medido); o que você derivar por "
+            "fórmula/geometria é 'estimado'. Não invente bitola, fck ou dimensão.\n\n"
+            + base_prompt)
 
     # Se for DETALHE_AMBIENTE, injetar contexto do ambiente específico no placeholder
     if sheet.sheet_type == SheetType.DETALHE_AMBIENTE:
@@ -1095,7 +1145,7 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
             model="claude-sonnet-4-6",
             max_tokens=16000,
             temperature=0,
-            system=SYSTEM_PROMPT,
+            system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
             messages=[{"role": "user", "content": content}],
         )
 
