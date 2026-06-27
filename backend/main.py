@@ -34,6 +34,13 @@ from processor import process_pdfs
 from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
+from engine_rules import (
+    salvage_truncated_json as _salvage_truncated_json,
+    extract_balanced_obj as _extract_balanced_obj,
+    normalize_items_payload as _normalize_items_payload,
+    should_force_steel_kg as _should_force_steel_kg,
+    is_likely_wrong_type as _is_likely_wrong_type,
+)
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
 # densidade (density_calibration.py) e só gera alertas.
@@ -1566,73 +1573,9 @@ async def _on_startup_recover_jobs():
         print(f"[recovery] não subiu a varredura periódica: {_e}")
 
 
-def _extract_balanced_obj(s: str, start: int):
-    """Do índice de um '{', retorna (substring do objeto JSON balanceado, índice
-    após o '}'). Se não fechar (resposta truncada), retorna (None, start).
-    Respeita strings e escapes pra não contar chaves dentro de aspas."""
-    depth = 0
-    in_str = False
-    esc = False
-    i = start
-    n = len(s)
-    while i < n:
-        c = s[i]
-        if in_str:
-            if esc:
-                esc = False
-            elif c == '\\':
-                esc = True
-            elif c == '"':
-                in_str = False
-        else:
-            if c == '"':
-                in_str = True
-            elif c == '{':
-                depth += 1
-            elif c == '}':
-                depth -= 1
-                if depth == 0:
-                    return s[start:i + 1], i + 1
-        i += 1
-    return None, start
-
-
-def _salvage_truncated_json(s: str) -> dict:
-    """Recupera o que der de um JSON truncado (resposta da IA cortada no teto de
-    tokens numa planta grande). Extrai project_data (se completo) e os itens
-    COMPLETOS do array "items", ignorando o último item cortado. Nunca lança —
-    no pior caso retorna {'items': []}."""
-    import json as _json
-    out = {"items": []}
-    try:
-        pi = s.index('"project_data"')
-        bstart = s.index('{', pi)
-        pd_obj, _ = _extract_balanced_obj(s, bstart)
-        if pd_obj:
-            out["project_data"] = _json.loads(pd_obj)
-    except Exception:
-        pass
-    try:
-        ii = s.index('"items"')
-        astart = s.index('[', ii)
-        i = astart + 1
-        n = len(s)
-        while i < n:
-            while i < n and s[i] not in '{]':
-                i += 1
-            if i >= n or s[i] == ']':
-                break
-            obj, end = _extract_balanced_obj(s, i)
-            if not obj:
-                break  # item truncado — para aqui (recupera os anteriores)
-            try:
-                out["items"].append(_json.loads(obj))
-            except Exception:
-                pass
-            i = end
-    except Exception:
-        pass
-    return out
+# _extract_balanced_obj e _salvage_truncated_json movidos pra engine_rules.py
+# (fonte única, sem duplicação; testados em tests/test_engine_rules.py).
+# Importados no topo do arquivo.
 
 
 # Regras determinísticas de unidade por tipo de serviço (pós-IA).
@@ -3107,12 +3050,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             print(f"DXF JSON truncado ({type(_je).__name__}: {_je}); "
                                   f"salvados {len(result.get('items', []))} itens")
 
-                        # Robustez: array cru [...] vira {"items":[...]} (a IA às
-                        # vezes devolve só o array, mais comum no prompt estrutural).
-                        if isinstance(result, list):
-                            result = {"items": result}
-                        elif not isinstance(result, dict):
-                            result = {"items": []}
+                        # Robustez: array cru [...] vira {"items":[...]} (engine_rules,
+                        # testado). Evita 'list object has no attribute get'.
+                        result = _normalize_items_payload(result)
 
                         # Extrair project_data
                         if "project_data" in result:
@@ -3404,26 +3344,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # benchmark de projeto, então não fere isolamento). Não toca em fôrma (m²)
         # nem concreto (m³): só força quando a descrição é claramente de aço.
         if is_structural:
-            import re as _re_kg
-            _aco_pat = _re_kg.compile(r'armadura|estribo|ferragem|vergalh|\baço\b', _re_kg.IGNORECASE)
-            _forma_pat = _re_kg.compile(r'f[ôo]rma', _re_kg.IGNORECASE)
+            # Aço SEMPRE em kg (regra de norma) + guardrail de tipo errado.
+            # Regras em engine_rules.py (testadas em tests/test_engine_rules.py).
             _fixed_kg = 0
             for _it in all_items:
-                _d = (getattr(_it, "description", "") or "")
-                if _aco_pat.search(_d) and not _forma_pat.search(_d) and getattr(_it, "unit", "") != "kg":
+                if _should_force_steel_kg(getattr(_it, "description", "")) and getattr(_it, "unit", "") != "kg":
                     _it.unit = "kg"
                     _fixed_kg += 1
             if _fixed_kg:
                 print(f"[estrutural] forcei unit=kg em {_fixed_kg} item(ns) de aço")
 
-            # Guardrail de tipo (caso Magno): projeto estrutural de verdade tem
-            # itens com quantidade medida/estimada. Se quase TUDO veio zerado, o
-            # arquivo provavelmente NÃO é estrutural (é arquitetura marcada errada
-            # no upload) — a IA não achou concreto/fôrma/aço e só listou
-            # placeholders. Avisa o usuário em vez de entregar planilha-lixo calada.
-            _n_est = len(all_items)
-            _zeros_est = sum(1 for _it in all_items if not (getattr(_it, "quantity", 0) or 0))
-            if _n_est and _zeros_est / _n_est >= 0.75:
+            # Guardrail (caso Magno): estrutural com quase tudo zerado provavelmente
+            # é arquitetura marcada errada no upload. Avisa em vez de entregar lixo.
+            if _is_likely_wrong_type([getattr(_it, "quantity", 0) for _it in all_items]):
                 _warn_tipo = ("⚠ Este arquivo parece ser de ARQUITETURA, não de estrutura — "
                               "quase nenhum item estrutural pôde ser medido. Reenvie marcando "
                               "\"Arquitetura\" no tipo de projeto (ou responda o e-mail do "
@@ -3433,7 +3366,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         project_data.warnings.insert(0, _warn_tipo)
                 except Exception:
                     pass
-                print(f"[estrutural] possivel tipo incorreto: {_zeros_est}/{_n_est} itens zerados")
+                print("[estrutural] possivel tipo incorreto: muitos itens zerados")
 
         # ── Consolidação pós-IA ──
         jobs.update_field(job_id, progress=91)
