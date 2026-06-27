@@ -3333,6 +3333,44 @@ bloco — só cite os que estão no inventário deste arquivo."""
             del text, crop_paths, sheet, result
             gc.collect()
 
+        # ── Aço SEMPRE em kg (projeto estrutural) ──
+        # Override determinístico: por mais que o SYSTEM_PROMPT_ESTRUTURA mande,
+        # a IA às vezes devolve item de aço/armadura/estribo em m² (caso Luciano).
+        # Em estrutura, aço é SEMPRE kg (regra de norma, universal — não é
+        # benchmark de projeto, então não fere isolamento). Não toca em fôrma (m²)
+        # nem concreto (m³): só força quando a descrição é claramente de aço.
+        if is_structural:
+            import re as _re_kg
+            _aco_pat = _re_kg.compile(r'armadura|estribo|ferragem|vergalh|\baço\b', _re_kg.IGNORECASE)
+            _forma_pat = _re_kg.compile(r'f[ôo]rma', _re_kg.IGNORECASE)
+            _fixed_kg = 0
+            for _it in all_items:
+                _d = (getattr(_it, "description", "") or "")
+                if _aco_pat.search(_d) and not _forma_pat.search(_d) and getattr(_it, "unit", "") != "kg":
+                    _it.unit = "kg"
+                    _fixed_kg += 1
+            if _fixed_kg:
+                print(f"[estrutural] forcei unit=kg em {_fixed_kg} item(ns) de aço")
+
+            # Guardrail de tipo (caso Magno): projeto estrutural de verdade tem
+            # itens com quantidade medida/estimada. Se quase TUDO veio zerado, o
+            # arquivo provavelmente NÃO é estrutural (é arquitetura marcada errada
+            # no upload) — a IA não achou concreto/fôrma/aço e só listou
+            # placeholders. Avisa o usuário em vez de entregar planilha-lixo calada.
+            _n_est = len(all_items)
+            _zeros_est = sum(1 for _it in all_items if not (getattr(_it, "quantity", 0) or 0))
+            if _n_est and _zeros_est / _n_est >= 0.75:
+                _warn_tipo = ("⚠ Este arquivo parece ser de ARQUITETURA, não de estrutura — "
+                              "quase nenhum item estrutural pôde ser medido. Reenvie marcando "
+                              "\"Arquitetura\" no tipo de projeto (ou responda o e-mail do "
+                              "AI.arq que a gente reprocessa pra você).")
+                try:
+                    if _warn_tipo not in (project_data.warnings or []):
+                        project_data.warnings.insert(0, _warn_tipo)
+                except Exception:
+                    pass
+                print(f"[estrutural] possivel tipo incorreto: {_zeros_est}/{_n_est} itens zerados")
+
         # ── Consolidação pós-IA ──
         jobs.update_field(job_id, progress=91)
         # Remove duplicatas similares (mesmo item com qty idêntica repetido em
