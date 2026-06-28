@@ -4176,6 +4176,29 @@ def _newsletter_recipients() -> list:
     return [(e, by_email[e]) for e in sorted(by_email) if e not in opt and e not in _block and "+smoke" not in e]
 
 
+def _newsletter_blast(subject, html_template, recipients):
+    """Manda html_template (com {{SAUDACAO}} e {{UNSUB}}) pra cada (email, nome).
+    Retorna (sent, fail). Best-effort por destinatário. Usado pelo envio manual e
+    pelo tick agendado."""
+    import urllib.parse as _up
+    sent = 0
+    fail = 0
+    for email, name in recipients:
+        try:
+            first = (name or "").strip().split(" ")[0] if (name or "").strip() else ""
+            greet = f"Olá, {first}!" if first else "Olá, tudo bem?"
+            unsub = (f"https://ai-arq.onrender.com/api/newsletter/unsub"
+                     f"?e={_up.quote(email)}&t={_newsletter_token(email)}")
+            html = html_template.replace("{{SAUDACAO}}", greet).replace("{{UNSUB}}", unsub)
+            ok = _send_email_smtp(email, subject, html)
+            sent += 1 if ok else 0
+            fail += 0 if ok else 1
+        except Exception as _e:
+            print(f"[newsletter] envio {email}: {_e}")
+            fail += 1
+    return sent, fail
+
+
 @app.post("/api/admin/newsletter/send")
 async def admin_newsletter_send(request: Request):
     """Dispara a newsletter mensal (admin-only). body {test_only: bool}.
@@ -4189,22 +4212,7 @@ async def admin_newsletter_send(request: Request):
         data = {}
     test_only = bool((data or {}).get("test_only"))
     recipients = [(ADMIN_EMAIL, "Pedro")] if test_only else _newsletter_recipients()
-    import urllib.parse as _up
-    sent = 0
-    fail = 0
-    for email, name in recipients:
-        try:
-            first = (name or "").strip().split(" ")[0] if (name or "").strip() else ""
-            greet = f"Olá, {first}!" if first else "Olá, tudo bem?"
-            unsub = (f"https://ai-arq.onrender.com/api/newsletter/unsub"
-                     f"?e={_up.quote(email)}&t={_newsletter_token(email)}")
-            html = _NEWSLETTER_HTML.replace("{{SAUDACAO}}", greet).replace("{{UNSUB}}", unsub)
-            ok = _send_email_smtp(email, _NEWSLETTER_SUBJECT, html)
-            sent += 1 if ok else 0
-            fail += 0 if ok else 1
-        except Exception as _e:
-            print(f"[newsletter] envio {email}: {_e}")
-            fail += 1
+    sent, fail = _newsletter_blast(_NEWSLETTER_SUBJECT, _NEWSLETTER_HTML, recipients)
     print(f"[newsletter] test_only={test_only} recipients={len(recipients)} sent={sent} fail={fail}")
     return {"status": "ok", "test_only": test_only,
             "recipients": len(recipients), "sent": sent, "fail": fail}
@@ -4232,6 +4240,122 @@ async def newsletter_unsub(e: str = "", t: str = ""):
         'margin-bottom:18px;"></div><h2 style="color:#0F172A;">Pronto, voc&ecirc; saiu da lista</h2>'
         '<p>N&atilde;o vamos mais te mandar a newsletter. Suas planilhas e avisos de projeto continuam normais.</p>'
         '<p style="font-size:13px;color:#94a3b8;">Mudou de ideia? &Eacute; s&oacute; responder um e-mail nosso. &mdash; AI.arq</p>'))
+
+
+@app.post("/api/admin/newsletter/schedule")
+async def admin_newsletter_schedule(request: Request):
+    """Agenda a edição ATUAL da newsletter pra uma data/hora (admin). Snapshot do
+    conteúdo embutido vai pro banco; o tick dispara na hora."""
+    _require_admin(request)
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    when = ((data or {}).get("scheduled_for") or "").strip()
+    if not when:
+        raise HTTPException(400, "scheduled_for requerido (ISO 8601 com timezone)")
+    ok = _supabase_insert("newsletter_scheduled", {
+        "subject": _NEWSLETTER_SUBJECT,
+        "html_template": _NEWSLETTER_HTML,
+        "scheduled_for": when,
+        "status": "pending",
+    })
+    if not ok:
+        raise HTTPException(502, "Não consegui agendar (verifique a service_role)")
+    return {"status": "ok", "scheduled_for": when}
+
+
+@app.get("/api/admin/newsletter/scheduled")
+async def admin_newsletter_scheduled(request: Request):
+    """Lista os agendamentos (admin)."""
+    _require_admin(request)
+    import urllib.request as _ur
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/newsletter_scheduled"
+             f"?select=id,subject,scheduled_for,status,recipients,sent,sent_at"
+             f"&order=scheduled_for.desc&limit=20")
+        r = _ur.Request(q, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[newsletter] scheduled list erro: {_e}")
+        rows = []
+    return {"scheduled": rows}
+
+
+@app.post("/api/admin/newsletter/cancel")
+async def admin_newsletter_cancel(request: Request):
+    """Cancela um agendamento pendente (admin)."""
+    _require_admin(request)
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    sid = ((data or {}).get("id") or "").strip()
+    if not sid:
+        raise HTTPException(400, "id requerido")
+    import urllib.request as _ur
+    try:
+        q = f"{SUPABASE_URL}/rest/v1/newsletter_scheduled?id=eq.{sid}&status=eq.pending"
+        r = _ur.Request(q, data=_json.dumps({"status": "canceled"}).encode("utf-8"), method="PATCH")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        r.add_header("Content-Type", "application/json")
+        _ur.urlopen(r, timeout=15)
+    except Exception as _e:
+        raise HTTPException(502, f"Não consegui cancelar: {str(_e)[:120]}")
+    return {"status": "ok"}
+
+
+@app.post("/api/newsletter/tick")
+async def newsletter_tick():
+    """Chamado pelo pg_cron (aberto, mesma mecânica do tick do IG). Dispara 1
+    newsletter agendada vencida por vez, com claim atômico anti-duplicação."""
+    import urllib.request as _ur, urllib.parse as _up
+    from datetime import datetime as _dt, timezone as _tz
+    now_iso = _dt.now(_tz.utc).isoformat()
+
+    def _patch(qs, payload, want_repr=False):
+        req = _ur.Request(f"{SUPABASE_URL}/rest/v1/newsletter_scheduled?{qs}",
+                          data=_json.dumps(payload).encode("utf-8"), method="PATCH")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        if want_repr:
+            req.add_header("Prefer", "return=representation")
+        resp = _ur.urlopen(req, timeout=25).read().decode("utf-8")
+        return _json.loads(resp) if want_repr else None
+
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/newsletter_scheduled?status=eq.pending"
+             f"&scheduled_for=lte.{_up.quote(now_iso)}&select=id&order=scheduled_for.asc&limit=1")
+        r = _ur.Request(q, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        due = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        return {"ok": False, "error": str(_e)[:200]}
+    if not due:
+        return {"ok": True, "message": "nada agendado vencido"}
+    sid = due[0]["id"]
+    try:
+        claimed = _patch(f"id=eq.{sid}&status=eq.pending", {"status": "sending"}, want_repr=True)
+    except Exception as _e:
+        return {"ok": False, "error": f"claim: {str(_e)[:150]}"}
+    if not claimed:
+        return {"ok": True, "message": "já reivindicado por outro tick"}
+    row = claimed[0]
+    recipients = _newsletter_recipients()
+    sent, fail = _newsletter_blast(row.get("subject") or _NEWSLETTER_SUBJECT,
+                                   row.get("html_template") or _NEWSLETTER_HTML, recipients)
+    try:
+        _patch(f"id=eq.{sid}", {"status": "sent", "recipients": len(recipients),
+                                "sent": sent, "sent_at": _dt.now(_tz.utc).isoformat()})
+    except Exception as _e:
+        print(f"[newsletter-tick] update final falhou: {_e}")
+    print(f"[newsletter-tick] {sid} enviado: {sent}/{len(recipients)} (fail {fail})")
+    return {"ok": True, "sent": sent, "recipients": len(recipients)}
 
 
 @app.get("/api/debug/service-role")
