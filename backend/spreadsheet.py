@@ -880,7 +880,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                 wsm.cell(row=rm, column=7,
                          value=sm.get('descricao', '')[:95]).font = F_N
                 wsm.cell(row=rm, column=8, value=sm.get('unidade', '')).font = F_N
-                sim_pct = f"{int(sm.get('similarity', 0) * 100)}%"
+                sim_pct = f"{min(100, max(0, int((sm.get('similarity', 0) or 0) * 100)))}%"  # cap: similaridade nunca >100%
                 wsm.cell(row=rm, column=9, value=sim_pct).font = F_BOLD
                 for c in range(1, 10):
                     wsm.cell(row=rm, column=c).border = BD
@@ -897,7 +897,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                 wsm.cell(row=rm, column=7,
                          value=best.get('descricao', '')[:95]).font = F_N
                 wsm.cell(row=rm, column=8, value=best.get('unidade', '')).font = F_N
-                sim_pct = f"{int(best.get('similarity', 0) * 100)}%"
+                sim_pct = f"{min(100, max(0, int((best.get('similarity', 0) or 0) * 100)))}%"  # cap: similaridade nunca >100%
                 wsm.cell(row=rm, column=9, value=sim_pct).font = F_BOLD
                 for c in range(1, 10):
                     wsm.cell(row=rm, column=c).border = BD

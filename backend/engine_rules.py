@@ -112,3 +112,19 @@ def is_likely_wrong_type(quantities, threshold=0.75):
         return False
     zeros = sum(1 for q in qs if not (q or 0))
     return zeros / len(qs) >= threshold
+
+
+def extraction_has_quality_caveat(metadata) -> bool:
+    """TRAVA DE PROCEDÊNCIA (regra nº1). True se a extração geométrica veio com
+    RESSALVA que impede confirmar: estéril (0 medições), unidade suspeita/absurda,
+    ou xref não resolvido. Nenhum item de um DXF com ressalva pode sair
+    'confirmado' (branco/medido) — só REBAIXA pra estimado, nunca promove.
+    Fecha o furo de a IA carimbar 'medido' num número que não dá pra confiar."""
+    if not metadata:
+        return False
+    return bool(
+        metadata.get("extracao_esteril")
+        or metadata.get("unidade_suspeita")
+        or metadata.get("alerta_unidade")
+        or metadata.get("xref_nao_resolvido")
+    )
