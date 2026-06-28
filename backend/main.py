@@ -41,6 +41,7 @@ from engine_rules import (
     should_force_steel_kg as _should_force_steel_kg,
     is_likely_wrong_type as _is_likely_wrong_type,
     extraction_has_quality_caveat as _extraction_has_quality_caveat,
+    extract_block_name as _extract_block_name,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -1788,6 +1789,50 @@ def _dedupe_rooms(rooms: list) -> list:
     return out
 
 
+def _dedupe_by_block(items: list) -> list:
+    """Funde itens que citam o MESMO bloco CAD (nome entre aspas na descrição).
+    A IA às vezes cria o mesmo bloco em 2-3 disciplinas (ex: 'cad-escr-02' como
+    'Cadeira para escritório' E 'Mobiliário de escritório') → a contagem inflava
+    (14 viravam 28). Mesmo bloco = MESMA contagem física: mantém 1 item (o de
+    maior confiança/descrição), usa a MAIOR qty (NÃO soma), descarta o resto."""
+    try:
+        from models import Confidence
+        _conf_ok = Confidence("confirmado")
+    except Exception:
+        _conf_ok = None
+    by_block: dict = {}
+    passthrough: list = []
+    for it in items:
+        bk = _extract_block_name(getattr(it, "description", "") or "")
+        if not bk:
+            passthrough.append(it)
+        else:
+            by_block.setdefault(bk, []).append(it)
+    merged = list(passthrough)
+    fundidos = 0
+    for bk, group in by_block.items():
+        if len(group) == 1:
+            merged.append(group[0])
+            continue
+        best = max(group, key=lambda it: (
+            1 if (_conf_ok is not None and it.confidence == _conf_ok) else 0,
+            len(getattr(it, "description", "") or ""),
+        ))
+        try:
+            best.quantity = max((float(it.quantity or 0) for it in group),
+                                default=float(best.quantity or 0))
+        except Exception:
+            pass
+        best.observations = ((getattr(best, "observations", "") or "") +
+            f" | Bloco '{bk}' aparecia em {len(group)} itens — fundido pra não "
+            f"duplicar a contagem (mesma peça do CAD)").strip(" |")
+        merged.append(best)
+        fundidos += len(group) - 1
+    if fundidos:
+        print(f"[dedup-bloco] {fundidos} itens duplicados de bloco fundidos")
+    return merged
+
+
 def _consolidate_items(items: list) -> list:
     """Consolida itens redundantes em múltiplas passadas:
 
@@ -3421,6 +3466,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         jobs.update_field(job_id, current_step="Consolidando itens duplicados...")
         n_before = len(all_items)
         all_items = _consolidate_items(all_items)
+        all_items = _dedupe_by_block(all_items)  # funde itens do mesmo bloco CAD (anti-duplicação)
         # Validar qty/unit após consolidação
         for it in all_items:
             new_qty, adjusted = _validate_quantity_for_unit(it)

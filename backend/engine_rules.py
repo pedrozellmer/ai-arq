@@ -128,3 +128,27 @@ def extraction_has_quality_caveat(metadata) -> bool:
         or metadata.get("alerta_unidade")
         or metadata.get("xref_nao_resolvido")
     )
+
+
+_BLOCK_NAME_RE = _re.compile(
+    r"bloco(?:\s+cad)?\s*['\"‘’“”]\s*([^'\"‘’“”]+?)\s*['\"‘’“”]",
+    _re.IGNORECASE,
+)
+
+
+def extract_block_name(description):
+    """Extrai o nome do bloco CAD citado na descrição (entre aspas, após 'bloco'),
+    ex: "bloco CAD 'cad-escr-02'" → 'cad-escr-02'; "bloco 'fogão'" → 'fogão'.
+    Retorna None se não houver. Usado pra DEDUP: o mesmo bloco citado em itens de
+    disciplinas diferentes é a MESMA contagem física (a IA às vezes duplica — 14
+    cadeiras 'cad-escr-02' viravam 28). 'bloco cerâmico/de concreto' (sem aspas)
+    NÃO casa, então alvenaria não é afetada."""
+    if not description:
+        return None
+    m = _BLOCK_NAME_RE.search(description)
+    if not m:
+        return None
+    name = (m.group(1) or "").strip().lower()
+    if len(name) < 2 or name in ("cad", "x", "xx"):
+        return None
+    return name

@@ -19,6 +19,7 @@ from engine_rules import (  # noqa: E402
     should_force_steel_kg,
     is_likely_wrong_type,
     extraction_has_quality_caveat,
+    extract_block_name,
 )
 
 _passed = 0
@@ -92,6 +93,15 @@ check("esteril -> ressalva (forca estimado)", extraction_has_quality_caveat({"ex
 check("unidade suspeita -> ressalva", extraction_has_quality_caveat({"unidade_suspeita": "x"}) is True)
 check("alerta de unidade -> ressalva", extraction_has_quality_caveat({"alerta_unidade": "maior 600m"}) is True)
 check("xref nao resolvido -> ressalva", extraction_has_quality_caveat({"xref_nao_resolvido": "arq.dwg"}) is True)
+
+print("== extract_block_name (dedup de bloco — bug HWB: cadeira contada 2x) ==")
+check("bloco CAD aspas simples", extract_block_name("Cadeira ... bloco CAD 'cad-escr-02'") == "cad-escr-02")
+check("bloco aspas simples", extract_block_name("Geladeira (bloco 'geladeira010')") == "geladeira010")
+check("bloco com acento", extract_block_name("Fogao, bloco 'fogão'") == "fogão")
+check("case-insensitive vira chave minuscula", extract_block_name("bloco CAD 'Geladeira'") == "geladeira")
+check("sem bloco -> None", extract_block_name("Piso vinilico em m2") is None)
+check("alvenaria bloco ceramico SEM aspas -> None", extract_block_name("Alvenaria de bloco ceramico ou de concreto") is None)
+check("descricao vazia -> None", extract_block_name("") is None)
 
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
