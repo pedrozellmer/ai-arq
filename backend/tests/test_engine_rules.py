@@ -18,6 +18,7 @@ from engine_rules import (  # noqa: E402
     normalize_items_payload,
     should_force_steel_kg,
     is_likely_wrong_type,
+    extraction_has_quality_caveat,
 )
 
 _passed = 0
@@ -82,6 +83,15 @@ check("tudo medido -> NAO dispara", is_likely_wrong_type([1, 2, 3, 4]) is False)
 check("lista vazia -> NAO dispara", is_likely_wrong_type([]) is False)
 check("exatamente 75% -> dispara (>=)", is_likely_wrong_type([0, 0, 0, 1]) is True)
 check("None na qty conta como zero", is_likely_wrong_type([None, None, None, 5]) is True)
+
+print("== extraction_has_quality_caveat (trava de procedencia, regra no1) ==")
+check("metadata vazio -> sem ressalva", extraction_has_quality_caveat({}) is False)
+check("None -> sem ressalva", extraction_has_quality_caveat(None) is False)
+check("extracao normal -> sem ressalva", extraction_has_quality_caveat({"sinal_medido": 50}) is False)
+check("esteril -> ressalva (forca estimado)", extraction_has_quality_caveat({"extracao_esteril": True}) is True)
+check("unidade suspeita -> ressalva", extraction_has_quality_caveat({"unidade_suspeita": "x"}) is True)
+check("alerta de unidade -> ressalva", extraction_has_quality_caveat({"alerta_unidade": "maior 600m"}) is True)
+check("xref nao resolvido -> ressalva", extraction_has_quality_caveat({"xref_nao_resolvido": "arq.dwg"}) is True)
 
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")

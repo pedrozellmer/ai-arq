@@ -1499,7 +1499,7 @@ def generate_budget_data(extraction: DXFExtraction) -> dict:
                 "unit": "un",
                 "quantity": block.count,
                 "discipline": discipline,
-                "confidence": "confirmado",
+                "confidence": "estimado",  # desarmado: era 'confirmado' hardcoded — só a trava de procedência confirma
                 "source": "DXF block count",
             })
 
@@ -1518,7 +1518,7 @@ def generate_budget_data(extraction: DXFExtraction) -> dict:
                 "unit": "m",
                 "quantity": round(total_length, 2),
                 "discipline": discipline,
-                "confidence": "confirmado",
+                "confidence": "estimado",  # desarmado: era 'confirmado' hardcoded — só a trava de procedência confirma
                 "source": "DXF line measurement",
             })
 
@@ -1538,7 +1538,7 @@ def generate_budget_data(extraction: DXFExtraction) -> dict:
                 "unit": "m²",
                 "quantity": round(total_area, 2),
                 "discipline": discipline,
-                "confidence": "confirmado",
+                "confidence": "estimado",  # desarmado: era 'confirmado' hardcoded — só a trava de procedência confirma
                 "source": "DXF hatch area",
             })
 

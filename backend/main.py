@@ -40,6 +40,7 @@ from engine_rules import (
     normalize_items_payload as _normalize_items_payload,
     should_force_steel_kg as _should_force_steel_kg,
     is_likely_wrong_type as _is_likely_wrong_type,
+    extraction_has_quality_caveat as _extraction_has_quality_caveat,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -2792,6 +2793,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     extraction = extract_from_file(dxf_path)
                     structured_text = extraction.to_structured_prompt()
 
+                    # ── TRAVA DE PROCEDÊNCIA (regra nº1) ──────────────────────
+                    # Se a extração geométrica veio com RESSALVA (estéril / unidade
+                    # suspeita / xref não resolvido), o CÓDIGO não deixa nenhum item
+                    # deste DXF ser 'confirmado' (branco/medido), independente do que
+                    # a IA marcar. Só REBAIXA pra estimado — nunca promove. Fecha o
+                    # furo de "a IA carimba medido num número que não dá pra confiar".
+                    _dxf_sem_procedencia = _extraction_has_quality_caveat(extraction.metadata)
+
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
                     jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Nossa IA está analisando os dados extraídos...")
@@ -3092,6 +3101,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 discipline = item_data.get("discipline", "Complementares")
                                 conf = item_data.get("confidence", "estimado")
                                 if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
+                                # trava de procedência: extração com ressalva → nunca confirmado
+                                if _dxf_sem_procedencia and conf == "confirmado":
+                                    conf = "estimado"
+                                    item_data["_procedencia_rebaixada"] = True
                                 qty = sf(item_data.get("quantity", 0))
                                 # qty=0 é permitido para itens estimados sem número concreto
                                 # (virará vazio na planilha pro usuário preencher).
@@ -3112,6 +3125,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     conf = "estimado"
                                     obs_raw = (f"{obs_raw} | Unidade ajustada de {original_unit} "
                                                f"para {normalized_unit} (revisar quantidade)")
+                                if item_data.get("_procedencia_rebaixada"):
+                                    obs_raw = (f"{obs_raw} | Procedência: extração com ressalva "
+                                               f"(estéril/unidade/xref) — quantidade não confirmada, revisar").strip(" |")
 
                                 item = BudgetItem(
                                     item_num=str(item_data.get("item_num", "")),
