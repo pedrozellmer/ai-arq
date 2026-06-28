@@ -1131,39 +1131,60 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         except Exception:
             continue
 
-    # ---- Áreas de polilinha FECHADA (ambiente/piso/forro) — m² medido ------
-    # Antes, polilinha fechada só virava comprimento; agora também emitimos a
-    # ÁREA (shoelace), destravando m² de cômodo/piso/forro sem depender de HATCH.
+    # ---- Áreas de polilinha FECHADA — SÓ camadas de superfície física -------
+    # Conservador de propósito (regra nº1: nunca inflar/forjar medida):
+    #  - ALLOWLIST: só conta polilinha fechada em layer claramente de piso/forro/laje.
+    #  - exclui quadro/memorial/zona de áreas (sobreposição de CÁLCULO, não superfície).
+    #  - DEDUPE aninhamento: descarta contorno contido em outro maior já aceito,
+    #    pra não somar piso + cada cômodo dentro + versão existente/nova da mesma área.
     polygon_areas: list[HatchArea] = []
-    _AREA_NOISE = ("trama", "pagina", "rotulo", "rótulo", "legenda", "cota",
-                   "carimbo", "titulo", "título", "hachura", "eixo")
+    _AREA_ALLOW = ("piso", "forro", "laje", "teto", "contrapiso", "cobertura",
+                   "revestimento", "pavimenta", "deck", "impermeab", "ambiente", "flor")
+    _AREA_DENY = ("trama", "pagina", "rotulo", "rótulo", "legenda", "cota", "carimbo",
+                  "titulo", "título", "hachura", "eixo", "memorial", "quadro", "zona")
+    _poly_cands: list = []  # (area_m2, bbox, layer)
 
-    def _emit_poly_area(layer_name, pts):
+    def _consider_poly(layer_name, pts):
         try:
             if len(pts) < 3:
                 return
-            a = abs(_shoelace_area(pts)) * area_factor
-            if a < 0.5:  # ignora símbolos/legenda/marcas pequenas
-                return
             clean = layer_name.split("|", 1)[-1].lower()
-            if any(tok in clean for tok in _AREA_NOISE):
+            if any(t in clean for t in _AREA_DENY):
                 return
-            polygon_areas.append(HatchArea(layer=layer_name, area=a, pattern="contorno fechado"))
+            if not any(t in clean for t in _AREA_ALLOW):
+                return  # allowlist: só superfície física reconhecível
+            a = abs(_shoelace_area(pts)) * area_factor
+            if a < 0.5:
+                return
+            xs = [p[0] for p in pts]
+            ys = [p[1] for p in pts]
+            _poly_cands.append((a, (min(xs), min(ys), max(xs), max(ys)), layer_name))
         except Exception:
             return
 
     for _lw in msp.query("LWPOLYLINE"):
         try:
             if getattr(_lw, "closed", False):
-                _emit_poly_area(_lw.dxf.layer, list(_lw.get_points(format="xy")))
+                _consider_poly(_lw.dxf.layer, list(_lw.get_points(format="xy")))
         except Exception:
             continue
     for _pl in msp.query("POLYLINE"):
         try:
             if getattr(_pl, "is_closed", False):
-                _emit_poly_area(_pl.dxf.layer, [(v.dxf.location.x, v.dxf.location.y) for v in _pl.vertices])
+                _consider_poly(_pl.dxf.layer, [(v.dxf.location.x, v.dxf.location.y) for v in _pl.vertices])
         except Exception:
             continue
+
+    def _bbox_inside(b, B, tol=0.5):
+        return b[0] >= B[0]-tol and b[1] >= B[1]-tol and b[2] <= B[2]+tol and b[3] <= B[3]+tol
+
+    _accepted: list = []
+    for _cand in sorted(_poly_cands, key=lambda x: -x[0]):
+        if any(_bbox_inside(_cand[1], _acc[1]) for _acc in _accepted):
+            continue  # contido em um maior já aceito → aninhado, não soma
+        _accepted.append(_cand)
+    for _a, _bb, _ly in _accepted:
+        polygon_areas.append(HatchArea(layer=_ly, area=_a, pattern="contorno fechado"))
 
     # ---- Hatches ----------------------------------------------------------
     hatches: list[HatchArea] = []
