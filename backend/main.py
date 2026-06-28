@@ -4139,7 +4139,7 @@ Muita gente usa SINAPI s&oacute; pra pre&ccedil;o de material. Mas tem o <b>insu
 <a href="https://ai.arq.br/dashboard.html" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
 </div>
 <div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abra&ccedil;o,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#94a3b8;">&mdash; AI.arq</span></div>
-<div style="margin-top:14px;font-size:11px;color:#aab4c0;line-height:1.6;">Voc&ecirc; recebe porque tem conta no AI.arq. Se quiser sair da lista, &eacute; s&oacute; <b>responder este e-mail</b>. &middot; <a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;">Privacidade</a></div>
+<div style="margin-top:14px;font-size:11px;color:#aab4c0;line-height:1.6;">Voc&ecirc; recebe porque tem conta no AI.arq. <a href="{{UNSUB}}" style="color:#8b93f6;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;">Privacidade</a></div>
 </div></div></div>"""
 
 import hmac as _hmac_nl, hashlib as _hashlib_nl
@@ -4189,13 +4189,16 @@ async def admin_newsletter_send(request: Request):
         data = {}
     test_only = bool((data or {}).get("test_only"))
     recipients = [(ADMIN_EMAIL, "Pedro")] if test_only else _newsletter_recipients()
+    import urllib.parse as _up
     sent = 0
     fail = 0
     for email, name in recipients:
         try:
             first = (name or "").strip().split(" ")[0] if (name or "").strip() else ""
             greet = f"Olá, {first}!" if first else "Olá, tudo bem?"
-            html = _NEWSLETTER_HTML.replace("{{SAUDACAO}}", greet)
+            unsub = (f"https://ai-arq.onrender.com/api/newsletter/unsub"
+                     f"?e={_up.quote(email)}&t={_newsletter_token(email)}")
+            html = _NEWSLETTER_HTML.replace("{{SAUDACAO}}", greet).replace("{{UNSUB}}", unsub)
             ok = _send_email_smtp(email, _NEWSLETTER_SUBJECT, html)
             sent += 1 if ok else 0
             fail += 0 if ok else 1
