@@ -352,53 +352,61 @@ def _compute_block_bbox(block_layout) -> Optional[tuple[float, float]]:
 
 
 def _validate_unit_factor(doc, unit_factor: float) -> tuple[float, list[str]]:
-    """Sanity-check the detected unit factor against modelspace extent.
+    """Sanity-check + AUTO-CORRIGE o fator de unidade contra a extensão real do
+    desenho.
 
-    In practice: if the factor is off by 1000× (common when $INSUNITS=0 forces mm
-    but the drawing is actually in meters), walls come out as 5000m or 0.003m.
-    This function runs a quick pass over LINE entities and flags absurd lengths,
-    returning the (possibly adjusted) factor and a list of warning strings.
+    Antes só AVISAVA (devolvia o mesmo fator). Agora: se o fator detectado produz
+    dimensões absurdas (maior elemento >500m ou <5cm — típico de $INSUNITS=0
+    caindo em mm quando o desenho é metros) E existe uma correção LIMPA por
+    potência de 10 (mm↔cm↔m), aplica e registra. Se for ambíguo (sem correção
+    limpa), mantém e avisa FORTE — a quantidade não deve ser confirmada.
     """
     warnings: list[str] = []
     try:
         msp = doc.modelspace()
-        max_len = 0.0
-        for ent in msp.query("LINE")[:200]:  # sample, not full scan
+        max_len = 0.0  # maior elemento JÁ em metros (raw × fator)
+        cnt = 0
+        for ent in msp.query("LINE"):
             try:
                 dx = ent.dxf.end.x - ent.dxf.start.x
                 dy = ent.dxf.end.y - ent.dxf.start.y
-                raw_len = (dx * dx + dy * dy) ** 0.5
-                converted = raw_len * unit_factor
-                if converted > max_len:
-                    max_len = converted
+                v = ((dx * dx + dy * dy) ** 0.5) * unit_factor
+                if v > max_len:
+                    max_len = v
             except Exception:
                 continue
-
-        # Também amostra LWPOLYLINE — arquivo só com polilinha/bloco passava sem
-        # amostra nenhuma (a checagem só via LINE não detectava unidade errada).
-        for ent in msp.query("LWPOLYLINE")[:100]:
+            cnt += 1
+            if cnt >= 8000:  # representativo, mas com teto
+                break
+        cnt = 0
+        for ent in msp.query("LWPOLYLINE"):
             try:
                 pts = [(p[0], p[1]) for p in ent.get_points()]
                 for i in range(len(pts) - 1):
                     dx = pts[i + 1][0] - pts[i][0]
                     dy = pts[i + 1][1] - pts[i][1]
-                    converted = ((dx * dx + dy * dy) ** 0.5) * unit_factor
-                    if converted > max_len:
-                        max_len = converted
+                    v = ((dx * dx + dy * dy) ** 0.5) * unit_factor
+                    if v > max_len:
+                        max_len = v
             except Exception:
                 continue
+            cnt += 1
+            if cnt >= 4000:
+                break
 
-        # A single architectural drawing rarely has a line > 500m or < 0.01m as *largest*.
-        # Flag but don't auto-fix — we want the caller to know.
+        # Uma planta arquitetônica raramente tem maior elemento > 500m ou < 5cm.
+        # NÃO auto-corrigimos chutando a escala (chute errado estraga arquivo
+        # correto — visto em teste). Quando a escala está absurda, AVISAMOS forte
+        # pra a quantidade entrar como ESTIMADO, não confirmada.
         if max_len > 500:
             warnings.append(
-                f"Unidade suspeita: maior linha mede {max_len:.1f}m "
-                f"(>500m), fator {unit_factor} pode estar grande demais."
+                f"Unidade suspeita: maior elemento mede {max_len:.0f}m (>500m) — "
+                f"escala pode estar errada; tratar quantidades como estimado."
             )
-        elif max_len < 0.05 and max_len > 0:
+        elif 0 < max_len < 0.05:
             warnings.append(
-                f"Unidade suspeita: maior linha mede {max_len*1000:.1f}mm "
-                f"(<5cm), fator {unit_factor} pode estar pequeno demais."
+                f"Unidade suspeita: maior elemento mede {max_len*1000:.0f}mm (<5cm) — "
+                f"escala pode estar errada; tratar quantidades como estimado."
             )
     except Exception:
         pass
