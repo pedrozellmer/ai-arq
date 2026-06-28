@@ -1860,6 +1860,42 @@
       }
     }
     renderFiles();
+    checkBigFilesAndWarn(newFiles);
+  }
+
+  // ══════════════════════════════════════════════
+  //  AVISO PREVENTIVO: ARQUIVO MUITO GRANDE (trava o envio)
+  // ══════════════════════════════════════════════
+  // Cortes/elevações em DXF podem ter 70-80MB cada; subir muitos junto trava o
+  // envio (caso 28/06: 409MB → "Enviando... 0%" eterno). Avisa (não bloqueia) e
+  // sugere remover os pesados — não são necessários pro quantitativo.
+  const BIG_FILE_MB = 35;     // 1 arquivo acima disso = provável corte/elevação
+  const BIG_TOTAL_MB = 100;   // soma acima disso = risco de travar o upload
+  const _bigWarned = new Set();
+  function _mb(bytes) { return (bytes || 0) / (1024 * 1024); }
+  function _warnToast(msg) {
+    if (window.toast) window.toast.warn(msg, { duration: 0 });
+    else setTimeout(() => window.toast?.warn(msg, { duration: 0 }) || console.warn(msg), 500);
+  }
+  function checkBigFilesAndWarn(newFiles) {
+    try {
+      for (const f of (newFiles || [])) {
+        const mb = _mb(f.size);
+        if (mb >= BIG_FILE_MB && !_bigWarned.has(f.name)) {
+          _bigWarned.add(f.name);
+          const ehCorte = /cort|elev|3d|render/i.test(f.name);
+          const dica = ehCorte
+            ? 'Cortes e elevações não são necessários pro quantitativo — pode remover.'
+            : 'Pro quantitativo bastam planta, piso, forro e layout.';
+          _warnToast(`⚠ "${f.name}" é grande (${mb.toFixed(0)} MB) e pode travar o envio. ${dica}`);
+        }
+      }
+      const totalMb = _mb(selectedFiles.reduce((s, f) => s + (f.size || 0), 0));
+      if (totalMb >= BIG_TOTAL_MB && !_bigWarned.has('__total__')) {
+        _bigWarned.add('__total__');
+        _warnToast(`⚠ Total dos arquivos = ${totalMb.toFixed(0)} MB. Acima de ${BIG_TOTAL_MB} MB o envio pode travar. Remova os pesados (cortes/elevações) — pro quantitativo bastam planta/piso/forro/layout.`);
+      }
+    } catch (e) { console.warn('checkBigFilesAndWarn falhou:', e); }
   }
 
   // ══════════════════════════════════════════════
