@@ -3073,6 +3073,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             result = _salvage_truncated_json(json_str)
                             print(f"DXF JSON truncado ({type(_je).__name__}: {_je}); "
                                   f"salvados {len(result.get('items', []))} itens")
+                            # #7 leitura possivelmente INCOMPLETA: resposta cortada no
+                            # teto de tokens; salvage recuperou o que deu mas pode FALTAR
+                            # item. Avisa o cliente — não entrega parcial calado (Ademir).
+                            try:
+                                project_data.warnings = (project_data.warnings or []) + [
+                                    f"A leitura de '{os.path.basename(dxf_path)}' pode estar INCOMPLETA "
+                                    f"(a resposta da IA foi cortada por tamanho; recuperei "
+                                    f"{len(result.get('items', []))} itens, mas pode faltar algum). "
+                                    f"Reprocessar pode completar a planilha."
+                                ]
+                            except Exception:
+                                pass
 
                         # Robustez: array cru [...] vira {"items":[...]} (engine_rules,
                         # testado). Evita 'list object has no attribute get'.
