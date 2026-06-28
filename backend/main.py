@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -4111,6 +4111,122 @@ async def admin_send_nudge(request: Request):
         raise HTTPException(502, "Não consegui gerar o link de login (verifique a service_role)")
     sent = _send_nudge_email(email, name, kind, link)
     return {"status": "ok", "sent": sent, "email": email, "kind": kind}
+
+
+# ── NEWSLETTER MENSAL ──
+# Edição atual (revisada, com fonte). Pra trocar de mês: edita SUBJECT + HTML aqui
+# e deploya; o admin dispara pelos botões do painel. {{UNSUB}} é trocado pelo link
+# de descadastro por destinatário no envio.
+_NEWSLETTER_SUBJECT = "Sua dose mensal do AI.arq — uma dica de orçamento e o que tem de novo"
+_NEWSLETTER_HTML = """<div style="background:#eaeef3;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#334155;">
+<div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;">
+<div style="height:5px;background:#4F46E5;"></div>
+<div style="padding:24px 30px;">
+<p style="margin:0 0 16px;color:#0F172A;font-size:20px;font-weight:700;">AI.arq</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">Ol&aacute;, tudo bem?<br>Essa &eacute; a 1&ordf; news do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>, sem encher sua caixa: uma dica &uacute;til e o que mudou por aqui.</p>
+<div style="padding:14px 16px;background:#F8FAFC;border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.6;margin:0 0 18px;">
+<b style="color:#0F172A;">&#128161; Dica do m&ecirc;s &mdash; SINAPI tem duas camadas</b><br>
+Muita gente usa SINAPI s&oacute; pra pre&ccedil;o de material. Mas tem o <b>insumo</b> (o tijolo, o cimento, a hora do pedreiro) e a <b>composi&ccedil;&atilde;o</b> (a receita pronta: pra 1&nbsp;m&sup2; de alvenaria, tantos tijolos + argamassa + horas, j&aacute; somados). Puxar a composi&ccedil;&atilde;o em vez de somar item por item <b>economiza tempo e erra menos.</b>
+<div style="color:#94a3b8;font-size:12px;margin-top:6px;">Fonte: SINAPI &mdash; Caixa Econ&ocirc;mica Federal / IBGE.</div>
+</div>
+<b style="color:#0F172A;font-size:15px;">&#10024; O que tem de novo</b>
+<ul style="margin:8px 0 18px;padding-left:20px;font-size:14px;line-height:1.6;">
+<li style="margin-bottom:8px;">Quando sua planilha fica pronta, o <b>email agora explica "como lemos seu projeto"</b> &mdash; quantos itens a IA <b>mediu</b> do desenho e quantos ficaram como <b>estimativa</b> pra revisar.</li>
+<li>Dica que muda o jogo: exporte em <b>DWG ou DXF</b> (n&atilde;o PDF) &mdash; no CAD a gente mede a geometria de verdade, saem mais itens medidos.</li>
+</ul>
+<div style="background:#F1F5F9;border-radius:10px;padding:16px;text-align:center;margin:0 0 18px;">
+<p style="margin:0 0 12px;font-size:15px;color:#0F172A;"><b>Tem projeto novo?</b> O primeiro &eacute; por nossa conta, sem cart&atilde;o.</p>
+<a href="https://ai.arq.br/dashboard.html" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
+</div>
+<div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abra&ccedil;o,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#94a3b8;">&mdash; AI.arq</span></div>
+<div style="margin-top:14px;font-size:11px;color:#aab4c0;line-height:1.6;">Voc&ecirc; recebe porque tem conta no AI.arq. <a href="{{UNSUB}}" style="color:#8b93f6;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;">Privacidade</a></div>
+</div></div></div>"""
+
+import hmac as _hmac_nl, hashlib as _hashlib_nl
+
+
+def _newsletter_token(email: str) -> str:
+    key = (SUPABASE_SERVICE_ROLE_KEY or "fallback").encode()
+    return _hmac_nl.new(key, (email or "").strip().lower().encode(), _hashlib_nl.sha256).hexdigest()[:24]
+
+
+def _newsletter_recipients() -> list:
+    """Emails distintos de projects, menos optout e contas de teste/admin."""
+    import urllib.request as _ur
+    out = set()
+    try:
+        r = _ur.Request(f"{SUPABASE_URL}/rest/v1/projects?select=user_email", method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        for row in _json.loads(_ur.urlopen(r, timeout=20).read().decode("utf-8")):
+            e = (row.get("user_email") or "").strip().lower()
+            if e and "@" in e:
+                out.add(e)
+        r2 = _ur.Request(f"{SUPABASE_URL}/rest/v1/newsletter_optout?select=email", method="GET")
+        r2.add_header("apikey", SUPABASE_KEY)
+        r2.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        opt = {(o.get("email") or "").strip().lower() for o in _json.loads(_ur.urlopen(r2, timeout=20).read().decode("utf-8"))}
+    except Exception as _e:
+        print(f"[newsletter] recipients erro: {_e}")
+        return []
+    _block = {ADMIN_EMAIL, "zarelalopes+smoke@gmail.com", "yurikgorges3@gmail.com"}
+    return sorted(e for e in out if e not in opt and e not in _block and "+smoke" not in e)
+
+
+@app.post("/api/admin/newsletter/send")
+async def admin_newsletter_send(request: Request):
+    """Dispara a newsletter mensal (admin-only). body {test_only: bool}.
+    test_only=true manda só pro ADMIN_EMAIL (pré-visualização). Senão manda pra
+    lista (projects distinct, menos optout/teste). Cada email leva link de
+    descadastro 1-clique personalizado."""
+    _require_admin(request)
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    test_only = bool((data or {}).get("test_only"))
+    recipients = [ADMIN_EMAIL] if test_only else _newsletter_recipients()
+    import urllib.parse as _up
+    sent = 0
+    fail = 0
+    for email in recipients:
+        try:
+            unsub = (f"https://ai-arq.onrender.com/api/newsletter/unsub"
+                     f"?e={_up.quote(email)}&t={_newsletter_token(email)}")
+            html = _NEWSLETTER_HTML.replace("{{UNSUB}}", unsub)
+            ok = _send_email_smtp(email, _NEWSLETTER_SUBJECT, html)
+            sent += 1 if ok else 0
+            fail += 0 if ok else 1
+        except Exception as _e:
+            print(f"[newsletter] envio {email}: {_e}")
+            fail += 1
+    print(f"[newsletter] test_only={test_only} recipients={len(recipients)} sent={sent} fail={fail}")
+    return {"status": "ok", "test_only": test_only,
+            "recipients": len(recipients), "sent": sent, "fail": fail}
+
+
+@app.get("/api/newsletter/unsub")
+async def newsletter_unsub(e: str = "", t: str = ""):
+    """Descadastro 1-clique (público, sem login). Valida token = HMAC(email) e
+    grava em newsletter_optout. Retorna página HTML simples."""
+    email = (e or "").strip().lower()
+    shell = ('<!doctype html><html lang="pt-br"><head><meta charset="utf-8">'
+             '<meta name="viewport" content="width=device-width,initial-scale=1"><title>AI.arq</title></head>'
+             '<body style="font-family:Arial,Helvetica,sans-serif;background:#eaeef3;padding:60px 20px;'
+             'text-align:center;color:#334155;"><div style="max-width:420px;margin:0 auto;background:#fff;'
+             'border-radius:14px;padding:36px 28px;border:1px solid #e2e8f0;">{msg}</div></body></html>')
+    if not email or not t or t != _newsletter_token(email):
+        return HTMLResponse(shell.format(msg='<h2 style="color:#0F172A;">Link inv&aacute;lido</h2>'
+            '<p>N&atilde;o consegui validar esse link. Se quiser sair da lista, responda o e-mail '
+            'que a gente tira na hora.</p>'), status_code=400)
+    try:
+        _supabase_insert("newsletter_optout", {"email": email, "source": "link"})
+    except Exception:
+        pass
+    return HTMLResponse(shell.format(msg='<div style="height:4px;background:#4F46E5;border-radius:4px;'
+        'margin-bottom:18px;"></div><h2 style="color:#0F172A;">Pronto, voc&ecirc; saiu da lista</h2>'
+        '<p>N&atilde;o vamos mais te mandar a newsletter. Suas planilhas e avisos de projeto continuam normais.</p>'
+        '<p style="font-size:13px;color:#94a3b8;">Mudou de ideia? &Eacute; s&oacute; responder um e-mail nosso. &mdash; AI.arq</p>'))
 
 
 @app.get("/api/debug/service-role")
