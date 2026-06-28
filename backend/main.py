@@ -4214,8 +4214,28 @@ async def admin_newsletter_send(request: Request):
     recipients = [(ADMIN_EMAIL, "Pedro")] if test_only else _newsletter_recipients()
     sent, fail = _newsletter_blast(_NEWSLETTER_SUBJECT, _NEWSLETTER_HTML, recipients)
     print(f"[newsletter] test_only={test_only} recipients={len(recipients)} sent={sent} fail={fail}")
+    if not test_only and sent:
+        # registra o envio manual no histórico (mesma tabela dos agendamentos)
+        try:
+            from datetime import datetime as _dt, timezone as _tz
+            _now = _dt.now(_tz.utc).isoformat()
+            _supabase_insert("newsletter_scheduled", {
+                "subject": _NEWSLETTER_SUBJECT, "html_template": _NEWSLETTER_HTML,
+                "scheduled_for": _now, "status": "sent",
+                "recipients": len(recipients), "sent": sent, "sent_at": _now,
+            })
+        except Exception as _e:
+            print(f"[newsletter] log histórico falhou: {_e}")
     return {"status": "ok", "test_only": test_only,
             "recipients": len(recipients), "sent": sent, "fail": fail}
+
+
+@app.get("/api/admin/newsletter/preview")
+async def admin_newsletter_preview(request: Request):
+    """Edição atual renderizada (subject + html) pra prévia no admin."""
+    _require_admin(request)
+    html = _NEWSLETTER_HTML.replace("{{SAUDACAO}}", "Olá, Pedro!").replace("{{UNSUB}}", "#")
+    return {"subject": _NEWSLETTER_SUBJECT, "html": html}
 
 
 @app.get("/api/newsletter/unsub")
