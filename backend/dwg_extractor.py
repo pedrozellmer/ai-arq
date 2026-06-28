@@ -80,6 +80,7 @@ class DXFExtraction:
     layers: list  # list of layer names
     dimensions: list  # list of (label, value) tuples
     metadata: dict = field(default_factory=dict)
+    polygon_areas: list = field(default_factory=list)  # áreas de polilinha FECHADA (ambiente/piso/forro) — m² medido, fonte distinta de HATCH
 
     # -- convenience helpers ------------------------------------------------
 
@@ -102,6 +103,13 @@ class DXFExtraction:
         result: dict[str, float] = defaultdict(float)
         for h in self.hatches:
             result[h.layer] += h.area
+        return dict(result)
+
+    def get_polygon_areas_by_layer(self) -> dict:
+        """Returns {layer_name: total_area_m2} de polilinhas FECHADAS (ambientes)."""
+        result: dict[str, float] = defaultdict(float)
+        for p in self.polygon_areas:
+            result[p.layer] += p.area
         return dict(result)
 
     def get_texts_by_layer(self) -> dict:
@@ -196,6 +204,16 @@ class DXFExtraction:
         if areas_by_layer:
             lines.append("ÁREAS HACHURADAS POR LAYER:")
             for layer, area in sorted(areas_by_layer.items()):
+                lines.append(f"  {layer}: {area:.2f} m²")
+            lines.append("")
+
+        # Áreas de polilinha fechada (ambiente/piso/forro) — m² medido da geometria
+        poly_areas = self.get_polygon_areas_by_layer()
+        if poly_areas:
+            lines.append("ÁREAS DE CONTORNO FECHADO POR LAYER (polilinha fechada — ambiente/piso/forro):")
+            lines.append("  (medido da geometria; pode incluir layer não-ambiente — use o nome do layer pra decidir; "
+                         "NÃO some com ÁREAS HACHURADAS da MESMA região — é a mesma área medida de outro jeito)")
+            for layer, area in sorted(poly_areas.items(), key=lambda x: -x[1]):
                 lines.append(f"  {layer}: {area:.2f} m²")
             lines.append("")
 
@@ -1113,6 +1131,40 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         except Exception:
             continue
 
+    # ---- Áreas de polilinha FECHADA (ambiente/piso/forro) — m² medido ------
+    # Antes, polilinha fechada só virava comprimento; agora também emitimos a
+    # ÁREA (shoelace), destravando m² de cômodo/piso/forro sem depender de HATCH.
+    polygon_areas: list[HatchArea] = []
+    _AREA_NOISE = ("trama", "pagina", "rotulo", "rótulo", "legenda", "cota",
+                   "carimbo", "titulo", "título", "hachura", "eixo")
+
+    def _emit_poly_area(layer_name, pts):
+        try:
+            if len(pts) < 3:
+                return
+            a = abs(_shoelace_area(pts)) * area_factor
+            if a < 0.5:  # ignora símbolos/legenda/marcas pequenas
+                return
+            clean = layer_name.split("|", 1)[-1].lower()
+            if any(tok in clean for tok in _AREA_NOISE):
+                return
+            polygon_areas.append(HatchArea(layer=layer_name, area=a, pattern="contorno fechado"))
+        except Exception:
+            return
+
+    for _lw in msp.query("LWPOLYLINE"):
+        try:
+            if getattr(_lw, "closed", False):
+                _emit_poly_area(_lw.dxf.layer, list(_lw.get_points(format="xy")))
+        except Exception:
+            continue
+    for _pl in msp.query("POLYLINE"):
+        try:
+            if getattr(_pl, "is_closed", False):
+                _emit_poly_area(_pl.dxf.layer, [(v.dxf.location.x, v.dxf.location.y) for v in _pl.vertices])
+        except Exception:
+            continue
+
     # ---- Hatches ----------------------------------------------------------
     hatches: list[HatchArea] = []
 
@@ -1182,6 +1234,15 @@ def extract_dxf(filepath: str) -> DXFExtraction:
                 measurement = dim.dxf.actual_measurement
             except Exception:
                 pass
+            # actual_measurement é "optional and often not present" (doc ezdxf);
+            # get_measurement() recalcula da geometria e recupera cota que sumia.
+            if measurement is None:
+                try:
+                    measurement = dim.get_measurement()
+                    if not isinstance(measurement, (int, float)):
+                        measurement = None  # angular/obj — ignora
+                except Exception:
+                    measurement = None
             # Try to get overridden text
             try:
                 label = dim.dxf.text.strip()
@@ -1202,7 +1263,7 @@ def extract_dxf(filepath: str) -> DXFExtraction:
     # ── Sinais de qualidade da extração (#6 estéril/xref + #4 unidade) ──
     # Mede se a extração realmente leu geometria. Se ZERO, a IA NÃO deve
     # "preencher" com itens de práxis como se fossem medidos sem o usuário saber.
-    measured_signal = len(blocks) + len(walls) + len(hatches) + len(dims)
+    measured_signal = len(blocks) + len(walls) + len(hatches) + len(dims) + len(polygon_areas)
     metadata["sinal_medido"] = measured_signal
     if measured_signal == 0:
         metadata["extracao_esteril"] = True
@@ -1227,6 +1288,7 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         layers=layer_names,
         dimensions=dims,
         metadata=metadata,
+        polygon_areas=polygon_areas,
     )
 
 
