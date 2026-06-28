@@ -2018,6 +2018,12 @@
     //   "Etapa 3/7: filename" (legado)
     const cadMatch = currentStepText.match(/(?:DXF|DWG[→>]DXF|Convertendo\s+DWG[→>]DXF.*?\()\s*(\d+)\s*\/\s*(\d+)/i);
     const pdfMatch = currentStepText.match(/(?:Prancha|Etapa)\s+(\d+)\s*\/\s*(\d+)/i);
+    // Fase FINAL do backend (sem arquivo específico no texto): consolidação,
+    // validação, SINAPI, geração da planilha. Aqui a extração de TODOS os
+    // arquivos já acabou — antes, como o texto não casava com "DXF X/Y", todos
+    // apareciam como "Aguardando" no 95% (parecia travado). Agora: concluídos.
+    const finalPhase = !cadMatch && !pdfMatch &&
+      /consolid|valid|gerando|geração|revis|planilha|finaliz|montando|plausib|calibra|dedup|disciplin/i.test(currentStepText || '');
 
     // Determinar índice do arquivo atual em selectedFiles
     let currentFileIndex = -1;
@@ -2048,6 +2054,11 @@
       //   4) arquivo CAD e vai ser processado ainda → aguardando
       //   5) arquivo PDF e estamos em PDF anterior → concluído; depois → aguardando
       if (overallProgress >= 100) {
+        statusIcon = '<span class="text-emerald-500">&#10003;</span>';
+        statusText = 'Conclu\u00eddo';
+        statusClass = 'text-emerald-600';
+      } else if (finalPhase) {
+        // extra\u00e7\u00e3o de todos os arquivos terminou; falta s\u00f3 montar a planilha
         statusIcon = '<span class="text-emerald-500">&#10003;</span>';
         statusText = 'Conclu\u00eddo';
         statusClass = 'text-emerald-600';
