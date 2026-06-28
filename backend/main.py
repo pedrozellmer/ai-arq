@@ -4123,7 +4123,7 @@ _NEWSLETTER_HTML = """<div style="background:#eaeef3;padding:24px 12px;font-fami
 <div style="height:5px;background:#4F46E5;"></div>
 <div style="padding:24px 30px;">
 <p style="margin:0 0 16px;color:#0F172A;font-size:20px;font-weight:700;">AI.arq</p>
-<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">Ol&aacute;, tudo bem?<br>Essa &eacute; a 1&ordf; news do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>, sem encher sua caixa: uma dica &uacute;til e o que mudou por aqui.</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}<br>Essa &eacute; a 1&ordf; news do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>, sem encher sua caixa: uma dica &uacute;til e o que mudou por aqui.</p>
 <div style="padding:14px 16px;background:#F8FAFC;border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.6;margin:0 0 18px;">
 <b style="color:#0F172A;">&#128161; Dica do m&ecirc;s &mdash; SINAPI tem duas camadas</b><br>
 Muita gente usa SINAPI s&oacute; pra pre&ccedil;o de material. Mas tem o <b>insumo</b> (o tijolo, o cimento, a hora do pedreiro) e a <b>composi&ccedil;&atilde;o</b> (a receita pronta: pra 1&nbsp;m&sup2; de alvenaria, tantos tijolos + argamassa + horas, j&aacute; somados). Puxar a composi&ccedil;&atilde;o em vez de somar item por item <b>economiza tempo e erra menos.</b>
@@ -4139,7 +4139,7 @@ Muita gente usa SINAPI s&oacute; pra pre&ccedil;o de material. Mas tem o <b>insu
 <a href="https://ai.arq.br/dashboard.html" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
 </div>
 <div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abra&ccedil;o,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#94a3b8;">&mdash; AI.arq</span></div>
-<div style="margin-top:14px;font-size:11px;color:#aab4c0;line-height:1.6;">Voc&ecirc; recebe porque tem conta no AI.arq. <a href="{{UNSUB}}" style="color:#8b93f6;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;">Privacidade</a></div>
+<div style="margin-top:14px;font-size:11px;color:#aab4c0;line-height:1.6;">Voc&ecirc; recebe porque tem conta no AI.arq. Se quiser sair da lista, &eacute; s&oacute; <b>responder este e-mail</b>. &middot; <a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;">Privacidade</a></div>
 </div></div></div>"""
 
 import hmac as _hmac_nl, hashlib as _hashlib_nl
@@ -4151,17 +4151,20 @@ def _newsletter_token(email: str) -> str:
 
 
 def _newsletter_recipients() -> list:
-    """Emails distintos de projects, menos optout e contas de teste/admin."""
+    """(email, nome) distintos de projects, menos optout e contas de teste/admin."""
     import urllib.request as _ur
-    out = set()
+    by_email = {}
     try:
-        r = _ur.Request(f"{SUPABASE_URL}/rest/v1/projects?select=user_email", method="GET")
+        r = _ur.Request(f"{SUPABASE_URL}/rest/v1/projects?select=user_email,user_name&order=created_at.desc", method="GET")
         r.add_header("apikey", SUPABASE_KEY)
         r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         for row in _json.loads(_ur.urlopen(r, timeout=20).read().decode("utf-8")):
             e = (row.get("user_email") or "").strip().lower()
-            if e and "@" in e:
-                out.add(e)
+            n = (row.get("user_name") or "").strip()
+            if not (e and "@" in e):
+                continue
+            if e not in by_email or (not by_email[e] and n):
+                by_email[e] = n  # nome mais recente; preenche se o recente vier vazio
         r2 = _ur.Request(f"{SUPABASE_URL}/rest/v1/newsletter_optout?select=email", method="GET")
         r2.add_header("apikey", SUPABASE_KEY)
         r2.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -4170,7 +4173,7 @@ def _newsletter_recipients() -> list:
         print(f"[newsletter] recipients erro: {_e}")
         return []
     _block = {ADMIN_EMAIL, "zarelalopes+smoke@gmail.com", "yurikgorges3@gmail.com"}
-    return sorted(e for e in out if e not in opt and e not in _block and "+smoke" not in e)
+    return [(e, by_email[e]) for e in sorted(by_email) if e not in opt and e not in _block and "+smoke" not in e]
 
 
 @app.post("/api/admin/newsletter/send")
@@ -4185,15 +4188,14 @@ async def admin_newsletter_send(request: Request):
     except Exception:
         data = {}
     test_only = bool((data or {}).get("test_only"))
-    recipients = [ADMIN_EMAIL] if test_only else _newsletter_recipients()
-    import urllib.parse as _up
+    recipients = [(ADMIN_EMAIL, "Pedro")] if test_only else _newsletter_recipients()
     sent = 0
     fail = 0
-    for email in recipients:
+    for email, name in recipients:
         try:
-            unsub = (f"https://ai-arq.onrender.com/api/newsletter/unsub"
-                     f"?e={_up.quote(email)}&t={_newsletter_token(email)}")
-            html = _NEWSLETTER_HTML.replace("{{UNSUB}}", unsub)
+            first = (name or "").strip().split(" ")[0] if (name or "").strip() else ""
+            greet = f"Olá, {first}!" if first else "Olá, tudo bem?"
+            html = _NEWSLETTER_HTML.replace("{{SAUDACAO}}", greet)
             ok = _send_email_smtp(email, _NEWSLETTER_SUBJECT, html)
             sent += 1 if ok else 0
             fail += 0 if ok else 1
