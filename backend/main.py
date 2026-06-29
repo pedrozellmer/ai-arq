@@ -42,6 +42,8 @@ from engine_rules import (
     is_likely_wrong_type as _is_likely_wrong_type,
     extraction_has_quality_caveat as _extraction_has_quality_caveat,
     extract_block_name as _extract_block_name,
+    is_nonsense_item as _is_nonsense_item,
+    extract_type_code as _extract_type_code,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -1833,6 +1835,55 @@ def _dedupe_by_block(items: list) -> list:
     return merged
 
 
+def _drop_nonsense_items(items: list) -> list:
+    """Remove itens-artefato que não são quantitativo de verdade (ex: 'área de
+    seção transversal' de parede — a hachura da ESPESSURA virou item de m²).
+    Caso Thamiry (projeto drywall multi-prancha)."""
+    kept = [it for it in items if not _is_nonsense_item(getattr(it, "description", "") or "")]
+    n = len(items) - len(kept)
+    if n:
+        print(f"[limpeza] {n} itens-artefato (seção transversal) removidos")
+    return kept
+
+
+def _consolidate_by_type_code(items: list) -> list:
+    """Funde o MESMO tipo de divisória/parede (DRY 07, DW-12...) que aparece em
+    VÁRIAS pranchas: SOMA as qtys (paredes diferentes em ambientes diferentes),
+    1 linha por (tipo, unidade, disciplina). Marca estimado (soma cross-prancha =
+    revisar). Caso Thamiry: 191 itens fragmentados de drywall, 156 zerados."""
+    from models import Confidence
+    by_key: dict = {}
+    passthrough: list = []
+    for it in items:
+        tc = _extract_type_code(getattr(it, "description", "") or "")
+        if not tc:
+            passthrough.append(it)
+        else:
+            by_key.setdefault((tc, it.unit, it.discipline), []).append(it)
+    merged = list(passthrough)
+    fundidos = 0
+    for (tc, _u, _d), group in by_key.items():
+        if len(group) == 1:
+            merged.append(group[0])
+            continue
+        best = max(group, key=lambda it: len(getattr(it, "description", "") or ""))
+        try:
+            best.quantity = round(sum(float(it.quantity or 0) for it in group), 2)
+        except Exception:
+            pass
+        try:
+            best.confidence = Confidence("estimado")
+        except Exception:
+            pass
+        best.observations = ((getattr(best, "observations", "") or "") +
+            f" | Tipo '{tc}' somado de {len(group)} entradas em várias pranchas — confira o total").strip(" |")
+        merged.append(best)
+        fundidos += len(group) - 1
+    if fundidos:
+        print(f"[consolida-tipo] {fundidos} entradas de tipo de divisória fundidas")
+    return merged
+
+
 def _consolidate_items(items: list) -> list:
     """Consolida itens redundantes em múltiplas passadas:
 
@@ -3467,6 +3518,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         n_before = len(all_items)
         all_items = _consolidate_items(all_items)
         all_items = _dedupe_by_block(all_items)  # funde itens do mesmo bloco CAD (anti-duplicação)
+        all_items = _drop_nonsense_items(all_items)       # tira "seção transversal" e afins
+        all_items = _consolidate_by_type_code(all_items)  # funde mesmo tipo (DRY 07) entre pranchas
         # Validar qty/unit após consolidação
         for it in all_items:
             new_qty, adjusted = _validate_quantity_for_unit(it)

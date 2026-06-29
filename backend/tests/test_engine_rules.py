@@ -20,6 +20,8 @@ from engine_rules import (  # noqa: E402
     is_likely_wrong_type,
     extraction_has_quality_caveat,
     extract_block_name,
+    is_nonsense_item,
+    extract_type_code,
 )
 
 _passed = 0
@@ -102,6 +104,15 @@ check("case-insensitive vira chave minuscula", extract_block_name("bloco CAD 'Ge
 check("sem bloco -> None", extract_block_name("Piso vinilico em m2") is None)
 check("alvenaria bloco ceramico SEM aspas -> None", extract_block_name("Alvenaria de bloco ceramico ou de concreto") is None)
 check("descricao vazia -> None", extract_block_name("") is None)
+
+print("== is_nonsense_item / extract_type_code (caso Thamiry: drywall inflado 284 itens) ==")
+check("secao transversal -> nonsense", is_nonsense_item("Area de secao transversal de paredes drywall") is True)
+check("area de secao -> nonsense", is_nonsense_item("área de seção de parede no layer A-WALL") is True)
+check("item normal -> NAO nonsense", is_nonsense_item("Divisoria drywall DRY 07") is False)
+check("DRY 07 -> tipo 'DRY 07'", extract_type_code("Divisoria drywall tipo DRY 07 — espessura 95mm") == "DRY 07")
+check("DW-12 -> tipo 'DW 12'", extract_type_code("Parede DW-12 chapa dupla") == "DW 12")
+check("PAREDE (sem num) -> None", extract_type_code("Parede de alvenaria comum") is None)
+check("vedacao generica -> None (nao funde sem codigo)", extract_type_code("sistema de vedacao em drywall") is None)
 
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
