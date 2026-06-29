@@ -152,3 +152,31 @@ def extract_block_name(description):
     if len(name) < 2 or name in ("cad", "x", "xx"):
         return None
     return name
+
+
+_NONSENSE_PAT = _re.compile(r"se[çc][ãa]o\s+transversal|[áa]rea\s+de\s+se[çc][ãa]o|cross.?section", _re.IGNORECASE)
+
+
+def is_nonsense_item(description):
+    """Item-ARTEFATO que não é quantitativo real: 'área de seção transversal' de
+    parede = a hachura da ESPESSURA da parede virou item de m². Ninguém compra
+    'seção transversal' — é lixo de extração. Caso Thamiry (projeto drywall)."""
+    if not description:
+        return False
+    return bool(_NONSENSE_PAT.search(description))
+
+
+_TYPE_CODE_PAT = _re.compile(r"\b(DRY|DW|DIV|PAR|PV)[\s\-]?(\d{1,3})\b", _re.IGNORECASE)
+
+
+def extract_type_code(description):
+    """Extrai código de TIPO de divisória/parede (DRY 07, DW-12, DIV 03...) pra
+    consolidar o MESMO tipo que aparece em várias pranchas. None se não houver.
+    Em projeto multi-prancha de drywall, o mesmo tipo se fragmenta em dezenas de
+    linhas (caso Thamiry: 191 itens, 156 zerados)."""
+    if not description:
+        return None
+    m = _TYPE_CODE_PAT.search(description)
+    if not m:
+        return None
+    return f"{m.group(1).upper()} {m.group(2)}"
