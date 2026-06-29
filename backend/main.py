@@ -3778,13 +3778,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             import html as _html, urllib.request as _ur2
             _q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                  f"&select=user_email,user_name,project_name")
+                  f"&select=user_email,user_name,project_name,reprocess_count")
             _rq = _ur2.Request(_q, method="GET")
             _rq.add_header("apikey", SUPABASE_KEY)
             _rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             _rows = _json.loads(_ur2.urlopen(_rq, timeout=10).read().decode("utf-8"))
             _pe = (_rows[0].get("user_email") if _rows else "") or ""
-            if _pe:
+            # REPROCESSO (reprocess_count>0): o cliente já clicou reprocessar e está
+            # acompanhando, OU é revisão interna nossa — NÃO re-emailar "planilha
+            # pronta" (evita spam de email a cada reprocesso). Só o 1º envio notifica.
+            _is_reproc = bool(_rows and (_rows[0].get("reprocess_count") or 0) > 0)
+            if _pe and _is_reproc:
+                print(f"[email] planilha-pronta PULADA (reprocesso count>0) — cliente não re-notificado")
+            if _pe and not _is_reproc:
                 _pn = _html.escape(_rows[0].get("project_name") or "seu projeto")
                 _greet = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
                 _aviso_html = ""
