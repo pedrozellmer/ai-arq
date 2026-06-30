@@ -89,6 +89,22 @@ function smartBack() {
     </div>
   </div>
 
+  <!-- Feedback rápido pós-projeto (NPS leve) -->
+  <div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+    <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
+    <p class="text-xs text-indigo-600 mb-3">Seu retorno ajuda a gente a melhorar — leva 5 segundos.</p>
+    <div id="fb-buttons" class="flex flex-wrap gap-2">
+      <button type="button" onclick="sendFeedback(9)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👍 Ajudou bastante</button>
+      <button type="button" onclick="sendFeedback(7)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">😐 Mais ou menos</button>
+      <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
+    </div>
+    <div id="fb-comment-wrap" class="hidden mt-3">
+      <textarea id="fb-comment" rows="2" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+      <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
+    </div>
+    <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
+  </div>
+
   <!-- Botão reprocessar -->
   <div id="reprocess-box" class="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 flex items-center gap-3">
     <span class="text-2xl">🔄</span>
@@ -1410,6 +1426,51 @@ function renderMetrics(p, items) {
   window.__projTypologyRaw = p.typology || '';
   window.__projAddress = p.address || '';
   window.__projPhase = p.phase || '';
+
+  // Card de feedback: só pra projeto que gerou planilha e que ainda não opinou.
+  const _hasItems = (p.items_count || items.length || 0) > 0;
+  if (_hasItems) maybeShowFeedback();
+}
+
+// ── Feedback pós-projeto (grava no endpoint NPS que já existe) ──────────────
+function maybeShowFeedback() {
+  try {
+    if (jobId && !localStorage.getItem('aiarq_fb_' + jobId)) {
+      const c = document.getElementById('feedback-card');
+      if (c) c.classList.remove('hidden');
+    }
+  } catch (e) { /* localStorage indisponível: sem feedback, sem erro */ }
+}
+
+let _fbScore = null;
+function sendFeedback(score) {
+  _fbScore = score;
+  document.getElementById('fb-buttons').classList.add('hidden');
+  document.getElementById('fb-comment-wrap').classList.remove('hidden');
+  postNps(score, '');  // registra a nota já; o comentário é opcional
+}
+function sendFeedbackComment() {
+  postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim());
+  document.getElementById('fb-comment-wrap').classList.add('hidden');
+  document.getElementById('fb-thanks').classList.remove('hidden');
+}
+async function postNps(score, comment) {
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    await authFetch(`${API_BASE}/api/nps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: session?.user?.id || 'anonymous',
+        user_email: session?.user?.email || '',
+        score: score,
+        comment: comment || '',
+        context: 'after_project',
+        job_id: jobId,
+      }),
+    });
+    localStorage.setItem('aiarq_fb_' + jobId, '1');  // não pergunta de novo
+  } catch (e) { /* best-effort: feedback nunca quebra a página */ }
 }
 
 function renderWarnings(warnings) {
