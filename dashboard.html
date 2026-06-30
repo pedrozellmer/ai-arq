@@ -1391,6 +1391,8 @@
       }).catch(e => console.warn('welcome notify:', e));
     }
 
+    if (window.trackEvent) trackEvent('view_dashboard');
+
     userName.textContent = meta.full_name || meta.name || user.email;
     userAvatar.src = meta.avatar_url || meta.picture || '';
     if (!userAvatar.src) {
@@ -2176,6 +2178,8 @@
         window.__creditsToConsumeCents = 0;  // reset para próximo projeto
       }
       const qs = new URLSearchParams(params).toString();
+
+      if (window.trackEvent) trackEvent('start_project', { type: params.project_type || '' });
 
       const res = await fetch(`${API_BASE}/api/process?${qs}`, {
         method: 'POST',
