@@ -89,6 +89,36 @@ function smartBack() {
     </div>
   </div>
 
+  <!-- Raio-X da leitura: medido vs a confirmar (a promessa do site, in-app) -->
+  <div id="raiox-card" class="hidden rounded-xl border-2 border-indigo-200 bg-white p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <svg class="w-5 h-5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      <span class="font-semibold text-gray-900">Raio-X da leitura</span>
+      <span class="text-xs text-gray-500">— no que dá pra confiar</span>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-lg bg-emerald-50 p-3">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+          <span id="rx-medido" class="text-2xl font-bold text-emerald-800">0</span>
+        </div>
+        <p class="text-xs text-emerald-700 mt-1">medidos — direto do CAD, em branco na planilha</p>
+      </div>
+      <div class="rounded-lg bg-amber-50 p-3">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
+          <span id="rx-confirmar" class="text-2xl font-bold text-amber-800">0</span>
+        </div>
+        <p class="text-xs text-amber-700 mt-1">a confirmar — você revisa, em laranja</p>
+      </div>
+    </div>
+    <div class="flex h-2 rounded-full overflow-hidden mt-3 bg-gray-100">
+      <div id="rx-bar-medido" class="bg-emerald-500" style="width:0%"></div>
+      <div id="rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
+    </div>
+    <p id="rx-pct" class="text-xs text-gray-500 mt-2"></p>
+  </div>
+
   <!-- Feedback rápido pós-projeto (NPS leve) -->
   <div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
     <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
@@ -1433,6 +1463,23 @@ function renderMetrics(p, items) {
   window.__projPhase = p.phase || '';
 
   if (window.trackEvent) trackEvent('open_project', { job_id: jobId });
+
+  // Raio-X da leitura: medido (confirmado) vs a confirmar (resto). vision_pdf
+  // já sai 'estimado' da origem, então contar confidence aqui é honesto.
+  const _medido = (items || []).filter(i => i && i.confidence === 'confirmado').length;
+  const _total = (items || []).length;
+  if (_total > 0) {
+    const _rx = document.getElementById('raiox-card');
+    if (_rx) {
+      const _pctM = Math.round((_medido / _total) * 100);
+      document.getElementById('rx-medido').textContent = _medido;
+      document.getElementById('rx-confirmar').textContent = _total - _medido;
+      document.getElementById('rx-bar-medido').style.width = _pctM + '%';
+      document.getElementById('rx-bar-confirmar').style.width = (100 - _pctM) + '%';
+      document.getElementById('rx-pct').textContent = `${_pctM}% medido · ${100 - _pctM}% a confirmar`;
+      _rx.classList.remove('hidden');
+    }
+  }
 
   // Card de feedback: só pra projeto que gerou planilha e que ainda não opinou.
   const _hasItems = (p.items_count || items.length || 0) > 0;
