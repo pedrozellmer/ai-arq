@@ -114,6 +114,16 @@ def is_likely_wrong_type(quantities, threshold=0.75):
     return zeros / len(qs) >= threshold
 
 
+def response_truncated(stop_reason) -> bool:
+    """#7 — resposta da IA cortada no teto de tokens = leitura possivelmente
+    INCOMPLETA (disciplinas/itens podem ter ficado de fora). Sinal de 1ª classe
+    pra AVISAR o cliente, independente de o JSON ter parseado ok — o pior é
+    entregar planilha parcial parecendo completa (caso Ademir). Anthropic:
+    Message.stop_reason == 'max_tokens'. Fonte única do 'número mágico' pra os
+    dois caminhos (DXF + Vision) não divergirem."""
+    return str(stop_reason or "").strip() == "max_tokens"
+
+
 def extraction_has_quality_caveat(metadata) -> bool:
     """TRAVA DE PROCEDÊNCIA (regra nº1). True se a extração geométrica veio com
     RESSALVA que impede confirmar: estéril (0 medições), unidade suspeita/absurda,

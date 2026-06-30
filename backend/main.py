@@ -44,6 +44,7 @@ from engine_rules import (
     extract_block_name as _extract_block_name,
     is_nonsense_item as _is_nonsense_item,
     extract_type_code as _extract_type_code,
+    response_truncated as _response_truncated,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -3140,6 +3141,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         response = _llm_retry(dxf_client, **_dxf_kwargs)
 
                         text = response.content[0].text
+                        # #7 sinal de 1ª classe: resposta cortada no teto (max_tokens) =
+                        # leitura possivelmente INCOMPLETA, mesmo que o JSON ainda parseie ok.
+                        _dxf_truncado = _response_truncated(getattr(response, "stop_reason", ""))
                         # Parser robusto: agora o Claude pode retornar raciocínio ANTES do JSON (CoT).
                         # Tentar em ordem: bloco ```json, bloco ```, último objeto {...} do texto.
                         json_str = None
@@ -3175,22 +3179,25 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             result = _salvage_truncated_json(json_str)
                             print(f"DXF JSON truncado ({type(_je).__name__}: {_je}); "
                                   f"salvados {len(result.get('items', []))} itens")
-                            # #7 leitura possivelmente INCOMPLETA: resposta cortada no
-                            # teto de tokens; salvage recuperou o que deu mas pode FALTAR
-                            # item. Avisa o cliente — não entrega parcial calado (Ademir).
-                            try:
-                                project_data.warnings = (project_data.warnings or []) + [
-                                    f"A leitura de '{os.path.basename(dxf_path)}' pode estar INCOMPLETA "
-                                    f"(a resposta da IA foi cortada por tamanho; recuperei "
-                                    f"{len(result.get('items', []))} itens, mas pode faltar algum). "
-                                    f"Reprocessar pode completar a planilha."
-                                ]
-                            except Exception:
-                                pass
+                            _dxf_truncado = True  # JSON quebrou = quase sempre corte no teto
 
                         # Robustez: array cru [...] vira {"items":[...]} (engine_rules,
                         # testado). Evita 'list object has no attribute get'.
                         result = _normalize_items_payload(result)
+
+                        # #7 leitura possivelmente INCOMPLETA (corte no teto via stop_reason
+                        # OU JSON truncado): avisa — não entrega parcial calado (caso Ademir).
+                        # Aviso único, dedup por arquivo.
+                        if _dxf_truncado:
+                            try:
+                                _n_salv = len(result.get("items", []))
+                                project_data.warnings = (project_data.warnings or []) + [
+                                    f"A leitura de '{os.path.basename(dxf_path)}' pode estar INCOMPLETA "
+                                    f"(a resposta da IA foi cortada por tamanho — li {_n_salv} itens, mas "
+                                    f"pode faltar algum). Reprocessar pode completar a planilha."
+                                ]
+                            except Exception:
+                                pass
 
                         # Extrair project_data
                         if "project_data" in result:
@@ -3392,6 +3399,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 sheet_errors.append(f"{filename}: {err_msg}")
                 print(f"[analyze-erro] {filename}: {err_msg}")
                 _log_error("pdf:analyze", f"{filename}: {err_msg}", job_id)
+
+            # #7 leitura possivelmente INCOMPLETA nesta prancha (resposta da IA
+            # cortada no teto). Avisa — não entrega parcial calado (caso Ademir).
+            if result.get("_truncated"):
+                try:
+                    project_data.warnings = (project_data.warnings or []) + [
+                        f"A leitura de '{filename}' pode estar INCOMPLETA (a resposta da IA "
+                        f"foi cortada por tamanho; pode faltar item). Reprocessar pode completar."
+                    ]
+                except Exception:
+                    pass
 
             # 4. Extrair dados do projeto
             if "project_data" in result:

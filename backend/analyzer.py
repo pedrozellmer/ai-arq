@@ -12,6 +12,7 @@ from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
     extract_balanced_obj as _extract_balanced_obj,
     normalize_items_payload as _normalize_items_payload,
+    response_truncated as _response_truncated,
 )
 
 
@@ -1113,17 +1114,25 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         else:
             json_str = text.strip()
 
+        # #7 sinal de 1ª classe: resposta cortada no teto (max_tokens) = leitura
+        # possivelmente INCOMPLETA, mesmo que o JSON ainda parseie ok.
+        _truncado = _response_truncated(getattr(response, "stop_reason", ""))
         try:
             _parsed = json.loads(json_str)
         except json.JSONDecodeError:
             # JSON truncado (resposta cortada no teto) — recupera os itens completos
             _parsed = _salvage_truncated_json(json_str)
+            _truncado = True  # JSON quebrou = quase sempre corte no teto
             if _parsed.get("items"):
                 print(f"PDF JSON truncado em {sheet.filename}; salvados {len(_parsed['items'])} itens")
             else:
                 raise
         # Robustez: array cru [...] vira {"items":[...]} (engine_rules, testado).
-        return _normalize_items_payload(_parsed)
+        _out = _normalize_items_payload(_parsed)
+        # main.py lê _truncated e avisa o cliente (não entrega parcial calado).
+        if _truncado:
+            _out["_truncated"] = True
+        return _out
 
     except json.JSONDecodeError as e:
         print(f"Erro JSON para {sheet.filename}: {e}")
