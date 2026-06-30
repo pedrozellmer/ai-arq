@@ -1093,7 +1093,7 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             return False
         import html as _hf, urllib.request as _urf
         _qf = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-               f"&select=user_email,user_name,project_name,parent_job_id,created_at")
+               f"&select=user_email,user_name,project_name,parent_job_id,reprocess_count,created_at")
         _rf = _urf.Request(_qf, method="GET")
         _rf.add_header("apikey", SUPABASE_KEY)
         _rf.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -1105,6 +1105,11 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             return False
         if _rows[0].get("parent_job_id"):
             _falha_emailed.add(job_id)  # filho de reprocessamento: pai já avisou
+            return False
+        if (_rows[0].get("reprocess_count") or 0) > 0:
+            # reprocesso (usuário clicou reprocessar e acompanha, OU revisão interna):
+            # não re-emailar falha — só o 1º processamento notifica o cliente.
+            _falha_emailed.add(job_id)
             return False
         # Freio anti-spam PERSISTENTE (sobrevive a restart — o dedup em memoria
         # furava quando um deploy reiniciava o processo e o cliente levava varios
