@@ -22,6 +22,7 @@ from engine_rules import (  # noqa: E402
     extract_block_name,
     is_nonsense_item,
     extract_type_code,
+    response_truncated,
 )
 
 _passed = 0
@@ -113,6 +114,14 @@ check("DRY 07 -> tipo 'DRY 07'", extract_type_code("Divisoria drywall tipo DRY 0
 check("DW-12 -> tipo 'DW 12'", extract_type_code("Parede DW-12 chapa dupla") == "DW 12")
 check("PAREDE (sem num) -> None", extract_type_code("Parede de alvenaria comum") is None)
 check("vedacao generica -> None (nao funde sem codigo)", extract_type_code("sistema de vedacao em drywall") is None)
+
+print("== response_truncated (#7 leitura incompleta: corte no teto de tokens) ==")
+check("max_tokens -> truncado (avisa incompleta)", response_truncated("max_tokens") is True)
+check("end_turn -> NAO truncado", response_truncated("end_turn") is False)
+check("stop_sequence -> NAO truncado", response_truncated("stop_sequence") is False)
+check("None -> NAO truncado (nao falsea aviso)", response_truncated(None) is False)
+check("vazio -> NAO truncado", response_truncated("") is False)
+check("espaco em volta nao engana", response_truncated(" max_tokens ") is True)
 
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
