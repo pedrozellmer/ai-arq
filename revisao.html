@@ -346,6 +346,11 @@ function renderItem(it, localIndex) {
   const isOrange = it.confidence === 'estimado' || it.confidence === 'verificar';
   const hasSheet = !!(it.ref_sheet && it.ref_sheet.trim() &&
                      !/^Pr\.|^DXF/i.test(it.ref_sheet));
+  // "De onde veio" explícito por item (citação): confirmado = medido na
+  // geometria do CAD; estimado = sugestão a conferir (da prancha ou inferência).
+  const provLabel = isOrange
+    ? (hasSheet ? '⚠ estimativa · da prancha' : '⚠ estimativa')
+    : '✓ medido do CAD';
   // Badge TEXTUAL do estado de revisão. Cor sozinha não basta — Pedro é
   // daltônico (regra de acessibilidade). Cor + ícone + texto.
   const stateChip = {
@@ -361,7 +366,7 @@ function renderItem(it, localIndex) {
         <p class="text-sm text-gray-800 ${isOrange ? '' : 'font-medium'}">${escapeHtml(it.description)}</p>
         <p class="text-xs text-gray-500 mt-1">
           <span class="chip ${isOrange ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}">
-            ${isOrange ? '⚠ estimado' : '✓ confirmado'}
+            ${provLabel}
           </span>${stateChip}
           <span class="ml-2">${it.quantity || 0} ${escapeHtml(it.unit)}</span>
           ${it.ref_sheet ? `<span class="ml-2 text-indigo-500">📄 ${escapeHtml(it.ref_sheet).slice(0,50)}</span>` : ''}
