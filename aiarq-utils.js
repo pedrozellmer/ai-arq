@@ -162,4 +162,34 @@
       notify.error('Erro de rede ao abrir: ' + (e && e.message ? e.message : e));
     }
   };
+
+  // ─── trackEvent ──────────────────────────────────────────────
+  // Telemetria leve de uso (Painel de Atividade no admin). Fire-and-forget:
+  // nunca bloqueia a UI, nunca lança. POST /api/track → grava em usage_events
+  // (RLS on, só o backend lê). Sem ferramenta de 3rd-party (LGPD tranquilo).
+  //   trackEvent('open_project', { job_id: '...' })
+  window.trackEvent = function (event, meta) {
+    try {
+      if (!event) return;
+      _sbClient.auth.getSession().then(({ data: { session } }) => {
+        const u = (session && session.user) ? session.user : null;
+        const body = JSON.stringify({
+          event: String(event).slice(0, 60),
+          user_id: u ? u.id : '',
+          user_email: u ? (u.email || '') : '',
+          job_id: (meta && meta.job_id) ? String(meta.job_id) : '',
+          path: (location.pathname || '').slice(0, 200),
+          meta: meta || {},
+        });
+        // keepalive: o evento sobrevive mesmo se a página for fechada logo
+        // após (ex.: clicou em baixar e saiu). Erro engolido de propósito.
+        fetch(API_BASE + '/api/track', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: body,
+          keepalive: true,
+        }).catch(() => {});
+      }).catch(() => {});
+    } catch (e) { /* telemetria nunca quebra nada */ }
+  };
 })();

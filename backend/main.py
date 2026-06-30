@@ -7606,6 +7606,97 @@ async def admin_nps_stages(request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  USAGE TRACKING (Painel de Atividade) — quem usa o quê, onde para
+# ═══════════════════════════════════════════════════════════════
+
+class TrackPayload(BaseModel):
+    event: str
+    user_id: Optional[str] = ""
+    user_email: Optional[str] = ""
+    job_id: Optional[str] = ""
+    path: Optional[str] = ""
+    meta: dict = {}
+
+
+@app.post("/api/track")
+async def track_event(payload: TrackPayload):
+    """Registra um evento de uso (best-effort, nunca falha pro cliente).
+    Chamado pelo trackEvent() do front nos pontos-chave. Aberto (sem auth):
+    grava os dados de identificação que o front mandar."""
+    ev = (payload.event or "").strip()
+    if not ev:
+        return {"status": "ignored"}
+    row = {
+        "event": ev[:60],
+        "user_id": (payload.user_id or "")[:80],
+        "user_email": (payload.user_email or "")[:200],
+        "job_id": (payload.job_id or "")[:80],
+        "path": (payload.path or "")[:200],
+        "meta": payload.meta if isinstance(payload.meta, dict) else {},
+    }
+    try:
+        _supabase_insert("usage_events", row)
+    except Exception:
+        pass  # telemetria nunca quebra nada
+    return {"status": "ok"}
+
+
+@app.get("/api/admin/activity")
+async def admin_activity(request: Request, days: int = 30, limit: int = 200):
+    """Painel de Atividade: eventos recentes + agregados (por evento, por usuário,
+    ativos 7/30d). Agrega em Python — volume pequeno."""
+    _require_admin(request)
+    import urllib.request as _urs
+    from datetime import datetime, timedelta, timezone
+    days = max(1, min(int(days or 30), 365))
+    limit = max(1, min(int(limit or 200), 1000))
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    since_url = since.replace("+00:00", "Z")
+    cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/usage_events"
+               f"?created_at=gte.{since_url}"
+               f"&select=event,user_email,user_id,job_id,path,created_at"
+               f"&order=created_at.desc&limit=5000")
+        req = _urs.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _json.loads(_urs.urlopen(req, timeout=20).read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"Erro: {e}")
+
+    by_event, by_user = {}, {}
+    seen_7d, seen_30d = set(), set()
+    for r in rows:
+        ev = r.get("event") or "?"
+        by_event[ev] = by_event.get(ev, 0) + 1
+        email = (r.get("user_email") or "").strip() or (r.get("user_id") or "anonymous")
+        u = by_user.setdefault(email, {"email": email, "events": 0,
+                                       "last_seen": None, "first_seen": None, "kinds": {}})
+        u["events"] += 1
+        u["kinds"][ev] = u["kinds"].get(ev, 0) + 1
+        ts = r.get("created_at") or ""
+        if u["last_seen"] is None or ts > u["last_seen"]:
+            u["last_seen"] = ts
+        if u["first_seen"] is None or ts < u["first_seen"]:
+            u["first_seen"] = ts
+        if email and email != "anonymous":
+            seen_30d.add(email)
+            if ts >= cutoff_7d:
+                seen_7d.add(email)
+    users = sorted(by_user.values(), key=lambda x: x.get("last_seen") or "", reverse=True)
+    return {
+        "total_events": len(rows),
+        "window_days": days,
+        "active_7d": len(seen_7d),
+        "active_30d": len(seen_30d),
+        "by_event": by_event,
+        "users": users,
+        "recent": rows[:limit],
+    }
+
+
+# ═══════════════════════════════════════════════════════════════
 #  SERVIR PRANCHA (pra revisão inline abrir em nova aba)
 # ═══════════════════════════════════════════════════════════════
 

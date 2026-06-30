@@ -699,10 +699,15 @@ async function carregarStatsEntregas() {
     btnDownload.setAttribute('href', 'javascript:void(0)');
     btnDownload.addEventListener('click', (e) => {
       e.preventDefault();
+      if (window.trackEvent) trackEvent('download_xlsx', { job_id: jobId });
       downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
     });
   }
   enableLink('btn-cronograma', `cronograma.html?job=${jobId}`);
+  const _cronBtn = document.getElementById('btn-cronograma');
+  if (_cronBtn) _cronBtn.addEventListener('click', () => {
+    if (window.trackEvent) trackEvent('use_cronograma', { job_id: jobId });
+  });
   // btn-cron-pdf e btn-cron-pptx: endpoints protegidos. Mesmo bug do download:
   // <a href> não envia Authorization → 401. Habilita botão e dispara via fetch.
   const wireCronExport = (id, url, filename) => {
@@ -1426,6 +1431,8 @@ function renderMetrics(p, items) {
   window.__projTypologyRaw = p.typology || '';
   window.__projAddress = p.address || '';
   window.__projPhase = p.phase || '';
+
+  if (window.trackEvent) trackEvent('open_project', { job_id: jobId });
 
   // Card de feedback: só pra projeto que gerou planilha e que ainda não opinou.
   const _hasItems = (p.items_count || items.length || 0) > 0;
