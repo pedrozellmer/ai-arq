@@ -1223,7 +1223,8 @@ def _send_welcome_email(email: str, name: str = "") -> bool:
             "Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
             "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
             "que normalmente leva horas no Excel.<br><br>"
-            "E o melhor: seu <b>primeiro projeto é por nossa conta</b>. Sem cartão, sem compromisso.")
+            "E o melhor: estamos em <b>beta &mdash; grátis e ilimitado</b> &#129514;. Você pode subir "
+            "<b>quantos projetos quiser</b>, sem cartão e sem compromisso. Aproveite pra testar à vontade.")
     return _send_email_smtp(
         email, "Bem-vindo ao AI.arq",
         _email_wrap("Bem-vindo ao AI.arq", body,
