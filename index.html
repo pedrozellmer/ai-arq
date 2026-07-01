@@ -703,6 +703,8 @@
       else document.getElementById('nav-avatar').classList.add('hidden');
     }
   })();
+  // Rastreio anônimo do topo do funil (visita da landing).
+  if (window.trackEvent) trackEvent('view_landing');
 </script>
 <script src="chat-widget.js" defer></script>
 <script src="contact-modal.js" defer></script>

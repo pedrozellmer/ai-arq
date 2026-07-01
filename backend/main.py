@@ -7674,7 +7674,7 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
     try:
         url = (f"{SUPABASE_URL}/rest/v1/usage_events"
                f"?created_at=gte.{since_url}"
-               f"&select=event,user_email,user_id,job_id,path,created_at"
+               f"&select=event,user_email,user_id,job_id,path,meta,created_at"
                f"&order=created_at.desc&limit=5000")
         req = _urs.Request(url, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
@@ -7685,9 +7685,18 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
 
     by_event, by_user = {}, {}
     seen_7d, seen_30d = set(), set()
+    # Funil do topo por VISITANTE único (cid anônimo no meta): landing → cadastro
+    # → completou. Responde "quanta gente visita e não converte".
+    _FUNNEL = ("view_landing", "view_cadastro", "signup_done")
+    funnel_cids = {k: set() for k in _FUNNEL}
     for r in rows:
         ev = r.get("event") or "?"
         by_event[ev] = by_event.get(ev, 0) + 1
+        if ev in funnel_cids:
+            _m = r.get("meta")
+            _cid = _m.get("cid") if isinstance(_m, dict) else ""
+            if _cid:
+                funnel_cids[ev].add(_cid)
         email = (r.get("user_email") or "").strip() or (r.get("user_id") or "anonymous")
         u = by_user.setdefault(email, {"email": email, "events": 0,
                                        "last_seen": None, "first_seen": None, "kinds": {}})
@@ -7709,6 +7718,7 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
         "active_7d": len(seen_7d),
         "active_30d": len(seen_30d),
         "by_event": by_event,
+        "funnel": {k: len(funnel_cids[k]) for k in _FUNNEL},
         "users": users,
         "recent": rows[:limit],
     }
