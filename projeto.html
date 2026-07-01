@@ -1496,15 +1496,19 @@ function maybeShowFeedback() {
   } catch (e) { /* localStorage indisponível: sem feedback, sem erro */ }
 }
 
-let _fbScore = null;
+let _fbScore = null, _fbTimer = null, _fbPosted = false;
 function sendFeedback(score) {
   _fbScore = score;
   document.getElementById('fb-buttons').classList.add('hidden');
   document.getElementById('fb-comment-wrap').classList.remove('hidden');
-  postNps(score, '');  // registra a nota já; o comentário é opcional
+  // NÃO posta na hora (evita NPS duplicado quando o usuário comenta): espera o
+  // comentário opcional; se em 6s não vier, posta só a nota. Uma linha por feedback.
+  clearTimeout(_fbTimer);
+  _fbTimer = setTimeout(() => { if (!_fbPosted) { _fbPosted = true; postNps(_fbScore, ''); } }, 6000);
 }
 function sendFeedbackComment() {
-  postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim());
+  clearTimeout(_fbTimer);
+  if (!_fbPosted) { _fbPosted = true; postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim()); }
   document.getElementById('fb-comment-wrap').classList.add('hidden');
   document.getElementById('fb-thanks').classList.remove('hidden');
 }

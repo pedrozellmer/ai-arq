@@ -1103,7 +1103,7 @@ async function loadActivity() {
 
     const evs = Object.entries(d.by_event || {}).sort((a, b) => b[1] - a[1]);
     byEvent.innerHTML = evs.length ? evs.map(([ev, n]) =>
-      `<div class="flex items-center justify-between"><span>${actLabel(ev)}</span><span class="font-semibold text-gray-700">${n}</span></div>`
+      `<div class="flex items-center justify-between"><span>${escapeHtml(actLabel(ev))}</span><span class="font-semibold text-gray-700">${n}</span></div>`
     ).join('') : '<p class="text-gray-400">Sem eventos ainda.</p>';
 
     const us = d.users || [];
@@ -1124,7 +1124,7 @@ async function loadActivity() {
       const job = r.job_id ? ` <span class="text-gray-400">· ${escapeHtml(String(r.job_id).slice(0, 8))}</span>` : '';
       return `<div class="flex items-center gap-2 border-b border-gray-50 py-1">
         <span class="text-gray-400 text-xs w-24 shrink-0">${actFmtTime(r.created_at)}</span>
-        <span class="text-gray-700 shrink-0">${actLabel(r.event)}</span>
+        <span class="text-gray-700 shrink-0">${escapeHtml(actLabel(r.event))}</span>
         <span class="text-gray-400 text-xs truncate">${escapeHtml(who)}${job}</span>
       </div>`;
     }).join('') : '<p class="text-gray-400">Sem atividade no período.</p>';

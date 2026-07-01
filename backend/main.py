@@ -1411,14 +1411,15 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office", project_type:
             print(f"[recovery-retomar] limpeza itens {job_id}: {_de}")
         _supabase_update("projects", "job_id", job_id,
                          {"status": "queued", "error_message": None})
-        # Anti-loop: incrementa reprocess_count ANTES de disparar, via a RPC
-        # atômica `increment_reprocess_count` (a mesma do reprocessar manual).
-        # CRÍTICO: NÃO usar _supabase_update aqui — ele roteia pro RPC
-        # update_project_status, que NÃO tem a coluna reprocess_count e
-        # descartava o incremento em silêncio → o anti-loop nunca disparava
-        # e um arquivo que sempre crasha seria retomado em todo restart (loop).
+        # Anti-loop: incrementa AUTO_RESUME_COUNT ANTES de disparar (contador
+        # PRÓPRIO da auto-retomada, separado do reprocess_count do reprocesso
+        # manual). Por que separado: assim a auto-retomada (a) NÃO gasta a cota de
+        # reprocesso grátis do usuário e (b) NÃO cai no gate "pular email de
+        # reprocesso" — job retomado que conclui/falha volta a NOTIFICAR o cliente.
+        # CRÍTICO: NÃO usar _supabase_update (roteia pro update_project_status,
+        # que não tem a coluna e descartaria o incremento → loop de retomada).
         try:
-            inc_url = f"{SUPABASE_URL}/rest/v1/rpc/increment_reprocess_count"
+            inc_url = f"{SUPABASE_URL}/rest/v1/rpc/increment_auto_resume_count"
             inc_body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
             inc_req = urllib.request.Request(inc_url, data=inc_body, method="POST")
             inc_req.add_header("apikey", SUPABASE_KEY)
@@ -1524,20 +1525,20 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
         ptype = "arquitetura"
         try:
             q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                 f"&select=reprocess_count,typology,project_type")
+                 f"&select=auto_resume_count,typology,project_type")
             qreq = urllib.request.Request(q, method="GET")
             qreq.add_header("apikey", SUPABASE_KEY)
             qreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             prow = json.loads(urllib.request.urlopen(qreq, timeout=10).read().decode("utf-8"))
             if prow:
-                prev_count = int(prow[0].get("reprocess_count") or 0)
+                prev_count = int(prow[0].get("auto_resume_count") or 0)
                 typ = prow[0].get("typology") or "office"
                 ptype = prow[0].get("project_type") or "arquitetura"
         except Exception:
             pass
 
         if prev_count < 1 and _retomar_job_do_storage(job_id, typ, ptype):
-            # _retomar já incrementou reprocess_count (anti-loop, via RPC
+            # _retomar já incrementou auto_resume_count (anti-loop, via RPC
             # atômica) e re-disparou o processamento.
             recovered += 1
             continue
@@ -1550,6 +1551,15 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
         })
         if ok:
             recovered += 1
+            # Registra no error_log (visível via MCP/admin) — antes o modo de
+            # falha nº1 (job morto por reinício) nunca escrevia aqui, dando a
+            # falsa sensação de "tudo verde". De quebra valida a escrita em prod.
+            try:
+                _log_error("recovery:restart",
+                           "Job não-retomável marcado como erro após reinício do servidor",
+                           job_id, severity="warning")
+            except Exception:
+                pass
             # Também atualiza o JobsStore local se ainda estiver lá
             try:
                 if job_id in jobs:
@@ -7174,7 +7184,11 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
                 safe_edits[k] = v
         if safe_edits:
             try:
-                url = f"{SUPABASE_URL}/rest/v1/project_items?id=eq.{item_id}"
+                # Segurança: amarra o item ao job_id JÁ validado como do dono
+                # (_require_project_owner acima). Sem o &job_id, um dono passaria
+                # o próprio job_id + o item_id de OUTRO projeto e editaria item
+                # alheio (IDOR, escrita cross-tenant com service_role).
+                url = f"{SUPABASE_URL}/rest/v1/project_items?id=eq.{item_id}&job_id=eq.{job_id}"
                 body = json.dumps(safe_edits).encode('utf-8')
                 req = urllib.request.Request(url, data=body, method='PATCH')
                 req.add_header('apikey', SUPABASE_KEY)
@@ -7188,7 +7202,8 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
     # 3) Se rejeitado, deleta row do item (mantém review pra histórico)
     if action == "reject":
         try:
-            url = f"{SUPABASE_URL}/rest/v1/project_items?id=eq.{item_id}"
+            # Segurança (IDOR): só apaga item que pertence ao job_id do dono.
+            url = f"{SUPABASE_URL}/rest/v1/project_items?id=eq.{item_id}&job_id=eq.{job_id}"
             req = urllib.request.Request(url, method='DELETE')
             req.add_header('apikey', SUPABASE_KEY)
             req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
@@ -7636,21 +7651,42 @@ class TrackPayload(BaseModel):
     meta: dict = {}
 
 
+# Lista branca de eventos aceitos pelo /api/track. Endpoint é ABERTO (sem auth),
+# então SÓ nomes conhecidos entram — mata XSS armazenado (nome de evento cru
+# renderizado no admin) e evita poluição com eventos arbitrários. Ao criar
+# evento novo no front, adicione aqui também.
+_TRACK_ALLOWED = {
+    "view_landing", "view_cadastro", "signup_done", "view_dashboard",
+    "start_project", "open_project", "download_xlsx",
+    "use_cronograma", "use_comparativo", "review_item", "review_finish",
+}
+
+
 @app.post("/api/track")
 async def track_event(payload: TrackPayload):
     """Registra um evento de uso (best-effort, nunca falha pro cliente).
-    Chamado pelo trackEvent() do front nos pontos-chave. Aberto (sem auth):
-    grava os dados de identificação que o front mandar."""
+    Chamado pelo trackEvent() do front. Aberto (sem auth), MAS só aceita nomes
+    de evento da allowlist e só as chaves de meta conhecidas (cid/type) —
+    segurança: nada de HTML/JS arbitrário chega ao painel admin."""
     ev = (payload.event or "").strip()
-    if not ev:
+    if ev not in _TRACK_ALLOWED:
         return {"status": "ignored"}
+    # meta capado: só cid (id anônimo do navegador) e type, curtos.
+    _meta = {}
+    if isinstance(payload.meta, dict):
+        _cid = str(payload.meta.get("cid") or "")[:40]
+        _type = str(payload.meta.get("type") or "")[:40]
+        if _cid:
+            _meta["cid"] = _cid
+        if _type:
+            _meta["type"] = _type
     row = {
-        "event": ev[:60],
+        "event": ev,  # já validado contra a allowlist
         "user_id": (payload.user_id or "")[:80],
         "user_email": (payload.user_email or "")[:200],
         "job_id": (payload.job_id or "")[:80],
         "path": (payload.path or "")[:200],
-        "meta": payload.meta if isinstance(payload.meta, dict) else {},
+        "meta": _meta,
     }
     try:
         _supabase_insert("usage_events", row)
@@ -8008,6 +8044,7 @@ async def reprocess_project(job_id: str, request: Request):
     )
 
     typology = orig.get("typology") or "office"
+    ptype = orig.get("project_type") or "arquitetura"
     _supabase_insert("projects", {
         "job_id": new_job_id,
         "user_id": orig.get("user_id") or "anonymous",
@@ -8015,6 +8052,7 @@ async def reprocess_project(job_id: str, request: Request):
         "user_name": orig.get("user_name") or "",
         "project_name": f"{orig.get('project_name','Projeto')} (reprocessado)",
         "typology": typology,
+        "project_type": ptype,  # propaga tipo: projeto ESTRUTURAL não vira arquitetura
         "files_count": len(new_file_paths),
         "file_types": file_types,
         "status": "queued",
@@ -8038,7 +8076,7 @@ async def reprocess_project(job_id: str, request: Request):
     t = threading.Thread(
         target=_process_job_throttled,
         args=(new_job_id, new_file_paths, new_work_dir),
-        kwargs={"typology": typology},
+        kwargs={"typology": typology, "project_type": ptype},
         daemon=True,
     )
     t.start()

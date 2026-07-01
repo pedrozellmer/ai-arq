@@ -107,7 +107,7 @@
             '<p id="aiarq-cc-title" style="margin:0 0 4px;font-size:14px;font-weight:600;color:#0f172a;">Cookies e telemetria</p>',
             '<p id="aiarq-cc-desc" style="margin:0;font-size:13px;line-height:1.5;color:#475569;">',
               'Usamos cookies <strong>essenciais</strong> pra manter sua sessão (login Supabase). ',
-              'Podemos também coletar <strong>telemetria anônima</strong> pra entender o uso e melhorar a plataforma — só com seu sim. ',
+              'Com seu sim, coletamos <strong>telemetria de uso</strong> pra melhorar a plataforma — anônima nas páginas públicas e vinculada à sua conta quando você está logado. ',
               '<a href="', POLICY_URL, '" style="color:#4f46e5;text-decoration:underline;font-weight:500;">Política de Privacidade</a>.',
             '</p>',
           '</div>',
@@ -158,7 +158,7 @@
               '<p style="margin:0;font-size:13px;font-weight:600;color:#0f172a;">Analytics / Telemetria</p>',
               '<input id="aiarq-cc-analytics" type="checkbox" style="width:18px;height:18px;accent-color:#4f46e5;cursor:pointer;" aria-describedby="aiarq-cc-analytics-desc">',
             '</div>',
-            '<p id="aiarq-cc-analytics-desc" style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#64748b;">Métricas anônimas de uso (páginas visitadas, tempo na tela, cliques). Ajuda a entender o que funciona — não te identifica.</p>',
+            '<p id="aiarq-cc-analytics-desc" style="margin:4px 0 0;font-size:12px;line-height:1.5;color:#64748b;">Métricas de uso (páginas visitadas, cliques). Anônimas nas páginas públicas; quando você está logado, ficam vinculadas à sua conta pra melhorar o produto.</p>',
           '</div>',
         '</label>',
 
