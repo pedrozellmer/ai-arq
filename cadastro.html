@@ -228,6 +228,8 @@
   //  SUPABASE CONFIG — vem de aiarq-utils.js
   // ══════════════════════════════════════════════
   const sbClient = window.sbClient;
+  // Rastreio anônimo do funil (chegou na página de cadastro).
+  if (window.trackEvent) trackEvent('view_cadastro');
 
   // ══════════════════════════════════════════════
   //  DOM REFS
@@ -563,6 +565,7 @@
       // Success
       clearDraft();
           localStorage.setItem('aiarq_profile_complete', 'true');
+      if (window.trackEvent) trackEvent('signup_done');
       window.location.href = 'dashboard.html';
 
     } catch (err) {

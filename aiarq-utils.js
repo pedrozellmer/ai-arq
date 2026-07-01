@@ -171,6 +171,13 @@
   window.trackEvent = function (event, meta) {
     try {
       if (!event) return;
+      // cid = id anônimo do navegador (localStorage) → dá pra contar VISITANTE
+      // único e seguir o funil (visita → cadastro) mesmo sem login.
+      let _cid = '';
+      try {
+        _cid = localStorage.getItem('aiarq_cid') || '';
+        if (!_cid) { _cid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem('aiarq_cid', _cid); }
+      } catch (e) { /* localStorage indisponível */ }
       _sbClient.auth.getSession().then(({ data: { session } }) => {
         const u = (session && session.user) ? session.user : null;
         const body = JSON.stringify({
@@ -179,7 +186,7 @@
           user_email: u ? (u.email || '') : '',
           job_id: (meta && meta.job_id) ? String(meta.job_id) : '',
           path: (location.pathname || '').slice(0, 200),
-          meta: meta || {},
+          meta: Object.assign({ cid: _cid }, meta || {}),
         });
         // keepalive: o evento sobrevive mesmo se a página for fechada logo
         // após (ex.: clicou em baixar e saiu). Erro engolido de propósito.

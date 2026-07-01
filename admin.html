@@ -833,6 +833,11 @@
 
         <div id="act-cards" class="grid gap-4 sm:grid-cols-3 mb-5"></div>
 
+        <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm mb-5">
+          <h3 class="font-semibold text-gray-900 mb-3">Funil do topo <span class="font-normal text-gray-500 text-sm">&mdash; visitantes &uacute;nicos</span></h3>
+          <div id="act-funnel-body" class="text-sm text-gray-400">Carregando&hellip;</div>
+        </div>
+
         <div class="grid gap-5 lg:grid-cols-2">
           <div class="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
             <h3 class="font-semibold text-gray-900 mb-3">Por tipo de evento</h3>
@@ -1038,6 +1043,9 @@ function switchTab(tabName) {
 // ATIVIDADE — painel de uso (usage_events)
 // ══════════════════════════════════════════════
 const ACT_LABELS = {
+  view_landing:    '🌐 Visitou a landing',
+  view_cadastro:   '📝 Abriu o cadastro',
+  signup_done:     '✅ Completou cadastro',
   view_dashboard:  '👀 Abriu o painel',
   start_project:   '📤 Subiu projeto',
   open_project:    '📂 Abriu um projeto',
@@ -1077,6 +1085,21 @@ async function loadActivity() {
         <p class="text-xs font-medium text-gray-600 mb-1">Ativos 30 dias</p>
         <p class="text-3xl font-bold text-gray-900">${d.active_30d}</p>
       </div>`;
+
+    // Funil do topo (visitantes únicos): landing → cadastro → completou
+    const fn = d.funnel || {};
+    const vL = fn.view_landing || 0, vC = fn.view_cadastro || 0, vS = fn.signup_done || 0;
+    const _pctf = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0);
+    const fb = document.getElementById('act-funnel-body');
+    if (fb) fb.innerHTML = `
+      <div class="flex items-stretch gap-2 text-center">
+        <div class="flex-1 rounded-lg bg-indigo-50 p-3"><p class="text-2xl font-bold text-indigo-900">${vL}</p><p class="text-xs text-indigo-700 mt-1">🌐 visitaram a landing</p></div>
+        <div class="self-center text-gray-300 text-lg">→</div>
+        <div class="flex-1 rounded-lg bg-indigo-50 p-3"><p class="text-2xl font-bold text-indigo-900">${vC}</p><p class="text-xs text-indigo-700 mt-1">📝 abriram cadastro</p><p class="text-[11px] text-gray-400">${_pctf(vC, vL)}% da landing</p></div>
+        <div class="self-center text-gray-300 text-lg">→</div>
+        <div class="flex-1 rounded-lg bg-emerald-50 p-3"><p class="text-2xl font-bold text-emerald-800">${vS}</p><p class="text-xs text-emerald-700 mt-1">✅ completaram</p><p class="text-[11px] text-gray-400">${_pctf(vS, vL)}% da landing</p></div>
+      </div>
+      ${vL === 0 ? '<p class="text-xs text-gray-400 mt-3">Sem visitas anônimas registradas ainda — começa a encher agora que o rastreio subiu.</p>' : ''}`;
 
     const evs = Object.entries(d.by_event || {}).sort((a, b) => b[1] - a[1]);
     byEvent.innerHTML = evs.length ? evs.map(([ev, n]) =>
