@@ -343,14 +343,16 @@ function render() {
 
 function renderItem(it, localIndex) {
   const state = reviewState[it.id] || 'pending';
-  const isOrange = it.confidence === 'estimado' || it.confidence === 'verificar';
+  // Regra dura nº1: default é ESTIMATIVA (laranja). SÓ 'confirmado' vira medido
+  // (branco). Fail-safe — confidence inesperada/nula fica estimativa, nunca
+  // "medido" (alinha a revisão com o XLSX e o Raio-X).
+  const isMedido = it.confidence === 'confirmado';
+  const isOrange = !isMedido;
   const hasSheet = !!(it.ref_sheet && it.ref_sheet.trim() &&
                      !/^Pr\.|^DXF/i.test(it.ref_sheet));
-  // "De onde veio" explícito por item (citação): confirmado = medido na
-  // geometria do CAD; estimado = sugestão a conferir (da prancha ou inferência).
-  const provLabel = isOrange
-    ? (hasSheet ? '⚠ estimativa · da prancha' : '⚠ estimativa')
-    : '✓ medido do CAD';
+  const provLabel = isMedido
+    ? '✓ medido do CAD'
+    : (hasSheet ? '⚠ estimativa · da prancha' : '⚠ estimativa');
   // Badge TEXTUAL do estado de revisão. Cor sozinha não basta — Pedro é
   // daltônico (regra de acessibilidade). Cor + ícone + texto.
   const stateChip = {
@@ -823,7 +825,7 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ user_id: window.currentUserId || '' }),
     }).catch(() => {});
-    flashToast('✓ Revisão concluída! Cashback será creditado.');
+    flashToast('✓ Revisão concluída! Suas correções treinam a IA pro próximo projeto.');
     // Redireciona pra página do projeto após 1.5s
     setTimeout(() => {
       window.location.href = `projeto.html?job_id=${jobId}`;

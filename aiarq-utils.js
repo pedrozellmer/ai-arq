@@ -171,6 +171,13 @@
   window.trackEvent = function (event, meta) {
     try {
       if (!event) return;
+      // LGPD (opt-in do banner de cookies): SÓ rastreia se o usuário consentiu
+      // com analytics. Sem consentimento — declinado OU ainda não respondido —
+      // não grava nada. Honra a promessa "telemetria só com seu sim".
+      try {
+        var _consent = JSON.parse(localStorage.getItem('aiarq_cookie_consent') || 'null');
+        if (!_consent || _consent.analytics !== true) return;
+      } catch (e) { return; }
       // cid = id anônimo do navegador (localStorage) → dá pra contar VISITANTE
       // único e seguir o funil (visita → cadastro) mesmo sem login.
       let _cid = '';

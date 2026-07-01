@@ -2433,10 +2433,10 @@
         const timeStr = mins > 0 ? `~${mins}min ${secs}s` : `~${secs}s`;
         timeEstimate.textContent = `${themed}  ·  ${timeStr}`;
       } else if (elapsed < 90 && realProgress < 5) {
-        // Render free tier dorme após 15min de inatividade — primeira request
-        // demora 30-60s pra acordar. Antes a barra mentia (chegava em 95% rapidão
-        // e ficava parada). Agora avisa explicitamente que está acordando.
-        timeEstimate.textContent = 'Acordando o motor (servidor estava em standby) — pode levar 30 a 60 segundos no primeiro acesso do dia.';
+        // Sem progresso real ainda: provavelmente na FILA (processamos 1 projeto
+        // por vez pra garantir qualidade) ou o motor iniciando. Render é PAGO —
+        // NÃO dorme; nunca atribuir a "standby/free tier" (regra do Pedro).
+        timeEstimate.textContent = 'Seu projeto entrou na fila — processamos um de cada vez pra garantir qualidade. Já começa. Pode fechar a aba: te avisamos por email quando a planilha ficar pronta.';
       } else {
         // Passou do tempo estimado — só a mensagem temática, sem contador
         timeEstimate.textContent = themed;
