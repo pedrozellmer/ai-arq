@@ -3883,7 +3883,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # pronta" (evita spam de email a cada reprocesso). Só o 1º envio notifica.
             _is_reproc = bool(_rows and (_rows[0].get("reprocess_count") or 0) > 0)
             if _pe and _is_reproc:
-                print(f"[email] planilha-pronta PULADA (reprocesso count>0) — cliente não re-notificado")
+                # Antes: mudo (anti-spam). Agora: email PRÓPRIO de reprocesso, 1x por
+                # job (dedup em email_auto_log). Fecha o buraco onde o cliente
+                # reprocessava (ou a gente resgatava) e ninguém avisava — caso
+                # Thamiry 06/07. Automação decidida com o Pedro em 07/07.
+                if _email_auto_ja_enviado(_pe, "reprocesso_pronto", ref=job_id):
+                    print(f"[email] reprocesso-pronto já enviado pra este job — pulando")
+                else:
+                    _pn_r = _html.escape(_rows[0].get("project_name") or "seu projeto")
+                    _greet_r = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
+                    _body_r = (f"{_greet_r}<br><br>Reprocessamos o projeto <b>{_pn_r}</b> com o motor "
+                               f"mais recente e a planilha atualizada ficou pronta, com "
+                               f"<b>{len(all_items)} itens</b> de quantitativo.<br><br>"
+                               f"Ela substitui a versão anterior — abra pra revisar e baixar. "
+                               f"Cada item vem marcado como <b>medido</b> (direto do CAD) ou "
+                               f"<b>estimativa</b> (pra você conferir).")
+                    _ok_r = _send_email_smtp(
+                        _pe, "Reprocessamos seu projeto no AI.arq — planilha atualizada",
+                        _email_wrap("Planilha atualizada", _body_r,
+                                    "Ver minha planilha", "https://ai.arq.br/dashboard.html",
+                                    badge="&#10003; Atualizado"))
+                    if _ok_r:
+                        _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
+                    print(f"[email] reprocesso-pronto -> enviado={_ok_r}")
             if _pe and not _is_reproc:
                 _pn = _html.escape(_rows[0].get("project_name") or "seu projeto")
                 _greet = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
@@ -4338,6 +4360,170 @@ async def admin_send_nudge(request: Request):
         raise HTTPException(502, "Não consegui gerar o link de login (verifique a service_role)")
     sent = _send_nudge_email(email, name, kind, link)
     return {"status": "ok", "sent": sent, "email": email, "kind": kind}
+
+
+# ═══════════════════ EMAILS AUTOMÁTICOS (tick horário via pg_cron) ═══════════════════
+# Automatiza o que o Pedro fazia na mão (decisão 07/07): reenviar convite de
+# cadastro incompleto, lembrar quem nunca subiu prancha, chamar de volta quem
+# sumiu há 30 dias. Anti-spam DURO: cada (email, kind) sai UMA vez na vida,
+# registrado em email_auto_log (unique). Janela de recência evita ressuscitar
+# cadastros antigos. EMAILS_AUTO=0 no ambiente desliga tudo. ?dry=1 = ensaio.
+
+def _email_auto_ja_enviado(email: str, kind: str, ref: str = "") -> bool:
+    """True se este lembrete já saiu (ou se a checagem falhar — na dúvida, NÃO envia)."""
+    import urllib.request as _u, urllib.parse as _up, json as _j
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/email_auto_log?select=id"
+             f"&email=eq.{_up.quote(email)}&kind=eq.{_up.quote(kind)}&ref=eq.{_up.quote(ref)}&limit=1")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _j.loads(_u.urlopen(req, timeout=10).read().decode("utf-8"))
+        return bool(rows)
+    except Exception as e:
+        print(f"[emails-auto] dedup check falhou ({kind}/{email}): {e} — NÃO enviando por segurança")
+        return True
+
+
+def _email_auto_registrar(email: str, kind: str, ref: str = "") -> None:
+    try:
+        _supabase_insert("email_auto_log", {"email": email, "kind": kind, "ref": ref})
+    except Exception as e:
+        print(f"[emails-auto] registrar falhou ({kind}/{email}): {e}")
+
+
+def _auth_admin_list_users(max_pages: int = 5) -> list[dict]:
+    """Lista usuários via Auth Admin API (service_role). Paginado, best-effort."""
+    import urllib.request as _u, json as _j
+    users: list[dict] = []
+    for page in range(1, max_pages + 1):
+        try:
+            req = _u.Request(f"{SUPABASE_URL}/auth/v1/admin/users?page={page}&per_page=200", method="GET")
+            req.add_header("apikey", SUPABASE_SERVICE_ROLE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            data = _j.loads(_u.urlopen(req, timeout=15).read().decode("utf-8"))
+            batch = data.get("users", data if isinstance(data, list) else [])
+            if not batch:
+                break
+            users.extend(batch)
+            if len(batch) < 200:
+                break
+        except Exception as e:
+            print(f"[emails-auto] list users p{page} falhou: {e}")
+            break
+    return users
+
+
+def _send_email_retorno30(email: str, name: str) -> bool:
+    """Retorno após 30 dias sem projeto — isca: cronograma grátis."""
+    import html as _hn
+    greet = _greeting_line(_hn.escape(name or ""))
+    body = (f"{greet}<br><br>Faz um tempinho que você não aparece por aqui — e desde a sua "
+            f"última visita o AI.arq melhorou bastante: a leitura das pranchas ficou mais "
+            f"precisa e agora todo projeto pode virar também um <b>cronograma de obra, de "
+            f"graça</b>.<br><br>Se tiver um projeto na mesa, manda a prancha (PDF, DWG ou DXF) "
+            f"que em minutos você recebe a planilha de quantitativos. Nessa fase de beta está "
+            f"<b>grátis e ilimitado</b>.")
+    return _send_email_smtp(
+        email, "Seu próximo quantitativo sai em minutos — e o cronograma é grátis",
+        _email_wrap("Sentimos sua falta por aqui", body,
+                    "Subir um projeto", "https://ai.arq.br/dashboard.html",
+                    reason=("Você está recebendo este e-mail porque tem uma conta no AI.arq. "
+                            "Se não quiser mais lembretes, é só responder avisando.")))
+
+
+@app.post("/api/emails/auto/tick")
+async def emails_auto_tick(dry: int = 0):
+    """Varredura horária (pg_cron): decide e envia os lembretes automáticos.
+    dry=1 → só lista o que ENVIARIA, sem mandar nada (ensaio)."""
+    if os.environ.get("EMAILS_AUTO", "1") == "0":
+        return {"status": "off"}
+    from datetime import datetime as _dt, timezone as _tz
+    import urllib.request as _u, json as _j
+
+    now = _dt.now(_tz.utc)
+
+    def _parse(ts):
+        try:
+            return _dt.fromisoformat(str(ts).replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    users = _auth_admin_list_users()
+
+    # projetos por email (pra saber quem nunca subiu / quem sumiu)
+    proj_by_email: dict[str, list] = {}
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/projects?select=user_email,created_at,status"
+             f"&order=created_at.desc&limit=2000")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        for p in _j.loads(_u.urlopen(req, timeout=15).read().decode("utf-8")):
+            e = (p.get("user_email") or "").lower()
+            if e:
+                proj_by_email.setdefault(e, []).append(p)
+    except Exception as e:
+        print(f"[emails-auto] projetos falhou: {e}")
+        return {"status": "erro", "detail": "não consegui ler projetos — abortando por segurança"}
+
+    acoes: list[dict] = []
+    H = 3600.0
+    for u in users:
+        email = (u.get("email") or "").lower()
+        if not email or email == ADMIN_EMAIL:
+            continue
+        created = _parse(u.get("created_at"))
+        if not created:
+            continue
+        idade_h = (now - created).total_seconds() / H
+        recente = idade_h <= 14 * 24  # janela: não ressuscitar cadastro antigo
+        confirmado = bool(u.get("email_confirmed_at"))
+        nome = ((u.get("user_metadata") or {}).get("full_name")
+                or (u.get("user_metadata") or {}).get("name") or "")
+
+        if not confirmado and 24 <= idade_h and recente:
+            acoes.append({"kind": "nudge_cadastro", "email": email, "nome": nome})
+        elif confirmado and 48 <= idade_h and recente and email not in proj_by_email:
+            acoes.append({"kind": "nudge_onboarding", "email": email, "nome": nome})
+
+    # retorno 30d: tem projeto concluído, último movimento entre 30 e 60 dias atrás
+    for email, plist in proj_by_email.items():
+        if email == ADMIN_EMAIL:
+            continue
+        ultimo = max((_parse(p.get("created_at")) for p in plist if _parse(p.get("created_at"))), default=None)
+        tem_done = any(p.get("status") == "done" for p in plist)
+        if ultimo and tem_done:
+            dias = (now - ultimo).total_seconds() / (24 * H)
+            if 30 <= dias <= 60:
+                acoes.append({"kind": "retorno_30d", "email": email, "nome": ""})
+
+    # dedup vida-inteira + teto por tick (goteja, nunca rajada)
+    acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"])][:5]
+
+    if dry:
+        return {"status": "dry", "enviaria": acoes}
+
+    enviados = []
+    for a in acoes:
+        ok = False
+        try:
+            if a["kind"] in ("nudge_cadastro", "nudge_onboarding"):
+                link = _generate_magic_link(a["email"])
+                if link:
+                    ok = _send_nudge_email(a["email"], a["nome"],
+                                           "cadastro" if a["kind"] == "nudge_cadastro" else "onboarding",
+                                           link)
+            else:
+                ok = _send_email_retorno30(a["email"], a["nome"])
+        except Exception as e:
+            print(f"[emails-auto] envio {a['kind']} -> {a['email']} falhou: {e}")
+        if ok:
+            _email_auto_registrar(a["email"], a["kind"])
+            enviados.append(a)
+    if enviados:
+        print(f"[emails-auto] tick enviou {len(enviados)}: {[(a['kind'], a['email']) for a in enviados]}")
+    return {"status": "ok", "enviados": len(enviados), "detalhe": enviados}
 
 
 # ── NEWSLETTER MENSAL ──
