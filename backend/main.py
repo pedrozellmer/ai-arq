@@ -1450,6 +1450,74 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office", project_type:
         return False
 
 
+# Erros PASSAGEIROS (infra/IA) que valem re-tentativa automática. Erro de
+# ARQUIVO (DWG inválido, PDF escaneado, 0 itens) NÃO casa — precisa do cliente.
+import re as _re_auto
+_TRANSIENT_ERR_RX = _re_auto.compile(
+    r"reinici|interrompid|sobrecarregad|timeout|tempo\s+limite|excedeu|conex|momentane",
+    _re_auto.IGNORECASE)
+
+
+def _auto_retry_erros_transitorios():
+    """REVISÃO AUTOMÁTICA (decisão Pedro 07/07): projeto que caiu por causa
+    passageira re-tenta SOZINHO na varredura de 5min — o que antes era resgate
+    manual (casos sumi/Lia/Thamiry 06/07). Mesma trava do recovery:
+    auto_resume_count < 2. Quando o erro vira TERMINAL (esgotou tentativas ou
+    é problema do arquivo), alerta interno pro Pedro com o diagnóstico — 1x
+    por job (dedup em email_auto_log) — pra ele nunca mais descobrir fuçando."""
+    import urllib.request as _u, json as _j
+    from datetime import timedelta as _td
+    try:
+        _cut = (datetime.utcnow() - _td(hours=24)).isoformat()
+        q = (f"{SUPABASE_URL}/rest/v1/projects?status=eq.error&archived=not.is.true"
+             f"&created_at=gte.{_cut}"
+             f"&select=job_id,user_email,project_name,error_message,typology,project_type,auto_resume_count"
+             f"&limit=20")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _j.loads(_u.urlopen(req, timeout=15).read().decode("utf-8"))
+    except Exception as e:
+        print(f"[auto-retry] busca de erros falhou: {e}")
+        return
+
+    for row in rows or []:
+        job_id = row.get("job_id")
+        if not job_id:
+            continue
+        msg = row.get("error_message") or ""
+        count = int(row.get("auto_resume_count") or 0)
+        transitorio = bool(_TRANSIENT_ERR_RX.search(msg))
+
+        if transitorio and count < 2:
+            typ = row.get("typology") or "office"
+            ptype = row.get("project_type") or "arquitetura"
+            if _retomar_job_do_storage(job_id, typ, ptype):
+                print(f"[auto-retry] {job_id}: erro passageiro → re-tentando sozinho "
+                      f"(tentativa {count + 1}/2)")
+                _log_error("auto-retry", f"re-tentativa automática {count + 1}/2 "
+                           f"(erro passageiro: {msg[:120]})", job_id, severity="info")
+                continue
+            # sem arquivo no Storage → cai pro alerta terminal abaixo
+
+        # TERMINAL: esgotou tentativas, não é transitório, ou não tem arquivo.
+        # Alerta interno 1x por job — o diagnóstico chega no email do Pedro.
+        if not _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id):
+            _causa = ("esgotou as 2 re-tentativas automáticas" if transitorio
+                      else "problema no arquivo do cliente (não re-tentável)")
+            _ok = _notify_admin(
+                f"Projeto com erro terminal: {job_id}",
+                f"<b>Projeto:</b> {row.get('project_name') or job_id}<br>"
+                f"<b>Cliente:</b> {row.get('user_email') or '—'}<br>"
+                f"<b>Classificação:</b> {_causa}<br>"
+                f"<b>Erro:</b> {msg[:400]}<br><br>"
+                f"O cliente já recebeu o email de falha com orientação. "
+                f"Se for caso de resgate manual, o arquivo está no Storage "
+                f"(job <code>{job_id}</code>).")
+            if _ok:
+                _email_auto_registrar(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id)
+
+
 def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
     """RESILIÊNCIA: varre jobs em queued/processing que sobreviveram a um
     restart e tenta RETOMAR (baixa do Storage + reprocessa). Só marca 'error'
@@ -1601,6 +1669,7 @@ async def _on_startup_recover_jobs():
             try:
                 time.sleep(RECOVERY_SWEEP_MIN * 60)
                 _recover_stuck_jobs_on_startup(skip_local_active=True)
+                _auto_retry_erros_transitorios()
             except Exception as _e:
                 print(f"[recovery] varredura periódica falhou (segue ativa): {_e}")
     try:

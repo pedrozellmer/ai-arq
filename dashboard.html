@@ -3111,9 +3111,25 @@
       </div>
     ` : isArchived ? `
       <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">Arquivos expirados (90 dias)</div>
-    ` : p.status === 'error' ? `
-      <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-red-500">Falha no processamento</div>
-    ` : '';
+    ` : p.status === 'error' ? (() => {
+      // Erro PASSAGEIRO (infra/IA) com re-tentativa automática pendente → o
+      // cliente vê que estamos agindo, não um beco sem saída. Erro de arquivo
+      // ou tentativas esgotadas → orientação de reprocessar/trocar arquivo.
+      // (mesma classificação do backend _TRANSIENT_ERR_RX)
+      const _em = String(p.error_message || '');
+      const _transient = /reinici|interrompid|sobrecarregad|timeout|tempo\s+limite|excedeu|conex|momentane/i.test(_em);
+      const _tries = parseInt(p.auto_resume_count || 0);
+      if (_transient && _tries < 2) {
+        return `<div class="mt-4 pt-3 border-t border-gray-100 text-xs text-amber-700 bg-amber-50 -mx-1 px-2 py-2 rounded">
+          <span aria-hidden="true">&#9203;</span> <strong>Erro passageiro</strong> — vamos re-tentar
+          automaticamente em alguns minutos. Você não precisa fazer nada; te avisamos por email quando concluir.
+        </div>`;
+      }
+      return `<div class="mt-4 pt-3 border-t border-gray-100 text-xs text-red-700">
+        <span aria-hidden="true">&#10007;</span> <strong>Falha no processamento</strong> — abra o projeto pra
+        ver o motivo e reprocessar. Se precisar de ajuda, responda nosso email que a gente resolve junto.
+      </div>`;
+    })() : '';
 
     return `
       <article class="${cardCls}" ${onclickAttr} data-job="${escProj(p.job_id)}">
