@@ -3351,10 +3351,34 @@ bloco — só cite os que estão no inventário deste arquivo."""
         pdf_end_pct = 90
         pdf_span = pdf_end_pct - pdf_start_pct
 
-        for i, (pdf_path, filename, sheet_type) in enumerate(pdf_infos):
+        # ── Explode PDF multi-página em unidades de página ──
+        # Um "PROJETO EXECUTIVO.pdf" traz VÁRIAS pranchas num arquivo só. Antes o
+        # motor lia só a página 1 (às vezes a capa!) e ainda estourava a memória
+        # varrendo o texto de todas as páginas de uma vez. Agora cada página vira
+        # uma prancha, processada uma de cada vez com memória limitada. Caso real
+        # sumi/lia (06/07): PDF de 13 MB derrubava o Render de 2 GB toda tentativa.
+        from processor import pdf_page_count as _pdf_pages
+        MAX_PAGES_PER_PDF = 40
+        page_units = []  # (pdf_path, filename, sheet_type, page_index, page_count)
+        for _p, _fn, _st in pdf_infos:
+            _npg = _pdf_pages(_p)
+            for _pi in range(min(_npg, MAX_PAGES_PER_PDF)):
+                page_units.append((_p, _fn, _st, _pi, _npg))
+            if _npg > MAX_PAGES_PER_PDF:
+                try:
+                    project_data.warnings = (project_data.warnings or []) + [
+                        f"'{_fn}' tem {_npg} páginas — lemos as primeiras {MAX_PAGES_PER_PDF}. "
+                        f"Pro restante, divida o arquivo em partes ou envie em DXF."
+                    ]
+                except Exception:
+                    pass
+        total = len(page_units)
+
+        for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
+            _disp = filename if page_count <= 1 else f"{filename} · pág {page_index+1}/{page_count}"
             step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
             jobs.update_field(job_id, progress=step_pct)
-            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename}")
+            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {_disp}")
 
             # Se o auto-detect falhou E o usuário não classificou manualmente:
             # - se o nome contém palavra-chave de AMBIENTE (banh, cozinha, lavabo,
@@ -3374,14 +3398,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     sheet_type = SheetType.ARQUITETURA
                     jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (tipo não identificado — extração genérica)")
 
-            # 1. Extrair texto
-            text = extract_text(pdf_path)
+            # 1. Extrair texto (só da página desta unidade — leve, bounded)
+            text = extract_text(pdf_path, page_index)
 
-            # 2. Renderizar crops (1 PDF de cada vez)
-            crop_paths = render_crops(pdf_path, sheet_type, crops_dir)
+            # 2. Renderizar crops (1 página de cada vez; stem único por página)
+            _stem = f"{os.path.splitext(os.path.basename(pdf_path))[0]}_p{page_index}"
+            crop_paths = render_crops(pdf_path, sheet_type, crops_dir,
+                                      page_index=page_index, out_stem=_stem)
 
             # 3. Analisar com IA
-            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: Nossa IA está analisando {filename}...")
+            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: Nossa IA está analisando {_disp}...")
             sheet = SheetInfo(
                 filename=filename,
                 sheet_type=sheet_type,
