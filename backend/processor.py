@@ -4,7 +4,6 @@ import os
 import re
 import tempfile
 from pathlib import Path
-import pdfplumber
 import pypdfium2 as pdfium
 from PIL import Image
 from models import SheetType, SheetInfo
@@ -175,38 +174,66 @@ def identify_sheet_type(filename: str) -> SheetType:
     return SheetType.DESCONHECIDO
 
 
-def extract_text(pdf_path: str) -> str:
-    """Extrai texto de um PDF usando pdfplumber."""
-    text_parts = []
+def pdf_page_count(pdf_path: str) -> int:
+    """Número de páginas do PDF (leve, via pypdfium2). Retorna 1 em erro."""
     try:
-        with pdfplumber.open(pdf_path) as pdf:
-            for page in pdf.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text_parts.append(page_text)
-                tables = page.extract_tables()
-                for table in tables:
-                    for row in table:
-                        if row:
-                            cells = [str(c) for c in row if c]
-                            if cells:
-                                text_parts.append(" | ".join(cells))
+        pdf = pdfium.PdfDocument(pdf_path)
+        n = len(pdf)
+        pdf.close()
+        return max(1, int(n))
+    except Exception:
+        return 1
+
+
+def extract_text(pdf_path: str, page_index: int = 0, char_budget: int = 6000) -> str:
+    """Extrai texto de UMA página do PDF (default: a primeira), limitado.
+
+    Usa pypdfium2 (motor C) — rápido e leve, o MESMO lib que já renderiza as
+    pranchas. NÃO usa mais pdfplumber: em PDF exportado de CAD, o pdfplumber era
+    lentíssimo por página (parseia cada objeto do desenho) e o extract_tables
+    interpretava as milhares de linhas como bordas de tabela, estourando
+    memória/CPU. Era a causa raiz do crash do "PROJETO EXECUTIVO" de 13 MB
+    derrubando o Render de 2 GB (caso sumi/lia, 06/07) — o extract_text antigo
+    ainda varria TODAS as páginas. Benchmark: 7 pranchas densas = 0,85s no
+    pdfium vs. >2min (travava) no pdfplumber. Lê só a página pedida.
+    """
+    try:
+        pdf = pdfium.PdfDocument(pdf_path)
+        try:
+            if page_index < 0 or page_index >= len(pdf):
+                return ""
+            tp = pdf[page_index].get_textpage()
+            try:
+                txt = tp.get_text_bounded() or ""
+            finally:
+                tp.close()
+            return txt[:char_budget]
+        finally:
+            pdf.close()
     except Exception as e:
-        text_parts.append(f"[Erro ao extrair texto: {e}]")
-    return "\n".join(text_parts)
+        return f"[Erro ao extrair texto: {e}]"
 
 
-def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 120) -> list[str]:
-    """Renderiza um PDF e corta regiões de interesse. Otimizado pra baixo consumo de memória."""
+def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 120,
+                 page_index: int = 0, out_stem: str | None = None) -> list[str]:
+    """Renderiza UMA página do PDF e corta regiões de interesse. Baixo consumo de memória.
+
+    page_index permite tratar PDF multi-página (executivo com várias pranchas
+    num arquivo só) página por página. out_stem evita colisão de nome entre as
+    páginas do mesmo arquivo.
+    """
     import gc
     crops_config = CROP_REGIONS.get(sheet_type, {})
     if not crops_config:
         crops_config = {"full": (0.0, 0.0, 1.0, 1.0)}
 
+    stem = out_stem or Path(pdf_path).stem
     crop_paths = []
     try:
         pdf = pdfium.PdfDocument(pdf_path)
-        page = pdf[0]
+        if page_index < 0 or page_index >= len(pdf):
+            page_index = 0
+        page = pdf[page_index]
         # DPI 120 = ~3300x2300 px por prancha A1 (~30MB RAM vs 80MB em 200 DPI)
         bitmap = page.render(scale=dpi / 72)
         img = bitmap.to_pil()
@@ -223,7 +250,7 @@ def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int
                 ratio = 1000 / max_side
                 crop = crop.resize((int(crop.width * ratio), int(crop.height * ratio)), Image.LANCZOS)
 
-            crop_path = os.path.join(output_dir, f"{Path(pdf_path).stem}_{name}.jpg")
+            crop_path = os.path.join(output_dir, f"{stem}_{name}.jpg")
             crop.save(crop_path, "JPEG", quality=80)
             crop_paths.append(crop_path)
             del crop
@@ -232,7 +259,7 @@ def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int
         del img
         gc.collect()
     except Exception as e:
-        print(f"Erro ao renderizar {pdf_path}: {e}")
+        print(f"Erro ao renderizar {pdf_path} p{page_index}: {e}")
 
     return crop_paths
 
