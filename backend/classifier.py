@@ -180,7 +180,9 @@ def classify_item(description: str, unit: str = "") -> dict:
     try:
         import anthropic
         from llm_retry import call_with_retry
-        client = anthropic.Anthropic(api_key=api_key)
+        # timeout=120: sem isso, uma chamada pendurada trava a finalização do job
+        # (etapa "Gerando planilha") e segura o servidor inteiro — auditoria 06/07.
+        client = anthropic.Anthropic(api_key=api_key, timeout=120.0)
         resp = call_with_retry(
             client,
             tag="classifier",
