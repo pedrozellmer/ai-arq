@@ -4432,6 +4432,20 @@ def _send_email_retorno30(email: str, name: str) -> bool:
                             "Se não quiser mais lembretes, é só responder avisando.")))
 
 
+def _email_eh_interno(email: str) -> bool:
+    """True pra contas do Pedro/teste — inclusive aliases (+smoke etc.).
+    O dry-run de 07/07 pegou zarelalopes+smoke@ escapando do filtro exato."""
+    e = (email or "").lower()
+    if e == ADMIN_EMAIL:
+        return True
+    try:
+        local, dom = e.split("@", 1)
+        a_local, a_dom = ADMIN_EMAIL.split("@", 1)
+        return dom == a_dom and local.split("+")[0] == a_local.split("+")[0]
+    except ValueError:
+        return False
+
+
 @app.post("/api/emails/auto/tick")
 async def emails_auto_tick(dry: int = 0):
     """Varredura horária (pg_cron): decide e envia os lembretes automáticos.
@@ -4471,7 +4485,7 @@ async def emails_auto_tick(dry: int = 0):
     H = 3600.0
     for u in users:
         email = (u.get("email") or "").lower()
-        if not email or email == ADMIN_EMAIL:
+        if not email or _email_eh_interno(email):
             continue
         created = _parse(u.get("created_at"))
         if not created:
@@ -4489,7 +4503,7 @@ async def emails_auto_tick(dry: int = 0):
 
     # retorno 30d: tem projeto concluído, último movimento entre 30 e 60 dias atrás
     for email, plist in proj_by_email.items():
-        if email == ADMIN_EMAIL:
+        if _email_eh_interno(email):
             continue
         ultimo = max((_parse(p.get("created_at")) for p in plist if _parse(p.get("created_at"))), default=None)
         tem_done = any(p.get("status") == "done" for p in plist)
