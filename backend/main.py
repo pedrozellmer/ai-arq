@@ -3855,6 +3855,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
               f"total_area={project_data.total_area} layout_area={project_data.layout_area} "
               f"ok={_supa_ok}")
 
+        # ── SHADOW: Medição Vetorial de PDF v1 (pdf_vector.py) ──
+        # Mede a geometria vetorial das primeiras páginas PDF DEPOIS do done,
+        # em thread daemon, e loga em error_log (stage pdfvec:shadow) pra
+        # comparação com o Vision. Zero impacto no cliente; PDFVEC_SHADOW=0
+        # desliga. work_dir sobrevive ao fim do job (sem rmtree), então a
+        # thread lê os arquivos numa boa; se sumirem (restart), ela só pula.
+        try:
+            if page_units and os.environ.get("PDFVEC_SHADOW", "1") != "0":
+                from pdf_vector import shadow_measure_async
+                shadow_measure_async(page_units, job_id, api_key, _log_error)
+        except Exception as _sve:
+            print(f"[pdfvec] shadow não iniciado: {_sve}")
+
         # Email "planilha pronta" pro usuário (best-effort; falha não derruba o job)
         try:
             import html as _html, urllib.request as _ur2
