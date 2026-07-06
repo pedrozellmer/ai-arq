@@ -1519,7 +1519,9 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
 
         # RESILIÊNCIA (16/06): tenta RETOMAR antes de marcar erro.
         # Busca reprocess_count + typology do job (proteção anti-loop:
-        # só auto-retoma 1 vez; se crashar de novo, aí sim vira erro).
+        # auto-retoma até 2× — job longo multi-arquivo (ex.: 22 DWGs) pode
+        # pegar 2 reinícios de deploy no meio; ampliado de 1 pra 2 na
+        # auditoria 06/07. Após 2, vira erro pra não entrar em loop).
         prev_count = 0
         typ = "office"
         ptype = "arquitetura"
@@ -1537,7 +1539,7 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
         except Exception:
             pass
 
-        if prev_count < 1 and _retomar_job_do_storage(job_id, typ, ptype):
+        if prev_count < 2 and _retomar_job_do_storage(job_id, typ, ptype):
             # _retomar já incrementou auto_resume_count (anti-loop, via RPC
             # atômica) e re-disparou o processamento.
             recovered += 1
@@ -2905,6 +2907,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # 1. Extrair dados estruturados do DXF
                     extraction = extract_from_file(dxf_path)
                     structured_text = extraction.to_structured_prompt()
+                    # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
+                    # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
+                    # folgado pra uma prancha real.
+                    if len(structured_text) > 300_000:
+                        structured_text = structured_text[:300_000] + "\n[... texto truncado por tamanho ...]"
 
                     # ── TRAVA DE PROCEDÊNCIA (regra nº1) ──────────────────────
                     # Se a extração geométrica veio com RESSALVA (estéril / unidade
@@ -2917,7 +2924,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
                     jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Nossa IA está analisando os dados extraídos...")
-                    dxf_client = anthropic.Anthropic(api_key=api_key)
+                    dxf_client = anthropic.Anthropic(api_key=api_key, timeout=300.0)
 
                     _proj_kind = "ESTRUTURA (concreto armado)" if is_structural else "arquitetura"
                     _estrutura_directive = (
@@ -3288,6 +3295,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _log_error("dxf:claude", f"{os.path.basename(dxf_path)}: {e}", job_id)
 
                     del structured_text
+                    try:
+                        del extraction
+                    except Exception:
+                        pass
+                    # Libera o DXF convertido (temp dir arq_dxf_*) desta prancha —
+                    # senão os N DXFs convertidos acumulam no /tmp do dyno durante o
+                    # job (leak achado na auditoria 06/07; caso Thamiry, 22 DWGs). O
+                    # preview lê de work_dir, não desses temp dirs, então é seguro.
+                    try:
+                        _dxf_dir = os.path.dirname(dxf_path)
+                        if os.path.basename(_dxf_dir).startswith("arq_dxf_"):
+                            shutil.rmtree(_dxf_dir, ignore_errors=True)
+                    except Exception:
+                        pass
                     gc.collect()
 
             except Exception as e:
@@ -3298,7 +3319,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 raise  # Deixar o erro aparecer
 
         total = len(pdf_paths)
-        client = anthropic.Anthropic(api_key=api_key)
+        client = anthropic.Anthropic(api_key=api_key, timeout=300.0)
         all_items = list(dxf_items)  # Começar com itens DXF
         crops_dir = os.path.join(work_dir, "crops")
         os.makedirs(crops_dir, exist_ok=True)

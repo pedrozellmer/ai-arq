@@ -1146,7 +1146,7 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
 def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                        progress_callback=None,
                        typology: str = "office") -> tuple[ProjectData, list[BudgetItem]]:
-    client = anthropic.Anthropic(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key, timeout=300.0)
     all_items = []
     project_data = ProjectData()
     # Coleta TODAS as leituras de área em pranchas diferentes pra não ficar

@@ -860,6 +860,23 @@ def extract_dxf(filepath: str) -> DXFExtraction:
     if not os.path.isfile(filepath):
         raise FileNotFoundError(f"Arquivo não encontrado: {filepath}")
 
+    # Guarda de memória (auditoria 06/07): ezdxf.readfile carrega o DXF INTEIRO
+    # na RAM. No Render (2 GB) um DXF gigante — comum no arquivo expandido pela
+    # conversão ODA — estoura antes de qualquer processamento (SIGKILL sem stack
+    # trace, aparece como "servidor reiniciou"). Recusa com mensagem clara acima
+    # de um teto seguro em vez de derrubar o processo inteiro.
+    try:
+        _sz = os.path.getsize(filepath)
+    except OSError:
+        _sz = 0
+    _MAX_DXF_BYTES = 150 * 1024 * 1024  # 150 MB — prancha normal é <20 MB
+    if _sz > _MAX_DXF_BYTES:
+        raise RuntimeError(
+            f"DXF grande demais pra processar com segurança "
+            f"({_sz // (1024 * 1024)} MB, limite {_MAX_DXF_BYTES // (1024 * 1024)} MB). "
+            f"Exporte só a prancha necessária ou divida o arquivo em partes."
+        )
+
     # Try UTF-8 first, then latin-1 (common in Brazilian CAD files)
     doc = None
     for encoding in ("utf-8", "latin-1", None):
