@@ -76,7 +76,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     except Exception as e:
         out["err_rooms"] = f"{type(e).__name__}: {e}"[:120]
 
-    # 4) paredes/divisórias
+    # 4) paredes/divisórias (medição por pares de paralelas na sopa)
     try:
         from pdfvec_walls import detect_walls
         w = detect_walls(pdf_path, page_index, den, bbox)
@@ -84,6 +84,15 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         out["n_walls"] = len(w.get("walls", []))
     except Exception as e:
         out["err_walls"] = f"{type(e).__name__}: {e}"[:120]
+
+    # 5) POR LAYER (descoberta 07/07: OCG preserva os layers do CAD no PDF) —
+    # parede só do layer de alvenaria/divisória (sem contaminação) + inventário
+    # de símbolos (IND-*/LUM-*). Determinístico, sem IA. Coleta pra calibrar.
+    try:
+        from pdfvec_layers import summarize_layers
+        out["layers"] = summarize_layers(pdf_path, page_index, den, bbox)
+    except Exception as e:
+        out["err_layers"] = f"{type(e).__name__}: {e}"[:120]
 
     out["secs"] = round(time.time() - t0, 1)
     return out
