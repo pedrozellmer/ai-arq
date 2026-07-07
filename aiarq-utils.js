@@ -163,6 +163,46 @@
     }
   };
 
+  // ─── Origem (first-touch attribution) ────────────────────────
+  // Guarda UMA VEZ de onde o visitante chegou (referrer + UTM/?origem=).
+  // First-party (só localStorage, zero 3rd-party). Usado no cadastro pra
+  // atribuir a conta e, com consentimento, no funil. NÃO sobrescreve — o
+  // PRIMEIRO toque é o que conta (a pessoa pode navegar antes de cadastrar).
+  function _classifyRef(host) {
+    if (!host) return '';
+    host = host.toLowerCase();
+    if (/instagram|l\.instagram|ig\./.test(host)) return 'instagram';
+    if (/wa\.me|whatsapp/.test(host)) return 'whatsapp';
+    if (/t\.me|telegram/.test(host)) return 'telegram';
+    if (/google\./.test(host)) return 'google';
+    if (/bing\.|duckduckgo|search\.yahoo/.test(host)) return 'busca';
+    if (/facebook|fb\.me|\bfb\./.test(host)) return 'facebook';
+    if (/linkedin|lnkd\.in/.test(host)) return 'linkedin';
+    if (/youtube|youtu\.be/.test(host)) return 'youtube';
+    if (/ai\.arq\.br/.test(host)) return '';   // navegação interna, ignora
+    return host.replace(/^www\./, '');
+  }
+  (function _captureSource() {
+    try {
+      if (localStorage.getItem('aiarq_src')) return;   // first-touch: não sobrescreve
+      var params = new URLSearchParams(location.search || '');
+      var utm_source = (params.get('utm_source') || params.get('origem') || '').slice(0, 40);
+      var utm_medium = (params.get('utm_medium') || '').slice(0, 40);
+      var utm_campaign = (params.get('utm_campaign') || params.get('campanha') || '').slice(0, 60);
+      var refHost = '';
+      try { if (document.referrer) refHost = new URL(document.referrer).hostname; } catch (e) {}
+      var label = utm_source || _classifyRef(refHost) || (refHost ? refHost.replace(/^www\./, '') : 'direto');
+      localStorage.setItem('aiarq_src', JSON.stringify({
+        label: String(label).slice(0, 40),
+        utm_source: utm_source, utm_medium: utm_medium, utm_campaign: utm_campaign,
+        ref: refHost.slice(0, 80), landing: (location.pathname || '').slice(0, 80),
+      }));
+    } catch (e) { /* nunca quebra nada */ }
+  })();
+  window.aiArqSource = function () {
+    try { return JSON.parse(localStorage.getItem('aiarq_src') || 'null'); } catch (e) { return null; }
+  };
+
   // ─── trackEvent ──────────────────────────────────────────────
   // Telemetria leve de uso (Painel de Atividade no admin). Fire-and-forget:
   // nunca bloqueia a UI, nunca lança. POST /api/track → grava em usage_events
@@ -185,6 +225,9 @@
         _cid = localStorage.getItem('aiarq_cid') || '';
         if (!_cid) { _cid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem('aiarq_cid', _cid); }
       } catch (e) { /* localStorage indisponível */ }
+      // src = origem first-touch (de onde o visitante chegou) — pra atribuir o funil
+      let _src = '';
+      try { var _s0 = JSON.parse(localStorage.getItem('aiarq_src') || 'null'); _src = (_s0 && _s0.label) ? String(_s0.label).slice(0, 40) : ''; } catch (e) {}
       _sbClient.auth.getSession().then(({ data: { session } }) => {
         const u = (session && session.user) ? session.user : null;
         const body = JSON.stringify({
@@ -193,7 +236,7 @@
           user_email: u ? (u.email || '') : '',
           job_id: (meta && meta.job_id) ? String(meta.job_id) : '',
           path: (location.pathname || '').slice(0, 200),
-          meta: Object.assign({ cid: _cid }, meta || {}),
+          meta: Object.assign({ cid: _cid, src: _src }, meta || {}),
         });
         // keepalive: o evento sobrevive mesmo se a página for fechada logo
         // após (ex.: clicou em baixar e saiu). Erro engolido de propósito.

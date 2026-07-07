@@ -565,6 +565,19 @@
       // Success
       clearDraft();
           localStorage.setItem('aiarq_profile_complete', 'true');
+      // Atribuição de origem: grava de onde este cliente chegou (first-touch)
+      // na conta dele — dado de conta, confiável (não depende de cookie).
+      // Aparece no admin agrupado, pra saber o que traz cliente.
+      try {
+        var _srcAttr = window.aiArqSource && window.aiArqSource();
+        if (_srcAttr && _srcAttr.label) {
+          await sbClient.auth.updateUser({ data: {
+            src: _srcAttr.label,
+            src_ref: _srcAttr.ref || '',
+            src_campaign: _srcAttr.utm_campaign || ''
+          } });
+        }
+      } catch (e) { /* atribuição nunca bloqueia o cadastro */ }
       if (window.trackEvent) trackEvent('signup_done');
       window.location.href = 'dashboard.html';
 

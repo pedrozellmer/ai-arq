@@ -8000,15 +8000,18 @@ async def track_event(payload: TrackPayload):
     ev = (payload.event or "").strip()
     if ev not in _TRACK_ALLOWED:
         return {"status": "ignored"}
-    # meta capado: só cid (id anônimo do navegador) e type, curtos.
+    # meta capado: só cid (id anônimo), type e src (origem first-touch), curtos.
     _meta = {}
     if isinstance(payload.meta, dict):
         _cid = str(payload.meta.get("cid") or "")[:40]
         _type = str(payload.meta.get("type") or "")[:40]
+        _src = str(payload.meta.get("src") or "")[:40]
         if _cid:
             _meta["cid"] = _cid
         if _type:
             _meta["type"] = _type
+        if _src:
+            _meta["src"] = _src
     row = {
         "event": ev,  # já validado contra a allowlist
         "user_id": (payload.user_id or "")[:80],
