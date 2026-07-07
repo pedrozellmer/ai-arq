@@ -244,3 +244,67 @@ def summarize_layers(pdf_path: str, page_index: int, scale_denominator: float,
         "symbols": dict(sorted(symbols.items(), key=lambda t: -t[1])[:10]),
         "symbol_layers": dict(sorted(sym_inv.items(), key=lambda t: -t[1])[:12]),
     }
+
+
+# ── Escala EXATA embutida no PDF (descoberta 07/07, achado #2 do estudo) ──
+# PDF exportado de CAD traz /VP (viewports) com /Measure /X /C = fator de
+# conversão real por view. denom = C / (2.54/72). Resolve escala + multi-view
+# + "INDICADAS" de forma DETERMINÍSTICA, sem Vision. Só pikepdf.
+_CM_PER_PT = 2.54 / 72.0            # 0.0352778 — 1 ponto em escala 1:1
+_STD_SCALES = [10, 20, 25, 33, 50, 75, 100, 125, 150, 200, 250, 500, 1000]
+
+
+def _snap_scale(raw: float):
+    """Aproxima pra escala padrão de arquitetura se estiver a ≤5%. C é cm/pt
+    (padrão do /RL). NÃO tenta unidades alternativas — isso fazia a folha 1:1
+    (raw≈1) casar errado com 1:10. Retorna (denom, snapped_bool) ou None."""
+    if raw <= 0:
+        return None
+    for s in _STD_SCALES:
+        if abs(raw - s) / s <= 0.05:
+            return s, True
+    if 5 <= raw <= 2000:
+        return int(round(raw)), False
+    return None
+
+
+def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
+    """Lê a escala exata de cada viewport do PDF. Retorna:
+      {main_scale, main_bbox, snapped, viewports:[{bbox, scale, snapped}]}.
+    main = maior viewport que não é a folha inteira. {} se não houver /VP."""
+    try:
+        pdf = pikepdf.open(pdf_path)
+        page = pdf.pages[page_index]
+        vps = page.get("/VP")
+        if not vps:
+            return {}
+        pw = float(page.MediaBox[2]) - float(page.MediaBox[0])
+        ph = float(page.MediaBox[3]) - float(page.MediaBox[1])
+        page_area = pw * ph
+        views = []
+        for v in vps:
+            try:
+                meas = v.get("/Measure")
+                bbox = [float(x) for x in v.get("/BBox")]
+                c = float(meas.get("/X")[0].get("/C"))
+            except Exception:
+                continue
+            snap = _snap_scale(c / _CM_PER_PT)
+            if not snap:
+                continue
+            denom, snapped = snap
+            area = abs(bbox[2] - bbox[0]) * abs(bbox[3] - bbox[1])
+            # ignora a viewport da folha inteira (é o quadro do papel, não um
+            # desenho) — sempre por ÁREA, nunca pelo denominador.
+            if area >= 0.9 * page_area:
+                continue
+            views.append({"bbox": bbox, "scale": denom, "snapped": snapped, "area": area})
+        if not views:
+            return {}
+        main = max(views, key=lambda x: x["area"])
+        for x in views:
+            x.pop("area", None)
+        return {"main_scale": main["scale"], "main_bbox": main["bbox"],
+                "snapped": main["snapped"], "viewports": views}
+    except Exception as e:
+        return {"error": f"{type(e).__name__}: {e}"[:100]}

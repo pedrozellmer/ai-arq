@@ -34,33 +34,51 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     out: dict = {"file": os.path.basename(pdf_path)[:60], "page": page_index}
     t0 = time.time()
 
-    # 1) escala declarada no carimbo (Vision, ~centavos)
+    # 1) ESCALA — fonte primária: viewport embutido no PDF (exato, R$0, resolve
+    # "INDICADAS"). Fallback: carimbo via Vision. (Achado #2 do estudo 07/07.)
+    den = None
+    bbox = None
     try:
-        from pdfvec_carimbo import read_carimbo_scale
-        car = read_carimbo_scale(pdf_path, page_index)
-        out["declared"] = car.get("declared_scales")
-        out["indicadas"] = bool(car.get("indicadas"))
-        den = car.get("main_scale")
+        from pdfvec_layers import scale_from_viewport
+        vp = scale_from_viewport(pdf_path, page_index)
+        if vp.get("main_scale"):
+            den = vp["main_scale"]
+            bbox = vp.get("main_bbox")  # bbox exato da view principal (melhor que clustering)
+            out["scale_src"] = "viewport"
+            out["scale_snapped"] = vp.get("snapped")
+            out["n_viewports"] = len(vp.get("viewports", []))
     except Exception as e:
-        out["err_carimbo"] = f"{type(e).__name__}: {e}"[:120]
-        den = None
+        out["err_viewport"] = f"{type(e).__name__}: {e}"[:120]
+
+    if not den:  # fallback: carimbo Vision
+        try:
+            from pdfvec_carimbo import read_carimbo_scale
+            car = read_carimbo_scale(pdf_path, page_index)
+            out["declared"] = car.get("declared_scales")
+            out["indicadas"] = bool(car.get("indicadas"))
+            den = car.get("main_scale")
+            if den:
+                out["scale_src"] = "carimbo"
+        except Exception as e:
+            out["err_carimbo"] = f"{type(e).__name__}: {e}"[:120]
+
     if not den:
-        out["skip"] = "sem escala declarada"
+        out["skip"] = "sem escala (viewport nem carimbo)"
         out["secs"] = round(time.time() - t0, 1)
         return out
     out["scale"] = den
 
-    # 2) view principal
-    bbox = None
-    try:
-        from pdfvec_views import detect_views
-        views = detect_views(pdf_path, page_index)
-        out["n_views"] = len(views)
-        main = next((v for v in views if v.get("is_main")), None)
-        if main:
-            bbox = main["bbox"]
-    except Exception as e:
-        out["err_views"] = f"{type(e).__name__}: {e}"[:120]
+    # 2) view principal — se o viewport não deu o bbox, cai pro clustering
+    if bbox is None:
+        try:
+            from pdfvec_views import detect_views
+            views = detect_views(pdf_path, page_index)
+            out["n_views"] = len(views)
+            main = next((v for v in views if v.get("is_main")), None)
+            if main:
+                bbox = main["bbox"]
+        except Exception as e:
+            out["err_views"] = f"{type(e).__name__}: {e}"[:120]
 
     # 3) ambientes (banda de sala) + envoltória (banda alta, ponte 12pt)
     try:
