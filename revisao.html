@@ -97,10 +97,10 @@
         <p class="mb-2 font-medium text-gray-800">Como usar</p>
         <ul class="space-y-1">
           <li>✓ <span class="font-medium">Aprovar</span> — item está correto</li>
-          <li>✗ <span class="font-medium">Remover</span> — alucinação, sai da planilha</li>
+          <li>✗ <span class="font-medium">Remover</span> — item que a IA inventou (alucinação), sai da planilha</li>
           <li>✎ <span class="font-medium">Editar</span> — corrigir qtd / unidade / descrição</li>
-          <li>💬 <span class="font-medium">Comentar</span> — sua correção treina a IA pro próximo projeto</li>
-          <li>🏠 <span class="font-medium">Marcar existente</span> — já existe na obra, mantém sem comprar (zera a quantidade)</li>
+          <li>💬 <span class="font-medium">Comentar</span> — ajuda a IA a acertar mais da próxima vez</li>
+          <li>🏠 <span class="font-medium">Marcar existente</span> — já existe na obra, mantém na obra sem precisar comprar (zera a quantidade)</li>
           <li>🔗 <span class="font-medium">Abrir prancha</span> — abre o desenho em outra aba pra conferir medindo (quando houver)</li>
         </ul>
       </div>
@@ -172,7 +172,7 @@
       <h3 id="modal-comment-title" class="font-semibold text-gray-800">Comentário sobre este item</h3>
       <button type="button" onclick="closeCommentModal()" aria-label="Fechar" class="text-gray-500 hover:text-gray-600">✕</button>
     </div>
-    <label for="comment-text" class="text-xs text-gray-500 mb-3 block">O que está errado, faltando ou confuso? Sua correção treina a IA pro próximo projeto.</label>
+    <label for="comment-text" class="text-xs text-gray-500 mb-3 block">O que está errado, faltando ou confuso? Sua correção ajuda a IA a acertar mais da próxima vez.</label>
     <textarea id="comment-text" rows="4" class="w-full px-3 py-2 border rounded text-sm" placeholder="Ex.: a IA esqueceu os 4 armários aéreos da cozinha"></textarea>
     <div class="flex gap-2 justify-end pt-3">
       <button type="button" onclick="closeCommentModal()" class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancelar</button>
@@ -198,6 +198,7 @@
       <div class="flex items-center gap-2"><kbd>E</kbd><span class="text-gray-600">Editar item</span></div>
       <div class="flex items-center gap-2"><kbd>C</kbd><span class="text-gray-600">Comentar item</span></div>
       <div class="flex items-center gap-2"><kbd>V</kbd><span class="text-gray-600">Ver prancha (nova aba)</span></div>
+      <div class="flex items-center gap-2"><kbd>M</kbd><span class="text-gray-600">Marcar como existente</span></div>
       <div class="flex items-center gap-2"><kbd>Esc</kbd><span class="text-gray-600">Fechar modal</span></div>
       <div class="flex items-center gap-2"><kbd>?</kbd><span class="text-gray-600">Esta ajuda</span></div>
     </div>
@@ -381,7 +382,7 @@ function renderItem(it, localIndex) {
           class="p-2 hover:bg-indigo-50 rounded text-indigo-600">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M14 10l7-7M10 21H5a2 2 0 01-2-2v-5m0-4V5a2 2 0 012-2h4"/></svg>
         </button>` : ''}
-        <button onclick="markExistente('${it.id}')" title="Marcar como existente — já existe na obra, mantém sem comprar (zera a quantidade) · tecla M"
+        <button onclick="markExistente('${it.id}')" title="Marcar como existente — já existe na obra, mantém na obra sem precisar comprar (zera a quantidade) · tecla M"
           class="p-2 hover:bg-slate-100 rounded text-slate-600">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
         </button>
@@ -551,7 +552,7 @@ async function submitComment() {
 document.getElementById('btn-save-later').addEventListener('click', () => {
   const pending = items.filter(it => !reviewState[it.id] || reviewState[it.id] === 'pending').length;
   const msg = pending > 0
-    ? `Progresso salvo! Você ainda tem ${pending} itens pendentes.\n\nVoltar pra "Meus Projetos" — você pode terminar a revisão depois.`
+    ? `Progresso salvo! Você ainda tem ${pending === 1 ? '1 item pendente' : pending + ' itens pendentes'}.\n\nVoltar pra "Meus Projetos" — você pode terminar a revisão depois.`
     : 'Progresso salvo! Voltando pra "Meus Projetos".';
   // Toast inline some em 2.5s. Mostra a mensagem completa via notify e
   // redireciona em seguida — sem alert bloqueante.
@@ -789,7 +790,7 @@ function updateCounters() {
       btnFinish.disabled = true;
       btnFinish.classList.add('opacity-50', 'cursor-not-allowed');
       btnFinish.classList.remove('shadow-btn', 'animate-pulse');
-      btnFinish.title = `Faltam ${counts.pending} itens pra concluir`;
+      btnFinish.title = counts.pending === 1 ? 'Falta 1 item pra concluir' : `Faltam ${counts.pending} itens pra concluir`;
     }
   }
 }

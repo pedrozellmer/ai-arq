@@ -66,12 +66,12 @@
         <span class="text-gray-500">Cronograma</span>
       </nav>
       <h1 class="font-semibold text-gray-800 truncate leading-tight">
-        Cronograma <span class="text-gray-500 font-normal text-sm">· físico-financeiro</span>
+        Cronograma <span class="text-gray-500 font-normal text-sm">· físico</span>
       </h1>
     </div>
     <span class="hidden md:inline-flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
       <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
-      Beta · Fase 2
+      Beta
     </span>
   </div>
 </header>
@@ -130,7 +130,7 @@
       <div class="flex-1 text-sm">
         <p class="font-semibold text-gray-800">Cronograma gerado automaticamente</p>
         <p class="text-xs text-gray-600 mt-0.5">
-          Baseado em <span id="ag-n-disciplinas" class="font-semibold">--</span> disciplinas detectadas e <span id="ag-duracao" class="font-semibold">--</span> meses de duração sugerida. Pra ajustar, mude a duração acima e clique em <strong>Regerar</strong>, ou clique em <strong>Editar fases</strong> pra refinar manualmente.
+          Baseado em <span id="ag-n-disciplinas" class="font-semibold">--</span> disciplinas detectadas e <span id="ag-duracao" class="font-semibold">--</span> meses de duração sugerida. Pra ajustar, mude a duração acima e clique em <strong>Regerar</strong>, ou edite direto na lista de fases do cronograma abaixo.
         </p>
       </div>
       <button onclick="document.getElementById('auto-gerado-banner').classList.add('hidden')" class="text-gray-500 hover:text-gray-700 shrink-0" title="Fechar">
@@ -170,7 +170,7 @@
       <div class="flex items-baseline justify-between mb-4">
         <div>
           <h2 class="text-lg font-bold text-slate-900">Fases do cronograma</h2>
-          <p class="text-xs text-slate-500 mt-1">Edite labels, datas, cores ou % executado — o Gantt atualiza enquanto você digita. Use as setas <span aria-hidden="true">↑↓</span> pra reordenar.</p>
+          <p class="text-xs text-slate-500 mt-1">Edite nomes, datas, cores ou % executado — o Gantt atualiza enquanto você digita. Use as setas <span aria-hidden="true">↑↓</span> pra reordenar.</p>
         </div>
         <button id="btn-add-fase" class="text-sm px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium transition flex items-center gap-1">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -178,7 +178,7 @@
         </button>
       </div>
       <div id="fases-editor" class="space-y-2"></div>
-      <p class="mt-4 text-xs text-slate-500">Mudanças ficam no navegador. Clique em <strong class="text-slate-700">Salvar</strong> no topo pra persistir no servidor (e habilitar PDF/PPT).</p>
+      <p class="mt-4 text-xs text-slate-500">Mudanças ficam no navegador. Clique em <strong class="text-slate-700">Salvar</strong> no topo pra salvar no servidor (e habilitar PDF/PPT).</p>
     </div>
 
     <!-- Resumo -->
@@ -200,7 +200,7 @@
         <p id="r-duracao" class="text-lg font-bold text-gray-900">--</p>
       </div>
       <div id="r-ppc-card" class="hidden rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4">
-        <p class="text-xs font-medium text-emerald-700 mb-1">Avanço real (PPC)</p>
+        <p class="text-xs font-medium text-emerald-700 mb-1">Avanço real (%)</p>
         <p id="r-ppc" class="text-lg font-bold text-emerald-900">--</p>
         <p id="r-ppc-sub" class="text-[10px] text-emerald-700 mt-0.5">--</p>
       </div>
@@ -220,10 +220,10 @@
       <div class="flex items-baseline justify-between mb-4">
         <div>
           <h2 class="text-lg font-bold text-gray-900">Curva S — Avanço previsto</h2>
-          <p class="text-xs text-gray-500">Modelo sigmoidal (k=10) · realista vs linear</p>
+          <p class="text-xs text-gray-500">Modelo sigmoidal · avanço realista, não linear</p>
         </div>
         <span class="text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
-          Lei 14.133 Art 117
+          Lei 14.133
         </span>
       </div>
       <div id="curva-s" class="overflow-x-auto"></div>
@@ -233,7 +233,7 @@
     <div class="rounded-2xl bg-white border shadow-sm p-6">
       <div class="flex items-baseline justify-between mb-4">
         <h2 class="text-lg font-bold text-gray-900">Distribuição por mês</h2>
-        <p class="text-xs text-gray-500">% de cada disciplina executado em cada mês</p>
+        <p class="text-xs text-gray-500">% de cada disciplina executada por mês</p>
       </div>
       <div id="matriz" class="overflow-x-auto"></div>
     </div>
@@ -241,7 +241,7 @@
     <!-- Caminho crítico -->
     <div class="rounded-2xl bg-amber-50 border-2 border-amber-200 p-6">
       <h2 class="text-base font-bold text-amber-900 mb-3">⚡ Caminho crítico</h2>
-      <p class="text-xs text-amber-700 mb-3">As 5 fases mais longas — atraso nelas atrasa a obra inteira</p>
+      <p class="text-xs text-amber-700 mb-3">As fases mais longas — atraso nelas empurra a obra inteira</p>
       <ol id="caminho-critico" class="space-y-1.5 text-sm text-amber-900"></ol>
     </div>
 
@@ -723,7 +723,7 @@ function aplicarEdits(opts) {
   // user ainda tá digitando. Só impede de re-renderizar com fases incompletas.
   if (invalido > 0 || !fasesEditadas.length) {
     if (!silencioso) {
-      if (invalido > 0) showSaveStatus(`${invalido} fase(s) com campos vazios — preencha label e datas`, 'error');
+      if (invalido > 0) showSaveStatus(`${invalido} fase(s) com campos vazios — preencha o nome e as datas`, 'error');
       else showSaveStatus('Cronograma vazio — adicione ao menos 1 fase', 'error');
     }
     return;
