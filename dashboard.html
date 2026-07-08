@@ -186,16 +186,17 @@
       <!-- ═══════════════════════════════════════════ -->
       <div id="tab-home" class="tab-content">
 
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Olá, <span id="home-name">você</span> 👋</h1>
-          <p class="text-sm text-gray-500 mt-1">Panorama dos seus projetos e economia com AI.arq</p>
-        </div>
-
-        <!-- Beta: grátis e ilimitado -->
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3 rounded-2xl bg-indigo-50 border border-indigo-100 px-5 py-4 mb-6">
-          <span class="text-xl leading-none" aria-hidden="true">🧪</span>
-          <p class="text-sm text-indigo-900 flex-1"><b>Você está no beta — grátis e ilimitado.</b> Suba quantos projetos quiser, sem custo. Que tal o próximo?</p>
-          <button onclick="switchTab('novo-projeto')" class="shrink-0 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Novo projeto</button>
+        <!-- Hero: saudação + beta + CTA numa faixa só (moderno, gradiente) -->
+        <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-indigo-500 text-white p-6 md:p-7 mb-6">
+          <div class="flex flex-col md:flex-row md:items-center gap-4">
+            <div class="flex-1 min-w-0">
+              <h1 class="text-2xl font-bold">Olá, <span id="home-name">você</span> 👋</h1>
+              <p class="text-sm text-indigo-100 mt-1"><b class="text-white">Você está no beta — grátis e ilimitado.</b> Suba quantas pranchas quiser, sem custo. Que tal o próximo projeto?</p>
+            </div>
+            <button onclick="switchTab('novo-projeto')" class="shrink-0 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-white text-indigo-700 hover:bg-indigo-50 font-semibold transition shadow-sm">
+              <span aria-hidden="true">➕</span> Novo projeto
+            </button>
+          </div>
         </div>
 
         <!-- Ativação: hero pro novo usuário (0 projetos). Mostrado via JS. -->
@@ -269,27 +270,34 @@
           </div>
         </div>
 
-        <!-- Ações rápidas -->
-        <div class="grid gap-3 md:grid-cols-3 mb-6">
-          <button onclick="switchTab('novo-projeto')" class="bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl p-4 flex items-center gap-3 text-left">
-            <span class="text-2xl">➕</span>
-            <div>
-              <p class="font-semibold">Novo projeto</p>
-              <p class="text-xs text-indigo-100">Subir PDFs/DWGs</p>
+        <!-- Atalhos (tiles) -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <button onclick="switchTab('novo-projeto')" class="flex items-center gap-3 rounded-2xl border-2 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 hover:border-indigo-300 p-4 text-left transition">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white text-lg" aria-hidden="true">➕</span>
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900 truncate">Novo projeto</p>
+              <p class="text-xs text-gray-500 truncate">Subir PDF/DWG/DXF</p>
             </div>
           </button>
-          <button onclick="switchTab('meus-projetos')" class="bg-white border-2 border-gray-200 hover:border-indigo-300 text-gray-700 rounded-xl p-4 flex items-center gap-3 text-left">
-            <span class="text-2xl">📁</span>
-            <div>
-              <p class="font-semibold">Meus projetos</p>
-              <p class="text-xs text-gray-500">Histórico e revisar</p>
+          <button onclick="switchTab('meus-projetos')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-lg" aria-hidden="true">📁</span>
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900 truncate">Meus projetos</p>
+              <p class="text-xs text-gray-500 truncate">Histórico e revisar</p>
             </div>
           </button>
-          <button onclick="switchTab('cashback')" class="bg-white border-2 border-gray-200 hover:border-amber-300 text-gray-700 rounded-xl p-4 flex items-center gap-3 text-left">
-            <span class="text-2xl">💸</span>
-            <div>
-              <p class="font-semibold">Cashback</p>
-              <p class="text-xs text-gray-500">Ver saldo por projeto</p>
+          <button onclick="switchTab('cashback')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-amber-300 hover:shadow-sm p-4 text-left transition">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-lg" aria-hidden="true">💸</span>
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900 truncate">Cashback</p>
+              <p class="text-xs text-gray-500 truncate">Saldo por projeto</p>
+            </div>
+          </button>
+          <button onclick="switchTab('meu-cadastro')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-lg" aria-hidden="true">👤</span>
+            <div class="min-w-0">
+              <p class="font-semibold text-gray-900 truncate">Meu cadastro</p>
+              <p class="text-xs text-gray-500 truncate">Dados e conta</p>
             </div>
           </button>
         </div>
