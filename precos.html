@@ -532,8 +532,9 @@
     const pct = ((n - 1) / 49) * 100;
     slider.style.setProperty('--pct', pct + '%');
 
-    // Economia (só mostra se >5 pranchas)
-    if (n > 5) {
+    // Economia: só mostra quando há economia REAL (>0%). Senão fica escondida —
+    // não finge desconto inexistente (ex.: 8 pranchas dá R$19,63/prancha = 0%).
+    if (economiaPct > 0) {
       economiaEl.classList.remove('hidden');
       economiaPctEl.textContent = economiaPct + '%';
     } else {
