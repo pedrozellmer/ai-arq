@@ -626,9 +626,9 @@
           </div>
         </div>
 
-        <!-- Grid de cards -->
+        <!-- Lista de projetos (linhas empilhadas) -->
         <div id="projects-table-wrap" class="hidden">
-          <div id="projects-grid" class="grid gap-4 md:grid-cols-2 lg:grid-cols-3"></div>
+          <div id="projects-grid" class="flex flex-col gap-2.5"></div>
           <div id="projects-no-match" class="hidden text-center py-10 text-sm text-gray-500">
             Nenhum projeto encontrado pra essa busca.
           </div>
@@ -3112,7 +3112,7 @@
       day:'2-digit', month:'2-digit', year:'numeric'
     }) : '--';
 
-    // Cada badge tem ícone + texto além da cor — Pedro é daltônico, cor sozinha não basta.
+    // Status: cor + ícone + texto (Pedro é daltônico, cor sozinha não basta).
     const STATUS_LABEL = {
       'done':       { label: 'Pronto',      icon: '✓', cls: 'bg-emerald-100 text-emerald-700' },
       'error':      { label: 'Erro',        icon: '✗', cls: 'bg-red-100 text-red-700' },
@@ -3120,95 +3120,89 @@
       'processing': { label: 'Processando', icon: '⚙', cls: 'bg-blue-100 text-blue-700' },
     };
     const s = STATUS_LABEL[p.status] || { label: p.status || '—', icon: '•', cls: 'bg-gray-100 text-gray-600' };
-    const statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${s.cls} text-[10px] font-semibold uppercase tracking-wide"><span aria-hidden="true">${s.icon}</span> ${s.label}</span>`;
+    const statusBadge = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full ${s.cls} text-[10px] font-semibold uppercase tracking-wide shrink-0"><span aria-hidden="true">${s.icon}</span> ${s.label}</span>`;
+
+    // Ícone + rótulo por tipologia (a cor é decoração; ícone e texto carregam a info).
+    const TIPO = {
+      office:      { icon: '🏢', label: 'Escritório',  bg: 'bg-indigo-50' },
+      residential: { icon: '🏠', label: 'Residencial', bg: 'bg-emerald-50' },
+      retail:      { icon: '🏪', label: 'Varejo',      bg: 'bg-amber-50' },
+      hospital:    { icon: '🏥', label: 'Saúde',       bg: 'bg-rose-50' },
+      educational: { icon: '🎓', label: 'Educacional', bg: 'bg-sky-50' },
+    };
+    const tip = TIPO[p.typology] || { icon: '📄', label: (p.typology || ''), bg: 'bg-gray-100' };
 
     const isArchived = p.archived === true;
-    const archivedBadge = isArchived
-      ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold">Arquivado</span>'
-      : '';
     const warnings = Array.isArray(p.warnings) ? p.warnings : [];
     const warningBadge = warnings.length
-      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold cursor-help" title="${escProj(warnings.join(' | '))}">⚠ ${warnings.length}</span>`
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold cursor-help shrink-0" title="${escProj(warnings.join(' | '))}">⚠ ${warnings.length}</span>`
+      : '';
+    const archivedBadge = isArchived
+      ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-200 text-gray-600 text-[10px] font-semibold shrink-0">Arquivado</span>'
       : '';
 
-    const clickable = (p.status === 'done' && !isArchived);
-    const cardCls = clickable
-      ? 'group cursor-pointer rounded-2xl border-2 border-gray-100 hover:border-indigo-300 hover:shadow-lg bg-white p-5 transition'
-      : 'rounded-2xl border-2 border-gray-100 bg-white p-5 opacity-90';
-
-    const onclickAttr = clickable
+    const done = (p.status === 'done' && !isArchived);
+    const openable = done || (p.status === 'error' && !isArchived);  // erro também abre (ver motivo)
+    const rowCls = openable
+      ? 'group cursor-pointer rounded-xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm transition'
+      : 'rounded-xl border border-gray-200 bg-white opacity-90';
+    const onclickAttr = openable
       ? `onclick="if(!event.target.closest('a,button')){window.location.href='projeto.html?job_id=${escProj(p.job_id)}'}"`
       : '';
 
-    const tipologia = p.typology
-      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[10px] font-semibold uppercase tracking-wide">${escProj(p.typology)}</span>`
-      : '';
+    // Subtítulo: cliente (se houver) OU tipologia OU código.
+    const sub = (p.client_name || '').trim()
+      ? `<span aria-hidden="true">👤</span> ${escProj(p.client_name)}${(p.client_company || '').trim() ? ' · ' + escProj(p.client_company) : ''}`
+      : (tip.label ? escProj(tip.label) : `<span class="font-mono">${escProj(p.job_id)}</span>`);
 
-    const actions = clickable ? `
-      <div class="flex items-center gap-3 mt-4 pt-3 border-t border-gray-100">
+    // Ações à direita: Abrir (destaque) sempre que abrível; Revisar/XLSX só p/ pronto.
+    const actions = openable ? `
         <a href="projeto.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
-           class="text-xs font-semibold text-indigo-600 hover:text-indigo-800 no-underline">Abrir</a>
-        <a href="revisao.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
-           class="text-xs font-semibold text-amber-600 hover:text-amber-800 no-underline">Revisar</a>
+           class="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold no-underline transition shrink-0">Abrir</a>
+        ${done ? `<a href="revisao.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
+           class="hidden sm:inline text-xs font-semibold text-amber-600 hover:text-amber-800 no-underline shrink-0">Revisar</a>
         <a href="javascript:void(0)" onclick="event.stopPropagation();window.aiArqDownloadProtected('${API_BASE}/api/download/${escProj(p.job_id)}','quantitativos_aiarq_${escProj(p.job_id)}.xlsx')"
-           class="text-xs font-semibold text-emerald-600 hover:text-emerald-800 no-underline">Baixar XLSX</a>
-      </div>
-    ` : isArchived ? `
-      <div class="mt-4 pt-3 border-t border-gray-100 text-xs text-gray-500">Arquivos expirados (90 dias)</div>
-    ` : p.status === 'error' ? (() => {
-      // Erro PASSAGEIRO (infra/IA) com re-tentativa automática pendente → o
-      // cliente vê que estamos agindo, não um beco sem saída. Erro de arquivo
-      // ou tentativas esgotadas → orientação de reprocessar/trocar arquivo.
-      // (mesma classificação do backend _TRANSIENT_ERR_RX)
+           class="hidden sm:inline text-xs font-semibold text-emerald-600 hover:text-emerald-800 no-underline shrink-0">XLSX</a>` : ''}
+    ` : '';
+
+    // Nota de estado (erro/arquivado) — linha abaixo, largura toda.
+    let note = '';
+    if (isArchived) {
+      note = `<div class="px-4 pb-3 -mt-1 text-xs text-gray-500">Arquivos expirados (90 dias)</div>`;
+    } else if (p.status === 'error') {
+      // Erro PASSAGEIRO (infra/IA) com re-tentativa automática pendente vs. erro
+      // de arquivo/tentativas esgotadas (mesma classificação do _TRANSIENT_ERR_RX).
       const _em = String(p.error_message || '');
       const _transient = /reinici|interrompid|sobrecarregad|timeout|tempo\s+limite|excedeu|conex|momentane/i.test(_em);
       const _tries = parseInt(p.auto_resume_count || 0);
-      if (_transient && _tries < 2) {
-        return `<div class="mt-4 pt-3 border-t border-gray-100 text-xs text-amber-700 bg-amber-50 -mx-1 px-2 py-2 rounded">
-          <span aria-hidden="true">&#9203;</span> <strong>Erro passageiro</strong> — vamos re-tentar
-          automaticamente em alguns minutos. Você não precisa fazer nada; te avisamos por email quando concluir.
-        </div>`;
-      }
-      return `<div class="mt-4 pt-3 border-t border-gray-100 text-xs text-red-700">
-        <span aria-hidden="true">&#10007;</span> <strong>Falha no processamento</strong> — abra o projeto pra
-        ver o motivo e reprocessar. Se precisar de ajuda, responda nosso email que a gente resolve junto.
-      </div>`;
-    })() : '';
+      note = (_transient && _tries < 2)
+        ? `<div class="mx-4 mb-3 text-xs text-amber-700 bg-amber-50 px-3 py-2 rounded-lg"><span aria-hidden="true">&#9203;</span> <strong>Erro passageiro</strong> — vamos re-tentar automaticamente em alguns minutos. Você não precisa fazer nada; te avisamos por email quando concluir.</div>`
+        : `<div class="mx-4 mb-3 text-xs text-red-700 bg-red-50 px-3 py-2 rounded-lg"><span aria-hidden="true">&#10007;</span> <strong>Falha no processamento</strong> — abra o projeto pra ver o motivo e reprocessar.</div>`;
+    }
 
     return `
-      <article class="${cardCls}" ${onclickAttr} data-job="${escProj(p.job_id)}">
-        <div class="flex items-start justify-between gap-2 mb-3">
+      <div class="${rowCls}" ${onclickAttr} data-job="${escProj(p.job_id)}">
+        <div class="flex items-center gap-3 px-4 py-3">
+          <div class="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${tip.bg} text-xl" aria-hidden="true">${tip.icon}</div>
           <div class="min-w-0 flex-1">
-            <h3 class="font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition">${escProj(p.project_name || 'Projeto sem nome')}</h3>
-            ${(p.client_name || '').trim()
-              ? `<p class="text-xs text-gray-600 truncate mt-0.5"><span aria-hidden="true">👤</span> ${escProj(p.client_name)}${(p.client_company || '').trim() ? ' · ' + escProj(p.client_company) : ''}</p>`
-              : `<p class="text-[11px] text-gray-400 font-mono mt-0.5">${escProj(p.job_id)}</p>`}
+            <div class="flex items-center gap-2 flex-wrap">
+              <h3 class="font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition">${escProj(p.project_name || 'Projeto sem nome')}</h3>
+              ${statusBadge}
+              <span class="review-pct"></span>
+              <span class="cron-badge"></span>
+              ${warningBadge}${archivedBadge}
+            </div>
+            <p class="text-xs text-gray-500 truncate mt-0.5">${sub}</p>
           </div>
-          ${statusBadge}
+          <div class="hidden md:flex items-center gap-5 shrink-0 text-center">
+            <div><p class="text-sm font-bold text-gray-800 leading-none">${p.items_count || '—'}</p><p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">itens</p></div>
+            <div><p class="text-sm font-bold text-gray-800 leading-none">${p.files_count || 0}</p><p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">arquivos</p></div>
+            <div><p class="text-xs font-semibold text-gray-600 leading-none">${created}</p><p class="text-[10px] uppercase tracking-wide text-gray-400 mt-1">criado</p></div>
+          </div>
+          <div class="flex items-center gap-2.5 shrink-0">${actions}</div>
         </div>
-        <div class="flex flex-wrap items-center gap-1.5 mb-3">
-          ${tipologia}
-          <span class="review-pct"></span>
-          <span class="cron-badge"></span>
-          ${warningBadge}
-          ${archivedBadge}
-        </div>
-        <div class="grid grid-cols-3 gap-2 text-center mt-3">
-          <div class="rounded-lg bg-gray-50 py-2">
-            <p class="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Itens</p>
-            <p class="text-base font-bold text-gray-800">${p.items_count || '—'}</p>
-          </div>
-          <div class="rounded-lg bg-gray-50 py-2">
-            <p class="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Arquivos</p>
-            <p class="text-base font-bold text-gray-800">${p.files_count || 0}</p>
-          </div>
-          <div class="rounded-lg bg-gray-50 py-2">
-            <p class="text-[10px] uppercase tracking-wide text-gray-500 font-medium">Criado</p>
-            <p class="text-xs font-semibold text-gray-700 mt-0.5">${created}</p>
-          </div>
-        </div>
-        ${actions}
-      </article>
+        ${note}
+      </div>
     `;
   }
 
