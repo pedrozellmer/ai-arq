@@ -1240,7 +1240,7 @@
               </div>
               <div class="flex-1 min-w-0">
                 <p class="font-medium text-gray-800 truncate">${escapeH(p.project_name || 'Sem nome')}</p>
-                <p class="text-xs text-gray-500">${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>
+                <p class="text-xs text-gray-500 truncate">${(p.client_name || '').trim() ? '<span class="text-gray-700 font-medium">👤 ' + escapeH(p.client_name) + '</span> · ' : ''}${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>
               </div>
               <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </a>
@@ -2206,7 +2206,9 @@
       sheetTypes.forEach(st => formData.append('sheet_types', st));
       sheetAmbientes.forEach(a => formData.append('sheet_ambientes', a));
 
-      const projectName = (document.getElementById('project-name')?.value || '').trim();
+      // Sem nome digitado → nome por data (nunca "Sem nome" no banco).
+      const _pnRaw = (document.getElementById('project-name')?.value || '').trim();
+      const projectName = _pnRaw || ('Projeto ' + new Date().toLocaleDateString('pt-BR'));
       const typology = document.getElementById('project-typology')?.value || 'office';
       const projectType = document.getElementById('project-type')?.value || 'arquitetura';
       const params = { typology, project_type: projectType, project_name: projectName };
@@ -2821,13 +2823,10 @@
   // ══════════════════════════════════════════════
   //  MEU CADASTRO
   // ══════════════════════════════════════════════
-  // Pré-preencher nome do projeto com data
-  const projNameInput = document.getElementById('project-name');
-  if (projNameInput) {
-    const now = new Date();
-    const dateStr = now.toLocaleDateString('pt-BR');
-    projNameInput.value = `Projeto ${dateStr}`;
-  }
+  // Nome do projeto começa VAZIO — o placeholder ("Ex.: Reforma...") incentiva
+  // um nome de verdade. Se ficar vazio no envio, processFiles cai num nome por
+  // data (nunca "Sem nome"). Antes era pré-preenchido "Projeto <data>", o que
+  // fazia todo projeto nascer com o mesmo cara de data.
 
   // Renderizar pagamentos
   function renderPayments() {
@@ -3181,7 +3180,9 @@
         <div class="flex items-start justify-between gap-2 mb-3">
           <div class="min-w-0 flex-1">
             <h3 class="font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition">${escProj(p.project_name || 'Projeto sem nome')}</h3>
-            <p class="text-[11px] text-gray-500 font-mono mt-0.5">${escProj(p.job_id)}</p>
+            ${(p.client_name || '').trim()
+              ? `<p class="text-xs text-gray-600 truncate mt-0.5"><span aria-hidden="true">👤</span> ${escProj(p.client_name)}${(p.client_company || '').trim() ? ' · ' + escProj(p.client_company) : ''}</p>`
+              : `<p class="text-[11px] text-gray-400 font-mono mt-0.5">${escProj(p.job_id)}</p>`}
           </div>
           ${statusBadge}
         </div>
@@ -3225,7 +3226,7 @@
       return;
     }
     const filtered = __projectsCache.filter(p => {
-      const hay = `${p.project_name || ''} ${p.typology || ''} ${p.job_id || ''}`.toLowerCase();
+      const hay = `${p.project_name || ''} ${p.client_name || ''} ${p.client_company || ''} ${p.typology || ''} ${p.job_id || ''}`.toLowerCase();
       return hay.includes(q);
     });
     if (!filtered.length) {
