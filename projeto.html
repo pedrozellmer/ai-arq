@@ -1436,7 +1436,11 @@ function renderMetrics(p, items) {
   document.getElementById('m-typology').textContent = p.typology || '--';
   const area = p.total_area ? `${Number(p.total_area).toLocaleString('pt-BR', {maximumFractionDigits: 1})} m²` : '--';
   document.getElementById('m-area').textContent = area;
-  document.getElementById('m-files').textContent = p.files_count || items.length || '--';
+  // Nº de arquivos = mesma contagem que a lista "Arquivos que alimentaram o projeto"
+  // usa (nomes únicos de ref_sheet). NUNCA cair em items.length (era o bug: mostrava
+  // nº de ITENS como se fosse arquivos). Só usa files_count do backend se não der pra derivar.
+  const _files = collectCadFiles(items);
+  document.getElementById('m-files').textContent = _files.size || p.files_count || '--';
   document.getElementById('m-items').textContent = p.items_count || items.length || '--';
 
   // Guarda valores pra o modal de edição (project_name, typology, address, phase)
@@ -1536,20 +1540,26 @@ function renderDates(p) {
   document.getElementById('d-phase').textContent = p.phase || 'Anteprojeto';
 }
 
-function renderFiles(proj, items) {
-  // Coleta nomes únicos de arquivo da lista de itens (ref_sheet)
+// Nomes únicos de arquivo CAD (ref_sheet) — FONTE ÚNICA de "quantos arquivos".
+// Compartilhada pela faixa de métricas (#m-files) E pela lista abaixo, pra as duas
+// nunca divergirem (antes #m-files caía em items.length = nº de itens, não de arquivos).
+function collectCadFiles(items) {
   const filesSet = new Map();  // filename → contagem de items
-  items.forEach(it => {
+  (items || []).forEach(it => {
     const raw = (it.ref_sheet || '').trim();
     if (!raw) return;
-    // ref_sheet pode vir "filename.pdf (hint)" → pega só filename
+    // ref_sheet pode vir "filename.pdf (hint)" → pega só o filename
     const cleanName = raw.split('(')[0].trim();
-    if (cleanName.toLowerCase().endsWith('.pdf') ||
-        cleanName.toLowerCase().endsWith('.dwg') ||
-        cleanName.toLowerCase().endsWith('.dxf')) {
+    const low = cleanName.toLowerCase();
+    if (low.endsWith('.pdf') || low.endsWith('.dwg') || low.endsWith('.dxf')) {
       filesSet.set(cleanName, (filesSet.get(cleanName) || 0) + 1);
     }
   });
+  return filesSet;
+}
+
+function renderFiles(proj, items) {
+  const filesSet = collectCadFiles(items);
 
   const container = document.getElementById('proj-files');
   if (!filesSet.size) {
