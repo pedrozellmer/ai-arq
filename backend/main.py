@@ -530,6 +530,20 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
         _supa_log(f"PERSIST items job={job_id} SKIP (empty)")
         return 0
 
+    # SWAP no caminho de SUCESSO: apaga os itens antigos deste job SÓ agora (com os
+    # novos itens já prontos) e insere. Assim um reprocesso que FALHA antes daqui
+    # (0 itens/erro) NÃO destrói a planilha anterior — crítico pro /add-file (troca
+    # PDF→CAD sem risco de perder o estimado). Idempotente pro run normal (1º upload
+    # não tem itens; job filho de reprocesso usa job_id novo → delete é no-op).
+    try:
+        _del = urllib.request.Request(
+            f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}", method='DELETE')
+        _del.add_header('apikey', SUPABASE_KEY)
+        _del.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+        urllib.request.urlopen(_del, timeout=20)
+    except Exception as _de:
+        _supa_log(f"PERSIST pre-delete job={job_id} WARN (segue pro insert): {_de}")
+
     # Batch insert — REST do Supabase aceita array
     try:
         url = f"{SUPABASE_URL}/rest/v1/project_items"
@@ -1213,6 +1227,56 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
     except Exception as _de:
         print(f"[email] diagnostico de leitura nao montado (nao-fatal): {_de}")
         return ""
+
+
+def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
+                     veio_pdf: bool = False, tem_cronograma: bool = False) -> str:
+    """Bloco 'o que fazer agora' PERSONALIZADO pro email de planilha pronta — os
+    caminhos dependem do resultado real do projeto, pra não empurrar passo que não
+    faz sentido. Tudo mora na página do projeto (o botão principal do email leva lá).
+
+    - veio de PDF e mediu 0 → 1º passo é 'complemente com o CAD' (caso Diana 08/07).
+    - mediu bem → pula o CAD e lidera com revisão (citando quantos ficaram em laranja).
+    - chat sempre; cronograma vira 'ver' se já existe, 'montar' se não."""
+    n_est = max(0, n_total - n_medido)
+    passos = []
+    # 1) Complementar com CAD — só quando veio de PDF e NADA foi medido
+    if veio_pdf and n_medido == 0 and n_total > 0:
+        passos.append(("&#128208;", "Me&ccedil;a de verdade: complemente com o CAD",
+            f"Sua prancha veio em <b>PDF</b>, ent&atilde;o os {n_total} itens sa&iacute;ram como "
+            f"<b>estimativa</b>. Suba o <b>DWG ou DXF</b> da mesma prancha no pr&oacute;prio projeto "
+            f"que a gente <b>refaz medindo de verdade</b> &mdash; de gra&ccedil;a."))
+    # 2) Revisar — sempre; se há estimativa, cita o número
+    if n_est > 0:
+        _it = "item" if n_est == 1 else "itens"
+        passos.append(("&#128221;", f"Revise os {n_est} {_it} em laranja",
+            "Esses sa&iacute;ram como <b>estimativa</b> pra voc&ecirc; conferir. Ajuste o que precisar &mdash; "
+            "e ao subir a planilha revisada voc&ecirc; ainda ganha <b>cashback</b>."))
+    else:
+        passos.append(("&#128221;", "Revise e ajuste",
+            "Confira os itens e ajuste o que precisar. Ao subir a planilha revisada voc&ecirc; ganha <b>cashback</b>."))
+    # 3) Chat — sempre útil
+    passos.append(("&#128172;", "Tire d&uacute;vidas no chat",
+        "Pergunte sobre o seu quantitativo direto na p&aacute;gina do projeto: o que &eacute; medido, "
+        "o que revisar, onde est&aacute; cada item."))
+    # 4) Cronograma — 'ver' se já existe, senão 'montar'
+    if tem_cronograma:
+        passos.append(("&#128197;", "Veja o cronograma",
+            "Seu cronograma f&iacute;sico-financeiro j&aacute; est&aacute; gerado &mdash; abra pra acompanhar a obra."))
+    else:
+        passos.append(("&#128197;", "Monte o cronograma",
+            "Gere o cronograma f&iacute;sico-financeiro da obra a partir do quantitativo. Tamb&eacute;m &eacute; de gra&ccedil;a."))
+    cards = ""
+    for emoji, titulo, desc in passos:
+        cards += (f'<div style="margin:10px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:10px;background:#ffffff;">'
+                  f'<div style="font-weight:600;color:#111827;font-size:14px;">{emoji} {titulo}</div>'
+                  f'<div style="font-size:13px;color:#4b5563;margin-top:3px;line-height:1.5;">{desc}</div>'
+                  f'</div>')
+    return (f'<div style="margin-top:20px;">'
+            f'<div style="font-weight:700;color:#111827;margin-bottom:4px;font-size:15px;">O que voc&ecirc; pode fazer agora</div>'
+            f'<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Tudo isso est&aacute; na p&aacute;gina do seu projeto &mdash; &eacute; s&oacute; abrir no bot&atilde;o acima.</div>'
+            f'{cards}'
+            f'</div>')
 
 
 def _send_welcome_email(email: str, name: str = "") -> bool:
@@ -3989,10 +4053,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _n_pdf = sum(1 for e in _exts if e == ".pdf")
                 _n_cad = sum(1 for e in _exts if e in (".dwg", ".dxf"))
                 _diag = _build_reading_diagnostic(all_items, _n_pdf, _n_cad, project_type, project_data)
+                # Próximos passos PERSONALIZADOS: PDF sem nada medido → puxa o CAD;
+                # senão lidera com revisão (citando quantos ficaram em laranja).
+                _n_med = sum(1 for it in all_items
+                             if str(getattr(getattr(it, "confidence", None), "value",
+                                            getattr(it, "confidence", "")) or "") == "confirmado")
+                _veio_pdf = (_n_cad == 0 and _n_pdf > 0)
+                _proximos = _next_steps_html(job_id, _n_med, len(all_items), _veio_pdf)
                 _body = (f"{_greet}<br><br>"
                          f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
                          f"({len(all_items)} itens). Abra seu projeto pra revisar e baixar a planilha."
-                         f"{_aviso_html}{_diag}")
+                         f"{_aviso_html}{_diag}{_proximos}")
                 _send_email_smtp(
                     _pe, "Sua planilha do AI.arq está pronta",
                     _email_wrap("Sua planilha está pronta", _body,
@@ -8533,6 +8604,116 @@ async def reprocess_project(job_id: str, request: Request):
         "files_count": len(new_file_paths),
         "typology": typology,
     }
+
+
+@app.post("/api/project/{job_id}/add-file")
+async def add_file_and_reprocess(job_id: str, request: Request, file: UploadFile = File(...)):
+    """Anexa um arquivo (DWG/DXF/PDF) a um projeto EXISTENTE e reprocessa NO MESMO
+    job_id — pro caso "veio PDF, deu tudo estimado; agora manda o CAD pra medir de
+    verdade". Diferente de /reprocess (que cria um job FILHO), aqui é IN-PLACE:
+    sobe o arquivo pro Storage do job, baixa TODOS os arquivos do job (o novo + os
+    originais), limpa os itens antigos (idempotência) e re-dispara process_job no
+    MESMO job (throttled pelo semáforo). Grátis — é melhoria de insumo, não gasta a
+    cota de reprocesso do usuário. Espelha o padrão de _retomar_job_do_storage."""
+    _require_project_owner(request, job_id)
+    import urllib.request, urllib.error, json
+    from urllib.parse import unquote
+
+    raw_name = file.filename or ""
+    ext = raw_name.lower().rsplit(".", 1)[-1] if "." in raw_name else ""
+    if ext not in ("dwg", "dxf", "pdf"):
+        raise HTTPException(400, "Envie um arquivo CAD: DWG, DXF ou PDF.")
+
+    # Teto pelo Content-Length ANTES de ler tudo na memória (anti-OOM com upload gigante)
+    _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
+    if _clen and _clen.isdigit() and int(_clen) > 160 * 1024 * 1024:
+        raise HTTPException(413, "Arquivo muito grande (máx. 150 MB). Exporte só a prancha necessária.")
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "Arquivo vazio.")
+    if len(data) > 150 * 1024 * 1024:
+        raise HTTPException(413, "Arquivo muito grande (máx. 150 MB). Exporte só a prancha necessária.")
+
+    # Projeto original: tipologia/tipo + guarda contra reprocesso concorrente
+    typology, ptype = "office", "arquitetura"
+    try:
+        purl = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=typology,project_type,status"
+        preq = urllib.request.Request(purl, method="GET")
+        preq.add_header("apikey", SUPABASE_KEY)
+        preq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        prows = json.loads(urllib.request.urlopen(preq, timeout=15).read().decode("utf-8"))
+        if prows:
+            typology = prows[0].get("typology") or "office"
+            ptype = prows[0].get("project_type") or "arquitetura"
+            if (prows[0].get("status") or "") in ("queued", "processing"):
+                raise HTTPException(409, "Esse projeto ainda está processando. Espera terminar e tenta de novo.")
+    except HTTPException:
+        raise
+    except Exception as _pe:
+        print(f"[add-file] leitura projeto {job_id}: {_pe}")
+
+    work_dir = os.path.join(WORK_DIR, job_id)
+    os.makedirs(work_dir, exist_ok=True)
+    safe_local = _safe_local_filename(raw_name)
+    new_local = os.path.join(work_dir, safe_local)
+    with open(new_local, "wb") as f:
+        f.write(data)
+    if not _supabase_storage_upload_prancha(new_local, job_id, safe_local):
+        raise HTTPException(500, "Não consegui guardar o arquivo. Tenta de novo.")
+
+    # Lista + baixa TODOS os arquivos do job (o novo + os originais)
+    try:
+        list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        lbody = json.dumps({"prefix": f"{job_id}/", "limit": 200}).encode("utf-8")
+        lreq = urllib.request.Request(list_url, data=lbody, method="POST")
+        lreq.add_header("apikey", SUPABASE_KEY)
+        lreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        lreq.add_header("Content-Type", "application/json")
+        objs = json.loads(urllib.request.urlopen(lreq, timeout=20).read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar Storage: {e}")
+
+    names = [unquote(o.get("name", "")) for o in objs if o.get("name")]
+    names = [n for n in names if n.lower().endswith((".pdf", ".dwg", ".dxf"))]
+    file_paths = []
+    for n in names:
+        bn = os.path.basename(n)
+        lp = os.path.join(work_dir, _safe_local_filename(bn))
+        d = _supabase_storage_download_prancha(job_id, bn)
+        if not d:
+            continue
+        with open(lp, "wb") as f:
+            f.write(d)
+        file_paths.append(lp)
+    if not file_paths:
+        raise HTTPException(500, "Falha ao preparar os arquivos pra reprocessar.")
+
+    # Se há CAD (dwg/dxf), processa SÓ o CAD e descarta os PDFs. O PDF era o
+    # stand-in que deu "estimado"; misturar os dois DUPLICA a quantidade (PDF
+    # estima 100, CAD mede 95 → 2 linhas). Com CAD presente, o CAD manda.
+    _cads = [p for p in file_paths if p.lower().endswith((".dwg", ".dxf"))]
+    if _cads:
+        file_paths = _cads
+
+    # NÃO apaga os itens antigos aqui: a limpeza acontece no _persist (só no
+    # SUCESSO do reprocesso). Se o CAD falhar (não-convertível/0 itens), a
+    # planilha estimada anterior é preservada. Aqui só marca 'queued'.
+    _supabase_update("projects", "job_id", job_id, {"status": "queued", "error_message": None})
+
+    jobs[job_id] = ProcessingStatus(
+        job_id=job_id, status="queued", progress=0,
+        current_step=f"Refazendo com o novo arquivo ({len(file_paths)} no total)",
+        total_steps=3,
+    )
+    import threading
+    threading.Thread(
+        target=_process_job_throttled,
+        args=(job_id, file_paths, work_dir),
+        kwargs={"typology": typology, "project_type": ptype},
+        daemon=True,
+    ).start()
+
+    return {"status": "ok", "job_id": job_id, "files_count": len(file_paths)}
 
 
 @app.post("/api/items/{job_id}/review-finalize")
