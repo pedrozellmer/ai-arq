@@ -250,3 +250,90 @@
     } catch (e) { /* telemetria nunca quebra nada */ }
   };
 })();
+
+// ═══════════════════════════════════════════════════════════════════
+// 🌙 MODO ESCURO — sistema único pra TODAS as páginas (todas carregam este arquivo).
+// Remapeia as cores base do Tailwind via CSS com seletores de atributo
+// [class~="..."] (não precisa de dark: em cada elemento) + botão flutuante +
+// memória da preferência (localStorage 'aiarq_theme' / prefers-color-scheme).
+// Badges/gradientes/botões coloridos ficam vibrantes; só as superfícies
+// brancas/cinzas e o texto viram escuros. Pedro é daltônico → contraste alto.
+// ═══════════════════════════════════════════════════════════════════
+(function () {
+  'use strict';
+  var CSS = [
+    'html.dark{color-scheme:dark;}',
+    'html.dark body{background-color:#0b1220;color:#e5e7eb;}',
+    'html.dark [class~="bg-white"]{background-color:#111827 !important;}',
+    'html.dark [class~="bg-white/80"]{background-color:rgba(17,24,39,.85) !important;}',
+    'html.dark [class~="bg-white/60"],html.dark [class~="bg-white/70"],html.dark [class~="bg-white/50"]{background-color:rgba(17,24,39,.55) !important;}',
+    'html.dark [class~="bg-gray-50"],html.dark [class~="bg-gray-100"],html.dark [class~="bg-gray-50/40"],html.dark [class~="bg-gray-50/60"],html.dark [class~="bg-slate-50"]{background-color:#0f172a !important;}',
+    'html.dark [class~="text-gray-900"]{color:#f3f4f6 !important;}',
+    'html.dark [class~="text-gray-800"]{color:#e5e7eb !important;}',
+    'html.dark [class~="text-gray-700"]{color:#d1d5db !important;}',
+    'html.dark [class~="text-gray-600"]{color:#b8c2d0 !important;}',
+    'html.dark [class~="text-gray-500"]{color:#9aa6b5 !important;}',
+    'html.dark [class~="text-gray-400"]{color:#7f8b9b !important;}',
+    'html.dark [class~="text-slate-700"],html.dark [class~="text-slate-600"],html.dark [class~="text-slate-500"]{color:#cbd5e1 !important;}',
+    'html.dark [class~="border"],html.dark [class~="border-2"],html.dark [class~="border-gray-100"],html.dark [class~="border-gray-200"],html.dark [class~="border-gray-300"],html.dark [class~="border-b"],html.dark [class~="border-t"]{border-color:#273244 !important;}',
+    'html.dark [class~="divide-y"]>*,html.dark [class~="divide-gray-100"]>*{border-color:#273244 !important;}',
+    'html.dark input,html.dark textarea,html.dark select{background-color:#0f172a !important;color:#e5e7eb !important;border-color:#334155 !important;}',
+    'html.dark input::placeholder,html.dark textarea::placeholder{color:#64748b !important;}',
+    'html.dark [class~="hover:bg-gray-50"]:hover,html.dark [class~="hover:bg-gray-100"]:hover{background-color:#1e293b !important;}',
+    'html.dark [class~="bg-indigo-50"],html.dark [class~="bg-indigo-50/50"],html.dark [class~="bg-indigo-50/40"],html.dark [class~="bg-indigo-50/60"]{background-color:rgba(99,102,241,.15) !important;}',
+    'html.dark [class~="bg-amber-50"],html.dark [class~="bg-amber-50/40"]{background-color:rgba(245,158,11,.15) !important;}',
+    'html.dark [class~="bg-emerald-50"]{background-color:rgba(16,185,129,.15) !important;}',
+    'html.dark [class~="bg-green-50"]{background-color:rgba(34,197,94,.15) !important;}',
+    'html.dark [class~="bg-purple-50"]{background-color:rgba(168,85,247,.15) !important;}',
+    'html.dark [class~="bg-rose-50"]{background-color:rgba(244,63,94,.15) !important;}',
+    'html.dark [class~="bg-sky-50"]{background-color:rgba(56,189,248,.15) !important;}',
+    'html.dark [class~="bg-cyan-50"]{background-color:rgba(34,211,238,.15) !important;}',
+    'html.dark [class~="bg-red-50"]{background-color:rgba(239,68,68,.15) !important;}',
+    'html.dark [class~="bg-orange-50"]{background-color:rgba(249,115,22,.15) !important;}',
+    'html.dark [class~="to-white"]{--tw-gradient-to:#111827 !important;}',
+    'html.dark [class~="from-indigo-50"]{--tw-gradient-from:rgba(99,102,241,.14) !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to) !important;}',
+    'html.dark [class~="from-amber-50"]{--tw-gradient-from:rgba(245,158,11,.14) !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to) !important;}',
+    'html.dark [class~="from-emerald-50"]{--tw-gradient-from:rgba(16,185,129,.14) !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to) !important;}',
+    'html.dark [class~="gradient-hero"]{background:linear-gradient(180deg,#0f172a 0%,#0b1220 100%) !important;}',
+    '#aiarq-theme-toggle{position:fixed;left:16px;bottom:16px;z-index:60;width:44px;height:44px;border-radius:9999px;display:flex;align-items:center;justify-content:center;border:1px solid #d1d5db;background:#fff;color:#374151;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;font-size:20px;line-height:1;transition:transform .15s,background .2s;}',
+    '#aiarq-theme-toggle:hover{transform:scale(1.08);}',
+    'html.dark #aiarq-theme-toggle{background:#1e293b !important;color:#fbbf24 !important;border-color:#334155 !important;}',
+  ].join('\n');
+
+  try {
+    var st = document.createElement('style');
+    st.id = 'aiarq-theme-css';
+    st.textContent = CSS;
+    (document.head || document.documentElement).appendChild(st);
+  } catch (e) { return; }
+
+  function saved() { try { return localStorage.getItem('aiarq_theme'); } catch (e) { return null; } }
+  function prefersDark() { try { return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; } }
+  function apply(mode) {
+    var dark = mode === 'dark';
+    document.documentElement.classList.toggle('dark', dark);
+    var b = document.getElementById('aiarq-theme-toggle');
+    if (b) {
+      b.textContent = dark ? '☀️' : '🌙';
+      b.setAttribute('aria-label', dark ? 'Mudar para o modo claro' : 'Mudar para o modo escuro');
+      b.title = dark ? 'Modo claro' : 'Modo escuro';
+    }
+  }
+  apply(saved() || (prefersDark() ? 'dark' : 'light'));
+
+  function mount() {
+    if (document.getElementById('aiarq-theme-toggle') || !document.body) return;
+    var btn = document.createElement('button');
+    btn.id = 'aiarq-theme-toggle';
+    btn.type = 'button';
+    btn.addEventListener('click', function () {
+      var next = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
+      try { localStorage.setItem('aiarq_theme', next); } catch (e) {}
+      apply(next);
+    });
+    document.body.appendChild(btn);
+    apply(document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  }
+  if (document.body) mount();
+  else document.addEventListener('DOMContentLoaded', mount);
+})();
