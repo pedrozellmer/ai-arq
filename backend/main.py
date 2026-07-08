@@ -5503,6 +5503,119 @@ async def public_chat(request: Request):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  CHAT DO PROJETO — "Pergunte sobre o seu quantitativo"
+#  Chat ancorado nos itens DESTE projeto. Guarda-corpo DURO contra
+#  preço (regra nº5: AI.arq entrega quantitativo, NÃO precifica).
+# ═══════════════════════════════════════════════════════════════
+_PROJECT_CHAT_HITS: dict = {}
+
+PROJECT_CHAT_SYSTEM = """Você é o assistente do AI.arq. Ajuda o cliente a ENTENDER o quantitativo dele — a planilha que a nossa IA gerou lendo o projeto CAD. Responda em português do Brasil, de forma clara, curta e cordial.
+
+REGRAS DURAS (nunca violar):
+1. Fale SÓ sobre ESTE projeto e os itens listados abaixo. Nunca invente um item que não está na lista.
+2. NUNCA dê preço, custo, valor em R$, ou BDI. O AI.arq entrega QUANTIDADE, não preço. Se perguntarem de preço/custo/orçamento, responda gentil: "O AI.arq gera o quantitativo (as quantidades) — a precificação é com você e seu orçamentista. Mas posso te ajudar a entender as quantidades e as referências SINAPI."
+3. Você NÃO substitui o profissional nem dá parecer técnico definitivo — você ajuda a LER e entender a planilha.
+4. Explique bem a diferença: um item MEDIDO foi extraído direto da geometria do CAD (confiável); uma ESTIMATIVA é quando o desenho não deixou claro e o cliente precisa revisar. Para ter MAIS itens medidos, oriente enviar o projeto em DWG ou DXF (PDF a IA lê, mas vira estimativa).
+5. Se não souber, ou o dado não estiver na planilha, seja honesto e diga que não consta.
+6. FORMATO: texto corrido e curto, com listas de traços quando ajudar. NÃO use títulos markdown (#, ##) nem tabelas — sua resposta aparece num balão de chat simples.
+
+DADOS DO PROJETO:
+{context}
+"""
+
+
+@app.post("/api/projeto/{job_id}/chat")
+async def project_chat(job_id: str, request: Request):
+    """Chat ancorado no quantitativo DESTE projeto. Auth: dono. Contexto: os
+    itens da planilha. Modelo Haiku (barato). Não precifica (regra nº5)."""
+    _require_project_owner(request, job_id)
+
+    import urllib.request as _u, json as _j
+    now_ts = datetime.utcnow().timestamp()
+    hits = [t for t in _PROJECT_CHAT_HITS.get(job_id, []) if now_ts - t < 600]
+    if len(hits) >= 30:  # rate limit leve: 30 msgs / 10min por projeto
+        return {"error": "rate_limit", "reply": "Você mandou bastante pergunta em pouco tempo — dá um respiro de uns minutinhos. 🙂"}
+    hits.append(now_ts)
+    _PROJECT_CHAT_HITS[job_id] = hits
+    if len(_PROJECT_CHAT_HITS) > 200 and int(now_ts) % 50 == 0:
+        for _k in [k for k, v in _PROJECT_CHAT_HITS.items() if not v or now_ts - max(v) > 600]:
+            _PROJECT_CHAT_HITS.pop(_k, None)
+
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    messages = body.get("messages", [])
+    if not isinstance(messages, list) or not messages:
+        return {"error": "Precisa mandar messages"}
+    clean = []
+    for m in messages[-8:]:
+        role = m.get("role")
+        content = str(m.get("content", ""))[:1500]
+        if role in ("user", "assistant") and content.strip():
+            clean.append({"role": role, "content": content})
+    if not clean:
+        return {"error": "Nenhuma mensagem válida"}
+
+    # Contexto: metadados + itens da planilha (service role; ownership já validado)
+    ctx_lines = []
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+             f"&select=project_name,total_area,typology,warnings")
+        rq = _u.Request(q, method="GET")
+        rq.add_header("apikey", SUPABASE_KEY)
+        rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        prow = _j.loads(_u.urlopen(rq, timeout=10).read().decode("utf-8"))
+        if prow:
+            if prow[0].get("total_area"):
+                ctx_lines.append(f"Área total do projeto: {prow[0]['total_area']} m²")
+            if prow[0].get("typology"):
+                ctx_lines.append(f"Tipologia: {prow[0]['typology']}")
+    except Exception as e:
+        print(f"[project_chat] meta erro: {e}")
+
+    items = []
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
+             f"&select=description,unit,quantity,confidence,discipline&limit=400")
+        rq = _u.Request(q, method="GET")
+        rq.add_header("apikey", SUPABASE_KEY)
+        rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        items = _j.loads(_u.urlopen(rq, timeout=15).read().decode("utf-8"))
+    except Exception as e:
+        print(f"[project_chat] itens erro: {e}")
+
+    by_disc: dict = {}
+    for it in items:
+        by_disc.setdefault(it.get("discipline") or "Outros", []).append(it)
+    ctx_lines.append(f"Total de itens na planilha: {len(items)}")
+    for _d, _lst in by_disc.items():
+        ctx_lines.append(f"\n[{_d}] ({len(_lst)} itens)")
+        for it in _lst[:40]:
+            _marca = "MEDIDO" if (it.get("confidence") == "confirmado") else "estimativa"
+            ctx_lines.append(f"  - {str(it.get('description',''))[:80]}: {it.get('quantity',0)} {it.get('unit','')} ({_marca})")
+    context = "\n".join(ctx_lines)[:9000]
+
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        return {"error": "Chat indisponível no momento."}
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key, timeout=60.0)
+        resp = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=500,
+            system=PROJECT_CHAT_SYSTEM.format(context=context),
+            messages=clean,
+        )
+        reply = resp.content[0].text if resp.content else "Não consegui responder agora."
+        return {"status": "ok", "reply": reply}
+    except Exception as e:
+        print(f"[project_chat] erro: {e}")
+        return {"error": "Erro temporário", "reply": "Ops, algo deu errado. Tenta de novo em instantes."}
+
+
+# ═══════════════════════════════════════════════════════════════
 #  COTAÇÕES DE FORNECEDORES (supplier quotes)
 # ═══════════════════════════════════════════════════════════════
 
