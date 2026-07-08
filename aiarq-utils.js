@@ -272,13 +272,13 @@
   };
   var R = [
     'html.dark{color-scheme:dark;}',
-    'html.dark body{background-color:#0b1220;color:#e5e7eb;}',
+    'html.dark body{background-color:#0f0f12;color:#e5e7eb;}',
     // superfícies brancas (+ opacidade) → escuro
-    'html.dark [class~="bg-white"],html.dark [class~="bg-white/95"],html.dark [class~="bg-white/90"],html.dark [class~="bg-white/80"]{background-color:#111827 !important;}',
-    'html.dark [class~="bg-white/70"],html.dark [class~="bg-white/60"],html.dark [class~="bg-white/50"]{background-color:rgba(17,24,39,.6) !important;}',
+    'html.dark [class~="bg-white"],html.dark [class~="bg-white/95"],html.dark [class~="bg-white/90"],html.dark [class~="bg-white/80"]{background-color:#1a1a1e !important;}',
+    'html.dark [class~="bg-white/70"],html.dark [class~="bg-white/60"],html.dark [class~="bg-white/50"]{background-color:rgba(26,26,30,.6) !important;}',
     // cinzas de fundo → escuro; chip cinza-200 → tom médio distinto
-    'html.dark [class~="bg-gray-50"],html.dark [class~="bg-gray-100"],html.dark [class~="bg-gray-50/40"],html.dark [class~="bg-gray-50/50"],html.dark [class~="bg-gray-50/60"],html.dark [class~="bg-slate-50"],html.dark [class~="bg-slate-100"]{background-color:#0f172a !important;}',
-    'html.dark [class~="bg-gray-200"],html.dark [class~="bg-slate-200"]{background-color:#334155 !important;}',
+    'html.dark [class~="bg-gray-50"],html.dark [class~="bg-gray-100"],html.dark [class~="bg-gray-50/40"],html.dark [class~="bg-gray-50/50"],html.dark [class~="bg-gray-50/60"],html.dark [class~="bg-slate-50"],html.dark [class~="bg-slate-100"]{background-color:#131316 !important;}',
+    'html.dark [class~="bg-gray-200"],html.dark [class~="bg-slate-200"]{background-color:#33333a !important;}',
     // texto cinza → claro
     'html.dark [class~="text-gray-900"],html.dark [class~="text-slate-900"]{color:#f3f4f6 !important;}',
     'html.dark [class~="text-gray-800"],html.dark [class~="text-slate-800"]{color:#e5e7eb !important;}',
@@ -287,22 +287,22 @@
     'html.dark [class~="text-gray-500"],html.dark [class~="text-slate-500"]{color:#9aa6b5 !important;}',
     'html.dark [class~="text-gray-400"],html.dark [class~="text-slate-400"]{color:#7f8b9b !important;}',
     // bordas cinza
-    'html.dark [class~="border"],html.dark [class~="border-2"],html.dark [class~="border-gray-100"],html.dark [class~="border-gray-200"],html.dark [class~="border-gray-300"],html.dark [class~="border-slate-100"],html.dark [class~="border-slate-200"],html.dark [class~="border-b"],html.dark [class~="border-t"]{border-color:#273244 !important;}',
-    'html.dark [class~="divide-y"]>*,html.dark [class~="divide-gray-100"]>*,html.dark [class~="divide-gray-200"]>*,html.dark [class~="divide-indigo-100"]>*{border-color:#273244 !important;}',
+    'html.dark [class~="border"],html.dark [class~="border-2"],html.dark [class~="border-gray-100"],html.dark [class~="border-gray-200"],html.dark [class~="border-gray-300"],html.dark [class~="border-slate-100"],html.dark [class~="border-slate-200"],html.dark [class~="border-b"],html.dark [class~="border-t"]{border-color:#2b2b31 !important;}',
+    'html.dark [class~="divide-y"]>*,html.dark [class~="divide-gray-100"]>*,html.dark [class~="divide-gray-200"]>*,html.dark [class~="divide-indigo-100"]>*{border-color:#2b2b31 !important;}',
     // inputs + hovers
-    'html.dark input,html.dark textarea,html.dark select{background-color:#0f172a !important;color:#e5e7eb !important;border-color:#334155 !important;}',
+    'html.dark input,html.dark textarea,html.dark select{background-color:#131316 !important;color:#e5e7eb !important;border-color:#33333a !important;}',
     'html.dark input::placeholder,html.dark textarea::placeholder{color:#64748b !important;}',
-    'html.dark [class~="hover:bg-gray-50"]:hover,html.dark [class~="hover:bg-gray-100"]:hover{background-color:#1e293b !important;}',
+    'html.dark [class~="hover:bg-gray-50"]:hover,html.dark [class~="hover:bg-gray-100"]:hover{background-color:#26262c !important;}',
     // gradientes pra branco → escuro
-    'html.dark [class~="to-white"]{--tw-gradient-to:#111827 !important;}',
-    'html.dark [class~="from-white"]{--tw-gradient-from:#111827 !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to) !important;}',
-    'html.dark [class~="gradient-hero"]{background:linear-gradient(180deg,#0f172a 0%,#0b1220 100%) !important;}',
+    'html.dark [class~="to-white"]{--tw-gradient-to:#1a1a1e !important;}',
+    'html.dark [class~="from-white"]{--tw-gradient-from:#1a1a1e !important;--tw-gradient-stops:var(--tw-gradient-from),var(--tw-gradient-to) !important;}',
+    'html.dark [class~="gradient-hero"]{background:linear-gradient(180deg,#131316 0%,#0f0f12 100%) !important;}',
     // card destacado da precos (borda gradiente via style inline com fill branco)
-    'html.dark [style*="linear-gradient(white, white)"],html.dark [style*="linear-gradient(white,white)"]{background-image:linear-gradient(#111827,#111827),linear-gradient(135deg,#4f46e5,#06b6d4) !important;}',
+    'html.dark [style*="linear-gradient(white, white)"],html.dark [style*="linear-gradient(white,white)"]{background-image:linear-gradient(#1a1a1e,#1a1a1e),linear-gradient(135deg,#4f46e5,#06b6d4) !important;}',
     // botão do toggle
     '#aiarq-theme-toggle{position:fixed;left:16px;bottom:16px;z-index:60;width:44px;height:44px;border-radius:9999px;display:flex;align-items:center;justify-content:center;border:1px solid #d1d5db;background:#fff;color:#374151;box-shadow:0 4px 14px rgba(0,0,0,.15);cursor:pointer;font-size:20px;line-height:1;transition:transform .15s,background .2s;}',
     '#aiarq-theme-toggle:hover{transform:scale(1.08);}',
-    'html.dark #aiarq-theme-toggle{background:#1e293b !important;color:#fbbf24 !important;border-color:#334155 !important;}'
+    'html.dark #aiarq-theme-toggle{background:#26262c !important;color:#fbbf24 !important;border-color:#33333a !important;}'
   ];
   // Gera por cor: fundos/chips tingidos → escuro translúcido; texto colorido →
   // claro (legível no escuro E nos chips escurecidos); gradientes e bordas.
