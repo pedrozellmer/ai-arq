@@ -267,6 +267,29 @@
       <h2 class="text-3xl font-bold text-gray-900 md:text-4xl">O raio-x da sua prancha</h2>
       <p class="mt-4 text-gray-600 max-w-2xl mx-auto">A IA <strong>mede</strong> a sua prancha e marca cada item: o que foi <strong>medido de verdade</strong> no desenho e o que é <strong>estimativa pra você revisar</strong>. Você enxerga tudo — nada fica escondido no meio.</p>
     </div>
+
+    <!-- Amostra da planilha: mostra (não só conta) o medido vs estimativa -->
+    <div class="mt-10 mx-auto max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-lg overflow-hidden">
+      <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-100">
+        <span class="text-sm font-bold text-gray-800">Planilha de quantitativos</span>
+        <span class="text-xs text-gray-400">exemplo</span>
+      </div>
+      <table class="w-full text-sm">
+        <tbody>
+          <tr class="border-b border-gray-100"><td class="px-5 py-3 text-gray-800">Parede de alvenaria</td><td class="px-2 py-3 text-right text-gray-500">128 m²</td><td class="px-5 py-3 text-right whitespace-nowrap"><span class="font-semibold text-indigo-700">&#10003; medido</span></td></tr>
+          <tr class="border-b border-gray-100"><td class="px-5 py-3 text-gray-800">Piso porcelanato</td><td class="px-2 py-3 text-right text-gray-500">96 m²</td><td class="px-5 py-3 text-right whitespace-nowrap"><span class="font-semibold text-indigo-700">&#10003; medido</span></td></tr>
+          <tr class="border-b border-gray-100"><td class="px-5 py-3 text-gray-800">Porta P1 &mdash; 0,80&times;2,10</td><td class="px-2 py-3 text-right text-gray-500">12 un</td><td class="px-5 py-3 text-right whitespace-nowrap"><span class="font-semibold text-indigo-700">&#10003; medido</span></td></tr>
+          <tr class="border-b border-gray-100 bg-amber-50"><td class="px-5 py-3 text-gray-800">Luminária de embutir</td><td class="px-2 py-3 text-right text-gray-500">34 un</td><td class="px-5 py-3 text-right whitespace-nowrap"><span class="font-semibold text-amber-700">&#9888; estimativa</span></td></tr>
+          <tr class="bg-amber-50"><td class="px-5 py-3 text-gray-800">Rodapé</td><td class="px-2 py-3 text-right text-gray-500">210 m</td><td class="px-5 py-3 text-right whitespace-nowrap"><span class="font-semibold text-amber-700">&#9888; estimativa</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-1 text-xs text-gray-500">
+      <span><b class="text-indigo-700">&#10003; medido</b> &mdash; da geometria do CAD (DWG/DXF)</span>
+      <span><b class="text-amber-700">&#9888; estimativa</b> &mdash; revisar antes de usar</span>
+    </div>
+    <p class="mt-6 text-center text-xs text-gray-500 max-w-2xl mx-auto">Os melhores modelos de IA do mundo acertam <strong>menos de 40%</strong> contando portas e janelas só &ldquo;olhando&rdquo; a planta &mdash; por isso a gente <strong>mede a geometria</strong>, não adivinha.<br><span class="text-gray-400">Fonte: AECV-Bench (2026), benchmark acadêmico de leitura de plantas.</span></p>
+
     <div class="mt-12 grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
       <!-- MEDIDO -->
       <div class="rounded-2xl border-2 border-gray-200 bg-white p-6 shadow-sm">
