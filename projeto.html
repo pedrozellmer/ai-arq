@@ -69,24 +69,12 @@ function smartBack() {
     </div>
   </div>
 
-  <!-- Métricas do projeto -->
-  <div class="grid gap-4 md:grid-cols-4">
-    <div class="rounded-xl border bg-white p-4">
-      <p class="text-xs font-medium text-gray-500 mb-1">Tipologia</p>
-      <p id="m-typology" class="text-xl font-semibold text-gray-900 capitalize">--</p>
-    </div>
-    <div class="rounded-xl border bg-white p-4">
-      <p class="text-xs font-medium text-gray-500 mb-1">Área da laje</p>
-      <p id="m-area" class="text-xl font-semibold text-gray-900">--</p>
-    </div>
-    <div class="rounded-xl border bg-white p-4">
-      <p class="text-xs font-medium text-gray-500 mb-1">Arquivos</p>
-      <p id="m-files" class="text-xl font-semibold text-gray-900">--</p>
-    </div>
-    <div class="rounded-xl border bg-white p-4">
-      <p class="text-xs font-medium text-gray-500 mb-1">Itens no quantitativo</p>
-      <p id="m-items" class="text-xl font-semibold text-gray-900">--</p>
-    </div>
+  <!-- Metadados do projeto (faixa compacta) -->
+  <div class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Área da laje</span><span id="m-area" class="font-semibold text-gray-900">--</span></span>
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Itens</span><span id="m-items" class="font-semibold text-gray-900">--</span></span>
   </div>
 
   <!-- Raio-X da leitura: medido vs a confirmar (a promessa do site, in-app) -->
@@ -249,16 +237,9 @@ function smartBack() {
           </div>
           <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700"><span aria-hidden="true">✓</span> PRONTO</span>
         </div>
-        <div class="grid grid-cols-2 gap-2 mb-4 text-xs">
-          <div class="rounded-lg bg-gray-50 px-3 py-2">
-            <p class="text-gray-500">Itens detectados</p>
-            <p id="entrega-q-items" class="font-bold text-gray-900 text-lg leading-tight">--</p>
-          </div>
-          <div class="rounded-lg bg-gray-50 px-3 py-2">
-            <p class="text-gray-500">Revisados</p>
-            <p id="entrega-q-revisados" class="font-bold text-gray-900 text-lg leading-tight">--</p>
-          </div>
-        </div>
+        <!-- contagens vivem no Raio-X acima (sem repetir aqui); ids mantidos p/ o JS -->
+        <span id="entrega-q-items" class="hidden"></span>
+        <span id="entrega-q-revisados" class="hidden"></span>
         <div class="flex flex-wrap gap-2">
           <a id="btn-review" href="#" style="pointer-events:none;opacity:0.6"
              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold no-underline transition">
@@ -330,55 +311,23 @@ function smartBack() {
         </a>
       </div>
 
-      <!-- CARD 4: MEMORIAL DESCRITIVO (Fase 3a — em breve) -->
-      <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-5 hover:bg-gray-50 transition">
-        <div class="flex items-start justify-between mb-3">
-          <div class="flex items-center gap-3">
-            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            </div>
-            <div>
-              <p class="font-bold text-gray-700">Memorial descritivo</p>
-              <p class="text-xs text-gray-500">NBR 13531/13532 · RRT/CAU</p>
-            </div>
-          </div>
+      <!-- EM BREVE — próximas entregas do ciclo (faixa leve, ocupa a linha toda) -->
+      <div class="md:col-span-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-4">
+        <div class="flex items-center gap-2 mb-2.5">
           <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700"><span aria-hidden="true">⏳</span> EM BREVE</span>
+          <span class="text-xs text-gray-500">Próximas entregas do ciclo — já no roadmap</span>
         </div>
-        <p class="text-xs text-gray-600">Memorial PDF pronto pra protocolar na prefeitura. RRT pré-preenchido. Checklist de documentos.</p>
-      </div>
-
-      <!-- CARD 5: CADERNO DE ACABAMENTOS (Fase 3b — em breve) -->
-      <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-5 hover:bg-gray-50 transition">
-        <div class="flex items-start justify-between mb-3">
-          <div class="flex items-center gap-3">
-            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
-            </div>
-            <div>
-              <p class="font-bold text-gray-700">Caderno de acabamentos</p>
-              <p class="text-xs text-gray-500">Portobello / Deca / Suvinil</p>
-            </div>
-          </div>
-          <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700"><span aria-hidden="true">⏳</span> EM BREVE</span>
+        <div class="flex flex-wrap gap-2">
+          <span class="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+            <span aria-hidden="true">📄</span> Memorial descritivo <span class="text-gray-400 hidden sm:inline">· NBR 13531</span>
+          </span>
+          <span class="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+            <span aria-hidden="true">🎨</span> Caderno de acabamentos <span class="text-gray-400 hidden sm:inline">· FF&E</span>
+          </span>
+          <span class="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
+            <span aria-hidden="true">📊</span> BDI Helper <span class="text-gray-400 hidden sm:inline">· TCU 2622</span>
+          </span>
         </div>
-        <p class="text-xs text-gray-600">FF&E por ambiente com fabricante BR + código + preço referência + link da ficha.</p>
-      </div>
-
-      <!-- CARD 6: BDI HELPER (Fase 3c — em breve) -->
-      <div class="rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-5 hover:bg-gray-50 transition">
-        <div class="flex items-start justify-between mb-3">
-          <div class="flex items-center gap-3">
-            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100 text-gray-500">
-              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"/></svg>
-            </div>
-            <div>
-              <p class="font-bold text-gray-700">BDI Helper</p>
-              <p class="text-xs text-gray-500">Acórdão TCU 2622/2013</p>
-            </div>
-          </div>
-          <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700"><span aria-hidden="true">⏳</span> EM BREVE</span>
-        </div>
-        <p class="text-xs text-gray-600">Sugestão de BDI calibrado por tipo de obra. Adm + Despesas + Lucro + Tributos editável.</p>
       </div>
 
     </div>
