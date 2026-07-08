@@ -198,8 +198,39 @@
           <button onclick="switchTab('novo-projeto')" class="shrink-0 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Novo projeto</button>
         </div>
 
+        <!-- Ativação: hero pro novo usuário (0 projetos). Mostrado via JS. -->
+        <div id="new-user-hero" class="hidden rounded-2xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-6 md:p-9 mb-6 text-center shadow-gradient">
+          <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl gradient-main text-white mb-4">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+          </div>
+          <h2 class="text-xl md:text-2xl font-bold text-gray-900 mb-2">Seu primeiro quantitativo é por nossa conta 🎉</h2>
+          <p class="text-sm md:text-base text-gray-600 max-w-xl mx-auto mb-6">
+            Sobe a prancha e em <b>minutos</b> você recebe a planilha de quantitativos — grátis, sem cartão.
+            Cada item vem marcado como <b>&#10003; medido</b> (do CAD) ou <b>&#9888; estimativa</b> (pra conferir),
+            então você <b>sempre sabe no que confiar</b>.
+          </p>
+          <div class="grid grid-cols-3 gap-2 max-w-md mx-auto mb-7">
+            <div class="text-xs text-gray-600">
+              <div class="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold">1</div>
+              <b>Sobe a prancha</b><br><span class="text-gray-400">PDF, DWG ou DXF</span>
+            </div>
+            <div class="text-xs text-gray-600">
+              <div class="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold">2</div>
+              <b>A IA lê</b><br><span class="text-gray-400">em minutos</span>
+            </div>
+            <div class="text-xs text-gray-600">
+              <div class="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold">3</div>
+              <b>Baixa a planilha</b><br><span class="text-gray-400">XLSX com SINAPI</span>
+            </div>
+          </div>
+          <button onclick="switchTab('novo-projeto')" class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl gradient-main text-white font-semibold shadow-btn transition text-base">
+            Enviar minha primeira prancha &rarr;
+          </button>
+          <p class="text-xs text-gray-500 mt-4">💡 Melhor resultado em <b>DWG ou DXF</b> — aí a gente mede a geometria de verdade.</p>
+        </div>
+
         <!-- Cards de métricas principais -->
-        <div class="grid gap-4 md:grid-cols-4 mb-6">
+        <div id="home-metrics" class="grid gap-4 md:grid-cols-4 mb-6">
           <div class="rounded-2xl border-2 border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
             <div class="flex items-center gap-2 mb-2">
               <span class="text-2xl">📊</span>
@@ -235,7 +266,7 @@
         </div>
 
         <!-- Métricas secundárias + atalhos -->
-        <div class="grid gap-4 md:grid-cols-3 mb-6">
+        <div id="home-metrics2" class="grid gap-4 md:grid-cols-3 mb-6">
           <div class="rounded-xl border bg-white p-4">
             <p class="text-xs font-medium text-gray-500 mb-1">Tipologia mais usada</p>
             <p id="stat-top-typology" class="text-lg font-semibold text-gray-800 capitalize">--</p>
@@ -276,7 +307,7 @@
         </div>
 
         <!-- Últimos projetos (atividade recente) -->
-        <div class="rounded-xl border bg-white overflow-hidden">
+        <div id="home-recent-card" class="rounded-xl border bg-white overflow-hidden">
           <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
             <h3 class="font-semibold text-gray-800">Atividade recente</h3>
             <button onclick="switchTab('meus-projetos')" class="text-xs text-indigo-600 hover:text-indigo-800">ver todos →</button>
@@ -603,16 +634,16 @@
           </div>
         </div>
 
-        <!-- Empty state -->
+        <!-- Empty state (ativação) -->
         <div id="projects-empty" class="hidden">
-          <div class="rounded-2xl border bg-white p-12 text-center shadow-gradient">
-            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-500 mb-6">
-              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+          <div class="rounded-2xl border-2 border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-10 md:p-12 text-center shadow-gradient">
+            <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-main text-white mb-6">
+              <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             </div>
-            <h2 class="text-lg font-semibold text-gray-700 mb-2">Nenhum projeto ainda</h2>
-            <p class="text-sm text-gray-500 mb-6">Comece enviando suas pranchas!</p>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Seu primeiro projeto é por nossa conta 🎉</h2>
+            <p class="text-sm text-gray-600 max-w-md mx-auto mb-6">Sobe a prancha (PDF, DWG ou DXF) e em <b>minutos</b> você recebe a planilha de quantitativos — grátis, sem cartão. Cada item vem marcado como <b>&#10003; medido</b> ou <b>&#9888; estimativa</b>, pra você saber no que confiar.</p>
             <button onclick="switchTab('novo-projeto')" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition text-sm">
-              Criar Primeiro Projeto
+              Enviar minha primeira prancha &rarr;
             </button>
           </div>
         </div>
@@ -1134,6 +1165,20 @@
 
       // Métricas principais
       const totalProj = projects.length;
+
+      // ── ATIVAÇÃO: usuário sem NENHUM projeto (nunca subiu) vê o hero de
+      // "primeira prancha"; escondemos as métricas zeradas (R$0/0h) que
+      // desanimam. Usa o total bruto (não só 'done') pra quem está no meio
+      // do 1º upload não cair no hero. ──
+      const _anyProj = (data.projects || []).length;
+      const _newUser = _anyProj === 0;
+      const _heroEl = document.getElementById('new-user-hero');
+      if (_heroEl) _heroEl.classList.toggle('hidden', !_newUser);
+      ['home-metrics', 'home-metrics2', 'home-recent-card'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('hidden', _newUser);
+      });
+
       const hoursPerProject = 16;  // estimativa: 2 dias de orçamentista
       const hourlyRate = 80;  // R$ por hora orçamentista sênior
       const totalItems = projects.reduce((s, p) => s + (p.items_count || 0), 0);
