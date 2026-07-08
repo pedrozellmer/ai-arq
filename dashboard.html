@@ -830,7 +830,7 @@
               <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-100 text-cyan-500">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
               </div>
-              <h3 class="font-semibold text-gray-900 text-sm">M&#225;ximo de arquivos</h3>
+              <h3 class="font-semibold text-gray-900 text-sm">Quantidade de arquivos</h3>
             </div>
             <p class="text-sm text-gray-500">Sem limite de arquivos — preço por prancha</p>
           </div>
@@ -3376,7 +3376,7 @@
         msg += 'Nenhuma linha com quantidade v\u00e1lida foi encontrada.\n\n';
       }
       if (result.cashback_granted) {
-        const amt = result.cashback_amount_brl || 20;
+        const amt = result.cashback_amount_brl || 30;
         msg += `\u2705 R$ ${amt.toFixed(2)} de cashback creditado \u2014 aplicado automaticamente no pr\u00f3ximo projeto.`;
       } else {
         msg += 'Cashback n\u00e3o foi liberado (revis\u00e3o duplicada ou sem linhas v\u00e1lidas).';

@@ -674,7 +674,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p>O parser tem 2 modos: <strong>strict</strong> (assume template padrão) e <strong>fuzzy</strong> (detecta colunas dinamicamente procurando palavras-chave no cabeçalho: "descrição", "unidade", "quantidade", "valor unitário", "total"). Em modo automático, ele tenta strict primeiro e cai pro fuzzy se não reconhecer. O matching entre fornecedores usa similaridade de string + Jaccard de tokens — "Demolição de drywall em placas" casa com "Demolicao de drywall com placas" mesmo sem normalização exata.</p>
+              <p>O sistema reconhece as colunas automaticamente (descrição, unidade, quantidade, valor) mesmo em planilhas de layouts diferentes, e identifica itens equivalentes mesmo quando descritos de formas diferentes.</p>
             </div>
           </div>
         </div>
@@ -885,7 +885,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p>O primeiro projeto &eacute; gr&aacute;tis e voc&ecirc; n&atilde;o precisa CPF/CNPJ s&oacute; pra testar. CPF/CNPJ &eacute; pedido s&oacute; antes do 1&ordm; pagamento &mdash; precisamos pra emitir o recibo da transa&ccedil;&atilde;o. Quem nunca vai pagar (s&oacute; usa o gr&aacute;tis ou tem c&oacute;digo beta) nunca precisa preencher.</p>
+              <p>O primeiro projeto &eacute; gr&aacute;tis e voc&ecirc; n&atilde;o precisa de CPF/CNPJ s&oacute; pra testar. CPF/CNPJ &eacute; pedido s&oacute; antes do 1&ordm; pagamento &mdash; precisamos pra emitir o recibo da transa&ccedil;&atilde;o. Quem nunca vai pagar (s&oacute; usa o gr&aacute;tis ou tem c&oacute;digo beta) nunca precisa preencher.</p>
               <p class="mt-2 text-xs text-gray-500">No checkout do Stripe (cart&atilde;o/PIX) o sistema confere se o CPF/CNPJ est&aacute; preenchido no seu perfil. Se n&atilde;o estiver, abre uma janelinha pra voc&ecirc; informar antes do pagamento.</p>
             </div>
           </div>
@@ -916,7 +916,7 @@
               <p class="mb-3">Verifique os seguintes pontos:</p>
               <ul class="space-y-1.5 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Os arquivos est&atilde;o em formato <strong>PDF, DWG ou DXF</strong>?</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Os nomes dos arquivos identificam claramente o tipo de prancha?</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> Dica: nomear as pranchas ajuda, mas n&atilde;o &eacute; obrigat&oacute;rio (voc&ecirc; classifica cada uma na tela).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> O arquivo abre normalmente no seu computador (n&atilde;o est&aacute; corrompido)?</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> A resolu&ccedil;&atilde;o &eacute; adequada (m&iacute;nimo 150 DPI, ideal 300 DPI)?</li>
               </ul>
