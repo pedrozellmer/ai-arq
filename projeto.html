@@ -147,6 +147,84 @@ function smartBack() {
     </button>
   </div>
 
+  <!-- ═════ CHAT: Pergunte sobre o seu quantitativo (ancorado nos itens) ═════ -->
+  <section id="chat-quant" class="rounded-2xl border-2 border-indigo-200 bg-white overflow-hidden">
+    <div class="flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl gradient-main text-white shrink-0" aria-hidden="true">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+      </div>
+      <div>
+        <p class="font-bold text-gray-900">Pergunte sobre o seu quantitativo</p>
+        <p class="text-xs text-gray-500">Tire dúvidas da planilha — o que é medido, o que revisar, onde está cada item.</p>
+      </div>
+    </div>
+    <div id="chat-msgs" class="px-5 py-4 space-y-3 max-h-96 overflow-y-auto text-sm">
+      <div class="text-gray-500">Oi! 👋 Posso te ajudar a entender a sua planilha — só não faço preço (isso é com o orçamentista). Pergunte à vontade:</div>
+    </div>
+    <div id="chat-chips" class="px-5 pb-1 flex flex-wrap gap-2">
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Por que tem item "estimativa"?</button>
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Como ter mais itens medidos?</button>
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Resume as disciplinas do projeto</button>
+    </div>
+    <div class="px-5 py-3 border-t border-gray-100 flex gap-2">
+      <input id="chat-input" type="text" autocomplete="off" placeholder="Escreva sua pergunta..." aria-label="Pergunte sobre o seu quantitativo" class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+      <button id="chat-send" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">Enviar</button>
+    </div>
+    <p class="px-5 pb-3 text-[11px] text-gray-400">Respostas geradas por IA a partir dos dados do seu projeto. O AI.arq entrega quantitativo, não preço.</p>
+  </section>
+
+  <script>
+  (function(){
+    var msgsEl = document.getElementById('chat-msgs');
+    var inputEl = document.getElementById('chat-input');
+    var sendBtn = document.getElementById('chat-send');
+    var jid = new URLSearchParams(location.search).get('job_id');
+    if (!msgsEl || !inputEl || !sendBtn || !jid) return;
+    var history = [];
+    var busy = false;
+    function esc(s){ return window.escapeHtml ? window.escapeHtml(s) : String(s == null ? '' : s); }
+    function bubble(role, text){
+      var wrap = document.createElement('div');
+      wrap.className = role === 'user' ? 'text-right' : 'text-left';
+      var span = document.createElement('span');
+      span.style.cssText = 'display:inline-block;padding:8px 12px;border-radius:12px;max-width:85%;white-space:pre-wrap;text-align:left;' +
+        (role === 'user' ? 'background:#4F46E5;color:#fff;border-bottom-right-radius:3px;' : 'background:#f1f5f9;color:#0f172a;border-bottom-left-radius:3px;');
+      span.textContent = text;
+      wrap.appendChild(span);
+      msgsEl.appendChild(wrap);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+      return span;
+    }
+    async function send(q){
+      q = (q || '').trim();
+      if (!q || busy) return;
+      busy = true; sendBtn.disabled = true; inputEl.value = '';
+      bubble('user', q);
+      history.push({ role: 'user', content: q });
+      var thinking = bubble('assistant', '…');
+      try {
+        var r = await window.authFetch(window.API_BASE + '/api/projeto/' + jid + '/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history.slice(-8) })
+        });
+        var data = await r.json();
+        var reply = data.reply || data.message || 'Não consegui responder agora.';
+        thinking.textContent = reply;
+        if (data.status === 'ok') history.push({ role: 'assistant', content: reply });
+      } catch (e) {
+        thinking.textContent = 'Ops, erro de rede. Tenta de novo.';
+      }
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+      busy = false; sendBtn.disabled = false; inputEl.focus();
+    }
+    sendBtn.addEventListener('click', function(){ send(inputEl.value); });
+    inputEl.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); send(inputEl.value); } });
+    Array.prototype.forEach.call(document.querySelectorAll('.chat-chip'), function(b){
+      b.addEventListener('click', function(){ send(b.textContent); });
+    });
+  })();
+  </script>
+
   <!-- ═════════════════════════════════════════════════════════════════ -->
   <!-- ENTREGAS DO PROJETO — cards expandíveis (cada um é uma fase do roadmap) -->
   <!-- ═════════════════════════════════════════════════════════════════ -->
