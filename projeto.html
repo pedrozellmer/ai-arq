@@ -242,7 +242,7 @@ function smartBack() {
         var data = await r.json().catch(function(){ return {}; });
         if (r.ok && data.status === 'ok'){
           document.getElementById('cad-upgrade-form').classList.add('hidden');
-          setStatus('✅ Recebido! Tô refazendo o teu projeto medindo pelo CAD — leva alguns minutos. Recarrega a página daqui a pouco pra ver o resultado medido.', 'text-emerald-700 font-medium');
+          setStatus('✅ Recebido! Tô refazendo o teu projeto medindo pelo CAD — leva alguns minutos. Te aviso por email quando ficar pronto (ou recarrega a página daqui a pouco).', 'text-emerald-700 font-medium');
         } else {
           btn.disabled = false;
           setStatus('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');

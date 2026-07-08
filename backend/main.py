@@ -2815,7 +2815,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
                 user_ambientes: dict[str, str] | None = None,
-                project_type: str = "arquitetura"):
+                project_type: str = "arquitetura",
+                is_complement: bool = False):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
 
     `typology` alimenta a camada de calibração por densidade — alertas
@@ -4015,7 +4016,37 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # acompanhando, OU é revisão interna nossa — NÃO re-emailar "planilha
             # pronta" (evita spam de email a cada reprocesso). Só o 1º envio notifica.
             _is_reproc = bool(_rows and (_rows[0].get("reprocess_count") or 0) > 0)
-            if _pe and _is_reproc:
+            if _pe and is_complement:
+                # add-file: refizemos o projeto medindo pelo CAD que o cliente anexou.
+                # Email PRÓPRIO (não cai no dedup dos outros), 1x por job — garante que
+                # a conclusão do "complementar" SEMPRE notifica, independente de
+                # reprocess_count. Se um resume pós-restart perder o is_complement, cai
+                # no email "planilha pronta" normal (sem dedup) → cliente notificado mesmo.
+                if _email_auto_ja_enviado(_pe, "complemento_pronto", ref=job_id):
+                    print(f"[email] complemento-pronto já enviado pra este job — pulando")
+                else:
+                    _pn_c = _html.escape(_rows[0].get("project_name") or "seu projeto")
+                    _greet_c = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
+                    _exts_c = [os.path.splitext(p)[1].lower() for p in file_paths]
+                    _n_pdf_c = sum(1 for e in _exts_c if e == ".pdf")
+                    _n_cad_c = sum(1 for e in _exts_c if e in (".dwg", ".dxf"))
+                    _diag_c = _build_reading_diagnostic(all_items, _n_pdf_c, _n_cad_c, project_type, project_data)
+                    _n_med_c = sum(1 for it in all_items
+                                   if str(getattr(getattr(it, "confidence", None), "value",
+                                                  getattr(it, "confidence", "")) or "") == "confirmado")
+                    _proximos_c = _next_steps_html(job_id, _n_med_c, len(all_items), _n_cad_c == 0 and _n_pdf_c > 0)
+                    _body_c = (f"{_greet_c}<br><br>Refizemos o projeto <b>{_pn_c}</b> medindo pelo <b>CAD</b> "
+                               f"que você anexou — a planilha foi atualizada, agora com <b>{len(all_items)} itens</b>."
+                               f"{_diag_c}{_proximos_c}")
+                    _ok_c = _send_email_smtp(
+                        _pe, "Medimos seu projeto com o CAD — planilha atualizada",
+                        _email_wrap("Planilha atualizada com o CAD", _body_c,
+                                    "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
+                                    badge="&#10003; Medido"))
+                    if _ok_c:
+                        _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
+                    print(f"[email] complemento-pronto -> enviado={_ok_c}")
+            if _pe and not is_complement and _is_reproc:
                 # Antes: mudo (anti-spam). Agora: email PRÓPRIO de reprocesso, 1x por
                 # job (dedup em email_auto_log). Fecha o buraco onde o cliente
                 # reprocessava (ou a gente resgatava) e ninguém avisava — caso
@@ -4039,7 +4070,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     if _ok_r:
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
                     print(f"[email] reprocesso-pronto -> enviado={_ok_r}")
-            if _pe and not _is_reproc:
+            if _pe and not is_complement and not _is_reproc:
                 _pn = _html.escape(_rows[0].get("project_name") or "seu projeto")
                 _greet = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
                 _aviso_html = ""
@@ -8709,7 +8740,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, file: UploadFile
     threading.Thread(
         target=_process_job_throttled,
         args=(job_id, file_paths, work_dir),
-        kwargs={"typology": typology, "project_type": ptype},
+        kwargs={"typology": typology, "project_type": ptype, "is_complement": True},
         daemon=True,
     ).start()
 
