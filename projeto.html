@@ -69,6 +69,94 @@ function smartBack() {
     </div>
   </div>
 
+  <!-- Dados do Projeto + Cliente Final — NO TOPO (de quem é o projeto vem primeiro) -->
+  <div class="rounded-xl border bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
+      <div>
+        <h2 class="font-semibold text-gray-800">📇 Dados do projeto e cliente</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Aparecem no cabeçalho da planilha, no PDF do cronograma e nos PPTs gerados</p>
+      </div>
+      <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
+    </div>
+    <div id="client-view" class="p-5 text-sm">
+      <div id="client-loading" class="text-gray-500">Carregando...</div>
+      <div id="client-empty" class="text-gray-500 hidden">Nenhum dado preenchido. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Preencher agora →</button></div>
+      <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
+    </div>
+    <div id="client-edit" class="p-5 hidden">
+
+      <!-- Seção 1: DADOS DO PROJETO -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do projeto</p>
+      <div class="grid gap-3 md:grid-cols-2 mb-5">
+        <div class="md:col-span-2">
+          <label for="p-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do projeto</label>
+          <input id="p-name" type="text" maxlength="120" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex.: Escritório Regional Americana"/>
+        </div>
+        <div>
+          <label for="p-typology" class="text-xs font-medium text-gray-500 block mb-1">Tipologia</label>
+          <select id="p-typology" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="office">Corporativo / Escritório</option>
+            <option value="residential">Residencial</option>
+            <option value="retail">Varejo / Comércio</option>
+            <option value="hospital">Hospital / Saúde</option>
+            <option value="educational">Educacional</option>
+          </select>
+        </div>
+        <div>
+          <label for="p-phase" class="text-xs font-medium text-gray-500 block mb-1">Fase do projeto</label>
+          <select id="p-phase" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="Estudo preliminar">Estudo preliminar</option>
+            <option value="Anteprojeto">Anteprojeto</option>
+            <option value="Projeto legal">Projeto legal</option>
+            <option value="Projeto executivo">Projeto executivo</option>
+            <option value="Reforma">Reforma</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label for="p-address" class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra</label>
+          <input id="p-address" type="text" maxlength="240" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
+        </div>
+      </div>
+
+      <!-- Seção 2: DADOS DO CLIENTE FINAL -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 mt-2">Cliente final do projeto</p>
+      <div class="grid gap-3 md:grid-cols-2">
+        <div>
+          <label for="c-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do contato</label>
+          <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Nome do cliente final"/>
+        </div>
+        <div>
+          <label for="c-company" class="text-xs font-medium text-gray-500 block mb-1">Empresa / Razão Social</label>
+          <input id="c-company" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Empresa do cliente"/>
+        </div>
+        <div>
+          <label for="c-email" class="text-xs font-medium text-gray-500 block mb-1">E-mail</label>
+          <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="email@empresa.com"/>
+        </div>
+        <div>
+          <label for="c-phone" class="text-xs font-medium text-gray-500 block mb-1">WhatsApp / Telefone</label>
+          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 9 0000-0000"/>
+        </div>
+        <div class="md:col-span-2 hidden">
+          <!-- Mantido por compat com fluxo antigo; agora endereço fica em p-address -->
+          <input id="c-address" type="hidden"/>
+        </div>
+        <div class="md:col-span-2">
+          <label for="c-notes" class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-500">(só você vê)</span></label>
+          <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>.</p>
+      <div id="edit-status" class="mt-2 text-xs hidden"></div>
+      <div class="mt-4 flex gap-2 justify-end">
+        <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+        <button onclick="saveProjectAndClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar tudo</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Metadados do projeto (faixa compacta) -->
   <div class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
     <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
@@ -106,6 +194,66 @@ function smartBack() {
     </div>
     <p id="rx-pct" class="text-xs text-gray-500 mt-2"></p>
   </div>
+
+  <!-- Aviso "manda o CAD" — aparece só quando veio de PDF e 0 medido (ver renderMetrics).
+       Campo que anexa o DWG/DXF ao MESMO projeto e reprocessa in-place (/add-file). -->
+  <div id="cad-upgrade-banner" class="hidden rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
+    <div class="flex items-start gap-3">
+      <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
+      <div class="flex-1">
+        <p class="font-semibold text-amber-900">Quer os números medidos de verdade?</p>
+        <p class="text-sm text-amber-800 mt-1">Esse projeto veio de <strong>PDF</strong> — a gente reconheceu os <em>tipos</em> de item, mas o PDF não traz as medidas de forma legível, então saiu tudo como <strong>estimativa</strong> (laranja, pra você conferir).</p>
+        <p class="text-sm text-amber-800 mt-2">Tem o <strong>DWG ou DXF</strong> da mesma prancha? Sobe aqui que a gente <strong>refaz e mede de verdade</strong> — no mesmo projeto e de graça.</p>
+        <div id="cad-upgrade-form" class="mt-3 flex flex-wrap items-center gap-2">
+          <input id="cad-file-input" type="file" accept=".dwg,.dxf,.pdf" class="text-sm text-amber-900 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-amber-600 file:text-white file:text-sm file:font-semibold file:cursor-pointer hover:file:bg-amber-700"/>
+          <button id="cad-upload-btn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold transition disabled:opacity-50">
+            <span aria-hidden="true">⬆️</span> Enviar e refazer
+          </button>
+          <a href="faq.html" class="text-sm text-amber-800 underline hover:text-amber-900">Como exporto DWG/DXF?</a>
+        </div>
+        <p id="cad-upload-status" class="hidden text-sm mt-2"></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (function(){
+    var btn = document.getElementById('cad-upload-btn');
+    var input = document.getElementById('cad-file-input');
+    var statusEl = document.getElementById('cad-upload-status');
+    var jid = new URLSearchParams(location.search).get('job_id');
+    if (!btn || !input || !statusEl || !jid) return;
+    function setStatus(msg, cls){ statusEl.className = 'text-sm mt-2 ' + (cls || ''); statusEl.textContent = msg; statusEl.classList.remove('hidden'); }
+    btn.addEventListener('click', async function(){
+      var f = input.files && input.files[0];
+      if (!f){ setStatus('Escolha o arquivo DWG/DXF primeiro.', 'text-amber-800'); return; }
+      var ext = (f.name.split('.').pop() || '').toLowerCase();
+      if (['dwg','dxf','pdf'].indexOf(ext) < 0){ setStatus('Envie um arquivo DWG, DXF ou PDF.', 'text-red-700'); return; }
+      btn.disabled = true;
+      setStatus('Enviando e refazendo… isso leva alguns minutos.', 'text-amber-800');
+      try {
+        var sess = (await sb.auth.getSession()).data.session;
+        if (!sess){ btn.disabled = false; setStatus('Faça login pra enviar.', 'text-red-700'); return; }
+        var fd = new FormData(); fd.append('file', f);
+        var r = await fetch(window.API_BASE + '/api/project/' + jid + '/add-file', {
+          method: 'POST', body: fd,
+          headers: { 'Authorization': 'Bearer ' + sess.access_token }
+        });
+        var data = await r.json().catch(function(){ return {}; });
+        if (r.ok && data.status === 'ok'){
+          document.getElementById('cad-upgrade-form').classList.add('hidden');
+          setStatus('✅ Recebido! Tô refazendo o teu projeto medindo pelo CAD — leva alguns minutos. Recarrega a página daqui a pouco pra ver o resultado medido.', 'text-emerald-700 font-medium');
+        } else {
+          btn.disabled = false;
+          setStatus('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');
+        }
+      } catch (e){
+        btn.disabled = false;
+        setStatus('✗ Erro de rede. Tenta de novo.', 'text-red-700');
+      }
+    });
+  })();
+  </script>
 
   <!-- Feedback rápido pós-projeto (NPS leve) -->
   <div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
@@ -356,93 +504,7 @@ function smartBack() {
     <div id="cashback-events-list" class="mt-4 space-y-1 text-sm"></div>
   </div>
 
-  <!-- Dados do Projeto + Cliente Final (editável em 1 lugar só) -->
-  <div class="rounded-xl border bg-white overflow-hidden">
-    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
-      <div>
-        <h2 class="font-semibold text-gray-800">📇 Dados do projeto e cliente</h2>
-        <p class="text-xs text-gray-500 mt-0.5">Aparecem no cabeçalho da planilha, no PDF do cronograma e nos PPTs gerados</p>
-      </div>
-      <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
-    </div>
-    <div id="client-view" class="p-5 text-sm">
-      <div id="client-loading" class="text-gray-500">Carregando...</div>
-      <div id="client-empty" class="text-gray-500 hidden">Nenhum dado preenchido. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Preencher agora →</button></div>
-      <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
-    </div>
-    <div id="client-edit" class="p-5 hidden">
-
-      <!-- Seção 1: DADOS DO PROJETO -->
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do projeto</p>
-      <div class="grid gap-3 md:grid-cols-2 mb-5">
-        <div class="md:col-span-2">
-          <label for="p-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do projeto</label>
-          <input id="p-name" type="text" maxlength="120" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex.: Escritório Regional Americana"/>
-        </div>
-        <div>
-          <label for="p-typology" class="text-xs font-medium text-gray-500 block mb-1">Tipologia</label>
-          <select id="p-typology" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="">— manter atual —</option>
-            <option value="office">Corporativo / Escritório</option>
-            <option value="residential">Residencial</option>
-            <option value="retail">Varejo / Comércio</option>
-            <option value="hospital">Hospital / Saúde</option>
-            <option value="educational">Educacional</option>
-          </select>
-        </div>
-        <div>
-          <label for="p-phase" class="text-xs font-medium text-gray-500 block mb-1">Fase do projeto</label>
-          <select id="p-phase" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="">— manter atual —</option>
-            <option value="Estudo preliminar">Estudo preliminar</option>
-            <option value="Anteprojeto">Anteprojeto</option>
-            <option value="Projeto legal">Projeto legal</option>
-            <option value="Projeto executivo">Projeto executivo</option>
-            <option value="Reforma">Reforma</option>
-          </select>
-        </div>
-        <div class="md:col-span-2">
-          <label for="p-address" class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra</label>
-          <input id="p-address" type="text" maxlength="240" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
-        </div>
-      </div>
-
-      <!-- Seção 2: DADOS DO CLIENTE FINAL -->
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 mt-2">Cliente final do projeto</p>
-      <div class="grid gap-3 md:grid-cols-2">
-        <div>
-          <label for="c-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do contato</label>
-          <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Nome do cliente final"/>
-        </div>
-        <div>
-          <label for="c-company" class="text-xs font-medium text-gray-500 block mb-1">Empresa / Razão Social</label>
-          <input id="c-company" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Empresa do cliente"/>
-        </div>
-        <div>
-          <label for="c-email" class="text-xs font-medium text-gray-500 block mb-1">E-mail</label>
-          <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="email@empresa.com"/>
-        </div>
-        <div>
-          <label for="c-phone" class="text-xs font-medium text-gray-500 block mb-1">WhatsApp / Telefone</label>
-          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 9 0000-0000"/>
-        </div>
-        <div class="md:col-span-2 hidden">
-          <!-- Mantido por compat com fluxo antigo; agora endereço fica em p-address -->
-          <input id="c-address" type="hidden"/>
-        </div>
-        <div class="md:col-span-2">
-          <label for="c-notes" class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-500">(só você vê)</span></label>
-          <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
-        </div>
-      </div>
-      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>.</p>
-      <div id="edit-status" class="mt-2 text-xs hidden"></div>
-      <div class="mt-4 flex gap-2 justify-end">
-        <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-        <button onclick="saveProjectAndClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar tudo</button>
-      </div>
-    </div>
-  </div>
+  <!-- (Card "Dados do projeto e cliente" foi movido pro TOPO da página, logo após os avisos.) -->
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <!-- ENVIAR ARQUIVOS — sub-tabs (sua planilha revisada × cotações)    -->
@@ -946,13 +1008,13 @@ async function loadClientData() {
     const data = await res.json() || {};
     document.getElementById('client-loading').classList.add('hidden');
 
-    // Mostra a view se há QUALQUER coisa preenchida: cliente OU dados do projeto
-    const projTitle = document.getElementById('proj-title')?.textContent.trim() || '';
-    const projTitleValid = projTitle && projTitle !== 'Projeto' && projTitle !== 'Sem nome';
+    // Card foca no CLIENTE (+ fase/endereço). Nome/tipologia saíram (vivem no
+    // cabeçalho/faixa). "Tem conteúdo" = cliente OU endereço OU fase; senão, mostra
+    // o convite "Preencher agora →" (bom nudge, já que o card agora está no topo).
     const temCliente = !!data.client_name;
-    const temProjeto = projTitleValid || window.__projAddress || window.__projPhase;
+    const temConteudo = temCliente || window.__projAddress || window.__projPhase;
 
-    if (temCliente || temProjeto) {
+    if (temConteudo) {
       renderClientData(data);
     } else {
       document.getElementById('client-empty').classList.remove('hidden');
@@ -967,18 +1029,16 @@ function renderClientData(d) {
   const dl = document.getElementById('client-data');
   // Endereço da obra vem do projeto (proj.address) — fallback no address_site do cliente
   const enderecoObra = window.__projAddress || d.address_site || '';
-  const projName = document.getElementById('proj-title')?.textContent.trim() || '';
-  const projTyp = window.__projTypologyRaw || '';
   const projPhase = window.__projPhase || '';
+  // Nome do projeto e Tipologia NÃO entram aqui — já vivem no cabeçalho e na faixa
+  // de métricas (dedup 08/07, Pedro apontou). Este card foca no CLIENTE + fase/endereço.
   const rows = [
-    ['Nome do projeto', projName && projName !== 'Projeto' ? projName : ''],
-    ['Tipologia', projTyp],
-    ['Fase', projPhase],
-    ['Endereço da obra', enderecoObra],
     ['Cliente final', d.client_name],
     ['Empresa', d.client_company],
     ['E-mail', d.client_email],
     ['WhatsApp / Telefone', d.client_phone],
+    ['Fase', projPhase],
+    ['Endereço da obra', enderecoObra],
   ];
   let html = rows.filter(r => r[1]).map(([k, v]) =>
     `<div><dt class="text-xs font-medium text-gray-500">${k}</dt><dd class="text-sm text-gray-800">${esc(v)}</dd></div>`
@@ -1466,6 +1526,17 @@ function renderMetrics(p, items) {
       document.getElementById('rx-pct').textContent = `${_pctM}% medido · ${100 - _pctM}% a confirmar`;
       _rx.classList.remove('hidden');
     }
+  }
+
+  // Aviso "manda o CAD": só quando NADA foi medido E a fonte é só PDF (0 medido
+  // num projeto que já é DWG/DXF seria outro problema — não pediria CAD). Reusa
+  // o _files (nomes únicos) computado acima pro m-files.
+  const _cadBanner = document.getElementById('cad-upgrade-banner');
+  if (_cadBanner) {
+    const _exts = new Set(Array.from(_files.keys()).map(f => f.toLowerCase().split('.').pop()));
+    const _soPdf = _exts.has('pdf') && !_exts.has('dwg') && !_exts.has('dxf');
+    if (_total > 0 && _medido === 0 && _soPdf && p.status !== 'error') _cadBanner.classList.remove('hidden');
+    else _cadBanner.classList.add('hidden');
   }
 
   // Card de feedback: só pra projeto que gerou planilha e que ainda não opinou.
