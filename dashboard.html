@@ -229,55 +229,43 @@
           <p class="text-xs text-gray-500 mt-4">💡 Melhor resultado em <b>DWG ou DXF</b> — aí a gente mede a geometria de verdade.</p>
         </div>
 
-        <!-- Cards de métricas principais -->
-        <div id="home-metrics" class="grid gap-4 md:grid-cols-4 mb-6">
-          <div class="rounded-2xl border-2 border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-2xl">📊</span>
-              <p class="text-xs font-medium text-indigo-700">Projetos</p>
+        <!-- Resumo do que a IA já fez (números REAIS, medidos do seu histórico) -->
+        <div id="home-metrics" class="rounded-2xl border border-gray-200 bg-white p-5 mb-6">
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-5">
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-xl" aria-hidden="true">📊</span>
+              <div class="min-w-0">
+                <p id="stat-projects" class="text-2xl font-bold text-gray-900 leading-none">0</p>
+                <p id="stat-projects-sub" class="text-xs text-gray-500 mt-1 truncate">projetos processados</p>
+              </div>
             </div>
-            <p id="stat-projects" class="text-3xl font-bold text-indigo-900">0</p>
-            <p id="stat-projects-sub" class="text-xs text-indigo-500 mt-1">Total processados</p>
-          </div>
-          <div class="rounded-2xl border-2 border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-2xl">⏱️</span>
-              <p class="text-xs font-medium text-emerald-700">Horas economizadas</p>
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-purple-50 text-xl" aria-hidden="true">📋</span>
+              <div class="min-w-0">
+                <p id="stat-items" class="text-2xl font-bold text-gray-900 leading-none">0</p>
+                <p class="text-xs text-gray-500 mt-1 truncate">itens de quantitativo</p>
+              </div>
             </div>
-            <p id="stat-hours" class="text-3xl font-bold text-emerald-900">0h</p>
-            <p class="text-xs text-emerald-500 mt-1">~16h por projeto</p>
-          </div>
-          <div class="rounded-2xl border-2 border-amber-100 bg-gradient-to-br from-amber-50 to-white p-5">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-2xl">💰</span>
-              <p class="text-xs font-medium text-amber-700">R$ economizados</p>
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-xl" aria-hidden="true">⏱️</span>
+              <div class="min-w-0">
+                <p id="stat-avg-time" class="text-2xl font-bold text-gray-900 leading-none">--</p>
+                <p class="text-xs text-gray-500 mt-1 truncate">tempo médio / projeto</p>
+              </div>
             </div>
-            <p id="stat-saved" class="text-3xl font-bold text-amber-900">R$ 0</p>
-            <p class="text-xs text-amber-500 mt-1">Equivale a ~R$ 80/h de trabalho manual</p>
-          </div>
-          <div class="rounded-2xl border-2 border-purple-100 bg-gradient-to-br from-purple-50 to-white p-5">
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-2xl">📋</span>
-              <p class="text-xs font-medium text-purple-700">Itens gerados</p>
+            <div class="flex items-center gap-3">
+              <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-xl" aria-hidden="true">🏠</span>
+              <div class="min-w-0">
+                <p id="stat-top-typology" class="text-lg font-bold text-gray-900 leading-tight capitalize truncate">--</p>
+                <p class="text-xs text-gray-500 mt-1 truncate">tipologia mais usada</p>
+              </div>
             </div>
-            <p id="stat-items" class="text-3xl font-bold text-purple-900">0</p>
-            <p class="text-xs text-purple-500 mt-1">Linhas de quantitativos</p>
           </div>
-        </div>
-
-        <!-- Métricas secundárias + atalhos -->
-        <div id="home-metrics2" class="grid gap-4 md:grid-cols-3 mb-6">
-          <div class="rounded-xl border bg-white p-4">
-            <p class="text-xs font-medium text-gray-500 mb-1">Tipologia mais usada</p>
-            <p id="stat-top-typology" class="text-lg font-semibold text-gray-800 capitalize">--</p>
-          </div>
-          <div class="rounded-xl border bg-white p-4">
-            <p class="text-xs font-medium text-gray-500 mb-1">Projetos este mês</p>
-            <p id="stat-this-month" class="text-lg font-semibold text-gray-800">0</p>
-          </div>
-          <div class="rounded-xl border bg-white p-4">
-            <p class="text-xs font-medium text-gray-500 mb-1">Tempo médio / projeto</p>
-            <p id="stat-avg-time" class="text-lg font-semibold text-gray-800">--</p>
+          <!-- Economia estimada — marcada como ESTIMATIVA (honestidade: não é medido) -->
+          <div class="mt-4 pt-3 border-t border-gray-100 flex items-start gap-2 text-xs text-gray-500">
+            <span aria-hidden="true" class="mt-0.5">⏳</span>
+            <p>Estimativa: você poupou cerca de <b id="stat-hours" class="text-gray-700">0h</b> ante medir à mão
+              <span class="text-gray-400">— número aproximado (~16h/projeto), não medido.</span></p>
           </div>
         </div>
 
@@ -1174,18 +1162,16 @@
       const _newUser = _anyProj === 0;
       const _heroEl = document.getElementById('new-user-hero');
       if (_heroEl) _heroEl.classList.toggle('hidden', !_newUser);
-      ['home-metrics', 'home-metrics2', 'home-recent-card'].forEach(id => {
+      ['home-metrics', 'home-recent-card'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.classList.toggle('hidden', _newUser);
       });
 
-      const hoursPerProject = 16;  // estimativa: 2 dias de orçamentista
-      const hourlyRate = 80;  // R$ por hora orçamentista sênior
+      const hoursPerProject = 16;  // estimativa honesta: ~2 dias de orçamentista
       const totalItems = projects.reduce((s, p) => s + (p.items_count || 0), 0);
 
       document.getElementById('stat-projects').textContent = totalProj;
       document.getElementById('stat-hours').textContent = (totalProj * hoursPerProject) + 'h';
-      document.getElementById('stat-saved').textContent = 'R$ ' + (totalProj * hoursPerProject * hourlyRate).toLocaleString('pt-BR');
       document.getElementById('stat-items').textContent = totalItems.toLocaleString('pt-BR');
 
       // Tipologia mais usada
@@ -1208,7 +1194,6 @@
       const thisMonth = projects.filter(p =>
         p.created_at && new Date(p.created_at) >= monthStart
       ).length;
-      document.getElementById('stat-this-month').textContent = thisMonth;
 
       // Tempo médio
       const times = projects
@@ -1233,11 +1218,10 @@
       } else {
         recentEl.innerHTML = recent.map(p => {
           const when = p.created_at ? new Date(p.created_at).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+          const _ti = ({office:['🏢','bg-indigo-50'],residential:['🏠','bg-emerald-50'],retail:['🏪','bg-amber-50'],hospital:['🏥','bg-rose-50'],educational:['🎓','bg-sky-50']})[p.typology] || ['📄','bg-gray-100'];
           return `
             <a href="projeto.html?job_id=${p.job_id}" class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 no-underline">
-              <div class="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              </div>
+              <div class="w-10 h-10 rounded-xl ${_ti[1]} flex items-center justify-center text-lg shrink-0" aria-hidden="true">${_ti[0]}</div>
               <div class="flex-1 min-w-0">
                 <p class="font-medium text-gray-800 truncate">${escapeH(p.project_name || 'Sem nome')}</p>
                 <p class="text-xs text-gray-500 truncate">${(p.client_name || '').trim() ? '<span class="text-gray-700 font-medium">👤 ' + escapeH(p.client_name) + '</span> · ' : ''}${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>
