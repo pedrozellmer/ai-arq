@@ -210,18 +210,30 @@
             Cada item vem marcado como <b>&#10003; medido</b> (do CAD) ou <b>&#9888; estimativa</b> (pra conferir),
             então você <b>sempre sabe no que confiar</b>.
           </p>
-          <div class="grid grid-cols-3 gap-2 max-w-md mx-auto mb-7">
-            <div class="text-xs text-gray-600">
-              <div class="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold">1</div>
-              <b>Sobe a prancha</b><br><span class="text-gray-400">PDF, DWG ou DXF</span>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto mb-7 text-left">
+            <div class="rounded-xl border border-indigo-100 bg-white/70 p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-lg" aria-hidden="true">📤</span>
+                <span class="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-bold">1</span>
+              </div>
+              <p class="font-semibold text-gray-900 text-sm">Sobe a prancha</p>
+              <p class="text-xs text-gray-500">PDF, DWG ou DXF</p>
             </div>
-            <div class="text-xs text-gray-600">
-              <div class="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold">2</div>
-              <b>A IA lê</b><br><span class="text-gray-400">em minutos</span>
+            <div class="rounded-xl border border-indigo-100 bg-white/70 p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-lg" aria-hidden="true">⚡</span>
+                <span class="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-bold">2</span>
+              </div>
+              <p class="font-semibold text-gray-900 text-sm">A IA lê</p>
+              <p class="text-xs text-gray-500">em minutos</p>
             </div>
-            <div class="text-xs text-gray-600">
-              <div class="mx-auto mb-1.5 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 font-bold">3</div>
-              <b>Baixa a planilha</b><br><span class="text-gray-400">XLSX com SINAPI</span>
+            <div class="rounded-xl border border-indigo-100 bg-white/70 p-4">
+              <div class="flex items-center gap-2 mb-2">
+                <span class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100 text-lg" aria-hidden="true">📥</span>
+                <span class="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-bold">3</span>
+              </div>
+              <p class="font-semibold text-gray-900 text-sm">Baixa a planilha</p>
+              <p class="text-xs text-gray-500">XLSX com SINAPI</p>
             </div>
           </div>
           <button onclick="switchTab('novo-projeto')" class="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl gradient-main text-white font-semibold shadow-btn transition text-base">
@@ -650,15 +662,17 @@
       <!-- ═══════════════════════════════════════════ -->
       <div id="tab-cashback" class="tab-content hidden">
 
-        <div class="mb-6 flex items-start justify-between gap-4">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900">Cashback</h1>
-            <p class="text-sm text-gray-500 mt-1">Crédito acumulado pelas suas revisões e contribuições</p>
-          </div>
-          <div class="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-white p-4 text-right">
-            <p class="text-xs font-medium text-amber-700 uppercase tracking-wide">Saldo total</p>
-            <p id="cb-total-all" class="text-3xl font-bold text-amber-700">R$ 0,00</p>
-            <p id="cb-events-count" class="text-xs text-gray-500 mt-1">0 ações</p>
+        <div class="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-400 text-white p-6 md:p-7 mb-6">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="min-w-0">
+              <h1 class="text-2xl font-bold">Cashback 💰</h1>
+              <p class="text-sm text-amber-50 mt-1">Crédito que você junta revisando e cotando — abatido nos próximos projetos.</p>
+            </div>
+            <div class="shrink-0 md:text-right">
+              <p class="text-xs font-medium text-amber-100 uppercase tracking-wide">Saldo total</p>
+              <p id="cb-total-all" class="text-3xl font-bold">R$ 0,00</p>
+              <p id="cb-events-count" class="text-xs text-amber-100 mt-0.5">0 ações</p>
+            </div>
           </div>
         </div>
 
