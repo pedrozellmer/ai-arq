@@ -460,33 +460,6 @@ function smartBack() {
     </div>
   </section>
 
-  <!-- Reportar problema neste projeto -->
-  <div class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
-    <div class="flex items-center gap-3">
-      <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-      </div>
-      <div>
-        <p class="text-sm font-semibold text-gray-800">Algo errado neste projeto?</p>
-        <p class="text-xs text-gray-500">Reporta pra gente que respondemos rapidinho.</p>
-      </div>
-    </div>
-    <button id="btn-report-project" type="button" class="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-50 text-orange-700 text-sm font-medium transition">
-      Reportar problema
-    </button>
-  </div>
-
-  <!-- Arquivos da prancha -->
-  <div class="rounded-xl border bg-white overflow-hidden">
-    <div class="px-5 py-4 border-b bg-gray-50">
-      <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
-      <p class="text-xs text-gray-500 mt-0.5">Clique pra abrir o PDF em nova aba — DWG/DXF baixam direto</p>
-    </div>
-    <div id="proj-files" class="divide-y">
-      <div class="p-8 text-center text-sm text-gray-500">Carregando arquivos...</div>
-    </div>
-  </div>
-
   <!-- Cashback acumulado deste projeto -->
   <div id="project-cashback-box" class="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 hidden">
     <div class="flex items-center justify-between">
@@ -588,7 +561,6 @@ function smartBack() {
         <p class="text-sm text-gray-700">
           <strong>Revisou a planilha no Excel?</strong> Suba a versão corrigida — é o que <strong class="text-amber-700">mais ajuda a calibrar o motor</strong>, e faz seus próximos projetos saírem mais afiados. Os quantitativos revisados podem ser usados de forma anonimizada.
         </p>
-        <p class="text-[11px] text-gray-500 mt-2">💡 No beta é grátis — o cashback de R$ 30 por planilha revisada volta quando a cobrança estiver ativa.</p>
       </div>
       <div class="p-5">
         <div class="grid gap-3 md:grid-cols-3 mb-3">
@@ -608,6 +580,33 @@ function smartBack() {
     </div>
     <!-- /tab-revisada -->
   </section>
+
+  <!-- Reportar problema neste projeto -->
+  <div class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
+    <div class="flex items-center gap-3">
+      <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+      </div>
+      <div>
+        <p class="text-sm font-semibold text-gray-800">Algo errado neste projeto?</p>
+        <p class="text-xs text-gray-500">Reporta pra gente que respondemos rapidinho.</p>
+      </div>
+    </div>
+    <button id="btn-report-project" type="button" class="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-50 text-orange-700 text-sm font-medium transition">
+      Reportar problema
+    </button>
+  </div>
+
+  <!-- Arquivos da prancha -->
+  <div class="rounded-xl border bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50">
+      <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
+      <p class="text-xs text-gray-500 mt-0.5">Clique pra abrir o PDF em nova aba — DWG/DXF baixam direto</p>
+    </div>
+    <div id="proj-files" class="divide-y">
+      <div class="p-8 text-center text-sm text-gray-500">Carregando arquivos...</div>
+    </div>
+  </div>
 
   <!-- Info extra -->
   <div class="grid gap-4 md:grid-cols-2">
@@ -970,6 +969,10 @@ function switchUploadTab(name) {
 window.switchUploadTab = switchUploadTab;
 
 async function loadProjectCashback() {
+  // Beta: cashback ESCONDIDO (ninguem paga ainda, nao faz sentido). Trocar
+  // CASHBACK_ATIVO pra true quando a cobranca entrar.
+  const CASHBACK_ATIVO = false;
+  if (!CASHBACK_ATIVO) return;
   try {
     // authFetch: endpoint trata PII financeira do projeto; sem Bearer, qualquer
     // um que adivinhar o job_id veria o saldo (auditoria 2026-05-23).
@@ -1345,7 +1348,7 @@ async function uploadRevisedSheet() {
     const data = await res.json();
     if (data.status === 'ok') {
       statusEl.className = 'mt-2 text-xs text-emerald-700';
-      statusEl.textContent = `✓ Planilha recebida! Muito obrigado — isso ajuda demais a afinar o motor. 🙏 (Cashback de R$ ${(data.credit_cents / 100).toFixed(2)} guardado pra quando a cobrança ligar.)`;
+      statusEl.textContent = `✓ Planilha recebida! Muito obrigado — isso ajuda demais a afinar o motor. 🙏`;
       document.getElementById('rev-file').value = '';
       loadProjectCashback();  // atualiza resumo
     } else {
