@@ -340,7 +340,7 @@ Se algum falhar, me peça pra investigar.
 - Sistema de cores (BRANCO medido / LARANJA estimado / CINZA metadado / ROXO indireto)
 - Revisão inline (sem cashback — alimenta calibração da IA pro próximo projeto)
 - Comparativo de fornecedores (upload XLSX múltiplos → quadro comparativo)
-- Painel admin (Pedro): usuários, códigos beta, projetos, calibração, NPS, insights, leads chat, mensagens
+- Painel admin (Pedro): usuários, projetos, calibração, NPS, insights, leads chat, mensagens
 - Cadastros incompletos visíveis no admin com botão "Reenviar login" (magic link)
 - Chat widget público (Claude Haiku 4.5, lead capture com nome+email)
 - Modal de contato com modo "ticket" (do projeto: assuntos pré-definidos + upload)

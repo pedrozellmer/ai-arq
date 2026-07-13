@@ -48,13 +48,6 @@
 
   .table-container { overflow-x: auto; }
   .table-container table { min-width: 700px; }
-
-  .modal-overlay {
-    transition: opacity 0.2s ease;
-  }
-  .modal-panel {
-    transition: transform 0.2s ease, opacity 0.2s ease;
-  }
 </style>
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
@@ -105,10 +98,6 @@
     <button onclick="switchTab('usuarios')" data-tab="usuarios" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
       <span>Usu&#225;rios</span>
-    </button>
-    <button onclick="switchTab('codigos')" data-tab="codigos" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-      <span>C&#243;digos Beta</span>
     </button>
     <button onclick="switchTab('projetos')" data-tab="projetos" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
@@ -229,17 +218,6 @@
             <p id="stat-projects-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
           </div>
 
-          <!-- Card: Codigos Beta Ativos -->
-          <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
-            <div class="flex items-center gap-3 mb-4">
-              <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-500">
-                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
-              </div>
-              <p class="text-sm font-medium text-gray-500">C&#243;digos Beta Ativos</p>
-            </div>
-            <p id="stat-beta" class="text-3xl font-bold text-gray-900">--</p>
-          </div>
-
           <!-- Card: Receita Total -->
           <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
             <div class="flex items-center gap-3 mb-4">
@@ -298,47 +276,6 @@
           </div>
         </div>
         <p id="users-count" class="text-xs text-gray-500 mt-3"></p>
-      </div>
-
-      <!-- ════════════════════════════════════════ -->
-      <!-- TAB: CODIGOS BETA                       -->
-      <!-- ════════════════════════════════════════ -->
-      <div id="tab-codigos" class="tab-content hidden">
-        <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900">C&#243;digos Beta</h1>
-            <p class="text-sm text-gray-500 mt-1">Gerenciamento de c&#243;digos de acesso beta</p>
-          </div>
-          <button onclick="openModal()" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl gradient-main text-white font-semibold text-sm shadow-btn transition hover:opacity-90">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-            Gerar Novo C&#243;digo
-          </button>
-        </div>
-
-        <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
-          <div class="table-container">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="border-b bg-gray-50">
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">C&#243;digo</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Nome</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Projetos</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Usado por</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Ativo</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Validade</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Data Cria&#231;&#227;o</th>
-                  <th class="text-left px-4 py-3 font-semibold text-gray-600">A&#231;&#245;es</th>
-                </tr>
-              </thead>
-              <tbody id="codes-table-body">
-                <tr>
-                  <td colspan="8" class="px-4 py-12 text-center text-gray-500">Carregando c&#243;digos...</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <p id="codes-count" class="text-xs text-gray-500 mt-3"></p>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -899,47 +836,6 @@
   </main>
 </div>
 
-<!-- ════════════════════════════════════════ -->
-<!-- MODAL: GERAR CODIGO BETA               -->
-<!-- ════════════════════════════════════════ -->
-<div id="modal-overlay" class="modal-overlay fixed inset-0 z-[60] bg-black/50 hidden flex items-center justify-center p-4" onclick="closeModal(event)">
-  <div class="modal-panel bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between mb-6">
-      <h3 class="text-lg font-bold text-gray-900">Gerar Novo C&#243;digo Beta</h3>
-      <button onclick="closeModal()" class="text-gray-500 hover:text-gray-600 transition p-1">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
-    </div>
-
-    <form id="form-new-code" class="space-y-4">
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">Nome da pessoa</label>
-        <input type="text" id="input-code-name" required placeholder="Ex: Maria Silva" class="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">Quantidade de projetos</label>
-        <input type="number" id="input-code-projects" value="5" min="1" max="100" required class="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
-      </div>
-      <div>
-        <label class="block text-sm font-medium text-gray-700 mb-1.5">Pranchas por projeto</label>
-        <input type="number" id="input-code-pranchas" value="10" min="1" max="200" required class="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
-      </div>
-      <div id="code-preview" class="hidden rounded-xl bg-gray-50 border p-3">
-        <p class="text-xs text-gray-500 mb-1">C&#243;digo que ser&#225; gerado:</p>
-        <p id="code-preview-text" class="text-sm font-mono font-bold gradient-text"></p>
-      </div>
-      <div id="modal-error" class="hidden rounded-xl bg-red-50 border border-red-200 p-3">
-        <p class="text-sm text-red-600"></p>
-      </div>
-      <button type="submit" id="btn-create-code" class="w-full py-3 rounded-xl gradient-main text-white font-semibold text-sm shadow-btn transition hover:opacity-90 flex items-center justify-center gap-2">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        Gerar C&#243;digo
-      </button>
-    </form>
-  </div>
-</div>
-
-
 <script>
 // ══════════════════════════════════════════════
 // SUPABASE CONFIG — vem de aiarq-utils.js (sbClient, authFetch, API_BASE)
@@ -1026,7 +922,6 @@ function switchTab(tabName) {
 
   // Load data for tab
   if (tabName === 'usuarios') loadUsers();
-  if (tabName === 'codigos') loadBetaCodes();
   if (tabName === 'projetos') loadProjects();
   if (tabName === 'dashboard') loadDashboardStats();
   if (tabName === 'calibracao') loadCalibrationFactors();
@@ -1937,13 +1832,6 @@ async function loadDashboardStats() {
       detailEl.textContent = parts.length ? parts.join(' \u00b7 ') : '\u00a0';
     }
 
-    // Count active beta codes
-    const { count: betaCount } = await sbClient
-      .from('beta_codes')
-      .select('*', { count: 'exact', head: true })
-      .eq('active', true);
-    document.getElementById('stat-beta').textContent = betaCount ?? 0;
-
   } catch (err) {
     console.error('Error loading stats:', err);
   }
@@ -1975,7 +1863,6 @@ async function loadUsers() {
         whatsapp: p.whatsapp,
         user_role: p.role,
         area: p.area,
-        beta_code: p.beta_code,
         referral_source: p.referral_source,
         referral_detail: p.referral_detail,
         profile_created_at: p.created_at,
@@ -2271,184 +2158,13 @@ document.getElementById('search-users').addEventListener('input', function() {
   const filtered = allUsers.filter(u => {
     const searchable = [
       u.full_name, u.email, u.whatsapp,
-      u.company, u.area, u.user_role, u.role, u.beta_code,
+      u.company, u.area, u.user_role, u.role,
       u.referral_source, u.referral_detail
     ].filter(Boolean).join(' ').toLowerCase();
     return searchable.includes(q);
   });
   renderUsers(filtered);
   document.getElementById('users-count').textContent = filtered.length + ' de ' + allUsers.length + ' usu\u00e1rio(s)';
-});
-
-// ══════════════════════════════════════════════
-// BETA CODES TABLE
-// ══════════════════════════════════════════════
-async function loadBetaCodes() {
-  const tbody = document.getElementById('codes-table-body');
-  tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-gray-500">Carregando c\u00f3digos...</td></tr>';
-
-  try {
-    const { data, error } = await sbClient
-      .from('beta_codes')
-      .select('*')
-      ;
-
-    if (error) throw error;
-
-    const codes = data || [];
-    renderBetaCodes(codes);
-    document.getElementById('codes-count').textContent = codes.length + ' c\u00f3digo(s) encontrado(s)';
-
-  } catch (err) {
-    console.error('Error loading beta codes:', err);
-    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-red-400">Erro ao carregar c\u00f3digos.</td></tr>';
-  }
-}
-
-function renderBetaCodes(codes) {
-  const tbody = document.getElementById('codes-table-body');
-
-  if (!codes.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-gray-500">Nenhum c\u00f3digo encontrado.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = codes.map(c => {
-    const created = c.created_at ? new Date(c.created_at).toLocaleDateString('pt-BR') : '--';
-    const expires = c.expires_at ? new Date(c.expires_at).toLocaleDateString('pt-BR') : 'Sem validade';
-    const used = (c.used_projects ?? 0) + '/' + (c.max_projects ?? 0);
-    const isActive = c.active !== false;
-
-    return `
-      <tr class="border-b hover:bg-gray-50 transition">
-        <td class="px-4 py-3"><span class="font-mono text-xs font-semibold bg-indigo-50 text-indigo-700 px-2 py-1 rounded">${esc(c.code)}</span></td>
-        <td class="px-4 py-3 font-medium text-gray-900">${esc(c.name || '--')}</td>
-        <td class="px-4 py-3 text-gray-600">${used}</td>
-        <td class="px-4 py-3 text-gray-600">${esc(c.used_by || '--')}</td>
-        <td class="px-4 py-3">
-          ${isActive
-            ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700">✓ Ativo</span>'
-            : '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-600">✗ Inativo</span>'
-          }
-        </td>
-        <td class="px-4 py-3 text-gray-500 text-xs">${expires}</td>
-        <td class="px-4 py-3 text-gray-500 text-xs">${created}</td>
-        <td class="px-4 py-3">
-          ${isActive
-            ? '<button onclick="deactivateCode(\'' + esc(c.code) + '\')" class="text-xs text-red-500 hover:text-red-700 font-medium transition hover:underline">Desativar</button>'
-            : '<span class="text-xs text-gray-500">--</span>'
-          }
-        </td>
-      </tr>
-    `;
-  }).join('');
-}
-
-async function deactivateCode(code) {
-  if (!confirm('Desativar o c\u00f3digo ' + code + '?')) return;
-
-  try {
-    const { error } = await sbClient
-      .from('beta_codes')
-      .update({ active: false })
-      .eq('code', code);
-
-    if (error) throw error;
-    loadBetaCodes();
-  } catch (err) {
-    console.error('Error deactivating code:', err);
-    alert('Erro ao desativar c\u00f3digo.');
-  }
-}
-
-// ══════════════════════════════════════════════
-// MODAL: NEW BETA CODE
-// ══════════════════════════════════════════════
-function openModal() {
-  document.getElementById('modal-overlay').classList.remove('hidden');
-  document.getElementById('input-code-name').value = '';
-  document.getElementById('input-code-projects').value = '5';
-  document.getElementById('input-code-pranchas').value = '10';
-  document.getElementById('code-preview').classList.add('hidden');
-  document.getElementById('modal-error').classList.add('hidden');
-  document.getElementById('input-code-name').focus();
-}
-
-function closeModal(event) {
-  if (event && event.target !== event.currentTarget) return;
-  document.getElementById('modal-overlay').classList.add('hidden');
-}
-
-// Live preview of the code
-document.getElementById('input-code-name').addEventListener('input', function() {
-  const name = this.value.trim();
-  const preview = document.getElementById('code-preview');
-  const previewText = document.getElementById('code-preview-text');
-
-  if (name) {
-    const codeName = name.toUpperCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^A-Z0-9]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
-    previewText.textContent = 'BETA-AI.ARQ-' + codeName;
-    preview.classList.remove('hidden');
-  } else {
-    preview.classList.add('hidden');
-  }
-});
-
-document.getElementById('form-new-code').addEventListener('submit', async function(e) {
-  e.preventDefault();
-  const btn = document.getElementById('btn-create-code');
-  const modalError = document.getElementById('modal-error');
-  modalError.classList.add('hidden');
-
-  const name = document.getElementById('input-code-name').value.trim();
-  const maxProjects = parseInt(document.getElementById('input-code-projects').value) || 5;
-  const maxPranchas = parseInt(document.getElementById('input-code-pranchas').value) || 10;
-
-  if (!name) return;
-
-  const codeName = name.toUpperCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^A-Z0-9]/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-  const code = 'BETA-AI.ARQ-' + codeName;
-
-  btn.disabled = true;
-  btn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Gerando...';
-
-  try {
-    const { error } = await sbClient.from('beta_codes').insert({
-      code: code,
-      name: name,
-      max_projects: maxProjects,
-      max_pranchas: maxPranchas,
-      used_projects: 0,
-      active: true
-    });
-
-    if (error) {
-      if (error.code === '23505') {
-        throw new Error('J\u00e1 existe um c\u00f3digo com esse nome.');
-      }
-      throw error;
-    }
-
-    document.getElementById('modal-overlay').classList.add('hidden');
-    loadBetaCodes();
-    loadDashboardStats();
-
-  } catch (err) {
-    console.error('Error creating code:', err);
-    modalError.querySelector('p').textContent = err.message || 'Erro ao gerar c\u00f3digo.';
-    modalError.classList.remove('hidden');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg> Gerar C\u00f3digo';
-  }
 });
 
 // ══════════════════════════════════════════════
