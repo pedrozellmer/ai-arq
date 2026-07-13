@@ -124,6 +124,11 @@
       <span>Atividade</span>
     </button>
 
+    <button onclick="switchTab('emails')" data-tab="emails" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+      <span>Emails</span>
+    </button>
+
     <p class="px-4 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">Caixa de Entrada</p>
     <button onclick="switchTab('leads')" data-tab="leads" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
@@ -842,8 +847,49 @@
         </div>
       </div>
 
+      <!-- ══════════════ CENTRAL DE EMAILS ══════════════ -->
+      <div id="tab-emails" class="tab-content hidden">
+        <h2 class="text-xl font-bold text-gray-900 mb-1">Central de Emails</h2>
+        <p class="text-sm text-gray-500 mb-5">Todos os emails que o AI.arq manda pros usu&aacute;rios. Veja o gatilho, quantos j&aacute; sa&iacute;ram e uma pr&eacute;via de cada um. <b>Isto n&atilde;o envia nada</b> &mdash; s&oacute; mostra.</p>
+
+        <div id="emails-loading" class="text-gray-400 text-sm">Carregando&hellip;</div>
+
+        <div id="emails-groups" class="hidden space-y-8">
+          <section>
+            <h3 class="flex items-center gap-2 text-base font-bold text-gray-900 mb-1">&#129302; Autom&aacute;ticos</h3>
+            <p class="text-xs text-gray-500 mb-4">O sistema dispara sozinho, na hora certa.</p>
+            <div id="emails-auto" class="grid gap-3 sm:grid-cols-2"></div>
+          </section>
+          <section>
+            <h3 class="flex items-center gap-2 text-base font-bold text-gray-900 mb-1">&#9995; Manuais (voc&ecirc; dispara)</h3>
+            <p class="text-xs text-gray-500 mb-4">Voc&ecirc; envia pelos bot&otilde;es na aba <b>Usu&aacute;rios</b>.</p>
+            <div id="emails-manual" class="grid gap-3 sm:grid-cols-2"></div>
+          </section>
+        </div>
+        <div id="emails-error" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-4"></div>
+      </div>
+
     </div>
   </main>
+</div>
+
+<!-- ══════════════ MODAL: PR&Eacute;VIA DE EMAIL ══════════════ -->
+<div id="email-preview-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/50 p-4" onclick="if(event.target===this)closeEmailPreview()">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200">
+      <div class="min-w-0">
+        <p class="text-[11px] font-semibold uppercase tracking-wide text-indigo-600 mb-0.5">Pr&eacute;via &middot; dados de exemplo</p>
+        <h3 id="email-preview-name" class="text-base font-bold text-gray-900 truncate">&mdash;</h3>
+        <p class="text-xs text-gray-500 mt-0.5"><b>Assunto:</b> <span id="email-preview-subject">&mdash;</span></p>
+      </div>
+      <button onclick="closeEmailPreview()" title="Fechar" class="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-hidden bg-gray-100 p-2">
+      <iframe id="email-preview-frame" class="w-full h-full min-h-[420px] rounded-lg border border-gray-200 bg-white" title="Pr&eacute;via do email"></iframe>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -938,6 +984,7 @@ function switchTab(tabName) {
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
   if (tabName === 'atividade') loadActivity();
+  if (tabName === 'emails') loadEmailCatalog();
   if (tabName === 'insights') loadInsights();
   if (tabName === 'leads') loadLeads();
   if (tabName === 'mensagens') loadMessages();
@@ -1141,6 +1188,105 @@ async function loadNewsletterPreview() {
     if (subj) subj.textContent = '(erro ao carregar a prévia)';
   }
 }
+
+// ══════════════════════════════════════════════
+// CENTRAL DE EMAILS — catálogo + preview (não envia nada)
+// ══════════════════════════════════════════════
+function _emailBadge(grupo) {
+  // Cor + ícone + texto (dono é daltônico — nunca cor sozinha).
+  if (grupo === 'manual') {
+    return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 text-xs font-semibold">&#9995; Manual</span>';
+  }
+  return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-semibold">&#129302; Autom&aacute;tico</span>';
+}
+
+function _emailCard(item) {
+  const vol = Number(item.volume || 0);
+  const volTxt = vol === 1 ? '1 email enviado' : `${vol} emails enviados`;
+  return `
+    <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-2">
+        <h4 class="font-semibold text-gray-900 text-sm leading-snug">${esc(item.nome)}</h4>
+        ${_emailBadge(item.grupo)}
+      </div>
+      <p class="text-xs text-gray-500 leading-relaxed">${esc(item.gatilho || '')}</p>
+      <div class="flex items-center justify-between mt-auto pt-1">
+        <span class="inline-flex items-center gap-1 text-xs text-gray-600" title="Total enviado pra usuários reais (email_sent_log)">&#128231; ${volTxt}</span>
+        <button onclick="openEmailPreview('${esc(item.key)}', '${esc(item.nome)}')"
+                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition">
+          &#128065; Ver preview
+        </button>
+      </div>
+    </div>`;
+}
+
+async function loadEmailCatalog() {
+  const loading = document.getElementById('emails-loading');
+  const groups  = document.getElementById('emails-groups');
+  const errBox  = document.getElementById('emails-error');
+  const autoBox = document.getElementById('emails-auto');
+  const manBox  = document.getElementById('emails-manual');
+  if (!groups) return;
+  loading.classList.remove('hidden');
+  groups.classList.add('hidden');
+  errBox.classList.add('hidden');
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/email-catalog`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const items = data.items || [];
+    const autos = items.filter(i => i.grupo !== 'manual');
+    const mans  = items.filter(i => i.grupo === 'manual');
+    autoBox.innerHTML = autos.length ? autos.map(_emailCard).join('') : '<p class="text-sm text-gray-400">Nenhum.</p>';
+    manBox.innerHTML  = mans.length  ? mans.map(_emailCard).join('')  : '<p class="text-sm text-gray-400">Nenhum.</p>';
+    loading.classList.add('hidden');
+    groups.classList.remove('hidden');
+  } catch (e) {
+    console.error('[loadEmailCatalog]', e);
+    loading.classList.add('hidden');
+    errBox.textContent = '⚠ Não consegui carregar a lista de emails. Tente recarregar a página.';
+    errBox.classList.remove('hidden');
+  }
+}
+
+async function openEmailPreview(key, nome) {
+  const modal = document.getElementById('email-preview-modal');
+  const frame = document.getElementById('email-preview-frame');
+  const subj  = document.getElementById('email-preview-subject');
+  const nm    = document.getElementById('email-preview-name');
+  if (!modal) return;
+  nm.textContent = nome || key;
+  subj.textContent = 'carregando…';
+  frame.srcdoc = '<p style="font-family:sans-serif;color:#999;padding:20px;">Carregando…</p>';
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/email-render?type=${encodeURIComponent(key)}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    subj.textContent = data.subject || '—';
+    frame.srcdoc = data.html || '<p style="font-family:sans-serif;color:#999;padding:20px;">Sem conteúdo.</p>';
+  } catch (e) {
+    console.error('[openEmailPreview]', e);
+    subj.textContent = '(erro)';
+    frame.srcdoc = '<p style="font-family:sans-serif;color:#c00;padding:20px;">Não consegui carregar a prévia deste email.</p>';
+  }
+}
+
+function closeEmailPreview() {
+  const modal = document.getElementById('email-preview-modal');
+  if (!modal) return;
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+  const frame = document.getElementById('email-preview-frame');
+  if (frame) frame.srcdoc = '';
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const modal = document.getElementById('email-preview-modal');
+  if (modal && !modal.classList.contains('hidden')) closeEmailPreview();
+});
 
 // ══════════════════════════════════════════════
 // MENSAGENS DE CONTATO — formulário público do site
