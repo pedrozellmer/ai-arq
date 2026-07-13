@@ -480,9 +480,8 @@ function smartBack() {
   <!-- (Card "Dados do projeto e cliente" foi movido pro TOPO da página, logo após os avisos.) -->
 
   <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- ENVIAR ARQUIVOS — sub-tabs (sua planilha revisada × cotações)    -->
-  <!-- Antes eram 2 caixas separadas, gerava confusão "ambas são .xlsx" -->
-  <!-- Agora 1 caixa com 2 abas claras: o que enviar e por que          -->
+  <!-- ENVIAR ARQUIVOS — planilha revisada (ouro) × cotações            -->
+  <!-- Reposicionado via JS (moveUploadAfterRaioX) pra logo após o Raio-X -->
   <!-- ═══════════════════════════════════════════════════════════════ -->
   <section id="cotacoes-section" class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50">
@@ -967,6 +966,16 @@ function switchUploadTab(name) {
 }
 // Disponibiliza global pro onclick inline
 window.switchUploadTab = switchUploadTab;
+
+// Sobe o card "Enviar planilhas" (planilha revisada = ouro pra calibração) pra
+// logo APÓS o Raio-X. Feito por JS pra não precisar mover o bloco grande no HTML.
+(function moveUploadAfterRaioX() {
+  try {
+    const up = document.getElementById('cotacoes-section');
+    const anchor = document.getElementById('cad-upgrade-banner'); // vem logo depois do Raio-X
+    if (up && anchor && anchor.parentNode) anchor.parentNode.insertBefore(up, anchor);
+  } catch (_) {}
+})();
 
 async function loadProjectCashback() {
   // Beta: cashback ESCONDIDO (ninguem paga ainda, nao faz sentido). Trocar
