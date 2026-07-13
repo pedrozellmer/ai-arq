@@ -6710,7 +6710,7 @@ async def upsert_project_client(
                 body=payload, prefer="return=minimal", timeout=8,
             )
             if up_status >= 400:
-                return {"error": "Falha ao atualizar cliente"}
+                raise HTTPException(500, "Falha ao atualizar os dados do cliente")
         else:
             # INSERT
             ins_status, _ = _supa_rest_as_user(
@@ -6719,10 +6719,12 @@ async def upsert_project_client(
                 body=payload, prefer="return=minimal", timeout=8,
             )
             if ins_status >= 400:
-                return {"error": "Falha ao gravar cliente"}
+                raise HTTPException(500, "Falha ao gravar os dados do cliente")
         return {"status": "ok"}
+    except HTTPException:
+        raise
     except Exception as e:
-        return {"error": str(e)}
+        raise HTTPException(500, f"Erro ao salvar cliente: {e}")
 
 
 # ── STRIPE CHECKOUT ──
