@@ -1941,13 +1941,21 @@
     try {
       for (const f of (newFiles || [])) {
         const mb = _mb(f.size);
+        // DWG pesado (3D/instalações/blocos) EXPLODE ao converter pra DXF: um DWG que
+        // passa no upload pode virar 212MB de DXF e falhar no processamento (limite
+        // 150MB). O tamanho do arquivo bruto NÃO prevê isso — então avisa 1x por sessão
+        // sempre que entra um DWG, independente do tamanho. Caso Luciano Scalise 13/07.
+        if ((f.name || '').toLowerCase().endsWith('.dwg') && !_bigWarned.has('__dwg_tip__')) {
+          _bigWarned.add('__dwg_tip__');
+          _warnToast('💡 Dica pra DWG: exporte só a prancha que você quer orçar (planta, piso, forro, layout). DWG com 3D e instalações pode virar grande demais ao processar e falhar — mesmo que o arquivo pareça pequeno.');
+        }
         if (mb >= BIG_FILE_MB && !_bigWarned.has(f.name)) {
           _bigWarned.add(f.name);
           const ehCorte = /cort|elev|3d|render/i.test(f.name);
           const dica = ehCorte
             ? 'Cortes e elevações não são necessários pro quantitativo — pode remover.'
             : 'Pro quantitativo bastam planta, piso, forro e layout.';
-          _warnToast(`⚠ "${f.name}" é grande (${mb.toFixed(0)} MB) e pode travar o envio. ${dica}`);
+          _warnToast(`⚠ "${f.name}" é grande (${mb.toFixed(0)} MB) e pode travar o envio ou falhar no processamento. ${dica}`);
         }
       }
       const totalMb = _mb(selectedFiles.reduce((s, f) => s + (f.size || 0), 0));
