@@ -353,22 +353,6 @@
           </div>
         </div>
 
-        <!-- BETA BANNER -->
-        <div id="beta-banner" class="mb-6 hidden">
-          <div class="relative rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
-            <div class="flex items-start gap-3">
-              <span class="text-2xl shrink-0">&#127881;</span>
-              <div class="flex-1">
-                <p class="text-sm text-emerald-800 leading-relaxed">
-                  <strong>Plano Beta Gratuito</strong> &#8212; Voc&#234; tem <strong id="beta-remaining">0</strong> projetos gr&#225;tis restantes.
-                  Em troca, revise a planilha e envie pelo Cashback.
-                </p>
-                <p class="text-xs text-emerald-600 mt-1">C&#243;digo: <span id="beta-code-display" class="font-mono font-semibold"></span></p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <!-- STATE: UPLOAD -->
         <div id="state-upload">
           <!-- Guia rápido -->
@@ -975,14 +959,6 @@
                 </select>
               </div>
             </div>
-            <!-- Beta code info in profile -->
-            <div id="prof-beta-section" class="hidden mt-2">
-              <div class="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                <label class="block text-xs font-medium text-emerald-700 mb-1">C&#243;digo Beta</label>
-                <p id="prof-beta-info" class="text-sm font-semibold text-emerald-800"></p>
-              </div>
-            </div>
-
             <!-- Logo + cor do escritório (co-branding em planilhas/PPT gerados) -->
             <div class="mt-4 pt-4 border-t">
               <label class="block text-sm font-semibold text-gray-800 mb-1">🎨 Identidade visual do escritório</label>
@@ -1366,7 +1342,6 @@
   let currentJobId = null;
   let pollTimer = null;
   let timeEstimateTimer = null;
-  let activeBetaCode = null; // holds beta_codes row if user has active beta
 
   // ══════════════════════════════════════════════
   //  DOM REFS
@@ -1463,8 +1438,6 @@
       'danielatp@gmail.com',  // testadora ativa
     ].includes(user.email);
 
-    // ── Load beta code banner ──
-    await loadBetaBanner();
     // ── Load credit balance (cashback, cupom, referral) ──
     await loadUserCredits();
 
@@ -1480,73 +1453,6 @@
     }
   }
   checkAuth();
-
-  // ══════════════════════════════════════════════
-  //  BETA CODE BANNER & HELPERS
-  // ══════════════════════════════════════════════
-  async function loadBetaBanner() {
-    const betaBanner = document.getElementById('beta-banner');
-    const betaRemaining = document.getElementById('beta-remaining');
-    const betaCodeDisplay = document.getElementById('beta-code-display');
-
-    // Check localStorage first
-    const storedCode = localStorage.getItem('aiarq_beta_code');
-    if (!storedCode) {
-      // Also check profile in case code was set during registration
-      try {
-        const { data: profile } = await sbClient.from('profiles')
-          .select('beta_code')
-          .eq('user_id', currentUser.id)
-          .maybeSingle();
-        if (profile && profile.beta_code) {
-          localStorage.setItem('aiarq_beta_code', profile.beta_code);
-        } else {
-          betaBanner.classList.add('hidden');
-          return;
-        }
-      } catch (e) {
-        betaBanner.classList.add('hidden');
-        return;
-      }
-    }
-
-    const code = localStorage.getItem('aiarq_beta_code');
-    if (!code) { betaBanner.classList.add('hidden'); return; }
-
-    try {
-      const { data: betaData, error } = await sbClient
-        .from('beta_codes')
-        .select('*')
-        .eq('code', code.toUpperCase())
-        .eq('active', true)
-        .maybeSingle();
-
-      if (error || !betaData) {
-        betaBanner.classList.add('hidden');
-        activeBetaCode = null;
-        return;
-      }
-
-      const isExpired = betaData.expires_at && new Date(betaData.expires_at) < new Date();
-      const remaining = betaData.max_projects - betaData.used_projects;
-
-      if (isExpired || remaining <= 0) {
-        betaBanner.classList.add('hidden');
-        activeBetaCode = null;
-        return;
-      }
-
-      // Show banner
-      activeBetaCode = betaData;
-      betaRemaining.textContent = remaining;
-      betaCodeDisplay.textContent = betaData.code;
-      betaBanner.classList.remove('hidden');
-
-    } catch (e) {
-      console.error('Erro ao carregar c\u00f3digo beta:', e);
-      betaBanner.classList.add('hidden');
-    }
-  }
 
   // Saldo de créditos (cashback, cupom, referral) — carregado do backend
   let userCreditsCents = 0;
@@ -1573,39 +1479,11 @@
     } catch (_) {}
   }
 
-  function hasBetaCredits() {
-    if (!activeBetaCode) return false;
-    const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-    return remaining > 0;
-  }
-
-  async function useBetaCredit() {
-    if (!activeBetaCode) return;
-    const newUsed = activeBetaCode.used_projects + 1;
-    await sbClient.from('beta_codes').update({
-      used_projects: newUsed,
-      used_by: currentUser.email
-    }).eq('code', activeBetaCode.code);
-    activeBetaCode.used_projects = newUsed;
-
-    // Update banner remaining count
-    const betaRemaining = document.getElementById('beta-remaining');
-    const remaining = activeBetaCode.max_projects - newUsed;
-    if (betaRemaining) betaRemaining.textContent = remaining;
-
-    // Hide banner if no credits left
-    if (remaining <= 0) {
-      const betaBanner = document.getElementById('beta-banner');
-      if (betaBanner) betaBanner.classList.add('hidden');
-    }
-  }
-
   // ══════════════════════════════════════════════
   //  LOGOUT
   // ══════════════════════════════════════════════
   btnLogout.addEventListener('click', async () => {
     localStorage.removeItem('aiarq_profile_complete');
-    localStorage.removeItem('aiarq_beta_code');
     await sbClient.auth.signOut();
     window.location.href = 'login.html';
   });
@@ -1683,10 +1561,7 @@
     const priceCents = Math.round(price * 100);
     const tier = est.tier_name || '';
 
-    const betaMaxPranchas = (activeBetaCode && activeBetaCode.max_pranchas) ?? 10;
     const free = isFirstProject() && n <= 5;
-    const betaFree = hasBetaCredits() && n <= betaMaxPranchas;
-    const betaOverLimit = hasBetaCredits() && n > betaMaxPranchas;
     const unlimited = !!window.__isUnlimitedUser;
 
     // Crédito disponível aplicável a esse projeto
@@ -1708,12 +1583,6 @@
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
     } else if (free) {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
-    } else if (betaFree) {
-      const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="text-emerald-600 font-bold">GR\u00c1TIS (Beta)</span> <span class="text-xs">${remaining} projeto${remaining !== 1 ? 's' : ''} restante${remaining !== 1 ? 's' : ''}</span>`;
-    } else if (betaOverLimit) {
-      const remaining = activeBetaCode.max_projects - activeBetaCode.used_projects;
-      priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span> <span class="text-xs text-amber-600">(Beta libera at\u00e9 ${betaMaxPranchas} pranchas; este tem ${n})</span>`;
     } else if (creditCoversAll) {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="text-green-600 font-bold">COBERTO pelo cr\u00e9dito</span> <span class="text-xs">(R$ ${(creditApplicable/100).toFixed(2)} do seu saldo)</span>`;
     } else if (creditApplicable > 0) {
@@ -2297,25 +2166,18 @@
     const numPranchasReais = (lastEstimate && lastEstimate.total_pranchas) || numFiles;
     const priceCents = lastEstimate ? Math.round((lastEstimate.price_brl || 0) * 100) : 0;
     const isFree = isFirstProject() && numPranchasReais <= 5;
-    // Beta cobre projeto até max_pranchas (default 10). Acima disso, cliente paga normal.
-    const betaMaxPranchas = (activeBetaCode && activeBetaCode.max_pranchas) ?? 10;
-    const isBetaFree = hasBetaCredits() && numPranchasReais <= betaMaxPranchas;
     const isUnlimited = !!window.__isUnlimitedUser;  // testing/dev bypass
     // Crédito cobre tudo? (cashback, cupom, referral)
     const creditCoversAll = priceCents > 0 && userCreditsCents >= priceCents;
 
-    if (isFree || isBetaFree || isUnlimited || creditCoversAll) {
-      if (isBetaFree && !isFree && !isUnlimited) {
-        // Using beta credit — increment usage
-        await useBetaCredit();
-      }
+    if (isFree || isUnlimited || creditCoversAll) {
       // Se crédito cobre tudo, passa instrução pro backend consumir
-      if (creditCoversAll && !isFree && !isBetaFree && !isUnlimited) {
+      if (creditCoversAll && !isFree && !isUnlimited) {
         window.__creditsToConsumeCents = priceCents;
       } else {
         window.__creditsToConsumeCents = 0;
       }
-      // Projeto gratuito (primeiro / beta / ilimitado / coberto por crédito) — processa direto
+      // Projeto gratuito (primeiro / ilimitado / coberto por crédito) — processa direto
       startProcessing();
     } else if (BETA_FREE) {
       // 2º projeto (ou mais) DURANTE O BETA: em vez de cobrar, avisamos que
@@ -2909,22 +2771,6 @@
           document.getElementById('prof-brand-color').value = profile.company_brand_color;
         }
 
-        // Show beta code info if available
-        const profBetaSection = document.getElementById('prof-beta-section');
-        const profBetaInfo = document.getElementById('prof-beta-info');
-        const betaCode = profile.beta_code || localStorage.getItem('aiarq_beta_code');
-        if (betaCode && profBetaSection && profBetaInfo) {
-          try {
-            const { data: betaData } = await sbClient.from('beta_codes')
-              .select('*').eq('code', betaCode.toUpperCase()).maybeSingle();
-            if (betaData) {
-              profBetaInfo.textContent = `${betaData.code} \u2014 ${betaData.used_projects}/${betaData.max_projects} projetos utilizados`;
-              profBetaSection.classList.remove('hidden');
-            }
-          } catch (e) {
-            // silent fail
-          }
-        }
       } else {
         document.getElementById('prof-name').value = currentUser.user_metadata?.full_name || '';
         document.getElementById('prof-email').value = currentUser.email || '';
