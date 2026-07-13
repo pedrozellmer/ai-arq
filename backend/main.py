@@ -7085,6 +7085,29 @@ async def agent_conversations(request: Request, job_id: Optional[str] = None, li
         req.add_header("Accept", "application/json")
         resp = _ur.urlopen(req, timeout=10)
         rows = _json.loads(resp.read().decode("utf-8"))
+        # Enriquece com QUEM perguntou e QUAL projeto: a conversa grava
+        # user_id='anonymous', entao a identidade vem do projeto ao qual o chat
+        # esta ancorado (job_id -> projects). Uma query so pra todos os job_ids.
+        _jids = sorted({(r.get("job_id") or "") for r in rows if r.get("job_id")})
+        _pmap = {}
+        if _jids:
+            try:
+                _inlist = ",".join(_jids)
+                _purl = (f"{SUPABASE_URL}/rest/v1/projects?job_id=in.({_ur.quote(_inlist, safe=',')})"
+                         f"&select=job_id,user_email,user_name,project_name")
+                _preq = _ur.Request(_purl, method="GET")
+                _preq.add_header("apikey", SUPABASE_KEY)
+                _preq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                _preq.add_header("Accept", "application/json")
+                for _p in _json.loads(_ur.urlopen(_preq, timeout=10).read().decode("utf-8")):
+                    _pmap[_p.get("job_id")] = _p
+            except Exception:
+                _pmap = {}
+        for _r in rows:
+            _p = _pmap.get(_r.get("job_id")) or {}
+            _r["user_email"] = _p.get("user_email") or ""
+            _r["user_name"] = _p.get("user_name") or ""
+            _r["project_name"] = _p.get("project_name") or ""
         return {"status": "ok", "count": len(rows), "conversations": rows}
     except Exception as e:
         raise HTTPException(500, f"Erro ao listar conversas: {str(e)}")
