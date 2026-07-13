@@ -516,22 +516,22 @@ function smartBack() {
       <h2 class="font-semibold text-gray-800">📤 Enviar planilhas deste projeto</h2>
     </div>
 
-    <!-- Tabs -->
+    <!-- Tabs — planilha revisada em 1o (ouro pra calibracao), cotacoes depois -->
     <div class="flex border-b text-sm">
-      <button id="tab-btn-cotacoes" type="button" onclick="switchUploadTab('cotacoes')"
-              class="flex-1 px-5 py-3 font-medium border-b-2 border-indigo-600 text-indigo-700 bg-white">
-        <span class="block text-[11px] uppercase tracking-wide text-indigo-500">Comparar fornecedores</span>
-        <span class="block">📊 Cotações de fornecedores</span>
-      </button>
       <button id="tab-btn-revisada" type="button" onclick="switchUploadTab('revisada')"
-              class="flex-1 px-5 py-3 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50">
-        <span class="block text-[11px] uppercase tracking-wide text-gray-500">Ganhar cashback</span>
+              class="flex-1 px-5 py-3 font-medium border-b-2 border-amber-600 text-amber-700 bg-white">
+        <span class="block text-[11px] uppercase tracking-wide text-amber-500">⭐ Ajude a calibrar o motor</span>
         <span class="block">✏️ Minha planilha revisada</span>
+      </button>
+      <button id="tab-btn-cotacoes" type="button" onclick="switchUploadTab('cotacoes')"
+              class="flex-1 px-5 py-3 font-medium border-b-2 border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50">
+        <span class="block text-[11px] uppercase tracking-wide text-gray-500">Comparar fornecedores</span>
+        <span class="block">📊 Cotações de fornecedores</span>
       </button>
     </div>
 
-    <!-- TAB 1: Cotações de Fornecedores (ativo por default) -->
-    <div id="tab-cotacoes" class="upload-tab">
+    <!-- TAB 1: Cotações de Fornecedores (escondida por default) -->
+    <div id="tab-cotacoes" class="upload-tab hidden">
       <div class="px-5 py-4 bg-indigo-50/40 border-b border-indigo-100">
         <p class="text-sm text-gray-700">
           <strong>Recebeu orçamento dos seus fornecedores?</strong> Suba aqui pro AI.arq comparar item a item, gerar ranking e apontar divergências contra o seu quantitativo.
@@ -582,13 +582,13 @@ function smartBack() {
     </div>
     <!-- /tab-cotacoes -->
 
-    <!-- TAB 2: Minha planilha revisada (escondida por default) -->
-    <div id="tab-revisada" class="upload-tab hidden">
+    <!-- TAB 2: Minha planilha revisada (EM FOCO por default — ouro pra calibração) -->
+    <div id="tab-revisada" class="upload-tab">
       <div class="px-5 py-4 bg-amber-50/40 border-b border-amber-100">
         <p class="text-sm text-gray-700">
-          <strong>Baixou a planilha e corrigiu offline no Excel?</strong> Suba a versão revisada — você ganha
-          <span class="font-semibold text-amber-700">R$ 30 de cashback</span> e ajuda a calibrar a IA. Os quantitativos revisados podem ser usados de forma anonimizada.
+          <strong>Revisou a planilha no Excel?</strong> Suba a versão corrigida — é o que <strong class="text-amber-700">mais ajuda a calibrar o motor</strong>, e faz seus próximos projetos saírem mais afiados. Os quantitativos revisados podem ser usados de forma anonimizada.
         </p>
+        <p class="text-[11px] text-gray-500 mt-2">💡 No beta é grátis — o cashback de R$ 30 por planilha revisada volta quando a cobrança estiver ativa.</p>
       </div>
       <div class="p-5">
         <div class="grid gap-3 md:grid-cols-3 mb-3">
@@ -1345,7 +1345,7 @@ async function uploadRevisedSheet() {
     const data = await res.json();
     if (data.status === 'ok') {
       statusEl.className = 'mt-2 text-xs text-emerald-700';
-      statusEl.textContent = `✓ Planilha recebida! +R$ ${(data.credit_cents / 100).toFixed(2)} de cashback adicionado.`;
+      statusEl.textContent = `✓ Planilha recebida! Muito obrigado — isso ajuda demais a afinar o motor. 🙏 (Cashback de R$ ${(data.credit_cents / 100).toFixed(2)} guardado pra quando a cobrança ligar.)`;
       document.getElementById('rev-file').value = '';
       loadProjectCashback();  // atualiza resumo
     } else {
