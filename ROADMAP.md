@@ -1,6 +1,6 @@
 # 🗺️ Roadmap AI.arq
 
-> **Última atualização:** 2026-05-25
+> **Última atualização:** 2026-07-13 (adicionada seção de robustez do motor — arquivos grandes)
 > **Versão:** 2.1 — Fase 5 redesenhada (ERP focado, não completo) após análise Braxio
 
 Este documento consolida a visão de longo prazo do AI.arq: onde estamos hoje, pra onde vamos, e o que evitamos no caminho. Vive em `ROADMAP.md` na raiz do repo (não vai pro GitHub Pages — é doc interno).
@@ -384,6 +384,32 @@ Identificadas em sessão de 2026-04-24. Estado atual:
 | 4 | **App Meta em modo Produção (App Review)** | Quando engajamento DM crescer | Hoje em dev mode — só testers interagem via DM. Postar funciona normal |
 | 5 | **Plugar Gemini 2.5 Flash Image** | Fase 2 do Instagram | Pra hero images conceito (~R$0,15/imagem) |
 | 6 | **Custom email templates Supabase em PT-BR** | Após item 1 | Magic link, bem-vindo, planilha pronta |
+
+---
+
+## 🧨 Robustez do motor — arquivos grandes/pesados (dívida técnica priorizada)
+
+**Problema:** DWG/DXF pesados (3D, instalações MEP, blocos, xrefs) estouram os limites de memória do motor. O caso mais insidioso: um DWG que **passa no upload** (bruto < 150 MB) **explode ao converter pra DXF** e falha no processamento. O tamanho do arquivo bruto **NÃO prevê** a explosão — por isso um aviso por tamanho na hora de subir **não resolve** esse caso.
+
+**Por que importa:** atinge exatamente o público-alvo — orçamentista de engenharia manda DWG pesado por natureza. 3 casos reais registrados:
+
+| Data | Cliente | Sintoma | Causa raiz / desfecho |
+|---|---|---|---|
+| 27/06/2026 | Ademir (prédio público) | Falhava sempre com "IA sobrecarregada" (rótulo enganoso) | JSON truncado no teto `max_tokens=16k` → **corrigido**: streaming + 32k + salvage de JSON. Validado: 103 itens |
+| 06/07/2026 | sumi / lia | Mesmo PDF 13 MB reenviado 5× | OOM: `extract_text` varria todas as páginas com pdfplumber → **corrigido**: pypdfium2 página a página (0,81s/32MB) |
+| 13/07/2026 | Luciano Scalise (orçamentista eng.) | 4 DWG falharam; 1 DWG sozinho = 212 MB de DXF | DWG explode na conversão ODA; bate em `_MAX_DXF_BYTES = 150 MB` (`backend/dwg_extractor.py`). PDF dele salvou (21 itens) |
+
+**⚠️ Restrição dura:** NÃO basta subir o limite de 150 MB. Um DXF de 212 MB no ezdxf pode consumir vários GB de RAM e derrubar o Render de 2 GB — é o próprio OOM que já custou caro. O limite **protege**, não atrapalha.
+
+**Paliativo já no ar (13/07, commit `9a529ce`):** `dashboard.html` avisa 1× por sessão ao adicionar DWG ("exporte só a prancha; DWG com 3D pode virar grande demais mesmo parecendo pequeno"). É expectativa, **não garantia**.
+
+**Conserto de verdade (candidatos — priorizar quando ≥1 caso/semana):**
+1. **Dividir por prancha/layout ANTES de abrir tudo** — extrair só o paperspace/layout relevante em vez de carregar o DOM inteiro do DXF gigante na memória.
+2. **Processamento em streaming / por partes** do DXF pesado.
+3. **Instância maior só pros jobs grandes** (worker Render dedicado / mais RAM sob demanda) — custa dinheiro; avaliar quando volume justificar.
+4. **Guarda de memória + mensagem ainda mais acionável** (passo-a-passo de PURGE / exportar prancha, talvez com print).
+
+**Acompanhamento:** medir frequência em `error_log` (Supabase, stage `process_job`, mensagem "grande demais") **antes** de investir no conserto pesado.
 
 ---
 
