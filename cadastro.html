@@ -172,6 +172,12 @@
               class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
             <span class="text-sm text-gray-600">Li e aceito os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="text-indigo-500 hover:text-indigo-700 underline">Termos de Uso</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="text-indigo-500 hover:text-indigo-700 underline">Pol&#237;tica de Privacidade</a></span>
           </label>
+
+          <label class="flex items-start gap-3 cursor-pointer">
+            <input type="checkbox" id="aceita_idade" name="aceita_idade" required
+              class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+            <span class="text-sm text-gray-600">Declaro que tenho <strong>18 anos ou mais</strong></span>
+          </label>
         </div>
 
         <!-- Error message -->
@@ -233,6 +239,7 @@
   const cargoSelect = document.getElementById('cargo');
   const aceitaMarketing = document.getElementById('aceita_marketing');
   const aceitaTermos = document.getElementById('aceita_termos');
+  const aceitaIdade = document.getElementById('aceita_idade');
   const formError = document.getElementById('form-error');
   const btnSubmit = document.getElementById('btn-submit');
   const referralSourceSelect = document.getElementById('referral_source');
@@ -464,6 +471,11 @@
       return;
     }
 
+    if (!aceitaIdade.checked) {
+      showError('Voc\u00ea precisa declarar que tem 18 anos ou mais para continuar.');
+      return;
+    }
+
     // Disable button
     btnSubmit.disabled = true;
     btnSubmit.innerHTML = '<svg class="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path></svg> Salvando...';
@@ -480,6 +492,7 @@
         role: cargo,
         area: area,
         accept_marketing: aceitaMarketing.checked,
+        age_confirmed_at: new Date().toISOString(),
         referral_source: referralSourceSelect.value || null,
         referral_detail: referralDetailInput.value.trim() || null
       };

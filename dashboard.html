@@ -1024,6 +1024,29 @@
     </div>
   </div>
 
+  <!-- MODAL IDADE 18+ — declaração exigida antes de processar um projeto.
+       Pros usuários antigos (cadastrados antes do checkbox no cadastro),
+       aparece na primeira vez que forem processar um projeto. -->
+  <div id="modal-age" role="dialog" aria-modal="true" aria-labelledby="modal-age-title"
+       class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-md w-full p-6">
+      <div class="flex items-center justify-between mb-3">
+        <h3 id="modal-age-title" class="font-semibold text-gray-900">Confirmação rápida</h3>
+        <button type="button" id="modal-age-close" aria-label="Fechar" class="text-gray-400 hover:text-gray-600">✕</button>
+      </div>
+      <p class="text-sm text-gray-600 mb-4">O AI.arq é destinado a maiores de 18 anos. Antes de processar seu projeto, confirme abaixo — a gente pede isso só uma vez.</p>
+      <label class="flex items-start gap-3 cursor-pointer">
+        <input type="checkbox" id="modal-age-check" class="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500">
+        <span class="text-sm text-gray-700">Declaro que tenho <strong>18 anos ou mais</strong></span>
+      </label>
+      <p id="modal-age-error" class="hidden mt-2 text-xs text-red-600" role="alert"></p>
+      <div class="mt-5 flex gap-2 justify-end">
+        <button type="button" id="modal-age-cancel" class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+        <button type="button" id="modal-age-save" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg">Confirmar e continuar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- FOOTER -->
   <footer class="border-t bg-gray-50 py-8">
     <div class="max-w-4xl mx-auto px-4">
@@ -1322,6 +1345,68 @@
           err.classList.remove('hidden');
           save.disabled = false;
           save.textContent = 'Salvar e continuar';
+        }
+      };
+      save.addEventListener('click', onSave);
+      cancel.addEventListener('click', onCancel);
+      closeX.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+    });
+  }
+
+  // Gate de idade (18+): exigido antes de processar um projeto. Novos usuários
+  // já declaram no cadastro; os antigos declaram aqui na 1ª vez que processam.
+  async function ensureAgeConfirmed() {
+    try {
+      const { data: profile } = await sbClient
+        .from('profiles')
+        .select('age_confirmed_at')
+        .eq('user_id', currentUser.id)
+        .maybeSingle();
+      if (profile && profile.age_confirmed_at) return true;
+    } catch (e) {
+      console.warn('profile age check falhou:', e);
+    }
+    return new Promise((resolve) => {
+      const modal = document.getElementById('modal-age');
+      const check = document.getElementById('modal-age-check');
+      const err   = document.getElementById('modal-age-error');
+      const save  = document.getElementById('modal-age-save');
+      const cancel = document.getElementById('modal-age-cancel');
+      const closeX = document.getElementById('modal-age-close');
+      err.classList.add('hidden');
+      check.checked = false;
+      modal.classList.remove('hidden');
+      setTimeout(() => check.focus(), 0);
+
+      const cleanup = (result) => {
+        modal.classList.add('hidden');
+        save.removeEventListener('click', onSave);
+        cancel.removeEventListener('click', onCancel);
+        closeX.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey);
+        resolve(result);
+      };
+      const onCancel = () => cleanup(false);
+      const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+      const onSave = async () => {
+        if (!check.checked) {
+          err.textContent = 'Marque a confirmação para continuar.';
+          err.classList.remove('hidden');
+          return;
+        }
+        save.disabled = true;
+        save.textContent = 'Salvando...';
+        try {
+          await sbClient.from('profiles')
+            .update({ age_confirmed_at: new Date().toISOString() })
+            .eq('user_id', currentUser.id);
+          cleanup(true);
+        } catch (e) {
+          err.textContent = 'Erro ao salvar: ' + (e.message || e);
+          err.classList.remove('hidden');
+          save.disabled = false;
+          save.textContent = 'Confirmar e continuar';
         }
       };
       save.addEventListener('click', onSave);
@@ -2159,6 +2244,10 @@
       notify.warn('Você precisa aceitar os Termos de Uso e a Política de Privacidade antes de processar.');
       return;
     }
+
+    // Gate de idade (18+) — antes de qualquer caminho (grátis/beta/pago).
+    const ageOk = await ensureAgeConfirmed();
+    if (!ageOk) return;
 
     const numFiles = selectedFiles.length;
     // Conta PRANCHAS REAIS (páginas dentro de PDFs + layouts dentro de DWGs)
