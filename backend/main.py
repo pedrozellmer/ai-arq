@@ -8266,6 +8266,43 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
     except Exception as e:
         raise HTTPException(500, f"Erro: {e}")
 
+    # ── Mistura o USO REAL do produto (tabela projects) ───────────────────
+    # usage_events é opt-in (só quem aceitou o cookie de analytics), então
+    # some gente que de fato USA o produto (ex.: quem ignorou o banner). A
+    # tabela projects tem TODOS os uploads/processamentos — é a fonte completa
+    # e é dado operacional do serviço (não cookie de navegação), então entra
+    # sempre. Assim o painel para de mostrar quase só o admin.
+    try:
+        purl = (f"{SUPABASE_URL}/rest/v1/projects"
+                f"?created_at=gte.{since_url}"
+                f"&select=user_email,user_id,job_id,status,created_at,completed_at"
+                f"&order=created_at.desc&limit=5000")
+        preq = _urs.Request(purl, method="GET")
+        preq.add_header("apikey", SUPABASE_KEY)
+        preq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _projects = _json.loads(_urs.urlopen(preq, timeout=20).read().decode("utf-8"))
+    except Exception:
+        _projects = []
+    # "Subiu projeto" passa a vir de projects (completo) — descarta o
+    # start_project opt-in pra não contar o mesmo upload duas vezes.
+    rows = [r for r in rows if (r.get("event") or "") != "start_project"]
+    for _p in _projects:
+        _base = {
+            "user_email": (_p.get("user_email") or "").strip(),
+            "user_id": _p.get("user_id") or "",
+            "job_id": _p.get("job_id") or "",
+            "path": "", "meta": {},
+        }
+        _ca = _p.get("created_at") or ""
+        _st = (_p.get("status") or "").strip()
+        _cp = _p.get("completed_at") or ""
+        rows.append({**_base, "event": "start_project", "created_at": _ca})
+        if _st == "done" and _cp:
+            rows.append({**_base, "event": "project_done", "created_at": _cp})
+        elif _st == "error":
+            rows.append({**_base, "event": "project_error", "created_at": _cp or _ca})
+    rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+
     by_event, by_user = {}, {}
     seen_7d, seen_30d = set(), set()
     # Funil do topo por VISITANTE único (cid anônimo no meta): landing → cadastro
