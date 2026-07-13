@@ -8326,6 +8326,11 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
             rows.append({**_base, "event": "project_error", "created_at": _cp or _ca})
     rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
 
+    # Tira as contas internas/do Pedro do painel: ele entra todo dia e dominaria
+    # (poluia a Atividade). _email_eh_interno pega o email dele + aliases (+smoke).
+    # Anonimos (sem email) continuam contando.
+    rows = [r for r in rows if not _email_eh_interno(r.get("user_email") or "")]
+
     by_event, by_user = {}, {}
     seen_7d, seen_30d = set(), set()
     # Funil do topo por VISITANTE único (cid anônimo no meta): landing → cadastro
