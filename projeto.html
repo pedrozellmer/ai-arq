@@ -34,7 +34,7 @@
         <span>›</span>
         <a href="dashboard.html#meus-projetos" class="hover:text-indigo-600">Meus Projetos</a>
       </nav>
-      <h1 id="proj-title" class="font-semibold text-gray-800 truncate leading-tight">Projeto</h1>
+      <h1 id="proj-title" class="text-lg md:text-xl font-bold text-gray-900 truncate leading-tight">Projeto</h1>
     </div>
     <div class="flex items-center gap-2">
       <span id="proj-status-badge"></span>
@@ -70,11 +70,11 @@ function smartBack() {
   </div>
 
   <!-- Dados do Projeto + Cliente Final — NO TOPO (de quem é o projeto vem primeiro) -->
-  <div class="rounded-xl border bg-white overflow-hidden">
+  <div id="dados-card" class="rounded-xl border-2 border-indigo-200 bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
       <div>
-        <h2 class="font-semibold text-gray-800">📇 Dados do projeto e cliente</h2>
-        <p class="text-xs text-gray-500 mt-0.5">Aparecem no cabeçalho da planilha, no PDF do cronograma e nos PPTs gerados</p>
+        <h2 class="text-base font-bold text-gray-900">📇 Projeto e cliente</h2>
+        <p class="text-xs text-gray-500 mt-0.5">De quem é este projeto — aparece no cabeçalho da planilha, no PDF do cronograma e nos PPTs</p>
       </div>
       <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
     </div>
@@ -158,7 +158,7 @@ function smartBack() {
   </div>
 
   <!-- Metadados do projeto (faixa compacta) -->
-  <div class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
+  <div id="metadados-strip" class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
     <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
     <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Área da laje</span><span id="m-area" class="font-semibold text-gray-900">--</span></span>
     <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
@@ -581,7 +581,7 @@ function smartBack() {
   </section>
 
   <!-- Reportar problema neste projeto -->
-  <div class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
+  <div id="reportar-box" class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
     <div class="flex items-center gap-3">
       <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
@@ -597,7 +597,7 @@ function smartBack() {
   </div>
 
   <!-- Arquivos da prancha -->
-  <div class="rounded-xl border bg-white overflow-hidden">
+  <div id="arquivos-box" class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50">
       <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
       <p class="text-xs text-gray-500 mt-0.5">Clique pra abrir o PDF em nova aba — DWG/DXF baixam direto</p>
@@ -608,7 +608,7 @@ function smartBack() {
   </div>
 
   <!-- Info extra -->
-  <div class="grid gap-4 md:grid-cols-2">
+  <div id="datas-box" class="grid gap-4 md:grid-cols-2">
     <div class="rounded-xl border bg-white p-5">
       <h3 class="text-sm font-semibold text-gray-700 mb-3">Datas</h3>
       <dl class="space-y-2 text-sm">
@@ -967,16 +967,30 @@ function switchUploadTab(name) {
 // Disponibiliza global pro onclick inline
 window.switchUploadTab = switchUploadTab;
 
-// Sobe os cards-chave pra logo APÓS o Raio-X. Feito por JS pra não precisar mover
-// blocos grandes no HTML. Ordem final: Raio-X → Planilha revisada → Entregas → resto.
-(function moveKeyCardsAfterRaioX() {
+// Ordena TODOS os cards da pagina (orientacao → resultado → entrega → acao →
+// secundario) via JS, pra nao precisar mover blocos grandes no HTML. A ordem
+// visivel e definida no array abaixo (basta reordenar aqui pra mudar a pagina).
+(function ordenarCardsProjeto() {
   try {
-    const anchor = document.getElementById('cad-upgrade-banner'); // vem logo depois do Raio-X
-    if (!anchor || !anchor.parentNode) return;
-    const up = document.getElementById('cotacoes-section');        // planilha revisada (ouro)
-    const entregas = document.getElementById('entregas-section');  // quantitativo + cronograma
-    if (up) anchor.parentNode.insertBefore(up, anchor);
-    if (entregas) anchor.parentNode.insertBefore(entregas, anchor);
+    const main = document.getElementById('main');
+    if (!main) return;
+    const ordem = [
+      'proj-warnings',        // 1. avisos do motor (condicional)
+      'dados-card',           // 2. dados do projeto/cliente (orientacao)
+      'metadados-strip',      // 3. faixa compacta
+      'raiox-card',           // 4. Raio-X (o resultado)
+      'cad-upgrade-banner',   // 5. aviso "manda o CAD" (condicional)
+      'entregas-section',     // 6. Entregas: baixar planilha + cronograma
+      'cotacoes-section',     // 7. Enviar planilha revisada (calibracao)
+      'chat-quant',           // 8. Chat
+      'reprocess-box',        // 9. Reprocessar
+      'feedback-card',        // 10. Avaliacao (NPS)
+      'project-cashback-box', // 11. Cashback (oculto no beta)
+      'arquivos-box',         // 12. Arquivos que alimentaram
+      'reportar-box',         // 13. Reportar problema
+      'datas-box',            // 14. Datas / identificacao
+    ];
+    ordem.forEach(id => { const el = document.getElementById(id); if (el) main.appendChild(el); });
   } catch (_) {}
 })();
 
