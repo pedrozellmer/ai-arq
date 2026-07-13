@@ -253,6 +253,16 @@
           <span class="inline-flex items-center gap-1.5"><span class="text-gray-500 font-bold">&#9675;</span> Email n&#227;o confirmado</span>
         </div>
 
+        <!-- Filtros de triagem (compõem com a busca) -->
+        <div id="user-filter-chips" class="flex flex-wrap items-center gap-2 mb-4">
+          <button type="button" data-filter="todos" data-label="Todos" onclick="setUsersFilter('todos')" class="user-chip"></button>
+          <button type="button" data-filter="incompletos" data-label="Incompletos" onclick="setUsersFilter('incompletos')" class="user-chip"></button>
+          <button type="button" data-filter="sem_projeto" data-label="Sem projeto" onclick="setUsersFilter('sem_projeto')" class="user-chip"></button>
+          <button type="button" data-filter="com_erro" data-label="Com erro" onclick="setUsersFilter('com_erro')" class="user-chip"></button>
+          <button type="button" data-filter="google" data-label="Google" onclick="setUsersFilter('google')" class="user-chip"></button>
+          <button type="button" data-filter="instagram" data-label="Instagram" onclick="setUsersFilter('instagram')" class="user-chip"></button>
+        </div>
+
         <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
           <div class="table-container">
             <table class="w-full text-sm">
@@ -1883,12 +1893,8 @@ async function loadUsers() {
       return tb - ta;
     });
 
-    renderUsers(allUsers);
-    const complete = allUsers.filter(u => u.has_profile).length;
-    const incomplete = allUsers.length - complete;
-    let msg = allUsers.length + ' usu\u00e1rio(s) — ' + complete + ' completo(s)';
-    if (incomplete > 0) msg += ', ' + incomplete + ' incompleto(s)';
-    document.getElementById('users-count').textContent = msg;
+    // Renderiza aplicando o filtro/chip ativo + o texto da busca (compoem).
+    applyUsersView();
 
   } catch (err) {
     console.error('Error loading users:', err);
@@ -1947,55 +1953,106 @@ function renderUsers(users) {
     const rowCls = !u.has_profile ? 'bg-yellow-50/40' : '';
     const name = u.full_name || '<span class="text-yellow-700 italic text-xs">sem cadastro</span>';
     const emailEsc = esc(u.email || '');
-    // nº de projetos conhecido (null = desconhecido, ex.: fallback sem a RPC) —
-    // evita mostrar botão de ação errado quando a contagem não carregou.
+    // numero de projetos conhecido (null = desconhecido; fallback sem a RPC).
+    // evita mostrar botao de acao errado quando a contagem nao carregou.
     const np = (u.num_projects == null) ? null : Number(u.num_projects);
+
+    // WhatsApp: limpa o numero, garante DDI 55, monta link com msg pronta.
+    let waBtn = '';
+    if (u.whatsapp) {
+      let waNum = String(u.whatsapp).replace(/\D/g, '');
+      if (waNum && waNum.indexOf('55') !== 0 && (waNum.length === 10 || waNum.length === 11)) {
+        waNum = '55' + waNum;
+      }
+      const firstName = (u.full_name || '').trim().split(/\s+/)[0] || '';
+      const emoji = String.fromCodePoint(0x1F642);
+      const waMsg = firstName ? ('Oi ' + firstName + '! Aqui é do AI.arq ' + emoji)
+                              : ('Oi! Aqui é do AI.arq ' + emoji);
+      const waHref = 'https://wa.me/' + waNum + '?text=' + encodeURIComponent(waMsg);
+      waBtn = `
+            <a href="${waHref}" target="_blank" rel="noopener"
+               class="inline-flex items-center justify-center px-2 py-1.5 rounded-md bg-green-100 hover:bg-green-200 text-green-700 transition"
+               title="WhatsApp">
+              <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38a9.9 9.9 0 004.79 1.22h.01c5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2zm0 1.8c2.17 0 4.21.85 5.75 2.38a8.08 8.08 0 012.38 5.74c0 4.54-3.7 8.23-8.24 8.23a8.2 8.2 0 01-4.19-1.15l-.3-.18-3.11.82.83-3.04-.2-.31a8.17 8.17 0 01-1.26-4.37c0-4.54 3.7-8.23 8.24-8.23zm4.7 9.79c-.06-.11-.24-.18-.5-.31-.26-.13-1.52-.75-1.76-.84-.24-.09-.41-.13-.59.13-.17.26-.67.84-.82 1.02-.15.17-.3.19-.56.06-.26-.13-1.09-.4-2.07-1.28-.77-.68-1.28-1.53-1.43-1.79-.15-.26-.02-.4.11-.53.12-.12.26-.3.39-.46.13-.15.17-.26.26-.43.09-.17.04-.32-.02-.45-.06-.13-.59-1.42-.81-1.94-.21-.51-.43-.44-.59-.45l-.5-.01c-.17 0-.45.06-.68.32-.24.26-.9.88-.9 2.14 0 1.26.92 2.48 1.05 2.65.13.17 1.8 2.76 4.37 3.87.61.26 1.09.42 1.46.54.61.2 1.17.17 1.61.1.49-.07 1.52-.62 1.73-1.22.21-.6.21-1.11.15-1.22z"/></svg>
+            </a>`;
+    }
+
+    // Saude dos projetos: total + concluidos (check) / com erro (aviso), icone + texto.
+    const doneC = Number(u.done_count) || 0;
+    const errC = Number(u.error_count) || 0;
+    let projCell;
+    if (np == null) {
+      projCell = '<span class="text-gray-300">&mdash;</span>';
+    } else if (np === 0) {
+      projCell = '<span class="text-gray-300 font-medium">0</span>';
+    } else if (doneC === 0 && errC === np) {
+      projCell = `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-semibold" title="Todos os ${np} projeto(s) deram erro"><span aria-hidden="true">&#9888;</span> ${np} erro</span>`;
+    } else {
+      let sub = '';
+      if (doneC > 0) sub += `<span class="inline-flex items-center gap-0.5 text-green-700" title="${doneC} concluido(s)"><span aria-hidden="true">&#10003;</span> ${doneC}</span>`;
+      if (errC > 0) sub += `<span class="inline-flex items-center gap-0.5 text-amber-700" title="${errC} com erro"><span aria-hidden="true">&#9888;</span> ${errC}</span>`;
+      projCell = `<div class="font-semibold text-gray-800">${np}</div>` +
+        (sub ? `<div class="flex items-center justify-center gap-2 text-xs mt-0.5">${sub}</div>` : '');
+    }
+
+    // Sinal ativo x dormente pelo ultimo login (a PALAVRA carrega o sinal; cor secundaria).
+    let signalHtml = '';
+    if (u.last_sign_in_at) {
+      const _ms = Date.now() - Date.parse(u.last_sign_in_at);
+      if (!isNaN(_ms)) {
+        const days = Math.max(0, Math.floor(_ms / 86400000));
+        if (days <= 7) {
+          const t = days === 0 ? 'ativo hoje' : ('ativo ' + days + 'd');
+          signalHtml = `<div class="inline-flex items-center gap-1 mt-1 text-green-700 font-medium"><span aria-hidden="true">&#9679;</span> ${t}</div>`;
+        } else {
+          signalHtml = `<div class="inline-flex items-center gap-1 mt-1 text-amber-700 font-medium"><span aria-hidden="true">&#9679;</span> parado ${days}d</div>`;
+        }
+      }
+    } else if (!u.has_profile) {
+      signalHtml = `<div class="inline-flex items-center gap-1 mt-1 text-gray-400"><span aria-hidden="true">&#9675;</span> nunca entrou</div>`;
+    }
+
     const actions = u.email
       ? `
-        <div class="flex items-center gap-1">
+        <div class="flex flex-wrap items-center gap-1">
           ${!u.has_profile ? `
             <button onclick="sendActivationLink('${emailEsc}', this)"
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium transition"
-                    title="Enviar link de login por email (magic link cru da Supabase)">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-              Reenviar
+                    class="inline-flex items-center justify-center px-2 py-1.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 transition"
+                    title="Reenviar login - envia magic link de login por email (Supabase)">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
             </button>
             <button onclick="sendNudge('${emailEsc}', 'cadastro', this)"
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 text-xs font-medium transition"
-                    title="Email 'falta pouco' (nosso, bonito) com login de 1 clique pra terminar o cadastro">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-              Lembrar cadastro
+                    class="inline-flex items-center justify-center px-2 py-1.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 transition"
+                    title="Lembrar cadastro - email 'falta pouco' com login de 1 clique">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
             </button>
           ` : ''}
           ${u.has_profile ? `
             <button onclick="sendWelcomeEmail('${u.user_id || ''}', '${emailEsc}', this)"
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium transition"
-                    title="Reenviar email de boas-vindas (pra quem se cadastrou antes do welcome existir)">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-              Boas-vindas
+                    class="inline-flex items-center justify-center px-2 py-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 transition"
+                    title="Boas-vindas - reenviar o email de boas-vindas do AI.arq">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
             </button>
           ` : ''}
           ${u.has_profile && np === 0 ? `
             <button onclick="sendNudge('${emailEsc}', 'onboarding', this)"
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-cyan-50 hover:bg-cyan-100 text-cyan-700 text-xs font-medium transition"
-                    title="Email convidando a subir a 1ª prancha (login de 1 clique)">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-              Lembrar de subir
+                    class="inline-flex items-center justify-center px-2 py-1.5 rounded-md bg-cyan-50 hover:bg-cyan-100 text-cyan-700 transition"
+                    title="Lembrar de subir - convite pra subir a 1a prancha (login de 1 clique)">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             </button>
           ` : ''}
           ${u.has_profile && np > 0 ? `
             <button onclick="sendNudge('${emailEsc}', 'feedback', this)"
-                    class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-medium transition"
-                    title="Perguntar 'como foi?' pra pegar feedback (cliente responde o email)">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z"/></svg>
-              Como foi?
+                    class="inline-flex items-center justify-center px-2 py-1.5 rounded-md bg-violet-50 hover:bg-violet-100 text-violet-700 transition"
+                    title="Como foi? - pedir feedback (o cliente responde o email)">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 3v-3z"/></svg>
             </button>
           ` : ''}
+          ${waBtn}
           <button onclick="copyEmail('${emailEsc}', this)"
-                  class="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium transition"
+                  class="inline-flex items-center justify-center px-2 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition"
                   title="Copiar email">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2m0 0h2a2 2 0 012 2v3m-4-6v5a1 1 0 001 1h5"/></svg>
-              Copiar
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h4a2 2 0 002-2M8 5a2 2 0 012-2h4a2 2 0 012 2m0 0h2a2 2 0 012 2v3m-4-6v5a1 1 0 001 1h5"/></svg>
           </button>
         </div>
       `
@@ -2013,10 +2070,11 @@ function renderUsers(users) {
           ${u.user_role ? `<div class="text-xs text-gray-400">${esc(u.user_role)}</div>` : ''}
         </td>
         <td class="px-4 py-3 align-top">${_referralLabel(u)}</td>
-        <td class="px-4 py-3 align-top text-center text-gray-700 font-medium">${np == null ? '—' : np}</td>
+        <td class="px-4 py-3 align-top text-center">${projCell}</td>
         <td class="px-4 py-3 align-top text-gray-500 text-xs">
           ${_fmtDate(u.auth_created_at || u.profile_created_at)}
           ${u.last_sign_in_at ? `<div class="text-gray-400">entrou ${_fmtDate(u.last_sign_in_at)}</div>` : ''}
+          ${signalHtml}
         </td>
         <td class="px-4 py-3 align-top">${actions}</td>
       </tr>
@@ -2073,7 +2131,7 @@ async function sendActivationLink(email, btnEl) {
     if (btnEl) {
       btnEl.disabled = false;
       btnEl.style.opacity = '1';
-      btnEl.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>Reenviar';
+      btnEl.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>';
     }
   }
 }
@@ -2154,25 +2212,77 @@ async function copyEmail(email, btnEl) {
   }
 }
 
-// Search filter
-document.getElementById('search-users').addEventListener('input', function() {
-  const q = this.value.toLowerCase().trim();
-  if (!q) {
-    renderUsers(allUsers);
-    document.getElementById('users-count').textContent = allUsers.length + ' usu\u00e1rio(s) encontrado(s)';
-    return;
+// ---- Filtros de triagem + busca (compoem) ----------------------------
+// Chip de filtro ativo: todos | incompletos | sem_projeto | com_erro | google | instagram
+let activeUsersFilter = 'todos';
+
+function _userMatchesFilter(u, filter) {
+  switch (filter) {
+    case 'incompletos': return !u.has_profile;
+    case 'sem_projeto': return u.has_profile && u.num_projects == 0;
+    case 'com_erro':    return Number(u.error_count) > 0;
+    case 'google':      return u.referral_source === 'google';
+    case 'instagram':   return u.referral_source === 'instagram';
+    case 'todos':
+    default:            return true;
   }
-  const filtered = allUsers.filter(u => {
-    const searchable = [
-      u.full_name, u.email, u.whatsapp,
-      u.company, u.area, u.user_role, u.role,
-      u.referral_source, u.referral_detail
-    ].filter(Boolean).join(' ').toLowerCase();
-    return searchable.includes(q);
+}
+
+// Pinta os chips: ativo = preenchido + negrito + marca de check (nunca so cor - daltonismo).
+function _styleUserChips() {
+  const chips = document.querySelectorAll('#user-filter-chips [data-filter]');
+  chips.forEach(c => {
+    const active = c.dataset.filter === activeUsersFilter;
+    c.className = 'user-chip inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs border transition ' +
+      (active
+        ? 'bg-indigo-600 text-white font-semibold border-indigo-600'
+        : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50 font-medium');
+    c.setAttribute('aria-pressed', active ? 'true' : 'false');
+    c.innerHTML = (active ? '<span aria-hidden="true">✓ </span>' : '') + esc(c.dataset.label || '');
   });
-  renderUsers(filtered);
-  document.getElementById('users-count').textContent = filtered.length + ' de ' + allUsers.length + ' usu\u00e1rio(s)';
-});
+}
+
+function setUsersFilter(filter) {
+  activeUsersFilter = filter;
+  _styleUserChips();
+  applyUsersView();
+}
+
+// Fonte unica da lista visivel: allUsers -> filtro ativo -> texto da busca -> render + contador.
+function applyUsersView() {
+  const searchEl = document.getElementById('search-users');
+  const q = (searchEl ? searchEl.value : '').toLowerCase().trim();
+  let list = allUsers.filter(u => _userMatchesFilter(u, activeUsersFilter));
+  if (q) {
+    list = list.filter(u => {
+      const searchable = [
+        u.full_name, u.email, u.whatsapp,
+        u.company, u.area, u.user_role, u.role,
+        u.referral_source, u.referral_detail
+      ].filter(Boolean).join(' ').toLowerCase();
+      return searchable.includes(q);
+    });
+  }
+  renderUsers(list);
+  const countEl = document.getElementById('users-count');
+  if (countEl) {
+    if (activeUsersFilter === 'todos' && !q) {
+      const complete = allUsers.filter(u => u.has_profile).length;
+      const incomplete = allUsers.length - complete;
+      let msg = allUsers.length + ' usuário(s) — ' + complete + ' completo(s)';
+      if (incomplete > 0) msg += ', ' + incomplete + ' incompleto(s)';
+      countEl.textContent = msg;
+    } else {
+      countEl.textContent = list.length + ' de ' + allUsers.length + ' usuário(s)';
+    }
+  }
+}
+
+// A busca compoe com o chip ativo (mesmo helper).
+document.getElementById('search-users').addEventListener('input', applyUsersView);
+
+// Estado inicial dos chips (antes de carregar os dados).
+_styleUserChips();
 
 // ══════════════════════════════════════════════
 // CALIBRATION — summary cards (todas tipologias)
