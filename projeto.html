@@ -364,7 +364,7 @@ function smartBack() {
   <!-- ═════════════════════════════════════════════════════════════════ -->
   <!-- ENTREGAS DO PROJETO — cards expandíveis (cada um é uma fase do roadmap) -->
   <!-- ═════════════════════════════════════════════════════════════════ -->
-  <section>
+  <section id="entregas-section">
     <div class="flex items-baseline justify-between mb-3">
       <h2 class="text-lg font-bold text-gray-900">Entregas do projeto</h2>
       <p class="text-xs text-gray-500">Cada entrega é uma etapa do ciclo de quantificação → cronograma → documentação</p>
@@ -967,13 +967,16 @@ function switchUploadTab(name) {
 // Disponibiliza global pro onclick inline
 window.switchUploadTab = switchUploadTab;
 
-// Sobe o card "Enviar planilhas" (planilha revisada = ouro pra calibração) pra
-// logo APÓS o Raio-X. Feito por JS pra não precisar mover o bloco grande no HTML.
-(function moveUploadAfterRaioX() {
+// Sobe os cards-chave pra logo APÓS o Raio-X. Feito por JS pra não precisar mover
+// blocos grandes no HTML. Ordem final: Raio-X → Planilha revisada → Entregas → resto.
+(function moveKeyCardsAfterRaioX() {
   try {
-    const up = document.getElementById('cotacoes-section');
     const anchor = document.getElementById('cad-upgrade-banner'); // vem logo depois do Raio-X
-    if (up && anchor && anchor.parentNode) anchor.parentNode.insertBefore(up, anchor);
+    if (!anchor || !anchor.parentNode) return;
+    const up = document.getElementById('cotacoes-section');        // planilha revisada (ouro)
+    const entregas = document.getElementById('entregas-section');  // quantitativo + cronograma
+    if (up) anchor.parentNode.insertBefore(up, anchor);
+    if (entregas) anchor.parentNode.insertBefore(entregas, anchor);
   } catch (_) {}
 })();
 
