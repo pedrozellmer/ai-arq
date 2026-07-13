@@ -1876,6 +1876,13 @@ async function loadUsers() {
       allUsers = data || [];
     }
 
+    // Mais novos primeiro (ordena por data de cadastro, decrescente)
+    allUsers.sort((a, b) => {
+      const ta = Date.parse(a.auth_created_at || a.profile_created_at || '') || 0;
+      const tb = Date.parse(b.auth_created_at || b.profile_created_at || '') || 0;
+      return tb - ta;
+    });
+
     renderUsers(allUsers);
     const complete = allUsers.filter(u => u.has_profile).length;
     const incomplete = allUsers.length - complete;
