@@ -1169,7 +1169,8 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             _rows[0].get("user_name") or "",
             _rows[0].get("project_name") or "seu projeto",
             reprocessavel)
-        ok = _send_email_smtp(_email, _subject, _html)
+        ok = _send_email_smtp(_email, _subject, _html,
+                              log_kind="erro_reprocessar" if reprocessavel else "erro_trocar")
         _falha_emailed.add(job_id)
         return ok
     except Exception as _e:
@@ -1291,9 +1292,30 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
             f'</div>')
 
 
-def _send_welcome_email(email: str, name: str = "") -> bool:
-    """Monta + envia o email de boas-vindas. Usado no 1º acesso ao dashboard
-    (gated por created_at) e no reenvio manual pelo admin. Best-effort."""
+def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
+                                 n_total: int, extra_body_html: str = ""):
+    """Monta (subject, html) do email 'planilha pronta'. Separado do envio pra
+    reuso no preview do painel. `extra_body_html` traz o diagnóstico de leitura +
+    próximos passos + avisos (montados com dados reais no envio; exemplo no
+    preview) — anexados ao fim do corpo, exatamente como no envio real."""
+    import html as _hp
+    _pn = _hp.escape(project_name or "seu projeto")
+    _greet = _greeting_line(_hp.escape(name or ""))
+    _body = (f"{_greet}<br><br>"
+             f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
+             f"({n_total} itens). Abra seu projeto pra revisar e baixar a planilha."
+             f"{extra_body_html}")
+    subject = "Sua planilha do AI.arq está pronta"
+    html = _email_wrap("Sua planilha está pronta", _body,
+                       "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
+                       badge="&#10003; Concluído",
+                       reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
+    return subject, html
+
+
+def _build_welcome_email(name: str = ""):
+    """Monta (subject, html) do email de boas-vindas. Separado do envio pra
+    reuso no preview do painel (Central de Emails)."""
     import html as _hw
     greet = _greeting_line(_hw.escape(name or ""))
     body = (f"{greet}<br><br>"
@@ -1302,11 +1324,18 @@ def _send_welcome_email(email: str, name: str = "") -> bool:
             "que normalmente leva horas no Excel.<br><br>"
             "E o melhor: estamos em <b>beta &mdash; grátis e ilimitado</b> &#129514;. Você pode subir "
             "<b>quantos projetos quiser</b>, sem cartão e sem compromisso. Aproveite pra testar à vontade.")
-    return _send_email_smtp(
-        email, "Bem-vindo ao AI.arq",
-        _email_wrap("Bem-vindo ao AI.arq", body,
-                    "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
-                    reason="Você está recebendo este e-mail porque criou sua conta no AI.arq."))
+    subject = "Bem-vindo ao AI.arq"
+    html = _email_wrap("Bem-vindo ao AI.arq", body,
+                       "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
+                       reason="Você está recebendo este e-mail porque criou sua conta no AI.arq.")
+    return subject, html
+
+
+def _send_welcome_email(email: str, name: str = "") -> bool:
+    """Monta + envia o email de boas-vindas. Usado no 1º acesso ao dashboard
+    (gated por created_at) e no reenvio manual pelo admin. Best-effort."""
+    subject, html = _build_welcome_email(name)
+    return _send_email_smtp(email, subject, html, log_kind="boas_vindas")
 
 
 def _generate_magic_link(email: str, redirect_to: str = "https://ai.arq.br/login.html") -> str:
@@ -1351,10 +1380,9 @@ def _name_from_auth(user_id: str) -> str:
         return ""
 
 
-def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool:
-    """Email de lembrete com login de 1 clique. kind:
-    - 'cadastro'   -> incompleto: 'falta pouco, termine o cadastro'.
-    - 'onboarding' -> tem conta mas 0 projetos: 'vem subir sua 1ª prancha'."""
+def _build_nudge_email(name: str, kind: str, magic_link: str):
+    """Monta (subject, html) do email de lembrete por kind. Separado do envio
+    pra reuso no preview. kinds: 'cadastro', 'onboarding', 'feedback'."""
     import html as _hn
     greet = _greeting_line(_hn.escape(name or ""))
     if kind == "cadastro":
@@ -1382,10 +1410,46 @@ def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool
                 f"AI.arq cada vez melhor. 🙂")
         cta = "Avaliar meu projeto"
         subject = "Como foi seu projeto no AI.arq? (1 min)"
-    return _send_email_smtp(
-        email, subject,
-        _email_wrap(title, body, cta, magic_link,
-                    reason="Você está recebendo este e-mail porque criou uma conta no AI.arq."))
+    html = _email_wrap(title, body, cta, magic_link,
+                       reason="Você está recebendo este e-mail porque criou uma conta no AI.arq.")
+    return subject, html
+
+
+# Mapeia kind do nudge -> coluna 'kind' do email_sent_log (volume por tipo).
+_NUDGE_LOG_KIND = {"cadastro": "nudge_cadastro", "onboarding": "nudge_onboarding", "feedback": "feedback"}
+
+
+def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool:
+    """Email de lembrete com login de 1 clique. kind:
+    - 'cadastro'   -> incompleto: 'falta pouco, termine o cadastro'.
+    - 'onboarding' -> tem conta mas 0 projetos: 'vem subir sua 1ª prancha'.
+    - 'feedback'   -> tem projeto: 'como foi?'."""
+    subject, html = _build_nudge_email(name, kind, magic_link)
+    return _send_email_smtp(email, subject, html, log_kind=_NUDGE_LOG_KIND.get(kind, "nudge"))
+
+
+def _build_calibracao_email(name: str, project_name: str):
+    """Monta (subject, html) do email de calibração: pede a PLANILHA REVISADA
+    (com as correções reais do cliente) pra afinar o motor. SEM mencionar
+    dinheiro/cashback (estamos em beta grátis). Disponível no catálogo, mas o
+    envio automático NÃO está ligado — hoje só serve pra preview/uso manual."""
+    import html as _hc
+    pn = _hc.escape(project_name or "seu projeto")
+    greet = _greeting_line(_hc.escape(name or ""))
+    body = (f"{greet}<br><br>"
+            f"Você chegou a revisar o quantitativo do projeto <b>{pn}</b>? Se ajustou "
+            f"quantidades, corrigiu itens ou tirou o que não fazia sentido, essas "
+            f"<b>correções valem ouro pra gente</b>.<br><br>"
+            f"Se puder, suba a <b>planilha revisada</b> — a sua versão, com as correções "
+            f"reais — na página do projeto. Cada ajuste seu <b>afina o nosso motor</b>, e "
+            f"o resultado aparece pra você: os <b>seus próximos projetos saem melhores</b>, "
+            f"medindo com mais precisão o que hoje ainda sai como estimativa.<br><br>"
+            f"Leva um minutinho e ajuda demais. 🙂")
+    subject = "Que tal ajudar a afinar seu quantitativo?"
+    html = _email_wrap("Suas correções deixam o motor mais preciso", body,
+                       "Subir minha planilha revisada", "https://ai.arq.br/dashboard.html",
+                       reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
+    return subject, html
 
 
 class JobsStore:
@@ -4083,8 +4147,6 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
                     print(f"[email] reprocesso-pronto -> enviado={_ok_r}")
             if _pe and not is_complement and not _is_reproc:
-                _pn = _html.escape(_rows[0].get("project_name") or "seu projeto")
-                _greet = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
                 _aviso_html = ""
                 if partial_failure:
                     _aviso_html = (f"<br><br><b>&#9888; Atenção:</b> {len(partial_errors)} prancha(s) "
@@ -4103,16 +4165,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                             getattr(it, "confidence", "")) or "") == "confirmado")
                 _veio_pdf = (_n_cad == 0 and _n_pdf > 0)
                 _proximos = _next_steps_html(job_id, _n_med, len(all_items), _veio_pdf)
-                _body = (f"{_greet}<br><br>"
-                         f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
-                         f"({len(all_items)} itens). Abra seu projeto pra revisar e baixar a planilha."
-                         f"{_aviso_html}{_diag}{_proximos}")
-                _send_email_smtp(
-                    _pe, "Sua planilha do AI.arq está pronta",
-                    _email_wrap("Sua planilha está pronta", _body,
-                                "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
-                                badge="&#10003; Concluído",
-                                reason="Você está recebendo este e-mail porque processou um projeto no AI.arq."))
+                _subj_pp, _html_pp = _build_planilha_pronta_email(
+                    _rows[0].get("user_name") or "",
+                    _rows[0].get("project_name") or "seu projeto",
+                    job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}")
+                _send_email_smtp(_pe, _subj_pp, _html_pp, log_kind="planilha_pronta")
         except Exception as _ee:
             print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
 
@@ -4597,8 +4654,9 @@ def _auth_admin_list_users(max_pages: int = 5) -> list[dict]:
     return users
 
 
-def _send_email_retorno30(email: str, name: str) -> bool:
-    """Retorno após 30 dias sem projeto — isca: cronograma grátis."""
+def _build_retorno30_email(name: str):
+    """Monta (subject, html) do email de retorno após 30 dias sem projeto —
+    isca: cronograma grátis. Separado do envio pra reuso no preview."""
     import html as _hn
     greet = _greeting_line(_hn.escape(name or ""))
     body = (f"{greet}<br><br>Faz um tempinho que você não aparece por aqui — e desde a sua "
@@ -4607,12 +4665,18 @@ def _send_email_retorno30(email: str, name: str) -> bool:
             f"graça</b>.<br><br>Se tiver um projeto na mesa, manda a prancha (PDF, DWG ou DXF) "
             f"que em minutos você recebe a planilha de quantitativos. Nessa fase de beta está "
             f"<b>grátis e ilimitado</b>.")
-    return _send_email_smtp(
-        email, "Seu próximo quantitativo sai em minutos — e o cronograma é grátis",
-        _email_wrap("Sentimos sua falta por aqui", body,
-                    "Subir um projeto", "https://ai.arq.br/dashboard.html",
-                    reason=("Você está recebendo este e-mail porque tem uma conta no AI.arq. "
-                            "Se não quiser mais lembretes, é só responder avisando.")))
+    subject = "Seu próximo quantitativo sai em minutos — e o cronograma é grátis"
+    html = _email_wrap("Sentimos sua falta por aqui", body,
+                       "Subir um projeto", "https://ai.arq.br/dashboard.html",
+                       reason=("Você está recebendo este e-mail porque tem uma conta no AI.arq. "
+                               "Se não quiser mais lembretes, é só responder avisando."))
+    return subject, html
+
+
+def _send_email_retorno30(email: str, name: str) -> bool:
+    """Retorno após 30 dias sem projeto — isca: cronograma grátis."""
+    subject, html = _build_retorno30_email(name)
+    return _send_email_smtp(email, subject, html, log_kind="retorno_30d")
 
 
 def _email_eh_interno(email: str) -> bool:
@@ -5034,6 +5098,105 @@ async def email_preview(request: Request):
     out["5_nudge_onboarding"] = _send_nudge_email(to, "Pedro", "onboarding", fake_link)
     out["6_feedback"] = _send_nudge_email(to, "Pedro", "feedback", "")
     return {"to": to, "sent": out, "obs": "planilha-pronta voce ja viu (projeto Template Novo)"}
+
+
+# ═══════════════════ CENTRAL DE EMAILS (painel admin) ═══════════════════
+# Catálogo dos emails transacionais + preview (sem enviar). Cada tipo tem um
+# helper _build_* que devolve (subject, html) — a Central de Emails renderiza o
+# preview e mostra o volume por tipo (email_sent_log.kind).
+
+# Catálogo: fonte única da verdade dos tipos que a Central de Emails mostra.
+# grupo "auto" = disparado sozinho pelo sistema; "manual" = você dispara em
+# Usuários. Tipos que são auto E manual ficam em "auto" com o gatilho anotando
+# "também manual" (evita card duplicado).
+_EMAIL_CATALOG = [
+    {"key": "boas_vindas", "nome": "Boas-vindas", "grupo": "auto",
+     "gatilho": "auto: 1º acesso ao painel · também manual (reenvio em Usuários)"},
+    {"key": "planilha_pronta", "nome": "Planilha pronta", "grupo": "auto",
+     "gatilho": "auto: quando o quantitativo termina de processar"},
+    {"key": "erro_reprocessar", "nome": "Erro — reprocessar", "grupo": "auto",
+     "gatilho": "auto: falha passageira (reprocessar resolve)"},
+    {"key": "erro_trocar", "nome": "Erro — trocar arquivo", "grupo": "auto",
+     "gatilho": "auto: arquivo não-quantificável (precisa de outro arquivo)"},
+    {"key": "retorno_30d", "nome": "Retorno após 30 dias", "grupo": "auto",
+     "gatilho": "auto: 30 dias sem subir projeto (tick horário)"},
+    {"key": "nudge_onboarding", "nome": "Lembrar de subir a 1ª prancha", "grupo": "auto",
+     "gatilho": "auto: tem conta, 0 projetos · também manual (Usuários)"},
+    {"key": "nudge_cadastro", "nome": "Lembrar de terminar o cadastro", "grupo": "auto",
+     "gatilho": "auto: cadastro incompleto · também manual (Usuários)"},
+    {"key": "calibracao", "nome": "Pedir planilha revisada (calibração)", "grupo": "auto",
+     "gatilho": "disponível, envio automático desligado"},
+    {"key": "feedback", "nome": "Como foi? (feedback)", "grupo": "manual",
+     "gatilho": "manual: botão em Usuários (usuário com projeto)"},
+]
+
+
+def _render_email_by_type(key: str):
+    """Devolve (subject, html) de um tipo de email com dados de EXEMPLO. NÃO
+    envia nada. Usado só pelo preview do painel. Levanta KeyError se o tipo não
+    existe."""
+    nome = "Pedro"
+    projeto = "Residencial Vila Nova"
+    fake_link = "https://ai.arq.br/login.html"
+    fake_job = "exemplo-1234"
+    if key == "boas_vindas":
+        return _build_welcome_email(nome)
+    if key == "planilha_pronta":
+        # Exemplo dos "próximos passos" (bloco real, dados fictícios) pro preview
+        # ficar representativo — sem tocar em all_items reais.
+        _extra = _next_steps_html(fake_job, 30, 42, False)
+        return _build_planilha_pronta_email(nome, projeto, fake_job, 42, _extra)
+    if key == "erro_reprocessar":
+        return _build_falha_email(nome, projeto, True)
+    if key == "erro_trocar":
+        return _build_falha_email(nome, projeto, False)
+    if key == "nudge_cadastro":
+        return _build_nudge_email(nome, "cadastro", fake_link)
+    if key == "nudge_onboarding":
+        return _build_nudge_email(nome, "onboarding", fake_link)
+    if key == "feedback":
+        return _build_nudge_email(nome, "feedback", fake_link)
+    if key == "retorno_30d":
+        return _build_retorno30_email(nome)
+    if key == "calibracao":
+        return _build_calibracao_email(nome, projeto)
+    raise KeyError(key)
+
+
+@app.get("/api/admin/email-render")
+async def admin_email_render(request: Request, type: str = ""):
+    """Renderiza (subject, html) de UM tipo de email com dados de EXEMPLO.
+    Admin-only. NÃO envia nada — é só pra pré-visualizar no painel."""
+    _require_admin(request)
+    key = (type or "").strip()
+    try:
+        subject, html = _render_email_by_type(key)
+    except KeyError:
+        raise HTTPException(400, f"tipo de email desconhecido: {key}")
+    return {"type": key, "subject": subject, "html": html}
+
+
+@app.get("/api/admin/email-catalog")
+async def admin_email_catalog(request: Request):
+    """Lista os tipos de email da Central de Emails com {key, nome, grupo,
+    gatilho, volume}. `volume` = quantos já saíram (email_sent_log por kind).
+    Admin-only."""
+    _require_admin(request)
+    # Agrega volume por kind num único fetch (baixo volume no beta).
+    volumes = {}
+    try:
+        _st, _rows = _supa_rest_service("GET", "/rest/v1/email_sent_log?select=kind")
+        if _rows:
+            for _r in _rows:
+                _k = (_r or {}).get("kind") or ""
+                if _k:
+                    volumes[_k] = volumes.get(_k, 0) + 1
+    except Exception as _e:
+        print(f"[email-catalog] volume falhou (nao critico): {_e}")
+    items = []
+    for c in _EMAIL_CATALOG:
+        items.append({**c, "volume": int(volumes.get(c["key"], 0))})
+    return {"items": items}
 
 
 @app.get("/api/health")
