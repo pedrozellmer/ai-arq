@@ -2066,6 +2066,7 @@ function renderUsers(users) {
           <div class="font-medium text-gray-900">${name === u.full_name ? esc(u.full_name) : name}</div>
           <div class="text-xs text-gray-500">${esc(u.email || '--')}</div>
           ${u.whatsapp ? `<div class="text-xs text-gray-400">${esc(u.whatsapp)}</div>` : ''}
+          ${u.emails_sent != null ? `<div class="text-xs mt-0.5 ${Number(u.emails_sent) >= 3 ? 'text-amber-700 font-medium' : 'text-gray-400'}" title="Emails que enviamos pra este usuario (bem-vindo, planilha pronta, lembretes, etc.)">📧 ${Number(u.emails_sent)} email${Number(u.emails_sent) === 1 ? '' : 's'}</div>` : ''}
         </td>
         <td class="px-4 py-3 align-top text-gray-600">
           <div>${esc(u.company || '--')}</div>

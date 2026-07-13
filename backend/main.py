@@ -906,7 +906,7 @@ def _save_jobs(jobs_dict):
 # ─── Email transacional (SMTP — Google Workspace) ───────────────────
 # Configurado por env vars SMTP_* no Render. Se não estiver configurado,
 # vira no-op silencioso (loga e segue) — NUNCA derruba o fluxo que chamou.
-def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "") -> bool:
+def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "", log_kind: str = "email") -> bool:
     host = os.getenv("SMTP_HOST", "")
     user = os.getenv("SMTP_USER", "")
     password = os.getenv("SMTP_PASSWORD", "")
@@ -938,6 +938,18 @@ def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str
             server.login(user, password)
             server.sendmail(from_email, [to_email], msg.as_string())
         print(f"[email] OK -> {to_email}: {subject}")
+        # Registra TODO email enviado pro usuario (medir volume/pessoa, nao poluir).
+        # Pula contas internas (Pedro/aliases) e o alerta interno (NOTIFY_EMAIL).
+        try:
+            _to = (to_email or "").lower()
+            if not _email_eh_interno(_to) and _to != (NOTIFY_EMAIL or "").lower():
+                _supabase_insert("email_sent_log", {
+                    "email": to_email,
+                    "kind": (log_kind or "email"),
+                    "subject": (subject or "")[:200],
+                })
+        except Exception as _e:
+            print(f"[email] log de envio falhou (nao critico): {_e}")
         return True
     except Exception as e:
         print(f"[email] FALHA -> {to_email}: {type(e).__name__}: {e}")
