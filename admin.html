@@ -1019,7 +1019,7 @@ async function loadActivity() {
       return `<div class="border-b border-gray-100 pb-2">
         <div class="flex items-center justify-between gap-2">
           <span class="font-medium text-gray-800 truncate">${escapeHtml(u.email)}</span>
-          <span class="text-xs text-gray-500 shrink-0">${u.events} ev.</span>
+          <span class="text-xs text-gray-500 shrink-0">${u.events} ${u.events === 1 ? 'ação' : 'ações'}</span>
         </div>
         <p class="text-xs text-gray-500">Último: ${actFmtTime(u.last_seen)} · ${escapeHtml(kinds)}</p>
       </div>`;
