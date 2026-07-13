@@ -522,7 +522,10 @@ import urllib.parse
 def _supa_select(table: str, query: str) -> list:
     """Helper: SELECT direto via REST API do Supabase."""
     url = f"{os.getenv('SUPABASE_URL', 'https://kqjabzwgbfuivzlcfvvu.supabase.co')}/rest/v1/{table}?{query}"
-    key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+    # service_role: o scheduler é backend puro (server-side no Render). Com a
+    # chave anon ele dependia da policy pública de instagram_scheduled_posts —
+    # que era um buraco (qualquer um agendava/publicava). (auditoria 2026-07-13)
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
     req = urllib.request.Request(url, method="GET")
     req.add_header("apikey", key)
     req.add_header("Authorization", f"Bearer {key}")
@@ -537,7 +540,10 @@ def _supa_select(table: str, query: str) -> list:
 def _supa_upsert(table: str, data: dict, on_conflict: str) -> bool:
     """Helper: UPSERT via REST API (insere ou atualiza por on_conflict)."""
     url = f"{os.getenv('SUPABASE_URL', 'https://kqjabzwgbfuivzlcfvvu.supabase.co')}/rest/v1/{table}?on_conflict={on_conflict}"
-    key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+    # service_role: o scheduler é backend puro (server-side no Render). Com a
+    # chave anon ele dependia da policy pública de instagram_scheduled_posts —
+    # que era um buraco (qualquer um agendava/publicava). (auditoria 2026-07-13)
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
     body = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST")
     req.add_header("apikey", key)
@@ -555,7 +561,10 @@ def _supa_upsert(table: str, data: dict, on_conflict: str) -> bool:
 def _supa_update(table: str, match_field: str, match_value: str, data: dict) -> bool:
     """Helper: PATCH via REST API."""
     url = f"{os.getenv('SUPABASE_URL', 'https://kqjabzwgbfuivzlcfvvu.supabase.co')}/rest/v1/{table}?{match_field}=eq.{urllib.parse.quote(match_value)}"
-    key = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
+    # service_role: o scheduler é backend puro (server-side no Render). Com a
+    # chave anon ele dependia da policy pública de instagram_scheduled_posts —
+    # que era um buraco (qualquer um agendava/publicava). (auditoria 2026-07-13)
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or ""
     body = json.dumps(data).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="PATCH")
     req.add_header("apikey", key)

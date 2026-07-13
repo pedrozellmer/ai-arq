@@ -5997,12 +5997,11 @@ async def upload_supplier_quote(
                     "approved_at": datetime.utcnow().isoformat(),
                     "approved_by": "auto",
                 }
-                cb_st, _ = _supa_rest_as_user(
-                    request, "POST",
-                    "/project_cashback_events",
-                    body=cb_payload, prefer="return=minimal", timeout=8,
-                )
-                cashback_status = "credited" if cb_st < 400 else "error"
+                # service_role: a escrita de cashback é do sistema (não do user).
+                # Com JWT do user a RLS negava (não há policy de INSERT authenticated)
+                # — o crédito vinha falhando. (auditoria 2026-07-13)
+                _cb_ok = _supabase_insert("project_cashback_events", cb_payload)
+                cashback_status = "credited" if _cb_ok else "error"
             except Exception:
                 cashback_status = "error"  # best-effort, não bloqueia upload
 
@@ -6475,11 +6474,8 @@ async def upload_revised_sheet(
                 "approved_at": datetime.utcnow().isoformat(),
                 "approved_by": "auto",
             }
-            _supa_rest_as_user(
-                request, "POST",
-                "/project_cashback_events",
-                body=cb_payload, prefer="return=minimal", timeout=8,
-            )
+            # service_role (escrita do sistema; RLS negava com JWT do user).
+            _supabase_insert("project_cashback_events", cb_payload)
         except Exception as e:
             print(f"[revised-sheet] erro cashback: {e}")
 
@@ -6842,8 +6838,17 @@ def _consume_credits(user_id: str, amount_cents: int, job_id: str) -> int:
 
 
 @app.get("/api/credits/balance")
-async def credits_balance(user_id: str):
-    """Retorna saldo de crédito disponível pro usuário."""
+async def credits_balance(request: Request, user_id: str):
+    """Retorna saldo de crédito disponível pro usuário.
+
+    Auth: exige JWT do próprio usuário (ou admin). Sem isso, qualquer um que
+    descubra um user_id veria o saldo financeiro alheio (IDOR — auditoria
+    2026-07-13). O frontend já chama com authFetch (manda o Bearer)."""
+    jwt_user = _get_user_from_request(request)
+    if not jwt_user:
+        raise HTTPException(401, "Autenticação requerida")
+    if jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+        raise HTTPException(403, "Só é possível consultar seu próprio saldo")
     credits = _get_available_credits(user_id)
     total = sum(int(c.get("amount_cents") or 0) for c in credits)
     return {
@@ -8116,7 +8121,7 @@ async def save_item_note(job_id: str, item_id: str, payload: NotePayload, reques
             # Delete
             _supa_rest_as_user(
                 request, "DELETE",
-                f"/item_notes?item_id=eq.{item_id}",
+                f"/item_notes?item_id=eq.{item_id}&job_id=eq.{job_id}",
                 timeout=10,
             )
             return {"status": "ok", "deleted": True}
@@ -8129,7 +8134,7 @@ async def save_item_note(job_id: str, item_id: str, payload: NotePayload, reques
         }
         _, rows = _supa_rest_as_user(
             request, "PATCH",
-            f"/item_notes?item_id=eq.{item_id}",
+            f"/item_notes?item_id=eq.{item_id}&job_id=eq.{job_id}",
             body=patch_body, prefer="return=representation", timeout=10,
         )
         rows = rows or []
@@ -8277,9 +8282,17 @@ async def submit_nps_detailed(payload: NPSDetailedPayload, request: Request):
 
 
 @app.get("/api/nps/check/{user_id}")
-async def should_show_nps(user_id: str):
+async def should_show_nps(user_id: str, request: Request):
     """Verifica se o usuário já respondeu NPS recentemente (últimos 60 dias).
-    Frontend usa isso pra não mostrar o widget repetidamente."""
+    Frontend usa isso pra não mostrar o widget repetidamente.
+
+    Auth: exige JWT do próprio usuário (ou admin) — evita checar/inferir NPS de
+    terceiros (auditoria 2026-07-13). O frontend já chama com authFetch."""
+    jwt_user = _get_user_from_request(request)
+    if not jwt_user:
+        raise HTTPException(401, "Autenticação requerida")
+    if jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
+        raise HTTPException(403, "Só é possível checar o próprio NPS")
     import urllib.request, urllib.error, json
     try:
         url = (f"{SUPABASE_URL}/rest/v1/nps_responses"
@@ -9082,15 +9095,16 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
 
     # 1) Busca reviews recentes (com JOIN manual pra pegar description do item)
     try:
-        _, reviews = _supa_rest_as_user(
-            request, "GET",
-            f"/item_reviews"
-            f"?select=id,job_id,item_id,action,edits,comment,reviewed_at"
-            f"&reviewed_at=gte.{(datetime.utcnow() - timedelta(days=days)).isoformat()}"
-            f"&order=reviewed_at.desc&limit=1000",
-            timeout=20,
-        )
-        reviews = reviews or []
+        # service_role: endpoint admin (agrega reviews de TODOS os projetos).
+        # Com JWT do admin a RLS owner-scoped voltaria só os do próprio admin.
+        _rev_url = (f"{SUPABASE_URL}/rest/v1/item_reviews"
+                    f"?select=id,job_id,item_id,action,edits,comment,reviewed_at"
+                    f"&reviewed_at=gte.{(datetime.utcnow() - timedelta(days=days)).isoformat()}"
+                    f"&order=reviewed_at.desc&limit=1000")
+        _rev_req = urllib.request.Request(_rev_url, method="GET")
+        _rev_req.add_header("apikey", SUPABASE_KEY)
+        _rev_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        reviews = json.loads(urllib.request.urlopen(_rev_req, timeout=20).read().decode("utf-8")) or []
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar reviews: {e}")
 
@@ -9112,12 +9126,13 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
         chunk = item_ids_uniq[i:i+100]
         try:
             ids_csv = ",".join(str(x) for x in chunk)
-            _, rows_ = _supa_rest_as_user(
-                request, "GET",
-                f"/project_items?id=in.({ids_csv})"
-                f"&select=id,description,discipline",
-                timeout=10,
-            )
+            # service_role: endpoint admin (itens de projetos de qualquer user).
+            _pi_url = (f"{SUPABASE_URL}/rest/v1/project_items?id=in.({ids_csv})"
+                       f"&select=id,description,discipline")
+            _pi_req = urllib.request.Request(_pi_url, method="GET")
+            _pi_req.add_header("apikey", SUPABASE_KEY)
+            _pi_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            rows_ = json.loads(urllib.request.urlopen(_pi_req, timeout=10).read().decode("utf-8"))
             for row in (rows_ or []):
                 item_descs[row.get("id")] = row.get("description", "")
         except Exception:
