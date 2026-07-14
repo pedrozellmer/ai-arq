@@ -39,27 +39,25 @@ RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=
 # NÃO setar QT_QPA_PLATFORM=offscreen — deixar usar xcb com xvfb
 
 # WeasyPrint (render dos templates de cronograma HTML->PDF) — libs de sistema.
-# Set completo (Pango + Cairo + GDK-Pixbuf + HarfBuzz) pra o find_library do
-# WeasyPrint achar o pango. ldconfig atualiza o cache do linker — SEM ele o
-# find_library falha no slim ("cannot load library pango-1.0-0"). NÃO engolir
-# erro aqui: se um pacote faltar, o build falha e a gente vê no deploy.
+# WeasyPrint 62 precisa de Pango + PangoFT2 (puxam harfbuzz/glib/cairo por
+# dependência). Só nomes VÁLIDOS em Debian bullseye E bookworm (evita build-fail
+# por nome versionado tipo libffi8/libgdk-pixbuf-2.0-0). ldconfig popula o cache
+# do linker — sem ele o find_library falha no slim ("cannot load library pango-1.0-0").
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpango-1.0-0 libpangoft2-1.0-0 libpangocairo-1.0-0 \
-    libharfbuzz0b libgdk-pixbuf-2.0-0 libcairo2 \
-    libjpeg62-turbo libffi8 fontconfig fonts-ibm-plex \
+    libpango-1.0-0 libpangoft2-1.0-0 fontconfig fonts-ibm-plex \
     && ldconfig \
     && rm -rf /var/lib/apt/lists/*
 
 # Fontes dos templates (Inter, Space Grotesk, Instrument Serif) via Google Fonts.
 # IBM Plex Sans/Mono já vêm de fonts-ibm-plex acima. Falha não quebra o build
 # (WeasyPrint cai pra fonte padrão; ajustamos depois se faltar).
-RUN mkdir -p /usr/share/fonts/truetype/aiarq && cd /usr/share/fonts/truetype/aiarq && \
-    wget -q "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf" -O Inter.ttf && \
-    wget -q "https://github.com/google/fonts/raw/main/ofl/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf" -O SpaceGrotesk.ttf && \
-    wget -q "https://github.com/google/fonts/raw/main/ofl/instrumentserif/InstrumentSerif-Regular.ttf" -O InstrumentSerif-Regular.ttf && \
-    wget -q "https://github.com/google/fonts/raw/main/ofl/instrumentserif/InstrumentSerif-Italic.ttf" -O InstrumentSerif-Italic.ttf && \
-    fc-cache -f \
-    || echo "google fonts download partial"
+RUN mkdir -p /usr/share/fonts/truetype/aiarq && cd /usr/share/fonts/truetype/aiarq \
+    && GH="https://github.com/google/fonts/raw/main/ofl" \
+    && (wget -q --tries=2 --timeout=25 "$GH/inter/Inter%5Bopsz,wght%5D.ttf" -O Inter.ttf || echo "inter fail") \
+    && (wget -q --tries=2 --timeout=25 "$GH/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf" -O SpaceGrotesk.ttf || echo "spacegrotesk fail") \
+    && (wget -q --tries=2 --timeout=25 "$GH/instrumentserif/InstrumentSerif-Regular.ttf" -O InstrumentSerif-Regular.ttf || echo "instrumentserif fail") \
+    && (wget -q --tries=2 --timeout=25 "$GH/instrumentserif/InstrumentSerif-Italic.ttf" -O InstrumentSerif-Italic.ttf || echo "instrumentserif-italic fail") \
+    && fc-cache -f || true
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
