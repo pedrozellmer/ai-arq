@@ -7983,12 +7983,23 @@ async def debug_cronograma_sample(template: str = "escuro", accent: str = "", k:
         "ressalva": "Cronograma de referencia. Validar com engenheiro responsavel (CREA/CAU).",
     }
     branding = {"project_name": "Apartamento DT e PZ", "architect_name": "DTZ Arquitetura", "client_name": "Pedro Zellmer", "company": "DTZ", "logo_local_path": "", "brand_color": "#4F46E5", "job_id": "sample"}
-    from cronograma_render import render_pdf_bytes
-    pdf = render_pdf_bytes(cron, branding, tmpl, (accent or None))
-    tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
-    tmp.write(pdf)
-    tmp.close()
-    return FileResponse(tmp.name, media_type='application/pdf', filename=f"sample_{tmpl}.pdf")
+    import traceback
+    from fastapi.responses import PlainTextResponse
+    # Diagnostico: import do weasyprint separado do render
+    try:
+        import weasyprint
+        wp_ver = getattr(weasyprint, "__version__", "?")
+    except Exception as e:
+        return PlainTextResponse(f"IMPORT weasyprint FALHOU: {type(e).__name__}: {e}\n\n{traceback.format_exc()}", status_code=200)
+    try:
+        from cronograma_render import render_pdf_bytes
+        pdf = render_pdf_bytes(cron, branding, tmpl, (accent or None))
+        tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+        tmp.write(pdf)
+        tmp.close()
+        return FileResponse(tmp.name, media_type='application/pdf', filename=f"sample_{tmpl}.pdf")
+    except Exception as e:
+        return PlainTextResponse(f"RENDER FALHOU ({tmpl}) [weasyprint v{wp_ver}]: {type(e).__name__}: {e}\n\n{traceback.format_exc()}", status_code=200)
 
 
 class ReviewPayload(BaseModel):
