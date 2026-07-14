@@ -160,6 +160,23 @@
       </a>
     </div>
 
+    <!-- Seletor de estilo do PDF/Apresentação: 5 templates + cor (marca por padrão) -->
+    <div id="estilo-panel" class="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 mb-4">
+      <div class="flex items-center gap-2 mb-3">
+        <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485"/></svg>
+        <h2 class="text-sm font-bold text-slate-900">Estilo do PDF e da apresentação</h2>
+        <span class="text-xs text-slate-500 hidden sm:inline">— escolha um visual; a cor puxa da sua marca</span>
+      </div>
+      <div class="mb-3">
+        <div class="text-xs font-medium text-slate-500 mb-1.5">Template</div>
+        <div id="tpl-chips" class="flex flex-wrap gap-2"></div>
+      </div>
+      <div>
+        <div class="text-xs font-medium text-slate-500 mb-1.5">Cor de destaque</div>
+        <div id="cor-chips" class="flex flex-wrap items-center gap-2"></div>
+      </div>
+    </div>
+
     <div id="save-status" class="hidden rounded-lg p-3 text-sm"></div>
 
     <!-- EDITOR — sempre aberto após geração (Onda 1, 2026-05-25). Render é
@@ -837,7 +854,67 @@ function escapeAttr(s) {
   return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// ── Seletor de estilo do cronograma (5 templates + cor) ──────────────
+const CRONO_TEMPLATES = [
+  { id: 'escuro',    nome: 'Escuro',    desc: 'Grafite sofisticado' },
+  { id: 'blueprint', nome: 'Blueprint', desc: 'Papel técnico' },
+  { id: 'claro',     nome: 'Claro',     desc: 'Branco premium' },
+  { id: 'editorial', nome: 'Editorial', desc: 'Revista' },
+  { id: 'bold',      nome: 'Bold',      desc: 'Bloco de cor' },
+];
+const CRONO_CORES = ['#4F46E5', '#0E7490', '#B0603F', '#1F8A5B', '#8B2E5D', '#111827'];
+let estiloTemplate = (function () { try { return localStorage.getItem('aiarq_crono_tpl') || 'escuro'; } catch (e) { return 'escuro'; } })();
+let estiloAccent = '';  // '' = automático (cor da marca, resolvida no backend)
+const _CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="w-3.5 h-3.5 flex-none" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
+
+function renderEstiloChips() {
+  const tc = document.getElementById('tpl-chips');
+  if (tc) {
+    tc.innerHTML = CRONO_TEMPLATES.map(function (t) {
+      const sel = t.id === estiloTemplate;
+      return '<button type="button" data-tpl="' + t.id + '" class="tpl-chip px-3 py-2 rounded-lg border text-left transition ' + (sel ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-300 hover:bg-slate-50') + '">'
+        + '<span class="flex items-center gap-1 text-sm font-semibold ' + (sel ? 'text-indigo-700' : 'text-slate-800') + '">' + (sel ? _CHK : '') + t.nome + '</span>'
+        + '<span class="block text-[11px] text-slate-500">' + t.desc + '</span></button>';
+    }).join('');
+    tc.querySelectorAll('.tpl-chip').forEach(function (b) {
+      b.addEventListener('click', function () {
+        estiloTemplate = b.dataset.tpl;
+        try { localStorage.setItem('aiarq_crono_tpl', estiloTemplate); } catch (e) {}
+        renderEstiloChips(); atualizarLinksExport();
+      });
+    });
+  }
+  const cc = document.getElementById('cor-chips');
+  if (cc) {
+    const autoSel = estiloAccent === '';
+    let html = '<button type="button" data-cor="" class="cor-chip px-3 py-2 rounded-lg border text-sm font-medium transition flex items-center gap-1 ' + (autoSel ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500 text-indigo-700' : 'border-slate-300 hover:bg-slate-50 text-slate-700') + '">' + (autoSel ? _CHK : '') + 'Automático (sua marca)</button>';
+    html += CRONO_CORES.map(function (c) {
+      const sel = estiloAccent.toLowerCase() === c.toLowerCase();
+      return '<button type="button" data-cor="' + c + '" title="' + c + '" aria-label="Cor ' + c + '" class="cor-chip w-8 h-8 rounded-lg flex items-center justify-center text-white border-2 ' + (sel ? 'border-slate-900' : 'border-transparent') + '" style="background:' + c + '">' + (sel ? _CHK : '') + '</button>';
+    }).join('');
+    html += '<label class="px-2 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-sm text-slate-700 cursor-pointer flex items-center gap-1.5">Outra<input type="color" id="cor-custom" class="w-6 h-6 cursor-pointer border-0 bg-transparent p-0" value="' + (estiloAccent || '#4F46E5') + '"></label>';
+    cc.innerHTML = html;
+    cc.querySelectorAll('.cor-chip').forEach(function (b) {
+      b.addEventListener('click', function () {
+        estiloAccent = b.dataset.cor || '';
+        renderEstiloChips(); atualizarLinksExport();
+      });
+    });
+    const cu = document.getElementById('cor-custom');
+    if (cu) cu.addEventListener('input', function () { estiloAccent = cu.value; renderEstiloChips(); atualizarLinksExport(); });
+  }
+}
+
 function atualizarLinksExport() {
+  renderEstiloChips();
+  // Monta ?template=&accent= a partir da escolha do usuário (accent vazio = marca).
+  const qs = (function () {
+    const p = new URLSearchParams();
+    if (estiloTemplate) p.set('template', estiloTemplate);
+    if (estiloAccent) p.set('accent', estiloAccent);
+    const s = p.toString();
+    return s ? '?' + s : '';
+  })();
   // Endpoints protegidos: registrar handler que dispara fetch+blob em vez de
   // .href direto (bug Daniela 2026-05-18: <a href> não envia Authorization).
   const wireExport = (id, url, filename) => {
@@ -853,8 +930,8 @@ function atualizarLinksExport() {
       downloadProtected(url, filename);
     });
   };
-  wireExport('btn-export-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
-  wireExport('btn-export-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
+  wireExport('btn-export-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf${qs}`, `cronograma_${jobId}.pdf`);
+  wireExport('btn-export-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx${qs}`, `cronograma_${jobId}.pptx`);
 }
 
 // ─── Gera cronograma ──

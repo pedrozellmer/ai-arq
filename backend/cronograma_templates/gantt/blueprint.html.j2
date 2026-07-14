@@ -1,0 +1,41 @@
+<div style="width:1123px;height:794px;background-color:#f3f1ea;background-image:linear-gradient(rgba(60,55,44,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(60,55,44,.05) 1px,transparent 1px);background-size:34px 34px;position:relative;padding:52px 56px 40px;font-family:'IBM Plex Sans',sans-serif;overflow:hidden;border:1px solid #ddd8ca">
+  <div style="position:absolute;top:0;left:0;width:100%;height:5px;background:var(--accent,#4F46E5)"></div>
+  <div style="position:absolute;top:30px;left:30px;width:14px;height:14px;border-left:2px solid var(--accent,#4F46E5);border-top:2px solid var(--accent,#4F46E5)"></div>
+  <div style="position:absolute;top:30px;right:30px;width:14px;height:14px;border-right:2px solid var(--accent,#4F46E5);border-top:2px solid var(--accent,#4F46E5)"></div>
+
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px">
+    <div style="font:600 12px/1 'IBM Plex Mono';letter-spacing:.2em;color:var(--accent,#4F46E5)">GANTT · CRONOGRAMA FÍSICO</div>
+    <div style="font:500 11px/1 'IBM Plex Mono';letter-spacing:.14em;color:#8a8472">PRANCHA 02 / 05</div>
+  </div>
+  <div style="font:600 38px/1.05 'IBM Plex Sans';color:#26231c;letter-spacing:-0.015em">Cronograma físico das disciplinas</div>
+  <div style="font:400 12.5px/1.5 'IBM Plex Mono';color:#8a8472;margin-top:9px;max-width:720px">ESC. TEMPORAL · 1 COL = 1 MÊS · BARRA = DURAÇÃO EM DIAS</div>
+
+  <!-- axis -->
+  <div style="margin:26px 0 0 268px;position:relative;height:22px;border-bottom:1.5px solid #26231c">
+    {% for a in axis %}<div style="position:absolute;left:{{ a.pct }}%;top:0;width:1px;height:8px;background:#26231c"></div><div style="position:absolute;left:{{ a.pct }}%;transform:translateX(-50%);top:10px;font:500 10px 'IBM Plex Mono';color:#8a8472">{{ a.label }}</div>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex;margin-top:4px">
+    <div style="width:268px;flex:none;padding-top:6px">
+      {% for f in fases %}<div style="height:39px;display:flex;align-items:center;justify-content:flex-end;gap:12px;padding-right:16px"><span style="font:500 10px 'IBM Plex Mono';color:#b0a893">{{ '%02d'|format(loop.index) }}</span><span style="font:500 12.5px 'IBM Plex Mono';color:#3a3730">{{ f.label }}</span></div>
+      {% endfor %}
+    </div>
+    <div style="flex:1;position:relative;padding-top:6px">
+      {% for a in axis %}<div style="position:absolute;left:{{ a.pct }}%;top:0;bottom:0;width:1px;background:rgba(38,35,28,.10)"></div>
+      {% endfor %}
+
+      {% for f in fases %}<div style="position:relative;height:39px">{% if f.cat == 'estrutura' %}<div style="position:absolute;top:9px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:20px;border:1.5px solid var(--accent,#4F46E5);background:color-mix(in srgb, var(--accent,#4F46E5) 15%, transparent);display:flex;align-items:center;justify-content:flex-end;padding:0 8px;font:600 10px 'IBM Plex Mono';color:color-mix(in srgb, var(--accent,#4F46E5) 60%, #26231c)">{{ f.dur_dias }}d</div>{% elif f.cat == 'instalacoes' %}<div style="position:absolute;top:9px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:20px;border:1.5px solid color-mix(in srgb, var(--accent,#4F46E5) 78%, #14141b);background:repeating-linear-gradient(45deg, color-mix(in srgb, var(--accent,#4F46E5) 22%, transparent) 0 4px, transparent 4px 8px);display:flex;align-items:center;justify-content:flex-end;padding:0 8px;font:600 10px 'IBM Plex Mono';color:color-mix(in srgb, var(--accent,#4F46E5) 60%, #26231c)">{{ f.dur_dias }}d</div>{% else %}<div style="position:absolute;top:9px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:20px;border:1.5px dashed color-mix(in srgb, var(--accent,#4F46E5) 55%, #8a8472);background:transparent;display:flex;align-items:center;justify-content:flex-end;padding:0 8px;font:600 10px 'IBM Plex Mono';color:#6b6555">{{ f.dur_dias }}d</div>{% endif %}</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div style="position:absolute;left:56px;right:56px;bottom:36px;display:flex;align-items:center;justify-content:space-between;border-top:1.5px solid #26231c;padding-top:12px">
+    <div style="display:flex;gap:20px">
+      <div style="display:flex;align-items:center;gap:7px"><span style="width:13px;height:11px;border:1.5px solid var(--accent,#4F46E5);background:color-mix(in srgb, var(--accent,#4F46E5) 15%, transparent)"></span><span style="font:500 10.5px 'IBM Plex Mono';color:#6b6555">ESTRUTURA</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><span style="width:13px;height:11px;border:1.5px solid color-mix(in srgb, var(--accent,#4F46E5) 78%, #14141b);background:repeating-linear-gradient(45deg, color-mix(in srgb, var(--accent,#4F46E5) 22%, transparent) 0 3px, transparent 3px 6px)"></span><span style="font:500 10.5px 'IBM Plex Mono';color:#6b6555">INSTALAÇÕES</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><span style="width:13px;height:11px;border:1.5px dashed #8a8472"></span><span style="font:500 10.5px 'IBM Plex Mono';color:#6b6555">ACABAMENTOS</span></div>
+    </div>
+    <div style="font:500 10.5px 'IBM Plex Mono';letter-spacing:.06em;color:#8a8472">AI.ARQ · {{ r.duracao_dias }} DIAS</div>
+  </div>
+</div>
