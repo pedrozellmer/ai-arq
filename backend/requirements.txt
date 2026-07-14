@@ -17,4 +17,5 @@ python-pptx==1.0.2
 shapely==2.1.2
 pikepdf==10.9.1
 weasyprint==62.3
+pydyf==0.10.0
 Jinja2==3.1.4
