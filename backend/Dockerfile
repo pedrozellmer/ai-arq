@@ -13,9 +13,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     xvfb \
     xauth \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    fontconfig \
+    fonts-ibm-plex \
+    && ldconfig \
     && rm -rf /var/lib/apt/lists/* \
     || (apt-get update && apt-get install -y --no-install-recommends \
     wget libgl1 libglib2.0-0 xvfb \
+    libpango-1.0-0 libpangoft2-1.0-0 fontconfig fonts-ibm-plex \
+    && ldconfig \
     && rm -rf /var/lib/apt/lists/*)
 
 # libredwg-tools (fallback open-source pro ODA File Converter) — OPCIONAL.
@@ -38,15 +45,10 @@ RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=
 # xvfb-run vai criar o display virtual automaticamente
 # NÃO setar QT_QPA_PLATFORM=offscreen — deixar usar xcb com xvfb
 
-# WeasyPrint (render dos templates de cronograma HTML->PDF) — libs de sistema.
-# WeasyPrint 62 precisa de Pango + PangoFT2 (puxam harfbuzz/glib/cairo por
-# dependência). Só nomes VÁLIDOS em Debian bullseye E bookworm (evita build-fail
-# por nome versionado tipo libffi8/libgdk-pixbuf-2.0-0). ldconfig popula o cache
-# do linker — sem ele o find_library falha no slim ("cannot load library pango-1.0-0").
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpango-1.0-0 libpangoft2-1.0-0 fontconfig fonts-ibm-plex \
-    && ldconfig \
-    && rm -rf /var/lib/apt/lists/*
+# WeasyPrint: as libs de sistema (Pango/PangoFT2/fontconfig/fonts-ibm-plex) são
+# instaladas no PRIMEIRO bloco apt lá em cima — no estado LIMPO do apt, antes da
+# instalação do ODA (que deixa o dpkg inconsistente e fazia esta camada separada
+# falhar no build). ldconfig lá popula o cache do linker pro find_library achar o pango.
 
 # Fontes dos templates (Inter, Space Grotesk, Instrument Serif) via Google Fonts.
 # IBM Plex Sans/Mono já vêm de fonts-ibm-plex acima. Falha não quebra o build
