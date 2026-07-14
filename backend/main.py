@@ -7949,58 +7949,8 @@ async def export_cronograma_pptx(job_id: str, request: Request,
         raise HTTPException(500, f"Erro ao gerar PPTX: {e}")
 
 
-@app.get("/api/debug/cronograma-sample")
-async def debug_cronograma_sample(template: str = "escuro", accent: str = "", k: str = ""):
-    """TEMPORARIO — verificacao do WeasyPrint no Render. Gera um PDF de cronograma
-    com DADOS DE EXEMPLO (zero dado de usuario), protegido por token. Removido apos validar."""
-    if k != "crono-selftest-2607":
-        raise HTTPException(404, "not found")
-    import tempfile
-    from fastapi.responses import FileResponse
-    tmpl = (template or "escuro").strip().lower()
-    if tmpl not in _CRONO_TEMPLATES:
-        tmpl = "escuro"
-    cron = {
-        "fases": [
-            {"label": "Servicos preliminares", "inicio": "2026-07-30", "fim": "2027-01-17", "dur_dias": 171, "categoria": "estrutura"},
-            {"label": "Fechamentos / alvenaria", "inicio": "2026-09-01", "fim": "2026-10-25", "dur_dias": 54, "categoria": "estrutura"},
-            {"label": "Instalacoes eletricas", "inicio": "2026-09-10", "fim": "2026-12-18", "dur_dias": 99, "categoria": "instalacoes"},
-            {"label": "Instalacoes hidraulicas", "inicio": "2026-09-10", "fim": "2026-12-18", "dur_dias": 99, "categoria": "instalacoes"},
-            {"label": "Revestimentos", "inicio": "2026-10-20", "fim": "2026-12-13", "dur_dias": 54, "categoria": "acabamentos"},
-            {"label": "Mobiliario", "inicio": "2027-01-01", "fim": "2027-01-19", "dur_dias": 18, "categoria": "acabamentos"},
-        ],
-        "curva_s": [
-            {"mes_label": "ago/26", "pct_acumulado": 3, "data_fim_mes": "2026-08-31"},
-            {"mes_label": "set/26", "pct_acumulado": 12, "data_fim_mes": "2026-09-30"},
-            {"mes_label": "out/26", "pct_acumulado": 35, "data_fim_mes": "2026-10-31"},
-            {"mes_label": "nov/26", "pct_acumulado": 62, "data_fim_mes": "2026-11-30"},
-            {"mes_label": "dez/26", "pct_acumulado": 85, "data_fim_mes": "2026-12-31"},
-            {"mes_label": "jan/27", "pct_acumulado": 100, "data_fim_mes": "2027-01-31"},
-        ],
-        "resumo": {"data_inicio": "2026-07-30", "data_fim": "2027-01-17", "duracao_dias_reais": 171, "n_fases": 6,
-                   "caminho_critico": [{"label": "Servicos preliminares", "dur_dias": 171}, {"label": "Instalacoes eletricas", "dur_dias": 99}, {"label": "Instalacoes hidraulicas", "dur_dias": 99}, {"label": "Revestimentos", "dur_dias": 54}, {"label": "Fechamentos / alvenaria", "dur_dias": 54}]},
-        "marcos_legais": ["Lei 14.133/2021, Art. 117 - medicao mensal", "Lei 14.133/2021, Art. 121 - fiscalizacao", "Acordao TCU 2622/2013", "PMI PMBOK 7a ed.", "NBR 16636-1/2:2017", "Last Planner System"],
-        "ressalva": "Cronograma de referencia. Validar com engenheiro responsavel (CREA/CAU).",
-    }
-    branding = {"project_name": "Apartamento DT e PZ", "architect_name": "DTZ Arquitetura", "client_name": "Pedro Zellmer", "company": "DTZ", "logo_local_path": "", "brand_color": "#4F46E5", "job_id": "sample"}
-    import traceback
-    from fastapi.responses import PlainTextResponse
-    _BUILD = "cronov6"  # marcador pra distinguir deploys no diagnostico
-    # Diagnostico: import do weasyprint separado do render
-    try:
-        import weasyprint
-        wp_ver = getattr(weasyprint, "__version__", "?")
-    except Exception as e:
-        return PlainTextResponse(f"[{_BUILD}] IMPORT weasyprint FALHOU: {type(e).__name__}: {e}\n\n{traceback.format_exc()}", status_code=200)
-    try:
-        from cronograma_render import render_pdf_bytes
-        pdf = render_pdf_bytes(cron, branding, tmpl, (accent or None))
-        tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
-        tmp.write(pdf)
-        tmp.close()
-        return FileResponse(tmp.name, media_type='application/pdf', filename=f"sample_{tmpl}.pdf", headers={"X-Build": _BUILD})
-    except Exception as e:
-        return PlainTextResponse(f"[{_BUILD}] RENDER FALHOU ({tmpl}) [weasyprint v{wp_ver}]: {type(e).__name__}: {e}\n\n{traceback.format_exc()}", status_code=200)
+# (endpoint temporário /api/debug/cronograma-sample removido após validar o
+#  WeasyPrint no Render em 2026-07-14 — os 5 templates renderizaram OK)
 
 
 class ReviewPayload(BaseModel):
