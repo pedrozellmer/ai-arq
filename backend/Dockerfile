@@ -39,12 +39,16 @@ RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=
 # NÃO setar QT_QPA_PLATFORM=offscreen — deixar usar xcb com xvfb
 
 # WeasyPrint (render dos templates de cronograma HTML->PDF) — libs de sistema.
-# WeasyPrint 62 usa Pango/HarfBuzz/fontconfig (não precisa mais de Cairo/GDK).
+# Set completo (Pango + Cairo + GDK-Pixbuf + HarfBuzz) pra o find_library do
+# WeasyPrint achar o pango. ldconfig atualiza o cache do linker — SEM ele o
+# find_library falha no slim ("cannot load library pango-1.0-0"). NÃO engolir
+# erro aqui: se um pacote faltar, o build falha e a gente vê no deploy.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libjpeg62-turbo libffi8 fontconfig \
-    fonts-ibm-plex \
-    && rm -rf /var/lib/apt/lists/* \
-    || echo "weasyprint deps install partial"
+    libpango-1.0-0 libpangoft2-1.0-0 libpangocairo-1.0-0 \
+    libharfbuzz0b libgdk-pixbuf-2.0-0 libcairo2 \
+    libjpeg62-turbo libffi8 fontconfig fonts-ibm-plex \
+    && ldconfig \
+    && rm -rf /var/lib/apt/lists/*
 
 # Fontes dos templates (Inter, Space Grotesk, Instrument Serif) via Google Fonts.
 # IBM Plex Sans/Mono já vêm de fonts-ibm-plex acima. Falha não quebra o build
