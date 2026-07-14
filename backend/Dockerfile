@@ -16,12 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     fontconfig \
-    fonts-ibm-plex \
     && ldconfig \
     && rm -rf /var/lib/apt/lists/* \
     || (apt-get update && apt-get install -y --no-install-recommends \
     wget libgl1 libglib2.0-0 xvfb \
-    libpango-1.0-0 libpangoft2-1.0-0 fontconfig fonts-ibm-plex \
+    libpango-1.0-0 libpangoft2-1.0-0 fontconfig \
     && ldconfig \
     && rm -rf /var/lib/apt/lists/*)
 
@@ -50,15 +49,24 @@ RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=
 # instalação do ODA (que deixa o dpkg inconsistente e fazia esta camada separada
 # falhar no build). ldconfig lá popula o cache do linker pro find_library achar o pango.
 
-# Fontes dos templates (Inter, Space Grotesk, Instrument Serif) via Google Fonts.
-# IBM Plex Sans/Mono já vêm de fonts-ibm-plex acima. Falha não quebra o build
-# (WeasyPrint cai pra fonte padrão; ajustamos depois se faltar).
+# Fontes dos templates via Google Fonts (Inter, Space Grotesk, Instrument Serif,
+# IBM Plex Sans/Mono). Tudo por wget (não depende de pacote apt) e tolerante a
+# falha: se uma fonte não baixar, o build segue e o WeasyPrint cai pra fallback.
 RUN mkdir -p /usr/share/fonts/truetype/aiarq && cd /usr/share/fonts/truetype/aiarq \
     && GH="https://github.com/google/fonts/raw/main/ofl" \
-    && (wget -q --tries=2 --timeout=25 "$GH/inter/Inter%5Bopsz,wght%5D.ttf" -O Inter.ttf || echo "inter fail") \
-    && (wget -q --tries=2 --timeout=25 "$GH/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf" -O SpaceGrotesk.ttf || echo "spacegrotesk fail") \
-    && (wget -q --tries=2 --timeout=25 "$GH/instrumentserif/InstrumentSerif-Regular.ttf" -O InstrumentSerif-Regular.ttf || echo "instrumentserif fail") \
-    && (wget -q --tries=2 --timeout=25 "$GH/instrumentserif/InstrumentSerif-Italic.ttf" -O InstrumentSerif-Italic.ttf || echo "instrumentserif-italic fail") \
+    && for u in \
+        "inter/Inter%5Bopsz,wght%5D.ttf|Inter.ttf" \
+        "spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf|SpaceGrotesk.ttf" \
+        "instrumentserif/InstrumentSerif-Regular.ttf|InstrumentSerif-Regular.ttf" \
+        "instrumentserif/InstrumentSerif-Italic.ttf|InstrumentSerif-Italic.ttf" \
+        "ibmplexsans/IBMPlexSans-Regular.ttf|IBMPlexSans-Regular.ttf" \
+        "ibmplexsans/IBMPlexSans-Medium.ttf|IBMPlexSans-Medium.ttf" \
+        "ibmplexsans/IBMPlexSans-SemiBold.ttf|IBMPlexSans-SemiBold.ttf" \
+        "ibmplexsans/IBMPlexSans-Bold.ttf|IBMPlexSans-Bold.ttf" \
+        "ibmplexmono/IBMPlexMono-Regular.ttf|IBMPlexMono-Regular.ttf" \
+        "ibmplexmono/IBMPlexMono-Medium.ttf|IBMPlexMono-Medium.ttf" \
+        "ibmplexmono/IBMPlexMono-SemiBold.ttf|IBMPlexMono-SemiBold.ttf" \
+        ; do src="${u%%|*}"; dst="${u##*|}"; wget -q --tries=2 --timeout=25 "$GH/$src" -O "$dst" || echo "font fail: $src"; done \
     && fc-cache -f || true
 
 COPY requirements.txt .
