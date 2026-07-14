@@ -1,0 +1,20 @@
+<div style="width:1123px;height:794px;background-color:#f3f1ea;background-image:linear-gradient(rgba(60,55,44,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(60,55,44,.06) 1px,transparent 1px);background-size:34px 34px;position:relative;overflow:hidden;border:1px solid #ddd8ca;box-shadow:0 24px 60px -22px rgba(42,38,28,.30)">
+  <div style="position:absolute;top:0;left:0;width:100%;height:5px;background:var(--accent)"></div>
+  <div style="position:absolute;top:34px;left:34px;width:16px;height:16px;border-left:2px solid var(--accent);border-top:2px solid var(--accent)"></div>
+  <div style="position:absolute;top:34px;right:34px;width:16px;height:16px;border-right:2px solid var(--accent);border-top:2px solid var(--accent)"></div>
+  <div style="position:absolute;top:62px;left:64px;right:64px;display:flex;align-items:flex-start;justify-content:space-between">
+    {% if b.logo_uri %}<div style="width:158px;height:50px;display:flex;align-items:center;justify-content:flex-start"><img src="{{ b.logo_uri }}" style="max-width:158px;max-height:50px;object-fit:contain"/></div>{% else %}<div style="width:158px;height:50px;border:1px dashed #b8b09c;border-radius:2px;display:flex;align-items:center;justify-content:center;font:500 10px 'IBM Plex Mono';letter-spacing:.12em;color:#9a927e;text-transform:uppercase;background:#f3f1ea">logo do cliente</div>{% endif %}
+    <div style="text-align:right;font:400 11px/1.7 'IBM Plex Mono';color:#8a8472">{{ b.architect_name|upper }}<br>{{ b.emitido_em|upper }}</div>
+  </div>
+  <div style="position:absolute;left:64px;top:288px;right:64px">
+    <div style="font:600 12px/1 'IBM Plex Mono';letter-spacing:.2em;color:var(--accent)">CRONOGRAMA FÍSICO-FINANCEIRO</div>
+    <div style="width:64px;height:2px;background:var(--accent);margin:20px 0 22px"></div>
+    <div style="font:600 66px/1.02 'IBM Plex Sans';color:#26231c;letter-spacing:-0.02em">{{ b.project_name }}</div>
+  </div>
+  <div style="position:absolute;left:64px;right:64px;bottom:40px;display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid #26231c;background:#f7f5ef">
+    <div style="padding:16px 18px;border-right:1px solid #cfc9ba"><div style="font:500 9px 'IBM Plex Mono';letter-spacing:.14em;color:#9a927e">CLIENTE</div><div style="font:600 15px 'IBM Plex Sans';color:#26231c;margin-top:6px">{{ b.client_name }}</div></div>
+    <div style="padding:16px 18px;border-right:1px solid #cfc9ba"><div style="font:500 9px 'IBM Plex Mono';letter-spacing:.14em;color:#9a927e">INÍCIO / TÉRMINO</div><div style="font:600 15px 'IBM Plex Sans';color:#26231c;margin-top:6px">{{ r.inicio_br }} → {{ r.fim_br }}</div></div>
+    <div style="padding:16px 18px;border-right:1px solid #cfc9ba"><div style="font:500 9px 'IBM Plex Mono';letter-spacing:.14em;color:#9a927e">DURAÇÃO</div><div style="font:600 15px 'IBM Plex Sans';color:#26231c;margin-top:6px">{{ r.duracao_dias }} dias · {{ r.n_fases }} fases</div></div>
+    <div style="padding:16px 18px"><div style="font:500 9px 'IBM Plex Mono';letter-spacing:.14em;color:#9a927e">PRANCHA</div><div style="font:600 15px 'IBM Plex Sans';color:#26231c;margin-top:6px">01 / 05 · AI.arq</div></div>
+  </div>
+</div>

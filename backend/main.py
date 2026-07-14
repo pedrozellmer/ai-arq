@@ -7848,21 +7848,45 @@ def _slug_filename(name: str) -> str:
     return s[:60] or 'cronograma'
 
 
+# Templates de cronograma disponiveis (seletor no cronograma.html). Default escuro.
+_CRONO_TEMPLATES = {"escuro", "blueprint", "claro", "editorial", "bold"}
+
+
 @app.get("/api/cronograma/{job_id}/export/pdf")
-async def export_cronograma_pdf(job_id: str, request: Request):
-    """Exporta cronograma como PDF co-branded (logo + cor + nome cliente)."""
+async def export_cronograma_pdf(job_id: str, request: Request,
+                                template: str = "", accent: str = ""):
+    """Exporta cronograma como PDF co-branded. Usa os novos templates (WeasyPrint,
+    5 direcoes, cor da marca); se falhar, cai no gerador antigo (reportlab)."""
     _require_project_owner(request, job_id)
-    import tempfile, os
+    import tempfile
     from fastapi.responses import FileResponse
     cron, branding = _build_cronograma_for_export(job_id, request=request)
+    tmpl = (template or "").strip().lower()
+    if tmpl not in _CRONO_TEMPLATES:
+        tmpl = "escuro"
+    acc = (accent or "").strip() or None
+    fname = f"cronograma_{_slug_filename(branding['project_name'])}.pdf"
+    # 1) Novo render HTML->PDF (fiel aos 5 templates do handoff)
+    try:
+        from cronograma_render import render_pdf_bytes
+        pdf = render_pdf_bytes(cron, branding, tmpl, acc)
+        if pdf:
+            tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+            tmp.write(pdf)
+            tmp.close()
+            return FileResponse(tmp.name, media_type='application/pdf', filename=fname)
+        raise RuntimeError("render_pdf_bytes vazio")
+    except Exception as e:
+        import traceback
+        print(f"[export pdf] novo render falhou ({tmpl}), fallback reportlab: {e}")
+        print(traceback.format_exc())
+    # 2) Fallback: gerador antigo (reportlab)
     try:
         from cronograma_export import exportar_pdf
         tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
         tmp.close()
         exportar_pdf(cron, tmp.name, branding=branding)
-        fname = f"cronograma_{_slug_filename(branding['project_name'])}.pdf"
-        return FileResponse(tmp.name, media_type='application/pdf',
-                             filename=fname)
+        return FileResponse(tmp.name, media_type='application/pdf', filename=fname)
     except Exception as e:
         import traceback
         print(f"[export pdf] erro: {e}")
@@ -7871,27 +7895,100 @@ async def export_cronograma_pdf(job_id: str, request: Request):
 
 
 @app.get("/api/cronograma/{job_id}/export/pptx")
-async def export_cronograma_pptx(job_id: str, request: Request):
-    """Exporta cronograma como PPTX co-branded (5 slides pra apresentar)."""
+async def export_cronograma_pptx(job_id: str, request: Request,
+                                 template: str = "", accent: str = ""):
+    """Exporta cronograma como PPTX (5 slides). Novo: renderiza o PDF dos templates
+    e insere 1 imagem full-bleed por slide (A4 paisagem). Fallback: gerador antigo."""
     _require_project_owner(request, job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = _build_cronograma_for_export(job_id, request=request)
+    tmpl = (template or "").strip().lower()
+    if tmpl not in _CRONO_TEMPLATES:
+        tmpl = "escuro"
+    acc = (accent or "").strip() or None
+    fname = f"cronograma_{_slug_filename(branding['project_name'])}.pptx"
+    _pptx_mime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+    # 1) Novo: PDF -> PNGs -> slides full-bleed
+    try:
+        from cronograma_render import render_pdf_bytes, render_png_paginas
+        pdf = render_pdf_bytes(cron, branding, tmpl, acc)
+        pngs = render_png_paginas(pdf) if pdf else []
+        if pngs:
+            from pptx import Presentation
+            from pptx.util import Inches
+            import io as _io
+            prs = Presentation()
+            prs.slide_width = Inches(11.69)   # A4 paisagem — mesma proporcao das paginas
+            prs.slide_height = Inches(8.27)
+            blank = prs.slide_layouts[6]
+            for png in pngs:
+                slide = prs.slides.add_slide(blank)
+                slide.shapes.add_picture(_io.BytesIO(png), 0, 0,
+                                         width=prs.slide_width, height=prs.slide_height)
+            tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
+            tmp.close()
+            prs.save(tmp.name)
+            return FileResponse(tmp.name, media_type=_pptx_mime, filename=fname)
+        raise RuntimeError("render_png_paginas vazio")
+    except Exception as e:
+        import traceback
+        print(f"[export pptx] novo render falhou ({tmpl}), fallback: {e}")
+        print(traceback.format_exc())
+    # 2) Fallback: gerador antigo
     try:
         from cronograma_export import exportar_pptx
         tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
         tmp.close()
         exportar_pptx(cron, tmp.name, branding=branding)
-        fname = f"cronograma_{_slug_filename(branding['project_name'])}.pptx"
-        return FileResponse(
-            tmp.name,
-            media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
-            filename=fname)
+        return FileResponse(tmp.name, media_type=_pptx_mime, filename=fname)
     except Exception as e:
         import traceback
         print(f"[export pptx] erro: {e}")
         print(traceback.format_exc())
         raise HTTPException(500, f"Erro ao gerar PPTX: {e}")
+
+
+@app.get("/api/debug/cronograma-sample")
+async def debug_cronograma_sample(template: str = "escuro", accent: str = "", k: str = ""):
+    """TEMPORARIO — verificacao do WeasyPrint no Render. Gera um PDF de cronograma
+    com DADOS DE EXEMPLO (zero dado de usuario), protegido por token. Removido apos validar."""
+    if k != "crono-selftest-2607":
+        raise HTTPException(404, "not found")
+    import tempfile
+    from fastapi.responses import FileResponse
+    tmpl = (template or "escuro").strip().lower()
+    if tmpl not in _CRONO_TEMPLATES:
+        tmpl = "escuro"
+    cron = {
+        "fases": [
+            {"label": "Servicos preliminares", "inicio": "2026-07-30", "fim": "2027-01-17", "dur_dias": 171, "categoria": "estrutura"},
+            {"label": "Fechamentos / alvenaria", "inicio": "2026-09-01", "fim": "2026-10-25", "dur_dias": 54, "categoria": "estrutura"},
+            {"label": "Instalacoes eletricas", "inicio": "2026-09-10", "fim": "2026-12-18", "dur_dias": 99, "categoria": "instalacoes"},
+            {"label": "Instalacoes hidraulicas", "inicio": "2026-09-10", "fim": "2026-12-18", "dur_dias": 99, "categoria": "instalacoes"},
+            {"label": "Revestimentos", "inicio": "2026-10-20", "fim": "2026-12-13", "dur_dias": 54, "categoria": "acabamentos"},
+            {"label": "Mobiliario", "inicio": "2027-01-01", "fim": "2027-01-19", "dur_dias": 18, "categoria": "acabamentos"},
+        ],
+        "curva_s": [
+            {"mes_label": "ago/26", "pct_acumulado": 3, "data_fim_mes": "2026-08-31"},
+            {"mes_label": "set/26", "pct_acumulado": 12, "data_fim_mes": "2026-09-30"},
+            {"mes_label": "out/26", "pct_acumulado": 35, "data_fim_mes": "2026-10-31"},
+            {"mes_label": "nov/26", "pct_acumulado": 62, "data_fim_mes": "2026-11-30"},
+            {"mes_label": "dez/26", "pct_acumulado": 85, "data_fim_mes": "2026-12-31"},
+            {"mes_label": "jan/27", "pct_acumulado": 100, "data_fim_mes": "2027-01-31"},
+        ],
+        "resumo": {"data_inicio": "2026-07-30", "data_fim": "2027-01-17", "duracao_dias_reais": 171, "n_fases": 6,
+                   "caminho_critico": [{"label": "Servicos preliminares", "dur_dias": 171}, {"label": "Instalacoes eletricas", "dur_dias": 99}, {"label": "Instalacoes hidraulicas", "dur_dias": 99}, {"label": "Revestimentos", "dur_dias": 54}, {"label": "Fechamentos / alvenaria", "dur_dias": 54}]},
+        "marcos_legais": ["Lei 14.133/2021, Art. 117 - medicao mensal", "Lei 14.133/2021, Art. 121 - fiscalizacao", "Acordao TCU 2622/2013", "PMI PMBOK 7a ed.", "NBR 16636-1/2:2017", "Last Planner System"],
+        "ressalva": "Cronograma de referencia. Validar com engenheiro responsavel (CREA/CAU).",
+    }
+    branding = {"project_name": "Apartamento DT e PZ", "architect_name": "DTZ Arquitetura", "client_name": "Pedro Zellmer", "company": "DTZ", "logo_local_path": "", "brand_color": "#4F46E5", "job_id": "sample"}
+    from cronograma_render import render_pdf_bytes
+    pdf = render_pdf_bytes(cron, branding, tmpl, (accent or None))
+    tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
+    tmp.write(pdf)
+    tmp.close()
+    return FileResponse(tmp.name, media_type='application/pdf', filename=f"sample_{tmpl}.pdf")
 
 
 class ReviewPayload(BaseModel):

@@ -1,0 +1,20 @@
+      <div style="width:1123px;height:794px;background:#f6f2e9;position:relative;overflow:hidden;border:1px solid #e6ded0;box-shadow:0 24px 60px -22px rgba(43,37,25,.30)">
+        <div style="position:absolute;top:0;left:0;width:100%;height:4px;background:var(--accent)"></div>
+        <div style="position:absolute;top:44px;left:64px;right:64px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #d8cfbd;padding-bottom:22px">
+          {% if b.logo_uri %}<div style="width:150px;height:46px;display:flex;align-items:center;justify-content:flex-start"><img src="{{b.logo_uri}}" style="max-width:150px;max-height:46px;object-fit:contain"/></div>{% else %}<div style="width:150px;height:46px;border:1px dashed #c9bfa9;border-radius:4px;display:flex;align-items:center;justify-content:center;font:500 10px 'Inter';letter-spacing:.12em;color:#a89f8c;text-transform:uppercase">logo do cliente</div>{% endif %}
+          <div style="font:400 13px/1 'Inter';letter-spacing:.28em;color:#8a8272;text-transform:uppercase">Cronograma da Obra</div>
+          <div style="text-align:right;font:italic 400 16px/1.3 'Instrument Serif';color:#8a8272">Emitido em<br>{{b.emitido_em}}</div>
+        </div>
+        <div style="position:absolute;left:64px;top:262px;right:64px">
+          <div style="font:400 14px/1 'Inter';letter-spacing:.24em;color:var(--accent);text-transform:uppercase;font-weight:700">Cronograma físico-financeiro</div>
+          <div style="margin-top:20px;font:400 74px/0.98 'Instrument Serif';color:#2b2519;letter-spacing:-0.02em">{{b.project_name}}</div>
+        </div>
+        <div style="position:absolute;left:64px;right:64px;bottom:96px;display:flex;border-top:1px solid #d8cfbd;padding-top:22px">
+          <div style="flex:1"><div style="font:400 10px 'Inter';letter-spacing:.18em;color:#a89f8c;text-transform:uppercase">Cliente</div><div style="font:400 24px 'Instrument Serif';color:#2b2519;margin-top:6px">{{b.client_name}}</div></div>
+          <div style="flex:1"><div style="font:400 10px 'Inter';letter-spacing:.18em;color:#a89f8c;text-transform:uppercase">Início / Término</div><div style="font:400 24px 'Instrument Serif';color:#2b2519;margin-top:6px">{{r.inicio_br}} — {{r.fim_br}}</div></div>
+          <div style="flex:1"><div style="font:400 10px 'Inter';letter-spacing:.18em;color:#a89f8c;text-transform:uppercase">Duração</div><div style="font:400 24px 'Instrument Serif';color:#2b2519;margin-top:6px">{{r.duracao_dias}} dias · {{r.n_fases}} fases</div></div>
+        </div>
+        <div style="position:absolute;left:64px;right:64px;bottom:40px;display:flex;justify-content:space-between;font:400 11px 'Inter';letter-spacing:.08em;color:#a89f8c">
+          <span>powered by AI.arq · ai.arq.br</span><span>Página 1 de 5</span>
+        </div>
+      </div>

@@ -1,0 +1,33 @@
+{#- GANTT (editorial) · Include: gantt/editorial.html.j2
+    Página autossuficiente (CSS inline, cores da direção editorial verbatim da referência).
+    NÃO redefinir --p-*/--accent. -#}
+<div style="width:1123px;height:794px;background:#f6f2e9;position:relative;padding:54px 64px 40px;font-family:'Instrument Serif',serif;overflow:hidden;border:1px solid #e6ded0">
+  <div style="position:absolute;top:0;left:0;width:100%;height:4px;background:var(--accent,#4F46E5)"></div>
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+    <div style="font:400 13px/1 'Inter';letter-spacing:.24em;color:var(--accent,#4F46E5);font-weight:700">GANTT</div>
+    <div style="font:400 12px/1 'Inter';letter-spacing:.14em;color:#a89f8c">02 / 05</div>
+  </div>
+  <div style="font:400 46px/1.05 'Instrument Serif';color:#2b2519;letter-spacing:-0.01em">Cronograma físico das disciplinas</div>
+  <div style="font:italic 400 17px/1.4 'Instrument Serif';color:#8a8272;margin-top:6px">{{ r.n_fases }} disciplinas, três frentes construtivas — {{ r.duracao_dias }} dias de obra.</div>
+
+  <div style="margin:26px 0 4px 300px;position:relative;height:18px">
+    {% for a in axis %}
+    <div style="position:absolute;left:{{ a.pct }}%;transform:translateX(-50%);font:600 10px 'Inter';letter-spacing:.14em;color:#a89f8c;text-transform:uppercase">{{ a.label }}</div>
+    {% endfor %}
+  </div>
+
+  <div>
+    {% for f in fases %}
+    <div style="display:flex;align-items:center;height:41px;border-top:1px solid {% if loop.first %}#26231c{% else %}#ded6c6{% endif %}{% if loop.last %};border-bottom:1px solid #26231c{% endif %}"><div style="width:300px;flex:none;display:flex;align-items:baseline;gap:14px"><span style="font:italic 400 16px 'Instrument Serif';color:#b4ab97">{{ '%02d'|format(loop.index) }}</span><span style="font:400 20px 'Instrument Serif';color:#2b2519">{{ f.label }}</span></div><div style="flex:1;position:relative;height:100%"><div style="position:absolute;top:16px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:9px;border-radius:5px;background:{% if f.cat=='estrutura' %}var(--accent,#4F46E5){% elif f.cat=='instalacoes' %}color-mix(in srgb, var(--accent,#4F46E5) 72%, #14141b){% else %}color-mix(in srgb, var(--accent,#4F46E5) 42%, #ffffff){% endif %}"></div><div style="position:absolute;top:12px;left:{{ f.label_pct }}%;margin-left:12px;font:600 10.5px 'Inter';letter-spacing:.06em;color:#6f6857">{{ f.dur_dias }} d</div></div></div>
+    {% endfor %}
+  </div>
+
+  <div style="position:absolute;left:64px;right:64px;bottom:32px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;gap:22px">
+      <div style="display:flex;align-items:center;gap:7px"><span style="width:16px;height:7px;border-radius:4px;background:var(--accent,#4F46E5)"></span><span style="font:400 15px 'Instrument Serif';color:#6f6857">Estrutura</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><span style="width:16px;height:7px;border-radius:4px;background:color-mix(in srgb, var(--accent,#4F46E5) 72%, #14141b)"></span><span style="font:400 15px 'Instrument Serif';color:#6f6857">Instalações</span></div>
+      <div style="display:flex;align-items:center;gap:7px"><span style="width:16px;height:7px;border-radius:4px;background:color-mix(in srgb, var(--accent,#4F46E5) 42%, #ffffff)"></span><span style="font:400 15px 'Instrument Serif';color:#6f6857">Acabamentos</span></div>
+    </div>
+    <div style="font:400 12px 'Inter';letter-spacing:.1em;color:#a89f8c">powered by AI.arq · ai.arq.br</div>
+  </div>
+</div>

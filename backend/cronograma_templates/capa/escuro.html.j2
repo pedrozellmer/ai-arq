@@ -1,0 +1,23 @@
+<div style="width:1123px;height:794px;background:radial-gradient(1200px 520px at 82% -12%, color-mix(in srgb, var(--accent) 34%, transparent), transparent 62%), #0f1115;position:relative;overflow:hidden;box-shadow:0 24px 60px -22px rgba(0,0,0,.5)">
+  <div style="position:absolute;top:0;left:0;width:100%;height:5px;background:var(--accent)"></div>
+  <div style="position:absolute;top:56px;left:64px;right:64px;display:flex;align-items:flex-start;justify-content:space-between">
+    {% if b.logo_uri %}<div style="width:158px;height:50px;display:flex;align-items:center;justify-content:flex-start"><img src="{{ b.logo_uri }}" style="max-width:158px;max-height:50px;object-fit:contain"/></div>{% else %}<div style="width:158px;height:50px;border:1px dashed #3a3f4b;border-radius:6px;display:flex;align-items:center;justify-content:center;font:500 10px 'IBM Plex Mono';letter-spacing:.12em;color:#5b6472;text-transform:uppercase">logo do cliente</div>{% endif %}
+    <div style="text-align:right;font:400 12px/1.7 'Space Grotesk';color:#8a93a3">{{ b.architect_name }}<br>Emitido em {{ b.emitido_em }}</div>
+  </div>
+  <div style="position:absolute;left:64px;top:322px;right:64px">
+    <div style="font:600 12px/1 'Space Grotesk';letter-spacing:.24em;color:color-mix(in srgb, var(--accent) 55%, #ffffff)">CRONOGRAMA FÍSICO-FINANCEIRO</div>
+    <div style="width:64px;height:1px;background:#2a2f3a;margin:22px 0 24px"></div>
+    <div style="font:500 78px/1.0 'Space Grotesk';color:#f5f6f8;letter-spacing:-0.025em">{{ b.project_name }}</div>
+    <div style="margin-top:26px;font:500 10px/1 'Space Grotesk';letter-spacing:.2em;color:#5b6472">CLIENTE</div>
+    <div style="margin-top:8px;font:500 20px 'Space Grotesk';color:#dfe3ea">{{ b.client_name }}</div>
+  </div>
+  <div style="position:absolute;left:64px;right:64px;bottom:104px;display:flex;gap:0">
+    <div style="flex:1"><div style="font:600 26px 'Space Grotesk';color:#f5f6f8">{{ r.inicio_br }}</div><div style="font:500 10px 'Space Grotesk';letter-spacing:.16em;color:#5b6472;margin-top:6px">INÍCIO PREVISTO</div></div>
+    <div style="flex:1;padding-left:28px"><div style="font:600 26px 'Space Grotesk';color:#f5f6f8">{{ r.fim_br }}</div><div style="font:500 10px 'Space Grotesk';letter-spacing:.16em;color:#5b6472;margin-top:6px">TÉRMINO PREVISTO</div></div>
+    <div style="flex:1;padding-left:28px"><div style="font:600 26px 'Space Grotesk';color:#f5f6f8">{{ r.duracao_dias }} dias</div><div style="font:500 10px 'Space Grotesk';letter-spacing:.16em;color:#5b6472;margin-top:6px">DURAÇÃO TOTAL</div></div>
+    <div style="flex:1;padding-left:28px"><div style="font:600 26px 'Space Grotesk';color:#f5f6f8">{{ r.n_fases }} fases</div><div style="font:500 10px 'Space Grotesk';letter-spacing:.16em;color:#5b6472;margin-top:6px">DISCIPLINAS</div></div>
+  </div>
+  <div style="position:absolute;left:64px;right:64px;bottom:40px;display:flex;justify-content:space-between;border-top:1px solid #23283a;padding-top:16px;font:400 11px 'Space Grotesk';letter-spacing:.08em;color:#5b6472">
+    <span>powered by AI.arq · ai.arq.br</span><span>Página 1 de 5</span>
+  </div>
+</div>

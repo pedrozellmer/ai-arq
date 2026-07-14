@@ -1,0 +1,55 @@
+{#-
+  gantt/claro.html.j2 — PÁGINA 2 (Gantt) · direção 'claro'
+  CSS/geometria/tipografia copiados VERBATIM de GanttLight.dc.html.
+  Dados fixos do exemplo trocados por Jinja (fases/axis/r). color-mix e
+  var(--accent) mantidos — o render.py resolve pós-Jinja. NÃO redefine --p-*/--accent.
+-#}
+<div style="width:1123px;height:794px;background:#f8f7f4;position:relative;padding:52px 60px 40px 72px;font-family:'Inter',sans-serif;overflow:hidden;border:1px solid #e7e5df">
+  <div style="position:absolute;top:0;left:0;width:8px;height:100%;background:var(--accent,#4F46E5)"></div>
+
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+    <div style="font:700 12px/1 'Inter';letter-spacing:.22em;color:var(--accent,#4F46E5)">GANTT · CRONOGRAMA FÍSICO</div>
+    <div style="font:400 11px/1 'Inter';letter-spacing:.14em;color:#a8a29a">02 / 05</div>
+  </div>
+  <div style="font:600 40px/1.05 'Space Grotesk';color:#1a1712;letter-spacing:-0.02em">Cronograma físico das disciplinas</div>
+  <div style="font:400 13.5px/1.5 'Inter';color:#78716c;margin-top:9px;max-width:720px">{{ r.n_fases }} disciplinas em três frentes construtivas ao longo de {{ r.duracao_dias }} dias.</div>
+
+  <div style="display:flex;gap:22px;margin-top:14px;margin-left:236px">
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:var(--accent,#4F46E5)"></span><span style="font:600 10.5px 'Inter';letter-spacing:.16em;color:#78716c;text-transform:uppercase">Estrutura</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:color-mix(in srgb, var(--accent,#4F46E5) 72%, #14141b)"></span><span style="font:600 10.5px 'Inter';letter-spacing:.16em;color:#78716c;text-transform:uppercase">Instalações</span></div>
+    <div style="display:flex;align-items:center;gap:9px"><span style="width:9px;height:9px;border-radius:3px;background:color-mix(in srgb, var(--accent,#4F46E5) 40%, #ffffff)"></span><span style="font:600 10.5px 'Inter';letter-spacing:.16em;color:#78716c;text-transform:uppercase">Acabamentos</span></div>
+  </div>
+
+  <div style="margin:20px 0 0 236px;position:relative;height:20px;border-bottom:1px solid #e0ddd4">
+    {% for a in axis %}
+    <div style="position:absolute;left:{{ a.pct }}%;transform:translateX(-50%);top:0;font:500 10.5px 'Inter';letter-spacing:.06em;color:#a8a29a">{{ a.label }}</div>
+    {% endfor %}
+  </div>
+
+  <div style="display:flex;margin-top:8px">
+    <div style="width:236px;flex:none">
+      {% for f in fases %}
+      <div style="height:36px;line-height:36px;text-align:right;padding-right:20px;font:500 12.5px 'Inter';color:#44403c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.label }}</div>
+      {% endfor %}
+    </div>
+    <div style="flex:1">
+      <div style="background:color-mix(in srgb, var(--accent,#4F46E5) 6%, #ffffff);border-radius:12px">
+        {% for f in fases %}
+        {% if f.cat == 'estrutura' %}
+        {% set barbg = 'var(--accent,#4F46E5)' %}{% set bartxt = '#fff' %}
+        {% elif f.cat == 'instalacoes' %}
+        {% set barbg = 'color-mix(in srgb, var(--accent,#4F46E5) 72%, #14141b)' %}{% set bartxt = '#fff' %}
+        {% else %}
+        {% set barbg = 'color-mix(in srgb, var(--accent,#4F46E5) 40%, #ffffff)' %}{% set bartxt = '#292524' %}
+        {% endif %}
+        <div style="position:relative;height:36px"><div style="position:absolute;top:7px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:22px;border-radius:8px;background:{{ barbg }};display:flex;align-items:center;justify-content:flex-end;padding:0 10px;color:{{ bartxt }};font:700 10.5px 'Inter'">{{ f.dur_dias }}d</div></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:72px;right:60px;bottom:34px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid #e7e5df;padding-top:14px">
+    <div style="font:400 11px 'Inter';letter-spacing:.1em;color:#a8a29a">powered by AI.arq · ai.arq.br</div>
+    <div style="font:500 11.5px 'Inter';color:#57534e">{{ r.duracao_dias }} dias · {{ r.inicio_br }} → {{ r.fim_br }}</div>
+  </div>
+</div>

@@ -38,6 +38,25 @@ RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=
 # xvfb-run vai criar o display virtual automaticamente
 # NÃO setar QT_QPA_PLATFORM=offscreen — deixar usar xcb com xvfb
 
+# WeasyPrint (render dos templates de cronograma HTML->PDF) — libs de sistema.
+# WeasyPrint 62 usa Pango/HarfBuzz/fontconfig (não precisa mais de Cairo/GDK).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpango-1.0-0 libpangoft2-1.0-0 libharfbuzz0b libjpeg62-turbo libffi8 fontconfig \
+    fonts-ibm-plex \
+    && rm -rf /var/lib/apt/lists/* \
+    || echo "weasyprint deps install partial"
+
+# Fontes dos templates (Inter, Space Grotesk, Instrument Serif) via Google Fonts.
+# IBM Plex Sans/Mono já vêm de fonts-ibm-plex acima. Falha não quebra o build
+# (WeasyPrint cai pra fonte padrão; ajustamos depois se faltar).
+RUN mkdir -p /usr/share/fonts/truetype/aiarq && cd /usr/share/fonts/truetype/aiarq && \
+    wget -q "https://github.com/google/fonts/raw/main/ofl/inter/Inter%5Bopsz,wght%5D.ttf" -O Inter.ttf && \
+    wget -q "https://github.com/google/fonts/raw/main/ofl/spacegrotesk/SpaceGrotesk%5Bwght%5D.ttf" -O SpaceGrotesk.ttf && \
+    wget -q "https://github.com/google/fonts/raw/main/ofl/instrumentserif/InstrumentSerif-Regular.ttf" -O InstrumentSerif-Regular.ttf && \
+    wget -q "https://github.com/google/fonts/raw/main/ofl/instrumentserif/InstrumentSerif-Italic.ttf" -O InstrumentSerif-Italic.ttf && \
+    fc-cache -f \
+    || echo "google fonts download partial"
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 

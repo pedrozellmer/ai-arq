@@ -1,0 +1,26 @@
+<div style="width:1123px;height:794px;background-color:var(--p-bg,#faf9f7);background-image:var(--p-grid,none);background-size:34px 34px;position:relative;padding:56px 64px 40px;font-family:var(--p-fb,'Inter'),sans-serif;overflow:hidden">
+  <div style="position:absolute;top:0;left:0;width:100%;height:5px;background:var(--accent,#4F46E5)"></div>
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+    <div style="font:700 12px/1 var(--p-fl,'Inter');letter-spacing:.22em;color:var(--p-eyebrow,var(--accent,#4F46E5))">REFERÊNCIAS</div>
+    <div style="font:400 11px/1 var(--p-fl,'Inter');letter-spacing:.14em;color:var(--p-muted,#94A3B8)">05 / 05</div>
+  </div>
+  <div style="font:var(--p-title-weight,600) 40px/1.05 var(--p-ft,'Inter');color:var(--p-title,#0F172A);letter-spacing:-0.015em">Marcos normativos e ressalvas</div>
+  <div style="font:400 13.5px/1.5 var(--p-fb,'Inter');color:var(--p-muted,#64748B);margin-top:9px;max-width:820px">Bases técnicas e legais consideradas na elaboração deste cronograma.</div>
+
+  <div style="margin-top:36px;font:700 11px var(--p-fl,'Inter');letter-spacing:.18em;color:var(--p-muted,#94A3B8);text-transform:uppercase">Marcos considerados</div>
+  <div style="margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:16px 48px">
+    {% for m in marcos_col1 %}<div style="display:flex;gap:12px;align-items:flex-start"><span style="color:var(--accent,#4F46E5);font:700 14px var(--p-fb,'Inter');line-height:1.5">▸</span><div style="font:400 14.5px/1.5 var(--p-fb,'Inter');color:var(--p-body,#334155)">{{ m }}</div></div>
+    {% endfor %}{% for m in marcos_col2 %}<div style="display:flex;gap:12px;align-items:flex-start"><span style="color:var(--accent,#4F46E5);font:700 14px var(--p-fb,'Inter');line-height:1.5">▸</span><div style="font:400 14.5px/1.5 var(--p-fb,'Inter');color:var(--p-body,#334155)">{{ m }}</div></div>
+    {% endfor %}
+  </div>
+
+  <div style="margin-top:38px;background:var(--p-card,#fff);border:1px solid var(--p-border,#E2E8F0);border-left:4px solid var(--accent,#4F46E5);border-radius:var(--p-radius,14px);padding:22px 26px">
+    <div style="font:700 15px var(--p-fb,'Inter');color:var(--p-title,#0F172A);display:flex;align-items:center;gap:8px">⚠ Cronograma de referência</div>
+    <div style="font:400 14px/1.6 var(--p-fb,'Inter');color:var(--p-body,#334155);margin-top:8px;max-width:940px">{{ ressalva }}</div>
+  </div>
+
+  <div style="position:absolute;left:64px;right:64px;bottom:34px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--p-border,#E2E8F0);padding-top:14px">
+    <div style="font:400 12px var(--p-fb,'Inter');color:var(--p-muted,#94A3B8)">Gerado por AI.arq · quantitativo com IA pra arquitetos brasileiros</div>
+    <div style="font:400 11px var(--p-fl,'Inter');letter-spacing:.1em;color:var(--p-muted,#94A3B8)">ai.arq.br</div>
+  </div>
+</div>

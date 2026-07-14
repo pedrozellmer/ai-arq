@@ -1,0 +1,37 @@
+<div style="width:1123px;height:794px;background:#fdfcfa;position:relative;padding:52px 56px 40px;font-family:'Space Grotesk',sans-serif;overflow:hidden;border:1px solid #ececec">
+  <div style="position:absolute;top:0;left:0;width:100%;height:6px;background:var(--accent,#4F46E5)"></div>
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+    <div style="font:700 12px/1 'Space Grotesk';letter-spacing:.2em;color:var(--accent,#4F46E5)">GANTT · CRONOGRAMA FÍSICO</div>
+    <div style="font:500 11px/1 'Space Grotesk';letter-spacing:.14em;color:#adadad">02 / 05</div>
+  </div>
+  <div style="font:700 42px/1.02 'Space Grotesk';color:#141414;letter-spacing:-0.03em">Cronograma físico das disciplinas</div>
+
+  <div style="margin-top:22px;background:color-mix(in srgb, var(--accent,#4F46E5) 7%, #ffffff);border-radius:22px;padding:22px 30px 14px">
+    <div style="margin:0 0 6px 224px;position:relative;height:18px">
+      {% for a in axis %}<div style="position:absolute;left:{{ a.pct }}%;transform:translateX(-50%);font:600 10.5px 'Space Grotesk';letter-spacing:.06em;color:#9a9a9a">{{ a.label }}</div>
+      {% endfor %}
+    </div>
+    <div style="display:flex">
+      <div style="width:224px;flex:none">
+        {% for f in fases %}<div style="height:40px;line-height:40px;text-align:right;padding-right:18px;font:600 12.5px 'Space Grotesk';color:#2a2a2a">{{ f.label }}</div>
+        {% endfor %}
+      </div>
+      <div style="flex:1;position:relative">
+        {% for a in axis %}<div style="position:absolute;left:{{ a.pct }}%;top:0;bottom:0;width:1px;background:rgba(20,20,20,.06)"></div>
+        {% endfor %}
+
+        {% for f in fases %}<div style="position:relative;height:40px"><div style="position:absolute;top:5px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:30px;border-radius:9px;{% if f.cat == 'estrutura' %}background:var(--accent,#4F46E5);color:#fff{% elif f.cat == 'instalacoes' %}background:color-mix(in srgb, var(--accent,#4F46E5) 78%, #14141b);color:#fff{% else %}background:color-mix(in srgb, var(--accent,#4F46E5) 34%, #ffffff);color:#2a2a2a{% endif %};display:flex;align-items:center;justify-content:flex-end;padding:0 12px;font:700 13px 'Space Grotesk'">{{ f.dur_dias }}d</div></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:56px;right:56px;bottom:34px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;gap:22px">
+      <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:5px;background:var(--accent,#4F46E5)"></span><span style="font:600 12px 'Space Grotesk';color:#5a5a5a">Estrutura</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:5px;background:color-mix(in srgb, var(--accent,#4F46E5) 78%, #14141b)"></span><span style="font:600 12px 'Space Grotesk';color:#5a5a5a">Instalações</span></div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="width:16px;height:16px;border-radius:5px;background:color-mix(in srgb, var(--accent,#4F46E5) 34%, #ffffff)"></span><span style="font:600 12px 'Space Grotesk';color:#5a5a5a">Acabamentos</span></div>
+    </div>
+    <div style="font:500 11.5px 'Space Grotesk';color:#adadad">powered by AI.arq · ai.arq.br</div>
+  </div>
+</div>

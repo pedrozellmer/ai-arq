@@ -1,0 +1,77 @@
+{#-
+  documento.html.j2 — NÚCLEO do export de cronograma (AI.arq)
+  ---------------------------------------------------------------------------
+  Monta o documento de 5 páginas A4 paisagem (1123x794px @96dpi) e delega
+  cada página a um include. O render.py (cronograma_render.py):
+    - injeta :root{--accent:{{accent}}}
+    - passa `pal` (dict do PALETAS[template]) -> vira o pacote --p-* do wrapper
+    - DEPOIS do Jinja, resolve todo color-mix()/var(--accent) por cor concreta
+      (WeasyPrint não suporta color-mix()).
+
+  Contexto (nomes EXATOS): template, accent, pal, b, r, fases, axis, curva,
+  caminho, marcos_col1, marcos_col2, ressalva. Ver build_context() no render.py.
+
+  Includes (paths relativos ao FileSystemLoader = cronograma_templates/):
+    capa/{{template}}.html.j2      (página 1 — por direção)
+    gantt/{{template}}.html.j2     (página 2 — por direção)
+    pages/curva_s.html.j2          (página 3 — compartilhada, tematizada por --p-*)
+    pages/caminho.html.j2          (página 4 — compartilhada)
+    pages/referencias.html.j2      (página 5 — compartilhada)
+
+  Cada include é UM <div> autossuficiente (todo CSS inline, como nas
+  referências .dc.html). NÃO deve trazer <html>/<head>/<body>. O wrapper
+  .doc-{{template}} abaixo já fornece --accent + todas as --p-* por herança;
+  os includes NÃO redefinem essas vars.
+-#}
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: 1123px 794px; margin: 0; }
+  html, body { margin: 0; padding: 0; }
+  * { box-sizing: border-box; }
+  :root { --accent: {{ accent }}; }
+  .pagina {
+    width: 1123px;
+    height: 794px;
+    overflow: hidden;
+    position: relative;
+    page-break-after: always;
+  }
+  .pagina:last-child { page-break-after: auto; }
+</style>
+</head>
+<body>
+{#- Wrapper da DIREÇÃO: define TODAS as --p-* do pacote (herdadas pelas páginas).
+    pal = PALETAS[template]; chaves sem '--' (ex.: 'p-bg') -> imprime '--p-bg:...'. -#}
+<div class="doc-{{ template }}" style="{% for k, v in pal.items() %}--{{ k }}:{{ v }};{% endfor %}">
+
+  {#- PÁGINA 1 — CAPA (por direção) -#}
+  <div class="pagina">
+    {% include 'capa/' ~ template ~ '.html.j2' %}
+  </div>
+
+  {#- PÁGINA 2 — GANTT (por direção) -#}
+  <div class="pagina">
+    {% include 'gantt/' ~ template ~ '.html.j2' %}
+  </div>
+
+  {#- PÁGINA 3 — CURVA S (compartilhada) -#}
+  <div class="pagina">
+    {% include 'pages/curva_s.html.j2' %}
+  </div>
+
+  {#- PÁGINA 4 — CAMINHO CRÍTICO (compartilhada) -#}
+  <div class="pagina">
+    {% include 'pages/caminho.html.j2' %}
+  </div>
+
+  {#- PÁGINA 5 — REFERÊNCIAS (compartilhada) -#}
+  <div class="pagina">
+    {% include 'pages/referencias.html.j2' %}
+  </div>
+
+</div>
+</body>
+</html>
