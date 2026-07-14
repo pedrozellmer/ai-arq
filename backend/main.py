@@ -1069,8 +1069,10 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
 _falha_emailed = set()
 
 
-def _build_falha_email(name: str, project_name: str, reprocessavel: bool):
-    """Monta (subject, html) do email de falha. Separado pra reuso no preview."""
+def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_hint: str = ""):
+    """Monta (subject, html) do email de falha. Separado pra reuso no preview.
+    error_hint = mensagem do erro; usada pra dar orientação ESPECÍFICA quando
+    reprocessavel=False (DWG não abre vs arquivo grande vs sem cotas)."""
     import html as _hf
     pn = _hf.escape(project_name or "seu projeto")
     greet = _greeting_line(_hf.escape(name or ""))
@@ -1087,13 +1089,29 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool):
                            badge="⚠ Precisa reprocessar", badge_color="amber",
                            reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
     else:
+        # Orientação ESPECÍFICA por tipo de problema de arquivo (mesmo diagnóstico do
+        # erro técnico). Reprocessar o MESMO arquivo não resolve em nenhum destes.
+        _eh = (error_hint or "").lower()
+        if "dwg" in _eh and ("abrir" in _eh or "convert" in _eh):
+            motivo = ("não conseguimos <b>abrir o seu DWG</b> automaticamente — costuma "
+                      "acontecer com arquivo salvo numa versão muito recente do AutoCAD, ou "
+                      "com objetos especiais (comum em incêndio, hidráulica e elétrica feitos "
+                      "em software MEP).")
+            fix = ("O ideal é <b>reenviar em DXF ou PDF vetorial</b>, ou salvar o DWG numa "
+                   "<b>versão mais antiga</b> do AutoCAD (ex.: 2013) e mandar de novo.")
+        elif "grande demais" in _eh or ("limite" in _eh and "mb" in _eh):
+            motivo = "o arquivo ficou <b>grande demais</b> pra processar com segurança."
+            fix = ("Exporte <b>só a prancha necessária</b> (não o projeto inteiro), ou "
+                   "<b>divida o arquivo em partes</b> e reenvie.")
+        else:
+            motivo = ("não conseguimos ler as quantidades nesse arquivo. Quase sempre é "
+                      "porque o PDF é uma imagem escaneada/fotografada, ou a prancha tem só "
+                      "o desenho, sem cotas e quadros de áreas.")
+            fix = ("O ideal é <b>reenviar a planta completa exportada direto do CAD</b> "
+                   "(PDF vetorial, DWG ou DXF).")
         body = (f"{greet}<br><br>"
-                f"Recebemos o projeto <b>{pn}</b>, mas não conseguimos ler as "
-                f"quantidades nesse arquivo — então <b>reprocessar não vai resolver</b>.<br><br>"
-                f"Quase sempre é porque o PDF é uma imagem escaneada/fotografada, ou a "
-                f"prancha tem só o desenho, sem cotas e quadros de áreas. O ideal é "
-                f"<b>reenviar a planta completa exportada direto do CAD</b> (PDF vetorial, "
-                f"DWG ou DXF).<br><br>"
+                f"Recebemos o projeto <b>{pn}</b>, mas {motivo} Ou seja, <b>reprocessar o "
+                f"mesmo arquivo não vai resolver</b>.<br><br>{fix}<br><br>"
                 f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
                 f"preparar. 🙂")
         subject = "Sobre o seu projeto no AI.arq — precisamos de outro arquivo"
@@ -1120,7 +1138,7 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
             return False
         import html as _hf, urllib.request as _urf
         _qf = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-               f"&select=user_email,user_name,project_name,parent_job_id,reprocess_count,created_at")
+               f"&select=user_email,user_name,project_name,parent_job_id,reprocess_count,created_at,error_message")
         _rf = _urf.Request(_qf, method="GET")
         _rf.add_header("apikey", SUPABASE_KEY)
         _rf.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -1168,7 +1186,8 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
         _subject, _html = _build_falha_email(
             _rows[0].get("user_name") or "",
             _rows[0].get("project_name") or "seu projeto",
-            reprocessavel)
+            reprocessavel,
+            error_hint=(_rows[0].get("error_message") or ""))
         ok = _send_email_smtp(_email, _subject, _html,
                               log_kind="erro_reprocessar" if reprocessavel else "erro_trocar")
         _falha_emailed.add(job_id)
@@ -4191,7 +4210,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # o arquivo) pela mensagem da exceção — a mesma distinção feita lá no
         # raise de "0 itens". O helper faz dedup pra não repetir por job.
         try:
-            _reproc = "Nenhum item quantificável" not in str(e)
+            # Reprocessável SÓ se o erro for passageiro (infra/IA) — mesmo detector
+            # do alerta interno (_TRANSIENT_ERR_RX). DWG que não abre, DXF grande
+            # demais, 0 itens = problema de arquivo: reprocessar o mesmo NÃO resolve,
+            # o email orienta a trocar/corrigir o arquivo. (bug eletrivan/Luciano 14/07)
+            _reproc = bool(_TRANSIENT_ERR_RX.search(str(e)))
             _email_falha_cliente(job_id, reprocessavel=_reproc)
         except Exception as _ee3:
             print(f"[email] erro-cliente nao enviado (nao-fatal): {_ee3}")
