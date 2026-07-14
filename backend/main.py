@@ -7953,6 +7953,52 @@ async def export_cronograma_pptx(job_id: str, request: Request,
 #  WeasyPrint no Render em 2026-07-14 — os 5 templates renderizaram OK)
 
 
+@app.get("/api/debug/ig-insights")
+async def debug_ig_insights(k: str = "", limit: int = 20):
+    """TEMPORARIO — puxa da Meta Graph API as midias recentes da conta @ai.arq.br
+    + insights de cada uma (pra analisar performance, inclusive reels postados na
+    mao fora do agendador). Dados da PROPRIA conta (sem PII de usuario). Token-gated."""
+    from fastapi.responses import JSONResponse
+    if k != "ig-analise-2607":
+        raise HTTPException(404, "not found")
+    try:
+        from instagram_api import MetaGraphAPI, GRAPH_API_BASE
+        ig = MetaGraphAPI()
+        if not ig.access_token or not ig.ig_user_id:
+            return JSONResponse({"error": "sem META_ACCESS_TOKEN/IG_USER_ID no ambiente"})
+        r = ig._request("GET", f"{GRAPH_API_BASE}/{ig.ig_user_id}/media", params={
+            "fields": "id,caption,media_type,media_product_type,timestamp,permalink,like_count,comments_count",
+            "limit": limit,
+        })
+        if "error" in r:
+            return JSONResponse({"error": "list media falhou", "details": r})
+        out = []
+        for m in r.get("data", []):
+            mid = m.get("id")
+            mpt = (m.get("media_product_type") or "").upper()
+            if mpt == "REELS":
+                mt, metrics = "reel", ["reach", "likes", "comments", "saved", "shares", "total_interactions", "views"]
+            elif mpt == "STORY":
+                mt, metrics = "story", ["reach", "replies", "shares", "total_interactions", "views"]
+            else:
+                mt, metrics = "feed", ["reach", "likes", "comments", "saved", "shares", "total_interactions", "follows", "profile_visits", "views"]
+            ins = ig.get_media_insights(mid, mt, metrics=metrics)
+            out.append({
+                "id": mid,
+                "tipo": mpt or m.get("media_type"),
+                "quando": m.get("timestamp"),
+                "cap": (m.get("caption") or "")[:90],
+                "permalink": m.get("permalink"),
+                "likes_publicos": m.get("like_count"),
+                "comentarios_publicos": m.get("comments_count"),
+                "insights": ins,
+            })
+        return JSONResponse({"build": "ig-v1", "count": len(out), "media": out})
+    except Exception as e:
+        import traceback
+        return JSONResponse({"error": str(e), "tb": traceback.format_exc()[:1800]})
+
+
 class ReviewPayload(BaseModel):
     action: str                              # 'approve' | 'reject' | 'edit'
     edits: Optional[dict] = None             # {description?, unit?, quantity?, discipline?, observations?}
