@@ -32,17 +32,21 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Aguarda Render deploy concluir (2min)
-        if: github.event_name == 'push'
+      - name: Aguarda deploy do Render + backend saudável (poll)
         run: |
-          echo "Render free tier demora 2-4min pra rebuild + start após push."
-          echo "Aguardando 120s antes de testar..."
-          sleep 120
-
-      - name: Acorda backend (Render free tier pode estar dormindo)
-        run: |
-          curl -sS -o /dev/null -w "HTTP %{http_code} em %{time_total}s\n" \
-            https://ai-arq.onrender.com/ || true
+          echo "Build Docker (com WeasyPrint) pode levar 5-8min após push."
+          echo "Poll até o backend responder 200 com 'AI.arq API' (evita testar durante o deploy)."
+          for i in $(seq 1 40); do
+            body=$(curl -sS --max-time 30 https://ai-arq.onrender.com/ 2>/dev/null || true)
+            if echo "$body" | grep -q "AI.arq API"; then
+              echo "Backend saudável após ~$((i*15))s."
+              sleep 15   # margem extra pro deploy assentar
+              exit 0
+            fi
+            echo "tentativa $i/40: backend ainda não pronto, aguardando 15s..."
+            sleep 15
+          done
+          echo "::warning::Backend não confirmou saúde em ~10min — segue testando mesmo assim"
 
       - name: Rodar smoke test (níveis 1 + 2 — HTTP puro)
         env:
