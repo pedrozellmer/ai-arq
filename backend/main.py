@@ -7985,7 +7985,7 @@ async def debug_cronograma_sample(template: str = "escuro", accent: str = "", k:
     branding = {"project_name": "Apartamento DT e PZ", "architect_name": "DTZ Arquitetura", "client_name": "Pedro Zellmer", "company": "DTZ", "logo_local_path": "", "brand_color": "#4F46E5", "job_id": "sample"}
     import traceback
     from fastapi.responses import PlainTextResponse
-    _BUILD = "cronov5"  # marcador pra distinguir deploys no diagnostico
+    _BUILD = "cronov6"  # marcador pra distinguir deploys no diagnostico
     # Diagnostico: import do weasyprint separado do render
     try:
         import weasyprint
@@ -7998,7 +7998,7 @@ async def debug_cronograma_sample(template: str = "escuro", accent: str = "", k:
         tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
         tmp.write(pdf)
         tmp.close()
-        return FileResponse(tmp.name, media_type='application/pdf', filename=f"sample_{tmpl}.pdf")
+        return FileResponse(tmp.name, media_type='application/pdf', filename=f"sample_{tmpl}.pdf", headers={"X-Build": _BUILD})
     except Exception as e:
         return PlainTextResponse(f"[{_BUILD}] RENDER FALHOU ({tmpl}) [weasyprint v{wp_ver}]: {type(e).__name__}: {e}\n\n{traceback.format_exc()}", status_code=200)
 

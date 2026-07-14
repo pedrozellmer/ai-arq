@@ -25,12 +25,15 @@
     <path d="{{ curva.line_d }}" style="fill:none;stroke:var(--accent,#4F46E5);stroke-width:3.5;stroke-linejoin:round;stroke-linecap:round"></path>
 
     {% for m in curva.markers %}
+    {#- perto da borda direita, joga o rótulo pra ESQUERDA do ponto (evita corte no viewBox) #}
+    {%- set _tx = (m.cx - 13) if m.cx > 880 else (m.cx + 13) %}
+    {%- set _ta = 'end' if m.cx > 880 else 'start' %}
     {%- if m.filled %}
     <circle cx="{{ m.cx }}" cy="{{ m.cy }}" r="6" style="fill:var(--accent,#4F46E5);stroke:var(--p-bg,#fff);stroke-width:3"></circle>
-    <text x="{{ m.cx + 13 }}" y="{{ m.cy + 14 }}" style="fill:var(--p-body,#334155);font:700 13px var(--p-fb,'Inter')">{{ m.pct }}%</text>
+    <text x="{{ _tx }}" y="{{ m.cy + 14 }}" text-anchor="{{ _ta }}" style="fill:var(--p-body,#334155);font:700 13px var(--p-fb,'Inter')">{{ m.pct }}%</text>
     {%- else %}
     <circle cx="{{ m.cx }}" cy="{{ m.cy }}" r="6" style="fill:var(--p-bg,#fff);stroke:var(--accent,#4F46E5);stroke-width:3"></circle>
-    <text x="{{ m.cx + 13 }}" y="{{ m.cy - 3 }}" style="fill:var(--p-body,#334155);font:700 13px var(--p-fb,'Inter')">{{ m.pct }}%</text>
+    <text x="{{ _tx }}" y="{{ m.cy - 3 }}" text-anchor="{{ _ta }}" style="fill:var(--p-body,#334155);font:700 13px var(--p-fb,'Inter')">{{ m.pct }}%</text>
     {%- endif %}
     {% endfor %}
 
