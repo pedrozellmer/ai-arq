@@ -506,16 +506,26 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
     Retorna quantos foram persistidos com sucesso."""
     import urllib.request, urllib.error, json
 
+    import math as _math
     rows = []
     for idx, it in enumerate(items):
         disc = getattr(it, "discipline", "") or "Complementares"
         section = _DISCIPLINE_TO_SECTION.get(disc, f"99. {disc}")
+        # Sanitiza quantity: NaN/inf viram 0. json.dumps emitiria `NaN` (JSON
+        # inválido) → o PostgREST rejeitava o BATCH INTEIRO (400) → 0 itens salvos
+        # mas items_count=len(all_items). Bug do job a2b9316b (14/07, diagrama sem medidas).
+        try:
+            _q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            _q = 0.0
+        if not _math.isfinite(_q):
+            _q = 0.0
         rows.append({
             "job_id": job_id,
             "item_num": str(getattr(it, "item_num", "") or ""),
             "description": (getattr(it, "description", "") or "")[:500],
             "unit": (getattr(it, "unit", "") or "vb")[:20],
-            "quantity": float(getattr(it, "quantity", 0) or 0),
+            "quantity": _q,
             "observations": (getattr(it, "observations", "") or "")[:1000],
             "ref_sheet": (getattr(it, "ref_sheet", "") or "")[:200],
             "confidence": str(getattr(getattr(it, "confidence", None), "value", "estimado"))

@@ -677,10 +677,23 @@ async def scheduler_tick(force_slot: Optional[str] = None):
                 results.append({"slot": slot, "status": "failed", "error": "container"})
                 continue
 
-            # Aguarda processamento (Reels precisam mais tempo, carousel também)
+            # Aguarda o container FICAR PRONTO antes de publicar. Reel e carousel
+            # levam tempo (a Meta processa o vídeo/álbum) — publicar cedo devolve
+            # "Publish falhou: None". Antes era sleep fixo de 15s, que não bastava
+            # pro reel (bug dos reels 14/07). Agora faz POLLING do status.
             import time
-            wait_seconds = 15 if media_type == "reel" else (8 if media_type == "carousel" else 3)
-            time.sleep(wait_seconds)
+            if media_type in ("reel", "carousel"):
+                max_checks = 36 if media_type == "reel" else 12  # ~3min reel / ~1min carousel
+                for _ in range(max_checks):
+                    time.sleep(5)
+                    try:
+                        st = api.check_media_status(creation_id)
+                    except Exception:
+                        st = "UNKNOWN"
+                    if st in ("FINISHED", "ERROR"):
+                        break
+            else:
+                time.sleep(3)
             media_id = api.publish_media(creation_id)
 
             if media_id and "error" not in str(media_id).lower():
