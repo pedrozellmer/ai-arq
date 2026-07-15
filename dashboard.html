@@ -485,7 +485,13 @@
                 <span class="text-amber-500 shrink-0">&#9888;&#65039;</span>
                 <div>
                   <p class="text-sm text-amber-800 font-medium">Poucos itens foram extraídos</p>
-                  <p class="text-xs text-amber-700 mt-1">Para um quantitativo mais completo, envie também as pranchas de <strong>Arquitetura</strong>, <strong>Pisos</strong>, <strong>Forro</strong> e <strong>Pontos Elétricos</strong>. Quanto mais pranchas, mais detalhada a planilha.</p>
+                  <p class="text-xs text-amber-700 mt-1">Para um quantitativo mais completo, envie também as pranchas de <strong>Arquitetura</strong>, <strong>Pisos</strong>, <strong>Forro</strong> e <strong>Pontos Elétricos</strong> &mdash; ou o <strong>DWG/DXF</strong> pra medir de verdade. Anexa aqui no mesmo projeto (de gra&ccedil;a):</p>
+                  <div id="few-upload-form" class="mt-3 flex flex-wrap items-center gap-2">
+                    <input id="few-file-input" type="file" multiple accept=".pdf,.dwg,.dxf" class="text-xs text-amber-900 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-amber-600 file:text-white file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-amber-700"/>
+                    <button id="few-upload-btn" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold transition disabled:opacity-50">&#11014;&#65039; Enviar mais e refazer</button>
+                    <button type="button" onclick="openExportModal()" class="text-xs text-amber-800 underline hover:text-amber-900">Como exportar DWG/DXF?</button>
+                  </div>
+                  <p id="few-upload-status" class="hidden text-xs mt-2"></p>
                 </div>
               </div>
             </div>
@@ -2631,6 +2637,49 @@
       }
     });
   }
+
+  // ══════════════════════════════════════════════
+  //  ENVIAR MAIS PRANCHAS / DWG (complementar in-place via /add-file)
+  //  Aparece na caixa "Poucos itens" — anexa arquivos ao MESMO job e refaz.
+  // ══════════════════════════════════════════════
+  (function(){
+    const fBtn = document.getElementById('few-upload-btn');
+    const fInput = document.getElementById('few-file-input');
+    const fStatus = document.getElementById('few-upload-status');
+    if (!fBtn || !fInput || !fStatus) return;
+    function fSet(msg, cls){ fStatus.className = 'text-xs mt-2 ' + (cls || ''); fStatus.textContent = msg; fStatus.classList.remove('hidden'); }
+    fBtn.addEventListener('click', async () => {
+      if (!currentJobId){ fSet('Sem projeto ativo.', 'text-red-700'); return; }
+      const fs = fInput.files ? Array.prototype.slice.call(fInput.files) : [];
+      if (!fs.length){ fSet('Escolha pelo menos um arquivo (PDF, DWG ou DXF).', 'text-amber-800'); return; }
+      for (let i = 0; i < fs.length; i++){
+        const ext = (fs[i].name.split('.').pop() || '').toLowerCase();
+        if (['pdf','dwg','dxf'].indexOf(ext) < 0){ fSet('Envie só PDF, DWG ou DXF.', 'text-red-700'); return; }
+      }
+      fBtn.disabled = true;
+      fSet('Enviando e refazendo… isso leva alguns minutos.', 'text-amber-800');
+      try {
+        const sess = (await sbClient.auth.getSession()).data.session;
+        if (!sess){ fBtn.disabled = false; fSet('Faça login pra enviar.', 'text-red-700'); return; }
+        const fd = new FormData();
+        for (let j = 0; j < fs.length; j++) fd.append('files', fs[j]);
+        const r = await fetch(`${API_BASE}/api/project/${currentJobId}/add-file`, {
+          method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + sess.access_token }
+        });
+        const data = await r.json().catch(() => ({}));
+        if (r.ok && data.status === 'ok'){
+          document.getElementById('few-upload-form').classList.add('hidden');
+          fSet('✅ Recebido! Tô refazendo o teu projeto com os arquivos novos — leva alguns minutos. Te aviso por email quando ficar pronto (dá pra acompanhar em Meus Projetos).', 'text-emerald-700 font-medium');
+        } else {
+          fBtn.disabled = false;
+          fSet('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');
+        }
+      } catch (e){
+        fBtn.disabled = false;
+        fSet('✗ Erro de rede. Tenta de novo.', 'text-red-700');
+      }
+    });
+  })();
 
   // ══════════════════════════════════════════════
   //  AGENTE TIRA-DÚVIDAS — com conversa contínua

@@ -205,7 +205,7 @@ function smartBack() {
         <p class="text-sm text-amber-800 mt-1">Esse projeto veio de <strong>PDF</strong> — a gente reconheceu os <em>tipos</em> de item, mas o PDF não traz as medidas de forma legível, então saiu tudo como <strong>estimativa</strong> (laranja, pra você conferir).</p>
         <p class="text-sm text-amber-800 mt-2">Tem o <strong>DWG ou DXF</strong> da mesma prancha? Sobe aqui que a gente <strong>refaz e mede de verdade</strong> — no mesmo projeto e de graça.</p>
         <div id="cad-upgrade-form" class="mt-3 flex flex-wrap items-center gap-2">
-          <input id="cad-file-input" type="file" accept=".dwg,.dxf,.pdf" class="text-sm text-amber-900 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-amber-600 file:text-white file:text-sm file:font-semibold file:cursor-pointer hover:file:bg-amber-700"/>
+          <input id="cad-file-input" type="file" multiple accept=".dwg,.dxf,.pdf" class="text-sm text-amber-900 file:mr-2 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-amber-600 file:text-white file:text-sm file:font-semibold file:cursor-pointer hover:file:bg-amber-700"/>
           <button id="cad-upload-btn" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold transition disabled:opacity-50">
             <span aria-hidden="true">⬆️</span> Enviar e refazer
           </button>
@@ -225,16 +225,18 @@ function smartBack() {
     if (!btn || !input || !statusEl || !jid) return;
     function setStatus(msg, cls){ statusEl.className = 'text-sm mt-2 ' + (cls || ''); statusEl.textContent = msg; statusEl.classList.remove('hidden'); }
     btn.addEventListener('click', async function(){
-      var f = input.files && input.files[0];
-      if (!f){ setStatus('Escolha o arquivo DWG/DXF primeiro.', 'text-amber-800'); return; }
-      var ext = (f.name.split('.').pop() || '').toLowerCase();
-      if (['dwg','dxf','pdf'].indexOf(ext) < 0){ setStatus('Envie um arquivo DWG, DXF ou PDF.', 'text-red-700'); return; }
+      var fs = input.files ? Array.prototype.slice.call(input.files) : [];
+      if (!fs.length){ setStatus('Escolha o arquivo DWG/DXF (ou PDF) primeiro.', 'text-amber-800'); return; }
+      for (var i = 0; i < fs.length; i++){
+        var ext = (fs[i].name.split('.').pop() || '').toLowerCase();
+        if (['dwg','dxf','pdf'].indexOf(ext) < 0){ setStatus('Envie só arquivos DWG, DXF ou PDF.', 'text-red-700'); return; }
+      }
       btn.disabled = true;
       setStatus('Enviando e refazendo… isso leva alguns minutos.', 'text-amber-800');
       try {
         var sess = (await sb.auth.getSession()).data.session;
         if (!sess){ btn.disabled = false; setStatus('Faça login pra enviar.', 'text-red-700'); return; }
-        var fd = new FormData(); fd.append('file', f);
+        var fd = new FormData(); for (var j = 0; j < fs.length; j++) fd.append('files', fs[j]);
         var r = await fetch(window.API_BASE + '/api/project/' + jid + '/add-file', {
           method: 'POST', body: fd,
           headers: { 'Authorization': 'Bearer ' + sess.access_token }

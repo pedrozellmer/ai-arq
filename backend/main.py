@@ -9154,32 +9154,32 @@ async def reprocess_project(job_id: str, request: Request):
 
 
 @app.post("/api/project/{job_id}/add-file")
-async def add_file_and_reprocess(job_id: str, request: Request, file: UploadFile = File(...)):
-    """Anexa um arquivo (DWG/DXF/PDF) a um projeto EXISTENTE e reprocessa NO MESMO
-    job_id — pro caso "veio PDF, deu tudo estimado; agora manda o CAD pra medir de
-    verdade". Diferente de /reprocess (que cria um job FILHO), aqui é IN-PLACE:
-    sobe o arquivo pro Storage do job, baixa TODOS os arquivos do job (o novo + os
-    originais), limpa os itens antigos (idempotência) e re-dispara process_job no
-    MESMO job (throttled pelo semáforo). Grátis — é melhoria de insumo, não gasta a
-    cota de reprocesso do usuário. Espelha o padrão de _retomar_job_do_storage."""
+async def add_file_and_reprocess(job_id: str, request: Request, files: list[UploadFile] = File(...)):
+    """Anexa UM OU MAIS arquivos (DWG/DXF/PDF) a um projeto EXISTENTE e reprocessa NO
+    MESMO job_id — pro caso "veio PDF, deu tudo estimado (ou poucas pranchas); agora
+    manda o CAD ou mais pranchas pra medir/completar". Diferente de /reprocess (que cria
+    um job FILHO), aqui é IN-PLACE: sobe os arquivos pro Storage do job, baixa TODOS (os
+    novos + os originais) e re-dispara process_job no MESMO job (throttled pelo semáforo).
+    Grátis — é melhoria de insumo. A limpeza dos itens antigos só acontece no SUCESSO do
+    reprocesso (_persist), então um reprocesso que falhe preserva a planilha anterior."""
     _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     from urllib.parse import unquote
 
-    raw_name = file.filename or ""
-    ext = raw_name.lower().rsplit(".", 1)[-1] if "." in raw_name else ""
-    if ext not in ("dwg", "dxf", "pdf"):
-        raise HTTPException(400, "Envie um arquivo CAD: DWG, DXF ou PDF.")
+    if not files:
+        raise HTTPException(400, "Envie ao menos um arquivo: DWG, DXF ou PDF.")
+
+    # Valida extensões de TODOS antes de ler nada
+    for _f in files:
+        _rn = _f.filename or ""
+        _ext = _rn.lower().rsplit(".", 1)[-1] if "." in _rn else ""
+        if _ext not in ("dwg", "dxf", "pdf"):
+            raise HTTPException(400, f"'{_rn or 'arquivo'}': envie só DWG, DXF ou PDF.")
 
     # Teto pelo Content-Length ANTES de ler tudo na memória (anti-OOM com upload gigante)
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
-    if _clen and _clen.isdigit() and int(_clen) > 160 * 1024 * 1024:
-        raise HTTPException(413, "Arquivo muito grande (máx. 150 MB). Exporte só a prancha necessária.")
-    data = await file.read()
-    if not data:
-        raise HTTPException(400, "Arquivo vazio.")
-    if len(data) > 150 * 1024 * 1024:
-        raise HTTPException(413, "Arquivo muito grande (máx. 150 MB). Exporte só a prancha necessária.")
+    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
+        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
 
     # Projeto original: tipologia/tipo + guarda contra reprocesso concorrente
     typology, ptype = "office", "arquitetura"
@@ -9201,12 +9201,22 @@ async def add_file_and_reprocess(job_id: str, request: Request, file: UploadFile
 
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
-    safe_local = _safe_local_filename(raw_name)
-    new_local = os.path.join(work_dir, safe_local)
-    with open(new_local, "wb") as f:
-        f.write(data)
-    if not _supabase_storage_upload_prancha(new_local, job_id, safe_local):
-        raise HTTPException(500, "Não consegui guardar o arquivo. Tenta de novo.")
+    saved = 0
+    for _f in files:
+        data = await _f.read()
+        if not data:
+            continue
+        if len(data) > 150 * 1024 * 1024:
+            raise HTTPException(413, f"'{_f.filename}' passa de 150 MB. Exporte só a prancha necessária.")
+        safe_local = _safe_local_filename(_f.filename or f"arquivo_{saved}")
+        new_local = os.path.join(work_dir, safe_local)
+        with open(new_local, "wb") as _out:
+            _out.write(data)
+        if not _supabase_storage_upload_prancha(new_local, job_id, safe_local):
+            raise HTTPException(500, "Não consegui guardar um dos arquivos. Tenta de novo.")
+        saved += 1
+    if not saved:
+        raise HTTPException(400, "Arquivo(s) vazio(s).")
 
     # Lista + baixa TODOS os arquivos do job (o novo + os originais)
     try:
