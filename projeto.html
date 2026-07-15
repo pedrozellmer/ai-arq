@@ -250,28 +250,40 @@ function smartBack() {
         var data = await r.json().catch(function(){ return {}; });
         if (r.ok && data.status === 'ok'){
           document.getElementById('cad-upgrade-form').classList.add('hidden');
-          setStatus('⏳ Refazendo com o CAD… 0%', 'text-amber-800');
+          setStatus('⏳ Refazendo com o CAD… 3%', 'text-amber-800');
           // Progresso ao vivo + reload automático quando terminar. Antes só mostrava
-          // "recarregue a página daqui a pouco" e o usuário ficava perdido (Pedro 15/07).
-          var _ticks = 0;
-          var _poll = setInterval(async function(){
-            _ticks++;
-            if (_ticks > 200){ clearInterval(_poll); setStatus('Ainda processando… recarregue a página em instantes.', 'text-amber-800'); return; }
-            try {
-              var sr = await fetch(window.API_BASE + '/api/status/' + jid, { headers: { 'Authorization': 'Bearer ' + sess.access_token } });
-              if (!sr.ok) return;
-              var sd = await sr.json().catch(function(){ return {}; });
-              var pct = Math.max(0, Math.round(sd.progress || 0));
-              var st = sd.status || '';
-              if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || pct >= 100){
-                clearInterval(_poll);
-                setStatus('✅ Pronto! Atualizando a página…', 'text-emerald-700 font-medium');
-                setTimeout(function(){ location.reload(); }, 800);
-              } else {
-                setStatus('⏳ Refazendo com o CAD… ' + pct + '%', 'text-amber-800');
-              }
-            } catch(e){ /* rede: tenta de novo no próximo tick */ }
-          }, 3000);
+          // "recarregue a página" e o usuário ficava perdido (Pedro 15/07). A barra
+          // agora ANDA suave por tempo (nunca congela na fase da IA, que fica parada em
+          // ~41% no backend): mostra o MAIOR entre o progresso real e um creep temporal,
+          // sem passar de 95% até concluir de verdade.
+          var _shown = 3, _elapsed = 0, _lastFetch = 0, _backendPct = 0, _stopped = false;
+          var _tick = setInterval(async function(){
+            if (_stopped) return;
+            _elapsed += 0.6;
+            // busca o status real a cada ~3s (o creep abaixo roda a cada 0,6s)
+            if (_elapsed - _lastFetch >= 3) {
+              _lastFetch = _elapsed;
+              try {
+                var sr = await fetch(window.API_BASE + '/api/status/' + jid, { headers: { 'Authorization': 'Bearer ' + sess.access_token } });
+                if (sr.ok) {
+                  var sd = await sr.json().catch(function(){ return {}; });
+                  _backendPct = Math.max(_backendPct, Math.round(sd.progress || 0));
+                  var st = sd.status || '';
+                  if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || _backendPct >= 100) {
+                    _stopped = true; clearInterval(_tick);
+                    setStatus('✅ Pronto! Atualizando a página…', 'text-emerald-700 font-medium');
+                    setTimeout(function(){ location.reload(); }, 800);
+                    return;
+                  }
+                }
+              } catch(e){ /* rede: tenta de novo no próximo tick */ }
+            }
+            // creep suave: alvo = maior entre progresso real e tempo (~1,2%/s, teto 95%)
+            var target = Math.max(_backendPct, Math.min(95, 3 + _elapsed * 1.2));
+            if (target > _shown) _shown = Math.min(target, _shown + 0.7);
+            setStatus('⏳ Refazendo com o CAD… ' + Math.round(_shown) + '%', 'text-amber-800');
+            if (_elapsed > 600) { _stopped = true; clearInterval(_tick); setStatus('Ainda processando… recarregue a página em instantes.', 'text-amber-800'); }
+          }, 600);
         } else {
           btn.disabled = false;
           setStatus('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');

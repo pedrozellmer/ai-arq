@@ -3023,6 +3023,18 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
+        # DXF supera DWG do MESMO nome-base: se o usuário re-exportou um DWG que
+        # falhava (ex.: AEC/MEP) pra DXF, o DWG velho fica no Storage e re-falha a
+        # cada processamento, gerando aviso "planilha INCOMPLETA" enganoso mesmo o
+        # DXF tendo medido tudo. Vale pra TODO caminho (upload, reprocesso, add-file).
+        # (Pedro 15/07, forro MEP.)
+        _dxf_stems_cad = {os.path.splitext(os.path.basename(f))[0].lower()
+                          for f in cad_paths if f.lower().endswith('.dxf')}
+        if _dxf_stems_cad:
+            cad_paths = [f for f in cad_paths
+                         if not (f.lower().endswith('.dwg')
+                                 and os.path.splitext(os.path.basename(f))[0].lower() in _dxf_stems_cad)]
+
         # Persistir TODOS os arquivos originais (PDF + DWG + DXF) no Storage.
         # Serve pra 3 coisas:
         # 1. Botão 👁 "Ver prancha" na revisão inline
