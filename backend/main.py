@@ -3189,17 +3189,25 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # nunca marca erro. (Feedback Pedro 15/07: DWG-complemento que não abriu
                     # sumia a planilha da tela; ele achou que tinha perdido tudo.)
                     if is_complement:
-                        _prev_n = 0
-                        try:
-                            import urllib.request as _urc
-                            _cq = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}&select=id&limit=1")
-                            _cr = _urc.Request(_cq, method="GET")
-                            _cr.add_header("apikey", SUPABASE_KEY)
-                            _cr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-                            _prev_n = len(_json.loads(_urc.urlopen(_cr, timeout=10).read().decode("utf-8")))
-                        except Exception as _cerr:
-                            print(f"[add-file] contagem de itens base falhou: {_cerr}")
-                        if _prev_n > 0:
+                        # DEFAULT SEGURO (board 15/07): um complemento SEMPRE existe sobre um
+                        # projeto-base. Se a contagem de itens falhar por soluço do banco
+                        # (timeout/5xx do Supabase, Render sob carga), NÃO pode concluir "base
+                        # vazia" e derrubar a planilha — isso reintroduziria, por outra porta,
+                        # exatamente o bug que este bloco conserta. Assume base=existe por
+                        # padrão; só marca vazio se a query SUCEDER e vier 0. 2 tentativas.
+                        _base_has_items = True
+                        for _try in range(2):
+                            try:
+                                import urllib.request as _urc
+                                _cq = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}&select=id&limit=1")
+                                _cr = _urc.Request(_cq, method="GET")
+                                _cr.add_header("apikey", SUPABASE_KEY)
+                                _cr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                                _base_has_items = len(_json.loads(_urc.urlopen(_cr, timeout=10).read().decode("utf-8"))) > 0
+                                break  # query sucedeu — decisão confiável
+                            except Exception as _cerr:
+                                print(f"[add-file] contagem de itens base falhou (tentativa {_try+1}, assumindo base existe): {_cerr}")
+                        if _base_has_items:
                             _warn_txt = (
                                 f"O arquivo CAD que você anexou ({arquivos}) não pôde ser aberto "
                                 f"automaticamente (DWG de versão recente do AutoCAD ou com objetos "
@@ -3217,7 +3225,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 })
                             except Exception as _upe:
                                 print(f"[add-file] restaurar done falhou: {_upe}")
-                            print(f"[add-file] complemento CAD falhou, base tem {_prev_n} itens → done+aviso (sem erro)")
+                            print(f"[add-file] complemento CAD falhou, base preservada → done+aviso (sem erro)")
                             return
                     jobs.update_field(job_id, error_message=msg, current_step="❌ Arquivo CAD inválido — leia mensagem abaixo")
                     raise RuntimeError(msg)

@@ -271,7 +271,12 @@ function smartBack() {
                   var st = sd.status || '';
                   if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || _backendPct >= 100) {
                     _stopped = true; clearInterval(_tick);
-                    setStatus('✅ Pronto! Atualizando a página…', 'text-emerald-700 font-medium');
+                    // Verde só no sucesso de verdade; erro = âmbar/neutro (não mentir "Pronto").
+                    if (st === 'error' || st === 'failed') {
+                      setStatus('⚠ Terminou — atualizando a página…', 'text-amber-800');
+                    } else {
+                      setStatus('✅ Pronto! Atualizando a página…', 'text-emerald-700 font-medium');
+                    }
                     setTimeout(function(){ location.reload(); }, 800);
                     return;
                   }
@@ -285,11 +290,11 @@ function smartBack() {
             if (_elapsed > 600) { _stopped = true; clearInterval(_tick); setStatus('Ainda processando… recarregue a página em instantes.', 'text-amber-800'); }
           }, 600);
         } else {
-          btn.disabled = false;
+          resetBtn();
           setStatus('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');
         }
       } catch (e){
-        btn.disabled = false;
+        resetBtn();
         setStatus('✗ Erro de rede. Tenta de novo.', 'text-red-700');
       }
     });
