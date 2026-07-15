@@ -3204,9 +3204,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # except da IA (armadilha #11 do CLAUDE.md reaparecendo no caminho DXF).
         dxf_errors: list[str] = []
         xref_warnings: list[str] = []  # xref não-resolvido / extração estéril → orienta o usuário (BIND / PDF)
-        # Cross-check determinístico (opt-in): promove estimado→confirmado SÓ quando o
-        # número da IA bate byte-a-byte com uma medida dura da geometria e sem ressalva.
-        # Off por padrão — ligar via env DXF_CONFIRM_CROSSCHECK=1 após validar em upload real.
+        # Cross-check determinístico (promove estimado→confirmado por geometria).
+        # 🚫 NÃO LIGAR EM PRODUÇÃO. Três rodadas de revisão adversarial (15/07) acharam,
+        # cada uma, um jeito NOVO de gerar falso-medido (item de remoção pegando área do
+        # piso novo; polígono do piso inteiro; abreviação de layer escapando da deny-list).
+        # O ganho (poucas células a mais de branco) não paga o risco na regra nº1.
+        # Fica OFF de propósito. A parte VALIOSA da caçada — rebaixar soma de layer
+        # multi-hachura — virou rede de segurança SEMPRE ligada (ver _multi_hatch_sums,
+        # independe deste flag). Se um dia for reativar, exige nova revisão + teste real.
         _XCHECK_ON = os.environ.get("DXF_CONFIRM_CROSSCHECK", "0") == "1"
         if dxf_paths:
             # Análise DXF começa onde a conversão termina
@@ -3345,6 +3350,32 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 _hard_area_by_cat.setdefault(_pcat, set()).add(round(float(_pav), 2))
                         except Exception:
                             pass
+
+                    # REDE DE SEGURANÇA (regra nº1, SEMPRE ligada — independe do flag):
+                    # o prompt lista a ÁREA HACHURADA somada POR LAYER. Um layer GENÉRICO com
+                    # VÁRIAS hachuras pode misturar acabamentos (porcelanato + cerâmica no
+                    # mesmo "ARQ-PISO") → a soma não mede um acabamento sozinho. Se a IA marcar
+                    # 'confirmado' num m² igual a essa soma, o código rebaixa pra estimado.
+                    # Só REBAIXA — nunca cria medido (Finding 1 da revisão 15/07).
+                    # EXCEÇÃO: layer que já NOMEIA o acabamento (PISO-PORCELANATO com 5 salas)
+                    # é mono-acabamento por construção — a soma É legítima, não rebaixa.
+                    _FINISH_TOKENS = ("porcelanato", "ceramic", "cerâmic", "vinil", "viníl",
+                                      "laminad", "madeira", "granito", "marmore", "mármore",
+                                      "ardosia", "ardósia", "cimenticio", "cimentício", "epoxi",
+                                      "epóxi", "carpete", "taco", "pedra", "deck", "granilite",
+                                      "paviflex", "borracha")
+                    _multi_hatch_sums = set()
+                    _mh_by_layer: dict[str, list] = {}
+                    for _h in (extraction.hatches or []):
+                        _mh_by_layer.setdefault(_h.layer, []).append(getattr(_h, "area", 0) or 0)
+                    for _lyr, _areas in _mh_by_layer.items():
+                        if len(_areas) <= 1:
+                            continue
+                        if any(_ft in (_lyr or "").lower() for _ft in _FINISH_TOKENS):
+                            continue  # layer nomeia o acabamento → mono-acabamento, soma legítima
+                        _tot = round(sum(_a for _a in _areas if _a and _a > 0), 2)
+                        if _tot > 0:
+                            _multi_hatch_sums.add(_tot)
 
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
@@ -3719,6 +3750,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                         conf = "confirmado"
                                         obs_raw = (f"{obs_raw} | Medido: confere com a geometria "
                                                    f"de {_icat} extraída ({_q2} {normalized_unit})").strip(" |")
+
+                                # REDE DE SEGURANÇA (Finding 1, SEMPRE ligada): se a IA marcou
+                                # 'confirmado' num m² que é a SOMA de um layer com várias
+                                # hachuras (acabamento possivelmente misto), rebaixa pra
+                                # estimado. Roda depois de tudo — só rebaixa, nunca cria medido.
+                                if (conf == "confirmado" and normalized_unit in ("m²", "m2")
+                                        and round(qty, 2) in _multi_hatch_sums):
+                                    conf = "estimado"
+                                    obs_raw = (f"{obs_raw} | Revisar: área = soma de várias hachuras "
+                                               f"no mesmo layer (possível acabamento misto) — confira "
+                                               f"o valor por ambiente").strip(" |")
 
                                 item = BudgetItem(
                                     item_num=str(item_data.get("item_num", "")),

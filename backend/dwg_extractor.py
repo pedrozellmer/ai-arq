@@ -202,9 +202,22 @@ class DXFExtraction:
         # Hatch areas
         areas_by_layer = self.get_areas_by_layer()
         if areas_by_layer:
+            # Conta hachuras por layer: quando um layer tem VÁRIAS hachuras, a área
+            # listada é a SOMA — e pode misturar acabamentos diferentes desenhados no
+            # MESMO layer (porcelanato + cerâmica em "ARQ-PISO"). A soma não mede
+            # nenhum acabamento sozinho, então a IA deve tratar como ESTIMADO, não
+            # confirmado (regra nº1 — revisão adversarial 15/07, Finding 1).
+            _hatch_n: dict[str, int] = defaultdict(int)
+            for _h in self.hatches:
+                _hatch_n[_h.layer] += 1
             lines.append("ÁREAS HACHURADAS POR LAYER:")
             for layer, area in sorted(areas_by_layer.items()):
-                lines.append(f"  {layer}: {area:.2f} m²")
+                if _hatch_n.get(layer, 1) > 1:
+                    lines.append(f"  {layer}: {area:.2f} m² (soma de {_hatch_n[layer]} hachuras — "
+                                 f"pode ser acabamento MISTO no mesmo layer; trate como ESTIMADO, "
+                                 f"confira o valor por ambiente)")
+                else:
+                    lines.append(f"  {layer}: {area:.2f} m²")
             lines.append("")
 
         # Áreas de polilinha fechada (ambiente/piso/forro) — m² medido da geometria
