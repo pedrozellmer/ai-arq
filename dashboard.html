@@ -1101,6 +1101,9 @@
       { key:'sketchup', name:'SketchUp', tip:'Exportar CAD só existe no SketchUp Pro (versão paga).',
         steps:['Pra planta, ajuste a vista: Câmera → Vistas Padrão + projeção paralela.','Arquivo → Exportar → Gráfico 2D (planta) ou Modelo 3D.','Escolha .dwg ou .dxf → Opções → OK → Exportar.'],
         src:'https://help.sketchup.com/en/sketchup/importing-and-exporting-cad-files', srcName:'Trimble' },
+      { key:'mep', name:'Elétrica/MEP', tip:'DWG de AutoCAD MEP/Architecture tem "objetos inteligentes" (AEC) que nenhum conversor abre direto — precisa achatar antes. A gente avisa na hora se detectar um.',
+        steps:['No AutoCAD, abra o arquivo e digite o comando EXPORTTOAUTOCAD (ou _AECEXPORTTOAUTOCAD) e Enter — isso transforma os objetos MEP/AEC em linhas comuns.','No arquivo que ele gerar, Salvar Como → AutoCAD 2013 DXF.','Suba esse DXF aqui — aí a gente consegue medir.'],
+        src:'https://help.autodesk.com/view/ARCHDESK/2024/ENU/?guid=GUID-A174C49B-2FB3-47F4-9ECA-35C700650263', srcName:'Autodesk' },
       { key:'pdf', name:'Só tenho PDF', tip:'PDF a gente lê, mas sai tudo como estimativa pra conferir.',
         steps:['Exporte um PDF VETORIAL: no AutoCAD, botão do Aplicativo → Exportar → PDF (preset "AutoCAD PDF - High Quality Print"). No Revit/ArchiCAD, use Imprimir/Plotar → PDF.','NUNCA "plotar como imagem" nem escanear/fotografar a planta — o desenho vira pixel, as cotas somem e a IA não consegue medir.','Se der, mande o DWG/DXF junto — a gente mede e completa o que o PDF deixou como estimativa.'],
         src:'https://help.autodesk.com/view/ACD/2025/ENU/?guid=GUID-EC9C6D47-814E-476D-840F-04104CF72B78', srcName:'Autodesk' },
@@ -1991,6 +1994,10 @@
           if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
             checkPdfTextAndWarn(f).catch(err => console.warn('PDF check falhou:', err));
           }
+          // DWG de AutoCAD MEP/Architecture (objetos AEC) → avisa na hora.
+          if (f.name.toLowerCase().endsWith('.dwg')) {
+            checkDwgAecAndWarn(f).catch(err => console.warn('DWG AEC check falhou:', err));
+          }
         }
       }
     }
@@ -2102,6 +2109,65 @@
       // Falha de leitura do PDF (corrompido / criptografado / pdf.js offline) →
       // não opina. User continua o fluxo normal.
       console.warn('Não consegui avaliar texto do PDF:', e);
+    }
+  }
+
+  // ══════════════════════════════════════════════
+  //  AVISO PREVENTIVO: DWG AutoCAD MEP/Architecture (objetos AEC)
+  // ══════════════════════════════════════════════
+  // DWG de AutoCAD MEP/Architecture tem 'objetos inteligentes' (AEC/proxy) que
+  // nenhum conversor livre abre (nem o nosso, nem "Salvar como DXF" comum). Antes
+  // o user só descobria depois de esperar e falhar. Agora a gente fareja no próprio
+  // navegador (marcadores AEC_VARS/AEC_OVERRIDES ficam em UTF-16 no DWG) e avisa NA
+  // HORA que escolhe o arquivo. Não bloqueia — só alerta. (Pedro 15/07: caso forro.)
+  const DWG_AEC_WARNED = new Set();
+
+  function _bytesIndexOf(hay, needle) {
+    outer: for (let i = 0; i <= hay.length - needle.length; i++) {
+      for (let j = 0; j < needle.length; j++) {
+        if (hay[i + j] !== needle[j]) continue outer;
+      }
+      return i;
+    }
+    return -1;
+  }
+  function _asciiBytes(s) { return Array.from(s).map(c => c.charCodeAt(0) & 0xff); }
+  function _utf16leBytes(s) {
+    const a = [];
+    for (const c of s) { const k = c.charCodeAt(0); a.push(k & 0xff, (k >> 8) & 0xff); }
+    return a;
+  }
+
+  async function checkDwgAecAndWarn(file) {
+    if (DWG_AEC_WARNED.has(file.name)) return;
+    DWG_AEC_WARNED.add(file.name);
+    try {
+      // Lê início (8MB) + fim (4MB) — os marcadores AEC ficam no header/dicionário
+      // ou na seção de objetos; assim pega arquivo grande sem carregar tudo.
+      const head = new Uint8Array(await file.slice(0, 8 * 1024 * 1024).arrayBuffer());
+      let tail = new Uint8Array(0);
+      if (file.size > 12 * 1024 * 1024) {
+        tail = new Uint8Array(await file.slice(file.size - 4 * 1024 * 1024).arrayBuffer());
+      }
+      const words = ['AEC_VARS', 'AEC_OVERRIDES', 'AEC_LAYERKEY', 'AEC_DISP'];
+      let hit = false;
+      for (const w of words) {
+        const u16 = _utf16leBytes(w), asc = _asciiBytes(w);
+        if (_bytesIndexOf(head, u16) >= 0 || _bytesIndexOf(head, asc) >= 0 ||
+            (tail.length && (_bytesIndexOf(tail, u16) >= 0 || _bytesIndexOf(tail, asc) >= 0))) {
+          hit = true; break;
+        }
+      }
+      if (!hit) return;
+      const msg = `⚠ "${file.name}" é um arquivo do AutoCAD MEP/Architecture (objetos inteligentes). ` +
+        `Nossos conversores — e o "Salvar como DXF" comum — não abrem esse tipo direto. Pra medir de verdade: ` +
+        `no AutoCAD rode o comando EXPORTTOAUTOCAD, salve como DXF 2013 e suba o DXF. ` +
+        `(Pode subir mesmo assim — mas pode não medir.)`;
+      if (window.toast) window.toast.warn(msg, { duration: 0 });
+      else setTimeout(() => window.toast?.warn(msg, { duration: 0 }) || console.warn(msg), 500);
+    } catch (e) {
+      // Falha de leitura → não opina, fluxo segue normal.
+      console.warn('Não consegui avaliar objetos AEC do DWG:', e);
     }
   }
 
