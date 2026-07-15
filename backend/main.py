@@ -1085,6 +1085,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
     reprocessavel=False (DWG não abre vs arquivo grande vs sem cotas)."""
     import html as _hf
     pn = _hf.escape(project_name or "seu projeto")
+    _pn_raw = (project_name or "").strip()
     greet = _greeting_line(_hf.escape(name or ""))
     if reprocessavel:
         body = (f"{greet}<br><br>"
@@ -1093,7 +1094,8 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                 f"resolve</b> — e o reprocessamento é grátis.<br><br>"
                 f"Se continuar dando problema, é só responder este e-mail que a gente "
                 f"te ajuda pessoalmente. 🙂")
-        subject = "Tivemos um problema com seu projeto no AI.arq"
+        subject = (f"{_pn_raw} — tivemos um problema no AI.arq"
+                   if _pn_raw else "Tivemos um problema com seu projeto no AI.arq")
         html = _email_wrap("Não conseguimos concluir seu projeto", body,
                            "Reprocessar no painel", "https://ai.arq.br/dashboard.html",
                            badge="⚠ Precisa reprocessar", badge_color="amber",
@@ -1124,7 +1126,8 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                 f"mesmo arquivo não vai resolver</b>.<br><br>{fix}<br><br>"
                 f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
                 f"preparar. 🙂")
-        subject = "Sobre o seu projeto no AI.arq — precisamos de outro arquivo"
+        subject = (f"{_pn_raw} — precisamos de outro arquivo (AI.arq)"
+                   if _pn_raw else "Sobre o seu projeto no AI.arq — precisamos de outro arquivo")
         html = _email_wrap("Precisamos de outro arquivo pra continuar", body,
                            "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
                            badge="⚠ Revisar o arquivo", badge_color="amber",
@@ -1334,7 +1337,9 @@ def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
              f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
              f"({n_total} itens). Abra seu projeto pra revisar e baixar a planilha."
              f"{extra_body_html}")
-    subject = "Sua planilha do AI.arq está pronta"
+    _pn_subj = (project_name or "").strip()
+    subject = (f"{_pn_subj} — sua planilha do AI.arq está pronta"
+               if _pn_subj else "Sua planilha do AI.arq está pronta")
     html = _email_wrap("Sua planilha está pronta", _body,
                        "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
                        badge="&#10003; Concluído",
@@ -4143,8 +4148,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _body_c = (f"{_greet_c}<br><br>Refizemos o projeto <b>{_pn_c}</b> medindo pelo <b>CAD</b> "
                                f"que você anexou — a planilha foi atualizada, agora com <b>{len(all_items)} itens</b>."
                                f"{_diag_c}{_proximos_c}")
+                    _pn_c_raw = (_rows[0].get("project_name") or "").strip()
+                    _subj_c = (f"{_pn_c_raw} — medimos com o CAD, planilha atualizada"
+                               if _pn_c_raw else "Medimos seu projeto com o CAD — planilha atualizada")
                     _ok_c = _send_email_smtp(
-                        _pe, "Medimos seu projeto com o CAD — planilha atualizada",
+                        _pe, _subj_c,
                         _email_wrap("Planilha atualizada com o CAD", _body_c,
                                     "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
                                     badge="&#10003; Medido"))
@@ -4167,8 +4175,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                f"Ela substitui a versão anterior — abra pra revisar e baixar. "
                                f"Cada item vem marcado como <b>medido</b> (direto do CAD) ou "
                                f"<b>estimativa</b> (pra você conferir).")
+                    _pn_r_raw = (_rows[0].get("project_name") or "").strip()
+                    _subj_r = (f"{_pn_r_raw} — reprocessamos, planilha atualizada"
+                               if _pn_r_raw else "Reprocessamos seu projeto no AI.arq — planilha atualizada")
                     _ok_r = _send_email_smtp(
-                        _pe, "Reprocessamos seu projeto no AI.arq — planilha atualizada",
+                        _pe, _subj_r,
                         _email_wrap("Planilha atualizada", _body_r,
                                     "Ver minha planilha", "https://ai.arq.br/dashboard.html",
                                     badge="&#10003; Atualizado"))
