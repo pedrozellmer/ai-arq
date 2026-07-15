@@ -117,6 +117,15 @@
     <p class="mt-3 text-gray-500 text-xs">Você pode exportar a qualquer momento — itens não revisados ficam como a IA gerou.</p>
   </div>
 
+  <!-- Resumo medido vs a confirmar + filtro "só as estimativas" (cor + ícone + texto) -->
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-3 rounded-lg border bg-white px-4 py-3">
+    <div class="flex items-center gap-4 text-sm text-gray-700">
+      <span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm border border-gray-300 bg-white"></span>&#10003; <b id="rv-medido">0</b> medidos</span>
+      <span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm confidence-orange"></span>&#9888; <b id="rv-estimado">0</b> a confirmar</span>
+    </div>
+    <button type="button" id="rv-filter-btn" onclick="toggleOnlyEstimates()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-50 transition">&#9888; Mostrar s&oacute; as estimativas</button>
+  </div>
+
   <div id="items-container" class="space-y-4"></div>
 
 </main>
@@ -236,6 +245,7 @@ if (!jobId) { notify.warn('job_id não informado na URL'); window.location.href 
 let currentUser = null;
 let items = [];                    // Itens carregados
 let reviewState = {};              // { [item_id]: 'approved'|'rejected'|'edited' }
+let showOnlyEstimates = false;     // filtro "mostrar só as estimativas (laranja)"
 let editingItem = null;
 let commentingItem = null;
 
@@ -282,9 +292,17 @@ async function loadItems() {
 }
 
 function render() {
+  // Resumo (sobre TODOS os itens, não muda com o filtro)
+  const _medidoAll = items.filter(it => it.confidence === 'confirmado').length;
+  const _mEl = document.getElementById('rv-medido'); if (_mEl) _mEl.textContent = _medidoAll;
+  const _eEl = document.getElementById('rv-estimado'); if (_eEl) _eEl.textContent = items.length - _medidoAll;
+
+  // Filtro "só as estimativas": esconde os medidos (confirmado)
+  const _base = showOnlyEstimates ? items.filter(it => it.confidence !== 'confirmado') : items;
+
   // Agrupar por section
   const groups = {};
-  items.forEach(it => {
+  _base.forEach(it => {
     const sec = it.section || 'Outros';
     (groups[sec] = groups[sec] || []).push(it);
   });
@@ -339,7 +357,21 @@ function render() {
     </section>
   `;
   }).join('');
+  if (!sortedSecs.length) {
+    container.innerHTML = '<p class="text-center text-gray-400 text-sm py-10">' +
+      (showOnlyEstimates ? 'Nenhuma estimativa pra revisar — tudo veio medido do CAD. 🎉' : 'Nenhum item.') + '</p>';
+  }
   updateCounters();
+}
+
+function toggleOnlyEstimates() {
+  showOnlyEstimates = !showOnlyEstimates;
+  const btn = document.getElementById('rv-filter-btn');
+  if (btn) {
+    btn.innerHTML = showOnlyEstimates ? '↩ Mostrar todos' : '⚠ Mostrar só as estimativas';
+    btn.classList.toggle('bg-amber-100', showOnlyEstimates);
+  }
+  render();
 }
 
 function renderItem(it, localIndex) {
