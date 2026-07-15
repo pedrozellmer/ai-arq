@@ -3235,36 +3235,69 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"{_bn_w}: não consegui ler geometria mensurável nesse arquivo. Reexporte "
                             f"do CAD com tudo incorporado (BIND, sem xref solto) ou mande o PDF plotado da prancha.")
 
-                    # Medidas DURAS desta prancha (pro cross-check), agora POR CATEGORIA
-                    # (revisão adversarial 15/07, furo C): NÃO um set achatado. Cada medida
-                    # fica atada à sua categoria física (piso/forro/paredes/...) pra o
-                    # cross-check casar o número contra a categoria do PRÓPRIO item — nunca
-                    # confirmar um forro com a área do piso. Área só de piso/forro/pintura;
-                    # comprimento só de parede/demolição; somado POR LAYER (agregado que a
-                    # IA vê). Hachura decorativa, eixo/cota/mobiliário e perímetro ficam FORA.
+                    # Medidas DURAS desta prancha (pro cross-check), POR CATEGORIA e com
+                    # 3 guards da 2ª revisão adversarial (15/07):
+                    #  • furo C: medida fica atada à categoria física do PRÓPRIO item
+                    #    (nunca confirma forro com área de piso).
+                    #  • furo E (CRÍTICO): área só entra se o layer tem UMA hachura só.
+                    #    Layer com várias hachuras = acabamentos mistos (porcelanato+cerâmica
+                    #    no mesmo "ARQ-PISO") → a soma não mede NENHUM acabamento sozinho.
+                    #  • furo F: layers que casam o token mas não são superfície instalável
+                    #    (PISCINA→"PIS", PAVIMENTO→"PAV", FÔRMA/FORNO→"FOR") ficam FORA.
+                    #  • furo G: layer de EXISTENTE / A-DEMOLIR não é superfície nova a instalar.
+                    # Comprimento (parede/demolição) segue somado por layer — muitos segmentos
+                    # = uma parede é o agregado correto (não tem o problema de acabamento misto).
                     _cats_geo = identify_architectural_elements(extraction)
                     _AREA_CATS = {"piso", "forro", "pintura"}   # m² físico
                     _LEN_CATS = {"paredes", "demolicao"}          # m físico (linear)
-                    _hard_area_by_cat: dict[str, set] = {}   # cat -> {áreas m² por layer}
+                    # tokens que casam categoria por prefixo mas NÃO são superfície nova
+                    _XC_AREA_DENY = ("piscina", "pavimento", "forma", "fôrma", "forno",
+                                     "parapeito", "peitoril", "soleira", "escada", "rampa",
+                                     "diversos", "generico", "genérico")
+
+                    def _xc_layer_ok(_lyr, _cat):
+                        """True se o layer pode virar medida DURA pro cross-check.
+                        • Superfície/parede NOVA não pode ser existente nem a-remover.
+                        • ÁREA também barra 'demolir/demol' (piso a demolir) e nomes que
+                          poluem (piscina/pavimento/fôrma). ATENÇÃO: a categoria LINEAR
+                          'demolicao' é legítima (queremos medir demolição) — por isso o
+                          barramento de 'demolir' é SÓ na área, nunca em demolicao."""
+                        _low = (_lyr or "").lower()
+                        if _cat in _AREA_CATS or _cat == "paredes":
+                            if any(_t in _low for _t in ("exist", "remov", "retir", "a-demol", "a demol")):
+                                return False
+                        if _cat in _AREA_CATS:
+                            if "demolir" in _low or "demol" in _low:
+                                return False
+                            if any(_t in _low for _t in _XC_AREA_DENY):
+                                return False
+                        return True
+
+                    _hard_area_by_cat: dict[str, set] = {}   # cat -> {áreas m² inequívocas}
                     _hard_len_by_cat: dict[str, set] = {}    # cat -> {comprimentos m por layer}
                     for _ck, _cd in _cats_geo.items():
                         if _ck in _AREA_CATS:
-                            _pl = {}
+                            # agrupa hachuras por layer; SÓ layer com EXATAMENTE 1 hachura
+                            # (superfície única, sem ambiguidade de acabamento) entra.
+                            _byl: dict[str, list] = {}
                             for _h in _cd.get("hatches", []):
-                                _pl[_h.layer] = _pl.get(_h.layer, 0.0) + (getattr(_h, "area", 0) or 0)
-                            _s = {round(_v, 2) for _v in _pl.values() if _v > 0}
-                            if _s:
-                                _hard_area_by_cat.setdefault(_ck, set()).update(_s)
+                                if not _xc_layer_ok(_h.layer, _ck):
+                                    continue
+                                _byl.setdefault(_h.layer, []).append(getattr(_h, "area", 0) or 0)
+                            for _areas in _byl.values():
+                                if len(_areas) == 1 and _areas[0] > 0:
+                                    _hard_area_by_cat.setdefault(_ck, set()).add(round(_areas[0], 2))
                         if _ck in _LEN_CATS:
-                            _pl2 = {}
+                            _pl2: dict[str, float] = {}
                             for _w in _cd.get("walls", []):
+                                if not _xc_layer_ok(_w.layer, _ck):
+                                    continue
                                 _pl2[_w.layer] = _pl2.get(_w.layer, 0.0) + (getattr(_w, "length", 0) or 0)
                             _s2 = {round(_v, 2) for _v in _pl2.values() if _v > 0}
                             if _s2:
                                 _hard_len_by_cat.setdefault(_ck, set()).update(_s2)
-                    # Polígonos fechados: categorizar POR LAYER e aceitar SÓ piso/forro
-                    # (furo D): "ambiente"/genérico do allowlist do extrator NÃO entra como
-                    # medida dura de categoria — só superfície física reconhecível.
+                    # Polígonos fechados: individuais (não somados), SÓ piso/forro e passando
+                    # os mesmos guards (furo D + F + G). Cada contorno já é 1 superfície.
                     for _pa in (getattr(extraction, "polygon_areas", None) or []):
                         try:
                             _pav = getattr(_pa, "area", None)
@@ -3272,7 +3305,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             if not (_pav and float(_pav) > 0):
                                 continue
                             _pcat = category_for_layer(_ply)
-                            if _pcat in ("piso", "forro"):
+                            if _pcat in ("piso", "forro") and _xc_layer_ok(_ply, _pcat):
                                 _hard_area_by_cat.setdefault(_pcat, set()).add(round(float(_pav), 2))
                         except Exception:
                             pass
