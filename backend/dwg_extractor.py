@@ -1163,8 +1163,11 @@ def extract_dxf(filepath: str) -> DXFExtraction:
     #  - DEDUPE aninhamento: descarta contorno contido em outro maior já aceito,
     #    pra não somar piso + cada cômodo dentro + versão existente/nova da mesma área.
     polygon_areas: list[HatchArea] = []
+    # "flor" REMOVIDO (revisão adversarial 15/07): casava FLOREIRA/FLORAL/FLORES
+    # (paisagismo) → contorno decorativo virava área de piso. "floor" real já é
+    # coberto por piso/pavimenta/deck. Nunca inflar medida (regra nº1).
     _AREA_ALLOW = ("piso", "forro", "laje", "teto", "contrapiso", "cobertura",
-                   "revestimento", "pavimenta", "deck", "impermeab", "ambiente", "flor")
+                   "revestimento", "pavimenta", "deck", "impermeab", "ambiente")
     _AREA_DENY = ("trama", "pagina", "rotulo", "rótulo", "legenda", "cota", "carimbo",
                   "titulo", "título", "hachura", "eixo", "memorial", "quadro", "zona")
     _poly_cands: list = []  # (area_m2, bbox, layer)
@@ -1350,7 +1353,7 @@ _LAYER_PATTERNS: list[tuple[list[str], str]] = [
     (["LUM", "LUMI", "LUMINARIA", "ILUM", "ILU", "LIGHT", "LT", "LGT"],                           "luminarias"),
     (["PAR", "PARED", "PAREDE", "WALL", "DRY", "DRYWALL", "GESS", "GYP", "DIV", "DVR"],           "paredes"),
     (["FOR", "FORR", "FORRO", "CEIL", "TET", "TETO"],                                             "forro"),
-    (["PIS", "PISO", "FLOOR", "FLR", "FLOR", "PAV", "CARPE", "CARPET", "RODA", "RODAP", "SKIRT"], "piso"),
+    (["PIS", "PISO", "FLOOR", "FLR", "PAV", "CARPE", "CARPET", "RODA", "RODAP", "SKIRT"], "piso"),
     (["PORT", "PORTA", "PRT", "DOOR", "DR"],                                                      "portas"),
     (["SPK", "SPRINK", "SPRINKLER", "INC", "INCEND", "INCENDIO", "FIRE", "PPCI"],                 "incendio"),
     (["ELET", "ELETR", "ELE", "ELEC", "POWR", "POWER", "TOMAD", "TOM", "TOMADA", "INTER", "CIRC"], "eletrica"),
@@ -1423,6 +1426,16 @@ def identify_architectural_elements(extraction: DXFExtraction) -> dict:
         }
 
     return result
+
+
+def category_for_layer(layer_name: str) -> str | None:
+    """Retorna a categoria arquitetônica de UM layer (piso/forro/paredes/...),
+    ou None se não casar. Mesma regra de token de identify_architectural_elements.
+    Usado pelo cross-check pra categorizar polígonos fechados por layer."""
+    for keywords, category in _LAYER_PATTERNS:
+        if _layer_matches_category(layer_name, keywords):
+            return category
+    return None
 
 
 # ---------------------------------------------------------------------------
