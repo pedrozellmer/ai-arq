@@ -3164,7 +3164,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _cr = _urc.Request(_cq, method="GET")
                             _cr.add_header("apikey", SUPABASE_KEY)
                             _cr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-                            _prev_n = len(json.loads(_urc.urlopen(_cr, timeout=10).read().decode("utf-8")))
+                            _prev_n = len(_json.loads(_urc.urlopen(_cr, timeout=10).read().decode("utf-8")))
                         except Exception as _cerr:
                             print(f"[add-file] contagem de itens base falhou: {_cerr}")
                         if _prev_n > 0:
