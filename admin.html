@@ -146,6 +146,11 @@
       <span>Newsletter</span>
     </button>
 
+    <button onclick="switchTab('instagram')" data-tab="instagram" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="5" stroke-width="2"/><circle cx="12" cy="12" r="3.5" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg>
+      <span>Instagram</span>
+    </button>
+
     <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
       <a href="dashboard.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/></svg>
@@ -869,6 +874,19 @@
         <div id="emails-error" class="hidden text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-4"></div>
       </div>
 
+      <!-- ══════════════ INSTAGRAM (fila de posts) ══════════════ -->
+      <div id="tab-instagram" class="tab-content hidden">
+        <div class="mb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">&#128248; Instagram</h2>
+            <p class="text-sm text-gray-500 mt-1">A fila de posts do <b>@ai.arq.br</b>. O rob&ocirc; publica sozinho na data marcada &mdash; mas s&oacute; depois que voc&ecirc; <b>aprova</b>. Post <b>sem imagem n&atilde;o pode ser agendado</b> (o rob&ocirc; falha).</p>
+          </div>
+          <button onclick="loadInstagramPosts()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-50 transition whitespace-nowrap">&#128260; Atualizar</button>
+        </div>
+        <div id="ig-stats" class="grid gap-3 grid-cols-2 sm:grid-cols-4 mb-2"></div>
+        <div id="ig-list"><p class="text-gray-400 text-sm">Carregando&hellip;</p></div>
+      </div>
+
     </div>
   </main>
 </div>
@@ -888,6 +906,44 @@
     </div>
     <div class="flex-1 overflow-auto bg-gray-100 p-2">
       <iframe id="email-preview-frame" class="w-full min-h-[420px] rounded-lg border border-gray-200 bg-white" title="Pr&eacute;via do email"></iframe>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════ MODAL: VER / EDITAR POST DO INSTAGRAM ══════════════ -->
+<div id="ig-modal" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/50 p-4" onclick="if(event.target===this)igCloseModal()">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden">
+    <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200">
+      <div class="min-w-0">
+        <h3 id="ig-m-title" class="text-base font-bold text-gray-900 truncate">&mdash;</h3>
+        <p id="ig-m-slot" class="text-xs text-gray-400 mt-0.5">&mdash;</p>
+      </div>
+      <button onclick="igCloseModal()" title="Fechar" class="shrink-0 inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="flex-1 overflow-auto p-5 space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Legenda</label>
+        <textarea id="ig-m-caption" rows="8" class="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+      </div>
+      <div id="ig-m-feed-wrap">
+        <label class="block text-xs font-semibold text-gray-600 mb-1">&#128444;&#65039; Link da imagem (feed)</label>
+        <input id="ig-m-image" type="url" placeholder="https://&hellip;" class="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:ring-2 focus:ring-indigo-500">
+        <p class="text-[11px] text-gray-400 mt-1">Link p&uacute;blico da imagem 1080&times;1080. <b>Sem imagem, o post n&atilde;o pode ser agendado.</b></p>
+      </div>
+      <div id="ig-m-car-wrap" class="hidden">
+        <label class="block text-xs font-semibold text-gray-600 mb-1">&#128444;&#65039; Links do carrossel (um por linha, 2 ou mais)</label>
+        <textarea id="ig-m-images" rows="4" placeholder="https://&hellip;/1.png&#10;https://&hellip;/2.png" class="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm outline-none focus:ring-2 focus:ring-indigo-500"></textarea>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">&#128203; Briefing (fonte + imagem + slides)</label>
+        <pre id="ig-m-notes" class="text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-xl p-3 whitespace-pre-wrap max-h-52 overflow-auto">&mdash;</pre>
+      </div>
+    </div>
+    <div class="flex items-center justify-end gap-2 px-5 py-4 border-t border-gray-200">
+      <button onclick="igCloseModal()" class="px-4 py-2 rounded-xl border border-gray-300 text-gray-600 text-sm font-medium hover:bg-gray-50">Fechar</button>
+      <button onclick="igSave()" class="px-4 py-2 rounded-xl gradient-main text-white text-sm font-semibold shadow-btn hover:opacity-90">&#128190; Salvar</button>
     </div>
   </div>
 </div>
@@ -989,6 +1045,152 @@ function switchTab(tabName) {
   if (tabName === 'leads') loadLeads();
   if (tabName === 'mensagens') loadMessages();
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
+  if (tabName === 'instagram') loadInstagramPosts();
+}
+
+// ══════════════════════════════════════════════
+// INSTAGRAM — fila de posts (instagram_scheduled_posts)
+// ══════════════════════════════════════════════
+const IG_STATUS = {
+  pending_approval: { icon:'📝', label:'Rascunho',  cls:'bg-slate-100 text-slate-700 border-slate-300' },
+  pending:          { icon:'🕓', label:'Agendado',  cls:'bg-indigo-50 text-indigo-700 border-indigo-300' },
+  publishing:       { icon:'⏳', label:'Publicando', cls:'bg-amber-50 text-amber-800 border-amber-300' },
+  published:        { icon:'✅', label:'Publicado', cls:'bg-emerald-50 text-emerald-700 border-emerald-300' },
+  failed:           { icon:'✖️', label:'Falhou',    cls:'bg-red-50 text-red-700 border-red-300' },
+  canceled:         { icon:'🚫', label:'Cancelado', cls:'bg-gray-100 text-gray-500 border-gray-300' },
+};
+const IG_RUBRICA_DAY = { seg:'🎬 Bastidor', ter:'⚠️ Erro caro', qua:'🧓 AIrnaldo', qui:'❓ Pergunta', sex:'💬 Real', sab:'⚖️ Comparativo', dom:'📣 Convite' };
+function igRubrica(slot){
+  if (slot && slot.indexOf('airnaldo') === 0) return '🧓 AIrnaldo';
+  const m = (slot || '').match(/_(seg|ter|qua|qui|sex|sab|dom)_/);
+  return m ? IG_RUBRICA_DAY[m[1]] : '📄 Post';
+}
+function igHasMedia(p){
+  const mt = (p.media_type || 'feed').toLowerCase();
+  if (mt === 'carousel') { let a = p.image_urls; if (typeof a === 'string') { try { a = JSON.parse(a); } catch(e){ a = []; } } return Array.isArray(a) && a.filter(x => String(x).trim()).length >= 2; }
+  if (mt === 'reel') return !!(p.video_url && p.video_url.trim());
+  return !!(p.image_url && p.image_url.trim());
+}
+function igEsc(s){ return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+function igFmtDate(iso){ try { return new Date(iso).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', weekday:'short', hour:'2-digit', minute:'2-digit' }); } catch(e){ return iso || ''; } }
+
+let IG_POSTS = [];
+async function loadInstagramPosts(){
+  const box = document.getElementById('ig-list');
+  box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/instagram/posts?limit=200`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'erro');
+    IG_POSTS = data.posts || [];
+    renderInstagram();
+  } catch(e) {
+    box.innerHTML = `<p class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl p-4">Não consegui carregar: ${igEsc(e.message)}</p>`;
+  }
+}
+function renderInstagram(){
+  const c = {};
+  IG_POSTS.forEach(p => { c[p.status] = (c[p.status] || 0) + 1; });
+  document.getElementById('ig-stats').innerHTML = [
+    ['📝','Rascunhos', c.pending_approval || 0, 'text-slate-700'],
+    ['🕓','Agendados', c.pending || 0, 'text-indigo-700'],
+    ['✅','Publicados', c.published || 0, 'text-emerald-700'],
+    ['✖️','Falhas', c.failed || 0, 'text-red-700'],
+  ].map(([i,l,n,cls]) => `<div class="rounded-2xl border bg-white p-4 shadow-sm"><p class="text-xs text-gray-500 mb-1">${i} ${l}</p><p class="text-2xl font-bold ${cls}">${n}</p></div>`).join('');
+
+  const fila = IG_POSTS.filter(p => ['pending_approval','pending','failed','publishing'].includes(p.status));
+  const hist = IG_POSTS.filter(p => ['published','canceled'].includes(p.status));
+  fila.sort((a,b) => new Date(a.publish_at) - new Date(b.publish_at));
+  hist.sort((a,b) => new Date(b.publish_at) - new Date(a.publish_at));
+
+  document.getElementById('ig-list').innerHTML =
+    igSection('📅 Fila — a publicar', fila, true) +
+    igSection('📚 Histórico', hist.slice(0, 40), false);
+}
+function igSection(title, arr, isFila){
+  if (!arr.length) return `<h3 class="text-sm font-bold text-gray-700 mt-6 mb-2">${title}</h3><p class="text-xs text-gray-400 mb-4">Nada aqui.</p>`;
+  return `<h3 class="text-sm font-bold text-gray-700 mt-6 mb-3">${title} <span class="text-gray-400 font-normal">(${arr.length})</span></h3>`
+    + '<div class="space-y-2.5">' + arr.map(p => igCard(p, isFila)).join('') + '</div>';
+}
+function igCard(p, isFila){
+  const st = IG_STATUS[p.status] || { icon:'•', label:p.status, cls:'bg-gray-100 text-gray-600 border-gray-300' };
+  const media = igHasMedia(p);
+  const mediaBadge = media
+    ? '<span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border bg-emerald-50 text-emerald-700 border-emerald-300">🖼️ com imagem</span>'
+    : '<span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border bg-amber-50 text-amber-800 border-amber-300">⚠️ sem imagem</span>';
+  const cap = igEsc((p.caption || '').slice(0, 150));
+  let actions = '';
+  if (p.status === 'pending_approval') {
+    actions = `<button onclick="igApprove('${p.id}')" ${media ? '' : 'disabled title="Adicione a imagem primeiro"'} class="px-3 py-1.5 rounded-lg text-xs font-semibold ${media ? 'bg-emerald-600 text-white hover:opacity-90' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}">✅ Aprovar e agendar</button>
+      <button onclick="igCancel('${p.id}')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">🚫 Cancelar</button>`;
+  } else if (p.status === 'pending') {
+    actions = `<button onclick="igStatus('${p.id}','pending_approval')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-amber-300 text-amber-700 hover:bg-amber-50">⏸️ Pausar</button>
+      <button onclick="igCancel('${p.id}')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">🚫 Cancelar</button>`;
+  } else if (p.status === 'canceled') {
+    actions = `<button onclick="igStatus('${p.id}','pending_approval')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">↩️ Reativar</button>`;
+  } else if (p.status === 'failed') {
+    actions = `<button onclick="igStatus('${p.id}','pending_approval')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-300 text-indigo-700 hover:bg-indigo-50">↩️ Voltar pra rascunho</button>
+      <button onclick="igCancel('${p.id}')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-600 hover:bg-gray-50">🚫 Cancelar</button>`;
+  }
+  const errLine = (p.status === 'failed' && p.error_message) ? `<p class="text-xs text-red-600 mt-1">✖️ ${igEsc((p.error_message || '').slice(0, 180))}</p>` : '';
+  const showMedia = !['published','canceled'].includes(p.status);
+  return `<div class="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div class="flex flex-wrap items-center gap-2 mb-1.5">
+      <span class="text-xs font-semibold text-gray-800">${igRubrica(p.slot_key)}</span>
+      <span class="text-xs text-gray-400">${igFmtDate(p.publish_at)}</span>
+      <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border ${st.cls}">${st.icon} ${st.label}</span>
+      ${showMedia ? mediaBadge : ''}
+      <span class="text-[11px] text-gray-300 ml-auto font-mono">${igEsc(p.slot_key)}</span>
+    </div>
+    <p class="text-sm text-gray-600 leading-snug">${cap}${(p.caption || '').length > 150 ? '…' : ''}</p>
+    ${errLine}
+    <div class="flex flex-wrap gap-2 mt-3">
+      <button onclick="igOpen('${p.id}')" class="px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 text-indigo-700 hover:bg-indigo-50">👁️ Ver / editar</button>
+      ${actions}
+    </div>
+  </div>`;
+}
+async function igStatus(id, status){
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/instagram/posts/status`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ id, status }) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'erro');
+    loadInstagramPosts();
+  } catch(e) { alert('Não deu: ' + e.message); }
+}
+function igApprove(id){ if (confirm('Aprovar e colocar na fila? O robô publica sozinho na data marcada.')) igStatus(id, 'pending'); }
+function igCancel(id){ if (confirm('Cancelar esse post? Ele sai da fila.')) igStatus(id, 'canceled'); }
+
+function igOpen(id){
+  const p = IG_POSTS.find(x => x.id === id); if (!p) return;
+  const m = document.getElementById('ig-modal');
+  m.dataset.id = id;
+  document.getElementById('ig-m-title').textContent = igRubrica(p.slot_key) + ' · ' + igFmtDate(p.publish_at);
+  document.getElementById('ig-m-slot').textContent = p.slot_key + ' · ' + (p.media_type || 'feed');
+  document.getElementById('ig-m-caption').value = p.caption || '';
+  document.getElementById('ig-m-notes').textContent = p.notes || '(sem briefing)';
+  const isCar = (p.media_type || '') === 'carousel';
+  document.getElementById('ig-m-feed-wrap').classList.toggle('hidden', isCar);
+  document.getElementById('ig-m-car-wrap').classList.toggle('hidden', !isCar);
+  document.getElementById('ig-m-image').value = p.image_url || '';
+  let a = p.image_urls; if (typeof a === 'string') { try { a = JSON.parse(a); } catch(e){ a = []; } }
+  document.getElementById('ig-m-images').value = Array.isArray(a) ? a.join('\n') : '';
+  m.classList.remove('hidden'); m.classList.add('flex');
+}
+function igCloseModal(){ const m = document.getElementById('ig-modal'); m.classList.add('hidden'); m.classList.remove('flex'); }
+async function igSave(){
+  const id = document.getElementById('ig-modal').dataset.id;
+  const p = IG_POSTS.find(x => x.id === id); if (!p) return;
+  const body = { id, caption: document.getElementById('ig-m-caption').value };
+  if ((p.media_type || '') === 'carousel') body.image_urls = document.getElementById('ig-m-images').value;
+  else body.image_url = document.getElementById('ig-m-image').value.trim();
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/instagram/posts/update`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'erro');
+    if (data.demoted) alert('Esse post estava agendado e ficou sem imagem — voltou pra Rascunho. Coloque a imagem e aprove de novo pra reagendar.');
+    igCloseModal(); loadInstagramPosts();
+  } catch(e) { alert('Não deu pra salvar: ' + e.message); }
 }
 
 // ══════════════════════════════════════════════
