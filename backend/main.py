@@ -5320,6 +5320,27 @@ async def admin_newsletter_scheduled(request: Request):
     return {"scheduled": rows}
 
 
+@app.get("/api/admin/motor-health")
+async def admin_motor_health(request: Request):
+    """Painel de SAÚDE DO MOTOR (admin): % medido por fonte (CAD vs PDF), distribuição
+    de % medido por projeto, itens medidos x total e top motivos de falha. Agrega via
+    RPC admin_motor_health (SECURITY DEFINER, só service_role) pra o Pedro parar de
+    otimizar às cegas (board 15/07)."""
+    _require_admin(request)
+    import urllib.request as _ur
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/admin_motor_health"
+        req = _ur.Request(url, data=b"{}", method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        data = _json.loads(_ur.urlopen(req, timeout=20).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[motor-health] erro: {_e}")
+        raise HTTPException(502, "Não consegui carregar a saúde do motor")
+    return data
+
+
 @app.post("/api/admin/newsletter/cancel")
 async def admin_newsletter_cancel(request: Request):
     """Cancela um agendamento pendente (admin)."""
