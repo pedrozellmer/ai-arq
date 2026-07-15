@@ -3129,6 +3129,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # except da IA (armadilha #11 do CLAUDE.md reaparecendo no caminho DXF).
         dxf_errors: list[str] = []
         xref_warnings: list[str] = []  # xref não-resolvido / extração estéril → orienta o usuário (BIND / PDF)
+        # Cross-check determinístico (opt-in): promove estimado→confirmado SÓ quando o
+        # número da IA bate byte-a-byte com uma medida dura da geometria e sem ressalva.
+        # Off por padrão — ligar via env DXF_CONFIRM_CROSSCHECK=1 após validar em upload real.
+        _XCHECK_ON = os.environ.get("DXF_CONFIRM_CROSSCHECK", "0") == "1"
         if dxf_paths:
             # Análise DXF começa onde a conversão termina
             extract_start = conv_end_pct
@@ -3191,6 +3195,26 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         xref_warnings.append(
                             f"{_bn_w}: não consegui ler geometria mensurável nesse arquivo. Reexporte "
                             f"do CAD com tudo incorporado (BIND, sem xref solto) ou mande o PDF plotado da prancha.")
+
+                    # Medidas DURAS desta prancha (pro cross-check): áreas (hatch + polígono
+                    # fechado) e comprimentos de linha (por segmento e somados por layer). Só
+                    # usadas pra PROMOVER a medido quando o número da IA bate exatamente.
+                    # 'un' (contagem de bloco) fica de fora — coincide fácil.
+                    _hard_m2 = {round(h.area, 2) for h in extraction.hatches if getattr(h, "area", 0) > 0}
+                    for _pa in (getattr(extraction, "polygon_areas", None) or []):
+                        try:
+                            _pav = _pa if isinstance(_pa, (int, float)) else getattr(_pa, "area", None)
+                            if _pav and float(_pav) > 0:
+                                _hard_m2.add(round(float(_pav), 2))
+                        except Exception:
+                            pass
+                    _hard_m = {round(w.length, 2) for w in extraction.walls if getattr(w, "length", 0) > 0}
+                    _by_layer_len = {}
+                    for _w in extraction.walls:
+                        _by_layer_len[_w.layer] = _by_layer_len.get(_w.layer, 0.0) + (getattr(_w, "length", 0) or 0)
+                    for _tot in _by_layer_len.values():
+                        if _tot > 0:
+                            _hard_m.add(round(_tot, 2))
 
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
@@ -3537,6 +3561,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if item_data.get("_procedencia_rebaixada"):
                                     obs_raw = (f"{obs_raw} | Procedência: extração com ressalva "
                                                f"(estéril/unidade/xref) — quantidade não confirmada, revisar").strip(" |")
+
+                                # CROSS-CHECK determinístico (opt-in via env DXF_CONFIRM_CROSSCHECK):
+                                # promove 'estimado' → 'confirmado' SÓ quando a quantidade bate
+                                # byte-a-byte com uma medida DURA da geometria (área/comprimento) E
+                                # não há ressalva. Nunca promove 'un' nem número derivado (não bate
+                                # com medida única). Conserta a "timidez" da IA sem falso-medido.
+                                if (_XCHECK_ON and conf == "estimado" and not _dxf_sem_procedencia
+                                        and not unit_corrected and qty > 0):
+                                    _q2 = round(qty, 2)
+                                    if ((normalized_unit in ("m²", "m2") and _q2 in _hard_m2) or
+                                            (normalized_unit in ("m", "ml") and _q2 in _hard_m)):
+                                        conf = "confirmado"
+                                        obs_raw = (f"{obs_raw} | Medido: confere com a geometria "
+                                                   f"extraída ({_q2} {normalized_unit})").strip(" |")
 
                                 item = BudgetItem(
                                     item_num=str(item_data.get("item_num", "")),
