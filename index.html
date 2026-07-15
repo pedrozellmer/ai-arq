@@ -310,7 +310,7 @@
     </div>
     <div class="mt-10 mx-auto max-w-2xl rounded-2xl bg-indigo-50 border border-indigo-100 px-5 py-4 flex items-start gap-3">
       <svg class="w-5 h-5 shrink-0 mt-0.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      <p class="text-sm text-indigo-900 leading-relaxed"><strong>Quer mais itens medidos (branco)?</strong> Mande seu projeto em <strong>DWG ou DXF</strong> — a IA mede a geometria de verdade. PDF a gente lê, mas vira estimativa. <a href="/faq.html" class="underline font-medium hover:text-indigo-700">Como exportar bem &rarr;</a></p>
+      <p class="text-sm text-indigo-900 leading-relaxed"><strong>Quer mais itens medidos (branco)?</strong> Mande seu projeto em <strong>DWG ou DXF</strong> — a IA mede a geometria de verdade. PDF a gente lê, mas vira estimativa. <button type="button" onclick="openExportModal()" class="underline font-medium hover:text-indigo-700">Como exportar bem &rarr;</button></p>
     </div>
     <p class="mt-8 text-center text-gray-600 max-w-2xl mx-auto">Você decide onde gastar a sua atenção: confere as estimativas com calma e segue tranquilo no que já é fato. E o preço continua sendo <strong>seu</strong> — só você sabe o seu BDI e o seu fornecedor.</p>
   </div>
@@ -733,5 +733,68 @@
 <script src="contact-modal.js" defer></script>
 <script src="onboarding-tour.js" defer></script>
 <script src="cookie-consent.js" defer></script>
+  <!-- MODAL: COMO EXPORTAR (passo a passo por programa CAD, com fonte oficial) -->
+  <div id="modal-export" role="dialog" aria-modal="true" aria-labelledby="modal-export-title"
+       class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+       onclick="if(event.target===this)closeExportModal()">
+    <div class="bg-white rounded-xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-gray-200">
+        <div>
+          <h3 id="modal-export-title" class="font-semibold text-gray-900">Como exportar pra ter o melhor resultado</h3>
+          <p class="text-xs text-gray-500 mt-0.5">Escolha seu programa &mdash; &eacute; rapidinho.</p>
+        </div>
+        <button type="button" onclick="closeExportModal()" aria-label="Fechar" class="text-gray-400 hover:text-gray-600 text-lg shrink-0">&#10005;</button>
+      </div>
+      <div class="px-5 py-3 border-b border-gray-100 bg-indigo-50/60">
+        <p class="text-xs text-indigo-900"><b>A regra de ouro:</b> DWG e DXF a gente <b>mede</b> (item sai branco). PDF a gente l&ecirc; pela imagem, sai <b>estimativa</b> (laranja) pra conferir. Se puder, mande DWG ou DXF.</p>
+      </div>
+      <div class="px-5 pt-3 flex flex-wrap gap-1.5" id="export-tabs"></div>
+      <div class="px-5 pb-5 pt-3 overflow-y-auto" id="export-content"></div>
+      <div class="px-5 py-3 border-t border-gray-200 flex items-center justify-between">
+        <a href="/faq.html" class="text-xs text-indigo-600 hover:underline">Mais d&uacute;vidas no FAQ</a>
+        <button type="button" onclick="closeExportModal()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg">Entendi</button>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    const EXPORT_GUIDE = [
+      { key:'autocad', name:'AutoCAD', tip:'O .dwg nativo já serve. DXF é bom porque abre em qualquer programa.',
+        steps:['Botão do Aplicativo (o "A" no topo à esquerda) → Salvar Como → Outros Formatos.','Em "Arquivos do tipo", escolha um DXF (ex.: AutoCAD 2018 DXF).','Dê um nome, escolha a pasta e clique em Salvar.'],
+        src:'https://help.autodesk.com/view/ACD/2024/ENU/?guid=GUID-5EA0F1DC-EA92-4ADB-9BDF-C352DF3AFC5F', srcName:'Autodesk' },
+      { key:'revit', name:'Revit', tip:'Arquivos .rvt e .ifc não entram direto — exporte DWG/DXF antes.',
+        steps:['Aba Arquivo → Exportar → Formatos CAD → DWG (ou DXF).','Ajuste a configuração (camadas) e escolha a vista/folha, ou um conjunto → Avançar.','Escolha a pasta; em "Arquivos do tipo", a versão do AutoCAD (DWG) ou DXF → OK.'],
+        src:'https://help.autodesk.com/cloudhelp/2025/ENU/Revit-DocumentPresent/files/GUID-42C75024-4D71-4831-8910-2747168624A3.htm', srcName:'Autodesk' },
+      { key:'archicad', name:'ArchiCAD', tip:'Funciona em planta/prancha (não em tabela, índice ou lista).',
+        steps:['Abra a planta ou prancha que quer exportar.','Arquivo → Salvar como → escolha DWG ou DXF.','No campo Tradutor, deixe um padrão (ex.: "For as-is output") e clique em Salvar.','Várias pranchas de uma vez: Documento → Publicar.'],
+        src:'https://help.graphisoft.com/AC/28/INT/_AC28_Help/120_Interoperability/120_Interoperability-26.htm', srcName:'Graphisoft' },
+      { key:'sketchup', name:'SketchUp', tip:'Exportar CAD só existe no SketchUp Pro (versão paga).',
+        steps:['Pra planta, ajuste a vista: Câmera → Vistas Padrão + projeção paralela.','Arquivo → Exportar → Gráfico 2D (planta) ou Modelo 3D.','Escolha .dwg ou .dxf → Opções → OK → Exportar.'],
+        src:'https://help.sketchup.com/en/sketchup/importing-and-exporting-cad-files', srcName:'Trimble' },
+      { key:'pdf', name:'Só tenho PDF', tip:'PDF a gente lê, mas sai tudo como estimativa pra conferir.',
+        steps:['Exporte um PDF VETORIAL: no AutoCAD, botão do Aplicativo → Exportar → PDF (preset "AutoCAD PDF - High Quality Print"). No Revit/ArchiCAD, use Imprimir/Plotar → PDF.','NUNCA "plotar como imagem" nem escanear/fotografar a planta — o desenho vira pixel, as cotas somem e a IA não consegue medir.','Se der, mande o DWG/DXF junto — a gente mede e completa o que o PDF deixou como estimativa.'],
+        src:'https://help.autodesk.com/view/ACD/2025/ENU/?guid=GUID-EC9C6D47-814E-476D-840F-04104CF72B78', srcName:'Autodesk' },
+    ];
+    let cur = 'autocad';
+    function esc(s){ return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function renderTabs(){
+      document.getElementById('export-tabs').innerHTML = EXPORT_GUIDE.map(g =>
+        `<button type="button" onclick="exportTab('${g.key}')" class="px-3 py-1.5 rounded-lg text-xs font-medium border ${g.key===cur?'bg-indigo-600 text-white border-indigo-600':'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'}">${esc(g.name)}</button>`
+      ).join('');
+    }
+    function renderContent(){
+      const g = EXPORT_GUIDE.find(x=>x.key===cur) || EXPORT_GUIDE[0];
+      document.getElementById('export-content').innerHTML =
+        '<ol class="list-decimal pl-5 space-y-2 text-sm text-gray-700">' +
+        g.steps.map(s=>`<li>${esc(s)}</li>`).join('') + '</ol>' +
+        `<p class="mt-3 text-xs text-gray-500">💡 ${esc(g.tip)}</p>` +
+        `<p class="mt-2 text-[11px] text-gray-400">Fonte: <a href="${esc(g.src)}" target="_blank" rel="noopener" class="underline hover:text-gray-600">${esc(g.srcName)} (documentação oficial)</a></p>`;
+    }
+    window.exportTab = function(k){ cur = k; renderTabs(); renderContent(); };
+    window.openExportModal = function(){ cur = 'autocad'; renderTabs(); renderContent(); document.getElementById('modal-export').classList.remove('hidden'); };
+    window.closeExportModal = function(){ document.getElementById('modal-export').classList.add('hidden'); };
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ const m=document.getElementById('modal-export'); if(m && !m.classList.contains('hidden')) window.closeExportModal(); } });
+  })();
+  </script>
 </body>
 </html>
