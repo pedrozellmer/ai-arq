@@ -9569,6 +9569,15 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     # estima 100, CAD mede 95 → 2 linhas). Com CAD presente, o CAD manda.
     _cads = [p for p in file_paths if p.lower().endswith((".dwg", ".dxf"))]
     if _cads:
+        # Se existe o DXF re-exportado de um DWG que falhava (MESMO nome), prefere
+        # o DXF e descarta o DWG. Senão o DWG velho no Storage re-falha a cada
+        # reprocesso e gera aviso "planilha INCOMPLETA" enganoso, mesmo o DXF tendo
+        # medido tudo (caso forro MEP do Pedro, 15/07 — DWG AEC não abre, DXF sim).
+        _dxf_stems = {os.path.splitext(os.path.basename(p))[0].lower()
+                      for p in _cads if p.lower().endswith(".dxf")}
+        _cads = [p for p in _cads
+                 if not (p.lower().endswith(".dwg")
+                         and os.path.splitext(os.path.basename(p))[0].lower() in _dxf_stems)]
         file_paths = _cads
 
     # NÃO apaga os itens antigos aqui: a limpeza acontece no _persist (só no
