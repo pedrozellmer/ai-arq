@@ -620,6 +620,38 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
     return None
 
 
+def dwg_has_aec_markers(dwg_path: str) -> bool:
+    """Detecta se o DWG contém objetos AEC (AutoCAD Architecture/MEP) por marcadores
+    no binário. Esses 'objetos inteligentes' (proxy) não são lidos pelos conversores
+    livres (ODA File Converter / libredwg) — é a causa nº1 de DWG que não abre.
+
+    Serve pra dar um aviso PRECISO ("é arquivo MEP/Architecture") em vez de genérico,
+    e pra alertar o usuário na hora. Lê em blocos (cap de memória) com sobreposição
+    pra pegar marcador entre blocos. Best-effort: erro → False.
+
+    OBS: no DWG os nomes de dicionário (AEC_VARS_*, AEC_OVERRIDES) ficam em UTF-16LE
+    (wide chars), não ASCII — por isso checamos as DUAS codificações."""
+    _words = ("AEC_VARS", "AEC_OVERRIDES", "AEC_LAYERKEY", "AEC_DISP", "AecDbDwg")
+    markers = []
+    for _w in _words:
+        markers.append(_w.encode("latin1"))          # ASCII
+        markers.append(_w.encode("utf-16-le"))         # UTF-16LE (o que o AutoCAD usa)
+    try:
+        tail = b""
+        with open(dwg_path, "rb") as fh:
+            while True:
+                chunk = fh.read(1 << 20)  # 1 MB por vez
+                if not chunk:
+                    break
+                buf = tail + chunk
+                if any(m in buf for m in markers):
+                    return True
+                tail = chunk[-32:]  # sobreposição pra marcador cortado no limite do bloco
+        return False
+    except Exception:
+        return False
+
+
 # ---------------------------------------------------------------------------
 # Core extraction
 # ---------------------------------------------------------------------------

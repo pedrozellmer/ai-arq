@@ -3108,11 +3108,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # Converter DWG→DXF se necessário
         dxf_paths = []
         dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
+        _aec_failed = []  # DWGs que falharam E são AutoCAD MEP/Architecture (objetos AEC) → aviso preciso
         if cad_paths:
             jobs.update_field(job_id, progress=5)
             jobs.update_field(job_id, current_step="Processando arquivos DWG/DXF...")
             try:
-                from dwg_extractor import extract_from_file, generate_budget_data, convert_dwg_to_dxf
+                from dwg_extractor import extract_from_file, generate_budget_data, convert_dwg_to_dxf, dwg_has_aec_markers
                 n_cad = len(cad_paths)
                 conv_span = conv_end_pct - 5  # ex.: 15 ou 10 pts
                 dwg_failed = []  # acumular DWGs que falharam pra reportar erro real depois
@@ -3128,6 +3129,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             jobs.update_field(job_id, current_step=f"DWG convertido: {os.path.basename(dxf_path)}")
                         else:
                             dwg_failed.append(os.path.basename(cad_path))
+                            # É arquivo AutoCAD MEP/Architecture (objetos AEC)? Aí a falha
+                            # é esperada (conversor livre não abre proxy) e o aviso é preciso.
+                            if dwg_has_aec_markers(cad_path):
+                                _aec_failed.append(os.path.basename(cad_path))
                             jobs.update_field(job_id, current_step=f"Falha ao converter DWG: {os.path.basename(cad_path)} (seguindo sem)")
                     else:
                         dxf_paths.append(cad_path)
@@ -3136,12 +3141,23 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # Mensagem instrutiva pro user resolver sozinho (95% dos casos).
                 if dwg_failed and not dxf_paths and not pdf_paths:
                     arquivos = ', '.join(dwg_failed)
+                    # Aviso PRECISO quando confirmamos objetos AEC (AutoCAD MEP/Architecture)
+                    # no binário — em vez do genérico "costuma acontecer".
+                    if _aec_failed:
+                        _abre = (
+                            f"⚠ Confirmado: {', '.join(_aec_failed)} é um arquivo do AutoCAD "
+                            f"MEP/Architecture, com 'objetos inteligentes' (AEC). Nenhum conversor "
+                            f"automático abre esse tipo direto — nem o nosso, nem o 'Salvar como DXF' "
+                            f"comum. NÃO é defeito do seu arquivo, é a natureza dele.\n\n")
+                    else:
+                        _abre = (
+                            f"⚠ Não conseguimos abrir automaticamente este(s) DWG: {arquivos}. "
+                            f"Isso costuma acontecer com DWG salvo numa versão muito recente do "
+                            f"AutoCAD, ou com objetos especiais (comum em projetos de incêndio, "
+                            f"hidráulica e elétrica feitos em software MEP). Não quer dizer que "
+                            f"seu arquivo está com defeito.\n\n")
                     msg = (
-                        f"⚠ Não conseguimos abrir automaticamente este(s) DWG: {arquivos}. "
-                        f"Isso costuma acontecer com DWG salvo numa versão muito recente do "
-                        f"AutoCAD, ou com objetos especiais (comum em projetos de incêndio, "
-                        f"hidráulica e elétrica feitos em software MEP). Não quer dizer que "
-                        f"seu arquivo está com defeito.\n\n"
+                        _abre +
                         f"📋 COMO RESOLVER (projeto de ELÉTRICA / MEP — recomendado):\n"
                         f"Esses desenhos costumam ter 'objetos especiais' (proxy) que o "
                         f"'Salvar como DXF' comum NÃO converte. O jeito que resolve:\n"
