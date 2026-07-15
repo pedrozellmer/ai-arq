@@ -5035,6 +5035,170 @@ async def admin_newsletter_cancel(request: Request):
     return {"status": "ok"}
 
 
+# ══════════════════════════════════════════════════
+#  Instagram — painel admin (fila de posts)
+#  Lê/gerencia instagram_scheduled_posts. O cron (/scheduler/tick) só publica
+#  status='pending' com publish_at<=now; 'pending_approval' é rascunho (ignorado).
+# ══════════════════════════════════════════════════
+
+_IG_ADMIN_STATUSES = {"pending_approval", "pending", "canceled"}
+_IG_UUID_RE = __import__("re").compile(r"^[0-9a-fA-F-]{32,40}$")
+
+
+def _ig_has_media(post: dict) -> bool:
+    """True se o post tem mídia suficiente pra publicar, conforme o tipo.
+    Guarda a regra dura: não agendar (pending) sem imagem/vídeo — senão o cron falha."""
+    mt = (post.get("media_type") or "feed").lower()
+    if mt == "carousel":
+        imgs = post.get("image_urls")
+        if isinstance(imgs, str):
+            try:
+                imgs = _json.loads(imgs)
+            except Exception:
+                imgs = []
+        return isinstance(imgs, list) and len([u for u in imgs if str(u).strip()]) >= 2
+    if mt == "reel":
+        return bool((post.get("video_url") or "").strip())
+    return bool((post.get("image_url") or "").strip())  # feed / story
+
+
+@app.get("/api/admin/instagram/posts")
+async def admin_instagram_posts(request: Request, limit: int = 150):
+    """Lista a fila do Instagram (admin): rascunhos, agendados e publicados."""
+    _require_admin(request)
+    from datetime import datetime as _dt, timezone as _tz
+    import urllib.request as _ur
+    limit = max(1, min(limit, 300))
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/instagram_scheduled_posts"
+             f"?select=id,slot_key,media_type,caption,notes,publish_at,status,"
+             f"image_url,image_urls,video_url,thumbnail_url,media_id,error_message,"
+             f"attempts,published_at,created_at"
+             f"&order=publish_at.desc&limit={limit}")
+        r = _ur.Request(q, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[ig-admin] list erro: {_e}")
+        raise HTTPException(502, "Não consegui listar os posts do Instagram")
+    return {"posts": rows, "now": _dt.now(_tz.utc).isoformat()}
+
+
+@app.post("/api/admin/instagram/posts/status")
+async def admin_instagram_post_status(request: Request):
+    """Muda o status de um post (admin): aprovar (->pending), pausar (->pending_approval), cancelar."""
+    _require_admin(request)
+    import urllib.request as _ur
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    pid = str((data or {}).get("id") or "").strip()
+    new_status = str((data or {}).get("status") or "").strip()
+    if not pid or not _IG_UUID_RE.match(pid):
+        raise HTTPException(400, "id inválido")
+    if new_status not in _IG_ADMIN_STATUSES:
+        raise HTTPException(400, f"status inválido (use: {', '.join(sorted(_IG_ADMIN_STATUSES))})")
+
+    # busca o post pra validar mídia e estado atual
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/instagram_scheduled_posts"
+             f"?id=eq.{pid}&select=id,media_type,image_url,image_urls,video_url,status")
+        r = _ur.Request(q, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        found = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        raise HTTPException(502, f"Não consegui ler o post: {str(_e)[:120]}")
+    if not found:
+        raise HTTPException(404, "post não encontrado")
+    post = found[0]
+
+    if (post.get("status") or "") in ("published", "publishing"):
+        raise HTTPException(409, "Post já publicado ou publicando — não dá pra mudar.")
+    # GUARDA DURA: não entra na fila (pending) sem mídia — senão o cron publica errado/falha
+    if new_status == "pending" and not _ig_has_media(post):
+        raise HTTPException(400, "Esse post ainda não tem imagem/vídeo. Adicione a mídia antes de agendar.")
+
+    try:
+        u = f"{SUPABASE_URL}/rest/v1/instagram_scheduled_posts?id=eq.{pid}"
+        body = _json.dumps({"status": new_status, "error_message": None}).encode("utf-8")
+        r = _ur.Request(u, data=body, method="PATCH")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        r.add_header("Content-Type", "application/json")
+        r.add_header("Prefer", "return=minimal")
+        _ur.urlopen(r, timeout=15)
+    except Exception as _e:
+        raise HTTPException(502, f"Não consegui atualizar: {str(_e)[:120]}")
+    return {"status": "ok", "new_status": new_status}
+
+
+@app.post("/api/admin/instagram/posts/update")
+async def admin_instagram_post_update(request: Request):
+    """Edita campos de um post (admin): legenda, data, mídia, notas."""
+    _require_admin(request)
+    import re as _re_ig
+    import urllib.request as _ur
+    try:
+        data = await request.json()
+    except Exception:
+        data = {}
+    pid = str((data or {}).get("id") or "").strip()
+    if not pid or not _IG_UUID_RE.match(pid):
+        raise HTTPException(400, "id inválido")
+    patch = {}
+    for k in ("caption", "publish_at", "image_url", "video_url", "thumbnail_url", "notes"):
+        if k in (data or {}):
+            patch[k] = data[k]
+    if "image_urls" in (data or {}):
+        iu = data["image_urls"]
+        if isinstance(iu, str):
+            iu = [x.strip() for x in _re_ig.split(r"[\n,]+", iu) if x.strip()]
+        patch["image_urls"] = iu
+    if not patch:
+        raise HTTPException(400, "nada pra atualizar")
+
+    # lê o post atual: protege publicados e reavalia a regra dura de mídia
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/instagram_scheduled_posts"
+             f"?id=eq.{pid}&select=status,media_type,image_url,image_urls,video_url")
+        rq = _ur.Request(q, method="GET")
+        rq.add_header("apikey", SUPABASE_KEY)
+        rq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        cur = _json.loads(_ur.urlopen(rq, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        raise HTTPException(502, f"Não consegui ler o post: {str(_e)[:120]}")
+    if not cur:
+        raise HTTPException(404, "post não encontrado")
+    cur = cur[0]
+    if (cur.get("status") or "") in ("published", "publishing"):
+        raise HTTPException(409, "Post já publicado ou publicando — não dá pra editar.")
+
+    # GUARDA DURA: se o post está AGENDADO (pending) e a edição o deixa sem mídia,
+    # rebaixa pra rascunho — senão o cron publica sem imagem e falha.
+    demoted = False
+    if (cur.get("status") or "") == "pending":
+        merged = dict(cur)
+        merged.update(patch)
+        if not _ig_has_media(merged):
+            patch["status"] = "pending_approval"
+            demoted = True
+
+    try:
+        u = f"{SUPABASE_URL}/rest/v1/instagram_scheduled_posts?id=eq.{pid}"
+        r = _ur.Request(u, data=_json.dumps(patch).encode("utf-8"), method="PATCH")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        r.add_header("Content-Type", "application/json")
+        r.add_header("Prefer", "return=minimal")
+        _ur.urlopen(r, timeout=15)
+    except Exception as _e:
+        raise HTTPException(502, f"Não consegui salvar: {str(_e)[:120]}")
+    return {"status": "ok", "demoted": demoted}
+
+
 @app.post("/api/newsletter/tick")
 async def newsletter_tick():
     """Chamado pelo pg_cron (aberto, mesma mecânica do tick do IG). Dispara 1
