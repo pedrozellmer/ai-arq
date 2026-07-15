@@ -3139,7 +3139,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
             jobs.update_field(job_id, progress=extract_start)
             jobs.update_field(job_id, current_step="Extraindo geometria dos DXF...")
             try:
-                from dwg_extractor import extract_from_file
+                from dwg_extractor import extract_from_file, identify_architectural_elements
                 from analyzer import SYSTEM_PROMPT, SYSTEM_PROMPT_ESTRUTURA
                 import json as _j
 
@@ -3196,25 +3196,44 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"{_bn_w}: não consegui ler geometria mensurável nesse arquivo. Reexporte "
                             f"do CAD com tudo incorporado (BIND, sem xref solto) ou mande o PDF plotado da prancha.")
 
-                    # Medidas DURAS desta prancha (pro cross-check): áreas (hatch + polígono
-                    # fechado) e comprimentos de linha (por segmento e somados por layer). Só
-                    # usadas pra PROMOVER a medido quando o número da IA bate exatamente.
-                    # 'un' (contagem de bloco) fica de fora — coincide fácil.
-                    _hard_m2 = {round(h.area, 2) for h in extraction.hatches if getattr(h, "area", 0) > 0}
+                    # Medidas DURAS desta prancha (pro cross-check): SÓ de layers FÍSICOS
+                    # reconhecidos, no MESMO agregado que a IA vê (somado POR LAYER). Área só
+                    # de piso/forro/revestimento; comprimento só de parede/demolição. Blinda
+                    # contra falso-medido (revisão adversarial 15/07): hachura decorativa,
+                    # eixo/cota/mobiliário e perímetro de piso ficam FORA.
+                    _cats_geo = identify_architectural_elements(extraction)
+                    _AREA_CATS = {"piso", "forro", "pintura"}   # m² físico
+                    _LEN_CATS = {"paredes", "demolicao"}          # m físico (linear)
+                    _hard_m2 = set()
+                    _hard_m = set()
+                    for _ck, _cd in _cats_geo.items():
+                        if _ck in _AREA_CATS:
+                            _pl = {}
+                            for _h in _cd.get("hatches", []):
+                                _pl[_h.layer] = _pl.get(_h.layer, 0.0) + (getattr(_h, "area", 0) or 0)
+                            for _v in _pl.values():
+                                if _v > 0:
+                                    _hard_m2.add(round(_v, 2))
+                        if _ck in _LEN_CATS:
+                            _pl2 = {}
+                            for _w in _cd.get("walls", []):
+                                _pl2[_w.layer] = _pl2.get(_w.layer, 0.0) + (getattr(_w, "length", 0) or 0)
+                            for _v in _pl2.values():
+                                if _v > 0:
+                                    _hard_m.add(round(_v, 2))
+                    # polígonos fechados já vêm allowlisted (ambiente/piso/forro) do extrator
                     for _pa in (getattr(extraction, "polygon_areas", None) or []):
                         try:
-                            _pav = _pa if isinstance(_pa, (int, float)) else getattr(_pa, "area", None)
+                            if isinstance(_pa, (int, float)):
+                                _pav = _pa
+                            elif isinstance(_pa, (tuple, list)) and _pa:
+                                _pav = _pa[0]
+                            else:
+                                _pav = getattr(_pa, "area", None)
                             if _pav and float(_pav) > 0:
                                 _hard_m2.add(round(float(_pav), 2))
                         except Exception:
                             pass
-                    _hard_m = {round(w.length, 2) for w in extraction.walls if getattr(w, "length", 0) > 0}
-                    _by_layer_len = {}
-                    for _w in extraction.walls:
-                        _by_layer_len[_w.layer] = _by_layer_len.get(_w.layer, 0.0) + (getattr(_w, "length", 0) or 0)
-                    for _tot in _by_layer_len.values():
-                        if _tot > 0:
-                            _hard_m.add(round(_tot, 2))
 
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
