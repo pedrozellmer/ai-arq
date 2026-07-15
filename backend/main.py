@@ -6786,6 +6786,36 @@ async def get_user_cashback_all(request: Request, user_id: str):
         return {"error": str(e)}
 
 
+@app.get("/api/projects-confidence")
+async def projects_confidence_summary(request: Request):
+    """Selo de confiança em 'Meus Projetos': medido/total por projeto do usuário,
+    numa query só (RPC user_project_confidence). Evita N fetches pesados de itens."""
+    user = _get_user_from_request(request)
+    if not user:
+        raise HTTPException(401, "Autenticação requerida")
+    uid = str(user.get("id") or "")
+    if not uid:
+        raise HTTPException(401, "Sessão inválida")
+    import urllib.request as _ur
+    try:
+        u = f"{SUPABASE_URL}/rest/v1/rpc/user_project_confidence"
+        body = _json.dumps({"p_user_id": uid}).encode("utf-8")
+        r = _ur.Request(u, data=body, method="POST")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        r.add_header("Content-Type", "application/json")
+        rows = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[proj-conf] erro: {_e}")
+        return {"summary": {}}
+    summary = {}
+    for row in (rows or []):
+        jid = row.get("job_id")
+        if jid:
+            summary[jid] = {"total": int(row.get("total") or 0), "medido": int(row.get("medido") or 0)}
+    return {"summary": summary}
+
+
 @app.get("/api/projects/{job_id}/cashback")
 async def get_project_cashback(job_id: str, request: Request):
     """Retorna eventos de cashback + total acumulado desse projeto.
