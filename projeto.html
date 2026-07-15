@@ -1593,7 +1593,12 @@ function renderMetrics(p, items) {
   if (_cadBanner) {
     const _exts = new Set(Array.from(_files.keys()).map(f => f.toLowerCase().split('.').pop()));
     const _soPdf = _exts.has('pdf') && !_exts.has('dwg') && !_exts.has('dxf');
-    if (_total > 0 && _medido === 0 && _soPdf && p.status !== 'error') _cadBanner.classList.remove('hidden');
+    // Mostra em projeto PRONTO ou em ERRO (com itens): erro é JUSTO onde o usuário
+    // quer anexar um arquivo melhor. Antes o gate `status !== 'error'` escondia o
+    // botão exatamente no projeto travado (feedback Pedro 15/07: "não tem onde
+    // mandar o DWG"). Não mostra durante processamento (queued/processing).
+    const _terminal = (p.status === 'done' || p.status === 'error' || p.status === 'failed');
+    if (_total > 0 && _medido === 0 && _soPdf && _terminal) _cadBanner.classList.remove('hidden');
     else _cadBanner.classList.add('hidden');
   }
 
