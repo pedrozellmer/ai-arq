@@ -2730,8 +2730,15 @@
         });
         const data = await r.json().catch(() => ({}));
         if (r.ok && data.status === 'ok'){
-          document.getElementById('few-upload-form').classList.add('hidden');
-          fSet('✅ Recebido! Tô refazendo o teu projeto com os arquivos novos — leva alguns minutos. Te aviso por email quando ficar pronto (dá pra acompanhar em Meus Projetos).', 'text-emerald-700 font-medium');
+          // Volta pra tela de PROGRESSO com % ao vivo — igual a um upload novo.
+          // Antes só mostrava um texto estático "Recebido…" e o usuário ficava
+          // perdido achando que travou (feedback Pedro 15/07).
+          resetBtn();                       // limpa o botão pra próxima vez
+          fStatus.classList.add('hidden');
+          document.getElementById('few-upload-form')?.classList.remove('hidden');
+          selectedFiles = fs;               // p/ estimativa de tempo + lista por arquivo
+          showState(stateProcessing);
+          startPolling();                   // religa o polling no MESMO job → % + conclusão
         } else {
           resetBtn();
           fSet('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');

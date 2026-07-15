@@ -3151,6 +3151,42 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         f"💡 ALTERNATIVA mais rápida: se você já plotou esse desenho em PDF, "
                         f"mande o PDF — funciona igual."
                     )
+                    # COMPLEMENTO (/add-file) que falha NÃO pode derrubar o projeto que
+                    # já funcionava. O add-file preserva os itens antigos (limpa só no
+                    # sucesso). Se este job já tinha resultado, restaura 'done' + avisa —
+                    # nunca marca erro. (Feedback Pedro 15/07: DWG-complemento que não abriu
+                    # sumia a planilha da tela; ele achou que tinha perdido tudo.)
+                    if is_complement:
+                        _prev_n = 0
+                        try:
+                            import urllib.request as _urc
+                            _cq = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}&select=id&limit=1")
+                            _cr = _urc.Request(_cq, method="GET")
+                            _cr.add_header("apikey", SUPABASE_KEY)
+                            _cr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                            _prev_n = len(json.loads(_urc.urlopen(_cr, timeout=10).read().decode("utf-8")))
+                        except Exception as _cerr:
+                            print(f"[add-file] contagem de itens base falhou: {_cerr}")
+                        if _prev_n > 0:
+                            _warn_txt = (
+                                f"O arquivo CAD que você anexou ({arquivos}) não pôde ser aberto "
+                                f"automaticamente (DWG de versão recente do AutoCAD ou com objetos "
+                                f"de MEP/elétrica). Sua planilha anterior foi mantida — nada foi "
+                                f"perdido. Pra medir pelo CAD: abra no AutoCAD ou BricsCAD, "
+                                f"Salvar Como → DXF 2013, e anexe o DXF aqui.")
+                            jobs.update_field(job_id, status="done", progress=100, error_message=None,
+                                              current_step="Complemento não pôde ser lido — planilha anterior mantida")
+                            try:
+                                _supabase_update("projects", "job_id", job_id, {
+                                    "status": "done",
+                                    "error_message": None,
+                                    "warnings": [_warn_txt],
+                                    "completed_at": datetime.utcnow().isoformat(),
+                                })
+                            except Exception as _upe:
+                                print(f"[add-file] restaurar done falhou: {_upe}")
+                            print(f"[add-file] complemento CAD falhou, base tem {_prev_n} itens → done+aviso (sem erro)")
+                            return
                     jobs.update_field(job_id, error_message=msg, current_step="❌ Arquivo CAD inválido — leia mensagem abaixo")
                     raise RuntimeError(msg)
             except Exception as e:
