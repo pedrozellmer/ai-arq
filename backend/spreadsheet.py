@@ -36,6 +36,7 @@ BD = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='t
 DISCIPLINE_ORDER = [
     "Serviços Preliminares",
     "Demolição e Remoção",
+    "Estrutura",
     "Fechamentos Verticais",
     "Revestimentos",
     "Pisos e Rodapés",
@@ -45,6 +46,8 @@ DISCIPLINE_ORDER = [
     "Persianas e Cortinas",
     "Iluminação",
     "Instalações Elétricas e Dados",
+    "Instalações Hidráulicas",
+    "Instalações de Gás",
     "Ar-Condicionado",
     "Incêndio e Segurança",
     "Marcenaria",

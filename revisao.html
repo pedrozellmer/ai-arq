@@ -781,16 +781,20 @@ function updateCounters() {
   // Botão "Concluir revisão" — habilita só quando pendentes == 0
   const btnFinish = document.getElementById('btn-finish');
   if (btnFinish) {
-    if (counts.pending === 0 && items.length > 0) {
+    if (items.length > 0) {
+      // Dá pra concluir a QUALQUER momento — itens não revisados ficam como a IA
+      // gerou (igual a legenda promete). Não trava mais em pending===0.
       btnFinish.disabled = false;
       btnFinish.classList.remove('opacity-50', 'cursor-not-allowed');
-      btnFinish.classList.add('shadow-btn', 'animate-pulse');
-      btnFinish.title = 'Finaliza a revisão e atualiza a planilha';
+      btnFinish.classList.add('shadow-btn');
+      btnFinish.classList.toggle('animate-pulse', counts.pending === 0);
+      btnFinish.title = counts.pending === 0
+        ? 'Finaliza a revisão e atualiza a planilha'
+        : `Concluir agora — ${counts.pending} ${counts.pending === 1 ? 'item fica' : 'itens ficam'} como a IA gerou`;
     } else {
       btnFinish.disabled = true;
       btnFinish.classList.add('opacity-50', 'cursor-not-allowed');
       btnFinish.classList.remove('shadow-btn', 'animate-pulse');
-      btnFinish.title = counts.pending === 1 ? 'Falta 1 item pra concluir' : `Faltam ${counts.pending} itens pra concluir`;
     }
   }
 }
@@ -806,9 +810,14 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
   // Cashback inline removido em 2026-05-13. A revisão dentro do site não
   // gera mais crédito — mensagem agora explica que o cashback vem do upload
   // da planilha revisada offline ou de cotações de fornecedor.
+  const pending = items.length - counts.approved - counts.rejected - counts.edited;
+  const pendingNote = pending > 0
+    ? `⚠ ${pending} ${pending === 1 ? 'item não revisado fica' : 'itens não revisados ficam'} como a IA gerou. `
+    : '';
   const finishMsg =
     `Concluir revisão de ${items.length} itens? ` +
     `✓ ${counts.approved} aprovados · ✗ ${counts.rejected} removidos · ✎ ${counts.edited} editados. ` +
+    pendingNote +
     `Suas correções treinam a IA pro próximo projeto. ` +
     `Pra ganhar cashback (R$ 30): baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto.`;
   const ok = window.toast
