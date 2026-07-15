@@ -3128,6 +3128,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # reprocesse grátis". Declarado ANTES do loop pra estar em escopo no
         # except da IA (armadilha #11 do CLAUDE.md reaparecendo no caminho DXF).
         dxf_errors: list[str] = []
+        xref_warnings: list[str] = []  # xref não-resolvido / extração estéril → orienta o usuário (BIND / PDF)
         if dxf_paths:
             # Análise DXF começa onde a conversão termina
             extract_start = conv_end_pct
@@ -3176,6 +3177,20 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # a IA marcar. Só REBAIXA pra estimado — nunca promove. Fecha o
                     # furo de "a IA carimba medido num número que não dá pra confiar".
                     _dxf_sem_procedencia = _extraction_has_quality_caveat(extraction.metadata)
+                    # Aviso ao usuário (não só rebaixar a cor): xref não-resolvido é a
+                    # causa nº1 de "planilha só laranja" em CAD — o sinal existe na
+                    # metadata mas antes morria no downgrade. Agora orienta a dar BIND
+                    # ou mandar o PDF plotado.
+                    _bn_w = os.path.basename(dxf_path)
+                    if extraction.metadata.get("xref_nao_resolvido"):
+                        xref_warnings.append(
+                            f"{_bn_w}: parece que falta o desenho de referência (xref) — o arquitetônico "
+                            f"pode estar num arquivo externo que não veio junto. No AutoCAD, use BIND pra "
+                            f"incorporar os xrefs e reexporte o DXF, ou mande o PDF plotado da prancha.")
+                    elif extraction.metadata.get("extracao_esteril"):
+                        xref_warnings.append(
+                            f"{_bn_w}: não consegui ler geometria mensurável nesse arquivo. Reexporte "
+                            f"do CAD com tudo incorporado (BIND, sem xref solto) ou mande o PDF plotado da prancha.")
 
                     # 2. Enviar pro Claude interpretar
                     jobs.update_field(job_id, progress=dxf_mid)
@@ -3997,6 +4012,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                           f"entraram nesta planilha — ela pode estar INCOMPLETA. "
                           f"Reprocesse (grátis) pra tentar completar. Faltaram: {_falhos[:280]}")
             project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [_aviso_cob]
+
+        # Aviso de xref/estéril por-arquivo (independe de falha parcial): orienta o
+        # usuário a incorporar o desenho externo, em vez de só ver tudo laranja.
+        if xref_warnings:
+            project_data.warnings = (getattr(project_data, 'warnings', None) or []) + xref_warnings
 
         # Gerar planilha
         jobs.update_field(job_id, progress=92)
