@@ -250,7 +250,28 @@ function smartBack() {
         var data = await r.json().catch(function(){ return {}; });
         if (r.ok && data.status === 'ok'){
           document.getElementById('cad-upgrade-form').classList.add('hidden');
-          setStatus('✅ Recebido! Tô refazendo o teu projeto medindo pelo CAD — leva alguns minutos. Te aviso por email quando ficar pronto (ou recarrega a página daqui a pouco).', 'text-emerald-700 font-medium');
+          setStatus('⏳ Refazendo com o CAD… 0%', 'text-amber-800');
+          // Progresso ao vivo + reload automático quando terminar. Antes só mostrava
+          // "recarregue a página daqui a pouco" e o usuário ficava perdido (Pedro 15/07).
+          var _ticks = 0;
+          var _poll = setInterval(async function(){
+            _ticks++;
+            if (_ticks > 200){ clearInterval(_poll); setStatus('Ainda processando… recarregue a página em instantes.', 'text-amber-800'); return; }
+            try {
+              var sr = await fetch(window.API_BASE + '/api/status/' + jid, { headers: { 'Authorization': 'Bearer ' + sess.access_token } });
+              if (!sr.ok) return;
+              var sd = await sr.json().catch(function(){ return {}; });
+              var pct = Math.max(0, Math.round(sd.progress || 0));
+              var st = sd.status || '';
+              if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || pct >= 100){
+                clearInterval(_poll);
+                setStatus('✅ Pronto! Atualizando a página…', 'text-emerald-700 font-medium');
+                setTimeout(function(){ location.reload(); }, 800);
+              } else {
+                setStatus('⏳ Refazendo com o CAD… ' + pct + '%', 'text-amber-800');
+              }
+            } catch(e){ /* rede: tenta de novo no próximo tick */ }
+          }, 3000);
         } else {
           btn.disabled = false;
           setStatus('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');
