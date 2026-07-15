@@ -2904,6 +2904,45 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
     return current_unit, False
 
 
+def _item_geo_category(description: str, discipline: str = "") -> str | None:
+    """Mapeia um ITEM (descrição+disciplina) para UMA categoria física geométrica
+    {piso, forro, pintura, paredes, demolicao} ou None.
+
+    Usado SÓ pelo cross-check determinístico: casar o número da IA contra a medida
+    da PRÓPRIA categoria do item (nunca confirmar forro com área de piso — furo C da
+    revisão 15/07). CONSERVADOR de propósito: só retorna categoria quando a descrição
+    tem a PALAVRA da categoria (piso/forro/parede/pintura/demolição). Material ambíguo
+    ('cerâmica', 'porcelanato' — pode ser piso OU parede) retorna None → não promove.
+    Recall menor, zero classificação errada (regra nº1)."""
+    t = f"{description} {discipline}".lower()
+    # Ordem: mais específico primeiro (demolição e forro antes de piso/parede).
+    if "demoli" in t or "demolir" in t:
+        return "demolicao"
+    if "forro" in t or "sanca" in t:
+        return "forro"
+    if "pintura" in t or "pintar" in t:
+        return "pintura"
+    if "contrapiso" in t or "piso" in t or "assoalho" in t:
+        return "piso"
+    if ("parede" in t or "alvenaria" in t or "divisória" in t
+            or "divisoria" in t or "drywall" in t):
+        return "paredes"
+    return None
+
+
+def _measure_unambiguous(value: float, cat: str, by_cat: dict) -> bool:
+    """True se `value` (medida arredondada) aparece SÓ na categoria `cat` dentro de
+    `by_cat` — não colide com nenhuma outra categoria do MESMO tipo de medida.
+
+    Fecha o furo C: forro≈piso (mesma área). Se a área bate tanto em piso quanto em
+    forro, o número é AMBÍGUO → não promove nenhum dos dois. Só confirma quando a
+    geometria aponta inequivocamente pra categoria do item."""
+    for _c, _s in by_cat.items():
+        if _c != cat and value in _s:
+            return False
+    return True
+
+
 # ─── Throttle de processamento concorrente ──────────────────────────
 # Cada upload dispara process_job() numa thread daemon. SEM limite, 2-3
 # projetos processando ao mesmo tempo somam picos de RAM (render PDF +
@@ -3139,7 +3178,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
             jobs.update_field(job_id, progress=extract_start)
             jobs.update_field(job_id, current_step="Extraindo geometria dos DXF...")
             try:
-                from dwg_extractor import extract_from_file, identify_architectural_elements
+                from dwg_extractor import extract_from_file, identify_architectural_elements, category_for_layer
                 from analyzer import SYSTEM_PROMPT, SYSTEM_PROMPT_ESTRUTURA
                 import json as _j
 
@@ -3196,42 +3235,45 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"{_bn_w}: não consegui ler geometria mensurável nesse arquivo. Reexporte "
                             f"do CAD com tudo incorporado (BIND, sem xref solto) ou mande o PDF plotado da prancha.")
 
-                    # Medidas DURAS desta prancha (pro cross-check): SÓ de layers FÍSICOS
-                    # reconhecidos, no MESMO agregado que a IA vê (somado POR LAYER). Área só
-                    # de piso/forro/revestimento; comprimento só de parede/demolição. Blinda
-                    # contra falso-medido (revisão adversarial 15/07): hachura decorativa,
-                    # eixo/cota/mobiliário e perímetro de piso ficam FORA.
+                    # Medidas DURAS desta prancha (pro cross-check), agora POR CATEGORIA
+                    # (revisão adversarial 15/07, furo C): NÃO um set achatado. Cada medida
+                    # fica atada à sua categoria física (piso/forro/paredes/...) pra o
+                    # cross-check casar o número contra a categoria do PRÓPRIO item — nunca
+                    # confirmar um forro com a área do piso. Área só de piso/forro/pintura;
+                    # comprimento só de parede/demolição; somado POR LAYER (agregado que a
+                    # IA vê). Hachura decorativa, eixo/cota/mobiliário e perímetro ficam FORA.
                     _cats_geo = identify_architectural_elements(extraction)
                     _AREA_CATS = {"piso", "forro", "pintura"}   # m² físico
                     _LEN_CATS = {"paredes", "demolicao"}          # m físico (linear)
-                    _hard_m2 = set()
-                    _hard_m = set()
+                    _hard_area_by_cat: dict[str, set] = {}   # cat -> {áreas m² por layer}
+                    _hard_len_by_cat: dict[str, set] = {}    # cat -> {comprimentos m por layer}
                     for _ck, _cd in _cats_geo.items():
                         if _ck in _AREA_CATS:
                             _pl = {}
                             for _h in _cd.get("hatches", []):
                                 _pl[_h.layer] = _pl.get(_h.layer, 0.0) + (getattr(_h, "area", 0) or 0)
-                            for _v in _pl.values():
-                                if _v > 0:
-                                    _hard_m2.add(round(_v, 2))
+                            _s = {round(_v, 2) for _v in _pl.values() if _v > 0}
+                            if _s:
+                                _hard_area_by_cat.setdefault(_ck, set()).update(_s)
                         if _ck in _LEN_CATS:
                             _pl2 = {}
                             for _w in _cd.get("walls", []):
                                 _pl2[_w.layer] = _pl2.get(_w.layer, 0.0) + (getattr(_w, "length", 0) or 0)
-                            for _v in _pl2.values():
-                                if _v > 0:
-                                    _hard_m.add(round(_v, 2))
-                    # polígonos fechados já vêm allowlisted (ambiente/piso/forro) do extrator
+                            _s2 = {round(_v, 2) for _v in _pl2.values() if _v > 0}
+                            if _s2:
+                                _hard_len_by_cat.setdefault(_ck, set()).update(_s2)
+                    # Polígonos fechados: categorizar POR LAYER e aceitar SÓ piso/forro
+                    # (furo D): "ambiente"/genérico do allowlist do extrator NÃO entra como
+                    # medida dura de categoria — só superfície física reconhecível.
                     for _pa in (getattr(extraction, "polygon_areas", None) or []):
                         try:
-                            if isinstance(_pa, (int, float)):
-                                _pav = _pa
-                            elif isinstance(_pa, (tuple, list)) and _pa:
-                                _pav = _pa[0]
-                            else:
-                                _pav = getattr(_pa, "area", None)
-                            if _pav and float(_pav) > 0:
-                                _hard_m2.add(round(float(_pav), 2))
+                            _pav = getattr(_pa, "area", None)
+                            _ply = getattr(_pa, "layer", "") or ""
+                            if not (_pav and float(_pav) > 0):
+                                continue
+                            _pcat = category_for_layer(_ply)
+                            if _pcat in ("piso", "forro"):
+                                _hard_area_by_cat.setdefault(_pcat, set()).add(round(float(_pav), 2))
                         except Exception:
                             pass
 
@@ -3582,18 +3624,32 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                f"(estéril/unidade/xref) — quantidade não confirmada, revisar").strip(" |")
 
                                 # CROSS-CHECK determinístico (opt-in via env DXF_CONFIRM_CROSSCHECK):
-                                # promove 'estimado' → 'confirmado' SÓ quando a quantidade bate
-                                # byte-a-byte com uma medida DURA da geometria (área/comprimento) E
-                                # não há ressalva. Nunca promove 'un' nem número derivado (não bate
-                                # com medida única). Conserta a "timidez" da IA sem falso-medido.
+                                # promove 'estimado' → 'confirmado' SÓ quando TODAS batem:
+                                #  (a) o item cai numa categoria física clara (piso/forro/parede/...);
+                                #  (b) a unidade corresponde ao tipo da categoria (m²=área, m=linear);
+                                #  (c) a quantidade bate byte-a-byte com uma medida dura DAQUELA
+                                #      categoria (não de outro elemento — furo C);
+                                #  (d) a medida é INEQUÍVOCA — não colide com outra categoria
+                                #      (forro≈piso não promove nenhum dos dois).
+                                # Sem ressalva, sem unidade ajustada, qty>0. Conserta a "timidez"
+                                # da IA sem falso-medido. Revisão adversarial 15/07.
                                 if (_XCHECK_ON and conf == "estimado" and not _dxf_sem_procedencia
                                         and not unit_corrected and qty > 0):
                                     _q2 = round(qty, 2)
-                                    if ((normalized_unit in ("m²", "m2") and _q2 in _hard_m2) or
-                                            (normalized_unit in ("m", "ml") and _q2 in _hard_m)):
+                                    _icat = _item_geo_category(desc, discipline)
+                                    _promo = False
+                                    if _icat in _AREA_CATS and normalized_unit in ("m²", "m2"):
+                                        if (_q2 in _hard_area_by_cat.get(_icat, set())
+                                                and _measure_unambiguous(_q2, _icat, _hard_area_by_cat)):
+                                            _promo = True
+                                    elif _icat in _LEN_CATS and normalized_unit in ("m", "ml"):
+                                        if (_q2 in _hard_len_by_cat.get(_icat, set())
+                                                and _measure_unambiguous(_q2, _icat, _hard_len_by_cat)):
+                                            _promo = True
+                                    if _promo:
                                         conf = "confirmado"
                                         obs_raw = (f"{obs_raw} | Medido: confere com a geometria "
-                                                   f"extraída ({_q2} {normalized_unit})").strip(" |")
+                                                   f"de {_icat} extraída ({_q2} {normalized_unit})").strip(" |")
 
                                 item = BudgetItem(
                                     item_num=str(item_data.get("item_num", "")),
