@@ -528,12 +528,16 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
             lf.write(oda_log)
         print(f"[ODA] {oda_log}")
         if result.returncode != 0:
-            logger.error(
-                "ODA File Converter falhou (code %d): %s",
+            # NÃO retorna aqui (bug corrigido 15/07): o ODA às vezes gera um DXF
+            # USÁVEL mesmo com código≠0 (audit com warnings), e mesmo quando não
+            # gera, ainda queremos tentar o fallback libredwg — que existe justo
+            # pra DWG com objetos fora do padrão (MEP/elétrica). Antes o return
+            # aqui pulava o plano B inteiro. Segue pro procura-DXF + libredwg.
+            logger.warning(
+                "ODA File Converter code %d (segue pra procurar DXF/fallback): %s",
                 result.returncode,
-                result.stderr or result.stdout,
+                (result.stderr or result.stdout or "")[:300],
             )
-            return None
     except FileNotFoundError:
         logger.error("Executável ODA não acessível: %s", oda_exe)
         return None
