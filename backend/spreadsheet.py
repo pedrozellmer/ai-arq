@@ -94,18 +94,25 @@ def _build_ref_text(item) -> str:
     if sinapi_matches:
         m = sinapi_matches[0]
         cod = m.get('codigo', '').strip()
-        if cod:
+        sim = m.get('similarity', 0) or 0
+        # CORTE DE RUÍDO (15/07): abaixo de 30% de similaridade o código específico
+        # é quase sempre errado, mas na coluna REF parece uma referência oficial e
+        # induz o orçamentista a copiar. Some o código aqui (segue visível na aba
+        # técnica COM o %). Acima de 30%, mostra código + nível de confiança.
+        if cod and sim >= 0.30:
             level = m.get('_match_level', 'full')
             mark = '~' if level.startswith('simplified') else ''
             # Confiança do match na própria linha (não só na aba técnica): código
             # errado induz o orçamentista, então o nível precisa estar visível.
-            sim = m.get('similarity', 0) or 0
             conf_lbl = 'conf. alta' if sim >= 0.7 else ('conf. média' if sim >= 0.45 else 'conf. baixa')
             # Aviso de unidade incompatível (piso m² × código em metro linear).
             sinapi_unit = (m.get('unidade') or '').strip()
             fi, fs = _unit_family(item.unit), _unit_family(sinapi_unit)
             unit_warn = f' ⚠ unidade difere (item {item.unit} × SINAPI {sinapi_unit})' if (fi and fs and fi != fs) else ''
             parts.append(f'SINAPI {mark}{cod} ({conf_lbl}){unit_warn}')
+        elif cod:
+            # Match fraco: sinaliza que há candidato SINAPI sem induzir com código.
+            parts.append('SINAPI: sem correspondência forte (ver aba técnica)')
 
     # TCPO BIM (referência técnica complementar)
     tcpo_matches = getattr(item, 'tcpo_matches', None) or []
@@ -938,8 +945,9 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         wsm.merge_cells(start_row=rm + 1, start_column=1, end_row=rm + 1, end_column=9)
         wsm.cell(row=rm + 1, column=1, value=(
             'Como ler: MATCH % indica a similaridade entre a descrição do item '
-            'e a composição TCPO. Acima de 70% = referência forte. 40-70% = '
-            'revisar. Abaixo = usar com cautela.')).font = F_NOTE
+            'e a composição SINAPI/TCPO. Acima de 70% = referência forte. 40-70% = '
+            'revisar. Abaixo de 30% = candidato fraco, buscar código manualmente '
+            'em https://www.caixa.gov.br/sinapi.')).font = F_NOTE
 
         wsm.freeze_panes = 'A6'
         wsm.page_setup.orientation = 'landscape'
