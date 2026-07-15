@@ -1334,8 +1334,15 @@
       document.getElementById('stat-projects-sub').textContent =
         thisMonth > 0 ? `${thisMonth} este mês` : 'Total processados';
 
-      // Atividade recente (últimos 5)
-      const recent = projects.slice(0, 5);
+      // Atividade recente (últimos 5) — INCLUI erro/processando pra não sumir do
+      // radar. Antes só mostrava 'done' e um projeto que falhou desaparecia do dash,
+      // só aparecendo em Meus Projetos (feedback Pedro 15/07). Métricas acima seguem
+      // só 'done' (não inflar "processados" com falha).
+      const recent = (data.projects || [])
+        .filter(p => !p.archived)
+        .slice()
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+        .slice(0, 5);
       const recentEl = document.getElementById('home-recent');
       if (!recent.length) {
         recentEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-500">Nenhum projeto ainda. <button onclick="switchTab(\'novo-projeto\')" class="text-indigo-600 hover:underline font-medium">Criar primeiro →</button></div>';
@@ -1343,11 +1350,22 @@
         recentEl.innerHTML = recent.map(p => {
           const when = p.created_at ? new Date(p.created_at).toLocaleString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
           const _ti = ({office:['🏢','bg-indigo-50'],residential:['🏠','bg-emerald-50'],retail:['🏪','bg-amber-50'],hospital:['🏥','bg-rose-50'],educational:['🎓','bg-sky-50']})[p.typology] || ['📄','bg-gray-100'];
+          // Selo de status — daltônico-safe (ícone + texto, nunca só cor)
+          const _st = p.status || '';
+          let _badge = '';
+          if (_st === 'error' || _st === 'failed') {
+            _badge = '<span class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-100 text-red-700">✗ Erro</span>';
+          } else if (_st === 'queued' || _st === 'processing') {
+            _badge = '<span class="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800">⏳ Processando</span>';
+          }
           return `
             <a href="projeto.html?job_id=${p.job_id}" class="flex items-center gap-3 px-5 py-3 hover:bg-gray-50 no-underline">
               <div class="w-10 h-10 rounded-xl ${_ti[1]} flex items-center justify-center text-lg shrink-0" aria-hidden="true">${_ti[0]}</div>
               <div class="flex-1 min-w-0">
-                <p class="font-medium text-gray-800 truncate">${escapeH(p.project_name || 'Sem nome')}</p>
+                <div class="flex items-center gap-2 min-w-0">
+                  <p class="font-medium text-gray-800 truncate">${escapeH(p.project_name || 'Sem nome')}</p>
+                  ${_badge}
+                </div>
                 <p class="text-xs text-gray-500 truncate">${(p.client_name || '').trim() ? '<span class="text-gray-700 font-medium">👤 ' + escapeH(p.client_name) + '</span> · ' : ''}${escapeH(p.typology || '')} · ${p.items_count || 0} itens · ${when}</p>
               </div>
               <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
