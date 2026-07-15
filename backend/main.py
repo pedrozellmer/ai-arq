@@ -3068,6 +3068,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
         # Converter DWG→DXF se necessário
         dxf_paths = []
+        dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
         if cad_paths:
             jobs.update_field(job_id, progress=5)
             jobs.update_field(job_id, current_step="Processando arquivos DWG/DXF...")
@@ -3149,8 +3150,19 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Extraindo {os.path.basename(dxf_path)}...")
 
                     # 1. Extrair dados estruturados do DXF
-                    extraction = extract_from_file(dxf_path)
-                    structured_text = extraction.to_structured_prompt()
+                    # ISOLADO por-arquivo: se o ezdxf não parseia ESTA prancha (objeto
+                    # proxy, DXF truncado, entidade não suportada), registra em dxf_errors
+                    # e PULA pro próximo — não derruba os outros DXF/PDF do job. Antes a
+                    # exceção subia pro except externo que fazia raise e matava a planilha
+                    # inteira por causa de uma prancha só (caso Thamiry: 22 DWGs).
+                    try:
+                        extraction = extract_from_file(dxf_path)
+                        structured_text = extraction.to_structured_prompt()
+                    except Exception as _ex_dxf:
+                        _bn_dxf = os.path.basename(dxf_path)
+                        print(f"[dxf] extração falhou em {_bn_dxf}: {_ex_dxf}")
+                        dxf_errors.append(f"{_bn_dxf}: não consegui ler a geometria desse arquivo (pode estar corrompido ou ter objetos não suportados)")
+                        continue
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
                     # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
                     # folgado pra uma prancha real.
@@ -3975,7 +3987,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # O guard acima só pega o caso de ZERO itens. Se sobram itens mas uma
         # disciplina inteira caiu por um pico passageiro da IA, o usuário recebia
         # planilha que PARECE completa (bug Vinícius ainda meio aberto).
-        partial_errors = (sheet_errors or []) + (dxf_errors or [])
+        _dwg_failed_msgs = [f"{n}: não consegui converter esse DWG (talvez versão nova do AutoCAD ou objetos especiais)"
+                            for n in (dwg_failed or [])]
+        partial_errors = (sheet_errors or []) + (dxf_errors or []) + _dwg_failed_msgs
         partial_failure = bool(partial_errors)
         if partial_failure:
             _falhos = "; ".join(e.split(":")[0] for e in partial_errors)
