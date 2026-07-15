@@ -315,14 +315,62 @@
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <p class="mb-3">A regra de ouro: <strong>DWG e DXF medem de verdade; PDF &eacute; leitura visual</strong>. No CAD a gente extrai a geometria (&aacute;reas, comprimentos, contagem de blocos), ent&atilde;o as quantidades saem <strong>medidas</strong>. No PDF a IA l&ecirc; pela imagem, ent&atilde;o sai tudo como <strong>estimativa</strong> pra voc&ecirc; conferir.</p>
-              <p class="mb-2 font-medium text-gray-700">Pra exportar bem:</p>
-              <ol class="list-decimal pl-5 space-y-1.5 mb-3">
-                <li><strong>Prefira DWG ou DXF</strong> — e, se puder, <strong>DXF</strong> (n&atilde;o depende de convers&atilde;o).</li>
-                <li><strong>Salve numa vers&atilde;o compat&iacute;vel</strong> (DXF 2013 ou 2010). Vers&otilde;es muito recentes do AutoCAD, ou objetos especiais (comuns em projetos MEP), &agrave;s vezes n&atilde;o abrem no conversor.</li>
-                <li><strong>Desenhe esquadrias, pe&ccedil;as e equipamentos como blocos</strong>, n&atilde;o como linhas soltas — &eacute; assim que a IA consegue contar quantos s&atilde;o.</li>
-                <li><strong>Evite PDF exportado em "modo desenho/imagem"</strong> — as cotas viram pixels e n&atilde;o d&atilde;o pra ler.</li>
-              </ol>
-              <p>S&oacute; tem PDF? Sem problema, a gente processa — s&oacute; lembre que sai tudo como estimativa pra conferir, e os n&uacute;meros voc&ecirc; ajusta.</p>
+              <p class="mb-2 font-medium text-gray-700">Passo a passo por programa:</p>
+              <div class="space-y-3 mb-4">
+                <div>
+                  <p class="font-semibold text-gray-800">AutoCAD</p>
+                  <ol class="list-decimal pl-5 space-y-0.5 mt-0.5">
+                    <li>Bot&atilde;o do Aplicativo (o "A" no topo &agrave; esquerda) &rarr; Salvar Como &rarr; Outros Formatos.</li>
+                    <li>Em "Arquivos do tipo", escolha um DXF (ex.: AutoCAD 2018 DXF).</li>
+                    <li>D&ecirc; um nome, escolha a pasta e Salvar. <span class="text-gray-400">(o .dwg nativo j&aacute; serve)</span></li>
+                  </ol>
+                  <p class="text-xs text-gray-400 mt-1"><a href="https://help.autodesk.com/view/ACD/2024/ENU/?guid=GUID-5EA0F1DC-EA92-4ADB-9BDF-C352DF3AFC5F" target="_blank" rel="noopener" class="underline hover:text-gray-600">Fonte: Autodesk</a></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-gray-800">Revit</p>
+                  <ol class="list-decimal pl-5 space-y-0.5 mt-0.5">
+                    <li>Aba Arquivo &rarr; Exportar &rarr; Formatos CAD &rarr; DWG (ou DXF).</li>
+                    <li>Ajuste a configura&ccedil;&atilde;o (camadas) e escolha a vista/folha, ou um conjunto &rarr; Avan&ccedil;ar.</li>
+                    <li>Escolha a pasta; em "Arquivos do tipo", a vers&atilde;o do AutoCAD (DWG) ou DXF &rarr; OK.</li>
+                  </ol>
+                  <p class="text-xs text-gray-400 mt-1">Arquivos .rvt e .ifc n&atilde;o entram direto &mdash; exporte antes. <a href="https://help.autodesk.com/cloudhelp/2025/ENU/Revit-DocumentPresent/files/GUID-42C75024-4D71-4831-8910-2747168624A3.htm" target="_blank" rel="noopener" class="underline hover:text-gray-600">Fonte: Autodesk</a></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-gray-800">ArchiCAD</p>
+                  <ol class="list-decimal pl-5 space-y-0.5 mt-0.5">
+                    <li>Abra a planta ou prancha (n&atilde;o funciona em tabela, &iacute;ndice ou lista).</li>
+                    <li>Arquivo &rarr; Salvar como &rarr; escolha DWG ou DXF.</li>
+                    <li>No campo Tradutor, deixe um padr&atilde;o (ex.: "For as-is output") e Salvar.</li>
+                    <li>V&aacute;rias pranchas de uma vez: Documento &rarr; Publicar.</li>
+                  </ol>
+                  <p class="text-xs text-gray-400 mt-1"><a href="https://help.graphisoft.com/AC/28/INT/_AC28_Help/120_Interoperability/120_Interoperability-26.htm" target="_blank" rel="noopener" class="underline hover:text-gray-600">Fonte: Graphisoft</a></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-gray-800">SketchUp <span class="font-normal text-gray-400">(Pro)</span></p>
+                  <ol class="list-decimal pl-5 space-y-0.5 mt-0.5">
+                    <li>Pra planta, ajuste a vista: C&acirc;mera &rarr; Vistas Padr&atilde;o + proje&ccedil;&atilde;o paralela.</li>
+                    <li>Arquivo &rarr; Exportar &rarr; Gr&aacute;fico 2D (planta) ou Modelo 3D.</li>
+                    <li>Escolha .dwg ou .dxf &rarr; Op&ccedil;&otilde;es &rarr; OK &rarr; Exportar.</li>
+                  </ol>
+                  <p class="text-xs text-gray-400 mt-1">Exportar CAD s&oacute; existe no SketchUp Pro. <a href="https://help.sketchup.com/en/sketchup/importing-and-exporting-cad-files" target="_blank" rel="noopener" class="underline hover:text-gray-600">Fonte: Trimble</a></p>
+                </div>
+                <div>
+                  <p class="font-semibold text-gray-800">S&oacute; tenho PDF</p>
+                  <ol class="list-decimal pl-5 space-y-0.5 mt-0.5">
+                    <li>Exporte um <strong>PDF vetorial</strong>: no AutoCAD, bot&atilde;o do Aplicativo &rarr; Exportar &rarr; PDF. No Revit/ArchiCAD, use Imprimir/Plotar &rarr; PDF.</li>
+                    <li><strong>Nunca</strong> "plotar como imagem" nem escanear/fotografar a planta &mdash; o desenho vira pixel, as cotas somem e a IA n&atilde;o consegue medir.</li>
+                    <li>Se der, mande o DWG/DXF junto &mdash; a gente mede e completa o que o PDF deixou como estimativa.</li>
+                  </ol>
+                </div>
+              </div>
+
+              <p class="mb-2 font-medium text-gray-700">Dicas que ajudam ainda mais:</p>
+              <ul class="list-disc pl-5 space-y-1 mb-3">
+                <li><strong>Salve numa vers&atilde;o compat&iacute;vel</strong> (DXF 2018, 2013 ou 2010) &mdash; objetos muito recentes ou especiais (comuns em projetos MEP) &agrave;s vezes n&atilde;o convertem.</li>
+                <li><strong>Desenhe esquadrias, pe&ccedil;as e equipamentos como blocos</strong>, n&atilde;o como linhas soltas &mdash; &eacute; assim que a IA conta quantos s&atilde;o.</li>
+              </ul>
+
+              <p>S&oacute; tem PDF mesmo? Sem problema, a gente processa &mdash; s&oacute; lembre que sai como estimativa pra conferir, e os n&uacute;meros voc&ecirc; ajusta.</p>
             </div>
           </div>
         </div>
