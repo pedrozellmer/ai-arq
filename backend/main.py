@@ -4327,18 +4327,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except ImportError:
             pass
 
-        try:
-            from tcpo_matcher import match_item as match_tcpo, get_insumos
-            for it in all_items:
-                try:
-                    ms = match_tcpo(it.description, limit=3)
-                    if ms:
-                        ms[0]['insumos'] = get_insumos(ms[0]['id'])
-                        it.tcpo_matches = ms
-                except Exception:
-                    pass
-        except ImportError:
-            pass
+        # TCPO REMOVIDO da planilha (16/07): decisão de produto = catálogo é SINAPI,
+        # TCPO fora da fase atual ([[project_ai_arq_catalogo]]). Parar de rodar o
+        # matcher em TODO item economiza tempo/consulta e não popula tcpo_matches, então
+        # a planilha não mostra mais TCPO. Endpoints /api/tcpo/* seguem (mortos, sem UI).
 
         # Checa heurísticas de mercado (dispersão, cobertura, share MAT/MO)
         # contra as categorias de cada item. Adiciona alertas nas observations
