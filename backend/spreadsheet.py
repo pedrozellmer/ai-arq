@@ -6,31 +6,34 @@ from openpyxl.utils import get_column_letter
 from models import ProjectData, BudgetItem, Confidence
 
 
-# Estilos
-F_TITLE = Font(name='Arial', bold=True, size=14)
-F_SEC = Font(name='Arial', bold=True, size=11, color='FFFFFF')
-F_SUB = Font(name='Arial', bold=True, size=10)
-F_HDR = Font(name='Arial', bold=True, size=9)
-F_N = Font(name='Arial', size=9)
-F_BLUE = Font(name='Arial', size=9, color='0000FF')
-F_BOLD = Font(name='Arial', bold=True, size=9)
-F_TOT = Font(name='Arial', bold=True, size=10)
-F_NOTE = Font(name='Arial', size=8, italic=True, color='FF0000')
-F_SM = Font(name='Arial', size=8)
+# Estilos — modernizado 16/07: fonte Calibri, paleta da marca (slate/indigo),
+# amarelo suave, bordas cinza-claro. Daltonismo mantido (cor + selo de texto).
+_FONT = 'Calibri'
+F_TITLE = Font(name=_FONT, bold=True, size=15, color='0F172A')
+F_SEC = Font(name=_FONT, bold=True, size=11, color='FFFFFF')
+F_SUB = Font(name=_FONT, bold=True, size=10, color='0F172A')
+F_HDR = Font(name=_FONT, bold=True, size=9, color='0F172A')
+F_N = Font(name=_FONT, size=9)
+F_BLUE = Font(name=_FONT, size=9, color='1D4ED8')
+F_BOLD = Font(name=_FONT, bold=True, size=9)
+F_TOT = Font(name=_FONT, bold=True, size=10, color='0F172A')
+F_NOTE = Font(name=_FONT, size=8, italic=True, color='64748B')
+F_SM = Font(name=_FONT, size=8)
 
-P_SEC = PatternFill('solid', fgColor='2F5496')
-P_SUB = PatternFill('solid', fgColor='D6E4F0')
-P_HDR = PatternFill('solid', fgColor='B4C6E7')
-P_YEL = PatternFill('solid', fgColor='FFFF00')
-P_TOT = PatternFill('solid', fgColor='D9E2F3')
-P_LT = PatternFill('solid', fgColor='F2F2F2')
-P_ORANGE = PatternFill('solid', fgColor='FFD699')
+P_SEC = PatternFill('solid', fgColor='0F172A')      # slate (cabeçalho de seção)
+P_SUB = PatternFill('solid', fgColor='EEF2FF')      # indigo-50 (subseção)
+P_HDR = PatternFill('solid', fgColor='E2E8F0')      # slate-200 (cabeçalho de coluna)
+P_YEL = PatternFill('solid', fgColor='FFF0A6')      # amarelo suave (preencher preço)
+P_TOT = PatternFill('solid', fgColor='E8ECF4')      # totais
+P_LT = PatternFill('solid', fgColor='F8FAFC')       # linha alternada sutil
+P_ORANGE = PatternFill('solid', fgColor='FFE1B3')   # estimado (laranja acessível)
 
 AC = Alignment(horizontal='center', vertical='center', wrap_text=True)
 AL = Alignment(horizontal='left', vertical='center', wrap_text=True)
 ALT = Alignment(horizontal='left', vertical='top', wrap_text=True)
 AR = Alignment(horizontal='right', vertical='center')
-BD = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
+_SD = Side(style='thin', color='D0D5DD')
+BD = Border(left=_SD, right=_SD, top=_SD, bottom=_SD)
 
 
 DISCIPLINE_ORDER = [
@@ -156,7 +159,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # ================================================================
     ws1 = wb.active
     ws1.title = 'Resumo Comparativo'
-    ws1.sheet_properties.tabColor = '2F5496'
+    ws1.sheet_properties.tabColor = '4F46E5'
     ws1.column_dimensions['A'].width = 4
     ws1.column_dimensions['B'].width = 90
 
@@ -164,14 +167,14 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     def add_title(text):
         nonlocal r
         ws1.merge_cells(f'A{r}:B{r}')
-        ws1.cell(row=r, column=1, value=text).font = Font(name='Arial', bold=True, size=12, color='2F5496')
+        ws1.cell(row=r, column=1, value=text).font = Font(name='Calibri', bold=True, size=12, color='4F46E5')
         r += 1
 
     def add_line(text, bold=False, fill=None):
         nonlocal r
         ws1.merge_cells(f'A{r}:B{r}')
         c = ws1.cell(row=r, column=1, value=text)
-        c.font = Font(name='Arial', bold=bold, size=10)
+        c.font = Font(name='Calibri', bold=bold, size=10)
         c.alignment = ALT
         if fill: c.fill = fill
         r += 1
@@ -180,7 +183,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         nonlocal r
         ws1.merge_cells(f'A{r}:B{r}')
         c = ws1.cell(row=r, column=1, value=text)
-        c.font = Font(name='Arial', bold=True, size=10, color='FFFFFF')
+        c.font = Font(name='Calibri', bold=True, size=10, color='FFFFFF')
         c.fill = P_SEC
         c.alignment = AL
         r += 1
@@ -198,7 +201,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         'Revisão por arquiteto ou engenheiro habilitado é obrigatória antes do uso. '
         'Itens em LARANJA são sugestões da IA — confira contra o projeto antes de mandar pros fornecedores.'
     ))
-    _cell_disc.font = Font(name='Arial', bold=True, size=10, color='8B4A0F')
+    _cell_disc.font = Font(name='Calibri', bold=True, size=10, color='8B4A0F')
     _cell_disc.fill = _disclaimer_fill
     _cell_disc.alignment = ALT
     ws1.row_dimensions[r].height = 48
@@ -264,7 +267,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         add_title('DEMOLIÇÃO — O QUE SAI')
         add_section('Notas importantes das pranchas de demolição')
         for note in project.demolition_notes:
-            add_line(f'  >> {note}', bold=True, fill=PatternFill('solid', fgColor='FFC7CE'))
+            add_line(f'  >> {note}', bold=True, fill=PatternFill('solid', fgColor='FEE2E2'))
         r += 1
 
     if project.new_rooms:
@@ -275,11 +278,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                 pd = room.get('ceiling_height', 'a definir')
                 area = room.get('area', 'a definir')
                 if pd and area and str(pd) != '' and str(area) != '':
-                    add_line(f'  • {name} — PD={pd}, ~{area} m²', fill=PatternFill('solid', fgColor='C6EFCE'))
+                    add_line(f'  • {name} — PD={pd}, ~{area} m²', fill=PatternFill('solid', fgColor='DCFCE7'))
                 else:
-                    add_line(f'  • {name}', fill=PatternFill('solid', fgColor='C6EFCE'))
+                    add_line(f'  • {name}', fill=PatternFill('solid', fgColor='DCFCE7'))
             else:
-                add_line(f'  • {room}', fill=PatternFill('solid', fgColor='C6EFCE'))
+                add_line(f'  • {room}', fill=PatternFill('solid', fgColor='DCFCE7'))
         r += 1
 
     if project.kept_elements:
@@ -300,7 +303,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # SHEET 2: ORÇAMENTO
     # ================================================================
     ws = wb.create_sheet('Orçamento')
-    ws.sheet_properties.tabColor = '2F5496'
+    ws.sheet_properties.tabColor = '4F46E5'
 
     widths = [7, 62, 5, 8, 13, 13, 15, 35, 12]
     for i, w in enumerate(widths, 1):
@@ -348,11 +351,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     P_PREMISSA = PatternFill('solid', fgColor='F3F4F6')
     for num, desc, un, qtd, obs, ref in premissas:
         ws.cell(row=ro, column=1, value=num).font = F_N
-        ws.cell(row=ro, column=2, value=desc).font = Font(name='Arial', size=9, italic=True, color='6B7280')
+        ws.cell(row=ro, column=2, value=desc).font = Font(name='Calibri', size=9, italic=True, color='6B7280')
         ws.cell(row=ro, column=3, value=un).font = F_N
         ws.cell(row=ro, column=4, value=qtd).font = F_N
-        ws.cell(row=ro, column=8, value=obs or 'Metadado do projeto — revisar no arquivo original').font = Font(name='Arial', size=8, italic=True, color='6B7280')
-        ws.cell(row=ro, column=9, value=ref).font = Font(name='Arial', size=7)
+        ws.cell(row=ro, column=8, value=obs or 'Metadado do projeto — revisar no arquivo original').font = Font(name='Calibri', size=8, italic=True, color='6B7280')
+        ws.cell(row=ro, column=9, value=ref).font = Font(name='Calibri', size=7)
         for c in range(1, 10):
             ws.cell(row=ro, column=c).border = BD
             ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
@@ -415,7 +418,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
             ref_text = _build_ref_text(item)
-            ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Arial', size=7)
+            ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Calibri', size=7)
 
             for c in range(1, 10):
                 ws.cell(row=ro, column=c).border = BD
@@ -472,7 +475,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
             ref_text = _build_ref_text(item)
-            ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Arial', size=7)
+            ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Calibri', size=7)
             for c in range(1, 10):
                 ws.cell(row=ro, column=c).border = BD
                 ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
@@ -499,11 +502,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ro += 1
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
     ws.cell(row=ro, column=1, value='SUGESTÕES POR TIPO DE PROJETO (itens que NÃO aparecem nas pranchas)')
-    _style_row(ws, ro, Font(name='Arial', bold=True, size=11, color='FFFFFF'), PatternFill('solid', fgColor='7B2D8E'), AL, 9)
+    _style_row(ws, ro, Font(name='Calibri', bold=True, size=11, color='FFFFFF'), PatternFill('solid', fgColor='7B2D8E'), AL, 9)
     ro += 1
 
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
-    ws.cell(row=ro, column=1, value='Itens que não constam nas pranchas — são custos de gestão e execução típicos de obras.').font = Font(name='Arial', size=8, italic=True, color='7B2D8E')
+    ws.cell(row=ro, column=1, value='Itens que não constam nas pranchas — são custos de gestão e execução típicos de obras.').font = Font(name='Calibri', size=8, italic=True, color='7B2D8E')
     ro += 1
 
     P_PURPLE = PatternFill('solid', fgColor='F3E8FF')
@@ -569,7 +572,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         else:
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
         ws.cell(row=ro, column=8, value=obs).font = F_N
-        ws.cell(row=ro, column=9, value='Experiência').font = Font(name='Arial', size=7)
+        ws.cell(row=ro, column=9, value='Experiência').font = Font(name='Calibri', size=7)
         for c in range(1, 10):
             ws.cell(row=ro, column=c).border = BD
             ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
@@ -657,7 +660,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.cell(row=ro, column=1, value='TOTAL GERAL COM CONTINGÊNCIA + BDI')
     ws.cell(row=ro, column=7, value=f'=G{td}+G{cont}+G{bdi}')
     ws.cell(row=ro, column=7).number_format = '#,##0.00'
-    _style_row(ws, ro, Font(name='Arial', bold=True, size=12, color='FFFFFF'), P_SEC, AR, 9)
+    _style_row(ws, ro, Font(name='Calibri', bold=True, size=12, color='FFFFFF'), P_SEC, AR, 9)
     ws.cell(row=ro, column=1).alignment = AL
 
     # ================================================================
@@ -666,7 +669,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ro += 2
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
     ws.cell(row=ro, column=1, value='OMISSOS — Itens não incluídos que provavelmente serão necessários')
-    _style_row(ws, ro, Font(name='Arial', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='B45309'), AL, 9)
+    _style_row(ws, ro, Font(name='Calibri', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='B45309'), AL, 9)
     ro += 1
     # OMISSOS por tipologia — itens que COSTUMAM ser esquecidos em cada tipo de obra.
     # Base comum + específicos.
@@ -710,7 +713,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         ]
     for om in omissos:
         ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
-        ws.cell(row=ro, column=1, value=f'  • {om}').font = Font(name='Arial', size=8, color='92400E')
+        ws.cell(row=ro, column=1, value=f'  • {om}').font = Font(name='Calibri', size=8, color='92400E')
         ws.cell(row=ro, column=1).fill = PatternFill('solid', fgColor='FEF3C7')
         ro += 1
 
@@ -720,7 +723,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ro += 1
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
     ws.cell(row=ro, column=1, value='EXCLUSOS — Itens explicitamente fora deste escopo (padrão de mercado)')
-    _style_row(ws, ro, Font(name='Arial', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='6B7280'), AL, 9)
+    _style_row(ws, ro, Font(name='Calibri', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='6B7280'), AL, 9)
     ro += 1
     # EXCLUSOS por tipologia — itens que PADRÃO DE MERCADO não entram neste tipo de obra.
     # Contaminação residencial era colocar CFTV e "móveis de escritório" pra casa.
@@ -765,7 +768,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         ]
     for ex in exclusos:
         ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
-        ws.cell(row=ro, column=1, value=f'  • {ex}').font = Font(name='Arial', size=8, color='374151')
+        ws.cell(row=ro, column=1, value=f'  • {ex}').font = Font(name='Calibri', size=8, color='374151')
         ws.cell(row=ro, column=1).fill = PatternFill('solid', fgColor='F3F4F6')
         ro += 1
 
