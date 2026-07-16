@@ -884,7 +884,11 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # Segurança (16/07): a API se autentica por Bearer token (Authorization header),
+    # NÃO por cookie. Com credentials=False, o '*' não reflete origem pra requisição
+    # credenciada — fecha o combo inseguro '*'+credentials sem quebrar nada (Bearer
+    # segue via allow_headers). Nenhum fluxo usa cookie cross-site.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Filename", "Content-Disposition"],
@@ -4587,6 +4591,14 @@ async def process_files(
     if not user_id or user_id == "anonymous":
         user_id = jwt_user.get("id") or user_id
 
+    # Teto de tamanho (segurança 16/07): rejeita upload gigante ANTES de ler os
+    # arquivos na RAM — o box do Render tem 2GB e um upload enorme de propósito
+    # sobrecarrega. Mesmo guarda do /add-file; o cap por-arquivo (DXF 150MB) já
+    # existe no motor.
+    _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
+    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
+        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
+
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
     # Tipo de projeto escolhido no upload: roteia o motor (arquitetura vs estrutura)
@@ -6380,7 +6392,12 @@ async def public_chat(request: Request):
     # Rate limit: 20 msgs / 10min por IP
     # FIX 2026-05-14: parênteses pra precedência correta de `or ... if ... else`
     # (antes parseava como `(A or B) if C else D` e podia explodir quando request.client é None).
-    fwd = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    # Segurança (16/07): usa o ÚLTIMO hop do X-Forwarded-For. No Render, o proxy
+    # confiável ANEXA o IP real do cliente no fim; os valores da esquerda podem ser
+    # FORJADOS pelo cliente. Antes [0] deixava burlar o rate-limit trocando o header
+    # (abuso de custo da IA na chat pública).
+    _xff = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    fwd = _xff[-1] if _xff else ""
     client_ip = fwd or (request.client.host if request.client else "unknown")
     now_ts = datetime.utcnow().timestamp()
     history = _PUBLIC_CHAT_HITS.get(client_ip, [])
