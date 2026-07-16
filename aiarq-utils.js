@@ -78,6 +78,39 @@
     );
   };
 
+  // ─── Datas/horas em horário de Brasília ──────────────────────
+  // Postgres/Supabase guardam TUDO em UTC (timestamptz). Se a gente formatar
+  // com toLocaleString SEM fixar o fuso, ele usa o RELÓGIO DO NAVEGADOR — muda
+  // de máquina pra máquina e, dependendo da config, mostra UTC (+3h) em vez de
+  // Brasília. Aqui fixamos America/Sao_Paulo pra TODO horário do sistema bater
+  // com o de Brasília, em qualquer navegador (o do Pedro, de um cliente, etc).
+  //   fmtBR(iso)                       → "16/07 15:32"
+  //   fmtBR(iso, { year:'numeric' })   → acrescenta o ano
+  //   fmtDataBR(iso)                   → só a data "16/07/2026"
+  // O timeZone é aplicado POR ÚLTIMO de propósito: o caller escolhe o formato,
+  // mas nunca troca o fuso — sistema inteiro em Brasília, sem exceção.
+  const _TZ_BR = 'America/Sao_Paulo';
+  window.fmtBR = function (iso, opts) {
+    if (iso == null || iso === '') return '';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);   // data inválida → devolve cru, nunca "Invalid Date"
+      const o = Object.assign(
+        { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' },
+        opts || {}, { timeZone: _TZ_BR });
+      return d.toLocaleString('pt-BR', o);
+    } catch (e) { return String(iso); }
+  };
+  window.fmtDataBR = function (iso, opts) {
+    if (iso == null || iso === '') return '';
+    try {
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return String(iso);
+      const o = Object.assign({}, opts || {}, { timeZone: _TZ_BR });
+      return d.toLocaleDateString('pt-BR', o);
+    } catch (e) { return String(iso); }
+  };
+
   // ─── authFetch ───────────────────────────────────────────────
   // Fetch com Bearer do Supabase. Backend exige JWT em endpoints
   // com ownership check (/api/items, /api/projects, /api/admin/*, etc).
