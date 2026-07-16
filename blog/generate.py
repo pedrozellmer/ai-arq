@@ -58,7 +58,7 @@ NAV = '''
     </div>
     <div class="flex items-center gap-3">
       <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
-      <a href="/cadastro.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+      <a href="/login.html?novo=1" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
     </div>
   </div>
 </nav>
@@ -511,7 +511,7 @@ def render_post_html(post):
   <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
     <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
     <p class="text-gray-700 mb-5">{post["cta"]}</p>
-    <a href="/cadastro.html" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+    <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
       Começar grátis
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
     </a>
@@ -656,6 +656,7 @@ def render_sitemap():
     urls = [
         (f"{SITE_URL}/", "1.0", "weekly"),
         (f"{SITE_URL}/precos.html", "0.9", "weekly"),
+        (f"{SITE_URL}/exemplo.html", "0.8", "monthly"),
         (f"{SITE_URL}/blog/", "0.9", "weekly"),
         (f"{SITE_URL}/faq.html", "0.7", "monthly"),
         (f"{SITE_URL}/termos.html", "0.3", "yearly"),
