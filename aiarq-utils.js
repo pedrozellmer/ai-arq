@@ -212,7 +212,7 @@
     if (/facebook|fb\.me|\bfb\./.test(host)) return 'facebook';
     if (/linkedin|lnkd\.in/.test(host)) return 'linkedin';
     if (/youtube|youtu\.be/.test(host)) return 'youtube';
-    if (/ai\.arq\.br/.test(host)) return '';   // navegação interna, ignora
+    if (/ai\.arq\.br/.test(host)) return 'direto';   // navegação interna → 'direto' (antes voltava '' e o fallback gravava 'ai.arq.br' como origem)
     return host.replace(/^www\./, '');
   }
   (function _captureSource() {
