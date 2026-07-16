@@ -161,6 +161,11 @@
       <span>Financeiro</span>
     </button>
 
+    <button onclick="switchTab('operacao')" data-tab="operacao" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <span>Operação</span>
+    </button>
+
     <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
       <a href="dashboard.html" class="nav-item flex items-center gap-3 px-4 py-3 rounded-lg text-white/60 text-sm font-medium hover:text-white/90">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/></svg>
@@ -283,6 +288,20 @@
         <div id="cost-totals" class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4"></div>
         <div id="costs-box"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <button onclick="costAddRow()" class="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">+ Adicionar custo</button>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- TAB: OPERAÇÃO                            -->
+      <!-- ════════════════════════════════════════ -->
+      <div id="tab-operacao" class="tab-content hidden">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900">🎯 Operação</h2>
+            <p class="text-sm text-gray-500">Aja sem depender de dev: recupere falhas, puxe PDF-só pro CAD e veja erros do motor.</p>
+          </div>
+          <button onclick="loadOps()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+        </div>
+        <div id="ops-box"><p class="text-gray-400 text-sm">Carregando…</p></div>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -1095,6 +1114,86 @@ function switchTab(tabName) {
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'motor') loadMotorHealth();
   if (tabName === 'financeiro') loadCosts();
+  if (tabName === 'operacao') loadOps();
+}
+
+// ══════════════════════════════════════════════
+// OPERAÇÃO — falhas p/ recuperar, só-PDF p/ puxar, erros do motor
+// ══════════════════════════════════════════════
+function opsEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function opsMailto(email, subject, body){
+  return `mailto:${encodeURIComponent(email||'')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+async function loadOps(){
+  const box = document.getElementById('ops-box');
+  box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/ops`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'erro');
+    box.innerHTML = renderOps(d);
+  } catch(e){
+    box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e&&e.message)||e}</p>`;
+  }
+}
+function renderOps(d){
+  const falhas = d.recent_failures || [];
+  const pdfOnly = d.pdf_only || [];
+  const erros = d.motor_errors || [];
+  let html = '';
+
+  // 1) FALHAS RECENTES — recuperar 1-a-1
+  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">⚠️ Falhas recentes <span class="text-xs font-normal text-gray-400">(${falhas.length}) — recuperar 1-a-1</span></h3>`;
+  if (!falhas.length) html += `<p class="text-xs text-gray-400 mb-6">Nenhuma falha recente. 🎉</p>`;
+  else {
+    html += `<div class="overflow-x-auto mb-6"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Projeto</th><th class="pr-2">Dono</th><th class="pr-2">Erro</th><th></th></tr></thead><tbody>`;
+    falhas.forEach(f => {
+      const body = `Olá${f.user_name ? ' '+f.user_name.split(' ')[0] : ''}, tudo bem?\n\nVi que o processamento do seu projeto "${f.project_name||''}" no AI.arq não concluiu. Posso te ajudar a resolver — se puder, reenvie o arquivo (de preferência DWG/DXF) que a gente refaz.\n\nAbraço,\nPedro — AI.arq`;
+      html += `<tr class="border-b align-top">
+        <td class="py-2 pr-2 whitespace-nowrap text-gray-500">${opsEsc(f.quando)}</td>
+        <td class="pr-2"><a href="projeto.html?job_id=${opsEsc(f.job_id)}" class="text-indigo-600 hover:underline">${opsEsc(f.project_name||'—')}</a></td>
+        <td class="pr-2 text-gray-600">${opsEsc(f.user_name||'')}<br><span class="text-gray-400">${opsEsc(f.user_email||'')}</span></td>
+        <td class="pr-2 text-gray-500">${opsEsc(f.erro||'')}</td>
+        <td class="pr-1 whitespace-nowrap"><a href="${opsMailto(f.user_email,'Seu projeto no AI.arq', body)}" class="px-2 py-1 rounded bg-indigo-100 text-indigo-700">✉ Avisar</a></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  // 2) SÓ-PDF que mediu pouco — puxar pro CAD
+  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">📄→📐 Só-PDF que mediu pouco <span class="text-xs font-normal text-gray-400">(${pdfOnly.length}) — puxar pro CAD</span></h3>`;
+  if (!pdfOnly.length) html += `<p class="text-xs text-gray-400 mb-6">Nenhum. 👍</p>`;
+  else {
+    html += `<div class="overflow-x-auto mb-6"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Projeto</th><th class="pr-2">Dono</th><th class="pr-2">% medido</th><th></th></tr></thead><tbody>`;
+    pdfOnly.forEach(x => {
+      const body = `Olá, tudo bem?\n\nSeu projeto "${x.project_name||''}" no AI.arq saiu com boa parte em estimativa porque veio de PDF. Se você tiver o DWG ou DXF da mesma prancha, dá pra a gente MEDIR de verdade (no nosso beta, CAD mede bem mais que PDF) — é grátis, anexa no mesmo projeto.\n\nAbraço,\nPedro — AI.arq`;
+      html += `<tr class="border-b align-top">
+        <td class="py-2 pr-2 whitespace-nowrap text-gray-500">${opsEsc(x.quando)}</td>
+        <td class="pr-2"><a href="projeto.html?job_id=${opsEsc(x.job_id)}" class="text-indigo-600 hover:underline">${opsEsc(x.project_name||'—')}</a></td>
+        <td class="pr-2 text-gray-600">${opsEsc(x.user_email||'')}</td>
+        <td class="pr-2"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">⚠ ${opsEsc(x.pct_medido)}%</span></td>
+        <td class="pr-1 whitespace-nowrap"><a href="${opsMailto(x.user_email,'Meça seu projeto de verdade — mande o DWG/DXF', body)}" class="px-2 py-1 rounded bg-emerald-100 text-emerald-700">✉ Sugerir DWG</a></td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  // 3) ERROS DO MOTOR (read-only)
+  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">🔧 Erros do motor <span class="text-xs font-normal text-gray-400">(${erros.length} recentes)</span></h3>`;
+  if (!erros.length) html += `<p class="text-xs text-gray-400">Nenhum erro recente.</p>`;
+  else {
+    html += `<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Etapa</th><th class="pr-2">Mensagem</th><th class="pr-2">Job</th></tr></thead><tbody>`;
+    erros.forEach(e => {
+      html += `<tr class="border-b align-top">
+        <td class="py-2 pr-2 whitespace-nowrap text-gray-500">${opsEsc(e.quando)}</td>
+        <td class="pr-2 text-gray-600 whitespace-nowrap">${opsEsc(e.stage||'')}</td>
+        <td class="pr-2 text-gray-500">${opsEsc(e.msg||'')}</td>
+        <td class="pr-2 text-gray-400 whitespace-nowrap">${e.job_id?`<a href="projeto.html?job_id=${opsEsc(e.job_id)}" class="text-indigo-500 hover:underline">${opsEsc(String(e.job_id).slice(0,8))}</a>`:'—'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  return html;
 }
 
 // ══════════════════════════════════════════════

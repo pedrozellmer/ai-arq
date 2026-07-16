@@ -5421,6 +5421,26 @@ async def admin_costs_delete(request: Request):
     return {"status": "ok"}
 
 
+@app.get("/api/admin/ops")
+async def admin_ops_panel(request: Request):
+    """Painel de OPERAÇÃO (admin): erros do motor (error_log), falhas recentes com
+    contato do dono (recuperar 1-a-1) e projetos só-PDF que mediram pouco (puxar pro
+    CAD). Tudo via RPC admin_ops (SECURITY DEFINER, só service_role)."""
+    _require_admin(request)
+    import urllib.request as _ur
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/admin_ops"
+        req = _ur.Request(url, data=b"{}", method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        data = _json.loads(_ur.urlopen(req, timeout=20).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[ops] erro: {_e}")
+        raise HTTPException(502, "Não consegui carregar a operação")
+    return data
+
+
 @app.post("/api/admin/newsletter/cancel")
 async def admin_newsletter_cancel(request: Request):
     """Cancela um agendamento pendente (admin)."""
