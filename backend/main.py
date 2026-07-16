@@ -5338,6 +5338,49 @@ async def admin_motor_health(request: Request):
     except Exception as _e:
         print(f"[motor-health] erro: {_e}")
         raise HTTPException(502, "Não consegui carregar a saúde do motor")
+
+    # #3 PDF SOMBRA: o medidor vetorial de PDF roda em modo sombra (loga em
+    # error_log stage 'pdfvec:shadow') e NÃO vira item medido — o item de PDF é
+    # sempre estimado por design. Este readout mostra o que o vetor TERIA medido:
+    # quantos PDFs pegaram escala, quanto de cômodo/parede foi achado. É o portão
+    # pra um dia graduar PDF de sombra→medido com dado, não chute (board 15/07).
+    _shadow = {"n_pdfs": 0, "com_escala": 0, "pulados": 0, "rooms_m2_total": 0.0,
+               "walls_m_total": 0.0, "amostras": []}
+    try:
+        _sq = (f"{SUPABASE_URL}/rest/v1/error_log?stage=like.pdfvec*"
+               f"&select=message,job_id,created_at&order=created_at.desc&limit=120")
+        _sr = _ur.Request(_sq, method="GET")
+        _sr.add_header("apikey", SUPABASE_KEY)
+        _sr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _slogs = _json.loads(_ur.urlopen(_sr, timeout=20).read().decode("utf-8"))
+        for _row in _slogs:
+            try:
+                _pg = (_json.loads(_row.get("message") or "{}").get("pages") or [{}])[0]
+            except Exception:
+                continue
+            _shadow["n_pdfs"] += 1
+            if _pg.get("skip"):
+                _shadow["pulados"] += 1
+                continue
+            if _pg.get("scale"):
+                _shadow["com_escala"] += 1
+            _rm = float(_pg.get("rooms_m2") or 0)
+            _wm = float(_pg.get("walls_m") or 0)
+            _shadow["rooms_m2_total"] += _rm
+            _shadow["walls_m_total"] += _wm
+            if (_rm > 0 or _wm > 0) and len(_shadow["amostras"]) < 8:
+                _shadow["amostras"].append({
+                    "job_id": _row.get("job_id"),
+                    "escala": _pg.get("scale"),
+                    "n_rooms": _pg.get("n_rooms") or 0,
+                    "rooms_m2": round(_rm, 1),
+                    "walls_m": round(_wm, 1),
+                })
+        _shadow["rooms_m2_total"] = round(_shadow["rooms_m2_total"], 1)
+        _shadow["walls_m_total"] = round(_shadow["walls_m_total"], 1)
+    except Exception as _se:
+        print(f"[motor-health] pdf-shadow erro: {_se}")
+    data["pdf_shadow"] = _shadow
     return data
 
 
