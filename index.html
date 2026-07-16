@@ -708,12 +708,13 @@
 <!-- FOOTER -->
 <footer class="border-t bg-gray-50 py-12">
   <div class="mx-auto max-w-6xl px-4">
-    <div class="flex flex-col items-center gap-6 md:flex-row md:justify-between">
-      <div class="flex items-center gap-2">
+    <!-- Linha 1: logo (esq) + links (dir), alinhados -->
+    <div class="flex flex-col items-center gap-5 md:flex-row md:justify-between">
+      <div class="flex items-center gap-2 shrink-0">
         <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
         <span class="font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
       </div>
-      <div class="flex flex-wrap items-center justify-center gap-6 text-sm text-gray-500">
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
         <a href="precos.html" class="hover:text-gray-900 transition">Preços</a>
         <a href="faq.html" class="hover:text-gray-900 transition">FAQ</a>
         <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
@@ -725,10 +726,10 @@
           @ai.arq.br
         </a>
       </div>
-      <p class="text-sm text-gray-500">
-        &copy; 2026 AI.arq · Todos os direitos reservados
-        <span class="block md:inline md:ml-2 text-xs text-gray-600">v0.5.0 · Beta</span>
-      </p>
+    </div>
+    <!-- Linha 2: copyright centralizado, com divisor sutil -->
+    <div class="mt-6 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
+      &copy; 2026 AI.arq · Todos os direitos reservados · v0.5.0 · Beta
     </div>
   </div>
 </footer>
