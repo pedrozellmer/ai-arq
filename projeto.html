@@ -202,7 +202,7 @@ function smartBack() {
       <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
       <div class="flex-1">
         <p class="font-semibold text-amber-900">Quer os números medidos de verdade?</p>
-        <p class="text-sm text-amber-800 mt-1">Esse projeto veio de <strong>PDF</strong> — a gente reconheceu os <em>tipos</em> de item, mas o PDF não traz as medidas de forma legível, então saiu tudo como <strong>estimativa</strong> (laranja, pra você conferir).</p>
+        <p class="text-sm text-amber-800 mt-1">Esse projeto veio de <strong>PDF</strong> — a gente reconheceu os <em>tipos</em> de item, mas o PDF não traz bem as medidas, então <strong>a maior parte saiu como estimativa</strong> (laranja, pra você conferir).</p>
         <p class="text-sm text-amber-800 mt-2">Tem o <strong>DWG ou DXF</strong> da mesma prancha? Sobe aqui que a gente <strong>refaz e mede de verdade</strong> — no mesmo projeto e de graça.</p>
         <div id="cad-upgrade-form" class="mt-3">
           <input id="cad-file-input" type="file" multiple accept=".dwg,.dxf,.pdf" class="hidden"/>
@@ -1603,19 +1603,20 @@ function renderMetrics(p, items) {
     }
   }
 
-  // Aviso "manda o CAD": só quando NADA foi medido E a fonte é só PDF (0 medido
-  // num projeto que já é DWG/DXF seria outro problema — não pediria CAD). Reusa
-  // o _files (nomes únicos) computado acima pro m-files.
+  // Aviso "manda o CAD": quando o projeto é só PDF e mediu POUCO. Antes exigia
+  // ZERO medido (===0), mas PDF mede ~7% em média (quase nunca zero cravado) →
+  // o convite ficava escondido justo pra maioria dos PDF-só, que é quem mais
+  // ganha mandando DWG (CAD mede ~4,3× mais — dado do painel 15/07). Agora dispara
+  // com < 40% medido. Reusa o _files (nomes únicos) computado acima pro m-files.
   const _cadBanner = document.getElementById('cad-upgrade-banner');
   if (_cadBanner) {
     const _exts = new Set(Array.from(_files.keys()).map(f => f.toLowerCase().split('.').pop()));
     const _soPdf = _exts.has('pdf') && !_exts.has('dwg') && !_exts.has('dxf');
+    const _mediuPouco = (_total > 0) && ((_medido / _total) < 0.40);
     // Mostra em projeto PRONTO ou em ERRO (com itens): erro é JUSTO onde o usuário
-    // quer anexar um arquivo melhor. Antes o gate `status !== 'error'` escondia o
-    // botão exatamente no projeto travado (feedback Pedro 15/07: "não tem onde
-    // mandar o DWG"). Não mostra durante processamento (queued/processing).
+    // quer anexar um arquivo melhor (feedback Pedro 15/07). Não durante processamento.
     const _terminal = (p.status === 'done' || p.status === 'error' || p.status === 'failed');
-    if (_total > 0 && _medido === 0 && _soPdf && _terminal) _cadBanner.classList.remove('hidden');
+    if (_mediuPouco && _soPdf && _terminal) _cadBanner.classList.remove('hidden');
     else _cadBanner.classList.add('hidden');
   }
 

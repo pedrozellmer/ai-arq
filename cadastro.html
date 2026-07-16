@@ -80,8 +80,8 @@
 
         <!-- WhatsApp -->
         <div>
-          <label for="whatsapp" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp</label>
-          <input type="tel" id="whatsapp" name="whatsapp" required
+          <label for="whatsapp" class="block text-sm font-medium text-gray-700 mb-1">WhatsApp <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <input type="tel" id="whatsapp" name="whatsapp"
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
             placeholder="(21) 99999-9999" maxlength="15">
         </div>
@@ -124,8 +124,8 @@
 
         <!-- Cargo -->
         <div>
-          <label for="cargo" class="block text-sm font-medium text-gray-700 mb-1">Cargo</label>
-          <select id="cargo" name="cargo" required
+          <label for="cargo" class="block text-sm font-medium text-gray-700 mb-1">Cargo <span class="text-gray-400 font-normal">(opcional)</span></label>
+          <select id="cargo" name="cargo"
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition bg-white appearance-none"
             style="background-image: url('data:image/svg+xml;charset=UTF-8,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%239ca3af%22 stroke-width=%222%22%3E%3Cpath stroke-linecap=%22round%22 stroke-linejoin=%22round%22 d=%22M19 9l-7 7-7-7%22/%3E%3C/svg%3E'); background-repeat: no-repeat; background-position: right 12px center; background-size: 18px;">
             <option value="" disabled selected>Selecione seu cargo</option>
@@ -432,8 +432,10 @@
       return;
     }
 
-    if (!whatsapp || whatsapp.replace(/\D/g, '').length < 10) {
-      showError('Por favor, informe um n\u00famero de WhatsApp v\u00e1lido.');
+    // WhatsApp OPCIONAL (menos fric\u00e7\u00e3o no 1\u00ba cadastro; pedimos depois se precisar).
+    // Se preenchido, validamos o formato pra n\u00e3o salvar lixo.
+    if (whatsapp && whatsapp.replace(/\D/g, '').length < 10) {
+      showError('O WhatsApp informado parece inv\u00e1lido \u2014 corrija ou deixe em branco.');
       whatsappInput.focus();
       return;
     }
@@ -454,11 +456,7 @@
       return;
     }
 
-    if (!cargo) {
-      showError('Por favor, selecione seu cargo.');
-      cargoSelect.focus();
-      return;
-    }
+    // Cargo OPCIONAL (menos fricção). Sem validação.
 
     if (!referralSourceSelect.value) {
       showError('Por favor, informe como nos conheceu.');
