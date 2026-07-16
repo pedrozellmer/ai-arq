@@ -883,7 +883,7 @@ async function carregarStatsEntregas() {
       const projTitleEl = document.getElementById('proj-title');
       const projName = projTitleEl ? projTitleEl.textContent.trim() : '';
       const projSubject = `Projeto ${jobId}${projName ? ' — ' + projName : ''}`;
-      const contextDetails = `Código: <strong>${jobId}</strong>${projName ? ' · ' + projName : ''}`;
+      const contextDetails = `Código: <strong>${escapeHtml(jobId)}</strong>${projName ? ' · ' + escapeHtml(projName) : ''}`;
       if (typeof aiArqContactOpen === 'function') {
         aiArqContactOpen({
           mode: 'ticket',
@@ -1471,9 +1471,9 @@ async function generateComparison() {
         `;
       }
       const pptxBtn = data.pptx_url ? `
-        <a href="${API_BASE}${data.pptx_url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-sm rounded-lg font-medium no-underline">
+        <button type="button" onclick="downloadProtected('${API_BASE}${data.pptx_url}', 'comparativo_fornecedores.pptx')" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-sm rounded-lg font-medium">
           📊 Baixar apresentação PPT
-        </a>
+        </button>
       ` : '';
       result.innerHTML = `
         <div class="p-4 bg-white rounded-lg border">
@@ -1482,9 +1482,9 @@ async function generateComparison() {
           ${s.n_discrepancies_above_100pct ? `<p class="mt-2 text-xs text-red-600">⚠ ${s.n_discrepancies_above_100pct} itens com diferença > 100% entre fornecedores</p>` : ''}
           ${refHtml}
           <div class="mt-4 flex flex-wrap gap-2">
-            <a href="${API_BASE}${data.xlsx_url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium no-underline">
+            <button type="button" onclick="downloadProtected('${API_BASE}${data.xlsx_url}', 'comparativo_fornecedores.xlsx')" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium">
               📥 Baixar comparativo XLSX
-            </a>
+            </button>
             ${pptxBtn}
           </div>
         </div>

@@ -318,7 +318,7 @@
       // Converte links markdown/url simples e **bold**
       let html = escapeHtml(m.content)
         .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-        .replace(/(https?:\/\/\S+|ai\.arq\.br\/\S+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>')
+        .replace(/(https?:\/\/\S+|ai\.arq\.br\/\S+)/g, function(u){ return '<a href="' + (u.indexOf('http') === 0 ? u : 'https://' + u) + '" target="_blank" rel="noopener noreferrer">' + u + '</a>'; })
         .replace(/\n/g, '<br>');
       return `<div class="aiarq-msg ${m.role}">${html}</div>`;
     }).join('');

@@ -199,6 +199,25 @@
   });
   document.body.appendChild(modal);
 
+  // Guarda o HTML original do corpo do modal (o form completo). Depois de um
+  // envio OK a tela de sucesso SUBSTITUI esse HTML (form destruído); sem
+  // restaurar, reabrir o modal dava TypeError (campos sumiram) e travava na
+  // tela de sucesso antiga — só um F5 resolvia. Bug pego na revisão 16/07.
+  // O listener de change do arquivo é delegado no document (linha ~433) e o
+  // onsubmit é inline, então ambos sobrevivem à restauração do innerHTML.
+  var _aicmOriginalBody = (function () {
+    var b = document.getElementById('aicm-body');
+    return b ? b.innerHTML : null;
+  })();
+  var _aicmSent = false;
+  function _aicmResetBody() {
+    if (_aicmSent && _aicmOriginalBody != null) {
+      var b = document.getElementById('aicm-body');
+      if (b) b.innerHTML = _aicmOriginalBody;   // form volta zerado e habilitado
+    }
+    _aicmSent = false;
+  }
+
   // ── API global ────────────────────────────────────────────────────
   // Modos:
   //   - geral (default): form completo, pessoa preenche tudo
@@ -219,6 +238,8 @@
 
     if (typeof opts === 'string') opts = { type: opts };
     opts = opts || {};
+
+    _aicmResetBody();   // se o último uso terminou na tela de sucesso, restaura o form antes de mexer nos campos
 
     var isTicket = opts.mode === 'ticket';
 
@@ -272,8 +293,8 @@
       if (opts.contextLabel || opts.contextDetails) {
         contextBox.style.display = 'flex';
         var html = '';
-        if (opts.contextLabel) html += '<strong>' + opts.contextLabel + '</strong><br>';
-        if (opts.contextDetails) html += opts.contextDetails;
+        if (opts.contextLabel) html += '<strong>' + (window.escapeHtml ? window.escapeHtml(opts.contextLabel) : opts.contextLabel) + '</strong><br>';
+        if (opts.contextDetails) html += opts.contextDetails;  // contém <strong> do chamador; o CHAMADOR deve escapar dados dinâmicos
         contextText.innerHTML = html;
       }
       // Customiza title
@@ -317,6 +338,7 @@
   window.aiArqContactClose = function () {
     modal.classList.remove('open');
     document.removeEventListener('keydown', _aicmEscHandler);
+    _aicmResetBody();   // fechou após enviar → restaura o form pra próxima abertura
     var err = document.getElementById('aicm-error');
     if (err) err.style.display = 'none';
     // Devolve foco pra origem (botão que abriu).
@@ -401,9 +423,13 @@
           btn.textContent = 'Enviar mensagem';
           return;
         }
-        // Sucesso
+        // Sucesso — marca que o corpo virou tela de sucesso pra restaurar o form
+        // ao reabrir/fechar (antes só um location.reload aos 5s, e só se o modal
+        // já estivesse fechado — senão o form ficava destruído e travava).
+        _aicmSent = true;
+        var _emEsc = (window.escapeHtml ? window.escapeHtml(sentEmail) : sentEmail);
         var emailHtml = sentEmail
-          ? 'A gente responde em até 24h úteis no email <strong>' + sentEmail + '</strong>.'
+          ? 'A gente responde em até 24h úteis no email <strong>' + _emEsc + '</strong>.'
           : 'A gente responde em até 24h úteis.';
         document.getElementById('aicm-body').innerHTML =
           '<div class="aicm-success">' +
@@ -412,12 +438,6 @@
           '<div class="aicm-success-msg">' + emailHtml + '</div>' +
           '<button class="aicm-submit" onclick="aiArqContactClose()" style="max-width:200px;margin:0 auto;">Fechar</button>' +
           '</div>';
-        setTimeout(function () {
-          var b = document.getElementById('aicm-body');
-          if (b && !modal.classList.contains('open')) {
-            location.reload();
-          }
-        }, 5000);
       })
       .catch(function () {
         errorEl.textContent = 'Erro de conexão. Tenta de novo em alguns segundos.';

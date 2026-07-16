@@ -1629,10 +1629,9 @@
     if (window.trackEvent) trackEvent('view_dashboard');
 
     userName.textContent = meta.full_name || meta.name || user.email;
-    userAvatar.src = meta.avatar_url || meta.picture || '';
-    if (!userAvatar.src) {
-      userAvatar.style.display = 'none';
-    }
+    const _av = meta.avatar_url || meta.picture || '';
+    if (_av) { userAvatar.src = _av; }
+    else { userAvatar.style.display = 'none'; }
 
     // Mostrar botão admin só pro email admin
     if (user.email === 'zarelalopes@gmail.com') {
@@ -1782,7 +1781,7 @@
     let detail = '';
     if (breakdown.length) {
       detail = ' <span class="text-xs text-gray-500">(' +
-        breakdown.map(b => `${b.filename.slice(0, 25)}: ${b.pranchas}p`).join(', ') +
+        breakdown.map(b => `${escapeH(b.filename.slice(0, 25))}: ${b.pranchas}p`).join(', ') +
         ')</span>';
     }
 
@@ -1942,7 +1941,7 @@
       div.innerHTML = `
         <svg class="w-5 h-5 text-red-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium text-gray-800 truncate">${file.name}</p>
+          <p class="text-sm font-medium text-gray-800 truncate">${escapeH(file.name)}</p>
           <p class="text-xs text-gray-500">${formatSize(file.size)}</p>
         </div>
         <select data-idx="${idx}" class="file-type-select text-xs border border-gray-200 rounded-lg px-2 py-1.5 text-gray-600 bg-gray-50 focus:ring-1 focus:ring-indigo-500 outline-none max-w-xs">
@@ -2301,7 +2300,7 @@
         <div class="file-progress-item flex items-center justify-between py-2.5 px-3 rounded-lg ${idx === currentFileIndex ? 'bg-indigo-50' : 'bg-gray-50'}">
           <div class="flex items-center gap-2.5 min-w-0 flex-1">
             <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-            <span class="text-sm text-gray-700 truncate">${shortName}</span>
+            <span class="text-sm text-gray-700 truncate">${escapeH(shortName)}</span>
           </div>
           <div class="flex items-center gap-2 shrink-0 ml-3">
             <span class="text-xs ${statusClass}">${statusText}</span>
@@ -3043,9 +3042,21 @@
            : selectedFiles.length <= 10 ? 157
            : selectedFiles.length <= 20 ? 247
            : 247 + (selectedFiles.length - 20) * 10,
-      reviewed: false
+      reviewed: false,
+      paid: false          // só vira true quando um pagamento REAL for confirmado (flip-day)
     };
-    history.unshift(project);
+    // Dedup por job_id: add-file/reprocesso reusa o MESMO currentJobId — antes
+    // dava unshift toda vez e o projeto aparecia 2x (Meus Pagamentos e select de
+    // cashback). Agora atualiza a entrada existente (sem recomputar fileCount/price,
+    // que no add-file conteriam só os arquivos recém-enviados).
+    const _idx = history.findIndex(p => p.id === currentJobId);
+    if (_idx >= 0) {
+      history[_idx].status = status;
+      history[_idx].date = now.toISOString();
+      history[_idx].timestamp = now.toISOString();
+    } else {
+      history.unshift(project);
+    }
     // Keep last 50
     if (history.length > 50) history.length = 50;
     localStorage.setItem('aiarq_project_history', JSON.stringify(history));
@@ -3077,7 +3088,7 @@
       const date = window.fmtDataBR(p.date || p.timestamp);
       const name = p.name || p.projectName || 'Projeto sem nome';
       const files = p.fileCount || p.files || '—';
-      const isFree = p.free || p.price === 0;
+      const isFree = p.paid !== true;   // "Pago" SÓ com pagamento REAL; no beta tudo é grátis de propósito (não inventa cobrança)
       const price = isFree ? 'Gr\u00e1tis' : (p.price ? `R$ ${p.price}` : '—');
       // Cor + \u00edcone + texto: cor sozinha n\u00e3o basta (Pedro \u00e9 dalt\u00f4nico).
       const statusClass = isFree ? 'bg-green-100 text-green-700' : 'bg-indigo-100 text-indigo-700';
@@ -3748,7 +3759,7 @@
       html += `
         <div class="flex items-center justify-between py-2.5 px-3 bg-gray-50 rounded-lg">
           <div class="min-w-0">
-            <p class="text-sm font-medium text-gray-700 truncate">${r.fileName}</p>
+            <p class="text-sm font-medium text-gray-700 truncate">${escapeH(r.fileName)}</p>
             <p class="text-xs text-gray-500">${r.dateFormatted}</p>
             ${calibrationInfo}
           </div>
