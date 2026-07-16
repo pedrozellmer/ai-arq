@@ -5341,6 +5341,86 @@ async def admin_motor_health(request: Request):
     return data
 
 
+# ── PAINEL FINANCEIRO (custos) ─────────────────────────────────────────
+_COST_UUID_RE = __import__("re").compile(r"^[0-9a-fA-F-]{32,40}$")
+
+
+@app.get("/api/admin/costs")
+async def admin_costs_list(request: Request):
+    """Lista as linhas de custo (admin). Tabela financial_costs = só service_role."""
+    _require_admin(request)
+    import urllib.request as _ur
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/financial_costs"
+             f"?select=id,servico,categoria,valor,moeda,periodo,confirmado,obs,ordem"
+             f"&order=ordem.asc,servico.asc")
+        r = _ur.Request(q, method="GET")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[costs] list erro: {_e}")
+        rows = []
+    return {"costs": rows}
+
+
+@app.post("/api/admin/costs")
+async def admin_costs_upsert(request: Request):
+    """Adiciona (sem id) ou edita (com id) uma linha de custo (admin)."""
+    _require_admin(request)
+    try:
+        d = await request.json()
+    except Exception:
+        d = {}
+    _cid = str(d.get("id") or "").strip()
+    _fields = {
+        "servico": str(d.get("servico") or "").strip()[:120],
+        "categoria": str(d.get("categoria") or "outro").strip()[:40],
+        "valor": sf(d.get("valor", 0)),
+        "moeda": str(d.get("moeda") or "BRL").strip()[:8],
+        "periodo": str(d.get("periodo") or "mensal").strip()[:12],
+        "confirmado": bool(d.get("confirmado", False)),
+        "obs": str(d.get("obs") or "")[:500],
+    }
+    if not _fields["servico"]:
+        raise HTTPException(400, "servico requerido")
+    if _cid:
+        if not _COST_UUID_RE.match(_cid):
+            raise HTTPException(400, "id inválido")
+        _fields["updated_at"] = datetime.utcnow().isoformat()
+        ok = _supabase_update("financial_costs", "id", _cid, _fields)
+    else:
+        ok = _supabase_insert("financial_costs", _fields)
+    if not ok:
+        raise HTTPException(502, "Não consegui salvar o custo")
+    return {"status": "ok"}
+
+
+@app.post("/api/admin/costs/delete")
+async def admin_costs_delete(request: Request):
+    """Exclui uma linha de custo (admin)."""
+    _require_admin(request)
+    try:
+        d = await request.json()
+    except Exception:
+        d = {}
+    _cid = str(d.get("id") or "").strip()
+    if not _COST_UUID_RE.match(_cid):
+        raise HTTPException(400, "id inválido")
+    import urllib.request as _ur
+    try:
+        q = f"{SUPABASE_URL}/rest/v1/financial_costs?id=eq.{_cid}"
+        r = _ur.Request(q, method="DELETE")
+        r.add_header("apikey", SUPABASE_KEY)
+        r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        r.add_header("Prefer", "return=minimal")
+        _ur.urlopen(r, timeout=15)
+    except Exception as _e:
+        print(f"[costs] delete erro: {_e}")
+        raise HTTPException(502, "Não consegui excluir")
+    return {"status": "ok"}
+
+
 @app.post("/api/admin/newsletter/cancel")
 async def admin_newsletter_cancel(request: Request):
     """Cancela um agendamento pendente (admin)."""
