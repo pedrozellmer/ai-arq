@@ -5361,7 +5361,18 @@ async def admin_costs_list(request: Request):
     except Exception as _e:
         print(f"[costs] list erro: {_e}")
         rows = []
-    return {"costs": rows}
+    # projetos concluídos nos últimos 30d → base pro "custo por projeto" no painel
+    _proj30 = 0
+    try:
+        _since = (datetime.utcnow() - timedelta(days=30)).isoformat()
+        _pq = (f"{SUPABASE_URL}/rest/v1/projects?status=eq.done&created_at=gte.{_since}&select=job_id")
+        _pr = _ur.Request(_pq, method="GET")
+        _pr.add_header("apikey", SUPABASE_KEY)
+        _pr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _proj30 = len(_json.loads(_ur.urlopen(_pr, timeout=15).read().decode("utf-8")))
+    except Exception as _pe:
+        print(f"[costs] contagem projetos 30d erro: {_pe}")
+    return {"costs": rows, "projetos_30d": _proj30}
 
 
 @app.post("/api/admin/costs")

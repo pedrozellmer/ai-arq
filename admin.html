@@ -315,6 +315,7 @@
           </div>
           <div class="flex items-center gap-2">
             <input type="text" id="search-users" placeholder="Buscar usu&#225;rio..." class="px-4 py-2 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none w-full sm:w-64">
+            <button onclick="exportUsersCsv()" class="px-3 py-2 rounded-xl border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 whitespace-nowrap">&#8595; CSV</button>
           </div>
         </div>
 
@@ -1200,6 +1201,7 @@ function renderOps(d){
 // FINANCEIRO — registro editável de custos
 // ══════════════════════════════════════════════
 let COSTS = [];
+let COSTS_PROJ30 = 0;   // projetos concluídos nos últimos 30d (pro custo/projeto)
 const COST_CATS = ['infra','ia','email','dominio','pagamento','outro'];
 const COST_MOEDAS = ['BRL','USD'];
 const COST_PERIODOS = ['mensal','anual','uso'];
@@ -1225,6 +1227,7 @@ async function loadCosts(){
     const d = await res.json();
     if (!res.ok) throw new Error(d.detail || 'erro');
     COSTS = d.costs || [];
+    COSTS_PROJ30 = d.projetos_30d || 0;
     renderCosts();
   } catch(e){
     box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e&&e.message)||e}</p>`;
@@ -1258,9 +1261,11 @@ function renderCostTotals(){
   const fixoMensal = COSTS.reduce((s,c)=> s + costMonthlyBRL(c), 0);
   const nUso = COSTS.filter(c=>c.periodo==='uso').length;
   const nConfirmar = COSTS.filter(c=>!c.confirmado).length;
+  const custoProj = (COSTS_PROJ30 > 0) ? (fixoMensal / COSTS_PROJ30) : null;
   el.innerHTML = `
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(fixoMensal)}</div><div class="text-xs text-gray-500">custo fixo / mês</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(fixoMensal*12)}</div><div class="text-xs text-gray-500">custo fixo / ano</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${custoProj!=null?costFmt(custoProj):'—'}</div><div class="text-xs text-gray-500">custo fixo / projeto ${COSTS_PROJ30?`(${COSTS_PROJ30} em 30d)`:''}</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${nUso}</div><div class="text-xs text-gray-500">itens "por uso" (variável)</div></div>`;
   if (nConfirmar>0) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">⚠ ${nConfirmar} valor(es) <b>a confirmar</b> (linhas em amarelo). Preenche o real e marca ✓ — o total ainda não é definitivo.</div>`;
 }
@@ -2608,6 +2613,21 @@ function _fmtDateTime(iso) {
   } catch (e) { return '--'; }
 }
 
+function exportUsersCsv(){
+  const rows = (typeof allUsers !== 'undefined' ? allUsers : []);
+  if (!rows.length){ alert('Nenhum usuário pra exportar.'); return; }
+  const cols = [['email','E-mail'],['full_name','Nome'],['company','Empresa'],['whatsapp','WhatsApp'],['user_role','Cargo'],['area','Área'],['referral_source','Origem'],['referral_detail','Origem detalhe'],['num_projects','Projetos'],['has_profile','Cadastro completo'],['profile_created_at','Criado em']];
+  const esc = v => { let s = (v==null?'':String(v)); if (/[",\n;]/.test(s)) s = '"'+s.replace(/"/g,'""')+'"'; return s; };
+  const head = cols.map(c=>c[1]).join(';');
+  const body = rows.map(u => cols.map(c=>esc(u[c[0]])).join(';')).join('\n');
+  const csv = '﻿' + head + '\n' + body;   // BOM pro Excel abrir acento certo; ; = padrão BR
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'usuarios_aiarq_' + new Date().toISOString().slice(0,10) + '.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
 function renderUsers(users) {
   const tbody = document.getElementById('users-table-body');
 
