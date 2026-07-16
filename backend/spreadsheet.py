@@ -85,9 +85,9 @@ def _unit_family(u: str) -> str:
 
 
 def _build_ref_text(item) -> str:
-    """Monta texto da coluna REF combinando código SINAPI/TCPO + ref do projeto.
+    """Monta texto da coluna REF combinando código SINAPI + ref do projeto.
 
-    Formato: 'SINAPI 86902 · TCPO 3R-1435 · prancha original.dwg'
+    Formato: 'SINAPI 86902 (conf. alta) · prancha original.dwg'
     Tudo opcional — só aparece o que existe.
     """
     parts = []
@@ -117,13 +117,7 @@ def _build_ref_text(item) -> str:
             # Match fraco: sinaliza que há candidato SINAPI sem induzir com código.
             parts.append('SINAPI: sem correspondência forte (ver aba técnica)')
 
-    # TCPO BIM (referência técnica complementar)
-    tcpo_matches = getattr(item, 'tcpo_matches', None) or []
-    if tcpo_matches:
-        m = tcpo_matches[0]
-        cod = (m.get('codigo_bim') or '').strip()
-        if cod:
-            parts.append(f'TCPO {cod}')
+    # TCPO removido (16/07): catálogo é SINAPI, TCPO fora da fase atual.
 
     # Referência da prancha original (sempre por último)
     if item.ref_sheet:
@@ -800,13 +794,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.page_setup.fitToWidth = 1
 
     # ================================================================
-    # SHEET 3: REFERÊNCIAS SINAPI / TCPO (códigos oficiais por item)
+    # SHEET 3: REFERÊNCIAS SINAPI (códigos oficiais por item)
     # ================================================================
-    # Gera se algum item tem sinapi_matches OU tcpo_matches
+    # TCPO removido (16/07): catálogo é SINAPI, TCPO fora da fase atual.
     items_with_sinapi = [it for it in items if getattr(it, 'sinapi_matches', None)]
-    items_with_tcpo = [it for it in items if getattr(it, 'tcpo_matches', None)]
-    if items_with_sinapi or items_with_tcpo:
-        wsm = wb.create_sheet('Referências SINAPI-TCPO')
+    if items_with_sinapi:
+        wsm = wb.create_sheet('Referências SINAPI')
         wsm.sheet_properties.tabColor = '059669'  # verde
 
         widths_m = [7, 45, 5, 10, 12, 12, 50, 6, 8]
@@ -816,17 +809,16 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         # Cabeçalho geral
         wsm.merge_cells('A1:I1')
         wsm.cell(row=1, column=1,
-                 value='REFERÊNCIAS SINAPI / TCPO BIM — códigos oficiais por item').font = F_TITLE
+                 value='REFERÊNCIAS SINAPI — códigos oficiais por item').font = F_TITLE
         wsm.merge_cells('A2:I2')
         wsm.cell(row=2, column=1, value=(
-            'SINAPI (Caixa) = referência oficial de preço/quantitativo no Brasil — '
-            'atualizado mensalmente. TCPO BIM (Pini) = composição técnica com '
-            'insumos detalhados. Cada item do quantitativo recebe os matches '
-            'mais próximos pra você buscar preço/composição.')).font = F_NOTE
+            'SINAPI (Caixa) = referência oficial de preço/quantitativo no Brasil, '
+            'atualizada mensalmente. Cada item do quantitativo recebe os códigos '
+            'SINAPI mais próximos pra você buscar o preço/composição.')).font = F_NOTE
         wsm.merge_cells('A3:I3')
         wsm.cell(row=3, column=1, value=(
             'AI.arq NÃO entrega preço. Use o código pra consultar o preço atualizado '
-            'no SINAPI oficial (https://www.caixa.gov.br) ou TCPO BIM. '
+            'no SINAPI oficial (https://www.caixa.gov.br). '
             'Matches marcados com ~ usaram busca simplificada — confirmar adequação.')
         ).font = F_NOTE
 
@@ -840,18 +832,13 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             cl.font = F_HDR; cl.fill = P_HDR; cl.alignment = AC; cl.border = BD
         rm += 1
 
-        # Cor diferente pra SINAPI vs TCPO
         P_SINAPI = PatternFill('solid', fgColor='DBEAFE')   # azul claro pra SINAPI (gov)
-        P_TCPO   = PatternFill('solid', fgColor='E0F2FE')   # azul mais claro pra TCPO
-
-        P_INSUMO = PatternFill('solid', fgColor='ECFDF5')   # verde claro pros insumos
         P_NOMATCH = PatternFill('solid', fgColor='FEE2E2')  # vermelho claro pra sem match
 
         for item in items:
             sinapi_matches = getattr(item, 'sinapi_matches', []) or []
-            tcpo_matches = getattr(item, 'tcpo_matches', []) or []
 
-            if not sinapi_matches and not tcpo_matches:
+            if not sinapi_matches:
                 # Item sem match nenhum — linha informativa
                 wsm.cell(row=rm, column=1, value=item.item_num).font = F_N
                 wsm.cell(row=rm, column=2, value=item.description).font = F_N
@@ -859,7 +846,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                 wsm.cell(row=rm, column=4, value=item.quantity).font = F_N
                 wsm.merge_cells(start_row=rm, start_column=5, end_row=rm, end_column=9)
                 wsm.cell(row=rm, column=5,
-                         value='Sem match SINAPI nem TCPO (descrição muito específica) — '
+                         value='Sem match SINAPI (descrição muito específica) — '
                          'buscar manualmente em https://www.caixa.gov.br/sinapi').font = F_NOTE
                 for c in range(1, 10):
                     wsm.cell(row=rm, column=c).border = BD
@@ -901,54 +888,13 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                     wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4, 5, 6, 8, 9) else AL
                 rm += 1
 
-            # TCPO depois (composição técnica) — só o melhor
-            if tcpo_matches:
-                best = tcpo_matches[0]
-                wsm.cell(row=rm, column=1, value='').font = F_SM
-                wsm.cell(row=rm, column=5, value='TCPO').font = F_BOLD
-                wsm.cell(row=rm, column=6, value=best.get('codigo_bim', '')).font = F_BOLD
-                wsm.cell(row=rm, column=7,
-                         value=best.get('descricao', '')[:95]).font = F_N
-                wsm.cell(row=rm, column=8, value=best.get('unidade', '')).font = F_N
-                sim_pct = f"{min(100, max(0, int((best.get('similarity', 0) or 0) * 100)))}%"  # cap: similaridade nunca >100%
-                wsm.cell(row=rm, column=9, value=sim_pct).font = F_BOLD
-                for c in range(1, 10):
-                    wsm.cell(row=rm, column=c).border = BD
-                    wsm.cell(row=rm, column=c).fill = P_TCPO
-                    wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4, 5, 6, 8, 9) else AL
-                rm += 1
-
-                # Insumos da composição TCPO (se carregados)
-                insumos = best.get('insumos', []) or []
-                for ins in insumos[:8]:
-                    tipo_label = {
-                        'mao_de_obra': 'MO', 'material': 'Mat',
-                        'equipamento': 'Eq',
-                    }.get(ins.get('tipo', 'material'), '-')
-                    consumo = ins.get('consumo')
-                    consumo_str = (f"{consumo:.4f}" if isinstance(consumo, (int, float))
-                                   else '-')
-                    wsm.cell(row=rm, column=2,
-                             value=f"   → {tipo_label}: {ins.get('descricao', '')[:60]}").font = F_SM
-                    wsm.cell(row=rm, column=3, value=ins.get('unidade', '')).font = F_SM
-                    wsm.cell(row=rm, column=4, value=consumo_str).font = F_SM
-                    wsm.cell(row=rm, column=6, value=ins.get('codigo_insumo', '')).font = F_SM
-                    wsm.merge_cells(start_row=rm, start_column=7, end_row=rm, end_column=9)
-                    wsm.cell(row=rm, column=7,
-                             value='insumo da composição (coef. consumo)').font = F_NOTE
-                    for c in range(1, 10):
-                        wsm.cell(row=rm, column=c).border = BD
-                        wsm.cell(row=rm, column=c).fill = P_INSUMO
-                        wsm.cell(row=rm, column=c).alignment = AC if c in (1, 3, 4, 6) else AL
-                    rm += 1
-
             rm += 1  # linha em branco entre itens
 
         # Rodapé
         wsm.merge_cells(start_row=rm + 1, start_column=1, end_row=rm + 1, end_column=9)
         wsm.cell(row=rm + 1, column=1, value=(
             'Como ler: MATCH % indica a similaridade entre a descrição do item '
-            'e a composição SINAPI/TCPO. Acima de 70% = referência forte. 40-70% = '
+            'e a composição SINAPI. Acima de 70% = referência forte. 40-70% = '
             'revisar. Abaixo de 30% = candidato fraco, buscar código manualmente '
             'em https://www.caixa.gov.br/sinapi.')).font = F_NOTE
 
