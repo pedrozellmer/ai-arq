@@ -5109,7 +5109,11 @@ async def emails_auto_tick(dry: int = 0):
     acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"])][:5]
 
     if dry:
-        return {"status": "dry", "enviaria": acoes}
+        # Endpoint é aberto (mesma mecânica dos outros ticks de cron). O modo dry
+        # NÃO pode devolver email/nome — vazava PII de usuários beta pra qualquer
+        # chamador anônimo. Devolve só a contagem por tipo. (Revisão 16/07.)
+        from collections import Counter as _Counter
+        return {"status": "dry", "total": len(acoes), "por_tipo": dict(_Counter(a["kind"] for a in acoes))}
 
     enviados = []
     for a in acoes:
