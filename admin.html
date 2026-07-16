@@ -3194,10 +3194,11 @@ document.getElementById('btn-logout').addEventListener('click', async () => {
 // UTILITIES
 // ══════════════════════════════════════════════
 function esc(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = String(str);
-  return div.innerHTML;
+  // Escapa também aspas (" e ') — necessário quando o valor cai dentro de um
+  // atributo HTML (ex.: title="..."). A versão antiga (textContent→innerHTML)
+  // NÃO escapava aspas, abrindo brecha em contexto de atributo. (Revisão 16/07.)
+  return String(str == null ? '' : str).replace(/[&<>"']/g, c =>
+    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
 // ══════════════════════════════════════════════

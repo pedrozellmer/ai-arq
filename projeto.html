@@ -1127,7 +1127,7 @@ function renderClientData(d) {
     actions.push(`<a href="https://wa.me/${waNum}?text=${msg}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded-lg no-underline font-medium">📱 WhatsApp</a>`);
   }
   if (d.client_email) {
-    actions.push(`<a href="mailto:${d.client_email}?subject=Comparativo de Orçamentos" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg no-underline font-medium">✉️ E-mail</a>`);
+    actions.push(`<a href="mailto:${esc(d.client_email)}?subject=Comparativo de Orçamentos" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg no-underline font-medium">✉️ E-mail</a>`);
   }
   if (actions.length) {
     html += `<div class="md:col-span-2 flex gap-2 pt-2 border-t">${actions.join('')}</div>`;
@@ -1451,7 +1451,7 @@ async function generateComparison() {
       const rankHtml = s.ranking.map((r, i) => `
         <div class="flex items-center justify-between py-1">
           <span class="text-sm ${i === 0 ? 'font-semibold text-emerald-700' : 'text-gray-700'}">
-            ${i === 0 ? '🏆 ' : `${i+1}º `}${r.supplier}
+            ${i === 0 ? '🏆 ' : `${i+1}º `}${esc(r.supplier)}
           </span>
           <span class="text-sm font-mono ${i === 0 ? 'text-emerald-700 font-semibold' : 'text-gray-600'}">
             R$ ${(r.paired_total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
@@ -1491,11 +1491,11 @@ async function generateComparison() {
       `;
       result.classList.remove('hidden');
     } else {
-      result.innerHTML = `<p class="text-sm text-red-600">${data.error || 'erro'}</p>`;
+      result.innerHTML = `<p class="text-sm text-red-600">${esc(data.error || 'erro')}</p>`;
       result.classList.remove('hidden');
     }
   } catch (e) {
-    result.innerHTML = `<p class="text-sm text-red-600">${e.message}</p>`;
+    result.innerHTML = `<p class="text-sm text-red-600">${esc(e.message)}</p>`;
     result.classList.remove('hidden');
   } finally {
     btn.disabled = false;
