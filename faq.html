@@ -209,7 +209,7 @@
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               O AI.arq &eacute; uma plataforma que cobre o <strong>ciclo de quantitativo, comparativo e apresenta&ccedil;&atilde;o</strong> (sem precificar &mdash; isso fica com seu or&ccedil;amentista):
               <br>(1) <strong>L&ecirc; o CAD</strong> &mdash; voc&ecirc; envia PDF, DWG ou DXF e a IA gera a planilha de quantitativos (itens, unidades e quantidades &mdash; <strong>sem pre&ccedil;os</strong>) em poucos minutos.
-              <br>(2) <strong>Refer&ecirc;ncias SINAPI-TCPO</strong> &mdash; cada item vem com c&oacute;digo oficial SINAPI e composi&ccedil;&atilde;o TCPO BIM (insumos esperados com coeficientes), pra justificar o quantitativo aos fornecedores.
+              <br>(2) <strong>Refer&ecirc;ncias SINAPI</strong> &mdash; cada item vem com c&oacute;digo oficial SINAPI (descri&ccedil;&atilde;o padronizada, unidade e % de compatibilidade), pra justificar o quantitativo aos fornecedores.
               <br>(3) <strong>Compara propostas</strong> &mdash; quando os fornecedores devolvem as cota&ccedil;&otilde;es, voc&ecirc; sobe as planilhas e o AI.arq gera o comparativo pareado (ranking, discrep&acirc;ncias, cobertura).
               <br>(4) <strong>Apresenta pro cliente final</strong> &mdash; com um clique, XLSX e PPT executivo saem com a <strong>logo e cor do seu escrit&oacute;rio</strong>, prontos pra enviar por WhatsApp ou e-mail.
             </div>
@@ -414,7 +414,7 @@
               <ul class="space-y-2 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Aba 1 &mdash; Resumo Comparativo:</strong> an&aacute;lise do que sai, entra e permanece (especialmente &uacute;til em reformas).</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Aba 2 &mdash; Or&ccedil;amento:</strong> itens organizados em at&eacute; 18 disciplinas (Servi&ccedil;os Preliminares, Demoli&ccedil;&atilde;o, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divis&oacute;rias, Persianas, Ilumina&ccedil;&atilde;o, El&eacute;trica, <strong>Hidr&aacute;ulica</strong>, <strong>G&aacute;s</strong>, AC, Inc&ecirc;ndio, Marcenaria, Mobili&aacute;rio, Complementares). &Eacute; nesta aba que voc&ecirc; ou o or&ccedil;amentista preenche os pre&ccedil;os unit&aacute;rios para compor o or&ccedil;amento.</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-700">Aba 3 &mdash; Refer&ecirc;ncias SINAPI-TCPO</strong> (quando h&aacute; matches): para cada item do quantitativo, traz c&oacute;digo oficial SINAPI e composi&ccedil;&atilde;o TCPO BIM, com os insumos esperados (material/m&atilde;o-de-obra/equipamento) e seus coeficientes de consumo. Serve pra justificar tecnicamente o quantitativo aos fornecedores.</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">&bull;</span> <strong class="text-emerald-700">Aba 3 &mdash; Refer&ecirc;ncias SINAPI</strong> (quando h&aacute; matches): para cada item do quantitativo, traz o c&oacute;digo oficial SINAPI com a descri&ccedil;&atilde;o padronizada da composi&ccedil;&atilde;o, unidade e % de compatibilidade. Serve pra justificar tecnicamente o quantitativo aos fornecedores.</li>
               </ul>
               <p class="mt-3 mb-2 font-medium text-gray-700">Recursos transversais:</p>
               <ul class="space-y-1 ml-1">
@@ -442,7 +442,7 @@
                 <li><strong>Extra&ccedil;&atilde;o do CAD:</strong> DWG/DXF &mdash; dados geom&eacute;tricos extra&iacute;dos direto (blocos, polylines, hachuras). PDF &mdash; texto extra&iacute;do e imagens recortadas por regi&atilde;o de legenda.</li>
                 <li><strong>An&aacute;lise com IA:</strong> cada prancha vai para a IA (Claude), que aplica conven&ccedil;&otilde;es NBR e identifica itens, materiais, quantidades e especifica&ccedil;&otilde;es.</li>
                 <li><strong>Calibra&ccedil;&atilde;o por densidade:</strong> ratios hist&oacute;ricos de projetos similares sinalizam itens fora do padr&atilde;o (alertas de anomalia).</li>
-                <li><strong>Enriquecimento com SINAPI/TCPO:</strong> cada item ganha refer&ecirc;ncia oficial na aba "Refer&ecirc;ncias SINAPI-TCPO" (composi&ccedil;&atilde;o + insumos com coeficientes).</li>
+                <li><strong>Enriquecimento com SINAPI:</strong> cada item ganha refer&ecirc;ncia oficial na aba "Refer&ecirc;ncias SINAPI" (c&oacute;digo + descri&ccedil;&atilde;o padronizada + % de compatibilidade).</li>
                 <li><strong>Gera&ccedil;&atilde;o:</strong> itens consolidados em planilha .xlsx com f&oacute;rmulas de subtotal, BDI e conting&ecirc;ncia prontas.</li>
                 <li><strong>Revis&atilde;o:</strong> voc&ecirc; revisa no navegador (aprovar/editar/comentar item a item) ou baixa e corrige offline.</li>
                 <li><strong>Comparativo de or&ccedil;amentos (opcional):</strong> quando os fornecedores devolvem, voc&ecirc; faz upload das planilhas e o AI.arq gera XLSX + PPT executivo com sua marca.</li>
@@ -518,7 +518,7 @@
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>El&eacute;trica:</strong> 2 tomadas comuns + 2 estabilizadas + 1 dado por posi&ccedil;&atilde;o de trabalho</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>AR-Condicionado:</strong> 600&ndash;800 BTU/m&sup2; + carga por pessoa e equipamento</li>
               </ul>
-              <p class="mt-3 text-xs text-gray-500">Base técnica: SINAPI (10.284 composições + 54.529 insumos) + TCPO BIM 15ª Ed. (1.333 composições + 6.733 insumos) carregados no sistema, fornecendo coeficientes de consumo por unidade.</p>
+              <p class="mt-3 text-xs text-gray-500">Base técnica: catálogo oficial SINAPI (Caixa), com ~10 mil composições carregadas no sistema como vocabulário de referência.</p>
             </div>
           </div>
         </div>
@@ -678,10 +678,10 @@
               <ul class="space-y-1.5 ml-1 mt-2">
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só quantitativo?</strong> Ok — você gera a planilha e usa do jeito que quiser, em qualquer ferramenta.</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só comparativo de fornecedores?</strong> Em breve vamos disponibilizar uma página separada. Hoje, o comparativo aparece dentro do projeto (mesmo que você não use o quantitativo do AI.arq como base).</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só referências SINAPI-TCPO?</strong> Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada.</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só referências SINAPI?</strong> Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada.</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1.5 shrink-0">✓</span> <strong>Só PPT com sua marca?</strong> Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte.</li>
               </ul>
-              <p class="mt-3">Você paga só pelo <strong>processamento do quantitativo</strong> (preço por faixa de pranchas — veja "Preços e Pagamento"). Todo o resto (referências SINAPI-TCPO, comparativo, PPT, cashback, agente de chat) está incluído, sem taxa extra e sem obrigatoriedade de uso.</p>
+              <p class="mt-3">Você paga só pelo <strong>processamento do quantitativo</strong> (preço por faixa de pranchas — veja "Preços e Pagamento"). Todo o resto (referências SINAPI, comparativo, PPT, cashback, agente de chat) está incluído, sem taxa extra e sem obrigatoriedade de uso.</p>
             </div>
           </div>
         </div>
@@ -774,19 +774,19 @@
 
         <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="referencias sinapi tcpo bim composicao insumo justificar quantidade codigo oficial memoria tecnica">
           <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
-            <span class="text-sm font-semibold text-gray-800 pr-4">O que é a aba "Referências SINAPI-TCPO" na planilha?</span>
+            <span class="text-sm font-semibold text-gray-800 pr-4">O que é a aba "Referências SINAPI" na planilha?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-2">Uma aba verde na planilha gerada que, pra cada item do quantitativo, mostra:</p>
+              <p class="mb-2">Uma aba na planilha gerada que, pra cada item do quantitativo, mostra:</p>
               <ul class="space-y-1 ml-4 mb-2">
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Código SINAPI (Caixa) sugerido + descrição padronizada e unidade</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Código TCPO BIM (quando há match) + descrição oficial da composição</li>
-                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Lista de insumos esperados (material, mão de obra, equipamento) com coeficiente de consumo</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Até 2 sugestões de composição por item, da mais compatível pra menos</li>
                 <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Similaridade entre descrição do item e a composição (% de compatibilidade)</li>
+                <li class="flex items-start gap-2"><span class="text-emerald-500 mt-1 shrink-0">•</span> Item sem match vem sinalizado, com orientação pra buscar o código manualmente no site da Caixa</li>
               </ul>
-              <p>Serve pra <strong>justificar tecnicamente o quantitativo</strong> pros fornecedores e dar credibilidade à planilha. Base: SINAPI (10.284 composições da Caixa, atualizado mensalmente) + TCPO BIM 15ª Edição (Pini).</p>
+              <p>Serve pra <strong>justificar tecnicamente o quantitativo</strong> pros fornecedores e dar credibilidade à planilha. Base: catálogo oficial SINAPI (Caixa), ~10 mil composições. <strong>Sem preço</strong> — o código serve pra consultar o valor atualizado direto na fonte.</p>
             </div>
           </div>
         </div>
