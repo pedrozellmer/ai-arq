@@ -267,7 +267,9 @@
   async function checkAuth() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) {
-      window.location.href = 'login.html';
+      // Quem cai aqui deslogado veio querendo CRIAR conta (link antigo/bookmark)
+      // → manda pro login já no modo Criar Conta, não na tela "Entrar".
+      window.location.href = 'login.html?novo=1';
       return;
     }
 

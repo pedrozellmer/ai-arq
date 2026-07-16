@@ -202,6 +202,15 @@
     }
   });
 
+  // Deep-link "Comece Gr\u00e1tis": login.html?novo=1 (ou #cadastro) abre j\u00e1 no modo
+  // Criar Conta \u2014 os CTAs da landing apontam pra c\u00e1. Antes apontavam pra
+  // cadastro.html, que chutava o visitante deslogado de volta pro login
+  // (flash + bounce no clique mais importante do funil). Revis\u00e3o 16/07.
+  if (new URLSearchParams(location.search).has('novo') || location.hash === '#cadastro') {
+    linkSignup.click();
+    document.title = 'Criar conta \u2014 AI.arq';
+  }
+
   formEmailLogin.addEventListener('submit', async (e) => {
     e.preventDefault();
     hideEmailMessages();
