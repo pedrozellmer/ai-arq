@@ -153,17 +153,12 @@
 
     <button onclick="switchTab('motor')" data-tab="motor" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-      <span>Saúde do motor</span>
+      <span>Motor</span>
     </button>
 
     <button onclick="switchTab('financeiro')" data-tab="financeiro" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       <span>Financeiro</span>
-    </button>
-
-    <button onclick="switchTab('operacao')" data-tab="operacao" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-      <span>Operação</span>
     </button>
 
     <div class="pt-4 mt-4 border-t border-white/10 space-y-1">
@@ -263,12 +258,16 @@
       <div id="tab-motor" class="tab-content hidden">
         <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h2 class="text-xl font-bold text-gray-900">📊 Saúde do motor</h2>
-            <p class="text-sm text-gray-500">Quanto o motor realmente MEDE (branco) — CAD × PDF, distribuição e por que uploads falham.</p>
+            <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
+            <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadMotorHealth()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadMotorHealth(); loadOps();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor</span></h3>
         <div id="motor-health"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <div class="my-8 border-t border-gray-200"></div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🎯 Ações <span class="font-normal text-gray-400">— operação (recuperar falha / puxar pro CAD / erros)</span></h3>
+        <div id="ops-box"><p class="text-gray-400 text-sm">Carregando…</p></div>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -290,19 +289,6 @@
         <button onclick="costAddRow()" class="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">+ Adicionar custo</button>
       </div>
 
-      <!-- ════════════════════════════════════════ -->
-      <!-- TAB: OPERAÇÃO                            -->
-      <!-- ════════════════════════════════════════ -->
-      <div id="tab-operacao" class="tab-content hidden">
-        <div class="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <h2 class="text-xl font-bold text-gray-900">🎯 Operação</h2>
-            <p class="text-sm text-gray-500">Aja sem depender de dev: recupere falhas, puxe PDF-só pro CAD e veja erros do motor.</p>
-          </div>
-          <button onclick="loadOps()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
-        </div>
-        <div id="ops-box"><p class="text-gray-400 text-sm">Carregando…</p></div>
-      </div>
 
       <!-- ════════════════════════════════════════ -->
       <!-- TAB: USUARIOS                           -->
@@ -1113,9 +1099,8 @@ function switchTab(tabName) {
   if (tabName === 'mensagens') loadMessages();
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
-  if (tabName === 'motor') loadMotorHealth();
+  if (tabName === 'motor') { loadMotorHealth(); loadOps(); }
   if (tabName === 'financeiro') loadCosts();
-  if (tabName === 'operacao') loadOps();
 }
 
 // ══════════════════════════════════════════════
