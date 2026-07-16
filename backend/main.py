@@ -5422,6 +5422,25 @@ async def admin_costs_list(request: Request):
     return {"costs": rows, "projetos_30d": _proj30}
 
 
+def _cost_to_float(v):
+    """float robusto pro valor de custo. Aceita número, '1.234,56' (BR) ou
+    '1234.56'. (Antes usava sf(), que só existe DENTRO de process_job → dava
+    NameError e 500 ao salvar custo. Bug pego na revisão 16/07.)"""
+    if v is None:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = str(v).strip().replace("R$", "").replace(" ", "")
+    if not s:
+        return 0.0
+    if "," in s:                       # BR: vírgula é decimal; ponto é milhar
+        s = s.replace(".", "").replace(",", ".")
+    try:
+        return float(s)
+    except Exception:
+        return 0.0
+
+
 @app.post("/api/admin/costs")
 async def admin_costs_upsert(request: Request):
     """Adiciona (sem id) ou edita (com id) uma linha de custo (admin)."""
@@ -5434,7 +5453,7 @@ async def admin_costs_upsert(request: Request):
     _fields = {
         "servico": str(d.get("servico") or "").strip()[:120],
         "categoria": str(d.get("categoria") or "outro").strip()[:40],
-        "valor": sf(d.get("valor", 0)),
+        "valor": _cost_to_float(d.get("valor", 0)),
         "moeda": str(d.get("moeda") or "BRL").strip()[:8],
         "periodo": str(d.get("periodo") or "mensal").strip()[:12],
         "confirmado": bool(d.get("confirmado", False)),
