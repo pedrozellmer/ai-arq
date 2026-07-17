@@ -4350,15 +4350,35 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # SINAPI = referência principal (preço oficial gov BR, atualizado mensal).
         # TCPO = referência técnica complementar (insumos detalhados).
         # Ambos best-effort, nunca bloqueiam planilha.
+        # BUSCA JUNTA + IA ESCOLHE (17/07). Antes: uma busca por texto escolhia
+        # sozinha e o que ela achava virava "referência SINAPI". Ela não sabe que
+        # spot é luz e cuba é pia, então "Piso porcelanato 60x60" saía como PISO DE
+        # BORRACHA com 100% de confiança. Agora a busca só JUNTA candidatos (é boa
+        # nisso) e a Haiku ESCOLHE — e responde "nenhum" quando o SINAPI não tem o
+        # serviço, em vez de empurrar o vizinho mais parecido.
         try:
-            from sinapi_matcher import match_item as match_sinapi
-            for it in all_items:
+            from sinapi_matcher import candidates_for, apply_llm_pick
+            from concurrent.futures import ThreadPoolExecutor
+
+            def _cands(it):
                 try:
-                    ms = match_sinapi(it.description, limit=3)
-                    if ms:
-                        it.sinapi_matches = ms
+                    return {"description": it.description,
+                            "unit": getattr(it, "unit", "") or "",
+                            "candidates": candidates_for(it.description, limit=60),
+                            "_item": it}
                 except Exception:
-                    pass
+                    return None
+
+            # Em paralelo: cada item faz ~5 consultas e o tempo é de ESPERA de rede,
+            # não de conta — em série dava ~1,4s/item (2min+ numa planilha de 100).
+            # Best-effort: item que falhar sai fora sem derrubar a planilha.
+            with ThreadPoolExecutor(max_workers=8) as _ex:
+                lote = [r for r in _ex.map(_cands, all_items) if r]
+            n_conf = apply_llm_pick(lote)   # sem ANTHROPIC_API_KEY → 0, cai no corte por nota
+            for e in lote:
+                if e["candidates"]:
+                    e["_item"].sinapi_matches = e["candidates"][:3]
+            print(f"[sinapi] {n_conf}/{len(lote)} itens com código conferido pela IA")
         except ImportError:
             pass
 
