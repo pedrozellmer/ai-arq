@@ -831,7 +831,12 @@
       <div id="tab-atividade" class="tab-content hidden">
         <div class="flex items-center justify-between mb-1">
           <h2 class="text-xl font-bold text-gray-900">Atividade</h2>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-3">
+            <label class="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer select-none">
+              <input type="checkbox" id="act-auto-refresh" checked class="rounded">
+              <span class="inline-flex items-center gap-1"><span id="act-live-dot" class="w-2 h-2 rounded-full bg-emerald-500 inline-block" style="transition:transform .3s ease,opacity .3s ease"></span> ao vivo</span>
+            </label>
+            <span id="act-updated" class="text-[11px] text-gray-400"></span>
             <select id="act-days" onchange="loadActivity()" class="text-sm border border-gray-300 rounded-lg px-2 py-1">
               <option value="7">7 dias</option>
               <option value="30" selected>30 dias</option>
@@ -1780,10 +1785,34 @@ async function loadActivity() {
         <span class="text-gray-400 text-xs truncate">${escapeHtml(who)}${job}</span>
       </div>`;
     }).join('') : '<p class="text-gray-400">Sem atividade no período.</p>';
+
+    const upd = document.getElementById('act-updated');
+    if (upd) upd.textContent = 'atualizado ' + new Date().toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' });
   } catch (e) {
     if (cards) cards.innerHTML = `<p class="text-sm text-red-500 sm:col-span-3">Erro ao carregar: ${escapeHtml(String(e.message || e))}</p>`;
   }
 }
+
+// Auto-refresh a cada 12s quando a aba Atividade está visível e "ao vivo" marcado.
+// Só recarrega se: aba aberta + toggle ligado + guia do navegador em foco (não
+// gasta request com o admin em segundo plano). Pisca o pontinho a cada ciclo.
+let _activityRefreshTimer = null;
+function startActivityAutoRefresh() {
+  if (_activityRefreshTimer) clearInterval(_activityRefreshTimer);
+  _activityRefreshTimer = setInterval(() => {
+    const tab = document.getElementById('tab-atividade');
+    const cb = document.getElementById('act-auto-refresh');
+    const dot = document.getElementById('act-live-dot');
+    const ativo = tab && !tab.classList.contains('hidden') && cb && cb.checked
+                  && document.visibilityState === 'visible';
+    if (dot) dot.style.opacity = ativo ? '1' : '0.25';
+    if (ativo) {
+      if (dot) { dot.style.transform = 'scale(1.6)'; setTimeout(() => { dot.style.transform = 'scale(1)'; }, 300); }
+      loadActivity();
+    }
+  }, 12000);
+}
+startActivityAutoRefresh();
 
 // ══════════════════════════════════════════════
 // NEWSLETTER — dispara a edição atual (admin)
