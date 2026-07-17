@@ -304,7 +304,8 @@
       </button>
     </div>
     <div id="aiarq-chat-footer" style="display:none;">
-      Respostas por IA · use para dúvidas rápidas, não aconselhamento técnico
+      <span aria-hidden="true">⚠</span> O AI.arq é uma IA e pode cometer erros — confira as informações importantes.
+      Use para dúvidas rápidas, não aconselhamento técnico.
     </div>
   `;
 
