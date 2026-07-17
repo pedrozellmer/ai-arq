@@ -311,7 +311,7 @@ function smartBack() {
       <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
     </div>
     <div id="fb-comment-wrap" class="hidden mt-3">
-      <textarea id="fb-comment" rows="2" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+      <textarea id="fb-comment" rows="2" oninput="_fbArm(20000)" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
       <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
     </div>
     <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
@@ -1636,18 +1636,28 @@ function maybeShowFeedback() {
 }
 
 let _fbScore = null, _fbTimer = null, _fbPosted = false;
+// O timer SEMPRE manda o que já está escrito na caixa (não só a nota) e se re-arma
+// a cada tecla. Antes ele disparava 6s cravados e marcava _fbPosted=true — quem
+// levava mais de 6s escrevendo tinha o comentário jogado fora em silêncio (a tela
+// ainda agradecia). /api/nps faz INSERT puro, então 2º POST viraria linha duplicada:
+// por isso o caminho continua sendo um envio só, com o texto do momento do disparo.
+function _fbFlush() {
+  if (_fbPosted) return;
+  _fbPosted = true;
+  postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim());
+}
+function _fbArm(ms) { clearTimeout(_fbTimer); _fbTimer = setTimeout(_fbFlush, ms); }
 function sendFeedback(score) {
   _fbScore = score;
   document.getElementById('fb-buttons').classList.add('hidden');
   document.getElementById('fb-comment-wrap').classList.remove('hidden');
   // NÃO posta na hora (evita NPS duplicado quando o usuário comenta): espera o
   // comentário opcional; se em 6s não vier, posta só a nota. Uma linha por feedback.
-  clearTimeout(_fbTimer);
-  _fbTimer = setTimeout(() => { if (!_fbPosted) { _fbPosted = true; postNps(_fbScore, ''); } }, 6000);
+  _fbArm(6000);
 }
 function sendFeedbackComment() {
   clearTimeout(_fbTimer);
-  if (!_fbPosted) { _fbPosted = true; postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim()); }
+  _fbFlush();
   document.getElementById('fb-comment-wrap').classList.add('hidden');
   document.getElementById('fb-thanks').classList.remove('hidden');
 }
