@@ -151,6 +151,11 @@
       <span>Instagram</span>
     </button>
 
+    <button onclick="switchTab('calendario')" data-tab="calendario" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      <span>Calendário</span>
+    </button>
+
     <button onclick="switchTab('motor')" data-tab="motor" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
       <span>Motor</span>
@@ -924,6 +929,34 @@
       </div>
 
       <!-- ══════════════ INSTAGRAM (fila de posts) ══════════════ -->
+      <!-- ═══════════ CALENDÁRIO DE CONTEÚDO (blog + IG + newsletter) ═══════════
+           Pedido do Pedro: os 3 canais num lugar só. Só leitura + atalhos — as
+           ferramentas de cada canal já existem; o que faltava era o panorama.
+           Fontes: /blog/posts.json (mesmo domínio), /api/admin/instagram/posts,
+           /api/admin/newsletter/scheduled (authFetch — regra do admin). -->
+      <div id="tab-calendario" class="tab-content hidden">
+        <div class="mb-5">
+          <h1 class="text-2xl font-bold text-gray-900">Calendário de conteúdo</h1>
+          <p class="text-sm text-gray-500 mt-1">Blog, Instagram e newsletter numa linha do tempo só</p>
+        </div>
+
+        <!-- Cobertura por canal (cor + ícone + texto) -->
+        <div id="cal-cobertura" class="grid md:grid-cols-3 gap-3 mb-6">
+          <div class="p-5 text-sm text-gray-400">Carregando…</div>
+        </div>
+
+        <!-- Linha do tempo -->
+        <div class="rounded-xl border bg-white overflow-hidden">
+          <div class="px-5 py-3 border-b bg-gray-50 flex items-center justify-between text-xs text-gray-500">
+            <span>Últimos 3 dias + próximos 45</span>
+            <span>📝 blog · 📸 Instagram · 📧 newsletter</span>
+          </div>
+          <div id="cal-timeline" class="divide-y">
+            <div class="p-6 text-center text-sm text-gray-400">Carregando…</div>
+          </div>
+        </div>
+      </div>
+
       <div id="tab-instagram" class="tab-content hidden">
         <div class="mb-5 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
@@ -1099,6 +1132,7 @@ function switchTab(tabName) {
   if (tabName === 'mensagens') loadMessages();
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
+  if (tabName === 'calendario') loadCalendario();
   if (tabName === 'motor') { loadMotorHealth(); loadOps(); }
   if (tabName === 'financeiro') loadCosts();
 }
@@ -1402,6 +1436,136 @@ function igEsc(s){ return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').r
 function igFmtDate(iso){ try { return window.fmtBR(iso, { day:'2-digit', month:'2-digit', weekday:'short', hour:'2-digit', minute:'2-digit' }); } catch(e){ return iso || ''; } }
 
 let IG_POSTS = [];
+// ══════════════════════════════════════════════
+// CALENDÁRIO DE CONTEÚDO — blog + IG + newsletter numa linha do tempo
+// ══════════════════════════════════════════════
+// Datas SEMPRE em Brasília (regra do projeto): toLocaleString com timeZone
+// explícito — publish_at vem em UTC e sem fuso mostraria +3h.
+function calDiaBR(iso){
+  return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); // YYYY-MM-DD
+}
+function calRotuloDia(ymd){
+  const d = new Date(ymd + 'T12:00:00-03:00');
+  return d.toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'America/Sao_Paulo' });
+}
+async function loadCalendario(){
+  const cob = document.getElementById('cal-cobertura');
+  const tl = document.getElementById('cal-timeline');
+  tl.innerHTML = '<div class="p-6 text-center text-sm text-gray-400">Carregando…</div>';
+  try {
+    // blog/posts.json é servido pelo mesmo domínio (GitHub Pages) — fetch simples.
+    const [blogRaw, igRaw, nlRaw] = await Promise.all([
+      fetch('/blog/posts.json?v=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
+      authFetch(`${API_BASE}/api/admin/instagram/posts?limit=300`).then(r => r.json()).catch(() => ({})),
+      authFetch(`${API_BASE}/api/admin/newsletter/scheduled`).then(r => r.json()).catch(() => ({})),
+    ]);
+    const hoje = calDiaBR(new Date().toISOString());
+    const ini = calDiaBR(new Date(Date.now() - 3 * 864e5).toISOString());
+    const fim = calDiaBR(new Date(Date.now() + 45 * 864e5).toISOString());
+
+    const itens = [];
+    // BLOG — publish_date já é data pura (sem fuso)
+    const blogPosts = blogRaw ? (blogRaw.posts || blogRaw) : [];
+    for (const p of blogPosts) {
+      const d = String(p.publish_date || '');
+      if (d >= ini && d <= fim) itens.push({
+        dia: d, canal: '📝 blog', titulo: p.title || p.slug,
+        status: d <= hoje ? 'publicado' : 'agendado',
+        acao: () => window.open('/blog/posts/' + p.slug + '.html', '_blank'),
+      });
+    }
+    // INSTAGRAM
+    for (const p of (igRaw.posts || [])) {
+      if (p.status === 'canceled' || !p.publish_at) continue;
+      const d = calDiaBR(p.publish_at);
+      if (d < ini || d > fim) continue;
+      const st = p.status === 'published' ? 'publicado'
+               : p.status === 'pending' ? 'agendado'
+               : p.status === 'pending_approval' ? 'esperando você'
+               : p.status;
+      itens.push({
+        dia: d, canal: '📸 Instagram',
+        titulo: (p.slot_key ? p.slot_key + ' — ' : '') + String(p.caption || '').slice(0, 60),
+        status: st, acao: () => switchTab('instagram'),
+      });
+    }
+    // NEWSLETTER
+    for (const n of (nlRaw.scheduled || [])) {
+      if (!n.scheduled_for) continue;
+      const d = calDiaBR(n.scheduled_for);
+      if (d < ini || d > fim) continue;
+      itens.push({
+        dia: d, canal: '📧 newsletter', titulo: n.subject || '(sem assunto)',
+        status: n.sent ? 'enviada' : 'agendada', acao: () => switchTab('newsletter'),
+      });
+    }
+
+    // ── Cobertura por canal (a régua respeita o fluxo do Pedro: aprovar 3-4
+    //    posts 2-3 dias antes é o NORMAL — só alerta se a cobertura APROVADA
+    //    do IG cair pra menos de 2 dias) ──
+    const igAprovados = (igRaw.posts || []).filter(p => p.status === 'pending' && p.publish_at && calDiaBR(p.publish_at) >= hoje);
+    const igEstoque = (igRaw.posts || []).filter(p => p.status === 'pending_approval' && p.publish_at && calDiaBR(p.publish_at) >= hoje).length;
+    const igAte = igAprovados.length ? igAprovados.map(p => calDiaBR(p.publish_at)).sort().pop() : null;
+    const igDias = igAte ? Math.round((new Date(igAte) - new Date(hoje)) / 864e5) : -1;
+    const blogFuturos = blogPosts.map(p => String(p.publish_date || '')).filter(d => d > hoje).sort();
+    const nlFuturas = (nlRaw.scheduled || []).filter(n => !n.sent && n.scheduled_for && calDiaBR(n.scheduled_for) >= hoje).length;
+
+    function cardCobertura(icone, nome, ok, texto) {
+      const cor = ok ? 'border-emerald-200 bg-emerald-50' : 'border-amber-300 bg-amber-50';
+      const selo = ok ? '<span class="text-emerald-700 font-semibold">✓ ok</span>'
+                      : '<span class="text-amber-700 font-semibold">⚠ atenção</span>';
+      return `<div class="rounded-xl border-2 ${cor} p-4">
+        <div class="flex items-center justify-between mb-1">
+          <p class="font-semibold text-gray-800 text-sm">${icone} ${esc(nome)}</p>${selo}
+        </div>
+        <p class="text-xs text-gray-600">${texto}</p>
+      </div>`;
+    }
+    cob.innerHTML =
+      cardCobertura('📸', 'Instagram', igDias >= 2,
+        igAte ? `Aprovado até <b>${calRotuloDia(igAte)}</b> · ${igEstoque} no estoque esperando aprovação`
+              : `Nenhum post aprovado na fila · ${igEstoque} esperando aprovação — <b>hora de aprovar a próxima leva</b>`) +
+      cardCobertura('📝', 'Blog', blogFuturos.length > 0,
+        blogFuturos.length ? `Abastecido até <b>${calRotuloDia(blogFuturos[blogFuturos.length - 1])}</b> (${blogFuturos.length} posts na fila)`
+                           : 'Sem posts futuros — a fila secou') +
+      cardCobertura('📧', 'Newsletter', nlFuturas > 0,
+        nlFuturas ? `${nlFuturas} agendada(s)` : 'Dormente — nenhuma agendada');
+
+    // ── Linha do tempo agrupada por dia ──
+    if (!itens.length) {
+      tl.innerHTML = '<div class="p-6 text-center text-sm text-gray-500">Nada na janela de -3 a +45 dias.</div>';
+      return;
+    }
+    const porDia = {};
+    itens.forEach(i => (porDia[i.dia] = porDia[i.dia] || []).push(i));
+    const badge = (st) => ({
+      'publicado':      '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">✓ publicado</span>',
+      'enviada':        '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">✓ enviada</span>',
+      'agendado':       '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ agendado</span>',
+      'agendada':       '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">✓ agendada</span>',
+      'esperando você': '<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">⏳ esperando você</span>',
+    })[st] || `<span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700">✗ ${esc(st)}</span>`;
+    window._calAcoes = [];
+    tl.innerHTML = Object.keys(porDia).sort().map(dia => {
+      const eHoje = dia === hoje;
+      const linhas = porDia[dia].map(i => {
+        const idx = window._calAcoes.push(i.acao) - 1;
+        return `<button type="button" onclick="window._calAcoes[${idx}]()" class="w-full flex items-center gap-3 px-4 py-2 text-left hover:bg-indigo-50/60 transition">
+          <span class="text-xs text-gray-500 shrink-0 w-28">${esc(i.canal)}</span>
+          <span class="flex-1 text-sm text-gray-800 truncate">${esc(i.titulo)}</span>
+          ${badge(i.status)}
+        </button>`;
+      }).join('');
+      return `<div class="${eHoje ? 'bg-indigo-50/40' : ''}">
+        <div class="px-4 pt-2.5 pb-1 text-xs font-semibold ${eHoje ? 'text-indigo-700' : 'text-gray-500'}">${calRotuloDia(dia)}${eHoje ? ' · HOJE' : ''}</div>
+        ${linhas}
+      </div>`;
+    }).join('');
+  } catch (e) {
+    tl.innerHTML = `<div class="p-6 text-center text-sm text-red-600">Erro ao montar o calendário: ${esc(e.message || e)}</div>`;
+  }
+}
+
 async function loadInstagramPosts(){
   const box = document.getElementById('ig-list');
   box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
@@ -2265,10 +2429,7 @@ function renderNpsStages(data) {
   }).join('');
 }
 
-function esc(s) {
-  return String(s || '').replace(/[&<>"']/g, c =>
-    ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+// (esc() vive em UTILITIES — havia uma cópia idêntica aqui, removida em 18/07)
 
 // Recarrega NPS quando muda período
 document.addEventListener('DOMContentLoaded', () => {
