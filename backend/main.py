@@ -8556,6 +8556,37 @@ async def save_cronograma(job_id: str, payload: CronogramaSavePayload, request: 
     return {"status": "ok", "job_id": job_id}
 
 
+@app.post("/api/cronograma/{job_id}/preview")
+async def preview_cronograma(job_id: str, payload: CronogramaSavePayload, request: Request):
+    """Recalcula o cronograma a partir das fases editadas SEM salvar.
+
+    Existe porque editar fases na tela mudava o Gantt mas deixava "Curva S",
+    "Distribuição por mês" e "Caminho crítico" com os números de ANTES da edição:
+    eles são calculados no servidor (curva_s / meses / matriz_pct) e o navegador
+    só re-desenhava os dados velhos. Refazer essa conta em JS seria duplicar a
+    matemática do cronograma.py e abrir espaço pra os dois lados divergirem —
+    então a tela pergunta pra mesma função que gera o PDF/PPTX.
+    """
+    _require_project_owner(request, job_id)
+    if not payload.fases_custom:
+        raise HTTPException(400, "fases_custom vazio")
+    try:
+        from datetime import date as _date
+        _date.fromisoformat(payload.data_inicio)
+    except Exception:
+        raise HTTPException(400, "data_inicio deve estar no formato YYYY-MM-DD")
+    try:
+        from cronograma import gerar_cronograma_de_fases_custom
+        cron = gerar_cronograma_de_fases_custom(
+            fases_custom=payload.fases_custom,
+            data_inicio=payload.data_inicio,
+            duracao_meses=payload.duracao_meses,
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao recalcular cronograma: {e}")
+    return {"status": "ok", "job_id": job_id, **cron}
+
+
 @app.get("/api/cronograma/{job_id}/full")
 async def get_cronograma_full(job_id: str, request: Request):
     """Retorna o cronograma já renderizado (Gantt+CurvaS+Matriz+PPC) pra

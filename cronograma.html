@@ -781,17 +781,72 @@ function aplicarEdits(opts) {
   cronogramaAtual.resumo.duracao_dias_reais = Math.max(1, Math.round(
     (new Date(cronogramaAtual.resumo.data_fim) - new Date(cronogramaAtual.resumo.data_inicio)) / 86400000));
 
-  // Re-render
+  // Re-render imediato do que dá pra calcular aqui (Gantt e resumo são locais).
   renderResumo(cronogramaAtual);
   renderGantt(cronogramaAtual);
   renderMatriz(cronogramaAtual);
   renderCaminhoCritico(cronogramaAtual);
+  // Curva S, Distribuição por mês e Caminho crítico vêm calculados do servidor —
+  // sem isto seguiam com os dados de ANTES da edição.
+  agendarRecalculoServidor();
 
   // Editor fica visível (não esconde mais). Só mostra status no modo
   // não-silencioso pra não poluir UI durante render live.
   if (!silencioso) {
     showSaveStatus('Mudanças aplicadas. Clique em "Salvar" pra persistir no servidor.', 'success');
   }
+}
+
+// Curva S, Distribuição por mês e Caminho crítico são calculados no servidor
+// (cronograma.py). Editar fase só mexia no Gantt, então esses três seguiam
+// mostrando os números pré-edição. Aqui a gente pergunta pra MESMA função que
+// gera o PDF/PPTX, em vez de reimplementar a conta em JS e arriscar divergir.
+// Debounce: aplicarEdits roda a cada 250ms enquanto digita, não dá pra bater no
+// backend a cada tecla.
+let _recalcTimer = null, _recalcSeq = 0;
+function agendarRecalculoServidor() {
+  clearTimeout(_recalcTimer);
+  _recalcTimer = setTimeout(recalcularNoServidor, 700);
+}
+async function recalcularNoServidor() {
+  if (!cronogramaAtual || !jobId) return;
+  const seq = ++_recalcSeq;
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    const headers = { 'Content-Type': 'application/json' };
+    if (session) headers['Authorization'] = `Bearer ${session.access_token}`;
+    const fases = (cronogramaAtual.fases || []).map((f, i) => ({
+      label: f.label, inicio: f.inicio, fim: f.fim, cor: f.cor,
+      ambiente: f.ambiente,
+      pct_executado: f.pct_executado != null ? f.pct_executado : 0,
+      categoria: f.categoria,
+      ordem: f.ordem !== undefined ? f.ordem : i,
+      manual: !!f.manual,
+      depends_on: f.depends_on || [],
+      is_milestone: !!f.is_milestone,
+      parent_ordem: f.parent_ordem != null ? f.parent_ordem : null,
+    }));
+    const resp = await fetch(`${API_BASE}/api/cronograma/${jobId}/preview`, {
+      method: 'POST', headers,
+      body: JSON.stringify({
+        data_inicio: document.getElementById('data-inicio').value,
+        duracao_meses: parseInt(document.getElementById('dur-slider').value) || 1,
+        fases_custom: fases,
+      }),
+    });
+    if (!resp.ok) return;             // silencioso: o Gantt na tela já está certo
+    const c = await resp.json();
+    if (seq !== _recalcSeq) return;   // resposta atrasada de uma edição anterior
+    if (c.curva_s) cronogramaAtual.curva_s = c.curva_s;
+    if (c.meses) cronogramaAtual.meses = c.meses;
+    if (c.matriz_pct) cronogramaAtual.matriz_pct = c.matriz_pct;
+    if (c.resumo) cronogramaAtual.resumo = { ...cronogramaAtual.resumo, ...c.resumo };
+    if (c.ppc) cronogramaAtual.ppc = c.ppc;
+    renderResumo(cronogramaAtual);
+    renderCurvaS(cronogramaAtual);
+    renderMatriz(cronogramaAtual);
+    renderCaminhoCritico(cronogramaAtual);
+  } catch (e) { /* best-effort: recálculo nunca quebra a tela */ }
 }
 
 async function salvarCronograma() {
