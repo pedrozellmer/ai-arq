@@ -158,7 +158,7 @@
           <!-- Subject livre (modo geral) -->
           <div id="aicm-subject-free-wrap" class="aicm-field">
             <label class="aicm-label" for="aicm-subject">Assunto (opcional)</label>
-            <input class="aicm-input" type="text" id="aicm-subject" name="subject" maxlength="300" placeholder="Ex: Dúvida sobre o cashback">
+            <input class="aicm-input" type="text" id="aicm-subject" name="subject" maxlength="300" placeholder="Ex: Dúvida sobre a planilha">
           </div>
 
           <!-- Subject pré-definido (modo ticket) -->

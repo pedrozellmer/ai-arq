@@ -851,7 +851,7 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
     `✓ ${counts.approved} aprovados · ✗ ${counts.rejected} removidos · ✎ ${counts.edited} editados. ` +
     pendingNote +
     `Suas correções treinam a IA pro próximo projeto. ` +
-    `Pra ganhar cashback (R$ 30): baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto.`;
+    `Quer contribuir mais? Baixe a planilha, corrija no Excel e suba a versão revisada na tela do projeto — afina o motor pros seus próximos quantitativos.`;
   const ok = window.toast
     ? await window.toast.confirm(finishMsg, { ok: 'Concluir revisão', cancel: 'Continuar revisando' })
     : confirm(finishMsg);
