@@ -832,7 +832,10 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         wsm.cell(row=3, column=1, value=(
             'AI.arq NÃO entrega preço. Use o código pra consultar o preço atualizado '
             'no SINAPI oficial (https://www.caixa.gov.br). '
-            'Matches marcados com ~ usaram busca simplificada — confirmar adequação.')
+            'A busca por texto levanta os candidatos e a IA escolhe qual é o mesmo '
+            'serviço: "✓ IA conferiu" é o escolhido (vai pra coluna REF do orçamento); '
+            'os demais são alternativas com o % de semelhança do TEXTO, que erra — '
+            'confira sempre a composição oficial ao lado antes de usar.')
         ).font = F_NOTE
 
         rm = 5
@@ -850,6 +853,13 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
 
         for item in items:
             sinapi_matches = getattr(item, 'sinapi_matches', []) or []
+            # A IA olhou os candidatos e disse que nenhum é o mesmo serviço: não
+            # adianta listá-los aqui "pra conferir". Era assim que "Pendente
+            # decorativo" oferecia SPRINKLER TIPO PENDENTE — o texto casa, a coisa
+            # não. Oferecer o candidato reprovado é convidar a copiar.
+            _reprovados = bool(sinapi_matches) and all(m.get('_llm_rejected') for m in sinapi_matches)
+            if _reprovados:
+                sinapi_matches = []
 
             if not sinapi_matches:
                 # Item sem match nenhum — linha informativa
@@ -859,8 +869,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                 wsm.cell(row=rm, column=4, value=item.quantity).font = F_N
                 wsm.merge_cells(start_row=rm, start_column=5, end_row=rm, end_column=9)
                 wsm.cell(row=rm, column=5,
-                         value='Sem match SINAPI (descrição muito específica) — '
-                         'buscar manualmente em https://www.caixa.gov.br/sinapi').font = F_NOTE
+                         value=('Sem correspondência no SINAPI — a IA conferiu os candidatos e '
+                                'nenhum é o mesmo serviço. Buscar manualmente em '
+                                'https://www.caixa.gov.br/sinapi')
+                         if _reprovados else
+                         ('Sem match SINAPI (descrição muito específica) — '
+                          'buscar manualmente em https://www.caixa.gov.br/sinapi')).font = F_NOTE
                 for c in range(1, 10):
                     wsm.cell(row=rm, column=c).border = BD
                     wsm.cell(row=rm, column=c).fill = P_NOMATCH
@@ -893,7 +907,14 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
                 wsm.cell(row=rm, column=7,
                          value=sm.get('descricao', '')[:95]).font = F_N
                 wsm.cell(row=rm, column=8, value=sm.get('unidade', '')).font = F_N
-                sim_pct = f"{min(100, max(0, int((sm.get('similarity', 0) or 0) * 100)))}%"  # cap: similaridade nunca >100%
+                # Quem foi escolhido pela IA não mostra %: a nota é de TEXTO e não
+                # foi o critério da escolha (no "spot", a cuba pontua mais que a
+                # luminária certa). Cravar um número aqui seria a mesma precisão
+                # fingida do "100%" que este trabalho veio consertar.
+                if sm.get('_llm_picked'):
+                    sim_pct = '✓ IA conferiu'
+                else:
+                    sim_pct = f"{min(100, max(0, int((sm.get('similarity', 0) or 0) * 100)))}% (texto)"
                 wsm.cell(row=rm, column=9, value=sim_pct).font = F_BOLD
                 for c in range(1, 10):
                     wsm.cell(row=rm, column=c).border = BD
