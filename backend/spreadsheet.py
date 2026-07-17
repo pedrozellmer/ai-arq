@@ -204,7 +204,8 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     _disclaimer_fill = _PF(start_color='FFF7CC', end_color='FFF7CC', fill_type='solid')
     ws1.merge_cells(f'A{r}:B{r}')
     _cell_disc = ws1.cell(row=r, column=1, value=(
-        '⚠️ Quantitativo gerado por IA. NÃO é orçamento. '
+        '⚠️ O AI.arq é uma IA e pode cometer erros — confira as informações importantes. '
+        'Quantitativo gerado por IA, NÃO é orçamento. '
         'Revisão por arquiteto ou engenheiro habilitado é obrigatória antes do uso. '
         'Itens em LARANJA são sugestões da IA — confira contra o projeto antes de mandar pros fornecedores.'
     ))
