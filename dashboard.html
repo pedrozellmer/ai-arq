@@ -107,7 +107,7 @@
       <!-- Ações principais -->
       <div class="flex items-center gap-2 md:gap-3">
         <!-- Saldo (desktop) -->
-        <div id="topbar-balance" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-100 transition" onclick="switchTab('cashback')" title="Ver cashback">
+        <div id="topbar-balance" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-100 transition" onclick="switchTab('cashback')" title="Ver contribuições e créditos guardados">
           <span>💰</span>
           <span id="topbar-balance-value">R$ 0,00</span>
         </div>
@@ -134,7 +134,7 @@
               <span>👤</span> <span>Meu cadastro</span>
             </button>
             <button onclick="switchTab('cashback'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
-              <span>💰</span> <span>Cashback</span>
+              <span>🤝</span> <span>Contribuições</span>
             </button>
             <button onclick="switchTab('meus-pagamentos'); closeAvatarMenu()" class="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3">
               <span>💳</span> <span>Meus pagamentos</span>
@@ -306,10 +306,10 @@
             </div>
           </button>
           <button onclick="switchTab('cashback')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-amber-300 hover:shadow-sm p-4 text-left transition">
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-lg" aria-hidden="true">💸</span>
+            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-lg" aria-hidden="true">🤝</span>
             <div class="min-w-0">
-              <p class="font-semibold text-gray-900 truncate">Cashback</p>
-              <p class="text-xs text-gray-500 truncate">Saldo por projeto</p>
+              <p class="font-semibold text-gray-900 truncate">Contribuições</p>
+              <p class="text-xs text-gray-500 truncate">Planilhas revisadas e cotações</p>
             </div>
           </button>
           <button onclick="switchTab('meu-cadastro')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
@@ -724,61 +724,62 @@
       <!-- ═══════════════════════════════════════════ -->
       <div id="tab-cashback" class="tab-content hidden">
 
-        <div class="rounded-2xl bg-gradient-to-br from-amber-500 to-amber-400 text-white p-6 md:p-7 mb-6">
+        <!-- Reframe 17/07 (decisão do Pedro): tirar o dinheiro do palco durante o
+             beta grátis. Em 2 meses, ZERO cashback orgânico — prometer R$ que
+             ninguém ganha nem gasta queima confiança. A recompensa real (e
+             verdadeira) hoje é a calibração: cada contribuição afina o motor
+             pros PRÓXIMOS projetos da própria pessoa. Créditos que existirem
+             ficam guardados pro dia que a cobrança ligar. -->
+        <div class="rounded-2xl bg-gradient-to-br from-indigo-600 to-cyan-500 text-white p-6 md:p-7 mb-6">
           <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div class="min-w-0">
-              <h1 class="text-2xl font-bold">Cashback 💰</h1>
-              <p class="text-sm text-amber-50 mt-1">Crédito que você junta revisando e cotando — abatido nos próximos projetos.</p>
+              <h1 class="text-2xl font-bold">Suas contribuições 🤝</h1>
+              <p class="text-sm text-indigo-50 mt-1">Cada planilha revisada e cotação que você envia afina o motor — seus próximos projetos saem medindo melhor.</p>
             </div>
             <div class="shrink-0 md:text-right">
-              <p class="text-xs font-medium text-amber-100 uppercase tracking-wide">Saldo total</p>
-              <p id="cb-total-all" class="text-3xl font-bold">R$ 0,00</p>
-              <p id="cb-events-count" class="text-xs text-amber-100 mt-0.5">0 ações</p>
+              <p class="text-xs font-medium text-indigo-100 uppercase tracking-wide">Créditos guardados</p>
+              <p id="cb-total-all" class="text-2xl font-bold">R$ 0,00</p>
+              <p id="cb-events-count" class="text-xs text-indigo-100 mt-0.5">0 ações</p>
             </div>
           </div>
         </div>
 
-        <!-- Como funciona (reduzido — o ganho real acontece dentro de cada projeto) -->
+        <!-- O que cada contribuição faz (sem promessa de dinheiro no beta) -->
         <div class="rounded-xl border-2 border-indigo-200 bg-indigo-50/50 p-5 mb-6">
-          <h3 class="font-semibold text-gray-800 mb-3">💡 Como ganhar cashback</h3>
-          <p class="text-sm text-gray-600 mb-3">Cada ação dentro de um projeto gera crédito automático, abatível nos próximos projetos:</p>
+          <h3 class="font-semibold text-gray-800 mb-3">💡 O que cada contribuição faz</h3>
           <div class="grid md:grid-cols-2 gap-3 text-sm">
             <div class="flex items-start gap-2">
               <span class="text-lg">📤</span>
               <div>
-                <p class="font-medium text-gray-700">Upload de planilha revisada</p>
-                <p class="text-xs text-gray-500">Envia a planilha corrigida offline (+R$ 30)</p>
+                <p class="font-medium text-gray-700">Planilha revisada</p>
+                <p class="text-xs text-gray-500">Suas correções reais afinam o motor — o que você corrigiu passa a sair certo nos seus próximos projetos</p>
               </div>
             </div>
             <div class="flex items-start gap-2">
               <span class="text-lg">📊</span>
               <div>
-                <p class="font-medium text-gray-700">Upload de cotação de fornecedor</p>
-                <p class="text-xs text-gray-500">Cada cotação lida (+R$ 10, máx 3 cotações = R$ 30)</p>
+                <p class="font-medium text-gray-700">Cotação de fornecedor</p>
+                <p class="text-xs text-gray-500">Monta o comparativo entre fornecedores do seu projeto e ajuda a calibrar as proporções (nunca os valores)</p>
               </div>
             </div>
             <div class="flex items-start gap-2 md:col-span-2">
               <span class="text-lg">✏️</span>
               <div>
-                <p class="font-medium text-gray-700">Revisão inline (sem cashback)</p>
-                <p class="text-xs text-gray-500">Valida ou ajusta itens dentro do site — não gera crédito, mas suas correções treinam a IA pro próximo projeto</p>
+                <p class="font-medium text-gray-700">Revisão inline</p>
+                <p class="text-xs text-gray-500">Valida ou ajusta itens dentro do site — treina a IA pro próximo projeto</p>
               </div>
             </div>
           </div>
+          <p class="mt-3 pt-3 border-t border-indigo-100 text-xs text-gray-500"><span aria-hidden="true">💰</span> No beta está tudo grátis, então não tem cashback pra abater — créditos que você tiver ficam <b>guardados</b> e valem quando a cobrança for ativada.</p>
         </div>
 
-        <!-- Lista de projetos com cashback acumulado -->
+        <!-- Lista de projetos com crédito guardado -->
         <div class="rounded-2xl border bg-white p-6 mb-6">
-          <h3 class="text-base font-semibold text-gray-900 mb-4">Cashback por projeto</h3>
+          <h3 class="text-base font-semibold text-gray-900 mb-4">Créditos guardados por projeto</h3>
           <div id="cb-projects-list" class="divide-y">
             <div class="p-6 text-center text-sm text-gray-500">Carregando...</div>
           </div>
         </div>
-
-        <!-- Fluxo legado de upload (mantido pra compatibilidade) -->
-        <details class="rounded-xl border bg-white p-4 mb-6">
-          <summary class="text-sm font-medium text-gray-700 cursor-pointer select-none">📤 Upload legado de planilha revisada (modo antigo)</summary>
-          <div class="mt-4 pt-4 border-t">
 
         <!-- Aviso uso de dados -->
         <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-6">
@@ -826,8 +827,6 @@
             <p class="text-sm text-gray-500">Nenhuma revis&#227;o pendente.</p>
           </div>
         </div>
-          </div>
-        </details>
 
       </div>
 
@@ -947,8 +946,8 @@
               <p class="text-sm text-gray-500">Sim! Cada envio &#233; tratado como um projeto independente. Voc&#234; pode ver o hist&#243;rico na aba "Meus Projetos".</p>
             </div>
             <div>
-              <h3 class="text-sm font-semibold text-gray-800 mb-1">Como funciona o cashback?</h3>
-              <p class="text-sm text-gray-500">Cada a&ccedil;&atilde;o que ajuda a calibrar a IA gera cr&eacute;dito: upload de planilha revisada (+R$ 30), upload de cota&ccedil;&atilde;o de fornecedor (+R$ 10 por cota&ccedil;&atilde;o, m&aacute;ximo 3). Total at&eacute; R$ 60/projeto, abatido no pr&oacute;ximo.</p>
+              <h3 class="text-sm font-semibold text-gray-800 mb-1">E o cashback?</h3>
+              <p class="text-sm text-gray-500">No beta est&aacute; tudo gr&aacute;tis, ent&atilde;o n&atilde;o tem o que abater. O que vale hoje: cada planilha revisada e cota&ccedil;&atilde;o que voc&ecirc; envia <b>afina o motor</b> &mdash; seus pr&oacute;ximos projetos saem medindo melhor. Cr&eacute;ditos que voc&ecirc; tiver ficam guardados e valem quando a cobran&ccedil;a for ativada.</p>
             </div>
           </div>
         </div>
@@ -3712,11 +3711,13 @@
       } else {
         msg += 'Nenhuma linha com quantidade v\u00e1lida foi encontrada.\n\n';
       }
+      // Beta gr\u00e1tis: cr\u00e9dito registrado fica GUARDADO (n\u00e3o tem o que abater
+      // agora) \u2014 a frase promete o que existe (decis\u00e3o Pedro 17/07).
       if (result.cashback_granted) {
         const amt = result.cashback_amount_brl || 30;
-        msg += `\u2705 R$ ${amt.toFixed(2)} de cashback creditado \u2014 aplicado automaticamente no pr\u00f3ximo projeto.`;
+        msg += `\u2705 Sua revis\u00e3o afina o motor \u2014 os pr\u00f3ximos projetos saem melhores. R$ ${amt.toFixed(2)} guardados como cr\u00e9dito futuro.`;
       } else {
-        msg += 'Cashback n\u00e3o foi liberado (revis\u00e3o duplicada ou sem linhas v\u00e1lidas).';
+        msg += 'Cr\u00e9dito n\u00e3o registrado (revis\u00e3o duplicada ou sem linhas v\u00e1lidas) \u2014 mas as corre\u00e7\u00f5es valem do mesmo jeito pra calibra\u00e7\u00e3o.';
       }
       // Cashback é mensagem longa de sucesso — info (não bloqueia, fecha sozinho)
       notify.ok(msg);
@@ -3777,7 +3778,7 @@
       if (!listEl) return;
       const byProject = data.by_project || [];
       if (byProject.length === 0) {
-        listEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-500">Nenhum cashback acumulado ainda. Entre num projeto e faça uma revisão pra ganhar crédito.</div>';
+        listEl.innerHTML = '<div class="p-6 text-center text-sm text-gray-500">Nenhuma contribuição registrada ainda. Entre num projeto e envie sua planilha revisada — seus próximos quantitativos saem melhores.</div>';
         return;
       }
       // Escape em project_name e event_types (input do usuário propaga via API).

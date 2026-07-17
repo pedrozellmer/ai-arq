@@ -45,7 +45,7 @@ Nosso slogan: "Planilha de quantitativos para seu orçamento em minutos, não em
 - Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra
 - PRIMEIRO PROJETO É GRÁTIS (até 5 pranchas). Sem cartão de crédito.
 - Sem mensalidade — pague por projeto.
-- Cashback: R$ 20 ao revisar a planilha e enviar de volta.
+- Planilha revisada: quem corrige e devolve afina a IA — os próximos projetos da pessoa saem medindo melhor. (NUNCA prometa cashback em dinheiro: no beta está tudo grátis.)
 
 ## Site: ai.arq.br
 ## Status: Beta Gratuito com vagas limitadas

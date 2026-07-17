@@ -1444,9 +1444,11 @@ async function uploadQuote() {
       // 'credited' = R$10 creditado · 'capped' = atingiu o limite · null = sem user
       let cashbackMsg = '';
       if (data.cashback === 'credited') {
-        cashbackMsg = ' · +R$ 10 de cashback adicionado';
+        // Beta grátis: crédito é registrado mas não tem o que abater — a frase
+        // promete o que existe, não dinheiro na mão (decisão Pedro 17/07).
+        cashbackMsg = ' · R$ 10 guardados como crédito futuro';
       } else if (data.cashback === 'capped') {
-        cashbackMsg = ' · cashback não creditado (limite de 3 cotações/projeto atingido)';
+        cashbackMsg = ' · crédito não registrado (limite de 3 cotações/projeto atingido)';
       }
       statusDiv.className = 'mt-3 text-xs text-emerald-700';
       statusDiv.textContent = `✓ ${data.n_items_quoted} itens lidos. Total R$ ${data.total_bruto.toLocaleString('pt-BR')}${cashbackMsg}`;

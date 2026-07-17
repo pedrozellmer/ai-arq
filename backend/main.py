@@ -1300,10 +1300,10 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
         _it = "item" if n_est == 1 else "itens"
         passos.append(("&#128221;", f"Revise os {n_est} {_it} em laranja",
             "Esses sa&iacute;ram como <b>estimativa</b> pra voc&ecirc; conferir. Ajuste o que precisar &mdash; "
-            "e ao subir a planilha revisada voc&ecirc; ainda ganha <b>cashback</b>."))
+            "e ao subir a planilha revisada voc&ecirc; <b>afina o motor</b>: os pr&oacute;ximos projetos saem medindo melhor."))
     else:
         passos.append(("&#128221;", "Revise e ajuste",
-            "Confira os itens e ajuste o que precisar. Ao subir a planilha revisada voc&ecirc; ganha <b>cashback</b>."))
+            "Confira os itens e ajuste o que precisar. Ao subir a planilha revisada voc&ecirc; <b>afina o motor</b> pros pr&oacute;ximos projetos."))
     # 3) Chat — sempre útil
     passos.append(("&#128172;", "Tire d&uacute;vidas no chat",
         "Pergunte sobre o seu quantitativo direto na p&aacute;gina do projeto: o que &eacute; medido, "
@@ -6498,7 +6498,7 @@ PUBLIC_CHAT_SYSTEM_PROMPT = """Você é o assistente virtual do AI.arq — uma p
 - **Grande** (11-20 pranchas): R$ 247 (-36% por prancha)
 - **Acima de 20**: R$ 247 + R$ 10/prancha extra
 - Pagamento via Stripe (cartão/PIX). **Sem mensalidade.** Paga só quando usa.
-- Todas as outras features (memória técnica, comparativo, PPT, cashback) estão INCLUÍDAS no preço do projeto. Sem taxas extras. Cada feature é OPCIONAL — use só se fizer sentido.
+- Todas as outras features (memória técnica, comparativo, PPT) estão INCLUÍDAS no preço do projeto. Sem taxas extras. Cada feature é OPCIONAL — use só se fizer sentido. Se perguntarem de cashback: no beta está tudo grátis, não há o que abater; créditos ficam guardados pra quando a cobrança ativar.
 
 ## CASHBACK
 
@@ -6520,7 +6520,7 @@ Programa granular — cada ação que ajuda a calibrar a IA gera crédito autom�
 1. Crie conta (grátis) em ai.arq.br → login
 2. No dashboard: clique "Novo projeto" → faça upload dos PDFs/DWGs
 3. Aguarde ~5 min o processamento
-4. Baixe a planilha ou revise no navegador (ganha cashback)
+4. Baixe a planilha ou revise no navegador (suas correções afinam o motor)
 5. Mande pros fornecedores, receba as propostas
 6. (Opcional) Faça upload das propostas no projeto → gere comparativo + PPT
 
