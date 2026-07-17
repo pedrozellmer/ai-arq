@@ -98,7 +98,8 @@ Se você é uma sessão nova de Claude lendo isso pela primeira vez:
 - **Backend:** https://ai-arq.onrender.com (Render)
 - **Tagline atual:** "Quantitativo com IA" (NÃO "Orçamento com IA" — corrigido)
 - **Fase atual:** Fase 1 (quantitativo) do roadmap de 10 fases — Fase 2 (Cronograma) em construção. **Fase 5 (ERP focado) redesenhada em 2026-05-25** — só 5 módulos, não ERP completo. Detalhes em `ROADMAP.md` e `docs/ANALISE_BRAXIO.md`.
-- **Estado:** Beta v0.5.0 · ~8 usuários cadastrados (Daniela Teixeira/DTZ Arquitetura é a mais ativa; também Yuri, Wilker, Vinícius, Rafael, Sidnei, Wesley). Crescendo — cada usuário ainda conta muito.
+- **Estado:** Beta v0.5.0 · **30 contas** cadastradas (conferido no banco em 17/07/2026): 19 entraram nos últimos 30 dias, 25 já subiram projeto, e **18 das 30 contas nasceram no último mês** — dobrou. Daniela Teixeira/DTZ Arquitetura é a tester nº1. Crescendo — cada usuário ainda conta muito.
+  - ⚠️ Este número envelhece rápido. Antes de citar, confira: `select count(*) from auth.users` (Supabase MCP).
 
 ### Modelo de negócio
 - **1º projeto: GRÁTIS** (sem cartão)
