@@ -5076,6 +5076,38 @@ def _send_email_retorno30(email: str, name: str) -> bool:
     return _send_email_smtp(email, subject, html, log_kind="retorno_30d")
 
 
+def _build_proximo_projeto_email(name: str, project_name: str):
+    """Monta (subject, html) do convite pro 2º projeto, dias 3-10 após o 1º.
+
+    Fecha o vão morto do funil: entre o "planilha pronta" (dia 0) e o
+    retorno_30d (dia 30+) o produto ficava MUDO — e o pico de intenção pro 2º
+    projeto é na primeira semana, logo depois da primeira entrega de valor.
+    Convida o 2º projeto e, de carona, pede a planilha revisada (calibração).
+    SEM mencionar dinheiro/cashback (beta grátis — mesma regra do calibracao)."""
+    import html as _hp
+    pn = _hp.escape(project_name or "seu primeiro projeto")
+    greet = _greeting_line(_hp.escape(name or ""))
+    body = (f"{greet}<br><br>"
+            f"O quantitativo do <b>{pn}</b> te ajudou? Se tiver outro projeto na mesa — "
+            f"mesmo que seja um estudo ou uma reforma pequena — manda a prancha (PDF, DWG "
+            f"ou DXF): o próximo sai em minutos, e nessa fase de beta está <b>grátis e "
+            f"ilimitado</b>.<br><br>"
+            f"E se você chegou a <b>revisar</b> a planilha do primeiro, subir a sua versão "
+            f"corrigida na página do projeto afina o motor — os seus próximos quantitativos "
+            f"saem medindo melhor exatamente o que você corrigiu.")
+    subject = "Tem outro projeto na mesa? O próximo sai em minutos"
+    html = _email_wrap("Bora fazer o próximo?", body,
+                       "Subir outro projeto", "https://ai.arq.br/dashboard.html",
+                       reason=("Você está recebendo este e-mail porque processou um projeto "
+                               "no AI.arq. Se não quiser mais lembretes, é só responder avisando."))
+    return subject, html
+
+
+def _send_email_proximo_projeto(email: str, name: str, project_name: str) -> bool:
+    subject, html = _build_proximo_projeto_email(name, project_name)
+    return _send_email_smtp(email, subject, html, log_kind="proximo_projeto")
+
+
 def _email_eh_interno(email: str) -> bool:
     """True pra contas do Pedro/teste — inclusive aliases (+smoke etc.).
     O dry-run de 07/07 pegou zarelalopes+smoke@ escapando do filtro exato."""
@@ -5112,7 +5144,7 @@ async def emails_auto_tick(dry: int = 0):
     # projetos por email (pra saber quem nunca subiu / quem sumiu)
     proj_by_email: dict[str, list] = {}
     try:
-        q = (f"{SUPABASE_URL}/rest/v1/projects?select=user_email,created_at,status"
+        q = (f"{SUPABASE_URL}/rest/v1/projects?select=user_email,created_at,status,project_name,user_name"
              f"&order=created_at.desc&limit=2000")
         req = _u.Request(q, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
@@ -5155,6 +5187,16 @@ async def emails_auto_tick(dry: int = 0):
             dias = (now - ultimo).total_seconds() / (24 * H)
             if 30 <= dias <= 60:
                 acoes.append({"kind": "retorno_30d", "email": email, "nome": ""})
+            # próximo projeto (dias 3-10): fecha o vão morto entre o "planilha
+            # pronta" (dia 0) e o retorno_30d (dia 30) — o pico de intenção pro
+            # 2º projeto é na 1ª semana. SÓ pra quem tem exatamente 1 projeto:
+            # quem já subiu o 2º se ativou sozinho e não precisa de cutucada.
+            # Dedup vida-inteira (sem ref) → cada pessoa recebe este no máximo
+            # UMA vez, no primeiro projeto da conta.
+            elif 3 <= dias <= 10 and len(plist) == 1 and plist[0].get("status") == "done":
+                acoes.append({"kind": "proximo_projeto", "email": email,
+                              "nome": plist[0].get("user_name") or "",
+                              "projeto": plist[0].get("project_name") or ""})
 
     # dedup vida-inteira + teto por tick (goteja, nunca rajada)
     acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"])][:5]
@@ -5176,6 +5218,8 @@ async def emails_auto_tick(dry: int = 0):
                     ok = _send_nudge_email(a["email"], a["nome"],
                                            "cadastro" if a["kind"] == "nudge_cadastro" else "onboarding",
                                            link)
+            elif a["kind"] == "proximo_projeto":
+                ok = _send_email_proximo_projeto(a["email"], a["nome"], a.get("projeto") or "")
             else:
                 ok = _send_email_retorno30(a["email"], a["nome"])
         except Exception as e:
@@ -5877,6 +5921,8 @@ _EMAIL_CATALOG = [
      "gatilho": "auto: falha passageira (reprocessar resolve)"},
     {"key": "erro_trocar", "nome": "Erro — trocar arquivo", "grupo": "auto",
      "gatilho": "auto: arquivo não-quantificável (precisa de outro arquivo)"},
+    {"key": "proximo_projeto", "nome": "Convite pro 2º projeto (dias 3-10)", "grupo": "auto",
+     "gatilho": "auto: 1º projeto done há 3-10 dias, sem 2º projeto (tick horário, 1x por pessoa)"},
     {"key": "retorno_30d", "nome": "Retorno após 30 dias", "grupo": "auto",
      "gatilho": "auto: 30 dias sem subir projeto (tick horário)"},
     {"key": "nudge_onboarding", "nome": "Lembrar de subir a 1ª prancha", "grupo": "auto",
@@ -5917,6 +5963,8 @@ def _render_email_by_type(key: str):
         return _build_nudge_email(nome, "feedback", fake_link)
     if key == "retorno_30d":
         return _build_retorno30_email(nome)
+    if key == "proximo_projeto":
+        return _build_proximo_projeto_email(nome, projeto)
     if key == "calibracao":
         return _build_calibracao_email(nome, projeto)
     raise KeyError(key)
