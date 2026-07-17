@@ -6993,7 +6993,13 @@ async def download_quotes_xlsx(job_id: str, request: Request):
     """Baixa o comparativo XLSX gerado."""
     path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.xlsx")
     if not os.path.exists(path):
-        return {"error": "comparativo não gerado ainda — chamar /quotes/compare primeiro"}
+        # 404, não 200 com JSON: o downloadProtected salva o corpo da resposta como
+        # arquivo — devolver {"error":...} com 200 fazia o usuário baixar um .xlsx
+        # que na verdade era texto de erro, e o Excel acusava arquivo corrompido.
+        # Acontece de verdade: o comparativo mora no disco EFÊMERO do Render, então
+        # some a cada deploy/restart. O 404 deixa a tela pedir pra gerar de novo.
+        raise HTTPException(404, "Comparativo não está mais disponível — clique em "
+                                 "'Gerar comparativo' novamente.")
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -7007,7 +7013,9 @@ async def download_quotes_pptx(job_id: str, request: Request):
     """Baixa o comparativo PPT gerado."""
     path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.pptx")
     if not os.path.exists(path):
-        return {"error": "PPT não gerado ainda — chamar /quotes/compare primeiro"}
+        # Mesmo motivo do XLSX acima: 200 com JSON virava .pptx corrompido.
+        raise HTTPException(404, "Apresentação não está mais disponível — clique em "
+                                 "'Gerar comparativo' novamente.")
     return FileResponse(
         path,
         media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",

@@ -238,17 +238,32 @@ def _compare_against_reference(merged, reference_items, suppliers):
         s = re_mod.sub(r"\s+", " ", s).strip()
         return s[:80]
 
-    ref_by_key = {(_n(it.get("description", "")), (it.get("unit") or "").lower()): it
-                  for it in reference_items
-                  if it.get("description")}
+    # Pareia REFERÊNCIA × ITENS ORÇADOS pelo mesmo critério fuzzy que o
+    # _fuzzy_merge usa entre fornecedores. Antes era igualdade exata de texto —
+    # mas fornecedor NUNCA copia a descrição igual ("Luminária LED de embutir
+    # 60x60" vira "Luminaria LED embutir 60x60"). Com igualdade, o MESMO item
+    # entrava nas duas listas: "nenhum fornecedor orçou" E "fornecedor
+    # acrescentou". O painel mentia nos dois sentidos, sempre.
+    refs = [it for it in reference_items if it.get("description")]
+    ref_norm = [(_n(it.get("description", "")), (it.get("unit") or "").lower(), it)
+                for it in refs]
+    merged_norm = [(_n(m["desc"]), (m["un"] or "").lower(), m) for m in merged]
 
-    merged_keys = set()
-    for m in merged:
-        merged_keys.add((_n(m["desc"]), (m["un"] or "").lower()))
+    def _acha(alvo_desc, alvo_un, candidatos):
+        """Melhor candidato acima do threshold, exigindo MESMA unidade (m² × m
+        muda o item). Devolve None se ninguém passar."""
+        melhor, melhor_score = None, 0.0
+        for c_desc, c_un, c_obj in candidatos:
+            if c_un != alvo_un:
+                continue
+            sc = _similarity(alvo_desc, c_desc)
+            if sc >= FUZZY_MATCH_THRESHOLD and sc > melhor_score:
+                melhor, melhor_score = c_obj, sc
+        return melhor
 
     missing_from_suppliers = []
-    for key, ref in ref_by_key.items():
-        if key not in merged_keys:
+    for r_desc, r_un, ref in ref_norm:
+        if _acha(r_desc, r_un, merged_norm) is None:
             missing_from_suppliers.append({
                 "description": ref.get("description"),
                 "unit": ref.get("unit"),
@@ -257,9 +272,8 @@ def _compare_against_reference(merged, reference_items, suppliers):
             })
 
     extra_from_suppliers = []
-    for m in merged:
-        key = (_n(m["desc"]), (m["un"] or "").lower())
-        if key not in ref_by_key:
+    for m_desc, m_un, m in merged_norm:
+        if _acha(m_desc, m_un, ref_norm) is None:
             cotou = [sup for sup in suppliers if m[sup]]
             extra_from_suppliers.append({
                 "description": m["desc"],
@@ -268,11 +282,13 @@ def _compare_against_reference(merged, reference_items, suppliers):
                 "note": "Item cotado por fornecedor que não existe no quantitativo AI.arq",
             })
 
-    # Divergência de quantidade
+    # Divergência de quantidade — mesmo pareamento fuzzy. Com igualdade exata
+    # esta checagem quase nunca achava par, então nunca avisava que o fornecedor
+    # estava orçando uma quantidade diferente da medida no CAD (que é o alerta
+    # mais caro dos três).
     qty_divergence = []
-    for m in merged:
-        key = (_n(m["desc"]), (m["un"] or "").lower())
-        ref = ref_by_key.get(key)
+    for m_desc, m_un, m in merged_norm:
+        ref = _acha(m_desc, m_un, ref_norm)
         if not ref or not ref.get("quantity"):
             continue
         ref_qty = float(ref["quantity"])
