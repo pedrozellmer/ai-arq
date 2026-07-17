@@ -68,6 +68,13 @@ def _style_row(ws, row, font, fill=None, align=None, cols=9):
         cell.border = BD
 
 
+# Confiança mínima pra um código SINAPI aparecer na coluna REF da planilha.
+# Medido em 17/07 (ver comentário em _build_ref): com a nota honesta, match bom
+# fica em 70-100% e match errado em 16-61%. Abaixo do corte o candidato não some —
+# vai pra aba técnica com a descrição oficial, pra conferir em vez de copiar.
+REF_MIN_CONFIDENCE = 0.70
+
+
 def _unit_family(u: str) -> str:
     """Família da unidade, pra checar compatibilidade item × código SINAPI.
     Retorna '' quando a unidade é desconhecida (aí não flaga divergência)."""
@@ -98,21 +105,27 @@ def _build_ref_text(item) -> str:
         m = sinapi_matches[0]
         cod = m.get('codigo', '').strip()
         sim = m.get('similarity', 0) or 0
-        # CORTE DE RUÍDO (15/07): abaixo de 30% de similaridade o código específico
-        # é quase sempre errado, mas na coluna REF parece uma referência oficial e
-        # induz o orçamentista a copiar. Some o código aqui (segue visível na aba
-        # técnica COM o %). Acima de 30%, mostra código + nível de confiança.
-        if cod and sim >= 0.30:
+        # CORTE DE RUÍDO (17/07): a REF só recebe código que a gente banca.
+        # O corte era 30%, mas em cima de uma nota inflada: o matcher pontuava
+        # contra a palavra reduzida da busca, então "piso porcelanato 60x60" casava
+        # com PISO DE BORRACHA a "100%" e passava folgado. Com a nota honesta
+        # (sinapi_matcher._rescore_honest, 17/07) a separação medida ficou nítida:
+        # match bom 70-100% (bacia 100, porta de vidro 81, luminária 80, split 70)
+        # × match errado 16-61% (piso→borracha 16, pintura→parede 31, porta→balsa
+        # 37, limpeza→revestimento 41, spot→cuba 61). Daí o corte em 70%.
+        # Abaixo disso o código NÃO aparece aqui — segue na aba técnica, COM a
+        # descrição oficial e o %, que é onde dá pra conferir em vez de copiar.
+        # A IA olhou e disse que nenhum candidato é a mesma coisa: respeita, mesmo
+        # que o texto pareça idêntico. É esse "não" que impede o SPOT → CUBA DE
+        # EMBUTIR REDONDA (o texto casa; a coisa não é a mesma).
+        if cod and not m.get('_llm_rejected') and sim >= REF_MIN_CONFIDENCE:
             level = m.get('_match_level', 'full')
             mark = '~' if level.startswith('simplified') else ''
-            # Confiança do match na própria linha (não só na aba técnica): código
-            # errado induz o orçamentista, então o nível precisa estar visível.
-            conf_lbl = 'conf. alta' if sim >= 0.7 else ('conf. média' if sim >= 0.45 else 'conf. baixa')
             # Aviso de unidade incompatível (piso m² × código em metro linear).
             sinapi_unit = (m.get('unidade') or '').strip()
             fi, fs = _unit_family(item.unit), _unit_family(sinapi_unit)
             unit_warn = f' ⚠ unidade difere (item {item.unit} × SINAPI {sinapi_unit})' if (fi and fs and fi != fs) else ''
-            parts.append(f'SINAPI {mark}{cod} ({conf_lbl}){unit_warn}')
+            parts.append(f'SINAPI {mark}{cod} (conf. alta){unit_warn}')
         elif cod:
             # Match fraco: sinaliza que há candidato SINAPI sem induzir com código.
             parts.append('SINAPI: sem correspondência forte (ver aba técnica)')
