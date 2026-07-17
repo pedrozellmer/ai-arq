@@ -774,6 +774,12 @@ function aplicarEdits(opts) {
   cronogramaAtual.resumo.data_fim = fasesEditadas.reduce((max, f) => f.fim > max ? f.fim : max, fasesEditadas[0].fim);
   cronogramaAtual.resumo.n_fases = fasesEditadas.length;
   cronogramaAtual.resumo.editado_manualmente = true;
+  // "Duração total" e "Início" também mudam quando as fases mudam — sem isso o card
+  // seguia mostrando o número de ANTES da edição. Mesma fórmula do backend
+  // (cronograma.py, caminho de fases custom): max(1, (maior fim - data_inicio)).
+  cronogramaAtual.resumo.data_inicio = dataInicio || cronogramaAtual.resumo.data_inicio;
+  cronogramaAtual.resumo.duracao_dias_reais = Math.max(1, Math.round(
+    (new Date(cronogramaAtual.resumo.data_fim) - new Date(cronogramaAtual.resumo.data_inicio)) / 86400000));
 
   // Re-render
   renderResumo(cronogramaAtual);
