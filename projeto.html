@@ -506,6 +506,28 @@ function smartBack() {
     </div>
   </section>
 
+  <!-- Expansão por disciplina: detecta o que JÁ está nos itens e sugere anexar
+       as pranchas que faltam no MESMO projeto (mesmo /add-file do banner CAD).
+       Só aparece com o projeto pronto e com ao menos 1 disciplina comum faltando. -->
+  <div id="expansao-disciplinas" class="hidden rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-5">
+    <div class="flex items-start gap-3">
+      <span class="text-2xl shrink-0" aria-hidden="true">🧩</span>
+      <div class="flex-1">
+        <p class="font-semibold text-gray-900">Complete o quantitativo deste projeto</p>
+        <p id="expansao-texto" class="text-sm text-gray-600 mt-1"></p>
+        <div id="expansao-chips" class="mt-3 flex flex-wrap gap-2"></div>
+        <div class="mt-3">
+          <input id="expansao-file-input" type="file" multiple accept=".dwg,.dxf,.pdf" class="hidden"/>
+          <button id="expansao-btn" type="button" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-60">
+            <span aria-hidden="true">&#8593;</span> Anexar pranchas dessas disciplinas
+          </button>
+          <p class="mt-2 text-xs text-gray-500">Entra no mesmo projeto, de graça. Em <b>DWG/DXF</b> a gente mede a geometria; em PDF os itens saem como <b>&#9888; estimativa</b> pra você conferir.</p>
+        </div>
+        <p id="expansao-status" class="hidden text-sm mt-2"></p>
+      </div>
+    </div>
+  </div>
+
   <!-- Cashback acumulado deste projeto -->
   <div id="project-cashback-box" class="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 hidden">
     <div class="flex items-center justify-between">
@@ -720,6 +742,74 @@ function safeRun(fn, label) {
 }
 
 // Preenche os stats dos cards de entregas (Quantitativo + Cronograma)
+// ── Expansão por disciplina ──────────────────────────────────────────────
+// O motor lê 18 disciplinas, mas o 1º upload costuma ser uma prancha só (a de
+// arquitetura). Este card olha o que JÁ está nos itens e sugere anexar as
+// disciplinas complementares que faltam — no MESMO projeto, pelo mesmo
+// /add-file do banner CAD. Catálogo = as complementares mais comuns da base
+// (conferido no banco em 17/07); Estrutura fica fora de propósito (beta,
+// medição fraca — regra: não anunciar).
+const _EXPANSAO_CATALOGO = [
+  { rotulo: 'Instalações Elétricas', re: /el[eé]tric/i, icone: '🔌' },
+  { rotulo: 'Instalações Hidráulicas', re: /hidr[aá]ulic|sanit[aá]r/i, icone: '🚰' },
+  { rotulo: 'Iluminação', re: /ilumina/i, icone: '💡' },
+  { rotulo: 'Ar-Condicionado', re: /ar.cond|climatiza/i, icone: '❄️' },
+  { rotulo: 'Forro', re: /forro/i, icone: '🔲' },
+  { rotulo: 'Incêndio e Segurança', re: /inc[eê]ndio|sprinkler/i, icone: '🧯' },
+];
+function renderExpansaoDisciplinas(items) {
+  const box = document.getElementById('expansao-disciplinas');
+  if (!box || !Array.isArray(items) || !items.length) return;
+  const presentes = items.map(i => String(i.discipline || '')).filter(Boolean);
+  const faltam = _EXPANSAO_CATALOGO.filter(c => !presentes.some(d => c.re.test(d)));
+  // Sem itens com disciplina (projeto antigo) ou nada faltando → fica quieto.
+  if (faltam.length === 0 || presentes.length === 0) return;
+  const temAlgo = _EXPANSAO_CATALOGO.length - faltam.length;
+  document.getElementById('expansao-texto').textContent = temAlgo > 0
+    ? 'Esse projeto ainda não tem itens destas disciplinas. Se você tiver as pranchas, anexa que a IA lê e soma tudo na mesma planilha:'
+    : 'Detectamos só as disciplinas de arquitetura. Tem as pranchas complementares? Anexa que a IA lê e soma tudo na mesma planilha:';
+  document.getElementById('expansao-chips').innerHTML = faltam.slice(0, 4).map(c =>
+    `<span class="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-800 bg-indigo-100 border border-indigo-200 rounded-full px-3 py-1.5"><span aria-hidden="true">${c.icone}</span> ${esc(c.rotulo)}</span>`
+  ).join('');
+  box.classList.remove('hidden');
+}
+// Upload do card: mesmo endpoint /add-file do banner CAD, versão enxuta —
+// envia, avisa que está refazendo e recarrega quando o status virar done/error.
+(function(){
+  const btn = document.getElementById('expansao-btn');
+  const input = document.getElementById('expansao-file-input');
+  const st = document.getElementById('expansao-status');
+  if (!btn || !input || !st) return;
+  const setSt = (msg, cls) => { st.className = 'text-sm mt-2 ' + (cls || 'text-gray-600'); st.textContent = msg; st.classList.remove('hidden'); };
+  btn.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const fs = Array.from(input.files || []);
+    if (!fs.length) return;
+    if (fs.some(f => !['dwg','dxf','pdf'].includes((f.name.split('.').pop() || '').toLowerCase()))) {
+      setSt('✗ Envie só arquivos DWG, DXF ou PDF.', 'text-red-700'); input.value = ''; return;
+    }
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    try {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (!session) { setSt('Faça login pra enviar.', 'text-red-700'); btn.disabled = false; return; }
+      const fd = new FormData(); fs.forEach(f => fd.append('files', f));
+      const r = await fetch(`${API_BASE}/api/project/${jobId}/add-file`, {
+        method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + session.access_token },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.status !== 'ok') { setSt('✗ ' + (d.detail || d.error || 'Não consegui enviar. Tenta de novo?'), 'text-red-700'); btn.disabled = false; input.value = ''; return; }
+      setSt('⏳ Refazendo o projeto com as pranchas novas — a página recarrega sozinha quando terminar.', 'text-indigo-800');
+      const poll = setInterval(async () => {
+        try {
+          const sr = await authFetch(`${API_BASE}/api/status/${jobId}`);
+          const sd = sr.ok ? await sr.json() : {};
+          if (sd.status === 'done' || sd.status === 'error') { clearInterval(poll); location.reload(); }
+        } catch (_) { /* segue tentando */ }
+      }, 5000);
+    } catch (e) { setSt('✗ Erro de rede — tenta de novo?', 'text-red-700'); btn.disabled = false; input.value = ''; }
+  });
+})();
+
 async function carregarStatsEntregas() {
   // ── Quantitativo: items detectados + revisados ──
   try {
@@ -1027,6 +1117,7 @@ window.switchUploadTab = switchUploadTab;
       'raiox-card',           // 4. Raio-X (o resultado)
       'cad-upgrade-banner',   // 5. aviso "manda o CAD" (condicional)
       'entregas-section',     // 6. Entregas: baixar planilha + cronograma
+      'expansao-disciplinas', // 6b. sugerir disciplinas que faltam (condicional)
       'cotacoes-section',     // 7. Enviar planilha revisada (calibracao)
       'chat-quant',           // 8. Chat
       'reprocess-box',        // 9. Reprocessar
@@ -1619,6 +1710,15 @@ function renderMetrics(p, items) {
     if (_mediuPouco && _soPdf && _terminal) _cadBanner.classList.remove('hidden');
     else _cadBanner.classList.add('hidden');
   }
+
+  // Expansão por disciplina: só com o projeto TERMINADO e sem competir com o
+  // banner CAD acima (dois "anexe arquivo" na mesma tela viram ruído — o banner
+  // CAD é mais urgente: sem medição não adianta somar disciplina).
+  try {
+    const _bannerVisivel = _cadBanner && !_cadBanner.classList.contains('hidden');
+    const _pronto = (p.status === 'done' || p.status === 'error' || p.status === 'failed');
+    if (_pronto && !_bannerVisivel) renderExpansaoDisciplinas(items);
+  } catch (e) { console.warn('expansao:', e); }
 
   // Card de feedback: só pra projeto que gerou planilha e que ainda não opinou.
   const _hasItems = (p.items_count || items.length || 0) > 0;
