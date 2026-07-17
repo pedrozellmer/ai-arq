@@ -2964,6 +2964,27 @@ def _process_job_throttled(*args, **kwargs):
         process_job(*args, **kwargs)
 
 
+def _complement_base_has_items(job_id: str) -> bool:
+    """Este job já tem itens salvos (= planilha anterior viva)?
+
+    DEFAULT SEGURO (board 15/07): um complemento SEMPRE existe sobre um projeto-base.
+    Se a contagem falhar por soluço do banco (timeout/5xx do Supabase, Render sob
+    carga), NÃO pode concluir "base vazia" e derrubar a planilha. Assume base=existe
+    por padrão; só devolve False se a query SUCEDER e vier 0. 2 tentativas.
+    """
+    for _try in range(2):
+        try:
+            import urllib.request as _urc
+            _cq = f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}&select=id&limit=1"
+            _cr = _urc.Request(_cq, method="GET")
+            _cr.add_header("apikey", SUPABASE_KEY)
+            _cr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            return len(_json.loads(_urc.urlopen(_cr, timeout=10).read().decode("utf-8"))) > 0
+        except Exception as _cerr:
+            print(f"[add-file] contagem de itens base falhou (tentativa {_try+1}, assumindo base existe): {_cerr}")
+    return True
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -3192,45 +3213,26 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # sucesso). Se este job já tinha resultado, restaura 'done' + avisa —
                     # nunca marca erro. (Feedback Pedro 15/07: DWG-complemento que não abriu
                     # sumia a planilha da tela; ele achou que tinha perdido tudo.)
-                    if is_complement:
-                        # DEFAULT SEGURO (board 15/07): um complemento SEMPRE existe sobre um
-                        # projeto-base. Se a contagem de itens falhar por soluço do banco
-                        # (timeout/5xx do Supabase, Render sob carga), NÃO pode concluir "base
-                        # vazia" e derrubar a planilha — isso reintroduziria, por outra porta,
-                        # exatamente o bug que este bloco conserta. Assume base=existe por
-                        # padrão; só marca vazio se a query SUCEDER e vier 0. 2 tentativas.
-                        _base_has_items = True
-                        for _try in range(2):
-                            try:
-                                import urllib.request as _urc
-                                _cq = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}&select=id&limit=1")
-                                _cr = _urc.Request(_cq, method="GET")
-                                _cr.add_header("apikey", SUPABASE_KEY)
-                                _cr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-                                _base_has_items = len(_json.loads(_urc.urlopen(_cr, timeout=10).read().decode("utf-8"))) > 0
-                                break  # query sucedeu — decisão confiável
-                            except Exception as _cerr:
-                                print(f"[add-file] contagem de itens base falhou (tentativa {_try+1}, assumindo base existe): {_cerr}")
-                        if _base_has_items:
-                            _warn_txt = (
-                                f"O arquivo CAD que você anexou ({arquivos}) não pôde ser aberto "
-                                f"automaticamente (DWG de versão recente do AutoCAD ou com objetos "
-                                f"de MEP/elétrica). Sua planilha anterior foi mantida — nada foi "
-                                f"perdido. Pra medir pelo CAD: abra no AutoCAD ou BricsCAD, "
-                                f"Salvar Como → DXF 2013, e anexe o DXF aqui.")
-                            jobs.update_field(job_id, status="done", progress=100, error_message=None,
-                                              current_step="Complemento não pôde ser lido — planilha anterior mantida")
-                            try:
-                                _supabase_update("projects", "job_id", job_id, {
-                                    "status": "done",
-                                    "error_message": None,
-                                    "warnings": [_warn_txt],
-                                    "completed_at": datetime.utcnow().isoformat(),
-                                })
-                            except Exception as _upe:
-                                print(f"[add-file] restaurar done falhou: {_upe}")
-                            print(f"[add-file] complemento CAD falhou, base preservada → done+aviso (sem erro)")
-                            return
+                    if is_complement and _complement_base_has_items(job_id):
+                        _warn_txt = (
+                            f"O arquivo CAD que você anexou ({arquivos}) não pôde ser aberto "
+                            f"automaticamente (DWG de versão recente do AutoCAD ou com objetos "
+                            f"de MEP/elétrica). Sua planilha anterior foi mantida — nada foi "
+                            f"perdido. Pra medir pelo CAD: abra no AutoCAD ou BricsCAD, "
+                            f"Salvar Como → DXF 2013, e anexe o DXF aqui.")
+                        jobs.update_field(job_id, status="done", progress=100, error_message=None,
+                                          current_step="Complemento não pôde ser lido — planilha anterior mantida")
+                        try:
+                            _supabase_update("projects", "job_id", job_id, {
+                                "status": "done",
+                                "error_message": None,
+                                "warnings": [_warn_txt],
+                                "completed_at": datetime.utcnow().isoformat(),
+                            })
+                        except Exception as _upe:
+                            print(f"[add-file] restaurar done falhou: {_upe}")
+                        print(f"[add-file] complemento CAD falhou, base preservada → done+aviso (sem erro)")
+                        return
                     jobs.update_field(job_id, error_message=msg, current_step="❌ Arquivo CAD inválido — leia mensagem abaixo")
                     raise RuntimeError(msg)
             except Exception as e:
@@ -4236,6 +4238,35 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # prancha de arquitetura real tem ao menos paredes/piso/forro.
         # Distingue 2 causas pra orientar o usuário com mensagem certa:
         if len(all_items) == 0:
+            # EXCEÇÃO — COMPLEMENTO (/add-file) sobre projeto que já tem planilha:
+            # a regra "0 itens = falha" vale pro projeto NORMAL (bug Vinícius). Num
+            # complemento, o arquivo anexado não rendeu nada mas a planilha anterior
+            # segue intacta (_persist_items_to_supabase só troca os itens no sucesso).
+            # Marcar erro aqui sumia a planilha da tela e mandava email de falha pra
+            # quem não perdeu nada — mesmo bug que o guard do DWG inválido conserta,
+            # só que por outra porta. Restaura 'done' + aviso; nunca marca erro.
+            if is_complement and _complement_base_has_items(job_id):
+                _anexados = ', '.join(os.path.basename(p) for p in (file_paths or [])) or 'o arquivo'
+                _warn_zero = (
+                    f"O arquivo que você anexou ({_anexados}) foi lido, mas não rendeu "
+                    f"nenhum item quantificável — pode ser prancha só de layout, sem "
+                    f"quadros/legendas, ou um PDF escaneado. Sua planilha anterior foi "
+                    f"mantida — nada foi perdido. Pra medir pelo CAD, anexe o DWG/DXF "
+                    f"da planta arquitetônica.")
+                jobs.update_field(job_id, status="done", progress=100, error_message=None,
+                                  current_step="Complemento sem itens — planilha anterior mantida")
+                try:
+                    _supabase_update("projects", "job_id", job_id, {
+                        "status": "done",
+                        "error_message": None,
+                        "warnings": [_warn_zero],
+                        "completed_at": datetime.utcnow().isoformat(),
+                    })
+                except Exception as _upe:
+                    print(f"[add-file] restaurar done (0 itens) falhou: {_upe}")
+                print(f"[add-file] complemento rendeu 0 itens, base preservada → done+aviso (sem erro)")
+                return
+
             # Considera falhas dos DOIS caminhos: PDF (sheet_errors) e DXF
             # (dxf_errors). Um projeto só-DXF cuja IA falhou tem dxf_errors mas
             # sheet_errors vazio — sem somar aqui, cairia na mensagem errada
