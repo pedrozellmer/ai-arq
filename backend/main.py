@@ -5133,6 +5133,39 @@ def _send_email_proximo_projeto(email: str, name: str, project_name: str) -> boo
     return _send_email_smtp(email, subject, html, log_kind="proximo_projeto")
 
 
+def _build_cronograma_checkin_email(name: str, project_name: str, semana: int, job_id: str):
+    """Monta (subject, html) do check-in semanal de obra em andamento.
+
+    O cronograma é a âncora de retorno do produto ([[feedback_cronograma_gratis]]):
+    uma obra dura meses, mas a tela era one-shot — nada puxava a pessoa de volta
+    pra atualizar o % executado. Este e-mail dispara pra obra EM ANDAMENTO
+    (entre início e fim previstos), no máximo 1x/semana por projeto (ref traz a
+    semana) — e o cooldown global de 7 dias garante que ninguém recebe junto com
+    outro automático."""
+    import html as _hk
+    pn = _hk.escape(project_name or "sua obra")
+    greet = _greeting_line(_hk.escape(name or ""))
+    body = (f"{greet}<br><br>"
+            f"Pelo cronograma, a obra <b>{pn}</b> está na <b>semana {semana}</b>. "
+            f"Como estão as fases no canteiro?<br><br>"
+            f"Atualizar o % executado leva um minuto e mantém a <b>Curva S</b> e o "
+            f"avanço real em dia — bom pra você enxergar atraso cedo, e pronto pra "
+            f"mostrar ao cliente (dá pra exportar em PDF direto da tela).")
+    subject = f"Semana {semana} da obra {project_name or 'do seu projeto'} — como está o avanço?"
+    html = _email_wrap(f"Semana {semana} — bora atualizar?", body,
+                       "Atualizar o avanço", f"https://ai.arq.br/cronograma.html?job={job_id}",
+                       reason=("Você está recebendo este e-mail porque tem um cronograma de obra "
+                               "em andamento no AI.arq. Se não quiser mais estes lembretes, é só "
+                               "responder avisando."))
+    return subject, html
+
+
+def _send_email_cronograma_checkin(email: str, name: str, project_name: str,
+                                   semana: int, job_id: str) -> bool:
+    subject, html = _build_cronograma_checkin_email(name, project_name, semana, job_id)
+    return _send_email_smtp(email, subject, html, log_kind="cronograma_checkin")
+
+
 def _email_eh_interno(email: str) -> bool:
     """True pra contas do Pedro/teste — inclusive aliases (+smoke etc.).
     O dry-run de 07/07 pegou zarelalopes+smoke@ escapando do filtro exato."""
@@ -5169,7 +5202,7 @@ async def emails_auto_tick(dry: int = 0):
     # projetos por email (pra saber quem nunca subiu / quem sumiu)
     proj_by_email: dict[str, list] = {}
     try:
-        q = (f"{SUPABASE_URL}/rest/v1/projects?select=user_email,created_at,status,project_name,user_name"
+        q = (f"{SUPABASE_URL}/rest/v1/projects?select=user_email,created_at,status,project_name,user_name,job_id"
              f"&order=created_at.desc&limit=2000")
         req = _u.Request(q, method="GET")
         req.add_header("apikey", SUPABASE_KEY)
@@ -5223,15 +5256,56 @@ async def emails_auto_tick(dry: int = 0):
                               "nome": plist[0].get("user_name") or "",
                               "projeto": plist[0].get("project_name") or ""})
 
+    # check-in de cronograma: obra EM ANDAMENTO (hoje entre início e fim previsto),
+    # que ninguém mexeu nos últimos 7 dias (quem atualizou está engajado — não
+    # precisa de cutucada). O ref carrega a SEMANA da obra, então o dedup
+    # vida-inteira vira "1x por semana por projeto" — e o cooldown global de 7
+    # dias abaixo garante no máximo 1 automático por pessoa por semana.
+    try:
+        proj_by_job = {}
+        for plist in proj_by_email.values():
+            for p in plist:
+                if p.get("job_id"):
+                    proj_by_job[p["job_id"]] = p
+        qc = (f"{SUPABASE_URL}/rest/v1/cronogramas"
+              f"?select=job_id,data_inicio,duracao_meses,updated_at&limit=500")
+        rc = _u.Request(qc, method="GET")
+        rc.add_header("apikey", SUPABASE_KEY)
+        rc.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        for c in _j.loads(_u.urlopen(rc, timeout=15).read().decode("utf-8")):
+            p = proj_by_job.get(c.get("job_id"))
+            if not p:
+                continue
+            email = (p.get("user_email") or "").lower()
+            if not email or _email_eh_interno(email):
+                continue
+            ini = _parse(str(c.get("data_inicio")) + "T00:00:00+00:00")
+            upd = _parse(c.get("updated_at"))
+            if not ini:
+                continue
+            dias_de_obra = (now - ini).total_seconds() / (24 * H)
+            fim_dias = (c.get("duracao_meses") or 0) * 30
+            mexeu_ha_pouco = upd and (now - upd).total_seconds() / (24 * H) < 7
+            # começa a cutucar a partir da semana 2 (semana 1 = acabou de planejar)
+            if 7 <= dias_de_obra <= fim_dias and not mexeu_ha_pouco:
+                semana = int(dias_de_obra // 7) + 1
+                acoes.append({"kind": "cronograma_checkin", "email": email,
+                              "nome": p.get("user_name") or "",
+                              "projeto": p.get("project_name") or "",
+                              "job_id": c["job_id"], "semana": semana,
+                              "ref": f"{c['job_id']}:w{semana}"})
+    except Exception as e:
+        print(f"[emails-auto] check-in cronograma falhou (pulando): {e}")
+
     # Três camadas anti-spam, nesta ordem (regra do Pedro: caixa de ninguém vira lixo):
     # 1) máx. 1 ação por PESSOA por tick (mesmo que ela caia em 2 regras diferentes);
-    # 2) dedup vida-inteira por tipo;
+    # 2) dedup vida-inteira por tipo (o ref, quando existe, limita por semana/projeto);
     # 3) cooldown global de 7 dias — nenhum automático pra quem recebeu QUALQUER
     #    automático na última semana (checado por último por custar 1 query/pessoa).
     # Teto de 5 por tick continua: goteja, nunca rajada.
     _vistos: set[str] = set()
     acoes = [a for a in acoes if not (a["email"] in _vistos or _vistos.add(a["email"]))]
-    acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"])]
+    acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"], ref=a.get("ref", ""))]
     acoes = [a for a in acoes if not _email_auto_recente(a["email"], dias=7)][:5]
 
     if dry:
@@ -5253,12 +5327,17 @@ async def emails_auto_tick(dry: int = 0):
                                            link)
             elif a["kind"] == "proximo_projeto":
                 ok = _send_email_proximo_projeto(a["email"], a["nome"], a.get("projeto") or "")
+            elif a["kind"] == "cronograma_checkin":
+                ok = _send_email_cronograma_checkin(a["email"], a["nome"],
+                                                    a.get("projeto") or "",
+                                                    a.get("semana") or 0,
+                                                    a.get("job_id") or "")
             else:
                 ok = _send_email_retorno30(a["email"], a["nome"])
         except Exception as e:
             print(f"[emails-auto] envio {a['kind']} -> {a['email']} falhou: {e}")
         if ok:
-            _email_auto_registrar(a["email"], a["kind"])
+            _email_auto_registrar(a["email"], a["kind"], ref=a.get("ref", ""))
             enviados.append(a)
     if enviados:
         print(f"[emails-auto] tick enviou {len(enviados)}: {[(a['kind'], a['email']) for a in enviados]}")
@@ -5956,6 +6035,8 @@ _EMAIL_CATALOG = [
      "gatilho": "auto: arquivo não-quantificável (precisa de outro arquivo)"},
     {"key": "proximo_projeto", "nome": "Convite pro 2º projeto (dias 3-10)", "grupo": "auto",
      "gatilho": "auto: 1º projeto done há 3-10 dias, sem 2º projeto (tick horário, 1x por pessoa)"},
+    {"key": "cronograma_checkin", "nome": "Check-in de obra (cronograma)", "grupo": "auto",
+     "gatilho": "auto: obra em andamento, sem atualização há 7+ dias (máx 1x/semana por projeto)"},
     {"key": "retorno_30d", "nome": "Retorno após 30 dias", "grupo": "auto",
      "gatilho": "auto: 30 dias sem subir projeto (tick horário)"},
     {"key": "nudge_onboarding", "nome": "Lembrar de subir a 1ª prancha", "grupo": "auto",
@@ -5998,6 +6079,8 @@ def _render_email_by_type(key: str):
         return _build_retorno30_email(nome)
     if key == "proximo_projeto":
         return _build_proximo_projeto_email(nome, projeto)
+    if key == "cronograma_checkin":
+        return _build_cronograma_checkin_email(nome, projeto, 6, fake_job)
     if key == "calibracao":
         return _build_calibracao_email(nome, projeto)
     raise KeyError(key)
