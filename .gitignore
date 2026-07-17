@@ -40,6 +40,7 @@ env/
 backend/_preview_*.json
 backend/_temp_*
 backend/_local_*
+backend/carimbo_cache.json
 TESTE_*.xlsx
 TESTE_*.csv
 quantitativos_aiarq_*.xlsx
