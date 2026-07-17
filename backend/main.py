@@ -5022,6 +5022,31 @@ def _email_auto_ja_enviado(email: str, kind: str, ref: str = "") -> bool:
         return True
 
 
+def _email_auto_recente(email: str, dias: int = 7) -> bool:
+    """True se a pessoa recebeu QUALQUER e-mail automático nos últimos `dias`.
+
+    Cooldown global entre tipos: o dedup vida-inteira é por tipo, então nada
+    impedia dois tipos DIFERENTES caírem na mesma caixa em dias seguidos (ex.:
+    nudge de cadastro num dia, convite pro 2º projeto no outro). Regra do Pedro:
+    não encher a caixa de ninguém — no máximo 1 automático por pessoa por semana.
+    Lembrete que perdeu a vez espera o próximo tick; se a janela dele passou,
+    paciência — silêncio é melhor que spam. Na dúvida (erro na checagem), NÃO envia.
+    """
+    import urllib.request as _u, urllib.parse as _up, json as _j
+    from datetime import datetime as _dt, timedelta as _td, timezone as _tz
+    try:
+        corte = (_dt.now(_tz.utc) - _td(days=dias)).isoformat()
+        q = (f"{SUPABASE_URL}/rest/v1/email_auto_log?select=id"
+             f"&email=eq.{_up.quote(email)}&sent_at=gte.{_up.quote(corte)}&limit=1")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        return bool(_j.loads(_u.urlopen(req, timeout=10).read().decode("utf-8")))
+    except Exception as e:
+        print(f"[emails-auto] cooldown check falhou ({email}): {e} — NÃO enviando por segurança")
+        return True
+
+
 def _email_auto_registrar(email: str, kind: str, ref: str = "") -> None:
     try:
         _supabase_insert("email_auto_log", {"email": email, "kind": kind, "ref": ref})
@@ -5198,8 +5223,16 @@ async def emails_auto_tick(dry: int = 0):
                               "nome": plist[0].get("user_name") or "",
                               "projeto": plist[0].get("project_name") or ""})
 
-    # dedup vida-inteira + teto por tick (goteja, nunca rajada)
-    acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"])][:5]
+    # Três camadas anti-spam, nesta ordem (regra do Pedro: caixa de ninguém vira lixo):
+    # 1) máx. 1 ação por PESSOA por tick (mesmo que ela caia em 2 regras diferentes);
+    # 2) dedup vida-inteira por tipo;
+    # 3) cooldown global de 7 dias — nenhum automático pra quem recebeu QUALQUER
+    #    automático na última semana (checado por último por custar 1 query/pessoa).
+    # Teto de 5 por tick continua: goteja, nunca rajada.
+    _vistos: set[str] = set()
+    acoes = [a for a in acoes if not (a["email"] in _vistos or _vistos.add(a["email"]))]
+    acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"])]
+    acoes = [a for a in acoes if not _email_auto_recente(a["email"], dias=7)][:5]
 
     if dry:
         # Endpoint é aberto (mesma mecânica dos outros ticks de cron). O modo dry
