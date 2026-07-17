@@ -27,6 +27,15 @@ from typing import Dict, List, Optional, Tuple
 from openpyxl import load_workbook
 
 
+# Cabeçalhos de preço, já normalizados (sem acento/pontuação, minúsculo).
+# Ancorados no início pra não confundir coluna vizinha: "OBSERVAÇÕES" não vira
+# mão de obra, "MATERIAL APLICADO" vira MAT. Aceitam o "unit." opcional na frente
+# e qualquer sufixo depois ("(R$)", "unitário", "R$/m²").
+_RE_MAT = re.compile(r"^(unit\.?\s*|vlr\.?\s*|valor\s*)?(mat|material)\b")
+_RE_MO = re.compile(r"^(unit\.?\s*|vlr\.?\s*|valor\s*)?(m\s*o\b|mao\s*de\s*obra|maodeobra)")
+_RE_TOTAL = re.compile(r"^(sub\s*)?total\b|^valor(\s+total)?\b|^preco(\s+total)?\b")
+
+
 def _normalize(s) -> str:
     """Remove acento, lowercase, espaços únicos."""
     if s is None:
@@ -108,16 +117,19 @@ def _find_header_row(ws) -> Tuple[int, Dict[str, int]]:
                 # Quantidade
                 elif any(k in cell_n for k in ["quant", "qtd", "qdade"]) and "qtd" not in col_map:
                     col_map["qtd"] = c_idx
-                # Unit MAT
-                elif ("mat" in cell_n and "unit" in cell_n) or \
-                     cell_n in ("unit mat", "unit. mat", "unit material"):
+                # Preço: casar por PREFIXO, não por igualdade. O sufixo de moeda é
+                # o normal no mercado ("TOTAL (R$)", "MAT (R$)", "M.O. (R$)") e a
+                # comparação exata rejeitava tudo isso — inclusive a planilha do
+                # PRÓPRIO AI.arq, que é o caminho mais provável do produto (o
+                # arquiteto manda a nossa planilha, o fornecedor preenche o preço
+                # e devolve). Sem as colunas de preço, o item saía sem valor e a
+                # aba inteira era descartada com "Nenhuma aba reconhecida".
+                # _normalize já tirou pontuação: "M.O. (R$)" -> "m o r".
+                elif _RE_MAT.match(cell_n) and "unit_mat" not in col_map:
                     col_map["unit_mat"] = c_idx
-                # Unit MO
-                elif ("mo" in cell_n and ("unit" in cell_n or "m o" in cell_n)) or \
-                     cell_n in ("unit mo", "unit. m.o", "unit. mo", "unit mão de obra"):
+                elif _RE_MO.match(cell_n) and "unit_mo" not in col_map:
                     col_map["unit_mo"] = c_idx
-                # Total
-                elif cell_n in ("total", "valor total", "valor", "subtotal"):
+                elif _RE_TOTAL.match(cell_n) and "total" not in col_map:
                     col_map["total"] = c_idx
 
             return row_idx, col_map
@@ -232,6 +244,21 @@ def _parse_with_col_map(ws, header_row: int, col_map: Dict[str, int],
         })
 
     # Filtra só itens precificados (un+qtd+total)
+    for it in items:
+        if it["is_section"] or not it["un"] or not it["qtd"]:
+            continue
+        if it["total"] and it["total"] > 0:
+            continue
+        # TOTAL quase sempre é FÓRMULA (=QTD*(MAT+MO)). Fórmula só tem valor lido
+        # se o arquivo passou pelo Excel — a planilha do próprio AI.arq sai do
+        # openpyxl sem valor em cache, então o TOTAL vinha None e TODO item era
+        # descartado como "não precificado". Reconstrói do unitário em vez de
+        # jogar o item fora.
+        mat, mo = it["unit_mat"] or 0, it["unit_mo"] or 0
+        if mat or mo:
+            it["total"] = round(it["qtd"] * (mat + mo), 2)
+            it["total_calculado"] = True
+
     priced = [it for it in items
               if it["un"] and it["qtd"] and it["total"] and it["total"] > 0
               and not it["is_section"]]
