@@ -420,7 +420,6 @@ def render_post_html(post):
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://cdn.tailwindcss.com">
 
 <title>{post["title"]} | AI.arq</title>
 <meta name="description" content="{post["description"]}">
@@ -451,7 +450,7 @@ def render_post_html(post):
 <!-- Data agendada (lida por JS pra esconder antes da hora) -->
 <meta name="publish-date" content="{post["publish_date"]}">
 
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/tailwind.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 {COMMON_STYLES}
 
@@ -581,7 +580,6 @@ def render_index_html():
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="preconnect" href="https://cdn.tailwindcss.com">
 
 <title>Blog AI.arq — Quantitativos, SINAPI e BDI pra arquitetos</title>
 <meta name="description" content="Artigos práticos sobre planilha de quantitativos, SINAPI, TCPO, BDI e memorial descritivo. Conteúdo gratuito pra arquitetos e engenheiros brasileiros.">
@@ -596,7 +594,7 @@ def render_index_html():
 <meta property="og:description" content="Conteúdo prático sobre quantitativos de obra, SINAPI, TCPO, BDI e IA aplicada à arquitetura.">
 <meta property="og:image" content="{SITE_URL}/og-image.png">
 
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="/tailwind.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
 {COMMON_STYLES}
 </head>
