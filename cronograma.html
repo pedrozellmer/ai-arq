@@ -967,26 +967,36 @@ const TPL_THUMB = {
   editorial: { bg:'#f6f2e9', ti:'#2b2519', su:'#a89f8c', tr:'#e2dac9' },
   bold:      { bg:'#fdfcfa', ti:'#141414', su:'#c9c9c9', tr:'#ececec' },
 };
+// Barras da miniatura nas cores REAIS das fases (paleta "materiais de obra"
+// do backend) — o PDF pinta as barras com a cor da fase, não com o accent.
+// O accent aparece onde aparece no PDF: eyebrow, filetes e detalhes.
+const _THUMB_FASES = ['#C9B896', '#C06B4E', '#2F8F83', '#98A15F'];
 function tplThumb(id) {
   const p = TPL_THUMB[id] || TPL_THUMB.claro;
   const acc = estiloAccent || '#4F46E5';
-  const bars = [[40,56],[54,40],[30,70],[62,34]];
-  const tx = id === 'bold' ? 16 : 10;
+  const bars = [[26, 30], [40, 42], [58, 46], [80, 34]];   // [x, largura] escalonadas (efeito cascata de Gantt)
+  const tx = id === 'bold' ? 17 : 10;
   let s = '<rect width="140" height="82" fill="' + p.bg + '"/>';
-  if (id === 'bold') s += '<rect x="0" y="0" width="9" height="82" fill="' + acc + '"/>';
+  if (id === 'bold') s += '<rect x="0" y="0" width="10" height="82" fill="' + acc + '"/>';
   if (id === 'blueprint') {
-    s += '<rect x="4" y="4" width="132" height="74" fill="none" stroke="' + p.fr + '" stroke-width="1"/>';
-    for (let gx = 42; gx < 136; gx += 24) s += '<line x1="' + gx + '" y1="6" x2="' + gx + '" y2="76" stroke="' + p.fr + '" stroke-opacity="0.12"/>';
+    s += '<rect x="4" y="4" width="132" height="74" fill="none" stroke="' + p.fr + '" stroke-width="1.2"/>';
+    for (let gx = 40; gx < 136; gx += 19) s += '<line x1="' + gx + '" y1="5" x2="' + gx + '" y2="77" stroke="' + p.fr + '" stroke-opacity="0.10"/>';
   }
-  s += '<rect x="' + tx + '" y="10" width="52" height="7" rx="2" fill="' + p.ti + '"/>';
-  s += '<rect x="' + tx + '" y="21" width="32" height="4" rx="2" fill="' + p.su + '"/>';
-  if (id === 'editorial') s += '<rect x="' + tx + '" y="28" width="46" height="1.6" fill="' + acc + '"/>';
+  // Cabeçalho: eyebrow no accent + título + subtítulo
+  s += '<rect x="' + tx + '" y="9" width="20" height="2.5" rx="1.25" fill="' + acc + '"/>';
+  s += '<rect x="' + tx + '" y="15" width="56" height="6.5" rx="2" fill="' + p.ti + '"/>';
+  s += '<rect x="' + tx + '" y="25" width="34" height="3.5" rx="1.75" fill="' + p.su + '"/>';
+  if (id === 'editorial') s += '<rect x="' + tx + '" y="31.5" width="118" height="1.2" fill="' + p.su + '" fill-opacity="0.6"/>';
+  // Mini-Gantt: trilhos + barras escalonadas, cada uma na cor da sua fase
   bars.forEach(function (b, i) {
-    const y = 35 + i * 11;
-    s += '<rect x="' + (tx + 18) + '" y="' + y + '" width="' + (140 - tx - 26) + '" height="5.5" rx="2.75" fill="' + p.tr + '"/>';
-    s += '<rect x="' + b[0] + '" y="' + y + '" width="' + b[1] + '" height="5.5" rx="2.75" fill="' + acc + '"/>';
-    s += '<rect x="' + tx + '" y="' + (y + 1) + '" width="12" height="3.5" rx="1.5" fill="' + p.su + '"/>';
+    const y = 37 + i * 9.5;
+    s += '<rect x="' + tx + '" y="' + (y + 1) + '" width="11" height="3.2" rx="1.6" fill="' + p.su + '"/>';
+    s += '<rect x="' + (tx + 15) + '" y="' + y + '" width="' + (125 - tx - 15) + '" height="5.5" rx="2.75" fill="' + p.tr + '"/>';
+    s += '<rect x="' + b[0] + '" y="' + y + '" width="' + b[1] + '" height="5.5" rx="2.75" fill="' + _THUMB_FASES[i] + '"/>';
   });
+  // Rodapé: filete no accent + assinatura
+  s += '<rect x="' + tx + '" y="75" width="14" height="2" rx="1" fill="' + acc + '"/>';
+  s += '<rect x="' + (tx + 18) + '" y="75" width="26" height="2" rx="1" fill="' + p.su + '" fill-opacity="0.7"/>';
   return '<svg viewBox="0 0 140 82" class="w-full block" style="height:auto" aria-hidden="true">' + s + '</svg>';
 }
 
