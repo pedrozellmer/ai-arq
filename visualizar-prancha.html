@@ -15,11 +15,14 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', -apple-system, sans-serif; margin: 0; overflow: hidden; }
+    .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #22D3EE 100%); }
     .viewer-container { height: 100vh; display: flex; flex-direction: column; }
     .viewer-toolbar {
       background: #1f2937; color: white; padding: 10px 16px;
       display: flex; align-items: center; gap: 12px;
       font-size: 13px; flex-shrink: 0;
+      border-bottom: 2px solid transparent;
+      border-image: linear-gradient(90deg, #4F46E5, #22D3EE) 1;
     }
     .viewer-frame { flex: 1; border: none; background: #4b5563; }
   </style>
@@ -28,14 +31,15 @@
 
 <div class="viewer-container">
   <div class="viewer-toolbar">
-    <button onclick="window.close()" class="text-gray-300 hover:text-white flex items-center gap-1">
+    <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs" aria-hidden="true">AI</div>
+    <button onclick="window.close()" class="text-gray-300 hover:text-indigo-300 flex items-center gap-1">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
       Fechar
     </button>
     <span class="text-gray-500">·</span>
     <span id="filename" class="font-medium truncate flex-1">Carregando...</span>
     <button onclick="downloadPdf()" title="Baixar o PDF original"
-      class="text-gray-300 hover:text-white flex items-center gap-1">
+      class="text-gray-300 hover:text-indigo-300 flex items-center gap-1">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
       Baixar
     </button>
@@ -124,17 +128,6 @@ if (!jobId || !ref) {
   });
 }
 </script>
-
-<footer class="mt-6 border-t bg-white py-4">
-  <div class="mx-auto max-w-7xl px-4 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-gray-500">
-    <span>AI.arq — Visualizar prancha</span>
-    <div class="flex items-center gap-4">
-      <a href="termos.html" class="hover:text-gray-700 transition">Termos</a>
-      <a href="privacidade.html" class="hover:text-gray-700 transition">Privacidade</a>
-      <a href="dashboard.html" class="hover:text-gray-700 transition">Dashboard</a>
-    </div>
-  </div>
-</footer>
 
 </body>
 </html>

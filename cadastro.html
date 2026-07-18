@@ -19,10 +19,16 @@
 <script src="aiarq-utils.js"></script>
 <style>
   body { font-family: 'Inter', sans-serif; }
-  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
-  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #22D3EE 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #22D3EE 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
   .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
   .shadow-btn { box-shadow: 0 8px 30px -8px rgba(79,70,229,0.4); }
+  /* Entrada suave do card (mesmo padrão do cronograma.html) */
+  @keyframes card-rise { from { opacity:0; transform:translateY(14px) } to { opacity:1; transform:none } }
+  .card-enter { animation: card-rise .4s cubic-bezier(.22,.61,.36,1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .card-enter { animation: none !important; }
+  }
 </style>
 </head>
 <body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
@@ -35,13 +41,14 @@
       <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
       <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
     </a>
+    <a href="index.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Voltar ao site</a>
   </div>
 </nav>
 
 <!-- MAIN CONTENT -->
 <main id="main" class="flex-1 flex items-center justify-center px-4 py-10">
   <div class="w-full max-w-lg">
-    <div class="rounded-2xl border bg-white p-8 md:p-10 shadow-gradient">
+    <div class="card-enter rounded-2xl border bg-white p-8 md:p-10 shadow-gradient">
 
       <!-- Logo -->
       <div class="flex items-center justify-center gap-3 mb-2">
@@ -181,7 +188,7 @@
         </div>
 
         <!-- Error message -->
-        <div id="form-error" class="hidden rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600"></div>
+        <div id="form-error" class="hidden rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600"></div>
 
         <!-- Submit -->
         <button type="submit" id="btn-submit"
