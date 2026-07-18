@@ -131,8 +131,8 @@
         Comece Grátis
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
       </a>
-      <a href="#como-funciona" class="text-lg font-medium px-8 py-4 rounded-xl border border-gray-300 hover:border-indigo-300 hover:bg-indigo-50 transition">
-        Veja como funciona
+      <a href="/exemplo.html" class="text-lg font-medium px-8 py-4 rounded-xl border border-gray-300 hover:border-indigo-300 hover:bg-indigo-50 transition no-underline">
+        Ver um exemplo pronto
       </a>
     </div>
     <p class="mt-4 text-sm text-gray-500">Primeiro projeto grátis, sem cartão. Revisão por arquiteto/engenheiro é sempre necessária.</p>
@@ -159,6 +159,12 @@
               <div class="text-xs md:text-sm text-gray-500 mt-1">Referência em cada item</div>
             </div>
           </div>
+
+          <!-- Prova compacta do wedge já na primeira dobra (dado real do beta) -->
+          <p class="mt-6 text-center text-sm text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5 inline-block w-full">
+            <span aria-hidden="true">📊</span> No beta, projetos em <strong>DWG/DXF</strong> saem com <strong>~4,3&times; mais itens medidos</strong> que em PDF
+            <span class="text-indigo-400 text-xs">· amostra de 51 projetos, jul/2026</span>
+          </p>
 
           <!-- O que entra na planilha — foco visual no quantitativo -->
           <p class="mt-8 text-xs text-gray-500 text-center uppercase tracking-wider">O que entra na planilha</p>
@@ -192,17 +198,17 @@
     <div class="text-center">
       <span class="inline-block mb-4 bg-indigo-100 text-indigo-700 text-sm font-medium px-3 py-1 rounded-full">Simples e rápido</span>
       <h2 class="text-3xl font-bold text-gray-900 md:text-4xl">Como funciona</h2>
-      <p class="mt-4 text-gray-600 max-w-2xl mx-auto">Do CAD à apresentação pro cliente final — quantitativo, comparativo de fornecedores e PPT no mesmo lugar.</p>
+      <p class="mt-4 text-gray-600 max-w-2xl mx-auto">Do CAD à planilha medida — em 4 passos.</p>
     </div>
-    <div class="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+    <div class="mt-16 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
       <!-- Passo 1 -->
       <div class="text-center relative">
         <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-main text-white shadow-lg shadow-indigo-500/25">
           <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
         </div>
         <div class="absolute -top-2 left-1/2 ml-6 flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-700 text-sm font-bold">1</div>
-        <h3 class="mt-6 text-lg font-semibold text-gray-900">Upload e classificação</h3>
-        <p class="mt-3 text-gray-600 text-sm leading-relaxed">Envia PDF, DWG ou DXF e escolhe a tipologia (residencial, escritório, varejo, hospitalar ou educacional). Pra cada prancha, opção de classificar tipo ou detalhe de ambiente. Preço mostrado antes do pagamento.</p>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Suba o projeto</h3>
+        <p class="mt-3 text-gray-600 text-sm leading-relaxed">Envia PDF, DWG ou DXF e escolhe a tipologia (residencial, escritório, varejo…). Só isso — o resto é com a IA.</p>
       </div>
       <!-- Passo 2 -->
       <div class="text-center relative">
@@ -210,8 +216,8 @@
           <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
         </div>
         <div class="absolute -top-2 left-1/2 ml-6 flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 text-sm font-bold">2</div>
-        <h3 class="mt-6 text-lg font-semibold text-gray-900">Análise com IA</h3>
-        <p class="mt-3 text-gray-600 text-sm leading-relaxed">Extrai geometria do CAD (blocos, polylines, áreas hachuradas), a IA lê legendas e identifica cada item. Aplica NBRs 6492/8403/10067/13532 e calibra por densidade de projetos similares.</p>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">A IA mede o desenho</h3>
+        <p class="mt-3 text-gray-600 text-sm leading-relaxed">Extrai a geometria do CAD (blocos, polylines, hachuras) e lê legendas e quadros. Cada item sai marcado: <strong>medido</strong> de verdade ou <strong>estimativa</strong> pra revisar.</p>
       </div>
       <!-- Passo 3 -->
       <div class="text-center relative">
@@ -228,26 +234,8 @@
           <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
         </div>
         <div class="absolute -top-2 left-1/2 ml-6 flex h-8 w-8 items-center justify-center rounded-full bg-cyan-100 text-cyan-700 text-sm font-bold">4</div>
-        <h3 class="mt-6 text-lg font-semibold text-gray-900">Revise e mande aos fornecedores</h3>
-        <p class="mt-3 text-gray-600 text-sm leading-relaxed">Revise no navegador (aprovar · editar · comentar) ou baixe o XLSX e corrija offline. Mande aos fornecedores — cada um responde cotando seu template.</p>
-      </div>
-      <!-- Passo 5 -->
-      <div class="text-center relative">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-lg shadow-amber-500/25">
-          <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-        </div>
-        <div class="absolute -top-2 left-1/2 ml-6 flex h-8 w-8 items-center justify-center rounded-full bg-amber-100 text-amber-700 text-sm font-bold">5</div>
-        <h3 class="mt-6 text-lg font-semibold text-gray-900">Upload dos orçamentos</h3>
-        <p class="mt-3 text-gray-600 text-sm leading-relaxed">Quando os fornecedores devolvem, sobe as planilhas direto no projeto. O sistema parseia automaticamente — funciona mesmo se cada fornecedor usar template diferente (modo fuzzy).</p>
-      </div>
-      <!-- Passo 6 -->
-      <div class="text-center relative">
-        <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-500/25">
-          <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        </div>
-        <div class="absolute -top-2 left-1/2 ml-6 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-700 text-sm font-bold">6</div>
-        <h3 class="mt-6 text-lg font-semibold text-gray-900">Comparativo automático</h3>
-        <p class="mt-3 text-gray-600 text-sm leading-relaxed">XLSX com ranking por total pareado + PPT executivo com a <strong>logo e cor do seu escritório</strong>. Mostra cobertura, diferenças de preço acima de 100% entre fornecedores, itens que cada fornecedor esqueceu. Envie pro cliente final direto pelo WhatsApp.</p>
+        <h3 class="mt-6 text-lg font-semibold text-gray-900">Revise e use</h3>
+        <p class="mt-3 text-gray-600 text-sm leading-relaxed">Revise no navegador (aprovar · editar · comentar) ou baixe o XLSX e corrija offline. Pronto pra mandar ao orçamentista ou aos fornecedores.</p>
       </div>
     </div>
     <div class="mt-12 text-center">
@@ -297,7 +285,7 @@
       <p class="mt-2 text-sm text-indigo-800">Em média, <strong>31,5%</strong> dos itens saem <strong>medidos</strong> num projeto em CAD, contra <strong>7,3%</strong> num PDF. Quanto mais medido, menos você confere na mão.</p>
       <p class="mt-3 text-xs text-indigo-500"><span aria-hidden="true">👉</span> Mande o <strong>DWG ou DXF</strong> sempre que puder. <span class="text-indigo-400">Fonte: dados agregados do beta AI.arq (amostra de 51 projetos, jul/2026).</span></p>
       <div class="mt-4 text-center">
-        <a href="/exemplo.html" class="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-700 hover:text-indigo-900">Ver um quantitativo real de exemplo <span aria-hidden="true">&rarr;</span></a>
+        <a href="/exemplo.html" class="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-700 hover:text-indigo-900">Ver um quantitativo de exemplo, do jeito que sai — sem cadastro <span aria-hidden="true">&rarr;</span></a>
       </div>
     </div>
 
@@ -542,6 +530,9 @@
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         Calculadora de preço: ver quanto custa o meu projeto →
       </a>
+      <p class="mt-4 mx-auto max-w-2xl text-sm text-indigo-900 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5">
+        <span aria-hidden="true">🧪</span> <strong>Beta aberto:</strong> por enquanto os projetos processados não são cobrados. Esta é a tabela que passa a valer quando a cobrança for ativada — e você é avisado com antecedência, com o valor sempre na tela antes de confirmar.
+      </p>
     </div>
 
     <!-- 3 cards enxutos — plano + preço + caso de uso -->
@@ -682,6 +673,7 @@
         <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@main/flat-rounded/elo.svg" alt="Elo" class="h-7" loading="lazy">
         <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@main/flat-rounded/hipercard.svg" alt="Hipercard" class="h-7" loading="lazy">
         <img src="https://cdn.jsdelivr.net/gh/aaronfagan/svg-credit-card-payment-icons@main/flat-rounded/diners.svg" alt="Diners" class="h-7" loading="lazy">
+        <span class="inline-flex items-center h-7 px-3 rounded bg-[#32BCAD] text-white text-xs font-bold tracking-wide" title="PIX">PIX</span>
       </div>
       <div class="flex items-center justify-center gap-2 mt-3">
         <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
