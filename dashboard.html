@@ -106,8 +106,9 @@
 
       <!-- Ações principais -->
       <div class="flex items-center gap-2 md:gap-3">
-        <!-- Saldo (desktop) -->
-        <div id="topbar-balance" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-100 transition" onclick="switchTab('cashback')" title="Ver contribuições e créditos guardados">
+        <!-- Saldo (desktop) — nasce escondido; loadUserCredits só mostra se saldo > 0
+             (beta: dinheiro fora do palco — quem tem crédito continua vendo) -->
+        <div id="topbar-balance" style="display:none" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-100 transition" onclick="switchTab('cashback')" title="Ver contribuições e créditos guardados">
           <span>💰</span>
           <span id="topbar-balance-value">R$ 0,00</span>
         </div>
@@ -1239,7 +1240,7 @@
     'home': 'Início',
     'novo-projeto': 'Novo Projeto',
     'meus-projetos': 'Meus Projetos',
-    'cashback': 'Cashback',
+    'cashback': 'Contribuições',  // dinheiro fora do palco no beta — título da aba já é "Suas contribuições"
     'meu-cadastro': 'Meu Cadastro',
     'meus-pagamentos': 'Meus Pagamentos',
     'como-funciona': 'Como Funciona',
@@ -1363,6 +1364,7 @@
     try {
       const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
       const data = await res.json();
+      __backendProjects = data.projects || [];  // espelho compartilhado (isFirstProject)
       const projects = (data.projects || []).filter(p => p.status === 'done');
 
       // Métricas principais
@@ -1749,6 +1751,13 @@
   }
   checkAuth();
 
+  // Espelho em memória dos projetos do usuário vindos do BACKEND.
+  // null = ainda não carregado nesta sessão. Alimentado por loadHomeStats,
+  // renderProjectHistory e renderPayments (todos usam a MESMA rota
+  // /api/projects/by-user). isFirstProject() prefere isso ao localStorage,
+  // que é por navegador e mente em outro dispositivo.
+  let __backendProjects = null;
+
   // Saldo de créditos (cashback, cupom, referral) — carregado do backend
   let userCreditsCents = 0;
   async function loadUserCredits() {
@@ -1764,12 +1773,21 @@
       console.warn('loadUserCredits err', e);
       userCreditsCents = 0;
     }
-    // Atualiza pill de saldo na topbar
+    // Atualiza pill de saldo na topbar — some quando o saldo é ZERO (beta:
+    // dinheiro fora do palco). Quem TEM crédito continua vendo normalmente.
     try {
       const el = document.getElementById('topbar-balance-value');
       if (el) {
         const brl = (userCreditsCents / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         el.textContent = 'R$ ' + brl;
+      }
+      const wrap = document.getElementById('topbar-balance');
+      if (wrap) {
+        // ⚠ Não mexer na classe 'hidden' aqui: ela faz par com 'md:flex' pra
+        // esconder a pill no MOBILE. Remover 'hidden' faria a pill aparecer no
+        // celular (block), quebrando a topbar. display inline resolve: 'none'
+        // esconde em qualquer tela; '' devolve o comportamento das classes.
+        wrap.style.display = (userCreditsCents === 0) ? 'none' : '';
       }
     } catch (_) {}
   }
@@ -2408,6 +2426,11 @@
   // sempre true → todo projeto saía como "1º grátis". O histórico real é
   // gravado em 'aiarq_project_history' (ver saveProjectToHistory).
   function isFirstProject() {
+    // Preferência: projetos do BACKEND (valem em qualquer navegador). null =
+    // ainda não carregados nesta sessão → cai no histórico local (fallback).
+    // ⚠ Só muda a FONTE da contagem — o gate de preço continua o mesmo
+    // (BETA_FREE manda; ver btnProcess).
+    if (Array.isArray(__backendProjects)) return __backendProjects.length === 0;
     const history = JSON.parse(localStorage.getItem('aiarq_project_history') || '[]');
     return history.length === 0;
   }
@@ -3147,6 +3170,25 @@
     // Keep last 50
     if (history.length > 50) history.length = 50;
     localStorage.setItem('aiarq_project_history', JSON.stringify(history));
+
+    // Mantém o espelho do backend coerente na MESMA sessão: isFirstProject usa
+    // o length dele, e o espelho só é recarregado quando alguma aba refaz o
+    // fetch. Sem isso, um 2º upload na mesma sessão ainda contaria como "1º".
+    // (Stub temporário — o próximo fetch de /api/projects/by-user sobrescreve.)
+    if (Array.isArray(__backendProjects)) {
+      const _bp = __backendProjects.find(p => p.job_id === currentJobId);
+      if (_bp) {
+        _bp.status = status;
+      } else if (currentJobId) {
+        __backendProjects.unshift({
+          job_id: currentJobId,
+          status: status,
+          project_name: project.name,
+          files_count: project.fileCount,
+          created_at: now.toISOString(),
+        });
+      }
+    }
   }
 
   // ══════════════════════════════════════════════
@@ -3158,11 +3200,32 @@
   // fazia todo projeto nascer com o mesmo cara de data.
 
   // Renderizar pagamentos
-  function renderPayments() {
+  // Fonte primária: BACKEND — a MESMA rota /api/projects/by-user usada nas abas
+  // Início e Meus Projetos. Antes lia só aiarq_project_history do localStorage:
+  // em outro navegador/dispositivo a aba aparecia vazia. O localStorage ficou
+  // como fallback só se o fetch falhar.
+  async function renderPayments() {
     const list = document.getElementById('payments-list');
     const empty = document.getElementById('payments-empty');
-    const history = JSON.parse(localStorage.getItem('aiarq_project_history') || '[]');
-    const payments = history.filter(p => p.status === 'done' || p.paid);
+
+    // Estado de carregamento (evita "Nenhum pagamento" piscando durante o fetch)
+    empty.classList.add('hidden');
+    list.innerHTML = '<tr><td colspan="5" class="px-6 py-8 text-center text-sm text-gray-500">Carregando...</td></tr>';
+
+    let payments = [];
+    try {
+      const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
+      const data = await res.json();
+      const projects = data.projects || [];
+      __backendProjects = projects;  // espelho compartilhado (isFirstProject)
+      // Concluídos = o que o usuário "levou" (no beta, tudo grátis de propósito)
+      payments = projects.filter(p => p.status === 'done' || p.paid === true);
+    } catch (e) {
+      // Fallback: histórico local (só existe no navegador que processou)
+      console.warn('renderPayments: backend falhou, usando localStorage', e);
+      const history = JSON.parse(localStorage.getItem('aiarq_project_history') || '[]');
+      payments = history.filter(p => p.status === 'done' || p.paid);
+    }
 
     if (payments.length === 0) {
       list.innerHTML = '';
@@ -3172,9 +3235,11 @@
 
     empty.classList.add('hidden');
     list.innerHTML = payments.map(p => {
-      const date = window.fmtDataBR(p.date || p.timestamp);
-      const name = p.name || p.projectName || 'Projeto sem nome';
-      const files = p.fileCount || p.files || '—';
+      // Campos do backend (created_at/project_name/files_count) com fallback
+      // pros nomes do histórico local (date/name/fileCount).
+      const date = window.fmtDataBR(p.created_at || p.date || p.timestamp);
+      const name = p.project_name || p.name || p.projectName || 'Projeto sem nome';
+      const files = p.files_count || p.fileCount || p.files || '—';
       const isFree = p.paid !== true;   // "Pago" SÓ com pagamento REAL; no beta tudo é grátis de propósito (não inventa cobrança)
       const price = isFree ? 'Gr\u00e1tis' : (p.price ? `R$ ${p.price}` : '—');
       // Cor + \u00edcone + texto: cor sozinha n\u00e3o basta (Pedro \u00e9 dalt\u00f4nico).
@@ -3362,6 +3427,7 @@
       const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
       const data = await res.json();
       const projects = data.projects || [];
+      __backendProjects = projects;  // espelho compartilhado (isFirstProject)
 
       loadingEl.classList.add('hidden');
 
