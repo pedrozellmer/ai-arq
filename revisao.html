@@ -13,7 +13,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     body { font-family: 'Inter', -apple-system, sans-serif; }
-    .section-header { background: linear-gradient(135deg,#4f46e5,#06b6d4); }
+    /* Cabeçalho de disciplina: card branco com faixa de degradê 3px no topo
+       (padrão novo do cronograma.html). Texto escuro, botões com contraste. */
+    .section-header { position: relative; background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .section-header::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
     .item-row { transition: all 0.15s; }
     /* Estados de revisão usam cor + espessura/estilo de borda + badge
        textual (renderizado no JS). Pedro é daltônico — verde vs âmbar
@@ -31,6 +34,35 @@
     .confidence-orange { background-color: #FFD699; }
     .confidence-white  { background-color: #ffffff; }
     .chip { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    /* ── Modernização (18/07): mini-KPIs + entrada suave (padrão cronograma.html) ── */
+    .kpi { position:relative; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease; }
+    .kpi:hover { transform:translateY(-3px); box-shadow:0 2px 4px rgba(15,23,42,.06), 0 18px 38px -16px rgba(79,70,229,.30); }
+    .kpi::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
+    .kpi.kpi-ok::before     { background:linear-gradient(135deg,#10b981,#34d399); }
+    .kpi.kpi-danger::before { background:linear-gradient(135deg,#ef4444,#f87171); }
+    .kpi.kpi-warn::before   { background:linear-gradient(135deg,#f59e0b,#fbbf24); }
+    .kpi.kpi-muted::before  { background:linear-gradient(135deg,#64748b,#94a3b8); }
+    .kpi-ico { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#EEF2FF; color:#4F46E5; flex:none; }
+    .kpi-ok .kpi-ico     { background:#ECFDF5; color:#059669; }
+    .kpi-danger .kpi-ico { background:#FEF2F2; color:#DC2626; }
+    .kpi-warn .kpi-ico   { background:#FFFBEB; color:#D97706; }
+    .kpi-muted .kpi-ico  { background:#F1F5F9; color:#475569; }
+    @keyframes cr-rise { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:none } }
+    /* Entrada só na carga inicial: init() adiciona .rv-ready no <body> quando o
+       gate some. As seções re-renderizam via innerHTML a cada interação, então
+       a animação fica nos containers ESTÁTICOS (não re-anima a cada clique). */
+    .rv-ready .rv-rise { animation: cr-rise .45s cubic-bezier(.22,.61,.36,1) both; }
+    .rv-ready .rv-rise-1 { animation-delay:.06s }
+    .rv-ready .rv-rise-2 { animation-delay:.12s }
+    .rv-ready .rv-rise-3 { animation-delay:.18s }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -63,12 +95,8 @@
     <!-- Em mobile: stacka ações com flex-wrap e esconde labels dos botões pra
          não estourar 375px (3 botões grandes lado a lado quebravam o header) -->
     <div class="flex items-center gap-2 flex-wrap justify-end">
-      <div class="hidden md:flex items-center gap-3 text-xs text-gray-600">
-        <span><span id="count-approved" class="font-semibold text-green-600">0</span> aprovados</span>
-        <span><span id="count-rejected" class="font-semibold text-red-600">0</span> removidos</span>
-        <span><span id="count-edited"   class="font-semibold text-amber-600">0</span> editados</span>
-        <span><span id="count-pending"  class="font-semibold text-gray-600">0</span> pendentes</span>
-      </div>
+      <!-- Contadores migrados pra linha de mini-KPIs no topo do <main> (18/07) —
+           agora aparecem também no celular. Mesmos ids (count-*) que o JS preenche. -->
       <div id="cashback-session-pill" class="hidden"></div>
       <button id="btn-save-later" class="bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
         title="Salvar progresso e continuar depois em Meus Projetos" aria-label="Salvar e terminar depois">
@@ -90,8 +118,48 @@
 
 <main id="main" class="max-w-7xl mx-auto px-4 py-6 space-y-6">
 
+  <!-- Progresso da revisão — mini-KPIs (cor + ícone + texto; visíveis também no celular) -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 rv-rise">
+    <div class="kpi kpi-ok bg-white rounded-2xl border shadow-sm px-3.5 py-3 flex items-center gap-3">
+      <div class="kpi-ico" aria-hidden="true">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      </div>
+      <div class="min-w-0">
+        <p class="text-lg font-bold text-gray-900 leading-none"><span id="count-approved">0</span></p>
+        <p class="text-[11px] text-gray-500 mt-1">✓ aprovados</p>
+      </div>
+    </div>
+    <div class="kpi kpi-danger bg-white rounded-2xl border shadow-sm px-3.5 py-3 flex items-center gap-3">
+      <div class="kpi-ico" aria-hidden="true">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </div>
+      <div class="min-w-0">
+        <p class="text-lg font-bold text-gray-900 leading-none"><span id="count-rejected">0</span></p>
+        <p class="text-[11px] text-gray-500 mt-1">✗ removidos</p>
+      </div>
+    </div>
+    <div class="kpi kpi-warn bg-white rounded-2xl border shadow-sm px-3.5 py-3 flex items-center gap-3">
+      <div class="kpi-ico" aria-hidden="true">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      </div>
+      <div class="min-w-0">
+        <p class="text-lg font-bold text-gray-900 leading-none"><span id="count-edited">0</span></p>
+        <p class="text-[11px] text-gray-500 mt-1">✎ editados</p>
+      </div>
+    </div>
+    <div class="kpi kpi-muted bg-white rounded-2xl border shadow-sm px-3.5 py-3 flex items-center gap-3">
+      <div class="kpi-ico" aria-hidden="true">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="min-w-0">
+        <p class="text-lg font-bold text-gray-900 leading-none"><span id="count-pending">0</span></p>
+        <p class="text-[11px] text-gray-500 mt-1">⏳ pendentes</p>
+      </div>
+    </div>
+  </div>
+
   <!-- Legenda rápida -->
-  <div class="bg-white rounded-lg border p-4 text-xs text-gray-600">
+  <div class="bg-white rounded-2xl border shadow-sm p-4 text-xs text-gray-600 rv-rise rv-rise-1">
     <div class="grid md:grid-cols-2 gap-4">
       <div>
         <p class="mb-2 font-medium text-gray-800">Como usar</p>
@@ -118,7 +186,7 @@
   </div>
 
   <!-- Resumo medido vs a confirmar + filtro "só as estimativas" (cor + ícone + texto) -->
-  <div class="flex flex-wrap items-center justify-between gap-3 mb-3 rounded-lg border bg-white px-4 py-3">
+  <div class="flex flex-wrap items-center justify-between gap-3 mb-3 rounded-2xl border shadow-sm bg-white px-4 py-3 rv-rise rv-rise-2">
     <div class="flex items-center gap-4 text-sm text-gray-700">
       <span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm border border-gray-300 bg-white"></span>&#10003; <b id="rv-medido">0</b> medidos</span>
       <span class="inline-flex items-center gap-1.5"><span class="w-3.5 h-3.5 rounded-sm confidence-orange"></span>&#9888; <b id="rv-estimado">0</b> a confirmar</span>
@@ -126,7 +194,7 @@
     <button type="button" id="rv-filter-btn" onclick="toggleOnlyEstimates()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-50 transition">&#9888; Mostrar s&oacute; as estimativas</button>
   </div>
 
-  <div id="items-container" class="space-y-4"></div>
+  <div id="items-container" class="space-y-4 rv-rise rv-rise-3"></div>
 
 </main>
 
@@ -223,11 +291,6 @@
   function closeHelpModal() { document.getElementById('modal-help').classList.add('hidden'); }
 </script>
 
-<!-- ═════════════════════════════════════════════════════════════ -->
-<!-- TOAST                                                            -->
-<!-- ═════════════════════════════════════════════════════════════ -->
-<div id="toast" class="hidden fixed bottom-6 right-6 bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg text-sm z-50"></div>
-
 <!-- supabase-js + utils compartilhados (sb, authFetch, downloadProtected, escapeHtml, API_BASE) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="aiarq-utils.js"></script>
@@ -259,6 +322,10 @@ let commentingItem = null;
 
   await loadItems();
   document.getElementById('gate').classList.add('hidden');
+  // Dispara a animação de entrada (cr-rise) SÓ agora — se rodasse no load do
+  // CSS, terminava escondida atrás do gate. Classe fica no body e não é
+  // re-adicionada nos re-renders (que trocam só o innerHTML do container).
+  document.body.classList.add('rv-ready');
 })();
 
 // ═══════════════════════════════════════════════
@@ -287,7 +354,8 @@ async function loadItems() {
       (alreadyReviewed ? ` · ${alreadyReviewed} já revisados` : '');
     render();
   } catch (e) {
-    flashToast('Erro ao carregar: ' + e.message);
+    const msg = 'Erro ao carregar: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
   }
 }
 
@@ -334,18 +402,18 @@ function render() {
     });
     const pendingInSec = secItems.filter(it => !reviewState[it.id] || reviewState[it.id] === 'pending').length;
     return `
-    <section class="bg-white rounded-lg border overflow-hidden">
-      <div class="section-header px-4 py-2 flex items-center justify-between">
-        <h2 class="text-white font-semibold text-sm">${escapeHtml(sec)}</h2>
+    <section class="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div class="section-header px-4 py-2.5 flex items-center justify-between gap-x-2 gap-y-1 flex-wrap">
+        <h2 class="text-gray-800 font-semibold text-sm">${escapeHtml(sec)}</h2>
         <div class="flex items-center gap-1 text-xs">
-          <span class="text-white/80 mr-2">${pendingInSec}/${secItems.length} pendentes</span>
+          <span class="text-gray-500 mr-2">${pendingInSec}/${secItems.length} pendentes</span>
           <button onclick="bulkReview('${escapeHtml(sec).replace(/'/g,'&#39;')}','approve')"
-            class="px-2 py-1 rounded bg-white/20 hover:bg-white/30 text-white text-xs"
+            class="px-2 py-1 rounded border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium"
             title="Aprovar todos desta seção">
             ✓ Aprovar seção
           </button>
           <button onclick="bulkReview('${escapeHtml(sec).replace(/'/g,'&#39;')}','reject')"
-            class="px-2 py-1 rounded bg-white/20 hover:bg-white/30 text-white text-xs"
+            class="px-2 py-1 rounded border border-red-200 bg-red-50 hover:bg-red-100 text-red-700 text-xs font-medium"
             title="Remover todos desta seção">
             ✗ Remover seção
           </button>
@@ -454,9 +522,17 @@ async function review(itemId, action) {
         reviewed_by: currentUser?.email || '',
       })
     });
-    flashToast(action === 'approve' ? '✓ Aprovado' : action === 'reject' ? '✗ Removido' : 'Editado');
+    // Feedback frequente (teclas A/D item a item) — sem toast.js fica em
+    // silêncio; alert bloquearia a revisão a cada tecla. O toast já põe
+    // cor + ícone + texto sozinho (acessibilidade).
+    if (window.toast) {
+      if (action === 'approve') window.toast.success('Aprovado');
+      else if (action === 'reject') window.toast.info('Removido');
+      else window.toast.info('Editado');
+    }
   } catch (e) {
-    flashToast('Erro ao salvar: ' + e.message);
+    const msg = 'Erro ao salvar: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
   }
 }
 
@@ -538,9 +614,10 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
         reviewed_by: currentUser?.email || '',
       })
     });
-    flashToast('✎ Salvo');
+    window.toast?.success('Salvo');
   } catch (e) {
-    flashToast('Erro: ' + e.message);
+    const msg = 'Erro: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
   }
 });
 
@@ -569,9 +646,10 @@ async function submitComment() {
         reviewed_by: currentUser?.email || '',
       })
     });
-    flashToast('💬 Comentário enviado');
+    window.toast ? window.toast.success('Comentário enviado') : alert('Comentário enviado');
   } catch (e) {
-    flashToast('Erro: ' + e.message);
+    const msg = 'Erro: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
   }
 }
 
@@ -586,9 +664,9 @@ document.getElementById('btn-save-later').addEventListener('click', () => {
   const msg = pending > 0
     ? `Progresso salvo! Você ainda tem ${pending === 1 ? '1 item pendente' : pending + ' itens pendentes'}.\n\nVoltar pra "Meus Projetos" — você pode terminar a revisão depois.`
     : 'Progresso salvo! Voltando pra "Meus Projetos".';
-  // Toast inline some em 2.5s. Mostra a mensagem completa via notify e
-  // redireciona em seguida — sem alert bloqueante.
-  flashToast('✓ Progresso salvo');
+  // Confirmação rápida via toast; a mensagem completa (com pendentes) vai
+  // via notify. Sem alert bloqueante — o redirect roda em seguida.
+  window.toast?.success('Progresso salvo');
   notify.ok(msg);
   setTimeout(() => { window.location.href = 'meus-projetos.html'; }, 1200);
 });
@@ -603,7 +681,8 @@ document.getElementById('btn-export').addEventListener('click', async () => {
     // enviaria o JWT → backend retornaria 401 (bug Daniela 2026-05-18).
     await downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
   } catch (e) {
-    flashToast('Erro ao exportar: ' + e.message);
+    const msg = 'Erro ao exportar: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
   } finally {
     setTimeout(() => {
       btn.disabled = false;
@@ -641,9 +720,11 @@ async function markExistente(itemId) {
         reviewed_by: currentUser?.email || '',
       })
     });
-    flashToast('🔄 Marcado como existente (sem custo)');
+    // Ação frequente (tecla M) — sem toast.js fica em silêncio, alert travaria o fluxo.
+    window.toast?.success('Marcado como existente (sem custo)');
   } catch (e) {
-    flashToast('Erro: ' + e.message);
+    const msg = 'Erro: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
   }
 }
 
@@ -668,7 +749,7 @@ async function bulkReview(section, action) {
     reviewState[it.id] = action === 'approve' ? 'approved' : 'rejected';
   });
   render();
-  flashToast(`${action === 'approve' ? 'Aprovando' : 'Removendo'} ${secItems.length} itens...`);
+  window.toast?.info(`${action === 'approve' ? 'Aprovando' : 'Removendo'} ${secItems.length} itens...`);
 
   // Dispara requests em paralelo (limita a 5 simultâneas pra não saturar)
   const limit = 5;
@@ -686,7 +767,8 @@ async function bulkReview(section, action) {
       }).catch(() => {}).finally(() => done++)
     ));
   }
-  flashToast(`${action === 'approve' ? '✓' : '✗'} ${done} itens processados`);
+  const doneMsg = `${done} ${done === 1 ? 'item processado' : 'itens processados'}`;
+  window.toast ? window.toast.success(doneMsg) : alert(doneMsg);
 }
 
 // ═══════════════════════════════════════════════
@@ -695,7 +777,7 @@ async function bulkReview(section, action) {
 function openSheet(itemId) {
   const it = items.find(x => x.id === itemId);
   if (!it || !it.ref_sheet) {
-    flashToast('Prancha não disponível');
+    window.toast ? window.toast.warn('Prancha não disponível') : alert('Prancha não disponível');
     return;
   }
   // Abre o viewer HTML que embeda o PDF num iframe — evita que o
@@ -867,26 +949,22 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ user_id: window.currentUserId || '' }),
     }).catch(() => {});
-    flashToast('✓ Revisão concluída! Suas correções treinam a IA pro próximo projeto.');
+    const okMsg = 'Revisão concluída! Suas correções treinam a IA pro próximo projeto.';
+    window.toast ? window.toast.success(okMsg) : alert(okMsg);
     // Redireciona pra página do projeto após 1.5s
     setTimeout(() => {
       window.location.href = `projeto.html?job_id=${jobId}`;
     }, 1500);
   } catch (e) {
-    flashToast('Erro: ' + e.message);
+    const msg = 'Erro: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
     btn.disabled = false;
     btn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg> Concluir revisão';
   }
 });
-// Mini-toast inline antigo (badge fixo #toast no canto). Renomeado pra
-// flashToast pra não colidir com o window.toast global de toast.js, que é
-// um objeto com {success,error,warn,info,confirm}.
-function flashToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.remove('hidden');
-  setTimeout(() => t.classList.add('hidden'), 2500);
-}
+// Toast unificado (18/07): o mini-toast legado (#toast/flashToast) foi
+// removido — tudo usa o window.toast global de toast.js, um objeto com
+// {success,error,warn,info,confirm} que já traz cor + ícone + texto.
 // escapeHtml vem de aiarq-utils.js
 </script>
 
