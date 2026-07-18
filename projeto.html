@@ -11,7 +11,32 @@
   <meta name="robots" content="noindex,follow">
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>body { font-family: 'Inter', -apple-system, sans-serif; }</style>
+  <style>
+  body { font-family: 'Inter', -apple-system, sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  /* ── Visual novo (portado do cronograma.html 18/07): KPIs + entrada suave ── */
+  @keyframes cr-rise { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:none } }
+  /* Entrada escalonada: a classe é aplicada UMA vez no load (ordenarCardsProjeto).
+     Re-render de innerHTML dentro do card não re-dispara a animação. */
+  .pj-rise { animation: cr-rise .45s cubic-bezier(.22,.61,.36,1) both; }
+  .kpi { position:relative; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease; }
+  .kpi:hover { transform:translateY(-3px); box-shadow:0 2px 4px rgba(15,23,42,.06), 0 18px 38px -16px rgba(79,70,229,.30); }
+  .kpi::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
+  .kpi.kpi-ok::before { background:linear-gradient(135deg,#10b981,#34d399); }
+  .kpi-ico { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#EEF2FF; color:#4F46E5; flex:none; }
+  .kpi-ok .kpi-ico { background:#ECFDF5; color:#059669; }
+  /* Barra de accent degradê no topo dos cards-herói (Raio-X, processando) */
+  .hero-accent { position:relative; overflow:hidden; }
+  .hero-accent::before { content:""; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+  </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
 <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
@@ -57,6 +82,80 @@ function smartBack() {
 </script>
 
 <main id="main" class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- Faixa de KPIs (visual portado do cronograma.html) — preenchida por
+       renderMetrics/renderDates com o que a página JÁ carrega; sem dado = "--" -->
+  <div id="kpi-strip" class="grid gap-4 grid-cols-2 md:grid-cols-4">
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Itens</p>
+      </div>
+      <p id="kpi-itens" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">detectados na leitura</p>
+    </div>
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Medido</p>
+      </div>
+      <p id="kpi-medido" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">dos itens, direto do CAD</p>
+    </div>
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M13 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V9l-6-6zM13 3v6h6"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Arquivos</p>
+      </div>
+      <p id="kpi-arquivos" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">pranchas enviadas</p>
+    </div>
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Processamento</p>
+      </div>
+      <p id="kpi-tempo" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">tempo total da leitura</p>
+    </div>
+  </div>
+
+  <!-- Estado vivo: PROCESSANDO — some tudo que depende de resultado e mostra
+       a barra de progresso (mesmo padrão de creep+poll do add-file). -->
+  <div id="proc-block" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
+    <div class="flex items-center gap-3 mb-1">
+      <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600 shrink-0" aria-hidden="true"></div>
+      <p class="font-bold text-gray-900">Ainda processando este projeto</p>
+    </div>
+    <p id="proc-step" class="text-sm text-gray-600 mt-1">Lendo as pranchas…</p>
+    <div class="h-3 rounded-full bg-gray-100 overflow-hidden mt-4" role="progressbar" aria-label="Progresso do processamento">
+      <div id="proc-bar" class="h-full rounded-full transition-all duration-500" style="width:3%;background:linear-gradient(135deg,#4f46e5,#22d3ee)"></div>
+    </div>
+    <p id="proc-pct" class="text-xs text-gray-500 mt-2" aria-live="polite">3%</p>
+    <p class="text-xs text-gray-400 mt-3">Pode deixar esta aba aberta — a página recarrega sozinha quando terminar.</p>
+  </div>
+
+  <!-- Estado vivo: ERRO — mostra o motivo real vindo do backend + saídas -->
+  <div id="erro-block" class="hidden rounded-2xl border-2 border-red-200 bg-red-50 p-6" role="alert">
+    <div class="flex items-start gap-3">
+      <svg class="w-6 h-6 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <div class="flex-1">
+        <p class="font-bold text-red-900"><span aria-hidden="true">✗</span> O processamento deste projeto falhou</p>
+        <p id="erro-msg" class="text-sm text-red-800 mt-1">Não foi possível processar os arquivos.</p>
+        <div class="mt-4 flex flex-wrap gap-2">
+          <input id="erro-file-input" type="file" multiple accept=".dwg,.dxf,.pdf" class="hidden"/>
+          <button id="erro-btn-arquivo" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-60">
+            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            Enviar outro arquivo
+          </button>
+          <button id="erro-btn-report" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-red-300 bg-white hover:bg-red-100 text-red-700 text-sm font-semibold transition">
+            Reportar problema
+          </button>
+        </div>
+        <p id="erro-upload-status" class="hidden text-sm mt-2"></p>
+      </div>
+    </div>
+  </div>
 
   <!-- Warnings do motor -->
   <div id="proj-warnings" class="hidden rounded-xl border-2 border-amber-200 bg-amber-50 p-5" role="alert" aria-live="polite">
@@ -161,34 +260,37 @@ function smartBack() {
   <div id="metadados-strip" class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
     <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
     <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Área da laje</span><span id="m-area" class="font-semibold text-gray-900">--</span></span>
-    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
-    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Itens</span><span id="m-items" class="font-semibold text-gray-900">--</span></span>
+    <!-- Arquivos e Itens agora vivem na faixa de KPIs no topo (18/07). Os ids
+         ficam no DOM (escondidos) porque renderMetrics ainda escreve neles. -->
+    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
+    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Itens</span><span id="m-items" class="font-semibold text-gray-900">--</span></span>
   </div>
 
-  <!-- Raio-X da leitura: medido vs a confirmar (a promessa do site, in-app) -->
-  <div id="raiox-card" class="hidden rounded-xl border-2 border-indigo-200 bg-white p-5">
+  <!-- Raio-X da leitura: medido vs a confirmar (a promessa do site, in-app).
+       Herói da página (18/07): accent degradê no topo, sombra e entrada cr-rise. -->
+  <div id="raiox-card" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
     <div class="flex items-center gap-2 mb-3">
       <svg class="w-5 h-5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
       <span class="font-semibold text-gray-900">Raio-X da leitura</span>
       <span class="text-xs text-gray-500">— no que dá pra confiar</span>
     </div>
     <div class="grid grid-cols-2 gap-3">
-      <div class="rounded-lg bg-emerald-50 p-3">
+      <div class="rounded-xl bg-emerald-50 p-4">
         <div class="flex items-center gap-1.5">
           <svg class="w-4 h-4 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-          <span id="rx-medido" class="text-2xl font-bold text-emerald-800">0</span>
+          <span id="rx-medido" class="text-3xl font-bold text-emerald-800">0</span>
         </div>
         <p class="text-xs text-emerald-700 mt-1">medidos — direto do CAD, em branco na planilha</p>
       </div>
-      <div class="rounded-lg bg-amber-50 p-3">
+      <div class="rounded-xl bg-amber-50 p-4">
         <div class="flex items-center gap-1.5">
           <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
-          <span id="rx-confirmar" class="text-2xl font-bold text-amber-800">0</span>
+          <span id="rx-confirmar" class="text-3xl font-bold text-amber-800">0</span>
         </div>
         <p class="text-xs text-amber-700 mt-1">a confirmar — você revisa, em laranja</p>
       </div>
     </div>
-    <div class="flex h-2 rounded-full overflow-hidden mt-3 bg-gray-100">
+    <div class="flex h-3 rounded-full overflow-hidden mt-3 bg-gray-100">
       <div id="rx-bar-medido" class="bg-emerald-500" style="width:0%"></div>
       <div id="rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
     </div>
@@ -317,17 +419,7 @@ function smartBack() {
     <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
   </div>
 
-  <!-- Botão reprocessar -->
-  <div id="reprocess-box" class="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 p-4 flex items-center gap-3">
-    <span class="text-2xl">🔄</span>
-    <div class="flex-1">
-      <p class="text-sm font-semibold text-gray-800">Reprocessar com motor atualizado</p>
-      <p id="reprocess-desc" class="text-xs text-gray-500">Gere a planilha de novo com a versão mais nova do motor. <strong>1× grátis por projeto.</strong></p>
-    </div>
-    <button id="btn-reprocess" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">
-      Reprocessar
-    </button>
-  </div>
+  <!-- (Botão reprocessar foi rebaixado pra seção "Detalhes do processamento", no fim.) -->
 
   <!-- ═════ CHAT: Pergunte sobre o seu quantitativo (ancorado nos itens) ═════ -->
   <section id="chat-quant" class="rounded-2xl border-2 border-indigo-200 bg-white overflow-hidden">
@@ -648,21 +740,7 @@ function smartBack() {
     <!-- /tab-revisada -->
   </section>
 
-  <!-- Reportar problema neste projeto -->
-  <div id="reportar-box" class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
-    <div class="flex items-center gap-3">
-      <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-      </div>
-      <div>
-        <p class="text-sm font-semibold text-gray-800">Algo errado neste projeto?</p>
-        <p class="text-xs text-gray-500">Reporta pra gente que respondemos rapidinho.</p>
-      </div>
-    </div>
-    <button id="btn-report-project" type="button" class="px-4 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-50 text-orange-700 text-sm font-medium transition">
-      Reportar problema
-    </button>
-  </div>
+  <!-- (Reportar problema foi rebaixado pra seção "Detalhes do processamento", no fim.) -->
 
   <!-- Arquivos da prancha -->
   <div id="arquivos-box" class="rounded-xl border bg-white overflow-hidden">
@@ -675,41 +753,80 @@ function smartBack() {
     </div>
   </div>
 
-  <!-- Info extra -->
-  <div id="datas-box" class="grid gap-4 md:grid-cols-2">
-    <div class="rounded-xl border bg-white p-5">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Datas</h3>
-      <dl class="space-y-2 text-sm">
-        <div class="flex justify-between">
-          <dt class="text-gray-500">Criado</dt>
-          <dd id="d-created" class="text-gray-800 font-medium">--</dd>
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- DETALHES DO PROCESSAMENTO — cards secundários rebaixados (18/07): -->
+  <!-- Reprocessar, Reportar problema, Datas e Identificação, compactos.  -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <section id="detalhes-processamento">
+    <h2 class="text-sm font-bold text-gray-700 mb-3">Detalhes do processamento</h2>
+    <div class="grid gap-3 sm:grid-cols-2">
+
+      <!-- Botão reprocessar (compacto) -->
+      <div id="reprocess-box" class="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-4 flex items-center gap-3">
+        <span class="text-xl" aria-hidden="true">🔄</span>
+        <div class="flex-1 min-w-0">
+          <p class="text-xs font-semibold text-gray-800">Reprocessar com motor atualizado</p>
+          <p id="reprocess-desc" class="text-xs text-gray-500">Gere a planilha de novo com a versão mais nova do motor. <strong>1× grátis por projeto.</strong></p>
         </div>
-        <div class="flex justify-between">
-          <dt class="text-gray-500">Concluído</dt>
-          <dd id="d-completed" class="text-gray-800 font-medium">--</dd>
+        <button id="btn-reprocess" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-lg font-medium shrink-0">
+          Reprocessar
+        </button>
+      </div>
+
+      <!-- Reportar problema neste projeto (compacto) -->
+      <div id="reportar-box" class="rounded-xl border border-gray-200 bg-white p-4 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-orange-600 shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          </div>
+          <div class="min-w-0">
+            <p class="text-xs font-semibold text-gray-800">Algo errado neste projeto?</p>
+            <p class="text-xs text-gray-500">Reporta pra gente que respondemos rapidinho.</p>
+          </div>
         </div>
-        <div class="flex justify-between">
-          <dt class="text-gray-500">Tempo total</dt>
-          <dd id="d-elapsed" class="text-gray-800 font-medium">--</dd>
-        </div>
-      </dl>
+        <button id="btn-report-project" type="button" class="px-3 py-2 rounded-lg border border-orange-300 bg-white hover:bg-orange-50 text-orange-700 text-xs font-medium transition shrink-0">
+          Reportar problema
+        </button>
+      </div>
+
+      <!-- Datas (compacto) -->
+      <div class="rounded-xl border bg-white p-4">
+        <h3 class="text-xs font-semibold text-gray-700 mb-2">Datas</h3>
+        <dl class="space-y-1.5 text-xs">
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Criado</dt>
+            <dd id="d-created" class="text-gray-800 font-medium">--</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Concluído</dt>
+            <dd id="d-completed" class="text-gray-800 font-medium">--</dd>
+          </div>
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Tempo total</dt>
+            <dd id="d-elapsed" class="text-gray-800 font-medium">--</dd>
+          </div>
+        </dl>
+      </div>
+
+      <!-- Identificação (compacto) -->
+      <div class="rounded-xl border bg-white p-4">
+        <h3 class="text-xs font-semibold text-gray-700 mb-2">Identificação</h3>
+        <dl class="space-y-1.5 text-xs">
+          <div class="flex justify-between">
+            <dt class="text-gray-500">Código do projeto</dt>
+            <dd id="d-jobid" class="text-gray-800 font-mono text-xs">--</dd>
+          </div>
+          <!-- Fase mora no card 'Dados do projeto e cliente' (editável); aqui ficava repetida.
+               #d-phase mantido escondido pq renderDates escreve nele sem guarda. -->
+          <div class="flex justify-between hidden">
+            <dt class="text-gray-500">Fase</dt>
+            <dd id="d-phase" class="text-gray-800">--</dd>
+          </div>
+        </dl>
+      </div>
+
     </div>
-    <div class="rounded-xl border bg-white p-5">
-      <h3 class="text-sm font-semibold text-gray-700 mb-3">Identificação</h3>
-      <dl class="space-y-2 text-sm">
-        <div class="flex justify-between">
-          <dt class="text-gray-500">Código do projeto</dt>
-          <dd id="d-jobid" class="text-gray-800 font-mono text-xs">--</dd>
-        </div>
-        <!-- Fase mora no card 'Dados do projeto e cliente' (editável); aqui ficava repetida.
-             #d-phase mantido escondido pq renderDates escreve nele sem guarda. -->
-        <div class="flex justify-between hidden">
-          <dt class="text-gray-500">Fase</dt>
-          <dd id="d-phase" class="text-gray-800">--</dd>
-        </div>
-      </dl>
-    </div>
-  </div>
+  </section>
 
 </main>
 
@@ -883,84 +1000,85 @@ async function carregarStatsEntregas() {
   if (!session) { window.location.href = 'login.html'; return; }
   document.getElementById('gate').classList.add('hidden');
 
-  // Habilita botões dos CARDS de entregas IMEDIATAMENTE após o auth.
-  // Não esperar Promise.all dos dados — se o Render dormiu (free tier, 15min
-  // ocioso), o cold-start demora 30-60s e o usuário fica olhando botão
-  // morto sem entender. Os links são estáticos (só job_id), podem ir já.
-  const enableLink = (id, href, isExternal = false) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.href = href;
-    el.style.pointerEvents = '';
-    el.style.opacity = '';
-    el.style.cursor = 'pointer';
-    if (isExternal) el.setAttribute('target', '_blank');
-  };
-  enableLink('btn-review', `revisao.html?job_id=${jobId}`);
-  // btn-download: NÃO usa enableLink porque <a href> não envia Authorization
-  // header → backend retorna 401 (bug Daniela 2026-05-18). Habilitamos o botão
-  // e disparamos download programático via fetch+blob.
-  const btnDownload = document.getElementById('btn-download');
-  if (btnDownload) {
-    btnDownload.style.pointerEvents = '';
-    btnDownload.style.opacity = '';
-    btnDownload.style.cursor = 'pointer';
-    btnDownload.removeAttribute('target');
-    btnDownload.setAttribute('href', 'javascript:void(0)');
-    btnDownload.addEventListener('click', (e) => {
-      e.preventDefault();
-      if (window.trackEvent) trackEvent('download_xlsx', { job_id: jobId });
-      downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
-    });
-  }
-  enableLink('btn-cronograma', `cronograma.html?job=${jobId}`);
-  const _cronBtn = document.getElementById('btn-cronograma');
-  if (_cronBtn) _cronBtn.addEventListener('click', () => {
-    if (window.trackEvent) trackEvent('use_cronograma', { job_id: jobId });
-  });
-  // btn-cron-pdf e btn-cron-pptx: endpoints protegidos. Mesmo bug do download:
-  // <a href> não envia Authorization → 401. Habilita botão e dispara via fetch.
-  const wireCronExport = (id, url, filename) => {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.style.pointerEvents = '';
-    el.style.opacity = '';
-    el.style.cursor = 'pointer';
-    el.removeAttribute('target');
-    el.setAttribute('href', 'javascript:void(0)');
-    el.addEventListener('click', (e) => {
-      e.preventDefault();
-      downloadProtected(url, filename);
-    });
-  };
-  wireCronExport('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
-  wireCronExport('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
-
-  // Torna os cards de entregas inteiros clicáveis (mãozinha em toda área).
-  // O <a> interno continua sendo o destino — clique em qualquer lugar do card
-  // dispara navegação. Cards "EM BREVE" não viram clicáveis (descartados).
-  const cardClickable = (cardSelector, btnId) => {
-    const cards = document.querySelectorAll(cardSelector);
-    cards.forEach(card => {
-      const btn = card.querySelector(`#${btnId}`);
-      if (!btn || !btn.href || btn.href.endsWith('#')) return;
-      card.style.cursor = 'pointer';
-      card.addEventListener('click', (e) => {
-        // Se clicou num botão/link específico, deixa o comportamento default
-        if (e.target.closest('a, button')) return;
-        if (btn.target === '_blank') {
-          window.open(btn.href, '_blank', 'noopener');
-        } else {
-          window.location.href = btn.href;
-        }
+  // ── (A) ESTADO VIVO (18/07): os botões de entrega SÓ habilitam com o
+  // projeto PRONTO. Antes eles ligavam direto após o auth sem olhar o status —
+  // projeto em processamento abria "morto": XLSX dava 404, Raio-X oculto,
+  // metadados em "--" e nenhuma explicação. Agora o init busca o status real
+  // (mesmo /api/status que o fluxo add-file já usa) em paralelo com os outros
+  // dados e decide o que mostrar. Tudo abaixo virou habilitarEntregas().
+  const habilitarEntregas = () => {
+    const enableLink = (id, href, isExternal = false) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.href = href;
+      el.style.pointerEvents = '';
+      el.style.opacity = '';
+      el.style.cursor = 'pointer';
+      if (isExternal) el.setAttribute('target', '_blank');
+    };
+    enableLink('btn-review', `revisao.html?job_id=${jobId}`);
+    // btn-download: NÃO usa enableLink porque <a href> não envia Authorization
+    // header → backend retorna 401 (bug Daniela 2026-05-18). Habilitamos o botão
+    // e disparamos download programático via fetch+blob.
+    const btnDownload = document.getElementById('btn-download');
+    if (btnDownload) {
+      btnDownload.style.pointerEvents = '';
+      btnDownload.style.opacity = '';
+      btnDownload.style.cursor = 'pointer';
+      btnDownload.removeAttribute('target');
+      btnDownload.setAttribute('href', 'javascript:void(0)');
+      btnDownload.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (window.trackEvent) trackEvent('download_xlsx', { job_id: jobId });
+        downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
       });
+    }
+    enableLink('btn-cronograma', `cronograma.html?job=${jobId}`);
+    const _cronBtn = document.getElementById('btn-cronograma');
+    if (_cronBtn) _cronBtn.addEventListener('click', () => {
+      if (window.trackEvent) trackEvent('use_cronograma', { job_id: jobId });
     });
-  };
-  cardClickable('.card-clickable-review', 'btn-review');
-  cardClickable('.card-clickable-cron', 'btn-cronograma');
+    // btn-cron-pdf e btn-cron-pptx: endpoints protegidos. Mesmo bug do download:
+    // <a href> não envia Authorization → 401. Habilita botão e dispara via fetch.
+    const wireCronExport = (id, url, filename) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.pointerEvents = '';
+      el.style.opacity = '';
+      el.style.cursor = 'pointer';
+      el.removeAttribute('target');
+      el.setAttribute('href', 'javascript:void(0)');
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        downloadProtected(url, filename);
+      });
+    };
+    wireCronExport('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
+    wireCronExport('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
 
-  // Preenche stats dos cards (entrega-q-* e entrega-cron-*)
-  carregarStatsEntregas();
+    // Torna os cards de entregas inteiros clicáveis (mãozinha em toda área).
+    // O <a> interno continua sendo o destino — clique em qualquer lugar do card
+    // dispara navegação. Cards "EM BREVE" não viram clicáveis (descartados).
+    const cardClickable = (cardSelector, btnId) => {
+      const cards = document.querySelectorAll(cardSelector);
+      cards.forEach(card => {
+        const btn = card.querySelector(`#${btnId}`);
+        if (!btn || !btn.href || btn.href.endsWith('#')) return;
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', (e) => {
+          // Se clicou num botão/link específico, deixa o comportamento default
+          if (e.target.closest('a, button')) return;
+          if (btn.target === '_blank') {
+            window.open(btn.href, '_blank', 'noopener');
+          } else {
+            window.location.href = btn.href;
+          }
+        });
+      });
+    };
+    cardClickable('.card-clickable-review', 'btn-review');
+    cardClickable('.card-clickable-cron', 'btn-cronograma');
+  };
 
   // Botão "Reportar problema" — abre em modo TICKET (campos reduzidos)
   const btnReport = document.getElementById('btn-report-project');
@@ -1028,9 +1146,24 @@ async function carregarStatsEntregas() {
       return { state: {} };
     }
   };
+  // Status VIVO do backend — mesmo /api/status que o fluxo add-file já usa.
+  // 404 é normal pra projeto antigo (o cache de jobs do Render é efêmero):
+  // nesse caso vale o status da tabela (proj.status, via by-user).
+  const getLiveStatus = async () => {
+    try {
+      const r = await fetchWithTimeout(`${API_BASE}/api/status/${jobId}`, {
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      }, 15000);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (e) {
+      console.warn('[status] erro:', e);
+      return null;
+    }
+  };
 
-  const [userProjectsRes, itemsRes, stateRes] = await Promise.all([
-    getProjects(), getItems(), getReviewState()
+  const [userProjectsRes, itemsRes, stateRes, live] = await Promise.all([
+    getProjects(), getItems(), getReviewState(), getLiveStatus()
   ]);
 
   const items = itemsRes.items || [];
@@ -1053,6 +1186,22 @@ async function carregarStatsEntregas() {
     };
   }
 
+  // Job vivo no backend mas ainda fora da lista (acabou de entrar na fila):
+  // sintetiza proj mínimo pra página abrir já no modo "processando" em vez
+  // da tela morta de "não consegui carregar".
+  if (!proj && live && live.status) {
+    proj = {
+      job_id: jobId,
+      project_name: 'Projeto',
+      status: live.status,
+      typology: null,
+      files_count: null,
+      items_count: items.length || null,
+      created_at: null,
+      completed_at: null,
+    };
+  }
+
   if (!proj) {
     document.querySelector('main').innerHTML = `
       <div class="text-center py-12">
@@ -1064,6 +1213,19 @@ async function carregarStatsEntregas() {
     return;
   }
 
+  // Status EFETIVO: o vivo do backend ganha (é o mais fresco); senão o da
+  // tabela. Vazio/desconhecido cai no comportamento antigo (trata como pronto)
+  // — projeto velho sem job no cache continua baixando via Storage.
+  if (live && live.status) proj.status = live.status;
+  const statusEfetivo = String(proj.status || '').toLowerCase();
+  const emProcesso = (statusEfetivo === 'queued' || statusEfetivo === 'processing');
+  const emErro = (statusEfetivo === 'error' || statusEfetivo === 'failed');
+
+  // Entregas (Revisar/XLSX/Cronograma/PDF/PPT) só ligam com projeto pronto.
+  if (!emProcesso && !emErro) habilitarEntregas();
+  // Stats dos cards de entregas não fazem sentido no meio do processamento.
+  if (!emProcesso) carregarStatsEntregas();
+
   // Cada render protegido — se um quebrar, os outros continuam
   safeRun(() => renderHeader(proj), 'renderHeader');
   safeRun(() => renderMetrics(proj, items), 'renderMetrics');
@@ -1071,11 +1233,171 @@ async function carregarStatsEntregas() {
   safeRun(() => renderDates(proj), 'renderDates');
   safeRun(() => renderFiles(proj, items), 'renderFiles');
 
+  // Estado vivo por cima dos renders (esconde o que não vale ainda):
+  if (emProcesso) {
+    safeRun(() => mostrarProcessando(live, session), 'mostrarProcessando');
+  } else if (emErro) {
+    const msgErro = (live && live.error_message) || proj.error_message || '';
+    safeRun(() => mostrarErro(msgErro, session), 'mostrarErro');
+  }
+
   // Dados secundários carregam separados (não bloqueiam render principal)
   loadClientData();
   loadQuotes();
   loadProjectCashback();
 })();
+
+// ══════════════════════════════════════════════
+//  ESTADO VIVO — projeto processando / com erro (18/07)
+// ══════════════════════════════════════════════
+// Projeto ⏳: esconde as seções que dependem de resultado (entregas, Raio-X,
+// chat, uploads) e mostra a barra de progresso — mesmo padrão de creep+poll
+// do fluxo add-file acima: a barra ANDA suave por tempo (nunca congela na
+// fase da IA), sem passar de 95% até concluir de verdade. Quando o status
+// virar done/error, a página recarrega sozinha.
+function mostrarProcessando(live, session) {
+  const bloco = document.getElementById('proc-block');
+  if (!bloco) return;
+  ['kpi-strip', 'erro-block', 'raiox-card', 'entregas-section', 'chat-quant',
+   'cotacoes-section', 'cad-upgrade-banner', 'expansao-disciplinas',
+   'feedback-card', 'reprocess-box', 'arquivos-box'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+  bloco.classList.remove('hidden');
+
+  const stepEl = document.getElementById('proc-step');
+  const barEl = document.getElementById('proc-bar');
+  const pctEl = document.getElementById('proc-pct');
+
+  let _backendPct = Math.max(3, Math.round((live && live.progress) || 0));
+  let _shown = _backendPct, _elapsed = 0, _lastFetch = 0, _stopped = false, _falhas = 0;
+  if (live && live.current_step) stepEl.textContent = live.current_step;
+  else stepEl.textContent = (live && live.status === 'queued')
+    ? 'Na fila — começa em instantes…'
+    : 'Lendo as pranchas…';
+
+  const paint = () => {
+    barEl.style.width = Math.round(_shown) + '%';
+    pctEl.textContent = Math.round(_shown) + '%';
+  };
+  const parar = (msg) => { _stopped = true; clearInterval(_tick); stepEl.textContent = msg; };
+  paint();
+
+  const _tick = setInterval(async () => {
+    if (_stopped) return;
+    _elapsed += 0.6;
+    // busca o status real a cada ~4s (o creep abaixo roda a cada 0,6s)
+    if (_elapsed - _lastFetch >= 4) {
+      _lastFetch = _elapsed;
+      try {
+        const sr = await fetch(`${API_BASE}/api/status/${jobId}`, {
+          headers: { 'Authorization': 'Bearer ' + session.access_token }
+        });
+        if (sr.status === 404) {
+          // Job sumiu do cache (restart do Render). A recuperação no boot vai
+          // marcar erro na tabela — depois de algumas tentativas, orienta.
+          _falhas++;
+          if (_falhas >= 5) parar('Perdi o contato com o processamento — recarregue a página em instantes.');
+        } else if (sr.ok) {
+          _falhas = 0;
+          const sd = await sr.json().catch(() => ({}));
+          _backendPct = Math.max(_backendPct, Math.round(sd.progress || 0));
+          if (sd.current_step) stepEl.textContent = sd.current_step;
+          const st = sd.status || '';
+          if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || _backendPct >= 100) {
+            _stopped = true;
+            clearInterval(_tick);
+            // Verde só no sucesso de verdade; erro recarrega e a página mostra o card vermelho.
+            if (st === 'error' || st === 'failed') {
+              stepEl.textContent = '⚠ Terminou com erro — atualizando a página…';
+            } else {
+              _shown = 100; paint();
+              stepEl.textContent = '✅ Pronto! Atualizando a página…';
+            }
+            setTimeout(() => location.reload(), 900);
+            return;
+          }
+        }
+      } catch (e) { /* rede: tenta de novo no próximo tick */ }
+    }
+    // creep suave: alvo = maior entre progresso real e tempo (~1,2%/s, teto 95%)
+    const target = Math.max(_backendPct, Math.min(95, 3 + _elapsed * 1.2));
+    if (target > _shown) _shown = Math.min(target, _shown + 0.7);
+    paint();
+    // 20min sem terminar: para o creep mas deixa claro que não travou de vez
+    if (_elapsed > 1200) parar('Tá demorando mais que o normal. Pode deixar a aba aberta — ou volte em alguns minutos.');
+  }, 600);
+}
+
+// Projeto ✗: card vermelho com o MOTIVO real vindo do backend + saídas
+// (enviar outro arquivo pro mesmo projeto via /add-file, ou reportar).
+function mostrarErro(msg, session) {
+  const bloco = document.getElementById('erro-block');
+  if (!bloco) return;
+  const msgEl = document.getElementById('erro-msg');
+  // textContent nunca interpreta HTML — o error_message do banco entra como
+  // texto puro (mesma garantia do esc(), sem passar por innerHTML).
+  msgEl.textContent = String(msg || '').trim() ||
+    'Não foi possível processar os arquivos deste projeto. Tenta enviar de novo — se persistir, reporta pra gente.';
+  bloco.classList.remove('hidden');
+  // O card de erro já é o convite pra mandar arquivo — banner CAD duplicaria o CTA.
+  const banner = document.getElementById('cad-upgrade-banner');
+  if (banner) banner.classList.add('hidden');
+
+  // "Reportar problema" reusa o fluxo do botão do fim da página (modal ticket).
+  const btnReport = document.getElementById('erro-btn-report');
+  if (btnReport) btnReport.addEventListener('click', () => {
+    const original = document.getElementById('btn-report-project');
+    if (original) original.click();
+    else if (typeof aiArqContactOpen === 'function') aiArqContactOpen({ mode: 'ticket', type: 'reclamacao' });
+  });
+
+  // "Enviar outro arquivo": mesmo /add-file dos outros fluxos da página.
+  const btn = document.getElementById('erro-btn-arquivo');
+  const input = document.getElementById('erro-file-input');
+  const st = document.getElementById('erro-upload-status');
+  if (!btn || !input || !st) return;
+  const setSt = (m, cls) => { st.className = 'text-sm mt-2 ' + (cls || 'text-red-800'); st.textContent = m; st.classList.remove('hidden'); };
+  btn.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const fs = Array.from(input.files || []);
+    if (!fs.length) return;
+    if (fs.some(f => !['dwg', 'dxf', 'pdf'].includes((f.name.split('.').pop() || '').toLowerCase()))) {
+      setSt('✗ Envie só arquivos DWG, DXF ou PDF.', 'text-red-700'); input.value = ''; return;
+    }
+    btn.disabled = true;
+    try {
+      const { data: { session: sess } } = await sb.auth.getSession();
+      if (!sess) { setSt('Faça login pra enviar.', 'text-red-700'); btn.disabled = false; return; }
+      setSt('Enviando e reprocessando… isso leva alguns minutos.', 'text-red-800');
+      const fd = new FormData();
+      fs.forEach(f => fd.append('files', f));
+      const r = await fetch(`${API_BASE}/api/project/${jobId}/add-file`, {
+        method: 'POST', body: fd,
+        headers: { 'Authorization': 'Bearer ' + sess.access_token },
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.status !== 'ok') {
+        setSt('✗ ' + (d.detail || d.error || 'Não consegui enviar. Tenta de novo?'), 'text-red-700');
+        btn.disabled = false; input.value = ''; return;
+      }
+      setSt('⏳ Reprocessando com o arquivo novo — a página recarrega sozinha quando entrar na fila.', 'text-red-800');
+      const poll = setInterval(async () => {
+        try {
+          const sr = await authFetch(`${API_BASE}/api/status/${jobId}`);
+          const sd = sr.ok ? await sr.json() : {};
+          // Qualquer status vivo (inclusive queued/processing) já basta pra
+          // recarregar — a página volta no modo "processando" com a barra.
+          if (sd.status) { clearInterval(poll); location.reload(); }
+        } catch (_) { /* segue tentando */ }
+      }, 4000);
+    } catch (e) {
+      setSt('✗ Erro de rede — tenta de novo?', 'text-red-700');
+      btn.disabled = false; input.value = '';
+    }
+  });
+}
 
 // Alterna entre as 2 sub-tabs do bloco "Enviar planilhas" (Cotações × Revisada)
 function switchUploadTab(name) {
@@ -1111,23 +1433,38 @@ window.switchUploadTab = switchUploadTab;
     const main = document.getElementById('main');
     if (!main) return;
     const ordem = [
-      'proj-warnings',        // 1. avisos do motor (condicional)
-      'dados-card',           // 2. dados do projeto/cliente (orientacao)
-      'metadados-strip',      // 3. faixa compacta
-      'raiox-card',           // 4. Raio-X (o resultado)
-      'cad-upgrade-banner',   // 5. aviso "manda o CAD" (condicional)
-      'entregas-section',     // 6. Entregas: baixar planilha + cronograma
-      'expansao-disciplinas', // 6b. sugerir disciplinas que faltam (condicional)
-      'cotacoes-section',     // 7. Enviar planilha revisada (calibracao)
-      'chat-quant',           // 8. Chat
-      'reprocess-box',        // 9. Reprocessar
-      'feedback-card',        // 10. Avaliacao (NPS)
-      'project-cashback-box', // 11. Cashback (oculto no beta)
-      'arquivos-box',         // 12. Arquivos que alimentaram
-      'reportar-box',         // 13. Reportar problema
-      'datas-box',            // 14. Datas / identificacao
+      'kpi-strip',              // 1. faixa de KPIs (logo abaixo do header)
+      'proc-block',             // 2. estado vivo: processando (condicional)
+      'erro-block',             // 3. estado vivo: erro (condicional)
+      'proj-warnings',          // 4. avisos do motor (condicional)
+      'dados-card',             // 5. dados do projeto/cliente (orientacao)
+      'metadados-strip',        // 6. faixa compacta (tipologia/area)
+      'raiox-card',             // 7. Raio-X (o HEROI da pagina)
+      'cad-upgrade-banner',     // 8. aviso "manda o CAD" (condicional)
+      'entregas-section',       // 9. Entregas: baixar planilha + cronograma
+      'expansao-disciplinas',   // 9b. sugerir disciplinas que faltam (condicional)
+      'cotacoes-section',       // 10. Enviar planilha revisada (calibracao)
+      'chat-quant',             // 11. Chat
+      'feedback-card',          // 12. Avaliacao (NPS)
+      'project-cashback-box',   // 13. Cashback (oculto no beta)
+      'arquivos-box',           // 14. Arquivos que alimentaram
+      'detalhes-processamento', // 15. secundarios rebaixados: reprocessar/reportar/datas/id
     ];
-    ordem.forEach(id => { const el = document.getElementById(id); if (el) main.appendChild(el); });
+    // Entrada suave escalonada — SO na carga inicial: a classe pj-rise entra
+    // uma vez aqui; re-render (innerHTML dentro do card) nao re-dispara a
+    // animacao. Card que nasce hidden (raiox, proc, erro) anima quando o JS
+    // revelar — e o guarda de prefers-reduced-motion zera tudo no CSS.
+    let vis = 0;
+    ordem.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      main.appendChild(el);
+      el.classList.add('pj-rise');
+      if (!el.classList.contains('hidden')) {
+        el.style.animationDelay = Math.min(vis * 0.06, 0.42).toFixed(2) + 's';
+        vis++;
+      }
+    });
   } catch (_) {}
 })();
 
@@ -1683,6 +2020,15 @@ function renderMetrics(p, items) {
   // já sai 'estimado' da origem, então contar confidence aqui é honesto.
   const _medido = (items || []).filter(i => i && i.confidence === 'confirmado').length;
   const _total = (items || []).length;
+
+  // KPIs do topo (faixa nova 18/07) — mesmos dados que a página já carrega;
+  // sem dado mostra "--", nunca inventa. "% medido" = o número do Raio-X
+  // (confidence 'confirmado', direto do CAD) — estimado NUNCA conta como medido.
+  const setKpi = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setKpi('kpi-itens', String(p.items_count || items.length || '--'));
+  setKpi('kpi-medido', _total > 0 ? `${Math.round((_medido / _total) * 100)}%` : '--');
+  setKpi('kpi-arquivos', String(_files.size || p.files_count || '--'));
+
   if (_total > 0) {
     const _rx = document.getElementById('raiox-card');
     if (_rx) {
@@ -1799,6 +2145,9 @@ function renderDates(p) {
     const min = Math.floor(ms / 60000);
     const sec = Math.floor((ms % 60000) / 1000);
     document.getElementById('d-elapsed').textContent = `${min}min ${sec}s`;
+    // KPI do topo — mesmo cálculo, mesma fonte (sem dado fica "--")
+    const _kt = document.getElementById('kpi-tempo');
+    if (_kt) _kt.textContent = `${min}min ${sec}s`;
   }
   document.getElementById('d-jobid').textContent = p.job_id;
   document.getElementById('d-phase').textContent = p.phase || 'Anteprojeto';
