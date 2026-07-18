@@ -610,24 +610,19 @@ def categoria_da_disciplina(label: str) -> str:
     return 'complementares'
 
 
-# Paleta SUPER sóbria — escala monocromática slate, sem indigo/cyan/verde.
-# Atualizada 2026-05-25 (2ª iteração): Pedro pediu mais seriedade. Agora é
-# 100% escala de cinza-azulado. Diferenciação por categoria vem do tom
-# (claro vs escuro), não da cor. Resultado: planta arquitetônica em vez
-# de dashboard infantil. Daltonismo do Pedro também agradece — escala
-# monocromática é a mais acessível possível.
+# Paleta "materiais de obra" — atualizada 2026-07-18 a pedido do Pedro
+# ("to achando feio" a escala 100% cinza de 2026-05-25; ele liberou a regra
+# do daltonismo pros materiais de cliente e pediu elegância). Tons TERROSOS
+# e dessaturados — cada categoria evoca o material da etapa, sem virar
+# dashboard infantil. Mesma cor alimenta Gantt, matriz, PDF e PPT.
 CATEGORIA_COR = {
-    'preliminares':   '#CBD5E1',  # slate-300 — bem claro, fase inicial leve
-    'estrutura':      '#334155',  # slate-700 — escuro, peso da estrutura
-    'vedacoes':       '#475569',  # slate-600 — médio-escuro, fechamentos
-    'instalacoes':    '#64748B',  # slate-500 — médio (lum ~114)
-    'acabamentos':    '#94A3B8',  # slate-400 — médio-claro (lum ~161)
-    'entrega':        '#1E293B',  # slate-800 — quase preto, marco final
-    # Fix 2026-06-09 (daltonismo): era zinc-500 #71717A (lum ~114), idêntico
-    # ao instalacoes — indistinguível. Movido pra zinc-300 claro (lum ~189),
-    # ~28 de gap pra acabamentos e ~22 pra preliminares. Tom levemente quente
-    # (R=G<B) pra não colidir com o slate-300 frio de preliminares.
-    'complementares': '#BCBCC4',  # zinc-300 claro quente — fase de apoio leve
+    'preliminares':   '#C9B896',  # areia — canteiro/mobilização, leve
+    'estrutura':      '#3E5C76',  # azul-aço — peso do concreto/aço
+    'vedacoes':       '#C06B4E',  # terracota — alvenaria/tijolo
+    'instalacoes':    '#2F8F83',  # verde-petróleo — dutos e tubulações
+    'acabamentos':    '#98A15F',  # oliva — pintura/revestimentos
+    'entrega':        '#703D57',  # vinho — marco final, celebração sóbria
+    'complementares': '#8E8CA8',  # lilás-cinza — apoio, discreto
 }
 
 CATEGORIA_LABEL = {
