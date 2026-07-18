@@ -1,0 +1,4 @@
+/* Entrada do build do Tailwind (ver tailwind.config.js e gerar-css.bat) */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
