@@ -957,14 +957,49 @@ let estiloTemplate = (function () { try { return localStorage.getItem('aiarq_cro
 let estiloAccent = '';  // '' = automático (cor da marca, resolvida no backend)
 const _CHK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" class="w-3.5 h-3.5 flex-none" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>';
 
+// Miniatura de cada template (capa + mini-Gantt). Cores espelham as do
+// backend (cronograma_render.py) pra a prévia bater com o PDF de verdade.
+// O accent segue a cor escolhida (vazio = marca #4F46E5).
+const TPL_THUMB = {
+  escuro:    { bg:'#0f1115', ti:'#f5f6f8', su:'#5b6472', tr:'#23283a' },
+  blueprint: { bg:'#f3f1ea', ti:'#26231c', su:'#8a8472', tr:'#ded7c8', fr:'#26231c' },
+  claro:     { bg:'#ffffff', ti:'#1a1712', su:'#c9c5bd', tr:'#eeece7' },
+  editorial: { bg:'#f6f2e9', ti:'#2b2519', su:'#a89f8c', tr:'#e2dac9' },
+  bold:      { bg:'#fdfcfa', ti:'#141414', su:'#c9c9c9', tr:'#ececec' },
+};
+function tplThumb(id) {
+  const p = TPL_THUMB[id] || TPL_THUMB.claro;
+  const acc = estiloAccent || '#4F46E5';
+  const bars = [[40,56],[54,40],[30,70],[62,34]];
+  const tx = id === 'bold' ? 16 : 10;
+  let s = '<rect width="140" height="82" fill="' + p.bg + '"/>';
+  if (id === 'bold') s += '<rect x="0" y="0" width="9" height="82" fill="' + acc + '"/>';
+  if (id === 'blueprint') {
+    s += '<rect x="4" y="4" width="132" height="74" fill="none" stroke="' + p.fr + '" stroke-width="1"/>';
+    for (let gx = 42; gx < 136; gx += 24) s += '<line x1="' + gx + '" y1="6" x2="' + gx + '" y2="76" stroke="' + p.fr + '" stroke-opacity="0.12"/>';
+  }
+  s += '<rect x="' + tx + '" y="10" width="52" height="7" rx="2" fill="' + p.ti + '"/>';
+  s += '<rect x="' + tx + '" y="21" width="32" height="4" rx="2" fill="' + p.su + '"/>';
+  if (id === 'editorial') s += '<rect x="' + tx + '" y="28" width="46" height="1.6" fill="' + acc + '"/>';
+  bars.forEach(function (b, i) {
+    const y = 35 + i * 11;
+    s += '<rect x="' + (tx + 18) + '" y="' + y + '" width="' + (140 - tx - 26) + '" height="5.5" rx="2.75" fill="' + p.tr + '"/>';
+    s += '<rect x="' + b[0] + '" y="' + y + '" width="' + b[1] + '" height="5.5" rx="2.75" fill="' + acc + '"/>';
+    s += '<rect x="' + tx + '" y="' + (y + 1) + '" width="12" height="3.5" rx="1.5" fill="' + p.su + '"/>';
+  });
+  return '<svg viewBox="0 0 140 82" class="w-full block" style="height:auto" aria-hidden="true">' + s + '</svg>';
+}
+
 function renderEstiloChips() {
   const tc = document.getElementById('tpl-chips');
   if (tc) {
     tc.innerHTML = CRONO_TEMPLATES.map(function (t) {
       const sel = t.id === estiloTemplate;
-      return '<button type="button" data-tpl="' + t.id + '" class="tpl-chip px-3 py-2 rounded-lg border text-left transition ' + (sel ? 'border-indigo-500 bg-indigo-50 ring-1 ring-indigo-500' : 'border-slate-300 hover:bg-slate-50') + '">'
+      return '<button type="button" data-tpl="' + t.id + '" title="' + t.nome + ' — ' + t.desc + '" class="tpl-chip rounded-xl border overflow-hidden text-left transition ' + (sel ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-300 hover:border-slate-400') + '" style="width:150px">'
+        + '<span class="block border-b ' + (sel ? 'border-indigo-200' : 'border-slate-200') + '">' + tplThumb(t.id) + '</span>'
+        + '<span class="block px-2.5 py-2 ' + (sel ? 'bg-indigo-50' : '') + '">'
         + '<span class="flex items-center gap-1 text-sm font-semibold ' + (sel ? 'text-indigo-700' : 'text-slate-800') + '">' + (sel ? _CHK : '') + t.nome + '</span>'
-        + '<span class="block text-[11px] text-slate-500">' + t.desc + '</span></button>';
+        + '<span class="block text-[11px] text-slate-500">' + t.desc + '</span></span></button>';
     }).join('');
     tc.querySelectorAll('.tpl-chip').forEach(function (b) {
       b.addEventListener('click', function () {
