@@ -846,6 +846,90 @@ def _supabase_storage_download_prancha(job_id: str, filename: str) -> Optional[b
 _supabase_storage_download_pdf = _supabase_storage_download_prancha
 
 
+# ─── CHECKPOINT por prancha (19/07) ───────────────────────────────────
+# A retomada pós-restart refazia o job INTEIRO do zero — num projeto de 22
+# pranchas isso paga a IA de novo e reabre a janela pra outra queda. Agora o
+# resultado da análise de cada prancha vira um JSON em
+# {job_id}/checkpoint/{stem}.json no bucket de pranchas; na retomada, prancha
+# com checkpoint NÃO chama a IA de novo. O filtro do _retomar (.pdf/.dwg/.dxf)
+# ignora esses .json. Tudo best-effort: sem checkpoint = comportamento antigo.
+
+def _ckpt_save(job_id: str, stem: str, result: dict) -> None:
+    import urllib.request, urllib.parse as _up, json as _j
+    try:
+        stem = _sanitize_filename_for_storage(stem)  # acentos quebram o Storage
+        body = _j.dumps(result, ensure_ascii=False, default=str).encode("utf-8")
+        key = f"{job_id}/checkpoint/{_up.quote(stem)}.json"
+        url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{key}"
+        req = urllib.request.Request(url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        req.add_header("x-upsert", "true")
+        urllib.request.urlopen(req, timeout=30)
+    except Exception as e:
+        print(f"[ckpt] save {stem} falhou (segue sem): {e}")
+
+
+def _ckpt_load_all(job_id: str) -> dict:
+    """{stem: result} de todos os checkpoints do job. Vazio se não há."""
+    import urllib.request, urllib.parse as _up, json as _j
+    out = {}
+    try:
+        list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        body = _j.dumps({"prefix": f"{job_id}/checkpoint/", "limit": 300}).encode("utf-8")
+        req = urllib.request.Request(list_url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        objs = _j.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8"))
+        for o in objs or []:
+            name = o.get("name", "")
+            if not name.endswith(".json"):
+                continue
+            try:
+                url = (f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/"
+                       f"{job_id}/checkpoint/{_up.quote(name)}")
+                r = urllib.request.Request(url, method="GET")
+                r.add_header("apikey", SUPABASE_KEY)
+                r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                data = _j.loads(urllib.request.urlopen(r, timeout=20).read().decode("utf-8"))
+                out[_up.unquote(name[:-5])] = data
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"[ckpt] load_all {job_id}: {e}")
+    return out
+
+
+def _ckpt_limpar(job_id: str) -> None:
+    """Apaga os checkpoints do job (chamado no done — não precisam mais)."""
+    import urllib.request, urllib.parse as _up, json as _j
+    try:
+        list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        body = _j.dumps({"prefix": f"{job_id}/checkpoint/", "limit": 300}).encode("utf-8")
+        req = urllib.request.Request(list_url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        objs = _j.loads(urllib.request.urlopen(req, timeout=15).read().decode("utf-8"))
+        for o in objs or []:
+            name = o.get("name", "")
+            if not name:
+                continue
+            try:
+                url = (f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/"
+                       f"{job_id}/checkpoint/{_up.quote(name)}")
+                r = urllib.request.Request(url, method="DELETE")
+                r.add_header("apikey", SUPABASE_KEY)
+                r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                urllib.request.urlopen(r, timeout=15)
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+
 def _supabase_storage_download(remote_key: str, local_path: str) -> bool:
     """Baixa arquivo do Supabase Storage pra path local. Cria diretório se preciso."""
     import urllib.request
@@ -1590,7 +1674,9 @@ RECOVERY_GRACE_MIN = 3  # minutos: jobs mais novos que isso são ignorados
 RECOVERY_SWEEP_MIN = 5  # minutos: intervalo da varredura periódica de recovery
 
 
-def _retomar_job_do_storage(job_id: str, typology: str = "office", project_type: str = "arquitetura") -> bool:
+def _retomar_job_do_storage(job_id: str, typology: str = "office",
+                            project_type: str = "arquitetura",
+                            conta_retomada: bool = True) -> bool:
     """RESILIÊNCIA (16/06): RETOMA um job interrompido por restart.
 
     Baixa os arquivos originais do Storage (que agora sobem no upload, antes
@@ -1646,16 +1732,20 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office", project_type:
         # reprocesso" — job retomado que conclui/falha volta a NOTIFICAR o cliente.
         # CRÍTICO: NÃO usar _supabase_update (roteia pro update_project_status,
         # que não tem a coluna e descartaria o incremento → loop de retomada).
-        try:
-            inc_url = f"{SUPABASE_URL}/rest/v1/rpc/increment_auto_resume_count"
-            inc_body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
-            inc_req = urllib.request.Request(inc_url, data=inc_body, method="POST")
-            inc_req.add_header("apikey", SUPABASE_KEY)
-            inc_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-            inc_req.add_header("Content-Type", "application/json")
-            urllib.request.urlopen(inc_req, timeout=10)
-        except Exception as _ie:
-            print(f"[recovery-retomar] {job_id}: falha ao incrementar contador: {_ie}")
+        if conta_retomada:
+            try:
+                inc_url = f"{SUPABASE_URL}/rest/v1/rpc/increment_auto_resume_count"
+                inc_body = _j.dumps({"p_job_id": job_id}).encode("utf-8")
+                inc_req = urllib.request.Request(inc_url, data=inc_body, method="POST")
+                inc_req.add_header("apikey", SUPABASE_KEY)
+                inc_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                inc_req.add_header("Content-Type", "application/json")
+                urllib.request.urlopen(inc_req, timeout=10)
+            except Exception as _ie:
+                print(f"[recovery-retomar] {job_id}: falha ao incrementar contador: {_ie}")
+        else:
+            print(f"[recovery-retomar] {job_id}: restart por DEPLOY — retomada "
+                  f"não desconta do orçamento (auto_resume_count intacto)")
         # Re-semeia a entrada local (o JSON volátil foi zerado no restart) pra
         # que /api/status volte a responder a barra de progresso durante o
         # resume — sem isso o usuário via 404/"não encontrado" no meio.
@@ -1746,6 +1836,37 @@ def _auto_retry_erros_transitorios():
                 _email_auto_registrar(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id)
 
 
+def _versao_build() -> str:
+    """Versão do código em execução (commit do deploy, injetado pelo Render).
+    'dev' fora do Render. Usada pra distinguir restart por DEPLOY (versão
+    mudou) de crash por OOM/plataforma (mesma versão)."""
+    return (os.environ.get("RENDER_GIT_COMMIT") or "").strip()[:8] or "dev"
+
+
+def _restart_foi_deploy() -> bool:
+    """True se o boot ANTERIOR rodava outra versão → este restart foi deploy.
+    Deploy não deve gastar o orçamento de retomada do job (2×) nem contar
+    pro disjuntor de crash-loop. Best-effort: na dúvida, False (trata como
+    crash — mais conservador)."""
+    import urllib.request, json, re as _re
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/error_log?stage=eq.boot"
+             f"&order=created_at.desc&limit=2&select=message")
+        req = urllib.request.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
+        # rows[0] = o boot ATUAL (registrado antes desta chamada); rows[1] = anterior
+        if len(rows) < 2:
+            return False
+        m = _re.search(r"\(v ([0-9a-z]+)\)", rows[1].get("message") or "")
+        if not m:
+            return False
+        return m.group(1) != _versao_build()
+    except Exception:
+        return False
+
+
 def _boots_recentes(minutos: int = 15) -> int:
     """Quantos boots o servidor teve nos últimos N minutos (inclui o atual,
     registrado no startup). 2+ boots em janela curta = crash-loop: algum
@@ -1767,7 +1888,8 @@ def _boots_recentes(minutos: int = 15) -> int:
 
 
 def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
-                                   crash_loop: bool = False):
+                                   crash_loop: bool = False,
+                                   deploy_restart: bool = False):
     """RESILIÊNCIA: varre jobs em queued/processing que sobreviveram a um
     restart e tenta RETOMAR (baixa do Storage + reprocessa). Só marca 'error'
     se não houver arquivo no Storage (job antigo) ou se já auto-retomou antes
@@ -1863,7 +1985,8 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
         # terminal com orientação de arquivo + alerta pro Pedro. Jobs 'queued'
         # (inocentes na fila) seguem o fluxo normal. Teria transformado o
         # incidente de 06/07 (5 jobs mortos) em 1.
-        quarentenado = (crash_loop and row.get("status") == "processing"
+        quarentenado = (crash_loop and not deploy_restart
+                        and row.get("status") == "processing"
                         and prev_count >= 1)
         if quarentenado:
             _supabase_update("projects", "job_id", job_id, {
@@ -1895,9 +2018,12 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
             recovered += 1
             continue
 
-        if prev_count < 2 and _retomar_job_do_storage(job_id, typ, ptype):
-            # _retomar já incrementou auto_resume_count (anti-loop, via RPC
-            # atômica) e re-disparou o processamento.
+        # Restart por DEPLOY não gasta o orçamento de retomada (o job não tem
+        # culpa da atualização); crash real (OOM/plataforma) conta como antes.
+        if prev_count < 2 and _retomar_job_do_storage(
+                job_id, typ, ptype, conta_retomada=not deploy_restart):
+            # _retomar incrementou auto_resume_count (quando conta_retomada)
+            # e re-disparou o processamento.
             recovered += 1
             continue
 
@@ -1946,17 +2072,23 @@ async def _on_startup_recover_jobs():
     (3) sobe uma varredura periódica que pega jobs encalhados entre dois
     restarts (ex.: restart dentro da janela de graça)."""
     crash_loop = False
+    deploy_restart = False
     try:
-        _log_error("boot", "Servidor iniciou", severity="info")
+        _log_error("boot", f"Servidor iniciou (v {_versao_build()})", severity="info")
+        deploy_restart = _restart_foi_deploy()
         n_boots = _boots_recentes(15)
         crash_loop = n_boots >= 2
-        if crash_loop:
+        if crash_loop and not deploy_restart:
             print(f"[recovery] ⚠ {n_boots} boots em 15min — modo crash-loop "
                   f"(job ativo com retomada gasta vai pra quarentena)")
+        elif deploy_restart:
+            print(f"[recovery] restart por deploy (v {_versao_build()}) — "
+                  f"retomadas não descontam do orçamento")
     except Exception:
         pass
     try:
-        _recover_stuck_jobs_on_startup(crash_loop=crash_loop)
+        _recover_stuck_jobs_on_startup(crash_loop=crash_loop,
+                                       deploy_restart=deploy_restart)
     except Exception as e:
         # Nunca deixar o startup falhar por causa da recuperação
         print(f"[recovery] exceção não-fatal no startup: {e}")
@@ -4057,6 +4189,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     pass
         total = len(page_units)
 
+        # CHECKPOINT (19/07): em RETOMADA automática pós-restart, reaproveita
+        # a análise das pranchas que já tinham terminado (não paga a IA de
+        # novo, não reabre a janela pra outra queda). Reprocesso MANUAL
+        # (reprocess_count>0) ignora de propósito — lá o objetivo é rodar o
+        # motor NOVO na prancha inteira.
+        _ckpt_cache = {}
+        try:
+            import urllib.request as _ur_ck
+            _qck = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                    f"&select=auto_resume_count,reprocess_count")
+            _rck = _ur_ck.Request(_qck, method="GET")
+            _rck.add_header("apikey", SUPABASE_KEY)
+            _rck.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _rows_ck = _json.loads(_ur_ck.urlopen(_rck, timeout=8).read().decode("utf-8"))
+            if _rows_ck and int(_rows_ck[0].get("auto_resume_count") or 0) > 0 \
+                    and int(_rows_ck[0].get("reprocess_count") or 0) == 0:
+                _ckpt_cache = _ckpt_load_all(job_id)
+                if _ckpt_cache:
+                    print(f"[ckpt] {job_id}: {len(_ckpt_cache)} prancha(s) com "
+                          f"análise pronta — retomada vai pular a IA nelas")
+        except Exception as _cke:
+            print(f"[ckpt] cache indisponível (segue do zero): {_cke}")
+
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             _disp = filename if page_count <= 1 else f"{filename} · pág {page_index+1}/{page_count}"
             step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
@@ -4081,34 +4236,46 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     sheet_type = SheetType.ARQUITETURA
                     jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (tipo não identificado — extração genérica)")
 
-            # 1. Extrair texto (só da página desta unidade — leve, bounded)
-            text = extract_text(pdf_path, page_index)
-
-            # 2. Renderizar crops (1 página de cada vez; stem único por página)
             _stem = f"{os.path.splitext(os.path.basename(pdf_path))[0]}_p{page_index}"
-            crop_paths = render_crops(pdf_path, sheet_type, crops_dir,
-                                      page_index=page_index, out_stem=_stem)
+            _ck_key = _sanitize_filename_for_storage(_stem)
+            if _ck_key in _ckpt_cache:
+                # CHECKPOINT: prancha já analisada antes do restart — reusa o
+                # resultado salvo (pula texto, crops e IA).
+                result = _ckpt_cache[_ck_key]
+                jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {_disp} — análise já concluída, retomando ✓")
+                print(f"[ckpt] {_stem}: análise reaproveitada do checkpoint")
+            else:
+                # 1. Extrair texto (só da página desta unidade — leve, bounded)
+                text = extract_text(pdf_path, page_index)
 
-            # 3. Analisar com IA
-            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: Nossa IA está analisando {_disp}...")
-            sheet = SheetInfo(
-                filename=filename,
-                sheet_type=sheet_type,
-                text_content=text[:5000],
-                crops=crop_paths,
-            )
-            # Ambiente: user escolheu manualmente > auto-detect por keyword
-            from processor import identify_ambiente as _id_amb
-            amb_for_sheet = user_ambientes.get(pdf_path, "") or (
-                _id_amb(filename) if sheet_type == SheetType.DETALHE_AMBIENTE else ""
-            )
-            # Irmãs: outras pranchas do mesmo ambiente (ex: LAVABO em 704+705)
-            siblings = []
-            if amb_for_sheet and amb_for_sheet in _siblings_map:
-                siblings = [s for s in _siblings_map[amb_for_sheet] if s != filename]
-            result = analyze_sheet(client, sheet, typology=typology,
-                                   ambiente=amb_for_sheet, siblings=siblings,
-                                   is_structural=is_structural)
+                # 2. Renderizar crops (1 página de cada vez; stem único por página)
+                crop_paths = render_crops(pdf_path, sheet_type, crops_dir,
+                                          page_index=page_index, out_stem=_stem)
+
+                # 3. Analisar com IA
+                jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: Nossa IA está analisando {_disp}...")
+                sheet = SheetInfo(
+                    filename=filename,
+                    sheet_type=sheet_type,
+                    text_content=text[:5000],
+                    crops=crop_paths,
+                )
+                # Ambiente: user escolheu manualmente > auto-detect por keyword
+                from processor import identify_ambiente as _id_amb
+                amb_for_sheet = user_ambientes.get(pdf_path, "") or (
+                    _id_amb(filename) if sheet_type == SheetType.DETALHE_AMBIENTE else ""
+                )
+                # Irmãs: outras pranchas do mesmo ambiente (ex: LAVABO em 704+705)
+                siblings = []
+                if amb_for_sheet and amb_for_sheet in _siblings_map:
+                    siblings = [s for s in _siblings_map[amb_for_sheet] if s != filename]
+                result = analyze_sheet(client, sheet, typology=typology,
+                                       ambiente=amb_for_sheet, siblings=siblings,
+                                       is_structural=is_structural)
+                # Salva o checkpoint da prancha (só análise SEM erro — erro
+                # deve re-tentar na retomada, não ser reaproveitado)
+                if not result.get("error"):
+                    _ckpt_save(job_id, _stem, result)
 
             # 3b. Capturar falha de IA nesta prancha (não interrompe o loop —
             # outras pranchas podem ter sucesso — mas registra pra decidir o
@@ -4564,6 +4731,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         print(f"[supabase] update job={job_id} status=done items={len(all_items)} "
               f"total_area={project_data.total_area} layout_area={project_data.layout_area} "
               f"ok={_supa_ok}")
+
+        # Checkpoints por prancha não servem mais depois do done — limpa em
+        # thread (best-effort, não atrasa a conclusão).
+        try:
+            import threading as _thck
+            _thck.Thread(target=_ckpt_limpar, args=(job_id,), daemon=True).start()
+        except Exception:
+            pass
 
         # ── SHADOW: Medição Vetorial de PDF v1 (pdf_vector.py) ──
         # Mede a geometria vetorial das primeiras páginas PDF DEPOIS do done,
