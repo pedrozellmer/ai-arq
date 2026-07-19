@@ -11,6 +11,10 @@
     <div style="width:64px;height:2px;background:var(--accent);margin:20px 0 22px"></div>
     <div style="font:600 66px/1.02 'IBM Plex Sans';color:#26231c;letter-spacing:-0.02em">{{ b.project_name }}</div>
   </div>
+  {#- faixa da obra: linha do tempo em miniatura, cores reais dos materiais (estilo técnico: com contorno) -#}
+  <div style="position:absolute;left:64px;right:64px;bottom:158px;height:12px;border:1.5px solid #26231c;background:#f7f5ef;overflow:hidden">
+    {% for f in fases %}<div style="position:absolute;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;top:0;bottom:0;background:{{ f.cor }};opacity:.88"></div>{% endfor %}
+  </div>
   <div style="position:absolute;left:64px;right:64px;bottom:40px;display:grid;grid-template-columns:repeat(4,1fr);border:1.5px solid #26231c;background:#f7f5ef">
     <div style="padding:16px 18px;border-right:1px solid #cfc9ba"><div style="font:500 9px 'IBM Plex Mono';letter-spacing:.14em;color:#9a927e">CLIENTE</div><div style="font:600 15px 'IBM Plex Sans';color:#26231c;margin-top:6px">{{ b.client_name }}</div></div>
     <div style="padding:16px 18px;border-right:1px solid #cfc9ba"><div style="font:500 9px 'IBM Plex Mono';letter-spacing:.14em;color:#9a927e">INÍCIO / TÉRMINO</div><div style="font:600 15px 'IBM Plex Sans';color:#26231c;margin-top:6px">{{ r.inicio_br }} → {{ r.fim_br }}</div></div>

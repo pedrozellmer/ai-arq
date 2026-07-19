@@ -7,6 +7,10 @@
   </div>
   <div style="position:absolute;left:56px;top:512px;font:600 11px 'Space Grotesk';letter-spacing:.16em;color:#adadad">CLIENTE</div>
   <div style="position:absolute;left:56px;top:530px;font:700 26px 'Space Grotesk';color:#141414">{{ b.client_name }}</div>
+  {#- faixa da obra: linha do tempo em miniatura, cores reais dos materiais -#}
+  <div style="position:absolute;left:56px;right:56px;top:584px;height:12px;border-radius:6px;background:#f0efec;overflow:hidden">
+    {% for f in fases %}<div style="position:absolute;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;top:0;bottom:0;background:{{ f.cor }}"></div>{% endfor %}
+  </div>
   <div style="position:absolute;left:56px;right:56px;bottom:98px;display:flex;gap:16px">
     <div style="flex:1;background:#f5f4f2;border-radius:16px;padding:20px 22px"><div style="font:700 24px 'Space Grotesk';color:#141414">{{ r.inicio_br }}</div><div style="font:600 10px 'Space Grotesk';letter-spacing:.14em;color:#9a9a9a;margin-top:7px">INÍCIO PREVISTO</div></div>
     <div style="flex:1;background:#f5f4f2;border-radius:16px;padding:20px 22px"><div style="font:700 24px 'Space Grotesk';color:#141414">{{ r.fim_br }}</div><div style="font:600 10px 'Space Grotesk';letter-spacing:.14em;color:#9a9a9a;margin-top:7px">TÉRMINO PREVISTO</div></div>

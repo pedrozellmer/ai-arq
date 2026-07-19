@@ -11,6 +11,10 @@
           <div style="margin-top:28px;font:500 10px/1 'Inter';letter-spacing:.2em;color:#a8a29a">CLIENTE</div>
           <div style="margin-top:8px;font:600 21px 'Space Grotesk';color:#292524">{{ b.client_name }}</div>
         </div>
+        {#- faixa da obra: linha do tempo em miniatura, cores reais dos materiais -#}
+        <div style="position:absolute;left:72px;right:64px;bottom:196px;height:10px;border-radius:5px;background:#eceae4;overflow:hidden">
+          {% for f in fases %}<div style="position:absolute;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;top:0;bottom:0;background:{{ f.cor }}"></div>{% endfor %}
+        </div>
         <div style="position:absolute;left:72px;right:64px;bottom:104px;display:flex">
           <div style="flex:1"><div style="font:600 27px 'Space Grotesk';color:#1a1712">{{ r.inicio_br }}</div><div style="font:500 10px 'Inter';letter-spacing:.16em;color:#a8a29a;margin-top:7px">INÍCIO PREVISTO</div></div>
           <div style="flex:1;padding-left:30px;border-left:1px solid #e0ddd4"><div style="font:600 27px 'Space Grotesk';color:#1a1712">{{ r.fim_br }}</div><div style="font:500 10px 'Inter';letter-spacing:.16em;color:#a8a29a;margin-top:7px">TÉRMINO PREVISTO</div></div>

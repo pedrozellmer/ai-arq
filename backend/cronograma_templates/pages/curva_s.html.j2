@@ -23,6 +23,9 @@
 
     <path d="{{ curva.area_d }}" style="fill:var(--accent,#4F46E5);opacity:0.12"></path>
     <path d="{{ curva.line_d }}" style="fill:none;stroke:var(--accent,#4F46E5);stroke-width:3.5;stroke-linejoin:round;stroke-linecap:round"></path>
+    {% if curva.real_d %}
+    <path d="{{ curva.real_d }}" style="fill:none;stroke:var(--p-title,#0F172A);stroke-width:3;stroke-dasharray:8 7;stroke-linejoin:round;stroke-linecap:round"></path>
+    {% endif %}
 
     {% for m in curva.markers %}
     {#- perto da borda direita, joga o rótulo pra ESQUERDA do ponto (evita corte no viewBox) #}
@@ -43,7 +46,7 @@
   </svg>
 
   <div style="position:absolute;left:64px;right:64px;bottom:34px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--p-border,#E2E8F0);padding-top:14px">
-    <div style="font:400 12px var(--p-fb,'Inter');color:var(--p-body,#475569);max-width:720px">Marcos 25 / 50 / 75 / 100% para medição mensal — <span style="color:var(--p-muted,#94A3B8)">Lei 14.133/2021, Art. 117.</span></div>
+    <div style="font:400 12px var(--p-fb,'Inter');color:var(--p-body,#475569);max-width:640px">{% if curva.real_d %}<span style="display:inline-block;width:18px;height:0;border-top:3px solid var(--accent,#4F46E5);vertical-align:middle;margin-right:6px;border-radius:2px"></span><span style="vertical-align:middle;margin-right:16px">Previsto</span><span style="display:inline-block;width:18px;height:0;border-top:3px dashed var(--p-title,#0F172A);vertical-align:middle;margin-right:6px"></span><span style="vertical-align:middle;margin-right:16px">Realizado</span>{% endif %}Marcos 25 / 50 / 75 / 100% para medição mensal — <span style="color:var(--p-muted,#94A3B8)">Lei 14.133/2021, Art. 117.</span></div>
     <div style="font:400 11px var(--p-fl,'Inter');letter-spacing:.1em;color:var(--p-muted,#94A3B8)">AI.arq · ai.arq.br</div>
   </div>
 </div>

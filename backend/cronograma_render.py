@@ -591,7 +591,43 @@ def build_curva(curva_s: List[Dict]) -> Dict:
             "filled": thr == 100,
         })
 
-    return {"area_d": area_d, "line_d": line_d, "markers": markers, "xlabels": xlabels}
+    return {"area_d": area_d, "line_d": line_d, "markers": markers, "xlabels": xlabels,
+            "real_d": ""}
+
+
+def anexar_curva_realizada(curva_ctx: Dict, curva_realizada: List[Dict]) -> Dict:
+    """Sobrepõe a curva REALIZADA (pct_executado informado pelo usuário) à
+    prevista, reusando as MESMAS coordenadas x (mesmos meses). Tracejada no
+    template, com legenda 'Realizado' — nunca se mistura com o previsto
+    (regra nº1: real e estimado sempre distinguíveis). Corta nos meses já
+    decorridos (data_fim_mes <= hoje + mês corrente): desenhar o futuro
+    estagnado seria uma linha plana mentirosa. Defensivo: qualquer
+    incompatibilidade → sem linha, sem erro."""
+    try:
+        pts = curva_realizada or []
+        xl = curva_ctx.get("xlabels") or []
+        n = len(xl)
+        if n < 2 or len(pts) != n:
+            return curva_ctx
+        if not any(float(p.get("pct_realizado", 0) or 0) > 0 for p in pts):
+            return curva_ctx
+        hoje = date.today()
+        def yf(pct: float) -> float:
+            return _CURVA_Y_BASE - (max(0.0, min(100.0, pct)) / 100.0) * _CURVA_H
+        coords = []
+        for i, p in enumerate(pts):
+            fim_mes = _parse_iso(p.get("data_fim_mes"))
+            # inclui meses decorridos + o mês corrente (parcial)
+            if fim_mes and (fim_mes.replace(day=1) > hoje.replace(day=1)):
+                break
+            pct = float(p.get("pct_realizado", 0) or 0)
+            coords.append((xl[i]["x"], round(yf(pct), 1)))
+        if len(coords) < 2:
+            return curva_ctx
+        curva_ctx["real_d"] = "M " + " L ".join(f"{x},{y}" for x, y in coords)
+    except Exception:
+        pass
+    return curva_ctx
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -661,6 +697,7 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
 
     fases_ctx, axis_ctx, hoje_pct, legenda_ctx = build_gantt(cronograma.get("fases", []))
     curva_ctx = build_curva(cronograma.get("curva_s", []))
+    curva_ctx = anexar_curva_realizada(curva_ctx, cronograma.get("curva_realizada", []))
     caminho_ctx = build_caminho(cronograma)
 
     # Branding
