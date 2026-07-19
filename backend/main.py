@@ -1746,7 +1746,28 @@ def _auto_retry_erros_transitorios():
                 _email_auto_registrar(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id)
 
 
-def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
+def _boots_recentes(minutos: int = 15) -> int:
+    """Quantos boots o servidor teve nos últimos N minutos (inclui o atual,
+    registrado no startup). 2+ boots em janela curta = crash-loop: algum
+    arquivo está derrubando o servidor a cada retomada (incidente 06/07:
+    5 boots em 35min, 1 arquivo venenoso matou 5 jobs). Best-effort: em
+    dúvida devolve 1 (sem quarentena indevida)."""
+    import urllib.request, urllib.parse, json
+    try:
+        desde = (datetime.utcnow() - timedelta(minutes=minutos)).isoformat() + "+00:00"
+        q = (f"{SUPABASE_URL}/rest/v1/error_log?stage=eq.boot"
+             f"&created_at=gte.{urllib.parse.quote(desde, safe='')}&select=id")
+        req = urllib.request.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
+        return len(rows or []) or 1
+    except Exception:
+        return 1
+
+
+def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
+                                   crash_loop: bool = False):
     """RESILIÊNCIA: varre jobs em queued/processing que sobreviveram a um
     restart e tenta RETOMAR (baixa do Storage + reprocessa). Só marca 'error'
     se não houver arquivo no Storage (job antigo) ou se já auto-retomou antes
@@ -1835,6 +1856,45 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
         except Exception:
             pass
 
+        # DISJUNTOR anti-crash-loop (19/07): em crash-loop (2+ boots em 15min),
+        # o job que estava PROCESSANDO no momento da morte é o provável veneno
+        # (arquivo pesado que re-OOMa a cada retomada). Se ele já gastou uma
+        # retomada (prev_count>=1), NÃO retomar de novo — quarentena: erro
+        # terminal com orientação de arquivo + alerta pro Pedro. Jobs 'queued'
+        # (inocentes na fila) seguem o fluxo normal. Teria transformado o
+        # incidente de 06/07 (5 jobs mortos) em 1.
+        quarentenado = (crash_loop and row.get("status") == "processing"
+                        and prev_count >= 1)
+        if quarentenado:
+            _supabase_update("projects", "job_id", job_id, {
+                "status": "error",
+                "error_message": ("Esse arquivo é pesado demais e derrubou o "
+                                  "processamento mais de uma vez. Envie só a "
+                                  "prancha de arquitetura (sem 3D/imagens), ou "
+                                  "divida o arquivo em partes menores."),
+                "completed_at": now.isoformat(),
+            })
+            _log_error("recovery:quarentena",
+                       f"Crash-loop detectado — job em quarentena após "
+                       f"{prev_count} retomada(s)", job_id, severity="error")
+            try:
+                _email_falha_cliente(job_id, reprocessavel=False)
+            except Exception:
+                pass
+            try:
+                import threading as _thq
+                _thq.Thread(target=_notify_admin, args=(
+                    "Disjuntor: job em quarentena (crash-loop)",
+                    f"O servidor reiniciou 2+ vezes em 15min e o job "
+                    f"<b>{job_id}</b> estava processando nas quedas — provável "
+                    f"arquivo venenoso (OOM). Ele foi marcado como erro e o "
+                    f"cliente orientado a enviar um arquivo menor."),
+                    daemon=True).start()
+            except Exception:
+                pass
+            recovered += 1
+            continue
+
         if prev_count < 2 and _retomar_job_do_storage(job_id, typ, ptype):
             # _retomar já incrementou auto_resume_count (anti-loop, via RPC
             # atômica) e re-disparou o processamento.
@@ -1881,11 +1941,22 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False):
 
 @app.on_event("startup")
 async def _on_startup_recover_jobs():
-    """Hook de startup do FastAPI: (1) recupera jobs travados do redeploy
-    anterior e (2) sobe uma varredura periódica que pega jobs encalhados
-    entre dois restarts (ex.: restart dentro da janela de graça)."""
+    """Hook de startup do FastAPI: (1) registra o boot (sinal do disjuntor
+    anti-crash-loop), (2) recupera jobs travados do redeploy anterior e
+    (3) sobe uma varredura periódica que pega jobs encalhados entre dois
+    restarts (ex.: restart dentro da janela de graça)."""
+    crash_loop = False
     try:
-        _recover_stuck_jobs_on_startup()
+        _log_error("boot", "Servidor iniciou", severity="info")
+        n_boots = _boots_recentes(15)
+        crash_loop = n_boots >= 2
+        if crash_loop:
+            print(f"[recovery] ⚠ {n_boots} boots em 15min — modo crash-loop "
+                  f"(job ativo com retomada gasta vai pra quarentena)")
+    except Exception:
+        pass
+    try:
+        _recover_stuck_jobs_on_startup(crash_loop=crash_loop)
     except Exception as e:
         # Nunca deixar o startup falhar por causa da recuperação
         print(f"[recovery] exceção não-fatal no startup: {e}")
