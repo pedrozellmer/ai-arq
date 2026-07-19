@@ -22,6 +22,22 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from typing import Optional
 
+# Medição ESTRUTURAL determinística (tabela de aço, pilares, vigas, lajes).
+# Import defensivo: se o módulo faltar num deploy parcial, o extrator segue
+# funcionando sem a frente estrutural (nunca derruba o fluxo principal).
+try:
+    from structural_extractor import (
+        StructRect,
+        extract_structural_measurements,
+        structural_prompt_section,
+        layer_is_pilar,
+    )
+except Exception:  # pragma: no cover
+    StructRect = None
+    extract_structural_measurements = None
+    structural_prompt_section = None
+    layer_is_pilar = None
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,6 +97,7 @@ class DXFExtraction:
     dimensions: list  # list of (label, value) tuples
     metadata: dict = field(default_factory=dict)
     polygon_areas: list = field(default_factory=list)  # áreas de polilinha FECHADA (ambiente/piso/forro) — m² medido, fonte distinta de HATCH
+    struct_rects: list = field(default_factory=list)  # retângulos/círculos FECHADOS em layer de PILAR (StructRect) — contagem de pilar medida
 
     # -- convenience helpers ------------------------------------------------
 
@@ -229,6 +246,19 @@ class DXFExtraction:
             for layer, area in sorted(poly_areas.items(), key=lambda x: -x[1]):
                 lines.append(f"  {layer}: {area:.2f} m²")
             lines.append("")
+
+        # Medições ESTRUTURAIS determinísticas (tabela de aço lida dos textos,
+        # pilares contados na geometria, vigas/lajes por layer). Auto-limitada:
+        # prancha de arquitetura sem esses dados não gera a seção. Defensivo:
+        # falha aqui NUNCA derruba o prompt principal.
+        if extract_structural_measurements is not None:
+            try:
+                _struct = extract_structural_measurements(self)
+                if _struct:
+                    lines.append(structural_prompt_section(_struct))
+                    lines.append("")
+            except Exception as _e_struct:
+                logger.warning("[estrutural] medição determinística falhou: %s", _e_struct)
 
         # Key texts
         texts_by_layer = self.get_texts_by_layer()
@@ -1263,6 +1293,76 @@ def extract_dxf(filepath: str) -> DXFExtraction:
     for _a, _bb, _ly in _accepted:
         polygon_areas.append(HatchArea(layer=_ly, area=_a, pattern="contorno fechado"))
 
+    # ---- PILARES: retângulos/círculos FECHADOS em layer de PILAR ------------
+    # Medição estrutural determinística (regra nº1): pilar em planta de fôrma é
+    # um retângulo pequeno fechado. Antes ele virava só "perímetro somado" no
+    # layer e a IA não tinha COMO contar → qty=0. Aqui a contagem é geométrica.
+    # Conservador: só layer que NOMEIA pilar, só contorno fechado de 4 lados
+    # (ou círculo), com lado 8cm–2,5m e área ≤ 3 m². Nada disso roda em prancha
+    # de arquitetura sem layer de pilar.
+    struct_rects: list = []
+    if StructRect is not None:
+        def _consider_pilar_poly(layer_name, pts):
+            try:
+                if not layer_is_pilar(layer_name):
+                    return
+                # remove ponto final repetido (polilinha fechada com 1º=último)
+                if len(pts) >= 2 and abs(pts[0][0] - pts[-1][0]) < 1e-9 \
+                        and abs(pts[0][1] - pts[-1][1]) < 1e-9:
+                    pts = pts[:-1]
+                if len(pts) != 4:
+                    return
+                d = [_line_length(pts[i], pts[(i + 1) % 4]) for i in range(4)]
+                if min(d) <= 0:
+                    return
+                # lados opostos ~iguais (retângulo/paralelogramo, tolerância 15%)
+                if abs(d[0] - d[2]) > 0.15 * max(d[0], d[2]):
+                    return
+                if abs(d[1] - d[3]) > 0.15 * max(d[1], d[3]):
+                    return
+                w_raw = (d[0] + d[2]) / 2.0
+                h_raw = (d[1] + d[3]) / 2.0
+                w_m, h_m = w_raw * unit_factor, h_raw * unit_factor
+                if not (0.08 <= min(w_m, h_m) and max(w_m, h_m) <= 2.5
+                        and w_m * h_m <= 3.0):
+                    return
+                cx = sum(p[0] for p in pts) / 4.0
+                cy = sum(p[1] for p in pts) / 4.0
+                struct_rects.append(StructRect(layer=layer_name, w_m=w_m, h_m=h_m,
+                                               w_raw=w_raw, h_raw=h_raw, cx=cx, cy=cy))
+            except Exception:
+                return
+
+        for _lw in msp.query("LWPOLYLINE"):
+            try:
+                if getattr(_lw, "closed", False):
+                    _consider_pilar_poly(_lw.dxf.layer, list(_lw.get_points(format="xy")))
+            except Exception:
+                continue
+        for _pl in msp.query("POLYLINE"):
+            try:
+                if getattr(_pl, "is_closed", False):
+                    _consider_pilar_poly(_pl.dxf.layer,
+                                         [(v.dxf.location.x, v.dxf.location.y) for v in _pl.vertices])
+            except Exception:
+                continue
+        for _ci in msp.query("CIRCLE"):
+            try:
+                _ly_ci = _ci.dxf.layer
+                if not layer_is_pilar(_ly_ci):
+                    continue
+                _d_raw = 2.0 * _ci.dxf.radius
+                _d_m = _d_raw * unit_factor
+                if 0.08 <= _d_m <= 1.5:
+                    struct_rects.append(StructRect(layer=_ly_ci, w_m=_d_m, h_m=_d_m,
+                                                   w_raw=_d_raw, h_raw=_d_raw,
+                                                   cx=_ci.dxf.center.x, cy=_ci.dxf.center.y,
+                                                   circular=True))
+            except Exception:
+                continue
+        if len(struct_rects) > 5000:  # teto defensivo de memória
+            struct_rects = struct_rects[:5000]
+
     # ---- Hatches ----------------------------------------------------------
     hatches: list[HatchArea] = []
 
@@ -1387,6 +1487,7 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         dimensions=dims,
         metadata=metadata,
         polygon_areas=polygon_areas,
+        struct_rects=struct_rects,
     )
 
 
