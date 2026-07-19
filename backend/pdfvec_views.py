@@ -298,7 +298,7 @@ def measure_main_view(
     out["main_bbox"] = main["bbox"]
 
     segs = _filter_segments(raw, w, h, main["bbox"])
-    faces = _polygonize_faces(segs)
+    faces, _bridges = _polygonize_faces(segs)
     m_per_pt = PT_TO_M * float(scale_denominator)
     sq = m_per_pt * m_per_pt
 
