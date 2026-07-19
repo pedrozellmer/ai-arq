@@ -20,17 +20,16 @@
         {% for a in axis %}<div style="position:absolute;left:{{ a.pct }}%;top:0;bottom:0;width:1px;background:rgba(20,20,20,.06)"></div>
         {% endfor %}
 
-        {% for f in fases %}<div style="position:relative;height:40px"><div style="position:absolute;top:5px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:30px;border-radius:9px;{% if f.cat == 'estrutura' %}background:var(--accent,#4F46E5);color:#fff{% elif f.cat == 'instalacoes' %}background:color-mix(in srgb, var(--accent,#4F46E5) 78%, #14141b);color:#fff{% else %}background:color-mix(in srgb, var(--accent,#4F46E5) 34%, #ffffff);color:#2a2a2a{% endif %};display:flex;align-items:center;justify-content:flex-end;padding:0 12px;font:700 13px 'Space Grotesk'">{{ f.dur_dias }}d</div></div>
+        {% for f in fases %}<div style="position:relative;height:40px"><div style="position:absolute;top:5px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:30px;border-radius:9px;background:{{ f.cor }};color:{{ f.txt }};overflow:hidden;display:flex;align-items:center;justify-content:flex-end;padding:0 12px;font:700 13px 'Space Grotesk'">{% if f.pct_exec > 0 %}<div style="position:absolute;top:0;left:0;bottom:0;width:{{ f.pct_exec }}%;background:rgba(15,17,21,.30)"></div>{% endif %}<span style="position:relative">{{ f.dur_dias }}d</span></div></div>
         {% endfor %}
+        {% if hoje_pct is not none %}<div style="position:absolute;top:0;bottom:0;left:{{ hoje_pct }}%;width:0;border-left:2px dashed var(--accent,#4F46E5)"></div>{% endif %}
       </div>
     </div>
   </div>
 
   <div style="position:absolute;left:56px;right:56px;bottom:34px;display:flex;align-items:center;justify-content:space-between">
     <div style="white-space:nowrap">
-      <span style="display:inline-block;margin-right:22px"><span style="display:inline-block;width:16px;height:16px;border-radius:5px;vertical-align:middle;margin-right:8px;background:var(--accent,#4F46E5)"></span><span style="vertical-align:middle;font:600 12px 'Space Grotesk';color:#5a5a5a">Estrutura</span></span>
-      <span style="display:inline-block;margin-right:22px"><span style="display:inline-block;width:16px;height:16px;border-radius:5px;vertical-align:middle;margin-right:8px;background:color-mix(in srgb, var(--accent,#4F46E5) 78%, #14141b)"></span><span style="vertical-align:middle;font:600 12px 'Space Grotesk';color:#5a5a5a">Instalações</span></span>
-      <span style="display:inline-block;margin-right:22px"><span style="display:inline-block;width:16px;height:16px;border-radius:5px;vertical-align:middle;margin-right:8px;background:color-mix(in srgb, var(--accent,#4F46E5) 34%, #ffffff)"></span><span style="vertical-align:middle;font:600 12px 'Space Grotesk';color:#5a5a5a">Acabamentos</span></span>
+      {% for lg in legenda %}<span style="display:inline-block;margin-right:20px"><span style="display:inline-block;width:16px;height:16px;border-radius:5px;vertical-align:middle;margin-right:8px;background:{{ lg.cor }}"></span><span style="vertical-align:middle;font:600 12px 'Space Grotesk';color:#5a5a5a">{{ lg.label }}</span></span>{% endfor %}
     </div>
     <div style="font:500 11.5px 'Space Grotesk';color:#adadad">powered by AI.arq · ai.arq.br</div>
   </div>

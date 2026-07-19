@@ -12,12 +12,11 @@
     <div style="font:400 11px/1 'Inter';letter-spacing:.14em;color:#a8a29a">02 / 05</div>
   </div>
   <div style="font:600 40px/1.05 'Space Grotesk';color:#1a1712;letter-spacing:-0.02em">Cronograma físico das disciplinas</div>
-  <div style="font:400 13.5px/1.5 'Inter';color:#78716c;margin-top:9px;max-width:720px">{{ r.n_fases }} disciplinas em três frentes construtivas ao longo de {{ r.duracao_dias }} dias.</div>
+  <div style="font:400 13.5px/1.5 'Inter';color:#78716c;margin-top:9px;max-width:720px">{{ r.n_fases }} disciplinas ao longo de {{ r.duracao_dias }} dias — cada etapa na cor do seu material.</div>
 
   <div style="margin-top:14px;margin-left:236px;white-space:nowrap">
-    <span style="display:inline-block;margin-right:22px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;vertical-align:middle;margin-right:9px;background:var(--accent,#4F46E5)"></span><span style="vertical-align:middle;font:600 10.5px 'Inter';letter-spacing:.16em;color:#78716c;text-transform:uppercase">Estrutura</span></span>
-    <span style="display:inline-block;margin-right:22px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;vertical-align:middle;margin-right:9px;background:color-mix(in srgb, var(--accent,#4F46E5) 72%, #14141b)"></span><span style="vertical-align:middle;font:600 10.5px 'Inter';letter-spacing:.16em;color:#78716c;text-transform:uppercase">Instalações</span></span>
-    <span style="display:inline-block;margin-right:22px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;vertical-align:middle;margin-right:9px;background:color-mix(in srgb, var(--accent,#4F46E5) 40%, #ffffff)"></span><span style="vertical-align:middle;font:600 10.5px 'Inter';letter-spacing:.16em;color:#78716c;text-transform:uppercase">Acabamentos</span></span>
+    {% for lg in legenda %}<span style="display:inline-block;margin-right:20px"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;vertical-align:middle;margin-right:8px;background:{{ lg.cor }}"></span><span style="vertical-align:middle;font:600 10.5px 'Inter';letter-spacing:.14em;color:#78716c;text-transform:uppercase">{{ lg.label }}</span></span>{% endfor %}
+    {% if hoje_pct is not none %}<span style="display:inline-block"><span style="display:inline-block;width:14px;height:0;border-top:2px dashed var(--accent,#4F46E5);vertical-align:middle;margin-right:8px"></span><span style="vertical-align:middle;font:600 10.5px 'Inter';letter-spacing:.14em;color:#78716c;text-transform:uppercase">Hoje</span></span>{% endif %}
   </div>
 
   <div style="margin:20px 0 0 236px;position:relative;height:20px;border-bottom:1px solid #e0ddd4">
@@ -33,17 +32,11 @@
       {% endfor %}
     </div>
     <div style="flex:1">
-      <div style="background:color-mix(in srgb, var(--accent,#4F46E5) 6%, #ffffff);border-radius:12px">
+      <div style="background:color-mix(in srgb, var(--accent,#4F46E5) 6%, #ffffff);border-radius:12px;position:relative">
         {% for f in fases %}
-        {% if f.cat == 'estrutura' %}
-        {% set barbg = 'var(--accent,#4F46E5)' %}{% set bartxt = '#fff' %}
-        {% elif f.cat == 'instalacoes' %}
-        {% set barbg = 'color-mix(in srgb, var(--accent,#4F46E5) 72%, #14141b)' %}{% set bartxt = '#fff' %}
-        {% else %}
-        {% set barbg = 'color-mix(in srgb, var(--accent,#4F46E5) 40%, #ffffff)' %}{% set bartxt = '#292524' %}
-        {% endif %}
-        <div style="position:relative;height:36px"><div style="position:absolute;top:7px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:22px;border-radius:8px;background:{{ barbg }};display:flex;align-items:center;justify-content:flex-end;padding:0 10px;color:{{ bartxt }};font:700 10.5px 'Inter'">{{ f.dur_dias }}d</div></div>
+        <div style="position:relative;height:36px"><div style="position:absolute;top:7px;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;height:22px;border-radius:8px;background:{{ f.cor }};overflow:hidden;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;color:{{ f.txt }};font:700 10.5px 'Inter'">{% if f.pct_exec > 0 %}<div style="position:absolute;top:0;left:0;bottom:0;width:{{ f.pct_exec }}%;background:rgba(15,17,21,.30)"></div>{% endif %}<span style="position:relative">{{ f.dur_dias }}d</span></div></div>
         {% endfor %}
+        {% if hoje_pct is not none %}<div style="position:absolute;top:0;bottom:0;left:{{ hoje_pct }}%;width:0;border-left:2px dashed var(--accent,#4F46E5)"></div>{% endif %}
       </div>
     </div>
   </div>
