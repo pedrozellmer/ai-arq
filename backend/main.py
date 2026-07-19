@@ -1200,8 +1200,9 @@ def _email_falha_cliente(job_id: str, reprocessavel: bool = True) -> bool:
                     return False
         except Exception as _te:
             print(f"[email] checagem de freio falhou (segue e manda): {_te}")
+        _nm = _resolve_client_name(_email, hint=_rows[0].get("user_name") or "")
         _subject, _html = _build_falha_email(
-            _rows[0].get("user_name") or "",
+            _nm,
             _rows[0].get("project_name") or "seu projeto",
             reprocessavel,
             error_hint=(_rows[0].get("error_message") or ""))
@@ -1372,6 +1373,7 @@ def _build_welcome_email(name: str = ""):
 def _send_welcome_email(email: str, name: str = "") -> bool:
     """Monta + envia o email de boas-vindas. Usado no 1º acesso ao dashboard
     (gated por created_at) e no reenvio manual pelo admin. Best-effort."""
+    name = _resolve_client_name(email, hint=name)
     subject, html = _build_welcome_email(name)
     return _send_email_smtp(email, subject, html, log_kind="boas_vindas")
 
@@ -1418,6 +1420,53 @@ def _name_from_auth(user_id: str) -> str:
         return ""
 
 
+def _resolve_client_name(email: str = "", user_id: str = "", hint: str = "") -> str:
+    """Nome do cliente pra saudação personalizada dos e-mails — regra do Pedro
+    (19/07): TODO e-mail pro cliente tem que vir com o nome dele. Busca na ordem
+    do que MAIS acha: hint > profiles.full_name (por user_id, depois por email) >
+    projects.user_name (por email) > metadata do auth. O nome real quase sempre
+    vive em profiles.full_name (o metadata do auth costuma vir VAZIO — foi o que
+    fez o e-mail do Tiago sair 'Boa tarde,' sem nome). Best-effort, nunca lança;
+    só devolve "" se realmente não houver nome em lugar nenhum."""
+    h = (hint or "").strip()
+    if h:
+        return h
+    import urllib.request as _ur, urllib.parse as _up
+    def _get(url):
+        try:
+            r = _ur.Request(url, method="GET")
+            r.add_header("apikey", SUPABASE_KEY)
+            r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            return _json.loads(_ur.urlopen(r, timeout=8).read().decode("utf-8")) or []
+        except Exception:
+            return []
+    # 1) profiles por user_id (exato)
+    if user_id:
+        rows = _get(f"{SUPABASE_URL}/rest/v1/profiles?user_id=eq.{_up.quote(str(user_id), safe='')}"
+                    f"&select=full_name&limit=1")
+        if rows and (rows[0].get("full_name") or "").strip():
+            return rows[0]["full_name"].strip()
+    # 2) profiles por email (cobre 100% dos usuários hoje — profiles.email sempre preenchido)
+    em = (email or "").strip()
+    _cands = [em, em.lower()] if (em and em != em.lower()) else ([em] if em else [])
+    for cand in _cands:
+        rows = _get(f"{SUPABASE_URL}/rest/v1/profiles?email=eq.{_up.quote(cand, safe='')}"
+                    f"&select=full_name&limit=1")
+        if rows and (rows[0].get("full_name") or "").strip():
+            return rows[0]["full_name"].strip()
+    # 3) projects por email (nome mais recente que não veio vazio)
+    if em:
+        rows = _get(f"{SUPABASE_URL}/rest/v1/projects?user_email=eq.{_up.quote(em.lower(), safe='')}"
+                    f"&select=user_name&order=created_at.desc&limit=10")
+        for row in rows:
+            if (row.get("user_name") or "").strip():
+                return row["user_name"].strip()
+    # 4) metadata do auth (último recurso — costuma vir vazio)
+    if user_id:
+        return _name_from_auth(user_id)
+    return ""
+
+
 def _build_nudge_email(name: str, kind: str, magic_link: str):
     """Monta (subject, html) do email de lembrete por kind. Separado do envio
     pra reuso no preview. kinds: 'cadastro', 'onboarding', 'feedback'."""
@@ -1462,6 +1511,7 @@ def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool
     - 'cadastro'   -> incompleto: 'falta pouco, termine o cadastro'.
     - 'onboarding' -> tem conta mas 0 projetos: 'vem subir sua 1ª prancha'.
     - 'feedback'   -> tem projeto: 'como foi?'."""
+    name = _resolve_client_name(email, hint=name)
     subject, html = _build_nudge_email(name, kind, magic_link)
     return _send_email_smtp(email, subject, html, log_kind=_NUDGE_LOG_KIND.get(kind, "nudge"))
 
@@ -4471,6 +4521,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # acompanhando, OU é revisão interna nossa — NÃO re-emailar "planilha
             # pronta" (evita spam de email a cada reprocesso). Só o 1º envio notifica.
             _is_reproc = bool(_rows and (_rows[0].get("reprocess_count") or 0) > 0)
+            # Nome do cliente pra saudação personalizada (regra do Pedro 19/07):
+            # se o projeto não trouxe user_name, busca em profiles/auth.
+            _nm = _resolve_client_name(_pe, hint=(_rows[0].get("user_name") if _rows else "") or "")
             if _pe and is_complement:
                 # add-file: refizemos o projeto medindo pelo CAD que o cliente anexou.
                 # Email PRÓPRIO (não cai no dedup dos outros), 1x por job — garante que
@@ -4481,7 +4534,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     print(f"[email] complemento-pronto já enviado pra este job — pulando")
                 else:
                     _pn_c = _html.escape(_rows[0].get("project_name") or "seu projeto")
-                    _greet_c = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
+                    _greet_c = _greeting_line(_html.escape(_nm))
                     _exts_c = [os.path.splitext(p)[1].lower() for p in file_paths]
                     _n_pdf_c = sum(1 for e in _exts_c if e == ".pdf")
                     _n_cad_c = sum(1 for e in _exts_c if e in (".dwg", ".dxf"))
@@ -4513,7 +4566,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     print(f"[email] reprocesso-pronto já enviado pra este job — pulando")
                 else:
                     _pn_r = _html.escape(_rows[0].get("project_name") or "seu projeto")
-                    _greet_r = _greeting_line(_html.escape(_rows[0].get("user_name") or ""))
+                    _greet_r = _greeting_line(_html.escape(_nm))
                     _body_r = (f"{_greet_r}<br><br>Reprocessamos o projeto <b>{_pn_r}</b> com o motor "
                                f"mais recente e a planilha atualizada ficou pronta, com "
                                f"<b>{len(all_items)} itens</b> de quantitativo.<br><br>"
@@ -4551,7 +4604,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _veio_pdf = (_n_cad == 0 and _n_pdf > 0)
                 _proximos = _next_steps_html(job_id, _n_med, len(all_items), _veio_pdf)
                 _subj_pp, _html_pp = _build_planilha_pronta_email(
-                    _rows[0].get("user_name") or "",
+                    _nm,
                     _rows[0].get("project_name") or "seu projeto",
                     job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}")
                 _send_email_smtp(_pe, _subj_pp, _html_pp, log_kind="planilha_pronta")
@@ -5097,6 +5150,7 @@ def _build_retorno30_email(name: str):
 
 def _send_email_retorno30(email: str, name: str) -> bool:
     """Retorno após 30 dias sem projeto — isca: cronograma grátis."""
+    name = _resolve_client_name(email, hint=name)
     subject, html = _build_retorno30_email(name)
     return _send_email_smtp(email, subject, html, log_kind="retorno_30d")
 
@@ -5129,6 +5183,7 @@ def _build_proximo_projeto_email(name: str, project_name: str):
 
 
 def _send_email_proximo_projeto(email: str, name: str, project_name: str) -> bool:
+    name = _resolve_client_name(email, hint=name)
     subject, html = _build_proximo_projeto_email(name, project_name)
     return _send_email_smtp(email, subject, html, log_kind="proximo_projeto")
 
@@ -5162,6 +5217,7 @@ def _build_cronograma_checkin_email(name: str, project_name: str, semana: int, j
 
 def _send_email_cronograma_checkin(email: str, name: str, project_name: str,
                                    semana: int, job_id: str) -> bool:
+    name = _resolve_client_name(email, hint=name)
     subject, html = _build_cronograma_checkin_email(name, project_name, semana, job_id)
     return _send_email_smtp(email, subject, html, log_kind="cronograma_checkin")
 
