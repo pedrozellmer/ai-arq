@@ -9,6 +9,10 @@
           <div style="font:400 14px/1 'Inter';letter-spacing:.24em;color:var(--accent);text-transform:uppercase;font-weight:700">Cronograma físico-financeiro</div>
           <div style="margin-top:20px;font:400 74px/0.98 'Instrument Serif';color:#2b2519;letter-spacing:-0.02em">{{b.project_name}}</div>
         </div>
+        {#- faixa da obra: linha do tempo em miniatura, cores reais dos materiais -#}
+        <div style="position:absolute;left:64px;right:64px;bottom:216px;height:8px;border-radius:4px;background:#e9e1d1;overflow:hidden">
+          {% for f in fases %}<div style="position:absolute;left:{{ f.left_pct }}%;width:{{ f.width_pct }}%;top:0;bottom:0;background:{{ f.cor }}"></div>{% endfor %}
+        </div>
         <div style="position:absolute;left:64px;right:64px;bottom:96px;display:flex;border-top:1px solid #d8cfbd;padding-top:22px">
           <div style="flex:1"><div style="font:400 10px 'Inter';letter-spacing:.18em;color:#a89f8c;text-transform:uppercase">Cliente</div><div style="font:400 24px 'Instrument Serif';color:#2b2519;margin-top:6px">{{b.client_name}}</div></div>
           <div style="flex:1"><div style="font:400 10px 'Inter';letter-spacing:.18em;color:#a89f8c;text-transform:uppercase">Início / Término</div><div style="font:400 24px 'Instrument Serif';color:#2b2519;margin-top:6px">{{r.inicio_br}} — {{r.fim_br}}</div></div>
