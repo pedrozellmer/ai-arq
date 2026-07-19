@@ -7445,6 +7445,16 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
         print(f"[quotes/compare] erro PPT: {e}")
         pptx_ok = False
 
+    # Persiste no Storage (19/07): o disco do Render é EFÊMERO — o comparativo
+    # sumia a cada deploy/restart e o download virava 404 "gere de novo".
+    # Best-effort: sem Storage, o fluxo antigo (disco) continua valendo.
+    try:
+        _supabase_storage_upload(xlsx_path, f"quotes/{job_id}/comparativo.xlsx")
+        if pptx_ok:
+            _supabase_storage_upload(pptx_path, f"quotes/{job_id}/comparativo.pptx")
+    except Exception as _se:
+        print(f"[quotes/compare] upload Storage falhou (segue com disco): {_se}")
+
     # ═══ ALIMENTA MOTOR ANONIMAMENTE ═══
     # Extrai heurísticas do comparativo (sem dados do projeto) e insere
     # em market_heuristics. Loop de aprendizado do motor.
@@ -7473,17 +7483,37 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
     }
 
 
+def _quotes_download_path(job_id: str, ext: str) -> Optional[str]:
+    """Caminho local do comparativo; se o disco efêmero perdeu (deploy/restart),
+    re-baixa do Storage (quotes/{job}/comparativo.{ext}, persistido no compare).
+    None = não existe em lugar nenhum → caller devolve 404."""
+    path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.{ext}")
+    if os.path.exists(path):
+        return path
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        if _supabase_storage_download(f"quotes/{job_id}/comparativo.{ext}", path) \
+                and os.path.exists(path) and os.path.getsize(path) > 0:
+            print(f"[quotes/download] {job_id}.{ext}: resgatado do Storage")
+            return path
+    except Exception as e:
+        print(f"[quotes/download] Storage {job_id}.{ext}: {e}")
+    try:
+        if os.path.exists(path):
+            os.remove(path)  # não deixar arquivo vazio/corrompido pra trás
+    except Exception:
+        pass
+    return None
+
+
 @app.get("/api/projects/{job_id}/quotes/download/xlsx")
 async def download_quotes_xlsx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
-    """Baixa o comparativo XLSX gerado."""
-    path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.xlsx")
-    if not os.path.exists(path):
-        # 404, não 200 com JSON: o downloadProtected salva o corpo da resposta como
-        # arquivo — devolver {"error":...} com 200 fazia o usuário baixar um .xlsx
-        # que na verdade era texto de erro, e o Excel acusava arquivo corrompido.
-        # Acontece de verdade: o comparativo mora no disco EFÊMERO do Render, então
-        # some a cada deploy/restart. O 404 deixa a tela pedir pra gerar de novo.
+    """Baixa o comparativo XLSX gerado (disco → fallback Storage)."""
+    path = _quotes_download_path(job_id, "xlsx")
+    if not path:
+        # 404, não 200 com JSON: o downloadProtected salva o corpo da resposta
+        # como arquivo — 200 com {"error":...} virava .xlsx corrompido no Excel.
         raise HTTPException(404, "Comparativo não está mais disponível — clique em "
                                  "'Gerar comparativo' novamente.")
     return FileResponse(
@@ -7496,9 +7526,9 @@ async def download_quotes_xlsx(job_id: str, request: Request):
 @app.get("/api/projects/{job_id}/quotes/download/pptx")
 async def download_quotes_pptx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
-    """Baixa o comparativo PPT gerado."""
-    path = os.path.join(WORK_DIR, job_id, f"comparativo_{job_id}.pptx")
-    if not os.path.exists(path):
+    """Baixa o comparativo PPT gerado (disco → fallback Storage)."""
+    path = _quotes_download_path(job_id, "pptx")
+    if not path:
         # Mesmo motivo do XLSX acima: 200 com JSON virava .pptx corrompido.
         raise HTTPException(404, "Apresentação não está mais disponível — clique em "
                                  "'Gerar comparativo' novamente.")
