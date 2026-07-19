@@ -1,0 +1,40 @@
+{#- MATRIZ MENSAL (página 5) · compartilhada, tematizada por --p-*/--accent.
+    Tabela disciplina × mês: célula = % da fase executado naquele mês, fundo
+    na cor REAL do material com alpha proporcional (pré-computado no
+    build_matriz — WeasyPrint não faz color-mix). Fonte encolhe com muitos
+    meses. NÃO redefinir --p-*/--accent. -#}
+{% set _nm = matriz.n_meses or 1 %}
+{% set _fs = '12px' if _nm <= 8 else ('10.5px' if _nm <= 14 else ('9.5px' if _nm <= 20 else '8px')) %}
+{% set _nf = matriz.n_fases or 1 %}
+{% set _py = '9px' if _nf <= 12 else ('6px' if _nf <= 16 else '4px') %}
+<div style="width:1123px;height:794px;background-color:var(--p-bg,#faf9f7);background-image:var(--p-grid,none);background-size:34px 34px;position:relative;padding:56px 64px 40px;font-family:var(--p-fb,'Inter'),sans-serif;overflow:hidden">
+  <div style="position:absolute;top:0;left:0;width:100%;height:5px;background:var(--accent,#4F46E5)"></div>
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px">
+    <div style="font:700 12px/1 var(--p-fl,'Inter');letter-spacing:.22em;color:var(--p-eyebrow,var(--accent,#4F46E5))">MATRIZ · % POR MÊS</div>
+    <div style="font:400 11px/1 var(--p-fl,'Inter');letter-spacing:.14em;color:var(--p-muted,#94A3B8)">05 / 06</div>
+  </div>
+  <div style="font:var(--p-title-weight,600) 40px/1.05 var(--p-ft,'Inter');color:var(--p-title,#0F172A);letter-spacing:-0.015em">Quanto de cada disciplina em cada mês</div>
+  <div style="font:400 13.5px/1.5 var(--p-fb,'Inter');color:var(--p-muted,#64748B);margin-top:9px;max-width:820px">Percentual da fase executado por mês — base da medição mensal e do desembolso.</div>
+
+  <table style="width:100%;margin-top:26px;border-collapse:collapse;table-layout:fixed">
+    <tr>
+      <td style="width:236px;padding:{{ _py }} 10px;font:700 10px var(--p-fl,'Inter');letter-spacing:.14em;color:var(--p-muted,#94A3B8);border-bottom:1.5px solid var(--p-title,#0F172A);text-transform:uppercase">Disciplina</td>
+      {% for lb in matriz.labels %}
+      <td style="padding:{{ _py }} 2px;text-align:center;font:600 {{ _fs }} var(--p-fl,'Inter');color:var(--p-muted,#94A3B8);border-bottom:1.5px solid var(--p-title,#0F172A)">{{ lb }}</td>
+      {% endfor %}
+    </tr>
+    {% for r in matriz.rows %}
+    <tr>
+      <td style="padding:{{ _py }} 10px;border-bottom:1px solid var(--p-border,#E2E8F0);white-space:nowrap;overflow:hidden"><span style="display:inline-block;width:9px;height:9px;border-radius:3px;background:{{ r.cor }};vertical-align:middle;margin-right:8px"></span><span style="vertical-align:middle;font:500 {{ '12.5px' if _nf <= 12 else '11px' }} var(--p-fb,'Inter');color:var(--p-body,#334155)">{{ r.label }}</span></td>
+      {% for c in r.cells %}
+      <td style="padding:{{ _py }} 1px;text-align:center;border-bottom:1px solid var(--p-border,#E2E8F0);background:{{ c.bg }};font:600 {{ _fs }} var(--p-fb,'Inter');color:{{ c.fg if c.fg else 'var(--p-body,#334155)' }}">{% if c.pct > 0 %}{{ c.pct }}%{% endif %}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+  </table>
+
+  <div style="position:absolute;left:64px;right:64px;bottom:34px;display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--p-border,#E2E8F0);padding-top:14px">
+    <div style="font:400 12px var(--p-fb,'Inter');color:var(--p-body,#475569)">Fundo mais forte = mês mais intenso daquela disciplina. Some a coluna pra estimar o desembolso do mês.</div>
+    <div style="font:400 11px var(--p-fl,'Inter');letter-spacing:.1em;color:var(--p-muted,#94A3B8)">AI.arq · ai.arq.br</div>
+  </div>
+</div>
