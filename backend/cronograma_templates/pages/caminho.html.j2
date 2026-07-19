@@ -12,7 +12,7 @@
     <div style="display:flex;align-items:center;gap:24px;background:var(--p-card,#fff);border:1px solid var(--p-border,#E2E8F0);border-radius:var(--p-radius,14px);padding:20px 26px">
       <div style="font:var(--p-title-weight,700) 34px var(--p-ft,'Inter');color:var(--accent,#4F46E5);width:40px;flex:none;line-height:1">{{ c.rank }}</div>
       <div style="width:280px;flex:none;font:600 18px var(--p-fb,'Inter');color:var(--p-title,#0F172A)">{{ c.label }}</div>
-      <div style="flex:1;height:10px;border-radius:6px;background:color-mix(in srgb, var(--accent,#4F46E5) 14%, transparent);position:relative"><div style="position:absolute;left:0;top:0;height:100%;width:{{ c.width_pct }}%;border-radius:6px;background:{% if c.cat == 'estrutura' %}var(--accent,#4F46E5){% elif c.cat == 'instalacoes' %}color-mix(in srgb, var(--accent,#4F46E5) 72%, #14141b){% else %}color-mix(in srgb, var(--accent,#4F46E5) 46%, #6b7280){% endif %}"></div></div>
+      <div style="flex:1;height:10px;border-radius:6px;background:color-mix(in srgb, var(--accent,#4F46E5) 14%, transparent);position:relative"><div style="position:absolute;left:0;top:0;height:100%;width:{{ c.width_pct }}%;border-radius:6px;background:{{ c.cor }}"></div></div>
       <div style="width:96px;flex:none;text-align:right;font:700 17px var(--p-fb,'Inter');color:var(--p-title,#0F172A)">{{ c.dur_dias }} dias</div>
     </div>
     {% endfor %}

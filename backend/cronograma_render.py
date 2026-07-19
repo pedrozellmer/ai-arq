@@ -46,6 +46,49 @@ _MESES_PT = ["jan", "fev", "mar", "abr", "mai", "jun",
 # Direções válidas
 TEMPLATES_VALIDOS = ("escuro", "blueprint", "claro", "editorial", "bold")
 
+# ─────────────────────────────────────────────────────────────────────
+#  Cores das fases no Gantt (18/07): as barras usam a COR REAL de cada
+#  fase (paleta "materiais de obra" do cronograma.py) — mesma da tela.
+#  Tudo pré-calculado AQUI em hex/rgba concretos: o resolvedor pós-Jinja
+#  só entende color-mix com var(--accent), então não criamos mixes novos.
+# ─────────────────────────────────────────────────────────────────────
+try:
+    from cronograma import CATEGORIA_COR, CATEGORIA_LABEL
+except Exception:                      # import defensivo (testes isolados)
+    CATEGORIA_COR, CATEGORIA_LABEL = {}, {}
+
+_COR_FALLBACK = "#8E8CA8"
+
+def _hex_rgb(h: str) -> Tuple[int, int, int]:
+    h = (h or "").strip().lstrip("#")
+    if len(h) == 3:
+        h = "".join(c * 2 for c in h)
+    try:
+        return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    except Exception:
+        return 142, 140, 168          # _COR_FALLBACK
+
+def _mix_hex(cor: str, base: str, peso_cor: float) -> str:
+    """Mistura `cor` sobre `base` (ex.: 0.15 = 15% da cor). Devolve hex."""
+    r1, g1, b1 = _hex_rgb(cor)
+    r2, g2, b2 = _hex_rgb(base)
+    m = lambda a, b: max(0, min(255, round(a * peso_cor + b * (1 - peso_cor))))
+    return f"#{m(r1, r2):02X}{m(g1, g2):02X}{m(b1, b2):02X}"
+
+def _fase_visual(f: Dict, cat: str) -> Dict:
+    """cor / texto / tons derivados da fase, prontos pro template."""
+    cor = (f.get("cor") or "").strip()
+    if not re.match(r"^#[0-9a-fA-F]{6}$", cor):
+        cor = CATEGORIA_COR.get(cat, _COR_FALLBACK)
+    r, g, b = _hex_rgb(cor)
+    lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+    return {
+        "cor": cor,
+        "txt": "#1D1B16" if lum > 165 else "#FFFFFF",   # areia/lilás → texto escuro
+        "cor_soft": _mix_hex(cor, "#FFFFFF", 0.16),       # fundo suave (blueprint)
+        "cor_glow": f"rgba({r},{g},{b},.45)",             # brilho (escuro)
+    }
+
 
 # ─────────────────────────────────────────────────────────────────────
 #  PALETAS — pacote --p-* por direção (valores do mestre Cronograma.dc.html)
@@ -382,10 +425,20 @@ def _norm_cat(categoria: Optional[str], label: str) -> str:
     return _cat_from_label(label)
 
 
+def _real_cat(categoria: Optional[str], label: str) -> str:
+    """Categoria REAL (1 dos 7 slugs da paleta materiais), pra legenda/cor.
+    Diferente de _norm_cat, que colapsa em 3 baldes só pro layout antigo."""
+    c = (categoria or "").strip().lower()
+    c = c.replace("ç", "c").replace("õ", "o").replace("ã", "a").replace("é", "e")
+    if c in CATEGORIA_COR:
+        return c
+    return _norm_cat(categoria, label)   # fallback: slug válido (tem cor+label)
+
+
 # ─────────────────────────────────────────────────────────────────────
 #  Geometria — Gantt (barras + eixo)
 # ─────────────────────────────────────────────────────────────────────
-def build_gantt(fases: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
+def build_gantt(fases: List[Dict]) -> Tuple[List[Dict], List[Dict], Optional[float], List[Dict]]:
     """Retorna (fases_ctx, axis_ctx).
 
     t0 = min(inicio); mes_fim = mês de max(fim); tN = último dia de mes_fim;
@@ -402,7 +455,7 @@ def build_gantt(fases: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
             continue
         parsed.append((f, ini, fim))
     if not parsed:
-        return [], []
+        return [], [], None, []
 
     t0 = min(p[1] for p in parsed)
     fim_max = max(p[2] for p in parsed)
@@ -420,13 +473,22 @@ def build_gantt(fases: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
         dur = f.get("dur_dias")
         if dur is None:
             dur = (fim - ini).days
+        cat = _norm_cat(f.get("categoria"), f.get("label", ""))
+        cat_real = _real_cat(f.get("categoria"), f.get("label", ""))
+        try:
+            pct_exec = int(max(0, min(100, float(f.get("pct_executado") or 0))))
+        except Exception:
+            pct_exec = 0
         fases_ctx.append({
             "label": f.get("label", ""),
             "dur_dias": int(dur),
             "left_pct": round(left, 2),
             "width_pct": round(width, 2),
             "label_pct": round(left + width, 2),
-            "cat": _norm_cat(f.get("categoria"), f.get("label", "")),
+            "cat": cat,
+            "cat_real": cat_real,
+            "pct_exec": pct_exec,
+            **_fase_visual(f, cat_real),
         })
 
     # Eixo de meses
@@ -440,7 +502,27 @@ def build_gantt(fases: List[Dict]) -> Tuple[List[Dict], List[Dict]]:
         axis.append({"label": _mes_label(m), "pct": round(pct, 2)})
         m = _next_month(m)
 
-    return fases_ctx, axis
+    # "HOJE" — só quando a data atual cai dentro do período do Gantt
+    hoje_pct = None
+    hoje = date.today()
+    if t0 <= hoje <= tN:
+        hoje_pct = round((hoje - t0).days / total * 100.0, 2)
+
+    # Legenda por categoria REALMENTE presente (ordem de aparição), com a cor
+    # dominante da categoria nas fases (1ª fase da categoria manda).
+    legenda: List[Dict] = []
+    _vistas = set()
+    for fc in fases_ctx:
+        if fc["cat_real"] in _vistas:
+            continue
+        _vistas.add(fc["cat_real"])
+        legenda.append({
+            "label": CATEGORIA_LABEL.get(fc["cat_real"], fc["cat_real"].title()),
+            "cor": fc["cor"],
+            "cor_soft": fc["cor_soft"],
+        })
+
+    return fases_ctx, axis, hoje_pct, legenda
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -532,12 +614,15 @@ def build_caminho(cronograma: Dict) -> List[Dict]:
     out = []
     for i, c in enumerate(cc, 1):
         dur = c.get("dur_dias", 0) or 0
+        cat_real = _real_cat(c.get("categoria"), c.get("label", ""))
         out.append({
             "rank": i,
             "label": c.get("label", ""),
             "dur_dias": int(dur),
             "width_pct": round(dur / maior * 100.0, 1),
             "cat": _norm_cat(c.get("categoria"), c.get("label", "")),
+            "cor": (c.get("cor") if re.match(r"^#[0-9a-fA-F]{6}$", str(c.get("cor") or ""))
+                    else CATEGORIA_COR.get(cat_real, _COR_FALLBACK)),
         })
     return out
 
@@ -574,7 +659,7 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
     accent = _norm_hex(branding.get("brand_color"))
     resumo = cronograma.get("resumo", {}) or {}
 
-    fases_ctx, axis_ctx = build_gantt(cronograma.get("fases", []))
+    fases_ctx, axis_ctx, hoje_pct, legenda_ctx = build_gantt(cronograma.get("fases", []))
     curva_ctx = build_curva(cronograma.get("curva_s", []))
     caminho_ctx = build_caminho(cronograma)
 
@@ -616,6 +701,8 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
         "r": r,
         "fases": fases_ctx,
         "axis": axis_ctx,
+        "hoje_pct": hoje_pct,
+        "legenda": legenda_ctx,
         "curva": curva_ctx,
         "caminho": caminho_ctx,
         "marcos_col1": marcos_col1,

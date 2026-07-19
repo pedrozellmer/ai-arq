@@ -241,7 +241,9 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
         })
 
     caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
-    caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias']} for f in caminho_critico]
+    caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias'],
+                        'categoria': f.get('categoria'), 'cor': f.get('cor')}
+                       for f in caminho_critico]
 
     # NOVO: PPC + distribuição categoria + curva realizada
     ppc = calcular_ppc(fases)
@@ -415,7 +417,8 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
 
     # Caminho crítico = top 5 disciplinas com maior duração
     caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
-    caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias']}
+    caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias'],
+                        'categoria': f.get('categoria'), 'cor': f.get('cor')}
                        for f in caminho_critico]
 
     data_fim = max(_parse_date(f['fim']) for f in fases) if fases else dt_inicio
