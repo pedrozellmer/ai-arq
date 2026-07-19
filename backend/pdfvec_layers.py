@@ -305,6 +305,7 @@ def scale_from_viewport(pdf_path: str, page_index: int = 0) -> dict:
         for x in views:
             x.pop("area", None)
         return {"main_scale": main["scale"], "main_bbox": main["bbox"],
-                "snapped": main["snapped"], "viewports": views}
+                "snapped": main["snapped"], "viewports": views,
+                "page_size": (pw, ph)}
     except Exception as e:
         return {"error": f"{type(e).__name__}: {e}"[:100]}
