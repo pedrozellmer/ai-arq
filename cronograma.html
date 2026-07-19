@@ -162,9 +162,10 @@
       </button>
     </div>
 
-    <!-- Barra de ações (Salvar / Toggle Editor / Exportar). Visual sóbrio: -->
-    <!-- bordas slate, sem cores gritantes, indigo só pra ação primária. -->
-    <div class="rounded-xl bg-white border border-slate-200 p-4 flex flex-wrap items-center gap-3">
+    <!-- Barra de ações (Salvar / Toggle Editor / Exportar). Fica FIXA no topo -->
+    <!-- (sticky) enquanto você rola pra editar/exportar de onde estiver — o -->
+    <!-- offset `top` = altura do header, calculada em JS (var --cr-header-h). -->
+    <div id="cr-actionbar" class="sticky z-30 rounded-xl bg-white/90 backdrop-blur-sm border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3 transition-shadow duration-200" style="top: var(--cr-header-h, 60px)">
       <button id="btn-save" class="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-900 text-white text-sm font-semibold transition flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         Salvar
@@ -219,7 +220,7 @@
         </button>
       </div>
       <div id="fases-editor" class="space-y-2"></div>
-      <p class="mt-4 text-xs text-slate-500">Mudanças ficam no navegador. Clique em <strong class="text-slate-700">Salvar</strong> no topo pra salvar no servidor (e habilitar PDF/PPT).</p>
+      <p class="mt-4 text-xs text-slate-500">Mudanças ficam no navegador. Clique em <strong class="text-slate-700">Salvar</strong> na barra fixa do topo (ela te acompanha) pra salvar no servidor e habilitar PDF/PPT.</p>
     </div>
 
     <!-- Resumo -->
@@ -516,6 +517,35 @@ let cronogramaAtual = null;  // último JSON retornado pelo backend
 document.getElementById('btn-save').addEventListener('click', salvarCronograma);
 document.getElementById('btn-edit').addEventListener('click', toggleEditor);
 document.getElementById('btn-add-fase').addEventListener('click', () => adicionarFaseEditor());
+
+// ─── Barra de ações fixa (sticky): segue o usuário no topo enquanto ele edita/
+//     exporta lá embaixo. offset `top` = altura real do header; sombra reforça
+//     quando ela "gruda". Fix da dinâmica estranha (Pedro 19/07). ──
+(function setupStickyActionbar() {
+  const header = document.querySelector('header');
+  const bar = document.getElementById('cr-actionbar');
+  if (!bar) return;
+  const setHeaderH = () => {
+    const h = header ? header.offsetHeight : 60;
+    document.documentElement.style.setProperty('--cr-header-h', h + 'px');
+    return h;
+  };
+  let h = setHeaderH();
+  let io = null;
+  const arm = () => {
+    if (io) io.disconnect();
+    try {
+      io = new IntersectionObserver(([e]) => {
+        const stuck = e.intersectionRatio < 1;
+        bar.classList.toggle('shadow-lg', stuck);
+        bar.classList.toggle('shadow-sm', !stuck);
+      }, { threshold: [1], rootMargin: `-${h + 1}px 0px 0px 0px` });
+      io.observe(bar);
+    } catch (_) { /* sem IntersectionObserver: sombra fixa, sem drama */ }
+  };
+  arm();
+  window.addEventListener('resize', () => { h = setHeaderH(); arm(); });
+})();
 
 // Editor agora vive aberto por default depois de gerar. O botão "Recolher
 // fases" só esconde o editor pra quem quer ver Gantt em tela cheia.
