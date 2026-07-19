@@ -38,6 +38,8 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     # "INDICADAS"). Fallback: carimbo via Vision. (Achado #2 do estudo 07/07.)
     den = None
     bbox = None
+    alt_viewports: list = []      # demais viewports do /VP (fallback de salas)
+    vp_page_area = None
     try:
         from pdfvec_layers import scale_from_viewport
         vp = scale_from_viewport(pdf_path, page_index)
@@ -47,6 +49,10 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             out["scale_src"] = "viewport"
             out["scale_snapped"] = vp.get("snapped")
             out["n_viewports"] = len(vp.get("viewports", []))
+            alt_viewports = [v for v in vp.get("viewports", [])
+                             if v.get("bbox") != bbox]
+            pw, ph = vp.get("page_size", (0.0, 0.0))
+            vp_page_area = (pw * ph) or None
     except Exception as e:
         out["err_viewport"] = f"{type(e).__name__}: {e}"[:120]
 
@@ -80,24 +86,67 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         except Exception as e:
             out["err_views"] = f"{type(e).__name__}: {e}"[:120]
 
-    # 3) ambientes (banda de sala) + envoltória (banda alta, ponte 12pt)
+    # 3) ambientes (banda de sala) + envoltória (banda alta, ponte proporcional)
+    room_den, room_bbox = den, bbox   # viewport que efetivamente mediu salas
     try:
-        from pdfvec_rooms import detect_rooms
-        rooms = detect_rooms(pdf_path, page_index, den, bbox)
+        from pdfvec_rooms import PT_TO_M, detect_rooms
+        # bridge_gaps_m=1.2: se a geometria pura fechar quase nada, refaz com
+        # ponte de vão de porta (até 1,2 m reais, proporcional à escala) e
+        # adota só se medir mais. Sala que dependa de ponte demais é
+        # descartada lá dentro (regra nº 1).
+        rooms, rmeta = detect_rooms(pdf_path, page_index, den, bbox,
+                                    bridge_gaps_m=1.2, return_meta=True)
+        # fallback multi-viewport: em prancha de DETALHE a viewport principal
+        # (maior área) pode ser uma VISTA/elevação — 0 salas ali é honesto,
+        # mas a PLANTA mora numa viewport irmã. Cada viewport do /VP traz a
+        # própria escala exata (zero chute); tenta as irmãs e fica com a que
+        # mais mede. Viewports < 5% da folha (miniatura/keyplan) ficam fora:
+        # planta inteira espremida + ponte = "sala" falsa.
+        if not rooms and alt_viewports:
+            best = None
+            tried = 0
+            for v in sorted(alt_viewports, key=lambda v: -abs(
+                    (v["bbox"][2] - v["bbox"][0]) * (v["bbox"][3] - v["bbox"][1]))):
+                vb = v["bbox"]
+                va = abs((vb[2] - vb[0]) * (vb[3] - vb[1]))
+                if vp_page_area and va < 0.05 * vp_page_area:
+                    continue
+                if tried >= 5 or time.time() - t0 > 120:
+                    break
+                tried += 1
+                r2, m2 = detect_rooms(pdf_path, page_index, v["scale"],
+                                      tuple(vb), bridge_gaps_m=1.2,
+                                      return_meta=True)
+                tot2 = sum(x["area_m2"] for x in r2)
+                if r2 and (best is None or tot2 > best[0]):
+                    best = (tot2, r2, m2, v)
+            if best:
+                _tot, rooms, rmeta, v = best
+                room_den, room_bbox = v["scale"], tuple(v["bbox"])
+                out["rooms_viewport"] = {"scale": v["scale"],
+                                         "bbox": [round(x, 1) for x in v["bbox"]]}
         areas = sorted((r["area_m2"] for r in rooms), reverse=True)
         out["n_rooms"] = len(areas)
         out["rooms_m2"] = round(sum(areas), 1)
         out["top_rooms"] = [round(a, 1) for a in areas[:5]]
+        if rooms and rmeta.get("stage") == "ponte_porta":
+            out["rooms_stage"] = rmeta["stage"]           # transparência no log
+            out["rooms_bridges"] = rmeta.get("n_bridges")
+        # envoltória: ponte proporcional à escala (1,2 m reais). Antes era 12pt
+        # fixo — batia com 1,2 m só em 1:100; em 1:50 fechava apenas 0,6 m.
+        env_gap_pt = 1.2 / (PT_TO_M * den)
         env = detect_rooms(pdf_path, page_index, den, bbox,
-                           min_m2=400, max_m2=5000, bridge_gaps_pt=12)
+                           min_m2=400, max_m2=5000, bridge_gaps_pt=env_gap_pt)
         out["envelope_m2"] = round(max((r["area_m2"] for r in env), default=0), 1) or None
     except Exception as e:
         out["err_rooms"] = f"{type(e).__name__}: {e}"[:120]
 
-    # 4) paredes/divisórias (medição por pares de paralelas na sopa)
+    # 4) paredes/divisórias (medição por pares de paralelas na sopa) — na
+    # MESMA viewport/escala que mediu as salas (numa prancha de detalhe, medir
+    # parede da elevação seria ruído)
     try:
         from pdfvec_walls import detect_walls
-        w = detect_walls(pdf_path, page_index, den, bbox)
+        w = detect_walls(pdf_path, page_index, room_den, room_bbox)
         out["walls_m"] = round(w.get("total_length_m", 0.0), 1)
         out["n_walls"] = len(w.get("walls", []))
     except Exception as e:
@@ -108,7 +157,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     # de símbolos (IND-*/LUM-*). Determinístico, sem IA. Coleta pra calibrar.
     try:
         from pdfvec_layers import summarize_layers
-        out["layers"] = summarize_layers(pdf_path, page_index, den, bbox)
+        out["layers"] = summarize_layers(pdf_path, page_index, room_den, room_bbox)
     except Exception as e:
         out["err_layers"] = f"{type(e).__name__}: {e}"[:120]
 
