@@ -4626,8 +4626,28 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # O guard acima só pega o caso de ZERO itens. Se sobram itens mas uma
         # disciplina inteira caiu por um pico passageiro da IA, o usuário recebia
         # planilha que PARECE completa (bug Vinícius ainda meio aberto).
+        # DWG que falhou mas tem PDF IRMÃO no mesmo job (mesmo nome-base):
+        # a prancha NÃO está perdida — entrou pela leitura do PDF. Caso real
+        # 19/07 (validação estrutural): FORMA.dwg falhou na conversão, mas
+        # FORMA.pdf estava no job e foi processado — e o aviso dizia "faltou",
+        # assustando à toa. Só o DWG SEM irmão conta como prancha perdida.
+        def _stem_norm(p):
+            import unicodedata as _ud
+            s = os.path.splitext(os.path.basename(p))[0].strip().lower()
+            s = _ud.normalize("NFKD", s)
+            return "".join(c for c in s if not _ud.combining(c))
+        _pdf_stems = {_stem_norm(p) for p in (pdf_paths or [])}
+        _dwg_com_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) in _pdf_stems]
+        _dwg_sem_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) not in _pdf_stems]
+        if _dwg_com_irmao:
+            project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [
+                f"ℹ {len(_dwg_com_irmao)} DWG(s) não converteram, mas a(s) prancha(s) "
+                f"entraram pela versão em PDF do mesmo nome: "
+                f"{', '.join(_dwg_com_irmao)[:200]}. Pra medir direto da geometria, "
+                f"rode EXPORTTOAUTOCAD no CAD e reenvie o DWG."
+            ]
         _dwg_failed_msgs = [f"{n}: não consegui converter esse DWG (talvez versão nova do AutoCAD ou objetos especiais)"
-                            for n in (dwg_failed or [])]
+                            for n in _dwg_sem_irmao]
         partial_errors = (sheet_errors or []) + (dxf_errors or []) + _dwg_failed_msgs
         partial_failure = bool(partial_errors)
         if partial_failure:
