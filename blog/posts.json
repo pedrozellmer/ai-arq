@@ -800,87 +800,88 @@
       ]
     },
     {
-      "slug": "disciplinas-obra-retrofit-comercial",
-      "title": "Lista Completa de Disciplinas em Obra de Retrofit Comercial (2026)",
-      "description": "Checklist das 18 disciplinas em obra de retrofit comercial. O que considerar, o que esquecer gera aditivo, ordem de execução, custos indiretos típicos e tendências 2026.",
-      "keywords": "disciplinas retrofit comercial, retrofit obra comercial, disciplinas obra escritório, checklist retrofit corporativo, ordem disciplinas obra, retrofit 2026 SP",
-      "category": "Tipologias",
-      "publish_date": "2026-09-13",
-      "intro": "Retrofit comercial parece obra simples até o canteiro começar a revelar surpresas: a parede que era estrutural, o esgoto que não tem caimento pra nova copa, o sistema de incêndio que o Corpo de Bombeiros vai exigir. O problema quase nunca é a disciplina difícil — é a disciplina esquecida, aquela que ninguém colocou no escopo e vira aditivo.\n\nEste guia organiza as 18 disciplinas típicas de uma obra de retrofit comercial em ordem de execução comum, mostra as 5 que mais geram aditivo, e separa o que muda no quantitativo com as tendências de 2026. Cada afirmação técnica vem com a norma ou a referência correspondente. A ideia é simples: levantar tudo antes, pra não descobrir depois.",
+      "slug": "por-que-nao-entregamos-o-preco-da-sua-obra",
+      "title": "Por que não te entregamos o preço da obra — e por que isso te protege",
+      "description": "Por que o AI.arq não dá preço de obra com IA: entregamos o quantitativo medido (raio-x da prancha) e deixamos a precificação com o orçamentista habilitado.",
+      "keywords": "ia orçamento de obra, ia preço de obra, por que ia não dá preço, estimativa de obra com ia, quantitativo com ia confiável, raio-x da prancha, precificação responsabilidade orçamentista",
+      "category": "IA e Confiança",
+      "publish_date": "2026-06-28",
+      "intro": "A pergunta mais comum que recebemos é direta: \"se a IA já leu meu projeto, por que ela não me dá logo o preço da obra?\" Tecnicamente, a gente poderia mostrar um número na tela. Mas decidimos, de propósito, não fazer isso. Este texto explica o porquê — não como desculpa, e sim como decisão de produto. A resposta curta: uma estimativa que parece verdade é mais perigosa do que nenhuma. A resposta longa está abaixo.",
       "sections": [
         {
-          "h2": "O que é retrofit comercial",
-          "body": "Retrofit é a reforma estratégica de espaço construído existente. Diferente de obra nova do zero, retrofit aproveita o esqueleto da edificação (estrutura, fachada, shafts verticais, infraestrutura predial básica) e renova tudo dentro.\n\nRetrofit comercial é um dos tipos mais comuns no Brasil — escritórios, lojas, restaurantes, clínicas que mudam de inquilino e precisam ser remodelados pra nova operação. Em São Paulo, o mercado de retrofit corporativo passou por amadurecimento em 2026, com Triple A novos coexistindo com revitalização de edifícios antigos da Avenida Paulista, Faria Lima, Berrini e centro histórico.\n\nCaracterísticas que diferenciam retrofit:\n- Prazo curto (geralmente 60 a 180 dias)\n- Operação adjacente em andamento (outros andares funcionando)\n- Limitações estruturais herdadas (paredes que não podem cair, shafts fixos, capacidade do elevador de carga)\n- Mistura de itens novos com existentes que ficam\n- Coordenação obrigatória com administração do condomínio\n- Restrição de horário pra serviços ruidosos"
+          "h2": "O que a gente entrega — e o que a gente não entrega",
+          "body": "Vamos ser transparentes sobre a linha que traçamos. O AI.arq lê seus arquivos CAD (DWG, DXF, PDF) e devolve o quantitativo: as quantidades de cada item levantadas a partir do desenho — áreas, comprimentos, contagens. Isso é o levantamento de quantitativos, que Aldo Dórea Mattos descreve como a etapa de medir e contar o que está no projeto, distinta da orçamentação propriamente dita (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019).\n\nO que a gente não entrega é o preço. As colunas de valor unitário e total saem em branco na planilha, prontas para o orçamentista preencher. Não é uma limitação que pedimos desculpa por ter — é a fronteira correta entre o que uma máquina pode medir e o que um profissional habilitado precisa julgar."
         },
         {
-          "h2": "As 18 disciplinas em ordem de execução típica",
-          "body": "Esta é uma ordem comum de execução. Cada item tem sua planilha de quantitativos separada:\n\n1. Demolição (paredes, forros, pisos antigos)\n2. Estrutura (reforço se necessário)\n3. Alvenaria (paredes novas, shafts internos)\n4. Instalações elétricas (infraestrutura, eletrocalhas, conduítes)\n5. Instalações hidráulicas (água fria e quente — infraestrutura)\n6. Instalações de esgoto (caimento, ramais)\n7. Instalações de climatização HVAC (dutos, dampers)\n8. Combate a incêndio (hidrantes e mangotinhos pela NBR 13714; chuveiros automáticos / sprinklers pela NBR 10897, quando exigidos)\n9. Cabeamento estruturado (rede, dados, voz, IoT)\n10. Pisos (assentamento, rodapés)\n11. Revestimentos de parede (cerâmica, painéis, madeira)\n12. Forro (acústico, decorativo, modular)\n13. Gesso (sancas, decorativo, drywall)\n14. Pintura (paredes, teto, esquadrias)\n15. Esquadrias (portas, divisórias)\n16. Vidros (divisórias, fachadas internas)\n17. Marcenaria (móveis fixos, marcenaria sob medida)\n18. Acabamentos finais (louças, metais, ferragens, luminárias, sinalização)\n\nDisciplinas separadas que aparecem em retrofit grande (corporativo Triple A): segurança eletrônica, automação predial (BMS), sistema de áudio ambiente, paisagismo interno (jardins verticais)."
+          "h2": "Uma estimativa que parece verdade é pior que nenhuma",
+          "body": "Esse é o coração da nossa tese. Um número de preço gerado automaticamente carrega um problema embutido: ele parece preciso. A tela mostra um total fechado, com centavos, e isso transmite uma confiança que o número não tem como sustentar.\n\nO problema é o que esse número vira depois. Mesmo com toda ressalva de \"valor aproximado\", uma estimativa numérica funciona como âncora: ela fixa uma expectativa na cabeça do cliente e vira, na prática, um compromisso. Quando a obra executa e o custo real aparece diferente, a conversa difícil sobra para o profissional que apresentou o número.\n\nE orçamento, por natureza, é estimativa com margem, não verdade exata. A própria orientação técnica IBRAOP OT-IBR 004/2012 (Precisão do orçamento de obras públicas) reconhece que existe um desvio esperado entre o custo estimado nas fases de projeto e o orçamento real da obra. Ou seja: a incerteza é parte legítima do orçamento. Aparentar precisão exata não elimina essa incerteza — só a esconde de quem mais precisa enxergá-la."
         },
         {
-          "h2": "5 disciplinas que mais geram aditivo em retrofit",
-          "body": "Por experiência de mercado, essas são as disciplinas que mais aparecem como surpresa no canteiro de retrofit comercial:\n\n1. Combate a incêndio — quase ninguém detalha bem na fase de orçamento. Aparece quando o Corpo de Bombeiros vistoria. As exigências (hidrantes, mangotinhos, chuveiros automáticos) e os limites de área e altura que disparam cada sistema vêm da legislação estadual de segurança contra incêndio (Instruções Técnicas do Corpo de Bombeiros), que remetem às normas técnicas: NBR 13714 pra hidrantes e mangotinhos, NBR 10897 pra chuveiros automáticos. Confirme sempre a IT vigente no seu estado antes de fechar o escopo.\n\n2. HVAC (climatização) — projeto antigo do prédio raramente suporta a nova carga térmica do layout aberto e da densidade ocupacional moderna. Tem que reforçar capacidade ou redistribuir dutos. O dimensionamento de sistemas centrais e unitários segue a NBR 16401.\n\n3. Estrutura — parede que parecia divisória era estrutural. Costuma aparecer só na demolição. Aí entra demolir mais reforçar com perfil metálico ou pilar adicional.\n\n4. Esgoto — caimento errado pra nova posição da copa, do banheiro ou da pia. Refazer todo o ramal de esgoto, com quebra de piso.\n\n5. Cabeamento e infraestrutura de rede — escritório moderno quer IoT, sensores, controle automatizado, áudio embutido. Projeto antigo não tem infraestrutura — vira aditivo relevante mesmo em escritório médio. O cabeamento estruturado de edifícios comerciais segue a NBR 14565.\n\nMarmoraria também aparece muito como aditivo, mas geralmente é por mudança de escopo (cliente decide trocar bancada de fórmica pra mármore depois que viu o showroom)."
+          "h2": "Preço é específico daquela obra (e a gente não conhece o seu mercado)",
+          "body": "Mattos chama isso de especificidade: o preço não é universal, ele é daquela obra, naquele local, naquele momento (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019). O mesmo item de serviço custa diferente conforme o estado, o fornecedor, o acesso ao canteiro e as condições locais.\n\nIsso não é só teoria. O SINAPI, mantido por Caixa e IBGE, é divulgado de forma regionalizada por estado — porque o custo de fato varia por UF. O CUB/m², calculado pelos Sinduscons com a metodologia da NBR 12721:2006, é uma média regional, não o custo da sua obra específica.\n\nSe o custo de referência já muda de estado para estado nas próprias bases oficiais, não faz sentido uma IA carimbar um número \"universal\" lendo só o seu desenho. Quem conhece o mercado da sua cidade, seus fornecedores e suas condições de canteiro é você e o orçamentista local — não a gente."
         },
         {
-          "h2": "Tendências de design corporativo 2026 que afetam quantitativo",
-          "body": "Tendências fortes em retrofit corporativo em 2026 que mudam o quantitativo:\n\n1. Layout flexível e áreas compartilhadas — menos salas privadas fixas, mais workstations rotativas, áreas de colaboração informal. Diminui alvenaria, aumenta divisórias móveis e mobiliário modular.\n\n2. IoT e sensores — controle de ocupação, qualidade do ar, iluminação adaptativa, automação de cortinas. Aumenta cabeamento e infraestrutura de TI.\n\n3. Conforto acústico — open offices precisam de tratamento acústico sério. Forro acústico, painéis absorvedores e carpete acústico puxam pra cima o custo de acabamento.\n\n4. Sustentabilidade e selos verdes (LEED, AQUA) — exigem materiais certificados, gestão de resíduos no canteiro e eficiência energética, o que pesa no custo total.\n\n5. Áreas de bem-estar — copa equipada, sala de descanso, espaço pra ginástica, jardins internos, áreas pet-friendly. Adiciona disciplinas que escritório tradicional não tinha. Quando há adequação de acessibilidade nesses espaços, vale conferir a NBR 9050."
+          "h2": "Preço perece no tempo (o número certo de hoje vence em semanas)",
+          "body": "O outro atributo que Mattos aponta é a temporalidade: o orçamento tem prazo de validade. Um preço correto hoje pode estar errado em poucas semanas (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019).\n\nDe novo, as bases oficiais confirmam isso na prática. O SINAPI tem atualização mensal. O CUB/m² é divulgado mensalmente pelos Sinduscons. Esses sistemas se atualizam todo mês justamente porque o custo de insumos e mão de obra se move o tempo todo.\n\nPor isso a coluna de preço sai em branco no AI.arq. Fixar um valor que vence seria entregar um número com data de validade escondida. O quantitativo medido na sua prancha, ao contrário, não perece: a área de um piso é a mesma hoje e daqui a seis meses. Faz sentido a máquina entregar o que é estável (a quantidade) e o humano aplicar o que muda (o preço do dia)."
         },
         {
-          "h2": "Custos indiretos em retrofit comercial (BDI maior)",
-          "body": "Em retrofit comercial, o BDI tende a ser maior que o de obra nova do zero por vários fatores:\n\n- Trabalho noturno (operação adjacente não pode parar de dia), com adicional noturno previsto em lei sobre a mão de obra\n- Logística complicada (subir material em elevador de carga compartilhado, restrição de horário)\n- Limpeza constante (cliente no prédio, andar vizinho funcionando)\n- Coordenação com administração do condomínio\n- Riscos de achados imprevistos (instalações antigas escondidas atrás de gesso), que pedem mais contingência\n- Restrição de janela de obra (alguns prédios só permitem serviço fora do horário comercial), que aumenta o prazo total\n- Necessidade de mockup/protótipo de espaço antes de replicar\n\nCada um desses itens entra como linha de custo indireto. A magnitude depende do prédio, do contrato e da janela de obra — cada caso é um caso. O AI.arq entrega o quantitativo dessas linhas; quem define os percentuais de BDI e fecha o preço é o orçamentista habilitado, que conhece a operação e o risco contratual."
+          "h2": "Preço carrega responsabilidade técnica — e máquina não assina RRT",
+          "body": "Tem um motivo que vai além de matemática: orçamento é um juízo profissional que se registra. A Lei Federal 12.378/2010, que regulamenta o exercício da Arquitetura e Urbanismo e cria o CAU, instituiu o RRT (Registro de Responsabilidade Técnica), que define quem responde tecnicamente por cada serviço.\n\nDefinir BDI, escolher o regime tributário, selecionar fornecedor, decidir margens — isso é julgamento de gente habilitada, com nome e responsabilidade atrelados. O Acórdão TCU 2622/2013 – Plenário, que trata de faixas referenciais de BDI por tipologia de obra, relaciona a inadequação do orçamento e do BDI ao sobrepreço e à responsabilidade técnica do orçamentista.\n\nUma IA não tem registro profissional, não assume responsabilidade técnica e não responde por nada. Colocar um preço na boca dela seria pedir que ela assinasse um documento que, por lei, é de um profissional. A gente prefere deixar essa assinatura com quem de direito."
         },
         {
-          "h2": "O que entra no custo por m² de retrofit",
-          "body": "O custo por m² de um retrofit não é um número de tabela — ele varia muito com o padrão de acabamento, o nível de automação, a complexidade da obra e a região. Em vez de cravar uma faixa de preço aqui (que envelhece rápido e induz erro), vale entender o que compõe esse custo:\n\n- Padrão de acabamento (do escritório standard ao boutique de design corporativo com materiais premium)\n- Nível de automação e infraestrutura de TI (IoT, sensores, BMS)\n- Exigências de sustentabilidade e certificação\n- Custos indiretos e BDI do retrofit (trabalho noturno, logística, contingência)\n- Região (capital costuma ser mais cara que interior; cada praça tem sua realidade de mão de obra e frete)\n\nO que normalmente NÃO entra no custo de obra por m² e precisa ser orçado à parte: mobiliário, equipamentos de TI, sinalização externa e taxas como ART/RRT.\n\nO papel do AI.arq aqui é entregar o quantitativo medido item a item, pra que o orçamentista habilitado aplique preços atualizados da praça e da data — não estimar o R$/m²."
+          "h2": "O que a gente entrega no lugar: o raio-x da prancha",
+          "body": "Se a gente não dá o preço, o que dá? A gente dá honestidade sobre cada número do levantamento — o que chamamos de raio-x da prancha. Cada item do quantitativo vem marcado por origem, com texto e símbolo (não só cor, porque cor sozinha exclui quem não a enxerga):\n\n- Medido (✓): a quantidade foi de fato extraída da geometria do seu CAD — uma área calculada do polígono, um comprimento lido da linha, uma contagem feita dos blocos. É número com lastro no desenho.\n- Estimativa (⚠): a quantidade é uma sugestão a revisar, porque o desenho não trouxe a informação medível (por exemplo, um PDF vetorial sem texto de cota, em que a geometria não pôde ser lida). É um ponto de partida, marcado para você conferir, não um fato.\n\nE as colunas de preço unitário e total ficam em branco, prontas para o orçamentista. A planilha sai com a estrutura pronta para precificar, mas sem nenhum valor sem responsável técnico ocupando o lugar do julgamento profissional.\n\nO ponto: a gente não esconde a incerteza atrás de um total fechado. Mostra exatamente o que é chão firme (medido ✓) e o que pede revisão (estimativa ⚠). Honestidade sobre a origem do número é o recurso, não a falha."
         },
         {
-          "h2": "Como o AI.arq lida com retrofit",
-          "body": "Quando você sobe um projeto de retrofit no AI.arq, a IA reconhece os elementos típicos da tipologia:\n\n- Pranchas de demolição (separação visual: o que sai)\n- Pranchas de layout atual vs novo\n- Comparação automática (o que sai, o que entra, o que fica intacto)\n- Quantificação separada por categoria (demolir, construir, manter)\n- Alerta pra disciplinas que costumam passar batido em retrofit (combate a incêndio, reforço de HVAC, cabeamento estruturado)\n- Sinalização clara de itens estimados onde a planta não tem informação suficiente — cada item vem marcado com símbolo e palavra: medido (check) quando foi contado do CAD, estimativa (alerta) quando é sugestão a confirmar\n- Seção de Custos Indiretos pré-pronta com itens típicos de retrofit (trabalho noturno, logística, contingência maior)\n\nResultado: planilha de quantitativos pronta pra o orçamentista precificar, com o que é medido separado do que é estimativa — menos pegadinha de aditivo posterior."
+          "h2": "Por que isso te dá poder — e te protege",
+          "body": "Terminar sem preço não é ficar de mãos vazias. É ficar com a parte mais trabalhosa já pronta e auditável, do seu jeito.\n\n1. Poder de barganha. Com o quantitativo medido em mãos, você manda a mesma planilha para vários orçamentistas e compara propostas item a item, na mesma base. Quem controla o quantitativo controla a cotação.\n2. Proteção jurídica e profissional. O preço sai de quem tem registro para precificar e assume a responsabilidade técnica por ele (Lei 12.378/2010). Você não apresenta ao cliente um número gerado por máquina que teria de defender depois.\n3. Tempo no lugar certo. A IA tira de você as horas de medir e contar — a parte mecânica e cansativa. Sobra tempo para o que é seu de verdade: projetar, e revisar o que está marcado como estimativa (⚠).\n\nQuantitativo e orçamento são coisas distintas — a NBR 12721:2006 e a Lei 14.133/2021 (art. 6º, nas definições) tratam um e outro separadamente. A gente fica, com convicção, do lado do quantitativo medido. No blog há um glossário dos termos (quantitativo, orçamentação e orçamento) e um texto sobre a divisão de papéis entre projetista e orçamentista, se quiser se aprofundar."
         }
       ],
-      "cta": "Tem retrofit comercial pra fazer levantamento? O AI.arq foi testado em projetos de retrofit corporativo de diferentes portes. Testa grátis em ai.arq.br.",
+      "cta": "Quer ver o raio-x da sua própria prancha? Suba um projeto em ai.arq.br e receba o quantitativo com cada item marcado como medido (✓) ou estimativa a revisar (⚠), com as colunas de preço em branco para o seu orçamentista. O primeiro projeto é grátis e sem cartão — estamos em beta e queremos seu feedback de arquiteto de verdade. A gente mede a prancha; o preço, com responsabilidade técnica, continua sendo seu.",
       "sources": [
         {
-          "type": "norm",
-          "title": "ABNT NBR 13714:2000",
-          "description": "Sistemas de hidrantes e de mangotinhos para combate a incêndio"
+          "type": "book",
+          "title": "Como preparar orçamentos de obras",
+          "author": "Aldo Dórea Mattos",
+          "publisher": "Editora Oficina de Textos",
+          "year": 2019
         },
         {
           "type": "norm",
-          "title": "ABNT NBR 10897:2020",
-          "description": "Sistemas de proteção contra incêndio por chuveiros automáticos — Requisitos"
+          "title": "ABNT NBR 12721:2006 — Avaliação de custos unitários de construção para incorporação imobiliária e outras disposições para condomínios edilícios — Procedimento",
+          "description": "Edição de agosto de 2006; base metodológica do cálculo do CUB. Trata quantitativo e orçamento como conceitos distintos."
         },
         {
           "type": "norm",
-          "title": "ABNT NBR 16401:2008",
-          "description": "Instalações de ar-condicionado — Sistemas centrais e unitários"
+          "title": "Lei Federal 14.133/2021 — Nova Lei de Licitações e Contratos",
+          "description": "Art. 6º traz as definições, incluindo orçamento estimado e preços unitários referenciais, tratando quantitativo e orçamento de forma distinta."
         },
         {
           "type": "norm",
-          "title": "ABNT NBR 14565:2019",
-          "description": "Cabeamento estruturado para edifícios comerciais e data centers"
+          "title": "Lei Federal 12.378/2010",
+          "description": "Regulamenta o exercício da Arquitetura e Urbanismo, cria o CAU e institui o RRT (Registro de Responsabilidade Técnica), que define os responsáveis técnicos pelos serviços."
         },
         {
           "type": "norm",
-          "title": "ABNT NBR 9050:2015 (Emenda 1:2020)",
-          "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos — referência para adequação em retrofit"
+          "title": "Acórdão TCU 2622/2013 – Plenário",
+          "description": "Estabelece faixas referenciais de BDI por tipologia de obra e relaciona a inadequação do orçamento e do BDI ao sobrepreço e à responsabilidade técnica do orçamentista."
+        },
+        {
+          "type": "norm",
+          "title": "IBRAOP OT-IBR 004/2012 — Precisão do orçamento de obras públicas",
+          "description": "Reconhece o desvio esperado entre o custo estimado nas fases de projeto e o orçamento real da obra."
         },
         {
           "type": "link",
-          "title": "Retrofit e áreas compartilhadas: 7 tendências para escritórios em 2026",
-          "url": "https://exame.com/mercado-imobiliario/retrofit-e-areas-compartilhadas-veja-7-tendencias-para-escritorios-em-2026/",
-          "publisher": "Exame"
+          "title": "SINAPI — Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil",
+          "url": "https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx",
+          "publisher": "Caixa Econômica Federal / IBGE"
         },
         {
           "type": "link",
-          "title": "Retrofit Corporativo 2026: Modernizando Prédios Antigos",
-          "url": "https://pdfpremium.com.br/blog/divisorias/retrofit-corporativo-modernizacao-divisorias-vidro-2026/",
-          "publisher": "PDFPremium"
-        },
-        {
-          "type": "link",
-          "title": "Retrofit Corporativo — Guia para um Retrofit de Escritório",
-          "url": "https://illiengenharia.com.br/blog-engenharia-coporativa/retrofit-de-escritorio/",
-          "publisher": "Illi Engenharia"
+          "title": "CUB/m² — Custo Unitário Básico da Construção",
+          "url": "https://www.cub.org.br/",
+          "publisher": "CBIC / Sinduscon"
         }
       ]
     },
@@ -1187,6 +1188,50 @@
       ]
     },
     {
+      "slug": "dwg-ou-pdf-quantitativo-o-que-os-dados-mostram",
+      "title": "DWG ou PDF? O que 51 projetos reais mostram sobre o seu quantitativo",
+      "description": "Comparamos a planilha de quantitativos de projetos enviados em DWG/DXF e em PDF: no CAD, a fatia de itens medidos direto do desenho foi ~4,3× maior. Entenda o porquê e como exportar.",
+      "keywords": "dwg ou pdf quantitativo, planilha de quantitativos dwg, exportar prancha cad, levantamento de quantitativos automatico, dxf quantitativo",
+      "category": "IA e Confiança",
+      "publish_date": "2026-07-22",
+      "intro": "Toda planilha que sai do AI.arq marca cada item de um jeito honesto: ✓ medido — quando a quantidade foi calculada direto da geometria do desenho — ou ⚠ estimativa a revisar, quando veio de leitura visual e referências do próprio projeto. Essa marcação nos deixou com um experimento involuntário nas mãos: dá pra comparar, com números, o que acontece quando o mesmo tipo de projeto chega em DWG/DXF e quando chega em PDF. Spoiler: o formato do arquivo muda mais o resultado do que qualquer outra coisa.",
+      "sections": [
+        {
+          "h2": "O experimento involuntário: 51 projetos, dois formatos",
+          "body": "Até meados de julho de 2026, 51 projetos processados na plataforma chegaram ao fim com planilha concluída. Separamos por formato de origem: 15 vieram com pelo menos um arquivo CAD (DWG ou DXF) e 36 vieram só em PDF.\n\nO resultado, medido pela nossa própria marcação de confiança item a item:\n\n• Projetos com CAD (DWG/DXF): em média 31,5% dos itens saíram como ✓ medido — quantidade calculada direto da geometria.\n• Projetos só com PDF: em média 7,3% dos itens medidos.\n\nÉ uma diferença de aproximadamente 4,3 vezes. Mesma plataforma, mesmo tipo de projeto, mesma leitura — o que mudou foi o arquivo que entrou. (Dados internos AI.arq, julho/2026, 51 projetos concluídos; médias por projeto. Amostra de beta — o número vai se refinando conforme a base cresce.)"
+        },
+        {
+          "h2": "Por que o formato muda tanto: pixel não tem medida",
+          "body": "Um PDF exportado da prancha é, na prática, uma imagem do desenho — mesmo quando é vetorial, o caminho comum de exportação transforma cotas e textos em traços. Dá pra ler, mas não dá pra medir: uma parede vira um risco sem comprimento conhecido.\n\nJá o DWG/DXF carrega o desenho de verdade: polilinhas com coordenadas, blocos, layers, hachuras. Nesses arquivos a plataforma calcula área, comprimento e contagem geometricamente — por isso o item pode ser marcado como medido, e não estimado.\n\nQuando só existe o PDF, a leitura visual continua funcionando e entrega uma planilha completa — mas a maior parte dos itens nasce como estimativa a revisar, porque é isso que ela é. A gente prefere te entregar uma linha laranja honesta do que um número bonito sem lastro."
+        },
+        {
+          "h2": "O que isso significa na sua planilha",
+          "body": "Mais itens medidos significa, na prática:\n\n• Menos linhas ⚠ pra você conferir manualmente antes de mandar pro orçamentista;\n• Quantidades de piso, forro, alvenaria e esquadrias vindas da geometria, não de inferência;\n• Revisão mais rápida — você confere o que é estimativa, e confia no que foi medido.\n\nVale repetir a regra que não quebramos nunca: item estimado jamais aparece como medido. O ✓ é reservado pro que veio do desenho."
+        },
+        {
+          "h2": "Como exportar pra aproveitar isso",
+          "body": "Se você trabalha em AutoCAD ou similar, o caminho é curto:\n\n1. Envie o DWG ou DXF direto — sem imprimir pra PDF antes.\n2. Se o projeto tem objetos especiais (elétrica, forro modular, mobiliário paramétrico), rode EXPORTTOAUTOCAD antes de salvar: isso converte os objetos em geometria comum, que dá pra medir.\n3. Só tem PDF? Envie mesmo assim — prefira o PDF exportado do CAD (vetorial) ao escaneado, e saiba que a planilha virá com mais estimativas pra revisar.\n\nO passo a passo completo, com prints, está no nosso guia de exportação no FAQ."
+        },
+        {
+          "h2": "Os limites do número (transparência em primeiro lugar)",
+          "body": "Esses 31,5% × 7,3% são médias de uma base em beta — 51 projetos, tipos de prancha variados, complexidades diferentes. Projeto com prancha rica em cotas mede mais; prancha só de layout mede menos, em qualquer formato. O número vai mudar conforme a base cresce, e vamos atualizando.\n\nO que o dado já sustenta com folga é a direção: se você pode escolher o formato do arquivo, escolha o CAD. É a diferença entre a plataforma ler o seu desenho — e medir o seu desenho."
+        }
+      ],
+      "cta": "Quer ver a diferença na sua própria prancha? Suba um projeto em ai.arq.br — de preferência em DWG ou DXF — e receba a planilha de quantitativos com cada item marcado como medido (✓) ou estimativa a revisar (⚠). O primeiro projeto é grátis, sem cartão.",
+      "sources": [
+        {
+          "type": "official",
+          "title": "Dados internos AI.arq — painel de qualidade de leitura (julho/2026, 51 projetos concluídos; metodologia descrita no texto)",
+          "url": "https://ai.arq.br/exemplo.html"
+        },
+        {
+          "type": "official",
+          "title": "Guia de exportação AI.arq — como exportar sua prancha pro melhor resultado (FAQ)",
+          "url": "https://ai.arq.br/faq.html"
+        }
+      ]
+    },
+    {
       "slug": "bdi-arquiteto-br-2026-tabela",
       "title": "BDI do arquiteto BR em 2026: tabela completa com exemplos por porte",
       "description": "Tabela de BDI completa pra arquiteto entender o orçamento da obra: faixas do Acórdão TCU 2622/2013, decomposição dos 6 componentes e exemplos de cálculo em obras de R$300k, R$1mi e R$3mi.",
@@ -1401,95 +1446,6 @@
           "title": "Como elaborar EAP (Estrutura Analítica do Projeto) em obras",
           "url": "https://blog.aecweb.com.br/eap-estrutura-analitica-de-projeto/",
           "publisher": "AECweb"
-        }
-      ]
-    },
-    {
-      "slug": "memorial-a-partir-do-quantitativo-caminho-inverso",
-      "title": "Memorial a partir do quantitativo: o caminho inverso que ninguém ensina",
-      "description": "A faculdade ensina escrever memorial primeiro e depois extrair planilha. Na prática, o caminho inverso funciona melhor: levanta o quantitativo da planta, depois escreve o memorial em cima. Reduz contradição com a planilha, fica auditável e acelera o executivo.",
-      "keywords": "memorial descritivo quantitativo, como escrever memorial descritivo, memorial descritivo arquitetura, memorial descritivo obra residencial, NBR 13531, NBR 13532, NBR 15575",
-      "category": "Documentação",
-      "publish_date": "2026-09-06",
-      "intro": "Na faculdade, o roteiro é claro: primeiro o arquiteto escreve o memorial descritivo, depois o orçamentista extrai a planilha de quantitativos a partir dele. Faz sentido na cabeça do professor, porque o texto vem antes do número. Só que, no canteiro real, esse fluxo cria um problema crônico: memorial e planilha sempre brigam. O memorial fala em piso porcelanato sem citar metragem, a planilha lista a metragem sem citar marca, e o analista do banco devolve o projeto pedindo coerência. Esse texto defende o caminho inverso, que muitos arquitetos experientes já fazem na prática: levantar o quantitativo da planta primeiro, e só depois redigir o memorial em cima da planilha. A norma ABNT NBR 13531:1995 não fixa essa ordem — é convenção de ensino, não regra técnica.",
-      "sections": [
-        {
-          "h2": "O fluxo que a faculdade ensina (e por que ele trava na prática)",
-          "body": "O fluxo clássico do projeto executivo no ensino brasileiro é linear. Anteprojeto vira projeto legal, projeto legal vira projeto executivo, e o executivo gera três entregas: pranchas, memorial descritivo e planilha de quantitativos. A sequência ensinada é quase sempre a mesma: pranchas prontas, memorial redigido em cima das pranchas, planilha extraída do memorial.\n\nO problema é que essa ordem trata o memorial como documento-fonte. Na prática, ele é documento-síntese. Quem dita o quantitativo é a planta, não o texto. Quando o arquiteto escreve o memorial olhando só pra prancha, ele descreve materiais sem contar quantos. Aí o orçamentista entra depois, conta, e descobre que o memorial dizia uma coisa e a planta mostra outra.\n\nA ABNT NBR 13531:1995 — Elaboração de projetos de edificações — Atividades técnicas — descreve as etapas do projeto, mas não fixa a ordem interna entre memorial e quantitativo dentro do executivo. É convenção pedagógica, não obrigação normativa. A NBR 13532:1995, específica de arquitetura, segue a mesma linha: lista os produtos do projeto, sem amarrar sequência de redação."
-        },
-        {
-          "h2": "O caminho inverso: planilha primeiro, memorial depois",
-          "body": "A proposta é simples: antes de redigir o memorial, levanta a planilha de quantitativos diretamente da planta. Lista de itens, áreas, especificações de cada ambiente. Só então o arquiteto escreve o memorial usando a planilha como espinha dorsal.\n\nCada parágrafo do memorial passa a ter um número de quantitativo por trás. Não dá pra escrever sobre piso porcelanato 90×90 se a planilha não tem essa linha. Não dá pra falar em pintura látex numa área de parede sem a área correspondente medida.\n\nAldo Dórea Mattos, em Como preparar orçamentos de obras — referência prática do mercado brasileiro de orçamentação —, organiza o processo a partir do levantamento físico: primeiro os quantitativos, depois a composição de custos. A lógica vale também pro texto descritivo. O argumento é direto: texto sem número é texto sem prova.\n\nNa prática, o caminho inverso funciona assim:\n\n1. Levantamento de áreas e contagens da planta (manual ou automatizado)\n2. Planilha de quantitativos por disciplina e por ambiente\n3. Especificação técnica de cada item (marca, modelo, classe)\n4. Redação do memorial descrevendo o que a planilha já contém\n5. Revisão cruzada memorial × planta × planilha"
-        },
-        {
-          "h2": "Vantagem 1: memorial auditável contra a planta",
-          "body": "Quando o memorial nasce da planilha, ele fica auditável. Cada afirmação do texto tem um número correspondente que pode ser conferido na planta. Isso muda a natureza do documento.\n\nEm vez de descrever genericamente — Cozinha terá piso porcelanato —, o memorial passa a descrever especificamente — Cozinha (12,4 m²) receberá 12,4 m² de piso porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4, conforme item 4.2.1 da planilha de quantitativos.\n\nQuem ler o memorial pode pegar o item 4.2.1 da planilha, ir na planta e medir. Se o número bate, o documento é coerente. Se não bate, fica óbvio onde está o erro. A conferência vira tarefa de segundos por linha.\n\nA NBR 15575:2021 — Norma de Desempenho — pede comprovação por sistema, não só descrição. Memorial auditável ajuda a comprovar desempenho, porque deixa rastro numérico de cada item. Em perícia, esse rastro é prova técnica."
-        },
-        {
-          "h2": "Vantagem 2: reduz contradição entre memorial e planilha",
-          "body": "Contradição entre memorial e planilha é uma das causas frequentes de devolução de projeto em análise de financiamento. O analista abre o memorial, abre a planilha, abre as pranchas, e procura inconsistência. Se acha, devolve pra revisão. Cada devolução custa dias ou semanas de espera.\n\nNo fluxo clássico — memorial primeiro, planilha depois — a contradição surge naturalmente. O arquiteto escreveu o memorial num momento, o orçamentista fez a planilha em outro. Entre uma coisa e outra, o projeto mudou, e os dois documentos passaram a falar línguas diferentes.\n\nNo caminho inverso, a planilha é a fonte única. Memorial é só a tradução textual do que a planilha já diz. Quando o projeto muda, atualiza a planilha, e o memorial vira reescrita parcial — não retrabalho do zero.\n\nO que importa, no fim, não é qual documento nasce primeiro, e sim que memorial e planilha digam a mesma coisa. A ordem invertida só torna essa coerência o estado natural do trabalho, em vez de algo que precisa ser perseguido na revisão final."
-        },
-        {
-          "h2": "Vantagem 3: acelera o projeto executivo",
-          "body": "Levantar quantitativo da planta toma tempo, mas é trabalho que precisa ser feito de qualquer jeito. Memorial sem quantitativo é memorial pela metade.\n\nQuando o arquiteto faz o levantamento primeiro, o memorial vira tarefa de redação, não de pesquisa. Não precisa parar de escrever pra ir na planta medir. Não precisa voltar pra prancha porque esqueceu de citar o forro. A planilha já organizou tudo por ambiente e por disciplina.\n\nO ganho de tempo é direto: em vez de buscar informação na planta a cada parágrafo, faz-se o levantamento uma vez, no início. O memorial passa a fluir de uma fonte já pronta.\n\nA lógica é a mesma que aparece em projeto estrutural: definir os dados quantitativos antes de redigir o memorial faz o texto técnico fluir melhor, porque o número já está na mesa. Yopanan Conrado Rebello, em Bases para projeto estrutural na arquitetura, trata os dados da estrutura como ponto de partida do raciocínio de projeto — e o mesmo princípio organiza bem a descrição arquitetônica."
-        },
-        {
-          "h2": "Como traduzir um item da planilha em parágrafo de memorial",
-          "body": "O coração do método está na tradução item-a-item. Cada linha da planilha vira um trecho do memorial, com referência cruzada explícita.\n\nExemplo. Planilha tem o item:\n\nCódigo: 4.2.1\nDescrição: Piso porcelanato esmaltado retificado 90×90 cm, classe PEI 4\nAmbiente: Sala de estar\nQuantidade: 145,00 m²\n\nO parágrafo correspondente no memorial fica:\n\nA sala de estar (área 145 m², conforme planta de layout PR-01) receberá piso em porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4 conforme ABNT NBR 13818, em assentamento com argamassa colante AC-III, junta 2 mm, rejunte epóxi cor cinza claro. Quantitativo: 145 m² (item 4.2.1 da planilha de quantitativos).\n\nNota como o parágrafo carrega três rastros: a planta de origem (PR-01), a norma técnica aplicável (NBR 13818) e o código da planilha (4.2.1). Cada afirmação pode ser conferida em pelo menos uma fonte cruzada.\n\nMultiplique esse padrão por todos os ambientes e disciplinas, e o memorial pronto tem coerência de cabo a rabo. Não dá pra esquecer um item, porque a planilha vira checklist. Não dá pra contradizer a planta, porque o número vem dela. Não dá pra ignorar norma técnica, porque cada classe de material puxa a NBR correspondente."
-        },
-        {
-          "h2": "Quando o caminho inverso NÃO se aplica",
-          "body": "Pra ser honesto, o método não serve pra todo momento do projeto. Tem três situações em que o fluxo clássico — memorial-primeiro — faz mais sentido.\n\nEstudo preliminar e anteprojeto. Aqui ainda não existe planta executiva. Memorial descritivo nessa fase é peça de intenção, descreve diretrizes gerais. Quantitativo nem cabe — o projeto ainda está mudando demais.\n\nProjetos conceituais e concursos. A entrega é texto + imagem, não documentação executiva. Memorial vira ferramenta de narrativa, não de auditoria.\n\nObras públicas em fase de termo de referência. O memorial pode preceder o projeto executivo, porque define escopo pra licitação. Vale lembrar que, no âmbito da Arquitetura e Urbanismo, a Resolução CAU/BR 91/2014 trata o Registro de Responsabilidade Técnica (RRT) por atividade técnica — projeto, execução de obra e demais serviços técnicos — e não exige que todos esses serviços estejam atrelados a um único projeto executivo.\n\nFora dessas três situações, o caminho inverso é o atalho prático. Vale especialmente pra: projeto executivo residencial, projeto pra financiamento, projeto pra prefeitura, projeto pra contrato de empreitada com construtor."
-        },
-        {
-          "h2": "Workflow sugerido na prática (passo a passo)",
-          "body": "Pra quem nunca trabalhou com fluxo invertido, vai uma sugestão de workflow pra projeto residencial padrão.\n\nPasso 1. Feche o projeto arquitetônico ao nível executivo. Plantas baixas, cortes, fachadas, detalhamentos típicos, paginação de piso e forro. Sem fechar isso, qualquer levantamento vira chute.\n\nPasso 2. Levante o quantitativo da planta. Pode ser manual (mais lento), via plugin de BIM, ou via ferramenta automatizada de leitura de CAD. O que importa é gerar a planilha por disciplina (alvenaria, revestimento, piso, forro, esquadria, pintura, hidráulica, elétrica) e por ambiente.\n\nPasso 3. Cruze a planilha com a NBR 15575. Pra cada item, identifique qual sistema da norma ele atende e qual classe de desempenho é exigida. Isso amarra a especificação técnica.\n\nPasso 4. Escreva o memorial usando a planilha como sumário. Comece pela identificação do projeto, depois características gerais, depois ambiente por ambiente seguindo a ordem da planilha.\n\nPasso 5. Revisão final cruzada. Pegue alguns itens aleatórios do memorial, confira contra a planilha e a planta. Se os três batem, o documento está saudável. Se algum diverge, refaça aquela seção.\n\nÉ um workflow chato, mas reduz bastante o risco de devolução no banco, na prefeitura ou em vistoria do cliente final."
-        },
-        {
-          "h2": "Onde encaixa a IA no fluxo invertido",
-          "body": "O passo mais demorado do caminho inverso é o levantamento da planta. Contar tomada, medir parede, listar porta, agrupar piso por ambiente — tudo isso consome horas dependendo do projeto.\n\nÉ exatamente o ponto em que ferramenta de IA aplicada a CAD ajuda. O AI.arq faz esse levantamento direto do arquivo de projeto (PDF, DWG ou DXF). Lê todas as pranchas, identifica ambientes, conta elementos, mede áreas, agrupa por disciplina e devolve a planilha de quantitativos pronta. Vale lembrar que o AI.arq entrega quantitativo, não precificação — o preço continua sendo decisão do arquiteto e do orçamentista habilitado, em diálogo com fornecedores locais.\n\nCom a planilha pronta em minutos, o arquiteto pula direto pra etapa de redação. O memorial vira tarefa mais curta, e sai coerente com a planta por construção — porque foi a IA que leu a planta, contou os itens e devolveu a tabela que serve de base pra cada parágrafo do texto.\n\nNão é substituição de profissional. É inversão de tempo. O arquiteto continua sendo o autor técnico do memorial; só não perde mais o dia inteiro contando tomada na planta."
-        }
-      ],
-      "cta": "Pra testar o caminho inverso sem pagar nada de cara, sobe seu CAD em ai.arq.br. A IA lê a planta, devolve a planilha de quantitativos por disciplina e por ambiente em poucos minutos, com referência SINAPI pra cada item. Daí o memorial fica natural pra escrever em cima — cada parágrafo já com seu número correspondente. Primeiro projeto é grátis.",
-      "sources": [
-        {
-          "type": "norm",
-          "title": "ABNT NBR 13531:1995",
-          "description": "Elaboração de projetos de edificações — Atividades técnicas"
-        },
-        {
-          "type": "norm",
-          "title": "ABNT NBR 13532:1995",
-          "description": "Elaboração de projetos de edificações — Arquitetura"
-        },
-        {
-          "type": "norm",
-          "title": "ABNT NBR 15575:2021",
-          "description": "Edificações habitacionais — Desempenho (revisão 2021)"
-        },
-        {
-          "type": "norm",
-          "title": "ABNT NBR 13818:1997",
-          "description": "Placas cerâmicas para revestimento — Especificação e métodos de ensaios"
-        },
-        {
-          "type": "book",
-          "title": "Como preparar orçamentos de obras",
-          "author": "Aldo Dórea Mattos",
-          "publisher": "Oficina de Textos",
-          "year": 2019
-        },
-        {
-          "type": "book",
-          "title": "Bases para projeto estrutural na arquitetura",
-          "author": "Yopanan Conrado Rebello",
-          "publisher": "Zigurate Editora",
-          "year": 2007
-        },
-        {
-          "type": "norm",
-          "title": "Resolução CAU/BR 91/2014",
-          "description": "Registro de Responsabilidade Técnica (RRT) referente a projetos, obras e demais serviços técnicos no âmbito da Arquitetura e Urbanismo"
         }
       ]
     },
@@ -1986,88 +1942,176 @@
       ]
     },
     {
-      "slug": "por-que-nao-entregamos-o-preco-da-sua-obra",
-      "title": "Por que não te entregamos o preço da obra — e por que isso te protege",
-      "description": "Por que o AI.arq não dá preço de obra com IA: entregamos o quantitativo medido (raio-x da prancha) e deixamos a precificação com o orçamentista habilitado.",
-      "keywords": "ia orçamento de obra, ia preço de obra, por que ia não dá preço, estimativa de obra com ia, quantitativo com ia confiável, raio-x da prancha, precificação responsabilidade orçamentista",
-      "category": "IA e Confiança",
-      "publish_date": "2026-06-28",
-      "intro": "A pergunta mais comum que recebemos é direta: \"se a IA já leu meu projeto, por que ela não me dá logo o preço da obra?\" Tecnicamente, a gente poderia mostrar um número na tela. Mas decidimos, de propósito, não fazer isso. Este texto explica o porquê — não como desculpa, e sim como decisão de produto. A resposta curta: uma estimativa que parece verdade é mais perigosa do que nenhuma. A resposta longa está abaixo.",
+      "slug": "memorial-a-partir-do-quantitativo-caminho-inverso",
+      "title": "Memorial a partir do quantitativo: o caminho inverso que ninguém ensina",
+      "description": "A faculdade ensina escrever memorial primeiro e depois extrair planilha. Na prática, o caminho inverso funciona melhor: levanta o quantitativo da planta, depois escreve o memorial em cima. Reduz contradição com a planilha, fica auditável e acelera o executivo.",
+      "keywords": "memorial descritivo quantitativo, como escrever memorial descritivo, memorial descritivo arquitetura, memorial descritivo obra residencial, NBR 13531, NBR 13532, NBR 15575",
+      "category": "Documentação",
+      "publish_date": "2026-09-06",
+      "intro": "Na faculdade, o roteiro é claro: primeiro o arquiteto escreve o memorial descritivo, depois o orçamentista extrai a planilha de quantitativos a partir dele. Faz sentido na cabeça do professor, porque o texto vem antes do número. Só que, no canteiro real, esse fluxo cria um problema crônico: memorial e planilha sempre brigam. O memorial fala em piso porcelanato sem citar metragem, a planilha lista a metragem sem citar marca, e o analista do banco devolve o projeto pedindo coerência. Esse texto defende o caminho inverso, que muitos arquitetos experientes já fazem na prática: levantar o quantitativo da planta primeiro, e só depois redigir o memorial em cima da planilha. A norma ABNT NBR 13531:1995 não fixa essa ordem — é convenção de ensino, não regra técnica.",
       "sections": [
         {
-          "h2": "O que a gente entrega — e o que a gente não entrega",
-          "body": "Vamos ser transparentes sobre a linha que traçamos. O AI.arq lê seus arquivos CAD (DWG, DXF, PDF) e devolve o quantitativo: as quantidades de cada item levantadas a partir do desenho — áreas, comprimentos, contagens. Isso é o levantamento de quantitativos, que Aldo Dórea Mattos descreve como a etapa de medir e contar o que está no projeto, distinta da orçamentação propriamente dita (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019).\n\nO que a gente não entrega é o preço. As colunas de valor unitário e total saem em branco na planilha, prontas para o orçamentista preencher. Não é uma limitação que pedimos desculpa por ter — é a fronteira correta entre o que uma máquina pode medir e o que um profissional habilitado precisa julgar."
+          "h2": "O fluxo que a faculdade ensina (e por que ele trava na prática)",
+          "body": "O fluxo clássico do projeto executivo no ensino brasileiro é linear. Anteprojeto vira projeto legal, projeto legal vira projeto executivo, e o executivo gera três entregas: pranchas, memorial descritivo e planilha de quantitativos. A sequência ensinada é quase sempre a mesma: pranchas prontas, memorial redigido em cima das pranchas, planilha extraída do memorial.\n\nO problema é que essa ordem trata o memorial como documento-fonte. Na prática, ele é documento-síntese. Quem dita o quantitativo é a planta, não o texto. Quando o arquiteto escreve o memorial olhando só pra prancha, ele descreve materiais sem contar quantos. Aí o orçamentista entra depois, conta, e descobre que o memorial dizia uma coisa e a planta mostra outra.\n\nA ABNT NBR 13531:1995 — Elaboração de projetos de edificações — Atividades técnicas — descreve as etapas do projeto, mas não fixa a ordem interna entre memorial e quantitativo dentro do executivo. É convenção pedagógica, não obrigação normativa. A NBR 13532:1995, específica de arquitetura, segue a mesma linha: lista os produtos do projeto, sem amarrar sequência de redação."
         },
         {
-          "h2": "Uma estimativa que parece verdade é pior que nenhuma",
-          "body": "Esse é o coração da nossa tese. Um número de preço gerado automaticamente carrega um problema embutido: ele parece preciso. A tela mostra um total fechado, com centavos, e isso transmite uma confiança que o número não tem como sustentar.\n\nO problema é o que esse número vira depois. Mesmo com toda ressalva de \"valor aproximado\", uma estimativa numérica funciona como âncora: ela fixa uma expectativa na cabeça do cliente e vira, na prática, um compromisso. Quando a obra executa e o custo real aparece diferente, a conversa difícil sobra para o profissional que apresentou o número.\n\nE orçamento, por natureza, é estimativa com margem, não verdade exata. A própria orientação técnica IBRAOP OT-IBR 004/2012 (Precisão do orçamento de obras públicas) reconhece que existe um desvio esperado entre o custo estimado nas fases de projeto e o orçamento real da obra. Ou seja: a incerteza é parte legítima do orçamento. Aparentar precisão exata não elimina essa incerteza — só a esconde de quem mais precisa enxergá-la."
+          "h2": "O caminho inverso: planilha primeiro, memorial depois",
+          "body": "A proposta é simples: antes de redigir o memorial, levanta a planilha de quantitativos diretamente da planta. Lista de itens, áreas, especificações de cada ambiente. Só então o arquiteto escreve o memorial usando a planilha como espinha dorsal.\n\nCada parágrafo do memorial passa a ter um número de quantitativo por trás. Não dá pra escrever sobre piso porcelanato 90×90 se a planilha não tem essa linha. Não dá pra falar em pintura látex numa área de parede sem a área correspondente medida.\n\nAldo Dórea Mattos, em Como preparar orçamentos de obras — referência prática do mercado brasileiro de orçamentação —, organiza o processo a partir do levantamento físico: primeiro os quantitativos, depois a composição de custos. A lógica vale também pro texto descritivo. O argumento é direto: texto sem número é texto sem prova.\n\nNa prática, o caminho inverso funciona assim:\n\n1. Levantamento de áreas e contagens da planta (manual ou automatizado)\n2. Planilha de quantitativos por disciplina e por ambiente\n3. Especificação técnica de cada item (marca, modelo, classe)\n4. Redação do memorial descrevendo o que a planilha já contém\n5. Revisão cruzada memorial × planta × planilha"
         },
         {
-          "h2": "Preço é específico daquela obra (e a gente não conhece o seu mercado)",
-          "body": "Mattos chama isso de especificidade: o preço não é universal, ele é daquela obra, naquele local, naquele momento (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019). O mesmo item de serviço custa diferente conforme o estado, o fornecedor, o acesso ao canteiro e as condições locais.\n\nIsso não é só teoria. O SINAPI, mantido por Caixa e IBGE, é divulgado de forma regionalizada por estado — porque o custo de fato varia por UF. O CUB/m², calculado pelos Sinduscons com a metodologia da NBR 12721:2006, é uma média regional, não o custo da sua obra específica.\n\nSe o custo de referência já muda de estado para estado nas próprias bases oficiais, não faz sentido uma IA carimbar um número \"universal\" lendo só o seu desenho. Quem conhece o mercado da sua cidade, seus fornecedores e suas condições de canteiro é você e o orçamentista local — não a gente."
+          "h2": "Vantagem 1: memorial auditável contra a planta",
+          "body": "Quando o memorial nasce da planilha, ele fica auditável. Cada afirmação do texto tem um número correspondente que pode ser conferido na planta. Isso muda a natureza do documento.\n\nEm vez de descrever genericamente — Cozinha terá piso porcelanato —, o memorial passa a descrever especificamente — Cozinha (12,4 m²) receberá 12,4 m² de piso porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4, conforme item 4.2.1 da planilha de quantitativos.\n\nQuem ler o memorial pode pegar o item 4.2.1 da planilha, ir na planta e medir. Se o número bate, o documento é coerente. Se não bate, fica óbvio onde está o erro. A conferência vira tarefa de segundos por linha.\n\nA NBR 15575:2021 — Norma de Desempenho — pede comprovação por sistema, não só descrição. Memorial auditável ajuda a comprovar desempenho, porque deixa rastro numérico de cada item. Em perícia, esse rastro é prova técnica."
         },
         {
-          "h2": "Preço perece no tempo (o número certo de hoje vence em semanas)",
-          "body": "O outro atributo que Mattos aponta é a temporalidade: o orçamento tem prazo de validade. Um preço correto hoje pode estar errado em poucas semanas (Como preparar orçamentos de obras, 3ª ed., Oficina de Textos, 2019).\n\nDe novo, as bases oficiais confirmam isso na prática. O SINAPI tem atualização mensal. O CUB/m² é divulgado mensalmente pelos Sinduscons. Esses sistemas se atualizam todo mês justamente porque o custo de insumos e mão de obra se move o tempo todo.\n\nPor isso a coluna de preço sai em branco no AI.arq. Fixar um valor que vence seria entregar um número com data de validade escondida. O quantitativo medido na sua prancha, ao contrário, não perece: a área de um piso é a mesma hoje e daqui a seis meses. Faz sentido a máquina entregar o que é estável (a quantidade) e o humano aplicar o que muda (o preço do dia)."
+          "h2": "Vantagem 2: reduz contradição entre memorial e planilha",
+          "body": "Contradição entre memorial e planilha é uma das causas frequentes de devolução de projeto em análise de financiamento. O analista abre o memorial, abre a planilha, abre as pranchas, e procura inconsistência. Se acha, devolve pra revisão. Cada devolução custa dias ou semanas de espera.\n\nNo fluxo clássico — memorial primeiro, planilha depois — a contradição surge naturalmente. O arquiteto escreveu o memorial num momento, o orçamentista fez a planilha em outro. Entre uma coisa e outra, o projeto mudou, e os dois documentos passaram a falar línguas diferentes.\n\nNo caminho inverso, a planilha é a fonte única. Memorial é só a tradução textual do que a planilha já diz. Quando o projeto muda, atualiza a planilha, e o memorial vira reescrita parcial — não retrabalho do zero.\n\nO que importa, no fim, não é qual documento nasce primeiro, e sim que memorial e planilha digam a mesma coisa. A ordem invertida só torna essa coerência o estado natural do trabalho, em vez de algo que precisa ser perseguido na revisão final."
         },
         {
-          "h2": "Preço carrega responsabilidade técnica — e máquina não assina RRT",
-          "body": "Tem um motivo que vai além de matemática: orçamento é um juízo profissional que se registra. A Lei Federal 12.378/2010, que regulamenta o exercício da Arquitetura e Urbanismo e cria o CAU, instituiu o RRT (Registro de Responsabilidade Técnica), que define quem responde tecnicamente por cada serviço.\n\nDefinir BDI, escolher o regime tributário, selecionar fornecedor, decidir margens — isso é julgamento de gente habilitada, com nome e responsabilidade atrelados. O Acórdão TCU 2622/2013 – Plenário, que trata de faixas referenciais de BDI por tipologia de obra, relaciona a inadequação do orçamento e do BDI ao sobrepreço e à responsabilidade técnica do orçamentista.\n\nUma IA não tem registro profissional, não assume responsabilidade técnica e não responde por nada. Colocar um preço na boca dela seria pedir que ela assinasse um documento que, por lei, é de um profissional. A gente prefere deixar essa assinatura com quem de direito."
+          "h2": "Vantagem 3: acelera o projeto executivo",
+          "body": "Levantar quantitativo da planta toma tempo, mas é trabalho que precisa ser feito de qualquer jeito. Memorial sem quantitativo é memorial pela metade.\n\nQuando o arquiteto faz o levantamento primeiro, o memorial vira tarefa de redação, não de pesquisa. Não precisa parar de escrever pra ir na planta medir. Não precisa voltar pra prancha porque esqueceu de citar o forro. A planilha já organizou tudo por ambiente e por disciplina.\n\nO ganho de tempo é direto: em vez de buscar informação na planta a cada parágrafo, faz-se o levantamento uma vez, no início. O memorial passa a fluir de uma fonte já pronta.\n\nA lógica é a mesma que aparece em projeto estrutural: definir os dados quantitativos antes de redigir o memorial faz o texto técnico fluir melhor, porque o número já está na mesa. Yopanan Conrado Rebello, em Bases para projeto estrutural na arquitetura, trata os dados da estrutura como ponto de partida do raciocínio de projeto — e o mesmo princípio organiza bem a descrição arquitetônica."
         },
         {
-          "h2": "O que a gente entrega no lugar: o raio-x da prancha",
-          "body": "Se a gente não dá o preço, o que dá? A gente dá honestidade sobre cada número do levantamento — o que chamamos de raio-x da prancha. Cada item do quantitativo vem marcado por origem, com texto e símbolo (não só cor, porque cor sozinha exclui quem não a enxerga):\n\n- Medido (✓): a quantidade foi de fato extraída da geometria do seu CAD — uma área calculada do polígono, um comprimento lido da linha, uma contagem feita dos blocos. É número com lastro no desenho.\n- Estimativa (⚠): a quantidade é uma sugestão a revisar, porque o desenho não trouxe a informação medível (por exemplo, um PDF vetorial sem texto de cota, em que a geometria não pôde ser lida). É um ponto de partida, marcado para você conferir, não um fato.\n\nE as colunas de preço unitário e total ficam em branco, prontas para o orçamentista. A planilha sai com a estrutura pronta para precificar, mas sem nenhum valor sem responsável técnico ocupando o lugar do julgamento profissional.\n\nO ponto: a gente não esconde a incerteza atrás de um total fechado. Mostra exatamente o que é chão firme (medido ✓) e o que pede revisão (estimativa ⚠). Honestidade sobre a origem do número é o recurso, não a falha."
+          "h2": "Como traduzir um item da planilha em parágrafo de memorial",
+          "body": "O coração do método está na tradução item-a-item. Cada linha da planilha vira um trecho do memorial, com referência cruzada explícita.\n\nExemplo. Planilha tem o item:\n\nCódigo: 4.2.1\nDescrição: Piso porcelanato esmaltado retificado 90×90 cm, classe PEI 4\nAmbiente: Sala de estar\nQuantidade: 145,00 m²\n\nO parágrafo correspondente no memorial fica:\n\nA sala de estar (área 145 m², conforme planta de layout PR-01) receberá piso em porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4 conforme ABNT NBR 13818, em assentamento com argamassa colante AC-III, junta 2 mm, rejunte epóxi cor cinza claro. Quantitativo: 145 m² (item 4.2.1 da planilha de quantitativos).\n\nNota como o parágrafo carrega três rastros: a planta de origem (PR-01), a norma técnica aplicável (NBR 13818) e o código da planilha (4.2.1). Cada afirmação pode ser conferida em pelo menos uma fonte cruzada.\n\nMultiplique esse padrão por todos os ambientes e disciplinas, e o memorial pronto tem coerência de cabo a rabo. Não dá pra esquecer um item, porque a planilha vira checklist. Não dá pra contradizer a planta, porque o número vem dela. Não dá pra ignorar norma técnica, porque cada classe de material puxa a NBR correspondente."
         },
         {
-          "h2": "Por que isso te dá poder — e te protege",
-          "body": "Terminar sem preço não é ficar de mãos vazias. É ficar com a parte mais trabalhosa já pronta e auditável, do seu jeito.\n\n1. Poder de barganha. Com o quantitativo medido em mãos, você manda a mesma planilha para vários orçamentistas e compara propostas item a item, na mesma base. Quem controla o quantitativo controla a cotação.\n2. Proteção jurídica e profissional. O preço sai de quem tem registro para precificar e assume a responsabilidade técnica por ele (Lei 12.378/2010). Você não apresenta ao cliente um número gerado por máquina que teria de defender depois.\n3. Tempo no lugar certo. A IA tira de você as horas de medir e contar — a parte mecânica e cansativa. Sobra tempo para o que é seu de verdade: projetar, e revisar o que está marcado como estimativa (⚠).\n\nQuantitativo e orçamento são coisas distintas — a NBR 12721:2006 e a Lei 14.133/2021 (art. 6º, nas definições) tratam um e outro separadamente. A gente fica, com convicção, do lado do quantitativo medido. No blog há um glossário dos termos (quantitativo, orçamentação e orçamento) e um texto sobre a divisão de papéis entre projetista e orçamentista, se quiser se aprofundar."
+          "h2": "Quando o caminho inverso NÃO se aplica",
+          "body": "Pra ser honesto, o método não serve pra todo momento do projeto. Tem três situações em que o fluxo clássico — memorial-primeiro — faz mais sentido.\n\nEstudo preliminar e anteprojeto. Aqui ainda não existe planta executiva. Memorial descritivo nessa fase é peça de intenção, descreve diretrizes gerais. Quantitativo nem cabe — o projeto ainda está mudando demais.\n\nProjetos conceituais e concursos. A entrega é texto + imagem, não documentação executiva. Memorial vira ferramenta de narrativa, não de auditoria.\n\nObras públicas em fase de termo de referência. O memorial pode preceder o projeto executivo, porque define escopo pra licitação. Vale lembrar que, no âmbito da Arquitetura e Urbanismo, a Resolução CAU/BR 91/2014 trata o Registro de Responsabilidade Técnica (RRT) por atividade técnica — projeto, execução de obra e demais serviços técnicos — e não exige que todos esses serviços estejam atrelados a um único projeto executivo.\n\nFora dessas três situações, o caminho inverso é o atalho prático. Vale especialmente pra: projeto executivo residencial, projeto pra financiamento, projeto pra prefeitura, projeto pra contrato de empreitada com construtor."
+        },
+        {
+          "h2": "Workflow sugerido na prática (passo a passo)",
+          "body": "Pra quem nunca trabalhou com fluxo invertido, vai uma sugestão de workflow pra projeto residencial padrão.\n\nPasso 1. Feche o projeto arquitetônico ao nível executivo. Plantas baixas, cortes, fachadas, detalhamentos típicos, paginação de piso e forro. Sem fechar isso, qualquer levantamento vira chute.\n\nPasso 2. Levante o quantitativo da planta. Pode ser manual (mais lento), via plugin de BIM, ou via ferramenta automatizada de leitura de CAD. O que importa é gerar a planilha por disciplina (alvenaria, revestimento, piso, forro, esquadria, pintura, hidráulica, elétrica) e por ambiente.\n\nPasso 3. Cruze a planilha com a NBR 15575. Pra cada item, identifique qual sistema da norma ele atende e qual classe de desempenho é exigida. Isso amarra a especificação técnica.\n\nPasso 4. Escreva o memorial usando a planilha como sumário. Comece pela identificação do projeto, depois características gerais, depois ambiente por ambiente seguindo a ordem da planilha.\n\nPasso 5. Revisão final cruzada. Pegue alguns itens aleatórios do memorial, confira contra a planilha e a planta. Se os três batem, o documento está saudável. Se algum diverge, refaça aquela seção.\n\nÉ um workflow chato, mas reduz bastante o risco de devolução no banco, na prefeitura ou em vistoria do cliente final."
+        },
+        {
+          "h2": "Onde encaixa a IA no fluxo invertido",
+          "body": "O passo mais demorado do caminho inverso é o levantamento da planta. Contar tomada, medir parede, listar porta, agrupar piso por ambiente — tudo isso consome horas dependendo do projeto.\n\nÉ exatamente o ponto em que ferramenta de IA aplicada a CAD ajuda. O AI.arq faz esse levantamento direto do arquivo de projeto (PDF, DWG ou DXF). Lê todas as pranchas, identifica ambientes, conta elementos, mede áreas, agrupa por disciplina e devolve a planilha de quantitativos pronta. Vale lembrar que o AI.arq entrega quantitativo, não precificação — o preço continua sendo decisão do arquiteto e do orçamentista habilitado, em diálogo com fornecedores locais.\n\nCom a planilha pronta em minutos, o arquiteto pula direto pra etapa de redação. O memorial vira tarefa mais curta, e sai coerente com a planta por construção — porque foi a IA que leu a planta, contou os itens e devolveu a tabela que serve de base pra cada parágrafo do texto.\n\nNão é substituição de profissional. É inversão de tempo. O arquiteto continua sendo o autor técnico do memorial; só não perde mais o dia inteiro contando tomada na planta."
         }
       ],
-      "cta": "Quer ver o raio-x da sua própria prancha? Suba um projeto em ai.arq.br e receba o quantitativo com cada item marcado como medido (✓) ou estimativa a revisar (⚠), com as colunas de preço em branco para o seu orçamentista. O primeiro projeto é grátis e sem cartão — estamos em beta e queremos seu feedback de arquiteto de verdade. A gente mede a prancha; o preço, com responsabilidade técnica, continua sendo seu.",
+      "cta": "Pra testar o caminho inverso sem pagar nada de cara, sobe seu CAD em ai.arq.br. A IA lê a planta, devolve a planilha de quantitativos por disciplina e por ambiente em poucos minutos, com referência SINAPI pra cada item. Daí o memorial fica natural pra escrever em cima — cada parágrafo já com seu número correspondente. Primeiro projeto é grátis.",
       "sources": [
+        {
+          "type": "norm",
+          "title": "ABNT NBR 13531:1995",
+          "description": "Elaboração de projetos de edificações — Atividades técnicas"
+        },
+        {
+          "type": "norm",
+          "title": "ABNT NBR 13532:1995",
+          "description": "Elaboração de projetos de edificações — Arquitetura"
+        },
+        {
+          "type": "norm",
+          "title": "ABNT NBR 15575:2021",
+          "description": "Edificações habitacionais — Desempenho (revisão 2021)"
+        },
+        {
+          "type": "norm",
+          "title": "ABNT NBR 13818:1997",
+          "description": "Placas cerâmicas para revestimento — Especificação e métodos de ensaios"
+        },
         {
           "type": "book",
           "title": "Como preparar orçamentos de obras",
           "author": "Aldo Dórea Mattos",
-          "publisher": "Editora Oficina de Textos",
+          "publisher": "Oficina de Textos",
           "year": 2019
         },
         {
-          "type": "norm",
-          "title": "ABNT NBR 12721:2006 — Avaliação de custos unitários de construção para incorporação imobiliária e outras disposições para condomínios edilícios — Procedimento",
-          "description": "Edição de agosto de 2006; base metodológica do cálculo do CUB. Trata quantitativo e orçamento como conceitos distintos."
+          "type": "book",
+          "title": "Bases para projeto estrutural na arquitetura",
+          "author": "Yopanan Conrado Rebello",
+          "publisher": "Zigurate Editora",
+          "year": 2007
         },
         {
           "type": "norm",
-          "title": "Lei Federal 14.133/2021 — Nova Lei de Licitações e Contratos",
-          "description": "Art. 6º traz as definições, incluindo orçamento estimado e preços unitários referenciais, tratando quantitativo e orçamento de forma distinta."
+          "title": "Resolução CAU/BR 91/2014",
+          "description": "Registro de Responsabilidade Técnica (RRT) referente a projetos, obras e demais serviços técnicos no âmbito da Arquitetura e Urbanismo"
+        }
+      ]
+    },
+    {
+      "slug": "disciplinas-obra-retrofit-comercial",
+      "title": "Lista Completa de Disciplinas em Obra de Retrofit Comercial (2026)",
+      "description": "Checklist das 18 disciplinas em obra de retrofit comercial. O que considerar, o que esquecer gera aditivo, ordem de execução, custos indiretos típicos e tendências 2026.",
+      "keywords": "disciplinas retrofit comercial, retrofit obra comercial, disciplinas obra escritório, checklist retrofit corporativo, ordem disciplinas obra, retrofit 2026 SP",
+      "category": "Tipologias",
+      "publish_date": "2026-09-13",
+      "intro": "Retrofit comercial parece obra simples até o canteiro começar a revelar surpresas: a parede que era estrutural, o esgoto que não tem caimento pra nova copa, o sistema de incêndio que o Corpo de Bombeiros vai exigir. O problema quase nunca é a disciplina difícil — é a disciplina esquecida, aquela que ninguém colocou no escopo e vira aditivo.\n\nEste guia organiza as 18 disciplinas típicas de uma obra de retrofit comercial em ordem de execução comum, mostra as 5 que mais geram aditivo, e separa o que muda no quantitativo com as tendências de 2026. Cada afirmação técnica vem com a norma ou a referência correspondente. A ideia é simples: levantar tudo antes, pra não descobrir depois.",
+      "sections": [
+        {
+          "h2": "O que é retrofit comercial",
+          "body": "Retrofit é a reforma estratégica de espaço construído existente. Diferente de obra nova do zero, retrofit aproveita o esqueleto da edificação (estrutura, fachada, shafts verticais, infraestrutura predial básica) e renova tudo dentro.\n\nRetrofit comercial é um dos tipos mais comuns no Brasil — escritórios, lojas, restaurantes, clínicas que mudam de inquilino e precisam ser remodelados pra nova operação. Em São Paulo, o mercado de retrofit corporativo passou por amadurecimento em 2026, com Triple A novos coexistindo com revitalização de edifícios antigos da Avenida Paulista, Faria Lima, Berrini e centro histórico.\n\nCaracterísticas que diferenciam retrofit:\n- Prazo curto (geralmente 60 a 180 dias)\n- Operação adjacente em andamento (outros andares funcionando)\n- Limitações estruturais herdadas (paredes que não podem cair, shafts fixos, capacidade do elevador de carga)\n- Mistura de itens novos com existentes que ficam\n- Coordenação obrigatória com administração do condomínio\n- Restrição de horário pra serviços ruidosos"
+        },
+        {
+          "h2": "As 18 disciplinas em ordem de execução típica",
+          "body": "Esta é uma ordem comum de execução. Cada item tem sua planilha de quantitativos separada:\n\n1. Demolição (paredes, forros, pisos antigos)\n2. Estrutura (reforço se necessário)\n3. Alvenaria (paredes novas, shafts internos)\n4. Instalações elétricas (infraestrutura, eletrocalhas, conduítes)\n5. Instalações hidráulicas (água fria e quente — infraestrutura)\n6. Instalações de esgoto (caimento, ramais)\n7. Instalações de climatização HVAC (dutos, dampers)\n8. Combate a incêndio (hidrantes e mangotinhos pela NBR 13714; chuveiros automáticos / sprinklers pela NBR 10897, quando exigidos)\n9. Cabeamento estruturado (rede, dados, voz, IoT)\n10. Pisos (assentamento, rodapés)\n11. Revestimentos de parede (cerâmica, painéis, madeira)\n12. Forro (acústico, decorativo, modular)\n13. Gesso (sancas, decorativo, drywall)\n14. Pintura (paredes, teto, esquadrias)\n15. Esquadrias (portas, divisórias)\n16. Vidros (divisórias, fachadas internas)\n17. Marcenaria (móveis fixos, marcenaria sob medida)\n18. Acabamentos finais (louças, metais, ferragens, luminárias, sinalização)\n\nDisciplinas separadas que aparecem em retrofit grande (corporativo Triple A): segurança eletrônica, automação predial (BMS), sistema de áudio ambiente, paisagismo interno (jardins verticais)."
+        },
+        {
+          "h2": "5 disciplinas que mais geram aditivo em retrofit",
+          "body": "Por experiência de mercado, essas são as disciplinas que mais aparecem como surpresa no canteiro de retrofit comercial:\n\n1. Combate a incêndio — quase ninguém detalha bem na fase de orçamento. Aparece quando o Corpo de Bombeiros vistoria. As exigências (hidrantes, mangotinhos, chuveiros automáticos) e os limites de área e altura que disparam cada sistema vêm da legislação estadual de segurança contra incêndio (Instruções Técnicas do Corpo de Bombeiros), que remetem às normas técnicas: NBR 13714 pra hidrantes e mangotinhos, NBR 10897 pra chuveiros automáticos. Confirme sempre a IT vigente no seu estado antes de fechar o escopo.\n\n2. HVAC (climatização) — projeto antigo do prédio raramente suporta a nova carga térmica do layout aberto e da densidade ocupacional moderna. Tem que reforçar capacidade ou redistribuir dutos. O dimensionamento de sistemas centrais e unitários segue a NBR 16401.\n\n3. Estrutura — parede que parecia divisória era estrutural. Costuma aparecer só na demolição. Aí entra demolir mais reforçar com perfil metálico ou pilar adicional.\n\n4. Esgoto — caimento errado pra nova posição da copa, do banheiro ou da pia. Refazer todo o ramal de esgoto, com quebra de piso.\n\n5. Cabeamento e infraestrutura de rede — escritório moderno quer IoT, sensores, controle automatizado, áudio embutido. Projeto antigo não tem infraestrutura — vira aditivo relevante mesmo em escritório médio. O cabeamento estruturado de edifícios comerciais segue a NBR 14565.\n\nMarmoraria também aparece muito como aditivo, mas geralmente é por mudança de escopo (cliente decide trocar bancada de fórmica pra mármore depois que viu o showroom)."
+        },
+        {
+          "h2": "Tendências de design corporativo 2026 que afetam quantitativo",
+          "body": "Tendências fortes em retrofit corporativo em 2026 que mudam o quantitativo:\n\n1. Layout flexível e áreas compartilhadas — menos salas privadas fixas, mais workstations rotativas, áreas de colaboração informal. Diminui alvenaria, aumenta divisórias móveis e mobiliário modular.\n\n2. IoT e sensores — controle de ocupação, qualidade do ar, iluminação adaptativa, automação de cortinas. Aumenta cabeamento e infraestrutura de TI.\n\n3. Conforto acústico — open offices precisam de tratamento acústico sério. Forro acústico, painéis absorvedores e carpete acústico puxam pra cima o custo de acabamento.\n\n4. Sustentabilidade e selos verdes (LEED, AQUA) — exigem materiais certificados, gestão de resíduos no canteiro e eficiência energética, o que pesa no custo total.\n\n5. Áreas de bem-estar — copa equipada, sala de descanso, espaço pra ginástica, jardins internos, áreas pet-friendly. Adiciona disciplinas que escritório tradicional não tinha. Quando há adequação de acessibilidade nesses espaços, vale conferir a NBR 9050."
+        },
+        {
+          "h2": "Custos indiretos em retrofit comercial (BDI maior)",
+          "body": "Em retrofit comercial, o BDI tende a ser maior que o de obra nova do zero por vários fatores:\n\n- Trabalho noturno (operação adjacente não pode parar de dia), com adicional noturno previsto em lei sobre a mão de obra\n- Logística complicada (subir material em elevador de carga compartilhado, restrição de horário)\n- Limpeza constante (cliente no prédio, andar vizinho funcionando)\n- Coordenação com administração do condomínio\n- Riscos de achados imprevistos (instalações antigas escondidas atrás de gesso), que pedem mais contingência\n- Restrição de janela de obra (alguns prédios só permitem serviço fora do horário comercial), que aumenta o prazo total\n- Necessidade de mockup/protótipo de espaço antes de replicar\n\nCada um desses itens entra como linha de custo indireto. A magnitude depende do prédio, do contrato e da janela de obra — cada caso é um caso. O AI.arq entrega o quantitativo dessas linhas; quem define os percentuais de BDI e fecha o preço é o orçamentista habilitado, que conhece a operação e o risco contratual."
+        },
+        {
+          "h2": "O que entra no custo por m² de retrofit",
+          "body": "O custo por m² de um retrofit não é um número de tabela — ele varia muito com o padrão de acabamento, o nível de automação, a complexidade da obra e a região. Em vez de cravar uma faixa de preço aqui (que envelhece rápido e induz erro), vale entender o que compõe esse custo:\n\n- Padrão de acabamento (do escritório standard ao boutique de design corporativo com materiais premium)\n- Nível de automação e infraestrutura de TI (IoT, sensores, BMS)\n- Exigências de sustentabilidade e certificação\n- Custos indiretos e BDI do retrofit (trabalho noturno, logística, contingência)\n- Região (capital costuma ser mais cara que interior; cada praça tem sua realidade de mão de obra e frete)\n\nO que normalmente NÃO entra no custo de obra por m² e precisa ser orçado à parte: mobiliário, equipamentos de TI, sinalização externa e taxas como ART/RRT.\n\nO papel do AI.arq aqui é entregar o quantitativo medido item a item, pra que o orçamentista habilitado aplique preços atualizados da praça e da data — não estimar o R$/m²."
+        },
+        {
+          "h2": "Como o AI.arq lida com retrofit",
+          "body": "Quando você sobe um projeto de retrofit no AI.arq, a IA reconhece os elementos típicos da tipologia:\n\n- Pranchas de demolição (separação visual: o que sai)\n- Pranchas de layout atual vs novo\n- Comparação automática (o que sai, o que entra, o que fica intacto)\n- Quantificação separada por categoria (demolir, construir, manter)\n- Alerta pra disciplinas que costumam passar batido em retrofit (combate a incêndio, reforço de HVAC, cabeamento estruturado)\n- Sinalização clara de itens estimados onde a planta não tem informação suficiente — cada item vem marcado com símbolo e palavra: medido (check) quando foi contado do CAD, estimativa (alerta) quando é sugestão a confirmar\n- Seção de Custos Indiretos pré-pronta com itens típicos de retrofit (trabalho noturno, logística, contingência maior)\n\nResultado: planilha de quantitativos pronta pra o orçamentista precificar, com o que é medido separado do que é estimativa — menos pegadinha de aditivo posterior."
+        }
+      ],
+      "cta": "Tem retrofit comercial pra fazer levantamento? O AI.arq foi testado em projetos de retrofit corporativo de diferentes portes. Testa grátis em ai.arq.br.",
+      "sources": [
+        {
+          "type": "norm",
+          "title": "ABNT NBR 13714:2000",
+          "description": "Sistemas de hidrantes e de mangotinhos para combate a incêndio"
         },
         {
           "type": "norm",
-          "title": "Lei Federal 12.378/2010",
-          "description": "Regulamenta o exercício da Arquitetura e Urbanismo, cria o CAU e institui o RRT (Registro de Responsabilidade Técnica), que define os responsáveis técnicos pelos serviços."
+          "title": "ABNT NBR 10897:2020",
+          "description": "Sistemas de proteção contra incêndio por chuveiros automáticos — Requisitos"
         },
         {
           "type": "norm",
-          "title": "Acórdão TCU 2622/2013 – Plenário",
-          "description": "Estabelece faixas referenciais de BDI por tipologia de obra e relaciona a inadequação do orçamento e do BDI ao sobrepreço e à responsabilidade técnica do orçamentista."
+          "title": "ABNT NBR 16401:2008",
+          "description": "Instalações de ar-condicionado — Sistemas centrais e unitários"
         },
         {
           "type": "norm",
-          "title": "IBRAOP OT-IBR 004/2012 — Precisão do orçamento de obras públicas",
-          "description": "Reconhece o desvio esperado entre o custo estimado nas fases de projeto e o orçamento real da obra."
+          "title": "ABNT NBR 14565:2019",
+          "description": "Cabeamento estruturado para edifícios comerciais e data centers"
+        },
+        {
+          "type": "norm",
+          "title": "ABNT NBR 9050:2015 (Emenda 1:2020)",
+          "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos — referência para adequação em retrofit"
         },
         {
           "type": "link",
-          "title": "SINAPI — Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil",
-          "url": "https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx",
-          "publisher": "Caixa Econômica Federal / IBGE"
+          "title": "Retrofit e áreas compartilhadas: 7 tendências para escritórios em 2026",
+          "url": "https://exame.com/mercado-imobiliario/retrofit-e-areas-compartilhadas-veja-7-tendencias-para-escritorios-em-2026/",
+          "publisher": "Exame"
         },
         {
           "type": "link",
-          "title": "CUB/m² — Custo Unitário Básico da Construção",
-          "url": "https://www.cub.org.br/",
-          "publisher": "CBIC / Sinduscon"
+          "title": "Retrofit Corporativo 2026: Modernizando Prédios Antigos",
+          "url": "https://pdfpremium.com.br/blog/divisorias/retrofit-corporativo-modernizacao-divisorias-vidro-2026/",
+          "publisher": "PDFPremium"
+        },
+        {
+          "type": "link",
+          "title": "Retrofit Corporativo — Guia para um Retrofit de Escritório",
+          "url": "https://illiengenharia.com.br/blog-engenharia-coporativa/retrofit-de-escritorio/",
+          "publisher": "Illi Engenharia"
         }
       ]
     }
