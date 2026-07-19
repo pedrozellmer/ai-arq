@@ -6909,16 +6909,34 @@ async def upload_supplier_quote(
     except ImportError:
         return {"error": "supplier_quote_parser indisponível"}
 
+    # Só .xlsx e com teto de tamanho (o parse carrega o arquivo inteiro em
+    # memória — Render tem 2GB pra tudo)
+    if not (file.filename or "").lower().endswith(".xlsx"):
+        return {"status": "error",
+                "error": "Envie a cotação em .xlsx (Excel). Se estiver em .xls "
+                         "antigo ou PDF, abra no Excel e salve como .xlsx."}
+    _quote_bytes = await file.read()
+    if len(_quote_bytes) > 15 * 1024 * 1024:
+        return {"status": "error",
+                "error": "Arquivo acima de 15MB — exporte só a planilha de "
+                         "orçamento, sem imagens."}
+
     # Salva temporariamente (anti path-traversal)
     work_dir = os.path.join(WORK_DIR, job_id, "quotes")
     os.makedirs(work_dir, exist_ok=True)
     safe_name = _safe_local_filename(file.filename)
     temp_path = os.path.join(work_dir, safe_name)
     with open(temp_path, "wb") as f:
-        f.write(await file.read())
+        f.write(_quote_bytes)
 
-    # Parseia
-    parsed = parse_supplier_quote(temp_path, supplier_name, mode=parser_mode)
+    # Parseia (arquivo corrompido/renomeado lançava BadZipFile → HTTP 500 cru)
+    try:
+        parsed = parse_supplier_quote(temp_path, supplier_name, mode=parser_mode)
+    except Exception as e:
+        print(f"[quotes/upload] parse falhou ({file.filename}): {e}")
+        return {"status": "error",
+                "error": "Não consegui abrir esse arquivo como planilha Excel. "
+                         "Confira se é um .xlsx válido e tente de novo."}
     if "error" in parsed:
         return {"status": "error", "error": parsed["error"]}
 
@@ -7195,6 +7213,8 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
         "pptx_url": f"/api/projects/{job_id}/quotes/download/pptx" if pptx_ok else None,
         "summary": {
             "n_suppliers": len(analysis["suppliers"]),
+            "paired_count": analysis.get("paired_count", 0),
+            "ranking_confiavel": analysis.get("ranking_confiavel", False),
             "ranking": [{"supplier": s, "paired_total": t}
                         for s, t in analysis["ranking"]],
             "n_discrepancies_above_100pct":
