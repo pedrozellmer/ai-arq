@@ -1624,6 +1624,32 @@ def _build_calibracao_email(name: str, project_name: str):
     return subject, html
 
 
+def _job_tem_planilha_revisada(job_id: str) -> bool:
+    """True se o job já recebeu upload de planilha revisada (evento de
+    cashback 'planilha_upload'). Best-effort: na dúvida diz True (não pede)."""
+    if not job_id:
+        return True
+    import urllib.request
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/project_cashback_events?job_id=eq.{job_id}"
+             f"&event_type=eq.planilha_upload&select=id&limit=1")
+        req = urllib.request.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
+        return bool(rows)
+    except Exception:
+        return True
+
+
+def _send_email_calibracao(email: str, name: str, project_name: str) -> bool:
+    """Pede a planilha revisada (loop de aprendizado do motor). Ligado no tick
+    automático em 19/07 (janela 12-30 dias pós-done, 1x por projeto)."""
+    name = _resolve_client_name(email, hint=name)
+    subject, html = _build_calibracao_email(name, project_name)
+    return _send_email_smtp(email, subject, html, log_kind="calibracao")
+
+
 class JobsStore:
     """Armazena jobs em arquivo JSON."""
     def __getitem__(self, key):
@@ -3540,6 +3566,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # exceção subia pro except externo que fazia raise e matava a planilha
                     # inteira por causa de uma prancha só (caso Thamiry: 22 DWGs).
                     try:
+                        # ARQUIVO GRANDE (19/07): DXF acima do teto de leitura
+                        # segura passa por emagrecimento streaming (iterdxf) que
+                        # mantém só o que o motor mede — em vez de recusar ou
+                        # estourar a memória. Falhou/não rendeu → segue original.
+                        try:
+                            from dxf_slim import emagrecer_dxf_se_preciso
+                            _slim = emagrecer_dxf_se_preciso(dxf_path)
+                            if _slim:
+                                dxf_path = _slim
+                        except Exception as _sl_e:
+                            print(f"[dxf-slim] pulando ({_sl_e})")
                         extraction = extract_from_file(dxf_path)
                         structured_text = extraction.to_structured_prompt()
                     except Exception as _ex_dxf:
@@ -5557,6 +5594,21 @@ async def emails_auto_tick(dry: int = 0):
                 acoes.append({"kind": "proximo_projeto", "email": email,
                               "nome": plist[0].get("user_name") or "",
                               "projeto": plist[0].get("project_name") or ""})
+            # calibração (dias 12-30, LIGADO 19/07): pede a PLANILHA REVISADA do
+            # projeto — cada correção real afina o motor (loop de aprendizado).
+            # Janela deliberadamente DEPOIS do proximo_projeto (3-10, que já
+            # pede a revisada de carona) e ANTES do retorno_30d. Só se o job
+            # ainda NÃO tem planilha_upload (checado no envio, 1 query); ref =
+            # job_id → máx 1x por projeto, + cooldown global de 7d por pessoa.
+            elif 12 <= dias <= 30:
+                _dones = [p for p in plist if p.get("status") == "done" and p.get("job_id")]
+                if _dones:
+                    _dj = max(_dones, key=lambda p: p.get("created_at") or "")
+                    acoes.append({"kind": "calibracao", "email": email,
+                                  "nome": _dj.get("user_name") or "",
+                                  "projeto": _dj.get("project_name") or "",
+                                  "job_id": _dj["job_id"],
+                                  "ref": _dj["job_id"]})
 
     # check-in de cronograma: obra EM ANDAMENTO (hoje entre início e fim previsto),
     # que ninguém mexeu nos últimos 7 dias (quem atualizou está engajado — não
@@ -5629,6 +5681,12 @@ async def emails_auto_tick(dry: int = 0):
                                            link)
             elif a["kind"] == "proximo_projeto":
                 ok = _send_email_proximo_projeto(a["email"], a["nome"], a.get("projeto") or "")
+            elif a["kind"] == "calibracao":
+                # se o cliente JÁ subiu a revisada deste job, não pede (silêncio)
+                if _job_tem_planilha_revisada(a.get("job_id") or ""):
+                    ok = False
+                else:
+                    ok = _send_email_calibracao(a["email"], a["nome"], a.get("projeto") or "")
             elif a["kind"] == "cronograma_checkin":
                 ok = _send_email_cronograma_checkin(a["email"], a["nome"],
                                                     a.get("projeto") or "",
@@ -6346,7 +6404,7 @@ _EMAIL_CATALOG = [
     {"key": "nudge_cadastro", "nome": "Lembrar de terminar o cadastro", "grupo": "auto",
      "gatilho": "auto: cadastro incompleto · também manual (Usuários)"},
     {"key": "calibracao", "nome": "Pedir planilha revisada (calibração)", "grupo": "auto",
-     "gatilho": "disponível, envio automático desligado"},
+     "gatilho": "auto: projeto concluído há 12-30 dias sem planilha revisada (1x por projeto)"},
     {"key": "feedback", "nome": "Como foi? (feedback)", "grupo": "manual",
      "gatilho": "manual: botão em Usuários (usuário com projeto)"},
 ]
