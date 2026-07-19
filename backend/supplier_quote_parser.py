@@ -34,6 +34,11 @@ from openpyxl import load_workbook
 _RE_MAT = re.compile(r"^(unit\.?\s*|vlr\.?\s*|valor\s*)?(mat|material)\b")
 _RE_MO = re.compile(r"^(unit\.?\s*|vlr\.?\s*|valor\s*)?(m\s*o\b|mao\s*de\s*obra|maodeobra)")
 _RE_TOTAL = re.compile(r"^(sub\s*)?total\b|^valor(\s+total)?\b|^preco(\s+total)?\b")
+# Preço UNITÁRIO ("VALOR UNITÁRIO (R$)", "PREÇO UNIT.", "UNITÁRIO"): coluna
+# própria. Sem ela, o layout mais comum do Brasil (unitário ANTES do total)
+# fazia o unitário capturar o slot "total" — e todos os totais saíam com o
+# preço de 1 unidade (erro de ordem de grandeza). Validação 19/07.
+_RE_UNITPRICE = re.compile(r"^(valor|preco|vlr\.?|custo)\s*unit|^unit(ario)?\b")
 
 
 def _normalize(s) -> str:
@@ -61,23 +66,13 @@ def _to_float(v) -> Optional[float]:
         elif "," in s and "." in s:
             # Ex: "1.234,56" → "1234.56"
             s = s.replace(".", "").replace(",", ".")
+        elif re.match(r"^\d{1,3}(\.\d{3})+$", s):
+            # Só pontos, grupos de 3: milhar BR sem centavos ("2.500" = 2500,
+            # não 2.5). Validação 19/07.
+            s = s.replace(".", "")
         return float(s)
     except (ValueError, TypeError):
         return None
-
-
-# Keywords pra detectar cada coluna em modo fuzzy
-COLUMN_HINTS = {
-    "item": ["item", "n°", "num", "código"],
-    "desc": ["especific", "descric", "servico", "discrimina", "item descrição"],
-    "un": ["un", "und", "unid"],
-    "qtd": ["quant", "qtd", "qdade"],
-    "unit_mat": ["unit mat", "unit. mat", "unitario mat", "unit. material",
-                  "mat unit", "valor mat"],
-    "unit_mo: [": ["unit mo", "unit. mo", "unitario m", "unit. m.o",
-                    "mo unit", "valor mo", "m.o. unit"],
-    "total": ["total", "valor total", "valor", "subtotal"],
-}
 
 
 def _find_header_row(ws) -> Tuple[int, Dict[str, int]]:
@@ -91,8 +86,11 @@ def _find_header_row(ws) -> Tuple[int, Dict[str, int]]:
         joined = " | ".join(str(c) for c in row if c)
         joined_n = _normalize(joined)
 
-        # Precisa ter pelo menos "descric/espec" + "un" + "qtd"
-        has_desc = any(k in joined_n for k in ["especific", "descric", "discrimina"])
+        # Precisa ter pelo menos "descrição" (ou sinônimo) + "un" + "qtd".
+        # "servico"/"produto" entram: cotação "ITEM | SERVIÇO | UNID | QTD"
+        # era rejeitada inteira. Validação 19/07.
+        has_desc = any(k in joined_n for k in ["especific", "descric", "discrimina",
+                                               "servico", "produto"])
         has_un = " un " in f" {joined_n} " or joined_n.startswith("un ") or \
                  " und " in f" {joined_n} " or " unid" in joined_n
         has_qtd = "quant" in joined_n or "qtd" in joined_n
@@ -129,7 +127,14 @@ def _find_header_row(ws) -> Tuple[int, Dict[str, int]]:
                     col_map["unit_mat"] = c_idx
                 elif _RE_MO.match(cell_n) and "unit_mo" not in col_map:
                     col_map["unit_mo"] = c_idx
-                elif _RE_TOTAL.match(cell_n) and "total" not in col_map:
+                # UNITÁRIO tem prioridade sobre TOTAL e o total NUNCA aceita
+                # header com "unit": no layout BR comum (VALOR UNITÁRIO |
+                # VALOR TOTAL) o unitário vinha primeiro e roubava o slot
+                # "total" via "^valor" — totais saíam como preço de 1 unidade.
+                elif _RE_UNITPRICE.match(cell_n) and "unit_price" not in col_map:
+                    col_map["unit_price"] = c_idx
+                elif _RE_TOTAL.match(cell_n) and "unit" not in cell_n \
+                        and "total" not in col_map:
                     col_map["total"] = c_idx
 
             return row_idx, col_map
@@ -237,6 +242,7 @@ def _parse_with_col_map(ws, header_row: int, col_map: Dict[str, int],
             "qtd": qtd,
             "unit_mat": _to_float(_col(row, "unit_mat")),
             "unit_mo": _to_float(_col(row, "unit_mo")),
+            "unit_price": _to_float(_col(row, "unit_price")),
             "total": _to_float(_col(row, "total")),
             "is_section": is_section,
             "disciplina": disciplina_atual,
@@ -258,6 +264,23 @@ def _parse_with_col_map(ws, header_row: int, col_map: Dict[str, int],
         if mat or mo:
             it["total"] = round(it["qtd"] * (mat + mo), 2)
             it["total_calculado"] = True
+        elif it.get("unit_price"):
+            # Layout BR: só VALOR UNITÁRIO preenchido (total é fórmula sem cache)
+            it["total"] = round(it["qtd"] * it["unit_price"], 2)
+            it["total_calculado"] = True
+
+    # Item de VERBA (vb/gb/cj, sem qtd) com total: assume qtd=1 e marca — antes
+    # "Administração da obra — vb — R$ 15.000" sumia do bruto sem aviso.
+    # Exige `un` preenchida e descrição que não seja linha de soma (evita
+    # transformar "SUBTOTAL"/"TOTAL GERAL" em item e duplicar o bruto).
+    for it in items:
+        if it["is_section"] or it["qtd"] or not it["un"]:
+            continue
+        if it["desc_norm"].startswith(("total", "subtotal", "soma")):
+            continue
+        if it["total"] and it["total"] > 0:
+            it["qtd"] = 1.0
+            it["qtd_assumida"] = True
 
     priced = [it for it in items
               if it["un"] and it["qtd"] and it["total"] and it["total"] > 0

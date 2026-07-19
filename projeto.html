@@ -1877,16 +1877,22 @@ async function generateComparison() {
     const data = await res.json();
     if (data.status === 'ok') {
       const s = data.summary;
-      const rankHtml = s.ranking.map((r, i) => `
+      // Guarda-corpo: com poucos itens pareados o ranking não compara nada —
+      // sem troféu/verde, e aviso claro no lugar (senão coroava "🏆 R$ 0,00").
+      const rkOk = !!s.ranking_confiavel;
+      const rankHtml = s.ranking.map((r, i) => {
+        const win = rkOk && i === 0;
+        return `
         <div class="flex items-center justify-between py-1">
-          <span class="text-sm ${i === 0 ? 'font-semibold text-emerald-700' : 'text-gray-700'}">
-            ${i === 0 ? '🏆 ' : `${i+1}º `}${esc(r.supplier)}
+          <span class="text-sm ${win ? 'font-semibold text-emerald-700' : 'text-gray-700'}">
+            ${win ? '🏆 ' : (rkOk ? `${i+1}º ` : '• ')}${esc(r.supplier)}
           </span>
-          <span class="text-sm font-mono ${i === 0 ? 'text-emerald-700 font-semibold' : 'text-gray-600'}">
+          <span class="text-sm font-mono ${win ? 'text-emerald-700 font-semibold' : 'text-gray-600'}">
             R$ ${(r.paired_total || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
           </span>
         </div>
-      `).join('');
+      `;}).join('') + (rkOk ? '' : `
+        <p class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">⚠ Poucos itens em comum entre as cotações (${s.paired_count || 0} pareados) — ranking suprimido. Compare pelo total bruto na planilha e confira as descrições.</p>`);
       let refHtml = '';
       if (s.reference_check_summary) {
         const rs = s.reference_check_summary;

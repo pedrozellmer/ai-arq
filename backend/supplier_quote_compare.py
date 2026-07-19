@@ -19,30 +19,87 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 
-# Threshold pra considerar dois textos "o mesmo item" (0-1, maior = mais estrito)
-FUZZY_MATCH_THRESHOLD = 0.78
+# Threshold pra considerar dois textos "o mesmo item" (0-1, maior = mais estrito).
+# Era 0.78 e NÃO casava reescrita real de fornecedor (2/8 nos testes de 19/07):
+# "Piso vinílico em régua 3mm" vs "Fornecimento e instalação de piso vinílico
+# 3mm" ficava fora. Baixado pra 0.62 + limpeza de stopwords/dimensões + trava
+# de números incompatíveis (abaixo) — 0.62 sem a trava fundiria "porta 80cm"
+# com "porta 90cm".
+FUZZY_MATCH_THRESHOLD = 0.62
+
+# Unidades equivalentes: fornecedor escreve "m2", nós "m²"; "und"/"unid"/"pç"
+# são tudo unidade. Sem normalizar, a exigência de "mesma unidade" zerava o
+# pareamento (0 pares nos testes de 19/07) → ranking "🏆 R$ 0,00".
+_UN_MAP = {
+    "m2": "m2", "m²": "m2", "m^2": "m2", "mq": "m2",
+    "m3": "m3", "m³": "m3", "m^3": "m3",
+    "un": "un", "und": "un", "unid": "un", "unidade": "un", "u": "un",
+    "pc": "un", "pç": "un", "pca": "un", "pça": "un", "peca": "un", "peça": "un",
+    "vb": "vb", "verba": "vb", "gb": "vb", "glb": "vb", "global": "vb",
+    "ml": "m", "m": "m", "mt": "m", "metro": "m",
+    "cj": "cj", "conj": "cj", "conjunto": "cj", "jg": "cj", "jogo": "cj",
+    "pt": "pt", "ponto": "pt",
+    "h": "h", "hr": "h", "hora": "h", "hs": "h",
+    "kg": "kg", "ton": "t", "t": "t", "l": "l", "lt": "l",
+    "mes": "mes", "mês": "mes", "dia": "dia", "diaria": "dia", "diária": "dia",
+}
+
+
+def _norm_un(un: str) -> str:
+    """Unidade canônica pra comparação ('M².' → 'm2'). Vazio fica vazio."""
+    u = (un or "").strip().lower().replace(".", "").replace(" ", "")
+    return _UN_MAP.get(u, u)
+
+
+_STOPWORDS = {"de", "da", "do", "das", "dos", "em", "com", "c/", "c",
+              "para", "p/", "p", "e", "a", "o", "no", "na", "tipo",
+              "fornecimento", "instalacao", "execucao", "incluso", "inclusa"}
+
+def _clean_tokens(s: str):
+    """Tokens limpos pra matching: colapsa dimensões ('60x60cm'→'60x60',
+    vale pra 2 ou 3 medidas: '14x19x39cm'→'14x19x39'), remove stopwords/verbos
+    de serviço e plural simples."""
+    import re as _re
+    s = _re.sub(r"(\d+(?:\s*[x×]\s*\d+)+)\s*(cm|mm|m)\b", r"\1", s or "")
+    s = _re.sub(r"\s*[x×]\s*", "x", s)
+    out = []
+    for t in s.split():
+        if t in _STOPWORDS:
+            continue
+        if len(t) > 3 and t.endswith("s"):
+            t = t[:-1]
+        out.append(t)
+    return out
 
 
 def _similarity(a: str, b: str) -> float:
-    """Similaridade combinada: SequenceMatcher + Jaccard de tokens."""
+    """Similaridade combinada: SequenceMatcher + Jaccard de tokens limpos.
+    Trava de números: se ambos têm números e NENHUM coincide ('porta 80cm' vs
+    'porta 90cm'), penaliza — dimensão diferente costuma ser item diferente."""
     if not a or not b:
         return 0.0
     if a == b:
         return 1.0
 
-    # 1) SequenceMatcher (leva em conta ordem e proximidade)
-    seq = SequenceMatcher(None, a, b).ratio()
+    ta, tb = _clean_tokens(a), _clean_tokens(b)
+    ca, cb = " ".join(ta), " ".join(tb)
+    if not ca or not cb:
+        return 0.0
+    if ca == cb:
+        return 1.0
 
-    # 2) Jaccard de tokens (palavras comuns / palavras totais)
-    tokens_a = set(a.split())
-    tokens_b = set(b.split())
-    if tokens_a and tokens_b:
-        jaccard = len(tokens_a & tokens_b) / len(tokens_a | tokens_b)
-    else:
-        jaccard = 0.0
+    seq = SequenceMatcher(None, ca, cb).ratio()
+    sa, sb = set(ta), set(tb)
+    jaccard = len(sa & sb) / len(sa | sb) if (sa and sb) else 0.0
+    score = 0.5 * seq + 0.5 * jaccard
 
-    # Mistura — Jaccard captura melhor "mesmo item com ordem diferente"
-    return 0.5 * seq + 0.5 * jaccard
+    import re as _re
+    nums_a = {t for t in ta if _re.search(r"\d", t)}
+    nums_b = {t for t in tb if _re.search(r"\d", t)}
+    if nums_a and nums_b and not (nums_a & nums_b):
+        score *= 0.7
+
+    return score
 
 
 def _fuzzy_merge(
@@ -74,16 +131,18 @@ def _fuzzy_merge(
 
             desc_norm = it.get("desc_norm", "")
             un = (it.get("un") or "").lower()
+            un_norm = _norm_un(un)
             if not desc_norm:
                 continue
 
-            # Procura bucket com maior similaridade (mesma unidade)
+            # Procura bucket com maior similaridade (mesma unidade NORMALIZADA:
+            # "m²" do fornecedor A casa com "m2" do B)
             best_bucket_idx = -1
             best_score = threshold
             for idx, b in enumerate(buckets):
                 if b.get(sup) is not None:
                     continue  # bucket já tem item desse fornecedor
-                if (b.get("un") or "") != un:
+                if (b.get("un_norm") or "") != un_norm:
                     continue  # unidade tem que bater
                 score = _similarity(b["desc_norm"], desc_norm)
                 if score > best_score:
@@ -101,6 +160,7 @@ def _fuzzy_merge(
                     "desc": it["desc"],
                     "desc_norm": desc_norm,
                     "un": un,
+                    "un_norm": un_norm,
                     **{s: None for s in suppliers},
                 }
                 new_bucket[sup] = it
@@ -214,6 +274,10 @@ def compare_quotes(quotes: List[Dict],
         "merged_items": merged,
         "paired_totals": paired_totals,
         "paired_count": paired_count,
+        # Ranking só é honesto com itens de fato pareados: com <3 pares o
+        # "menor preço" compara quase nada (chegava a coroar 🏆 R$ 0,00 com
+        # zero pares). Quem exibe (XLSX/PPT/tela) DEVE checar esta flag.
+        "ranking_confiavel": paired_count >= 3,
         "ranking": ranking,
         "biggest_discrepancies": discrepancies,
         "n_unique_items": n_unique,
@@ -245,9 +309,10 @@ def _compare_against_reference(merged, reference_items, suppliers):
     # entrava nas duas listas: "nenhum fornecedor orçou" E "fornecedor
     # acrescentou". O painel mentia nos dois sentidos, sempre.
     refs = [it for it in reference_items if it.get("description")]
-    ref_norm = [(_n(it.get("description", "")), (it.get("unit") or "").lower(), it)
+    ref_norm = [(_n(it.get("description", "")), _norm_un(it.get("unit") or ""), it)
                 for it in refs]
-    merged_norm = [(_n(m["desc"]), (m["un"] or "").lower(), m) for m in merged]
+    merged_norm = [(_n(m["desc"]), m.get("un_norm") or _norm_un(m["un"] or ""), m)
+                   for m in merged]
 
     def _acha(alvo_desc, alvo_un, candidatos):
         """Melhor candidato acima do threshold, exigindo MESMA unidade (m² × m
@@ -409,10 +474,12 @@ def generate_comparative_xlsx(analysis: Dict, output_path: str,
         analysis["paired_totals"].items(),
         key=lambda x: x[1] or float("inf")
     )
+    # Com <3 itens pareados o ranking não compara nada — sem vencedor/destaque
+    _rk_ok = bool(analysis.get("ranking_confiavel", analysis.get("paired_count", 0) >= 3))
     for rank, (sup, paired_tot) in enumerate(ranking_list, 1):
         data = analysis["totals_by_supplier"][sup]
         cov = analysis["coverage"][sup]
-        is_winner = rank == 1
+        is_winner = rank == 1 and _rk_ok
 
         ws.cell(row=ro, column=2, value=sup).font = F_WIN if is_winner else F_BOLD
         ws.cell(row=ro, column=4, value=data["mat"] or 0).number_format = "#,##0.00"
@@ -424,7 +491,8 @@ def generate_comparative_xlsx(analysis: Dict, output_path: str,
         ws.cell(row=ro, column=8, value=paired_tot).number_format = "#,##0.00"
         if is_winner:
             ws.cell(row=ro, column=8).font = F_WIN
-        ws.cell(row=ro, column=9, value=f"{rank}º {'✔' if is_winner else ''}")
+        ws.cell(row=ro, column=9,
+                value=(f"{rank}º {'✔' if is_winner else ''}" if _rk_ok else "—"))
         if is_winner:
             ws.cell(row=ro, column=9).font = F_WIN
         for c in range(2, min(10, total_cols + 1)):
@@ -439,9 +507,13 @@ def generate_comparative_xlsx(analysis: Dict, output_path: str,
     ro += 1
     ws.merge_cells(start_row=ro, start_column=2, end_row=ro, end_column=total_cols)
     ws.cell(row=ro, column=2,
-            value=f"* Ranking por TOTAL PAREADO ({analysis['paired_count']} "
-                  f"itens que todos os {n_sup} fornecedores orçaram). "
-                  f"Comparação justa."
+            value=(f"* Ranking por TOTAL PAREADO ({analysis['paired_count']} "
+                   f"itens que todos os {n_sup} fornecedores orçaram). "
+                   f"Comparação justa."
+                   if _rk_ok else
+                   f"* Poucos itens pareados entre os fornecedores "
+                   f"({analysis['paired_count']}). Ranking suprimido — compare "
+                   f"pelo TOTAL BRUTO e confira as descrições item a item.")
             ).font = Font(name="Arial", italic=True, size=9, color="6B7280")
     ro += 2
 
@@ -704,15 +776,20 @@ def generate_comparative_pptx(analysis: Dict, output_path: str,
     card_y = Inches(1.6)
     card_h = Inches(3.5)
 
+    # Com <3 itens pareados o "menor preço" não compara nada: sem troféu/verde
+    _rk_ok_ppt = bool(analysis.get("ranking_confiavel",
+                                   analysis.get("paired_count", 0) >= 3))
     for rank, (sup, paired_tot) in enumerate(ranking_list, 1):
         data = analysis["totals_by_supplier"][sup]
         cov = analysis["coverage"][sup]
-        bg = VERDE if rank == 1 else (AZUL if rank == 2 else CINZA)
+        bg = (VERDE if rank == 1 else (AZUL if rank == 2 else CINZA)) \
+            if _rk_ok_ppt else CINZA
         x = start_x + (rank - 1) * (card_w + card_gap)
 
         _rect(slide, x, card_y, card_w, card_h, bg)
 
-        rank_label = "🏆 MENOR PREÇO" if rank == 1 else f"{rank}º"
+        rank_label = ("🏆 MENOR PREÇO" if rank == 1 else f"{rank}º") \
+            if _rk_ok_ppt else "—"
         _txt(slide, x + Inches(0.1), card_y + Inches(0.1),
               card_w - Inches(0.2), Inches(0.5),
               rank_label, size=14, bold=True, color=BRANCO, align=PP_ALIGN.CENTER)
@@ -739,12 +816,17 @@ def generate_comparative_pptx(analysis: Dict, output_path: str,
 
     cheapest_paired = ranking_list[0][1] or 0
     most_exp_paired = ranking_list[-1][1] or 0
-    if cheapest_paired > 0 and most_exp_paired > cheapest_paired:
+    if _rk_ok_ppt and cheapest_paired > 0 and most_exp_paired > cheapest_paired:
         delta = most_exp_paired - cheapest_paired
         pct = (delta / cheapest_paired) * 100
         _txt(slide, Inches(0.5), Inches(5.5), Inches(12.3), Inches(0.6),
               f"▲ DIFERENÇA: R$ {delta:,.2f}   ({pct:.1f}%)", size=18,
               bold=True, color=VERMELHO, align=PP_ALIGN.CENTER)
+    elif not _rk_ok_ppt:
+        _txt(slide, Inches(0.5), Inches(5.5), Inches(12.3), Inches(0.6),
+              f"⚠ Poucos itens pareados ({analysis.get('paired_count', 0)}) — "
+              f"compare pelo total bruto e revise as descrições.", size=14,
+              bold=True, color=CINZA, align=PP_ALIGN.CENTER)
 
     _txt(slide, Inches(0.5), Inches(6.3), Inches(12.3), Inches(0.6),
          "Total pareado = só os itens que TODOS os fornecedores orçaram (comparação justa).",
