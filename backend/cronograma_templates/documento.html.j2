@@ -67,7 +67,14 @@
     {% include 'pages/caminho.html.j2' %}
   </div>
 
-  {#- PÁGINA 5 — REFERÊNCIAS (compartilhada) -#}
+  {#- PÁGINA 5 — MATRIZ MENSAL (compartilhada; 19/07) -#}
+  {% if matriz and matriz.rows %}
+  <div class="pagina">
+    {% include 'pages/matriz.html.j2' %}
+  </div>
+  {% endif %}
+
+  {#- PÁGINA 6 — REFERÊNCIAS (compartilhada) -#}
   <div class="pagina">
     {% include 'pages/referencias.html.j2' %}
   </div>

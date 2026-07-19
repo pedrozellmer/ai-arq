@@ -631,6 +631,45 @@ def anexar_curva_realizada(curva_ctx: Dict, curva_realizada: List[Dict]) -> Dict
 
 
 # ─────────────────────────────────────────────────────────────────────
+#  Matriz mensal (página 6) — % da fase executado em cada mês
+# ─────────────────────────────────────────────────────────────────────
+def build_matriz(cronograma: Dict) -> Dict:
+    """Linhas de matriz_pct (label, cor, percentuais_por_mes) + labels dos
+    meses, prontas pro template: célula com fundo = cor da fase com alpha
+    proporcional ao %, e texto claro quando o fundo satura. Degrada pra
+    {'rows': []} sem dados (o template pula a página inteira... não — a
+    página sai vazia elegante; quem monta decide)."""
+    rows_in = cronograma.get("matriz_pct") or []
+    meses = cronograma.get("meses") or []
+    labels = [m.get("label", "") for m in meses]
+    n = len(labels)
+    rows: List[Dict] = []
+    for r in rows_in:
+        cor = (r.get("cor") or "").strip()
+        if not re.match(r"^#[0-9a-fA-F]{6}$", cor):
+            cor = _COR_FALLBACK
+        cr, cg, cb = _hex_rgb(cor)
+        lum = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb
+        cells: List[Dict] = []
+        for p in (r.get("percentuais_por_mes") or [])[:n]:
+            try:
+                pct = int(max(0, min(100, float(p or 0))))
+            except Exception:
+                pct = 0
+            if pct <= 0:
+                cells.append({"pct": 0, "bg": "transparent", "fg": ""})
+                continue
+            alpha = round(0.14 + 0.72 * (pct / 100.0), 2)
+            # fundo saturado (>55%) usa o texto da fase (branco em cor escura)
+            fg = ("#FFFFFF" if lum <= 165 else "#1D1B16") if alpha > 0.55 else ""
+            cells.append({"pct": pct, "bg": f"rgba({cr},{cg},{cb},{alpha})", "fg": fg})
+        while len(cells) < n:
+            cells.append({"pct": 0, "bg": "transparent", "fg": ""})
+        rows.append({"label": r.get("label", ""), "cor": cor, "cells": cells})
+    return {"labels": labels, "rows": rows, "n_meses": n, "n_fases": len(rows)}
+
+
+# ─────────────────────────────────────────────────────────────────────
 #  Geometria — Caminho crítico
 # ─────────────────────────────────────────────────────────────────────
 def build_caminho(cronograma: Dict) -> List[Dict]:
@@ -697,8 +736,11 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
 
     fases_ctx, axis_ctx, hoje_pct, legenda_ctx = build_gantt(cronograma.get("fases", []))
     curva_ctx = build_curva(cronograma.get("curva_s", []))
-    curva_ctx = anexar_curva_realizada(curva_ctx, cronograma.get("curva_realizada", []))
+    # chave real do gerador = 'curva_s_realizada'; aceita a variante por robustez
+    curva_ctx = anexar_curva_realizada(
+        curva_ctx, cronograma.get("curva_s_realizada") or cronograma.get("curva_realizada") or [])
     caminho_ctx = build_caminho(cronograma)
+    matriz_ctx = build_matriz(cronograma)
 
     # Branding
     b = {
@@ -742,6 +784,9 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
         "legenda": legenda_ctx,
         "curva": curva_ctx,
         "caminho": caminho_ctx,
+        "matriz": matriz_ctx,
+        # total de páginas: 6 com matriz, 5 sem (numeração dos rodapés)
+        "n_paginas": 6 if matriz_ctx.get("rows") else 5,
         "marcos_col1": marcos_col1,
         "marcos_col2": marcos_col2,
         "ressalva": ressalva,
