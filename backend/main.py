@@ -10680,6 +10680,132 @@ async def admin_eval_reprocess(job_id: str, request: Request):
     }
 
 
+def _ai_suggest_combine(files_meta: list, base_type: str = "") -> dict:
+    """Pede pra Claude Haiku olhar os arquivos (nome/tipo/tamanho/disciplina) e
+    sugerir QUAIS combinar (mesma obra) e quais deixar de fora (outra obra,
+    grande demais >150MB, duplicado). Best-effort — se a IA falhar, cai num
+    fallback determinístico (recomenda todos até 150MB, exclui os gigantes)."""
+    def _fallback():
+        rec, exc = [], []
+        for f in files_meta:
+            if f.get("size_mb", 0) and f["size_mb"] > 150:
+                exc.append({"filename": f["filename"],
+                            "reason": f"grande demais ({f['size_mb']:.0f} MB, limite 150) — não abre"})
+            else:
+                rec.append(f["filename"])
+        return {"recommended": rec, "excluded": exc, "ai": False,
+                "summary": "Sugestão automática (IA indisponível): todos os arquivos até 150 MB."}
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key or not files_meta:
+        return _fallback()
+    try:
+        import anthropic, json as _j
+        _lines = [
+            f"{i+1}. {f['filename']} | tipo={f.get('ext','?').upper()} | {f.get('size_mb',0):.1f} MB "
+            f"| projeto=\"{f.get('project_name','')}\" | disciplina={f.get('project_type','?')}"
+            for i, f in enumerate(files_meta)
+        ]
+        prompt = (
+            "Você ajuda um admin a COMBINAR arquivos CAD que pertencem à MESMA obra num "
+            "quantitativo só. Abaixo, os arquivos que um cliente subiu (em vários envios):\n\n"
+            + "\n".join(_lines) +
+            "\n\nDecida QUAIS combinar (são a mesma obra/edifício) e quais DEIXAR DE FORA. "
+            "Deixe de fora: arquivo claramente de OUTRA obra (pelo nome), duplicado óbvio, ou "
+            "grande demais (>150 MB, não abre). DWG, DXF e PDF da MESMA obra DEVEM ser combinados "
+            "(o motor mede pelo CAD e completa pelo PDF), mesmo em disciplinas diferentes "
+            "(arquitetura + estrutura da MESMA obra = ok juntar).\n\n"
+            "Responda SÓ com JSON, sem texto fora: {\"recommended\":[\"nome1\",...],"
+            "\"excluded\":[{\"filename\":\"nome\",\"reason\":\"motivo curto\"}],"
+            "\"summary\":\"1-2 frases pro admin (pt-br): o que combinar e por quê\"}"
+        )
+        client = anthropic.Anthropic(api_key=api_key)
+        resp = client.messages.create(model="claude-haiku-4-5", max_tokens=900,
+                                      messages=[{"role": "user", "content": prompt}])
+        txt = resp.content[0].text if resp.content else ""
+        _s, _e = txt.find("{"), txt.rfind("}")
+        data = _j.loads(txt[_s:_e + 1]) if (_s >= 0 and _e > _s) else {}
+        rec = [str(x) for x in (data.get("recommended") or [])]
+        exc = [{"filename": str(x.get("filename", "")), "reason": str(x.get("reason", ""))}
+               for x in (data.get("excluded") or []) if isinstance(x, dict)]
+        if not rec and not exc:
+            return _fallback()
+        return {"recommended": rec, "excluded": exc, "ai": True,
+                "summary": (str(data.get("summary") or "").strip() or "A IA analisou os arquivos.")}
+    except Exception as _e:
+        print(f"[combine-preview] IA falhou, fallback: {_e}")
+        return _fallback()
+
+
+@app.get("/api/admin/combine-preview/{job_id}")
+async def admin_combine_preview(job_id: str, request: Request):
+    """PRÉVIA do Combinar: lista os arquivos do MESMO cliente (nome/tipo/tamanho/
+    disciplina) e pede pra IA sugerir quais juntar (mesma obra). O admin confere
+    e ajusta antes de rodar. Não processa nada — só lê. Só ADMIN_EMAIL."""
+    _require_admin(request)
+    import urllib.request, urllib.error, json
+    from urllib.parse import unquote, quote as _q
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+        base = json.loads(urllib.request.urlopen(req, timeout=15).read().decode('utf-8'))
+        if not base:
+            raise HTTPException(404, "Projeto não encontrado.")
+        base = base[0]
+    except urllib.error.HTTPError as e:
+        raise HTTPException(500, f"Erro ao buscar projeto: HTTP {e.code}")
+    _email = (base.get("user_email") or "").strip()
+    if not _email:
+        raise HTTPException(400, "Projeto sem cliente (email vazio) — não dá pra combinar.")
+    try:
+        pq = (f"{SUPABASE_URL}/rest/v1/projects?user_email=eq.{_q(_email)}"
+              f"&is_eval=not.is.true&select=job_id,project_name,project_type,created_at&limit=40")
+        preq = urllib.request.Request(pq, method='GET')
+        preq.add_header('apikey', SUPABASE_KEY)
+        preq.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+        projs = json.loads(urllib.request.urlopen(preq, timeout=15).read().decode('utf-8'))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar projetos: {e}")
+    valid_ext = ('.pdf', '.dwg', '.dxf')
+    files_meta, seen_names = [], set()
+    for p in projs or []:
+        pj = p.get("job_id")
+        try:
+            list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+            body = json.dumps({"prefix": f"{pj}/", "limit": 100}).encode("utf-8")
+            r = urllib.request.Request(list_url, data=body, method="POST")
+            r.add_header("apikey", SUPABASE_KEY)
+            r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            r.add_header("Content-Type", "application/json")
+            objs = json.loads(urllib.request.urlopen(r, timeout=20).read().decode("utf-8"))
+        except Exception:
+            continue
+        for o in objs or []:
+            n = unquote(o.get("name", ""))
+            if not n.lower().endswith(valid_ext):
+                continue
+            bn = os.path.basename(n)
+            if bn in seen_names:
+                continue
+            seen_names.add(bn)
+            try:
+                _sz = int(((o.get("metadata") or {}).get("size")) or 0)
+            except Exception:
+                _sz = 0
+            files_meta.append({
+                "filename": bn, "ext": bn.lower().rsplit('.', 1)[-1],
+                "size_mb": round(_sz / 1048576, 1), "job_id": pj,
+                "project_name": p.get("project_name", ""),
+                "project_type": p.get("project_type", ""),
+            })
+    if not files_meta:
+        raise HTTPException(400, "Nenhum arquivo no Storage desse cliente.")
+    suggestion = _ai_suggest_combine(files_meta, base.get("project_type", ""))
+    return {"status": "ok", "client_email": _email, "base_job_id": job_id,
+            "files": files_meta, "suggestion": suggestion}
+
+
 @app.post("/api/admin/eval-combine/{job_id}")
 async def admin_eval_combine(job_id: str, request: Request):
     """ADMIN — "combinar e avaliar": junta os arquivos de TODOS os projetos do
@@ -10707,40 +10833,77 @@ async def admin_eval_combine(job_id: str, request: Request):
 
     _email = (base.get("user_email") or "").strip()
     _pname = (base.get("project_name") or "").strip()
-    sibling_ids = [job_id]
-    if _email and _pname:
-        try:
-            sq = (f"{SUPABASE_URL}/rest/v1/projects?user_email=eq.{_q(_email)}"
-                  f"&project_name=eq.{_q(_pname)}&is_eval=not.is.true&select=job_id&limit=20")
-            sreq = urllib.request.Request(sq, method='GET')
-            sreq.add_header('apikey', SUPABASE_KEY)
-            sreq.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-            rows = json.loads(urllib.request.urlopen(sreq, timeout=15).read().decode('utf-8'))
-            sibling_ids = list(dict.fromkeys([job_id] + [r.get("job_id") for r in rows if r.get("job_id")]))
-        except Exception as _se:
-            print(f"[combine] busca de irmãos falhou (usa só o base): {_se}")
 
-    # 2) União dos arquivos de todos os irmãos (dedupe por nome de arquivo)
+    # Lista EXPLÍCITA de arquivos (vinda da PRÉVIA — o admin conferiu e escolheu).
+    # Formato: {"files":[{"job_id":"...","filename":"..."}]}. Se vier, MANDA.
+    explicit = []
+    try:
+        _body = await request.json()
+        if isinstance(_body, dict):
+            explicit = [x for x in (_body.get("files") or [])
+                        if isinstance(x, dict) and x.get("job_id") and x.get("filename")]
+    except Exception:
+        explicit = []
+
     valid_ext = ('.pdf', '.dwg', '.dxf')
     eval_job_id = "ev" + str(uuid.uuid4())[:6]
     eval_work_dir = os.path.join(WORK_DIR, eval_job_id)
     os.makedirs(eval_work_dir, exist_ok=True)
     seen = {}  # basename -> source_job_id
-    for src in sibling_ids:
+
+    if explicit:
+        # TRAVA DE ISOLAMENTO (regra dura): todo job referenciado TEM que ser do
+        # MESMO cliente que o base. Blinda contra combinar clientes diferentes
+        # mesmo que o front tenha bug.
+        src_ids = list(dict.fromkeys(str(x["job_id"]) for x in explicit))
         try:
-            list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
-            body = json.dumps({"prefix": f"{src}/", "limit": 100}).encode("utf-8")
-            r = urllib.request.Request(list_url, data=body, method="POST")
-            r.add_header("apikey", SUPABASE_KEY)
-            r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-            r.add_header("Content-Type", "application/json")
-            files = json.loads(urllib.request.urlopen(r, timeout=20).read().decode("utf-8"))
-        except Exception:
-            continue
-        for f in files:
-            n = unquote(f.get("name", ""))
-            if n.lower().endswith(valid_ext):
-                seen.setdefault(os.path.basename(n), src)
+            vq = (f"{SUPABASE_URL}/rest/v1/projects?job_id=in.({','.join(src_ids)})"
+                  f"&select=job_id,user_email")
+            vreq = urllib.request.Request(vq, method='GET')
+            vreq.add_header('apikey', SUPABASE_KEY)
+            vreq.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+            owners = json.loads(urllib.request.urlopen(vreq, timeout=15).read().decode('utf-8'))
+        except Exception as _ve:
+            shutil.rmtree(eval_work_dir, ignore_errors=True)
+            raise HTTPException(500, f"Erro ao validar donos dos arquivos: {_ve}")
+        _emails = {(o.get("user_email") or "").strip().lower() for o in owners}
+        if (not _email) or _emails != {_email.lower()} or len(owners) != len(src_ids):
+            shutil.rmtree(eval_work_dir, ignore_errors=True)
+            raise HTTPException(400, "Não dá pra combinar: os arquivos têm que ser TODOS do "
+                                     "mesmo cliente (isolamento). Revise a seleção.")
+        for x in explicit:
+            bn = os.path.basename(str(x["filename"]))
+            if bn.lower().endswith(valid_ext):
+                seen.setdefault(bn, str(x["job_id"]))
+    else:
+        # Fallback (sem prévia): auto por email + nome (mesma obra, mesmo dia)
+        sibling_ids = [job_id]
+        if _email and _pname:
+            try:
+                sq = (f"{SUPABASE_URL}/rest/v1/projects?user_email=eq.{_q(_email)}"
+                      f"&project_name=eq.{_q(_pname)}&is_eval=not.is.true&select=job_id&limit=20")
+                sreq = urllib.request.Request(sq, method='GET')
+                sreq.add_header('apikey', SUPABASE_KEY)
+                sreq.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+                rows = json.loads(urllib.request.urlopen(sreq, timeout=15).read().decode('utf-8'))
+                sibling_ids = list(dict.fromkeys([job_id] + [r.get("job_id") for r in rows if r.get("job_id")]))
+            except Exception as _se:
+                print(f"[combine] busca de irmãos falhou (usa só o base): {_se}")
+        for src in sibling_ids:
+            try:
+                list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+                body = json.dumps({"prefix": f"{src}/", "limit": 100}).encode("utf-8")
+                r = urllib.request.Request(list_url, data=body, method="POST")
+                r.add_header("apikey", SUPABASE_KEY)
+                r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                r.add_header("Content-Type", "application/json")
+                files = json.loads(urllib.request.urlopen(r, timeout=20).read().decode("utf-8"))
+            except Exception:
+                continue
+            for f in files:
+                n = unquote(f.get("name", ""))
+                if n.lower().endswith(valid_ext):
+                    seen.setdefault(os.path.basename(n), src)
 
     eval_file_paths = []
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
