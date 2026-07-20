@@ -245,6 +245,56 @@
             <p id="stat-success" class="text-3xl font-bold text-gray-900">--</p>
             <p id="stat-success-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
           </div>
+
+          <!-- Card: Itens gerados (30 dias) -->
+          <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
+            <div class="flex items-center gap-3 mb-4">
+              <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+              </div>
+              <p class="text-sm font-medium text-gray-500">Itens gerados (30 dias)</p>
+            </div>
+            <p id="stat-items" class="text-3xl font-bold text-gray-900">--</p>
+            <p id="stat-items-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
+          </div>
+        </div>
+
+        <!-- ═══ Operação agora ═══ -->
+        <div class="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-bold text-gray-700 flex items-center gap-2">&#9889; Opera&#231;&#227;o agora</h2>
+            <span class="text-xs text-gray-400">estado atual</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div class="rounded-xl bg-gray-50 p-4">
+              <p class="text-xs text-gray-500">&#8987; Em curso</p>
+              <p id="stat-op-running" class="text-2xl font-bold text-gray-900 mt-1">--</p>
+            </div>
+            <div class="rounded-xl bg-amber-50 p-4">
+              <p class="text-xs text-amber-800">&#9888; Travados</p>
+              <p id="stat-op-stuck" class="text-2xl font-bold text-amber-900 mt-1">--</p>
+            </div>
+            <div class="rounded-xl bg-rose-50 p-4">
+              <p class="text-xs text-rose-800">&#10007; Erros (24h)</p>
+              <p id="stat-op-errors" class="text-2xl font-bold text-rose-900 mt-1">--</p>
+            </div>
+            <div class="rounded-xl bg-emerald-50 p-4">
+              <p class="text-xs text-emerald-800">&#10003; Conclu&#237;dos hoje</p>
+              <p id="stat-op-donetoday" class="text-2xl font-bold text-emerald-900 mt-1">--</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ═══ Leitura & Clientes ═══ -->
+        <div class="mt-6 grid gap-6 lg:grid-cols-2">
+          <div class="rounded-2xl border bg-white p-6 shadow-sm">
+            <h2 class="text-sm font-bold text-gray-700 flex items-center gap-2 mb-4">&#128208; Leitura &amp; qualidade <span class="font-normal text-gray-400">&mdash; 30 dias</span></h2>
+            <div id="panel-quality" class="space-y-2.5 text-sm text-gray-600"><p class="text-gray-400">Carregando&#8230;</p></div>
+          </div>
+          <div class="rounded-2xl border bg-white p-6 shadow-sm">
+            <h2 class="text-sm font-bold text-gray-700 flex items-center gap-2 mb-4">&#128101; Clientes <span class="font-normal text-gray-400">&mdash; atividade</span></h2>
+            <div id="panel-clients" class="space-y-2.5 text-sm text-gray-600"><p class="text-gray-400">Carregando&#8230;</p></div>
+          </div>
         </div>
       </div>
 
@@ -2825,8 +2875,11 @@ async function adminDownloadXlsx(jobId) {
 // DASHBOARD STATS
 // ══════════════════════════════════════════════
 async function loadDashboardStats() {
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const _mins = (typeof minutesSince === 'function') ? minutesSince : (d => (Date.now() - Date.parse(d)) / 60000);
+  const STUCK = (typeof STUCK_MINUTES !== 'undefined') ? STUCK_MINUTES : 20;
   try {
-    // Count users — via RPC (inclui cadastros incompletos)
+    // Usuários (RPC admin — inclui cadastros incompletos)
     let total = 0, incomplete = 0, last7 = 0;
     try {
       const { data, error } = await sbClient.rpc('admin_list_all_signups');
@@ -2834,41 +2887,76 @@ async function loadDashboardStats() {
       const users = data || [];
       total = users.length;
       incomplete = users.filter(u => !u.has_profile).length;
-      const sevenAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-      last7 = users.filter(u => {
-        const t = u.auth_created_at ? Date.parse(u.auth_created_at) : 0;
-        return t >= sevenAgo;
-      }).length;
+      const sevenAgo = Date.now() - 7 * 864e5;
+      last7 = users.filter(u => (u.auth_created_at ? Date.parse(u.auth_created_at) : 0) >= sevenAgo).length;
     } catch (e) {
-      // Fallback
       const { count } = await sbClient.from('profiles').select('*', { count: 'exact', head: true });
       total = count || 0;
     }
-    document.getElementById('stat-users').textContent = total;
-    // KPIs de projetos (P0): total 30d + taxa de sucesso. Sem receita (beta grátis).
-    try {
-      const _since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
-      const { data: _pj } = await sbClient.from('projects').select('status').gte('created_at', _since);
-      const _l = _pj || [];
-      const _done = _l.filter(p => p.status === 'done').length;
-      const _err  = _l.filter(p => p.status === 'error').length;
-      const _fin  = _done + _err;
-      const _elP = document.getElementById('stat-projects');
-      if (_elP) _elP.textContent = _l.length;
-      const _elPd = document.getElementById('stat-projects-detail');
-      if (_elPd) _elPd.textContent = '✓ ' + _done + ' concluídos · ⏳ ' + Math.max(0, _l.length - _fin) + ' em curso';
-      const _elS = document.getElementById('stat-success');
-      if (_elS) _elS.textContent = _fin ? (Math.round(_done / _fin * 100) + '%') : '--';
-      const _elSd = document.getElementById('stat-success-detail');
-      if (_elSd) _elSd.textContent = _fin ? ('✓ ' + _done + ' ok · ✗ ' + _err + ' erro (de ' + _fin + ')') : ' ';
-    } catch (_e) { console.error('KPIs projetos:', _e); }
+    set('stat-users', total);
     const detailEl = document.getElementById('stat-users-detail');
     if (detailEl) {
       const parts = [];
       if (last7 > 0) parts.push('+' + last7 + ' em 7d');
       if (incomplete > 0) parts.push(incomplete + ' incompleto(s)');
-      detailEl.textContent = parts.length ? parts.join(' \u00b7 ') : '\u00a0';
+      detailEl.textContent = parts.length ? parts.join(' · ') : ' ';
     }
+
+    // Projetos — busca ampla e EXCLUI avaliações/teste (is_eval)
+    const { data: _all } = await sbClient.from('projects')
+      .select('status,items_count,total_area,created_at,completed_at,user_email,file_types,reprocess_count,is_eval')
+      .order('created_at', { ascending: false }).limit(300);
+    const proj = (_all || []).filter(p => !p.is_eval);
+    const now = Date.now(), d30 = now - 30 * 864e5, d1 = now - 864e5;
+    const today0 = new Date(); today0.setHours(0, 0, 0, 0);
+
+    const p30 = proj.filter(p => p.created_at && Date.parse(p.created_at) >= d30);
+    const done30 = p30.filter(p => p.status === 'done');
+    const err30 = p30.filter(p => p.status === 'error');
+    const fin30 = done30.length + err30.length;
+
+    set('stat-projects', p30.length);
+    set('stat-projects-detail', '✓ ' + done30.length + ' concluídos · ⏳ ' + Math.max(0, p30.length - fin30) + ' em curso');
+    set('stat-success', fin30 ? (Math.round(done30.length / fin30 * 100) + '%') : '--');
+    set('stat-success-detail', fin30 ? ('✓ ' + done30.length + ' ok · ✗ ' + err30.length + ' erro (de ' + fin30 + ')') : ' ');
+    const itens30 = done30.reduce((s, p) => s + (p.items_count || 0), 0);
+    set('stat-items', itens30.toLocaleString('pt-BR'));
+    set('stat-items-detail', done30.length ? ('média ' + Math.round(itens30 / done30.length) + '/projeto concluído') : ' ');
+
+    // Operação agora (estado atual)
+    const running = proj.filter(p => p.status === 'queued' || p.status === 'processing');
+    const stuck = running.filter(p => _mins(p.created_at) > STUCK && !((p.reprocess_count || 0) > 0));
+    const err24 = proj.filter(p => p.status === 'error' && p.created_at && Date.parse(p.created_at) >= d1);
+    const doneToday = proj.filter(p => p.status === 'done' && p.completed_at && new Date(p.completed_at) >= today0);
+    set('stat-op-running', running.length);
+    set('stat-op-stuck', stuck.length);
+    set('stat-op-errors', err24.length);
+    set('stat-op-donetoday', doneToday.length);
+
+    // Leitura & qualidade (30d)
+    const comArea = done30.filter(p => p.total_area > 0);
+    const areaMedia = comArea.length ? Math.round(comArea.reduce((s, p) => s + p.total_area, 0) / comArea.length) : 0;
+    let nPdf = 0, nCad = 0;
+    p30.forEach(p => { const ft = p.file_types || {}; nPdf += (ft.pdf || 0); nCad += (ft.dwg || 0) + (ft.dxf || 0); });
+    const totFiles = nPdf + nCad, pdfPct = totFiles ? Math.round(nPdf / totFiles * 100) : 0;
+    const reproc30 = p30.filter(p => (p.reprocess_count || 0) > 0).length;
+    const row = (label, val) => '<div class="flex justify-between items-baseline"><span>' + label + '</span><b class="text-gray-900">' + val + '</b></div>';
+    const qEl = document.getElementById('panel-quality');
+    if (qEl) qEl.innerHTML =
+      row('Itens por projeto', done30.length ? Math.round(itens30 / done30.length) : '--') +
+      row('Área média', areaMedia ? areaMedia.toLocaleString('pt-BR') + ' m²' : '--') +
+      row('Arquivos enviados', totFiles ? (pdfPct + '% PDF · ' + (100 - pdfPct) + '% CAD') : '--') +
+      row('Reprocessados (30d)', reproc30);
+
+    // Clientes
+    const ativos30 = new Set(p30.map(p => (p.user_email || '').toLowerCase()).filter(Boolean)).size;
+    const comErro = new Set(err24.map(p => (p.user_email || '').toLowerCase()).filter(Boolean)).size;
+    const cEl = document.getElementById('panel-clients');
+    if (cEl) cEl.innerHTML =
+      row('Ativos (30d)', ativos30) +
+      row('Novos cadastros (7d)', last7) +
+      row('Cadastros incompletos', incomplete) +
+      row('⚠ Com erro (24h)', comErro);
 
   } catch (err) {
     console.error('Error loading stats:', err);
