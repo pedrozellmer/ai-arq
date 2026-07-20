@@ -1142,6 +1142,9 @@
       { key:'mep', name:'Elétrica/MEP', tip:'DWG de AutoCAD MEP/Architecture tem "objetos inteligentes" (AEC) que nenhum conversor abre direto — precisa achatar antes. A gente avisa na hora se detectar um.',
         steps:['No AutoCAD, abra o arquivo e digite o comando EXPORTTOAUTOCAD (ou _AECEXPORTTOAUTOCAD) e Enter — isso transforma os objetos MEP/AEC em linhas comuns.','No arquivo que ele gerar, Salvar Como → AutoCAD 2013 DXF.','Suba esse DXF aqui — aí a gente consegue medir.'],
         src:'https://help.autodesk.com/view/ARCHDESK/2024/ENU/?guid=GUID-A174C49B-2FB3-47F4-9ECA-35C700650263', srcName:'Autodesk' },
+      { key:'estrutural', name:'Estrutural', tip:'O DXF é o que destrava o aço: a gente lê a tabela "Resumo de Aço" e mede o kg de ferro. Em PDF a tabela não dá pra ler — sai tudo estimativa.',
+        steps:['No seu programa estrutural (TQS, Eberick, AltoQi, AutoCAD…), exporte cada prancha em DXF — Salvar Como → DXF, ou Exportar → DXF.','Mande principalmente as pranchas que têm a TABELA / RESUMO DE AÇO (pilar e viga) — é dela que sai o kg de ferro medido.','Suba os DXF aqui. A gente lê a tabela de aço e marca como medido; o detalhamento em si pode sair como estimativa pra conferir.'],
+        src:'', srcName:'' },
       { key:'pdf', name:'Só tenho PDF', tip:'PDF a gente lê, mas sai tudo como estimativa pra conferir.',
         steps:['Exporte um PDF VETORIAL: no AutoCAD, botão do Aplicativo → Exportar → PDF (preset "AutoCAD PDF - High Quality Print"). No Revit/ArchiCAD, use Imprimir/Plotar → PDF.','NUNCA "plotar como imagem" nem escanear/fotografar a planta — o desenho vira pixel, as cotas somem e a IA não consegue medir.','Se der, mande o DWG/DXF junto — a gente mede e completa o que o PDF deixou como estimativa.'],
         src:'https://help.autodesk.com/view/ACD/2025/ENU/?guid=GUID-EC9C6D47-814E-476D-840F-04104CF72B78', srcName:'Autodesk' },
@@ -1159,7 +1162,7 @@
         '<ol class="list-decimal pl-5 space-y-2 text-sm text-gray-700">' +
         g.steps.map(s=>`<li>${esc(s)}</li>`).join('') + '</ol>' +
         `<p class="mt-3 text-xs text-gray-500">💡 ${esc(g.tip)}</p>` +
-        `<p class="mt-2 text-[11px] text-gray-400">Fonte: <a href="${esc(g.src)}" target="_blank" rel="noopener" class="underline hover:text-gray-600">${esc(g.srcName)} (documentação oficial)</a></p>`;
+        (g.src ? `<p class="mt-2 text-[11px] text-gray-400">Fonte: <a href="${esc(g.src)}" target="_blank" rel="noopener" class="underline hover:text-gray-600">${esc(g.srcName)} (documentação oficial)</a></p>` : '');
     }
     window.exportTab = function(k){ cur = k; renderTabs(); renderContent(); };
     window.openExportModal = function(){ cur = 'autocad'; renderTabs(); renderContent(); document.getElementById('modal-export').classList.remove('hidden'); };
