@@ -3335,6 +3335,53 @@ def _complement_base_has_items(job_id: str) -> bool:
     return True
 
 
+def _salvage_layout_esquadrias(file_paths):
+    """Última cartada antes de declarar "0 itens" numa planta de LAYOUT vetorial:
+    lê as ESQUADRIAS das cotas escritas no texto do PDF (largura×altura/peitoril,
+    ex. "160x150/86"). 100% DETERMINÍSTICO — não chama IA, não inventa dimensão,
+    só conta o que está escrito na prancha. Caso Catarina (20/07): estudo de layout
+    de interiores sem quadro de áreas dava erro "nenhum item"; agora entrega as
+    esquadrias medidas na prancha, marcadas 'estimado' (é leitura de layout, não
+    medição geométrica nossa — regra dura nº1). Só PDF; retorna [] se nada casar.
+
+    Nota: BudgetItem/Confidence são importados LOCALMENTE (o main.py não os traz
+    no topo — só ProcessingStatus); por isso a assinatura não os anota."""
+    from models import BudgetItem, Confidence
+    import collections, re as _re_esq
+    # Cota de esquadria no texto vetorial: "160x150/86" = largura×altura/peitoril (cm).
+    # A forma COM peitoril (3 números) é notação inconfundível de esquadria — evita
+    # falso-positivo com tamanho de piso ("60x60", que não tem "/"). Conservador.
+    _rx = _re_esq.compile(r'^(\d{2,3})x(\d{2,3})/(\d{2,3})$')
+    counts: "collections.Counter" = collections.Counter()
+    for p in file_paths or []:
+        if not str(p).lower().endswith(".pdf"):
+            continue
+        try:
+            import pdfplumber
+            with pdfplumber.open(p) as pdf:
+                for page in pdf.pages:
+                    for w in page.extract_words():
+                        m = _rx.match((w.get("text") or "").replace(" ", ""))
+                        if m:
+                            counts[(m.group(1), m.group(2), m.group(3))] += 1
+        except Exception as e:
+            print(f"[salvage-esq] {os.path.basename(str(p))}: {e}")
+            continue
+    items = []
+    _ref = os.path.basename(str(file_paths[0])) if file_paths else ""
+    for (L, A, P), n in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        Lm, Am, Pm = int(L) / 100.0, int(A) / 100.0, int(P) / 100.0
+        desc = (f"Esquadria (janela/porta) {L}×{A}/{P} — {Lm:.2f} × {Am:.2f} m, "
+                f"peitoril {Pm:.2f} m")
+        items.append(BudgetItem(
+            item_num="", description=desc, unit="un", quantity=float(n),
+            observations=("Dimensão lida da cota escrita na prancha (estudo de layout — "
+                          "confira o tipo e a quantidade; portas sem cota não entram)."),
+            ref_sheet=_ref, confidence=Confidence.ESTIMADO,
+            discipline="Esquadrias", origem="vision_pdf"))
+    return items
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -4678,6 +4725,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     print(f"[densidade] {density_flagged} itens fora do padrão histórico")
             except Exception as e:
                 print(f"[densidade] Erro no check de anomalia: {e}")
+
+        # ── SALVAMENTO DE LAYOUT (20/07, caso Catarina) ──
+        # Antes de declarar "0 itens = falha": uma planta de ESTUDO DE LAYOUT
+        # (interiores, sem quadro de áreas) é legível mas não rende item clássico
+        # — a IA rodava de boa e devolvia vazio → erro. Só que a prancha tem
+        # ESQUADRIAS cotadas no texto vetorial (medida escrita: "160x150/86").
+        # Extrai essas esquadrias de forma DETERMINÍSTICA (sem IA, sem inventar)
+        # pra planilha ter conteúdo real em vez de erro. Só quando a IA NÃO deu
+        # erro (senão é falha real do provedor, não layout) — aí mantém o erro
+        # honesto. Não roda em complemento (a base já tem itens).
+        if len(all_items) == 0 and not is_complement and not (sheet_errors or dxf_errors):
+            _salv = _salvage_layout_esquadrias(file_paths)
+            if _salv:
+                all_items.extend(_salv)
+                _n_esq = sum(int(i.quantity) for i in _salv)
+                project_data.warnings = (project_data.warnings or []) + [
+                    f"Esta prancha é um ESTUDO DE LAYOUT (sem quadro de áreas/cotas de "
+                    f"dimensão). Não dá pra medir áreas (piso/forro) com honestidade daqui — "
+                    f"o que deu pra extrair foram as {_n_esq} esquadrias cotadas na prancha. "
+                    f"Pra o quantitativo completo, informe a área total ou envie o DXF."
+                ]
+                print(f"[salvage-layout] job={job_id}: 0 itens da IA → salvei {_n_esq} "
+                      f"esquadrias ({len(_salv)} tipos) do texto vetorial")
 
         # ── Resultado vazio: NÃO marcar "done" silencioso ──
         # Bug Vinícius (2026-05-21): 1 PDF processou em 17s, 0 itens, status
