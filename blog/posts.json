@@ -1210,14 +1210,14 @@
         },
         {
           "h2": "Como exportar pra aproveitar isso",
-          "body": "Se você trabalha em AutoCAD ou similar, o caminho é curto:\n\n1. Envie o DWG ou DXF direto — sem imprimir pra PDF antes.\n2. Se o projeto tem objetos especiais (elétrica, forro modular, mobiliário paramétrico), rode EXPORTTOAUTOCAD antes de salvar: isso converte os objetos em geometria comum, que dá pra medir.\n3. Só tem PDF? Envie mesmo assim — prefira o PDF exportado do CAD (vetorial) ao escaneado, e saiba que a planilha virá com mais estimativas pra revisar.\n\nO passo a passo completo, com prints, está no nosso guia de exportação no FAQ."
+          "body": "Se você trabalha em AutoCAD ou similar, o caminho é curto:\n\n1. Prefira DXF. Entre os dois formatos de CAD, o DXF é o mais seguro: abre em qualquer programa e não trava com os “objetos inteligentes” (AEC) de projetos feitos em AutoCAD Architecture/MEP — que às vezes impedem o DWG de ser convertido. O DWG também mede a geometria; só costuma dar mais dor de cabeça na conversão.\n2. Envie o CAD direto — sem imprimir pra PDF antes.\n3. Se o projeto tem objetos especiais (elétrica, forro modular, mobiliário paramétrico), rode EXPORTTOAUTOCAD antes de salvar em DXF: isso converte os objetos em geometria comum, que dá pra medir.\n4. Só tem PDF? Envie mesmo assim — prefira o PDF exportado do CAD (vetorial) ao escaneado, e saiba que a planilha virá com mais estimativas pra revisar.\n\nO passo a passo completo, com prints, está no nosso guia de exportação no FAQ."
         },
         {
           "h2": "Os limites do número (transparência em primeiro lugar)",
           "body": "Esses 31,5% × 7,3% são médias de uma base em beta — 51 projetos, tipos de prancha variados, complexidades diferentes. Projeto com prancha rica em cotas mede mais; prancha só de layout mede menos, em qualquer formato. O número vai mudar conforme a base cresce, e vamos atualizando.\n\nO que o dado já sustenta com folga é a direção: se você pode escolher o formato do arquivo, escolha o CAD. É a diferença entre a plataforma ler o seu desenho — e medir o seu desenho."
         }
       ],
-      "cta": "Quer ver a diferença na sua própria prancha? Suba um projeto em ai.arq.br — de preferência em DWG ou DXF — e receba a planilha de quantitativos com cada item marcado como medido (✓) ou estimativa a revisar (⚠). O primeiro projeto é grátis, sem cartão.",
+      "cta": "Quer ver a diferença na sua própria prancha? Suba um projeto em ai.arq.br — de preferência em DXF (ou DWG) — e receba a planilha de quantitativos com cada item marcado como medido (✓) ou estimativa a revisar (⚠). O primeiro projeto é grátis, sem cartão.",
       "sources": [
         {
           "type": "official",
