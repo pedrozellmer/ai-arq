@@ -1866,6 +1866,7 @@ def _auto_retry_erros_transitorios():
     try:
         _cut = (datetime.utcnow() - _td(hours=24)).isoformat()
         q = (f"{SUPABASE_URL}/rest/v1/projects?status=eq.error&archived=not.is.true"
+             f"&is_eval=not.is.true"  # avaliações (teste) ficam fora do auto-retry/alerta
              f"&created_at=gte.{_cut}"
              f"&select=job_id,user_email,project_name,error_message,typology,project_type,auto_resume_count"
              f"&limit=20")
@@ -10558,6 +10559,124 @@ async def reprocess_project(job_id: str, request: Request):
         "new_job_id": new_job_id,
         "files_count": len(new_file_paths),
         "typology": typology,
+    }
+
+
+@app.post("/api/admin/eval-reprocess/{job_id}")
+async def admin_eval_reprocess(job_id: str, request: Request):
+    """ADMIN — "modo avaliação": re-roda os arquivos de um projeto num job
+    ISOLADO, sem tocar no projeto do cliente. Serve pra comparar leituras sem
+    risco (ex.: DWG vs PDF, ou motor novo vs antigo).
+
+    Isolamento (por quê é seguro):
+    - is_eval=true  → fora das varreduras (auto-retry/alerta) e marcado no admin;
+    - user_email='' → TODO email de cliente (sucesso e falha) no-opa (o
+      _send_email_smtp/_email_falha_cliente checam email não-vazio);
+    - parent_job_id → guarda extra contra email de falha;
+    - user_id='eval'→ não aparece no dashboard de nenhum cliente;
+    - NÃO incrementa o reprocess_count do original (não gasta o grátis do cliente).
+    Mesmo pipeline do processamento real → avaliação fiel. Só ADMIN_EMAIL acessa."""
+    _require_admin(request)
+    import urllib.request, urllib.error, json, shutil
+    from urllib.parse import unquote
+
+    # 1) Projeto original (service role — admin já validado no _require_admin)
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+        projects = json.loads(urllib.request.urlopen(req, timeout=15).read().decode('utf-8'))
+        if not projects:
+            raise HTTPException(404, "Projeto original não encontrado.")
+        orig = projects[0]
+    except urllib.error.HTTPError as e:
+        raise HTTPException(500, f"Erro ao buscar projeto: HTTP {e.code}")
+
+    if orig.get("is_eval"):
+        raise HTTPException(400, "Este já é um projeto de avaliação — avalie o original.")
+
+    # 2) Arquivos originais no Storage do job ORIGINAL
+    try:
+        list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+        body = json.dumps({"prefix": f"{job_id}/", "limit": 100}).encode("utf-8")
+        req = urllib.request.Request(list_url, data=body, method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        storage_files = json.loads(urllib.request.urlopen(req, timeout=20).read().decode("utf-8"))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao listar Storage: {e}")
+
+    valid_ext = ('.pdf', '.dwg', '.dxf')
+    original_filenames = [unquote(f.get("name", "")) for f in storage_files
+                          if unquote(f.get("name", "")).lower().endswith(valid_ext)]
+    if not original_filenames:
+        raise HTTPException(400,
+            "Arquivos originais não estão no Storage (projeto antigo, pré-upload "
+            "automático de 21/04/2026). Sem os arquivos não dá pra avaliar.")
+
+    # 3) Novo job de avaliação + download dos arquivos
+    eval_job_id = "ev" + str(uuid.uuid4())[:6]
+    eval_work_dir = os.path.join(WORK_DIR, eval_job_id)
+    os.makedirs(eval_work_dir, exist_ok=True)
+    eval_file_paths = []
+    file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
+    for fname in original_filenames:
+        data = _supabase_storage_download_prancha(job_id, fname)
+        if not data:
+            continue
+        lp = os.path.join(eval_work_dir, fname)
+        with open(lp, "wb") as f:
+            f.write(data)
+        eval_file_paths.append(lp)
+        ext = fname.lower().rsplit('.', 1)[-1]
+        file_types[ext] = file_types.get(ext, 0) + 1
+    if not eval_file_paths:
+        shutil.rmtree(eval_work_dir, ignore_errors=True)
+        raise HTTPException(500, "Falha ao baixar arquivos do Storage")
+
+    # 4) Row de avaliação ISOLADA
+    typology = orig.get("typology") or "office"
+    ptype = orig.get("project_type") or "arquitetura"
+    types_summary = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
+    jobs[eval_job_id] = ProcessingStatus(
+        job_id=eval_job_id, status="queued", progress=0,
+        current_step=f"Avaliação (teste): {len(eval_file_paths)} arquivo(s) ({types_summary})",
+        total_steps=3,
+    )
+    _supabase_insert("projects", {
+        "job_id": eval_job_id,
+        "user_id": "eval",
+        "user_email": "",  # vazio → nenhum email de cliente dispara
+        "user_name": "",
+        "project_name": f"[TESTE] {orig.get('project_name', 'Projeto')} — avaliação",
+        "typology": typology,
+        "project_type": ptype,
+        "files_count": len(eval_file_paths),
+        "file_types": file_types,
+        "status": "queued",
+        "parent_job_id": job_id,  # rastreabilidade + guarda extra contra email
+        "is_eval": True,
+    })
+
+    # 5) Dispara — MESMO pipeline (avaliação fiel). NÃO incrementa reprocess do original.
+    import threading
+    threading.Thread(
+        target=_process_job_throttled,
+        args=(eval_job_id, eval_file_paths, eval_work_dir),
+        kwargs={"typology": typology, "project_type": ptype},
+        daemon=True,
+    ).start()
+
+    print(f"[eval] avaliação {eval_job_id} disparada a partir de {job_id} "
+          f"({len(eval_file_paths)} arquivo(s), {types_summary})")
+    return {
+        "status": "ok",
+        "original_job_id": job_id,
+        "eval_job_id": eval_job_id,
+        "files_count": len(eval_file_paths),
+        "view_url": f"/projeto.html?job_id={eval_job_id}",
     }
 
 
