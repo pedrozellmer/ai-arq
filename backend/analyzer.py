@@ -1140,12 +1140,13 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         return {"items": [], "error": f"JSON parse error: {e}"}
     except Exception as e:
         print(f"Erro API para {sheet.filename}: {e}")
-        # Preserva o status_code do erro-raiz (429/529/400/404...) num prefixo
-        # estável pra main.py classificar por status, não re-adivinhar por
-        # substring. Sem isso o caminho PDF fica cego pro tipo do erro.
+        # Preserva status_code E nome da classe do erro-raiz num prefixo estável
+        # pra main.py classificar por tipo, não re-adivinhar por substring. O
+        # type= pega erro de rede cru que escapa da tipagem do SDK no streaming
+        # (BrokenPipeError/RemoteProtocolError) — sem status, mas transitório.
         _status = getattr(e, "status_code", None)
-        _tag = f"[status={_status}] " if _status is not None else ""
-        return {"items": [], "error": f"{_tag}{e}"}
+        _bits = ([f"status={_status}"] if _status is not None else []) + [f"type={type(e).__name__}"]
+        return {"items": [], "error": f"[{' '.join(_bits)}] {e}"}
 
 
 def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,

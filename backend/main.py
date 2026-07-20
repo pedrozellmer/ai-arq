@@ -1027,7 +1027,11 @@ def _load_jobs() -> dict:
             if os.path.exists(JOBS_FILE):
                 with open(JOBS_FILE, 'r') as f:
                     return _json.load(f)
-        except: pass
+        except Exception as _e:
+            # NÃO fica calado: _jobs.json corrompido → retornar {} apagaria TODOS
+            # os jobs de uma vez (o cenário catastrófico que a escrita atômica
+            # minimiza). Deixa rastro no log do Render pra não sumir em silêncio.
+            print(f"[jobs] FALHA ao ler {JOBS_FILE}: {type(_e).__name__}: {_e}")
         return {}
 
 def _save_jobs(jobs_dict):
@@ -1040,7 +1044,8 @@ def _save_jobs(jobs_dict):
             with open(tmp, 'w') as f:
                 _json.dump(jobs_dict, f)
             os.replace(tmp, JOBS_FILE)
-        except: pass
+        except Exception as _e:
+            print(f"[jobs] FALHA ao gravar {JOBS_FILE}: {type(_e).__name__}: {_e}")
 
 # ─── Email transacional (SMTP — Google Workspace) ───────────────────
 # Configurado por env vars SMTP_* no Render. Se não estiver configurado,
@@ -1717,6 +1722,10 @@ class JobsStore:
             if key in jobs:
                 jobs[key].update(kwargs)
                 _save_jobs(jobs)
+            else:
+                # Atualização de status pra um job que sumiu do store vira no-op
+                # MUDO — deixa rastro pra não esconder "status não gravou".
+                print(f"[jobs] update_field no-op: job '{key}' fora do store {list(kwargs)}")
 
 jobs = JobsStore()
 
@@ -4180,11 +4189,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # Registra em dxf_errors pra o guard de 0-itens distinguir
                         # "IA falhou (reprocessável grátis)" de "arquivo sem
                         # conteúdo medível" — espelha o tratamento do caminho PDF.
-                        # Preserva o status_code do erro-raiz pra classificar por
-                        # status depois (não re-adivinhar por substring).
+                        # Preserva status_code E nome da classe do erro-raiz pra
+                        # classificar por tipo (não re-adivinhar por substring). O
+                        # type= pega erro de rede cru do streaming (BrokenPipe/
+                        # RemoteProtocol) que vem sem status mas é transitório.
                         _status = getattr(e, "status_code", None)
-                        _tag = f"[status={_status}] " if _status is not None else ""
-                        err_msg = f"{_tag}{str(e)[:200]}"
+                        _bits = ([f"status={_status}"] if _status is not None else []) + [f"type={type(e).__name__}"]
+                        err_msg = f"[{' '.join(_bits)}] {str(e)[:200]}"
                         dxf_errors.append(f"{os.path.basename(dxf_path)}: {err_msg}")
                         jobs.update_field(job_id, current_step=f"Erro IA (DXF): {err_msg}")
                         print(f"Erro Claude DXF: {e}")
