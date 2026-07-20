@@ -349,12 +349,15 @@ def _pair_walls(
     min_len_pt: float,
     min_overlap_frac: float = 0.6,
     max_partners: int = 6,
-) -> list[tuple[float, float]]:
+) -> list[tuple[float, float, float, float, float]]:
     """Casa pares paralelos à distância [tmin, tmax] com bucketing por p.
 
-    Retorna lista de (comprimento_overlap_pt, espessura_pt). Guloso por maior
-    overlap; cada segmento casa no máximo uma vez. Segmento com mais de
-    `max_partners` candidatos = provável hachura/grade → descartado.
+    Retorna lista de (comprimento_overlap_pt, espessura_pt, inicio_pt,
+    fim_pt, p_meio_pt) — os 3 últimos localizam a parede no eixo (intervalo
+    da sobreposição + coordenada perpendicular média), usados pela validação
+    por cota (pdfvec_cotas). Guloso por maior overlap; cada segmento casa no
+    máximo uma vez. Segmento com mais de `max_partners` candidatos =
+    provável hachura/grade → descartado.
     """
     n = len(segs)
     if n < 2:
@@ -389,13 +392,15 @@ def _pair_walls(
     cands.sort(key=lambda cd: (-cd[0], cd[1]))
 
     used: set[int] = set()
-    walls: list[tuple[float, float]] = []
+    walls: list[tuple[float, float, float, float, float]] = []
     for ov, d, i, j in cands:
         if i in used or j in used:
             continue
         used.add(i)
         used.add(j)
-        walls.append((ov, d))
+        a0, a1, p = segs[i]
+        b0, b1, q = segs[j]
+        walls.append((ov, d, max(a0, b0), min(a1, b1), (p + q) / 2.0))
     return walls
 
 
@@ -427,7 +432,10 @@ def detect_walls(
     Returns:
         {"total_length_m": float,
          "n_walls": int,
-         "walls": [{"length_m": float, "thickness_cm": float}, ...],
+         "walls": [{"length_m": float, "thickness_cm": float,
+                    "axis": "h"|"v", "span_pt": (ini, fim), "p_pt": float},
+                   ...],   # axis/span_pt/p_pt localizam a parede no papel —
+                           # consumidos pela validação por cota (pdfvec_cotas)
          "meta": {...diagnóstico: engine, contagens, tempo...}}
     """
     t0 = time.time()
@@ -452,18 +460,20 @@ def detect_walls(
             seq.sort(key=lambda s: s[1] - s[0], reverse=True)
             del seq[max_segments:]
 
-    walls_pt = (
-        _pair_walls(horiz, tmin_pt, tmax_pt, min_len_pt, min_overlap_frac)
-        + _pair_walls(vert, tmin_pt, tmax_pt, min_len_pt, min_overlap_frac)
-    )
-
-    walls = [
-        {
-            "length_m": round(ov * m_per_pt, 3),
-            "thickness_cm": round(d * m_per_pt * 100.0, 1),
-        }
-        for ov, d in walls_pt
-    ]
+    walls = []
+    for axis, seq in (("h", horiz), ("v", vert)):
+        for ov, d, lo, hi, p in _pair_walls(seq, tmin_pt, tmax_pt,
+                                            min_len_pt, min_overlap_frac):
+            walls.append({
+                "length_m": round(ov * m_per_pt, 3),
+                "thickness_cm": round(d * m_per_pt * 100.0, 1),
+                # posição no eixo (pontos PDF, y pra cima) — consumida pela
+                # validação por cota (pdfvec_cotas): "h" = parede horizontal
+                # (span em x, p = y da linha média); "v" = vertical.
+                "axis": axis,
+                "span_pt": (round(lo, 1), round(hi, 1)),
+                "p_pt": round(p, 1),
+            })
     walls.sort(key=lambda w: -w["length_m"])
     total = sum(w["length_m"] for w in walls)
 

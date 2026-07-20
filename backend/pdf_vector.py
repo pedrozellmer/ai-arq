@@ -88,6 +88,8 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
 
     # 3) ambientes (banda de sala) + envoltória (banda alta, ponte proporcional)
     room_den, room_bbox = den, bbox   # viewport que efetivamente mediu salas
+    rooms_ok: list = []               # salas finais (consumidas pela validação por cota)
+    walls_ok: list = []               # paredes finais (idem)
     try:
         from pdfvec_rooms import PT_TO_M, detect_rooms
         # bridge_gaps_m=1.2: se a geometria pura fechar quase nada, refaz com
@@ -125,6 +127,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
                 room_den, room_bbox = v["scale"], tuple(v["bbox"])
                 out["rooms_viewport"] = {"scale": v["scale"],
                                          "bbox": [round(x, 1) for x in v["bbox"]]}
+        rooms_ok = rooms
         areas = sorted((r["area_m2"] for r in rooms), reverse=True)
         out["n_rooms"] = len(areas)
         out["rooms_m2"] = round(sum(areas), 1)
@@ -147,10 +150,33 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     try:
         from pdfvec_walls import detect_walls
         w = detect_walls(pdf_path, page_index, room_den, room_bbox)
+        walls_ok = w.get("walls", [])
         out["walls_m"] = round(w.get("total_length_m", 0.0), 1)
-        out["n_walls"] = len(w.get("walls", []))
+        out["n_walls"] = len(walls_ok)
     except Exception as e:
         out["err_walls"] = f"{type(e).__name__}: {e}"[:120]
+
+    # 4.5) VALIDAÇÃO POR COTA (pdfvec_cotas): cruza as cotas ESCRITAS na view
+    # medida com paredes/arestas de sala MEDIDAS. >= 2 cotas independentes
+    # batendo em ±2% => escala validada por duas fontes. É só EVIDÊNCIA — a
+    # promoção pra planilha é decisão de outra etapa. Multi-escala (2+
+    # viewports com escalas distintas): a validação usa apenas tokens dentro
+    # do bbox da view medida, então "escala_validada" vale SÓ pra ela —
+    # "cotas_escopo" marca isso no log.
+    try:
+        from pdfvec_cotas import validate_scale
+        cot = validate_scale(pdf_path, page_index, room_den, room_bbox,
+                             walls=walls_ok, rooms=rooms_ok)
+        out["cotas_encontradas"] = cot["n_cotas"]
+        out["cotas_batem"] = cot["n_matches"]
+        out["escala_validada"] = bool(cot["validada"])
+        if cot["n_matches"]:
+            out["cotas_exemplos"] = cot["exemplos"]
+        distinct = {room_den, den} | {v.get("scale") for v in alt_viewports}
+        if len({s for s in distinct if s}) > 1:
+            out["cotas_escopo"] = "view_principal"
+    except Exception as e:
+        out["err_cotas"] = f"{type(e).__name__}: {e}"[:120]
 
     # 5) POR LAYER (descoberta 07/07: OCG preserva os layers do CAD no PDF) —
     # parede só do layer de alvenaria/divisória (sem contaminação) + inventário
