@@ -3518,8 +3518,18 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             dwg_failed.append(os.path.basename(cad_path))
                             # É arquivo AutoCAD MEP/Architecture (objetos AEC)? Aí a falha
                             # é esperada (conversor livre não abre proxy) e o aviso é preciso.
-                            if dwg_has_aec_markers(cad_path):
+                            _is_aec = dwg_has_aec_markers(cad_path)
+                            if _is_aec:
                                 _aec_failed.append(os.path.basename(cad_path))
+                            # Telemetria (20/07): a conversão DWG→DXF falha e some no disco
+                            # efêmero do Render — foi a CAIXA-PRETA do caso estrutural Luciano
+                            # (DWG não converteu → aço nunca foi lido → tudo estimado). Registra
+                            # no error_log pra o Pedro VER por que o cliente não teve medição.
+                            _log_error("dwg:convert-fail",
+                                       f"DWG não converteu pra DXF: {os.path.basename(cad_path)}"
+                                       + (" — objetos AEC/MEP (conversor livre não abre)" if _is_aec
+                                          else " — cliente ganharia a medição mandando DXF direto"),
+                                       job_id, severity="warning")
                             jobs.update_field(job_id, current_step=f"Falha ao converter DWG: {os.path.basename(cad_path)} (seguindo sem)")
                     else:
                         dxf_paths.append(cad_path)
