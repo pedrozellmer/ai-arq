@@ -7845,11 +7845,48 @@ async def upload_revised_sheet(
         except Exception as e:
             print(f"[revised-sheet] erro cashback: {e}")
 
+    # Feedback de revisão (best-effort, em thread): compara a planilha revisada
+    # com os itens originais (project_items) e grava em revision_feedback —
+    # é o que alimenta o painel "Onde a IA mais erra" no admin. Nunca pode
+    # atrasar nem derrubar a resposta do upload.
+    try:
+        import threading
+        import revision_feedback as _rf
+        threading.Thread(
+            target=_rf.processar_revisao, args=(job_id, dst), daemon=True
+        ).start()
+    except Exception as _rfe:
+        print(f"[revision-feedback] não iniciou thread job={job_id}: {_rfe}")
+
     return {
         "status": "ok",
         "filename": file.filename,
         "credit_cents": credit_cents,
     }
+
+
+@app.get("/api/admin/revision-feedback")
+async def admin_revision_feedback(request: Request):
+    """Onde a IA mais erra — agregado das planilhas revisadas pelos clientes.
+
+    Lê a tabela revision_feedback (service_role; RLS sem policy) e devolve o
+    resumo pronto pro painel: por disciplina + recorte medido×estimado."""
+    _require_admin(request)
+    import urllib.request as _url_rf
+    import json as _json_rf
+    import revision_feedback as _rf
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/revision_feedback"
+               f"?select=*&order=created_at.desc&limit=200")
+        req = _url_rf.Request(url, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        resp = _url_rf.urlopen(req, timeout=10)
+        rows = _json_rf.loads(resp.read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[revision-feedback] admin erro: {_e}")
+        raise HTTPException(502, "Não consegui carregar o feedback de revisões")
+    return _rf.resumo_para_admin(rows if isinstance(rows, list) else [])
 
 
 # ═══════════════════════════════════════════════════════════════

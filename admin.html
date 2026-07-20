@@ -265,10 +265,13 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadMotorHealth(); loadOps();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadMotorHealth(); loadOps(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor</span></h3>
         <div id="motor-health"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <div class="my-8 border-t border-gray-200"></div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🩻 Onde a IA mais erra <span class="font-normal text-gray-400">— aprendizado com as planilhas revisadas dos clientes</span></h3>
+        <div id="revision-feedback"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🎯 Ações <span class="font-normal text-gray-400">— operação (recuperar falha / puxar pro CAD / erros)</span></h3>
         <div id="ops-box"><p class="text-gray-400 text-sm">Carregando…</p></div>
@@ -1137,7 +1140,7 @@ function switchTab(tabName) {
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadMotorHealth(); loadOps(); }
+  if (tabName === 'motor') { loadMotorHealth(); loadOps(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -1410,6 +1413,123 @@ function renderMotorHealth(d){
     }
   }
 
+  return html;
+}
+
+// ══════════════════════════════════════════════
+// ONDE A IA MAIS ERRA — feedback das planilhas revisadas pelos clientes
+// (acessibilidade: cor NUNCA sozinha — sempre cor + ícone + texto)
+// ══════════════════════════════════════════════
+async function loadRevisionFeedback(){
+  const box = document.getElementById('revision-feedback');
+  if (!box) return;
+  box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/revision-feedback`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'erro');
+    box.innerHTML = renderRevisionFeedback(d);
+  } catch(e){
+    box.innerHTML = `<p class="text-red-600 text-sm">✖ Não consegui carregar: ${(e && e.message) || e}</p>`;
+  }
+}
+function renderRevisionFeedback(d){
+  const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  const num = (v, suf='') => (v==null || v==='' ? '—' : `${v}${suf}`);
+  if (!d || !d.n_planilhas){
+    return `<div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+      <div class="text-3xl mb-2">📭</div>
+      <p class="text-sm font-medium text-gray-700">Nenhuma planilha revisada ainda</p>
+      <p class="text-xs text-gray-500 mt-1">Quando um cliente subir a planilha revisada dele (cashback), este painel mostra onde a IA mais erra — por disciplina e no recorte medido × estimado.</p>
+    </div>`;
+  }
+  const t = d.totais || {};
+  const conf = (d.por_confidence || {}).confirmado || {};
+  const est  = (d.por_confidence || {}).estimado || {};
+
+  // Veredito da pergunta de ouro (ícone + texto + cor, nunca só cor)
+  let veredito = '';
+  if ((conf.n_itens || 0) > 0 && (est.n_itens || 0) > 0){
+    const pc = conf.pct_alterados == null ? 0 : conf.pct_alterados;
+    const pe = est.pct_alterados == null ? 0 : est.pct_alterados;
+    veredito = (pe >= pc)
+      ? `<div class="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-900 mb-4">✅ <b>Os medidos sobrevivem:</b> clientes corrigem ${esc(pe)}% dos ESTIMADOS × ${esc(pc)}% dos MEDIDOS. O selo "medido do CAD" está segurando a confiança.</div>`
+      : `<div class="rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-900 mb-4">🚨 <b>Alerta — branco enganoso:</b> clientes corrigem MAIS os itens MEDIDOS (${esc(pc)}%) do que os estimados (${esc(pe)}%). Isso viola a regra nº 1 do produto — investigar o motor.</div>`;
+  }
+
+  let html = `
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(d.n_planilhas)}</div><div class="text-xs text-gray-500">planilhas revisadas recebidas</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(t.n_itens||0)}</div><div class="text-xs text-gray-500">itens comparados</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-amber-700">${num(t.pct_alterados,'%')}</div><div class="text-xs text-gray-500">⚠ alterados pelo cliente (${esc(t.n_alterados||0)})</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${num(t.mediana_abs_delta_pct,'%')}</div><div class="text-xs text-gray-500">mediana do desvio |Δ%| quando altera</div></div>
+  </div>
+  ${veredito}
+  <h4 class="font-semibold text-gray-800 mb-2">Recorte medido × estimado — o cliente confia no selo?</h4>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <div class="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-4">
+      <div class="text-emerald-800 text-sm font-semibold">✓ MEDIDO do CAD (fundo branco na planilha)</div>
+      <div class="mt-1 text-3xl font-bold text-emerald-700">${num(conf.pct_alterados,'%')} <span class="text-sm font-medium">corrigidos</span></div>
+      <div class="text-xs text-emerald-800 mt-1">⚠ ${esc(conf.n_alterados||0)} alterados de ${esc(conf.n_itens||0)} itens · mediana |Δ| ${num(conf.mediana_abs_delta_pct,'%')} · ✖ ${esc(conf.n_removidos||0)} removidos</div>
+    </div>
+    <div class="rounded-xl border-2 border-amber-200 bg-amber-50 p-4">
+      <div class="text-amber-800 text-sm font-semibold">⚠ ESTIMADO (fundo laranja na planilha)</div>
+      <div class="mt-1 text-3xl font-bold text-amber-700">${num(est.pct_alterados,'%')} <span class="text-sm font-medium">corrigidos</span></div>
+      <div class="text-xs text-amber-800 mt-1">⚠ ${esc(est.n_alterados||0)} alterados de ${esc(est.n_itens||0)} itens · mediana |Δ| ${num(est.mediana_abs_delta_pct,'%')} · ✖ ${esc(est.n_removidos||0)} removidos</div>
+    </div>
+  </div>`;
+
+  const discs = d.por_disciplina || [];
+  if (discs.length){
+    html += `<h4 class="font-semibold text-gray-800 mb-2">Por disciplina — onde o cliente mais mexe</h4>
+    <div class="overflow-x-auto mb-4"><table class="w-full text-xs">
+      <thead><tr class="text-left text-gray-500 border-b">
+        <th class="py-1.5 pr-3">Disciplina</th><th class="pr-3">Itens</th>
+        <th class="pr-3">⚠ Alterados</th><th class="pr-3">Mediana |Δ%|</th>
+        <th class="pr-3">✖ Removidos</th><th class="pr-3">➕ Adicionados</th>
+      </tr></thead><tbody>`;
+    discs.forEach(x => {
+      const pct = x.pct_alterados;
+      const barW = Math.min(100, Math.round(pct || 0));
+      // Severidade SEMPRE com ícone + rótulo textual (cor é só reforço)
+      const sev = pct == null ? {i:'·', cls:'text-gray-400', bar:'bg-gray-200', label:'sem base'}
+        : pct >= 50 ? {i:'🚨', cls:'text-rose-700', bar:'bg-rose-400', label:'crítico'}
+        : pct >= 25 ? {i:'⚠', cls:'text-amber-700', bar:'bg-amber-400', label:'atenção'}
+        : {i:'✓', cls:'text-emerald-700', bar:'bg-emerald-400', label:'ok'};
+      html += `<tr class="border-b align-middle">
+        <td class="py-1.5 pr-3 font-medium text-gray-800">${esc(x.disciplina)}</td>
+        <td class="pr-3 text-gray-600">${esc(x.n_itens)}</td>
+        <td class="pr-3"><div class="flex items-center gap-2" style="min-width:200px">
+          <span class="${sev.cls} font-semibold whitespace-nowrap">${sev.i} ${pct==null?'—':pct+'%'} (${esc(x.n_alterados)}) · ${sev.label}</span>
+          <div class="flex-1 bg-gray-100 rounded h-3 overflow-hidden"><div class="h-3 ${sev.bar} rounded" style="width:${barW}%"></div></div>
+        </div></td>
+        <td class="pr-3 text-gray-700">${num(x.mediana_abs_delta_pct,'%')}</td>
+        <td class="pr-3 text-gray-700">✖ ${esc(x.n_removidos||0)}</td>
+        <td class="pr-3 text-gray-700">➕ ${esc(x.n_adicionados||0)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  const ult = d.ultimas || [];
+  if (ult.length){
+    const fmtDT = iso => { try { return new Date(iso).toLocaleDateString('pt-BR', {timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', year:'2-digit'}); } catch(e){ return String(iso||'').slice(0,10); } };
+    html += `<h4 class="font-semibold text-gray-800 mb-2">Últimas planilhas revisadas</h4>
+    <div class="overflow-x-auto"><table class="w-full text-xs">
+      <thead><tr class="text-left text-gray-500 border-b"><th class="py-1.5 pr-3">Data</th><th class="pr-3">Job</th><th class="pr-3">Arquivo</th><th class="pr-3">Itens</th><th class="pr-3">⚠ Alt.</th><th class="pr-3">✖ Rem.</th><th class="pr-3">➕ Adic.</th></tr></thead><tbody>`;
+    ult.forEach(u => {
+      html += `<tr class="border-b">
+        <td class="py-1.5 pr-3 text-gray-600">${esc(fmtDT(u.created_at))}</td>
+        <td class="pr-3">${u.job_id?`<a href="projeto.html?job_id=${esc(u.job_id)}" class="text-indigo-500 hover:underline">${esc(String(u.job_id).slice(0,8))}</a>`:'—'}</td>
+        <td class="pr-3 text-gray-600 truncate" style="max-width:180px">${esc(u.arquivo||'—')}</td>
+        <td class="pr-3 text-gray-700">${esc(u.n_originais||0)}</td>
+        <td class="pr-3 text-amber-700 font-medium">⚠ ${esc(u.n_alterados||0)}</td>
+        <td class="pr-3 text-gray-700">✖ ${esc(u.n_removidos||0)}</td>
+        <td class="pr-3 text-gray-700">➕ ${esc(u.n_adicionados||0)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
   return html;
 }
 
