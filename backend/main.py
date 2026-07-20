@@ -3382,6 +3382,135 @@ def _salvage_layout_esquadrias(file_paths):
     return items
 
 
+_LAYOUT_COUNT_DISCIPLINES = {
+    "Louças e Metais", "Portas e Ferragens", "Marcenaria", "Mobiliário",
+    "Iluminação",
+}
+# Palavras que denunciam item de ÁREA/superfície (proibido no salvamento — regra
+# dura nº1: sem m² fingido). Se a descrição bate, descarta o item.
+_LAYOUT_COUNT_BLOCK = (
+    "piso", "forro", "parede", "pintura", "revestiment", "rodap", "m²", "m2",
+    "azulej", "porcelanat", "laje", "reboco", "contrapiso", "área", "area",
+    "metro quadrado",
+)
+
+_LAYOUT_COUNT_SYSTEM = (
+    "Você é um orçamentista de interiores experiente. A imagem é uma planta de "
+    "LAYOUT (arrumação de móveis), sem quadro de áreas e sem cotas de dimensão "
+    "além das esquadrias. Sua tarefa é LISTAR e CONTAR, por tipo, APENAS os itens "
+    "CONTÁVEIS que você vê com CLAREZA no desenho.\n\n"
+    "CATEGORIAS (use exatamente estes nomes em 'discipline'):\n"
+    "- 'Louças e Metais': vasos sanitários/bacias, cubas/lavatórios, box/chuveiros, "
+    "pia de cozinha, tanque, cooktop, torneiras.\n"
+    "- 'Portas e Ferragens': portas internas (conte pelos arcos de abertura). NÃO "
+    "conte janelas — elas já foram contadas à parte.\n"
+    "- 'Marcenaria': roupeiros/armários embutidos, bancadas, ilha de cozinha, "
+    "painel de TV/rack, aparador.\n"
+    "- 'Mobiliário': camas, sofás, mesas, cadeiras, poltronas, banquetas.\n\n"
+    "REGRAS DURAS (obrigatórias):\n"
+    "1. NÃO invente. Se não tem certeza do tipo OU da quantidade, NÃO liste (é "
+    "melhor faltar item do que errar número).\n"
+    "2. É PROIBIDO produzir qualquer item de ÁREA em m² (piso, forro, parede, "
+    "pintura, revestimento). Só contagem de peças (unidade 'un').\n"
+    "3. Não repita esquadrias/janelas.\n\n"
+    "Responda SOMENTE com JSON puro, sem texto fora dele, no formato:\n"
+    '{"items":[{"description":"...","quantity":N,"discipline":"..."}]}\n'
+    "quantity é um inteiro. Se não vê nada contável com clareza, retorne "
+    '{"items":[]}.'
+)
+
+
+def _salvage_layout_ai_counts(client, file_paths, crops_dir):
+    """Complemento do salvamento de layout: além das esquadrias (texto), pede pra
+    IA CONTAR louças/metais, portas, marcenaria e mobiliário que ela vê na planta
+    renderizada. ADITIVO e só roda no caminho de salvamento (0 itens da IA num
+    layout vetorial) — nunca toca projeto que já funcionava. Tudo marcado
+    'estimado' (o cliente confirma) e a IA é instruída a NÃO inventar nem gerar
+    m². Qualquer falha (render, API, JSON) → [] (mantém só as esquadrias).
+
+    ⚠ Sem verificação adversarial (ao contrário do estudo one-off): pode listar
+    item a mais/menos. Aceitável porque só aparece onde HOJE daria erro seco, e
+    todo item entra como 'estimado' pra conferência."""
+    try:
+        from processor import render_crops
+        from analyzer import encode_image
+        from llm_retry import call_with_retry_stream
+        from models import BudgetItem, Confidence, SheetType
+        import json as _json_lc, os as _os_lc
+    except Exception as _imp_e:
+        print(f"[salvage-ai] import falhou: {_imp_e}")
+        return []
+    _pdf = next((p for p in (file_paths or []) if str(p).lower().endswith(".pdf")), None)
+    if not _pdf:
+        return []
+    try:
+        crops = render_crops(_pdf, SheetType.ARQUITETURA, crops_dir, dpi=140,
+                             page_index=0, out_stem="_salvage_layout")
+    except Exception as _re_e:
+        print(f"[salvage-ai] render falhou: {_re_e}")
+        return []
+    content = []
+    for cp in (crops or [])[:3]:
+        try:
+            if _os_lc.path.exists(cp) and _os_lc.path.getsize(cp) <= 500_000:
+                content.append({"type": "image", "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg" if cp.endswith(".jpg") else "image/png",
+                    "data": encode_image(cp)}})
+        except Exception:
+            continue
+    if not content:
+        return []
+    content.append({"type": "text", "text":
+                    "Conte os itens desta planta de layout conforme as regras."})
+    try:
+        resp = call_with_retry_stream(
+            client, tag="salvage-layout-counts", model="claude-sonnet-4-6",
+            max_tokens=4000, temperature=0, system=_LAYOUT_COUNT_SYSTEM,
+            messages=[{"role": "user", "content": content}])
+        txt = resp.content[0].text
+        if "```json" in txt:
+            txt = txt.split("```json")[1].split("```")[0]
+        elif "```" in txt:
+            txt = txt.split("```")[1].split("```")[0]
+        data = _json_lc.loads(txt.strip())
+    except Exception as _ai_e:
+        print(f"[salvage-ai] IA/JSON falhou: {_ai_e}")
+        return []
+    _ref = _os_lc.path.basename(str(_pdf))
+    out = []
+    for it in (data.get("items") or [])[:60]:
+        try:
+            desc = str(it.get("description", "")).strip()
+            if len(desc) < 3:
+                continue
+            # Descarta item de ÁREA/superfície disfarçado de contagem (a IA às
+            # vezes devolve "Piso porcelanato: 80 un" — proibido aqui).
+            _dl = desc.lower()
+            if any(b in _dl for b in _LAYOUT_COUNT_BLOCK):
+                continue
+            disc = str(it.get("discipline", "")).strip()
+            # Fora das categorias de CONTAGEM → descarta (não remapeia pra genérico,
+            # pra não virar depósito de item duvidoso).
+            if disc not in _LAYOUT_COUNT_DISCIPLINES:
+                continue
+            try:
+                qty = float(it.get("quantity", 0) or 0)
+            except (TypeError, ValueError):
+                qty = 0
+            if qty <= 0 or qty > 500:
+                continue
+            out.append(BudgetItem(
+                item_num="", description=desc, unit="un", quantity=qty,
+                observations=("Contagem visual do layout pela IA — CONFIRA o tipo e a "
+                              "quantidade (leitura de desenho, não medição)."),
+                ref_sheet=_ref, confidence=Confidence.ESTIMADO,
+                discipline=disc, origem="vision_pdf"))
+        except Exception:
+            continue
+    return out
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -4740,14 +4869,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if _salv:
                 all_items.extend(_salv)
                 _n_esq = sum(int(i.quantity) for i in _salv)
+                # Esquadrias confirmam que é um layout vetorial legível → vale o
+                # passo de contagem visual (louças/móveis/portas). Aditivo e robusto:
+                # falha → só as esquadrias. Não roda se esquadrias não acharam nada
+                # (provável prancha ilegível/escaneada — não gasta chamada de IA).
+                _n_ai = 0
+                try:
+                    _salv_ai = _salvage_layout_ai_counts(client, file_paths, crops_dir)
+                    if _salv_ai:
+                        all_items.extend(_salv_ai)
+                        _n_ai = len(_salv_ai)
+                except Exception as _sai_e:
+                    print(f"[salvage-ai] falhou (mantendo só esquadrias): {_sai_e}")
                 project_data.warnings = (project_data.warnings or []) + [
                     f"Esta prancha é um ESTUDO DE LAYOUT (sem quadro de áreas/cotas de "
-                    f"dimensão). Não dá pra medir áreas (piso/forro) com honestidade daqui — "
-                    f"o que deu pra extrair foram as {_n_esq} esquadrias cotadas na prancha. "
-                    f"Pra o quantitativo completo, informe a área total ou envie o DXF."
+                    f"dimensão). Não dá pra medir áreas (piso/forro) com honestidade daqui. "
+                    f"Extraímos {_n_esq} esquadrias cotadas na prancha"
+                    + (f" e {_n_ai} itens de contagem (louças/móveis, ⚠ confira)" if _n_ai else "")
+                    + f". Pra o quantitativo COM áreas, informe a área total no upload ou envie o DXF."
                 ]
                 print(f"[salvage-layout] job={job_id}: 0 itens da IA → salvei {_n_esq} "
-                      f"esquadrias ({len(_salv)} tipos) do texto vetorial")
+                      f"esquadrias ({len(_salv)} tipos) + {_n_ai} itens de contagem visual")
 
         # ── Resultado vazio: NÃO marcar "done" silencioso ──
         # Bug Vinícius (2026-05-21): 1 PDF processou em 17s, 0 itens, status
