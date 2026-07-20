@@ -150,3 +150,71 @@ def estimate_for_files(file_paths: list[str]) -> dict:
         "tier_name": tier["name"],
         "min_price_cents": MIN_PRICE_CENTS,
     }
+
+
+# ── Precheck de quantificabilidade (QW5, 20/07) ──────────────────────────────
+# Roda no /api/estimate-price reaproveitando o arquivo JÁ em disco (alcança
+# inclusive o 1º projeto grátis — a "1ª impressão" do cliente novo). Avisa ANTES
+# de pagar quando o arquivo claramente não vai medir bem. BARATO e conservador:
+# só lê amostra/header (sem ezdxf.readfile no arquivo inteiro, que arriscaria
+# OOM no worker), e só avisa quando é MUITO claramente imagem/proxy — na dúvida,
+# fica calado. O aviso é ADVISORY: não bloqueia o checkout, só orienta.
+_PRECHECK_PDF_SAMPLE = 3    # nº de páginas amostradas por PDF
+_PRECHECK_MIN_CHARS = 20    # abaixo disso, nas páginas amostradas, cheira a imagem
+
+
+def _pdf_parece_escaneado(path: str) -> bool:
+    """True só quando as primeiras páginas amostradas têm texto vetorial ~zero
+    (cheira a escaneado/imagem). PDF exportado do CAD sempre tem cotas/legendas,
+    então não dá falso-positivo. Barato: pdfplumber carrega página sob demanda.
+    Na dúvida (qualquer erro), retorna False — nunca super-avisa."""
+    try:
+        import pdfplumber
+        with pdfplumber.open(path) as pdf:
+            paginas = pdf.pages[:_PRECHECK_PDF_SAMPLE]
+            if not paginas:
+                return False
+            total = 0
+            for pg in paginas:
+                try:
+                    total += len((pg.extract_text() or "").strip())
+                except Exception:
+                    return False  # falha de página não afirma "escaneado"
+                if total >= _PRECHECK_MIN_CHARS:
+                    return False
+            return total < _PRECHECK_MIN_CHARS
+    except Exception:
+        return False
+
+
+def precheck_warnings(file_paths: list[str]) -> list[str]:
+    """Lista de avisos ANTES de pagar (vazia = nada a apontar). Best-effort —
+    nunca levanta. Campo novo/opcional na resposta do estimate: front antigo
+    ignora, não muda preço."""
+    avisos: list[str] = []
+    for p in file_paths or []:
+        ext = os.path.splitext(p)[1].lower()
+        try:
+            if ext == ".pdf":
+                if _pdf_parece_escaneado(p):
+                    avisos.append(
+                        f"⚠ {os.path.basename(p)}: parece um PDF escaneado ou de "
+                        f"imagem — o motor mede PDF vetorial exportado direto do CAD "
+                        f"(AutoCAD/Revit). Escaneado costuma render poucos itens. Se "
+                        f"puder, envie o DWG/DXF ou o PDF vetorial da prancha."
+                    )
+            elif ext == ".dwg":
+                try:
+                    from dwg_extractor import dwg_has_aec_markers
+                    if dwg_has_aec_markers(p):
+                        avisos.append(
+                            f"⚠ {os.path.basename(p)}: é um DWG com objetos "
+                            f"inteligentes AEC/MEP (AutoCAD Architecture/Revit). Os "
+                            f"conversores livres não leem esses objetos — pra medir "
+                            f"bem, exporte em DXF ou faça BIND/explode antes de subir."
+                        )
+                except Exception:
+                    pass
+        except Exception:
+            continue
+    return avisos

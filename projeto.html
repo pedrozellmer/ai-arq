@@ -1271,6 +1271,10 @@ function mostrarProcessando(live, session) {
 
   let _backendPct = Math.max(3, Math.round((live && live.progress) || 0));
   let _shown = _backendPct, _elapsed = 0, _lastFetch = 0, _stopped = false, _falhas = 0;
+  // Escotilha (QW4, 20/07): rastreia quando o progresso REAL avançou pela última
+  // vez — pra distinguir "trabalhando devagar" de "travou de vez" (não só por tempo).
+  let _lastRealPct = _backendPct, _lastAdvance = 0, _escotilhaShown = false;
+  const _STALL_SECS = 300;  // 5min de progresso real congelado → oferece ação
   if (live && live.current_step) stepEl.textContent = live.current_step;
   else stepEl.textContent = (live && live.status === 'queued')
     ? 'Na fila — começa em instantes…'
@@ -1281,6 +1285,38 @@ function mostrarProcessando(live, session) {
     pctEl.textContent = Math.round(_shown) + '%';
   };
   const parar = (msg) => { _stopped = true; clearInterval(_tick); stepEl.textContent = msg; };
+
+  // Escotilha de fuga: progresso real congelado há muito tempo enquanto o status
+  // segue "processando" cheira a job travado/zumbi (thread morreu num restart e
+  // o /status responde 200 pra sempre). Em vez de texto passivo, dá uma AÇÃO.
+  // Recarregar NÃO gasta o reprocesso grátis — a retomada automática do backend
+  // é free; se estiver morto mesmo, a página recarregada mostra o card de erro
+  // com o botão certo de reprocessar. Acessibilidade: borda + ícone + texto.
+  const _hideEscotilha = () => {
+    _escotilhaShown = false;
+    const esc = document.getElementById('proc-escotilha');
+    if (esc) esc.classList.add('hidden');
+  };
+  const _mostrarEscotilha = () => {
+    _escotilhaShown = true;
+    let esc = document.getElementById('proc-escotilha');
+    if (esc) { esc.classList.remove('hidden'); return; }
+    esc = document.createElement('div');
+    esc.id = 'proc-escotilha';
+    esc.className = 'mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-3';
+    esc.innerHTML =
+      '<span aria-hidden="true" class="text-lg leading-none">⏱️</span>' +
+      '<div class="flex-1">' +
+      '<p class="font-semibold">Parece que travou?</p>' +
+      '<p class="text-xs text-amber-800 mt-0.5">O progresso não avança há alguns minutos. ' +
+      'Às vezes é o servidor que reiniciou no meio. Recarregue pra ver o estado real — ' +
+      'se estiver travado mesmo, a página te mostra a opção de reprocessar (é grátis).</p>' +
+      '<button type="button" id="proc-escotilha-btn" class="mt-2 px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs rounded-lg font-medium">Recarregar e verificar</button>' +
+      '</div>';
+    bloco.appendChild(esc);
+    const b = esc.querySelector('#proc-escotilha-btn');
+    if (b) b.addEventListener('click', () => location.reload());
+  };
   paint();
 
   const _tick = setInterval(async () => {
@@ -1302,6 +1338,8 @@ function mostrarProcessando(live, session) {
           _falhas = 0;
           const sd = await sr.json().catch(() => ({}));
           _backendPct = Math.max(_backendPct, Math.round(sd.progress || 0));
+          // Progresso REAL avançou → marca o momento e esconde a escotilha (job vivo).
+          if (_backendPct > _lastRealPct) { _lastRealPct = _backendPct; _lastAdvance = _elapsed; _hideEscotilha(); }
           if (sd.current_step) stepEl.textContent = sd.current_step;
           const st = sd.status || '';
           if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || _backendPct >= 100) {
@@ -1324,6 +1362,8 @@ function mostrarProcessando(live, session) {
     const target = Math.max(_backendPct, Math.min(95, 3 + _elapsed * 1.2));
     if (target > _shown) _shown = Math.min(target, _shown + 0.7);
     paint();
+    // Progresso REAL congelado tempo demais (não só tempo total): oferece a ação.
+    if (!_escotilhaShown && (_elapsed - _lastAdvance) > _STALL_SECS) _mostrarEscotilha();
     // 20min sem terminar: para o creep mas deixa claro que não travou de vez
     if (_elapsed > 1200) parar('Tá demorando mais que o normal. Pode deixar a aba aberta — ou volte em alguns minutos.');
   }, 600);

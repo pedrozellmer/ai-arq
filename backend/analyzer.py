@@ -1140,7 +1140,12 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         return {"items": [], "error": f"JSON parse error: {e}"}
     except Exception as e:
         print(f"Erro API para {sheet.filename}: {e}")
-        return {"items": [], "error": str(e)}
+        # Preserva o status_code do erro-raiz (429/529/400/404...) num prefixo
+        # estável pra main.py classificar por status, não re-adivinhar por
+        # substring. Sem isso o caminho PDF fica cego pro tipo do erro.
+        _status = getattr(e, "status_code", None)
+        _tag = f"[status={_status}] " if _status is not None else ""
+        return {"items": [], "error": f"{_tag}{e}"}
 
 
 def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,

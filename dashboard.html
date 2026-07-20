@@ -1902,6 +1902,30 @@
     } else {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="font-bold text-indigo-600">R$ ${price}</span>`;
     }
+
+    // QW5 (20/07): avisos do precheck ANTES de pagar (PDF escaneado / DWG AEC).
+    renderEstimateWarnings(est.warnings);
+  }
+
+  // Avisos advisory do precheck. Acessibilidade (Pedro dalt\u00f4nico): box com
+  // BORDA + \u00edcone \u26a0 + texto \u2014 nunca depende s\u00f3 da cor. N\u00e3o bloqueia o checkout.
+  function renderEstimateWarnings(warnings) {
+    const priceInfo = document.getElementById('price-info');
+    if (!priceInfo) return;
+    let box = document.getElementById('price-warnings');
+    if (!Array.isArray(warnings) || !warnings.length) {
+      if (box) box.remove();
+      return;
+    }
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'price-warnings';
+      box.className = 'mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-1';
+      priceInfo.appendChild(box);
+    }
+    box.innerHTML = warnings.map(w =>
+      `<div class="flex items-start gap-1.5"><span aria-hidden="true">\u26a0</span><span>${escapeH(String(w).replace(/^\u26a0\s*/, ''))}</span></div>`
+    ).join('');
   }
 
   function renderFiles() {
