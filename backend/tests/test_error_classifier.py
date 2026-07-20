@@ -37,6 +37,12 @@ CASES = [
     # permanente vence transitório quando os dois aparecem (nunca culpar provedor
     # havendo prova de erro nosso)
     ("[status=400] invalid_request; connection reset", "permanent"),
+    # erros de rede CRUS que escapam da tipagem do SDK no streaming (sem status)
+    # — reconhecidos pelo type=<Classe> no prefixo. NÃO podem virar terminal.
+    ("[type=BrokenPipeError] [Errno 32] Broken pipe", "transient"),
+    ("[type=RemoteProtocolError] Server disconnected without response", "transient"),
+    ("[type=IncompleteRead] IncompleteRead(0 bytes read)", "transient"),
+    ("[type=ConnectionResetError] [Errno 104] Connection reset by peer", "transient"),
 ]
 
 

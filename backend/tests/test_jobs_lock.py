@@ -52,9 +52,15 @@ def _stress(n_jobs=12, iters=60):
 
     perdidos = []
     for i in range(n_jobs):
-        js = main.jobs[f"j{i}"]
-        if js.progress != iters:
-            perdidos.append((f"j{i}", js.progress))
+        try:
+            prog = main.jobs[f"j{i}"].progress
+        except KeyError:
+            # Sem a trava o job pode SUMIR inteiro do JSON (pior que defasado) —
+            # conta como perdido em vez de deixar o KeyError abortar o teste e
+            # pular os cenários (b)/(c) que validam a produção. (achado revisão 20/07)
+            prog = None
+        if prog != iters:
+            perdidos.append((f"j{i}", prog))
     return perdidos
 
 

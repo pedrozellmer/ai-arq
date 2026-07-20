@@ -127,6 +127,13 @@ _TRANSIENT_TOKENS = (
     "rate_limit", "rate limit", "429", "529", "overloaded", "timeout",
     "timed out", "sobrecarregad", "connection", "status=500", "status=502",
     "status=503", "status=504",
+    # Erros de rede CRUS que escapam da tipagem do SDK no MEIO do streaming
+    # (socket cai durante a leitura do corpo) — chegam sem status_code, mas são
+    # transitórios e valem re-tentar. Reconhecidos pelo type=<Classe> no prefixo
+    # (ver analyzer.py / main.py) ou pela mensagem de baixo nível do SO/httpx.
+    "broken pipe", "brokenpipeerror", "remoteprotocolerror", "protocolerror",
+    "incompleteread", "econnreset", "reset by peer", "disconnected",
+    "connectionreset", "connectionaborted", "connectionerror",
 )
 
 
