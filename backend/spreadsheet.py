@@ -233,7 +233,10 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         _total = project.total_area or 0
         _layout = project.layout_area or 0
         _nointer = project.no_intervention_area or 0
-        if _total and not _layout:
+        if getattr(project, 'total_area_source', '') == 'informado':
+            # Área veio do cliente (não medida) — rotula sem falar "laje bruta medida"
+            add_line(f'Área total: {_total:,.1f} m² (informada por você — não medida pela planta)', bold=True)
+        elif _total and not _layout:
             # layout=0 vira "a confirmar" visível em vez de número enganoso
             add_line(f'Área laje bruta: {_total:,.1f} m² | Área layout: a confirmar | Sem intervenção: {_nointer:,.1f} m²')
         else:
@@ -345,7 +348,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
 
     premissas = []
     if project.total_area:
-        premissas.append(('0.1', 'Área construída — perímetro externo da laje', 'm²', project.total_area, '', ''))
+        if getattr(project, 'total_area_source', '') == 'informado':
+            premissas.append(('0.1', 'Área total do projeto — INFORMADA POR VOCÊ (não medida pela planta)', 'm²',
+                              project.total_area, 'Base para itens de área (piso/forro/pintura) — confira antes de orçar', ''))
+        else:
+            premissas.append(('0.1', 'Área construída — perímetro externo da laje', 'm²', project.total_area, '', ''))
     if project.no_intervention_area:
         # "core" é jargão de escritório (elevadores/escadas/banheiros comuns)
         label_noint = 'Área sem intervenção (core)' if typology == "office" else 'Área sem intervenção'
