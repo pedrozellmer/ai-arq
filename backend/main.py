@@ -9235,7 +9235,24 @@ async def get_project_items(job_id: str, request: Request):
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=15)
         items = json.loads(resp.read().decode('utf-8'))
-        return {"status": "ok", "job_id": job_id, "items": items, "count": len(items)}
+        # Meta do projeto (datas, status) — pra páginas que NÃO acham o projeto no
+        # by-user usarem como fallback (caso avaliação/eval: user_id != dono logado,
+        # então a linha não vem na lista e o tempo/datas ficavam "--"). Best-effort.
+        _meta = {}
+        try:
+            _murl = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                     f"&select=project_name,status,typology,files_count,items_count,"
+                     f"total_area,user_total_area,created_at,completed_at,phase&limit=1")
+            _mreq = urllib.request.Request(_murl, method="GET")
+            _mreq.add_header("apikey", SUPABASE_KEY)
+            _mreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _mrows = json.loads(urllib.request.urlopen(_mreq, timeout=10).read().decode("utf-8"))
+            if _mrows:
+                _meta = _mrows[0]
+        except Exception as _me:
+            print(f"[items] meta do projeto falhou (não crítico): {_me}")
+        return {"status": "ok", "job_id": job_id, "items": items,
+                "count": len(items), "project": _meta}
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar itens: {str(e)}")
 

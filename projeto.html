@@ -27,12 +27,31 @@
   /* Barra de accent degradê no topo dos cards-herói (Raio-X, processando) */
   .hero-accent { position:relative; overflow:hidden; }
   .hero-accent::before { content:""; position:absolute; top:0; left:0; right:0; height:4px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
+  /* 🏠 Casinha sendo construída — indicador de "processando" com a cara do AI.arq.
+     O perímetro da casa desenha (cresce) e apaga (diminui) em loop; a porta segue
+     com leve atraso. Substitui o spinner genérico. */
+  .aiarq-build svg { display:block; }
+  .aiarq-build .ab-line { stroke-dasharray:1; stroke-dashoffset:1; }
+  .aiarq-build .ab-wall { animation: ab-draw 2.4s ease-in-out infinite; }
+  .aiarq-build .ab-door { animation: ab-draw 2.4s ease-in-out infinite; animation-delay:.45s; }
+  @keyframes ab-draw {
+    0%   { stroke-dashoffset:1; }
+    45%  { stroke-dashoffset:0; }
+    62%  { stroke-dashoffset:0; }
+    100% { stroke-dashoffset:1; }
+  }
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
+    }
+    /* Exceção: a casinha é FEEDBACK de carregamento (não decoração) — se congelar,
+       parece travado. Mantém animando, gentil e lento, mesmo com "reduzir movimento". */
+    .aiarq-build .ab-wall, .aiarq-build .ab-door {
+      animation-duration: 2.6s !important;
+      animation-iteration-count: infinite !important;
     }
   }
   </style>
@@ -123,7 +142,12 @@ function smartBack() {
        a barra de progresso (mesmo padrão de creep+poll do add-file). -->
   <div id="proc-block" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
     <div class="flex items-center gap-3 mb-1">
-      <div class="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600 shrink-0" aria-hidden="true"></div>
+      <span class="aiarq-build shrink-0" aria-hidden="true">
+        <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none">
+          <path class="ab-line ab-wall" pathLength="1" d="M4 20 L4 10 L12 3 L20 10 L20 20 Z" stroke="#4f46e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path class="ab-line ab-door" pathLength="1" d="M10 20 L10 14.5 L14 14.5 L14 20" stroke="#22d3ee" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
       <p class="font-bold text-gray-900">Ainda processando este projeto</p>
     </div>
     <p id="proc-step" class="text-sm text-gray-600 mt-1">Lendo as pranchas…</p>
@@ -1166,22 +1190,28 @@ async function carregarStatsEntregas() {
   ]);
 
   const items = itemsRes.items || [];
+  // Meta do projeto vinda do /api/items (datas, status) — usada quando o projeto
+  // NÃO está no by-user (ex.: avaliação/eval, cujo user_id != dono logado). Sem
+  // isso, o proj sintetizado ficava sem datas e o "tempo de processamento" dava "--".
+  const pmeta = itemsRes.project || {};
   let proj = (userProjectsRes.projects || []).find(p => p.job_id === jobId);
 
   // Se a lista de projetos falhou mas temos items, sintetiza proj mínimo
   // pra pelo menos renderizar o que dá (em vez de mostrar "Projeto não encontrado"
-  // e deixar o resto em branco).
+  // e deixar o resto em branco). Enriquecido com pmeta (datas/status reais).
   if (!proj && items.length > 0) {
-    console.warn('[projeto] proj não veio da lista, sintetizando a partir dos items');
+    console.warn('[projeto] proj não veio da lista, sintetizando a partir dos items + meta');
     proj = {
       job_id: jobId,
-      project_name: 'Projeto',
-      status: 'done',
-      typology: items[0]?.typology || null,
-      files_count: null,
-      items_count: items.length,
-      created_at: null,
-      completed_at: null,
+      project_name: pmeta.project_name || 'Projeto',
+      status: pmeta.status || 'done',
+      typology: pmeta.typology || items[0]?.typology || null,
+      files_count: pmeta.files_count ?? null,
+      items_count: pmeta.items_count ?? items.length,
+      total_area: pmeta.total_area ?? null,
+      phase: pmeta.phase || null,
+      created_at: pmeta.created_at || null,
+      completed_at: pmeta.completed_at || null,
     };
   }
 
@@ -1191,13 +1221,13 @@ async function carregarStatsEntregas() {
   if (!proj && live && live.status) {
     proj = {
       job_id: jobId,
-      project_name: 'Projeto',
+      project_name: pmeta.project_name || 'Projeto',
       status: live.status,
-      typology: null,
-      files_count: null,
-      items_count: items.length || null,
-      created_at: null,
-      completed_at: null,
+      typology: pmeta.typology || null,
+      files_count: pmeta.files_count ?? null,
+      items_count: pmeta.items_count ?? (items.length || null),
+      created_at: pmeta.created_at || null,
+      completed_at: pmeta.completed_at || null,
     };
   }
 
