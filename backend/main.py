@@ -10803,6 +10803,7 @@ async def admin_combine_preview(job_id: str, request: Request):
         raise HTTPException(400, "Nenhum arquivo no Storage desse cliente.")
     suggestion = _ai_suggest_combine(files_meta, base.get("project_type", ""))
     return {"status": "ok", "client_email": _email, "base_job_id": job_id,
+            "base_project_type": (base.get("project_type") or ""),
             "files": files_meta, "suggestion": suggestion}
 
 

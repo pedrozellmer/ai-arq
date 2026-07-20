@@ -2897,7 +2897,7 @@ function showCombinePreview(baseJobId, data) {
     const reason = exclReason[fn];
     const big = f.size_mb > 150;
     return '<label class="flex items-start gap-2 py-2 px-3 rounded-lg hover:bg-gray-50 cursor-pointer border-b border-gray-100">'
-      + '<input type="checkbox" class="combine-file mt-1" data-job="' + esc(String(f.job_id)) + '" data-file="' + esc(fn) + '" ' + (isRec ? 'checked' : '') + '>'
+      + '<input type="checkbox" class="combine-file mt-1" data-job="' + esc(String(f.job_id)) + '" data-file="' + esc(fn) + '" data-disc="' + esc(f.project_type || '') + '" ' + (isRec ? 'checked' : '') + '>'
       + '<span class="flex-1 min-w-0">'
       + '<span class="flex items-center gap-2 flex-wrap"><span class="font-mono text-xs text-gray-800 break-all">' + esc(fn) + '</span>' + badge(f.ext) + '<span class="text-[11px] text-gray-400">' + (f.size_mb || 0) + ' MB</span></span>'
       + '<span class="block text-[11px] text-gray-400 mt-0.5">' + esc(f.project_type || '—') + ' · ' + esc(f.project_name || '') + '</span>'
@@ -2913,6 +2913,7 @@ function showCombinePreview(baseJobId, data) {
     +   '<button class="combine-close text-gray-400 hover:text-gray-700 text-2xl leading-none">&times;</button>'
     + '</div>'
     + '<div class="px-6 py-3 bg-indigo-50 border-b text-sm text-indigo-900 flex items-start gap-2"><span>🤖</span><span>' + esc(sug.summary || 'A IA analisou os arquivos.') + (sug.ai === false ? ' <span class="text-indigo-400">(sugestão automática)</span>' : '') + '</span></div>'
+    + '<div id="combine-warn" class="px-6 py-3 bg-amber-50 border-b border-amber-200 text-sm text-amber-900" style="display:none;"></div>'
     + '<div class="overflow-y-auto flex-1 px-3 py-2">' + (rows || '<p class="text-gray-400 text-sm p-4">Nenhum arquivo encontrado.</p>') + '</div>'
     + '<div class="px-6 py-4 border-t flex items-center justify-between gap-3">'
     +   '<span id="combine-count" class="text-xs text-gray-500"></span>'
@@ -2925,12 +2926,29 @@ function showCombinePreview(baseJobId, data) {
   document.body.appendChild(ov);
   ov.querySelectorAll('.combine-close').forEach(b => b.addEventListener('click', close));
 
+  const baseDisc = (data.base_project_type || '').trim();
   const updateCount = () => {
-    const n = ov.querySelectorAll('.combine-file:checked').length;
+    const checked = Array.from(ov.querySelectorAll('.combine-file:checked'));
+    const n = checked.length;
     const cc = ov.querySelector('#combine-count');
     if (cc) cc.textContent = n + ' de ' + files.length + ' selecionado(s)';
     const rb = ov.querySelector('#combine-run');
     if (rb) rb.disabled = n < 1;
+    // Aviso de MISTURA DE DISCIPLINAS: o combinado roda tudo como a disciplina
+    // do projeto base, então juntar arquitetura + estrutura achata as disciplinas.
+    const discs = new Set(checked.map(cb => (cb.dataset.disc || '').trim().toLowerCase()).filter(Boolean));
+    const w = ov.querySelector('#combine-warn');
+    if (w) {
+      if (discs.size > 1) {
+        w.style.display = '';
+        w.innerHTML = '⚠ <b>Você misturou disciplinas</b> (' + esc(Array.from(discs).join(' + ')) + '). '
+          + 'O combinado vai rodar <b>TUDO como “' + esc(baseDisc || '—') + '”</b> — isso costuma <b>achatar</b> as disciplinas '
+          + '(foi o que deixou o teste anterior com 17 itens numa disciplina só, 0 medido). '
+          + 'Ideal: fazer <b>um combinado por disciplina</b> (desmarque a que não for desta rodada).';
+      } else {
+        w.style.display = 'none';
+      }
+    }
   };
   ov.querySelectorAll('.combine-file').forEach(cb => cb.addEventListener('change', updateCount));
   updateCount();
