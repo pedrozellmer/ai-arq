@@ -429,13 +429,13 @@
           </div>
           <!-- Drop Zone -->
           <label for="file-input" class="block cursor-pointer">
-            <div id="drop-zone" role="button" tabindex="0" aria-label="Clique ou arraste arquivos pra upload (PDF, DWG ou DXF)" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
+            <div id="drop-zone" role="button" tabindex="0" aria-label="Clique ou arraste arquivos pra upload (DXF, DWG ou PDF)" class="drop-zone rounded-2xl bg-white p-10 md:p-16 text-center cursor-pointer">
               <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-100 text-indigo-500 mb-6">
                 <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
               </div>
               <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os arquivos do projeto aqui</p>
               <p class="text-sm text-gray-500 mb-3">ou clique para selecionar</p>
-              <p class="text-xs text-gray-600">PDF, DWG ou DXF — sem limite de arquivos</p>
+              <p class="text-xs text-gray-600">DXF, DWG ou PDF — sem limite de arquivos</p>
               <!-- stopPropagation: o link abre o exemplo, não o seletor de arquivo
                    (a drop-zone inteira vive dentro de um <label for="file-input">) -->
               <p class="text-xs text-gray-500 mt-3">Sem arquivo na mão agora?
@@ -448,7 +448,7 @@
           <!-- Dica de upload: DWG/DXF medem, PDF estima (honesto; cor+ícone+texto p/ daltonismo) -->
           <div class="mt-3 flex items-start gap-2.5 rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 text-xs text-indigo-900">
             <svg class="w-4 h-4 shrink-0 mt-0.5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            <span><b>Melhor resultado: DWG ou DXF</b> &mdash; a gente mede a geometria de verdade. PDF a gente l&ecirc;, mas sai tudo como <b>estimativa</b> pra conferir. <button type="button" onclick="openExportModal()" class="underline font-medium hover:text-indigo-700">Como exportar &rarr;</button></span>
+            <span><b>🥇 DXF d&aacute; o melhor resultado</b> &mdash; a gente mede a geometria exata (n&uacute;mero <b>medido</b>, n&atilde;o estimado). <b>DWG</b> tamb&eacute;m mede, mas alguns (AutoCAD Architecture/MEP) n&atilde;o abrem &mdash; se der erro, exporte <b>DXF</b>. <b>PDF</b> a gente l&ecirc;, mas sai como <b>estimativa</b> pra conferir. <button type="button" onclick="openExportModal()" class="underline font-medium hover:text-indigo-700">Como exportar DXF &rarr;</button></span>
           </div>
 
           <!-- File List -->
@@ -1114,7 +1114,7 @@
         <button type="button" onclick="closeExportModal()" aria-label="Fechar" class="text-gray-400 hover:text-gray-600 text-lg shrink-0">&#10005;</button>
       </div>
       <div class="px-5 py-3 border-b border-gray-100 bg-indigo-50/60">
-        <p class="text-xs text-indigo-900"><b>A regra de ouro:</b> DWG e DXF a gente <b>mede</b> (item sai branco). PDF a gente l&ecirc; pela imagem, sai <b>estimativa</b> (laranja) pra conferir. Se puder, mande DWG ou DXF.</p>
+        <p class="text-xs text-indigo-900"><b>A regra de ouro:</b> <b>🥇 DXF</b> &eacute; o melhor &mdash; a gente <b>mede</b> a geometria (item sai branco). <b>DWG</b> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP n&atilde;o abrem (veja a aba El&eacute;trica/MEP). <b>PDF</b> a gente l&ecirc; pela imagem, sai <b>estimativa</b> (laranja) pra conferir. Na d&uacute;vida, <b>mande DXF</b>.</p>
       </div>
       <div class="px-5 pt-3 flex flex-wrap gap-1.5" id="export-tabs"></div>
       <div class="px-5 pb-5 pt-3 overflow-y-auto" id="export-content"></div>
@@ -1127,7 +1127,7 @@
   <script>
   (function(){
     const EXPORT_GUIDE = [
-      { key:'autocad', name:'AutoCAD', tip:'O .dwg nativo já serve. DXF é bom porque abre em qualquer programa.',
+      { key:'autocad', name:'AutoCAD', tip:'DXF é o que a gente mede melhor e abre em qualquer programa — prefira ele. O .dwg nativo também serve, mas se for Architecture/MEP pode não abrir (veja a aba Elétrica/MEP).',
         steps:['Botão do Aplicativo (o "A" no topo à esquerda) → Salvar Como → Outros Formatos.','Em "Arquivos do tipo", escolha um DXF (ex.: AutoCAD 2018 DXF).','Dê um nome, escolha a pasta e clique em Salvar.'],
         src:'https://help.autodesk.com/view/ACD/2024/ENU/?guid=GUID-5EA0F1DC-EA92-4ADB-9BDF-C352DF3AFC5F', srcName:'Autodesk' },
       { key:'revit', name:'Revit', tip:'Arquivos .rvt e .ifc não entram direto — exporte DWG/DXF antes.',
