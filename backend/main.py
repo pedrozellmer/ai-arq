@@ -10680,6 +10680,116 @@ async def admin_eval_reprocess(job_id: str, request: Request):
     }
 
 
+@app.post("/api/admin/eval-combine/{job_id}")
+async def admin_eval_combine(job_id: str, request: Request):
+    """ADMIN — "combinar e avaliar": junta os arquivos de TODOS os projetos do
+    mesmo cliente com o MESMO nome (caso comum: o cliente subiu a mesma obra em
+    DWG, DXF e PDF separados) num teste ISOLADO. O motor mede o esqueleto pelo
+    DXF/DWG e completa a cobertura pelo PDF — o melhor dos dois. Mesma blindagem
+    do eval-reprocess (is_eval, user_email='', não avisa o cliente, não gasta
+    reprocesso). Só ADMIN_EMAIL acessa."""
+    _require_admin(request)
+    import urllib.request, urllib.error, json, shutil
+    from urllib.parse import unquote, quote as _q
+
+    # 1) Projeto base + irmãos (mesmo email + mesmo nome, não-eval)
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=*"
+        req = urllib.request.Request(url, method='GET')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+        base = json.loads(urllib.request.urlopen(req, timeout=15).read().decode('utf-8'))
+        if not base:
+            raise HTTPException(404, "Projeto não encontrado.")
+        base = base[0]
+    except urllib.error.HTTPError as e:
+        raise HTTPException(500, f"Erro ao buscar projeto: HTTP {e.code}")
+
+    _email = (base.get("user_email") or "").strip()
+    _pname = (base.get("project_name") or "").strip()
+    sibling_ids = [job_id]
+    if _email and _pname:
+        try:
+            sq = (f"{SUPABASE_URL}/rest/v1/projects?user_email=eq.{_q(_email)}"
+                  f"&project_name=eq.{_q(_pname)}&is_eval=not.is.true&select=job_id&limit=20")
+            sreq = urllib.request.Request(sq, method='GET')
+            sreq.add_header('apikey', SUPABASE_KEY)
+            sreq.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+            rows = json.loads(urllib.request.urlopen(sreq, timeout=15).read().decode('utf-8'))
+            sibling_ids = list(dict.fromkeys([job_id] + [r.get("job_id") for r in rows if r.get("job_id")]))
+        except Exception as _se:
+            print(f"[combine] busca de irmãos falhou (usa só o base): {_se}")
+
+    # 2) União dos arquivos de todos os irmãos (dedupe por nome de arquivo)
+    valid_ext = ('.pdf', '.dwg', '.dxf')
+    eval_job_id = "ev" + str(uuid.uuid4())[:6]
+    eval_work_dir = os.path.join(WORK_DIR, eval_job_id)
+    os.makedirs(eval_work_dir, exist_ok=True)
+    seen = {}  # basename -> source_job_id
+    for src in sibling_ids:
+        try:
+            list_url = f"{SUPABASE_URL}/storage/v1/object/list/{PRANCHAS_BUCKET}"
+            body = json.dumps({"prefix": f"{src}/", "limit": 100}).encode("utf-8")
+            r = urllib.request.Request(list_url, data=body, method="POST")
+            r.add_header("apikey", SUPABASE_KEY)
+            r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            r.add_header("Content-Type", "application/json")
+            files = json.loads(urllib.request.urlopen(r, timeout=20).read().decode("utf-8"))
+        except Exception:
+            continue
+        for f in files:
+            n = unquote(f.get("name", ""))
+            if n.lower().endswith(valid_ext):
+                seen.setdefault(os.path.basename(n), src)
+
+    eval_file_paths = []
+    file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
+    for bn, src in seen.items():
+        data = _supabase_storage_download_prancha(src, bn)
+        if not data:
+            continue
+        lp = os.path.join(eval_work_dir, bn)
+        with open(lp, "wb") as f:
+            f.write(data)
+        eval_file_paths.append(lp)
+        ext = bn.lower().rsplit('.', 1)[-1]
+        file_types[ext] = file_types.get(ext, 0) + 1
+    if not eval_file_paths:
+        shutil.rmtree(eval_work_dir, ignore_errors=True)
+        raise HTTPException(400, "Nenhum arquivo encontrado no Storage desses projetos.")
+
+    # 3) Row de avaliação ISOLADA (mesma blindagem do eval-reprocess)
+    typology = base.get("typology") or "office"
+    ptype = base.get("project_type") or "arquitetura"
+    types_summary = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
+    jobs[eval_job_id] = ProcessingStatus(
+        job_id=eval_job_id, status="queued", progress=0,
+        current_step=f"Avaliação combinada: {len(eval_file_paths)} arquivo(s) ({types_summary})",
+        total_steps=3,
+    )
+    _supabase_insert("projects", {
+        "job_id": eval_job_id, "user_id": "eval", "user_email": "", "user_name": "",
+        "project_name": f"[TESTE] {_pname or 'Projeto'} — combinado ({types_summary})",
+        "typology": typology, "project_type": ptype,
+        "files_count": len(eval_file_paths), "file_types": file_types,
+        "status": "queued", "parent_job_id": job_id, "is_eval": True,
+    })
+    import threading
+    threading.Thread(target=_process_job_throttled,
+                     args=(eval_job_id, eval_file_paths, eval_work_dir),
+                     kwargs={"typology": typology, "project_type": ptype}, daemon=True).start()
+    print(f"[combine] avaliação combinada {eval_job_id}: {len(sibling_ids)} projeto(s) → "
+          f"{len(eval_file_paths)} arquivo(s) ({types_summary})")
+    return {
+        "status": "ok",
+        "eval_job_id": eval_job_id,
+        "combined_from": sibling_ids,
+        "files_count": len(eval_file_paths),
+        "file_types": file_types,
+        "view_url": f"/projeto.html?job_id={eval_job_id}",
+    }
+
+
 @app.post("/api/project/{job_id}/add-file")
 async def add_file_and_reprocess(job_id: str, request: Request, files: list[UploadFile] = File(...)):
     """Anexa UM OU MAIS arquivos (DWG/DXF/PDF) a um projeto EXISTENTE e reprocessa NO

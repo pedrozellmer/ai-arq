@@ -2767,6 +2767,7 @@ async function loadProjects() {
       if ((p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminReprocess(\'' + jid + '\')" class="text-[11px] px-2 py-0.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">&#8635; Reprocessar</button>');
       // "Avaliar" (teste isolado) só em projeto REAL (não numa avaliação) e concluído/erro/travado.
       if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalReprocess(\'' + jid + '\')" title="Re-roda os arquivos num teste isolado, sem tocar no projeto do cliente" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#129514; Avaliar</button>');
+      if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalCombine(\'' + jid + '\')" title="Junta os arquivos de TODOS os projetos deste cliente com o mesmo nome (DWG+DXF+PDF) num teste combinado — mede pelo CAD e completa pelo PDF" class="text-[11px] px-2 py-0.5 rounded border border-violet-300 text-violet-800 hover:bg-violet-50">&#129513; Combinar</button>');
       // Numa avaliação: link pra abrir e comparar.
       if (_isEval && jid) _btns.push('<a href="projeto.html?job_id=' + jid + '" target="_blank" rel="noopener" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#128269; Abrir teste</a>');
       const actInline = _btns.length ? '<div class="flex flex-wrap gap-1 mt-1.5">' + _btns.join('') + '</div>' : '';
@@ -2852,6 +2853,39 @@ async function adminEvalReprocess(jobId) {
   } catch (e) {
     if (testWin) { try { testWin.close(); } catch (_) {} }
     _adminToast('Falha ao avaliar: ' + (e.message || e), 'error');
+  }
+}
+// COMBINAR: junta os arquivos de todos os projetos do mesmo cliente/nome
+// (DWG+DXF+PDF) num teste isolado. Abre o resultado numa aba nova.
+async function adminEvalCombine(jobId) {
+  if (!jobId) return;
+  if (!confirm('Combinar os arquivos deste cliente num TESTE?\n\nJunta o DWG + DXF + PDF de todos os projetos com o mesmo nome (o motor mede pelo CAD e completa pelo PDF), SEM tocar nos projetos do cliente.\n\nAbre numa aba nova.')) return;
+  const testWin = window.open('about:blank', '_blank');
+  if (testWin) {
+    try {
+      testWin.document.write('<!doctype html><meta charset="utf-8"><title>Teste combinado — AI.arq</title>'
+        + '<body style="font-family:system-ui,-apple-system,sans-serif;padding:48px;color:#334155;background:#f8fafc">'
+        + '<h2 style="margin:0 0 8px">&#129513; Combinando arquivos…</h2>'
+        + '<p>Juntando DWG + DXF + PDF do cliente num teste único. Abre o resultado aqui automaticamente.</p></body>');
+    } catch (_) {}
+  }
+  _adminToast('Combinando arquivos de ' + jobId + '…', 'warn');
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/eval-combine/${jobId}`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || data.error || ('HTTP ' + res.status));
+    const evalId = data.eval_job_id;
+    if (testWin && evalId) {
+      testWin.location = 'projeto.html?job_id=' + evalId;
+    } else if (!testWin && evalId) {
+      _adminToast('Popup bloqueado — abra o teste (' + evalId + ') pela lista', 'warn');
+    }
+    const ft = data.file_types || {};
+    _adminToast('Combinado ✓ ' + (evalId ? '(' + evalId + ') ' : '') + (data.files_count || 0) + ' arquivo(s)', 'success');
+    setTimeout(loadProjects, 1500);
+  } catch (e) {
+    if (testWin) { try { testWin.close(); } catch (_) {} }
+    _adminToast('Falha ao combinar: ' + (e.message || e), 'error');
   }
 }
 async function adminDownloadXlsx(jobId) {
