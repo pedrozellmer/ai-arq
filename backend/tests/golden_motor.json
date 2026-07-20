@@ -115,18 +115,18 @@
  "pdf": {
   "0326.CGR.14.100.DEMOLIR.00-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 140,
+   "n_rooms": 37,
    "n_walls": 382,
-   "rooms_m2": 1839.3,
+   "rooms_m2": 327.9,
    "scale": 100,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
-    341.1,
-    82.7,
-    70.9,
-    63.4,
-    58.6
+    46.0,
+    40.5,
+    31.3,
+    25.8,
+    22.1
    ],
    "walls_m": 824.1
   },
@@ -183,77 +183,77 @@
   },
   "0326.CGR.14.301.MARCENARIA.00-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 48,
+   "n_rooms": 44,
    "n_walls": 873,
-   "rooms_m2": 225.8,
+   "rooms_m2": 211.1,
    "scale": 100,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
     71.5,
-    8.6,
     8.0,
     8.0,
-    7.9
+    7.9,
+    7.8
    ],
    "walls_m": 885.6
   },
   "0326.CGR.14.400.ARQUITETURA.00-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 183,
+   "n_rooms": 64,
    "n_walls": 402,
-   "rooms_m2": 1937.0,
+   "rooms_m2": 472.1,
    "scale": 100,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
-    270.9,
     71.5,
-    70.6,
-    62.1,
-    60.8
+    40.2,
+    30.3,
+    28.6,
+    25.6
    ],
    "walls_m": 745.5
   },
   "0326.CGR.14.500.PONTOS-A1.pdf": {
    "envelope_m2": 1414.7,
-   "n_rooms": 72,
+   "n_rooms": 63,
    "n_walls": 523,
-   "rooms_m2": 317.5,
+   "rooms_m2": 255.8,
    "scale": 100,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
     47.5,
-    33.5,
     11.4,
-    10.8,
-    9.6
+    9.6,
+    8.0,
+    8.0
    ],
    "walls_m": 881.4
   },
   "0326.CGR.14.600.PISO.00-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 135,
+   "n_rooms": 42,
    "n_walls": 1301,
-   "rooms_m2": 1590.9,
+   "rooms_m2": 371.5,
    "scale": 100,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
-    250.7,
     77.6,
-    71.1,
-    58.5,
-    53.9
+    31.3,
+    28.6,
+    25.6,
+    22.1
    ],
    "walls_m": 1325.3
   },
   "0326.CGR.14.700.FORRO.00-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 127,
+   "n_rooms": 114,
    "n_walls": 5118,
-   "rooms_m2": 784.4,
+   "rooms_m2": 738.6,
    "scale": 100,
    "scale_src": "viewport",
    "skip": null,
@@ -268,18 +268,18 @@
   },
   "0326.CGR.14.701.DET FORRO.00-A0.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 178,
+   "n_rooms": 126,
    "n_walls": 1129,
-   "rooms_m2": 1367.7,
+   "rooms_m2": 860.5,
    "scale": 100,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
     193.6,
-    63.4,
     50.5,
-    43.1,
-    41.9
+    41.9,
+    21.7,
+    21.6
    ],
    "walls_m": 1616.6
   },
@@ -336,51 +336,51 @@
   },
   "225.AFS.300.ARQUITETURA_EX-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 18,
+   "n_rooms": 13,
    "n_walls": 124,
-   "rooms_m2": 102.5,
+   "rooms_m2": 69.2,
    "scale": 50,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
     42.4,
-    10.8,
-    6.2,
-    6.2,
-    5.0
+    4.0,
+    3.1,
+    2.4,
+    2.4
    ],
    "walls_m": 160.9
   },
   "225.AFS.500.PONTOS_EX-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 9,
+   "n_rooms": 5,
    "n_walls": 138,
-   "rooms_m2": 83.6,
+   "rooms_m2": 35.5,
    "scale": 50,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
-    59.7,
-    8.2,
-    3.1,
-    2.8,
-    2.5
+    20.7,
+    8.0,
+    3.0,
+    1.9,
+    1.8
    ],
    "walls_m": 116.1
   },
   "225.AFS.500.PONTOS_EX_12-12-25-A1.pdf": {
    "envelope_m2": 0.0,
-   "n_rooms": 9,
+   "n_rooms": 7,
    "n_walls": 140,
-   "rooms_m2": 83.2,
+   "rooms_m2": 48.8,
    "scale": 50,
    "scale_src": "viewport",
    "skip": null,
    "top_rooms": [
-    59.2,
-    8.2,
-    3.1,
-    2.8,
+    20.7,
+    10.7,
+    8.0,
+    3.0,
     2.5
    ],
    "walls_m": 117.6
