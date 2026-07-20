@@ -337,7 +337,10 @@ Se algum falhar, me peça pra investigar.
 - Landing page com hero, recursos, preços, FAQ
 - Cadastro/login (Supabase Auth + Google OAuth)
 - Dashboard do usuário (projetos, cashback, cadastro, pagamentos)
-- Upload de CAD (PDF/DWG/DXF) → processamento → planilha XLSX
+- Upload de CAD (DXF/DWG/PDF) → processamento → planilha XLSX
+- **DXF é o formato recomendado nº1** em todo o sistema (upload, landing, FAQ, projeto, preços, guia de exportação) — decidido 20/07: DXF mede e nunca trava; DWG mede mas os de AutoCAD Architecture/MEP (AEC) não abrem; PDF = estimativa. **NÃO é DXF-only** (manter DWG/PDF pra não matar o topo do funil).
+- **Campo "Área total (m²)" opcional no upload** (20/07): pra planta sem cota (estudo de layout), o cliente informa a metragem → vira base pras áreas, rotulada "informada por você, não medida" (`projects.user_total_area` + `ProjectData.total_area_source='informado'`). Só usa quando a planta NÃO mediu — a medição da planta sempre vem primeiro.
+- **Salvamento de planta de layout** (20/07, caso Catarina): estudo de layout de interiores (sem quadro de áreas) não dava item → erro "0 itens". Agora, no guard de 0 itens do `process_job`, extrai (a) esquadrias das cotas do texto vetorial (`_salvage_layout_esquadrias`, DETERMINÍSTICO) e (b) louças/móveis/portas por VISÃO (`_salvage_layout_ai_counts`, ADITIVO — só roda onde daria erro, blocklist anti-m², tudo estimado). ⚠ O passo (b) não tem verificação adversarial — conferir ao vivo antes de confiar amplo.
 - Sistema de cores (BRANCO medido / LARANJA estimado / CINZA metadado / ROXO indireto)
 - Revisão inline (sem cashback — alimenta calibração da IA pro próximo projeto)
 - Comparativo de fornecedores (upload XLSX múltiplos → quadro comparativo)
