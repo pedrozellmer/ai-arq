@@ -4289,12 +4289,47 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 crop_paths = render_crops(pdf_path, sheet_type, crops_dir,
                                           page_index=page_index, out_stem=_stem)
 
+                # 2.5 PROMOÇÃO DO VETORIAL (19/07): mede a página com o motor
+                # vetorial ANTES da IA. SÓ injeta quando a escala foi VALIDADA
+                # POR COTA da própria prancha (≥2 cotas independentes batendo
+                # ±2% com elementos medidos) — sem prova, comportamento antigo.
+                # Subprocess com timeout: página pesada não trava o job.
+                _vet_secao = ""
+                try:
+                    import subprocess as _sp, json as _jv, sys as _sysv
+                    _cmd = [_sysv.executable, "-c", (
+                        "import sys, json; sys.path.insert(0, r'" +
+                        os.path.dirname(os.path.abspath(__file__)) + "'); "
+                        "from pdf_vector import _measure_page; "
+                        f"print(json.dumps(_measure_page(r'{pdf_path}', {page_index}, '')))"
+                    )]
+                    _pr = _sp.run(_cmd, capture_output=True, text=True, timeout=75)
+                    _vm = _jv.loads(_pr.stdout.strip().splitlines()[-1]) if _pr.returncode == 0 and _pr.stdout.strip() else {}
+                    if _vm.get("escala_validada") and (_vm.get("n_rooms") or _vm.get("walls_m")):
+                        _linhas = [
+                            "",
+                            "=== MEDIÇÕES VETORIAIS DA PRANCHA (validadas por cota) ===",
+                            f"Escala 1:{_vm.get('scale')} confirmada por {_vm.get('cotas_batem')} cota(s) da própria prancha.",
+                        ]
+                        if _vm.get("n_rooms"):
+                            _linhas.append(f"Ambientes MEDIDOS geometricamente: {_vm['n_rooms']} somando {_vm.get('rooms_m2', 0)} m² (maiores: {_vm.get('top_rooms')} m²).")
+                        if _vm.get("walls_m"):
+                            _linhas.append(f"Paredes/divisórias MEDIDAS: {_vm['walls_m']} m ({_vm.get('n_walls')} segmentos).")
+                        _linhas.append(
+                            "REGRA: itens de ÁREA (piso/forro/pintura de área) e COMPRIMENTO de parede "
+                            "baseados EXATAMENTE nestes valores podem sair com confidence 'confirmado' "
+                            "(medição geométrica validada). Qualquer outro valor segue 'estimado'.")
+                        _vet_secao = "\n".join(_linhas)
+                        print(f"[pdfvec-promo] {_stem}: escala validada por cota — seção injetada")
+                except Exception as _ve:
+                    print(f"[pdfvec-promo] {_stem}: sem promoção ({_ve})")
+
                 # 3. Analisar com IA
                 jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: Nossa IA está analisando {_disp}...")
                 sheet = SheetInfo(
                     filename=filename,
                     sheet_type=sheet_type,
-                    text_content=text[:5000],
+                    text_content=text[:5000] + _vet_secao,
                     crops=crop_paths,
                 )
                 # Ambiente: user escolheu manualmente > auto-detect por keyword
