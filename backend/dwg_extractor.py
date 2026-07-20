@@ -166,6 +166,18 @@ class DXFExtraction:
                          f"Comprimentos/áreas podem estar com a escala errada — marque os itens medidos como "
                          f"'estimado' até o usuário confirmar a unidade.")
             lines.append("")
+        # "Régua da prancha" — unidade provada pelas próprias COTAS do desenho
+        if self.metadata.get("unidade_corrigida_por_cotas"):
+            lines.append(f"UNIDADE: CORRIGIDA PELA PRÓPRIA PRANCHA — "
+                         f"{self.metadata['unidade_corrigida_por_cotas']}. As cotas (DIMENSION) são "
+                         f"dado real do CAD: o texto exibido bateu com a medida geométrica num fator "
+                         f"diferente do detectado. Todas as medidas abaixo JÁ usam o fator corrigido.")
+            lines.append("")
+        elif self.metadata.get("unidade_validada_por_cotas"):
+            lines.append(f"UNIDADE: {self.metadata.get('unidade_nome_provada', '?')} — VALIDADA POR "
+                         f"{self.metadata['unidade_validada_por_cotas']} COTAS DA PRANCHA "
+                         f"(o texto exibido nas cotas bate com a medida geométrica; escala confiável).")
+            lines.append("")
 
         # Layers — com xref prefix removido e deduplicado pra não poluir o prompt
         clean_layers = set()
@@ -454,6 +466,221 @@ def _validate_unit_factor(doc, unit_factor: float) -> tuple[float, list[str]]:
     except Exception:
         pass
     return unit_factor, warnings
+
+
+# ---------------------------------------------------------------------------
+# "Régua da prancha" — validação da unidade pelas COTAS (DIMENSION)
+# ---------------------------------------------------------------------------
+# A prancha carrega a própria régua: cada cota linear tem uma medida GEOMÉTRICA
+# (distância real entre os pontos cotados, em unidades do desenho) e um TEXTO
+# exibido (o número que o arquiteto vê impresso). A razão texto/medida prova a
+# unidade do desenho sem heurística — cota é dado REAL do CAD, não suposição.
+
+_CANONICAL_METRIC_FACTORS = (1.0, 0.1, 0.01, 0.001)  # m, dm, cm, mm → metros
+_UNIT_FACTOR_NAMES = {1.0: "metros", 0.1: "decímetros",
+                      0.01: "centímetros", 0.001: "milímetros"}
+# Texto de cota BR: número (vírgula OU ponto decimal) com sufixo de unidade
+# opcional. Prefixo de aproximação (~ ≈ ±) tolerado; qualquer outra palavra
+# ("VER DETALHE", "VAR.") invalida o uso como régua.
+_DIM_TEXT_NUM_RE = re.compile(
+    r"^\s*[~≈±]?\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\s*\.?\s*$", re.IGNORECASE)
+_DIM_TEXT_UNIT_SCALE = {"m": 1.0, "cm": 0.01, "mm": 0.001}
+_DIM_RATIO_TOL = 0.02        # ±2% — consistência exigida entre texto e medida
+_DIM_MIN_COTAS = 3           # mínimo de cotas consistentes pra provar algo
+_DIM_MAJORITY = 0.8          # e ≥80% das cotas utilizáveis concordando
+_DIM_LEN_MIN, _DIM_LEN_MAX = 0.05, 500.0   # plausibilidade POR COTA (metros)
+_DIM_MED_MIN, _DIM_MED_MAX = 0.5, 100.0    # plausibilidade da MEDIANA (metros)
+_DIM_MAX_SCAN = 4000         # teto defensivo de cotas varridas
+
+
+def _dim_effective_dimlfac(doc, dim) -> float:
+    """DIMLFAC efetivo de uma cota (fator que multiplica a medida geométrica
+    pra virar o texto default). Ordem: override na entidade (XDATA DSTYLE — o
+    ezdxf já cai no dimstyle quando não há override) → dimstyle da tabela → 1.0.
+    DIMLFAC ≤ 0 só se aplica a cota de paperspace (convenção AutoCAD) — pra
+    cota de modelspace vale 1.0."""
+    lf = None
+    try:
+        lf = dim.override().get("dimlfac", None)
+    except Exception:
+        lf = None
+    if lf is None:
+        try:
+            style = doc.dimstyles.get(dim.dxf.dimstyle)
+            if style is not None:
+                lf = style.get_dxf_attrib("dimlfac", None)
+        except Exception:
+            lf = None
+    try:
+        lf = float(lf) if lf is not None else 1.0
+    except (TypeError, ValueError):
+        return 1.0
+    return lf if lf > 0 else 1.0
+
+
+def _dim_displayed_number(doc, dim, measurement: float):
+    """Número que a cota EXIBE na prancha, ou None se não serve como régua.
+
+    Retorna (valor, escala_explícita | None):
+      - texto vazio ou contendo "<>" → medida formatada pelo dimstyle:
+        measurement × DIMLFAC ("<> VAR." mantém o número medido embutido)
+      - texto " " (um espaço) → texto SUPRIMIDO — sem número na prancha, fora
+      - número literal ("350", "3,50", "12.5", "350 cm") → o número (vírgula BR
+        ok); sufixo m/cm/mm vira escala explícita do texto
+      - override não-numérico ("VER DETALHE") → None (fora)
+    """
+    try:
+        raw = dim.dxf.text
+    except Exception:
+        raw = ""
+    if raw is None:
+        raw = ""
+    if raw == " ":          # convenção DXF: espaço único = suprime o texto
+        return None
+    stripped = raw.strip()
+    if stripped == "" or "<>" in stripped:
+        return (measurement * _dim_effective_dimlfac(doc, dim), None)
+    m = _DIM_TEXT_NUM_RE.match(stripped)
+    if not m:
+        return None
+    try:
+        value = float(m.group(1).replace(",", "."))
+    except ValueError:
+        return None
+    suffix = m.group(2)
+    scale = _DIM_TEXT_UNIT_SCALE.get(suffix.lower()) if suffix else None
+    return (value, scale)
+
+
+def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
+    """A RÉGUA DA PRANCHA: usa as cotas lineares (DIMENSION linear/aligned) pra
+    validar ou corrigir o fator de unidade detectado por heurística.
+
+    Pra cada cota utilizável: o texto exibido D, lido em metros sob cada unidade
+    de texto plausível (m / cm / mm — ou a explícita, se o texto tem sufixo),
+    dividido pela medida geométrica M implica um fator unidade→metros. Se esse
+    fator implícito casa (±2%) com um fator métrico canônico (m/dm/cm/mm) e o
+    comprimento real resultante é plausível (5cm–500m), a cota SUPORTA aquele
+    fator. Um fator fica PROVADO quando ≥3 cotas E ≥80% das utilizáveis o
+    suportam E a mediana dos comprimentos reais é de escala arquitetônica
+    (0,5m–100m — é o que desempata a ambiguidade cm×mm de razão 1:1).
+
+    Saídas (regra nº1 — só o que as cotas PROVAM; na dúvida, nada muda):
+      {"status": "validada", ...}   fator detectado é o ÚNICO provado
+      {"status": "corrigida", ...}  detectado NÃO se sustenta e há UM ÚNICO
+                                    fator provado → usar fator_corrigido
+      {"status": "ambigua"|None}    sem prova exclusiva → comportamento antigo
+    """
+    out: dict = {"status": None, "cotas_utilizaveis": 0}
+    try:
+        msp = doc.modelspace()
+        evidence: list[tuple[float, float, Optional[float]]] = []
+        scanned = 0
+        for dim in msp.query("DIMENSION"):
+            if scanned >= _DIM_MAX_SCAN:
+                break
+            scanned += 1
+            try:
+                if dim.dimtype not in (0, 1):
+                    continue  # angular/diâmetro/raio/ordenada NÃO é régua linear
+            except Exception:
+                continue
+            try:
+                meas = dim.get_measurement()
+            except Exception:
+                continue
+            if not isinstance(meas, (int, float)):
+                continue  # tipos exóticos devolvem vetor — fora
+            meas = float(meas)
+            if meas <= 1e-9:
+                continue
+            shown = _dim_displayed_number(doc, dim, meas)
+            if shown is None:
+                continue
+            value, explicit_scale = shown
+            if value <= 0:
+                continue
+            evidence.append((meas, value, explicit_scale))
+
+        # Suporte por fator canônico: {fator: [comprimentos reais das cotas]}
+        support: dict[float, list[float]] = {f: [] for f in _CANONICAL_METRIC_FACTORS}
+        usable = 0
+        for meas, value, explicit_scale in evidence:
+            scales = (explicit_scale,) if explicit_scale is not None else (1.0, 0.01, 0.001)
+            cand: dict[float, float] = {}
+            for s in scales:
+                real_len = value * s              # metros que o TEXTO afirma
+                if not (_DIM_LEN_MIN <= real_len <= _DIM_LEN_MAX):
+                    continue
+                implied = real_len / meas         # fator unidade→m implicado
+                for f in _CANONICAL_METRIC_FACTORS:
+                    if abs(implied / f - 1.0) <= _DIM_RATIO_TOL:
+                        cand[f] = real_len
+            if not cand:
+                continue
+            usable += 1
+            for f, real_len in cand.items():
+                support[f].append(real_len)
+
+        out["cotas_utilizaveis"] = usable
+        if usable < _DIM_MIN_COTAS:
+            return out
+
+        def _median_of(xs: list) -> float:
+            s = sorted(xs)
+            n = len(s)
+            return s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2.0
+
+        def _proven(f: float) -> bool:
+            lens = support[f]
+            if len(lens) < _DIM_MIN_COTAS or len(lens) < _DIM_MAJORITY * usable:
+                return False
+            return _DIM_MED_MIN <= _median_of(lens) <= _DIM_MED_MAX
+
+        proven = [f for f in _CANONICAL_METRIC_FACTORS if _proven(f)]
+
+        detected = None  # fator detectado ancorado no canônico métrico (±2%)
+        for f in _CANONICAL_METRIC_FACTORS:
+            if abs(unit_factor / f - 1.0) <= _DIM_RATIO_TOL:
+                detected = f
+                break
+
+        if detected is not None and detected in proven:
+            if len(proven) == 1:
+                out.update({
+                    "status": "validada",
+                    "fator": detected,
+                    "n_cotas": len(support[detected]),
+                    "unidade_nome": _UNIT_FACTOR_NAMES[detected],
+                })
+            else:
+                # Compatível com o detectado, mas OUTRO fator também qualificou
+                # (ex.: cotas cm×mm com razão 1:1) — prova não é exclusiva.
+                out["status"] = "ambigua"
+            return out
+
+        # Contradição consistente: o detectado não se provou E existe UM ÚNICO
+        # fator provado pelas cotas → correção honesta (cota é dado real do CAD).
+        # Fator não-métrico detectado (imperial) nunca é corrigido — abstém.
+        if detected is not None and len(proven) == 1:
+            novo = proven[0]
+            n = len(support[novo])
+            out.update({
+                "status": "corrigida",
+                "fator_original": unit_factor,
+                "fator_corrigido": novo,
+                "n_cotas": n,
+                "unidade_nome": _UNIT_FACTOR_NAMES[novo],
+                "mensagem": (
+                    f"unidade corrigida pelas cotas da prancha: fator {unit_factor:g} → {novo:g} "
+                    f"({_UNIT_FACTOR_NAMES[novo]}) — provado por {n} cotas "
+                    f"(texto exibido × medida geométrica, ±2%)"
+                ),
+            })
+        return out
+    except Exception as exc:  # defensivo: a régua NUNCA derruba a extração
+        logger.warning("[unit-cotas] validação por cotas falhou (ignorada): %s", exc)
+        return {"status": None, "cotas_utilizaveis": 0}
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1213,27 @@ def extract_dxf(filepath: str) -> DXFExtraction:
     msp = doc.modelspace()
     unit_factor = _detect_unit_factor(doc)
     unit_factor, unit_warnings = _validate_unit_factor(doc, unit_factor)
+    # ── "Régua da prancha": as COTAS (DIMENSION) validam/corrigem a unidade ──
+    # Cota é dado REAL do CAD: o texto exibido × a medida geométrica provam o
+    # fator. Só 3 saídas (regra nº1 — nunca promover por suposição):
+    #   validada  → ≥3 cotas consistentes confirmam o fator detectado como ÚNICO
+    #               plausível; a suspeita heurística de extensão é superada por
+    #               dado medido (fica rastreada em metadata, não some);
+    #   corrigida → o detectado não se sustenta e ≥3 cotas provam OUTRO fator
+    #               único — upgrade honesto, correção registrada;
+    #   (nada)    → cotas insuficientes/ambíguas/conflitantes: tudo como antes.
+    dim_check = _validate_unit_by_dimensions(doc, unit_factor)
+    if dim_check.get("status") == "corrigida":
+        unit_factor = dim_check["fator_corrigido"]
+        logger.warning("[unit-cotas] %s", dim_check["mensagem"])
+        # os avisos antigos foram computados com o fator ERRADO — refaz a
+        # heurística de extensão com o fator provado pelas cotas
+        _, unit_warnings = _validate_unit_factor(doc, unit_factor)
+    elif dim_check.get("status") == "validada" and unit_warnings:
+        # fator PROVADO por cota: a heurística de extensão vira rastro em
+        # metadata em vez de rebaixar tudo pra estimado
+        dim_check["heuristica_superada"] = " | ".join(unit_warnings)
+        unit_warnings = []
     for w in unit_warnings:
         logger.warning("[unit-sanity] %s", w)
     area_factor = unit_factor * unit_factor  # for m² conversion
@@ -1012,6 +1260,21 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         metadata["fator_para_metros"] = f"{unit_factor}"
         if unit_warnings:
             metadata["alerta_unidade"] = " | ".join(unit_warnings)
+    except Exception:
+        pass
+    # "Régua da prancha" — resultado da validação da unidade pelas cotas.
+    # Correção NÃO entra em unidade_suspeita (não é suspeita, é fator provado).
+    try:
+        _dim_status = dim_check.get("status")
+        if _dim_status == "validada":
+            metadata["unidade_validada_por_cotas"] = dim_check["n_cotas"]
+            metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
+            if dim_check.get("heuristica_superada"):
+                metadata["heuristica_extensao_superada_por_cotas"] = \
+                    dim_check["heuristica_superada"]
+        elif _dim_status == "corrigida":
+            metadata["unidade_corrigida_por_cotas"] = dim_check["mensagem"]
+            metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
     except Exception:
         pass
 
