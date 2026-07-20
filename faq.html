@@ -38,7 +38,7 @@
       "name": "Quais formatos de arquivo são aceitos?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "PDF, DWG (AutoCAD) e DXF. O ideal é PDF vetorial exportado diretamente do CAD ou o próprio DWG. PDFs escaneados (foto da planta impressa) não funcionam — a IA precisa enxergar as cotas, blocos e textos vetoriais."
+        "text": "DXF, DWG (AutoCAD) e PDF. O ideal é DXF exportado diretamente do CAD — é o formato que mede a geometria de verdade e não trava na conversão. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) podem não abrir. PDF a IA lê pela imagem (sai como estimativa); PDFs escaneados (foto da planta impressa) não funcionam — a IA precisa enxergar as cotas, blocos e textos vetoriais."
       }
     },
     {
@@ -313,7 +313,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3">A regra de ouro: <strong>DWG e DXF medem de verdade; PDF &eacute; leitura visual</strong>. No CAD a gente extrai a geometria (&aacute;reas, comprimentos, contagem de blocos), ent&atilde;o as quantidades saem <strong>medidas</strong>. No PDF a IA l&ecirc; pela imagem, ent&atilde;o sai tudo como <strong>estimativa</strong> pra voc&ecirc; conferir.</p>
+              <p class="mb-3">A regra de ouro: <strong>🥇 DXF &eacute; o melhor</strong> &mdash; mede de verdade e nunca trava na convers&atilde;o. <strong>DWG</strong> tamb&eacute;m mede, mas os de AutoCAD Architecture/MEP (objetos AEC) &agrave;s vezes n&atilde;o abrem &mdash; se der erro, exporte DXF. <strong>PDF</strong> &eacute; leitura visual, sai como <strong>estimativa</strong>. No CAD a gente extrai a geometria (&aacute;reas, comprimentos, contagem de blocos), ent&atilde;o as quantidades saem <strong>medidas</strong>; no PDF a IA l&ecirc; pela imagem, ent&atilde;o sai tudo como estimativa pra voc&ecirc; conferir.</p>
               <p class="mb-2 font-medium text-gray-700">Passo a passo por programa:</p>
               <div class="space-y-3 mb-4">
                 <div>
