@@ -3555,7 +3555,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"seu arquivo está com defeito.\n\n")
                     msg = (
                         _abre +
-                        f"📋 COMO RESOLVER (projeto de ELÉTRICA / MEP — recomendado):\n"
+                        f"📋 COMO RESOLVER (arquivo do AutoCAD Architecture / MEP):\n"
                         f"Esses desenhos costumam ter 'objetos especiais' (proxy) que o "
                         f"'Salvar como DXF' comum NÃO converte. O jeito que resolve:\n"
                         f"1. Abra o arquivo no AutoCAD\n"
