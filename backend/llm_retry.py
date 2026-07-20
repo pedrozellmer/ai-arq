@@ -230,3 +230,4 @@ def call_with_retry_stream(
     if last_exc:
         raise last_exc
     raise RuntimeError("call_with_retry_stream: loop terminou sem exception nem retorno")
+# deploy: restart 19/07 23h — destravar job órfão do Rodrigo (sem mudança funcional)
