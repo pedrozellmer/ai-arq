@@ -52,6 +52,10 @@ class ProjectData(BaseModel):
     address: str = ""
     architect: str = ""
     total_area: float = 0
+    # Origem de total_area: "" (não definida), "medido" (geometria DXF/vetorial),
+    # "informado" (o cliente digitou a metragem no upload — NÃO é medição nossa,
+    # a planilha rotula como tal e mantém confiança 'estimado', regra dura nº1).
+    total_area_source: str = ""
     layout_area: float = 0
     no_intervention_area: float = 0
     workstations: int = 0

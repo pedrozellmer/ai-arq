@@ -3340,7 +3340,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 user_sheet_types: dict[str, str] | None = None,
                 user_ambientes: dict[str, str] | None = None,
                 project_type: str = "arquitetura",
-                is_complement: bool = False):
+                is_complement: bool = False,
+                user_total_area: float = 0):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
 
     `typology` alimenta a camada de calibração por densidade — alertas
@@ -4830,6 +4831,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
         project_data.total_area = _pick_area_consensus(_area_readings["total_area"])
         project_data.layout_area = _pick_area_consensus(_area_readings["layout_area"])
         project_data.no_intervention_area = _pick_area_consensus(_area_readings["no_intervention_area"])
+        # ÁREA INFORMADA PELO CLIENTE (campo no upload): só usa como base quando a
+        # planta NÃO deu área nenhuma (típico de estudo de layout sem cota, ex.
+        # Catarina). Geometria/leitura da própria planta SEMPRE tem prioridade —
+        # a área do cliente nunca sobrescreve o que a planta forneceu. Rótulo
+        # 'informado' faz a planilha dizer "informada por você, não medida"
+        # (regra dura nº1: não é medição nossa, segue tratada como base a conferir).
+        try:
+            _uta = float(user_total_area or 0)
+        except (TypeError, ValueError):
+            _uta = 0
+        if _uta > 0 and not (project_data.total_area or 0):
+            project_data.total_area = round(_uta, 2)
+            project_data.total_area_source = "informado"
+            project_data.warnings = (project_data.warnings or []) + [
+                f"Área total de {_uta:.0f} m² foi INFORMADA POR VOCÊ no upload (a planta não trazia "
+                f"cota/quadro pra medir). Ela entra como BASE pros itens de área — confira antes de orçar."
+            ]
+            print(f"[area-informada] job={job_id}: usando área do cliente {_uta} m² (planta sem medição)")
         for _fld, _reads in _area_readings.items():
             if len(set(_reads)) > 1:
                 print(f"[area-consensus] {_fld}: leituras={_reads} → "
@@ -5108,6 +5127,7 @@ async def process_files(
     user_email: str = "",
     user_name: str = "",
     credits_to_consume_cents: int = 0,
+    user_total_area: float = 0,
 ):
     """Recebe PDF, DWG ou DXF e inicia processamento em background.
 
@@ -5156,6 +5176,14 @@ async def process_files(
     project_type = (project_type or "arquitetura").strip().lower()
     if project_type not in ("arquitetura", "estrutura"):
         project_type = "arquitetura"
+    # Área informada pelo cliente (campo opcional no upload): sanitiza contra
+    # número absurdo/negativo. 0 = não informou (comportamento antigo).
+    try:
+        user_total_area = float(user_total_area or 0)
+    except (TypeError, ValueError):
+        user_total_area = 0
+    if user_total_area < 0 or user_total_area > 1_000_000:
+        user_total_area = 0
     if not files:
         raise HTTPException(400, "Nenhum arquivo enviado")
 
@@ -5249,6 +5277,7 @@ async def process_files(
         "files_count": len(file_paths),
         "file_types": file_types,
         "status": "queued",
+        "user_total_area": user_total_area if user_total_area > 0 else None,
     })
 
     # Consome créditos de cashback/cupom se o frontend declarou uso
@@ -5267,7 +5296,8 @@ async def process_files(
         kwargs={"typology": typology,
                 "user_sheet_types": user_sheet_types,
                 "user_ambientes": user_ambientes,
-                "project_type": project_type},
+                "project_type": project_type,
+                "user_total_area": user_total_area},
         daemon=True,
     )
     t.start()
@@ -10527,6 +10557,10 @@ async def reprocess_project(job_id: str, request: Request):
 
     typology = orig.get("typology") or "office"
     ptype = orig.get("project_type") or "arquitetura"
+    try:
+        _uta_orig = float(orig.get("user_total_area") or 0)
+    except (TypeError, ValueError):
+        _uta_orig = 0
     _supabase_insert("projects", {
         "job_id": new_job_id,
         "user_id": orig.get("user_id") or "anonymous",
@@ -10539,6 +10573,7 @@ async def reprocess_project(job_id: str, request: Request):
         "file_types": file_types,
         "status": "queued",
         "parent_job_id": job_id,  # rastreabilidade: novo projeto é filho do original
+        "user_total_area": _uta_orig if _uta_orig > 0 else None,  # propaga área informada
     })
 
     # Incrementar contador do ORIGINAL via RPC atômica
@@ -10558,7 +10593,8 @@ async def reprocess_project(job_id: str, request: Request):
     t = threading.Thread(
         target=_process_job_throttled,
         args=(new_job_id, new_file_paths, new_work_dir),
-        kwargs={"typology": typology, "project_type": ptype},
+        kwargs={"typology": typology, "project_type": ptype,
+                "user_total_area": _uta_orig},
         daemon=True,
     )
     t.start()
