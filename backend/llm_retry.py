@@ -107,6 +107,42 @@ def _is_retryable(exc: Exception) -> bool:
     return False
 
 
+# ── Classificação de erro por TEXTO (pra quem só tem a string já achatada) ──
+# main.py junta sheet_errors/dxf_errors (strings) e precisa decidir a copy: só
+# chamar de "provedor sobrecarregado" com PROVA de transitório. 400/401/403/404/
+# 413/invalid_request/surrogate são PERMANENTES e NUNCA viram "é o provedor,
+# reprocesse" — era essa inversão de default que prendia o cliente em loop
+# (caso Rodrigo 19/07: model-id errado dava 404 em todo DXF e virava "sobrecarga").
+
+# Marcadores de erro PERMANENTE (nosso/arquivo) — reprocessar sozinho não conserta.
+_PERMANENT_TOKENS = (
+    "invalid_request", "invalid high surrogate", "surrogate", "bad_request",
+    "invalid json", "request body is not valid", "request too large",
+    "authentication_error", "permission_error", "not_found_error",
+    "status=400", "status=401", "status=403", "status=404", "status=413",
+    "status=422",
+)
+# Marcadores de erro TRANSITÓRIO (provedor/infra) — PROVA de que reprocessar resolve.
+_TRANSIENT_TOKENS = (
+    "rate_limit", "rate limit", "429", "529", "overloaded", "timeout",
+    "timed out", "sobrecarregad", "connection", "status=500", "status=502",
+    "status=503", "status=504",
+)
+
+
+def classify_error_text(text: str) -> str:
+    """Classifica uma mensagem de erro JÁ achatada em 'transient' | 'permanent'
+    | 'unknown'. Permanente vence transitório quando os dois aparecem — nunca
+    culpar o provedor havendo prova de erro nosso/de arquivo. 'unknown' é
+    tratado como NÃO-transitório pelo chamador (não vira 'sobrecarga')."""
+    msg = (text or "").lower()
+    if any(t in msg for t in _PERMANENT_TOKENS):
+        return "permanent"
+    if any(t in msg for t in _TRANSIENT_TOKENS):
+        return "transient"
+    return "unknown"
+
+
 def _extract_retry_after(exc: Exception) -> float | None:
     """Se a API mandou um Retry-After em segundos, respeitar."""
     try:

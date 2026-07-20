@@ -6,6 +6,7 @@ import uuid
 import shutil
 import asyncio
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
@@ -137,6 +138,32 @@ def _log_error(stage, message, job_id=None, severity="error"):
         })
     except Exception:
         pass
+
+
+def _error_log_causa_real(job_id: str, limit: int = 3) -> str:
+    """Causa TÉCNICA real de um job (o que o cliente NÃO viu — ele viu o rótulo).
+    Junta as entradas mais recentes do error_log por job_id pra o alerta do Pedro
+    mostrar a raiz ao lado do rótulo (QW3, 20/07). Best-effort — nunca levanta."""
+    if not job_id:
+        return ""
+    import urllib.request as _u, json as _j
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/error_log?job_id=eq.{job_id}"
+             f"&severity=in.(error,critical)"
+             f"&select=stage,message,created_at&order=created_at.desc&limit={limit}")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows = _j.loads(_u.urlopen(req, timeout=8).read().decode("utf-8"))
+        partes = []
+        for r in rows or []:
+            _stage = (r.get("stage") or "").strip()
+            _msg = (r.get("message") or "").strip()
+            if _msg:
+                partes.append(f"[{_stage}] {_msg[:280]}" if _stage else _msg[:280])
+        return " · ".join(partes)
+    except Exception:
+        return ""
 
 
 def _supabase_update(table, match_field, match_value, data):
@@ -987,19 +1014,33 @@ WORK_DIR = os.path.join(tempfile.gettempdir(), "aiarq_jobs")
 os.makedirs(WORK_DIR, exist_ok=True)
 JOBS_FILE = os.path.join(WORK_DIR, "_jobs.json")
 
+# Trava de escrita do store de jobs. Recovery, request e processamento escrevem
+# o MESMO JSON. Sem ela, dois read-modify-write concorrentes se atropelam
+# (lost-update): um 'error' pode ser sobrescrito de volta pra 'queued'/'processing'
+# por uma thread com snapshot velho — a raiz do job órfão. RLock (reentrante)
+# porque _load_jobs/_save_jobs são chamados de dentro de seções já travadas.
+_JOBS_LOCK = threading.RLock()
+
 def _load_jobs() -> dict:
-    try:
-        if os.path.exists(JOBS_FILE):
-            with open(JOBS_FILE, 'r') as f:
-                return _json.load(f)
-    except: pass
-    return {}
+    with _JOBS_LOCK:
+        try:
+            if os.path.exists(JOBS_FILE):
+                with open(JOBS_FILE, 'r') as f:
+                    return _json.load(f)
+        except: pass
+        return {}
 
 def _save_jobs(jobs_dict):
-    try:
-        with open(JOBS_FILE, 'w') as f:
-            _json.dump(jobs_dict, f)
-    except: pass
+    # Escrita atômica: grava num tmp e faz rename. Se o processo morrer no meio,
+    # o _jobs.json antigo continua íntegro em vez de virar arquivo truncado —
+    # que o _load_jobs engoliria como {} e apagaria TODOS os jobs de uma vez.
+    with _JOBS_LOCK:
+        try:
+            tmp = f"{JOBS_FILE}.{os.getpid()}.tmp"
+            with open(tmp, 'w') as f:
+                _json.dump(jobs_dict, f)
+            os.replace(tmp, JOBS_FILE)
+        except: pass
 
 # ─── Email transacional (SMTP — Google Workspace) ───────────────────
 # Configurado por env vars SMTP_* no Render. Se não estiver configurado,
@@ -1659,21 +1700,23 @@ class JobsStore:
         return ProcessingStatus(**jobs[key])
 
     def __setitem__(self, key, value):
-        jobs = _load_jobs()
-        if isinstance(value, ProcessingStatus):
-            jobs[key] = value.model_dump()
-        else:
-            jobs[key] = value
-        _save_jobs(jobs)
+        with _JOBS_LOCK:
+            jobs = _load_jobs()
+            if isinstance(value, ProcessingStatus):
+                jobs[key] = value.model_dump()
+            else:
+                jobs[key] = value
+            _save_jobs(jobs)
 
     def __contains__(self, key):
         return key in _load_jobs()
 
     def update_field(self, key, **kwargs):
-        jobs = _load_jobs()
-        if key in jobs:
-            jobs[key].update(kwargs)
-            _save_jobs(jobs)
+        with _JOBS_LOCK:
+            jobs = _load_jobs()
+            if key in jobs:
+                jobs[key].update(kwargs)
+                _save_jobs(jobs)
 
 jobs = JobsStore()
 
@@ -1849,17 +1892,35 @@ def _auto_retry_erros_transitorios():
         if not _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id):
             _causa = ("esgotou as 2 re-tentativas automáticas" if transitorio
                       else "problema no arquivo do cliente (não re-tentável)")
+            # QW3 (20/07): a causa TÉCNICA real (error_log) ao lado do rótulo que
+            # o cliente viu — pro Pedro parar de investigar às cegas.
+            _causa_real = _error_log_causa_real(job_id)
+            _bloco_real = (f"<b>Causa técnica real:</b> {_causa_real[:600]}<br>"
+                           if _causa_real else "")
             _ok = _notify_admin(
                 f"Projeto com erro terminal: {job_id}",
                 f"<b>Projeto:</b> {row.get('project_name') or job_id}<br>"
                 f"<b>Cliente:</b> {row.get('user_email') or '—'}<br>"
                 f"<b>Classificação:</b> {_causa}<br>"
-                f"<b>Erro:</b> {msg[:400]}<br><br>"
+                f"<b>Rótulo que o cliente viu:</b> {msg[:400]}<br>"
+                f"{_bloco_real}<br>"
                 f"O cliente já recebeu o email de falha com orientação. "
                 f"Se for caso de resgate manual, o arquivo está no Storage "
                 f"(job <code>{job_id}</code>).")
             if _ok:
                 _email_auto_registrar(NOTIFY_EMAIL, "alerta_erro_terminal", ref=job_id)
+            else:
+                # QW6 (20/07): o alerta é canal único best-effort. Se o SMTP está
+                # fora, o aviso sumiria em silêncio — registra crítico no error_log
+                # pra ficar rastreável via MCP mesmo sem email. NÃO registra o
+                # dedup (assim re-tenta o alerta na próxima varredura, quando o
+                # SMTP voltar). A causa real vai junto pra não perder o diagnóstico.
+                _log_error(
+                    "alert:admin",
+                    f"alerta de erro terminal NÃO entregue (SMTP fora) — job {job_id}; "
+                    f"cliente {row.get('user_email') or '—'}; rótulo: {msg[:200]}"
+                    + (f"; causa real: {_causa_real[:400]}" if _causa_real else ""),
+                    job_id, severity="critical")
 
 
 def _versao_build() -> str:
@@ -4119,7 +4180,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # Registra em dxf_errors pra o guard de 0-itens distinguir
                         # "IA falhou (reprocessável grátis)" de "arquivo sem
                         # conteúdo medível" — espelha o tratamento do caminho PDF.
-                        err_msg = str(e)[:200]
+                        # Preserva o status_code do erro-raiz pra classificar por
+                        # status depois (não re-adivinhar por substring).
+                        _status = getattr(e, "status_code", None)
+                        _tag = f"[status={_status}] " if _status is not None else ""
+                        err_msg = f"{_tag}{str(e)[:200]}"
                         dxf_errors.append(f"{os.path.basename(dxf_path)}: {err_msg}")
                         jobs.update_field(job_id, current_step=f"Erro IA (DXF): {err_msg}")
                         print(f"Erro Claude DXF: {e}")
@@ -4633,29 +4698,36 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # de "troque o arquivo".
             ai_errors = sheet_errors + dxf_errors
             if ai_errors:
-                # NÃO culpar o provedor quando o erro é PERMANENTE nosso: 400
-                # invalid_request (ex.: surrogate quebrado no texto do CAD) não
-                # é "sobrecarga" — reprocessar não resolvia e o cliente ficava
-                # em loop (caso Rodrigo 19/07). A raiz foi corrigida (scrub em
-                # llm_retry), mas se algo assim voltar, a mensagem é honesta.
-                _errblob = " ".join(str(e) for e in ai_errors).lower()
-                _permanente = any(t in _errblob for t in (
-                    "invalid_request", "invalid high surrogate", "400 -",
-                    "invalid json", "request body is not valid"))
-                if _permanente:
+                # Classificação HONESTA (QW2, 20/07): só chamar de "provedor
+                # sobrecarregado" com PROVA de transitório (429/529/timeout). O
+                # DEFAULT deixou de ser "sobrecarga" — erro desconhecido/permanente
+                # (404 de model-id errado, 400 invalid_request, surrogate) vira
+                # mensagem honesta e NÃO casa o _TRANSIENT_ERR_RX, então NÃO entra
+                # em auto-retry infinito — era exatamente esse loop que prendeu o
+                # Rodrigo (19/07). Classificador único em llm_retry.classify_error_text.
+                from llm_retry import classify_error_text
+                _errblob = " ".join(str(e) for e in ai_errors)
+                _verdict = classify_error_text(_errblob)
+                if _verdict == "transient":
+                    # PROVA de sobrecarga/timeout — é do provedor, reprocessar resolve.
                     raise RuntimeError(
-                        "⚠ Tivemos um problema técnico ao ler o texto deste "
-                        "projeto (um caractere inválido no arquivo do CAD). Já "
-                        "estamos de olho nisso do nosso lado. Reprocesse — se "
-                        "persistir, fale com o suporte pelo botão 'Reportar "
-                        "problema' que a gente resolve rápido."
+                        "⚠ Os servidores de IA estavam sobrecarregados neste "
+                        "momento — é um problema temporário do provedor, NÃO do "
+                        "seu arquivo. O sistema já tentou sozinho várias vezes "
+                        "(alguns minutos) antes de desistir. É só reprocessar daqui "
+                        "a alguns minutos — é grátis e não conta no seu limite."
                     )
+                # permanent OU unknown: NUNCA culpar o provedor sem prova. Mensagem
+                # honesta — problema técnico do nosso lado, reprocessável, com suporte.
+                _low = _errblob.lower()
+                _detalhe = ("um caractere inválido no arquivo do CAD"
+                            if ("surrogate" in _low or "invalid high surrogate" in _low)
+                            else "um problema técnico do nosso lado")
                 raise RuntimeError(
-                    "⚠ Os servidores de IA estavam sobrecarregados neste "
-                    "momento — é um problema temporário do provedor, NÃO do "
-                    "seu arquivo. O sistema já tentou sozinho várias vezes "
-                    "(alguns minutos) antes de desistir. É só reprocessar daqui "
-                    "a alguns minutos — é grátis e não conta no seu limite."
+                    f"⚠ Tivemos um problema técnico ao processar este projeto "
+                    f"({_detalhe}). Já estamos de olho nisso do nosso lado. "
+                    f"Reprocesse — se persistir, fale com o suporte pelo botão "
+                    f"'Reportar problema' que a gente resolve rápido."
                 )
             else:
                 # A IA rodou sem erro mas não achou nada quantificável.
@@ -8227,9 +8299,17 @@ async def estimate_price(files: list[UploadFile] = File(...)):
             with open(p, "wb") as out:
                 out.write(await f.read())
             saved_paths.append(p)
-        from pricing import estimate_for_files
+        from pricing import estimate_for_files, precheck_warnings
         result = estimate_for_files(saved_paths)
-        return {"status": "ok", **result}
+        # QW5 (20/07): precheck barato ANTES de pagar, reaproveitando os arquivos
+        # que já estão em disco aqui (antes do finally apagar). Best-effort —
+        # se o precheck falhar, o preço sai igual (warnings=[]).
+        try:
+            warnings = precheck_warnings(saved_paths)
+        except Exception as _pe:
+            print(f"[estimate] precheck falhou (não crítico): {_pe}")
+            warnings = []
+        return {"status": "ok", **result, "warnings": warnings}
     finally:
         # Limpa
         for p in saved_paths:
