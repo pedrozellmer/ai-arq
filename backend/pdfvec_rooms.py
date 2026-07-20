@@ -31,7 +31,12 @@ Fechamento de ambientes (melhorias 19/07, A/B em 28 pranchas reais):
   - ponte de vao de porta (bridge_gaps_m, 2 estagios): so' dispara quando a
     leitura pura mede quase nada, e so' e' adotada se medir MAIS;
   - guarda BRIDGE_PERIM_FRAC: sala que depende de ponte em >25% do perimetro
-    e' descartada — fechamento honesto ou nada (regra nº 1).
+    e' descartada — fechamento honesto ou nada (regra nº 1);
+  - DEDUPE (_dedupe_rooms): faces aninhadas/sobrepostas (IoU ou containment
+    > DUP_OVERLAP) viram UMA — vence o contorno com menos ponte;
+  - FILTRO DE MALHA (_drop_lattice): clusters de 4+ faces que dividem a MESMA
+    linha entre si sao malha de anotacao particionando papel vazio (a
+    superdetecao "140 salas" da prancha de demolicao), nao ambientes.
 
 Uso:
     from pdfvec_rooms import detect_rooms
@@ -87,6 +92,28 @@ BRIDGE_PERIM_FRAC: float = 0.25
 # 19/07: ponte em prancha que ja fecha bem DERRUBA a medicao, ex. 21->17
 # salas na 225.AFS.201 — por isso nunca pontear incondicionalmente).
 UNDERDETECT_M2: float = 20.0
+
+# ── dedupe + filtro de malha (melhorias 19/07 tarde, A/B em 28 pranchas) ─────
+# DEDUPE: faces quase identicas (aninhadas entre as bandas das duas linhas de
+# uma parede, ou repetidas entre passadas) => fica UMA. Criterio: sobreposicao
+# (IoU, ou intersecao/menor — cobre containment) acima de DUP_OVERLAP.
+# Vence o contorno mais honesto: menor fracao de ponte; empate = menor area
+# (o anel interno e' o piso de verdade; o externo inclui a parede).
+DUP_OVERLAP: float = 0.8
+# FILTRO DE MALHA: a superdetecao real do gabarito (DEMOLIR: "140 salas"/
+# 1.839 m²) NAO e' sala sobreposta — e' a malha de anotacao (linhas de cota,
+# eixos, hachura de demolicao) PARTICIONANDO papel vazio em celulas de
+# 1,5-500 m². Assinatura estrutural (medida nas 28 pranchas): celulas de
+# malha dividem a MESMA linha com as vizinhas (aresta 1-D compartilhada);
+# salas reais nunca — entre duas salas sempre existe a banda da parede.
+# Celulas formam CLUSTERS grandes (5-40 faces coladas nas pranchas ruins);
+# pranchas boas tem no maximo pares/trios (o trio da AFS.201 contem a sala
+# real de 43,3 m² — por isso o piso de cluster e' 4, nunca menos).
+# Aresta do grafo: >20% do menor anel. 0.25 deixava passar celula QUADRADA
+# que divide exatamente 1 lado (= 25% cravado); 0.20 nao muda nada nas
+# pranchas boas do corpus (clusters continuam <= 3) e pega o caso quadrado.
+LATTICE_SHARED_FRAC: float = 0.20
+LATTICE_MIN_CLUSTER: int = 4        # 4+ faces coladas em cadeia = malha
 
 
 def _curve_pts_bottom_up(curve: dict, page_height: float) -> list[tuple[float, float]]:
@@ -311,12 +338,122 @@ def _polygonize_faces(
     return list(polygonize(merged)), bridges
 
 
+def _dedupe_rooms(
+    rooms: list[tuple[float, Polygon, float]],
+) -> tuple[list[tuple[float, Polygon, float]], int]:
+    """Dedupe de faces quase identicas: containment ou IoU > DUP_OVERLAP.
+
+    rooms = [(area_m2, shell, bridge_frac)]. Faces sobrepostas/aninhadas
+    (bandas das duas linhas de uma parede; repeticao entre passadas) formam
+    grupos por union-find; de cada grupo fica UMA — a de contorno mais
+    honesto: menor fracao de ponte no perimetro; empate = menor area (anel
+    interno = piso real). Razoes calculadas em pt² (livres de escala).
+    Retorna (mantidas, n_descartadas).
+    """
+    n = len(rooms)
+    if n < 2:
+        return rooms, 0
+    shells = [r[1] for r in rooms]
+    tree = STRtree(shells)
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(n):
+        for j in tree.query(shells[i], predicate="intersects"):
+            j = int(j)
+            if j <= i:
+                continue
+            try:
+                inter = shells[i].intersection(shells[j]).area
+            except Exception:
+                continue
+            ai, aj = shells[i].area, shells[j].area
+            if ai <= 0 or aj <= 0 or inter <= 0:
+                continue
+            iou = inter / (ai + aj - inter)
+            if iou > DUP_OVERLAP or inter > DUP_OVERLAP * min(ai, aj):
+                parent[find(i)] = find(j)
+
+    groups: dict[int, list[int]] = {}
+    for i in range(n):
+        groups.setdefault(find(i), []).append(i)
+    kept: list[tuple[float, Polygon, float]] = []
+    for members in groups.values():
+        # contorno mais honesto: menor ponte; empate = menor area
+        best = min(members, key=lambda k: (rooms[k][2], rooms[k][0]))
+        kept.append(rooms[best])
+    return kept, n - len(kept)
+
+
+def _drop_lattice(
+    rooms: list[tuple[float, Polygon, float]],
+) -> tuple[list[tuple[float, Polygon, float]], int]:
+    """Descarta CLUSTERS de malha de anotacao (linhas de cota/eixo/hachura
+    particionando papel vazio — a superdetecao "140 salas" da DEMOLIR).
+
+    Assinatura: celulas de malha compartilham ARESTA 1-D com as vizinhas
+    (> LATTICE_SHARED_FRAC do menor anel); sala real tem banda de parede no
+    meio (nunca a mesma linha). Clusters com >= LATTICE_MIN_CLUSTER faces
+    coladas em cadeia sao malha => descartados inteiros. Pares/trios ficam
+    (na AFS.201 um trio colado contem a sala real de 43,3 m²).
+
+    Salvaguarda (regra do produto: prancha que media nao pode zerar): se o
+    filtro descartasse TODAS as salas, ele se abstem e devolve como estava.
+    Retorna (mantidas, n_descartadas).
+    """
+    n = len(rooms)
+    if n < LATTICE_MIN_CLUSTER:
+        return rooms, 0
+    rings = [r[1].exterior for r in rooms]
+    lens = [ring.length for ring in rings]
+    tree = STRtree(rings)
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(n):
+        for j in tree.query(rings[i], predicate="intersects"):
+            j = int(j)
+            if j <= i:
+                continue
+            try:
+                inter = rings[i].intersection(rings[j])
+            except Exception:
+                continue
+            shared = 0.0
+            if inter.geom_type == "LineString":
+                shared = inter.length
+            elif hasattr(inter, "geoms"):
+                shared = sum(g.length for g in inter.geoms
+                             if g.geom_type == "LineString")
+            if shared > LATTICE_SHARED_FRAC * min(lens[i], lens[j]):
+                parent[find(i)] = find(j)
+
+    sizes: dict[int, int] = {}
+    for i in range(n):
+        sizes[find(i)] = sizes.get(find(i), 0) + 1
+    kept = [rooms[i] for i in range(n) if sizes[find(i)] < LATTICE_MIN_CLUSTER]
+    if not kept:
+        return rooms, 0     # abster de abster: nunca zerar a prancha aqui
+    return kept, n - len(kept)
+
+
 def _middle_layer(
     faces: list[Polygon],
     m_per_pt: float,
     min_m2: float,
     max_m2: float,
     bridges: Optional[list[LineString]] = None,
+    prune_meta: Optional[dict] = None,
 ) -> list[dict]:
     """Resolve o aninhamento: descarta envoltorias e mobiliario, fica o ambiente.
 
@@ -334,7 +471,8 @@ def _middle_layer(
     bridge_tree: Optional[STRtree] = None
     if bridges:
         bridge_tree = STRtree(bridges)
-    cands: list[tuple[float, Polygon, Polygon]] = []  # (area_m2_shell, shell, face)
+    # (area_m2_shell, shell, face, fracao_de_ponte_no_perimetro)
+    cands: list[tuple[float, Polygon, Polygon, float]] = []
     for f in faces:
         try:
             shell = Polygon(f.exterior)
@@ -343,6 +481,7 @@ def _middle_layer(
         a = shell.area * sq
         if not (min_m2 <= a <= max_m2):
             continue
+        bfrac = 0.0
         if bridge_tree is not None:
             ring = shell.exterior
             # faixa fina em volta do anel: mede quanto do contorno é ponte
@@ -353,9 +492,10 @@ def _middle_layer(
                     blen += bridges[int(bi)].intersection(band).length
                 except Exception:
                     continue
-            if blen > BRIDGE_PERIM_FRAC * ring.length:
+            bfrac = blen / max(ring.length, 1e-9)
+            if bfrac > BRIDGE_PERIM_FRAC:
                 continue  # "sala" feita de ponte => abstém
-        cands.append((a, shell, f))
+        cands.append((a, shell, f, bfrac))
     if not cands:
         return []
 
@@ -367,7 +507,7 @@ def _middle_layer(
     # filhos estritos de cada candidato (ponto-representante dentro do shell,
     # com area menor — faces do polygonize nao se sobrepoem em interior)
     children: list[list[int]] = [[] for _ in cands]
-    for i, (a_i, shell_i, _f) in enumerate(cands):
+    for i, (a_i, shell_i, _f, _bf) in enumerate(cands):
         for j in tree.query(shell_i, predicate="contains"):
             j = int(j)
             if j != i and cands[j][0] < a_i * 0.98:
@@ -375,7 +515,7 @@ def _middle_layer(
 
     accepted: list[int] = []
     accepted_shells: list[Polygon] = []
-    for i, (a_i, shell_i, _f) in enumerate(cands):
+    for i, (a_i, shell_i, _f, _bf) in enumerate(cands):
         # mobiliario: dentro de um ambiente ja aceito (aceitos vem antes, sao maiores)
         rep = reps[i]
         if any(s.contains(rep) for s in accepted_shells):
@@ -388,9 +528,16 @@ def _middle_layer(
         accepted.append(i)
         accepted_shells.append(shell_i)
 
+    # dedupe (faces aninhadas/sobrepostas => 1) + filtro de malha de anotacao
+    kept = [(cands[i][0], cands[i][1], cands[i][3]) for i in accepted]
+    kept, n_dup = _dedupe_rooms(kept)
+    kept, n_lat = _drop_lattice(kept)
+    if prune_meta is not None:
+        prune_meta["n_dedup"] = n_dup
+        prune_meta["n_lattice"] = n_lat
+
     rooms: list[dict] = []
-    for i in accepted:
-        a, shell, _f = cands[i]
+    for a, shell, _bf in kept:
         cx, cy = shell.centroid.x, shell.centroid.y
         x0, y0, x1, y1 = shell.bounds
         rooms.append({
@@ -453,9 +600,11 @@ def detect_rooms(
     m_per_pt = PT_TO_M * float(scale_denominator)
 
     faces, bridges = _polygonize_faces(segs, bridge_gaps_pt=bridge_gaps_pt)
-    rooms = _middle_layer(faces, m_per_pt, min_m2, max_m2, bridges=bridges)
+    prune: dict = {}
+    rooms = _middle_layer(faces, m_per_pt, min_m2, max_m2, bridges=bridges,
+                          prune_meta=prune)
     meta = {"stage": "ponte_fixa" if bridge_gaps_pt > 0 else "puro",
-            "n_bridges": len(bridges)}
+            "n_bridges": len(bridges), **prune}
 
     # 2º estagio (conservador): SO' quando a leitura pura mediu quase nada
     # (< UNDERDETECT_M2 — contorno aberto). Vao de porta abre o ambiente; a
@@ -467,11 +616,13 @@ def detect_rooms(
     if total_puro < UNDERDETECT_M2 and bridge_gaps_m > 0 and bridge_gaps_pt <= 0:
         gap_pt = bridge_gaps_m / m_per_pt
         faces2, bridges2 = _polygonize_faces(segs, bridge_gaps_pt=gap_pt)
-        rooms2 = _middle_layer(faces2, m_per_pt, min_m2, max_m2, bridges=bridges2)
+        prune2: dict = {}
+        rooms2 = _middle_layer(faces2, m_per_pt, min_m2, max_m2,
+                               bridges=bridges2, prune_meta=prune2)
         if sum(r["area_m2"] for r in rooms2) > total_puro:
             rooms = rooms2
             meta = {"stage": "ponte_porta", "n_bridges": len(bridges2),
-                    "gap_pt": round(gap_pt, 1)}
+                    "gap_pt": round(gap_pt, 1), **prune2}
 
     if return_meta:
         return rooms, meta
