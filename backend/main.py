@@ -4633,8 +4633,23 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # de "troque o arquivo".
             ai_errors = sheet_errors + dxf_errors
             if ai_errors:
-                # A IA falhou em ao menos uma prancha/DXF — erro técnico, vale
-                # reprocessar (pode ter sido sobrecarga/timeout passageiro).
+                # NÃO culpar o provedor quando o erro é PERMANENTE nosso: 400
+                # invalid_request (ex.: surrogate quebrado no texto do CAD) não
+                # é "sobrecarga" — reprocessar não resolvia e o cliente ficava
+                # em loop (caso Rodrigo 19/07). A raiz foi corrigida (scrub em
+                # llm_retry), mas se algo assim voltar, a mensagem é honesta.
+                _errblob = " ".join(str(e) for e in ai_errors).lower()
+                _permanente = any(t in _errblob for t in (
+                    "invalid_request", "invalid high surrogate", "400 -",
+                    "invalid json", "request body is not valid"))
+                if _permanente:
+                    raise RuntimeError(
+                        "⚠ Tivemos um problema técnico ao ler o texto deste "
+                        "projeto (um caractere inválido no arquivo do CAD). Já "
+                        "estamos de olho nisso do nosso lado. Reprocesse — se "
+                        "persistir, fale com o suporte pelo botão 'Reportar "
+                        "problema' que a gente resolve rápido."
+                    )
                 raise RuntimeError(
                     "⚠ Os servidores de IA estavam sobrecarregados neste "
                     "momento — é um problema temporário do provedor, NÃO do "

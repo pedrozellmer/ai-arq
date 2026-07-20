@@ -36,8 +36,48 @@ except ImportError:
     _HAS_ANTHROPIC = False
 
 
+def _clean_str(s: str) -> str:
+    """Remove surrogates soltos / bytes não-codificáveis em UTF-8. Fast-path:
+    string sã volta intacta. CAD brasileiro às vezes tem MTEXT com surrogate
+    órfão (lixo de encoding) → a API responde 400 'invalid high surrogate' e o
+    job inteiro morre disfarçado de 'IA sobrecarregada' (caso Rodrigo 19/07)."""
+    try:
+        s.encode("utf-8")
+        return s
+    except UnicodeEncodeError:
+        return s.encode("utf-8", "ignore").decode("utf-8", "ignore")
+
+
+def _scrub_payload(kwargs: dict) -> dict:
+    """Limpa recursivamente todo texto de messages/system antes do envio.
+    Imagens (base64 ascii) passam pelo fast-path sem alteração."""
+    def _walk(obj):
+        if isinstance(obj, str):
+            return _clean_str(obj)
+        if isinstance(obj, list):
+            return [_walk(x) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _walk(v) for k, v in obj.items()}
+        return obj
+    for _k in ("messages", "system"):
+        if _k in kwargs:
+            kwargs[_k] = _walk(kwargs[_k])
+    return kwargs
+
+
+def _is_bad_request(exc: Exception) -> bool:
+    """400 invalid_request — erro PERMANENTE nosso (payload inválido), NUNCA
+    'sobrecarga'. Não deve ser rotulado como transitório nem re-tentado à toa."""
+    if _HAS_ANTHROPIC and isinstance(exc, anthropic.APIStatusError):
+        if getattr(exc, "status_code", None) == 400:
+            return True
+    return "invalid_request_error" in str(exc) or "invalid high surrogate" in str(exc)
+
+
 def _is_retryable(exc: Exception) -> bool:
     """True se a exceção é transitória e vale retentar."""
+    if _is_bad_request(exc):
+        return False  # 400 é nosso; retentar só empurra o mesmo lixo de novo
     if not _HAS_ANTHROPIC:
         return False
 
@@ -110,6 +150,7 @@ def call_with_retry(
     Raises:
         A última exceção, se todas as tentativas falharem.
     """
+    kwargs = _scrub_payload(kwargs)  # limpa surrogates antes do 1º envio
     last_exc: Exception | None = None
     delay = base_delay
 
@@ -161,6 +202,7 @@ def call_with_retry_stream(
 
     Retorna o Message FINAL (mesmo formato de messages.create — .content[0].text).
     """
+    kwargs = _scrub_payload(kwargs)  # limpa surrogates antes do 1º envio
     last_exc: Exception | None = None
     delay = base_delay
 
