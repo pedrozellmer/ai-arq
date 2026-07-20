@@ -477,11 +477,22 @@ def count_pillars(extraction) -> dict | None:
     for d in por_secao.values():
         d["nomes"] = sorted(set(d["nomes"]))
 
+    # Blocos que TÊM 'pilar' no nome/layer mas NÃO são o pilar de concreto:
+    # eixos, hachura (rayado), cota, texto, tabela, símbolo. Contá-los inflava
+    # o total (caso Luciano: 'Eixos do pilar'=136 + 'RAYADO Pxx' → 184 falsos).
+    _BLOCO_NAO_PILAR = (
+        "EIXO", "RAYADO", "HACH", "HATCH", "COTA", "TEXTO", "TABELA", "QUADRO",
+        "TITULO", "TÍTULO", "LEGENDA", "SIMBOLO", "SÍMBOLO", "CARIMBO", "NORTE",
+        "SETA", "NIVEL", "NÍVEL", "ETIQUETA",
+    )
     blocos = []
     for b in getattr(extraction, "blocks", None) or []:
         bname = getattr(b, "name", "") or ""
         blayer = getattr(b, "layer", "") or ""
-        if _has_token(blayer, _PILAR_TOKENS) or "PILAR" in bname.upper():
+        _bn_up = bname.upper()
+        if any(tok in _bn_up for tok in _BLOCO_NAO_PILAR):
+            continue  # eixo / hachura / anotação — não é pilar de concreto medido
+        if _has_token(blayer, _PILAR_TOKENS) or "PILAR" in _bn_up:
             blocos.append({"nome": bname, "qtd": int(getattr(b, "count", 0) or 0)})
 
     total = len(kept) + sum(x["qtd"] for x in blocos)
