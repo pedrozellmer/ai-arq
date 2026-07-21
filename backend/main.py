@@ -10480,6 +10480,42 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
             rows.append({**_base, "event": "project_done", "created_at": _cp})
         elif _st == "error":
             rows.append({**_base, "event": "project_error", "created_at": _cp or _ca})
+
+    # ── Signups do AUTH (3ª fonte) ────────────────────────────────────────
+    # usage_events e projects não cobrem quem CRIOU CONTA mas não fez mais nada
+    # (cadastro incompleto: conta Google/email criada, perfil nunca completado) —
+    # ficava INVISÍVEL na Atividade. Puxa os usuários do auth e injeta um evento
+    # 'signup_created' por conta criada na janela. Best-effort — nunca derruba o
+    # painel. (feedback Pedro 21/07: um incompleto de hoje não aparecia.)
+    _since_dt = datetime.now(timezone.utc) - timedelta(days=days)
+    try:
+        aurl = f"{SUPABASE_URL}/auth/v1/admin/users?per_page=200&page=1"
+        areq = _urs.Request(aurl, method="GET")
+        areq.add_header("apikey", SUPABASE_KEY)
+        areq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _adata = _json.loads(_urs.urlopen(areq, timeout=20).read().decode("utf-8"))
+        _ausers = _adata.get("users", []) if isinstance(_adata, dict) else (_adata or [])
+    except Exception as _ae:
+        print(f"[activity] auth users falhou (não crítico): {_ae}")
+        _ausers = []
+    for _au in _ausers:
+        _acreated = _au.get("created_at") or ""
+        try:
+            _adt = datetime.fromisoformat(_acreated.replace("Z", "+00:00"))
+            if _adt.tzinfo is None:
+                _adt = _adt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if _adt < _since_dt:
+            continue
+        rows.append({
+            "event": "signup_created",
+            "user_email": (_au.get("email") or "").strip(),
+            "user_id": _au.get("id") or "",
+            "job_id": "", "path": "", "meta": {},
+            "created_at": _acreated,
+        })
+
     rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
 
     # Tira as contas internas/do Pedro do painel: ele entra todo dia e dominaria
