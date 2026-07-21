@@ -3828,15 +3828,39 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # segura passa por emagrecimento streaming (iterdxf) que
                         # mantém só o que o motor mede — em vez de recusar ou
                         # estourar a memória. Falhou/não rendeu → segue original.
+                        #
+                        # TIMEOUT DE EXTRAÇÃO (21/07, incidente Everton): um DXF gigante
+                        # de hospital pendurava extract_from_file por ~20min — o job travava
+                        # e segurava o _JOB_SEMAPHORE (próximo upload ficava preso atrás).
+                        # Agora emagrecimento + parse + prompt rodam num worker com teto de
+                        # 240s; estourou → pula ESTA prancha (job segue) em vez de pendurar.
+                        import concurrent.futures as _cf
+                        def _extract_dxf_guarded(_p):
+                            try:
+                                from dxf_slim import emagrecer_dxf_se_preciso
+                                _s = emagrecer_dxf_se_preciso(_p)
+                                if _s:
+                                    _p = _s
+                            except Exception as _sl_e:
+                                print(f"[dxf-slim] pulando ({_sl_e})")
+                            _ext = extract_from_file(_p)
+                            return _ext, _ext.to_structured_prompt(), _p
+                        _tpe = _cf.ThreadPoolExecutor(max_workers=1)
+                        _fut = _tpe.submit(_extract_dxf_guarded, dxf_path)
                         try:
-                            from dxf_slim import emagrecer_dxf_se_preciso
-                            _slim = emagrecer_dxf_se_preciso(dxf_path)
-                            if _slim:
-                                dxf_path = _slim
-                        except Exception as _sl_e:
-                            print(f"[dxf-slim] pulando ({_sl_e})")
-                        extraction = extract_from_file(dxf_path)
-                        structured_text = extraction.to_structured_prompt()
+                            extraction, structured_text, dxf_path = _fut.result(timeout=240)
+                        finally:
+                            _tpe.shutdown(wait=False)  # nunca espera: thread pendurada não trava o job
+                    except _cf.TimeoutError:
+                        _bn_dxf = os.path.basename(dxf_path)
+                        print(f"[dxf] extração ESTOUROU 240s em {_bn_dxf} — pulando (job segue)")
+                        try:
+                            _log_error("dxf:extract-timeout",
+                                       f"{_bn_dxf}: extração de geometria > 240s (prancha grande/complexa)", job_id)
+                        except Exception:
+                            pass
+                        dxf_errors.append(f"{_bn_dxf}: a leitura da geometria demorou demais (prancha muito grande/pesada) — mande essa prancha isolada, ou reexporte só o pavimento que você precisa")
+                        continue
                     except Exception as _ex_dxf:
                         _bn_dxf = os.path.basename(dxf_path)
                         print(f"[dxf] extração falhou em {_bn_dxf}: {_ex_dxf}")
