@@ -5584,12 +5584,15 @@ async def process_files(
         user_id = jwt_user.get("id") or user_id
 
     # Teto de tamanho (segurança 16/07): rejeita upload gigante ANTES de ler os
-    # arquivos na RAM — o box do Render tem 2GB e um upload enorme de propósito
-    # sobrecarrega. Mesmo guarda do /add-file; o cap por-arquivo (DXF 150MB) já
-    # existe no motor.
+    # arquivos na RAM. Usuário comum ~300 MB; ADMIN (Pedro) ~700 MB pra entrega de
+    # cliente grande — ex.: projeto de 43 DXF de elétrica (21/07). O servidor hoje
+    # tem 25 GB (o comentário antigo dizia 2GB — desatualizado), então o teto maior
+    # pro admin é seguro. Mesmo guarda do /add-file; o cap por-arquivo (DXF 150MB)
+    # no motor segue valendo.
+    _max_up_mb = 700 if jwt_user.get("email", "").lower() == ADMIN_EMAIL else 320
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
-    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
-        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
+    if _clen and _clen.isdigit() and int(_clen) > _max_up_mb * 1024 * 1024:
+        raise HTTPException(413, f"Arquivos muito grandes (máx. ~{_max_up_mb} MB no total). Envie só as pranchas necessárias.")
 
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
@@ -11644,10 +11647,13 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         if _ext not in ("dwg", "dxf", "pdf"):
             raise HTTPException(400, f"'{_rn or 'arquivo'}': envie só DWG, DXF ou PDF.")
 
-    # Teto pelo Content-Length ANTES de ler tudo na memória (anti-OOM com upload gigante)
+    # Teto pelo Content-Length ANTES de ler tudo na memória (anti-OOM com upload
+    # gigante). Admin (Pedro) tem teto maior pra entregas grandes; comum ~300 MB.
+    _u_af = _get_user_from_request(request)
+    _max_up_mb = 700 if (_u_af and _u_af.get("email", "").lower() == ADMIN_EMAIL) else 320
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
-    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
-        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
+    if _clen and _clen.isdigit() and int(_clen) > _max_up_mb * 1024 * 1024:
+        raise HTTPException(413, f"Arquivos muito grandes (máx. ~{_max_up_mb} MB no total). Envie só as pranchas necessárias.")
 
     # Projeto original: tipologia/tipo + guarda contra reprocesso concorrente
     typology, ptype = "office", "arquitetura"
