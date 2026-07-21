@@ -255,14 +255,16 @@
   const referralSourceSelect = document.getElementById('referral_source');
   const referralDetailInput = document.getElementById('referral_detail');
 
-  // Mostra campo "detalhe" só pra indicação / outro (precisa de contexto)
+  // Mostra campo "detalhe" só pra indicação / outro (precisa de contexto) — e
+  // aí ele é OBRIGATÓRIO: "Outro"/"Indicação" sem detalhe não diz nada (não
+  // sabemos qual outro, nem quem indicou). A validação no submit cobra.
   referralSourceSelect.addEventListener('change', function () {
     const v = this.value;
     if (v === 'indicacao' || v === 'outro') {
       referralDetailInput.classList.remove('hidden');
       referralDetailInput.placeholder = (v === 'indicacao')
-        ? 'Quem indicou? (nome ou @ no Instagram)'
-        : 'Conta mais — onde nos viu?';
+        ? 'Quem indicou? (nome ou @ no Instagram) *'
+        : 'Conta mais — onde nos viu? *';
     } else {
       referralDetailInput.classList.add('hidden');
       referralDetailInput.value = '';
@@ -479,6 +481,18 @@
     if (!referralSourceSelect.value) {
       showError('Por favor, informe como nos conheceu.');
       referralSourceSelect.focus();
+      return;
+    }
+
+    // "Outro" e "Indicação" EXIGEM o detalhe — senão a resposta não diz nada
+    // (não sabemos qual "outro", nem quem indicou).
+    const _refSrc = referralSourceSelect.value;
+    if ((_refSrc === 'outro' || _refSrc === 'indicacao') && !referralDetailInput.value.trim()) {
+      showError(_refSrc === 'indicacao'
+        ? 'Conta pra gente quem indicou (nome ou @ no Instagram).'
+        : 'Conta pra gente onde nos conheceu.');
+      referralDetailInput.classList.remove('hidden');
+      referralDetailInput.focus();
       return;
     }
 
