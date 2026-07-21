@@ -5061,6 +5061,33 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 f"cota/quadro pra medir). Ela entra como BASE pros itens de área — confira antes de orçar."
             ]
             print(f"[area-informada] job={job_id}: usando área do cliente {_uta} m² (planta sem medição)")
+
+        # ── HONESTIDADE: Vision não mede geometria — zera m² INVENTADO (regra dura nº1) ──
+        # A IA de Vision (PDF) às vezes CHUTA metragem numa planta sem cota
+        # ("Forro Sala 52 m²") — número que parece medido mas é inventado (caso
+        # Catarina 20/07, decisão do Pedro: zerar). Zera a QUANTIDADE de itens de
+        # ÁREA/COMPRIMENTO que NÃO vieram de geometria DXF: o item continua como
+        # scaffold "a definir", sem número falso. O m² só sobrevive quando medido
+        # do CAD (origem 'dxf_geom') — pra PDF, o orçamentista preenche (ou manda
+        # DXF / informa a área). Contagens (un) e verbas (vb) não são tocadas.
+        _AREA_UNITS = {"m²", "m2", "m", "ml", "m³", "m3", "mts", "m2.", "m²."}
+        _blanked = 0
+        for _it in all_items:
+            _u = (getattr(_it, "unit", "") or "").strip().lower()
+            if _u in _AREA_UNITS and getattr(_it, "origem", "") != "dxf_geom":
+                if _it.quantity and _it.quantity > 0:
+                    _it.quantity = 0
+                    _obs = _it.observations or ""
+                    if "não medida" not in _obs.lower():
+                        _it.observations = (
+                            _obs + " | Área NÃO medida (lida de PDF por IA, não da geometria) — "
+                            "preencha a metragem, informe a área no upload ou envie o DXF pra medir."
+                        ).strip(" |")
+                    _blanked += 1
+        if _blanked:
+            print(f"[honestidade-m2] job={job_id}: zerei a quantidade de {_blanked} itens de área "
+                  f"não-medidos (Vision) — evita m² inventado (regra nº1)")
+
         for _fld, _reads in _area_readings.items():
             if len(set(_reads)) > 1:
                 print(f"[area-consensus] {_fld}: leituras={_reads} → "
