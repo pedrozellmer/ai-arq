@@ -3833,7 +3833,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # de hospital pendurava extract_from_file por ~20min — o job travava
                         # e segurava o _JOB_SEMAPHORE (próximo upload ficava preso atrás).
                         # Agora emagrecimento + parse + prompt rodam num worker com teto de
-                        # 240s; estourou → pula ESTA prancha (job segue) em vez de pendurar.
+                        # 900s (15min); estourou → pula ESTA prancha (job segue) em vez de
+                        # pendurar. Teto GENEROSO de propósito (servidor 25GB, 21/07): só
+                        # pega hang de verdade — prancha grande legítima leva minutos e conclui.
                         import concurrent.futures as _cf
                         def _extract_dxf_guarded(_p):
                             try:
@@ -3848,15 +3850,15 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         _tpe = _cf.ThreadPoolExecutor(max_workers=1)
                         _fut = _tpe.submit(_extract_dxf_guarded, dxf_path)
                         try:
-                            extraction, structured_text, dxf_path = _fut.result(timeout=240)
+                            extraction, structured_text, dxf_path = _fut.result(timeout=900)
                         finally:
                             _tpe.shutdown(wait=False)  # nunca espera: thread pendurada não trava o job
                     except _cf.TimeoutError:
                         _bn_dxf = os.path.basename(dxf_path)
-                        print(f"[dxf] extração ESTOUROU 240s em {_bn_dxf} — pulando (job segue)")
+                        print(f"[dxf] extração ESTOUROU 900s em {_bn_dxf} — pulando (job segue)")
                         try:
                             _log_error("dxf:extract-timeout",
-                                       f"{_bn_dxf}: extração de geometria > 240s (prancha grande/complexa)", job_id)
+                                       f"{_bn_dxf}: extração de geometria > 900s (prancha grande/complexa)", job_id)
                         except Exception:
                             pass
                         dxf_errors.append(f"{_bn_dxf}: a leitura da geometria demorou demais (prancha muito grande/pesada) — mande essa prancha isolada, ou reexporte só o pavimento que você precisa")
