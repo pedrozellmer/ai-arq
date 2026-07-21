@@ -2114,6 +2114,26 @@
       fileList.appendChild(div);
     });
 
+    // Reforço de DXF NO MOMENTO de subir (Pedro 21/07): adapta ao que o cliente
+    // escolheu — se mandou PDF/DWG, lembra que DXF MEDE de verdade; se é só DXF,
+    // elogia. cor+ícone+texto (daltonismo). Some quando ele troca os arquivos.
+    if (selectedFiles.length) {
+      const _semDxf = selectedFiles.some(f => !/\.dxf$/i.test(f.name));
+      const _rem = document.createElement('div');
+      if (_semDxf) {
+        _rem.className = 'flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-100 px-4 py-3';
+        _rem.innerHTML = '<span class="text-base shrink-0" aria-hidden="true">&#128161;</span>'
+          + '<p class="text-xs text-amber-800 leading-relaxed"><strong>Lembrete:</strong> em <strong>DXF</strong> a gente <strong>mede</strong> a geometria de verdade '
+          + '(n&uacute;mero <strong>medido</strong>, n&atilde;o estimado). Se puder, exporte suas pranchas em DXF antes de subir. '
+          + '<button type="button" onclick="openExportModal()" class="underline font-medium hover:text-amber-900">Como exportar DXF &rarr;</button></p>';
+      } else {
+        _rem.className = 'flex items-center gap-2.5 rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-2.5';
+        _rem.innerHTML = '<span class="text-base shrink-0" aria-hidden="true">&#10003;</span>'
+          + '<p class="text-xs text-emerald-800"><strong>DXF &mdash; &oacute;tima escolha!</strong> Vamos medir a geometria de verdade, n&atilde;o estimar.</p>';
+      }
+      fileList.appendChild(_rem);
+    }
+
     fileList.querySelectorAll('.btn-remove-file').forEach(btn => {
       btn.addEventListener('click', () => {
         const idx = parseInt(btn.getAttribute('data-idx'));
@@ -3501,19 +3521,22 @@
 
   // Cache de projetos pra filtro de busca
   let __projectsCache = [];
+  let __projectsPollTimer = null;  // auto-refresh enquanto tem projeto rodando
 
-  async function renderProjectHistory() {
+  async function renderProjectHistory(silent = false) {
     const loadingEl = document.getElementById('projects-loading');
     const tableWrap = document.getElementById('projects-table-wrap');
     const grid = document.getElementById('projects-grid');
     const searchWrap = document.getElementById('projects-search-wrap');
     const emptyEl = document.getElementById('projects-empty');
 
-    // Reset
-    emptyEl.classList.add('hidden');
-    tableWrap.classList.add('hidden');
-    searchWrap.classList.add('hidden');
-    loadingEl.classList.remove('hidden');
+    // Reset (pulado no auto-refresh silencioso pra não piscar a tela a cada 15s)
+    if (!silent) {
+      emptyEl.classList.add('hidden');
+      tableWrap.classList.add('hidden');
+      searchWrap.classList.add('hidden');
+      loadingEl.classList.remove('hidden');
+    }
 
     if (!currentUser || !currentUser.id) {
       loadingEl.innerHTML = '<p class="text-red-500">Usuário não autenticado</p>';
@@ -3526,10 +3549,11 @@
       const projects = data.projects || [];
       __backendProjects = projects;  // espelho compartilhado (isFirstProject)
 
-      loadingEl.classList.add('hidden');
+      if (!silent) loadingEl.classList.add('hidden');
 
       if (!projects.length) {
-        emptyEl.classList.remove('hidden');
+        if (__projectsPollTimer) { clearInterval(__projectsPollTimer); __projectsPollTimer = null; }
+        if (!silent) emptyEl.classList.remove('hidden');
         return;
       }
 
@@ -3546,6 +3570,17 @@
         }
       }
       grid.innerHTML = projects.map(p => renderProjectCard(p)).join('');
+
+      // Auto-refresh (Pedro 21/07): enquanto houver projeto RODANDO (na fila ou
+      // processando), atualiza a lista sozinha a cada 15s — o cliente vê virar
+      // "Pronto" ao vivo, sem recarregar. Para sozinho quando nada mais roda.
+      const _rodando = projects.some(p => p.status === 'queued' || p.status === 'processing');
+      if (_rodando) {
+        if (!__projectsPollTimer) __projectsPollTimer = setInterval(() => renderProjectHistory(true), 15000);
+      } else if (__projectsPollTimer) {
+        clearInterval(__projectsPollTimer);
+        __projectsPollTimer = null;
+      }
 
       // Selo de confiança (medido vs estimativa) — 1 fetch só pra todos os projetos
       (async () => {
