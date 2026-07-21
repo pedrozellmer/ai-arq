@@ -3866,6 +3866,32 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # multi-hachura — virou rede de segurança SEMPRE ligada (ver _multi_hatch_sums,
         # independe deste flag). Se um dia for reativar, exige nova revisão + teste real.
         _XCHECK_ON = os.environ.get("DXF_CONFIRM_CROSSCHECK", "0") == "1"
+
+        # ── CHECKPOINT: cache carregado UMA vez, serve DXF e PDF ───────────
+        # Só na RETOMADA automática (auto_resume>0) e fora do reprocesso manual:
+        # aí a prancha já analisada (DXF ou PDF) pula extração+IA. No 1º run o
+        # cache fica vazio (nada a reaproveitar), mas os checkpoints são SALVOS
+        # durante o run — pra existir se o servidor cair no meio. Antes só o
+        # caminho PDF salvava/lia; o DXF não guardava nada, então um job de 43
+        # DXF que caía refazia TUDO na retomada (caso perplan/Rafael 21/07).
+        _ckpt_cache = {}
+        try:
+            import urllib.request as _ur_ck
+            _qck = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                    f"&select=auto_resume_count,reprocess_count")
+            _rck = _ur_ck.Request(_qck, method="GET")
+            _rck.add_header("apikey", SUPABASE_KEY)
+            _rck.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _rows_ck = _json.loads(_ur_ck.urlopen(_rck, timeout=8).read().decode("utf-8"))
+            if _rows_ck and int(_rows_ck[0].get("auto_resume_count") or 0) > 0 \
+                    and int(_rows_ck[0].get("reprocess_count") or 0) == 0:
+                _ckpt_cache = _ckpt_load_all(job_id)
+                if _ckpt_cache:
+                    print(f"[ckpt] {job_id}: {len(_ckpt_cache)} prancha(s) com "
+                          f"análise pronta — retomada vai pular a IA nelas")
+        except Exception as _cke:
+            print(f"[ckpt] cache indisponível (segue do zero): {_cke}")
+
         if dxf_paths:
             # Análise DXF começa onde a conversão termina
             extract_start = conv_end_pct
@@ -3886,6 +3912,61 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
                     jobs.update_field(job_id, progress=dxf_base)
                     jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Extraindo {os.path.basename(dxf_path)}...")
+
+                    # ── CHECKPOINT DXF (buraco tapado 21/07): se esta prancha já
+                    # foi analisada num run anterior (retomada), restaura os itens
+                    # + contribuições salvos e PULA extração/IA (que é o caro). A
+                    # chave leva prefixo "dxfck_" pra nunca colidir com as do PDF
+                    # (que são "<stem>_p<n>"). Passa o stem CRU pro _ckpt_save (que
+                    # sanitiza 1x, igual o PDF) e sanitiza só no lookup — senão a
+                    # dupla-sanitização (o "__" colapsa pra "_") faz a chave não bater.
+                    _dxf_raw_stem = "dxfck_" + os.path.splitext(os.path.basename(dxf_path))[0]
+                    _dxf_stem = _sanitize_filename_for_storage(_dxf_raw_stem)
+                    if _dxf_stem in _ckpt_cache:
+                        _cp = _ckpt_cache[_dxf_stem]
+                        from models import BudgetItem as _BI, Confidence as _Conf
+                        _rest = 0
+                        for _r in (_cp.get("items") or []):
+                            try:
+                                dxf_items.append(_BI(
+                                    item_num=_r.get("item_num", "") or "",
+                                    description=_r.get("description", "") or "",
+                                    unit=_r.get("unit", "vb") or "vb",
+                                    quantity=float(_r.get("quantity") or 0),
+                                    observations=_r.get("observations", "") or "",
+                                    ref_sheet=_r.get("ref_sheet", "DXF") or "DXF",
+                                    confidence=_Conf(_r.get("confidence", "estimado") or "estimado"),
+                                    discipline=_r.get("discipline", "Complementares") or "Complementares",
+                                    origem=_r.get("origem", "dxf_geom") or "dxf_geom",
+                                ))
+                                _rest += 1
+                            except Exception:
+                                continue
+                        for _w in (_cp.get("xref_warnings") or []):
+                            xref_warnings.append(_w)
+                        project_data.warnings = (project_data.warnings or []) + list(_cp.get("pd_warnings") or [])
+                        if _cp.get("new_rooms"): project_data.new_rooms.extend(_cp["new_rooms"])
+                        if _cp.get("kept_elements"): project_data.kept_elements.extend(_cp["kept_elements"])
+                        if _cp.get("demolition_notes"): project_data.demolition_notes.extend(_cp["demolition_notes"])
+                        for _k, _vs in (_cp.get("area_readings") or {}).items():
+                            if _k in _area_readings:
+                                _area_readings[_k].extend(_vs)
+                        if _cp.get("name") and not project_data.name:
+                            project_data.name = _cp["name"]
+                        jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: análise já concluída, retomando ✓")
+                        print(f"[ckpt] {os.path.basename(dxf_path)}: {_rest} itens reaproveitados do checkpoint")
+                        continue
+                    # snapshot dos acumuladores ANTES de processar (pro checkpoint no fim)
+                    _snap = {
+                        "items": len(dxf_items),
+                        "xref": len(xref_warnings),
+                        "warn": len(project_data.warnings or []),
+                        "rooms": len(project_data.new_rooms or []),
+                        "kept": len(project_data.kept_elements or []),
+                        "demo": len(project_data.demolition_notes or []),
+                        "area": {_k: len(_v) for _k, _v in _area_readings.items()},
+                        "name": project_data.name or "",
+                    }
 
                     # 1. Extrair dados estruturados do DXF
                     # ISOLADO por-arquivo: se o ezdxf não parseia ESTA prancha (objeto
@@ -4468,6 +4549,39 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
                         print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
 
+                        # ── CHECKPOINT DXF: guarda os itens + contribuições desta
+                        # prancha pra retomada não recomeçar do zero. Só chega aqui
+                        # se a IA e o parse deram certo (falha cai no except abaixo,
+                        # sem checkpoint → re-tenta na retomada, como o PDF já fazia).
+                        try:
+                            def _ser_ck(_it):
+                                _cf = getattr(_it, "confidence", None)
+                                return {
+                                    "item_num": getattr(_it, "item_num", "") or "",
+                                    "description": getattr(_it, "description", "") or "",
+                                    "unit": getattr(_it, "unit", "") or "vb",
+                                    "quantity": float(getattr(_it, "quantity", 0) or 0),
+                                    "observations": getattr(_it, "observations", "") or "",
+                                    "ref_sheet": getattr(_it, "ref_sheet", "DXF") or "DXF",
+                                    "confidence": getattr(_cf, "value", None) or str(_cf or "estimado"),
+                                    "discipline": getattr(_it, "discipline", "Complementares") or "Complementares",
+                                    "origem": getattr(_it, "origem", "dxf_geom") or "dxf_geom",
+                                }
+                            _cp_payload = {
+                                "_kind": "dxf",
+                                "items": [_ser_ck(it) for it in dxf_items[_snap["items"]:]],
+                                "xref_warnings": list(xref_warnings[_snap["xref"]:]),
+                                "pd_warnings": list((project_data.warnings or [])[_snap["warn"]:]),
+                                "new_rooms": list((project_data.new_rooms or [])[_snap["rooms"]:]),
+                                "kept_elements": list((project_data.kept_elements or [])[_snap["kept"]:]),
+                                "demolition_notes": list((project_data.demolition_notes or [])[_snap["demo"]:]),
+                                "area_readings": {_k: list(_area_readings[_k][_snap["area"].get(_k, 0):]) for _k in _area_readings},
+                                "name": (project_data.name if (not _snap["name"] and project_data.name) else ""),
+                            }
+                            _ckpt_save(job_id, _dxf_raw_stem, _cp_payload)
+                        except Exception as _cpe:
+                            print(f"[ckpt] save DXF {os.path.basename(dxf_path)} falhou (segue): {_cpe}")
+
                     except Exception as e:
                         # Falha de IA neste DXF (sobrecarga/timeout/JSON inválido).
                         # Registra em dxf_errors pra o guard de 0-itens distinguir
@@ -4586,29 +4700,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     pass
         total = len(page_units)
 
-        # CHECKPOINT (19/07): em RETOMADA automática pós-restart, reaproveita
-        # a análise das pranchas que já tinham terminado (não paga a IA de
-        # novo, não reabre a janela pra outra queda). Reprocesso MANUAL
-        # (reprocess_count>0) ignora de propósito — lá o objetivo é rodar o
-        # motor NOVO na prancha inteira.
-        _ckpt_cache = {}
-        try:
-            import urllib.request as _ur_ck
-            _qck = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                    f"&select=auto_resume_count,reprocess_count")
-            _rck = _ur_ck.Request(_qck, method="GET")
-            _rck.add_header("apikey", SUPABASE_KEY)
-            _rck.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-            _rows_ck = _json.loads(_ur_ck.urlopen(_rck, timeout=8).read().decode("utf-8"))
-            if _rows_ck and int(_rows_ck[0].get("auto_resume_count") or 0) > 0 \
-                    and int(_rows_ck[0].get("reprocess_count") or 0) == 0:
-                _ckpt_cache = _ckpt_load_all(job_id)
-                if _ckpt_cache:
-                    print(f"[ckpt] {job_id}: {len(_ckpt_cache)} prancha(s) com "
-                          f"análise pronta — retomada vai pular a IA nelas")
-        except Exception as _cke:
-            print(f"[ckpt] cache indisponível (segue do zero): {_cke}")
-
+        # CHECKPOINT: o cache (_ckpt_cache) já foi carregado UMA vez lá em cima,
+        # antes do bloco DXF — serve os dois loops (DXF e PDF). Em RETOMADA
+        # automática, prancha já analisada pula extração+IA; reprocesso MANUAL
+        # ignora de propósito (roda o motor novo na prancha inteira).
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             _disp = filename if page_count <= 1 else f"{filename} · pág {page_index+1}/{page_count}"
             step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
