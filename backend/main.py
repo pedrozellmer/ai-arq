@@ -5583,16 +5583,15 @@ async def process_files(
     if not user_id or user_id == "anonymous":
         user_id = jwt_user.get("id") or user_id
 
-    # Teto de tamanho (segurança 16/07): rejeita upload gigante ANTES de ler os
-    # arquivos na RAM. Usuário comum ~300 MB; ADMIN (Pedro) ~700 MB pra entrega de
-    # cliente grande — ex.: projeto de 43 DXF de elétrica (21/07). O servidor hoje
-    # tem 25 GB (o comentário antigo dizia 2GB — desatualizado), então o teto maior
-    # pro admin é seguro. Mesmo guarda do /add-file; o cap por-arquivo (DXF 150MB)
-    # no motor segue valendo.
-    _max_up_mb = 700 if jwt_user.get("email", "").lower() == ADMIN_EMAIL else 320
+    # Teto de tamanho (anti-OOM): a instância Pro do Render tem 4 GB de RAM — o
+    # "25 GB" é DISCO, não memória. O backend BUFFERIZA o upload inteiro na RAM
+    # antes de processar, então upload gigante estoura os 4 GB e REINICIA o serviço
+    # pra TODOS. Incidente 21/07: cap subiu pra 700MB, um upload de 506MB ajudou a
+    # dar OOM → revertido pra 320MB pra todos (lotes de 6-8 pranchas cabem folgado).
+    # Cap por-arquivo (DXF 150MB) no motor segue valendo.
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
-    if _clen and _clen.isdigit() and int(_clen) > _max_up_mb * 1024 * 1024:
-        raise HTTPException(413, f"Arquivos muito grandes (máx. ~{_max_up_mb} MB no total). Envie só as pranchas necessárias.")
+    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
+        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
 
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
@@ -11648,12 +11647,11 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
             raise HTTPException(400, f"'{_rn or 'arquivo'}': envie só DWG, DXF ou PDF.")
 
     # Teto pelo Content-Length ANTES de ler tudo na memória (anti-OOM com upload
-    # gigante). Admin (Pedro) tem teto maior pra entregas grandes; comum ~300 MB.
-    _u_af = _get_user_from_request(request)
-    _max_up_mb = 700 if (_u_af and _u_af.get("email", "").lower() == ADMIN_EMAIL) else 320
+    # gigante). 320MB pra todos — RAM da instância é o gargalo (ver /api/process);
+    # o cap admin de 700MB (21/07) ajudou a dar OOM e foi revertido.
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
-    if _clen and _clen.isdigit() and int(_clen) > _max_up_mb * 1024 * 1024:
-        raise HTTPException(413, f"Arquivos muito grandes (máx. ~{_max_up_mb} MB no total). Envie só as pranchas necessárias.")
+    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
+        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
 
     # Projeto original: tipologia/tipo + guarda contra reprocesso concorrente
     typology, ptype = "office", "arquitetura"
