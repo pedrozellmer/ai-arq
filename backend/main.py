@@ -35,6 +35,7 @@ from processor import process_pdfs
 from analyzer import analyze_all_sheets
 from spreadsheet import generate_spreadsheet
 from instagram_webhook import router as instagram_router
+from whatsapp_notify import router as whatsapp_router, send_whatsapp_template
 from engine_rules import (
     salvage_truncated_json as _salvage_truncated_json,
     extract_balanced_obj as _extract_balanced_obj,
@@ -1007,6 +1008,7 @@ app.add_middleware(
 
 # ── Instagram Agent (desativado por padrão, ativar manualmente via /api/instagram/toggle) ──
 app.include_router(instagram_router)
+app.include_router(whatsapp_router)  # WhatsApp Cloud API (webhook); envio dormente até setar env
 
 # Armazenamento de jobs em arquivo JSON (sobrevive a restarts)
 import json as _json
