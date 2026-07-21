@@ -3511,6 +3511,76 @@ def _salvage_layout_ai_counts(client, file_paths, crops_dir):
     return out
 
 
+# ── Honestidade de ÁREA (regra dura nº1) ──────────────────────────────────────
+# Unidades tratadas como "área/medida" que a IA de Vision às vezes CHUTA num PDF
+# sem cota. Só o que veio da geometria do CAD (origem 'dxf_geom') é medido de fato.
+_AREA_UNITS_HONESTY = {"m²", "m2", "m", "ml", "m³", "m3", "mts", "m2.", "m²."}
+# Subconjunto: m² de verdade (superfície) — candidato a receber a área INFORMADA.
+_FLOOR_M2_UNITS = {"m²", "m2", "m2.", "m²."}
+# Superfícies HORIZONTAIS (piso/forro/laje/teto) — escalam com a área de piso.
+_FLOOR_AREA_KW = ("piso", "contrapiso", "forro", "laje", "regulariz",
+                  "impermeabiliz", "teto")
+# Exclui itens que têm palavra de área mas NÃO escalam com m² de piso
+# (dependem de perímetro/pé-direito): rodapé, parede, azulejo de parede.
+_FLOOR_AREA_BLOCK_KW = ("rodap", "parede", "azulej", "meia parede")
+
+
+def _is_floor_surface(desc: str) -> bool:
+    d = (desc or "").lower()
+    return any(k in d for k in _FLOOR_AREA_KW) and not any(b in d for b in _FLOOR_AREA_BLOCK_KW)
+
+
+def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "") -> tuple[int, int]:
+    """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
+
+    - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
+      SUPERFÍCIE HORIZONTAL (piso/forro/laje), PREENCHE com a área informada como
+      ESTIMADO (laranja), rotulado 'informado por você — não medido'. É o que o
+      cliente pediu ao informar a metragem: completar os itens de área com uma base
+      honesta (não é medição nossa, segue como estimativa a conferir).
+    - Caso contrário, ZERA a quantidade (Vision não mede geometria → evita m²
+      inventado, caso Catarina 20/07) e anota que a área não foi medida.
+
+    Contagens (un), verbas (vb) e itens medidos do CAD (origem 'dxf_geom') ficam
+    intocados. Devolve (n_preenchidos, n_zerados)."""
+    from models import Confidence
+    informado = (total_area_source == "informado") and (total_area or 0) > 0
+    filled = blanked = 0
+    for it in items:
+        if getattr(it, "origem", "") == "dxf_geom":
+            continue
+        u = (getattr(it, "unit", "") or "").strip().lower()
+        if u not in _AREA_UNITS_HONESTY:
+            continue
+        try:
+            q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            q = 0.0
+        if informado and u in _FLOOR_M2_UNITS and _is_floor_surface(getattr(it, "description", "")):
+            it.quantity = round(float(total_area), 2)
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            # tira aviso antigo "área NÃO medida" e põe o rótulo honesto da área informada
+            _segs = [s.strip() for s in (it.observations or "").split("|")
+                     if "não medida" not in s.lower() and "nao medida" not in s.lower()]
+            _segs.append("Área informada por você (não medida): assumido = área total do "
+                         "projeto. Confira antes de orçar.")
+            it.observations = " | ".join(s for s in _segs if s)
+            filled += 1
+        elif q > 0:
+            it.quantity = 0
+            _obs = it.observations or ""
+            if "não medida" not in _obs.lower():
+                it.observations = (
+                    _obs + " | Área NÃO medida (lida de PDF por IA, não da geometria) — "
+                    "preencha a metragem, informe a área no upload ou envie o DXF pra medir."
+                ).strip(" |")
+            blanked += 1
+    return filled, blanked
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -5088,28 +5158,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
             ]
             print(f"[area-informada] job={job_id}: usando área do cliente {_uta} m² (planta sem medição)")
 
-        # ── HONESTIDADE: Vision não mede geometria — zera m² INVENTADO (regra dura nº1) ──
-        # A IA de Vision (PDF) às vezes CHUTA metragem numa planta sem cota
-        # ("Forro Sala 52 m²") — número que parece medido mas é inventado (caso
-        # Catarina 20/07, decisão do Pedro: zerar). Zera a QUANTIDADE de itens de
-        # ÁREA/COMPRIMENTO que NÃO vieram de geometria DXF: o item continua como
-        # scaffold "a definir", sem número falso. O m² só sobrevive quando medido
-        # do CAD (origem 'dxf_geom') — pra PDF, o orçamentista preenche (ou manda
-        # DXF / informa a área). Contagens (un) e verbas (vb) não são tocadas.
-        _AREA_UNITS = {"m²", "m2", "m", "ml", "m³", "m3", "mts", "m2.", "m²."}
-        _blanked = 0
-        for _it in all_items:
-            _u = (getattr(_it, "unit", "") or "").strip().lower()
-            if _u in _AREA_UNITS and getattr(_it, "origem", "") != "dxf_geom":
-                if _it.quantity and _it.quantity > 0:
-                    _it.quantity = 0
-                    _obs = _it.observations or ""
-                    if "não medida" not in _obs.lower():
-                        _it.observations = (
-                            _obs + " | Área NÃO medida (lida de PDF por IA, não da geometria) — "
-                            "preencha a metragem, informe a área no upload ou envie o DXF pra medir."
-                        ).strip(" |")
-                    _blanked += 1
+        # ── HONESTIDADE DE ÁREA (regra dura nº1) — helper _apply_area_honesty ──
+        # Vision (PDF) às vezes CHUTA metragem numa planta sem cota ("Forro Sala 52 m²")
+        # — número que parece medido mas é inventado (caso Catarina 20/07): ZERA.
+        # PORÉM, se o cliente INFORMOU a área (no upload ou depois), os itens de
+        # piso/forro/laje recebem essa área como ESTIMADO rotulado "informado por
+        # você" — completar os itens com base honesta, sem fingir medição. O m²
+        # medido de verdade (origem 'dxf_geom') nunca é tocado.
+        _n_fill, _blanked = _apply_area_honesty(
+            all_items, project_data.total_area,
+            getattr(project_data, "total_area_source", ""))
+        if _n_fill:
+            print(f"[honestidade-m2] job={job_id}: preenchi {_n_fill} itens de piso/forro/laje "
+                  f"com a área INFORMADA {project_data.total_area} m² (estimado, a conferir)")
         if _blanked:
             print(f"[honestidade-m2] job={job_id}: zerei a quantidade de {_blanked} itens de área "
                   f"não-medidos (Vision) — evita m² inventado (regra nº1)")
@@ -10061,6 +10122,153 @@ async def finalize_review(job_id: str, request: Request):
         "items_count": len(items),
         "download_url": f"/api/download/{job_id}",
         "storage_uploaded": _storage_ok,
+    }
+
+
+class InformAreaPayload(BaseModel):
+    area: float
+
+
+@app.post("/api/project/{job_id}/inform-area")
+async def inform_project_area(job_id: str, payload: InformAreaPayload, request: Request):
+    """Cliente informa a metragem DEPOIS do processamento, pra completar itens de
+    área que ficaram em branco porque a planta não tinha cota de área (caso layout,
+    ex. Catarina). NÃO reprocessa do zero (sem custo de IA, sem re-erro): reaproveita
+    os itens já salvos, preenche as superfícies horizontais (piso/forro/laje) com a
+    área informada — SEMPRE estimado (laranja) e rotulado 'informado por você, não
+    medido' (regra dura nº1, via _apply_area_honesty) — e regenera a planilha in-place
+    (mesmo projeto, sem criar cópia). Itens que não escalam com piso (pintura de
+    parede, rodapé) NÃO são preenchidos."""
+    _require_project_owner(request, job_id)
+    import urllib.request, urllib.error, json
+    from models import BudgetItem, Confidence, ProjectData
+    from spreadsheet import generate_spreadsheet
+
+    # 1) Validar área informada
+    try:
+        area = round(float(payload.area or 0), 2)
+    except (TypeError, ValueError):
+        area = 0
+    if area <= 0 or area > 1_000_000:
+        raise HTTPException(400, "Informe uma área válida em m² (maior que 0).")
+
+    # 2) Projeto + itens atuais (mesmo padrão do finalize_review)
+    try:
+        _, projects = _supa_rest_as_user(
+            request, "GET", f"/projects?job_id=eq.{job_id}&select=*", timeout=15)
+        projects = projects or []
+        if not projects:
+            raise HTTPException(404, "Projeto não encontrado")
+        proj = projects[0]
+    except HTTPException:
+        raise
+    except urllib.error.HTTPError as e:
+        raise HTTPException(500, f"Erro Supabase: {e}")
+
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+        body = json.dumps({"p_job_id": job_id}).encode('utf-8')
+        req = urllib.request.Request(url, data=body, method='POST')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+        req.add_header('Content-Type', 'application/json')
+        resp = urllib.request.urlopen(req, timeout=15)
+        rows = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        raise HTTPException(500, f"Erro ao buscar itens: {e}")
+
+    # 3) Reconstituir ProjectData (área = informada) + BudgetItems na MESMA ordem
+    #    (list_project_items vem ordenado por sort_order → re-persistir preserva ordem)
+    pd = ProjectData(
+        name=proj.get("project_name", "") or "Projeto",
+        total_area=area,
+        layout_area=proj.get("layout_area") or 0,
+    )
+    try:
+        pd.total_area_source = "informado"
+    except Exception:
+        pass
+
+    items = []
+    for r in rows:
+        try:
+            items.append(BudgetItem(
+                item_num=r.get("item_num", "") or "",
+                description=r.get("description", "") or "",
+                unit=r.get("unit", "vb") or "vb",
+                quantity=float(r.get("quantity") or 0),
+                observations=r.get("observations", "") or "",
+                ref_sheet=r.get("ref_sheet", "") or "",
+                confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
+                discipline=r.get("discipline", "Complementares") or "Complementares",
+            ))
+        except Exception:
+            continue
+
+    # 4) Preenche piso/forro/laje com a área informada (estimado, rotulado) — mesma
+    #    regra do motor. Itens em branco não-horizontais seguem em branco.
+    filled, _ = _apply_area_honesty(items, area, "informado")
+
+    # 5) Enriquecimento (TCPO + heurísticas) igual ao finalize + gerar xlsx in-place
+    typology = proj.get("typology") or "office"
+    try:
+        from tcpo_matcher import match_item, get_insumos
+        for it in items:
+            try:
+                ms = match_item(it.description, limit=3)
+                if ms:
+                    ms[0]['insumos'] = get_insumos(ms[0]['id'])
+                    it.tcpo_matches = ms
+            except Exception:
+                pass
+    except ImportError:
+        pass
+    try:
+        from market_heuristics import check_item_anomaly
+        for it in items:
+            try:
+                alertas = check_item_anomaly(it, typology=typology)
+                if alertas:
+                    sep = " | " if it.observations else ""
+                    it.observations = (it.observations or "") + sep + " ".join(alertas)
+            except Exception:
+                pass
+    except ImportError:
+        pass
+
+    work_dir = os.path.join(WORK_DIR, job_id)
+    os.makedirs(work_dir, exist_ok=True)
+    output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
+    generate_spreadsheet(pd, items, output_path, typology=typology)
+    _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
+
+    # 6) Persistir itens atualizados (revisão/planilha na tela refletem o preenchimento)
+    _persist_items_to_supabase(job_id, items)
+
+    # 7) Atualizar projeto: área informada + warning honesto (troca avisos antigos
+    #    de "informe a área" pra não duplicar)
+    _warn = (f"Área total de {area:.0f} m² INFORMADA POR VOCÊ (a planta não trazia cota "
+             f"pra medir). Preenchemos os itens de piso/forro/laje com essa base — "
+             f"confira antes de orçar. Pra medir de verdade, envie o DXF.")
+    _existing = proj.get("warnings") or []
+    if not isinstance(_existing, list):
+        _existing = []
+    _existing = [w for w in _existing
+                 if "não trazia" not in str(w) and "informe a área" not in str(w).lower()
+                 and "informe a metragem" not in str(w).lower()]
+    _supabase_update("projects", "job_id", job_id, {
+        "total_area": area,
+        "user_total_area": area,
+        "warnings": _existing + [_warn],
+    })
+
+    return {
+        "status": "ok",
+        "job_id": job_id,
+        "area": area,
+        "filled_count": filled,
+        "items_count": len(items),
+        "download_url": f"/api/download/{job_id}",
     }
 
 

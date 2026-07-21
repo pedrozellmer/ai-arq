@@ -191,6 +191,26 @@ function smartBack() {
     </div>
   </div>
 
+  <!-- Área inteligente: aparece SÓ quando a planta não tinha cota de área e há
+       itens de piso/forro/laje em branco. Pergunta a metragem DEPOIS pra completar
+       esses itens (sem inventar — fica estimado/laranja, informado por você). -->
+  <div id="area-prompt" class="hidden rounded-xl border-2 border-indigo-200 bg-indigo-50 p-5">
+    <div class="flex items-start gap-3">
+      <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
+      <div class="flex-1">
+        <h3 class="font-semibold text-indigo-900 mb-1">Sua planta não tinha cota de área</h3>
+        <p class="text-sm text-indigo-800 mb-3">Por isso os itens de <b>piso, forro e laje</b> ficaram em branco &mdash; a gente não inventa metragem. Se você souber a <b>área total do projeto</b>, informe abaixo pra completar esses itens. Eles ficam marcados como <b>&#9888; estimado (informado por você)</b>, pra conferir antes de orçar. Pra medir de verdade, envie o <b>DXF</b>.</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="area-input" class="sr-only">Área total em metros quadrados</label>
+          <input type="number" id="area-input" min="0" step="0.01" inputmode="decimal" placeholder="Ex: 120" class="w-32 px-3 py-2 rounded-lg border border-indigo-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <span class="text-sm text-indigo-700">m²</span>
+          <button type="button" id="area-submit" onclick="submitInformedArea()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">Completar itens de área</button>
+          <span id="area-msg" class="text-sm" aria-live="polite"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Dados do Projeto + Cliente Final — NO TOPO (de quem é o projeto vem primeiro) -->
   <div id="dados-card" class="rounded-xl border-2 border-indigo-200 bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
@@ -1259,6 +1279,7 @@ async function carregarStatsEntregas() {
   safeRun(() => renderHeader(proj), 'renderHeader');
   safeRun(() => renderMetrics(proj, items), 'renderMetrics');
   safeRun(() => renderWarnings(proj.warnings || []), 'renderWarnings');
+  safeRun(() => maybeShowAreaPrompt(proj, items), 'maybeShowAreaPrompt');
   safeRun(() => renderDates(proj), 'renderDates');
   safeRun(() => renderFiles(proj, items), 'renderFiles');
 
@@ -1506,6 +1527,7 @@ window.switchUploadTab = switchUploadTab;
       'proc-block',             // 2. estado vivo: processando (condicional)
       'erro-block',             // 3. estado vivo: erro (condicional)
       'proj-warnings',          // 4. avisos do motor (condicional)
+      'area-prompt',            // 4b. informe a metragem (condicional — planta sem cota)
       'dados-card',             // 5. dados do projeto/cliente (orientacao)
       'metadados-strip',        // 6. faixa compacta (tipologia/area)
       'raiox-card',             // 7. Raio-X (o HEROI da pagina)
@@ -2209,6 +2231,63 @@ function renderWarnings(warnings) {
   document.getElementById('proj-warnings-list').innerHTML = warnings.map(w =>
     `<li class="flex items-start gap-2"><span class="mt-0.5">⚠</span><span>${esc(w)}</span></li>`
   ).join('');
+}
+
+// Área inteligente — mostra o prompt SÓ quando: (a) o projeto não tem área medida
+// e (b) há item de área (m²) em branco marcado como "não medida". Aí o cliente
+// informa a metragem pra completar piso/forro/laje (estimado, informado por ele).
+const _AREA_M2_UI = ['m²', 'm2', 'm2.', 'm².'];
+function maybeShowAreaPrompt(proj, items) {
+  try {
+    const noArea = !proj.total_area || Number(proj.total_area) === 0;
+    if (!noArea) return;
+    const hasBlankArea = (items || []).some(it => {
+      const u = String(it.unit || '').toLowerCase().trim();
+      const q = Number(it.quantity || 0);
+      const o = String(it.observations || '').toLowerCase();
+      return _AREA_M2_UI.includes(u) && q === 0 &&
+        (o.includes('não medida') || o.includes('nao medida') ||
+         o.includes('informe a metragem') || o.includes('preencha a metragem'));
+    });
+    if (!hasBlankArea) return;
+    document.getElementById('area-prompt').classList.remove('hidden');
+  } catch (e) { console.warn('[area-prompt]', e); }
+}
+
+async function submitInformedArea() {
+  const inp = document.getElementById('area-input');
+  const btn = document.getElementById('area-submit');
+  const msg = document.getElementById('area-msg');
+  const val = parseFloat(String(inp.value || '').replace(',', '.'));
+  if (!val || val <= 0) {
+    msg.textContent = '⚠ Informe uma área válida (maior que 0).';
+    msg.className = 'text-sm text-amber-700';
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = '⏳ Completando...';
+  msg.className = 'text-sm text-indigo-700';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await fetch(`${API_BASE}/api/project/${jobId}/inform-area`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (session ? session.access_token : '')
+      },
+      body: JSON.stringify({ area: val })
+    });
+    if (!r.ok) { throw new Error(await r.text() || ('HTTP ' + r.status)); }
+    const data = await r.json();
+    msg.textContent = `✓ ${data.filled_count || 0} itens de área preenchidos. Recarregando...`;
+    msg.className = 'text-sm text-emerald-700';
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    console.error('[inform-area]', e);
+    msg.textContent = '✗ Não consegui completar agora. Tenta de novo.';
+    msg.className = 'text-sm text-red-700';
+    btn.disabled = false;
+  }
 }
 
 function renderDates(p) {
