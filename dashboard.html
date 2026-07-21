@@ -217,7 +217,7 @@
                 <span class="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white text-[11px] font-bold">1</span>
               </div>
               <p class="font-semibold text-gray-900 text-sm">Sobe a prancha</p>
-              <p class="text-xs text-gray-500">PDF, DWG ou DXF</p>
+              <p class="text-xs text-gray-500">DXF, DWG ou PDF</p>
             </div>
             <div class="rounded-xl border border-indigo-100 bg-white/70 p-4">
               <div class="flex items-center gap-2 mb-2">
@@ -246,7 +246,7 @@
               <span aria-hidden="true">👀</span> Ver um exemplo pronto
             </a>
           </div>
-          <p class="text-xs text-gray-500 mt-4">💡 Melhor resultado em <b>DWG ou DXF</b> — aí a gente mede a geometria de verdade. Sem arquivo agora? O exemplo mostra como a planilha sai.</p>
+          <p class="text-xs text-gray-500 mt-4">🥇 Melhor resultado em <b>DXF</b> (ou DWG) — aí a gente mede a geometria de verdade. Sem arquivo agora? O exemplo mostra como a planilha sai.</p>
         </div>
 
         <!-- Resumo do que a IA já fez (números REAIS, medidos do seu histórico) -->
@@ -295,7 +295,7 @@
             <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white text-lg" aria-hidden="true">➕</span>
             <div class="min-w-0">
               <p class="font-semibold text-gray-900 truncate">Novo projeto</p>
-              <p class="text-xs text-gray-500 truncate">Subir PDF/DWG/DXF</p>
+              <p class="text-xs text-gray-500 truncate">Subir DXF/DWG/PDF</p>
             </div>
           </button>
           <button onclick="switchTab('meus-projetos')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
@@ -342,7 +342,7 @@
               <p class="text-sm text-gray-600 mt-1">Se o AI.arq te ajudou, indicar é o maior elogio que você pode fazer. A mensagem já está pronta:</p>
               <!-- Mensagem: caixinha com botão de copiar no canto (padrão copy/paste) -->
               <div class="mt-3 relative">
-                <div id="indica-msg" class="rounded-xl border border-indigo-100 bg-white px-4 py-3 pr-24 text-sm text-gray-700 leading-relaxed">Tô usando o AI.arq pra tirar o quantitativo dos projetos: você sobe a prancha (PDF, DWG ou DXF) e em minutos sai a planilha, com cada item marcado como medido do CAD ou estimativa pra conferir, e referência SINAPI. O 1º projeto é grátis, sem cartão. Olha um exemplo real: https://ai.arq.br/exemplo.html</div>
+                <div id="indica-msg" class="rounded-xl border border-indigo-100 bg-white px-4 py-3 pr-24 text-sm text-gray-700 leading-relaxed">Tô usando o AI.arq pra tirar o quantitativo dos projetos: você sobe a prancha (DXF, DWG ou PDF) e em minutos sai a planilha, com cada item marcado como medido do CAD ou estimativa pra conferir, e referência SINAPI. O 1º projeto é grátis, sem cartão. Olha um exemplo real: https://ai.arq.br/exemplo.html</div>
                 <button type="button" onclick="indicaCopiarTexto(this)" aria-label="Copiar mensagem" class="absolute top-2 right-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white/95 hover:bg-gray-50 text-gray-600 text-xs font-medium shadow-sm transition">
                   <span aria-hidden="true">📋</span> Copiar
                 </button>
@@ -396,7 +396,7 @@
               <li>&#8226; Envie as <strong>pranchas principais</strong>: Arquitetura, Pisos, Forro, Pontos El&eacute;tricos, Demoli&ccedil;&atilde;o</li>
               <li>&#8226; Pranchas de <strong>Marcenaria</strong> e <strong>Mobili&aacute;rio</strong> complementam com itens sob medida</li>
               <li>&#8226; Para <strong>reformas</strong>, inclua o Layout Atual e o Layout Novo para comparativo</li>
-              <li>&#8226; PDF, DWG ou DXF &mdash; um arquivo por prancha</li>
+              <li>&#8226; DXF, DWG ou PDF &mdash; um arquivo por prancha</li>
               <li>&#8226; Quanto mais pranchas, mais completa a planilha &mdash; m&iacute;nimo recomendado: <strong>3 pranchas</strong></li>
             </ul>
           </div>
@@ -441,7 +441,7 @@
               </div>
               <p class="text-lg font-semibold text-gray-700 mb-1">Arraste os arquivos do projeto aqui</p>
               <p class="text-sm text-gray-500 mb-3">ou clique para selecionar</p>
-              <p class="text-xs text-gray-600">DXF, DWG ou PDF — sem limite de arquivos</p>
+              <p class="text-xs text-gray-600"><b class="text-indigo-600">🥇 DXF (recomendado)</b>, DWG ou PDF — sem limite de arquivos</p>
               <!-- stopPropagation: o link abre o exemplo, não o seletor de arquivo
                    (a drop-zone inteira vive dentro de um <label for="file-input">) -->
               <p class="text-xs text-gray-500 mt-3">Sem arquivo na mão agora?
@@ -717,7 +717,7 @@
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             </div>
             <h2 class="text-lg font-semibold text-gray-800 mb-2">Seu primeiro projeto é por nossa conta 🎉</h2>
-            <p class="text-sm text-gray-600 max-w-md mx-auto mb-6">Sobe a prancha (PDF, DWG ou DXF) e em <b>minutos</b> você recebe a planilha de quantitativos — grátis, sem cartão. Cada item vem marcado como <b>&#10003; medido</b> ou <b>&#9888; estimativa</b>, pra você saber no que confiar.</p>
+            <p class="text-sm text-gray-600 max-w-md mx-auto mb-6">Sobe a prancha (DXF, DWG ou PDF) e em <b>minutos</b> você recebe a planilha de quantitativos — grátis, sem cartão. Cada item vem marcado como <b>&#10003; medido</b> ou <b>&#9888; estimativa</b>, pra você saber no que confiar.</p>
             <button onclick="switchTab('novo-projeto')" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition text-sm">
               Enviar minha primeira prancha &rarr;
             </button>
@@ -853,7 +853,7 @@
             <div class="flex items-start gap-4">
               <div class="flex h-8 w-8 items-center justify-center rounded-full gradient-main text-white text-sm font-bold shrink-0">1</div>
               <div>
-                <p class="text-sm font-semibold text-gray-800">Fa&#231;a upload dos arquivos do projeto (PDF, DWG ou DXF)</p>
+                <p class="text-sm font-semibold text-gray-800">Fa&#231;a upload dos arquivos do projeto (DXF, DWG ou PDF)</p>
                 <p class="text-xs text-gray-500 mt-0.5">Planta baixa, layout, demoli&#231;&#227;o, forro, pontos etc.</p>
               </div>
             </div>
@@ -904,7 +904,7 @@
               </div>
               <h3 class="font-semibold text-gray-900 text-sm">Formato aceito</h3>
             </div>
-            <p class="text-sm text-gray-500">PDF, DWG ou DXF (pranchas de projeto arquitet&#244;nico)</p>
+            <p class="text-sm text-gray-500">DXF, DWG ou PDF (pranchas de projeto arquitet&#244;nico)</p>
           </div>
           <div class="rounded-xl border bg-white p-5 shadow-sm">
             <div class="flex items-center gap-3 mb-3">
@@ -941,7 +941,7 @@
           <div class="space-y-4">
             <div class="border-b pb-4">
               <h3 class="text-sm font-semibold text-gray-800 mb-1">Quais tipos de projeto s&#227;o suportados?</h3>
-              <p class="text-sm text-gray-500">Projetos de reforma com arquivos em PDF, DWG ou DXF. O sistema analisa demoli&#231;&#227;o, constru&#231;&#227;o, el&#233;trica, hidr&#225;ulica, forro, revestimentos e mais.</p>
+              <p class="text-sm text-gray-500">Projetos de reforma com arquivos em DXF, DWG ou PDF. O sistema analisa demoli&#231;&#227;o, constru&#231;&#227;o, el&#233;trica, hidr&#225;ulica, forro, revestimentos e mais.</p>
             </div>
             <div class="border-b pb-4">
               <h3 class="text-sm font-semibold text-gray-800 mb-1">A planilha &#233; precisa o suficiente para or&#231;amento?</h3>
