@@ -3581,6 +3581,54 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     return filled, blanked
 
 
+def _dedupe_revisoes(file_paths: list) -> tuple:
+    """Quando a MESMA prancha vem em várias revisões (mesmo nome-base, só muda o
+    sufixo -RNN), mantém só a revisão mais alta — senão o quantitativo conta a
+    mesma prancha 2x (caso Rafael/Engefast 21/07: 008 R03+R04, 009 R02+R03).
+
+    CONSERVADOR (regra nº1 — nunca apagar prancha real em silêncio):
+    - só trata como REVISÃO quando veio "REV" explícito OU o número tem 2+ dígitos
+      (R00, R01, R04...). Um "R" + 1 dígito só (R1, R2, R5) é ambíguo — em projeto
+      BR pode ser Rua (viário/loteamento), modelo de casa (CUB R1/R8/R16), Raio de
+      curva ou eixo — então NÃO deduplica (fica igual a antes: no máx conta 2x,
+      nunca some prancha);
+    - só funde quando o nome-base bate EXATAMENTE e a extensão é a MESMA;
+    - arquivo sem sufixo de revisão NUNCA é descartado.
+    Retorna (mantidos, descartados), descartados = lista de (path_descartado,
+    path_mantido) — pra AVISAR o usuário (recuperável, nunca some em silêncio)."""
+    import re
+    # g1=base  g2="EV"/None (marca REV explícita)  g3=dígitos da revisão
+    rev_rx = re.compile(r'^(.*?)[-_ ]R(EV\.?)?[-_ .]?(\d{1,3})$', re.IGNORECASE)
+    grupos: dict = {}
+    sem_rev: list = []
+    for p in file_paths:
+        stem, ext = os.path.splitext(os.path.basename(p))
+        m = rev_rx.match(stem)
+        if not m:
+            sem_rev.append(p)
+            continue
+        base, rev_marker, digits = m.group(1), m.group(2), m.group(3)
+        if not rev_marker and len(digits) < 2:
+            # "R" + 1 dígito sem "REV": ambíguo (Rua/Raio/modelo) — não arrisca
+            sem_rev.append(p)
+            continue
+        chave = (base.rstrip(" -_.").lower(), ext.lower())
+        grupos.setdefault(chave, []).append((int(digits), p))
+    mantidos_set = set(sem_rev)
+    descartados: list = []
+    for _chave, lst in grupos.items():
+        if len(lst) == 1:
+            mantidos_set.add(lst[0][1])
+            continue
+        lst.sort(key=lambda x: x[0])   # menor revisão primeiro
+        vencedor = lst[-1][1]           # maior revisão vence
+        mantidos_set.add(vencedor)
+        for _rev, p in lst[:-1]:
+            descartados.append((p, vencedor))
+    mantidos = [p for p in file_paths if p in mantidos_set]  # preserva ordem
+    return mantidos, descartados
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -3640,6 +3688,24 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # Acumulador de áreas: consenso ao final do loop (evita ordem de
         # processamento decidir qual valor sobrevive)
         _area_readings = {"total_area": [], "layout_area": [], "no_intervention_area": []}
+
+        # Dedupe de REVISÃO: mesma prancha em várias revisões (só muda o -RNN) →
+        # mantém a mais nova, senão o quantitativo conta a prancha 2x. Conservador
+        # e TRANSPARENTE (avisa o usuário quais tratou como antigas). Vale pra todo
+        # caminho (upload, reprocesso, add-file, recovery). Caso Rafael/Engefast 21/07.
+        file_paths, _revs_desc = _dedupe_revisoes(file_paths)
+        if _revs_desc:
+            _pares = "; ".join(f"{os.path.basename(_v)} → {os.path.basename(_n)}"
+                               for _v, _n in _revs_desc)
+            print(f"[dedupe-revisao] {len(_revs_desc)} revisão(ões) antiga(s) ignorada(s): {_pares}")
+            try:
+                project_data.warnings = (project_data.warnings or []) + [
+                    f"{len(_revs_desc)} prancha(s) vieram em mais de uma revisão — usei só a "
+                    f"mais recente de cada pra não contar em dobro. Se alguma não for revisão "
+                    f"da outra, me avise que eu incluo."
+                ]
+            except Exception:
+                pass
 
         # Separar PDFs de DWG/DXF
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
@@ -3902,6 +3968,53 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 from analyzer import SYSTEM_PROMPT, SYSTEM_PROMPT_ESTRUTURA
                 import json as _j
 
+                # ── CONSENSO DE UNIDADE DO PROJETO (pré-passe barato) ──────────
+                # Prancha SEM cota chuta a escala — num projeto BR sem cota o motor
+                # cai em "pés" (0,3048) e o comprimento sai errado/zerado. Aqui
+                # sondamos algumas pranchas (planta primeiro, menor primeiro) até
+                # UMA provar a escala por cota, e usamos essa nas pranchas sem cota.
+                # Cota PRÓPRIA da prancha sempre vence (não sobrescreve quem tem
+                # prova). Caso Rafael 21/07: 501 provou metros, 004/201 chutavam
+                # pés — achado na 6ª sondagem em ~10s. Kill: DXF_UNIT_CONSENSUS=0.
+                _unit_consensus = None
+                if os.getenv("DXF_UNIT_CONSENSUS", "1") != "0" and len(dxf_paths) >= 2:
+                    try:
+                        from dwg_extractor import probe_unit as _probe_unit
+                        def _planta_score(_p):
+                            _up = os.path.basename(_p).upper()
+                            _s = 0
+                            if ".PL." in _up or "-PL-" in _up or "PLANTA" in _up:
+                                _s -= 100          # planta: mais provável ter cota
+                            if any(_k in _up for _k in ("DET", "DIAG", "-DG", "DT.DC",
+                                                        "DT.DP", "ESQ.", "VS.", "UNIFIL")):
+                                _s += 50           # detalhe/diagrama: raramente cotado
+                            try:
+                                _sz = os.path.getsize(_p)
+                            except OSError:
+                                _sz = 0
+                            return (_s, _sz)       # depois menor arquivo (readfile + barato)
+                        for _i_pb, _pp in enumerate(sorted(dxf_paths, key=_planta_score)):
+                            if _i_pb >= 12:        # cap: não lê o projeto inteiro só pra unidade
+                                break
+                            # a sondagem roda FORA do timeout de 900s — não lê prancha
+                            # gigante (a que prova a escala é planta normal, <20MB).
+                            try:
+                                if os.path.getsize(_pp) > 60 * 1024 * 1024:
+                                    continue
+                            except OSError:
+                                pass
+                            _f = _probe_unit(_pp)
+                            if _f and _f > 0:
+                                _unit_consensus = _f
+                                print(f"[unit-consenso] escala do projeto provada por cota em "
+                                      f"{os.path.basename(_pp)}: fator {_f} (sondagem {_i_pb+1})")
+                                break
+                        if _unit_consensus is None:
+                            print("[unit-consenso] nenhuma prancha provou a escala por cota — "
+                                  "cada prancha segue com a própria detecção")
+                    except Exception as _uce:
+                        print(f"[unit-consenso] pré-passe falhou (segue sem): {_uce}")
+
                 n_dxf = len(dxf_paths)
                 dxf_span = cad_end_pct - extract_start
                 for idx, dxf_path in enumerate(dxf_paths):
@@ -3996,7 +4109,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                     _p = _s
                             except Exception as _sl_e:
                                 print(f"[dxf-slim] pulando ({_sl_e})")
-                            _ext = extract_from_file(_p)
+                            _ext = extract_from_file(_p, unit_factor_override=_unit_consensus)
                             return _ext, _ext.to_structured_prompt(), _p
                         _tpe = _cf.ThreadPoolExecutor(max_workers=1)
                         _fut = _tpe.submit(_extract_dxf_guarded, dxf_path)
@@ -5534,6 +5647,46 @@ async def root():
 _VALID_TYPOLOGIES = {"office", "residential", "retail", "hospital", "educational"}
 
 
+async def _stream_upload_to_disk(upload_file, file_path, *, head_bytes=16, chunk=1024 * 1024):
+    """Grava o upload em disco em pedaços, SEM bufferizar o arquivo inteiro na RAM.
+
+    Motivo (anti-OOM): `await upload_file.read()` (sem argumento) puxa o arquivo
+    todo pra memória de uma vez — um DXF de 300 MB dava um pico de 300 MB, e em
+    cima do resto isso estourava a RAM do Render e reiniciava o serviço pra todos.
+    O parser multipart do Starlette já derrama uploads grandes num arquivo temp em
+    disco; o vilão era só o `.read()`. Lendo em pedaços de 1 MB, o pico de RAM do
+    upload fica em ~1 MB, independente do tamanho do arquivo.
+
+    Retorna (bytes_gravados, head): `head` são os primeiros bytes, pra checagem de
+    assinatura (ex.: 'AC' do DWG) sem precisar reabrir o arquivo.
+    """
+    try:
+        await upload_file.seek(0)
+    except Exception:
+        pass
+    total = 0
+    head = b""
+    try:
+        with open(file_path, "wb") as out:
+            while True:
+                buf = await upload_file.read(chunk)
+                if not buf:
+                    break
+                if len(head) < head_bytes:
+                    head += buf[: head_bytes - len(head)]
+                out.write(buf)
+                total += len(buf)
+    except OSError as e:
+        # Disco cheio / IOError no meio da gravação: apaga o parcial e devolve
+        # erro claro (senão o FastAPI daria 500 mudo e o arquivo meio-escrito
+        # ficaria no work_dir). Ambos os chamadores herdam esse tratamento.
+        try: os.remove(file_path)
+        except OSError: pass
+        raise HTTPException(507, "Não consegui salvar o arquivo no servidor "
+                            "(sem espaço em disco no momento). Tente de novo em instantes.") from e
+    return total, head
+
+
 @app.post("/api/process")
 async def process_files(
     request: Request,
@@ -5583,15 +5736,18 @@ async def process_files(
     if not user_id or user_id == "anonymous":
         user_id = jwt_user.get("id") or user_id
 
-    # Teto de tamanho (anti-OOM): a instância Pro do Render tem 4 GB de RAM — o
-    # "25 GB" é DISCO, não memória. O backend BUFFERIZA o upload inteiro na RAM
-    # antes de processar, então upload gigante estoura os 4 GB e REINICIA o serviço
-    # pra TODOS. Incidente 21/07: cap subiu pra 700MB, um upload de 506MB ajudou a
-    # dar OOM → revertido pra 320MB pra todos (lotes de 6-8 pranchas cabem folgado).
-    # Cap por-arquivo (DXF 150MB) no motor segue valendo.
+    # Teto de tamanho do REQUEST (anti-OOM). Desde 21/07 o upload é gravado em
+    # disco em pedaços (_stream_upload_to_disk) — NÃO bufferiza mais o arquivo
+    # inteiro na RAM, então o pico de memória do upload é ~1 MB por arquivo,
+    # independente do tamanho. Render agora em 4 GB de RAM (o "25 GB" é DISCO).
+    # O que ainda consome RAM é o PROCESSAMENTO (ezdxf carrega o DXF na memória,
+    # prancha a prancha) — por isso o cap por-arquivo (DXF 150MB) no motor segue
+    # sendo a trava real; este teto de request só limita quantas pranchas vêm de
+    # uma vez. 320→450 MB após o fix de streaming + upgrade pra 4 GB (incidente
+    # 21/07: em 2 GB, cap de 700MB + upload de 506MB deu OOM; agora é outro cenário).
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
-    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
-        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
+    if _clen and _clen.isdigit() and int(_clen) > 450 * 1024 * 1024:
+        raise HTTPException(413, "Arquivos muito grandes (máx. ~450 MB no total). Envie as pranchas do projeto — se for um projeto enorme, mande em 2 lotes.")
 
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
@@ -5640,26 +5796,33 @@ async def process_files(
         # Anti path-traversal: nunca confiar em upload_file.filename
         safe_name = _safe_local_filename(upload_file.filename)
         file_path = os.path.join(work_dir, safe_name)
-        content = await upload_file.read()
+        # Grava em disco em pedaços (não bufferiza o arquivo inteiro na RAM).
+        n_written, head = await _stream_upload_to_disk(upload_file, file_path)
 
         # Validação de integridade (Bug Rafael 2026-05-04: DWG chegou
         # truncado e backend processou sem detectar, gerando planilha vazia)
-        if upload_file.size and len(content) != upload_file.size:
+        if upload_file.size and n_written != upload_file.size:
+            try: os.remove(file_path)
+            except OSError: pass
             raise HTTPException(
                 400,
                 f"Arquivo '{upload_file.filename}' chegou incompleto: "
-                f"recebido {len(content)} de {upload_file.size} bytes. "
+                f"recebido {n_written} de {upload_file.size} bytes. "
                 f"Provável conexão instável durante upload — tente de novo."
             )
         ext = upload_file.filename.lower().rsplit('.', 1)[-1]
         if ext == "dwg":
-            if len(content) < 100:
+            if n_written < 100:
+                try: os.remove(file_path)
+                except OSError: pass
                 raise HTTPException(
                     400,
-                    f"DWG '{upload_file.filename}' muito pequeno ({len(content)} bytes) — "
+                    f"DWG '{upload_file.filename}' muito pequeno ({n_written} bytes) — "
                     f"provavelmente corrompido. Verifique se o arquivo abre no AutoCAD."
                 )
-            if content[:2] != b"AC":
+            if head[:2] != b"AC":
+                try: os.remove(file_path)
+                except OSError: pass
                 raise HTTPException(
                     400,
                     f"DWG '{upload_file.filename}' não tem assinatura válida "
@@ -5667,8 +5830,6 @@ async def process_files(
                     f"verifique no AutoCAD ou exporte como PDF e suba o PDF."
                 )
 
-        with open(file_path, "wb") as f:
-            f.write(content)
         file_paths.append(file_path)
         if user_st:
             user_sheet_types[file_path] = user_st
@@ -8755,13 +8916,19 @@ async def upsert_project_client(
 
 # ── STRIPE CHECKOUT ──
 @app.post("/api/estimate-price")
-async def estimate_price(files: list[UploadFile] = File(...)):
+async def estimate_price(request: Request, files: list[UploadFile] = File(...)):
     """Conta pranchas REAIS (páginas dentro de PDFs + layouts dentro de DWG/DXF)
     e devolve preço calculado. Usado antes do checkout pra mostrar preview
     transparente pro cliente.
     """
     if not files:
         raise HTTPException(400, "Nenhum arquivo enviado")
+    # Anti-OOM: este endpoint é PÚBLICO (sem login) — sem teto vira porta anônima
+    # de estouro de memória. Teto de request + streaming pro disco (mesmo padrão
+    # do /api/process). Cap por-arquivo abaixo evita um único CAD gigante.
+    _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
+    if _clen and _clen.isdigit() and int(_clen) > 450 * 1024 * 1024:
+        raise HTTPException(413, "Arquivos muito grandes (máx. ~450 MB no total).")
     tmp_dir = os.path.join(WORK_DIR, "_estimate_tmp", str(uuid.uuid4())[:8])
     os.makedirs(tmp_dir, exist_ok=True)
     saved_paths = []
@@ -8771,8 +8938,12 @@ async def estimate_price(files: list[UploadFile] = File(...)):
                 continue
             safe_name = _safe_local_filename(f.filename)
             p = os.path.join(tmp_dir, safe_name)
-            with open(p, "wb") as out:
-                out.write(await f.read())
+            # Grava em pedaços (não bufferiza o arquivo inteiro na RAM).
+            n_written, _ = await _stream_upload_to_disk(f, p)
+            if n_written > 150 * 1024 * 1024:
+                try: os.remove(p)
+                except OSError: pass
+                raise HTTPException(413, f"Arquivo '{f.filename}' grande demais (máx. ~150 MB por prancha).")
             saved_paths.append(p)
         from pricing import estimate_for_files, precheck_warnings
         result = estimate_for_files(saved_paths)
@@ -11646,12 +11817,12 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         if _ext not in ("dwg", "dxf", "pdf"):
             raise HTTPException(400, f"'{_rn or 'arquivo'}': envie só DWG, DXF ou PDF.")
 
-    # Teto pelo Content-Length ANTES de ler tudo na memória (anti-OOM com upload
-    # gigante). 320MB pra todos — RAM da instância é o gargalo (ver /api/process);
-    # o cap admin de 700MB (21/07) ajudou a dar OOM e foi revertido.
+    # Teto de request (anti-OOM). O upload agora é gravado em pedaços no disco
+    # (_stream_upload_to_disk, mesmo do /api/process) — não bufferiza mais o
+    # arquivo inteiro na RAM. Unificado em 450 MB com o /api/process (4 GB).
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
-    if _clen and _clen.isdigit() and int(_clen) > 320 * 1024 * 1024:
-        raise HTTPException(413, "Arquivos muito grandes (máx. ~300 MB no total). Envie só as pranchas necessárias.")
+    if _clen and _clen.isdigit() and int(_clen) > 450 * 1024 * 1024:
+        raise HTTPException(413, "Arquivos muito grandes (máx. ~450 MB no total). Envie só as pranchas necessárias.")
 
     # Projeto original: tipologia/tipo + guarda contra reprocesso concorrente
     typology, ptype = "office", "arquitetura"
@@ -11675,15 +11846,19 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     os.makedirs(work_dir, exist_ok=True)
     saved = 0
     for _f in files:
-        data = await _f.read()
-        if not data:
-            continue
-        if len(data) > 150 * 1024 * 1024:
-            raise HTTPException(413, f"'{_f.filename}' passa de 150 MB. Exporte só a prancha necessária.")
         safe_local = _safe_local_filename(_f.filename or f"arquivo_{saved}")
         new_local = os.path.join(work_dir, safe_local)
-        with open(new_local, "wb") as _out:
-            _out.write(data)
+        # Grava em pedaços (não bufferiza o arquivo inteiro na RAM — mesmo padrão
+        # anti-OOM do /api/process; este arquivo alimenta o ezdxf logo em seguida).
+        n_written, _ = await _stream_upload_to_disk(_f, new_local)
+        if not n_written:
+            try: os.remove(new_local)
+            except OSError: pass
+            continue
+        if n_written > 150 * 1024 * 1024:
+            try: os.remove(new_local)
+            except OSError: pass
+            raise HTTPException(413, f"'{_f.filename}' passa de 150 MB. Exporte só a prancha necessária.")
         if not _supabase_storage_upload_prancha(new_local, job_id, safe_local):
             raise HTTPException(500, "Não consegui guardar um dos arquivos. Tenta de novo.")
         saved += 1

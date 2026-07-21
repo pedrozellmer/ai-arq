@@ -1149,11 +1149,15 @@ def _shoelace_area(points: list) -> float:
     return area / 2.0
 
 
-def extract_dxf(filepath: str) -> DXFExtraction:
+def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """Main extraction function — reads a .dxf file and returns structured data.
 
     Args:
         filepath: Path to a .dxf file.
+        unit_factor_override: escala (fator p/ metros) PROVADA por cota em OUTRA
+            prancha do mesmo projeto (consenso de unidade). Só é usada quando ESTA
+            prancha NÃO tem cota própria que prove a escala — cota local sempre
+            vence. Evita "pés" numa prancha BR sem cota (caso Rafael 21/07).
 
     Returns:
         DXFExtraction with all extracted elements.
@@ -1234,6 +1238,35 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         # metadata em vez de rebaixar tudo pra estimado
         dim_check["heuristica_superada"] = " | ".join(unit_warnings)
         unit_warnings = []
+    # ── CONSENSO DE UNIDADE DO PROJETO ──────────────────────────────────────
+    # Se ESTA prancha NÃO tem cota que prove a escala e a detecção local dela é
+    # FRACA (chutou pela extensão / caiu em pés por $MEASUREMENT, sem $INSUNITS
+    # explícito), usa a escala PROVADA por cota em outra prancha do projeto.
+    # Cota PRÓPRIA sempre vence. E — crucial (revisão adversarial 21/07) — NÃO
+    # sobrescreve prancha cujo $INSUNITS afirma explicitamente a unidade: senão um
+    # detalhe legítimo em mm (sem cota) num projeto provado em metros seria inflado
+    # ×1000. Após aplicar, RE-VALIDA a extensão contra a nova escala: se ficar
+    # implausível, o warning rebaixa pra estimado (a escala foi inferida, não
+    # provada NESTA prancha) — regra nº1.
+    _unit_consenso = None
+    try:
+        _insunits_local = int(doc.header.get("$INSUNITS", 0) or 0)
+    except Exception:
+        _insunits_local = 0
+    _deteccao_local_forte = (_insunits_local in _INSUNITS_TO_METERS
+                             and _insunits_local != 0 and not unit_warnings)
+    if (unit_factor_override and unit_factor_override > 0
+            and dim_check.get("status") not in ("validada", "corrigida")
+            and not _deteccao_local_forte
+            and abs(unit_factor_override - unit_factor) > 1e-9):
+        _unit_consenso = (unit_factor, unit_factor_override)
+        unit_factor = unit_factor_override
+        # re-valida a extensão sob a escala nova (não zera às cegas): se a extensão
+        # ficar implausível, o warning rebaixa pra estimado — honesto.
+        _, unit_warnings = _validate_unit_factor(doc, unit_factor)
+        logger.info("[unit-consenso] %s: fator %s -> %s (escala provada por cota em "
+                    "outra prancha do projeto)", os.path.basename(filepath),
+                    _unit_consenso[0], _unit_consenso[1])
     for w in unit_warnings:
         logger.warning("[unit-sanity] %s", w)
     area_factor = unit_factor * unit_factor  # for m² conversion
@@ -1275,6 +1308,11 @@ def extract_dxf(filepath: str) -> DXFExtraction:
         elif _dim_status == "corrigida":
             metadata["unidade_corrigida_por_cotas"] = dim_check["mensagem"]
             metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
+        if _unit_consenso:
+            metadata["unidade_por_consenso_projeto"] = (
+                f"prancha sem cota própria: usei a escala provada por cota em outra "
+                f"prancha do projeto (fator {_unit_consenso[1]} no lugar do chute "
+                f"{_unit_consenso[0]})")
     except Exception:
         pass
 
@@ -1497,6 +1535,95 @@ def extract_dxf(filepath: str) -> DXFExtraction:
                 ))
         except Exception:
             continue
+
+    # ---- Comprimento de INFRA LINEAR dentro de BLOCOS ----------------------
+    # O laço acima só vê o MODELSPACE. Em muitos projetos de instalação o
+    # eletroduto/eletrocalha/tubulação é desenhado DENTRO de blocos (MATRIZ,
+    # blocos anônimos), então o comprimento sai ZERO e o item vem sem metro
+    # (caso Fábio/Engie 21/07: eletroduto nos blocos MATRIZ-*, 0 no modelspace).
+    #
+    # Regra nº1 (nunca inflar/forjar): NÃO explodimos tudo — bloco de móvel,
+    # símbolo ou legenda inflaria parede/piso. Só percorremos blocos pra medir
+    # linha em layers CLARAMENTE de infra linear (allowlist abaixo), onde o
+    # comprimento é a quantidade legítima. Pulamos blocos de anotação/carimbo.
+    # Interruptor de emergência: DXF_MEASURE_BLOCK_INFRA=0 desliga sem deploy.
+    if os.getenv("DXF_MEASURE_BLOCK_INFRA", "1") != "0":
+        import re as _re_infra
+        _INFRA_LINEAR_RX = _re_infra.compile(
+            r'eletrodut|eletrocal|condul|condut|condu[íi]t|conduit|tubula|prumad|'
+            r'ramal|canaleta|perfilad|barramen',   # 'leito' removido: colidia com LEITO HOSPITALAR
+            _re_infra.IGNORECASE)
+        _MAX_BLOCK_WALLS = 40000     # teto de segmentos adicionados (anti-explosão)
+        _MAX_BLOCK_SCAN = 400000     # teto de entidades varridas dentro de blocos
+        _n_block_walls = 0
+        _n_scanned = 0
+        # Silencia o spam "copy process ignored ACAD_PROXY_OBJECT" do ezdxf ao
+        # explodir blocos com objetos de app AEC (dezenas de linhas por prancha).
+        _ezlog = logging.getLogger("ezdxf")
+        _ez_prev = _ezlog.level
+        _ezlog.setLevel(max(_ez_prev or logging.WARNING, logging.ERROR))
+        # try/finally: esta é uma feature ADITIVA — jamais pode derrubar a prancha
+        # (perder parede/piso já medidos = viola regra nº1) nem deixar o logger
+        # global do ezdxf silenciado. O finally SEMPRE restaura o nível.
+        try:
+            for insert in msp.query("INSERT"):
+                if _n_block_walls >= _MAX_BLOCK_WALLS or _n_scanned >= _MAX_BLOCK_SCAN:
+                    break
+                try:
+                    _bn = insert.dxf.name or ""
+                    if _is_annotation_block(_bn):   # legenda/carimbo/corte — não mede
+                        continue
+                    try:
+                        _vents = insert.virtual_entities()   # explode 1 nível, com transform
+                    except Exception:
+                        continue
+                    # A explosão do ezdxf é LAZY: cada next() pode estourar (ex.:
+                    # MLEADER degenerado → ZeroDivisionError). next() protegido pra
+                    # um bloco ruim não derrubar a prancha (caso Rafael 004, 21/07).
+                    while True:
+                        try:
+                            _e = next(_vents)
+                        except StopIteration:
+                            break
+                        except Exception:
+                            break   # ezdxf falhou explodindo este bloco — pula o resto
+                        _n_scanned += 1
+                        if _n_block_walls >= _MAX_BLOCK_WALLS or _n_scanned >= _MAX_BLOCK_SCAN:
+                            break
+                        _et = _e.dxftype()
+                        if _et not in ("LINE", "LWPOLYLINE", "POLYLINE", "ARC"):
+                            continue
+                        _lay = _e.dxf.layer
+                        if not _INFRA_LINEAR_RX.search(str(_lay)):
+                            continue
+                        try:
+                            if _et == "LINE":
+                                _L = _line_length((_e.dxf.start.x, _e.dxf.start.y),
+                                                  (_e.dxf.end.x, _e.dxf.end.y))
+                            elif _et == "LWPOLYLINE":
+                                _L = _lwpolyline_length(_e)
+                            elif _et == "POLYLINE":
+                                _L = _polyline_length(_e)
+                            else:  # ARC
+                                _r = _e.dxf.radius
+                                _a0 = math.radians(_e.dxf.start_angle)
+                                _a1 = math.radians(_e.dxf.end_angle)
+                                if _a1 < _a0:
+                                    _a1 += 2 * math.pi
+                                _L = abs(_r * (_a1 - _a0))
+                            _L *= unit_factor
+                        except Exception:
+                            continue
+                        if _L > 0:
+                            walls.append(WallSegment(layer=_lay, length=_L, start=(0, 0), end=(0, 0)))
+                            _n_block_walls += 1
+                except Exception:
+                    continue   # bloco problemático nunca derruba a prancha (regra nº1)
+        finally:
+            _ezlog.setLevel(_ez_prev)   # SEMPRE restaura o logger global do ezdxf
+        if _n_block_walls:
+            logger.info("[infra-bloco] +%d segmentos de infra linear medidos dentro de blocos",
+                        _n_block_walls)
 
     # ---- Áreas de polilinha FECHADA — SÓ camadas de superfície física -------
     # Conservador de propósito (regra nº1: nunca inflar/forjar medida):
@@ -1855,11 +1982,51 @@ def category_for_layer(layer_name: str) -> str | None:
 # Entry point — handles both .dxf and .dwg
 # ---------------------------------------------------------------------------
 
-def extract_from_file(filepath: str) -> DXFExtraction:
+def probe_unit(filepath: str) -> Optional[float]:
+    """Sondagem LEVE de unidade: lê o DXF e retorna o fator (p/ metros) PROVADO
+    por COTA nesta prancha, ou None se ela não tem cotas suficientes. Usado no
+    consenso de unidade por projeto (process_job) — barato de rodar em algumas
+    pranchas até achar uma com cota, sem extrair geometria. Nunca levanta: em
+    qualquer erro (arquivo grande/ilegível) devolve None e o consenso segue."""
+    try:
+        filepath = os.path.abspath(filepath)
+        if not os.path.isfile(filepath) or Path(filepath).suffix.lower() != ".dxf":
+            return None
+        if os.path.getsize(filepath) > 150 * 1024 * 1024:
+            return None
+        doc = None
+        for enc in ("utf-8", "latin-1", None):
+            try:
+                doc = ezdxf.readfile(filepath, **({"encoding": enc} if enc else {}))
+                break
+            except UnicodeDecodeError:
+                continue
+            except Exception:
+                if enc is None:
+                    return None
+        if doc is None:
+            return None
+        uf = _detect_unit_factor(doc)
+        uf, _ = _validate_unit_factor(doc, uf)
+        dim = _validate_unit_by_dimensions(doc, uf)
+        st = dim.get("status")
+        if st == "corrigida":
+            return dim.get("fator_corrigido")
+        if st == "validada":
+            return uf
+        return None
+    except Exception:
+        return None
+
+
+def extract_from_file(filepath: str, unit_factor_override: Optional[float] = None) -> DXFExtraction:
     """High-level entry point: extract structured data from a DWG or DXF file.
 
     Args:
         filepath: Path to .dwg or .dxf file.
+        unit_factor_override: escala provada por cota em outra prancha do projeto
+            (consenso). Repassada ao extract_dxf — só usada se a prancha não tem
+            cota própria.
 
     Returns:
         DXFExtraction with all extracted elements.
@@ -1876,7 +2043,7 @@ def extract_from_file(filepath: str) -> DXFExtraction:
     ext = Path(filepath).suffix.lower()
 
     if ext == ".dxf":
-        return extract_dxf(filepath)
+        return extract_dxf(filepath, unit_factor_override=unit_factor_override)
 
     if ext == ".dwg":
         dxf_path = convert_dwg_to_dxf(filepath)
@@ -1887,7 +2054,7 @@ def extract_from_file(filepath: str) -> DXFExtraction:
                 "ou exporte o arquivo como .dxf no AutoCAD/BricsCAD."
             )
         try:
-            return extract_dxf(dxf_path)
+            return extract_dxf(dxf_path, unit_factor_override=unit_factor_override)
         finally:
             # Clean up the temporary DXF
             try:
