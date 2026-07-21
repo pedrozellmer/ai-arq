@@ -2386,6 +2386,36 @@
       if (currPdf) currentFileIndex = globalIdx.get(currPdf);
     }
 
+    // Muitas pranchas (ex.: as 41 do Rafael): em vez de empilhar 40+ linhas,
+    // recolhe PRONTAS e EM FILA em contadores e deixa só a que processa em
+    // destaque — a lista não vira um paredão. Projeto pequeno (<=6) segue detalhado.
+    if (selectedFiles.length > 6) {
+      const _st = (file, idx) => {
+        const fileIsCad = isCad(file);
+        const cadOrder = cadFiles.indexOf(file);
+        if (overallProgress >= 100 || finalPhase) return 'done';
+        if (idx === currentFileIndex) return 'current';
+        if (fileIsCad && cadOrder < cadDoneCount) return 'done';
+        if (!fileIsCad && pdfMatch && currentFileIndex >= 0 && idx < currentFileIndex) return 'done';
+        return 'waiting';
+      };
+      const _states = selectedFiles.map(_st);
+      const _doneN = _states.filter(s => s === 'done').length;
+      const _waitN = _states.filter(s => s === 'waiting').length;
+      const _curIx = _states.indexOf('current');
+      const _svg = '<svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>';
+      const _sumRow = (icon, txt, cls) => `<div class="file-progress-item flex items-center gap-2.5 py-2.5 px-3 rounded-lg bg-gray-50"><span class="text-base shrink-0">${icon}</span><span class="text-sm ${cls}">${txt}</span></div>`;
+      let _h = '';
+      if (_doneN) _h += _sumRow('<span class="text-emerald-500">&#10003;</span>', `${_doneN} de ${selectedFiles.length} pranchas concluídas`, 'text-emerald-600 font-medium');
+      if (_curIx >= 0) {
+        const _nm = selectedFiles[_curIx].name.replace(/\.(pdf|dwg|dxf)$/i, '');
+        _h += `<div class="file-progress-item flex items-center justify-between py-2.5 px-3 rounded-lg bg-indigo-50"><div class="flex items-center gap-2.5 min-w-0 flex-1">${_svg}<span class="text-sm text-gray-700 truncate">${escapeH(_nm)}</span></div><div class="flex items-center gap-2 shrink-0 ml-3"><span class="text-xs text-indigo-600 font-medium">Analisando com IA...</span><span class="animate-spin-slow inline-block text-indigo-500">&#9881;</span></div></div>`;
+      }
+      if (_waitN) _h += _sumRow('<span class="text-gray-400">&#9208;</span>', `${_waitN} prancha${_waitN > 1 ? 's' : ''} na fila`, 'text-gray-500');
+      fileProgressList.innerHTML = _h;
+      return;
+    }
+
     let html = '';
     selectedFiles.forEach((file, idx) => {
       let statusIcon, statusText, statusClass;
