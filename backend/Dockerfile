@@ -76,4 +76,11 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --workers 1 É OBRIGATÓRIO (fix OOM 2026-07-22): sem isso, o Render injeta
+# WEB_CONCURRENCY=2 e o uvicorn sobe 2 workers. Cada worker carrega o app +
+# catálogos SINAPI/TCPO na RAM (dobra a memória base) E cada um tem seu próprio
+# _JOB_SEMAPHORE, o que permite 2 jobs simultâneos — furando a proteção de "1 por
+# vez" e somando o pico de memória do processamento. Resultado: estouro dos 4GB e
+# crash-loop em projetos com várias pranchas DXF. 1 worker = metade da RAM base +
+# 1 job por vez garantido. Concorrência de API continua ok (FastAPI é async).
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
