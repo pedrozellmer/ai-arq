@@ -63,11 +63,13 @@ async def webhook_receive(request: Request):
     """
     body = await request.body()
 
-    # Verificar assinatura (opcional em dev, obrigatorio em prod)
+    # Verificar assinatura. Se o app secret está configurado (produção), a
+    # assinatura é OBRIGATÓRIA. Fix 2026-07-22: antes, um request SEM o header
+    # X-Hub-Signature-256 pulava a verificação (bypass trivial).
     signature = request.headers.get("X-Hub-Signature-256", "")
     api = MetaGraphAPI()
-    if signature and not api.verify_signature(body, signature):
-        logger.warning("Assinatura do webhook invalida!")
+    if api.app_secret and not api.verify_signature(body, signature):
+        logger.warning("Webhook IG: assinatura ausente ou invalida")
         raise HTTPException(403, "Assinatura invalida")
 
     try:

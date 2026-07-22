@@ -188,8 +188,11 @@ async def whatsapp_webhook_receive(request: Request):
     responder 200 rápido (<5s) senão a Meta re-tenta e pode desativar o webhook."""
     body = await request.body()
     sig = request.headers.get("X-Hub-Signature-256", "")
-    if sig and not _verify_sig(body, sig):
-        logger.warning("[whatsapp] assinatura do webhook inválida")
+    # Se o app secret está configurado (produção), a assinatura é OBRIGATÓRIA.
+    # _verify_sig retorna True só quando NÃO há secret (dev). Fix 2026-07-22:
+    # antes um request SEM o header pulava a verificação (bypass trivial).
+    if not _verify_sig(body, sig):
+        logger.warning("[whatsapp] webhook: assinatura ausente ou inválida")
         raise HTTPException(403, "Assinatura inválida")
     try:
         data = json.loads(body)
