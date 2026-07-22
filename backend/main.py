@@ -5972,8 +5972,14 @@ async def get_oda_log(request: Request, job_id: str):
 
 
 @app.get("/api/status/{job_id}")
-async def get_status(job_id: str):
-    """Retorna o status de processamento de um job."""
+async def get_status(job_id: str, request: Request):
+    """Retorna o status de processamento de um job.
+
+    Restrito ao dono (fix IDOR 2026-07-22): current_step/error_message carregam
+    o nome do arquivo enviado. A linha do projeto é inserida de forma síncrona no
+    /api/process antes de devolver o job_id, então o owner já existe quando o
+    frontend começa a pollar. Projetos anônimos ficam livres via _require_project_owner."""
+    _require_project_owner(request, job_id)
     if job_id not in jobs:
         raise HTTPException(404, "Job não encontrado")
     return jobs[job_id]
@@ -7454,6 +7460,63 @@ async def heuristics_summary():
 _PUBLIC_CHAT_HITS: dict = {}  # ip → [timestamps]
 
 
+# ── Rate limit genérico por IP + guarda anti-SSRF (fix segurança 2026-07-22) ──
+_RATE_BUCKETS: dict = {}  # (bucket, ip) → [timestamps]
+
+
+def _client_ip(request) -> str:
+    _xff = [p.strip() for p in (request.headers.get("x-forwarded-for") or "").split(",") if p.strip()]
+    return (_xff[-1] if _xff else "") or (request.client.host if request.client else "unknown")
+
+
+def _rate_limit_ok(bucket: str, request, limit: int, window_s: int) -> bool:
+    """True se dentro do limite; False se estourou. Best-effort em memória (por IP)."""
+    ip = _client_ip(request)
+    now_ts = datetime.utcnow().timestamp()
+    key = (bucket, ip)
+    hist = [t for t in _RATE_BUCKETS.get(key, []) if now_ts - t < window_s]
+    if len(hist) >= limit:
+        _RATE_BUCKETS[key] = hist
+        return False
+    hist.append(now_ts)
+    _RATE_BUCKETS[key] = hist
+    # Anti memory-leak: limpa buckets velhos de vez em quando.
+    if len(_RATE_BUCKETS) > 500 and (int(now_ts) % 100) == 0:
+        for k in [k for k, v in _RATE_BUCKETS.items() if not v or (now_ts - max(v)) > window_s]:
+            _RATE_BUCKETS.pop(k, None)
+    return True
+
+
+def _url_is_safe_public(url: str) -> bool:
+    """Guarda anti-SSRF: aceita só http/https cujo host resolve pra IP PÚBLICO.
+    Barra file://, localhost, 169.254.169.254 (metadata da nuvem) e redes
+    privadas — impede que uma logo_url arbitrária faça o servidor ler recurso
+    interno."""
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+    try:
+        p = urlparse(url or "")
+    except Exception:
+        return False
+    if p.scheme not in ("http", "https") or not p.hostname:
+        return False
+    try:
+        port = p.port or (443 if p.scheme == "https" else 80)
+        infos = socket.getaddrinfo(p.hostname, port, proto=socket.IPPROTO_TCP)
+    except Exception:
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            return False
+    return True
+
+
 @app.post("/api/public/chat/lead")
 async def save_chat_lead(request: Request):
     """Salva (ou atualiza) um lead do chat widget.
@@ -7568,6 +7631,9 @@ async def submit_contact(request: Request):
     Aceita arquivo opcional (campo 'file', máx 10MB) que vai pro Supabase
     Storage no bucket 'contact-attachments'. URL pública é salva junto.
     """
+    # Anti-spam/flood: público sem login — limita por IP (fix segurança 2026-07-22).
+    if not _rate_limit_ok("contact", request, limit=8, window_s=600):
+        return {"ok": False, "error": "Muitas mensagens em pouco tempo. Espere alguns minutos e tente de novo."}
     content_type = (request.headers.get("content-type") or "").lower()
     upload_file = None
     upload_filename = None
@@ -8244,7 +8310,8 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
 
     # Download logo temporariamente pra embutir no PPT
     logo_path = None
-    if logo_url:
+    # Guarda anti-SSRF (fix 2026-07-22): só baixa logo de host público.
+    if logo_url and _url_is_safe_public(logo_url):
         try:
             work_dir_lg = os.path.join(WORK_DIR, job_id)
             os.makedirs(work_dir_lg, exist_ok=True)
@@ -8252,7 +8319,7 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
             lg_req = urllib.request.Request(logo_url, method="GET")
             with urllib.request.urlopen(lg_req, timeout=10) as resp:
                 with open(logo_path, "wb") as f:
-                    f.write(resp.read())
+                    f.write(resp.read(20 * 1024 * 1024))  # cap 20MB
         except Exception:
             logo_path = None
 
@@ -8925,6 +8992,9 @@ async def estimate_price(request: Request, files: list[UploadFile] = File(...)):
     """
     if not files:
         raise HTTPException(400, "Nenhum arquivo enviado")
+    # Anti-DoS: endpoint PÚBLICO — limita rajadas por IP (fix segurança 2026-07-22).
+    if not _rate_limit_ok("estimate", request, limit=15, window_s=600):
+        raise HTTPException(429, "Muitas estimativas em pouco tempo. Espere alguns minutos e tente de novo.")
     # Anti-OOM: este endpoint é PÚBLICO (sem login) — sem teto vira porta anônima
     # de estouro de memória. Teto de request + streaming pro disco (mesmo padrão
     # do /api/process). Cap por-arquivo abaixo evita um único CAD gigante.
@@ -9194,19 +9264,33 @@ async def create_checkout(request: Request, num_pranchas: int = 1, num_files: in
 
 
 @app.get("/api/checkout/verify/{session_id}")
-async def verify_payment(session_id: str):
-    """Verifica se o pagamento foi concluído."""
+async def verify_payment(session_id: str, request: Request):
+    """Verifica se o pagamento foi concluído.
+
+    Exige login e confere que a sessão Stripe pertence ao próprio usuário
+    (metadata.user_id gravado no create-checkout). Fix 2026-07-22: antes era
+    aberto — qualquer um com um session_id via status/valor do pagamento."""
+    jwt_user = _get_user_from_request(request)
+    if not jwt_user:
+        raise HTTPException(401, "Autenticação requerida")
     import stripe
     stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
     try:
         session = stripe.checkout.Session.retrieve(session_id)
-        return {
-            "paid": session.payment_status == "paid",
-            "status": session.payment_status,
-            "amount": session.amount_total,
-        }
     except Exception as e:
         raise HTTPException(404, f"Sessão não encontrada: {str(e)}")
+    try:
+        sess_user = (session.metadata or {}).get("user_id")
+    except Exception:
+        sess_user = None
+    if (jwt_user.get("email", "").lower() != ADMIN_EMAIL
+            and sess_user and sess_user != jwt_user.get("id")):
+        raise HTTPException(403, "Sessão de pagamento não pertence a este usuário")
+    return {
+        "paid": session.payment_status == "paid",
+        "status": session.payment_status,
+        "amount": session.amount_total,
+    }
 
 
 # ── CALIBRATION ENDPOINTS ──
@@ -9869,13 +9953,15 @@ def _get_branding_context(job_id: str, request=None) -> dict:
     if not ctx['project_name']:
         ctx['project_name'] = 'Projeto sem nome'
 
-    # 5. Baixa logo pra arquivo temp (se houver)
-    if ctx['logo_url']:
+    # 5. Baixa logo pra arquivo temp (se houver).
+    # Guarda anti-SSRF (fix 2026-07-22): logo_url vem do perfil do usuário e
+    # poderia apontar pra arquivo local/rede interna. Só baixa de host público.
+    if ctx['logo_url'] and _url_is_safe_public(ctx['logo_url']):
         try:
             req = urllib.request.Request(ctx['logo_url'], method="GET",
                                           headers={'User-Agent': 'AI.arq/1.0'})
             with urllib.request.urlopen(req, timeout=10) as resp:
-                data = resp.read()
+                data = resp.read(20 * 1024 * 1024)  # cap 20MB
             ext = '.png'
             if '.jpg' in ctx['logo_url'].lower() or '.jpeg' in ctx['logo_url'].lower():
                 ext = '.jpg'
@@ -11179,7 +11265,9 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
 
     filename = _find_prancha_file(job_id, ref)
     if not filename:
-        raise HTTPException(404, f"Prancha correspondente a '{ref}' não encontrada")
+        # Não ecoar o 'ref' cru (evita refletir input do usuário no viewer —
+        # defesa em profundidade contra XSS; fix 2026-07-22). Mensagem estática.
+        raise HTTPException(404, "Prancha não encontrada")
 
     ext = os.path.splitext(filename.lower())[1]
     preview_filename = filename
@@ -11938,6 +12026,7 @@ async def finalize_review(job_id: str, request: Request):
 
     Chamado quando o usuário clica "Concluir revisão" na tela de revisão.
     """
+    _require_project_owner(request, job_id)  # fix IDOR 2026-07-22 (igual ao review-state)
     try:
         body = await request.json()
     except Exception:

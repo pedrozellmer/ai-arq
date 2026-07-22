@@ -57,6 +57,26 @@ const ref = urlParams.get('ref');
 
 let currentBlobUrl = null;  // referência pra revogar no unload
 
+// Exibe erro fatal SEM jogar dado do servidor em innerHTML (fix XSS 2026-07-22):
+// o texto entra por textContent, imune a payload tipo <img src=x onerror=...>
+// que antes vinha refletido no 'detail' do backend.
+function showFatal(msg) {
+  document.body.innerHTML = '';
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'padding:40px;font-family:Inter;text-align:center;';
+  const p1 = document.createElement('p');
+  p1.textContent = msg;
+  const p2 = document.createElement('p');
+  p2.style.marginTop = '16px';
+  const a = document.createElement('a');
+  a.href = 'dashboard.html';
+  a.style.cssText = 'color:#4f46e5;text-decoration:underline';
+  a.textContent = 'Voltar pro dashboard';
+  p2.appendChild(a);
+  wrap.appendChild(p1); wrap.appendChild(p2);
+  document.body.appendChild(wrap);
+}
+
 if (!jobId || !ref) {
   document.body.innerHTML = '<div style="padding:40px;font-family:Inter;text-align:center;">Parâmetros ausentes (?job_id=...&ref=...)</div>';
 } else {
@@ -82,14 +102,14 @@ if (!jobId || !ref) {
       if (!resp.ok) {
         let detail = `HTTP ${resp.status}`;
         try { const j = await resp.json(); detail = j.detail || detail; } catch {}
-        document.body.innerHTML = `<div style="padding:40px;font-family:Inter;text-align:center;"><p>Não consegui abrir a prancha: ${detail}</p><p style="margin-top:16px"><a href="dashboard.html" style="color:#4f46e5;text-decoration:underline">Voltar pro dashboard</a></p></div>`;
+        showFatal('Não consegui abrir a prancha: ' + detail);
         return;
       }
       const blob = await resp.blob();
       currentBlobUrl = URL.createObjectURL(blob);
       document.getElementById('pdf-frame').src = currentBlobUrl;
     } catch (e) {
-      document.body.innerHTML = `<div style="padding:40px;font-family:Inter;text-align:center;"><p>Erro de rede ao carregar: ${e.message}</p><p style="margin-top:16px"><a href="dashboard.html" style="color:#4f46e5;text-decoration:underline">Voltar pro dashboard</a></p></div>`;
+      showFatal('Erro de rede ao carregar: ' + (e && e.message ? e.message : e));
     }
   }
   loadPdfIntoFrame();

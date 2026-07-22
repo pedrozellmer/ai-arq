@@ -77,21 +77,30 @@ def count_pdf_pages(path: str) -> int:
 
 
 def count_dwg_layouts(path: str) -> int:
-    """Conta paper-space layouts de um DXF (ou DWG convertido pra DXF).
+    """Conta paper-space layouts de um DXF SEM carregar o documento no ezdxf.
 
     Cada paper-space = 1 prancha desenhada com viewport pra impressão.
-    Model space sozinho = 1 prancha implícita. ezdxf expõe `doc.layouts`
-    com a lista — 'Model' + paper-spaces (Layout1, Layout2, ...).
+    Model space sozinho = 1 prancha implícita.
+
+    🔒 Segurança (fix 2026-07-22): esta função roda no /api/estimate-price, que é
+    PÚBLICO. `ezdxf.readfile()` expande o DXF em objetos Python — um DXF denso
+    (pequeno em disco, milhões de entidades) podia estourar a RAM do worker e
+    derrubar o serviço (DoS anônimo). Aqui contamos os marcadores de layout
+    direto nos BYTES do arquivo (custo O(tamanho em disco), limitado pelo cap de
+    upload), sem materializar entidades. Cada objeto LAYOUT (Model + paper-spaces)
+    carrega um subclass marker 'AcDbLayout'. O motor real (processamento pago)
+    segue no caminho preciso — aqui é só a estimativa de preço.
     """
     try:
-        import ezdxf
-        doc = ezdxf.readfile(path)
-        # ezdxf.layouts é um LayoutManager — len() funciona
-        names = [name for name in doc.layouts.names() if name.lower() != "model"]
-        # Pelo menos 1 (model space sempre existe)
-        return max(1, len(names))
+        with open(path, "rb") as f:
+            data = f.read(200 * 1024 * 1024)  # cap de leitura (~200MB)
+        n_layouts = data.count(b"AcDbLayout")
+        if n_layouts <= 0:
+            return 1  # DWG binário / sem marcador → 1 prancha implícita
+        # Tira o Model space (sempre presente) → sobram os paper-spaces.
+        return max(1, n_layouts - 1)
     except Exception:
-        # Se for DWG (não DXF) ou falha qualquer, conta como 1
+        # DWG puro ou falha qualquer: conta como 1.
         return 1
 
 
