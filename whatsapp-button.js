@@ -1,5 +1,5 @@
-/* Botão flutuante de WhatsApp — a cara clássica: círculo verde com o LOGO branco.
-   Link wa.me (zero API). Bottom-RIGHT.
+/* Botão flutuante de WhatsApp — a cara do app: QUADRADINHO verde com cantos
+   arredondados e o LOGO branco. Link wa.me (zero API). Bottom-RIGHT.
    O × só esconde na página atual (em memória) — ao trocar de página, VOLTA sozinho.
    🔧 Pra trocar de número, muda só a constante NUMERO abaixo (E.164 sem '+'). */
 (function () {
@@ -27,7 +27,7 @@
     a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
     a.setAttribute('aria-label', 'Falar com o AI.arq no WhatsApp');
     a.title = 'Fale com a gente no WhatsApp';
-    a.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:68px;height:68px;border-radius:9999px;background:#25D366;box-shadow:0 8px 26px rgba(37,211,102,.55);transition:transform .15s ease,box-shadow .15s ease;';
+    a.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:68px;height:68px;border-radius:18px;background:#25D366;box-shadow:0 8px 26px rgba(37,211,102,.55);transition:transform .15s ease,box-shadow .15s ease;';
     a.innerHTML = WA_LOGO;
     a.onmouseover = function () { a.style.transform = 'translateY(-2px) scale(1.06)'; a.style.boxShadow = '0 14px 34px rgba(37,211,102,.65)'; };
     a.onmouseout = function () { a.style.transform = ''; a.style.boxShadow = '0 8px 26px rgba(37,211,102,.55)'; };
