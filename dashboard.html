@@ -2431,15 +2431,33 @@
       const _doneN = _states.filter(s => s === 'done').length;
       const _waitN = _states.filter(s => s === 'waiting').length;
       const _curIx = _states.indexOf('current');
+      const _total = selectedFiles.length;
       const _svg = '<svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>';
-      const _sumRow = (icon, txt, cls) => `<div class="file-progress-item flex items-center gap-2.5 py-2.5 px-3 rounded-lg bg-gray-50"><span class="text-base shrink-0">${icon}</span><span class="text-sm ${cls}">${txt}</span></div>`;
+      // Fita compacta: 1 bolinha por prancha (verde=pronta, índigo pulsando=atual,
+      // cinza=fila). Mostra TODAS num relance, com quebra automática (wrap) — nunca
+      // vira paredão nem precisa de scroll, mesmo com 40+ pranchas. Passar o mouse
+      // mostra o nome. (Pedro 22/07)
+      const _dots = selectedFiles.map((f, i) => {
+        const s = _states[i];
+        const nm = f.name.replace(/\.(pdf|dwg|dxf)$/i, '');
+        let cls, tip;
+        if (s === 'done') { cls = 'w-2.5 h-2.5 bg-emerald-500'; tip = '✓ ' + nm; }
+        else if (s === 'current') { cls = 'w-3 h-3 bg-indigo-500 animate-pulse'; tip = '⚙ analisando: ' + nm; }
+        else { cls = 'w-2.5 h-2.5 bg-gray-200'; tip = nm + ' (na fila)'; }
+        return `<span title="${escapeH(tip)}" class="inline-block rounded-full shrink-0 ${cls}"></span>`;
+      }).join('');
       let _h = '';
-      if (_doneN) _h += _sumRow('<span class="text-emerald-500">&#10003;</span>', `${_doneN} de ${selectedFiles.length} pranchas concluídas`, 'text-emerald-600 font-medium');
+      _h += `<div class="file-progress-item px-3 py-2.5 rounded-lg bg-gray-50">`
+          + `<div class="flex items-center justify-between mb-2">`
+          + `<span class="text-xs font-medium text-emerald-600">&#10003; ${_doneN} de ${_total} pronta${_total > 1 ? 's' : ''}</span>`
+          + (_waitN ? `<span class="text-xs text-gray-400">${_waitN} na fila</span>` : `<span class="text-xs text-gray-400">reta final</span>`)
+          + `</div>`
+          + `<div class="flex flex-wrap items-center gap-1.5">${_dots}</div>`
+          + `</div>`;
       if (_curIx >= 0) {
         const _nm = selectedFiles[_curIx].name.replace(/\.(pdf|dwg|dxf)$/i, '');
-        _h += `<div class="file-progress-item flex items-center justify-between py-2.5 px-3 rounded-lg bg-indigo-50"><div class="flex items-center gap-2.5 min-w-0 flex-1">${_svg}<span class="text-sm text-gray-700 truncate">${escapeH(_nm)}</span></div><div class="flex items-center gap-2 shrink-0 ml-3"><span class="text-xs text-indigo-600 font-medium">Analisando com IA...</span><span class="animate-spin-slow inline-block text-indigo-500">&#9881;</span></div></div>`;
+        _h += `<div class="file-progress-item flex items-center justify-between py-2.5 px-3 rounded-lg bg-indigo-50 mt-2"><div class="flex items-center gap-2.5 min-w-0 flex-1">${_svg}<span class="text-sm text-gray-700 truncate">${escapeH(_nm)}</span></div><div class="flex items-center gap-2 shrink-0 ml-3"><span class="text-xs text-indigo-600 font-medium">Analisando com IA...</span><span class="animate-spin-slow inline-block text-indigo-500">&#9881;</span></div></div>`;
       }
-      if (_waitN) _h += _sumRow('<span class="text-gray-400">&#9208;</span>', `${_waitN} prancha${_waitN > 1 ? 's' : ''} na fila`, 'text-gray-500');
       fileProgressList.innerHTML = _h;
       return;
     }
