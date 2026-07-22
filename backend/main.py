@@ -2060,7 +2060,7 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
         # auto-retoma até 2× — job longo multi-arquivo (ex.: 22 DWGs) pode
         # pegar 2 reinícios de deploy no meio; ampliado de 1 pra 2 na
         # auditoria 06/07. Após 2, vira erro pra não entrar em loop).
-        prev_count = 0
+        prev_count = None   # sentinela: None = leitura FALHOU → fail-closed (não retoma)
         typ = "office"
         ptype = "arquitetura"
         try:
@@ -2070,12 +2070,19 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
             qreq.add_header("apikey", SUPABASE_KEY)
             qreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             prow = json.loads(urllib.request.urlopen(qreq, timeout=10).read().decode("utf-8"))
+            prev_count = int(prow[0].get("auto_resume_count") or 0) if prow else 0
             if prow:
-                prev_count = int(prow[0].get("auto_resume_count") or 0)
                 typ = prow[0].get("typology") or "office"
                 ptype = prow[0].get("project_type") or "arquitetura"
         except Exception:
-            pass
+            # Fail-CLOSED (fix 2026-07-22): antes o default 0 anulava OS DOIS freios
+            # (quarentena exige >=1, retomada exige <2) — uma única falha de leitura
+            # fazia retomar sem limite. Agora leitura falha = prev_count None = não
+            # retoma (trata como "já retomou").
+            _log_error("recovery:read-fail",
+                       "Falha ao ler auto_resume_count — fail-closed, não retoma",
+                       job_id, severity="error")
+            prev_count = None
 
         # DISJUNTOR anti-crash-loop (19/07): em crash-loop (2+ boots em 15min),
         # o job que estava PROCESSANDO no momento da morte é o provável veneno
@@ -2084,6 +2091,18 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
         # terminal com orientação de arquivo + alerta pro Pedro. Jobs 'queued'
         # (inocentes na fila) seguem o fluxo normal. Teria transformado o
         # incidente de 06/07 (5 jobs mortos) em 1.
+        # Fail-closed: se não deu pra ler o contador de retomadas, não dá pra saber
+        # quantas já gastou — não retoma (evita loop infinito); marca erro pro
+        # cliente reenviar.
+        if prev_count is None:
+            _supabase_update("projects", "job_id", job_id, {
+                "status": "error",
+                "error_message": "Processamento interrompido por reinício do servidor. Reenvie o projeto.",
+                "completed_at": now.isoformat(),
+            })
+            recovered += 1
+            continue
+
         quarentenado = (crash_loop and not deploy_restart
                         and row.get("status") == "processing"
                         and prev_count >= 1)
@@ -3671,6 +3690,16 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
     try:
         jobs.update_field(job_id, status="processing")
+        # Espelha 'processing' no BANCO (fix disjuntor 2026-07-22): o disjuntor
+        # anti-crash-loop da recuperação exige status='processing' no banco pra
+        # achar o job venenoso — mas antes só o JobsStore LOCAL recebia esse status,
+        # então a quarentena NUNCA disparava (o job ficava 'queued' no banco). Agora
+        # o job ATIVO é marcado no banco → um OOM é quarentenado na 2ª tentativa em
+        # vez de virar crash-loop de 6 boots.
+        try:
+            _supabase_update("projects", "job_id", job_id, {"status": "processing"})
+        except Exception:
+            pass
         jobs.update_field(job_id, progress=3)
         jobs.update_field(job_id, current_step="Iniciando processamento...")
 
@@ -3775,11 +3804,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # Upload PNG pro Storage
                         _png_fname = os.path.splitext(_fname)[0] + '.png'
                         _supabase_storage_upload_prancha(_png_path, job_id, _png_fname)
-            try:
-                import threading as _t2
-                _t2.Thread(target=_render_cad_previews_bg, daemon=True).start()
-            except Exception:
-                pass
+            # NÃO inicia o preview aqui (fix OOM 2026-07-22): rodar o matplotlib
+            # concorrente com a análise soma o pico de RAM do render EM CIMA do
+            # pico da análise — justamente a janela de perigo em projeto com muitas
+            # pranchas (6-9). O preview é cosmético (botão "Ver prancha"); iniciado
+            # no FIM, depois da planilha, lendo os DXF que ficam no work_dir.
 
         # ── Pesos de progresso alinhados com percepção do usuário ──
         # A fase que o usuário percebe como "cada prancha processada" é a análise
@@ -5423,6 +5452,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 if e["candidates"]:
                     e["_item"].sinapi_matches = e["candidates"][:3]
             print(f"[sinapi] {n_conf}/{len(lote)} itens com código conferido pela IA")
+            # Libera o pool 60-wide de candidatos SINAPI (de TODAS as pranchas)
+            # antes da geração do XLSX + upload — não é mais usado. (higiene de RAM)
+            for e in lote:
+                e["candidates"] = None
+            del lote
+            gc.collect()
         except ImportError:
             pass
 
@@ -5451,6 +5486,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)
+
+        # Preview das pranchas (cosmético): inicia SÓ AGORA, depois do pico de RAM
+        # da análise+planilha, pra o matplotlib não coincidir com o momento crítico
+        # (fix OOM 2026-07-22). Lê os DXF do work_dir, que sobrevive ao fim do job.
+        if cad_paths:
+            try:
+                import threading as _t2
+                _t2.Thread(target=_render_cad_previews_bg, daemon=True).start()
+            except Exception:
+                pass
 
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
