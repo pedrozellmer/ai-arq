@@ -342,14 +342,14 @@
               <p class="text-sm text-gray-600 mt-1">Se o AI.arq te ajudou, indicar é o maior elogio que você pode fazer. A mensagem já está pronta:</p>
               <!-- Mensagem: caixinha com botão de copiar no canto (padrão copy/paste) -->
               <div class="mt-3 relative">
-                <div id="indica-msg" class="rounded-xl border border-indigo-100 bg-white px-4 py-3 pr-24 text-sm text-gray-700 leading-relaxed">Tô usando o AI.arq pra tirar o quantitativo dos projetos: você sobe a prancha (DXF, DWG ou PDF) e em minutos sai a planilha, com cada item marcado como medido do CAD ou estimativa pra conferir, e referência SINAPI. O 1º projeto é grátis, sem cartão. Olha um exemplo real: https://ai.arq.br/exemplo.html</div>
+                <div id="indica-msg" class="rounded-xl border border-indigo-100 bg-white px-4 py-3 pr-24 text-sm text-gray-700 leading-relaxed">Tô usando o AI.arq pra tirar o quantitativo dos projetos: você sobe a prancha (DXF, DWG ou PDF) e em minutos sai a planilha, com cada item marcado como medido do CAD ou estimativa pra conferir, e referência SINAPI. No beta, é tudo grátis, sem cartão. Olha um exemplo real: https://ai.arq.br/exemplo.html</div>
                 <button type="button" onclick="indicaCopiarTexto(this)" aria-label="Copiar mensagem" class="absolute top-2 right-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white/95 hover:bg-gray-50 text-gray-600 text-xs font-medium shadow-sm transition">
                   <span aria-hidden="true">📋</span> Copiar
                 </button>
               </div>
               <!-- Imagem: preview com o mesmo botão de copiar (cola direto no zap) -->
               <div class="mt-3 relative inline-block">
-                <img src="/indique/aiarq-apresentacao.png" alt="Apresentação do AI.arq em uma imagem: 3 passos, itens marcados como medidos ou estimativa, 1º projeto grátis" class="rounded-xl border border-indigo-100 w-44 shadow-sm">
+                <img src="/indique/aiarq-apresentacao.png" alt="Apresentação do AI.arq em uma imagem: 3 passos, itens marcados como medidos ou estimativa, grátis no beta" class="rounded-xl border border-indigo-100 w-44 shadow-sm">
                 <button type="button" onclick="indicaCopiarImagem(this)" aria-label="Copiar imagem" class="absolute top-2 right-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white/95 hover:bg-gray-50 text-gray-600 text-xs font-medium shadow-sm transition">
                   <span aria-hidden="true">📋</span> Copiar
                 </button>
@@ -724,7 +724,7 @@
             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl gradient-main text-white mb-6">
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             </div>
-            <h2 class="text-lg font-semibold text-gray-800 mb-2">Seu primeiro projeto é por nossa conta 🎉</h2>
+            <h2 class="text-lg font-semibold text-gray-800 mb-2">Grátis durante o beta 🎉</h2>
             <p class="text-sm text-gray-600 max-w-md mx-auto mb-6">Sobe a prancha (DXF, DWG ou PDF) e em <b>minutos</b> você recebe a planilha de quantitativos — grátis, sem cartão. Cada item vem marcado como <b>&#10003; medido</b> ou <b>&#9888; estimativa</b>, pra você saber no que confiar.</p>
             <button onclick="switchTab('novo-projeto')" class="px-6 py-3 rounded-xl gradient-main text-white font-semibold shadow-btn transition text-sm">
               Enviar minha primeira prancha &rarr;
@@ -990,7 +990,7 @@
           <div id="payments-empty" class="text-center py-12 text-gray-500">
             <span class="text-4xl block mb-3">&#128179;</span>
             <p class="font-medium">Nenhum pagamento realizado</p>
-            <p class="text-xs mt-1">Seu primeiro projeto &eacute; gr&aacute;tis!</p>
+            <p class="text-xs mt-1">Gr&aacute;tis durante o beta!</p>
           </div>
         </div>
       </div>
