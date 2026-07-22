@@ -2771,6 +2771,25 @@
   let errorCount = 0;
   let estimatedTotalSeconds = 120;
 
+  // ── Progresso HONESTO por prancha (fix 2026-07-22) ──
+  // A barra segue as PRANCHAS reais (ex.: 2 de 8 = ~25%), não o tempo. Auto-calibra
+  // o ritmo (perPlateSec) pelo tempo real de cada prancha do PRÓPRIO projeto.
+  let plTotal = 0, plCur = 0, plDone = 0;   // Y, X (atual, 1-based), concluídas
+  let plStartMs = 0, anStartMs = 0, finalStartMs = 0;
+  let perPlateSec = 0;                       // ritmo aprendido (s/prancha); 0 = sem dado ainda
+  let inFinal = false;                       // fase final (consolidação/planilha)
+
+  function parsePlateProgress(step) {
+    const s = step || '';
+    const cad = s.match(/(?:DXF|DWG[→>]DXF|Convertendo\s+DWG[→>]DXF.*?\()\s*(\d+)\s*\/\s*(\d+)/i);
+    const pdf = s.match(/(?:Prancha|Etapa)\s+(\d+)\s*\/\s*(\d+)/i);
+    const fin = !cad && !pdf && /consolid|valid|gerando|geração|revis|planilha|finaliz|montando|plausib|calibra|dedup|disciplin/i.test(s);
+    let X = 0, Y = 0;
+    if (cad) { X = parseInt(cad[1]); Y = parseInt(cad[2]); }
+    else if (pdf) { X = parseInt(pdf[1]); Y = parseInt(pdf[2]); }
+    return { X: X, Y: Y, final: fin };
+  }
+
   // Estimativa baseada no tamanho e tipo de cada arquivo
   function estimateProcessingTime(files) {
     let total = 15; // overhead fixo: upload, inicialização, geração da planilha
@@ -2847,6 +2866,10 @@
     progressPercent.textContent = '2%';
     pollStartTime = Date.now();
     errorCount = 0;
+    // reset do rastreio de pranchas (progresso honesto)
+    plTotal = 0; plCur = 0; plDone = 0;
+    plStartMs = 0; anStartMs = 0; finalStartMs = 0;
+    perPlateSec = 0; inFinal = false;
     estimatedTotalSeconds = estimateProcessingTime(selectedFiles);
     pollTimer = setInterval(pollStatus, 3000);
 
@@ -2854,35 +2877,52 @@
       if (!currentJobId) return;
       const elapsed = (Date.now() - pollStartTime) / 1000;
 
-      // Creep suave: visual sempre avança baseado em tempo, mas nunca cai.
-      // Se backend reportou mais, usa o maior. Se não, avança suavemente até 95%.
-      const timeBasedPct = Math.min(95, Math.round((elapsed / estimatedTotalSeconds) * 100));
-      const target = Math.max(realProgress, timeBasedPct);
+      // ── Progresso HONESTO: a barra segue as PRANCHAS, não o tempo (fix 2026-07-22).
+      // Fica na banda da prancha atual (2 de 8 = ~25%) e faz um creep suave DENTRO
+      // dessa banda; nunca dispara pros 95% na frente do trabalho real.
+      let target;
+      if (inFinal) {
+        const tf = finalStartMs ? (Date.now() - finalStartMs) / 1000 : 0;
+        target = 90 + Math.min(9, (tf / 25) * 9);             // 90→99 em ~25s
+      } else if (plTotal > 0 && plCur > 0) {
+        const band = 86 / plTotal;
+        const est = perPlateSec || (estimatedTotalSeconds / Math.max(plTotal, 1));
+        const tin = plStartMs ? (Date.now() - plStartMs) / 1000 : 0;
+        const frac = est > 0 ? Math.min(0.92, tin / est) : 0; // creep até 92% da banda da prancha
+        target = 4 + (plDone / plTotal) * 86 + band * frac;
+      } else {
+        // Sem prancha ainda: fila/início OU step em formato inesperado. Fallback
+        // conservador por tempo (teto 85% — nunca finge que concluiu).
+        target = Math.max(4, Math.min(85, (elapsed / Math.max(estimatedTotalSeconds, 1)) * 88));
+      }
+      target = Math.min(99, target);
       if (target > displayProgress) {
-        // avança gradualmente (evita pulos bruscos)
-        const step = Math.min(target - displayProgress, 0.5);
-        displayProgress = Math.min(target, displayProgress + step);
+        displayProgress = Math.min(target, displayProgress + Math.max(0.25, (target - displayProgress) * 0.2));
         progressBar.style.width = displayProgress + '%';
         progressPercent.textContent = Math.round(displayProgress) + '%';
       }
 
-      // Mensagem temática conforme a fase + tempo restante
-      const remaining = Math.max(0, estimatedTotalSeconds - elapsed);
-      const mins = Math.floor(remaining / 60);
-      const secs = Math.floor(remaining % 60);
+      // ── Tempo restante: auto-calibrado pelo ritmo REAL das pranchas do projeto ──
+      let etaSec;
+      if (inFinal) {
+        etaSec = Math.max(3, 25 - (finalStartMs ? (Date.now() - finalStartMs) / 1000 : 0));
+      } else if (plTotal > 0 && plCur > 0) {
+        const est = perPlateSec || (estimatedTotalSeconds / Math.max(plTotal, 1));
+        const spentCur = plStartMs ? (Date.now() - plStartMs) / 1000 : 0;
+        etaSec = Math.max(5, (plTotal - plDone) * est - spentCur + 12);
+      } else {
+        etaSec = Math.max(5, estimatedTotalSeconds - elapsed);
+      }
+      const mins = Math.floor(etaSec / 60);
+      const secs = Math.floor(etaSec % 60);
       const themed = pickMessageForProgress(displayProgress);
-
-      if (remaining > 5) {
-        const timeStr = mins > 0 ? `~${mins}min ${secs}s` : `~${secs}s`;
-        timeEstimate.textContent = `${themed}  ·  ${timeStr}`;
-      } else if (elapsed < 90 && realProgress < 5) {
-        // Sem progresso real ainda: provavelmente na FILA (processamos 1 projeto
-        // por vez pra garantir qualidade) ou o motor iniciando. Render é PAGO —
-        // NÃO dorme; nunca atribuir a "standby/free tier" (regra do Pedro).
+      if (plTotal === 0 && !inFinal && elapsed < 120) {
+        // Ainda sem prancha: provavelmente na FILA (1 projeto por vez). Render é
+        // PAGO — não dorme; nunca dizer "standby/free tier" (regra do Pedro).
         timeEstimate.textContent = 'Seu projeto entrou na fila — processamos um de cada vez pra garantir qualidade. Já começa. Pode fechar a aba: te avisamos por email quando a planilha ficar pronta.';
       } else {
-        // Passou do tempo estimado — só a mensagem temática, sem contador
-        timeEstimate.textContent = themed;
+        const timeStr = mins > 0 ? `~${mins}min ${secs}s` : `~${secs}s`;
+        timeEstimate.textContent = `${themed}  ·  ${timeStr}`;
       }
     }, 500);
   }
@@ -2914,6 +2954,24 @@
       const pct = data.progress || 0;
       const step = data.step || data.current_step || 'Processando...';
       const status = data.status || '';
+
+      // Atualiza o rastreio de pranchas pro progresso HONESTO
+      {
+        const pp = parsePlateProgress(step);
+        const nowMs = Date.now();
+        if (pp.final) {
+          if (!inFinal) { inFinal = true; finalStartMs = nowMs; }
+        } else if (pp.X && pp.Y) {
+          if (pp.Y > plTotal) plTotal = pp.Y;
+          if (!anStartMs) anStartMs = nowMs;
+          if (pp.X !== plCur) {
+            plCur = pp.X;
+            plDone = pp.X - 1;
+            plStartMs = nowMs;
+            if (plDone >= 1) perPlateSec = ((nowMs - anStartMs) / 1000) / plDone;
+          }
+        }
+      }
 
       // Só sobe; nunca deixa cair
       realProgress = Math.max(realProgress, pct);
