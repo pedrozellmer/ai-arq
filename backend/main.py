@@ -3382,6 +3382,90 @@ def _abort_job_mem(job_id: str, done: int, total: int):
         pass
 
 
+def _extract_dxf_inprocess(dxf_path, unit_consensus):
+    """Extração IN-PROCESS (fallback): emagrece + extrai + gera o prompt. Mesmo
+    resultado do worker isolado, mas roda no processo do servidor (sem teto de RAM)."""
+    p = dxf_path
+    try:
+        from dxf_slim import emagrecer_dxf_se_preciso
+        _s = emagrecer_dxf_se_preciso(p)
+        if _s:
+            p = _s
+    except Exception as _sl_e:
+        print(f"[dxf-slim] pulando ({_sl_e})")
+    from dwg_extractor import extract_from_file
+    _ext = extract_from_file(p, unit_factor_override=unit_consensus)
+    return _ext, _ext.to_structured_prompt(), p
+
+
+def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900):
+    """Extrai UMA prancha DXF num SUBPROCESSO matável com teto de memória (fix
+    confiabilidade 2026-07-22). Uma prancha densa que estouraria a RAM mata só o
+    filho — o servidor fica de pé. Retorna (extraction, structured_text, path).
+
+    - timeout → concurrent.futures.TimeoutError (o loop já trata: pula a prancha)
+    - filho morto por RAM / erro de parse → RuntimeError (o loop trata: pula)
+    - NÃO deu pra lançar o subprocesso (local/ambiente restrito) → fallback in-process
+    """
+    import concurrent.futures as _cf
+    import subprocess
+    import sys
+    import tempfile
+    import pickle as _pk
+    _worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dxf_extract_worker.py")
+    if not os.path.exists(_worker):
+        return _extract_dxf_inprocess(dxf_path, unit_consensus)   # sem worker → in-process
+    _fd, _out = tempfile.mkstemp(suffix=".pkl", prefix="dxfext_")
+    os.close(_fd)
+    # Teto de memória do filho (POSIX). Prancha legítima cabe; densa patológica morre
+    # aqui em vez de derrubar o container. RLIMIT_AS é VIRTUAL (> RSS real), então o
+    # padrão é folgado (2,5GB) pra não matar prancha grande boa por engano — pai ~1GB
+    # + filho 2,5GB = 3,5GB < 4GB do container. Env DXF_EXTRACT_MEM_MB ajusta: se
+    # prancha legítima começar a falhar, sobe; se ainda estourar o container, desce.
+    _preexec = None
+    try:
+        import resource as _res
+        _cap = int(os.environ.get("DXF_EXTRACT_MEM_MB", "2560")) * 1024 * 1024
+        def _cap_mem():
+            _res.setrlimit(_res.RLIMIT_AS, (_cap, _cap))
+        _preexec = _cap_mem
+    except Exception:
+        _preexec = None
+    try:
+        _kw = dict(cwd=os.path.dirname(os.path.abspath(__file__)),
+                   timeout=timeout_s, capture_output=True)
+        if _preexec is not None:
+            _kw["preexec_fn"] = _preexec
+        _proc = subprocess.run(
+            [sys.executable, _worker, dxf_path, _out,
+             ("" if unit_consensus is None else str(unit_consensus))], **_kw)
+    except subprocess.TimeoutExpired:
+        try: os.remove(_out)
+        except OSError: pass
+        raise _cf.TimeoutError()          # subprocess.run já matou o filho
+    except Exception as _le:
+        # Não deu pra LANÇAR o subprocesso (ex.: local sem 'resource'/preexec) →
+        # cai pro in-process (mesmo resultado, sem isolamento). NÃO é o caso OOM.
+        try: os.remove(_out)
+        except OSError: pass
+        print(f"[dxf-isolado] subprocesso não lançou ({type(_le).__name__}: {_le}) — fallback in-process")
+        return _extract_dxf_inprocess(dxf_path, unit_consensus)
+    if _proc.returncode != 0:
+        _err = (_proc.stderr or b"").decode("utf-8", "replace")[-600:]
+        try: os.remove(_out)
+        except OSError: pass
+        # rc != 0 = filho morto pelo teto de RAM OU erro de parse → NÃO faz fallback
+        # (re-rodar in-process uma prancha que estourou a RAM derrubaria o servidor).
+        raise RuntimeError(f"extração isolada falhou (rc={_proc.returncode}): {_err}")
+    try:
+        with open(_out, "rb") as _f:
+            _result = _pk.load(_f)
+    finally:
+        try: os.remove(_out)
+        except OSError: pass
+    return _result
+
+
 def _measure_unambiguous(value: float, cat: str, by_cat: dict) -> bool:
     """True se `value` (medida arredondada) aparece SÓ na categoria `cat` dentro de
     `by_cat` — não colide com nenhuma outra categoria do MESMO tipo de medida.
@@ -4217,22 +4301,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # pendurar. Teto GENEROSO de propósito (servidor 25GB, 21/07): só
                         # pega hang de verdade — prancha grande legítima leva minutos e conclui.
                         import concurrent.futures as _cf
-                        def _extract_dxf_guarded(_p):
-                            try:
-                                from dxf_slim import emagrecer_dxf_se_preciso
-                                _s = emagrecer_dxf_se_preciso(_p)
-                                if _s:
-                                    _p = _s
-                            except Exception as _sl_e:
-                                print(f"[dxf-slim] pulando ({_sl_e})")
-                            _ext = extract_from_file(_p, unit_factor_override=_unit_consensus)
-                            return _ext, _ext.to_structured_prompt(), _p
-                        _tpe = _cf.ThreadPoolExecutor(max_workers=1)
-                        _fut = _tpe.submit(_extract_dxf_guarded, dxf_path)
-                        try:
-                            extraction, structured_text, dxf_path = _fut.result(timeout=900)
-                        finally:
-                            _tpe.shutdown(wait=False)  # nunca espera: thread pendurada não trava o job
+                        # Extração ISOLADA num subprocesso matável com teto de RAM
+                        # (fix confiabilidade 2026-07-22): uma prancha densa que
+                        # estouraria a memória mata só o filho — o servidor fica de pé.
+                        # timeout → _cf.TimeoutError (pula prancha); filho morto/erro →
+                        # RuntimeError (pula prancha); sem subprocesso → fallback in-process.
+                        extraction, structured_text, dxf_path = _extract_dxf_isolated(
+                            dxf_path, _unit_consensus, timeout_s=900)
                     except _cf.TimeoutError:
                         _bn_dxf = os.path.basename(dxf_path)
                         print(f"[dxf] extração ESTOUROU 900s em {_bn_dxf} — pulando (job segue)")
