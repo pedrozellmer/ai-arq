@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<title>Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM | AI.arq</title>
+<meta name="description" content="Guia prático para extrair quantitativo do DWG/DXF sem modelar em BIM: o que dá pra medir de verdade (áreas, comprimentos, blocos), o que fica estimado e por que exportar DXF mede melhor.">
+<meta name="keywords" content="extrair quantitativo do dwg, quantitativo automático dwg sem bim, levantamento de quantitativos do dxf, quantitativo dwg, medir área dxf, quantitativo sem revit, extrair quantitativo cad">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html">
+<meta property="og:title" content="Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM">
+<meta property="og:description" content="Guia prático para extrair quantitativo do DWG/DXF sem modelar em BIM: o que dá pra medir de verdade (áreas, comprimentos, blocos), o que fica estimado e por que exportar DXF mede melhor.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-07-22T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Quantitativos">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM">
+<meta name="twitter:description" content="Guia prático para extrair quantitativo do DWG/DXF sem modelar em BIM: o que dá pra medir de verdade (áreas, comprimentos, blocos), o que fica estimado e por que exportar DXF mede melhor.">
+<meta name="twitter:image" content="https://ai.arq.br/og-image.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-07-22">
+
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM",
+  "description": "Guia prático para extrair quantitativo do DWG/DXF sem modelar em BIM: o que dá pra medir de verdade (áreas, comprimentos, blocos), o que fica estimado e por que exportar DXF mede melhor.",
+  "datePublished": "2026-07-22T10:00:00-03:00",
+  "dateModified": "2026-07-22T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/og-image.png",
+  "url": "https://ai.arq.br/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html"
+  },
+  "keywords": "extrair quantitativo do dwg, quantitativo automático dwg sem bim, levantamento de quantitativos do dxf, quantitativo dwg, medir área dxf, quantitativo sem revit, extrair quantitativo cad",
+  "articleSection": "Quantitativos"
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html?novo=1" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Quantitativos</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Quantitativos</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 22/07/2026</span>
+    <span>·</span>
+    <span>⏱️ 10 min de leitura</span>
+  </div>
+
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">Você tem o DWG na mão. O projeto está desenhado, cotado, com layers organizados e blocos de esquadria espalhados pela planta. Mas na hora de levantar o quantitativo, a rotina ainda é a de sempre: abrir o CAD, medir polilinha por polilinha, contar bloco por bloco, anotar numa planilha e torcer para não pular nada. Modelar tudo de novo em BIM para "extrair automático" não é opção — dá um trabalho que muitas vezes não cabe no prazo do orçamento.
+
+A boa notícia é que o DWG já guarda quase tudo que você precisa medir. Ele não é uma imagem: é um banco de dados de geometria. Cada parede é uma linha com coordenadas reais, cada ambiente é um polígono com área calculável, cada porta é um bloco que dá para contar. O que falta não é o dado — é ler esse dado sem abrir o desenho no braço.
+
+Este post é sobre exatamente isso: como o quantitativo pode sair do DWG/DXF de forma automática, sem BIM e sem Revit. Vamos separar com honestidade o que a geometria permite medir de verdade do que continua sendo estimativa, explicar por que exportar o DXF muda o jogo e mostrar onde entra a SINAPI como vocabulário. Nada de mágica: só o que o arquivo realmente carrega.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>Por que o DWG guarda a geometria que dá para medir</h2><p>Um erro comum é tratar o DWG como se fosse um desenho "achatado", tipo uma foto da prancha. Não é. O DWG é o formato nativo do AutoCAD e armazena os elementos como objetos vetoriais com coordenadas reais: uma parede é uma linha (ou polilinha) que vai do ponto X1,Y1 ao X2,Y2; um piso é um contorno fechado que delimita uma área; uma tomada é um bloco inserido numa posição.</p><p>Isso muda tudo para o levantamento. Se cada elemento tem coordenada, então comprimento, área e contagem são cálculos geométricos diretos — não é preciso "interpretar a imagem", basta ler os números que já estão lá. Três estruturas do arquivo carregam quase todo o quantitativo:</p><ul><li>**Layers (camadas):** o projeto costuma estar organizado por disciplina e elemento — parede, esquadria, piso, hidráulica, elétrica. O layer é o rótulo que diz o que aquela geometria representa.</li><li>**Blocos:** portas, janelas, louças, luminárias e tomadas normalmente são blocos repetidos. Contar blocos por nome é contar peças.</li><li>**Hachuras e contornos fechados:** áreas de piso, revestimento e forro geralmente aparecem como regiões preenchidas ou polígonos fechados, e todo polígono fechado tem área calculável.</li></ul><p>Em outras palavras: o desenho que você já entregou ou recebeu contém, embutida, a matéria-prima de um quantitativo. O trabalho é extrair, não recriar.</p><h2>O caminho manual: contar no CAD, item por item</h2><p>O jeito tradicional funciona — e todo orçamentista já fez isso mil vezes. Você abre o DWG, isola os layers de interesse, usa os comandos de medição (área, distância, listar propriedades) e vai transferindo cada número para a planilha. Para contagem de blocos, dá para usar filtros de seleção rápida por nome de bloco e ler quantos existem.</p><p>O problema não é a técnica, é a escala e o erro humano. Alguns pontos que corroem o levantamento manual:</p><ul><li>**Volume:** uma planta de médio porte tem centenas de segmentos de parede, dezenas de ambientes e várias famílias de esquadria. Medir tudo à mão consome horas e cansa.</li><li>**Reprocesso:** mudou o projeto, mudou a planta — e o levantamento inteiro precisa ser refeito, muitas vezes na véspera da entrega.</li><li>**Inconsistência:** dois profissionais medindo a mesma planta chegam a números um pouco diferentes, porque cada um decide de forma distinta o que entra, o que arredonda e o que agrupa.</li><li>**Rastreabilidade fraca:** depois de digitado na planilha, o número perde o vínculo com o desenho. Seis meses depois, ninguém lembra se aquele valor foi medido ou "chutado com folga".</li></ul><p>O caminho manual é confiável quando bem feito, mas é lento e frágil justamente onde mais dói: no prazo e na hora de auditar de onde saiu cada quantidade.</p><h2>O caminho automático: ler a geometria em vez de medir na mão</h2><p>A alternativa é deixar o computador fazer o que ele faz bem: ler coordenadas e calcular. Como cada elemento do DWG/DXF tem geometria explícita, um software consegue percorrer o arquivo e somar, com precisão de máquina, o que você somaria à mão.</p><p>Na prática, o processamento automático faz três operações básicas sobre a geometria:</p><ul><li>**Somar comprimentos:** percorre as linhas e polilinhas de um layer (por exemplo, o de tubulação ou de rodapé) e soma o comprimento total.</li><li>**Calcular áreas:** identifica os contornos fechados e hachuras e calcula a área de cada ambiente ou revestimento — a mesma conta de sempre, só que sem clicar.</li><li>**Contar blocos:** agrupa as inserções de bloco por nome e conta quantas peças de cada tipo existem no desenho.</li></ul><p>A diferença de fundo em relação ao caminho manual é a rastreabilidade. Quando a quantidade nasce de uma leitura da geometria, ela pode ficar amarrada ao elemento que a originou. Isso importa para o próximo tópico: nem tudo no arquivo pode ser medido com a mesma confiança, e ser honesto sobre isso é o que separa um número auditável de um chute com aparência de precisão.</p><h2>O que dá para medir de verdade — e o que fica como estimativa</h2><p>Aqui está o ponto mais importante do post, e o que costuma ser varrido para debaixo do tapete: nem tudo que aparece num quantitativo automático foi "medido". Uma parte vem direto da geometria (medido); outra parte é inferência a partir de regras ou premissas (estimado). Confundir as duas coisas é o caminho mais rápido para um orçamento furado.</p><p>**O que dá para medir do CAD, com a geometria na mão:**</p><ul><li>**Áreas** de piso, forro e revestimento, a partir de contornos fechados e hachuras (m²).</li><li>**Comprimentos** de paredes, tubulações, eletrodutos, rodapés e soleiras, a partir de linhas e polilinhas (m).</li><li>**Contagens** de esquadrias, louças, metais, luminárias, tomadas e pontos — a partir dos blocos (unidades).</li></ul><p>**O que normalmente fica como estimativa (não está desenhado, se infere):**</p><ul><li>**Volumes de concreto e taxas de aço** quando a peça não está modelada em 3D nem detalhada — a área até sai da planta, mas a espessura/altura entra por premissa.</li><li>**Camadas que não aparecem na planta 2D:** contrapiso, regularização, chapisco, emboço, impermeabilização — muitas vezes derivadas da área medida por um fator, não desenhadas.</li><li>**Perdas e sobras de material,** que são coeficientes de execução, não geometria.</li></ul><p>A regra de ouro é simples: o que veio da geometria do desenho é medido e pode carregar um selo de confirmado; o que veio de premissa é estimado e precisa aparecer como alerta, para o orçamentista revisar. Estimativa não é medição — e um bom levantamento deixa isso escrito em cada linha, em vez de entregar todos os números com a mesma cara de certeza.</p><h2>DWG vs DXF: por que exportar o DXF mede melhor</h2><p>Os dois formatos vêm da Autodesk, mas têm naturezas diferentes. O DWG é o formato nativo do AutoCAD e é **proprietário e binário** — otimizado para uso dentro dos produtos Autodesk, com a especificação controlada pela empresa. O DXF (Drawing Interchange Format) foi criado justamente para **interoperabilidade**: é um formato de troca, e na sua variante mais comum é **texto puro (ASCII)**, legível e com cada elemento descrito explicitamente.</p><p>Essa diferença aparece na hora de extrair quantitativo. O DXF organiza o desenho em seções bem definidas — TABLES (onde ficam os layers), BLOCKS (as definições de bloco) e ENTITIES (as entidades do desenho, incluindo as referências de bloco) — e cada dado é precedido por um "group code", um número que diz o que vem a seguir. É um formato pensado para ser lido por outro programa, não só pelo AutoCAD.</p><p>Na prática, isso significa que **exportar o projeto como DXF costuma dar uma leitura mais limpa e completa da geometria** do que tentar processar o DWG direto. Objetos mais "exóticos" — especialmente de disciplinas como elétrica, hidráulica e forros feitas em ferramentas AEC — nem sempre atravessam bem para leitura automática; passar o desenho por uma exportação para DXF (no AutoCAD, o comando de exportar para AutoCAD limpo antes de gerar o DXF ajuda) reduz muito o número de elementos que "somem" ou viram contagem zero. A recomendação prática é direta: se você tem o DWG, exporte também um DXF e mande os dois. Você não perde nada e ganha uma medição mais fiel.</p><h2>Layers e blocos organizados: o que faz o levantamento render</h2><p>A qualidade do quantitativo automático depende diretamente da qualidade do desenho — e isso é uma boa notícia, porque é algo que está no seu controle. Um projeto com layers bem nomeados e blocos padronizados é lido com muito mais precisão do que um desenho onde tudo foi jogado num layer só e as esquadrias foram desenhadas linha a linha, sem virar bloco.</p><p>Algumas práticas que fazem diferença real na extração:</p><ul><li>**Um layer por elemento/disciplina:** paredes num layer, esquadrias em outro, hidráulica em outro. Quanto mais o layer diz o que a geometria representa, mais direto fica classificar a quantidade.</li><li>**Esquadrias e louças como blocos, não como linhas soltas:** bloco se conta; um amontoado de linhas não. Se a porta é um bloco nomeado, a contagem sai sozinha.</li><li>**Contornos de ambiente fechados:** área só se calcula em polígono fechado. Polilinha que não fecha vira área zero ou erro.</li><li>**Cotas e escala consistentes:** a medição em metros depende da escala real do desenho. Se as cotas viraram texto solto ou a escala está inconsistente, o comprimento pode sair errado.</li></ul><p>Não é preciso reorganizar o projeto inteiro para colher o benefício — mas vale saber que meia hora arrumando layers e transformando esquadrias em blocos costuma render um levantamento bem mais confiável, seja ele manual ou automático.</p><h2>SINAPI: o vocabulário que dá nome ao que você mediu</h2><p>Medir a geometria responde "quanto" — 120 m² de piso, 340 m de tubulação, 18 portas. Mas um quantitativo precisa também responder "do quê", com um nome que outras pessoas reconheçam. É aí que entra a SINAPI, o Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil, mantido pela Caixa Econômica Federal em parceria com o IBGE.</p><p>A SINAPI é um banco de dados de insumos e composições de serviços da construção civil, com códigos e descrições padronizadas — uma taxonomia. Para obras com recursos públicos federais, ela é referência por força do Decreto nº 7.983/2013, que estabelece a SINAPI como sistema de referência de custos do orçamento. Isso a torna, na prática, o vocabulário comum do setor: quando você amarra "120 m² de piso" a uma descrição SINAPI de revestimento de piso, qualquer orçamentista entende exatamente do que se trata.</p><p>Vale a distinção honesta: usar a SINAPI como **vocabulário** (para nomear e classificar o serviço medido) é diferente de usá-la como **preço**. O quantitativo é a lista do que tem e quanto tem; a precificação, com os custos de referência, é etapa seguinte e é trabalho do orçamentista. Amarrar cada quantidade a um código SINAPI organiza o levantamento e prepara o terreno para o orçamento — sem que o levantamento precise, ele mesmo, colocar preço em nada.</p><h2>Juntando tudo: do DWG à planilha, sem modelar em BIM</h2><p>Recapitulando o caminho, sem BIM e sem Revit no meio: o DWG já é geometria, não imagem; layers, blocos e contornos guardam áreas, comprimentos e contagens; um processamento automático lê esses dados e soma o que você somaria à mão, com a vantagem de manter o vínculo com o desenho; exportar um DXF ajuda a leitura a ficar mais completa; e a SINAPI dá nome padronizado a cada item medido.</p><p>O ganho concreto não é "substituir o orçamentista" — é tirar do profissional as horas de trabalho braçal e de baixo valor (clicar em cada parede, contar bloco a bloco) e devolver um levantamento já organizado, onde o que foi medido está separado do que foi estimado. O julgamento técnico, a revisão das premissas e a precificação continuam sendo humanos. O que muda é o ponto de partida: em vez de uma folha em branco, você começa de uma planilha já preenchida a partir do desenho, com cada número rastreável até o elemento que o originou.</p><p>É exatamente essa a ideia por trás do **AI.arq**. Você sobe o CAD — PDF, DWG ou DXF —, a IA lê as pranchas em minutos e devolve uma planilha de quantitativos por disciplina, com referência SINAPI, distinguindo claramente o que foi **medido** da geometria do que ficou como **estimativa**. Sem modelar em BIM, sem Revit: parte do desenho que você já tem. O primeiro projeto é grátis em ai.arq.br — vale subir uma planta que você conheça bem e conferir os números contra o seu próprio levantamento.</p>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Tem um DWG ou DXF na mão e quer ver o quantitativo sair do desenho, sem modelar nada em BIM? Suba o arquivo no AI.arq: a IA lê as pranchas em minutos e devolve uma planilha por disciplina com referência SINAPI, separando o que foi medido do que foi estimado. O primeiro projeto é grátis em ai.arq.br — teste com uma planta que você já conhece e compare com o seu levantamento.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+        Começar grátis
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+      </a>
+      <!-- Caminho de baixo atrito: leitor orgânico que não quer se cadastrar
+           ainda vê a prova (25 itens reais, sem login) em vez de bater no muro -->
+      <a href="/exemplo.html" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
+        Ver um quantitativo real →
+      </a>
+    </div>
+    <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão. O exemplo abre sem cadastro.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Leis e Atos Normativos</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>Decreto nº 7.983, de 8 de abril de 2013 (Câmara dos Deputados)</strong> &mdash; <span class="text-gray-600">Decreto que estabelece regras e critérios para o orçamento de referência de obras e serviços de engenharia com recursos federais, fixando a SINAPI como sistema de referência de custos (art. 3º). Sustenta a afirmação sobre o papel oficial da SINAPI.</span></li></ul></div><div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">SINAPI — Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil (Caixa Econômica Federal)</a></li><li><a href="https://en.wikipedia.org/wiki/AutoCAD_DXF" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">AutoCAD DXF — formato tagged com group codes, seções TABLES/BLOCKS/ENTITIES (Wikipedia)</a></li><li><a href="https://www.loc.gov/preservation/digital/formats/fdd/fdd000446.shtml" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">DXF (AutoCAD Drawing Interchange Format) Family, ASCII variant — Library of Congress</a></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 22/07/2026. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Leia também (posts relacionados) -->
+  
+    <section class="aiarq-related mt-16 pt-8 border-t border-gray-200">
+      <h2 class="flex items-center gap-2 text-lg font-bold text-gray-900 mb-5">
+        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Leia também
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        
+        <a href="/blog/posts/quantitativo-de-obra-com-ia.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Quantitativo de obra com IA: como funciona e dá pra confiar?</div>
+        </a>
+        <a href="/blog/posts/5-erros-quantitativo-atraso-de-obra.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">5 erros de quantitativo que viram atraso de obra (e como evitar)</div>
+        </a>
+        <a href="/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">IA e Confiança</span>
+          <div class="font-semibold text-gray-900 leading-snug">DWG ou PDF? O que 51 projetos reais mostram sobre o seu quantitativo</div>
+        </a>
+      </div>
+    </section>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Produto</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Legal</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 ai.arq.br · Todos os direitos reservados
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
+<script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
+</body>
+</html>

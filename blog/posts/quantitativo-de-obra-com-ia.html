@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<title>Quantitativo de obra com IA: como funciona e dá pra confiar? | AI.arq</title>
+<meta name="description" content="Quantitativo com inteligência artificial: o que a IA faz bem ao ler a prancha, onde ela estima, por que medido é diferente de chute e como revisar antes de confiar.">
+<meta name="keywords" content="quantitativo com inteligência artificial, ia para levantamento de quantitativos, dá pra confiar em quantitativo de ia, quantitativo de obra com ia, medido vs estimado, quantitativo automático a partir do cad, levantamento de quantitativos com ia">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html">
+<meta property="og:title" content="Quantitativo de obra com IA: como funciona e dá pra confiar?">
+<meta property="og:description" content="Quantitativo com inteligência artificial: o que a IA faz bem ao ler a prancha, onde ela estima, por que medido é diferente de chute e como revisar antes de confiar.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-07-22T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Quantitativos">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Quantitativo de obra com IA: como funciona e dá pra confiar?">
+<meta name="twitter:description" content="Quantitativo com inteligência artificial: o que a IA faz bem ao ler a prancha, onde ela estima, por que medido é diferente de chute e como revisar antes de confiar.">
+<meta name="twitter:image" content="https://ai.arq.br/og-image.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-07-22">
+
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Quantitativo de obra com IA: como funciona e dá pra confiar?",
+  "description": "Quantitativo com inteligência artificial: o que a IA faz bem ao ler a prancha, onde ela estima, por que medido é diferente de chute e como revisar antes de confiar.",
+  "datePublished": "2026-07-22T10:00:00-03:00",
+  "dateModified": "2026-07-22T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/og-image.png",
+  "url": "https://ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html"
+  },
+  "keywords": "quantitativo com inteligência artificial, ia para levantamento de quantitativos, dá pra confiar em quantitativo de ia, quantitativo de obra com ia, medido vs estimado, quantitativo automático a partir do cad, levantamento de quantitativos com ia",
+  "articleSection": "Quantitativos"
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html?novo=1" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Quantitativos</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Quantitativos</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Quantitativo de obra com IA: como funciona e dá pra confiar?</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 22/07/2026</span>
+    <span>·</span>
+    <span>⏱️ 10 min de leitura</span>
+  </div>
+
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">"IA que faz quantitativo" virou promessa de feira de tecnologia — e, como toda promessa redonda demais, merece desconfiança. Quem já passou uma tarde inteira contando porta em planta, medindo área de piso no CAD e digitando tudo numa planilha sabe que o trabalho é chato, repetitivo e, justamente por isso, cheio de erro humano. A pergunta certa não é "a IA faz?", é "o que exatamente ela faz, onde ela acerta, onde ela chuta, e como eu confiro?".
+
+Este texto responde isso sem vender milagre. A tese é simples: uma ferramenta de quantitativo com IA só é séria se ela for honesta sobre a diferença entre o que ela MEDIU no desenho e o que ela ESTIMOU. Uma área de piso extraída da geometria da prancha é um número que você pode auditar. Um "chute" de quantidade de tomadas sem contar no desenho é outra coisa — e tratar os dois como se fossem a mesma coisa é o que separa uma ferramenta de trabalho de um gerador de números bonitos. Vamos destrinchar o que a tecnologia faz bem hoje, onde ela tropeça (com dado de pesquisa, não com achismo), e como revisar um levantamento antes de assinar embaixo.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>O que "quantitativo com IA" quer dizer — e o que não quer</h2><p>Antes de confiar ou desconfiar, vale separar o que está no pacote. Quantitativo é o levantamento das quantidades de uma obra: metros quadrados de piso, metros lineares de rodapé, número de portas e janelas, área de parede a revestir, metros de eletroduto, quilos de aço. É a base de qualquer orçamento — mas não é o orçamento. Quem transforma quantidade em dinheiro é o orçamentista, aplicando preços, produtividade, encargos e composições.</p><p>"IA para levantamento de quantitativos" descreve um software que lê o projeto (PDF, DWG ou DXF), interpreta o que está desenhado e devolve essas quantidades organizadas. Repare no que isso NÃO é:</p><ul><li>Não é BIM. Você não precisa modelar nada no Revit nem ter um modelo federado. A IA trabalha em cima do desenho 2D que o escritório já produz.</li><li>Não é orçamento. Sai quantidade, não preço.</li><li>Não é adivinhação de projeto. A IA não inventa o que não está desenhado — ou pelo menos não deveria, e quando extrapola, tem que avisar.</li></ul><p>Entender essa fronteira é o primeiro filtro de confiança. Uma ferramenta que promete "orçamento pronto em minutos" está prometendo mais do que a geometria de uma prancha permite entregar com honestidade.</p><h2>O que a IA realmente faz bem hoje: ler, contar e medir a geometria</h2><p>A parte boa é concreta. Quando o projeto chega em formato vetorial — um DWG, um DXF ou um PDF exportado do CAD com as linhas preservadas —, o desenho não é uma foto: é um conjunto de coordenadas. Uma linha de parede tem começo e fim; um hachurado de piso tem um contorno fechado com área calculável; um bloco de porta é um objeto que aparece repetido. Isso é matéria-prima para medição de verdade.</p><p>O que a tecnologia entrega bem nesse cenário:</p><ul><li>Medir área e comprimento pela geometria. Área de um ambiente, perímetro para rodapé, comprimento de parede — tudo isso é aritmética sobre coordenadas. Não é interpretação subjetiva; é medição.</li><li>Contar objetos repetidos. Blocos de porta, janela, luminária e mobiliário aparecem como instâncias no arquivo. Contar instância é algo que a máquina faz sem cansar e sem pular a porta do fundo às 18h.</li><li>Ler texto da prancha. Cotas, legendas, tabelas de esquadrias, nomes de ambiente — a extração de texto (OCR e leitura de camadas de texto) é hoje uma das tarefas em que os modelos vão bem.</li><li>Organizar por disciplina. Separar arquitetura, elétrica, hidráulica e estrutura, e agrupar os itens numa planilha navegável.</li></ul><p>No lugar de uma tarde inteira riscando planta com marca-texto, o levantamento base sai em minutos. Esse ganho é real — desde que você saiba o que veio de medição e o que veio de estimativa.</p><h2>Onde a IA erra: contar símbolo é mais difícil que ler texto</h2><p>Aqui entra o dado que separa conversa de vendedor de conversa técnica. Em janeiro de 2026 foi publicado o AECV-Bench, um benchmark que testou modelos multimodais (as "IAs que enxergam") justamente na tarefa de entender plantas de arquitetura e engenharia — incluindo contar portas, janelas, quartos e banheiros em 120 plantas de qualidade.</p><p>O resultado é honesto e útil: a leitura de texto (OCR, extrair informação escrita) chegou a cerca de 95% de acurácia, mas a contagem confiável de portas e janelas a partir da imagem ficou frequentemente entre 40% e 55% de acerto. Ou seja: pedir para um modelo "olhar" uma planta rasterizada e contar símbolos ainda é um problema não resolvido, com erro proporcional alto.</p><p>A lição prática é direta. Quando a contagem depende de o modelo interpretar visualmente um símbolo numa imagem, o resultado é frágil. Quando a contagem sai da geometria do arquivo vetorial — o bloco de porta é um objeto que existe no DWG, não um desenho que precisa ser "reconhecido" —, o jogo muda completamente. É por isso que o formato do arquivo que você sobe importa tanto (voltamos a isso adiante) e por que uma ferramenta séria não trata "contei os blocos no DXF" e "achei que tinha umas 12 portas na imagem" como a mesma coisa.</p><h2>Medido vs estimado: a linha que separa ferramenta séria de chute</h2><p>Esse é o ponto central do texto. Todo quantitativo gerado por IA mistura dois tipos de número, e a diferença entre eles é o que decide se você pode confiar:</p><ul><li>Medido: veio da geometria do desenho. A área de 47,3 m² de um ambiente saiu do contorno fechado da hachura; os 8 blocos de porta saíram da contagem de instâncias no arquivo. Você consegue apontar no CAD de onde cada número veio e refazer a conta. Isso é auditável.</li><li>Estimado: veio de uma inferência, de uma regra empírica ou de um índice de projeto — não de uma medição direta no desenho. Por exemplo, deduzir área de forma de concreto sem que a estrutura esteja cotada, ou completar um item que a prancha não detalha.</li></ul><p>Uma ferramenta honesta marca cada linha da planilha com essa distinção — visualmente, sem letra miúda. Medido é medido; estimado carrega um alerta que diz "confira isto antes de usar". O pecado capital de uma ferramenta de IA é apresentar estimativa com cara de medição: um número redondo, confiante, sem aviso, que o usuário copia direto para o orçamento achando que a máquina "mediu".</p><p>Quando você avalia qualquer solução de quantitativo com IA, faça essa pergunta de teste: "como você me mostra o que mediu versus o que estimou?". Se a resposta é vaga, ou se tudo vem com a mesma cor e a mesma confiança, desconfie. Não porque a IA seja ruim, mas porque a ferramenta escondeu de você exatamente a informação que você precisa para revisar.</p><h2>Por que casar com o SINAPI importa (é taxonomia, não preço)</h2><p>Medir a quantidade é metade do trabalho; a outra metade é chamar cada item pelo nome certo. Um levantamento que diz "parede: 210 m²" ajuda pouco. "Alvenaria de vedação com bloco cerâmico furado, revestimento com chapisco + emboço + reboco" já conversa com o resto da cadeia — porque cada um desses serviços tem um código numa referência nacional.</p><p>O SINAPI (Sistema Nacional de Pesquisa de Custos e Índices da Construção Civil), mantido pela Caixa com pesquisa de preços do IBGE, é essa referência. Ele é inclusive obrigatório como parâmetro de custo em obras públicas com recursos federais, conforme o Decreto nº 7.983/2013. Mas atenção ao uso que uma ferramenta de quantitativo faz dele: aqui o SINAPI vale como vocabulário controlado — uma taxonomia de serviços com códigos e descrições padronizadas —, não como fonte de preço.</p><p>Casar cada item medido com uma composição SINAPI faz três coisas úteis:</p><ul><li>Dá um nome padronizado que o orçamentista reconhece e consegue precificar depois, na base que ele escolher.</li><li>Evita ambiguidade: "contrapiso", "regularização de base" e "lastro" param de virar três nomes para a mesma coisa.</li><li>Facilita conferência, porque a descrição da composição diz o que aquele serviço inclui.</li></ul><p>O que uma ferramenta de quantitativo NÃO deve fazer é usar o SINAPI para cravar preço e chamar aquilo de orçamento. Quantidade + código de referência é insumo para o orçamentista — não substitui o julgamento dele sobre preço, produtividade e contexto da obra.</p><h2>Como revisar um quantitativo gerado por IA: um checklist prático</h2><p>Confiar não é acreditar — é conferir e passar a confiar no que resistiu à conferência. A boa notícia é que revisar um levantamento pronto é muito mais rápido do que levantar do zero. Um roteiro que funciona:</p><ul><li>Comece pelos itens marcados como estimados. São os candidatos naturais a erro. Se a planilha separa medido de estimado, você já sabe onde gastar sua atenção.</li><li>Cheque as âncoras de área. Pegue dois ou três ambientes e confira a área contra a cota da prancha. Se as áreas medidas batem, a leitura da geometria está saudável.</li><li>Confira as contagens em uma disciplina. Conte à mão as portas de um pavimento e compare. Divergência grande costuma denunciar problema de camada, bloco não reconhecido ou escala errada.</li><li>Desconfie de zeros e de números redondos demais. Um item que deveria existir e voltou zerado geralmente significa que a informação não estava no formato que a IA conseguiu ler — não que a obra não tem aquilo.</li><li>Verifique a escala e a unidade. Um desenho sem cota de referência, ou com mais de uma escala na mesma prancha, é a maior fonte de erro sistemático. Área errada por escala erra tudo para cima ou para baixo na mesma proporção.</li><li>Valide o casamento com a referência. Veja se o código SINAPI atribuído descreve mesmo o serviço que você desenhou.</li></ul><p>Se a ferramenta te dá rastreabilidade — de onde saiu cada número —, essa revisão vira meia hora de conferência dirigida em vez de um recomeço. Esse é o teste final de confiança: uma boa ferramenta te deixa auditar rápido; uma ruim te obriga a refazer para descobrir se pode acreditar.</p><h2>O formato do arquivo muda o resultado: PDF vetorial, DWG e DXF</h2><p>Voltando ao ponto que o benchmark deixou claro: a qualidade do quantitativo depende diretamente de quanta geometria de verdade chega até a IA. E isso é decidido no formato do arquivo.</p><ul><li>DWG e DXF (formatos nativos de CAD) são o melhor cenário. As linhas, hachuras e blocos são objetos com coordenadas. Contar e medir aqui é operar sobre dados exatos, não sobre uma imagem interpretada. É a diferença entre 40-55% e algo muito mais confiável na contagem.</li><li>PDF vetorial (exportado do CAD com as linhas preservadas) ainda carrega geometria e permite medição real, desde que exista uma cota ou escala de referência para calibrar.</li><li>PDF "desenho" ou imagem escaneada é o pior caso. Quando o CAD foi exportado como figura, as cotas viram pixel e o contorno vira mancha. Aí a IA cai justamente na tarefa em que os modelos erram mais: reconhecer símbolo em imagem. Quantidade tende a zerar ou a sair torta.</li></ul><p>A regra prática: quando possível, suba o arquivo mais próximo do CAD original que você tiver. Um DWG ou DXF entrega um levantamento auditável; um PDF achatado entrega um palpite. Se o seu projeto vem de disciplinas com objetos especiais (elétrica, forro, MEP em geral), às vezes é preciso exportar para DXF a partir do CAD para que a geometria fique legível — vale o passo a mais, porque é ele que transforma chute em medição.</p><h2>O que a IA não faz: ela não substitui o orçamentista</h2><p>Depois de tudo que a tecnologia faz bem, o limite precisa ficar igualmente claro — porque confiar cega em uma ferramenta é tão ruim quanto desconfiar de tudo.</p><p>A IA não decide método construtivo. Ela mede a parede; se aquela parede vai ser bloco cerâmico ou de concreto, drywall ou alvenaria estrutural, é decisão de projeto e de obra. A IA não aplica critério de perda, não escolhe produtividade de equipe, não julga o contexto do canteiro, não avalia se aquele detalhe da prancha faz sentido executivo. E, principalmente, ela não precifica: transformar quantidade em custo, com composição, encargos e BDI, é trabalho do orçamentista — e existe norma para o cálculo de custos, como a ABNT NBR 12721, justamente porque isso exige método e responsabilidade técnica.</p><p>O papel correto da ferramenta é tirar do profissional a parte mecânica e propensa a erro — contar, medir, digitar — e devolver tempo para ele fazer o que a máquina não faz: julgar. O quantitativo com IA é uma primeira versão rápida e auditável do levantamento, não a palavra final. Quem assina o orçamento continua sendo gente, e a ferramenta que finge o contrário é a que você não deve usar.</p><p>É por isso que a distinção medido vs estimado importa tanto: ela devolve ao profissional exatamente o controle que uma automação honesta deve preservar. A máquina faz o volume; você faz o juízo.</p>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">É assim que o AI.arq foi construído. Você sobe o projeto (PDF, DWG ou DXF), a IA lê as pranchas em minutos e devolve uma planilha de quantitativos organizada por disciplina, com referência SINAPI em cada item — e, o mais importante, marcando o que foi medido na geometria do desenho e o que foi apenas estimado, para você saber exatamente onde olhar. Nada de preço fingido de orçamento: quantidade auditável, para o orçamentista fazer o resto. O primeiro projeto é grátis em ai.arq.br. Suba uma prancha e confira você mesmo o que a IA mediu.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+        Começar grátis
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+      </a>
+      <!-- Caminho de baixo atrito: leitor orgânico que não quer se cadastrar
+           ainda vê a prova (25 itens reais, sem login) em vez de bater no muro -->
+      <a href="/exemplo.html" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
+        Ver um quantitativo real →
+      </a>
+    </div>
+    <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão. O exemplo abre sem cadastro.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Normas ABNT</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>ABNT NBR 12721 — Avaliação de custos unitários de construção para incorporação imobiliária</strong> &mdash; <span class="text-gray-600">Norma brasileira que padroniza o cálculo de áreas e a avaliação de custos unitários de construção — referência de que a precificação é trabalho técnico normatizado, distinto do levantamento de quantidades.</span></li></ul></div><div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Leis e Atos Normativos</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>SINAPI — Manual de Metodologias e Conceitos (Caixa Econômica Federal)</strong> &mdash; <span class="text-gray-600">Documento oficial da Caixa que descreve o SINAPI, a taxonomia de composições e insumos usada como vocabulário de referência para nomear serviços da construção civil.</span></li><li><strong>Decreto nº 7.983, de 8 de abril de 2013 (Planalto)</strong> &mdash; <span class="text-gray-600">Estabelece regras e critérios para a elaboração do orçamento de referência de obras com recursos federais, adotando o SINAPI como parâmetro de custo — sistema mantido pela Caixa com pesquisa de preços do IBGE.</span></li></ul></div><div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://arxiv.org/abs/2601.04819" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">AECV-Bench: Benchmarking Multimodal Models on Architectural and Engineering Drawings Understanding (2026)</a></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 22/07/2026. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Leia também (posts relacionados) -->
+  
+    <section class="aiarq-related mt-16 pt-8 border-t border-gray-200">
+      <h2 class="flex items-center gap-2 text-lg font-bold text-gray-900 mb-5">
+        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Leia também
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        
+        <a href="/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM</div>
+        </a>
+        <a href="/blog/posts/5-erros-quantitativo-atraso-de-obra.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">5 erros de quantitativo que viram atraso de obra (e como evitar)</div>
+        </a>
+        <a href="/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">IA e Confiança</span>
+          <div class="font-semibold text-gray-900 leading-snug">DWG ou PDF? O que 51 projetos reais mostram sobre o seu quantitativo</div>
+        </a>
+      </div>
+    </section>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Produto</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Legal</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 ai.arq.br · Todos os direitos reservados
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
+<script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
+</body>
+</html>
