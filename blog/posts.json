@@ -1237,7 +1237,7 @@
       "description": "Tabela de BDI completa pra arquiteto entender o orçamento da obra: faixas do Acórdão TCU 2622/2013, decomposição dos 6 componentes e exemplos de cálculo em obras de R$300k, R$1mi e R$3mi.",
       "keywords": "BDI arquitetura, BDI tabela TCU 2026, BDI Acórdão 2622, BDI obra residencial, BDI obra comercial, componentes BDI, BDI tabela referencial, BDI obras públicas, fórmula BDI, BDI honorário arquiteto",
       "category": "BDI/Orçamento",
-      "publish_date": "2026-07-26",
+      "publish_date": "2026-08-16",
       "intro": "O arquiteto não precisa virar orçamentista pra entender BDI, mas precisa entender BDI o suficiente pra não passar vergonha em reunião com o cliente. Quando alguém pergunta \"quanto vai sair a obra?\" e olha pro custo direto da planilha, está olhando pra metade da resposta. A outra metade é o BDI — Benefícios e Despesas Indiretas — o percentual que cobre tudo que não está embutido na composição de cada item. Esse guia explica BDI especificamente pra arquiteto brasileiro em 2026: o que cada componente significa, quais as faixas referenciais do Acórdão TCU 2622/2013 (ainda canônico), exemplos de cálculo em três portes de obra (R$300 mil, R$1 milhão e R$3 milhões) e o erro mais comum que arquiteto comete misturando BDI da obra com honorário do projeto.",
       "sections": [
         {
@@ -1343,7 +1343,7 @@
       "description": "Guia completo pra montar cronograma físico-financeiro de obra: EAP/WBS, durações, dependências, curva S e distribuição do valor no tempo. Modelo Excel gratuito incluso.",
       "keywords": "cronograma físico-financeiro, cronograma físico-financeiro Excel, curva S obra, EAP WBS arquitetura, cronograma de obra, planejamento de obra, modelo cronograma Excel",
       "category": "Cronograma",
-      "publish_date": "2026-08-02",
+      "publish_date": "2026-08-23",
       "intro": "Toda obra de porte relevante precisa de cronograma físico-financeiro — pra negociar com cliente, liberar crédito no banco, cobrar adiantamento do empreiteiro ou prestar contas em obra pública. O problema é que poucos profissionais foram ensinados a montar do zero: o cronograma vira um Gantt bonito sem amarração com o desembolso real. Esse guia traz o passo a passo: quebrar a obra em Estrutura Analítica do Projeto (EAP/WBS), estimar duração e dependência por atividade, construir a curva S e distribuir o valor total mês a mês por disciplina. Tem também modelo Excel gratuito pra baixar e adaptar — sem cadastro.",
       "sections": [
         {
@@ -1455,7 +1455,7 @@
       "description": "Comparativo prático do memorial descritivo exigido pelas prefeituras de São Paulo, Rio de Janeiro e Belo Horizonte. Estrutura, base normativa, erros que reprovam e checklist por cidade.",
       "keywords": "memorial descritivo CAU, memorial descritivo PMSP, memorial descritivo prefeitura SP, memorial descritivo Rio de Janeiro, memorial descritivo BH, aprovação de projeto, código de obras",
       "category": "Documentação",
-      "publish_date": "2026-08-09",
+      "publish_date": "2026-08-30",
       "intro": "Memorial descritivo pra prefeitura parece tarefa simples até o protocolo voltar com exigências. Aí o arquiteto descobre que o modelo que funcionou em São Paulo é recusado no Rio. Que cada cidade pede uma sequência diferente de itens, anexos específicos e até nomenclatura própria pra disciplinas. Esse guia compara o memorial descritivo exigido por três grandes prefeituras do Sudeste: São Paulo, Rio de Janeiro e Belo Horizonte. A base nacional é a mesma — ABNT NBR 13531:1995 e NBR 13532:1995, mais a regulamentação do CAU/BR — mas cada município tem seu próprio código de obras. Vamos ver o que muda, o que reprova e como montar o documento certo na primeira tentativa.",
       "sections": [
         {
@@ -1606,7 +1606,7 @@
       "description": "Checklist completo da NBR 9050:2020 pra arquitetos: portas, banheiros, rampas, sinalização, estacionamento e cozinhas adaptáveis. Medidas-chave, erros que reprovam projeto e tabela imprimível pra vistoria.",
       "keywords": "NBR 9050 checklist, acessibilidade arquitetura NBR 9050:2020, banheiro acessível medidas, rampa acessibilidade inclinação, piso tátil NBR 16537, Lei Brasileira de Inclusão, desenho universal",
       "category": "Normas",
-      "publish_date": "2026-08-16",
+      "publish_date": "2026-09-06",
       "intro": "Acessibilidade deixou de ser tema de nicho e virou exigência básica de qualquer projeto de uso público, comercial ou multi-residencial no Brasil. A ABNT NBR 9050:2020 é a norma que define os parâmetros técnicos — largura de porta, raio de manobra, altura de bancada, inclinação de rampa, posição de barra de apoio. Quem ignora um item da norma corre risco real: prefeitura nega o habite-se, Ministério Público autua o proprietário, cliente é processado. Esse guia organiza a NBR 9050:2020 em 7 categorias de checklist, com as medidas-chave verificáveis em projeto, os 10 erros que mais reprovam aprovação na prefeitura e uma tabela final imprimível pra usar em vistoria.",
       "sections": [
         {
@@ -1732,7 +1732,7 @@
       "description": "Planilha modelo de quantitativos com códigos SINAPI organizada por 18 disciplinas. Entenda o que é o SINAPI, diferença entre composição e insumo, e como montar XLSX pra orçamentista cotar.",
       "keywords": "quantitativo SINAPI, planilha SINAPI XLSX, modelo planilha quantitativos, composições SINAPI, SINAPI Caixa, quantitativo arquitetura, planilha orçamento obra, composições e insumos SINAPI",
       "category": "Quantitativos",
-      "publish_date": "2026-08-23",
+      "publish_date": "2026-09-13",
       "intro": "Toda planilha de quantitativos de obra brasileira termina em algum momento batendo no SINAPI. Seja porque o cliente exige (obra pública sempre exige), seja porque o orçamentista pediu (precisa de código pra cotar), seja porque o financiamento da Caixa pede. Mas dois mitos atrapalham muita gente: achar que SINAPI é tabela de preço pronta pra copiar, e achar que dá pra ignorar o sistema e inventar códigos próprios. Esse guia explica em detalhe o que é o SINAPI, qual a diferença entre composição e insumo, quais são as 18 disciplinas típicas que entram numa planilha de arquitetura, como organizar o XLSX pro orçamentista preencher preço sem caos, e libera um modelo editável pra você baixar agora.",
       "sections": [
         {
@@ -1840,7 +1840,7 @@
       "description": "Quantitativo é a lista do o quê e quanto, função do autor do projeto. Orçamento é a lista do quanto custa, função do orçamentista habilitado. Entenda a distinção técnica e jurídica, e por que misturar as duas funções gera erro.",
       "keywords": "quantitativo vs orçamento, diferença quantitativo orçamento, arquiteto orçamentista, função orçamentista obra, planilha quantitativos arquitetura, orçamento de obra, BDI, Aldo Mattos",
       "category": "BDI/Orçamento",
-      "publish_date": "2026-08-30",
+      "publish_date": "2026-09-20",
       "intro": "Existe uma confusão recorrente nos escritórios de arquitetura: muitos profissionais acreditam que entregar um orçamento detalhado faz parte do escopo do projeto. Não faz. Quantitativo e orçamento são produtos técnicos distintos, com responsáveis distintos, metodologia distinta e responsabilidade jurídica distinta. O autor do projeto entrega o quantitativo — a lista do que precisa ser construído e em qual magnitude. O orçamentista, profissional habilitado em engenharia de custos, pega esse quantitativo e transforma em orçamento, com cotação de mercado, encargos sociais, leis sociais, BDI e cronograma físico-financeiro. Quando arquiteto tenta fazer as duas coisas, normalmente uma das duas sai mal feita. Esse post explica a distinção segundo a literatura técnica brasileira (Aldo Mattos, Maçahico Tisaka), a normativa vigente (NBR 12721, Lei 14.133/2021) e a tabela de honorários do CAU/BR — e mostra por que delegar a precificação é mais profissional do que tentar abraçar tudo.",
       "sections": [
         {
@@ -1947,7 +1947,7 @@
       "description": "A faculdade ensina escrever memorial primeiro e depois extrair planilha. Na prática, o caminho inverso funciona melhor: levanta o quantitativo da planta, depois escreve o memorial em cima. Reduz contradição com a planilha, fica auditável e acelera o executivo.",
       "keywords": "memorial descritivo quantitativo, como escrever memorial descritivo, memorial descritivo arquitetura, memorial descritivo obra residencial, NBR 13531, NBR 13532, NBR 15575",
       "category": "Documentação",
-      "publish_date": "2026-09-06",
+      "publish_date": "2026-09-27",
       "intro": "Na faculdade, o roteiro é claro: primeiro o arquiteto escreve o memorial descritivo, depois o orçamentista extrai a planilha de quantitativos a partir dele. Faz sentido na cabeça do professor, porque o texto vem antes do número. Só que, no canteiro real, esse fluxo cria um problema crônico: memorial e planilha sempre brigam. O memorial fala em piso porcelanato sem citar metragem, a planilha lista a metragem sem citar marca, e o analista do banco devolve o projeto pedindo coerência. Esse texto defende o caminho inverso, que muitos arquitetos experientes já fazem na prática: levantar o quantitativo da planta primeiro, e só depois redigir o memorial em cima da planilha. A norma ABNT NBR 13531:1995 não fixa essa ordem — é convenção de ensino, não regra técnica.",
       "sections": [
         {
@@ -2036,7 +2036,7 @@
       "description": "Checklist das 18 disciplinas em obra de retrofit comercial. O que considerar, o que esquecer gera aditivo, ordem de execução, custos indiretos típicos e tendências 2026.",
       "keywords": "disciplinas retrofit comercial, retrofit obra comercial, disciplinas obra escritório, checklist retrofit corporativo, ordem disciplinas obra, retrofit 2026 SP",
       "category": "Tipologias",
-      "publish_date": "2026-09-13",
+      "publish_date": "2026-10-04",
       "intro": "Retrofit comercial parece obra simples até o canteiro começar a revelar surpresas: a parede que era estrutural, o esgoto que não tem caimento pra nova copa, o sistema de incêndio que o Corpo de Bombeiros vai exigir. O problema quase nunca é a disciplina difícil — é a disciplina esquecida, aquela que ninguém colocou no escopo e vira aditivo.\n\nEste guia organiza as 18 disciplinas típicas de uma obra de retrofit comercial em ordem de execução comum, mostra as 5 que mais geram aditivo, e separa o que muda no quantitativo com as tendências de 2026. Cada afirmação técnica vem com a norma ou a referência correspondente. A ideia é simples: levantar tudo antes, pra não descobrir depois.",
       "sections": [
         {
@@ -2182,7 +2182,7 @@
           "url": "https://www.loc.gov/preservation/digital/formats/fdd/fdd000446.shtml"
         }
       ],
-      "publish_date": "2026-07-22"
+      "publish_date": "2026-07-26"
     },
     {
       "slug": "quantitativo-de-obra-com-ia",
@@ -2249,7 +2249,7 @@
           "description": "Norma brasileira que padroniza o cálculo de áreas e a avaliação de custos unitários de construção — referência de que a precificação é trabalho técnico normatizado, distinto do levantamento de quantidades."
         }
       ],
-      "publish_date": "2026-07-22"
+      "publish_date": "2026-08-02"
     },
     {
       "slug": "quantitativo-manual-automatico-ou-bim-comparativo",
@@ -2320,7 +2320,7 @@
           "description": "Norma técnica que padroniza a avaliação de custos unitários de construção e o cálculo de áreas na incorporação imobiliária. Referência para a fronteira entre medição de quantidades e avaliação de custo."
         }
       ],
-      "publish_date": "2026-07-22"
+      "publish_date": "2026-08-09"
     }
   ]
 }

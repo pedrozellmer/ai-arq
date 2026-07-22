@@ -105,19 +105,4 @@
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
-  <url>
-    <loc>https://ai.arq.br/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.8</priority>
-  </url>
 </urlset>
