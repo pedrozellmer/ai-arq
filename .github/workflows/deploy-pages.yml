@@ -69,8 +69,10 @@ jobs:
             -name "CNAME" -o \
             -name ".nojekyll" \
           \) -exec cp {} _site/ \;
-          # Copia pastas de assets frontend (se existirem)
-          for d in assets img images static fonts frontend instagram_assets blog; do
+          # Copia SOMENTE as pastas que o site público usa.
+          # NUNCA copiar: backend/ (código), frontend/ (app Next.js + node_modules),
+          # docs/, _local/, email-templates/ — são internos e não podem ir pro ar.
+          for d in assets blog exemplos indique instagram_assets; do
             if [ -d "$d" ]; then cp -r "$d" _site/; fi
           done
           # Limpa o blog: remove generate.py e posts.json (não devem ir pro deploy)
@@ -84,20 +86,6 @@ jobs:
           echo "=== Conteúdo de _site ==="
           ls -la _site/ | head -40
           echo "=== Total de arquivos: $(find _site -type f | wc -l) ==="
-
-      - name: Stamp build version
-        # Carimbo AUTOMÁTICO em todo deploy: o placeholder AIARQ_BUILD nos footers
-        # vira "v{VERSION} · Beta · {data do commit}". Lê o arquivo VERSION + git,
-        # então a versão/data se atualizam sozinhas — nunca mais editar footer na mão.
-        run: |
-          VER=$(cat VERSION 2>/dev/null | tr -d '[:space:]' || echo "dev")
-          DATE=$(git log -1 --format=%cd --date=format:'%d/%m/%Y' 2>/dev/null || date -u +%d/%m/%Y)
-          STAMP="v${VER} · Beta · ${DATE}"
-          echo "Carimbando build: ${STAMP}"
-          grep -rl "AIARQ_BUILD" _site 2>/dev/null | while read -r f; do
-            sed -i "s#AIARQ_BUILD#${STAMP}#g" "$f"
-          done
-          echo "Footers carimbados."
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
