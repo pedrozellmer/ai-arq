@@ -75,7 +75,7 @@ Se você é uma sessão nova de Claude lendo isso pela primeira vez:
 - **WhatsApp:** (21) 98207-9721
 - **Empresa:** Fami Capital (separado do AI.arq, mas é o mesmo Pedro)
 - **Perfil técnico:** **NÃO é dev**. Não roda comandos, não edita código manualmente. Você executa tudo.
-- **🎨 Daltônico (informado 2026-05-21)** — **REGRA DE ACESSIBILIDADE DURA:** cor NUNCA é o único indicador de informação. Todo status, categoria, nível de confiança e alerta — no site, na planilha XLSX e nas respostas pro Pedro no chat — usa **cor + ícone + texto/rótulo**. Pares verde↔vermelho são os piores (daltonismo vermelho-verde é o mais comum) — preferir azul/laranja, ou sempre acompanhar de símbolo (✓ OK · ⚠ atenção · ✗ falha) e palavra. Aplica-se a: sistema de confiança dos itens (branco/laranja/cinza/roxo), status de projeto, badges, o Auditor de Resultado, legendas da planilha.
+- **🎨 Daltonismo — regra REVOGADA pelo Pedro (2026-07-21).** Ele mandou esquecer: *"isso eu que sou, não importante mais."* NÃO forçar mais "cor + ícone + texto" por causa de daltonismo em lugar nenhum (site, admin, botões, badges). Priorizar elegância / o visual que o Pedro pedir; a cor pode liderar. ⚠️ Exceção que NÃO é sobre daltonismo: os selos **"✓ MEDIDO do CAD / ⚠ ESTIMADO — revisar"** e o sistema branco/laranja continuam — mas por causa da **Regra Dura nº1 (honestidade medido vs estimado)**, não por acessibilidade de cor.
 - **Estilo de trabalho:**
   - Prefere AUTO MODE (executa sem perguntar)
   - Manda screenshots pra apontar problemas
