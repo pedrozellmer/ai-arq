@@ -157,12 +157,29 @@ def render_dxf_to_png_safe(dxf_path: str, output_png_path: str,
         "from dxf_render import render_dxf_to_png;"
         "sys.exit(0 if render_dxf_to_png(sys.argv[1], sys.argv[2]) else 1)"
     )
+    # Teto de MEMÓRIA no subprocesso do preview (fix OOM 2026-07-22): um DXF denso
+    # faz ezdxf.readfile carregar GBs no filho ANTES do guarda de densidade — sem
+    # teto, isso estourava os 4GB do container (OOM no FIM do job, depois da planilha
+    # pronta). Com RLIMIT_AS, o filho morre ao passar do teto → o preview daquela
+    # prancha falha (cosmético), mas o SERVIDOR nunca cai. Só POSIX (no Render é
+    # Linux; local, sem 'resource', segue sem o teto e cai no fallback in-process).
+    _preexec = None
     try:
+        import resource as _res
+        _cap_mb = int(os.environ.get("CAD_PREVIEW_MEM_MB", "1536"))  # 1,5 GB padrão
+        _CAP = _cap_mb * 1024 * 1024
+        def _cap_mem():
+            _res.setrlimit(_res.RLIMIT_AS, (_CAP, _CAP))
+        _preexec = _cap_mem
+    except Exception:
+        _preexec = None
+    try:
+        _kw = dict(cwd=os.path.dirname(os.path.abspath(__file__)),
+                   timeout=timeout_s, capture_output=True)
+        if _preexec is not None:
+            _kw["preexec_fn"] = _preexec
         proc = subprocess.run(
-            [sys.executable, "-c", code, dxf_path, output_png_path],
-            cwd=os.path.dirname(os.path.abspath(__file__)),
-            timeout=timeout_s,
-            capture_output=True,
+            [sys.executable, "-c", code, dxf_path, output_png_path], **_kw
         )
         return proc.returncode == 0 and os.path.exists(output_png_path)
     except subprocess.TimeoutExpired:
