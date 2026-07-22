@@ -35,7 +35,7 @@
     {
       icon: '✏️',
       title: '3 · Revise e baixe',
-      body: 'Itens em <strong style="color:#0f172a;background:#f8fafc;padding:1px 6px;border-radius:4px;border:1px solid #cbd5e1">BRANCO</strong> foram medidos do CAD (confia). Itens em <strong style="color:#ea580c">LARANJA</strong> são estimativa da IA (revisa antes de mandar). Você ganha <strong>R$ 30</strong> subindo a planilha revisada e <strong>R$ 10</strong> por cotação de fornecedor (até <strong>R$ 60</strong> abatidos no próximo).',
+      body: 'Itens em <strong style="color:#0f172a;background:#f8fafc;padding:1px 6px;border-radius:4px;border:1px solid #cbd5e1">BRANCO</strong> foram medidos do CAD (confia). Itens em <strong style="color:#ea580c">LARANJA</strong> são estimativa da IA (revisa antes de mandar). Subir a planilha revisada e cotações de fornecedor ajuda a IA a <strong>medir melhor</strong> seus próximos projetos.',
       cta: 'Próximo',
     },
     {

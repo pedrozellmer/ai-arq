@@ -521,7 +521,7 @@
             Envie or&#231;amentos reais pra ensinar a IA a reconhecer <b>densidades t&#237;picas</b>
             (ex.: lumin&#225;rias/m&#178;, alvenaria/m&#178;) por tipologia. Projetos novos recebem
             <b>alertas laranja</b> quando fogem do padr&#227;o &plusmn;2&sigma;. Nunca copia valores absolutos.
-            Clientes que mandam revis&#227;o pelo cashback alimentam a mesma base, automaticamente.
+            Clientes que mandam a planilha revisada alimentam a mesma base, automaticamente.
           </p>
           <div class="grid gap-4 sm:grid-cols-2 mb-4">
             <div class="sm:col-span-2">
@@ -1481,7 +1481,7 @@ function renderRevisionFeedback(d){
     return `<div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
       <div class="text-3xl mb-2">📭</div>
       <p class="text-sm font-medium text-gray-700">Nenhuma planilha revisada ainda</p>
-      <p class="text-xs text-gray-500 mt-1">Quando um cliente subir a planilha revisada dele (cashback), este painel mostra onde a IA mais erra — por disciplina e no recorte medido × estimado.</p>
+      <p class="text-xs text-gray-500 mt-1">Quando um cliente subir a planilha revisada dele, este painel mostra onde a IA mais erra — por disciplina e no recorte medido × estimado.</p>
     </div>`;
   }
   const t = d.totais || {};

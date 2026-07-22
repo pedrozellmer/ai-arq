@@ -105,9 +105,10 @@
 
       <!-- Ações principais -->
       <div class="flex items-center gap-2 md:gap-3">
-        <!-- Saldo (desktop) — nasce escondido; loadUserCredits só mostra se saldo > 0
-             (beta: dinheiro fora do palco — quem tem crédito continua vendo) -->
-        <div id="topbar-balance" style="display:none" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-100 transition" onclick="switchTab('cashback')" title="Ver contribuições e créditos guardados">
+        <!-- Saldo (desktop) — cashback 100% fora do palco no beta (decisão Pedro
+             22/07): a pill nunca aparece pra ninguém. Element mantido só pra
+             loadUserCredits não quebrar; o saldo segue no checkout, só não é exibido. -->
+        <div id="topbar-balance" style="display:none" class="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-xs font-medium text-amber-800 cursor-pointer hover:bg-amber-100 transition" onclick="switchTab('cashback')" title="Ver suas contribuições">
           <span>💰</span>
           <span id="topbar-balance-value">R$ 0,00</span>
         </div>
@@ -751,9 +752,8 @@
               <p class="text-sm text-indigo-50 mt-1">Cada planilha revisada e cotação que você envia afina o motor — seus próximos projetos saem medindo melhor.</p>
             </div>
             <div class="shrink-0 md:text-right">
-              <p class="text-xs font-medium text-indigo-100 uppercase tracking-wide">Créditos guardados</p>
-              <p id="cb-total-all" class="text-2xl font-bold">R$ 0,00</p>
-              <p id="cb-events-count" class="text-xs text-indigo-100 mt-0.5">0 ações</p>
+              <p class="text-xs font-medium text-indigo-100 uppercase tracking-wide">Contribuições enviadas</p>
+              <p id="cb-events-count" class="text-2xl font-bold">0</p>
             </div>
           </div>
         </div>
@@ -784,16 +784,9 @@
               </div>
             </div>
           </div>
-          <p class="mt-3 pt-3 border-t border-indigo-100 text-xs text-gray-500"><span aria-hidden="true">💰</span> No beta está tudo grátis, então não tem cashback pra abater — créditos que você tiver ficam <b>guardados</b> e valem quando a cobrança for ativada.</p>
+          <p class="mt-3 pt-3 border-t border-indigo-100 text-xs text-gray-500"><span aria-hidden="true">🤝</span> Contribuir é opcional e ajuda a IA a medir melhor os <b>seus</b> próximos projetos — é o que mais afina o motor no que importa pra você.</p>
         </div>
 
-        <!-- Lista de projetos com crédito guardado -->
-        <div class="rounded-2xl border bg-white p-6 mb-6">
-          <h3 class="text-base font-semibold text-gray-900 mb-4">Créditos guardados por projeto</h3>
-          <div id="cb-projects-list" class="divide-y">
-            <div class="p-6 text-center text-sm text-gray-500">Carregando...</div>
-          </div>
-        </div>
 
         <!-- Aviso uso de dados -->
         <div class="rounded-xl border border-blue-200 bg-blue-50 p-4 mb-6">
@@ -960,8 +953,8 @@
               <p class="text-sm text-gray-500">Sim! Cada envio &#233; tratado como um projeto independente. Voc&#234; pode ver o hist&#243;rico na aba "Meus Projetos".</p>
             </div>
             <div>
-              <h3 class="text-sm font-semibold text-gray-800 mb-1">E o cashback?</h3>
-              <p class="text-sm text-gray-500">No beta est&aacute; tudo gr&aacute;tis, ent&atilde;o n&atilde;o tem o que abater. O que vale hoje: cada planilha revisada e cota&ccedil;&atilde;o que voc&ecirc; envia <b>afina o motor</b> &mdash; seus pr&oacute;ximos projetos saem medindo melhor. Cr&eacute;ditos que voc&ecirc; tiver ficam guardados e valem quando a cobran&ccedil;a for ativada.</p>
+              <h3 class="text-sm font-semibold text-gray-800 mb-1">Revisar e enviar minha planilha corrigida vale a pena?</h3>
+              <p class="text-sm text-gray-500">Vale muito: cada planilha revisada e cota&ccedil;&atilde;o que voc&ecirc; envia <b>afina o motor</b> &mdash; seus pr&oacute;ximos projetos saem medindo melhor exatamente onde voc&ecirc; corrigiu.</p>
             </div>
           </div>
         </div>
@@ -1799,11 +1792,10 @@
       }
       const wrap = document.getElementById('topbar-balance');
       if (wrap) {
-        // ⚠ Não mexer na classe 'hidden' aqui: ela faz par com 'md:flex' pra
-        // esconder a pill no MOBILE. Remover 'hidden' faria a pill aparecer no
-        // celular (block), quebrando a topbar. display inline resolve: 'none'
-        // esconde em qualquer tela; '' devolve o comportamento das classes.
-        wrap.style.display = (userCreditsCents === 0) ? 'none' : '';
+        // Cashback 100% fora do palco no beta (decisão Pedro 22/07): a pill de
+        // saldo não aparece pra ninguém. O saldo (cupom/indicação/crédito) segue
+        // carregado em userCreditsCents pro checkout; só não é exibido aqui.
+        wrap.style.display = 'none';
       }
     } catch (_) {}
   }
@@ -3988,10 +3980,9 @@
       // Beta gr\u00e1tis: cr\u00e9dito registrado fica GUARDADO (n\u00e3o tem o que abater
       // agora) \u2014 a frase promete o que existe (decis\u00e3o Pedro 17/07).
       if (result.cashback_granted) {
-        const amt = result.cashback_amount_brl || 30;
-        msg += `\u2705 Sua revis\u00e3o afina o motor \u2014 os pr\u00f3ximos projetos saem melhores. R$ ${amt.toFixed(2)} guardados como cr\u00e9dito futuro.`;
+        msg += '\u2705 Sua revis\u00e3o afina o motor \u2014 os pr\u00f3ximos projetos saem melhores exatamente onde voc\u00ea corrigiu.';
       } else {
-        msg += 'Cr\u00e9dito n\u00e3o registrado (revis\u00e3o duplicada ou sem linhas v\u00e1lidas) \u2014 mas as corre\u00e7\u00f5es valem do mesmo jeito pra calibra\u00e7\u00e3o.';
+        msg += 'As corre\u00e7\u00f5es valem do mesmo jeito pra calibra\u00e7\u00e3o do motor.';
       }
       // Cashback é mensagem longa de sucesso — info (não bloqueia, fecha sozinho)
       notify.ok(msg);
@@ -4019,7 +4010,7 @@
         }
       }
 
-      notify.warn('Revis\u00e3o salva localmente. A calibra\u00e7\u00e3o ser\u00e1 processada quando o servidor estiver dispon\u00edvel. O cr\u00e9dito de cashback ser\u00e1 aplicado no pr\u00f3ximo projeto.');
+      notify.warn('Revis\u00e3o salva localmente. A calibra\u00e7\u00e3o ser\u00e1 processada quando o servidor estiver dispon\u00edvel.');
     }
 
     // Reset
@@ -4047,7 +4038,7 @@
 
       const total = (data.total_cents || 0) / 100;
       if (totalEl) totalEl.textContent = 'R$ ' + total.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-      if (countEl) countEl.textContent = `${data.n_events || 0} ações`;
+      if (countEl) countEl.textContent = String(data.n_events || 0);
 
       if (!listEl) return;
       const byProject = data.by_project || [];

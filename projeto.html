@@ -663,22 +663,8 @@ function smartBack() {
     </div>
   </div>
 
-  <!-- Cashback acumulado deste projeto -->
-  <div id="project-cashback-box" class="rounded-xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 hidden">
-    <div class="flex items-center justify-between">
-      <div>
-        <h2 class="font-semibold text-gray-800 flex items-center gap-2">
-          💰 Cashback deste projeto
-        </h2>
-        <p class="text-xs text-gray-600 mt-1">Crédito acumulado pelas suas ações no projeto (planilha revisada e cotações). Válido pra abatimento em novos projetos.</p>
-      </div>
-      <div class="text-right">
-        <p id="cashback-total" class="text-3xl font-bold text-amber-700">R$ 0,00</p>
-        <p id="cashback-count" class="text-xs text-gray-500">0 ações</p>
-      </div>
-    </div>
-    <div id="cashback-events-list" class="mt-4 space-y-1 text-sm"></div>
-  </div>
+  <!-- Card "Cashback deste projeto" removido 22/07 (cashback 100% fora do palco no
+       beta, decisão Pedro). Re-adicionar a UI ao religar a cobrança — ver loadProjectCashback(). -->
 
   <!-- (Card "Dados do projeto e cliente" foi movido pro TOPO da página, logo após os avisos.) -->
 
@@ -1537,7 +1523,6 @@ window.switchUploadTab = switchUploadTab;
       'cotacoes-section',       // 10. Enviar planilha revisada (calibracao)
       'chat-quant',             // 11. Chat
       'feedback-card',          // 12. Avaliacao (NPS)
-      'project-cashback-box',   // 13. Cashback (oculto no beta)
       'arquivos-box',           // 14. Arquivos que alimentaram
       'detalhes-processamento', // 15. secundarios rebaixados: reprocessar/reportar/datas/id
     ];
@@ -1560,8 +1545,9 @@ window.switchUploadTab = switchUploadTab;
 })();
 
 async function loadProjectCashback() {
-  // Beta: cashback ESCONDIDO (ninguem paga ainda, nao faz sentido). Trocar
-  // CASHBACK_ATIVO pra true quando a cobranca entrar.
+  // Beta: cashback 100% fora do palco (decisão Pedro 22/07). O card visual foi
+  // REMOVIDO do HTML; esta função fica inerte (CASHBACK_ATIVO=false). Ao religar
+  // a cobrança, re-adicionar a UI do card + trocar CASHBACK_ATIVO pra true.
   const CASHBACK_ATIVO = false;
   if (!CASHBACK_ATIVO) return;
   try {
@@ -1868,18 +1854,8 @@ async function uploadQuote() {
     });
     const data = await res.json();
     if (data.status === 'ok') {
-      // Mensagem deixa explícito o status do cashback (cap de 3 cotações):
-      // 'credited' = R$10 creditado · 'capped' = atingiu o limite · null = sem user
-      let cashbackMsg = '';
-      if (data.cashback === 'credited') {
-        // Beta grátis: crédito é registrado mas não tem o que abater — a frase
-        // promete o que existe, não dinheiro na mão (decisão Pedro 17/07).
-        cashbackMsg = ' · R$ 10 guardados como crédito futuro';
-      } else if (data.cashback === 'capped') {
-        cashbackMsg = ' · crédito não registrado (limite de 3 cotações/projeto atingido)';
-      }
       statusDiv.className = 'mt-3 text-xs text-emerald-700';
-      statusDiv.textContent = `✓ ${data.n_items_quoted} itens lidos. Total R$ ${data.total_bruto.toLocaleString('pt-BR')}${cashbackMsg}`;
+      statusDiv.textContent = `✓ ${data.n_items_quoted} itens lidos. Total R$ ${data.total_bruto.toLocaleString('pt-BR')}`;
       document.getElementById('q-supplier-name').value = '';
       document.getElementById('q-file').value = '';
       loadQuotes();
