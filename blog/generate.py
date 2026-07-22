@@ -520,7 +520,7 @@ def render_post_html(post):
         Ver um quantitativo real →
       </a>
     </div>
-    <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão. O exemplo abre sem cadastro.</p>
+    <p class="mt-3 text-xs text-gray-500">Grátis no beta, quantos projetos quiser. Sem cartão. O exemplo abre sem cadastro.</p>
   </div>
 
   {sources_html}
