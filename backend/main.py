@@ -5610,7 +5610,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # Em paralelo: cada item faz ~5 consultas e o tempo é de ESPERA de rede,
             # não de conta — em série dava ~1,4s/item (2min+ numa planilha de 100).
             # Best-effort: item que falhar sai fora sem derrubar a planilha.
-            with ThreadPoolExecutor(max_workers=8) as _ex:
+            with ThreadPoolExecutor(max_workers=5) as _ex:   # 8→5: gentileza com a CPU da instância Supabase (fix SINAPI timeout 2026-07-22)
                 lote = [r for r in _ex.map(_cands, all_items) if r]
             n_conf = apply_llm_pick(lote)   # sem ANTHROPIC_API_KEY → 0, cai no corte por nota
             for e in lote:

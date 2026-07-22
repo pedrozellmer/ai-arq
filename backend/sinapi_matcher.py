@@ -17,9 +17,17 @@ from typing import List, Dict, Optional
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://kqjabzwgbfuivzlcfvvu.supabase.co")
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or os.getenv("SUPABASE_ANON_KEY") or (
+# Usa a service_role quando disponível (backend) — ela NÃO tem statement_timeout,
+# então a busca SINAPI não é cancelada aos 3s do anon sob carga. Fix 2026-07-22:
+# o matcher dispara ~8 RPCs concorrentes por projeto; sob saturação de CPU da
+# instância Supabase, chamadas passavam de 3s → 500 → item ficava sem código SINAPI
+# (confirmado nos logs: "canceling statement due to statement timeout"). Cai pro
+# anon localmente. As RPCs (sinapi_candidates/search_sinapi) são SECURITY DEFINER
+# read-only do catálogo público — service_role aqui não expõe nada.
+SUPABASE_KEY = (os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+                or os.getenv("SUPABASE_ANON_KEY") or (
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI"
-)
+))
 
 # Similaridade mínima — mais baixa que TCPO porque SINAPI é mais descritivo
 # (códigos longos com modelo/fabricante embutido, similaridade textual cai)
