@@ -3305,6 +3305,83 @@ def _item_geo_category(description: str, discipline: str = "") -> str | None:
     return None
 
 
+# ══════════════════════════════════════════════════════════════════
+#  🛡️ FREIO DE MEMÓRIA (fix 2026-07-22) — garante que o servidor NÃO CAI
+#  por causa de UM projeto pesado. Lê a RAM real do container (cgroup) e
+#  aborta o job de forma limpa ANTES do OOM killer, mantendo o serviço de
+#  pé pra todos os outros clientes. Confiabilidade = cliente volta.
+# ══════════════════════════════════════════════════════════════════
+def _container_mem_frac():
+    """Fração de RAM usada do CONTAINER (cgroup), 0..1, ou None se não medir.
+    Lê o cgroup (v2 e v1) — reflete o limite REAL do container (4GB no Render),
+    ao contrário de psutil.virtual_memory(), que lê o HOST inteiro e mente."""
+    for used_p, lim_p in (
+        ("/sys/fs/cgroup/memory.current", "/sys/fs/cgroup/memory.max"),
+        ("/sys/fs/cgroup/memory/memory.usage_in_bytes",
+         "/sys/fs/cgroup/memory/memory.limit_in_bytes"),
+    ):
+        try:
+            with open(used_p) as _uf:
+                used = int(_uf.read().strip())
+            with open(lim_p) as _lf:
+                raw = _lf.read().strip()
+            if raw == "max":
+                continue
+            limit = int(raw)
+            if 0 < limit < 200 * 1024 ** 3:   # ignora "sem limite" (número gigante)
+                return used / limit
+        except Exception:
+            continue
+    return None
+
+
+def _mem_pressure(threshold: float = 0.85) -> bool:
+    """True se o container passou de `threshold` do limite de RAM. Se não der pra
+    medir (dev/local sem cgroup), retorna False — não bloqueia."""
+    frac = _container_mem_frac()
+    return frac is not None and frac >= threshold
+
+
+def _abort_job_mem(job_id: str, done: int, total: int):
+    """Aborta um job por pressão de memória, de forma LIMPA — mantém o servidor de
+    pé pra todos os outros. Marca erro com orientação de dividir em lotes + alerta."""
+    _msg = ("Seu projeto é grande demais pra processar de uma vez e chegou perto do "
+            "limite de memória do servidor. Divida em 2-3 envios menores (ex.: "
+            "metade das pranchas por vez) que processa tranquilo.")
+    try:
+        jobs.update_field(job_id, status="error")
+        jobs.update_field(job_id, error_message=_msg)
+    except Exception:
+        pass
+    try:
+        _supabase_update("projects", "job_id", job_id, {
+            "status": "error", "error_message": _msg,
+            "completed_at": datetime.utcnow().isoformat(),
+        })
+    except Exception:
+        pass
+    try:
+        _log_error("mem:freio",
+                   f"Freio de memória: abortado em {done}/{total} pranchas "
+                   f"(uso={_container_mem_frac()})", job_id, severity="error")
+    except Exception:
+        pass
+    try:
+        import threading as _thm
+        _thm.Thread(target=_notify_admin, args=(
+            "🛡️ Freio de memória disparou",
+            f"O job <b>{job_id}</b> chegou perto do limite de RAM em {done}/{total} "
+            f"pranchas e foi abortado ANTES de derrubar o servidor. O cliente foi "
+            f"orientado a dividir em lotes menores. (Servidor seguiu de pé.)"),
+            daemon=True).start()
+    except Exception:
+        pass
+    try:
+        _email_falha_cliente(job_id, reprocessavel=False)
+    except Exception:
+        pass
+
+
 def _measure_unambiguous(value: float, cat: str, by_cat: dict) -> bool:
     """True se `value` (medida arredondada) aparece SÓ na categoria `cat` dentro de
     `by_cat` — não colide com nenhuma outra categoria do MESMO tipo de medida.
@@ -4049,6 +4126,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 n_dxf = len(dxf_paths)
                 dxf_span = cad_end_pct - extract_start
                 for idx, dxf_path in enumerate(dxf_paths):
+                    # 🛡️ Freio de MEMÓRIA: se o container está chegando perto do limite
+                    # de RAM, aborta ANTES do OOM matar o servidor inteiro. Um projeto
+                    # pesado falha sozinho (com orientação de dividir em lotes) e o
+                    # servidor fica de pé pra todos os outros. Só depois da 1ª prancha
+                    # (idx>0) — se estourar já na 1ª, é caso de prancha única densa.
+                    if idx > 0 and _mem_pressure(0.85):
+                        _abort_job_mem(job_id, idx, n_dxf)
+                        return
                     # Cada DXF ocupa 1/N da faixa. Extração 30% + IA 70% dentro da faixa.
                     dxf_base = extract_start + int((idx / max(n_dxf, 1)) * dxf_span)
                     dxf_next = extract_start + int(((idx + 1) / max(n_dxf, 1)) * dxf_span)
@@ -4849,6 +4934,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # automática, prancha já analisada pula extração+IA; reprocesso MANUAL
         # ignora de propósito (roda o motor novo na prancha inteira).
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
+            # 🛡️ Freio de MEMÓRIA (idem loop DXF): aborta limpo antes do OOM,
+            # mantendo o servidor de pé pros outros clientes.
+            if i > 0 and _mem_pressure(0.85):
+                _abort_job_mem(job_id, i, total)
+                return
             _disp = filename if page_count <= 1 else f"{filename} · pág {page_index+1}/{page_count}"
             step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
             jobs.update_field(job_id, progress=step_pct)
