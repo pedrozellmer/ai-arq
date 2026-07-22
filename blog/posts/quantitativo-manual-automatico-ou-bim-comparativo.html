@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<title>Quantitativo manual, automático (IA lê o CAD) ou BIM: comparativo honesto por cenário | AI.arq</title>
+<meta name="description" content="Quantitativo manual ou automático? 2D vs BIM? Comparamos as três abordagens por precisão, tempo, curva de aprendizado e o que cada uma realmente mede.">
+<meta name="keywords" content="quantitativo manual ou automático, quantitativo 2d vs bim, como escolher ferramenta de quantitativo, levantamento de quantitativos, quantitativo automático a partir do CAD, quantitativo sem BIM, medição de projeto DWG">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html">
+<meta property="og:title" content="Quantitativo manual, automático (IA lê o CAD) ou BIM: comparativo honesto por cenário">
+<meta property="og:description" content="Quantitativo manual ou automático? 2D vs BIM? Comparamos as três abordagens por precisão, tempo, curva de aprendizado e o que cada uma realmente mede.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-07-22T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Quantitativos e Orçamento">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Quantitativo manual, automático (IA lê o CAD) ou BIM: comparativo honesto por cenário">
+<meta name="twitter:description" content="Quantitativo manual ou automático? 2D vs BIM? Comparamos as três abordagens por precisão, tempo, curva de aprendizado e o que cada uma realmente mede.">
+<meta name="twitter:image" content="https://ai.arq.br/og-image.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-07-22">
+
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Quantitativo manual, automático (IA lê o CAD) ou BIM: comparativo honesto por cenário",
+  "description": "Quantitativo manual ou automático? 2D vs BIM? Comparamos as três abordagens por precisão, tempo, curva de aprendizado e o que cada uma realmente mede.",
+  "datePublished": "2026-07-22T10:00:00-03:00",
+  "dateModified": "2026-07-22T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/og-image.png",
+  "url": "https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/quantitativo-manual-automatico-ou-bim-comparativo.html"
+  },
+  "keywords": "quantitativo manual ou automático, quantitativo 2d vs bim, como escolher ferramenta de quantitativo, levantamento de quantitativos, quantitativo automático a partir do CAD, quantitativo sem BIM, medição de projeto DWG",
+  "articleSection": "Quantitativos e Orçamento"
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html?novo=1" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Quantitativos e Orçamento</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Quantitativos e Orçamento</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Quantitativo manual, automático (IA lê o CAD) ou BIM: comparativo honesto por cenário</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 22/07/2026</span>
+    <span>·</span>
+    <span>⏱️ 10 min de leitura</span>
+  </div>
+
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">Todo orçamento de obra começa no mesmo lugar: alguém precisa contar. Contar metros de parede, área de piso, número de portas, comprimento de eletroduto, volume de concreto. Esse levantamento de quantitativos é a base numérica de tudo o que vem depois — o preço, o cronograma, a compra de material. E, na prática, existem três caminhos para chegar até ele: fazer na mão sobre a prancha, deixar uma ferramenta ler o CAD e medir a geometria, ou extrair as quantidades de um modelo BIM.
+
+A pergunta que trava muita gente é: qual dos três usar? A resposta honesta é que depende do projeto que está na sua frente hoje — não do que seria ideal num mundo perfeito. Uma reforma de 80 m² sem modelo nenhum não pede a mesma abordagem de um hospital com projeto BIM completo e coordenado. Este post compara as três formas de levantar quantitativo por cenário: quanto tempo custam, quão precisas são, o que cada uma mede de verdade e quanto tempo você leva para aprender a usá-las. Sem torcida por nenhum lado — cada abordagem tem o terreno onde ganha.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>Primeiro, o que é 'quantitativo' e por que ele não é orçamento</h2><p>Vale separar dois termos que costumam ser usados como sinônimos e não são. O quantitativo é a lista de quantidades físicas do projeto: 240 m² de contrapiso, 68 m de rodapé, 12 portas de 80 cm, 340 m de eletroduto de 3/4". É medição — responde 'quanto tem'. O orçamento é o passo seguinte: pega cada quantidade, aplica um custo unitário (mão de obra + material + encargos) e chega no 'quanto custa'.</p><p>Essa fronteira importa porque as três abordagens deste post resolvem o quantitativo — a contagem. Quem transforma quantidade em preço é o orçamentista, aplicando composições de custo, BDI, produtividade da equipe e a realidade de preço da praça. No Brasil, a referência pública mais usada para essas composições é o SINAPI, mantido em parceria pela Caixa Econômica Federal (parte técnica) e pelo IBGE (pesquisa de preços), conforme descrito no próprio Manual de Metodologias e Conceitos do sistema.</p><p>Ou seja: um bom quantitativo é insumo para o orçamento, não substituto dele. Errar a contagem contamina todo o resto — por isso vale tanto discutir como levantá-la bem.</p><h2>Abordagem 1 — Levantamento manual sobre a prancha 2D</h2><p>É o método clássico: o profissional abre a planta (no papel, no PDF ou dentro do CAD) e vai medindo, contando e anotando numa planilha. Escalímetro em desenho impresso, ou a ferramenta de medir do visualizador em arquivo digital. Parede por parede, ambiente por ambiente.</p><p>Quando faz sentido: obra pequena, reforma, projeto que só existe em 2D, situação em que você precisa entender cada linha do desenho de perto. O levantamento manual força você a ler o projeto com atenção — e isso, em obra pequena, é uma vantagem real, não desperdício.</p><p>O custo é o tempo e a fadiga. Contar 300 m de eletroduto clicando trecho a trecho é lento e cansa; e cansaço gera erro de digitação, ambiente pulado, trecho contado duas vezes. A precisão do método é alta em teoria (você mede o que quiser, do jeito que quiser) mas frágil na prática, porque depende de disciplina humana constante ao longo de horas. A curva de aprendizado é a menor das três — qualquer pessoa que lê projeto já sabe medir — e é justamente por isso que continua sendo o padrão na maioria dos escritórios pequenos. O que ele mede? Tudo o que você tiver paciência de medir. O limite é seu tempo, não a ferramenta.</p><h2>Abordagem 2 — Quantitativo automático: a IA lê o CAD e mede a geometria</h2><p>Aqui a lógica muda. Em vez de uma pessoa clicar em cada trecho, um software lê o arquivo do projeto (PDF vetorial, DWG ou DXF), reconhece as entidades geométricas — linhas, polilinhas, hachuras, blocos, textos — e calcula as quantidades a partir delas. Comprimento de parede vira metro linear; hachura de piso vira área; bloco de porta repetido vira contagem.</p><p>O ponto que diferencia essa abordagem de um 'chute inteligente' é que ela mede a geometria que está no desenho, e não tenta adivinhar o que não está. Se o eletroduto foi desenhado como linha no projeto, ele é medido; se aparece só como um símbolo sem traçado, não há o que medir. Essa honra à evidência é o que separa medição de estimativa — e voltaremos a ela na seção sobre 'medido vs estimado'.</p><p>Quando faz sentido: prazo curto, muitos projetos para levantar, plantas grandes onde a contagem manual seria exaustiva, e todo o universo enorme de obras que simplesmente não têm modelo BIM. Esse é o ponto cego que a abordagem automática 2D cobre: ela entrega velocidade de máquina sem exigir que o projeto tenha sido modelado em BIM. O custo de tempo despenca — o que levava um dia sai em minutos. A curva de aprendizado é baixa: você sobe o arquivo e recebe a planilha; não precisa dominar software de modelagem. O que ela mede depende do que está desenhado no CAD com geometria real — e é por isso que a qualidade do arquivo de entrada importa tanto (falaremos disso adiante).</p><h2>Abordagem 3 — Extração de quantitativos a partir do modelo BIM</h2><p>No fluxo BIM, o quantitativo não é medido depois — ele nasce junto com o projeto. Cada elemento modelado (uma parede, uma laje, uma porta) carrega seus próprios dados: material, dimensões, área, volume. Extrair o quantitativo é, em boa parte, listar propriedades que já existem no modelo. É a abordagem mais rica em informação das três.</p><p>Quando faz sentido: projeto novo, de médio a grande porte, com equipe e software de modelagem, e principalmente quando o modelo BIM já vai existir por outras razões — coordenação de disciplinas, detecção de interferências, gestão da obra. Nesse contexto, o quantitativo sai quase 'de graça' como subproduto do modelo. No setor público federal brasileiro, o BIM inclusive deixou de ser opcional em partes: o Decreto 10.306/2020 estabelece a adoção gradual do BIM em obras da administração pública federal, em fases a partir de 2021, com ampliação em 2024 e 2028 — e a extração de quantitativos já está entre os usos previstos desde a primeira fase.</p><p>O custo aqui é de entrada, não de operação. Modelar exige software, treinamento e, sobretudo, que o projeto seja concebido em BIM desde o início — a curva de aprendizado é a mais íngreme das três. A precisão do quantitativo é excelente quando o modelo está bem construído e com nível de informação adequado; e é enganosa quando o modelo está incompleto ou modelado 'só para parecer 3D'. BIM não é mágica: um modelo mal alimentado gera quantitativo mal alimentado. O que ele mede é tudo o que foi modelado com parâmetros — geometria e dados juntos.</p><h2>Comparativo direto: tempo, precisão, curva e o que cada um mede</h2><p>Colocando lado a lado, sem torcida:</p><ul><li>Tempo por projeto: o manual é o mais lento (horas a dias); o automático é o mais rápido para levantar (minutos); o BIM é lentíssimo se você precisa modelar do zero só para o quantitativo, mas praticamente instantâneo se o modelo já existe.</li><li>Precisão: as três podem ser precisas. O manual é preciso se a pessoa não cansar; o automático é preciso na medida em que o desenho tem geometria real e limpa; o BIM é preciso na medida em que o modelo está completo e bem parametrizado. Em todos os casos, a precisão é herdada da qualidade da fonte, não garantida pela ferramenta.</li><li>Curva de aprendizado: baixa no manual, baixa no automático (subir arquivo e ler planilha), alta no BIM (modelagem é uma competência).</li><li>O que mede: o manual mede o que você tiver paciência; o automático mede a geometria desenhada no CAD; o BIM mede geometria + dados dos elementos modelados.</li><li>Pré-requisito de entrada: o manual precisa só do desenho; o automático precisa de um CAD com geometria (idealmente vetorial/DWG/DXF); o BIM precisa de um modelo — e essa é a barreira que exclui a maioria das obras pequenas e reformas.</li></ul><p>A leitura prática: não existe abordagem melhor no absoluto. Existe a abordagem certa para o projeto que está na sua mesa e para o prazo que você tem.</p><h2>'Quantitativo 2D vs BIM' é a pergunta errada — o pré-requisito decide</h2><p>Muita discussão trata 2D e BIM como rivais em pé de igualdade, como se fosse só escolher a mais moderna. Na prática, o que decide não é preferência — é o insumo que você tem em mãos.</p><p>Se o projeto só existe em 2D (e a maioria dos projetos de reforma, obra pequena e retrofit existe só assim), a rota do BIM simplesmente não está disponível sem antes modelar tudo do zero. Modelar um projeto inteiro em BIM só para extrair quantitativo de uma reforma raramente se paga — é usar um caminhão para entregar uma carta. Nesse cenário, a disputa real é entre manual e automático sobre o 2D, e a pergunta vira: 'vale a pena eu contar isso na mão ou deixar a máquina medir a geometria?'.</p><p>Se o projeto já é BIM ou vai ser modelado de qualquer forma, aí sim o quantitativo BIM é o caminho natural e mais completo, porque aproveita informação que já existe. A conclusão honesta: 2D e BIM não competem pelo mesmo terreno na maior parte das obras. O BIM domina quando há modelo; o 2D (manual ou automático) domina o vasto território de projetos que não têm — e nunca terão — um modelo. Escolher a ferramenta é, antes de tudo, olhar o que você recebeu do projetista.</p><h2>O ponto que ninguém pode ignorar: medido não é estimado</h2><p>Independentemente da abordagem, existe uma distinção que determina se você pode confiar num número: ele foi medido da fonte ou estimado por dedução?</p><p>Um valor medido vem diretamente da evidência — a hachura que delimita o piso, a polilinha que traça a parede, o elemento modelado com sua dimensão. Um valor estimado vem de uma regra de proporção ('lajes costumam ter tantos cm', 'para cada porta há tantos metros de guarnição') quando o dado não está no desenho. Os dois são úteis, mas têm confiabilidade diferente — e tratar estimativa como se fosse medição é como assinar um cheque sem conferir o saldo.</p><p>O problema é que muita ferramenta entrega tudo com a mesma cara, sem dizer o que é osso e o que é achismo. O levantamento manual sofre disso quando o profissional 'completa' o que não conseguiu medir e esquece de sinalizar. O BIM sofre quando um elemento vem sem o parâmetro preenchido e o software assume um padrão. O automático sofre quando tenta adivinhar o que não está desenhado. A boa prática, em qualquer abordagem, é a mesma: deixar explícito o que veio da medição da fonte e o que veio de estimativa, para que o orçamentista saiba onde apertar antes de fechar preço. Um quantitativo honesto não é o que tem menos estimativa — é o que te avisa onde ela está.</p><h2>A qualidade do arquivo manda mais do que a ferramenta</h2><p>Vale um alerta técnico que economiza dor de cabeça nas duas rotas 2D. A abordagem automática só mede bem o que está no arquivo como geometria de verdade. E aqui há uma armadilha comum: o PDF 'desenho'.</p><p>Quando um CAD é exportado como PDF de imagem (ou impresso/escaneado), as linhas e cotas viram pixels — não há mais geometria vetorial nem texto pesquisável por trás. Para o olho humano, continua sendo uma planta legível; para qualquer software que tenta medir, virou uma foto. O resultado é quantidade zerada ou medição furada, não por falha do método, mas por falta de matéria-prima. O mesmo vale para objetos AEC especializados (instalações, forros) que, em certos formatos, não 'abrem' a geometria e precisam ser exportados de forma adequada.</p><p>A regra de ouro para levantamento automático: prefira o arquivo mais próximo do original — DWG ou DXF, ou um PDF gerado por exportação vetorial (não escaneado). Quanto mais 'vivo' o arquivo, melhor a medição. Isso vale como orientação até para o levantamento manual sobre PDF: medir sobre um PDF vetorial com escala confiável é muito mais seguro do que sobre uma imagem sem cota. A ferramenta importa; a qualidade do que você entrega para ela importa mais.</p><h2>Como escolher, na prática, para o projeto que está na sua frente</h2><p>Um roteiro simples, sem receita de bolo, para decidir a rota:</p><ul><li>Tem modelo BIM completo e confiável? Extraia o quantitativo do modelo. É a fonte mais rica e você já pagou o custo de modelar. Só valide se os elementos estão com os parâmetros preenchidos — modelo vazio engana.</li><li>Não tem modelo, mas tem o CAD (DWG/DXF ou PDF vetorial)? A rota automática costuma ser o melhor custo-benefício: velocidade de máquina sobre a geometria que já existe, sem precisar modelar nada. Ideal para reforma, obra pequena/média, prazo curto e para quem levanta muitos projetos.</li><li>Projeto minúsculo, ou um trecho pontual que você precisa entender linha a linha? O manual ainda ganha em simplicidade — às vezes clicar cinco medidas na mão é mais rápido do que qualquer setup.</li><li>Arquivo é uma imagem/PDF escaneado sem geometria? Antes de escolher a ferramenta, resolva a fonte: peça o DWG/DXF ou um PDF vetorial ao projetista. Sem matéria-prima, nenhuma das rotas automáticas entrega bem.</li></ul><p>Em muitos escritórios a resposta é combinar: automático para o grosso do levantamento, manual para conferir os pontos críticos, BIM quando o projeto já vem modelado. O erro é fixar uma única rota por dogma. A pergunta certa nunca é 'qual é a melhor ferramenta' — é 'o que este projeto, neste prazo, com este arquivo, me permite fazer com segurança'.</p>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Se o seu projeto já existe em CAD e você não quer contar tudo na mão, dá para testar a rota automática agora. No AI.arq você sobe as pranchas (PDF, DWG ou DXF), a IA lê o desenho em minutos e devolve uma planilha de quantitativos organizada por disciplina, com referência SINAPI — e, principalmente, marcando o que foi medido da geometria do projeto e o que ficou como estimativa, para o orçamentista saber onde olhar. Não é BIM, não precisa de Revit, não precisa modelar nada: parte do arquivo que você já tem. O primeiro projeto é grátis em ai.arq.br.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+        Começar grátis
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+      </a>
+      <!-- Caminho de baixo atrito: leitor orgânico que não quer se cadastrar
+           ainda vê a prova (25 itens reais, sem login) em vez de bater no muro -->
+      <a href="/exemplo.html" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
+        Ver um quantitativo real →
+      </a>
+    </div>
+    <p class="mt-3 text-xs text-gray-500">Primeiro projeto grátis. Sem cartão. O exemplo abre sem cadastro.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Normas ABNT</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>ABNT NBR 12721:2006 — Avaliação de custos unitários de construção</strong> &mdash; <span class="text-gray-600">Norma técnica que padroniza a avaliação de custos unitários de construção e o cálculo de áreas na incorporação imobiliária. Referência para a fronteira entre medição de quantidades e avaliação de custo.</span></li></ul></div><div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Leis e Atos Normativos</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>Decreto nº 7.983/2013 — regras do orçamento de referência de obras públicas</strong> &mdash; <span class="text-gray-600">Estabelece que o custo global de referência de obras de construção civil da União se baseia nas composições do SINAPI. Fundamenta o uso do SINAPI como referência oficial de composições de custo no Brasil.</span></li><li><strong>Decreto nº 10.306/2020 — uso do BIM em obras da administração pública federal</strong> &mdash; <span class="text-gray-600">Institui a adoção gradual do BIM em obras públicas federais, em fases a partir de 2021, com ampliação em 2024 e 2028; a extração de quantitativos consta entre os usos previstos desde a primeira fase. Base para a seção sobre quando o BIM já vai existir por obrigação.</span></li></ul></div><div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://www.caixa.gov.br/Downloads/sinapi-metodologia/Livro_SINAPI_Metodologias_Conceitos.pdf" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">SINAPI — Manual de Metodologias e Conceitos (Caixa Econômica Federal)</a></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 22/07/2026. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Leia também (posts relacionados) -->
+  
+    <section class="aiarq-related mt-16 pt-8 border-t border-gray-200">
+      <h2 class="flex items-center gap-2 text-lg font-bold text-gray-900 mb-5">
+        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Leia também
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        
+        <a href="/blog/posts/dwg-ou-pdf-quantitativo-o-que-os-dados-mostram.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">IA e Confiança</span>
+          <div class="font-semibold text-gray-900 leading-snug">DWG ou PDF? O que 51 projetos reais mostram sobre o seu quantitativo</div>
+        </a>
+        <a href="/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM</div>
+        </a>
+        <a href="/blog/posts/quantitativo-de-obra-com-ia.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Quantitativo de obra com IA: como funciona e dá pra confiar?</div>
+        </a>
+      </div>
+    </section>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Produto</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Legal</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 ai.arq.br · Todos os direitos reservados
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
+<script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
+</body>
+</html>
