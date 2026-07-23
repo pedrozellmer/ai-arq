@@ -35,11 +35,19 @@
   // Source of truth: este arquivo. NÃO duplicar nos HTMLs.
   const SUPABASE_URL      = 'https://kqjabzwgbfuivzlcfvvu.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtxamFiendnYmZ1aXZ6bGNmdnZ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMDg5NzcsImV4cCI6MjA5MTU4NDk3N30.48xSenZlDV0LfD94ZxwGvX41Kf9Je2n-ouZpJrrCSKI';
-  const API_BASE          = 'https://ai-arq.onrender.com';
+  // API geral passa pelo Cloudflare (proxy laranja em api.ai.arq.br → protege,
+  // esconde origem, permite rate-limit). 23/07.
+  const API_BASE          = 'https://api.ai.arq.br';
+  // 🪤 UPLOAD DE CAD vai DIRETO pro Render, FORA do Cloudflare: o backend aceita
+  // até 450 MB (main.py:5970, projetos grandes), mas o Cloudflare Free CORTA em
+  // 100 MB — passar upload grande pelo proxy daria 413 antes de chegar no backend.
+  // Use API_UPLOAD_BASE em /api/process e /api/project/{id}/add-file. Só esses.
+  const API_UPLOAD_BASE   = 'https://ai-arq.onrender.com';
 
   window.SUPABASE_URL      = SUPABASE_URL;
   window.SUPABASE_ANON_KEY = SUPABASE_ANON_KEY;
   window.API_BASE          = API_BASE;
+  window.API_UPLOAD_BASE   = API_UPLOAD_BASE;
 
   // ─── Cliente Supabase ─────────────────────────────────────────
   // Defensivo: se o <script> do supabase-js não carregou (rede ruim,

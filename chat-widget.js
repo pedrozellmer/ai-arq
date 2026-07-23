@@ -12,7 +12,7 @@
 (function() {
   'use strict';
 
-  const API_BASE = 'https://ai-arq.onrender.com';
+  const API_BASE = 'https://api.ai.arq.br';  // via Cloudflare (chat é leve, sem upload grande)
   const STORAGE_KEY = 'aiarq_chat_history';
   const LEAD_KEY = 'aiarq_chat_lead';
   const MAX_STORED_MSGS = 10;
