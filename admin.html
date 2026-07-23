@@ -106,6 +106,10 @@
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       <span>Atividade</span>
     </button>
+    <button onclick="switchTab('origem')" data-tab="origem" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      <span>Origem</span>
+    </button>
     <p class="px-4 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">Motor &amp; Qualidade</p>
     <button onclick="switchTab('calibracao')" data-tab="calibracao" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
@@ -393,6 +397,33 @@
           </div>
         </div>
         <p id="users-count" class="text-xs text-gray-500 mt-3"></p>
+      </div>
+
+      <!-- ════════════════════════════════════════ -->
+      <!-- TAB: ORIGEM (de onde vêm os clientes)   -->
+      <!-- ════════════════════════════════════════ -->
+      <div id="tab-origem" class="tab-content hidden">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Origem dos clientes</h1>
+          <p class="text-sm text-gray-500 mt-1">De onde vêm e onde est&#227;o os cadastros.
+            <span class="text-gray-400">Fonte = declarada no cadastro (&ldquo;como nos conheceu?&rdquo;); regi&#227;o = aproximada pelo DDD do WhatsApp &mdash; ainda n&#227;o capturamos estado.</span>
+          </p>
+        </div>
+        <div id="origem-box"><p class="text-gray-500 text-sm">Carregando...</p></div>
+      </div>
+
+      <!-- Modal: detalhe do cliente (visão admin) -->
+      <div id="user-detail-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black/40 p-4" onclick="if(event.target===this)closeUserDetail()">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] overflow-y-auto">
+          <div class="flex items-center justify-between px-5 py-4 border-b sticky top-0 bg-white z-10">
+            <div>
+              <h3 id="user-detail-title" class="font-bold text-gray-900 leading-tight">Cliente</h3>
+              <p class="text-xs text-gray-400">Visão do administrador &mdash; o que este cliente tem na conta</p>
+            </div>
+            <button onclick="closeUserDetail()" class="text-gray-400 hover:text-gray-700 text-3xl leading-none px-2" title="Fechar">&times;</button>
+          </div>
+          <div id="user-detail-body" class="p-5"></div>
+        </div>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -1174,6 +1205,7 @@ function switchTab(tabName) {
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
   if (tabName === 'atividade') loadActivity();
+  if (tabName === 'origem') loadOrigem();
   if (tabName === 'emails') loadEmailCatalog();
   if (tabName === 'insights') loadInsights();
   if (tabName === 'leads') loadLeads();
@@ -3315,7 +3347,7 @@ function renderUsers(users) {
       `
       : '--';
     return `
-      <tr class="border-b hover:bg-gray-50 transition ${rowCls}">
+      <tr onclick="openUserDetail('${esc(u.user_id||'')}')" class="border-b hover:bg-indigo-50/50 transition cursor-pointer ${rowCls}" title="Ver a conta deste cliente">
         <td class="px-4 py-3 align-top">${_statusBadge(u)}</td>
         <td class="px-4 py-3 align-top">
           <div class="font-medium text-gray-900">${name === u.full_name ? esc(u.full_name) : name}</div>
@@ -3334,10 +3366,257 @@ function renderUsers(users) {
           ${u.last_sign_in_at ? `<div class="text-gray-400">entrou ${_fmtDate(u.last_sign_in_at)}</div>` : ''}
           ${signalHtml}
         </td>
-        <td class="px-4 py-3 align-top">${actions}</td>
+        <td class="px-4 py-3 align-top" onclick="event.stopPropagation()">${actions}</td>
       </tr>
     `;
   }).join('');
+}
+
+// ══════════════════════════════════════════════
+// ORIGEM / AQUISIÇÃO — de onde vêm os clientes
+// Dado REAL: referral_source (declarado no cadastro) + região aproximada pelo
+// DDD do WhatsApp. NÃO temos estado capturado — o DDD é aproximação honesta,
+// rotulada como tal (regra nº1: não inventar dado). Tudo do admin_list_all_signups.
+// ══════════════════════════════════════════════
+const DDD_UF = {
+  '11':'SP','12':'SP','13':'SP','14':'SP','15':'SP','16':'SP','17':'SP','18':'SP','19':'SP',
+  '21':'RJ','22':'RJ','24':'RJ','27':'ES','28':'ES',
+  '31':'MG','32':'MG','33':'MG','34':'MG','35':'MG','37':'MG','38':'MG',
+  '41':'PR','42':'PR','43':'PR','44':'PR','45':'PR','46':'PR',
+  '47':'SC','48':'SC','49':'SC','51':'RS','53':'RS','54':'RS','55':'RS',
+  '61':'DF','62':'GO','64':'GO','63':'TO','65':'MT','66':'MT','67':'MS',
+  '68':'AC','69':'RO','71':'BA','73':'BA','74':'BA','75':'BA','77':'BA','79':'SE',
+  '81':'PE','87':'PE','82':'AL','83':'PB','84':'RN','85':'CE','88':'CE','86':'PI','89':'PI',
+  '91':'PA','93':'PA','94':'PA','92':'AM','97':'AM','95':'RR','96':'AP','98':'MA','99':'MA'
+};
+const UF_NOME = { SP:'São Paulo', RJ:'Rio de Janeiro', ES:'Espírito Santo', MG:'Minas Gerais',
+  PR:'Paraná', SC:'Santa Catarina', RS:'Rio Grande do Sul', DF:'Distrito Federal', GO:'Goiás',
+  TO:'Tocantins', MT:'Mato Grosso', MS:'Mato Grosso do Sul', AC:'Acre', RO:'Rondônia', BA:'Bahia',
+  SE:'Sergipe', PE:'Pernambuco', AL:'Alagoas', PB:'Paraíba', RN:'Rio Grande do Norte', CE:'Ceará',
+  PI:'Piauí', PA:'Pará', AM:'Amazonas', RR:'Roraima', AP:'Amapá', MA:'Maranhão' };
+const OG_SRC_LABEL = { google:'🔍 Google', instagram:'📷 Instagram', facebook:'📘 Facebook',
+  linkedin:'💼 LinkedIn', indicacao:'🤝 Indicação', evento:'🎤 Evento', blog:'📝 Blog',
+  anuncio:'📢 Anúncio', youtube:'▶️ YouTube', outro:'✏️ Outro' };
+
+// DDD do WhatsApp → UF. Guard: só tira o 55 (DDI) quando tem 12+ dígitos, senão
+// um número com DDD 55 (RS/Santa Maria) seria confundido com DDI.
+function _dddToUf(whatsapp){
+  if(!whatsapp) return null;
+  let d = String(whatsapp).replace(/\D/g,'');
+  if(d.length>=12 && d.slice(0,2)==='55') d = d.slice(2);
+  if(d.length<10) return null;
+  return DDD_UF[d.slice(0,2)] || null;
+}
+
+// Garante allUsers carregado (reusa a RPC do loadUsers sem depender da aba Usuários).
+async function _ensureSignups(){
+  if (typeof allUsers !== 'undefined' && allUsers && allUsers.length) return allUsers;
+  try {
+    const { data, error } = await sbClient.rpc('admin_list_all_signups');
+    if (!error && data) { allUsers = data; return allUsers; }
+  } catch(e){ console.warn('[origem] rpc falhou', e); }
+  return (typeof allUsers !== 'undefined' && allUsers) ? allUsers : [];
+}
+
+function ogCard(label, val, sub){
+  return `<div class="rounded-2xl border bg-white p-4">
+    <div class="text-xs text-gray-400">${label}</div>
+    <div class="text-2xl font-bold text-gray-900 mt-1">${val}</div>
+    ${sub?`<div class="text-xs text-gray-500 mt-0.5">${sub}</div>`:''}
+  </div>`;
+}
+function ogBars(rows, total){
+  const t = total || rows.reduce((s,r)=>s+r.n,0) || 1;
+  const max = rows.reduce((m,r)=>Math.max(m,r.n),0) || 1;
+  return rows.map(r=>{
+    const pct = Math.round(r.n*100/t);
+    const w = Math.max(3, Math.round(r.n*100/max));
+    return `<div class="mb-2.5">
+      <div class="flex items-center justify-between text-sm mb-1">
+        <span class="text-gray-700">${r.label}</span>
+        <span class="text-gray-500 tabular-nums">${r.n} <span class="text-gray-400">(${pct}%)</span></span>
+      </div>
+      <div class="h-2 rounded-full bg-gray-100 overflow-hidden"><div class="h-full rounded-full bg-indigo-500" style="width:${w}%"></div></div>
+    </div>`;
+  }).join('');
+}
+
+async function loadOrigem(){
+  const box = document.getElementById('origem-box');
+  if (box) box.innerHTML = '<p class="text-gray-500 text-sm">Carregando...</p>';
+  const users = await _ensureSignups();
+  if (!users.length){ if(box) box.innerHTML = '<p class="text-gray-500 text-sm">Sem dados de cadastro ainda.</p>'; return; }
+
+  const total = users.length;
+  const comProjeto = users.filter(u=>Number(u.num_projects)>0).length;
+  const ativos7 = users.filter(u=>u.last_sign_in_at && (Date.now()-Date.parse(u.last_sign_in_at))<=7*86400000).length;
+
+  // Fonte declarada ("como nos conheceu?")
+  const bySrc = {};
+  users.forEach(u=>{ const k = u.referral_source || '__none'; bySrc[k]=(bySrc[k]||0)+1; });
+  const srcRows = Object.entries(bySrc).map(([k,n])=>({
+    key:k, n, label: k==='__none' ? '<span class="text-gray-400">&mdash; não informado</span>' : (OG_SRC_LABEL[k] || ('✏️ '+esc(k)))
+  })).sort((a,b)=>b.n-a.n);
+  const srcNo1 = srcRows.filter(r=>r.key!=='__none')[0];
+
+  // Região por DDD do WhatsApp (aproximado)
+  const byUf = {}; let semTel = 0;
+  users.forEach(u=>{ const uf=_dddToUf(u.whatsapp); if(uf) byUf[uf]=(byUf[uf]||0)+1; else semTel++; });
+  const comTel = total - semTel;
+  const ufRows = Object.entries(byUf).map(([uf,n])=>({
+    n, label: `<span class="font-semibold text-gray-700">${uf}</span> <span class="text-gray-400 text-xs">${UF_NOME[uf]||''}</span>`
+  })).sort((a,b)=>b.n-a.n);
+
+  // Cadastros por semana (últimas 8)
+  const DAY=86400000, now=Date.now();
+  const weeks = Array.from({length:8},(_,i)=>{ const to=now-(7-i)*7*DAY; const from=to-7*DAY;
+    let lbl='--'; try{ lbl=window.fmtDataBR(new Date(to).toISOString()).slice(0,5); }catch(e){}
+    return {from,to,n:0,lbl}; });
+  users.forEach(u=>{ const t=Date.parse(u.auth_created_at||u.profile_created_at||''); if(!isNaN(t)){ const w=weeks.find(w=>t>=w.from&&t<w.to); if(w)w.n++; } });
+  const maxW = weeks.reduce((m,w)=>Math.max(m,w.n),0) || 1;
+
+  box.innerHTML = `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      ${ogCard('Contas', total)}
+      ${ogCard('Com projeto', comProjeto, total?`${Math.round(comProjeto*100/total)}% do total`:'')}
+      ${ogCard('Ativos 7 dias', ativos7)}
+      ${ogCard('Origem nº1', srcNo1?srcNo1.label:'--', srcNo1?`${srcNo1.n} conta(s)`:'')}
+    </div>
+    <div class="grid md:grid-cols-2 gap-5">
+      <div class="rounded-2xl border bg-white p-5">
+        <h3 class="font-semibold text-gray-900 mb-0.5">De onde vêm</h3>
+        <p class="text-xs text-gray-400 mb-3">&ldquo;Como nos conheceu?&rdquo; &mdash; declarado no cadastro</p>
+        ${ogBars(srcRows, total)}
+      </div>
+      <div class="rounded-2xl border bg-white p-5">
+        <h3 class="font-semibold text-gray-900 mb-0.5">Região <span class="text-xs font-normal text-gray-400">(aprox. pelo DDD)</span></h3>
+        <p class="text-xs text-gray-400 mb-3">${comTel} de ${total} têm WhatsApp com DDD reconhecível</p>
+        ${ufRows.length?ogBars(ufRows, comTel):'<p class="text-gray-400 text-sm">Sem telefones pra estimar região.</p>'}
+      </div>
+    </div>
+    <div class="rounded-2xl border bg-white p-5 mt-5">
+      <h3 class="font-semibold text-gray-900 mb-4">Cadastros por semana <span class="text-xs font-normal text-gray-400">(últimas 8)</span></h3>
+      <div class="flex items-end gap-2" style="height:130px">
+        ${weeks.map(w=>{ const h=Math.round(w.n*100/maxW); return `
+          <div class="flex-1 flex flex-col items-center justify-end gap-1 h-full">
+            <span class="text-xs font-medium text-gray-600">${w.n||''}</span>
+            <div class="w-full rounded-t bg-indigo-500" style="height:${Math.max(2,h)}%" title="${w.n} cadastro(s)"></div>
+            <span class="text-[10px] text-gray-400">${w.lbl}</span>
+          </div>`; }).join('')}
+      </div>
+    </div>
+    <p class="text-xs text-gray-400 mt-4">Quer &ldquo;estado&rdquo; exato (não aproximado pelo DDD)? Dá pra adicionar um campo opcional &ldquo;Estado (UF)&rdquo; no cadastro &mdash; me avise.</p>
+  `;
+}
+
+// ══════════════════════════════════════════════
+// DETALHE DO CLIENTE (visão admin) — o que aquele cliente tem na conta.
+// Usa o BYPASS de admin dos endpoints existentes (JWT do Pedro):
+// /api/projects/by-user/{id}, /api/items/{job}, /api/download/{job}. Sem endpoint novo.
+// ══════════════════════════════════════════════
+function _udBadge(s){
+  const map = { done:['bg-green-100 text-green-800','concluído'], error:['bg-red-100 text-red-700','erro'],
+    processing:['bg-blue-100 text-blue-700','processando'], queued:['bg-gray-100 text-gray-600','na fila'] };
+  const m = map[s] || ['bg-gray-100 text-gray-600', s||'--'];
+  return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${m[0]}">${esc(m[1])}</span>`;
+}
+
+function _udProjRow(p){
+  const jid = String(p.job_id||'');
+  const nome = esc(p.project_name || p.typology || 'Projeto');
+  const dt = _fmtDate(p.created_at);
+  const items = (p.items_count!=null) ? p.items_count : '--';
+  const warn = p.warnings ? `<span class="text-amber-600" title="${esc(String(p.warnings))}">⚠ avisos</span>` : '';
+  return `<div class="border rounded-xl p-3 mb-2">
+    <div class="flex items-start justify-between gap-2 flex-wrap">
+      <div class="min-w-0">
+        <div class="font-medium text-gray-900 truncate">${nome}</div>
+        <div class="text-xs text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+          ${_udBadge(p.status)} <span>${dt}</span> <span>${items} itens</span> ${warn}
+          <span class="text-gray-300 font-mono">${jid.slice(0,8)}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1 shrink-0">
+        <button onclick="_udRaiox('${jid}', this)" class="px-2 py-1 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium">Raio-X</button>
+        ${p.status==='done'?`<button onclick="downloadProtected('${API_BASE}/api/download/${jid}','quantitativos_${jid}.xlsx')" class="px-2 py-1 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium">Planilha</button>`:''}
+        <a href="projeto.html?job_id=${encodeURIComponent(jid)}" target="_blank" rel="noopener" class="px-2 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium">Abrir</a>
+      </div>
+    </div>
+    <div id="udrx-${jid}" class="hidden mt-2 pt-2 border-t text-xs"></div>
+  </div>`;
+}
+
+// Raio-X sob demanda: medido (branco) vs a revisar (laranja) — mesmo sistema do cliente.
+async function _udRaiox(jid, btn){
+  const box = document.getElementById('udrx-'+jid);
+  if(!box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = '<span class="text-gray-400">Carregando raio-x...</span>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/items/${jid}`);
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.detail || 'erro');
+    const items = d.items || [];
+    const medido = items.filter(i=>i.confidence==='confirmado').length;
+    const est = items.length - medido;
+    const pctM = items.length ? Math.round(medido*100/items.length) : 0;
+    box.innerHTML = `
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-white border border-gray-400"></span> <b>${medido}</b> medido</span>
+        <span class="inline-flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-400"></span> <b>${est}</b> a revisar</span>
+        <span class="text-gray-500">${pctM}% medido de ${items.length} itens</span>
+      </div>`;
+  } catch(e){ box.innerHTML = `<span class="text-red-500">Erro: ${esc(String(e.message||e))}</span>`; }
+}
+
+async function openUserDetail(userId){
+  if(!userId) return;
+  const u = (typeof allUsers!=='undefined' && allUsers ? allUsers : []).find(x=>String(x.user_id)===String(userId)) || {};
+  const modal = document.getElementById('user-detail-modal');
+  const body = document.getElementById('user-detail-body');
+  const title = document.getElementById('user-detail-title');
+  if(title) title.textContent = u.full_name || u.email || 'Cliente';
+  modal.classList.remove('hidden'); modal.classList.add('flex');
+  body.innerHTML = '<p class="text-gray-500 text-sm">Carregando projetos...</p>';
+
+  const uf = _dddToUf(u.whatsapp);
+  const campos = [
+    ['E-mail', esc(u.email||'--')],
+    ['Empresa', esc(u.company||'--')],
+    ['Cargo / área', esc([u.user_role,u.area].filter(Boolean).join(' · ') || '--')],
+    ['WhatsApp', u.whatsapp ? (esc(u.whatsapp) + (uf?` <span class="text-gray-400">(${uf})</span>`:'')) : '--'],
+    ['Como conheceu', u.referral_source ? (OG_SRC_LABEL[u.referral_source] || esc(u.referral_source)) + (u.referral_detail?` <span class="text-gray-400 italic">&ldquo;${esc(u.referral_detail)}&rdquo;</span>`:'') : '--'],
+    ['Cadastro', _fmtDate(u.auth_created_at||u.profile_created_at)],
+    ['Último acesso', u.last_sign_in_at ? _fmtDate(u.last_sign_in_at) : 'nunca entrou'],
+  ];
+  const info = `<div class="grid grid-cols-2 gap-x-4 gap-y-2.5 text-sm mb-5 pb-5 border-b">`
+    + campos.map(c=>`<div><div class="text-[11px] uppercase tracking-wide text-gray-400">${c[0]}</div><div class="text-gray-800">${c[1]}</div></div>`).join('')
+    + `</div>`;
+
+  let projs = [];
+  try {
+    const res = await authFetch(`${API_BASE}/api/projects/by-user/${encodeURIComponent(userId)}`);
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.detail || 'erro');
+    projs = d.projects || [];
+  } catch(e){
+    body.innerHTML = info + `<p class="text-red-500 text-sm">Erro ao carregar projetos: ${esc(String(e.message||e))}</p>`;
+    return;
+  }
+  projs.sort((a,b)=>(Date.parse(b.created_at||'')||0)-(Date.parse(a.created_at||'')||0));
+  const projHtml = projs.length
+    ? projs.map(_udProjRow).join('')
+    : '<p class="text-gray-500 text-sm">Nenhum projeto ainda.</p>';
+  body.innerHTML = info
+    + `<h4 class="font-semibold text-gray-900 mb-3">Projetos <span class="text-gray-400 font-normal">(${projs.length})</span></h4>`
+    + projHtml;
+}
+
+function closeUserDetail(){
+  const modal = document.getElementById('user-detail-modal');
+  if(!modal) return;
+  modal.classList.add('hidden'); modal.classList.remove('flex');
 }
 
 // Mini toast pra feedback de ações
