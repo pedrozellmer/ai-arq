@@ -43,7 +43,7 @@ def render_dxf_to_png(
     dxf_path: str,
     output_png_path: str,
     *,
-    dpi: int = 150,
+    dpi: int = 110,
     max_layouts: int = 1,
     fig_size_inches: tuple[float, float] = (14, 10),
 ) -> bool:
@@ -52,7 +52,11 @@ def render_dxf_to_png(
     Args:
         dxf_path: caminho do arquivo DXF.
         output_png_path: destino do PNG gerado.
-        dpi: resolução em dots por polegada (150 = bom equilíbrio tamanho×nitidez).
+        dpi: resolução em dots por polegada. Baixado de 150→110 em 23/07 pra
+            cortar banda: o preview é só enfeite (o arquivo real fica no botão
+            "Baixar"), e 110dpi × (14,10) ≈ 1540×1100px segue bem legível, com
+            ~46% menos bytes por PNG — economia na subida pro Storage E em cada
+            "Ver prancha" (Storage→Render→browser). Ver docs/PESQUISA banda Render.
         max_layouts: quantos layouts renderizar (V1 só o primeiro).
         fig_size_inches: tamanho base da figura matplotlib.
 
