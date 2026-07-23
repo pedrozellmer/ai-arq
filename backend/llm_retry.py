@@ -82,8 +82,9 @@ def _apply_system_cache(kwargs: dict) -> dict:
     - system string  → vira 1 bloco de texto com cache_control.
     - system já-lista → põe cache_control no ÚLTIMO bloco (fim do prefixo).
     - sem system      → não faz nada (nem adiciona header).
-    Se o prefixo for menor que o mínimo do modelo (1024 tok Sonnet/Opus, 2048
-    Haiku), a API só IGNORA o marcador — sem erro e sem cobrança extra.
+    Se o prefixo for menor que o mínimo do modelo, a API só IGNORA o marcador —
+    sem erro e sem cobrança extra. Mínimos (doc oficial jul/2026): Sonnet 4.6 e
+    Opus 4.8 = 1024 tok; Opus 4.7 = 2048; Opus 4.6 = 4096; Haiku 4.5 = 4096.
 
     Kill switch: env LLM_PROMPT_CACHE=0 desliga tudo (no-op) sem deploy — rede
     de segurança pro caminho que gera a planilha, caso o cache dê problema."""
