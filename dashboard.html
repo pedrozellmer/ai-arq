@@ -2601,7 +2601,7 @@
       // Agora "Enviando arquivos... 45%" sobe de verdade conforme os bytes sobem.
       const res = await new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${API_BASE}/api/process?${qs}`);
+        xhr.open('POST', `${window.API_UPLOAD_BASE}/api/process?${qs}`);  // upload CAD DIRETO (fora do CF, 450MB)
         xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`);
         xhr.timeout = 900000; // 15min — upload grande em conexão lenta não estoura
         xhr.upload.onprogress = (e) => {
@@ -3103,7 +3103,7 @@
         if (!sess){ resetBtn(); fSet('Faça login pra enviar.', 'text-red-700'); return; }
         const fd = new FormData();
         for (let j = 0; j < fs.length; j++) fd.append('files', fs[j]);
-        const r = await fetch(`${API_BASE}/api/project/${currentJobId}/add-file`, {
+        const r = await fetch(`${window.API_UPLOAD_BASE}/api/project/${currentJobId}/add-file`, {
           method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + sess.access_token }
         });
         const data = await r.json().catch(() => ({}));

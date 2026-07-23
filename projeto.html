@@ -388,7 +388,7 @@ function smartBack() {
         var sess = (await sb.auth.getSession()).data.session;
         if (!sess){ resetBtn(); setStatus('Faça login pra enviar.', 'text-red-700'); return; }
         var fd = new FormData(); for (var j = 0; j < fs.length; j++) fd.append('files', fs[j]);
-        var r = await fetch(window.API_BASE + '/api/project/' + jid + '/add-file', {
+        var r = await fetch(window.API_UPLOAD_BASE + '/api/project/' + jid + '/add-file', {
           method: 'POST', body: fd,
           headers: { 'Authorization': 'Bearer ' + sess.access_token }
         });
@@ -939,7 +939,7 @@ function renderExpansaoDisciplinas(items) {
       const { data: { session } } = await sbClient.auth.getSession();
       if (!session) { setSt('Faça login pra enviar.', 'text-red-700'); btn.disabled = false; return; }
       const fd = new FormData(); fs.forEach(f => fd.append('files', f));
-      const r = await fetch(`${API_BASE}/api/project/${jobId}/add-file`, {
+      const r = await fetch(`${window.API_UPLOAD_BASE}/api/project/${jobId}/add-file`, {
         method: 'POST', body: fd, headers: { 'Authorization': 'Bearer ' + session.access_token },
       });
       const d = await r.json().catch(() => ({}));
@@ -1449,7 +1449,7 @@ function mostrarErro(msg, session) {
       setSt('Enviando e reprocessando… isso leva alguns minutos.', 'text-red-800');
       const fd = new FormData();
       fs.forEach(f => fd.append('files', f));
-      const r = await fetch(`${API_BASE}/api/project/${jobId}/add-file`, {
+      const r = await fetch(`${window.API_UPLOAD_BASE}/api/project/${jobId}/add-file`, {
         method: 'POST', body: fd,
         headers: { 'Authorization': 'Bearer ' + sess.access_token },
       });

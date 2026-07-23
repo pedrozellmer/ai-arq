@@ -16,7 +16,7 @@
   if (window.aiArqContactInjected) return;
   window.aiArqContactInjected = true;
 
-  var API = (window.AIARQ_API_BASE || 'https://ai-arq.onrender.com');
+  var API = (window.AIARQ_API_BASE || 'https://api.ai.arq.br');  // via Cloudflare (anexo é capado em 10 MB, cabe no limite)
 
   // ── CSS isolado ───────────────────────────────────────────────────
   var css = `
