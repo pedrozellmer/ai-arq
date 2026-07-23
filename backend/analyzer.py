@@ -1102,6 +1102,10 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
             model="claude-sonnet-4-6",
             max_tokens=16000,
             temperature=0,
+            # cache_system: o SYSTEM_PROMPT (~4,4k tok) é idêntico em TODA prancha
+            # do projeto → cacheado, custa ~90% menos na leitura (só a imagem/DXF
+            # da prancha, que muda, paga cheio). Economia de custo da IA (23/07).
+            cache_system=True,
             system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
             messages=[{"role": "user", "content": content}],
         )
