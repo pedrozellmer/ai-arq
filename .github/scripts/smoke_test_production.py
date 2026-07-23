@@ -48,6 +48,14 @@ YELLOW = "\033[93m"
 BLUE = "\033[94m"
 RESET = "\033[0m"
 
+# UA de navegador: desde 23/07 o site está atrás do Cloudflare (proxy laranja),
+# que devolve 403 pra User-Agent com cara de robô (ex.: 'Python-urllib'). O site
+# é feito pra navegador — bloquear bot é o comportamento desejado —, então o
+# smoke test se identifica como browser pra não ser barrado. (Confirmado:
+# urllib→403, browser UA→200, Server: cloudflare.)
+BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+              "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
+
 failures: list[str] = []
 passes: list[str] = []
 
@@ -64,7 +72,10 @@ def _check(name: str, ok: bool, detail: str = "") -> bool:
 
 def _get(url: str, headers: dict | None = None, timeout: int = 60) -> tuple[int, bytes, dict]:
     """GET retorna (status, body_bytes, headers_dict)."""
-    req = urllib.request.Request(url, method="GET", headers=headers or {})
+    h = {"User-Agent": BROWSER_UA}
+    if headers:
+        h.update(headers)
+    req = urllib.request.Request(url, method="GET", headers=h)
     try:
         resp = urllib.request.urlopen(req, timeout=timeout)
         return resp.status, resp.read(), dict(resp.headers)
@@ -76,7 +87,7 @@ def _get(url: str, headers: dict | None = None, timeout: int = 60) -> tuple[int,
 
 
 def _post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 60) -> tuple[int, bytes]:
-    h = {"Content-Type": "application/json"}
+    h = {"Content-Type": "application/json", "User-Agent": BROWSER_UA}
     if headers:
         h.update(headers)
     body = json.dumps(payload).encode("utf-8")
