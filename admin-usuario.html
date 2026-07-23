@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<link rel="icon" type="image/x-icon" href="favicon-v2.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI.arq - Cliente (admin)</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen">
+
+<!-- LOADING / ACCESS GATE -->
+<div id="access-gate" class="fixed inset-0 z-[100] bg-white flex items-center justify-center">
+  <div id="gate-loading" class="text-center">
+    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl gradient-main text-white mb-4">
+      <svg class="w-7 h-7 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg>
+    </div>
+    <p class="text-sm text-gray-500">Verificando acesso...</p>
+  </div>
+  <div id="gate-denied" class="hidden text-center px-6">
+    <p class="text-lg font-semibold text-gray-900 mb-1">Acesso restrito</p>
+    <p class="text-sm text-gray-500">Redirecionando...</p>
+  </div>
+</div>
+
+<!-- CONTENT -->
+<div id="content" class="hidden max-w-3xl mx-auto px-4 py-6">
+  <!-- Top bar -->
+  <div class="flex items-center justify-between mb-6">
+    <a href="admin.html" onclick="if(document.referrer.includes('admin.html')){history.back();return false;}" class="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-800">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z"/></svg>
+      Voltar ao admin
+    </a>
+    <span class="text-xs text-gray-400">Vis&atilde;o do administrador</span>
+  </div>
+
+  <!-- User header -->
+  <div id="user-header" class="rounded-2xl border bg-white p-5 mb-5">
+    <p class="text-gray-400 text-sm">Carregando...</p>
+  </div>
+
+  <!-- Projects -->
+  <div class="flex items-center justify-between mb-3">
+    <h2 class="text-lg font-bold text-gray-900">Projetos</h2>
+    <span id="proj-count" class="text-sm text-gray-400"></span>
+  </div>
+  <div id="projects-box"><p class="text-gray-400 text-sm">Carregando projetos...</p></div>
+</div>
+
+<script>
+const API_BASE = window.API_BASE;
+const ADMIN_EMAIL = 'zarelalopes@gmail.com';
+const esc = window.escapeHtml || (s => String(s==null?'':s));
+const _fmtDate = iso => { if(!iso) return '--'; try { return window.fmtDataBR(iso); } catch(e){ return '--'; } };
+const _fmtDateTime = iso => { if(!iso) return '--'; try { return window.fmtBR(iso, {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e){ return '--'; } };
+
+// DDD do WhatsApp → UF (mesmo mapa/guard do admin). Só aproximação por DDD.
+const DDD_UF = {'11':'SP','12':'SP','13':'SP','14':'SP','15':'SP','16':'SP','17':'SP','18':'SP','19':'SP','21':'RJ','22':'RJ','24':'RJ','27':'ES','28':'ES','31':'MG','32':'MG','33':'MG','34':'MG','35':'MG','37':'MG','38':'MG','41':'PR','42':'PR','43':'PR','44':'PR','45':'PR','46':'PR','47':'SC','48':'SC','49':'SC','51':'RS','53':'RS','54':'RS','55':'RS','61':'DF','62':'GO','64':'GO','63':'TO','65':'MT','66':'MT','67':'MS','68':'AC','69':'RO','71':'BA','73':'BA','74':'BA','75':'BA','77':'BA','79':'SE','81':'PE','87':'PE','82':'AL','83':'PB','84':'RN','85':'CE','88':'CE','86':'PI','89':'PI','91':'PA','93':'PA','94':'PA','92':'AM','97':'AM','95':'RR','96':'AP','98':'MA','99':'MA'};
+const OG_SRC_LABEL = { google:'🔍 Google', instagram:'📷 Instagram', facebook:'📘 Facebook', linkedin:'💼 LinkedIn', indicacao:'🤝 Indicação', evento:'🎤 Evento', blog:'📝 Blog', anuncio:'📢 Anúncio', youtube:'▶️ YouTube', outro:'✏️ Outro' };
+function _dddToUf(w){ if(!w) return null; let d=String(w).replace(/\D/g,''); if(d.length>=12 && d.slice(0,2)==='55') d=d.slice(2); if(d.length<10) return null; return DDD_UF[d.slice(0,2)]||null; }
+
+function getParam(name){ return new URLSearchParams(location.search).get(name); }
+
+async function checkAdminAccess(){
+  try {
+    const { data:{ session } } = await sbClient.auth.getSession();
+    if(!session){ location.href='login.html'; return false; }
+    if(session.user.email !== ADMIN_EMAIL){
+      document.getElementById('gate-loading').classList.add('hidden');
+      document.getElementById('gate-denied').classList.remove('hidden');
+      setTimeout(()=>location.href='dashboard.html', 1500);
+      return false;
+    }
+    document.getElementById('access-gate').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+    return true;
+  } catch(e){ console.error(e); location.href='login.html'; return false; }
+}
+
+function statusBadge(u){
+  if(!u.email_confirmed_at) return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">Email não confirmado</span>';
+  if(!u.has_profile) return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium">Cadastro incompleto</span>';
+  return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-xs font-medium">Cadastro completo</span>';
+}
+
+function renderHeader(u){
+  const box = document.getElementById('user-header');
+  const uf = _dddToUf(u.whatsapp);
+  const nome = u.full_name || '(sem nome)';
+  const inicial = (u.full_name || u.email || '?').trim().charAt(0).toUpperCase();
+  // WhatsApp com msg pronta
+  let waBtn = '';
+  if(u.whatsapp){
+    let n = String(u.whatsapp).replace(/\D/g,''); if(n && n.indexOf('55')!==0 && (n.length===10||n.length===11)) n='55'+n;
+    const fn = (u.full_name||'').trim().split(/\s+/)[0]||'';
+    const msg = fn ? ('Oi '+fn+'! Aqui é do AI.arq 🙂') : ('Oi! Aqui é do AI.arq 🙂');
+    waBtn = `<a href="https://wa.me/${n}?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-100 hover:bg-green-200 text-green-700 text-sm font-medium">WhatsApp</a>`;
+  }
+  const campos = [
+    ['Empresa', esc(u.company||'--')],
+    ['Cargo / área', esc([u.user_role,u.area].filter(Boolean).join(' · ') || '--')],
+    ['WhatsApp', u.whatsapp ? (esc(u.whatsapp) + (uf?` <span class="text-gray-400">(${uf} — aprox. DDD)</span>`:'')) : '--'],
+    ['Como conheceu', u.referral_source ? (OG_SRC_LABEL[u.referral_source] || esc(u.referral_source)) + (u.referral_detail?` <span class="text-gray-400 italic">&ldquo;${esc(u.referral_detail)}&rdquo;</span>`:'') : '--'],
+    ['Cadastro', _fmtDateTime(u.auth_created_at || u.profile_created_at)],
+    ['Último acesso', u.last_sign_in_at ? _fmtDateTime(u.last_sign_in_at) : 'nunca entrou'],
+    ['Projetos', `${u.num_projects!=null?u.num_projects:'--'}${Number(u.done_count)?` · ${u.done_count} ok`:''}${Number(u.error_count)?` · ${u.error_count} erro`:''}`],
+    ['Emails enviados', u.emails_sent!=null ? String(u.emails_sent) : '--'],
+  ];
+  box.innerHTML = `
+    <div class="flex items-start gap-4">
+      <div class="shrink-0 w-14 h-14 rounded-2xl gradient-main text-white flex items-center justify-center text-xl font-bold">${esc(inicial)}</div>
+      <div class="min-w-0 flex-1">
+        <div class="flex items-center gap-2 flex-wrap">
+          <h1 class="text-xl font-bold text-gray-900 truncate">${esc(nome)}</h1>
+          ${statusBadge(u)}
+        </div>
+        <div class="text-sm text-gray-500 mt-0.5">${esc(u.email||'--')}</div>
+        <div class="flex items-center gap-2 mt-3">
+          ${waBtn}
+          <button onclick="navigator.clipboard.writeText('${esc(u.email||'')}');this.textContent='Copiado!';setTimeout(()=>this.textContent='Copiar e-mail',1200)" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium">Copiar e-mail</button>
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 mt-5 pt-5 border-t text-sm">
+      ${campos.map(c=>`<div><div class="text-[11px] uppercase tracking-wide text-gray-400">${c[0]}</div><div class="text-gray-800 mt-0.5">${c[1]}</div></div>`).join('')}
+    </div>`;
+}
+
+function projBadge(s){
+  const map = { done:['bg-green-100 text-green-800','concluído'], error:['bg-red-100 text-red-700','erro'], processing:['bg-blue-100 text-blue-700','processando'], queued:['bg-gray-100 text-gray-600','na fila'] };
+  const m = map[s] || ['bg-gray-100 text-gray-600', s||'--'];
+  return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium ${m[0]}">${esc(m[1])}</span>`;
+}
+
+function projCard(p){
+  const jid = String(p.job_id||'');
+  const nome = esc(p.project_name || p.typology || 'Projeto');
+  const warn = p.warnings ? `<span class="text-amber-600" title="${esc(String(p.warnings))}">⚠ avisos</span>` : '';
+  return `<div class="border rounded-xl p-4 mb-3 bg-white">
+    <div class="flex items-start justify-between gap-2 flex-wrap">
+      <div class="min-w-0">
+        <div class="font-semibold text-gray-900">${nome}</div>
+        <div class="text-xs text-gray-500 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+          ${projBadge(p.status)}
+          <span>${_fmtDate(p.created_at)}</span>
+          <span>${(p.items_count!=null?p.items_count:'--')} itens</span>
+          ${p.typology?`<span>${esc(p.typology)}</span>`:''}
+          ${warn}
+          <span class="text-gray-300 font-mono">${jid.slice(0,8)}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 shrink-0">
+        <button onclick="toggleRaiox('${jid}', this)" class="px-2.5 py-1.5 rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium">Raio-X</button>
+        ${p.status==='done'?`<button onclick="downloadProtected('${API_BASE}/api/download/${jid}','quantitativos_${jid}.xlsx')" class="px-2.5 py-1.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-medium">Planilha</button>`:''}
+        <a href="projeto.html?job_id=${encodeURIComponent(jid)}" target="_blank" rel="noopener" class="px-2.5 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium">Abrir projeto</a>
+      </div>
+    </div>
+    <div id="rx-${jid}" class="hidden mt-3 pt-3 border-t text-xs"></div>
+  </div>`;
+}
+
+// Raio-X sob demanda: medido (branco) vs a revisar (laranja) — mesmo sistema do cliente.
+async function toggleRaiox(jid, btn){
+  const box = document.getElementById('rx-'+jid);
+  if(!box) return;
+  if(!box.classList.contains('hidden')){ box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = '<span class="text-gray-400">Carregando raio-x...</span>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/items/${jid}`);
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.detail || 'erro');
+    const items = d.items || [];
+    const medido = items.filter(i=>i.confidence==='confirmado').length;
+    const est = items.length - medido;
+    const pctM = items.length ? Math.round(medido*100/items.length) : 0;
+    box.innerHTML = `
+      <div class="flex flex-wrap items-center gap-4">
+        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-white border border-gray-400"></span> <b>${medido}</b> medido</span>
+        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-400"></span> <b>${est}</b> a revisar</span>
+        <span class="text-gray-500">${pctM}% medido de ${items.length} itens</span>
+      </div>`;
+  } catch(e){ box.innerHTML = `<span class="text-red-500">Erro: ${esc(String(e.message||e))}</span>`; }
+}
+
+async function loadUserPage(){
+  const id = getParam('id');
+  if(!id){ document.getElementById('user-header').innerHTML='<p class="text-red-500 text-sm">Sem id de usuário na URL.</p>'; return; }
+
+  // Dados do usuário (RPC admin, tem trava interna de admin)
+  try {
+    const { data, error } = await sbClient.rpc('admin_list_all_signups');
+    if(error) throw error;
+    const u = (data||[]).find(x=>String(x.user_id)===String(id));
+    if(!u){ document.getElementById('user-header').innerHTML='<p class="text-amber-600 text-sm">Usuário não encontrado.</p>'; }
+    else renderHeader(u);
+  } catch(e){
+    document.getElementById('user-header').innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar o usuário: ${esc(String(e.message||e))}</p>`;
+  }
+
+  // Projetos do usuário (bypass admin no endpoint existente)
+  const pbox = document.getElementById('projects-box');
+  try {
+    const res = await authFetch(`${API_BASE}/api/projects/by-user/${encodeURIComponent(id)}`);
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.detail || 'erro');
+    let projs = d.projects || [];
+    projs.sort((a,b)=>(Date.parse(b.created_at||'')||0)-(Date.parse(a.created_at||'')||0));
+    document.getElementById('proj-count').textContent = projs.length + (projs.length===1?' projeto':' projetos');
+    pbox.innerHTML = projs.length ? projs.map(projCard).join('') : '<p class="text-gray-500 text-sm border rounded-xl p-4 bg-white">Nenhum projeto ainda.</p>';
+  } catch(e){
+    pbox.innerHTML = `<p class="text-red-500 text-sm">Erro ao carregar projetos: ${esc(String(e.message||e))}</p>`;
+  }
+}
+
+(async function init(){
+  const ok = await checkAdminAccess();
+  if(ok) loadUserPage();
+})();
+</script>
+</body>
+</html>
