@@ -3454,10 +3454,16 @@ async function loadOrigem(){
     n, label: `<span class="font-semibold text-gray-700">${uf}</span> <span class="text-gray-400 text-xs">${UF_NOME[uf]||''}</span>`
   })).sort((a,b)=>b.n-a.n);
 
-  // Cadastros por semana (últimas 8)
+  // Cadastros por semana (últimas 8). Rótulo = intervalo início–fim pra ficar
+  // claro que cada barra é uma SEMANA (não um dia).
   const DAY=86400000, now=Date.now();
+  const _dd = n => String(n).padStart(2,'0');
+  const _rangeLbl = (from,to)=>{ const a=new Date(from), b=new Date(to);
+    return a.getMonth()===b.getMonth()
+      ? `${_dd(a.getDate())}–${_dd(b.getDate())}/${_dd(b.getMonth()+1)}`
+      : `${_dd(a.getDate())}/${_dd(a.getMonth()+1)}–${_dd(b.getDate())}/${_dd(b.getMonth()+1)}`; };
   const weeks = Array.from({length:8},(_,i)=>{ const to=now-(7-i)*7*DAY; const from=to-7*DAY;
-    let lbl='--'; try{ lbl=window.fmtDataBR(new Date(to).toISOString()).slice(0,5); }catch(e){}
+    let lbl='--'; try{ lbl=_rangeLbl(from,to); }catch(e){}
     return {from,to,n:0,lbl}; });
   users.forEach(u=>{ const t=Date.parse(u.auth_created_at||u.profile_created_at||''); if(!isNaN(t)){ const w=weeks.find(w=>t>=w.from&&t<w.to); if(w)w.n++; } });
   const maxW = weeks.reduce((m,w)=>Math.max(m,w.n),0) || 1;
@@ -3476,14 +3482,17 @@ async function loadOrigem(){
       </div>
     </div>
     <div class="rounded-2xl border bg-white p-5 mt-5">
-      <h3 class="font-semibold text-gray-900 mb-4">Cadastros por semana <span class="text-xs font-normal text-gray-400">(últimas 8)</span></h3>
-      <div class="flex items-end gap-2" style="height:130px">
+      <h3 class="font-semibold text-gray-900 mb-4">Cadastros por semana <span class="text-xs font-normal text-gray-400">(últimas 8 semanas · início&ndash;fim)</span></h3>
+      <div class="flex items-end gap-2" style="height:150px">
         ${weeks.map((w,i)=>{ const h=Math.round(w.n*100/maxW); const atual=(i===weeks.length-1);
           const col = atual ? '#4F46E5' : '#C7D2FE'; return `
-          <div class="flex-1 flex flex-col items-center justify-end gap-1 h-full">
-            <span class="text-xs font-semibold ${atual?'text-indigo-600':'text-gray-500'}">${w.n||''}</span>
-            <div class="w-full rounded-t transition-all" style="height:${Math.max(2,h)}%;background:${col}" title="${w.n} cadastro(s) em ${w.lbl}"></div>
-            <span class="text-[10px] ${atual?'text-indigo-600 font-medium':'text-gray-400'}">${w.lbl}</span>
+          <div class="flex-1 flex flex-col items-center justify-end h-full">
+            <span class="text-xs font-semibold mb-1 ${atual?'text-indigo-600':'text-gray-500'}">${w.n||''}</span>
+            <div class="w-full rounded-t transition-all" style="height:${Math.max(2,h)}%;background:${col}" title="${w.n} cadastro(s) na semana ${w.lbl}"></div>
+            <div class="h-9 flex flex-col items-center justify-start pt-1 text-center leading-tight">
+              <span class="text-[10px] ${atual?'text-indigo-600 font-semibold':'text-gray-400'}">${w.lbl}</span>
+              ${atual?'<span class="text-[9px] text-indigo-500 font-medium">esta semana</span>':''}
+            </div>
           </div>`; }).join('')}
       </div>
     </div>
