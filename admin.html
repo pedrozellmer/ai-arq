@@ -3493,11 +3493,12 @@ async function loadOrigem(){
     <div class="rounded-2xl border bg-white p-5 mt-5">
       <h3 class="font-semibold text-gray-900 mb-4">Cadastros por semana <span class="text-xs font-normal text-gray-400">(últimas 8)</span></h3>
       <div class="flex items-end gap-2" style="height:130px">
-        ${weeks.map((w,i)=>{ const h=Math.round(w.n*100/maxW); const col=OG_PALETTE[i % OG_PALETTE.length]; return `
+        ${weeks.map((w,i)=>{ const h=Math.round(w.n*100/maxW); const atual=(i===weeks.length-1);
+          const col = atual ? '#4F46E5' : '#C7D2FE'; return `
           <div class="flex-1 flex flex-col items-center justify-end gap-1 h-full">
-            <span class="text-xs font-medium text-gray-600">${w.n||''}</span>
-            <div class="w-full rounded-t" style="height:${Math.max(2,h)}%;background:${col}" title="${w.n} cadastro(s)"></div>
-            <span class="text-[10px] text-gray-400">${w.lbl}</span>
+            <span class="text-xs font-semibold ${atual?'text-indigo-600':'text-gray-500'}">${w.n||''}</span>
+            <div class="w-full rounded-t transition-all" style="height:${Math.max(2,h)}%;background:${col}" title="${w.n} cadastro(s) em ${w.lbl}"></div>
+            <span class="text-[10px] ${atual?'text-indigo-600 font-medium':'text-gray-400'}">${w.lbl}</span>
           </div>`; }).join('')}
       </div>
     </div>
