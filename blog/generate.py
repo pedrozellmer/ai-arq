@@ -426,7 +426,7 @@ def render_post_html(post):
 <meta name="author" content="AI.arq">
 
 <link rel="canonical" href="{canonical_url}">
-<link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+<link rel="icon" type="image/x-icon" href="/favicon-v2.ico">
 
 <!-- Open Graph -->
 <meta property="og:type" content="article">
@@ -585,7 +585,7 @@ def render_index_html():
 <meta name="keywords" content="blog arquitetura, planilha quantitativos, sinapi, tcpo, bdi, memorial descritivo, ia arquitetura">
 
 <link rel="canonical" href="{SITE_URL}/blog/">
-<link rel="icon" type="image/x-icon" href="/favicon.ico?v=2">
+<link rel="icon" type="image/x-icon" href="/favicon-v2.ico">
 
 <meta property="og:type" content="website">
 <meta property="og:url" content="{SITE_URL}/blog/">
