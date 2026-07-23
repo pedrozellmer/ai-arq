@@ -25,6 +25,7 @@ Observação sobre Anthropic SDK:
 - A exceção `anthropic.APIStatusError` cobre 5xx incluindo 529 (overloaded).
 - `anthropic.APITimeoutError` / `anthropic.APIConnectionError` cobrem rede.
 """
+import os
 import time
 import random
 from typing import Any
@@ -62,6 +63,53 @@ def _scrub_payload(kwargs: dict) -> dict:
     for _k in ("messages", "system"):
         if _k in kwargs:
             kwargs[_k] = _walk(kwargs[_k])
+    return kwargs
+
+
+# ── Prompt caching (economia de custo) ──────────────────────────────────────
+# Marca o system prompt como cacheável ("ephemeral", TTL ~5min). Quando o MESMO
+# system se repete em chamadas próximas (ex.: SYSTEM_PROMPT da leitura de prancha,
+# reusado em TODA prancha do projeto), a Anthropic cobra os tokens do prefixo
+# cacheado ~90% mais barato na leitura. Ligado só onde o prefixo é grande E
+# estático (ver cache_system nos call sites). Provado 23/07: cache_read confirmado.
+# Header beta é necessário no anthropic==0.40.0 (pinado no Render) e inócuo em
+# versões novas onde caching já é GA.
+_PROMPT_CACHE_BETA = "prompt-caching-2024-07-31"
+
+
+def _apply_system_cache(kwargs: dict) -> dict:
+    """Torna o system prompt cacheável. Idempotente e seguro:
+    - system string  → vira 1 bloco de texto com cache_control.
+    - system já-lista → põe cache_control no ÚLTIMO bloco (fim do prefixo).
+    - sem system      → não faz nada (nem adiciona header).
+    Se o prefixo for menor que o mínimo do modelo (1024 tok Sonnet/Opus, 2048
+    Haiku), a API só IGNORA o marcador — sem erro e sem cobrança extra.
+
+    Kill switch: env LLM_PROMPT_CACHE=0 desliga tudo (no-op) sem deploy — rede
+    de segurança pro caminho que gera a planilha, caso o cache dê problema."""
+    if os.environ.get("LLM_PROMPT_CACHE", "1") == "0":
+        return kwargs
+    sysv = kwargs.get("system")
+    if isinstance(sysv, str) and sysv.strip():
+        kwargs["system"] = [{
+            "type": "text",
+            "text": sysv,
+            "cache_control": {"type": "ephemeral"},
+        }]
+    elif isinstance(sysv, list) and sysv:
+        last = sysv[-1]
+        if isinstance(last, dict) and "cache_control" not in last:
+            sysv[-1] = {**last, "cache_control": {"type": "ephemeral"}}
+    else:
+        return kwargs  # nada a cachear → não mexe no header
+    # header beta sem clobberar um anthropic-beta já existente
+    hdrs = dict(kwargs.get("extra_headers") or {})
+    existing = hdrs.get("anthropic-beta")
+    if existing and _PROMPT_CACHE_BETA not in existing:
+        hdrs["anthropic-beta"] = f"{existing},{_PROMPT_CACHE_BETA}"
+    else:
+        hdrs["anthropic-beta"] = _PROMPT_CACHE_BETA
+    kwargs["extra_headers"] = hdrs
     return kwargs
 
 
@@ -175,6 +223,7 @@ def call_with_retry(
     base_delay: float = 2.0,
     max_delay: float = 90.0,
     tag: str = "anthropic",
+    cache_system: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Wrapper em torno de `client.messages.create(**kwargs)` com retry.
@@ -185,6 +234,8 @@ def call_with_retry(
         base_delay: delay inicial em segundos (dobra a cada tentativa).
         max_delay: teto do backoff.
         tag: string pra log identificar qual chamada tá retentando.
+        cache_system: se True, marca o system prompt como cacheável (economia de
+            custo em chamadas repetidas com o mesmo system). Ver _apply_system_cache.
         **kwargs: passados direto pra `messages.create`.
 
     Returns:
@@ -194,6 +245,8 @@ def call_with_retry(
         A última exceção, se todas as tentativas falharem.
     """
     kwargs = _scrub_payload(kwargs)  # limpa surrogates antes do 1º envio
+    if cache_system:
+        kwargs = _apply_system_cache(kwargs)
     last_exc: Exception | None = None
     delay = base_delay
 
@@ -233,6 +286,7 @@ def call_with_retry_stream(
     base_delay: float = 2.0,
     max_delay: float = 90.0,
     tag: str = "anthropic-stream",
+    cache_system: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Igual a call_with_retry, mas via STREAMING (client.messages.stream).
@@ -246,6 +300,8 @@ def call_with_retry_stream(
     Retorna o Message FINAL (mesmo formato de messages.create — .content[0].text).
     """
     kwargs = _scrub_payload(kwargs)  # limpa surrogates antes do 1º envio
+    if cache_system:
+        kwargs = _apply_system_cache(kwargs)
     last_exc: Exception | None = None
     delay = base_delay
 

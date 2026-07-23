@@ -4681,6 +4681,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             tag=f"dxf:{os.path.basename(dxf_path)}",
                             model=_dxf_model,
                             max_tokens=32000,  # CoT + JSON de planta GRANDE (16k truncava o JSON -> 0 itens)
+                            # SYSTEM_PROMPT (~4,4k tok) é o mesmo em toda prancha →
+                            # cacheado, custa ~90% menos na leitura (23/07).
+                            cache_system=True,
                             system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
                             messages=[{"role": "user", "content": dxf_prompt}],
                         )
