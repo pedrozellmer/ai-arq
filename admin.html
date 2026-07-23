@@ -2955,9 +2955,7 @@ async function loadDashboardStats() {
     // Usuários (RPC admin — inclui cadastros incompletos)
     let total = 0, incomplete = 0, last7 = 0;
     try {
-      const { data, error } = await sbClient.rpc('admin_list_all_signups');
-      if (error) throw error;
-      const users = data || [];
+      const users = await fetchSignups();
       total = users.length;
       incomplete = users.filter(u => !u.has_profile).length;
       const sevenAgo = Date.now() - 7 * 864e5;
@@ -3041,16 +3039,32 @@ async function loadDashboardStats() {
 // ══════════════════════════════════════════════
 let allUsers = [];
 
+// Busca MEMOIZADA dos cadastros (RPC admin_list_all_signups). A RPC é pesada
+// (4 subconsultas por usuário); Dashboard + Origem a disparavam em paralelo no
+// boot = 2 chamadas iguais. Agora compartilham UMA requisição em voo, e o resto
+// do painel reusa o cache. Popula allUsers; em erro zera pra permitir retry.
+let _signupsPromise = null;
+function fetchSignups(force) {
+  if (force) _signupsPromise = null;
+  if (!_signupsPromise) {
+    _signupsPromise = sbClient.rpc('admin_list_all_signups').then(({ data, error }) => {
+      if (error) { _signupsPromise = null; throw error; }
+      allUsers = data || [];
+      return allUsers;
+    }, err => { _signupsPromise = null; throw err; });
+  }
+  return _signupsPromise;
+}
+
 async function loadUsers() {
   const tbody = document.getElementById('users-table-body');
   tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-12 text-center text-gray-500">Carregando usu\u00e1rios...</td></tr>';
 
   try {
-    // Tenta via RPC (admin-only, inclui auth.users sem profile)
-    const { data, error } = await sbClient.rpc('admin_list_all_signups');
-
-    if (error) {
-      // Fallback: profiles table (sem os cadastros incompletos)
+    // Cadastros via busca memoizada (reusa o cache do boot). Em erro, cai pra profiles.
+    try {
+      await fetchSignups();
+    } catch (error) {
       console.warn('[admin] RPC falhou, caindo pra profiles:', error.message);
       const r2 = await sbClient.from('profiles').select('*');
       if (r2.error) throw r2.error;
@@ -3071,8 +3085,6 @@ async function loadUsers() {
         has_profile: true,
         num_projects: null,   // desconhecido neste fallback (sem a RPC que conta)
       }));
-    } else {
-      allUsers = data || [];
     }
 
     // Mais novos primeiro (ordena por data de cadastro, decrescente)
@@ -3330,12 +3342,8 @@ function _dddToUf(whatsapp){
 
 // Garante allUsers carregado (reusa a RPC do loadUsers sem depender da aba Usuários).
 async function _ensureSignups(){
-  if (typeof allUsers !== 'undefined' && allUsers && allUsers.length) return allUsers;
-  try {
-    const { data, error } = await sbClient.rpc('admin_list_all_signups');
-    if (!error && data) { allUsers = data; return allUsers; }
-  } catch(e){ console.warn('[origem] rpc falhou', e); }
-  return (typeof allUsers !== 'undefined' && allUsers) ? allUsers : [];
+  try { return await fetchSignups(); }
+  catch(e){ console.warn('[origem] rpc falhou', e); return (allUsers && allUsers.length) ? allUsers : []; }
 }
 
 function ogCard(label, val, sub, color){
@@ -3864,6 +3872,7 @@ function esc(str) {
   const hasAccess = await checkAdminAccess();
   if (hasAccess) {
     loadDashboardStats();
+    loadOrigem();   // Origem vive dentro do Dashboard — precisa carregar no boot
   }
 })();
 </script>
