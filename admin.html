@@ -106,10 +106,6 @@
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       <span>Atividade</span>
     </button>
-    <button onclick="switchTab('origem')" data-tab="origem" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-      <span>Origem</span>
-    </button>
     <p class="px-4 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">Motor &amp; Qualidade</p>
     <button onclick="switchTab('calibracao')" data-tab="calibracao" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
@@ -299,6 +295,15 @@
             <div id="panel-clients" class="space-y-2.5 text-sm text-gray-600"><p class="text-gray-400">Carregando&#8230;</p></div>
           </div>
         </div>
+
+        <!-- ═══ Origem dos clientes ═══ -->
+        <div class="mt-8">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold text-gray-700 flex items-center gap-2">&#128205; Origem dos clientes</h2>
+            <span class="text-xs text-gray-400">de onde v&#234;m &middot; regi&#227;o aprox. DDD &middot; cadastros/semana</span>
+          </div>
+          <div id="origem-box"><p class="text-gray-400 text-sm">Carregando&#8230;</p></div>
+        </div>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -397,19 +402,6 @@
           </div>
         </div>
         <p id="users-count" class="text-xs text-gray-500 mt-3"></p>
-      </div>
-
-      <!-- ════════════════════════════════════════ -->
-      <!-- TAB: ORIGEM (de onde vêm os clientes)   -->
-      <!-- ════════════════════════════════════════ -->
-      <div id="tab-origem" class="tab-content hidden">
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Origem dos clientes</h1>
-          <p class="text-sm text-gray-500 mt-1">De onde vêm e onde est&#227;o os cadastros.
-            <span class="text-gray-400">Fonte = declarada no cadastro (&ldquo;como nos conheceu?&rdquo;); regi&#227;o = aproximada pelo DDD do WhatsApp &mdash; ainda n&#227;o capturamos estado.</span>
-          </p>
-        </div>
-        <div id="origem-box"><p class="text-gray-500 text-sm">Carregando...</p></div>
       </div>
 
       <!-- ════════════════════════════════════════ -->
@@ -1186,12 +1178,11 @@ function switchTab(tabName) {
   // Load data for tab
   if (tabName === 'usuarios') loadUsers();
   if (tabName === 'projetos') loadProjects();
-  if (tabName === 'dashboard') loadDashboardStats();
+  if (tabName === 'dashboard') { loadDashboardStats(); loadOrigem(); }
   if (tabName === 'calibracao') loadCalibrationFactors();
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
   if (tabName === 'atividade') loadActivity();
-  if (tabName === 'origem') loadOrigem();
   if (tabName === 'emails') loadEmailCatalog();
   if (tabName === 'insights') loadInsights();
   if (tabName === 'leads') loadLeads();
@@ -3472,12 +3463,6 @@ async function loadOrigem(){
   const maxW = weeks.reduce((m,w)=>Math.max(m,w.n),0) || 1;
 
   box.innerHTML = `
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-      ${ogCard('Contas', total, '', '#4F46E5')}
-      ${ogCard('Com projeto', comProjeto, total?`${Math.round(comProjeto*100/total)}% do total`:'', '#10B981')}
-      ${ogCard('Ativos 7 dias', ativos7, '', '#06B6D4')}
-      ${ogCard('Origem nº1', srcNo1?srcNo1.label:'--', srcNo1?`${srcNo1.n} conta(s)`:'', '#F59E0B')}
-    </div>
     <div class="grid md:grid-cols-2 gap-5">
       <div class="rounded-2xl border bg-white p-5">
         <h3 class="font-semibold text-gray-900 mb-0.5">De onde vêm</h3>
