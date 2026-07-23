@@ -2253,6 +2253,7 @@ _UNIT_COUNT_KEYWORDS = _re.compile(
     r"\b(lumin[áa]rias?|spots?|projetores?|pendentes?|arandelas?|"
     r"portas?|janelas?|esquadrias?|tomadas?|interruptores?|sensores?|"
     r"difusores?|grelhas?|sprinklers?|detectores?|c[âa]meras?|cftv|"
+    r"tvs?|televisor(?:es)?|monitor(?:es)?|"  # eletrônicos: TV/monitor são UN, nunca m²
     r"quadro|qdf|caixa(?:\s+de\s+som)?|al[çc]ap[ãa]o|al[çc]ap[õo]es|"
     r"chuveiros?|torneiras?)\b",
     _re.IGNORECASE,
@@ -3257,22 +3258,27 @@ def _normalize_unit_for_item(description: str, current_unit: str) -> tuple[str, 
     - Senão, mantém a unidade atual"""
     if not description:
         return current_unit, False
-    desc_lower = description.lower()
 
     # Vb / % / mês / dia são especiais — não corrigir
     if current_unit in ("vb", "%", "mês", "mes", "dia", "h"):
         return current_unit, False
 
+    # Decide pela IDENTIDADE do item (o NOME), não pelo contexto entre parênteses.
+    # Ex.: "MONITOR/TV 42\" (…visíveis na planta de forro)" NÃO é m² só porque a
+    # observação cita "forro" — ali "forro" é LOCALIZAÇÃO, não o tipo do item.
+    # Casa as palavras-chave só no trecho antes do 1º "(" (caso Roberta 23/07).
+    head_lower = description.split("(", 1)[0].lower()
+
     # Ordem de precedência: contável > linear > superfície (senão piso vira superfície erroneamente)
-    if _UNIT_COUNT_KEYWORDS.search(desc_lower):
+    if _UNIT_COUNT_KEYWORDS.search(head_lower):
         if current_unit != "un":
             return "un", True
         return "un", False
-    if _UNIT_LINEAR_KEYWORDS.search(desc_lower):
+    if _UNIT_LINEAR_KEYWORDS.search(head_lower):
         if current_unit != "ml":
             return "ml", True
         return "ml", False
-    if _UNIT_SURFACE_KEYWORDS.search(desc_lower):
+    if _UNIT_SURFACE_KEYWORDS.search(head_lower):
         if current_unit != "m²":
             return "m²", True
         return "m²", False
