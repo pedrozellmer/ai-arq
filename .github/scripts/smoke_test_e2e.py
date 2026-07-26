@@ -178,4 +178,22 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
     except Exception:
         pass
-    sys.exit(main())
+
+    # RETRY 1x: desde 23/07 o site está atrás do Cloudflare (Fase 2). O runner
+    # do GitHub Actions usa IP compartilhado no mundo inteiro — às vezes um IP
+    # com reputação ruim (usado por outro CI em outro lugar) leva um desafio
+    # automático do Cloudflare, sem relação com bug real (site/API testados na
+    # mão continuam saudáveis nesses casos). Rodar 2x antes de alarmar reduz
+    # falso-positivo sem esconder regressão de verdade (se falhar as 2, é sinal
+    # forte). Ver memória: falhas 25-26/07 no mesmo commit que passou 23-24/07.
+    import time
+    rc = main()
+    if rc != 0:
+        print("\n[retry] 1ª tentativa falhou — pode ser desafio de rede transitório "
+              "(IP do runner CI). Aguardando 20s e tentando de novo antes de alarmar...",
+              flush=True)
+        time.sleep(20)
+        rc = main()
+        if rc == 0:
+            print("[retry] 2ª tentativa passou — confirma que foi transitório.", flush=True)
+    sys.exit(rc)
