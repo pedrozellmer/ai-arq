@@ -144,6 +144,10 @@ check("impermeabilizacao area molhada -> NAO", is_floor_surface("Impermeabiliza�
 check("rodape no piso -> NAO (perimetro)", is_floor_surface("Rodapé de madeira — piso do showroom") is False)
 check("parede -> NAO", is_floor_surface("Pintura de parede acrílica branca") is False)
 check("luminaria em m2 -> NAO (contagem)", is_floor_surface("Luminária de piso LED embutida no forro") is False)
+# 2a rodada — falsos-positivos pescados no teste real ev3c243d (155 itens):
+check("bancada H=1m do piso -> NAO (movel/altura)", is_floor_surface("Bancada/balcão de atendimento — elemento horizontal a H=1,00m do piso, prof 1,99m") is False)
+check("bebedouro de piso -> NAO (aparelho)", is_floor_surface("Bebedouro / purificador de água de coluna ou piso — vista 3D") is False)
+check("contrapiso H=5cm -> SIM (espessura, nao posicao)", is_floor_surface("Contrapiso desempenado H=5cm — regularização sobre laje") is True)
 
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
