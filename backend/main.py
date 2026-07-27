@@ -2759,8 +2759,17 @@ def _consolidate_items(items: list) -> list:
         should_merge = False
         if unit == "vb" and len(group) >= 2:
             should_merge = True  # vb duplicado é sempre erro
-        elif unit == "un" and len(group) >= 3:
-            should_merge = True  # 3+ un mesma família: provável duplicação
+        elif unit == "un" and len(group) >= 3 and (
+                _is_legend_variant(descs) or _same_opening(descs, 3)):
+            # 3+ "un" SÓ funde COM reforço (mesma legenda OU mesma abertura de 3
+            # tokens) — igual ao ramo genérico abaixo. Sem isso, 3 produtos
+            # DISTINTOS de mesmo substantivo (porta de madeira PM-01 + de vidro
+            # PV-01 + de emergência P-EM) virariam 1 linha "qtd 3", violando a
+            # regra dura nº4 (tipo específico nunca some) e entregando
+            # quantitativo errado. Bug achado na auditoria 27/07
+            # (test_no_false_positive_portas). Ralo/Porta IGUAIS repetidos têm a
+            # mesma abertura → o _same_opening deixa fundir; tipos diferentes não.
+            should_merge = True
         elif unit == "cj" and len(group) >= 2:
             should_merge = True  # conjuntos duplicados
         elif len(group) >= 3 and (_is_legend_variant(descs) or _same_opening(descs, 3)):
