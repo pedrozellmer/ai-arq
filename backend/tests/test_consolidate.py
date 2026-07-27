@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Teste rápido dos 3 resíduos do consolidador."""
 import sys, os
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models import BudgetItem, Confidence
 from main import _consolidate_items, _normalize_description_key, _primary_noun
