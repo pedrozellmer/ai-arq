@@ -48,8 +48,26 @@ def main() -> int:
     failures: list[str] = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(accept_downloads=True)
+        # Desde 23/07 o site está atrás do Cloudflare (Fase 2). O CF injeta em
+        # TODA página o script de desafio invisível (/cdn-cgi/challenge-platform/
+        # scripts/jsd/main.js + window.__CF$cv$params) — comprovado 27/07 baixando
+        # a login.html com UA de HeadlessChrome. Pra gente ele roda em silêncio;
+        # pra browser automatizado ele detecta a automação e ATRASA/segura a
+        # página, então o #login-email não fica pronto e o fill estourava em 30s.
+        # Mitigação: UA de Chrome normal (sem "HeadlessChrome") + flags que
+        # escondem os sinais óbvios de automação. Não burla proteção nenhuma —
+        # é o nosso próprio site, só evita que o CF trate o teste como bot.
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--disable-blink-features=AutomationControlled"],
+        )
+        context = browser.new_context(
+            accept_downloads=True,
+            user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                        "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"),
+            locale="pt-BR",
+            viewport={"width": 1366, "height": 768},
+        )
         page = context.new_page()
 
         # ── 1. Login ─────────────────────────────────────────────
@@ -58,6 +76,24 @@ def main() -> int:
             page.goto(f"{SITE}/login.html", wait_until="domcontentloaded", timeout=30_000)
         except PlaywrightTimeoutError:
             failures.append(f"não carregou login.html em 30s ({SITE})")
+            return _close_and_report(browser, failures)
+
+        # Espera o campo ficar PRONTO antes de preencher. O desafio invisível do
+        # Cloudflare pode atrasar a página alguns segundos no browser automatizado;
+        # sem essa espera, o fill estourava em 30s e o teste falhava sem o site
+        # ter problema nenhum (falso-positivo 25-27/07).
+        try:
+            page.wait_for_selector("#login-email", state="visible", timeout=60_000)
+        except PlaywrightTimeoutError:
+            body_txt = ""
+            try:
+                body_txt = page.locator("body").inner_text()[:200].replace("\n", " ")
+            except Exception:
+                pass
+            failures.append(
+                f"#login-email não ficou visível em 60s — possível desafio do "
+                f"Cloudflare segurando a página. URL={page.url} | corpo='{body_txt}'"
+            )
             return _close_and_report(browser, failures)
 
         try:
