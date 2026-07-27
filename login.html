@@ -54,7 +54,7 @@
 
       <!-- Heading -->
       <h1 class="text-2xl font-bold text-gray-900 mb-2">Bem-vindo ao AI.arq</h1>
-      <p class="text-gray-600 text-sm mb-8">Seu <strong>1º projeto é por nossa conta</strong> — sem cartão. Entre com o Google (cria a conta na hora) ou com e-mail. É novo por aqui? Clique em Cadastre-se logo abaixo.</p>
+      <p class="text-gray-600 text-sm mb-8"><strong>Grátis durante o beta</strong> — quantos projetos quiser, sem cartão. Entre com o Google (cria a conta na hora) ou com e-mail. É novo por aqui? Clique em Cadastre-se logo abaixo.</p>
 
       <!-- Google Button -->
       <button id="btn-google-login" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-6 py-4 text-base font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:shadow-md transition-all duration-200 shadow-sm">
@@ -83,7 +83,7 @@
         </div>
         <div>
           <label for="login-password" class="sr-only">Senha</label>
-          <input type="password" id="login-password" required placeholder="Sua senha" minlength="6" autocomplete="current-password"
+          <input type="password" id="login-password" required placeholder="Sua senha" autocomplete="current-password"
             class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition">
         </div>
         <div id="email-login-error" class="hidden rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600"></div>
@@ -227,7 +227,10 @@
     const password = loginPassword.value;
 
     if (!email) { showEmailError('Por favor, informe seu e-mail.'); return; }
-    if (!password || password.length < 6) { showEmailError('A senha deve ter pelo menos 6 caracteres.'); return; }
+    if (!password) { showEmailError('Por favor, informe sua senha.'); return; }
+    // Mínimo de 8 só no CADASTRO (o Supabase exige 8). No login NÃO validamos
+    // comprimento — senão quebra quem criou conta quando o mínimo era 6.
+    if (isSignupMode && password.length < 8) { showEmailError('A senha precisa ter pelo menos 8 caracteres.'); return; }
 
     btnEmailLogin.disabled = true;
     const originalHTML = btnEmailLogin.innerHTML;
@@ -253,6 +256,8 @@
         showEmailError('E-mail ou senha incorretos.');
       } else if (err.message.includes('Email not confirmed')) {
         showEmailError('E-mail ainda n\u00e3o confirmado. Verifique sua caixa de entrada.');
+      } else if (/password/i.test(err.message || '')) {
+        showEmailError('A senha precisa ter pelo menos 8 caracteres.');
       } else {
         showEmailError(err.message || 'Erro inesperado. Tente novamente.');
       }
