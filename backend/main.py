@@ -987,10 +987,18 @@ def get_planilha_path(job_id: str) -> Optional[str]:
     return None
 
 
+# Swagger/OpenAPI só quando LIGADO explicitamente (env EXPOSE_API_DOCS=1). Em
+# produção fica OFF: /docs, /redoc e /openapi.json eram públicos e expunham toda
+# a superfície da API pra reconhecimento (achado auditoria 27/07). Os endpoints
+# seguem protegidos por auth — isto só tira o mapa de bandeja do atacante.
+_EXPOSE_DOCS = os.environ.get("EXPOSE_API_DOCS", "0") == "1"
 app = FastAPI(
     title="AI.arq API",
     description="Motor de processamento de pranchas de arquitetura com IA",
     version="1.0.0",
+    docs_url="/docs" if _EXPOSE_DOCS else None,
+    redoc_url="/redoc" if _EXPOSE_DOCS else None,
+    openapi_url="/openapi.json" if _EXPOSE_DOCS else None,
 )
 
 app.add_middleware(
@@ -5965,6 +5973,14 @@ async def process_files(
     # Dono autoritativo vem do token (não confia só no parâmetro).
     if not user_id or user_id == "anonymous":
         user_id = jwt_user.get("id") or user_id
+
+    # Freio anti-abuso de CUSTO (achado auditoria 27/07): processar dispara IA
+    # cara (Anthropic/Replicate) + RAM. No beta grátis/ilimitado, um usuário
+    # logado num loop queimaria gasto sem teto. Limite por usuário+IP, generoso —
+    # um humano sobe poucos projetos por sessão; robô em loop é barrado.
+    if not _rate_limit_ok(f"process:{user_id}", request, limit=12, window_s=600):
+        raise HTTPException(429, "Muitos projetos enviados em pouco tempo. Espere "
+                            "alguns minutos e tente de novo.")
 
     # Teto de tamanho do REQUEST (anti-OOM). Desde 21/07 o upload é gravado em
     # disco em pedaços (_stream_upload_to_disk) — NÃO bufferiza mais o arquivo
@@ -11567,6 +11583,10 @@ async def reprocess_project(job_id: str, request: Request):
     Política: 1 reprocessamento grátis por projeto. Tentativas adicionais
     retornam 402 (Payment Required) com mensagem orientando o user."""
     _require_project_owner(request, job_id)
+    # Freio anti-abuso de custo (auditoria 27/07): reprocessar dispara o motor de
+    # IA de novo. Teto por-projeto — humano reprocessa 1-2×; loop é barrado.
+    if not _rate_limit_ok(f"reprocess:{job_id}", request, limit=6, window_s=600):
+        raise HTTPException(429, "Muitos reprocessamentos em pouco tempo. Espere alguns minutos.")
     import urllib.request, urllib.error, json, shutil
 
     # 1) Buscar projeto original + checar contador.
@@ -12122,6 +12142,10 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     Grátis — é melhoria de insumo. A limpeza dos itens antigos só acontece no SUCESSO do
     reprocesso (_persist), então um reprocesso que falhe preserva a planilha anterior."""
     _require_project_owner(request, job_id)
+    # Freio anti-abuso de custo (auditoria 27/07): anexar+reprocessar dispara o
+    # motor de IA. Teto por-projeto — loop é barrado, uso normal passa folgado.
+    if not _rate_limit_ok(f"addfile:{job_id}", request, limit=6, window_s=600):
+        raise HTTPException(429, "Muitos envios de arquivo em pouco tempo. Espere alguns minutos.")
     import urllib.request, urllib.error, json
     from urllib.parse import unquote
 
