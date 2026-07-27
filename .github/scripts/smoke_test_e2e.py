@@ -70,14 +70,18 @@ def main() -> int:
             except Exception:
                 return None
 
+        # Só o SITE vai por IP (GitHub Pages tem IP estável e documentado).
+        # A API NÃO: o IP do Render rotaciona (vi .8/.9 → .15 → .7 no mesmo dia)
+        # e mapear por IP quebrou o CORS dentro do Chromium ("Response to
+        # preflight request doesn't pass" + ERR_FAILED, run 9bf2b24) mesmo com o
+        # preflight respondendo 200 no curl. Pra API uso REESCRITA DE URL
+        # (page.route) pro hostname real do Render — nome real, cert real,
+        # DNS real, sem passar pelo nosso Cloudflare. Ver _reroute_api abaixo.
         _rules = []
         _pages_ip = _resolve("pedrozellmer.github.io")   # origem do site
-        _render_ip = _resolve("ai-arq.onrender.com")     # origem da API
         if _pages_ip:
             _rules.append(f"MAP ai.arq.br {_pages_ip}")
             _rules.append(f"MAP www.ai.arq.br {_pages_ip}")
-        if _render_ip:
-            _rules.append(f"MAP api.ai.arq.br {_render_ip}")
 
         _args = ["--disable-blink-features=AutomationControlled"]
         if _rules:
@@ -97,6 +101,35 @@ def main() -> int:
             viewport={"width": 1366, "height": 768},
         )
         page = context.new_page()
+
+        # ── API: reescreve api.ai.arq.br → ai-arq.onrender.com ───────────────
+        # O site em produção chama a API em api.ai.arq.br, que passa pelo nosso
+        # Cloudflare — e o Bot Fight Mode derruba essas chamadas no browser
+        # automatizado (comprovado run 9bf2b24: "blocked by CORS policy:
+        # Response to preflight request doesn't pass" + ERR_FAILED em TODAS:
+        # /notify/welcome, /credits/balance, /projects/by-user; a tela mostrou
+        # "Erro ao carregar: Failed to fetch"). Aqui trocamos o hostname pelo
+        # endereço direto do Render: MESMO backend, cert real, DNS real, sem CF.
+        # Funciona pro CORS porque o backend responde 'access-control-allow-
+        # origin: *' (verificado no curl). É o mesmo alvo que o nível 2 já usa.
+        _rerouted = {"n": 0}
+
+        def _reroute_api(route):
+            try:
+                _u = route.request.url
+                if "api.ai.arq.br" in _u:
+                    _rerouted["n"] += 1
+                    route.continue_(url=_u.replace("https://api.ai.arq.br",
+                                                   "https://ai-arq.onrender.com"))
+                else:
+                    route.continue_()
+            except Exception:
+                try:
+                    route.continue_()
+                except Exception:
+                    pass
+
+        page.route("https://api.ai.arq.br/**", _reroute_api)
 
         # Diagnóstico: guarda erro de console e requisição que FALHOU. Sem isso,
         # "nenhum projeto apareceu" não diz se foi a chamada da API que quebrou,
@@ -223,6 +256,7 @@ def main() -> int:
             failures.append(
                 f"nenhum projeto VISÍVEL no dashboard em 30s "
                 f"(links no DOM={_n_dom} → {'escondido/aba fechada' if _n_dom else 'lista não carregou'}); "
+                f"chamadas de API reescritas p/ Render={_rerouted['n']}; "
                 f"URL={page.url} | tela='{_body}'"
             )
             if failed_reqs:
