@@ -219,6 +219,10 @@ FLOOR_AREA_BLOCK_KW = (
     "ponto", "interruptor", "tomada", "luminár", "ralo", "spot", "arandela",
     "faixa", "demarca", "vaga",
     "banheiro", "wc", "vestiár", "sanitár", "molhad", "cabine", "nicho",
+    # posicionado por ALTURA ("a 1,00m do piso") ou móvel/aparelho que menciona
+    # piso de raspão — pego no teste real do LAAV (bancada, bebedouro). "m do piso"
+    # (não "h=") pra não bloquear contrapiso com espessura tipo "H=5cm".
+    "m do piso", "bancada", "balcão", "balcao", "bebedouro", "purificador",
 )
 
 
