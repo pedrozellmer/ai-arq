@@ -23,6 +23,7 @@ from engine_rules import (  # noqa: E402
     is_nonsense_item,
     extract_type_code,
     response_truncated,
+    is_floor_surface,
 )
 
 _passed = 0
@@ -122,6 +123,27 @@ check("stop_sequence -> NAO truncado", response_truncated("stop_sequence") is Fa
 check("None -> NAO truncado (nao falsea aviso)", response_truncated(None) is False)
 check("vazio -> NAO truncado", response_truncated("") is False)
 check("espaco em volta nao engana", response_truncated(" max_tokens ") is True)
+
+print("== is_floor_surface (caso LAAV 27/07: area informada 335,4 m2 replicada) ==")
+# DEVEM contar como superficie de piso (herdam a area informada — corretos):
+check("piso -> superficie", is_floor_surface("Piso — tipo a definir — área total da planta baixa") is True)
+check("forro -> superficie", is_floor_surface("Forro — área total dos ambientes internos") is True)
+check("pintura de piso -> superficie", is_floor_surface("Pintura de piso — Tinta Piso Suvinil cor Cinza — piso geral") is True)
+check("pintura de forro -> superficie", is_floor_surface("Pintura de forro em gesso acartonado — látex acrílica branca") is True)
+check("contrapiso -> superficie", is_floor_surface("Regularização de contrapiso — área total da laje") is True)
+# NAO PODEM herdar a area (o bug): pontual, linear ou comodo especifico:
+check("interruptor (piso=altura) -> NAO", is_floor_surface("Interruptor simples — H=1,10m do piso acabado — 220V") is False)
+check("ponto de agua (piso=altura) -> NAO", is_floor_surface("Ponto de água fria — H=0,20m do piso acabado") is False)
+check("ponto de pneumatica -> NAO", is_floor_surface("Ponto de pneumática — H=0,40m do piso acabado, ar comprimido") is False)
+check("faixa de seguranca no piso -> NAO", is_floor_surface("Faixa de segurança em tinta epóxi — demarcação no piso, largura 5 cm") is False)
+check("demarcacao de vagas -> NAO", is_floor_surface("Faixa de demarcação de vagas em tinta epóxi — piso, largura 5 cm") is False)
+check("argamassa colante banheiro -> NAO", is_floor_surface("Argamassa colante para cerâmica dos banheiros — contrapiso/piso existente") is False)
+check("impermeabilizante de banheiro -> NAO", is_floor_surface("Impermeabilizante em paredes de banheiros e cabine de pintura") is False)
+check("impermeabilizacao area molhada -> NAO", is_floor_surface("Impermeabilização de piso em áreas molhadas (WC, vestiário)") is False)
+# guarda-corpo do comportamento antigo que ja funcionava:
+check("rodape no piso -> NAO (perimetro)", is_floor_surface("Rodapé de madeira — piso do showroom") is False)
+check("parede -> NAO", is_floor_surface("Pintura de parede acrílica branca") is False)
+check("luminaria em m2 -> NAO (contagem)", is_floor_surface("Luminária de piso LED embutida no forro") is False)
 
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
