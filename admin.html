@@ -3480,9 +3480,15 @@ async function loadOrigem(){
 
   // Cadastros por semana (últimas 8). Rótulo = intervalo início–fim pra ficar
   // claro que cada barra é uma SEMANA (não um dia).
-  const DAY=86400000, now=Date.now();
+  // 27/07: as janelas agora fecham em DIA INTEIRO (meia-noite local = Brasília),
+  // não na hora atual. Antes o corte caía no meio do dia, então o rótulo mostrava
+  // o mesmo dia em 2 barras ("01–08/06" e "08–15/06") e um cadastro podia cair de
+  // um lado ou do outro dependendo da hora. Agora cada barra = 7 dias fechados.
+  const DAY=86400000;
+  const _mn = new Date(); _mn.setHours(24,0,0,0);   // meia-noite do fim de HOJE
+  const now = _mn.getTime();
   const _dd = n => String(n).padStart(2,'0');
-  const _rangeLbl = (from,to)=>{ const a=new Date(from), b=new Date(to);
+  const _rangeLbl = (from,to)=>{ const a=new Date(from), b=new Date(to-DAY);
     return a.getMonth()===b.getMonth()
       ? `${_dd(a.getDate())}–${_dd(b.getDate())}/${_dd(b.getMonth()+1)}`
       : `${_dd(a.getDate())}/${_dd(a.getMonth()+1)}–${_dd(b.getDate())}/${_dd(b.getMonth()+1)}`; };
@@ -3506,16 +3512,16 @@ async function loadOrigem(){
       </div>
     </div>
     <div class="rounded-2xl border bg-white p-5 mt-5">
-      <h3 class="font-semibold text-gray-900 mb-4">Cadastros por semana <span class="text-xs font-normal text-gray-400">(últimas 8 semanas · início&ndash;fim)</span></h3>
+      <h3 class="font-semibold text-gray-900 mb-4">Cadastros por semana <span class="text-xs font-normal text-gray-400">(8 blocos de 7 dias · início&ndash;fim)</span></h3>
       <div class="flex items-end gap-2" style="height:150px">
         ${weeks.map((w,i)=>{ const h=Math.round(w.n*100/maxW); const atual=(i===weeks.length-1);
           const col = atual ? '#4F46E5' : '#C7D2FE'; return `
           <div class="flex-1 flex flex-col items-center justify-end h-full">
             <span class="text-xs font-semibold mb-1 ${atual?'text-indigo-600':'text-gray-500'}">${w.n||''}</span>
-            <div class="w-full rounded-t transition-all" style="height:${Math.max(2,h)}%;background:${col}" title="${w.n} cadastro(s) na semana ${w.lbl}"></div>
+            <div class="w-full rounded-t transition-all" style="height:${Math.max(2,h)}%;background:${col}" title="${w.n} cadastro(s) entre ${w.lbl}"></div>
             <div class="h-9 flex flex-col items-center justify-start pt-1 text-center leading-tight">
               <span class="text-[10px] ${atual?'text-indigo-600 font-semibold':'text-gray-400'}">${w.lbl}</span>
-              ${atual?'<span class="text-[9px] text-indigo-500 font-medium">esta semana</span>':''}
+              ${atual?'<span class="text-[9px] text-indigo-500 font-medium">últimos 7 dias</span>':''}
             </div>
           </div>`; }).join('')}
       </div>
