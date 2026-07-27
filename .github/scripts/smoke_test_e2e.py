@@ -161,7 +161,25 @@ def main() -> int:
             page.wait_for_url("**/dashboard.html*", timeout=20_000)
             print("[e2e] login OK, chegou no dashboard", flush=True)
         except PlaywrightTimeoutError:
-            failures.append(f"login não redirecionou pra dashboard em 20s; URL final={page.url}")
+            # Captura o que a TELA disse — a msg de erro do login aparece em
+            # #email-login-error. Sem isso a falha vira "não redirecionou" e não
+            # dá pra saber se foi credencial, rate-limit do Supabase ou rede.
+            _err_txt = ""
+            try:
+                _el = page.locator("#email-login-error")
+                if _el.count() and _el.first.is_visible():
+                    _err_txt = _el.first.inner_text()[:200]
+            except Exception:
+                pass
+            if not _err_txt:
+                try:
+                    _err_txt = page.locator("body").inner_text()[:200].replace("\n", " ")
+                except Exception:
+                    pass
+            failures.append(
+                f"login não redirecionou pra dashboard em 20s; URL final={page.url} "
+                f"| msg da tela='{_err_txt}'"
+            )
             return _close_and_report(browser, failures)
 
         # ── 2. Pegar 1º projeto na aba "Meus projetos" do dashboard ───────
@@ -256,6 +274,13 @@ def _close_and_report(browser, failures: list[str]) -> int:
         print(f"\n[FAIL E2E] {len(failures)} problema(s):", flush=True)
         for f in failures:
             print(f"  - {f}", flush=True)
+            # Emite também como ANNOTATION do Actions (::error::). Motivo prático:
+            # baixar o LOG do job exige permissão de admin no repo, mas as
+            # annotations são legíveis pela API pública (/check-runs/{id}/
+            # annotations). Assim o diagnóstico chega sem depender de print
+            # manual — foi o que travou a investigação de 25-27/07.
+            _one = " ".join(str(f).split())[:400]
+            print(f"::error::[E2E] {_one}", flush=True)
         return 1
     print("[ok-e2e] download via browser real funcionou", flush=True)
     return 0
