@@ -48,19 +48,47 @@ def main() -> int:
     failures: list[str] = []
 
     with sync_playwright() as p:
-        # Desde 23/07 o site está atrás do Cloudflare (Fase 2). O CF injeta em
-        # TODA página o script de desafio invisível (/cdn-cgi/challenge-platform/
-        # scripts/jsd/main.js + window.__CF$cv$params) — comprovado 27/07 baixando
-        # a login.html com UA de HeadlessChrome. Pra gente ele roda em silêncio;
-        # pra browser automatizado ele detecta a automação e ATRASA/segura a
-        # página, então o #login-email não fica pronto e o fill estourava em 30s.
-        # Mitigação: UA de Chrome normal (sem "HeadlessChrome") + flags que
-        # escondem os sinais óbvios de automação. Não burla proteção nenhuma —
-        # é o nosso próprio site, só evita que o CF trate o teste como bot.
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--disable-blink-features=AutomationControlled"],
-        )
+        # ── Testar o ORIGIN, contornando o Cloudflare (sem enfraquecer nada) ──
+        # Desde 23/07 o site está atrás do CF (Fase 2) com Bot Fight Mode ligado.
+        # O BFM serve um interstitial ("Executando verificação de segurança") pro
+        # browser automatizado — a login.html nem chega, então o teste morria.
+        # E a doc oficial é clara: BFM NÃO é bypassável (skip/allow/WAF não têm
+        # efeito). A alternativa a DESLIGAR a proteção é apontar o browser direto
+        # pro servidor de origem: mesmo conteúdo, mesmo backend, cert válido,
+        # sem passar pelo CF. Verificado 27/07 com curl --resolve:
+        #   ai.arq.br     → GitHub Pages : 200, cert OK, #login-email presente
+        #   api.ai.arq.br → Render       : 200, cert OK
+        # 🪤 A camada Cloudflare continua coberta pelo NÍVEL 1 (que bate em
+        # ai.arq.br através do CF). Aqui o alvo é o fluxo do cliente (bug Daniela).
+        # IPs resolvidos em runtime (não hardcode) — se a resolução falhar, cai
+        # no caminho normal e o skip do BFM abaixo evita alarme falso.
+        import socket
+
+        def _resolve(host: str):
+            try:
+                return socket.gethostbyname(host)
+            except Exception:
+                return None
+
+        _rules = []
+        _pages_ip = _resolve("pedrozellmer.github.io")   # origem do site
+        _render_ip = _resolve("ai-arq.onrender.com")     # origem da API
+        if _pages_ip:
+            _rules.append(f"MAP ai.arq.br {_pages_ip}")
+            _rules.append(f"MAP www.ai.arq.br {_pages_ip}")
+        if _render_ip:
+            _rules.append(f"MAP api.ai.arq.br {_render_ip}")
+
+        _args = ["--disable-blink-features=AutomationControlled"]
+        if _rules:
+            _args.append("--host-resolver-rules=" + ",".join(_rules))
+            print(f"[e2e] testando o ORIGIN direto (contorna Cloudflare/BFM): {_rules}",
+                  flush=True)
+        else:
+            print("[e2e] não resolvi os IPs de origem — seguindo pelo Cloudflare",
+                  flush=True)
+
+        browser = p.chromium.launch(headless=True, args=_args)
         context = browser.new_context(
             accept_downloads=True,
             user_agent=("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
