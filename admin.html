@@ -2717,22 +2717,101 @@ async function loadProjects() {
       // Numa avaliação: link pra abrir e comparar.
       if (_isEval && jid) _btns.push('<a href="projeto.html?job_id=' + jid + '" target="_blank" rel="noopener" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#128269; Abrir teste</a>');
       const actInline = _btns.length ? '<div class="flex flex-wrap gap-1 mt-1.5">' + _btns.join('') + '</div>' : '';
-      const rowClass = isStuck ? 'border-t bg-red-50/50 hover:bg-red-50' : 'border-t hover:bg-gray-50';
+      // ATIVOS (queued/processing): NÃO crava "TRAVADO" só por tempo — o admin não
+      // enxergava o progresso real e marcava travado a partir de 15min, então um PDF
+      // grande legítimo (lento) parecia morto. Deixa o badge neutro + âncoras
+      // (#pbadge/#pprog) e enrichActiveProgress() busca /api/status pra mostrar a
+      // verdade: progresso vivo (%+prancha) ou travado-real (404 = sumiu da memória).
+      const _activeBadge = '<span id="pbadge-' + jid + '" class="px-2 py-1 rounded-full text-xs font-medium text-yellow-700 bg-yellow-50">' + (p.status === 'queued' ? '\u23f3 Na fila' : '\u2699 Processando') + '</span>' +
+        '<div id="pprog-' + jid + '" class="text-[11px] text-gray-500 mt-1">verificando progresso\u2026</div>';
+      const _staticBadge = '<span class="px-2 py-1 rounded-full text-xs font-medium ' + statusColor + '">' + statusLabel + '</span>';
+      const statusCellInner = (isActive && jid) ? _activeBadge : _staticBadge;
+      // Não oferece Reprocessar/Avaliar num job ativo — só quando parar (o enrich
+      // injeta o botão se confirmar travado-real).
+      const actInlineFinal = (isActive && jid) ? '' : actInline;
+      const rowClass = 'border-t hover:bg-gray-50';
       return `<tr class="${rowClass}">` +
         '<td class="px-4 py-3 font-mono text-xs">' + (p.job_id || '--') + (_isEval ? ' <span class="inline-block px-1 rounded bg-amber-100 text-amber-800 text-[10px] font-sans font-semibold align-middle">&#129514; TESTE</span>' : '') + '</td>' +
         '<td class="px-4 py-3">' + userLabel + '</td>' +
         '<td class="px-4 py-3">' + (p.files_count || 0) + ' (' + types + ')</td>' +
         '<td class="px-4 py-3">' + (p.items_count || '--') + '</td>' +
         '<td class="px-4 py-3">' + (p.total_area ? p.total_area.toFixed(0) + ' m\u00b2' : '--') + '</td>' +
-        '<td class="px-4 py-3"><span class="px-2 py-1 rounded-full text-xs font-medium ' + statusColor + '">' + statusLabel + '</span>' + errInline + actInline + '</td>' +
-        '<td class="px-4 py-3 text-xs font-mono ' + (isStuck ? 'text-red-700 font-semibold' : 'text-gray-500') + '">' + elapsed + '</td>' +
+        '<td class="px-4 py-3">' + statusCellInner + errInline + actInlineFinal + '</td>' +
+        '<td class="px-4 py-3 text-xs font-mono text-gray-500">' + elapsed + '</td>' +
         '<td class="px-4 py-3 text-xs text-gray-500 font-mono">' + dateFmt + '</td>' +
         '</tr>';
     }).join('');
+
+    // Progresso REAL dos jobs ativos — corre em paralelo, não bloqueia a tabela.
+    enrichActiveProgress(projects);
   } catch (err) {
     console.error('Error loading projects:', err);
     tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-red-400">Erro ao carregar projetos: ' + esc(err.message) + '</td></tr>';
   }
+}
+
+// Busca o progresso REAL dos jobs ativos no backend (/api/status) e mostra no
+// admin — % + a prancha atual ("Prancha 25/35 · pág 13/23"), igual a tela do
+// cliente já faz. Corrige o falso "TRAVADO": antes o admin só via o tempo
+// decorrido e cravava travado a partir de 15min, mesmo num job saudável só lento
+// (PDF grande de detalhamento). Sinais do backend:
+//   • 200 + progresso → VIVO: mostra % e a prancha atual.
+//   • 404             → job sumiu da memória do servidor = travado DE VERDADE:
+//                       pinta vermelho + botão Reprocessar.
+//   • rede/timeout    → indeterminado: não crava nada, só sinaliza "sem resposta".
+// O admin passa no _require_project_owner (acesso a qualquer projeto), então o
+// /api/status responde pra jobs de qualquer usuário.
+async function enrichActiveProgress(projects) {
+  const ativos = (projects || []).filter(p =>
+    (p.status === 'queued' || p.status === 'processing') && p.job_id);
+  if (!ativos.length) return;
+  let travadosReais = 0;
+  await Promise.all(ativos.map(async (p) => {
+    const jid = p.job_id;
+    const badge = document.getElementById('pbadge-' + jid);
+    const prog  = document.getElementById('pprog-' + jid);
+    if (!badge || !prog) return;  // tabela re-renderizou no meio — ignora
+    // Timeout curto: se o backend (free tier) estiver dormindo, não pendura.
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 9000);
+    let res;
+    try {
+      res = await authFetch(`${API_BASE}/api/status/${jid}`, { signal: ctrl.signal });
+    } catch (e) {
+      clearTimeout(to);
+      prog.textContent = 'sem resposta do servidor — ' + minutesSince(p.created_at) + 'min';
+      return;
+    }
+    clearTimeout(to);
+    if (res.status === 404) {
+      // Job não está mais na memória do backend: morreu num reinício. Travado real.
+      travadosReais++;
+      badge.className = 'px-2 py-1 rounded-full text-xs font-medium text-red-700 bg-red-100 animate-pulse';
+      badge.textContent = '⚠ TRAVADO';
+      prog.innerHTML = '<span class="text-red-600">sumiu do servidor (reinício) — precisa reprocessar</span> ' +
+        '<button onclick="adminReprocess(\'' + jid + '\')" class="ml-1 text-[11px] px-2 py-0.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">↻ Reprocessar</button>';
+      return;
+    }
+    if (!res.ok) { prog.textContent = 'servidor respondeu ' + res.status; return; }
+    let sd;
+    try { sd = await res.json(); } catch (_) { return; }
+    // Virou done/error entre o load e agora: mostra e deixa o próximo refresh formatar.
+    if (sd.status === 'done' || sd.status === 'error') {
+      const ok = sd.status === 'done';
+      badge.textContent = ok ? '✓ Concluído' : '✗ Erro';
+      badge.className = 'px-2 py-1 rounded-full text-xs font-medium ' +
+        (ok ? 'text-green-700 bg-green-50' : 'text-red-700 bg-red-50');
+      prog.textContent = '';
+      return;
+    }
+    const pct = Math.max(0, Math.min(100, Math.round(sd.progress || 0)));
+    badge.textContent = '⚙ ' + pct + '%';
+    prog.textContent = sd.current_step || 'processando…';
+  }));
+  // Contador honesto: "travados" = os que o backend confirmou perdidos (404),
+  // não os que só passaram de 15min.
+  const stEl = document.getElementById('proj-stat-stuck');
+  if (stEl) stEl.textContent = travadosReais;
 }
 
 // Auto-refresh a cada 10s quando aba Projetos visível e checkbox marcada
