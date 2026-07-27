@@ -98,6 +98,17 @@ def main() -> int:
         )
         page = context.new_page()
 
+        # Diagnóstico: guarda erro de console e requisição que FALHOU. Sem isso,
+        # "nenhum projeto apareceu" não diz se foi a chamada da API que quebrou,
+        # JS com erro, ou só a aba que não abriu (investigação 27/07).
+        console_errs: list[str] = []
+        failed_reqs: list[str] = []
+        page.on("console", lambda m: (
+            console_errs.append(f"{m.type}: {m.text[:160]}")
+            if m.type == "error" else None))
+        page.on("requestfailed", lambda r: failed_reqs.append(
+            f"{r.method} {r.url[:110]} :: {r.failure}"))
+
         # ── 1. Login ─────────────────────────────────────────────
         print(f"[e2e] abrindo {SITE}/login.html", flush=True)
         try:
@@ -197,11 +208,27 @@ def main() -> int:
             # demorar se o Render estava dormindo).
             page.wait_for_selector(proj_selector, timeout=30_000)
         except PlaywrightTimeoutError:
+            # Diagnóstico rico: separa "link existe mas está escondido" (aba não
+            # abriu) de "a lista nem carregou" (chamada da API falhou).
+            _n_dom = 0
+            try:
+                _n_dom = page.locator(proj_selector).count()
+            except Exception:
+                pass
+            _body = ""
+            try:
+                _body = " ".join(page.locator("body").inner_text()[:220].split())
+            except Exception:
+                pass
             failures.append(
-                "nenhum projeto apareceu no dashboard em 30s — a conta de "
-                "teste precisa de ao menos 1 projeto processado, ou o "
-                "carregamento da lista quebrou"
+                f"nenhum projeto VISÍVEL no dashboard em 30s "
+                f"(links no DOM={_n_dom} → {'escondido/aba fechada' if _n_dom else 'lista não carregou'}); "
+                f"URL={page.url} | tela='{_body}'"
             )
+            if failed_reqs:
+                failures.append("requisições que falharam: " + " || ".join(failed_reqs[:4]))
+            if console_errs:
+                failures.append("erros de console: " + " || ".join(console_errs[:4]))
             return _close_and_report(browser, failures)
 
         first = page.locator(proj_selector).first
