@@ -47,6 +47,9 @@ from engine_rules import (
     is_nonsense_item as _is_nonsense_item,
     extract_type_code as _extract_type_code,
     response_truncated as _response_truncated,
+    is_floor_surface as _is_floor_surface,
+    AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
+    FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -3717,24 +3720,9 @@ def _salvage_layout_ai_counts(client, file_paths, crops_dir):
 
 
 # ── Honestidade de ÁREA (regra dura nº1) ──────────────────────────────────────
-# Unidades tratadas como "área/medida" que a IA de Vision às vezes CHUTA num PDF
-# sem cota. Só o que veio da geometria do CAD (origem 'dxf_geom') é medido de fato.
-_AREA_UNITS_HONESTY = {"m²", "m2", "m", "ml", "m³", "m3", "mts", "m2.", "m²."}
-# Subconjunto: m² de verdade (superfície) — candidato a receber a área INFORMADA.
-_FLOOR_M2_UNITS = {"m²", "m2", "m2.", "m²."}
-# Superfícies HORIZONTAIS (piso/forro/laje/teto) — escalam com a área de piso.
-_FLOOR_AREA_KW = ("piso", "contrapiso", "forro", "laje", "regulariz",
-                  "impermeabiliz", "teto")
-# Exclui itens que têm palavra de área mas NÃO escalam com m² de piso
-# (dependem de perímetro/pé-direito): rodapé, parede, azulejo de parede.
-_FLOOR_AREA_BLOCK_KW = ("rodap", "parede", "azulej", "meia parede")
-
-
-def _is_floor_surface(desc: str) -> bool:
-    d = (desc or "").lower()
-    return any(k in d for k in _FLOOR_AREA_KW) and not any(b in d for b in _FLOOR_AREA_BLOCK_KW)
-
-
+# As unidades/keywords e is_floor_surface() vivem em engine_rules.py (regra
+# determinística, testável sem IA — tests/test_engine_rules.py). Importados no topo
+# como _AREA_UNITS_HONESTY / _FLOOR_M2_UNITS / _is_floor_surface.
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "") -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 

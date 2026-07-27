@@ -190,3 +190,43 @@ def extract_type_code(description):
     if not m:
         return None
     return f"{m.group(1).upper()} {m.group(2)}"
+
+
+# ── Honestidade de área: superfície de piso x item pontual/linear/localizado ────
+# Usado por _apply_area_honesty (main.py): num PDF SEM cota, quando o cliente INFORMA
+# a área total, só os itens que REALMENTE cobrem o piso/forro inteiro herdam essa
+# área. Contagem (interruptor, ponto), faixa/demarcação e cômodo específico (banheiro,
+# cabine) NÃO — senão a área do projeto vira "quantidade" de coisa que não cobre o
+# chão. Bug LAAV 27/07: cliente informou 335,4 m² e 17 itens herdaram a mesma
+# metragem, vários absurdos (interruptor = 335 m², faixa de 5 cm = 335 m²).
+
+# Unidades que a IA de Vision às vezes CHUTA num PDF sem cota (tratadas como "medida").
+AREA_UNITS_HONESTY = {"m²", "m2", "m", "ml", "m³", "m3", "mts", "m2.", "m²."}
+# Subconjunto: m² de superfície — candidato a receber a área INFORMADA.
+FLOOR_M2_UNITS = {"m²", "m2", "m2.", "m²."}
+# Superfícies HORIZONTAIS que escalam com a área de piso (o item É a superfície).
+# "impermeabiliz" saiu daqui de propósito: impermeabilização é sempre localizada
+# (área molhada/banheiro/laje técnica) — se for de laje, o "laje" abaixo já pega.
+FLOOR_AREA_KW = ("piso", "contrapiso", "forro", "laje", "regulariz", "teto")
+# Bloqueia itens que MENCIONAM piso/forro mas NÃO cobrem a área toda:
+#  - contagem/pontual (a palavra "piso" é só a altura, ex "H=1,10m do piso acabado"):
+#    ponto, interruptor, tomada, luminária, ralo, spot, arandela
+#  - linear/faixa: faixa, demarcação, vaga, rodapé
+#  - cômodo/área específica: parede, azulejo, banheiro, wc, vestiário, sanitário,
+#    área molhada, cabine, nicho
+FLOOR_AREA_BLOCK_KW = (
+    "rodap", "parede", "azulej", "meia parede",
+    "ponto", "interruptor", "tomada", "luminár", "ralo", "spot", "arandela",
+    "faixa", "demarca", "vaga",
+    "banheiro", "wc", "vestiár", "sanitár", "molhad", "cabine", "nicho",
+)
+
+
+def is_floor_surface(desc):
+    """True se a descrição é uma SUPERFÍCIE horizontal que cobre ~a área toda
+    (piso/forro/laje/teto) — não um item pontual, linear ou de cômodo específico.
+    Heurística por palavra-chave; a medição real só vem da geometria do CAD.
+    Ver _apply_area_honesty em main.py e os testes em test_engine_rules.py."""
+    d = (desc or "").lower()
+    return (any(k in d for k in FLOOR_AREA_KW)
+            and not any(b in d for b in FLOOR_AREA_BLOCK_KW))
