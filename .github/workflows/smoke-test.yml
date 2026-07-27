@@ -22,7 +22,9 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # 8min: o E2E agora espera até 60s pelo #login-email (o desafio invisível do
+    # Cloudflare atrasa a página no browser automatizado) e ainda tem retry 1x.
+    timeout-minutes: 8
     steps:
       - name: Checkout
         uses: actions/checkout@v4
