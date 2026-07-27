@@ -11823,6 +11823,7 @@ async def admin_eval_reprocess(job_id: str, request: Request):
         "file_types": file_types,
         "status": "queued",
         "parent_job_id": job_id,  # rastreabilidade + guarda extra contra email
+        "user_total_area": orig.get("user_total_area"),  # espelha a área informada do original
         "is_eval": True,
     })
 
@@ -11831,7 +11832,10 @@ async def admin_eval_reprocess(job_id: str, request: Request):
     threading.Thread(
         target=_process_job_throttled,
         args=(eval_job_id, eval_file_paths, eval_work_dir),
-        kwargs={"typology": typology, "project_type": ptype},
+        # Passa a área INFORMADA pelo cliente no original — sem isso a avaliação
+        # não é fiel (cai no ramo que zera todo m²). 0 se não houve área informada.
+        kwargs={"typology": typology, "project_type": ptype,
+                "user_total_area": float(orig.get("user_total_area") or 0)},
         daemon=True,
     ).start()
 
