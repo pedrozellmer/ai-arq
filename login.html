@@ -99,6 +99,13 @@
         N&atilde;o tem conta? <a href="#" id="link-signup" class="text-indigo-500 hover:text-indigo-700 underline font-medium">Cadastre-se</a>
       </p>
 
+      <!-- Recupera&ccedil;&atilde;o de senha (28/07/2026): antes disto n&atilde;o existia NENHUM
+           caminho de recupera&ccedil;&atilde;o no site — quem esquecia a senha ficava trancado
+           do lado de fora e s&oacute; voltava se pedisse link manual pro Pedro. -->
+      <p class="mt-2 text-sm text-gray-500">
+        Esqueceu a senha? <a href="#" id="link-forgot" class="text-indigo-500 hover:text-indigo-700 underline font-medium">Recuperar acesso</a>
+      </p>
+
       <!-- Terms -->
       <p class="mt-6 text-xs text-gray-500">
         Ao entrar, voc&ecirc; concorda com nossos <a href="termos.html" class="text-indigo-500 hover:text-indigo-700 underline">Termos de Uso</a> e a <a href="privacidade.html" class="text-indigo-500 hover:text-indigo-700 underline">Pol&iacute;tica de Privacidade</a>.
@@ -195,6 +202,34 @@
   function hideEmailMessages() {
     emailLoginError.classList.add('hidden');
     emailLoginSuccess.classList.add('hidden');
+  }
+
+  // ── Recuperar acesso (28/07/2026) ──
+  // Usa o e-mail já digitado no formulário. A resposta é SEMPRE a mesma, exista
+  // a conta ou não: dizer "esse e-mail não tem conta" entregaria a qualquer um
+  // uma forma de descobrir quem é cliente.
+  const linkForgot = document.getElementById('link-forgot');
+  if (linkForgot) {
+    linkForgot.addEventListener('click', async (e) => {
+      e.preventDefault();
+      hideEmailMessages();
+      const email = (loginEmail.value || '').trim();
+      if (!email || !email.includes('@')) {
+        showEmailError('Digite seu e-mail no campo acima e clique de novo em "Recuperar acesso".');
+        loginEmail.focus();
+        return;
+      }
+      linkForgot.textContent = 'Enviando...';
+      try {
+        await sbClient.auth.resetPasswordForEmail(email, {
+          redirectTo: 'https://ai.arq.br/redefinir-senha.html',
+        });
+      } catch (err) {
+        console.warn('[login] reset falhou:', err);
+      }
+      linkForgot.textContent = 'Recuperar acesso';
+      showEmailSuccess('Se existir uma conta com esse e-mail, o link de redefinição chega em instantes. Confira também a caixa de spam.');
+    });
   }
 
   linkSignup.addEventListener('click', (e) => {

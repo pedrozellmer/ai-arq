@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="icon" type="image/x-icon" href="favicon-v2.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Criar nova senha — AI.arq</title>
+<meta name="description" content="Defina uma nova senha para a sua conta no AI.arq.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conte&uacute;do</a>
+
+<main id="main" class="flex-1 flex items-center justify-center px-4 py-16">
+  <div class="w-full max-w-md">
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+
+      <div class="flex items-center gap-3 mb-6">
+        <div class="flex h-12 w-12 items-center justify-center rounded-xl gradient-main text-white font-bold text-lg">AI</div>
+        <span class="text-2xl font-extrabold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+
+      <!-- Estado: verificando o link -->
+      <div id="estado-carregando">
+        <h1 class="text-xl font-bold text-gray-900 mb-2">Verificando seu link...</h1>
+        <p class="text-sm text-gray-500">S&oacute; um instante.</p>
+      </div>
+
+      <!-- Estado: link inv&aacute;lido ou vencido -->
+      <div id="estado-invalido" class="hidden">
+        <h1 class="text-xl font-bold text-gray-900 mb-2">Esse link n&atilde;o vale mais</h1>
+        <p class="text-sm text-gray-600 leading-relaxed mb-6">
+          Links de redefini&ccedil;&atilde;o valem por pouco tempo e s&oacute; podem ser usados uma vez.
+          Pe&ccedil;a um novo na tela de entrada &mdash; leva 10 segundos.
+        </p>
+        <a href="login.html" class="inline-flex w-full items-center justify-center gradient-main text-white rounded-xl px-6 py-3.5 text-sm font-medium no-underline">
+          Voltar e pedir outro link
+        </a>
+      </div>
+
+      <!-- Estado: formul&aacute;rio de nova senha -->
+      <div id="estado-form" class="hidden">
+        <h1 class="text-xl font-bold text-gray-900 mb-2">Criar nova senha</h1>
+        <p class="text-sm text-gray-600 mb-6">Escolha uma senha de pelo menos <strong>8 caracteres</strong>.</p>
+
+        <form id="form-nova-senha" class="space-y-4" novalidate>
+          <div>
+            <label for="senha1" class="block text-sm font-medium text-gray-700 mb-1.5">Nova senha</label>
+            <input type="password" id="senha1" required minlength="8" autocomplete="new-password"
+              class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+              placeholder="Pelo menos 8 caracteres">
+          </div>
+          <div>
+            <label for="senha2" class="block text-sm font-medium text-gray-700 mb-1.5">Repita a nova senha</label>
+            <input type="password" id="senha2" required minlength="8" autocomplete="new-password"
+              class="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
+              placeholder="Digite de novo">
+          </div>
+
+          <div id="erro" class="hidden rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700" role="alert"></div>
+          <div id="sucesso" class="hidden rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700" role="status"></div>
+
+          <button type="submit" id="btn-salvar"
+            class="w-full flex items-center justify-center gap-2 gradient-main text-white rounded-xl px-6 py-3.5 text-sm font-medium shadow-sm hover:shadow-md transition">
+            Salvar nova senha
+          </button>
+        </form>
+
+        <p class="mt-5 text-xs text-gray-500">
+          Depois de salvar, voc&ecirc; entra direto &mdash; n&atilde;o precisa digitar de novo.
+        </p>
+      </div>
+
+    </div>
+
+    <p class="mt-6 text-center text-xs text-gray-400">
+      Problemas? Escreva pra <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>
+    </p>
+  </div>
+</main>
+
+<script>
+  const sbClient = window.sbClient;
+  const elCarregando = document.getElementById('estado-carregando');
+  const elInvalido   = document.getElementById('estado-invalido');
+  const elForm       = document.getElementById('estado-form');
+  const erro         = document.getElementById('erro');
+  const sucesso      = document.getElementById('sucesso');
+  const btnSalvar    = document.getElementById('btn-salvar');
+
+  function mostrar(el) {
+    [elCarregando, elInvalido, elForm].forEach(x => x.classList.add('hidden'));
+    el.classList.remove('hidden');
+  }
+  function mostrarErro(msg) {
+    erro.textContent = msg;
+    erro.classList.remove('hidden');
+    sucesso.classList.add('hidden');
+  }
+
+  // O Supabase entrega a sessão de recuperação no #hash da URL e dispara o
+  // evento PASSWORD_RECOVERY. Escutamos ANTES de checar a sessão pra não haver
+  // corrida entre o evento e a leitura.
+  let liberado = false;
+  sbClient.auth.onAuthStateChange((event) => {
+    if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+      liberado = true;
+      mostrar(elForm);
+    }
+  });
+
+  (async () => {
+    try {
+      const { data: { session } } = await sbClient.auth.getSession();
+      if (session) { liberado = true; mostrar(elForm); return; }
+    } catch (e) {
+      console.warn('[redefinir] getSession falhou:', e);
+    }
+    // Dá um tempo pro evento chegar antes de declarar o link inválido.
+    setTimeout(() => { if (!liberado) mostrar(elInvalido); }, 2500);
+  })();
+
+  document.getElementById('form-nova-senha').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    erro.classList.add('hidden');
+    sucesso.classList.add('hidden');
+
+    const s1 = document.getElementById('senha1').value;
+    const s2 = document.getElementById('senha2').value;
+
+    if (s1.length < 8) { mostrarErro('A senha precisa ter pelo menos 8 caracteres.'); return; }
+    if (s1 !== s2)     { mostrarErro('As duas senhas não são iguais. Confira e tente de novo.'); return; }
+
+    btnSalvar.disabled = true;
+    btnSalvar.textContent = 'Salvando...';
+
+    const { error } = await sbClient.auth.updateUser({ password: s1 });
+
+    if (error) {
+      btnSalvar.disabled = false;
+      btnSalvar.textContent = 'Salvar nova senha';
+      // Mensagem do Supabase vem em inglês — traduzimos os casos comuns.
+      const m = (error.message || '').toLowerCase();
+      if (m.includes('should be different') || m.includes('same as the old')) {
+        mostrarErro('Essa é a senha que você já usava. Escolha uma diferente.');
+      } else if (m.includes('weak') || m.includes('at least')) {
+        mostrarErro('Senha muito fraca. Use pelo menos 8 caracteres, misturando letras e números.');
+      } else if (m.includes('expired') || m.includes('invalid')) {
+        mostrar(elInvalido);
+      } else {
+        mostrarErro('Não consegui salvar agora. Tente de novo em instantes ou escreva pra contato@ai.arq.br.');
+      }
+      return;
+    }
+
+    sucesso.textContent = 'Senha alterada. Levando você pra sua área...';
+    sucesso.classList.remove('hidden');
+    setTimeout(() => { window.location.href = 'dashboard.html'; }, 1500);
+  });
+</script>
+</body>
+</html>
