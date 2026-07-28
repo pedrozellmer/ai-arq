@@ -79,6 +79,12 @@ jobs:
           if [ -d "_site/blog" ]; then
             rm -f _site/blog/generate.py _site/blog/posts.json
           fi
+          # 🪤 28/07/2026: script interno estava sendo servido em
+          # /blog/downloads/gen_memorial_template.py (HTTP 200 no site).
+          # A limpeza acima só tirava generate.py; qualquer .py em pasta copiada
+          # passava batido. Agora varre o _site inteiro — nenhum código-fonte
+          # Python vai pro ar, hoje nem no futuro.
+          find _site -type f -name "*.py" -print -delete
           # Copia sitemap.xml e robots.txt (na raiz)
           for f in sitemap.xml robots.txt; do
             if [ -f "$f" ]; then cp "$f" _site/; fi

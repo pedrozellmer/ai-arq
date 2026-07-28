@@ -665,6 +665,11 @@ def render_sitemap():
         (f"{SITE_URL}/faq.html", "0.7", "monthly"),
         (f"{SITE_URL}/termos.html", "0.3", "yearly"),
         (f"{SITE_URL}/privacidade.html", "0.3", "yearly"),
+        # 🪤 Esta lista é a fonte da verdade do sitemap: ele é REESCRITO do zero
+        # a cada `python blog/generate.py`. Página nova na raiz precisa entrar
+        # aqui, senão some do sitemap na próxima regeneração do blog — foi o que
+        # quase aconteceu com licencas.html, adicionada à mão em 27/07/2026.
+        (f"{SITE_URL}/licencas.html", "0.2", "yearly"),
     ]
     for post in POSTS:
         if post["publish_date"] <= today:
