@@ -52,7 +52,7 @@ def is_configured() -> bool:
 
 def _normalize_phone_br(raw: str) -> str:
     """Normaliza pra E.164 sem o '+' (formato que a Cloud API espera), ex.:
-    '(21) 98207-9721' -> '5521982079721'. Best-effort pra número brasileiro."""
+    '(21) 90000-0000' -> '5521900000000'. Best-effort pra número brasileiro."""
     digits = "".join(ch for ch in (raw or "") if ch.isdigit())
     if not digits:
         return ""
