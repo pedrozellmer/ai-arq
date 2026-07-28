@@ -6633,6 +6633,13 @@ async def emails_auto_tick(dry: int = 0):
             continue
         idade_h = (now - created).total_seconds() / H
         recente = idade_h <= 14 * 24  # janela: não ressuscitar cadastro antigo
+        # Janela maior SÓ pro cadastro incompleto (decisão do Pedro, 28/07/2026):
+        # como o gatilho estava quebrado desde sempre, essa gente nunca recebeu
+        # nada — ficaram parados meses sem uma única mensagem. A janela de 14
+        # dias é pra não ressuscitar quem já foi contatado; aqui ninguém foi.
+        # O anti-spam continua valendo: cada pessoa recebe este lembrete UMA vez
+        # na vida (dedup por email+kind) e no máximo 1 automático por semana.
+        recente_cadastro = idade_h <= 60 * 24
         confirmado = bool(u.get("email_confirmed_at"))
         nome = ((u.get("user_metadata") or {}).get("full_name")
                 or (u.get("user_metadata") or {}).get("name") or "")
@@ -6643,7 +6650,7 @@ async def emails_auto_tick(dry: int = 0):
         #    quem não confirmou o e-mail quanto pra quem confirmou, logou e
         #    abandonou a segunda etapa — que é o caso real que estava passando
         #    batido. 24h de espera pra não cutucar quem ainda está preenchendo.
-        if not tem_perfil and 24 <= idade_h and recente:
+        if not tem_perfil and 24 <= idade_h and recente_cadastro:
             acoes.append({"kind": "nudge_cadastro", "email": email, "nome": nome})
         # 2) Completou o cadastro, mas nunca subiu prancha.
         elif tem_perfil and confirmado and 48 <= idade_h and recente and email not in proj_by_email:
@@ -6737,12 +6744,60 @@ async def emails_auto_tick(dry: int = 0):
     acoes = [a for a in acoes if not _email_auto_ja_enviado(a["email"], a["kind"], ref=a.get("ref", ""))]
     acoes = [a for a in acoes if not _email_auto_recente(a["email"], dias=7)][:5]
 
+    # ── Alerta INTERNO pro Pedro: chegou gente nova ────────────────────────
+    # 28/07/2026: o comentário do NOTIFY_EMAIL promete "alerta de novo cliente"
+    # desde sempre, mas _notify_admin só era chamado quando um projeto falhava.
+    # Na prática o Pedro só descobria cadastro novo se abrisse o painel e
+    # reparasse — e não reparava. Agora chega por e-mail em até 1h, dizendo se a
+    # pessoa completou o cadastro ou parou no meio.
+    # Dedup por e-mail → 1 alerta por pessoa, na vida. NÃO entra no cooldown dos
+    # automáticos do usuário (aquilo protege a caixa do cliente; isto é interno).
+    novos = []
+    for _u2 in users:
+        _e2 = (_u2.get("email") or "").lower()
+        if not _e2 or _email_eh_interno(_e2):
+            continue
+        _c2 = _parse(_u2.get("created_at"))
+        if not _c2 or (now - _c2).total_seconds() / H > 36:
+            continue
+        if _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_novo_cadastro", ref=_e2):
+            continue
+        novos.append({
+            "email": _e2,
+            "nome": ((_u2.get("user_metadata") or {}).get("full_name")
+                     or (_u2.get("user_metadata") or {}).get("name") or ""),
+            "tem_perfil": (str(_u2.get("id") or "") in ids_com_perfil) or (_e2 in emails_com_perfil),
+        })
+
+    if not dry and novos:
+        import html as _ha
+        for _n in novos:
+            _sit = ("✅ completou o cadastro" if _n["tem_perfil"]
+                    else "⚠️ <b>parou antes de completar o cadastro</b>")
+            _corpo = (
+                f"<b>{_ha.escape(_n['nome']) or '(ainda sem nome)'}</b> criou uma conta.<br>"
+                f"E-mail: {_ha.escape(_n['email'])}<br>"
+                f"Situação: {_sit}<br><br>"
+                f'<a href="https://ai.arq.br/admin.html#usuarios">Abrir no painel</a>'
+            )
+            if _notify_admin(f"Cadastro novo — {_n['email']}", _corpo):
+                _email_auto_registrar(NOTIFY_EMAIL, "alerta_novo_cadastro", ref=_n["email"])
+            else:
+                # Não registra: assim tenta de novo no próximo tick em vez de
+                # perder o aviso porque o SMTP piscou.
+                print(f"[emails-auto] alerta de cadastro novo NÃO entregue: {_n['email']}")
+
     if dry:
         # Endpoint é aberto (mesma mecânica dos outros ticks de cron). O modo dry
         # NÃO pode devolver email/nome — vazava PII de usuários beta pra qualquer
         # chamador anônimo. Devolve só a contagem por tipo. (Revisão 16/07.)
         from collections import Counter as _Counter
-        return {"status": "dry", "total": len(acoes), "por_tipo": dict(_Counter(a["kind"] for a in acoes))}
+        return {
+            "status": "dry",
+            "total": len(acoes),
+            "por_tipo": dict(_Counter(a["kind"] for a in acoes)),
+            "alertas_novo_cadastro": len(novos),
+        }
 
     enviados = []
     for a in acoes:
