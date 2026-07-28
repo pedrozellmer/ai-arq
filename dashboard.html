@@ -1731,18 +1731,21 @@
     if (_av) { userAvatar.src = _av; }
     else { userAvatar.style.display = 'none'; }
 
-    // Mostrar botão admin só pro email admin
-    if (user.email === 'zarelalopes@gmail.com') {
+    // Mostrar botão admin só pro email admin.
+    // 28/07: repo é público — e-mails de pessoas reais (inclusive testadora)
+    // saíram daqui. Agora comparamos pela impressão digital (SHA-256).
+    // Isto é só a UI; quem autoriza de verdade é o backend (_require_admin).
+    if (await window.aiarqEmailMatches(user.email, '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2')) {
       const btnAdmin = document.getElementById('btn-admin');
       if (btnAdmin) { btnAdmin.classList.remove('hidden'); btnAdmin.classList.add('flex'); }
     }
     // Usuários com acesso ilimitado (testing/dev + testadores confiáveis)
-    window.__isUnlimitedUser = [
-      'zarelalopes@gmail.com',
-      'pedro.zellmer@famicapital.com.br',
-      'pedrozellmer@gmail.com',
-      'danielatp@gmail.com',  // testadora ativa
-    ].includes(user.email);
+    window.__isUnlimitedUser = await window.aiarqEmailMatches(user.email, [
+      '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2',
+      'edee66b47638bedbd3848f3a9873abdb8a344efde912344cc678930084ae7e18',
+      '4483cfe979ce877fcd450db13601895b3363f364db022e36b6ceaaaba4237956',
+      '2e347d77ee5a45a9feae573ac3fad8ae11ed192a3ce191f0924c7ee0358596d7',
+    ]);
 
     // ── Load credit balance (cashback, cupom, referral) ──
     await loadUserCredits();

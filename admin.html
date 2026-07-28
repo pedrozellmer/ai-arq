@@ -1038,7 +1038,9 @@
 // Em <script> top-level, `const` em ponto mais embaixo causaria TDZ se
 // uma dessas funções fosse chamada antes da linha do `const`.
 const API_BASE = window.API_BASE;
-const ADMIN_EMAIL = 'zarelalopes@gmail.com';
+// 28/07: repo é público — e-mail do admin sai daqui, fica só a impressão
+// digital (SHA-256). Gate de verdade é no backend (_require_admin).
+const ADMIN_EMAIL_HASH = '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2';
 
 // ══════════════════════════════════════════════
 // ACCESS CONTROL
@@ -1058,7 +1060,7 @@ async function checkAdminAccess() {
 
     const email = session.user.email;
 
-    if (email !== ADMIN_EMAIL) {
+    if (!(await window.aiarqEmailMatches(email, ADMIN_EMAIL_HASH))) {
       gateLoading.classList.add('hidden');
       gateDenied.classList.remove('hidden');
       setTimeout(() => {

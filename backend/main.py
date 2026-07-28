@@ -6781,8 +6781,23 @@ def _newsletter_recipients() -> list:
     except Exception as _e:
         print(f"[newsletter] recipients erro: {_e}")
         return []
-    _block = {ADMIN_EMAIL, "zarelalopes+smoke@gmail.com", "yurikgorges3@gmail.com"}
-    return [(e, by_email[e]) for e in sorted(by_email) if e not in opt and e not in _block and "+smoke" not in e]
+    # 28/07: o repositório é PÚBLICO. E-mails de pessoas reais saíram daqui —
+    # ficam só as impressões digitais (SHA-256). Mesma lista de antes:
+    # a conta de smoke test e um descadastro manual.
+    import hashlib as _hl_block
+    _block_hashes = {
+        "8efe29cfa06aab88dfd0bb7cc63e7d0aab297c3670d4c6626b15092b0119c35c",
+        "f4100dd59b6bd35a3ee43afa1bc53540ec191a04cce22287a87664189c074c57",
+    }
+
+    def _blocked(e):
+        return _hl_block.sha256(e.strip().lower().encode()).hexdigest() in _block_hashes
+
+    return [
+        (e, by_email[e])
+        for e in sorted(by_email)
+        if e not in opt and e != ADMIN_EMAIL and not _blocked(e) and "+smoke" not in e
+    ]
 
 
 def _newsletter_blast(subject, html_template, recipients):

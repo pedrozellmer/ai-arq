@@ -63,7 +63,8 @@
 
 <script>
 const API_BASE = window.API_BASE;
-const ADMIN_EMAIL = 'zarelalopes@gmail.com';
+// 28/07: repo é público — só a impressão digital do e-mail do admin.
+const ADMIN_EMAIL_HASH = '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2';
 const esc = window.escapeHtml || (s => String(s==null?'':s));
 const _fmtDate = iso => { if(!iso) return '--'; try { return window.fmtDataBR(iso); } catch(e){ return '--'; } };
 const _fmtDateTime = iso => { if(!iso) return '--'; try { return window.fmtBR(iso, {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e){ return '--'; } };
@@ -79,7 +80,7 @@ async function checkAdminAccess(){
   try {
     const { data:{ session } } = await sbClient.auth.getSession();
     if(!session){ location.href='login.html'; return false; }
-    if(session.user.email !== ADMIN_EMAIL){
+    if(!(await window.aiarqEmailMatches(session.user.email, ADMIN_EMAIL_HASH))){
       document.getElementById('gate-loading').classList.add('hidden');
       document.getElementById('gate-denied').classList.remove('hidden');
       setTimeout(()=>location.href='dashboard.html', 1500);

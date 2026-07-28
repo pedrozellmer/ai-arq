@@ -77,6 +77,28 @@
   };
   window.aiArqNotify = notify;
 
+  // ─── Impressão digital de e-mail ─────────────────────────────
+  // 28/07: o repositório é PÚBLICO. Antes, e-mails de pessoas reais
+  // (admin e testadores) ficavam em texto claro nos HTMLs — qualquer um
+  // lia. Agora comparamos pelo hash SHA-256.
+  //
+  // ⚠️ Isto NÃO é controle de segurança: hash de e-mail é conferível por
+  // quem já conhece o endereço. Serve pra não EXPOR o dado pessoal.
+  // A autorização de verdade é sempre no backend (`_require_admin`).
+  window.aiarqEmailHash = async function (email) {
+    const norm = String(email == null ? '' : email).trim().toLowerCase();
+    if (!norm || !window.crypto || !crypto.subtle) return '';
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(norm));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+  };
+
+  // Confere se o e-mail bate com um hash ou com uma lista de hashes.
+  window.aiarqEmailMatches = async function (email, hashes) {
+    const h = await window.aiarqEmailHash(email);
+    if (!h) return false;
+    return (Array.isArray(hashes) ? hashes : [hashes]).includes(h);
+  };
+
   // ─── escapeHtml ──────────────────────────────────────────────
   // Versão mais defensiva (de revisao.html): aceita null/undefined
   // sem explodir (o `|| ''` na coerção).
