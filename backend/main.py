@@ -7955,11 +7955,28 @@ async def submit_contact(request: Request):
     attachment_url = None
     attachment_size_kb = None
     if upload_file and upload_filename:
+        ext = ""
+        if "." in upload_filename:
+            ext = "." + upload_filename.rsplit(".", 1)[-1][:10]
+        # 🔒 28/07/2026: só aceita os tipos que a gente realmente espera num
+        # ticket de suporte. Antes, qualquer extensão passava e caía em
+        # application/octet-stream — inclusive .html e .svg, que executam script
+        # se abertos direto do Storage.
+        # 🪤 Esta checagem fica FORA do try de baixo de propósito: lá os erros são
+        # engolidos ("segue sem anexo"), e recusa de arquivo o usuário precisa ver.
+        _ext_ok = {
+            ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp",
+            ".xlsx", ".xls", ".csv", ".doc", ".docx", ".txt",
+            ".dxf", ".dwg", ".zip",
+        }
+        if ext.lower() not in _ext_ok:
+            raise HTTPException(
+                400,
+                "Tipo de arquivo não aceito. Envie PDF, imagem, planilha, "
+                "documento de texto, DXF, DWG ou ZIP."
+            )
         try:
             import uuid as _uuid
-            ext = ""
-            if "." in upload_filename:
-                ext = "." + upload_filename.rsplit(".", 1)[-1][:10]
             object_key = f"contact/{datetime.utcnow().strftime('%Y%m')}/{_uuid.uuid4()}{ext}"
 
             up_url = f"{SUPABASE_URL}/storage/v1/object/contact-attachments/{object_key}"
@@ -7980,9 +7997,32 @@ async def submit_contact(request: Request):
             req.add_header("x-upsert", "true")
             urllib.request.urlopen(req, timeout=30)
 
-            attachment_url = f"{SUPABASE_URL}/storage/v1/object/public/contact-attachments/{object_key}"
+            # 🔒 28/07/2026: o bucket era PÚBLICO e a URL abaixo era
+            # /object/public/... — qualquer um com o endereço abria o anexo que
+            # um cliente mandou no formulário de contato. O bucket virou privado
+            # e agora geramos um link ASSINADO, com validade. Se a assinatura
+            # falhar, preferimos ficar SEM link a devolver um link público.
             attachment_size_kb = round(len(upload_file) / 1024)
-            print(f"[contact] anexo enviado: {attachment_url}")
+            try:
+                import json as _json_sign  # 🪤 não existe `json` global neste módulo
+                sign_url = f"{SUPABASE_URL}/storage/v1/object/sign/contact-attachments/{object_key}"
+                sign_req = urllib.request.Request(
+                    sign_url,
+                    data=_json_sign.dumps({"expiresIn": 60 * 60 * 24 * 365}).encode("utf-8"),
+                    method="POST",
+                )
+                sign_req.add_header("apikey", SUPABASE_KEY)
+                sign_req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                sign_req.add_header("Content-Type", "application/json")
+                signed = _json_sign.loads(urllib.request.urlopen(sign_req, timeout=20).read().decode("utf-8"))
+                signed_path = signed.get("signedURL") or signed.get("signedUrl") or ""
+                if signed_path:
+                    attachment_url = f"{SUPABASE_URL}/storage/v1{signed_path}"
+                    print(f"[contact] anexo enviado (link assinado), {attachment_size_kb} KB")
+                else:
+                    print("[contact] anexo enviado, mas assinatura veio vazia — sem link")
+            except Exception as _se:
+                print(f"[contact] anexo enviado, mas falhou ao assinar link: {_se}")
         except Exception as e:
             print(f"[contact] erro upload Storage: {e}")
             # Não falha a request por causa do anexo — segue sem ele
