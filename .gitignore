@@ -75,6 +75,11 @@ HISTORICO_*.md
 # O historico foi limpo em 28/07/2026 — nao reverter estas linhas.
 docs/
 email-templates/
+# Contexto e configuracao do Claude — descrevem estrategia, processo interno e
+# tinham telefone/e-mail do Pedro. Vivem no repo privado + no PC. 28/07/2026.
+CLAUDE.md
+ROADMAP.md
+.claude/
 
 # (bloco antigo desativado — LIBERAVA históricos + atlas + estudos em /docs (mapa de contexto pra outras sessões Claude acharem)
 #!docs/HISTORICO_*.md
