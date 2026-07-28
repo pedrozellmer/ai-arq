@@ -6838,25 +6838,28 @@ async def emails_auto_tick(dry: int = 0):
 # Edição atual (revisada, com fonte). Pra trocar de mês: edita SUBJECT + HTML aqui
 # e deploya; o admin dispara pelos botões do painel. {{UNSUB}} é trocado pelo link
 # de descadastro por destinatário no envio.
-_NEWSLETTER_SUBJECT = "Sua dose mensal do AI.arq — uma dica de orçamento e o que tem de novo"
+_NEWSLETTER_SUBJECT = "IA que só olha a planta erra quase metade"
 _NEWSLETTER_HTML = """<div style="background:#eaeef3;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#334155;">
 <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;">
 <div style="height:5px;background:#4F46E5;"></div>
 <div style="padding:24px 30px;">
 <p style="margin:0 0 16px;color:#0F172A;font-size:20px;font-weight:700;">AI.arq</p>
-<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}<br>Essa &eacute; a 1&ordf; news do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>, sem encher sua caixa: uma dica &uacute;til e o que mudou por aqui.</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}<br>News do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>, sem encher sua caixa: uma ideia &uacute;til e o que mudou por aqui.</p>
 <div style="padding:14px 16px;background:#F8FAFC;border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.6;margin:0 0 18px;">
-<b style="color:#0F172A;">&#128161; Dica do m&ecirc;s &mdash; SINAPI tem duas camadas</b><br>
-Muita gente usa SINAPI s&oacute; pra pre&ccedil;o de material. Mas tem o <b>insumo</b> (o tijolo, o cimento, a hora do pedreiro) e a <b>composi&ccedil;&atilde;o</b> (a receita pronta: pra 1&nbsp;m&sup2; de alvenaria, tantos tijolos + argamassa + horas, j&aacute; somados). Puxar a composi&ccedil;&atilde;o em vez de somar item por item <b>economiza tempo e erra menos.</b>
-<div style="color:#94a3b8;font-size:12px;margin-top:6px;">Fonte: SINAPI &mdash; Caixa Econ&ocirc;mica Federal / IBGE.</div>
+<b style="color:#0F172A;">&#129504; IA na arquitetura &mdash; o que ela ainda n&atilde;o faz bem</b><br>
+Saiu em 2026 o <b>AECV-Bench</b>, um estudo acad&ecirc;mico que testou os melhores modelos de IA do mundo lendo plantas de arquitetura. Numa tarefa simples &mdash; <b>contar portas e janelas</b> &mdash; a taxa de acerto ficou <b>entre 40% e 55%</b>. Quase metade errada, s&oacute; &ldquo;olhando&rdquo; o desenho.<br><br>
+&Eacute; por isso que o AI.arq <b>mede a geometria do arquivo</b> em vez de interpretar a imagem: no DWG e no DXF, cada parede e cada bloco t&ecirc;m coordenadas &mdash; d&aacute; pra calcular, n&atilde;o chutar. E quando n&atilde;o d&aacute; pra medir, o item sai marcado como <b>estimativa</b>, pra voc&ecirc; conferir. Nunca de branco.
+<div style="color:#94a3b8;font-size:12px;margin-top:6px;">Fonte: AECV-Bench (2026) &mdash; <a href="https://arxiv.org/abs/2601.04819" style="color:#8b93f6;">arxiv.org/abs/2601.04819</a></div>
 </div>
-<b style="color:#0F172A;font-size:15px;">&#10024; O que tem de novo</b>
+<b style="color:#0F172A;font-size:15px;">&#10024; O que melhorou em julho</b>
 <ul style="margin:8px 0 18px;padding-left:20px;font-size:14px;line-height:1.6;">
-<li style="margin-bottom:8px;">Quando sua planilha fica pronta, o <b>email agora explica "como lemos seu projeto"</b> &mdash; quantos itens a IA <b>mediu</b> do desenho e quantos ficaram como <b>estimativa</b> pra revisar.</li>
-<li>Dica que muda o jogo: exporte em <b>DWG ou DXF</b> (n&atilde;o PDF) &mdash; no CAD a gente mede a geometria de verdade, saem mais itens medidos.</li>
+<li style="margin-bottom:8px;"><b>Projeto grande n&atilde;o trava mais no meio.</b> O motor agora salva o progresso prancha por prancha &mdash; se algo falhar, ele retoma de onde parou em vez de recome&ccedil;ar. E o envio mostra o <b>progresso real</b>, ent&atilde;o arquivo pesado n&atilde;o parece travado.</li>
+<li style="margin-bottom:8px;"><b>Planta sem cota n&atilde;o volta mais vazia.</b> Se o desenho n&atilde;o tem cotas, voc&ecirc; pode informar a <b>&aacute;rea total</b> no envio &mdash; ela vira base pros c&aacute;lculos, sempre rotulada como <i>informada por voc&ecirc;</i>, n&atilde;o medida.</li>
+<li style="margin-bottom:8px;"><b>Menos n&uacute;mero estranho na planilha.</b> Corrigimos casos em que um item pontual (um bebedouro, uma TV) aparecia com a &aacute;rea do pavimento inteiro, e casos de unidade trocada. Se voc&ecirc; achar algo assim, responde esse e-mail: &eacute; assim que a gente acha.</li>
+<li><b>DXF &eacute; o formato que mede melhor.</b> Exportou do Revit, do AutoCAD ou do ArchiCAD? Salve em <b>DXF</b> &mdash; &eacute; o que abre sempre e mede mais. PDF a gente l&ecirc;, mas vira estimativa.</li>
 </ul>
 <div style="background:#F1F5F9;border-radius:10px;padding:16px;text-align:center;margin:0 0 18px;">
-<p style="margin:0 0 12px;font-size:15px;color:#0F172A;"><b>Tem projeto novo?</b> O primeiro &eacute; por nossa conta, sem cart&atilde;o.</p>
+<p style="margin:0 0 12px;font-size:15px;color:#0F172A;"><b>Tem projeto novo?</b> Durante o beta &eacute; <b>gr&aacute;tis</b>, quantos projetos voc&ecirc; quiser.</p>
 <a href="https://ai.arq.br/dashboard.html" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
 </div>
 <div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abra&ccedil;o,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#94a3b8;">&mdash; AI.arq</span></div>
