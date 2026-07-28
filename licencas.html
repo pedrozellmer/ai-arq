@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="icon" type="image/x-icon" href="favicon-v2.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Licen&ccedil;as de Terceiros — AI.arq</title>
+<meta name="description" content="Componentes de software livre utilizados pelo AI.arq e suas respectivas licenças.">
+<link rel="canonical" href="https://ai.arq.br/licencas.html">
+<meta name="robots" content="index, follow">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://ai.arq.br/licencas.html">
+<meta property="og:title" content="Licen&ccedil;as de Terceiros — AI.arq">
+<meta property="og:description" content="Componentes de software livre utilizados pelo AI.arq e suas respectivas licenças.">
+<meta property="og:image" content="https://ai.arq.br/og-image.png">
+<meta property="og:locale" content="pt_BR">
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+</style>
+</head>
+<body class="bg-gray-50 text-gray-900 antialiased min-h-screen flex flex-col">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conte&uacute;do</a>
+
+<!-- NAVBAR -->
+<nav class="sticky top-0 z-50 border-b bg-white/80 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="index.html" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div id="nav-auth" class="flex items-center gap-3">
+      <a href="login.html" id="nav-login" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="login.html" id="nav-cta" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm no-underline">Comece Gr&aacute;tis</a>
+      <div id="nav-user" class="hidden flex items-center gap-3">
+        <img id="nav-avatar" src="" alt="" class="w-8 h-8 rounded-full" loading="lazy">
+        <span id="nav-name" class="text-sm font-medium text-gray-700"></span>
+        <a href="dashboard.html" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm no-underline">Minha &Aacute;rea</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main id="main" class="flex-1">
+  <div class="max-w-4xl mx-auto px-4 py-12">
+
+    <div class="mb-10">
+      <h1 class="text-3xl font-bold text-gray-900 md:text-4xl">Licen&ccedil;as de Terceiros</h1>
+      <p class="mt-2 text-lg text-gray-500">AI.arq</p>
+      <p class="mt-1 text-sm text-gray-500">Atualizado em: 27 de julho de 2026</p>
+    </div>
+
+    <div class="space-y-8">
+
+      <section>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed">
+            O AI.arq &eacute; constru&iacute;do sobre componentes de <strong>software livre</strong> mantidos por
+            suas respectivas comunidades. Esta p&aacute;gina existe para dar o cr&eacute;dito devido e para
+            cumprir as obriga&ccedil;&otilde;es de atribui&ccedil;&atilde;o dessas licen&ccedil;as.
+          </p>
+          <p class="text-gray-600 leading-relaxed">
+            As licen&ccedil;as indicadas s&atilde;o as declaradas pelos pr&oacute;prios projetos. O texto integral de
+            cada licen&ccedil;a est&aacute; dispon&iacute;vel no reposit&oacute;rio oficial do respectivo componente.
+          </p>
+        </div>
+      </section>
+
+      <!-- Backend -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Processamento e servidor</h2>
+        <div class="rounded-xl bg-white border shadow-sm overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left">
+              <tr>
+                <th class="px-4 py-3 font-semibold text-gray-700">Componente</th>
+                <th class="px-4 py-3 font-semibold text-gray-700">Para que serve</th>
+                <th class="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Licen&ccedil;a</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 text-gray-600">
+              <tr><td class="px-4 py-3 font-medium text-gray-800">FastAPI</td><td class="px-4 py-3">Servidor da aplica&ccedil;&atilde;o</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Uvicorn</td><td class="px-4 py-3">Execu&ccedil;&atilde;o do servidor</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">python-multipart</td><td class="px-4 py-3">Recebimento de arquivos</td><td class="px-4 py-3 whitespace-nowrap">Apache-2.0</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">httpx</td><td class="px-4 py-3">Comunica&ccedil;&atilde;o com servi&ccedil;os externos</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Jinja2</td><td class="px-4 py-3">Montagem de documentos</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">psutil</td><td class="px-4 py-3">Monitoramento de recursos</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">python-dotenv</td><td class="px-4 py-3">Configura&ccedil;&atilde;o do ambiente</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Leitura de projeto -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Leitura de pranchas e medi&ccedil;&atilde;o</h2>
+        <div class="rounded-xl bg-white border shadow-sm overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left">
+              <tr>
+                <th class="px-4 py-3 font-semibold text-gray-700">Componente</th>
+                <th class="px-4 py-3 font-semibold text-gray-700">Para que serve</th>
+                <th class="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Licen&ccedil;a</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 text-gray-600">
+              <tr><td class="px-4 py-3 font-medium text-gray-800">ezdxf</td><td class="px-4 py-3">Leitura de arquivos DXF e extra&ccedil;&atilde;o da geometria</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Shapely</td><td class="px-4 py-3">C&aacute;lculo de &aacute;reas e opera&ccedil;&otilde;es geom&eacute;tricas</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">pdfplumber</td><td class="px-4 py-3">Leitura de texto e vetores de PDF</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">pypdfium2 (PDFium)</td><td class="px-4 py-3">Renderiza&ccedil;&atilde;o de p&aacute;ginas de PDF</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause / Apache-2.0</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">pikepdf (QPDF)</td><td class="px-4 py-3">Manipula&ccedil;&atilde;o de PDF</td><td class="px-4 py-3 whitespace-nowrap">MPL-2.0</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Pillow</td><td class="px-4 py-3">Tratamento de imagens</td><td class="px-4 py-3 whitespace-nowrap">MIT-CMU (HPND)</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Matplotlib</td><td class="px-4 py-3">Gera&ccedil;&atilde;o de pr&eacute;-visualiza&ccedil;&otilde;es</td><td class="px-4 py-3 whitespace-nowrap">Licen&ccedil;a Matplotlib (estilo PSF/BSD)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Entreg&aacute;veis -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Gera&ccedil;&atilde;o de planilhas e documentos</h2>
+        <div class="rounded-xl bg-white border shadow-sm overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left">
+              <tr>
+                <th class="px-4 py-3 font-semibold text-gray-700">Componente</th>
+                <th class="px-4 py-3 font-semibold text-gray-700">Para que serve</th>
+                <th class="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Licen&ccedil;a</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 text-gray-600">
+              <tr><td class="px-4 py-3 font-medium text-gray-800">openpyxl</td><td class="px-4 py-3">Gera&ccedil;&atilde;o das planilhas XLSX</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">python-pptx</td><td class="px-4 py-3">Gera&ccedil;&atilde;o das apresenta&ccedil;&otilde;es PPTX</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">WeasyPrint</td><td class="px-4 py-3">Gera&ccedil;&atilde;o de PDF a partir de HTML</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">pydyf</td><td class="px-4 py-3">Escrita de PDF (usado pelo WeasyPrint)</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">ReportLab</td><td class="px-4 py-3">Gera&ccedil;&atilde;o de PDF</td><td class="px-4 py-3 whitespace-nowrap">BSD-3-Clause</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Interface -->
+      <section>
+        <h2 class="text-xl font-bold text-gray-900 mb-3">Interface e integra&ccedil;&otilde;es</h2>
+        <div class="rounded-xl bg-white border shadow-sm overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left">
+              <tr>
+                <th class="px-4 py-3 font-semibold text-gray-700">Componente</th>
+                <th class="px-4 py-3 font-semibold text-gray-700">Para que serve</th>
+                <th class="px-4 py-3 font-semibold text-gray-700 whitespace-nowrap">Licen&ccedil;a</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 text-gray-600">
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Tailwind CSS</td><td class="px-4 py-3">Estilo das p&aacute;ginas</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">supabase-js</td><td class="px-4 py-3">Autentica&ccedil;&atilde;o e acesso a dados</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Inter (fonte)</td><td class="px-4 py-3">Tipografia do site</td><td class="px-4 py-3 whitespace-nowrap">SIL Open Font License 1.1</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">Montserrat (fonte)</td><td class="px-4 py-3">Tipografia de materiais gerados</td><td class="px-4 py-3 whitespace-nowrap">SIL Open Font License 1.1</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">SDK Anthropic (Python)</td><td class="px-4 py-3">Comunica&ccedil;&atilde;o com a API Claude</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+              <tr><td class="px-4 py-3 font-medium text-gray-800">SDK Stripe (Python)</td><td class="px-4 py-3">Processamento de pagamentos</td><td class="px-4 py-3 whitespace-nowrap">MIT</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section>
+        <div class="rounded-xl bg-white border p-6 shadow-sm space-y-3">
+          <p class="text-gray-600 leading-relaxed text-sm">
+            Marcas e nomes de produtos citados pertencem aos seus respectivos titulares. A men&ccedil;&atilde;o a
+            formatos ou softwares de terceiros &mdash; como AutoCAD, Revit ou SINAPI &mdash; tem finalidade
+            exclusivamente descritiva e t&eacute;cnica, e n&atilde;o implica associa&ccedil;&atilde;o, patroc&iacute;nio ou endosso.
+          </p>
+          <p class="text-gray-600 leading-relaxed text-sm">
+            Encontrou uma atribui&ccedil;&atilde;o incorreta ou faltando? Escreva para
+            <a href="mailto:contato@ai.arq.br" class="text-indigo-600 hover:text-indigo-800 font-medium">contato@ai.arq.br</a>
+            e corrigimos.
+          </p>
+        </div>
+      </section>
+
+    </div>
+  </div>
+</main>
+
+<footer class="border-t bg-gray-50 py-12">
+  <div class="mx-auto max-w-6xl px-4">
+    <div class="flex flex-col items-center gap-5 text-center">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold text-xs" style="background:linear-gradient(135deg,#4F46E5 0%,#22D3EE 100%)">AI</div>
+        <span class="font-bold text-gray-900">AI<span style="background:linear-gradient(135deg,#4F46E5,#22D3EE);-webkit-background-clip:text;background-clip:text;color:transparent">.arq</span></span>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
+        <a href="precos.html" class="hover:text-gray-900 transition">Pre&ccedil;os</a>
+        <a href="faq.html" class="hover:text-gray-900 transition">FAQ</a>
+        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+        <a href="licencas.html" class="hover:text-gray-900 transition">Licen&ccedil;as</a>
+        <a href="javascript:void(0)" onclick="window.aiArqContactOpen?aiArqContactOpen():window.location.href='mailto:contato@ai.arq.br'" class="hover:text-gray-900 transition">Contato</a>
+      </div>
+    </div>
+    <div class="mt-6 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
+      &copy; 2026 ai.arq.br &middot; Todos os direitos reservados
+    </div>
+  </div>
+</footer>
+
+<script>
+  const sbClient = window.sbClient;
+  (async () => {
+    const { data: { session } } = await sbClient.auth.getSession();
+    if (session) {
+      const user = session.user;
+      const meta = user.user_metadata || {};
+      document.getElementById('nav-login').classList.add('hidden');
+      document.getElementById('nav-cta').classList.add('hidden');
+      const navUser = document.getElementById('nav-user');
+      navUser.classList.remove('hidden');
+      navUser.classList.add('flex');
+      document.getElementById('nav-name').textContent = meta.full_name || meta.name || user.email.split('@')[0];
+      const avatar = meta.avatar_url || meta.picture || '';
+      if (avatar) document.getElementById('nav-avatar').src = avatar;
+      else document.getElementById('nav-avatar').classList.add('hidden');
+    }
+  })();
+</script>
+
+<script src="contact-modal.js" defer></script>
+<script src="cookie-consent.js" defer></script>
+<script src="whatsapp-button.js" defer></script>
+</body>
+</html>
