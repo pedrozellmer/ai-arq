@@ -6580,6 +6580,32 @@ async def emails_auto_tick(dry: int = 0):
 
     users = _auth_admin_list_users()
 
+    # 🪤 28/07/2026 — BUG QUE SEGUROU ESTE LEMBRETE DESDE SEMPRE:
+    # "cadastro incompleto" NÃO é "e-mail não confirmado". A condição antiga era
+    # `not confirmado`, mas no fluxo atual (Supabase + Google) TODA conta nasce
+    # com email_confirmed_at preenchido — as 42 contas do banco estão assim.
+    # Resultado: a regra nunca foi verdadeira e o template "Falta pouco pra
+    # terminar seu cadastro" marcava 0 enviados no painel, com gente parada há
+    # 21 dias sem receber nada.
+    # Incompleto de verdade = criou login e NÃO criou o perfil em `profiles`.
+    ids_com_perfil: set[str] = set()
+    emails_com_perfil: set[str] = set()
+    try:
+        qp = f"{SUPABASE_URL}/rest/v1/profiles?select=user_id,email&limit=5000"
+        rp = _u.Request(qp, method="GET")
+        rp.add_header("apikey", SUPABASE_KEY)
+        rp.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        for row in _j.loads(_u.urlopen(rp, timeout=15).read().decode("utf-8")):
+            if row.get("user_id"):
+                ids_com_perfil.add(str(row["user_id"]))
+            if row.get("email"):
+                emails_com_perfil.add(str(row["email"]).lower())
+    except Exception as e:
+        # Sem essa lista, todo mundo pareceria "sem perfil" e levaria cutucada
+        # indevida. Na dúvida, NÃO envia.
+        print(f"[emails-auto] profiles falhou: {e}")
+        return {"status": "erro", "detail": "não consegui ler perfis — abortando por segurança"}
+
     # projetos por email (pra saber quem nunca subiu / quem sumiu)
     proj_by_email: dict[str, list] = {}
     try:
@@ -6611,9 +6637,16 @@ async def emails_auto_tick(dry: int = 0):
         nome = ((u.get("user_metadata") or {}).get("full_name")
                 or (u.get("user_metadata") or {}).get("name") or "")
 
-        if not confirmado and 24 <= idade_h and recente:
+        tem_perfil = (str(u.get("id") or "") in ids_com_perfil) or (email in emails_com_perfil)
+
+        # 1) Parou ANTES de completar o cadastro (sem perfil). Vale tanto pra
+        #    quem não confirmou o e-mail quanto pra quem confirmou, logou e
+        #    abandonou a segunda etapa — que é o caso real que estava passando
+        #    batido. 24h de espera pra não cutucar quem ainda está preenchendo.
+        if not tem_perfil and 24 <= idade_h and recente:
             acoes.append({"kind": "nudge_cadastro", "email": email, "nome": nome})
-        elif confirmado and 48 <= idade_h and recente and email not in proj_by_email:
+        # 2) Completou o cadastro, mas nunca subiu prancha.
+        elif tem_perfil and confirmado and 48 <= idade_h and recente and email not in proj_by_email:
             acoes.append({"kind": "nudge_onboarding", "email": email, "nome": nome})
 
     # retorno 30d: tem projeto concluído, último movimento entre 30 e 60 dias atrás
