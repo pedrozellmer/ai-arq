@@ -65,11 +65,22 @@ _frontend_legado/
 .claude/cache/
 .claude/logs/
 HISTORICO_*.md
-# Mas LIBERA históricos + atlas + estudos em /docs (mapa de contexto pra outras sessões Claude acharem)
-!docs/HISTORICO_*.md
-!docs/INDEX.md
-!docs/ATLAS_FEATURES.md
-!docs/ESTUDO_*.md
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🔒 DOCUMENTOS INTERNOS — NUNCA no repo publico (28/07/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# O repositorio e PUBLICO. Estudos, auditorias, analise de concorrente,
+# estrategia e rascunhos de mensagem com dado de cliente NAO podem vir pra ca.
+# Eles vivem no repo PRIVADO ai-arq-docs.
+# O historico foi limpo em 28/07/2026 — nao reverter estas linhas.
+docs/
+email-templates/
+
+# (bloco antigo desativado — LIBERAVA históricos + atlas + estudos em /docs (mapa de contexto pra outras sessões Claude acharem)
+#!docs/HISTORICO_*.md
+#!docs/INDEX.md
+#!docs/ATLAS_FEATURES.md
+#!docs/ESTUDO_*.md
 
 # Pastas de teste com binários grandes
 *.dwg
