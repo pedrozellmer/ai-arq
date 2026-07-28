@@ -34,21 +34,36 @@ jobs:
         with:
           python-version: '3.13'
 
-      - name: Aguarda deploy do Render + backend saudável (poll)
+      - name: Aguarda o deploy DESTE commit subir no Render (poll)
+        env:
+          SHA: ${{ github.sha }}
         run: |
-          echo "Build Docker (com WeasyPrint) pode levar 5-8min após push."
-          echo "Poll até o backend responder 200 com 'AI.arq API' (evita testar durante o deploy)."
+          # 🪤 28/07/2026: antes, o poll só checava se o backend RESPONDIA. Só que
+          # o Render mantém a versão antiga no ar durante o build (deploy sem
+          # downtime) — então respondia, com o CÓDIGO VELHO, e o smoke test
+          # rodava contra a versão anterior. Toda mudança de backend virava
+          # falha falsa (aconteceu no commit 2c6e5eb).
+          # Agora esperamos o `commit` do endpoint raiz bater com o do push.
+          SHORT="${SHA:0:7}"
+          echo "Esperando o backend reportar commit $SHORT (build Docker leva 5-8min)."
           for i in $(seq 1 40); do
             body=$(curl -sS --max-time 30 https://ai-arq.onrender.com/ 2>/dev/null || true)
-            if echo "$body" | grep -q "AI.arq API"; then
-              echo "Backend saudável após ~$((i*15))s."
-              sleep 15   # margem extra pro deploy assentar
+            got=$(echo "$body" | sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            if [ -n "$got" ] && [ "$got" = "$SHORT" ]; then
+              echo "Deploy de $SHORT no ar após ~$((i*15))s."
+              sleep 10   # margem pro worker assentar
               exit 0
             fi
-            echo "tentativa $i/40: backend ainda não pronto, aguardando 15s..."
+            echo "tentativa $i/40: no ar=[${got:-nenhum}] esperado=[$SHORT] — aguardando 15s..."
             sleep 15
           done
-          echo "::warning::Backend não confirmou saúde em ~10min — segue testando mesmo assim"
+          # Não falha o job: pode ser deploy só de frontend (o Render nem
+          # rebuilda) ou a env RENDER_GIT_COMMIT não estar disponível.
+          if echo "$body" | grep -q "AI.arq API"; then
+            echo "::warning::Não confirmei o commit $SHORT em ~10min, mas o backend responde — seguindo."
+          else
+            echo "::warning::Backend não respondeu em ~10min — seguindo mesmo assim."
+          fi
 
       - name: Rodar smoke test (níveis 1 + 2 — HTTP puro)
         env:

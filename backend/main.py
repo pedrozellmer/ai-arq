@@ -5880,7 +5880,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
 @app.get("/")
 async def root():
-    return {"service": "AI.arq API", "version": "1.0.0", "status": "online"}
+    # `commit` existe pro smoke test saber SE O DEPLOY NOVO JÁ SUBIU.
+    # 🪤 28/07/2026: o Render mantém a versão antiga no ar até a nova ficar
+    # pronta (deploy sem downtime). O poll do workflow só checava se alguém
+    # respondia — e respondia: o código VELHO. Resultado: o teste rodava contra
+    # a versão anterior e acusava falha falsa a cada mudança de backend.
+    # Agora o workflow espera este commit bater com o do push.
+    return {
+        "service": "AI.arq API",
+        "version": "1.0.0",
+        "status": "online",
+        "commit": (os.getenv("RENDER_GIT_COMMIT") or "")[:7],
+    }
 
 
 _VALID_TYPOLOGIES = {"office", "residential", "retail", "hospital", "educational"}
