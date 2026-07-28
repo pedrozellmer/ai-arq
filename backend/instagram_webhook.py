@@ -21,6 +21,24 @@ logger = logging.getLogger("instagram_webhook")
 
 router = APIRouter(prefix="/api/instagram", tags=["Instagram Agent"])
 
+
+# ══════════════════════════════════════════════════
+#  Gate de admin (28/07/2026)
+# ══════════════════════════════════════════════════
+# Antes disto, TODA rota deste arquivo era aberta: qualquer pessoa publicava
+# post, desligava o agente, aprovava a fila e lia as conversas privadas de
+# quem manda DM pro perfil. Agora as rotas de escrita e as de leitura de
+# conversa exigem o mesmo admin do resto do sistema.
+#
+# 🪤 Ficam ABERTAS de propósito (quem chama não tem como mandar JWT):
+#   - GET/POST /webhook        → a Meta chama
+#   - POST /scheduler/tick     → o pg_cron do Supabase chama
+#   - GET /image/{filename}    → a Meta baixa a imagem pra publicar
+def _admin(request: Request):
+    """Exige admin. Import tardio de main pra não criar import circular."""
+    from main import _require_admin
+    return _require_admin(request)
+
 # ══════════════════════════════════════════════════
 #  Webhook — Verificacao (GET)
 # ══════════════════════════════════════════════════
@@ -183,11 +201,12 @@ class PostRequest(BaseModel):
 
 
 @router.post("/post")
-async def create_post(req: PostRequest):
-    """Gera conteudo com IA e publica no Instagram.
+async def create_post(req: PostRequest, request: Request):
+    """Gera conteudo com IA e publica no Instagram. Admin-only.
 
     Se nenhum topic for fornecido, usa o proximo tema do calendario rotativo.
     """
+    _admin(request)
     config = store.get_config()
 
     if not config.get("agent_enabled") or not config.get("auto_post_enabled"):
@@ -344,8 +363,9 @@ class ToggleRequest(BaseModel):
 
 
 @router.post("/toggle")
-async def toggle_agent(req: ToggleRequest):
-    """Liga/desliga o agente ou funcionalidades individuais."""
+async def toggle_agent(req: ToggleRequest, request: Request):
+    """Liga/desliga o agente ou funcionalidades individuais. Admin-only."""
+    _admin(request)
     updates = {}
     if req.agent_enabled is not None:
         updates["agent_enabled"] = req.agent_enabled
@@ -362,26 +382,30 @@ async def toggle_agent(req: ToggleRequest):
 
 
 @router.get("/conversations")
-async def list_conversations(limit: int = Query(50, le=100)):
-    """Lista conversas recentes."""
+async def list_conversations(request: Request, limit: int = Query(50, le=100)):
+    """Lista conversas recentes. Admin-only — é DM de gente real."""
+    _admin(request)
     return store.list_conversations(limit)
 
 
 @router.get("/conversations/{sender_id}")
-async def get_conversation(sender_id: str):
-    """Retorna historico completo de uma conversa."""
+async def get_conversation(sender_id: str, request: Request):
+    """Retorna historico completo de uma conversa. Admin-only."""
+    _admin(request)
     return store.get_conversation(sender_id)
 
 
 @router.get("/activity")
-async def get_activity(limit: int = Query(50, le=200)):
-    """Retorna log de atividade do agente."""
+async def get_activity(request: Request, limit: int = Query(50, le=200)):
+    """Retorna log de atividade do agente. Admin-only."""
+    _admin(request)
     return store.get_activity_log(limit)
 
 
 @router.get("/posts")
-async def list_posts():
-    """Lista posts publicados e agendados."""
+async def list_posts(request: Request):
+    """Lista posts publicados e agendados. Admin-only."""
+    _admin(request)
     return store.get_scheduled_posts()
 
 
@@ -725,8 +749,9 @@ async def scheduler_tick(force_slot: Optional[str] = None):
 
 
 @router.get("/scheduler/list")
-async def scheduler_list():
-    """Lista todos os posts agendados com status atual."""
+async def scheduler_list(request: Request):
+    """Lista todos os posts agendados com status atual. Admin-only."""
+    _admin(request)
     posts = _supa_select(
         "instagram_scheduled_posts",
         "select=slot_key,status,media_type,publish_at,published_at,attempts,error_message,media_id,video_url,image_url&order=publish_at.asc",
@@ -735,12 +760,15 @@ async def scheduler_list():
 
 
 @router.post("/insights/sync")
-async def insights_sync(force: bool = False):
+async def insights_sync(request: Request, force: bool = False):
     """Sincroniza insights (likes/reach/saves/etc) dos posts publicados.
 
     - Cache de 5min: se sincronizou recentemente, retorna do banco direto
     - Use ?force=true pra forçar re-sync ignorando cache
+
+    Admin-only: gasta chamada da Graph API.
     """
+    _admin(request)
     # Cache: se synced_at mais recente < 5min, retorna do DB
     if not force:
         recent = _supa_select(
@@ -816,8 +844,9 @@ async def insights_sync(force: bool = False):
 
 
 @router.get("/insights/list")
-async def insights_list():
-    """Retorna últimos insights salvos no banco (não chama Graph API)."""
+async def insights_list(request: Request):
+    """Retorna últimos insights salvos no banco (não chama Graph API). Admin-only."""
+    _admin(request)
     rows = _supa_select(
         "instagram_post_insights",
         "select=*&order=synced_at.desc",
@@ -826,12 +855,13 @@ async def insights_list():
 
 
 @router.post("/scheduler/approve")
-async def scheduler_approve(slot_key: str, action: str = "approve"):
-    """Aprova ou rejeita post em pending_approval (geralmente Reel).
+async def scheduler_approve(slot_key: str, request: Request, action: str = "approve"):
+    """Aprova ou rejeita post em pending_approval (geralmente Reel). Admin-only.
 
     action='approve' -> status vira 'pending' (tick vai publicar)
     action='reject'  -> status vira 'canceled'
     """
+    _admin(request)
     if action not in ("approve", "reject"):
         return {"ok": False, "error": "action deve ser 'approve' ou 'reject'"}
 

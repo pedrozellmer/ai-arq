@@ -141,17 +141,14 @@ def nivel_1():
         f"HTTP {status}",
     )
 
-    # Endpoint público de instagram
+    # Instagram: a rota FICOU FECHADA em 28/07/2026 (antes qualquer um lia a
+    # fila e as DMs). O teste agora confirma o oposto do que confirmava: sem
+    # token tem que dar 401/403. Se voltar 200, o gate caiu — isso é a falha.
     status, body, _ = _get(f"{API_BASE}/api/instagram/scheduler/list?limit=1")
-    try:
-        data = json.loads(body) if body else {}
-        ok = status == 200 and (isinstance(data, dict) or isinstance(data, list))
-    except Exception:
-        ok = False
     _check(
-        "GET /api/instagram/scheduler/list",
-        ok,
-        f"HTTP {status}",
+        "GET /api/instagram/scheduler/list exige admin",
+        status in (401, 403),
+        f"HTTP {status} (esperado 401 ou 403)",
     )
 
 

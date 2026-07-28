@@ -481,8 +481,8 @@ def _get_project_owner(job_id: str):
 def _require_project_owner(request, job_id: str):
     """Valida que quem chamou é dono do projeto.
 
-    Regra de retrocompat:
-    - Projeto com user_id='anonymous' (ou vazio/null): libera acesso sem JWT.
+    Regra:
+    - Projeto com user_id='anonymous' (ou vazio/null): SÓ admin. Ver nota abaixo.
     - Projeto com user_id real: exige JWT válido e user.id == project.user_id.
       JWT inválido → 401; válido mas não dono → 403.
 
@@ -492,8 +492,21 @@ def _require_project_owner(request, job_id: str):
     if owner is None:
         raise HTTPException(404, "Projeto não encontrado")
 
-    # Projetos anônimos: livres
+    # 🚨 FECHADO EM 28/07/2026. Antes: `if not owner or owner == "anonymous":
+    # return owner` — ou seja, projeto sem dono era LIBERADO sem login nenhum.
+    # São 53 projetos do começo do beta (17/04 a 22/05/2026), 9 deles com
+    # planilha pronta, contendo prancha e quantitativo de cliente real. O id é
+    # UUID (não dá pra adivinhar), mas quem tivesse o link — recebido por
+    # WhatsApp, e-mail ou histórico — abria sem senha.
+    # Como esses projetos não têm dono, não existe a quem liberar: só admin.
     if not owner or owner == "anonymous":
+        user = _get_user_from_request(request)
+        if not user or user.get("email", "").lower() != ADMIN_EMAIL:
+            raise HTTPException(
+                403,
+                "Este projeto é de uma versão antiga do AI.arq e não está mais "
+                "acessível por link. Fale com a gente em contato@ai.arq.br."
+            )
         return owner
 
     # Projetos de usuário logado: exigem JWT
@@ -10984,14 +10997,17 @@ async def list_my_projects(user_id: str, request: Request):
     """Lista projetos de um usuário (pra tela 'Meus projetos').
     Usa RPC list_user_projects (SECURITY DEFINER).
 
-    Auth: user_id='anonymous' é livre (retrocompat). Para user_id real,
-    exige JWT Bearer do próprio usuário (ou admin)."""
-    if user_id and user_id != "anonymous":
-        user = _get_user_from_request(request)
-        if not user:
-            raise HTTPException(401, "Autenticação requerida")
-        if user.get("id") != user_id and user.get("email", "").lower() != ADMIN_EMAIL:
-            raise HTTPException(403, "Só é possível listar seus próprios projetos")
+    Auth: sempre exige JWT Bearer do próprio usuário (ou admin).
+    28/07/2026: 'anonymous' deixou de ser livre — listava os 53 projetos órfãos
+    do começo do beta, com nome de projeto de cliente real, sem login."""
+    user = _get_user_from_request(request)
+    if not user:
+        raise HTTPException(401, "Autenticação requerida")
+    is_admin = user.get("email", "").lower() == ADMIN_EMAIL
+    if user_id == "anonymous" and not is_admin:
+        raise HTTPException(403, "Lista indisponível")
+    if user_id != "anonymous" and user.get("id") != user_id and not is_admin:
+        raise HTTPException(403, "Só é possível listar seus próprios projetos")
     import urllib.request, urllib.error, json
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/list_user_projects"
