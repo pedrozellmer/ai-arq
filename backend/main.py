@@ -6787,6 +6787,52 @@ async def emails_auto_tick(dry: int = 0):
                 # perder o aviso porque o SMTP piscou.
                 print(f"[emails-auto] alerta de cadastro novo NÃO entregue: {_n['email']}")
 
+    # ── Lembrete da newsletter no ÚLTIMO DIA ÚTIL do mês ───────────────────
+    # Decisão do Pedro (28/07/2026, opção B): o sistema NÃO dispara newsletter
+    # sozinho — ele lembra, e o Pedro revisa a prévia e dispara na mão.
+    # Motivo de existir: a edição de julho quase passou em branco. A última que
+    # saiu foi 30/06 e ninguém percebeu que a de julho não tinha sido agendada.
+    # Dedup por mês (ref='YYYY-MM') → no máximo 1 lembrete por mês.
+    lembrete_news = 0
+    try:
+        from datetime import timedelta as _td_nl
+        import calendar as _cal_nl
+        import html as _ha_nl
+        _agora_br = now - _td_nl(hours=3)  # Brasília = UTC-3 (sem horário de verão)
+        _hoje_br = _agora_br.date()
+        _ult = _hoje_br.replace(day=_cal_nl.monthrange(_hoje_br.year, _hoje_br.month)[1])
+        while _ult.weekday() > 4:  # 5=sábado, 6=domingo
+            _ult -= _td_nl(days=1)
+        _ref_mes = _hoje_br.strftime("%Y-%m")
+        # Janela de 1h pra não depender de o tick cair num minuto exato.
+        if _hoje_br == _ult and 9 <= _agora_br.hour < 10:
+            if not _email_auto_ja_enviado(NOTIFY_EMAIL, "lembrete_newsletter", ref=_ref_mes):
+                # Se a edição do mês JÁ foi enviada, não enche o saco.
+                _ja_saiu = False
+                try:
+                    _qn = (f"{SUPABASE_URL}/rest/v1/newsletter_scheduled"
+                           f"?select=sent_at&status=eq.sent&sent_at=gte.{_hoje_br.replace(day=1)}T00:00:00Z")
+                    _rn = _u.Request(_qn, method="GET")
+                    _rn.add_header("apikey", SUPABASE_KEY)
+                    _rn.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                    _ja_saiu = bool(_j.loads(_u.urlopen(_rn, timeout=15).read().decode("utf-8")))
+                except Exception as _en:
+                    print(f"[newsletter] checagem do mês falhou: {_en}")
+                if not _ja_saiu:
+                    lembrete_news = 1
+                    if not dry:
+                        _corpo_nl = (
+                            f"Hoje é o <b>último dia útil de {_hoje_br.strftime('%m/%Y')}</b> e a "
+                            f"newsletter do mês ainda não saiu.<br><br>"
+                            f"Assunto atual: <b>{_ha_nl.escape(_NEWSLETTER_SUBJECT)}</b><br><br>"
+                            f"Abra a prévia, confira e dispare — nada sai sem você clicar."
+                            f'<br><br><a href="https://ai.arq.br/admin.html#newsletter">Abrir a aba Newsletter</a>'
+                        )
+                        if _notify_admin("Newsletter do mês — revisar e disparar hoje", _corpo_nl):
+                            _email_auto_registrar(NOTIFY_EMAIL, "lembrete_newsletter", ref=_ref_mes)
+    except Exception as _enl:
+        print(f"[newsletter] lembrete do último dia útil falhou: {_enl}")
+
     if dry:
         # Endpoint é aberto (mesma mecânica dos outros ticks de cron). O modo dry
         # NÃO pode devolver email/nome — vazava PII de usuários beta pra qualquer
@@ -6797,6 +6843,7 @@ async def emails_auto_tick(dry: int = 0):
             "total": len(acoes),
             "por_tipo": dict(_Counter(a["kind"] for a in acoes)),
             "alertas_novo_cadastro": len(novos),
+            "lembrete_newsletter": lembrete_news,
         }
 
     enviados = []
