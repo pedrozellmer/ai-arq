@@ -1163,6 +1163,16 @@ def _greeting_line(full_name: str) -> str:
     return f"{fn}, {s}," if fn else f"{s.capitalize()},"
 
 
+# Número dedicado do AI.arq no WhatsApp Business (app, atendido pelo Pedro).
+# 🪤 NÃO é o pessoal dele. Se mudar, mudar também em `whatsapp-button.js`
+# (const NUMERO), que é o botão flutuante do site.
+# O cliente é sempre quem INICIA a conversa — foi o contrário disso (cold-DM do
+# número pessoal) que restringiu a conta dele em 23/07.
+_WHATSAPP_NUM = "551151968034"
+_WHATSAPP_LINK = (f"https://wa.me/{_WHATSAPP_NUM}"
+                  "?text=Ol%C3%A1%21%20Vim%20pelo%20e-mail%20do%20AI.arq.")
+
+
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
                 badge_color: str = "green",
                 reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.",
@@ -1197,6 +1207,11 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
                     'Um abraço,<br>'
                     '<span style="font-weight:700;color:#0F172A;">Pedro</span><br>'
                     '<span style="color:#94a3b8;font-size:13px;">AI.arq &middot; ai.arq.br</span>'
+                    f'<div style="margin-top:12px;"><a href="{_WHATSAPP_LINK}" '
+                    'style="display:inline-block;border:1px solid #25D366;color:#128C4A;'
+                    'text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;'
+                    'font-weight:600;font-family:Arial,sans-serif;">'
+                    '&#128172; Falar no WhatsApp</a></div>'
                     '</div></td></tr>')
     return (
         '<div style="background:#eaeef3;padding:28px 14px;font-family:Arial,sans-serif;">'
@@ -6937,7 +6952,8 @@ O <b>AECV-Bench</b>, estudo de 2026, testou os melhores modelos de IA do mundo l
 <p style="margin:0 0 12px;font-size:15px;color:#0F172A;"><b>Tem projeto novo?</b> Durante o beta &eacute; <b>gr&aacute;tis</b>, quantos projetos voc&ecirc; quiser.</p>
 <a href="https://ai.arq.br/dashboard.html" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
 </div>
-<div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abra&ccedil;o,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#94a3b8;">&mdash; AI.arq</span></div>
+<div style="border-top:1px solid #eef2f7;padding-top:16px;font-size:14px;color:#475569;">Um abra&ccedil;o,<br><b style="color:#0F172A;">Pedro</b> <span style="color:#94a3b8;">&mdash; AI.arq</span>
+<div style="margin-top:12px;"><a href="{{WPP}}" style="display:inline-block;border:1px solid #25D366;color:#128C4A;text-decoration:none;padding:8px 14px;border-radius:8px;font-size:13px;font-weight:600;">&#128172; Falar no WhatsApp</a></div></div>
 <div style="margin-top:14px;font-size:11px;color:#aab4c0;line-height:1.6;">Voc&ecirc; recebe porque tem conta no AI.arq. <a href="{{UNSUB}}" style="color:#8b93f6;">Sair da lista</a> &middot; <a href="https://ai.arq.br/privacidade.html" style="color:#8b93f6;">Privacidade</a></div>
 </div></div></div>"""
 
@@ -7003,7 +7019,9 @@ def _newsletter_blast(subject, html_template, recipients):
             greet = f"Olá, {first}!" if first else "Olá, tudo bem?"
             unsub = (f"https://ai-arq.onrender.com/api/newsletter/unsub"
                      f"?e={_up.quote(email)}&t={_newsletter_token(email)}")
-            html = html_template.replace("{{SAUDACAO}}", greet).replace("{{UNSUB}}", unsub)
+            html = (html_template.replace("{{SAUDACAO}}", greet)
+                    .replace("{{UNSUB}}", unsub)
+                    .replace("{{WPP}}", _WHATSAPP_LINK))
             ok = _send_email_smtp(email, subject, html)
             sent += 1 if ok else 0
             fail += 0 if ok else 1
@@ -7048,7 +7066,8 @@ async def admin_newsletter_send(request: Request):
 async def admin_newsletter_preview(request: Request):
     """Edição atual renderizada (subject + html) pra prévia no admin."""
     _require_admin(request)
-    html = _NEWSLETTER_HTML.replace("{{SAUDACAO}}", "Olá, Pedro!").replace("{{UNSUB}}", "#")
+    html = (_NEWSLETTER_HTML.replace("{{SAUDACAO}}", "Olá, Pedro!")
+            .replace("{{UNSUB}}", "#").replace("{{WPP}}", _WHATSAPP_LINK))
     return {"subject": _NEWSLETTER_SUBJECT, "html": html}
 
 
