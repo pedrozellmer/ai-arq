@@ -248,8 +248,15 @@ def calc_read_time(post):
     return minutes
 
 
-def render_sources(sources):
-    """Renderiza bloco de fontes no rodapé do post."""
+def render_sources(sources, data_ref=""):
+    """Renderiza bloco de fontes no rodapé do post.
+
+    🪤 28/07/2026: `data_ref` é a data de PUBLICAÇÃO do post, não a de hoje.
+    Antes usava datetime.now(), então toda regeneração do blog reescrevia os 25
+    posts carimbando "Última atualização: <hoje>" — mesmo sem uma vírgula ter
+    mudado. Além de sujar o diff, republicar post intocado como "atualizado
+    hoje" é enganoso com o leitor e o Google penaliza data inflada.
+    """
     if not sources:
         return ""
 
@@ -312,7 +319,7 @@ def render_sources(sources):
       </h3>
       {items_html}
       <p class="mt-4 text-xs text-gray-400 italic">
-        Última atualização: {datetime.now().strftime('%d/%m/%Y')}. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+        Última atualização: {data_ref}. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
       </p>
     </aside>
     '''
@@ -377,7 +384,10 @@ def render_post_html(post):
     sections_html = "".join(render_section(s) for s in post["sections"])
 
     # Adiciona bloco de fontes no fim, se houver
-    sources_html = render_sources(post.get("sources", []))
+    sources_html = render_sources(
+        post.get("sources", []),
+        data_ref=datetime.fromisoformat(post["publish_date"]).strftime("%d/%m/%Y"),
+    )
 
     # Bloco "Leia também" — internal linking entre posts irmãos (SEO)
     related_html = render_related_posts(post)
@@ -389,6 +399,15 @@ def render_post_html(post):
     publish_date_br = datetime.fromisoformat(post["publish_date"]).strftime("%d/%m/%Y")
 
     canonical_url = f"{SITE_URL}/blog/posts/{post['slug']}.html"
+
+    # 🪤 28/07/2026: o HTML dos posts AGENDADOS é gerado com antecedência — é
+    # assim que o post "se publica sozinho" na data (o JS do índice revela o
+    # card quando chega o dia). O efeito colateral era o Google achar e indexar
+    # o texto antes do lançamento, com data futura no JSON-LD.
+    # Agora o post futuro nasce com noindex; ao regenerar depois da data de
+    # publicação, a marca cai sozinha e ele passa a ser indexável.
+    _eh_futuro = post["publish_date"] > date.today().isoformat()
+    robots_meta = '\n<meta name="robots" content="noindex, follow">' if _eh_futuro else ""
 
     # Schema.org Article (JSON-LD) — boost SEO
     schema = {
@@ -425,7 +444,7 @@ def render_post_html(post):
 <meta name="keywords" content="{post["keywords"]}">
 <meta name="author" content="AI.arq">
 
-<link rel="canonical" href="{canonical_url}">
+<link rel="canonical" href="{canonical_url}">{robots_meta}
 <link rel="icon" type="image/x-icon" href="/favicon-v2.ico">
 
 <!-- Open Graph -->

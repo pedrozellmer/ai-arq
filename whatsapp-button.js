@@ -56,7 +56,10 @@
     close.setAttribute('aria-label', 'Esconder o botão do WhatsApp nesta página');
     close.title = 'Esconder aqui (volta ao trocar de página)';
     close.textContent = '×';
-    close.style.cssText = 'position:absolute;top:-6px;right:-6px;background:#fff;color:#6b7280;border:1px solid #e5e7eb;width:22px;height:22px;border-radius:9999px;font-size:14px;line-height:1;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.15);padding:0;z-index:1;';
+    // 28/07/2026: era 22px colado no botão de 68px — no celular o dedo acertava
+    // o WhatsApp quando queria fechar. Agora 32px (mínimo confortável de toque)
+    // e afastado, pra não disparar a ação errada.
+    close.style.cssText = 'position:absolute;top:-10px;right:-10px;background:#fff;color:#4b5563;border:1px solid #d1d5db;width:32px;height:32px;border-radius:9999px;font-size:18px;line-height:1;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.18);padding:0;z-index:2;display:flex;align-items:center;justify-content:center;';
     // Só esconde nesta página (em memória) — não persiste. Ao navegar/recarregar, o botão volta.
     close.onclick = function () { wrap.remove(); };
 

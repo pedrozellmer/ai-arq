@@ -654,9 +654,13 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.cell(row=ro, column=8, value='Reserva técnica para imprevistos (ajustável 5-15%)').font = F_SM
     cont = ro; ro += 1
 
-    # BDI (fórmula TCU: AC+CF+S+R+G+L+T ≈ 27,5% para reforma escritório)
+    # BDI — ponto de partida de 27,5%, EDITÁVEL pelo orçamentista.
+    # 🪤 28/07/2026: não carimbar "Ref. TCU" neste valor. O Acórdão 2622/2013
+    # traz faixa de 20,34% a 25% para CONSTRUÇÃO DE EDIFÍCIOS (1º ao 3º quartil);
+    # 27,5% está acima do teto, então atribuir o número ao TCU era incorreto.
+    # A FÓRMULA abaixo é a do acórdão; o percentual é que não vem dele.
     ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=5)
-    ws.cell(row=ro, column=1, value='BDI (%) — Ref. TCU para reforma')
+    ws.cell(row=ro, column=1, value='BDI (%) — ponto de partida, ajuste pro seu caso')
     ws.cell(row=ro, column=6, value=0.275)
     ws.cell(row=ro, column=6).font = F_BLUE
     ws.cell(row=ro, column=6).number_format = '0.00%'
@@ -794,7 +798,9 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     notas = [
         '1. REFORMA: quantitativos consideram apenas o que MUDA. Conferir in loco e em projeto executivo.',
         '2. Colunas MAT e M.O. (amarelo): preencher pelo orçamentista/fornecedor.',
-        '3. BDI padrão 27,5% (ref. TCU para reforma). Fórmula: ((1+AC)(1+CF)(1+S)(1+R)(1+G)(1+L)/(1-T))-1.',
+        '3. BDI: 27,5% é só um ponto de partida — ajuste pro seu caso. Fórmula do Acórdão TCU '
+        '2622/2013: ((1+AC)(1+CF)(1+S)(1+R)(1+G)(1+L)/(1-T))-1. O mesmo acórdão traz faixa de '
+        '20,34% a 25% para construção de edifícios em obra pública.',
         '4. Itens em BRANCO: quantidade medida/contada diretamente do arquivo (bloco, hachura, linha). Confiável pra aprovar direto.',
         '5. Itens em LARANJA: quantidade sugerida pela IA sem medição direta — SEMPRE confirmar antes de orçar.',
         '6. Itens em CINZA (Premissas): metadados do projeto extraídos do arquivo — revisar no original.',
