@@ -865,6 +865,18 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
         logger.info("libredwg (dwg2dxf) não instalado — pulando fallback")
         return None
 
+    # 🚨 TRAVA DE QUALIDADE (29/07/2026) — regra dura nº1.
+    # O binário passou a existir de verdade (antes o apt-get falhava em silêncio),
+    # mas a QUALIDADE da conversão ainda não foi medida contra os DWGs reais que já
+    # processamos. Um conversor que devolve DXF que ABRE mas com geometria errada é
+    # PIOR que um que falha: gera número branco ("medido") falso. Enquanto não houver
+    # a comparação item a item contra o ODA, ele fica desligado.
+    # Pra ligar depois de validar: LIBREDWG_FALLBACK=1 no Render.
+    if os.getenv("LIBREDWG_FALLBACK", "0").strip().lower() not in ("1", "true", "on", "sim"):
+        logger.info("libredwg instalado mas DESLIGADO (LIBREDWG_FALLBACK != 1) — "
+                    "aguardando validação de qualidade antes de virar fallback real")
+        return None
+
     stem = Path(dwg_path).stem
     out_path = os.path.join(output_dir, stem + "_libredwg.dxf")
 

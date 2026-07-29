@@ -1,3 +1,35 @@
+# ══════════════════════════════════════════════════════════════════════════
+# ESTÁGIO 1 — compilar o LibreDWG (conversor DWG→DXF livre, GPL-3.0-or-later)
+# ══════════════════════════════════════════════════════════════════════════
+# 🚨 Por que compilar em vez de apt-get: o Debian NÃO empacota o libredwg
+# (packages.debian.org devolve vazio). O antigo `apt-get install libredwg-tools
+# || echo "install failed"` falhava SEMPRE, em silêncio, e o build seguia limpo —
+# então o "fallback" de DWG nunca existiu. Confirmado em 29/07/2026:
+# /api/debug/dwg devolvia libredwg_which=null em produção.
+#
+# GPL não contamina o backend: o dwg2dxf é chamado como PROGRAMA SEPARADO por
+# subprocess (dwg_extractor._try_libredwg_convert), não linkado. É GPL, não AGPL,
+# então rodar em servidor também não obriga a publicar fonte.
+# O tarball de RELEASE já vem com ./configure pronto — não precisa autogen/autotools.
+# --disable-bindings tira SWIG/Perl/Python-dev do build.
+# Estático (--disable-shared): sai um dwg2dxf que não precisa levar .so junto pra
+# imagem final. `test -x` no fim garante que o binário existe mesmo — se não
+# existir, o build quebra AQUI, que é onde a gente quer descobrir.
+FROM python:3.11-slim AS libredwg-build
+ARG LIBREDWG_VERSION=0.14
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential wget ca-certificates libpcre2-dev \
+    && wget -q --tries=3 --timeout=60 -O /tmp/libredwg.tar.gz \
+       "https://github.com/LibreDWG/libredwg/releases/download/${LIBREDWG_VERSION}/libredwg-${LIBREDWG_VERSION}.tar.gz" \
+    && tar xzf /tmp/libredwg.tar.gz -C /tmp \
+    && cd "/tmp/libredwg-${LIBREDWG_VERSION}" \
+    && ./configure --disable-bindings --disable-shared --enable-static \
+    && make -j"$(nproc)" \
+    && make install \
+    && test -x /usr/local/bin/dwg2dxf \
+    && (strip /usr/local/bin/dwg2dxf || true)
+
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -16,22 +48,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libpangoft2-1.0-0 \
     fontconfig \
+    libpcre2-8-0 \
     && ldconfig \
     && rm -rf /var/lib/apt/lists/* \
     || (apt-get update && apt-get install -y --no-install-recommends \
     wget libgl1 libglib2.0-0 xvfb \
-    libpango-1.0-0 libpangoft2-1.0-0 fontconfig \
+    libpango-1.0-0 libpangoft2-1.0-0 fontconfig libpcre2-8-0 \
     && ldconfig \
     && rm -rf /var/lib/apt/lists/*)
 
-# libredwg-tools (fallback open-source pro ODA File Converter) — OPCIONAL.
-# Se instalação falhar (ex. pacote indisponível no mirror), build continua;
-# código Python (dwg_extractor._try_libredwg_convert) já usa shutil.which
-# e pula fallback se binário ausente.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends libredwg-tools \
-    && rm -rf /var/lib/apt/lists/* \
-    || echo "libredwg-tools install failed — fallback DWG converter unavailable"
+# LibreDWG: traz só o binário do estágio de compilação acima.
+# 🪤 SEM `|| echo`: se o dwg2dxf não vier, o build DEVE quebrar. Foi justamente o
+# "falha em silêncio" que escondeu por meses que o fallback não existia. Build que
+# falha mantém o deploy anterior no ar — é o modo seguro de errar.
+COPY --from=libredwg-build /usr/local/bin/dwg2dxf /usr/local/bin/dwg2dxf
+RUN test -x /usr/local/bin/dwg2dxf && (dwg2dxf --version 2>&1 | head -1 || true)
 
 # Baixar e instalar ODA File Converter
 RUN wget -q -O /tmp/oda.deb "https://www.opendesign.com/guestfiles/get?filename=ODAFileConverter_QT6_lnxX64_8.3dll_27.1.deb" && \
