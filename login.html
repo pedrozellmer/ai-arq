@@ -237,12 +237,31 @@
     e.preventDefault();
     hideEmailMessages();
     isSignupMode = !isSignupMode;
+    // 28/07/2026: s\u00f3 o bot\u00e3o mudava. O t\u00edtulo continuava "Bem-vindo ao AI.arq"
+    // (texto de quem j\u00e1 \u00e9 cliente), o campo pedia "Sua senha" com autocomplete
+    // de senha ATUAL \u2014 o gerenciador do navegador oferecia a senha antiga em
+    // vez de sugerir uma nova \u2014 e o link "Recuperar acesso" ficava \u00e0 mostra pra
+    // quem nem conta tinha. Agora a tela inteira acompanha o modo.
+    const tituloEl = document.querySelector('h1');
+    const subtituloEl = tituloEl ? tituloEl.nextElementSibling : null;
     if (isSignupMode) {
       btnEmailLogin.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg> Criar Conta';
       linkSignup.textContent = 'J\u00e1 tem conta? Entrar';
+      if (tituloEl) tituloEl.textContent = 'Criar sua conta';
+      if (subtituloEl) subtituloEl.innerHTML = '<strong>Gr\u00e1tis durante o beta</strong> \u2014 quantos projetos quiser, sem cart\u00e3o. Escolha uma senha de pelo menos 8 caracteres.';
+      loginPassword.placeholder = 'Crie uma senha (m\u00edn. 8 caracteres)';
+      loginPassword.setAttribute('autocomplete', 'new-password');
+      loginPassword.setAttribute('minlength', '8');
+      if (linkForgot) linkForgot.parentElement.classList.add('hidden');
     } else {
       btnEmailLogin.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Entrar com E-mail';
       linkSignup.textContent = 'N\u00e3o tem conta? Cadastre-se';
+      if (tituloEl) tituloEl.textContent = 'Bem-vindo ao AI.arq';
+      if (subtituloEl) subtituloEl.innerHTML = '<strong>Gr\u00e1tis durante o beta</strong> \u2014 quantos projetos quiser, sem cart\u00e3o. Entre com o Google (cria a conta na hora) ou com e-mail. \u00c9 novo por aqui? Clique em Cadastre-se logo abaixo.';
+      loginPassword.placeholder = 'Sua senha';
+      loginPassword.setAttribute('autocomplete', 'current-password');
+      loginPassword.removeAttribute('minlength');
+      if (linkForgot) linkForgot.parentElement.classList.remove('hidden');
     }
   });
 

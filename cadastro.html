@@ -161,6 +161,7 @@
             <option value="evento">Evento / palestra</option>
             <option value="outro">Outro</option>
           </select>
+          <label for="referral_detail" class="sr-only">Detalhe de como voc&ecirc; conheceu o AI.arq</label>
           <input type="text" id="referral_detail" name="referral_detail"
             class="hidden mt-2 w-full rounded-xl border border-gray-300 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none transition"
             placeholder="Quem indicou? / Conta mais">
@@ -187,8 +188,12 @@
           </label>
         </div>
 
-        <!-- Error message -->
-        <div id="form-error" class="hidden rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-600"></div>
+        <!-- Error message.
+             role=alert + aria-live: o erro é anunciado assim que aparece, em vez
+             de ficar mudo no rodapé do formulário. Ver também showError() no JS,
+             que agora rola até aqui. -->
+        <div id="form-error" role="alert" aria-live="assertive" tabindex="-1"
+             class="hidden rounded-xl bg-red-50 border border-red-200 p-3 text-sm text-red-700"></div>
 
         <!-- Submit -->
         <button type="submit" id="btn-submit"
@@ -359,6 +364,16 @@
   function showError(msg) {
     formError.textContent = msg;
     formError.classList.remove('hidden');
+    // 28/07/2026: o erro nasce no rodapé do formulário. Em tela de celular, a
+    // pessoa clicava em "Criar conta", nada parecia acontecer e ela clicava de
+    // novo — a mensagem estava fora da vista. Agora leva a tela até o erro e
+    // põe o foco nele (o tabindex=-1 no elemento permite receber foco).
+    try {
+      formError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      formError.focus({ preventScroll: true });
+    } catch (e) {
+      formError.scrollIntoView();
+    }
   }
 
   function hideError() {
