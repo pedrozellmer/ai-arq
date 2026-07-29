@@ -57,7 +57,7 @@
 
     <!-- RAIO-X -->
     <div class="mt-8 rounded-2xl border bg-white p-6 shadow-sm">
-      <p class="text-sm font-semibold text-gray-800 flex items-center gap-2"><span aria-hidden="true">🔎</span> Raio-X da leitura <span class="font-normal text-gray-400">— no que dá pra confiar</span></p>
+      <p class="text-sm font-semibold text-gray-800 flex items-center gap-2"><span aria-hidden="true">🔎</span> Raio-X da leitura <span class="font-normal text-gray-500">— no que dá pra confiar</span></p>
       <div class="mt-3 grid grid-cols-2 gap-4">
         <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
           <div class="text-3xl font-bold text-emerald-700 flex items-center gap-2"><span aria-hidden="true">&#10003;</span> <span id="rx-med">18</span></div>
@@ -72,7 +72,7 @@
         <div id="rx-bar" class="h-3 bg-emerald-500" style="width:72%"></div>
       </div>
       <p id="rx-pct" class="mt-1 text-xs text-gray-500">72% medido · 28% a confirmar</p>
-      <p class="mt-2 text-[11px] text-gray-400 leading-relaxed">Neste exemplo, 72% saiu medido. Na média do beta, projetos em CAD (DWG/DXF) saem com ~31,5% medido (amostra de 51 projetos, jul/2026) — varia com a qualidade e o padrão de camadas do arquivo.</p>
+      <p class="mt-2 text-[11px] text-gray-500 leading-relaxed">Neste exemplo, 72% saiu medido. Na média do beta, projetos em CAD (DWG/DXF) saem com ~31,5% medido (amostra de 51 projetos, jul/2026) — varia com a qualidade e o padrão de camadas do arquivo.</p>
       <div class="mt-4 flex flex-wrap gap-3">
         <a href="/exemplos/quantitativo-exemplo-aiarq.xlsx" download class="inline-flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-emerald-500 text-emerald-700 font-semibold no-underline hover:bg-emerald-50">
           <span aria-hidden="true">&#8595;</span> Baixar esta planilha (.xlsx)
@@ -85,7 +85,7 @@
     <div class="mt-6 flex flex-wrap gap-4 text-xs text-gray-600">
       <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-emerald-500 inline-block"></span> <span aria-hidden="true">&#10003;</span> <b>Medido</b> (do CAD)</span>
       <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded bg-amber-400 inline-block"></span> <span aria-hidden="true">&#9888;</span> <b>Estimado</b> (revisar)</span>
-      <span class="text-gray-400">SINAPI = código oficial de referência da Caixa.</span>
+      <span class="text-gray-500">SINAPI = código oficial de referência da Caixa.</span>
     </div>
 
     <!-- TABELA DE ITENS -->
@@ -106,7 +106,7 @@
       <p class="mt-2 text-white/90">Suba o DWG, DXF ou PDF. No beta, é <strong>tudo grátis</strong> — quantos projetos quiser, sem cartão.</p>
       <a href="/login.html?novo=1" class="mt-4 inline-block px-6 py-3 rounded-xl bg-white text-indigo-700 font-bold no-underline">Começar grátis</a>
     </div>
-    <p class="mt-6 text-center text-xs text-gray-400"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Exemplo com dados <b>fictícios</b>, só pra demonstração. O AI.arq gera quantitativo, não orçamento — a precificação e a conferência final são do profissional habilitado.</p>
+    <p class="mt-6 text-center text-xs text-gray-600"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Exemplo com dados <b>fictícios</b>, só pra demonstração. O AI.arq gera quantitativo, não orçamento — a precificação e a conferência final são do profissional habilitado.</p>
   </main>
 
   <script>
@@ -143,7 +143,7 @@
     // agrupa por disciplina, na ordem de aparição
     const groups = []; const idx = {};
     EX.itens.forEach(it => { if (!(it.disc in idx)){ idx[it.disc]=groups.length; groups.push([it.disc,[]]); } groups[idx[it.disc]][1].push(it); });
-    let html = '<p class="sm:hidden text-xs text-gray-400 mb-2">&#128073; arraste a tabela pro lado pra ver <b>Confian&ccedil;a</b> e <b>SINAPI</b></p><div class="rounded-2xl border bg-white overflow-hidden shadow-sm"><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b bg-gray-50"><th class="py-2.5 px-3">Item</th><th class="px-2">Descrição</th><th class="px-2">Un</th><th class="px-2 text-right">Qtd</th><th class="px-2">Confiança</th><th class="px-2">SINAPI</th></tr></thead><tbody>';
+    let html = '<p class="sm:hidden text-xs text-gray-500 mb-2">&#128073; arraste a tabela pro lado pra ver <b>Confian&ccedil;a</b> e <b>SINAPI</b></p><div class="rounded-2xl border bg-white overflow-hidden shadow-sm"><div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-gray-500 border-b bg-gray-50"><th class="py-2.5 px-3">Item</th><th class="px-2">Descrição</th><th class="px-2">Un</th><th class="px-2 text-right">Qtd</th><th class="px-2">Confiança</th><th class="px-2">SINAPI</th></tr></thead><tbody>';
     groups.forEach(([disc, its]) => {
       html += `<tr class="bg-indigo-50/60"><td colspan="6" class="py-1.5 px-3 text-xs font-semibold text-indigo-800">${esc(disc)}</td></tr>`;
       its.forEach(it => {
@@ -157,10 +157,10 @@
         // em 1 segundo em vez de acreditar.
         const sin = it.sinapi
           ? `<div class="text-gray-700 font-medium">${esc(it.sinapi.cod)}</div>
-             <div class="text-gray-400 text-xs leading-tight max-w-[19rem] whitespace-normal">${esc(it.sinapi.comp)}… <span class="text-gray-300">[${esc(it.sinapi.un)}]</span></div>`
-          : '<span class="text-gray-400 text-xs">— sem equivalente no SINAPI</span>';
+             <div class="text-gray-500 text-xs leading-tight max-w-[19rem] whitespace-normal">${esc(it.sinapi.comp)}… <span class="text-gray-500">[${esc(it.sinapi.un)}]</span></div>`
+          : '<span class="text-gray-500 text-xs">— sem equivalente no SINAPI</span>';
         html += `<tr class="border-b last:border-0 ${it.medido?'':'bg-amber-50/30'}">
-          <td class="py-2 px-3 text-gray-400 whitespace-nowrap">${esc(it.num)}</td>
+          <td class="py-2 px-3 text-gray-500 whitespace-nowrap">${esc(it.num)}</td>
           <td class="px-2 text-gray-800">${esc(it.desc)}</td>
           <td class="px-2 text-gray-500">${esc(it.un)}</td>
           <td class="px-2 text-right font-medium text-gray-800 whitespace-nowrap">${fmtQt(it.qtd)}</td>
@@ -200,7 +200,7 @@
           </a>
         </div>
       </div>
-      <div class="mt-6 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
+      <div class="mt-6 pt-6 border-t border-gray-100 text-center text-xs text-gray-500">
         &copy; 2026 ai.arq.br · Todos os direitos reservados
       </div>
     </div>

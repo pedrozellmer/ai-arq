@@ -1060,7 +1060,10 @@
     // Close all
     document.querySelectorAll('.faq-answer.open').forEach(el => {
       el.classList.remove('open');
-      el.closest('.faq-item').querySelector('.faq-chevron').classList.remove('rotated');
+      const it = el.closest('.faq-item');
+      it.querySelector('.faq-chevron').classList.remove('rotated');
+      const b = it.querySelector('.faq-toggle');
+      if (b) b.setAttribute('aria-expanded', 'false');
     });
 
     // Toggle current
@@ -1068,7 +1071,15 @@
       answer.classList.add('open');
       chevron.classList.add('rotated');
     }
+    // 28/07/2026: sem aria-expanded, quem usa leitor de tela ouvia 37 botões
+    // iguais, sem saber quais estavam abertos. A seta é sinal só visual.
+    btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
   }
+
+  // Estado inicial: todas fechadas.
+  document.querySelectorAll('.faq-toggle').forEach(b => {
+    b.setAttribute('aria-expanded', 'false');
+  });
 
   // ══════════════════════════════════════════════
   //  SEARCH

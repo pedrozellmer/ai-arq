@@ -129,7 +129,9 @@
           </div>
         </div>
         <input id="calc-pranchas" type="range" min="1" max="50" value="10"
-               class="calc-slider w-full" />
+               class="calc-slider w-full"
+               aria-label="Quantidade de pranchas do projeto"
+               aria-describedby="calc-preco" />
         <div class="flex justify-between mt-2 text-xs text-gray-500">
           <span>1</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50+</span>
         </div>
@@ -141,7 +143,9 @@
           <div>
             <p class="text-indigo-100 text-sm font-medium uppercase tracking-wide">Preço do projeto</p>
             <div class="mt-1 flex items-baseline gap-2">
-              <span id="calc-preco" class="text-5xl md:text-6xl font-bold">R$ 157</span>
+              <!-- aria-live: ao arrastar o slider, o preço muda sem nenhum aviso
+                   pra quem usa leitor de tela. Com isto, o novo valor é falado. -->
+              <span id="calc-preco" class="text-5xl md:text-6xl font-bold" aria-live="polite" role="status">R$ 157</span>
             </div>
             <p id="calc-por-prancha" class="mt-2 text-indigo-100 text-sm">R$ 19,63 por prancha</p>
           </div>
