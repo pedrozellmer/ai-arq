@@ -5004,7 +5004,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _siblings_map.setdefault(_amb, []).append(_fn)
 
         # Faixa de progresso reservada para PDFs: após cad_end_pct (se houver CAD) até 90%
-        pdf_start_pct = cad_end_pct if has_cad else 5
+        # 🪤 `has_cad` diz "veio DWG/DXF no envio", NÃO "sobrou CAD pra analisar".
+        # Quando o DWG não converte (caso AEC/MEP), a faixa de análise CAD não roda —
+        # e reservá-la mesmo assim dava 40 pontos de barra por trabalho que não
+        # aconteceu: o cliente via "55%" ainda na prancha 1/7 (caso Walter 29/07).
+        # Só reserva a faixa se de fato houve DXF pra analisar.
+        _cad_analisou = bool(dxf_paths)
+        pdf_start_pct = (cad_end_pct if _cad_analisou else conv_end_pct) if has_cad else 5
         pdf_end_pct = 90
         pdf_span = pdf_end_pct - pdf_start_pct
 
@@ -5829,11 +5835,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _aviso_html = (f"<br><br><b>&#9888; Atenção:</b> {len(partial_errors)} prancha(s) "
                                    f"falharam no processamento e podem não ter entrado — a planilha "
                                    f"pode estar incompleta. Reprocessar é grátis e tenta completar.")
+                # DWG que não abriu: o cliente PRECISA saber, senão ele acha que o
+                # resultado fraco é o normal do produto. Caso Walter 29/07 — mandou
+                # 1 DWG + 7 PDF, o DWG não converteu, e o email não dizia uma palavra.
+                if dwg_failed:
+                    import html as _hesc
+                    _q = len(dwg_failed)
+                    _nomes = ", ".join(_hesc.escape(os.path.basename(str(p))) for p in dwg_failed[:3])
+                    _e_aec = " (é um arquivo do AutoCAD Architecture/MEP)" if _aec_failed else ""
+                    _aviso_html += (
+                        f"<br><br><b>&#9888; {'Seu arquivo DWG não abriu' if _q == 1 else f'{_q} arquivos DWG não abriram'}"
+                        f"</b>{_e_aec}: <i>{_nomes}</i>. Era o arquivo que mediria de verdade &mdash; "
+                        f"sem ele, o que veio de PDF sai como <b>estimativa</b>. "
+                        f"Pra resolver: abra no AutoCAD ou BricsCAD, <b>Salvar Como &rarr; DXF 2013</b>, "
+                        f"e suba o DXF no mesmo projeto. A gente refaz <b>medindo</b> &mdash; de graça.")
                 # Diagnóstico de leitura personalizado: explica COMO lemos e POR QUE
                 # a planilha ficou assim (tipo de arquivo + medido vs estimado + avisos).
                 _exts = [os.path.splitext(p)[1].lower() for p in file_paths]
                 _n_pdf = sum(1 for e in _exts if e == ".pdf")
-                _n_cad = sum(1 for e in _exts if e in (".dwg", ".dxf"))
+                # 🪤 Conta o CAD que REALMENTE virou análise, não o que foi enviado.
+                # DWG que não converteu não é CAD lido — tratar como tal fazia o email
+                # culpar o desenho do cliente ("elementos desenhados como linhas soltas")
+                # e sumir com o passo "complemente com o CAD", que era a saída dele.
+                _n_cad = len(dxf_paths)
                 _diag = _build_reading_diagnostic(all_items, _n_pdf, _n_cad, project_type, project_data)
                 # Próximos passos PERSONALIZADOS: PDF sem nada medido → puxa o CAD;
                 # senão lidera com revisão (citando quantos ficaram em laranja).
