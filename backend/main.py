@@ -1483,10 +1483,11 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
     # 4) Cronograma — 'ver' se já existe, senão 'montar'
     if tem_cronograma:
         passos.append(("&#128197;", "Veja o cronograma",
-            "Seu cronograma f&iacute;sico-financeiro j&aacute; est&aacute; gerado &mdash; abra pra acompanhar a obra."))
+            "Seu cronograma f&iacute;sico j&aacute; est&aacute; gerado &mdash; abra pra acompanhar a obra."))
     else:
         passos.append(("&#128197;", "Monte o cronograma",
-            "Gere o cronograma f&iacute;sico-financeiro da obra a partir do quantitativo. Tamb&eacute;m &eacute; de gra&ccedil;a."))
+            "Gere o cronograma f&iacute;sico da obra a partir do quantitativo &mdash; as etapas "
+            "distribu&iacute;das no tempo, com o peso de cada uma. Tamb&eacute;m &eacute; de gra&ccedil;a."))
     cards = ""
     for emoji, titulo, desc in passos:
         cards += (f'<div style="margin:10px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:10px;background:#ffffff;">'
@@ -10321,7 +10322,7 @@ async def cronograma_sugestao(job_id: str, request: Request):
 @app.post("/api/cronograma/{job_id}/generate")
 async def generate_cronograma(job_id: str, payload: CronogramaPayload, request: Request):
     _require_project_owner(request, job_id)
-    """Gera cronograma físico-financeiro a partir do quantitativo do projeto.
+    """Gera cronograma FÍSICO (prazo e avanço, sem valores) a partir do quantitativo.
 
     Devolve JSON com fases + Gantt + curva S, pronto pra renderizar no
     frontend. Não persiste (recalcula a cada chamada — UX live).

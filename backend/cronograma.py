@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Gerador de cronograma físico-financeiro a partir do quantitativo do projeto.
+"""Gerador de cronograma FÍSICO a partir do quantitativo do projeto.
+
+🪤 Físico, não físico-financeiro: a curva S daqui é % de AVANÇO acumulado, não
+desembolso. Não existe um único campo em R$ neste módulo, e não deve existir
+enquanto valer a regra dura nº5 (o AI.arq não precifica).
 
 Recebe lista de disciplinas (extraída do project_items) + data início + duração.
 Devolve JSON com fases + Gantt + curva S, pronto pra renderizar no frontend.
@@ -283,7 +287,11 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
         'marcos_legais': [
             'Lei 14.133/2021 Art 117 — medição mensal obrigatória',
             'Lei 14.133/2021 Art 121 — fiscalização + diário de obra',
-            'Acórdão TCU 2622/2013 — cronograma físico-financeiro evidenciado',
+            # 🪤 Saiu o Acórdão TCU 2622/2013 ("cronograma físico-FINANCEIRO
+            # evidenciado"): este gerador entrega só a parte FÍSICA (curva S em
+            # % de avanço, zero valor em R$). Citar o acórdão sugeria uma
+            # conformidade que não temos — e roça a regra dura nº5 (não
+            # precificar). Volta a entrar se/quando existir a parte financeira.
             'PMI PMBOK 7th ed. — Performance Domain Planning',
             'NBR 16636-1/2:2017 — gerenciamento de serviços técnicos',
             'Last Planner System (Ballard 2000) — 4 níveis + PPC',
@@ -448,7 +456,11 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
         'marcos_legais': [
             'Lei 14.133/2021 Art 117 — medição mensal obrigatória',
             'Lei 14.133/2021 Art 121 — fiscalização + diário de obra',
-            'Acórdão TCU 2622/2013 — cronograma físico-financeiro evidenciado',
+            # 🪤 Saiu o Acórdão TCU 2622/2013 ("cronograma físico-FINANCEIRO
+            # evidenciado"): este gerador entrega só a parte FÍSICA (curva S em
+            # % de avanço, zero valor em R$). Citar o acórdão sugeria uma
+            # conformidade que não temos — e roça a regra dura nº5 (não
+            # precificar). Volta a entrar se/quando existir a parte financeira.
             'PMI PMBOK 7th ed. — Performance Domain Planning',
             'NBR 16636-1/2:2017 — gerenciamento de serviços técnicos',
             'Last Planner System (Ballard 2000) — 4 níveis + PPC',
