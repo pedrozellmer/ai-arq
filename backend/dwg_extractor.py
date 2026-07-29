@@ -819,6 +819,15 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         except Exception:
             err_content = ""
         logger.warning("ODA gerou .dxf.err (DWG inválido/corrompido): %s", err_content)
+        # 🪤 Sem isto a CAUSA se perde: o .err mora num tempdir que o Render apaga,
+        # e o _oda_log.txt (o que /api/debug/oda-log devolve) é escrito ANTES desta
+        # checagem. Resultado: "DWG não converteu" sem nunca dizer por quê — caso
+        # Walter 29/07, em que o ODA saiu com rc=0 e só deixou o .err pra trás.
+        try:
+            with open(os.path.join(os.path.dirname(dwg_path), "_oda_log.txt"), "a") as _lf:
+                _lf.write(f"\n--- conteudo do .dxf.err ---\n{err_content}\n")
+        except Exception:
+            pass
 
     # Try case-insensitive search in output dir (caso ODA tenha gerado com nome diferente)
     for f in os.listdir(output_dir):

@@ -6212,6 +6212,10 @@ async def debug_dwg(request: Request):
     import shutil
     result = {
         "oda_which": shutil.which("ODAFileConverter"),
+        # O Dockerfile instala libredwg-tools com "|| echo" — se o pacote não vier,
+        # o build passa em silêncio e o fallback simplesmente não existe, sem ninguém
+        # saber. Aqui a resposta fica explícita (null = fallback indisponível).
+        "libredwg_which": shutil.which("dwg2dxf"),
         "oda_paths_checked": [],
     }
     # Verificar caminhos
