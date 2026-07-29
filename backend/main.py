@@ -6346,7 +6346,23 @@ async def notify_welcome(request: Request):
         import threading as _thw
         _ab = (f"<b>Novo cadastro! 🎉</b><br><b>Email:</b> {_hw.escape(email)}<br>"
                f"<b>Nome:</b> {_hw.escape(name or '(ainda não preencheu)')}")
-        _thw.Thread(target=_notify_admin, args=("Novo cliente cadastrado", _ab), daemon=True).start()
+
+        def _alerta_novo_cliente():
+            # 🪤 Registra no email_auto_log com o MESMO kind/ref que o tick horário
+            # usa pra deduplicar ("alerta_novo_cadastro"). Sem isso o Pedro recebe
+            # DOIS alertas da mesma pessoa: este (imediato) e o do tick, até 1h
+            # depois — foi o que aconteceu com o cliente Walter em 29/07.
+            # Os dois existem de propósito e se completam: este é imediato mas só
+            # dispara quando a pessoa ABRE o painel; o do tick pega também quem
+            # criou conta e nunca voltou. Quem chegar primeiro cala o outro.
+            if _notify_admin("Novo cliente cadastrado", _ab):
+                try:
+                    _email_auto_registrar(NOTIFY_EMAIL, "alerta_novo_cadastro",
+                                          ref=(email or "").strip().lower())
+                except Exception:
+                    pass
+
+        _thw.Thread(target=_alerta_novo_cliente, daemon=True).start()
     except Exception:
         pass
     return {"status": "ok", "sent": sent}
@@ -6788,11 +6804,14 @@ async def emails_auto_tick(dry: int = 0):
     acoes = [a for a in acoes if not _email_auto_recente(a["email"], dias=7)][:5]
 
     # ── Alerta INTERNO pro Pedro: chegou gente nova ────────────────────────
-    # 28/07/2026: o comentário do NOTIFY_EMAIL promete "alerta de novo cliente"
-    # desde sempre, mas _notify_admin só era chamado quando um projeto falhava.
-    # Na prática o Pedro só descobria cadastro novo se abrisse o painel e
-    # reparasse — e não reparava. Agora chega por e-mail em até 1h, dizendo se a
-    # pessoa completou o cadastro ou parou no meio.
+    # 28/07/2026: chega por e-mail em até 1h, dizendo se a pessoa completou o
+    # cadastro ou parou no meio.
+    # ⚠️ CORREÇÃO 29/07: o comentário aqui dizia que não existia alerta de cadastro
+    # nenhum. Existia — o "Novo cliente cadastrado", disparado quando a pessoa abre
+    # o painel. Resultado: 2 e-mails pela mesma pessoa (caso Walter). Os dois ficam,
+    # porque se completam — o imediato só dispara pra quem ABRE o painel, este pega
+    # quem criou conta e sumiu. Agora aquele registra o mesmo kind/ref aqui embaixo,
+    # então quem chegar primeiro cala o outro.
     # Dedup por e-mail → 1 alerta por pessoa, na vida. NÃO entra no cooldown dos
     # automáticos do usuário (aquilo protege a caixa do cliente; isto é interno).
     novos = []
