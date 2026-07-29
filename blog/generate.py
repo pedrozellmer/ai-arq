@@ -578,10 +578,17 @@ def render_index_html():
         is_future = post["publish_date"] > today
         future_class = ' data-future="true" style="display:none"' if is_future else ''
 
+        # 🪤 28/07/2026: o card era um <article onclick="window.location=...">.
+        # Sem <a href>, o Google não seguia pro post (a listagem não passava
+        # autoridade pra nenhum artigo), não dava pra abrir em nova aba, nem
+        # copiar o endereço, nem chegar pelo teclado. Agora o título é um link
+        # de verdade e o card inteiro continua clicável pelo ::after esticado.
         cards_html += f'''
-        <article{future_class} class="post-card group rounded-2xl border bg-white p-6 shadow-sm hover:shadow-lg transition cursor-pointer" data-publish-date="{post["publish_date"]}" onclick="window.location='/blog/posts/{post["slug"]}.html'">
+        <article{future_class} class="post-card group relative rounded-2xl border bg-white p-6 shadow-sm hover:shadow-lg focus-within:ring-2 focus-within:ring-indigo-500 transition" data-publish-date="{post["publish_date"]}">
           <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">{post["category"]}</span>
-          <h2 class="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition leading-tight">{post["title"]}</h2>
+          <h2 class="text-xl font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition leading-tight">
+            <a href="/blog/posts/{post["slug"]}.html" class="no-underline text-inherit after:absolute after:inset-0 after:content-['']">{post["title"]}</a>
+          </h2>
           <p class="text-sm text-gray-600 leading-relaxed mb-4">{post["description"]}</p>
           <div class="flex items-center justify-between text-xs text-gray-500">
             <span>📅 {publish_date_br}</span>
