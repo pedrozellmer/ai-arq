@@ -17,15 +17,25 @@
 # existir, o build quebra AQUI, que é onde a gente quer descobrir.
 FROM python:3.11-slim AS libredwg-build
 ARG LIBREDWG_VERSION=0.14
+# 🪤 gperf, libtool, pkg-config e texinfo NÃO vêm no build-essential, e o
+# configure.ac procura por eles (AC_CHECK_PROGS). Faltar gperf foi o suspeito
+# nº1 da 1ª tentativa, que quebrou o build no Render em 29/07.
+# Compila só `src` (a lib) e `programs` (onde mora o dwg2dxf): o `make` puro
+# também compila `examples` e `test`, que não usamos e que só somam tempo de
+# build e chance de quebrar. -j2 em vez de nproc porque a máquina de build tem
+# RAM limitada e paralelismo demais estoura.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential wget ca-certificates libpcre2-dev \
+        build-essential gperf libtool pkg-config texinfo perl \
+        wget ca-certificates libpcre2-dev \
     && wget -q --tries=3 --timeout=60 -O /tmp/libredwg.tar.gz \
        "https://github.com/LibreDWG/libredwg/releases/download/${LIBREDWG_VERSION}/libredwg-${LIBREDWG_VERSION}.tar.gz" \
     && tar xzf /tmp/libredwg.tar.gz -C /tmp \
     && cd "/tmp/libredwg-${LIBREDWG_VERSION}" \
-    && ./configure --disable-bindings --disable-shared --enable-static \
-    && make -j"$(nproc)" \
-    && make install \
+    && ./configure --disable-bindings --disable-shared --enable-static --disable-docs \
+    && make -j2 -C src \
+    && make -j2 -C programs \
+    && (install -m 755 programs/dwg2dxf /usr/local/bin/dwg2dxf 2>/dev/null \
+        || install -m 755 programs/.libs/dwg2dxf /usr/local/bin/dwg2dxf) \
     && test -x /usr/local/bin/dwg2dxf \
     && (strip /usr/local/bin/dwg2dxf || true)
 
