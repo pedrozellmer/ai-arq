@@ -6891,20 +6891,20 @@ _NEWSLETTER_HTML = """<div style="background:#eaeef3;padding:24px 12px;font-fami
 <div style="height:5px;background:#4F46E5;"></div>
 <div style="padding:24px 30px;">
 <p style="margin:0 0 16px;color:#0F172A;font-size:20px;font-weight:700;">AI.arq</p>
-<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}<br>News do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>, sem encher sua caixa: uma ideia &uacute;til e o que mudou por aqui.</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}<br>News do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>: uma ideia &uacute;til e o que mudou por aqui.</p>
 <div style="padding:14px 16px;background:#F8FAFC;border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.6;margin:0 0 18px;">
 <b style="color:#0F172A;">&#129504; IA na arquitetura &mdash; o que ela ainda n&atilde;o faz bem</b><br>
-Saiu em 2026 o <b>AECV-Bench</b>, um estudo acad&ecirc;mico que testou os melhores modelos de IA do mundo lendo plantas de arquitetura. Numa tarefa simples &mdash; <b>contar portas e janelas</b> &mdash; a taxa de acerto ficou <b>entre 40% e 55%</b>. Quase metade errada, s&oacute; &ldquo;olhando&rdquo; o desenho.<br><br>
-&Eacute; por isso que o AI.arq <b>mede a geometria do arquivo</b> em vez de interpretar a imagem: no DWG e no DXF, cada parede e cada bloco t&ecirc;m coordenadas &mdash; d&aacute; pra calcular, n&atilde;o chutar. E quando n&atilde;o d&aacute; pra medir, o item sai marcado como <b>estimativa</b>, pra voc&ecirc; conferir. Nunca de branco.
+O <b>AECV-Bench</b>, estudo de 2026, testou os melhores modelos de IA do mundo lendo pranchas. Em tarefas de s&iacute;mbolo &mdash; como <b>contar portas e janelas</b> &mdash; o acerto ficou <b>entre 40% e 55%</b>. Quase metade errada, s&oacute; &ldquo;olhando&rdquo; o desenho.<br><br>
+&Eacute; por isso que o AI.arq <b>mede a geometria do arquivo</b> em vez de interpretar a imagem: no DWG e no DXF, cada parede e cada bloco t&ecirc;m coordenadas. O que n&atilde;o d&aacute; pra medir sai como <b>estimativa</b> &mdash; nunca em branco.
 <div style="color:#94a3b8;font-size:12px;margin-top:6px;">Fonte: AECV-Bench (2026) &mdash; <a href="https://arxiv.org/abs/2601.04819" style="color:#8b93f6;">arxiv.org/abs/2601.04819</a></div>
 </div>
 <b style="color:#0F172A;font-size:15px;">&#10024; O que melhorou em julho</b>
-<ul style="margin:8px 0 18px;padding-left:20px;font-size:14px;line-height:1.6;">
-<li style="margin-bottom:8px;"><b>Projeto grande n&atilde;o trava mais no meio.</b> O motor agora salva o progresso prancha por prancha &mdash; se algo falhar, ele retoma de onde parou em vez de recome&ccedil;ar. E o envio mostra o <b>progresso real</b>, ent&atilde;o arquivo pesado n&atilde;o parece travado.</li>
-<li style="margin-bottom:8px;"><b>Planta sem cota n&atilde;o volta mais vazia.</b> Se o desenho n&atilde;o tem cotas, voc&ecirc; pode informar a <b>&aacute;rea total</b> no envio &mdash; ela vira base pros c&aacute;lculos, sempre rotulada como <i>informada por voc&ecirc;</i>, n&atilde;o medida.</li>
-<li style="margin-bottom:8px;"><b>Menos n&uacute;mero estranho na planilha.</b> Corrigimos casos em que um item pontual (um bebedouro, uma TV) aparecia com a &aacute;rea do pavimento inteiro, e casos de unidade trocada. Se voc&ecirc; achar algo assim, responde esse e-mail: &eacute; assim que a gente acha.</li>
-<li><b>DXF &eacute; o formato que mede melhor.</b> Exportou do Revit, do AutoCAD ou do ArchiCAD? Salve em <b>DXF</b> &mdash; &eacute; o que abre sempre e mede mais. PDF a gente l&ecirc;, mas vira estimativa.</li>
+<ul style="margin:8px 0 14px;padding-left:20px;font-size:14px;line-height:1.6;">
+<li style="margin-bottom:8px;"><b>Projeto grande n&atilde;o trava no meio.</b> O motor salva o progresso prancha por prancha e retoma de onde parou. E o envio mostra o progresso real &mdash; arquivo pesado n&atilde;o parece mais travado.</li>
+<li style="margin-bottom:8px;"><b>Planta sem cota n&atilde;o volta vazia.</b> Sem cotas no desenho, voc&ecirc; informa a <b>&aacute;rea total</b> no envio. Ela vira base pros c&aacute;lculos, sempre rotulada como <i>informada por voc&ecirc;</i> &mdash; n&atilde;o medida.</li>
+<li><b>Menos n&uacute;mero estranho na planilha.</b> Um bebedouro chegou a aparecer com a &aacute;rea do pavimento inteiro: o motor leu a observa&ccedil;&atilde;o &ldquo;H=1,00m do piso&rdquo; e, pela palavra <i>piso</i>, tratou o item como o piso todo. Noutro projeto, uma TV veio em m&sup2; em vez de contada por pe&ccedil;a. Os dois corrigidos &mdash; se vir um n&uacute;mero estranho, responde esse e-mail. &Eacute; assim que a gente acha.</li>
 </ul>
+<p style="margin:0 0 18px;padding:10px 14px;background:#FFFBEB;border-radius:8px;font-size:14px;line-height:1.6;color:#78350F;">&#128161; <b>Dica:</b> exportando do Revit, do AutoCAD ou do ArchiCAD, salve em <b>DXF</b> &mdash; &eacute; o formato que mede melhor. PDF a gente l&ecirc;, mas vira estimativa.</p>
 <div style="background:#F1F5F9;border-radius:10px;padding:16px;text-align:center;margin:0 0 18px;">
 <p style="margin:0 0 12px;font-size:15px;color:#0F172A;"><b>Tem projeto novo?</b> Durante o beta &eacute; <b>gr&aacute;tis</b>, quantos projetos voc&ecirc; quiser.</p>
 <a href="https://ai.arq.br/dashboard.html" style="display:inline-block;background:#4F46E5;color:#fff;text-decoration:none;padding:12px 24px;border-radius:10px;font-size:15px;font-weight:600;">Abrir o AI.arq</a>
