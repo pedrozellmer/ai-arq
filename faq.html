@@ -30,23 +30,63 @@
       "name": "O que é o AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Plataforma brasileira que usa IA para extrair quantitativos de obra a partir de plantas em CAD (DXF, DWG ou PDF). Em cerca de 5 minutos, gera uma planilha XLSX por disciplina (18 categorias) com referência SINAPI. Não precifica — é uma ferramenta de apoio para orçamentistas e arquitetos."
+        "text": "O AI.arq é uma plataforma que cobre o ciclo de quantitativo, comparativo e apresentação (sem precificar — isso fica com seu orçamentista): (1) Lê o CAD — você envia DXF, DWG ou PDF e a IA gera a planilha de quantitativos (itens, unidades e quantidades — sem preços) em poucos minutos. (2) Referências SINAPI — cada item vem com código oficial SINAPI (descrição padronizada, unidade e % de compatibilidade), pra justificar o quantitativo aos fornecedores. (3) Compara propostas — quando os fornecedores devolvem as cotações, você sobe as planilhas e o AI.arq gera o comparativo pareado (ranking, discrepâncias, cobertura)."
       }
     },
     {
       "@type": "Question",
-      "name": "Quais formatos de arquivo são aceitos?",
+      "name": "Para quem é o AI.arq?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "DXF, DWG (AutoCAD) e PDF. O ideal é DXF exportado diretamente do CAD — é o formato que mede a geometria de verdade e não trava na conversão. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) podem não abrir. PDF a IA lê pela imagem (sai como estimativa); PDFs escaneados (foto da planta impressa) não funcionam — a IA precisa enxergar as cotas, blocos e textos vetoriais."
+        "text": "Arquitetos, engenheiros de custos, orçamentistas, construtoras, incorporadoras e escritórios de engenharia que precisam levantar quantitativos de projetos para concorrência ou orçamento de obras."
       }
     },
     {
       "@type": "Question",
-      "name": "Quanto custa o AI.arq?",
+      "name": "O AI.arq substitui um orçamentista profissional?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Durante o beta, é grátis e ilimitado, sem cartão. Os preços abaixo passam a valer quando o beta acabar (avisamos antes): R$ 97 para projetos de 1 a 5 pranchas, R$ 157 para 6 a 10 pranchas, R$ 247 para 11 a 20 pranchas e + R$ 10 por prancha adicional. Sem mensalidade — você paga apenas quando usa."
+        "text": "Não. O AI.arq é uma ferramenta de apoio que acelera o levantamento inicial de quantitativos e organiza a comunicação com fornecedores. A planilha gerada deve sempre ser revisada por um profissional habilitado antes de ser utilizada em orçamentos ou contratações. Itens marcados em laranja (estimados pela IA) e roxo (custos indiretos / gestão) requerem verificação obrigatória antes de fechamento."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq funciona para obras novas ou só reformas?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Funciona para ambos. Para reformas, o sistema compara automaticamente o layout atual com o novo e identifica o que sai, o que entra e o que permanece, gerando um resumo comparativo na primeira aba da planilha."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais tipos de pranchas o AI.arq lê?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No upload, você escolhe a tipologia do projeto (residencial, escritório, varejo, hospitalar, educacional) e, para cada prancha, classifica o tipo ou o detalhe do ambiente. Isso permite que o sistema processe com precisão os tipos clássicos: • Demolição • Layout Atual e Novo • Mobiliário e Marcenaria • Arquitetura — portas, revestimentos, divisórias, persianas • Pontos Elétricos e Dados • Pisos, Forro e Iluminação • Detalhamentos por ambiente (banheiro, cozinha, lavabo, etc) • Hidráulica e Gás Aceita DXF, DWG ou PDF. Nomear os arquivos com clareza ajuda (ex.: \"Pr100_Demolir.pdf\"), mas não é obrigatório — você classifica cada prancha na tela de upload."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq funciona com projetos em BIM/Revit/AutoCAD?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim — projeto feito no Revit funciona. Exporte em DWG ou DXF (Arquivo → Exportar → Formatos CAD) e mande pra gente. O AI.arq aceita PDF, DWG e DXF; nos dois últimos o sistema extrai a geometria direto do desenho — áreas, perímetros, comprimento de parede, contagem de blocos — e por isso mede com mais precisão. Arquivos .rvt e .ifc a gente não lê — e isso é escolha, não falta. Nesses formatos a quantidade que aparece é a que o autor do modelo digitou nos parâmetros. A gente só marca de branco (“medido”) aquilo que mediu com as próprias mãos, a partir da geometria do desenho. Repassar número de terceiro com selo de medido seria quebrar a regra que sustenta a planilha inteira."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como exporto meu projeto pra ter o melhor resultado?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A regra de ouro: 🥇 DXF é o melhor — mede de verdade e nunca trava na conversão. DWG também mede, mas os de AutoCAD Architecture/MEP (objetos AEC) às vezes não abrem — se der erro, exporte DXF. PDF é leitura visual, sai como estimativa. No CAD a gente extrai a geometria (áreas, comprimentos, contagem de blocos), então as quantidades saem medidas; no PDF a IA lê pela imagem, então sai tudo como estimativa pra você conferir. Passo a passo por programa: AutoCAD Botão do Aplicativo (o \"A\" no topo à esquerda) → Salvar Como → Outros Formatos. Em \"Arquivos do tipo\", escolha um DXF (ex.: AutoCAD 2018 DXF). Dê um nome, escolha a pasta e Salvar."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quantas pranchas posso enviar por projeto?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sem limite de arquivos. O que conta é a quantidade de pranchas reais dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: Pequeno (1-5 pranchas) R$ 97, Médio (6-10) R$ 157, Grande (11-20) R$ 247. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. Dúvidas ou casos especiais: contato@ai.arq.br."
       }
     },
     {
@@ -54,15 +94,79 @@
       "name": "Quanto tempo leva o processamento?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Em média, 1 a 2 minutos por prancha. Um projeto típico com 10 pranchas leva cerca de 10 minutos. O resultado é uma planilha XLSX por disciplina, pronta para download."
+        "text": "Aproximadamente 1–2 minutos por prancha. Um projeto com 10 pranchas leva cerca de 10 minutos. Projetos menores (3–5 pranchas) podem levar de 3 a 5 minutos. Você acompanha o progresso em tempo real no dashboard."
       }
     },
     {
       "@type": "Question",
-      "name": "O AI.arq substitui o orçamentista?",
+      "name": "O que a planilha gerada contém?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Não. O AI.arq entrega o LEVANTAMENTO QUANTITATIVO (o que e quanto), mas não precifica. A precificação, o BDI e o fechamento do orçamento são trabalho do orçamentista. A planilha sai sem preços preenchidos, com itens estimados marcados em laranja para revisão."
+        "text": "Importante: o AI.arq entrega uma planilha de quantitativos (itens + unidades + quantidades + descrições SINAPI) — sem preços preenchidos. A precificação e o fechamento do orçamento são feitos por você ou pelo seu orçamentista. A planilha (.xlsx) tem até 3 abas: • Aba 1 — Resumo Comparativo: análise do que sai, entra e permanece (especialmente útil em reformas). • Aba 2 — Orçamento: itens organizados em até 18 disciplinas (Serviços Preliminares, Demolição, Fechamentos, Revestimentos, Pisos, Forros, Portas, Divisórias, Persianas, Iluminação, Elétrica, Hidráulica, Gás, AC, Incêndio, Marcenaria, Mobiliário, Complementares)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais são as etapas do processamento?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Upload + classificação: você envia DXF/DWG/PDF, escolhe a tipologia (residencial, escritório, varejo, hospitalar, educacional) e, para cada prancha, classifica o tipo ou detalhe de ambiente. Extração do CAD: DWG/DXF — dados geométricos extraídos direto (blocos, polylines, hachuras). PDF — texto extraído e imagens recortadas por região de legenda. Análise com IA: cada prancha vai para a IA (Claude), que aplica convenções NBR e identifica itens, materiais, quantidades e especificações. Calibração por densidade: ratios históricos de projetos similares sinalizam itens fora do padrão (alertas de anomalia)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qual a precisão do AI.arq?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A precisão depende da qualidade do arquivo: DWG/DXF permitem medição geométrica direta; PDF depende de as cotas estarem no desenho. Por isso cada item volta marcado como medido (do CAD) ou estimativa (pra revisar) — você sempre sabe no que confiar. Por que medir e não só \"olhar\" a planta? Mesmo os modelos de IA mais avançados do mundo, quando contam itens só pela imagem de uma planta, erram muito: um benchmark acadêmico de 2026 (AECV-Bench) mediu menos de 40% de acerto na contagem de portas e janelas. Por isso o AI.arq lê a geometria do arquivo CAD em vez de adivinhar pela imagem — e te mostra, item a item, o que foi medido e o que é estimativa."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Por que alguns itens ficam em laranja?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "A planilha usa 4 cores com significados diferentes (não é uma escala de \"pior pra melhor\" — cada cor indica um tipo de item): Branco — MEDIDO: quantidade medida ou contada diretamente do CAD (hachura, bloco, polyline). É a parte mais sólida — ainda assim, a revisão por arquiteto/engenheiro é sempre recomendada. Laranja — ESTIMADO / VERIFICAR: quantidade sugerida pela IA (fórmula, ratio de densidade, inferência da legenda). Revisar antes de usar. Cinza — METADADO: informação do projeto (área total, área de layout, postos de trabalho). Não é item orçável — é contexto."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como a IA calcula as quantidades?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Quando a legenda informa a quantidade, ela é usada diretamente."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como obter melhores resultados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "• Exporte os PDFs em alta resolução (300 DPI). • Nomeie os arquivos de forma clara (ex.: “Pr100_Demolir.pdf”, “Pr400_Arquitetura.pdf”). • Inclua legendas completas com materiais, fabricantes e referências. • Envie todas as pranchas do projeto juntas — o sistema cruza dados entre elas e dá resultado mais consolidado. • Pode enviar PDFs com múltiplas páginas e DWGs com vários layouts — cada página/layout vira uma prancha separada na contagem."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "E se o sistema não conseguir ler meu arquivo? (inclui DWG de elétrica/MEP que não abriu)",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Quando o sistema não consegue extrair itens de uma prancha, ele avisa de forma clara — não entrega uma planilha vazia sem explicação. As causas mais comuns: • O PDF é uma imagem escaneada ou fotografada da planta. O sistema lê PDF vetorial exportado direto do CAD (AutoCAD, Revit) — não foto. • O arquivo chegou incompleto — conexão instável durante o envio. • A prancha tem só o desenho, sem cotas nem legendas legíveis. • É um DWG de AutoCAD MEP/Architecture (elétrica, hidráulica, ar-condicionado) com “objetos inteligentes” (AEC). Nenhum conversor abre esse tipo direto — nem o nosso, nem o “Salvar como DXF” comum. O DWG comum (arquitetônico) converte normal; só os de MEP travam."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quanto custa usar o AI.arq?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Três planos com economia de escala — quanto maior o projeto, mais barato por prancha. Durante o beta, grátis e ilimitado. Pequeno R$ 97 Até 5 pranchas R$ 19,40 / prancha MAIS COMUM Médio R$ 157 6 a 10 pranchas R$ 15,70 / prancha · −19% Grande R$ 247 11 a 20 pranchas R$ 12,35 / prancha · −36%"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais formas de pagamento são aceitas?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Cartão de crédito/débito, processado pelo Stripe — a mesma plataforma de pagamentos utilizada por empresas como Uber, Spotify e Amazon. Não armazenamos dados do seu cartão; todo o fluxo financeiro ocorre diretamente nos servidores do Stripe (certificado PCI-DSS)."
       }
     },
     {
@@ -70,23 +174,159 @@
       "name": "O que muda quando envio planilha revisada e cotações?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Cada planilha revisada e cotação de fornecedor enviada afina a IA — os próximos quantitativos do próprio usuário saem medindo melhor exatamente o que foi corrigido, e as cotações alimentam o comparativo do projeto. O histórico fica na aba \"Contribuições\" do seu dashboard."
+        "text": "Cada planilha revisada e cotação de fornecedor que você envia afina a calibração — nos seus próximos projetos, o motor avisa quando um número sai fora do esperado pro tipo de obra (ele não copia a sua quantidade pra outro projeto). As cotações alimentam o comparativo do projeto. Histórico na aba \"Contribuições\" do seu dashboard."
       }
     },
     {
       "@type": "Question",
-      "name": "Meus dados de projeto estão seguros?",
+      "name": "Tem mensalidade ou assinatura?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sim. Conformidade com LGPD: você é o controlador dos dados; o AI.arq atua como operador, apenas processando. Comunicação criptografada (TLS) e dados em repouso criptografados no banco. Plantas CAD não treinam IA pública sem autorização explícita."
+        "text": "Não. Você paga apenas por projeto processado, sem assinatura, mensalidade ou taxa oculta. Use somente quando precisar."
       }
     },
     {
       "@type": "Question",
-      "name": "E se o sistema não conseguir ler meu arquivo?",
+      "name": "Preciso usar todas as features? É obrigatório?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Quando o sistema não consegue extrair itens de uma prancha, ele avisa de forma clara — não entrega planilha vazia. Causas comuns: PDF escaneado em vez de vetorial, arquivo incompleto no envio ou prancha apenas de layout sem cotas. A solução é reenviar PDF vetorial exportado do CAD, em conexão estável."
+        "text": "Não. Cada feature funciona sozinha. Não tem venda casada. ✓ Só quantitativo? Ok — você gera a planilha e usa do jeito que quiser, em qualquer ferramenta. ✓ Só comparativo de fornecedores? Em breve vamos disponibilizar uma página separada. Hoje, o comparativo aparece dentro do projeto (mesmo que você não use o quantitativo do AI.arq como base). ✓ Só referências SINAPI? Vêm junto com o quantitativo automaticamente quando há matches — não é cobrada separada. ✓ Só PPT com sua marca? Só é gerado quando você tiver cotações pra comparar. É brinde do comparativo, não é cobrado à parte. Você paga só pelo processamento do quantitativo (preço por faixa de pranchas — veja \"Preços e Pagamento\")."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq faz cronograma de obra?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Faz. Depois que o quantitativo fica pronto, dá pra gerar um cronograma físico-financeiro a partir dele: as etapas da obra distribuídas no tempo, com o peso de cada uma. Você escolhe a data de início e a duração, ajusta as etapas na tela, e baixa em PDF ou como apresentação com a sua marca — dá pra levar direto pra reunião com o cliente. Como todo o resto, no beta está incluso — sem custo adicional."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como funciona o comparativo de fornecedores?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Depois que você gera o quantitativo e manda pros fornecedores, eles devolvem planilhas preenchidas. Dentro do seu projeto no AI.arq, tem o card \"Recebeu orçamentos dos fornecedores?\" — basta fazer o upload de cada XLSX recebido. Quando você tem 2 ou mais cotações, o botão \"Gerar comparativo\" produz: ✓ XLSX com ranking por total pareado (só itens que todos orçaram — comparação justa) ✓ Cobertura de cada fornecedor (quantos % dos itens ele cotou) ✓ Top discrepâncias acima de 100% (sinal de escopo diferente) ✓ Cruzamento com o quantitativo AI.arq original (quem esqueceu o quê) ✓ PPT executivo com a logo e cor do seu escritório"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "E se cada fornecedor usar um template diferente?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O sistema reconhece as colunas automaticamente (descrição, unidade, quantidade, valor) mesmo em planilhas de layouts diferentes, e identifica itens equivalentes mesmo quando descritos de formas diferentes."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Posso usar a logo do meu escritório nos PPTs gerados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. No Dashboard → \"Meu Cadastro\" → seção \"Identidade visual\" você sobe o logo (PNG/JPG/SVG, máx 2MB) e escolhe uma cor de marca. A partir daí, todo PPT comparativo sai com: • Logo na capa e em cada slide (canto superior esquerdo) • Títulos e cards usando a sua cor primária • Rodapé \"Análise preparada por [Escritório] — Powered by AI.arq\" Ao subir o logo você declara ter os direitos autorais ou autorização de uso (ver Termos)."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como cadastro dados do meu cliente final?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Dentro do projeto, no card \"📇 Dados do cliente final\" você preenche nome, empresa, e-mail, WhatsApp e endereço da obra. Esses dados: • Aparecem no cabeçalho das planilhas e PPTs gerados • Habilitam os botões \"📱 WhatsApp\" e \"✉️ E-mail\" pra envio rápido (abre o app com mensagem pronta — o AI.arq não envia sozinho) • Ficam isolados por projeto, não alimentam IA nem são vistos por outros usuários LGPD: você é o controlador dos dados, o AI.arq é o operador. Detalhes em Privacidade seção 1-A."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que cada contribuição faz pela IA?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Cada contribuição tem um efeito direto nos seus próximos projetos: • Planilha revisada (.xlsx corrigido offline): suas correções viram referência de proporção (quanto de cada item por m², no seu tipo de obra). Nos próximos projetos, o motor usa isso pra avisar quando um número sai fora do esperado — ele não copia a sua quantidade pra outro projeto • Cotação de fornecedor: monta o comparativo do seu projeto e calibra proporções (nunca valores absolutos) • Revisão inline dentro do site: ajuda a calibrar o motor pros próximos projetos O histórico de tudo que você contribuiu fica na aba \"Contribuições\" do seu dashboard."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O que é a aba \"Referências SINAPI\" na planilha?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Uma aba na planilha gerada que, pra cada item do quantitativo, mostra: • Código SINAPI (Caixa) sugerido + descrição padronizada e unidade • Até 2 sugestões de composição por item, da mais compatível pra menos • Similaridade entre descrição do item e a composição (% de compatibilidade) • Item sem match vem sinalizado, com orientação pra buscar o código manualmente no site da Caixa Serve pra justificar tecnicamente o quantitativo pros fornecedores e dar credibilidade à planilha. Base: catálogo oficial SINAPI (Caixa), ~10 mil composições. Sem preço — o código serve pra consultar o valor atualizado direto na fonte."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Meus fornecedores e clientes aparecem pros outros usuários do AI.arq?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não. Regra dura do sistema: ✗ Valores absolutos em R$ nunca são compartilhados entre projetos ✗ Nome do cliente final, fornecedor, endereço da obra — ficam isolados por projeto ✓ Apenas métricas adimensionais anonimizadas (CV de preço por categoria, share MAT/MO) vão pro motor de alertas ✓ Fornecedores entram no motor só como \"fornecedor_1/2/3\" em ordem aleatória, sem qualquer vínculo rastreável Antes de qualquer inserção na base anônima, uma auditoria verifica que nenhum valor em R$, nome ou identificador vazou. Detalhes: Política de Privacidade seção 1-A."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Meus projetos estão seguros?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Sim. Seus arquivos (PDF, DWG, DXF) são armazenados em storage criptografado no Supabase por até 90 dias após o processamento, para permitir duas funcionalidades: • Abrir a prancha em nova aba durante a revisão inline (botão \"Ver prancha\"). • Reprocessar o projeto com a última versão do motor (sem precisar reenviar). Após 90 dias, são excluídos automaticamente. Toda comunicação é criptografada via HTTPS. Não usamos seus arquivos para treinar modelos de IA genéricos nem compartilhamos com terceiros. Você pode solicitar exclusão antecipada a qualquer momento em contato@ai.arq.br."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Por quanto tempo planilha e arquivos ficam disponíveis?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Planilhas e arquivos originais (DXF/DWG/PDF) ficam disponíveis por até 90 dias após o processamento para revisão inline, reprocessamento e download. Depois disso, são excluídos automaticamente. Você pode solicitar exclusão antecipada em contato@ai.arq.br."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quem tem acesso aos meus dados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Apenas os parceiros essenciais para o funcionamento do Serviço: • Anthropic (Claude API): recebe imagens das pranchas para análise com IA. • Stripe: processa pagamentos (não armazenamos dados de cartão). • Supabase: banco de dados do perfil do usuário (criptografado). • Google: autenticação OAuth (nome, e-mail, foto). Não vendemos dados. Seus PDFs não são usados para treinar modelos de IA."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais são meus direitos sobre meus dados (LGPD)?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Em conformidade com a LGPD, você tem direito a: • Acessar seus dados pessoais • Corrigir dados incorretos ou incompletos • Solicitar exclusão de conta e todos os dados • Portabilidade dos dados • Revogar consentimento de marketing a qualquer momento Para exercer esses direitos, envie um e-mail para contato@ai.arq.br."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quais dados pessoais são coletados?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "• Via Google: nome, e-mail e foto de perfil • Via cadastro: nome completo, WhatsApp, empresa, área de atuação e cargo (CPF/CNPJ só antes do 1º pagamento, pro recibo — no beta o uso é grátis, sem CPF) • Via uso: Arquivos enviados — PDF, DWG e DXF (armazenados por até 90 dias em storage criptografado, excluídos automaticamente) e histórico de projetos • Via pagamento: processado pelo Stripe — não armazenamos dados de cartão Consulte nossa Política de Privacidade para detalhes completos."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Por que vocês não pedem CPF no cadastro?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Durante o beta, todos os projetos são grátis e você não precisa de CPF/CNPJ pra usar. CPF/CNPJ é pedido só antes do 1º pagamento — precisamos pra emitir o recibo da transação. Quem nunca vai pagar (só usa o grátis) nunca precisa preencher. No checkout do Stripe (cartão) o sistema confere se o CPF/CNPJ está preenchido no seu perfil. Se não estiver, abre uma janelinha pra você informar antes do pagamento."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O processamento falhou. O que faço?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Verifique os seguintes pontos: • Os arquivos estão em formato DXF, DWG ou PDF? • Dica: nomear as pranchas ajuda, mas não é obrigatório (você classifica cada uma na tela). • O arquivo abre normalmente no seu computador (não está corrompido)? • A resolução é adequada (mínimo 150 DPI, ideal 300 DPI)? Se o problema persistir, envie os arquivos para contato@ai.arq.br e analisaremos o caso."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como tirar dúvidas ou entrar em contato?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Pra dúvidas sobre a sua planilha (por que tem X m de Y, qual item é isso, etc.), use o chat com IA que aparece abaixo do botão de download após o processamento terminar. A IA lê sua planilha, busca os itens e responde em segundos, citando a fonte (layer CAD, observação, etc.). Pra assuntos administrativos (pagamento, cadastro, exclusão de conta), envie e-mail pra contato@ai.arq.br. Respondemos em até 48 horas úteis."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Como excluir minha conta?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Envie um e-mail para contato@ai.arq.br solicitando a exclusão da conta. Seus dados pessoais serão removidos em até 15 dias. Para limpar os dados armazenados localmente no navegador (localStorage), acesse as configurações do seu navegador e limpe os dados do site ai.arq.br."
       }
     }
   ]
