@@ -227,7 +227,30 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
     if not results:
         return
     try:
-        payload = json.dumps({"v": 1, "pages": results}, ensure_ascii=False)
+        # 🪤 A coluna do log corta em 2.000 caracteres. Despejar o dict inteiro
+        # (que traz nomes de camada, contagens etc.) fazia justamente os projetos
+        # GRANDES — mais páginas, JSON mais longo — serem truncados. E são eles a
+        # evidência que interessa: em 30/07 os 3 jobs do cliente Walter, os únicos
+        # com CAD do MESMO projeto pra comparar, estavam todos cortados em 2000.
+        # Agora grava só o que decide se o leitor vetorial sai da sombra.
+        def _resumo(r: dict) -> dict:
+            keep = ("file", "page", "scale", "scale_src", "n_rooms",
+                    "rooms_m2", "envelope_m2", "skip", "err")
+            d = {k: r[k] for k in keep if r.get(k) is not None}
+            if isinstance(d.get("file"), str):
+                d["file"] = d["file"][:34]
+            return d
+
+        _tot = 0.0
+        for r in results:
+            try:
+                _tot += float(r.get("rooms_m2") or 0)
+            except (TypeError, ValueError):
+                pass
+        payload = json.dumps({"v": 2, "n": len(results),
+                              "rooms_m2_total": round(_tot, 1),
+                              "pages": [_resumo(r) for r in results]},
+                             ensure_ascii=False)
         log_fn("pdfvec:shadow", payload[:2000], job_id, severity="info")
         print(f"[pdfvec] shadow {job_id}: {len(results)} página(s) medida(s)")
     except Exception as e:
