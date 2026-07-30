@@ -5683,6 +5683,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 f"cota/quadro pra medir). Ela entra como BASE pros itens de área — confira antes de orçar."
             ]
             print(f"[area-informada] job={job_id}: usando área do cliente {_uta} m² (planta sem medição)")
+        elif not (project_data.total_area or 0):
+            # 🚨 63% dos projetos concluídos terminam SEM área total (47% dos com
+            # CAD, 76% dos só-PDF — medido em 30/07). A área sai UNICAMENTE da IA
+            # lendo o quadro de áreas da prancha; não há cálculo geométrico por
+            # trás. Quando não acha, o cliente recebia a planilha em SILÊNCIO: sem
+            # saber que faltou a base dos itens de área, e sem saber que podia
+            # informar a metragem. Agora ele sabe e tem o que fazer.
+            project_data.warnings = (project_data.warnings or []) + [
+                "⚠ Não encontramos a área total do projeto — a prancha não trazia um quadro "
+                "de áreas legível. Os itens medidos em m² saíram sem essa base de conferência, "
+                "então confira com atenção. Pra resolver: reenvie informando a área total no "
+                "campo do envio, ou mande também a prancha que tem o quadro de áreas."
+            ]
+            print(f"[area-ausente] job={job_id}: sem área total e sem área informada")
 
         # ── HONESTIDADE DE ÁREA (regra dura nº1) — helper _apply_area_honesty ──
         # Vision (PDF) às vezes CHUTA metragem numa planta sem cota ("Forro Sala 52 m²")
