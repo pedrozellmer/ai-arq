@@ -5616,9 +5616,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
         partial_failure = bool(partial_errors)
         if partial_failure:
             _falhos = "; ".join(e.split(":")[0] for e in partial_errors)
-            _aviso_cob = (f"⚠ {len(partial_errors)} prancha(s)/arquivo(s) falharam e NÃO "
-                          f"entraram nesta planilha — ela pode estar INCOMPLETA. "
-                          f"Reprocesse (grátis) pra tentar completar. Faltaram: {_falhos[:280]}")
+            # 🪤 "Reprocesse (grátis)" é conselho ERRADO quando o que falhou foi um
+            # DWG que não converte: reprocessar roda o MESMO arquivo no MESMO
+            # conversor e falha igual. Foi o que fez o cliente Thalison (29/07)
+            # reenviar 2x e desistir da prancha. Só sugere reprocessar quando a
+            # falha for de prancha (pode ter sido soluço da IA); quando for DWG,
+            # o caminho é mandar o arquivo em DXF.
+            if _dwg_sem_irmao and not (sheet_errors or dxf_errors):
+                _saida = ("Reprocessar não resolve — o conversor vai falhar igual. "
+                          "Abra no seu CAD e salve como DXF, e suba o DXF aqui.")
+            elif _dwg_sem_irmao:
+                _saida = ("Pras pranchas, reprocessar (grátis) pode completar. "
+                          "Pro DWG que não abriu, reprocessar não resolve: salve como "
+                          "DXF no seu CAD e suba o DXF.")
+            else:
+                _saida = "Reprocessar é grátis e pode completar."
+            _aviso_cob = (f"⚠ {len(partial_errors)} prancha(s)/arquivo(s) não entraram nesta "
+                          f"planilha — ela pode estar INCOMPLETA. {_saida} "
+                          f"Faltaram: {_falhos[:280]}")
             project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [_aviso_cob]
 
         # Aviso de xref/estéril por-arquivo (independe de falha parcial): orienta o
@@ -5906,9 +5921,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if _pe and not is_complement and not _is_reproc:
                 _aviso_html = ""
                 if partial_failure:
+                    # 🪤 Mesma correção do aviso na tela: não sugerir reprocesso quando
+                    # o que falhou foi DWG que não converte — reprocessar falha igual.
+                    _rep = ("" if _dwg_sem_irmao
+                            else " Reprocessar é grátis e tenta completar.")
                     _aviso_html = (f"<br><br><b>&#9888; Atenção:</b> {len(partial_errors)} prancha(s) "
-                                   f"falharam no processamento e podem não ter entrado — a planilha "
-                                   f"pode estar incompleta. Reprocessar é grátis e tenta completar.")
+                                   f"não entraram — a planilha pode estar incompleta.{_rep}")
                 # DWG que não abriu: o cliente PRECISA saber, senão ele acha que o
                 # resultado fraco é o normal do produto. Caso Walter 29/07 — mandou
                 # 1 DWG + 7 PDF, o DWG não converteu, e o email não dizia uma palavra.
