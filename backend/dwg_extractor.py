@@ -719,6 +719,22 @@ def _find_oda_converter() -> Optional[str]:
     return None
 
 
+# Motivo da última falha de conversão, por nome de arquivo. Preenchido em
+# convert_dwg_to_dxf e lido por main.py via dwg_failure_reason() — serve pra
+# mensagem de erro dizer a verdade em vez de listar hipóteses.
+_FALHA_MOTIVO: dict = {}
+
+
+def dwg_failure_reason(dwg_path: str) -> str:
+    """Por que este DWG não converteu: 'truncado' ou '' (não classificado).
+
+    'truncado' = o arquivo chegou incompleto/corrompido (o leitor bateu no fim do
+    arquivo antes do esperado). O conselho certo é reabrir no CAD e salvar de
+    novo — NÃO é 'exporte pra DXF', que não resolve arquivo quebrado.
+    """
+    return _FALHA_MOTIVO.get(os.path.basename(str(dwg_path)), "")
+
+
 def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
     """Attempt to convert a DWG file to DXF using ODA File Converter.
 
@@ -819,6 +835,16 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         except Exception:
             err_content = ""
         logger.warning("ODA gerou .dxf.err (DWG inválido/corrompido): %s", err_content)
+        # Classifica a causa pra main.py dar o conselho CERTO em vez de chutar
+        # "versão nova do AutoCAD ou objetos especiais" — que foi o que o cliente
+        # Thalison leu em 29/07 quando o problema real era arquivo INCOMPLETO
+        # (ODA: "Unexpected end of file"). Conselho errado = ele reenviou o mesmo
+        # arquivo 2x e desistiu da prancha.
+        _low_err = (err_content or "").lower()
+        if ("unexpected end of file" in _low_err
+                or "invalid system section page map" in _low_err
+                or "premature end" in _low_err):
+            _FALHA_MOTIVO[os.path.basename(dwg_path)] = "truncado"
         # 🪤 Sem isto a CAUSA se perde: o .err mora num tempdir que o Render apaga,
         # e o _oda_log.txt (o que /api/debug/oda-log devolve) é escrito ANTES desta
         # checagem. Resultado: "DWG não converteu" sem nunca dizer por quê — caso

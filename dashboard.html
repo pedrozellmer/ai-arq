@@ -672,11 +672,14 @@
             <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100 text-red-500 mb-6">
               <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
             </div>
-            <h2 class="text-xl font-bold text-gray-900 mb-2">Erro no processamento</h2>
-            <p id="error-message" class="text-sm text-gray-500 mb-8">Ocorreu um erro inesperado. Tente novamente.</p>
+            <h2 class="text-xl font-bold text-gray-900 mb-4">N&atilde;o conseguimos processar</h2>
+            <!-- whitespace-pre-line: a mensagem do backend vem com quebras de linha e
+                 tópicos numerados. Sem isso o navegador colapsa tudo num paredão de
+                 texto centralizado que ninguém lê. (Pedro 29/07) -->
+            <p id="error-message" class="text-sm text-gray-600 leading-relaxed mb-8 text-left whitespace-pre-line">Ocorreu um erro inesperado.</p>
 
             <button id="btn-retry" class="w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition flex items-center justify-center gap-2">
-              Tentar Novamente
+              Enviar outro arquivo
             </button>
           </div>
         </div>
@@ -2281,6 +2284,9 @@
   // navegador (marcadores AEC_VARS/AEC_OVERRIDES ficam em UTF-16 no DWG) e avisa NA
   // HORA que escolhe o arquivo. Não bloqueia — só alerta. (Pedro 15/07: caso forro.)
   const DWG_AEC_WARNED = new Set();
+  // Acumula os AEC detectados e dispara UM aviso só (ver checkDwgAecAndWarn).
+  let _aecHits = [];
+  let _aecToastTimer = null;
 
   function _bytesIndexOf(hay, needle) {
     outer: for (let i = 0; i <= hay.length - needle.length; i++) {
@@ -2319,12 +2325,20 @@
         }
       }
       if (!hit) return;
-      const msg = `⚠ "${file.name}" é um arquivo do AutoCAD MEP/Architecture (objetos inteligentes). ` +
-        `Nossos conversores — e o "Salvar como DXF" comum — não abrem esse tipo direto. Pra medir de verdade: ` +
-        `no AutoCAD rode o comando EXPORTTOAUTOCAD, salve como DXF 2013 e suba o DXF. ` +
-        `(Pode subir mesmo assim — mas pode não medir.)`;
-      if (window.toast) window.toast.warn(msg, { duration: 0 });
-      else setTimeout(() => window.toast?.warn(msg, { duration: 0 }) || console.warn(msg), 500);
+      // Um aviso SÓ, mesmo com vários arquivos AEC. Antes disparava um toast por
+      // arquivo, cada um com o passo a passo inteiro — 2 arquivos = 2 paredões de
+      // texto empilhados no canto da tela, e ninguém lê. (Pedro 29/07)
+      _aecHits.push(file.name);
+      clearTimeout(_aecToastTimer);
+      _aecToastTimer = setTimeout(() => {
+        const n = _aecHits.length;
+        const quais = n === 1 ? `"${_aecHits[0]}"` : `${n} arquivos`;
+        const msg = `⚠ ${quais} ${n === 1 ? 'é' : 'são'} do AutoCAD MEP/Architecture — `
+          + `pode não medir. Rode EXPORTTOAUTOCAD no CAD e mande o DXF. `
+          + `Veja o passo a passo no guia de exportação abaixo.`;
+        if (window.toast) window.toast.warn(msg, { duration: 0 });
+        else setTimeout(() => window.toast?.warn(msg, { duration: 0 }) || console.warn(msg), 500);
+      }, 400);
     } catch (e) {
       // Falha de leitura → não opina, fluxo segue normal.
       console.warn('Não consegui avaliar objetos AEC do DWG:', e);
@@ -3310,7 +3324,13 @@
   //  RETRY
   // ══════════════════════════════════════════════
   btnRetry.addEventListener('click', () => {
+    // 🪤 LIMPA a seleção. Antes só voltava pra tela de envio com o arquivo que
+    // acabou de falhar ainda selecionado — o cliente Thalison (29/07) mandou o
+    // MESMO DWG quebrado 2x e desistiu da prancha. Se o arquivo é o problema,
+    // reenviá-lo não pode ser o caminho mais fácil da tela.
+    selectedFiles = [];
     currentJobId = null;
+    renderFiles();
     showState(stateUpload);
   });
 

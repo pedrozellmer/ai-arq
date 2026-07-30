@@ -4085,34 +4085,57 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     arquivos = ', '.join(dwg_failed)
                     # Aviso PRECISO quando confirmamos objetos AEC (AutoCAD MEP/Architecture)
                     # no binário — em vez do genérico "costuma acontecer".
+                    # 3 causas DIFERENTES, cada uma com uma saída diferente. Antes as
+                    # três recebiam o mesmo texto de 12 linhas listando hipóteses — o
+                    # cliente Thalison (29/07) leu "versão nova ou objetos especiais"
+                    # quando o arquivo dele estava INCOMPLETO, reenviou o mesmo arquivo
+                    # 2x e desistiu da prancha. Mensagem curta, em tópicos, 1 saída só.
+                    try:
+                        from dwg_extractor import dwg_failure_reason as _motivo_falha
+                    except Exception:
+                        _motivo_falha = lambda _p: ""
+                    _truncados = [n for n in dwg_failed if _motivo_falha(n) == "truncado"]
+
                     if _aec_failed:
-                        _abre = (
-                            f"⚠ Confirmado: {', '.join(_aec_failed)} é um arquivo do AutoCAD "
-                            f"MEP/Architecture, com 'objetos inteligentes' (AEC). Nenhum conversor "
-                            f"automático abre esse tipo direto — nem o nosso, nem o 'Salvar como DXF' "
-                            f"comum. NÃO é defeito do seu arquivo, é a natureza dele.\n\n")
+                        msg = (
+                            f"Não conseguimos medir: {', '.join(_aec_failed)}\n\n"
+                            f"É um arquivo do AutoCAD MEP/Architecture. Ele guarda paredes e "
+                            f"móveis como \"objetos inteligentes\", que nenhum conversor abre "
+                            f"direto — nem o \"Salvar como DXF\" comum. Não é defeito do seu "
+                            f"arquivo.\n\n"
+                            f"Como resolver, em 3 passos:\n"
+                            f"1. No AutoCAD, com o arquivo aberto, digite EXPORTTOAUTOCAD e Enter\n"
+                            f"2. Na janela que abrir, escolha a versão 2013 e confirme — ele cria "
+                            f"um arquivo novo (o seu original não é alterado)\n"
+                            f"3. Abra esse arquivo novo e salve como DXF. Suba o DXF aqui\n\n"
+                            f"Não tem o AutoCAD Architecture? Mande o PDF vetorial da prancha "
+                            f"(plotado com escala) — a gente mede pela geometria."
+                        )
+                    elif _truncados:
+                        msg = (
+                            f"O arquivo chegou incompleto: {', '.join(_truncados)}\n\n"
+                            f"O leitor de CAD encontrou o fim do arquivo antes do esperado — ou "
+                            f"seja, ele está truncado ou corrompido. Reenviar o mesmo arquivo vai "
+                            f"dar no mesmo.\n\n"
+                            f"Como resolver:\n"
+                            f"1. Abra o arquivo no seu CAD e confira se abre inteiro\n"
+                            f"2. Salve de novo (Salvar Como), de preferência em DXF\n"
+                            f"3. Suba o arquivo novo aqui\n\n"
+                            f"Se ele também não abrir no seu CAD, procure a última versão salva "
+                            f"ou o backup automático (.bak) — o arquivo original se danificou."
+                        )
                     else:
-                        _abre = (
-                            f"⚠ Não conseguimos abrir automaticamente este(s) DWG: {arquivos}. "
-                            f"Isso costuma acontecer com DWG salvo numa versão muito recente do "
-                            f"AutoCAD, ou com objetos especiais (comum em projetos de incêndio, "
-                            f"hidráulica e elétrica feitos em software MEP). Não quer dizer que "
-                            f"seu arquivo está com defeito.\n\n")
-                    msg = (
-                        _abre +
-                        f"📋 COMO RESOLVER (arquivo do AutoCAD Architecture / MEP):\n"
-                        f"Esses desenhos costumam ter 'objetos especiais' (proxy) que o "
-                        f"'Salvar como DXF' comum NÃO converte. O jeito que resolve:\n"
-                        f"1. Abra o arquivo no AutoCAD\n"
-                        f"2. Digite o comando EXPORTTOAUTOCAD (ou _AECEXPORTTOAUTOCAD) e Enter — "
-                        f"isso transforma os objetos especiais em linhas comuns\n"
-                        f"3. No arquivo gerado, Arquivo → Salvar Como → AutoCAD 2013 DXF (*.dxf)\n"
-                        f"4. Suba esse DXF aqui\n\n"
-                        f"📋 SE FOR DESENHO COMUM (sem objetos especiais):\n"
-                        f"Salvar Como → AutoCAD 2013 DXF já basta.\n\n"
-                        f"💡 ALTERNATIVA mais rápida: se você já plotou esse desenho em PDF "
-                        f"COM escala/carimbo, mande o PDF — a gente mede pela geometria vetorial."
-                    )
+                        msg = (
+                            f"Não conseguimos abrir: {arquivos}\n\n"
+                            f"O conversor não reconheceu o arquivo. Não quer dizer que ele esteja "
+                            f"com defeito — pode ser uma versão de DWG que não lemos ainda.\n\n"
+                            f"Como resolver:\n"
+                            f"1. Abra o arquivo no seu CAD\n"
+                            f"2. Salvar Como → DXF (versão 2013)\n"
+                            f"3. Suba o DXF aqui\n\n"
+                            f"O DXF é o formato que a gente mede melhor. Se preferir, o PDF "
+                            f"vetorial da prancha também serve — mas aí sai como estimativa."
+                        )
                     # COMPLEMENTO (/add-file) que falha NÃO pode derrubar o projeto que
                     # já funcionava. O add-file preserva os itens antigos (limpa só no
                     # sucesso). Se este job já tinha resultado, restaura 'done' + avisa —
