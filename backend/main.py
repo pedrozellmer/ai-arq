@@ -3551,6 +3551,27 @@ def _process_job_throttled(*args, **kwargs):
         process_job(*args, **kwargs)
 
 
+def _job_medidos_count(job_id: str) -> int:
+    """Quantos itens MEDIDOS (confidence=confirmado) este job já tem salvos.
+
+    Retorna -1 se não deu pra saber (soluço do banco). Usado pela trava
+    anti-perda do complemento: refazer um projeto que já mediu, usando só PDF,
+    trocaria medição por estimativa — proibido pela regra dura nº1.
+    """
+    try:
+        import urllib.request as _urm
+        _q = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
+              f"&confidence=eq.confirmado&select=id")
+        _r = _urm.Request(_q, method="GET")
+        _r.add_header("apikey", SUPABASE_KEY)
+        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _resp = _urm.urlopen(_r, timeout=10)
+        return len(_json.loads(_resp.read().decode("utf-8")))
+    except Exception as _e:
+        print(f"[add-file] contagem de medidos falhou: {_e}")
+        return -1
+
+
 def _complement_base_has_items(job_id: str) -> bool:
     """Este job já tem itens salvos (= planilha anterior viva)?
 
@@ -3969,8 +3990,22 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         for _p in file_paths:
             try:
                 _fname = os.path.basename(_p)
-                if _supabase_storage_upload_prancha(_p, job_id, _fname):
+                _ok_up = _supabase_storage_upload_prancha(_p, job_id, _fname)
+                if not _ok_up:
+                    # 2ª tentativa: o timeout é de 60s e CAD grande passa perto
+                    # disso. Falhar aqui não interrompe o processamento — mas deixa
+                    # o projeto SEM o original, e aí um complemento futuro refaz sem
+                    # o CAD e apaga a medição (caso Walter 30/07).
+                    _ok_up = _supabase_storage_upload_prancha(_p, job_id, _fname)
+                if _ok_up:
                     _n_ok += 1
+                elif _p.lower().endswith((".dwg", ".dxf")):
+                    # CAD que não subiu é grave e era INVISÍVEL: só ia pro log do
+                    # Render. Agora aparece no painel.
+                    _log_error("storage:cad-nao-guardado",
+                               f"CAD não subiu pro Storage: {_fname} — complemento ou "
+                               f"reprocesso deste projeto não vai conseguir medir de novo",
+                               job_id, severity="warning")
             except Exception as _e:
                 print(f"[upload-pranchas] erro {os.path.basename(_p)}: {_e}")
         print(f"[upload-pranchas] {_n_ok}/{len(file_paths)} no Storage "
@@ -12551,6 +12586,22 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
                  if not (p.lower().endswith(".dwg")
                          and os.path.splitext(os.path.basename(p))[0].lower() in _dxf_stems)]
         file_paths = _cads
+
+    # 🚨 TRAVA ANTI-PERDA (caso Walter, 30/07/2026). O complemento refaz o projeto
+    # a partir do que está no STORAGE. Se o CAD original não subiu (o upload tem
+    # timeout de 60s e falha em SILÊNCIO), sobram só os PDFs — e o passo final
+    # APAGA os itens antigos antes de gravar os novos. Aconteceu de verdade: um
+    # projeto com 40 itens MEDIDOS virou 57 estimados, sem erro nenhum na tela.
+    # Regra dura nº1: nunca trocar medição por estimativa pelas nossas costas.
+    if not _cads:
+        _medidos_antes = _job_medidos_count(job_id)
+        if _medidos_antes > 0:
+            raise HTTPException(409, (
+                f"Esse projeto tem {_medidos_antes} itens medidos do CAD, e o arquivo CAD "
+                f"original não está mais guardado aqui. Refazer só com PDF apagaria essa "
+                f"medição e deixaria tudo como estimativa. Anexe o DXF (ou DWG) junto que "
+                f"a gente refaz medindo — seus arquivos novos já ficaram salvos."
+            ))
 
     # NÃO apaga os itens antigos aqui: a limpeza acontece no _persist (só no
     # SUCESSO do reprocesso). Se o CAD falhar (não-convertível/0 itens), a
