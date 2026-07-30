@@ -4074,6 +4074,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
         # Converter DWG→DXF se necessário
         dxf_paths = []
+        # (caminho, fator_para_metros) das pranchas DXF que a extração leu com
+        # sucesso — alimenta a SOMBRA de montagem de cômodos no fim do job.
+        _dxfrooms_units: list = []
         dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
         _aec_failed = []  # DWGs que falharam E são AutoCAD MEP/Architecture (objetos AEC) → aviso preciso
         if cad_paths:
@@ -4434,6 +4437,15 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # a IA marcar. Só REBAIXA pra estimado — nunca promove. Fecha o
                     # furo de "a IA carimba medido num número que não dá pra confiar".
                     _dxf_sem_procedencia = _extraction_has_quality_caveat(extraction.metadata)
+                    # Guarda (caminho, fator) pra SOMBRA de montagem de cômodos —
+                    # roda depois do done, fora do caminho do cliente. O fator tem
+                    # que ser o MESMO que a extração real usou (já validado pelas
+                    # cotas), senão a sombra mede noutra escala e não serve de nada.
+                    try:
+                        _dxfrooms_units.append(
+                            (dxf_path, float(extraction.metadata.get("fator_para_metros") or 1.0)))
+                    except (TypeError, ValueError):
+                        pass
                     # Aviso ao usuário (não só rebaixar a cor): xref não-resolvido é a
                     # causa nº1 de "planilha só laranja" em CAD — o sinal existe na
                     # metadata mas antes morria no downgrade. Agora orienta a dar BIND
@@ -5854,6 +5866,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 shadow_measure_async(page_units, job_id, api_key, _log_error)
         except Exception as _sve:
             print(f"[pdfvec] shadow não iniciado: {_sve}")
+
+        # ── SHADOW: montagem de cômodos a partir do DXF (dxf_rooms_shadow.py) ──
+        # A área total falta em 63% dos projetos porque o motor só reconhece
+        # ambiente desenhado como polígono FECHADO — e quase ninguém desenha
+        # assim. O spike de 30/07 montou as faces a partir dos traços do DXF e
+        # chegou a 99% da área declarada na prancha de arquitetura (contra 33-43%
+        # do caminho do PDF). Aqui ele CALCULA e REGISTRA, sem entregar nada ao
+        # cliente — regra dura nº1: vira medição só com prova de vários projetos.
+        # DXFROOMS_SHADOW=0 desliga.
+        try:
+            if _dxfrooms_units:
+                from dxf_rooms_shadow import shadow_rooms_async
+                shadow_rooms_async(_dxfrooms_units, job_id, _log_error)
+        except Exception as _sre:
+            print(f"[dxfrooms] shadow não iniciado: {_sre}")
 
         # Email "planilha pronta" pro usuário (best-effort; falha não derruba o job)
         try:
