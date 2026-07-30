@@ -539,7 +539,11 @@ def _dim_displayed_number(doc, dim, measurement: float):
         return None
     stripped = raw.strip()
     if stripped == "" or "<>" in stripped:
-        return (measurement * _dim_effective_dimlfac(doc, dim), None)
+        # 🚨 AUTOMÁTICO: o número exibido É a medida geométrica formatada. Isso
+        # NÃO é evidência independente de escala — comparar "texto × geometria"
+        # aqui é circular e "prova" qualquer fator que se assuma. Serve pra
+        # CONFIRMAR, nunca pra CORRIGIR. (auto=True; ver caso marcenaria 30/07.)
+        return (measurement * _dim_effective_dimlfac(doc, dim), None, True)
     m = _DIM_TEXT_NUM_RE.match(stripped)
     if not m:
         return None
@@ -549,7 +553,8 @@ def _dim_displayed_number(doc, dim, measurement: float):
         return None
     suffix = m.group(2)
     scale = _DIM_TEXT_UNIT_SCALE.get(suffix.lower()) if suffix else None
-    return (value, scale)
+    # Número DIGITADO por quem desenhou = evidência independente da geometria.
+    return (value, scale, False)
 
 
 def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
@@ -597,15 +602,16 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
             shown = _dim_displayed_number(doc, dim, meas)
             if shown is None:
                 continue
-            value, explicit_scale = shown
+            value, explicit_scale, auto_text = shown
             if value <= 0:
                 continue
-            evidence.append((meas, value, explicit_scale))
+            evidence.append((meas, value, explicit_scale, auto_text))
 
         # Suporte por fator canônico: {fator: [comprimentos reais das cotas]}
         support: dict[float, list[float]] = {f: [] for f in _CANONICAL_METRIC_FACTORS}
         usable = 0
-        for meas, value, explicit_scale in evidence:
+        n_digitadas = 0   # cotas com número DIGITADO — a única prova independente
+        for meas, value, explicit_scale, auto_text in evidence:
             scales = (explicit_scale,) if explicit_scale is not None else (1.0, 0.01, 0.001)
             cand: dict[float, float] = {}
             for s in scales:
@@ -619,6 +625,8 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
             if not cand:
                 continue
             usable += 1
+            if not auto_text:
+                n_digitadas += 1
             for f, real_len in cand.items():
                 support[f].append(real_len)
 
@@ -662,7 +670,13 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
         # Contradição consistente: o detectado não se provou E existe UM ÚNICO
         # fator provado pelas cotas → correção honesta (cota é dado real do CAD).
         # Fator não-métrico detectado (imperial) nunca é corrigido — abstém.
-        if detected is not None and len(proven) == 1:
+        # 🚨 SÓ CORRIGE COM PROVA INDEPENDENTE (caso marcenaria, 30/07/2026).
+        # Cota com texto "<>" exibe a PRÓPRIA medida geométrica: comparar as duas
+        # é circular e "prova" qualquer fator. Numa prancha de marcenaria (mediana
+        # 40 cm) isso derrubou o $INSUNITS=cm do desenho e cravou METROS, porque
+        # 0,40 m ficou abaixo do piso de plausibilidade (0,5 m) e 40 m coube nele.
+        # Resultado: 346 KM de parede. Sem número digitado, no máximo confirma.
+        if detected is not None and len(proven) == 1 and n_digitadas >= _DIM_MIN_COTAS:
             novo = proven[0]
             n = len(support[novo])
             out.update({
