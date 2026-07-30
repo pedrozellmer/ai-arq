@@ -596,6 +596,55 @@ def _log_conversation(job_id: str, question: str, answer: str,
         urllib.request.urlopen(req, timeout=8)
     except Exception as e:
         print(f"[agent] log error: {e}")
+    # 🚨 O chat é o melhor detector de buraco do motor que a gente tem — e era
+    # CEGO. Em 21/07 um cliente reclamou de eletroduto faltando e a resposta
+    # explicou a causa raiz ("a planta não tem polilinha fechada"); ficou 9 dias
+    # numa tabela sem ninguém ler. Das 11 conversas de sempre, 3 eram falha real
+    # de medição, com job_id anexado. Agora isso vira alerta. (30/07/2026)
+    try:
+        _alerta_lacuna(job_id, question)
+    except Exception as _e:
+        print(f"[agent] alerta de lacuna falhou (nao-fatal): {_e}")
+
+
+# Sinais de que o cliente está APONTANDO UMA FALHA, não tirando dúvida.
+_LACUNA_RE = re.compile(
+    r"(n[ãa]o\s+(tem|veio|apareceu|consta|calculou|mediu|bateu)|"
+    r"falt(a|ou|aram|ando)|sem\s+(quantitativo|medi[çc][ãa]o|quantidade)|"
+    r"(t[áa]|est[áa])\s+(em\s+branco|zerad|vazi|errad)|"
+    r"n[ãa]o\s+apresentou|incomplet|"
+    r"(pq|por\s*que|porqu[êe])\s+(n[ãa]o|nao))",
+    re.IGNORECASE,
+)
+
+
+def _alerta_lacuna(job_id: str, question: str) -> None:
+    """Avisa o dono quando o cliente aponta falta de medição no chat.
+
+    Best-effort e silencioso: nunca pode atrapalhar a resposta ao cliente.
+    Deduplica por job (1 alerta por projeto) pra não virar spam em conversa
+    longa — o objetivo é sinalizar o projeto, não cada frase.
+    """
+    if not question or not _LACUNA_RE.search(question):
+        return
+    try:
+        from main import _notify_admin, _email_auto_registrar, _email_auto_ja_enviado, NOTIFY_EMAIL
+    except Exception:
+        return
+    _ref = f"chat:{job_id}"
+    if _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_chat_lacuna", ref=_ref):
+        return
+    import html as _h
+    _corpo = (
+        f"<b>Um cliente apontou falta de medição pelo chat.</b><br><br>"
+        f"<b>Pergunta:</b> {_h.escape(question[:400])}<br>"
+        f"<b>Projeto:</b> {_h.escape(job_id)}<br><br>"
+        f"Isso costuma ser buraco do motor, não dúvida do cliente — vale olhar "
+        f"o que a planilha deixou de medir nesse projeto.<br><br>"
+        f'<a href="https://ai.arq.br/admin.html#projetos">Abrir no painel</a>'
+    )
+    if _notify_admin(f"Chat: cliente diz que faltou medição — {job_id}", _corpo):
+        _email_auto_registrar(NOTIFY_EMAIL, "alerta_chat_lacuna", ref=_ref)
 
 
 def ask(job_id: str, question: str, max_iterations: int = 8,
