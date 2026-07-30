@@ -473,13 +473,18 @@ function smartBack() {
       </div>
       <div>
         <p class="font-bold text-gray-900">Pergunte sobre o seu quantitativo</p>
-        <p class="text-xs text-gray-500">Tire dúvidas da sua planilha.</p>
+        <p class="text-xs text-gray-500">Tire d&uacute;vidas &mdash; ou aponte o que faltou. A gente lê.</p>
       </div>
     </div>
     <div id="chat-msgs" class="px-5 py-4 space-y-3 max-h-96 overflow-y-auto text-sm">
       <div class="text-gray-500">Oi! 👋 Posso te ajudar a entender a sua planilha — só não faço preço (isso é com o orçamentista). Pergunte à vontade:</div>
     </div>
     <div id="chat-chips" class="px-5 pb-1 flex flex-wrap gap-2">
+      <!-- 🪤 Este 1º chip nasceu do uso REAL (30/07): das 11 conversas do chat, 3
+           eram "faltou X na planilha" — a pergunta mais comum, e a mais valiosa
+           pra gente. O cliente tinha que descobrir sozinho que podia apontar
+           isso aqui. Agora é convite explícito, e dispara alerta pro dono. -->
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition">Faltou um item na minha planilha</button>
       <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Por que tem item "estimativa"?</button>
       <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Como ter mais itens medidos?</button>
       <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Resume as disciplinas do projeto</button>
