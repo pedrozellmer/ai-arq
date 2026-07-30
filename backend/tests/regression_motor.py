@@ -34,7 +34,14 @@ _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
 FIXTURES = os.environ.get("MOTOR_FIXTURES_DIR", r"C:\Users\admin\Desktop\arq")
-GOLDEN_PATH = os.path.join(_BACKEND, "tests", "golden_motor.json")
+# 🚨 O gabarito mora JUNTO das pranchas, FORA do repositório (30/07/2026).
+# Ele é derivado de projetos de clientes: guardava 25 nomes de ambiente
+# ("ABRIGO DE GÁS", "ADM - GER.", "ALMOXARIFADO DE A&B") e 13 códigos de
+# prancha de 3 projetos reais — e o repo `ai-arq` é PÚBLICO. Desenho nunca foi
+# versionado; o gabarito, que descreve o desenho, também não pode ser.
+# Nossa política de privacidade promete não compartilhar projeto com terceiros.
+GOLDEN_PATH = os.environ.get("MOTOR_GOLDEN_PATH",
+                             os.path.join(FIXTURES, "golden_motor.json"))
 
 TOL_QTY = 0.01          # 1% em quantidades contínuas
 SANITY_SALA_MIN = 1.5   # m²

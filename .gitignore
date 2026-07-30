@@ -142,3 +142,8 @@ logo-opcao*.png
 # ────────────────────────────────────────────────────────────────
 _site/
 .github/.cache/
+
+# Gabarito da rede de regressao do motor — DERIVADO de projetos de clientes
+# (nomes de ambiente e codigos de prancha). Mora junto das pranchas, fora do
+# repo publico. Ver backend/tests/regression_motor.py (MOTOR_GOLDEN_PATH).
+backend/tests/golden_motor.json
