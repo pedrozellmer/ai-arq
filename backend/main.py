@@ -7278,15 +7278,32 @@ async def admin_blog_agenda(request: Request):
     Devolve só o necessário pro calendário — nunca o corpo dos posts.
     """
     _require_admin(request)
+    # 🪤 O container do Render é construído SÓ com a pasta backend/ (`COPY . .`
+    # com o contexto em backend/), então `../blog/posts.json` NÃO existe lá — a
+    # 1ª versão deste endpoint respondia 503 em produção e funcionava só local.
+    # Ordem: arquivo local (desenvolvimento) → repositório (produção).
     _p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "blog", "posts.json")
+    _raw = None
+    _erros = []
     try:
         with open(_p, "r", encoding="utf-8") as _f:
             _raw = _json.load(_f)
     except Exception as e:
+        _erros.append(f"local: {type(e).__name__}")
+    if _raw is None:
+        try:
+            import urllib.request as _urb
+            _u = ("https://raw.githubusercontent.com/pedrozellmer/ai-arq/"
+                  "main/blog/posts.json")
+            _req = _urb.Request(_u, headers={"User-Agent": "aiarq-admin"})
+            _raw = _json.loads(_urb.urlopen(_req, timeout=12).read().decode("utf-8"))
+        except Exception as e:
+            _erros.append(f"repo: {type(e).__name__}")
+    if _raw is None:
         # Falha explícita: o painel PRECISA distinguir "não consegui ler" de
         # "não há nada agendado" — foi essa confusão que gerou o alarme falso.
-        raise HTTPException(503, f"Não consegui ler a agenda do blog: {type(e).__name__}")
+        raise HTTPException(503, "Não consegui ler a agenda do blog (" + "; ".join(_erros) + ")")
     _posts = _raw.get("posts", _raw) if isinstance(_raw, dict) else _raw
     _out = []
     for _p2 in (_posts or []):
