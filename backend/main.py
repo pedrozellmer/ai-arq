@@ -6382,6 +6382,67 @@ async def debug_supa_log(request: Request, tail: int = 50):
         return {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
 
+@app.get("/api/debug/storage-limit")
+async def debug_storage_limit(request: Request, mb: int = 60):
+    """Descobre o limite REAL de upload do Storage sem usar cliente como cobaia.
+
+    Sobe um arquivo sintético de `mb` MB no bucket das pranchas e apaga em
+    seguida. Devolve OK ou o motivo exato da recusa (413 = passou do limite
+    global do projeto; timeout = lentidão, não limite).
+
+    Existe porque em 31/07 (caso Ana) 4 de 37 projetos com CAD estavam sem o
+    arquivo original e não dava pra saber se era o teto de 50 MB do plano Free
+    ou o timeout de 60s — os dois suspeitos empilhados. Restrito a admin.
+    """
+    _require_admin(request)
+    import tempfile, urllib.request, urllib.parse as _up
+    mb = max(1, min(600, int(mb)))
+    _t0 = time.time()
+    caminho = None
+    try:
+        # Conteúdo tipo DXF (texto repetido) pra o teste parecer o caso real:
+        # bytes aleatórios não comprimem, texto sim, e é texto que a gente sobe.
+        linha = b"  0\nLINE\n  8\nTESTE-DIAGNOSTICO\n 10\n0.0\n 20\n0.0\n"
+        with tempfile.NamedTemporaryFile(suffix=".dxf", delete=False) as fh:
+            caminho = fh.name
+            escrito = 0
+            alvo = mb * 1048576
+            bloco = linha * 2048
+            while escrito < alvo:
+                fh.write(bloco)
+                escrito += len(bloco)
+        tamanho_real = os.path.getsize(caminho) / 1048576.0
+        nome = "_diagnostico-limite.dxf"
+        ok = _supabase_storage_upload_prancha(caminho, "_diagnostico", nome)
+        resp = {
+            "tamanho_testado_mb": round(tamanho_real, 1),
+            "subiu": ok,
+            "motivo": None if ok else (_ULTIMA_FALHA_UPLOAD_PRANCHA or "não registrado"),
+            "segundos": round(time.time() - _t0, 1),
+        }
+        if ok:
+            # limpa na hora — diagnóstico não pode virar lixo cobrado no Storage
+            try:
+                key = f"_diagnostico/{_up.quote(nome)}"
+                req = urllib.request.Request(
+                    f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{key}",
+                    method="DELETE")
+                req.add_header("apikey", SUPABASE_KEY)
+                req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+                urllib.request.urlopen(req, timeout=30)
+                resp["apagado"] = True
+            except Exception as e:
+                resp["apagado"] = False
+                resp["erro_ao_apagar"] = f"{type(e).__name__}: {e}"
+        return resp
+    finally:
+        if caminho:
+            try:
+                os.unlink(caminho)
+            except Exception:
+                pass
+
+
 @app.get("/api/debug/dwg")
 async def debug_dwg(request: Request):
     """Diagnóstico do suporte DWG. Restrito a admin (revela paths do FS)."""
