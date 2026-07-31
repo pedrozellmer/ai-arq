@@ -7,7 +7,7 @@
    "keywords": "memorial descritivo de obra, modelo memorial descritivo, memorial descritivo pdf, memorial descritivo word, memorial descritivo arquitetura, NBR 15575, NBR 13532, PCI Caixa",
    "category": "Documentação",
    "publish_date": "2026-04-26",
-   "intro": "Todo arquiteto entrega memorial descritivo em algum momento — pra anexar no contrato com o cliente, pra mandar pro orçamentista cotar a obra, ou pra quem vai financiar o imóvel pelo banco. O problema é o tempo: redigir um memorial bem feito costuma tomar boa parte de um dia, e quase ninguém usa modelo padronizado. Resultado: cada projeto começa do zero, copy-paste de algum memorial antigo que pode estar desatualizado. Esse guia traz a estrutura completa, orientada pela NBR 15575 e pela tradição consolidada da NBR 13.532, exemplos práticos de redação por ambiente, e libera um modelo editável em PDF e DOCX pra você baixar agora — sem cadastro.",
+   "intro": "Todo arquiteto entrega memorial descritivo em algum momento — pra anexar no contrato com o cliente, pra mandar pro orçamentista cotar a obra, ou pra quem vai financiar o imóvel pelo banco. O problema é o tempo: redigir um memorial bem feito costuma tomar boa parte de um dia, e quase ninguém usa modelo padronizado. Resultado: cada projeto começa do zero, copy-paste de algum memorial antigo que pode estar desatualizado. Esse guia traz a estrutura completa, orientada pela NBR 15575 e pela tradição consolidada da antiga NBR 13.532, hoje substituída pela NBR 16636-2, exemplos práticos de redação por ambiente, e libera um modelo editável em PDF e DOCX pra você baixar agora — sem cadastro.",
    "sections": [
     {
      "h2": "Baixe o modelo agora (PDF + DOCX)",
@@ -19,7 +19,7 @@
     },
     {
      "h2": "O que a NBR 15575 mudou no memorial descritivo",
-     "body": "A ABNT NBR 15575 (Edificações habitacionais — Desempenho), em vigor desde 2013 e com revisão em 2021, ajudou a transformar o memorial descritivo de uma simples \"lista de materiais\" em um documento que precisa demonstrar o desempenho esperado dos sistemas construtivos.\n\nA norma estabelece parâmetros mínimos de desempenho pra cada sistema da edificação, entre eles:\n- Estrutura (com critérios de vida útil de projeto)\n- Vedações verticais (paredes — desempenho térmico e acústico)\n- Coberturas (estanqueidade e durabilidade)\n- Pisos (resistência mecânica e à abrasão)\n- Sistemas hidrossanitários (durabilidade e estanqueidade)\n- Sistemas elétricos (segurança e dimensionamento)\n\nNa prática, isso significa que o memorial precisa ir além do nome do material. Não basta dizer \"piso porcelanato\" — convém indicar qual classe de PEI atende ao tráfego previsto pra cada ambiente.\n\nO resultado é um memorial mais longo e detalhado do que o modelo antigo de poucas páginas. Mais trabalho, mas também mais clareza e proteção jurídica pro autor do projeto."
+     "body": "A ABNT NBR 15575 (Edificações habitacionais — Desempenho), publicada em 2008, em vigor desde 19/07/2013 e revisada em 2021, com Emenda 1 em 2024, ajudou a transformar o memorial descritivo de uma simples \"lista de materiais\" em um documento que precisa demonstrar o desempenho esperado dos sistemas construtivos.\n\nA norma estabelece parâmetros mínimos de desempenho pra cada sistema da edificação, entre eles:\n- Estrutura (com critérios de vida útil de projeto)\n- Vedações verticais (paredes — desempenho térmico e acústico)\n- Coberturas (estanqueidade e durabilidade)\n- Pisos (resistência mecânica e à abrasão)\n- Sistemas hidrossanitários (durabilidade e estanqueidade)\n- Sistemas elétricos (segurança e dimensionamento)\n\nNa prática, isso significa que o memorial precisa ir além do nome do material. Não basta dizer \"piso porcelanato\" — convém indicar qual classe de PEI atende ao tráfego previsto pra cada ambiente.\n\nO resultado é um memorial mais longo e detalhado do que o modelo antigo de poucas páginas. Mais trabalho, mas também mais clareza e proteção jurídica pro autor do projeto."
     },
     {
      "h2": "Estrutura padrão (10 seções)",
@@ -55,8 +55,8 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 15575:2021",
-     "description": "Edificações habitacionais — Desempenho (revisão 2021)"
+     "title": "ABNT NBR 15575-1:2024",
+     "description": "Edificações habitacionais — Desempenho — Parte 1: Requisitos gerais. Equivale à edição de 2021 com a Emenda 1 de 23/01/2024. A norma tem 6 partes e teve 1ª edição em 2008."
     },
     {
      "type": "norm",
@@ -65,8 +65,8 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 6118:2014",
-     "description": "Projeto de estruturas de concreto — Procedimento"
+     "title": "ABNT NBR 6118:2023",
+     "description": "Projeto de estruturas de concreto — Procedimento. 4ª edição, cancelou e substituiu a de 2014."
     },
     {
      "type": "norm",
@@ -80,7 +80,7 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 9050:2020",
+     "title": "ABNT NBR 9050:2020 (Versão Corrigida: 2021)",
      "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos (consolidação da NBR 9050:2015 com Emenda 1:2020)"
     },
     {
@@ -432,8 +432,8 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 10821-2:2017",
-     "description": "Esquadrias para edificações — Parte 2: Esquadrias externas — Requisitos e classificação"
+     "title": "ABNT NBR 10821-2:2023",
+     "description": "Esquadrias para edificações — Parte 2: Esquadrias externas — Requisitos e classificação. Edição de 2023; as Partes 1, 3, 4 e 5 seguem na edição de 2017."
     },
     {
      "type": "norm",
@@ -931,17 +931,17 @@
    "sources": [
     {
      "type": "norm",
-     "title": "ABNT NBR 6492:1994",
-     "description": "Representação de projetos de arquitetura — convenções gráficas. Foi revisada pela ABNT NBR 6492:2021."
+     "title": "ABNT NBR 6492:2021",
+     "description": "Representação de projetos de arquitetura. 2ª edição, de 16/06/2021; cancelou e substituiu a de 1994."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 13532:1995",
-     "description": "Elaboração de projetos de edificações — Arquitetura"
+     "title": "ABNT NBR 16636-2:2017",
+     "description": "Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — Parte 2: Projeto arquitetônico. Cancelou e substituiu a ABNT NBR 13532:1995."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 9050:2015 (Emenda 1:2020)",
+     "title": "ABNT NBR 9050:2020 (Versão Corrigida: 2021)",
      "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos — afeta o dimensionamento mostrado em planta. O texto consolidado com a Emenda 1 de 2020 é referido como NBR 9050:2020."
     },
     {
@@ -1071,11 +1071,11 @@
    "sections": [
     {
      "h2": "Por que o quantitativo errado vira atraso de obra",
-     "body": "Quantitativo é a lista numérica de tudo que a obra vai consumir: metros quadrados de revestimento, unidades de luminária, metros lineares de tubulação, sacos de cimento. É a base sobre a qual o orçamentista aplica preço unitário e BDI pra chegar no custo final.\n\nQuando o quantitativo erra, três coisas acontecem em sequência:\n\n1. O cliente aprova orçamento subdimensionado, achando que vai pagar X.\n2. Na obra, aparece item faltando ou quantidade maior que a prevista.\n3. Aditivo de contrato, briga com cliente, fornecedor esperando material que não chegou, pedreiro parado. Atraso.\n\nA ABNT NBR 12721:2006 (Avaliação de custos unitários de construção para incorporação imobiliária) e a NBR 13531:1995 (Elaboração de projetos de edificações — Atividades técnicas) tratam o levantamento de quantitativos como etapa formal do projeto, não improviso de canteiro. Aldo Dórea Mattos, na referência clássica \"Como Preparar Orçamentos de Obras\" (Oficina de Textos, 3ª ed., 2019), dedica o livro inteiro a mostrar que o erro de orçamento nasce cedo, no levantamento, e se propaga até o custo final.\n\nOs 5 erros abaixo são os que mais aparecem em obra residencial e comercial de pequeno e médio porte no Brasil."
+     "body": "Quantitativo é a lista numérica de tudo que a obra vai consumir: metros quadrados de revestimento, unidades de luminária, metros lineares de tubulação, sacos de cimento. É a base sobre a qual o orçamentista aplica preço unitário e BDI pra chegar no custo final.\n\nQuando o quantitativo erra, três coisas acontecem em sequência:\n\n1. O cliente aprova orçamento subdimensionado, achando que vai pagar X.\n2. Na obra, aparece item faltando ou quantidade maior que a prevista.\n3. Aditivo de contrato, briga com cliente, fornecedor esperando material que não chegou, pedreiro parado. Atraso.\n\nA ABNT NBR 12721:2006 (Avaliação de custos unitários de construção para incorporação imobiliária) e a NBR 16636-1:2017 (Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos), que substituiu a antiga NBR 13531:1995, tratam o levantamento de quantitativos como etapa formal do projeto, não improviso de canteiro. Aldo Dórea Mattos, na referência clássica \"Como Preparar Orçamentos de Obras\" (Oficina de Textos, 3ª ed., 2019), dedica o livro inteiro a mostrar que o erro de orçamento nasce cedo, no levantamento, e se propaga até o custo final.\n\nOs 5 erros abaixo são os que mais aparecem em obra residencial e comercial de pequeno e médio porte no Brasil."
     },
     {
      "h2": "Erro 1: Confiar em planta antiga sem revisar",
-     "body": "É o erro mais comum e o mais óbvio. O projeto passou por várias revisões com o cliente, e o quantitativo foi levantado numa versão intermediária. Mas o que vai pra obra é a versão final. Resultado: parede que mudou de lugar, ambiente que foi compartimentado, banheiro que virou suíte — nada disso entrou no levantamento.\n\nExemplo concreto\n\nApartamento de 95 m² teve cozinha integrada à sala no projeto inicial. O cliente, na revisão final, pediu pra fechar a cozinha de novo com parede de gesso acartonado e porta de correr de vidro. O quantitativo continuou contando \"sala única\". Na obra, faltou: placa de gesso, perfil metálico, a porta de correr de vidro e o revestimento cerâmico que voltou pra cozinha. Resultado: aditivo de orçamento e dias a mais no cronograma — tudo por causa de uma revisão que não chegou ao levantamento.\n\nComo evitar\n\n- Trabalhe sempre com a versão mais recente datada e nomeada (ex: PROJETO_ARQ_R07_2026-07-15.dwg).\n- Antes de fechar o quantitativo, faça uma reunião final de congelamento de projeto com o cliente, com ata assinada. A NBR 13531:1995 organiza o projeto em fases justamente pra que cada versão seja formalmente fechada antes de avançar.\n- Quando houver mudança aprovada depois do congelamento, refaça o trecho afetado do quantitativo. Não vale ajustar de cabeça.\n- Numere e date cada revisão na própria planta (selo do desenho)."
+     "body": "É o erro mais comum e o mais óbvio. O projeto passou por várias revisões com o cliente, e o quantitativo foi levantado numa versão intermediária. Mas o que vai pra obra é a versão final. Resultado: parede que mudou de lugar, ambiente que foi compartimentado, banheiro que virou suíte — nada disso entrou no levantamento.\n\nExemplo concreto\n\nApartamento de 95 m² teve cozinha integrada à sala no projeto inicial. O cliente, na revisão final, pediu pra fechar a cozinha de novo com parede de gesso acartonado e porta de correr de vidro. O quantitativo continuou contando \"sala única\". Na obra, faltou: placa de gesso, perfil metálico, a porta de correr de vidro e o revestimento cerâmico que voltou pra cozinha. Resultado: aditivo de orçamento e dias a mais no cronograma — tudo por causa de uma revisão que não chegou ao levantamento.\n\nComo evitar\n\n- Trabalhe sempre com a versão mais recente datada e nomeada (ex: PROJETO_ARQ_R07_2026-07-15.dwg).\n- Antes de fechar o quantitativo, faça uma reunião final de congelamento de projeto com o cliente, com ata assinada. A NBR 16636-1:2017 organiza o projeto em fases justamente pra que cada versão seja formalmente fechada antes de avançar.\n- Quando houver mudança aprovada depois do congelamento, refaça o trecho afetado do quantitativo. Não vale ajustar de cabeça.\n- Numere e date cada revisão na própria planta (selo do desenho)."
     },
     {
      "h2": "Erro 2: Item de instalação esquecido entre disciplinas",
@@ -1115,8 +1115,8 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 13531:1995",
-     "description": "Elaboração de projetos de edificações — Atividades técnicas. Estabelece as fases formais do projeto e o fechamento de cada versão."
+     "title": "ABNT NBR 16636-1:2017",
+     "description": "Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — Parte 1: Diretrizes e terminologia. Cancelou e substituiu a ABNT NBR 13531:1995."
     },
     {
      "type": "norm",
@@ -1130,7 +1130,7 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 9050:2015 (Emenda 1:2020)",
+     "title": "ABNT NBR 9050:2020 (Versão Corrigida: 2021)",
      "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos. Impacta dimensionamento de circulação e banheiros."
     },
     {
@@ -1456,19 +1456,19 @@
    "keywords": "memorial descritivo CAU, memorial descritivo PMSP, memorial descritivo prefeitura SP, memorial descritivo Rio de Janeiro, memorial descritivo BH, aprovação de projeto, código de obras",
    "category": "Documentação",
    "publish_date": "2026-08-30",
-   "intro": "Memorial descritivo pra prefeitura parece tarefa simples até o protocolo voltar com exigências. Aí o arquiteto descobre que o modelo que funcionou em São Paulo é recusado no Rio. Que cada cidade pede uma sequência diferente de itens, anexos específicos e até nomenclatura própria pra disciplinas. Esse guia compara o memorial descritivo exigido por três grandes prefeituras do Sudeste: São Paulo, Rio de Janeiro e Belo Horizonte. A base nacional é a mesma — ABNT NBR 13531:1995 e NBR 13532:1995, mais a regulamentação do CAU/BR — mas cada município tem seu próprio código de obras. Vamos ver o que muda, o que reprova e como montar o documento certo na primeira tentativa.",
+   "intro": "Memorial descritivo pra prefeitura parece tarefa simples até o protocolo voltar com exigências. Aí o arquiteto descobre que o modelo que funcionou em São Paulo é recusado no Rio. Que cada cidade pede uma sequência diferente de itens, anexos específicos e até nomenclatura própria pra disciplinas. Esse guia compara o memorial descritivo exigido por três grandes prefeituras do Sudeste: São Paulo, Rio de Janeiro e Belo Horizonte. A base nacional é a mesma — a série ABNT NBR 16636:2017, mais a regulamentação do CAU/BR — mas cada município tem seu próprio código de obras. Vamos ver o que muda, o que reprova e como montar o documento certo na primeira tentativa.",
    "sections": [
     {
      "h2": "O que é memorial descritivo na prática da aprovação municipal",
-     "body": "Memorial descritivo é o documento textual que acompanha o projeto arquitetônico no protocolo da prefeitura. Descreve em palavras as soluções de projeto, sistemas construtivos, materiais e métodos. A ABNT NBR 13531:1995 (Elaboração de projetos de edificações — Atividades técnicas) trata da documentação de projeto. A NBR 13532:1995 (Elaboração de projetos de edificações — Arquitetura) detalha o conteúdo arquitetônico.\n\nNa esfera profissional, o memorial está vinculado a um Registro de Responsabilidade Técnica (RRT) do arquiteto e urbanista, conforme a Resolução CAU/BR 91/2014, que governa o RRT. As atribuições privativas do arquiteto e urbanista têm base na Lei Federal 12.378/2010.\n\nA função do memorial varia conforme a etapa:\n- Aprovação de projeto — demonstra que a edificação atende ao código de obras municipal\n- Habite-se — confirma que a obra foi executada conforme aprovado\n- Alvará de execução — vincula o responsável técnico ao que será construído\n- Contestações e perícias — base técnica em disputas\n\nNas três cidades comparadas, o memorial é peça do dossiê de aprovação. Sem ele, o protocolo não entra na análise."
+     "body": "Memorial descritivo é o documento textual que acompanha o projeto arquitetônico no protocolo da prefeitura. Descreve em palavras as soluções de projeto, sistemas construtivos, materiais e métodos. A ABNT NBR 16636-1:2017 (Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — Parte 1) trata da documentação de projeto. Ela e a Parte 2 cancelaram, em dezembro de 2017, as antigas NBR 13531:1995 e NBR 13532:1995, que ainda circulam muito em material de consulta. A NBR 16636-2:2017 (Parte 2: Projeto arquitetônico) detalha o conteúdo arquitetônico.\n\nNa esfera profissional, o memorial está vinculado a um Registro de Responsabilidade Técnica (RRT) do arquiteto e urbanista, conforme a Resolução CAU/BR 91/2014, que governa o RRT. As atribuições privativas do arquiteto e urbanista têm base na Lei Federal 12.378/2010.\n\nA função do memorial varia conforme a etapa:\n- Aprovação de projeto — demonstra que a edificação atende ao código de obras municipal\n- Habite-se — confirma que a obra foi executada conforme aprovado\n- Alvará de execução — vincula o responsável técnico ao que será construído\n- Contestações e perícias — base técnica em disputas\n\nNas três cidades comparadas, o memorial é peça do dossiê de aprovação. Sem ele, o protocolo não entra na análise."
     },
     {
      "h2": "Por que cada prefeitura tem exigência diferente",
      "body": "O Brasil não tem código de obras federal. Cada município legisla sobre uso e ocupação do solo conforme a Constituição Federal (artigo 30, inciso VIII). Isso significa que São Paulo, Rio e Belo Horizonte têm leis próprias, escritas em momentos diferentes, com prioridades distintas.\n\nSão Paulo aprovou a Lei Municipal 16.642/2017 (Código de Obras e Edificações — COE), regulamentada pelo Decreto 57.776/2017. É o código mais recente entre os três e tende a um memorial mais enxuto, com foco em desempenho.\n\nRio de Janeiro tem como base o Código de Obras e Edificações Simplificado (COES), instituído pela Lei Complementar 198/2019. Ela revogou expressamente o antigo Regulamento de Construções e Edificações de 1970 (Decreto “E” 3.800/1970), no art. 41, inciso II — vale conferir a data de qualquer material de consulta, porque muita referência na internet ainda trata o regulamento de 1970 como se estivesse valendo. Os parâmetros de zoneamento não estão no COES: vêm da legislação urbanística própria do município, que precisa ser conferida por região junto à SMU.\n\nBelo Horizonte tem o Código de Edificações na Lei Municipal 9.725/2009, regulamentada pelo Decreto 13.842/2010 e alterada ao longo dos anos. Os parâmetros urbanísticos (zoneamento, coeficientes, afastamentos) vêm do Plano Diretor, a Lei Municipal 11.181/2019.\n\nA consequência prática: arquiteto que atende as três capitais precisa de três modelos diferentes, três checklists, três fluxos de protocolo. Não dá pra copiar o memorial de SP e colar no Rio."
     },
     {
-     "h2": "Base nacional comum: NBR 13531, NBR 13532 e CAU",
-     "body": "Antes de ver as diferenças, vale fixar o que é comum às três cidades. O memorial costuma seguir a estrutura das normas ABNT de projeto.\n\nA NBR 13531:1995 organiza as etapas do projeto de edificações. O memorial costuma ser elaborado a partir do projeto básico e detalhado no projeto para execução.\n\nA NBR 13532:1995 trata do conteúdo arquitetônico: identificação do projeto, descrição da edificação, especificação de sistemas construtivos, especificação de materiais e acabamentos, e referência às demais normas aplicáveis.\n\nNo plano profissional, a redação do memorial é atividade do arquiteto e urbanista (ou em conjunto com engenheiro, quando há disciplinas complementares), com base na Lei Federal 12.378/2010. O profissional precisa estar regular no CAU e ter emitido o RRT correspondente, conforme a Resolução CAU/BR 91/2014.\n\nAlém disso, duas referências de acessibilidade e desempenho atravessam os memoriais municipais:\n- NBR 9050:2020 — Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos\n- NBR 15575 (Desempenho), na edição vigente\n\nNo campo da acessibilidade, vale lembrar que a base legal federal é a Lei 13.146/2015 (Estatuto da Pessoa com Deficiência) e o Decreto 5.296/2004, que remetem às normas técnicas da ABNT."
+     "h2": "Base nacional comum: série NBR 16636 e CAU",
+     "body": "Antes de ver as diferenças, vale fixar o que é comum às três cidades. O memorial costuma seguir a estrutura das normas ABNT de projeto.\n\nA NBR 16636-1:2017 organiza as etapas do projeto. O memorial costuma ser elaborado a partir do projeto básico e detalhado no projeto para execução.\n\nA NBR 16636-2:2017 trata do conteúdo arquitetônico: identificação do projeto, descrição da edificação, especificação de sistemas construtivos, especificação de materiais e acabamentos, e referência às demais normas aplicáveis.\n\nNo plano profissional, a redação do memorial é atividade do arquiteto e urbanista (ou em conjunto com engenheiro, quando há disciplinas complementares), com base na Lei Federal 12.378/2010. O profissional precisa estar regular no CAU e ter emitido o RRT correspondente, conforme a Resolução CAU/BR 91/2014.\n\nAlém disso, duas referências de acessibilidade e desempenho atravessam os memoriais municipais:\n- NBR 9050:2020 — Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos\n- NBR 15575 (Desempenho), na edição vigente\n\nNo campo da acessibilidade, vale lembrar que a base legal federal é a Lei 13.146/2015 (Estatuto da Pessoa com Deficiência) e o Decreto 5.296/2004, que remetem às normas técnicas da ABNT."
     },
     {
      "h2": "São Paulo (PMSP): o que a LM 16.642/2017 exige",
@@ -1500,29 +1500,29 @@
     },
     {
      "h2": "Resumo prático",
-     "body": "Memorial descritivo pra prefeitura não é documento único: é uma família de documentos, um pra cada município, com base nacional comum (NBR 13531, NBR 13532 e regulamentação do CAU/BR) e adaptação local.\n\nOs três pontos que mais variam:\n- Estrutura (integrada em SP, por disciplina no RJ, em blocos em BH)\n- Vocabulário e quadro de áreas (cada código tem nomenclatura própria)\n- Formato e protocolo (definidos no manual de cada órgão licenciador)\n\nOs pontos que tendem a se repetir:\n- Necessidade de RRT vinculado (Resolução CAU/BR 91/2014)\n- Citação à NBR 9050:2020 e à base legal federal de acessibilidade\n- Especificação técnica verificável (sem termo genérico)\n\nMontar memorial certo na primeira tentativa exige consulta ao manual do município específico, atenção às edições vigentes das normas e checklist próprio por cidade. Vale o investimento de tempo: protocolo recusado custa atraso no cronograma do cliente."
+     "body": "Memorial descritivo pra prefeitura não é documento único: é uma família de documentos, um pra cada município, com base nacional comum (série NBR 16636 e regulamentação do CAU/BR) e adaptação local.\n\nOs três pontos que mais variam:\n- Estrutura (integrada em SP, por disciplina no RJ, em blocos em BH)\n- Vocabulário e quadro de áreas (cada código tem nomenclatura própria)\n- Formato e protocolo (definidos no manual de cada órgão licenciador)\n\nOs pontos que tendem a se repetir:\n- Necessidade de RRT vinculado (Resolução CAU/BR 91/2014)\n- Citação à NBR 9050:2020 e à base legal federal de acessibilidade\n- Especificação técnica verificável (sem termo genérico)\n\nMontar memorial certo na primeira tentativa exige consulta ao manual do município específico, atenção às edições vigentes das normas e checklist próprio por cidade. Vale o investimento de tempo: protocolo recusado custa atraso no cronograma do cliente."
     }
    ],
    "cta": "A parte de contar e medir do memorial — ambientes, esquadrias, áreas computáveis — sai pronta quando você sobe o CAD no AI.arq. A IA lê o projeto e devolve a planilha de quantitativos por disciplina, com referência SINAPI. O texto técnico do memorial fica sob sua responsabilidade (escolha de materiais, adequação ao código municipal, decisões de projeto), mas a base quantitativa chega organizada. No beta, é grátis — quantos projetos quiser — em ai.arq.br.",
    "sources": [
     {
      "type": "norm",
-     "title": "ABNT NBR 13531:1995",
-     "description": "Elaboração de projetos de edificações — Atividades técnicas"
+     "title": "ABNT NBR 16636-1:2017",
+     "description": "Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — Parte 1: Diretrizes e terminologia. Cancelou e substituiu a ABNT NBR 13531:1995."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 13532:1995",
-     "description": "Elaboração de projetos de edificações — Arquitetura"
+     "title": "ABNT NBR 16636-2:2017",
+     "description": "Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — Parte 2: Projeto arquitetônico. Cancelou e substituiu a ABNT NBR 13532:1995."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 15575",
-     "description": "Edificações habitacionais — Desempenho (consultar a edição vigente)"
+     "title": "ABNT NBR 15575-1:2024",
+     "description": "Edificações habitacionais — Desempenho — Parte 1: Requisitos gerais. Edição de 2021 com Emenda 1 de 23/01/2024."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 9050:2020",
+     "title": "ABNT NBR 9050:2020 (Versão Corrigida: 2021)",
      "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos"
     },
     {
@@ -1615,7 +1615,7 @@
     },
     {
      "h2": "O que mudou da NBR 9050:2015 pra NBR 9050:2020",
-     "body": "A revisão de 2020 não foi reescrita do zero — manteve a estrutura da versão 2015 — mas trouxe ajustes relevantes que muitos arquitetos ainda aplicam errado por confundir com a edição antiga.\n\nPrincipais frentes de ajuste da edição 2020:\n\n1. Detalhamento da rota acessível dentro de cada lote — não basta entrada acessível, é preciso garantir percurso até o ponto de uso final (sala, sanitário, vaga).\n2. Parâmetros de piso tátil — a NBR 9050 remete à ABNT NBR 16537:2016 (norma específica de sinalização tátil no piso) para o detalhamento técnico do piso tátil.\n3. Sinalização sonora e visual em elevadores, incluindo informação de pavimento por voz.\n4. Áreas de transferência em sanitários acessíveis, incluindo lavatório com aproximação frontal e altura livre inferior pra cadeirante.\n5. Cozinhas e dormitórios adaptáveis em hotelaria e habitação social.\n\nO que segue idêntico em essência: largura mínima de porta (0,80m), corredor mínimo (1,20m), área de manobra circular (Ø 1,50m), inclinação máxima de rampa (8,33% pra desnível superior a 0,40m) e o símbolo internacional de acesso.\n\nNa transição entre edições, projetos novos devem atender à edição vigente (2020). Em caso de dúvida sobre qual edição se aplica a um protocolo específico, confirme a regra de transição com o órgão licenciador municipal — o critério varia de prefeitura pra prefeitura."
+     "body": "A revisão de 2020 não foi reescrita do zero — manteve a estrutura da versão 2015 — mas trouxe ajustes relevantes que muitos arquitetos ainda aplicam errado por confundir com a edição antiga.\n\nPrincipais frentes de ajuste da edição 2020:\n\n1. Detalhamento da rota acessível dentro de cada lote — não basta entrada acessível, é preciso garantir percurso até o ponto de uso final (sala, sanitário, vaga).\n2. Parâmetros de piso tátil — a NBR 9050 remete à ABNT NBR 16537:2024 (norma específica de sinalização tátil no piso) para o detalhamento técnico do piso tátil.\n3. Sinalização sonora e visual em elevadores, incluindo informação de pavimento por voz.\n4. Áreas de transferência em sanitários acessíveis, incluindo lavatório com aproximação frontal e altura livre inferior pra cadeirante.\n5. Cozinhas e dormitórios adaptáveis em hotelaria e habitação social.\n\nO que segue idêntico em essência: largura mínima de porta (0,80m), corredor mínimo (1,20m), área de manobra circular (Ø 1,50m), inclinação máxima de rampa (8,33% pra desnível superior a 0,40m) e o símbolo internacional de acesso.\n\nNa transição entre edições, projetos novos devem atender à edição vigente (2020). Em caso de dúvida sobre qual edição se aplica a um protocolo específico, confirme a regra de transição com o órgão licenciador municipal — o critério varia de prefeitura pra prefeitura."
     },
     {
      "h2": "Checklist 1: portas e circulações horizontais",
@@ -1635,7 +1635,7 @@
     },
     {
      "h2": "Checklist 5: sinalização (tátil, visual e sonora)",
-     "body": "Sinalização acessível combina três canais simultaneamente: tátil (pessoa cega lê), visual (pessoa surda enxerga), sonora (pessoa cega ouve). A NBR 9050:2020 e a NBR 16537:2016 (referenciada pela NBR 9050) detalham cada modo.\n\nSinalização tátil no piso:\n- Sinalização tátil de alerta (\"círculos\"): cor contrastante, instalada em todo desnível, escada, rampa, plataforma de embarque, obstáculo suspenso, junto a portas de elevadores\n- Sinalização tátil direcional (\"linhas\"): orienta o percurso em ambientes amplos sem referência de parede, instalada em rotas acessíveis\n- Largura faixa direcional: 0,25m a 0,40m\n- Contraste cromático com piso adjacente: deve haver diferença de luminância suficiente entre a sinalização e o piso, conforme a NBR 16537\n\nSinalização tátil em corrimão e parede:\n- Placa em Braille ao final de cada corrimão de escada/rampa, indicando o pavimento\n- Plaquetas táteis nas portas de salas (instaladas a 1,50m do piso e 0,10m da lateral da porta)\n\nSinalização visual:\n- Pictogramas conforme NBR 9050\n- Símbolo internacional de acesso (cadeirante estilizado) em entradas acessíveis, sanitários acessíveis, vagas acessíveis, elevadores acessíveis\n- Letras com altura proporcional à distância de leitura\n\nSinalização sonora:\n- Elevadores: informação de pavimento por voz e sinal sonoro de chegada\n- Cruzamentos urbanos: semáforo sonoro\n- Alarme de incêndio: combinar sinal sonoro com sinal visual luminoso intermitente, conforme a NBR 17240 (sistemas de detecção e alarme de incêndio)"
+     "body": "Sinalização acessível combina três canais simultaneamente: tátil (pessoa cega lê), visual (pessoa surda enxerga), sonora (pessoa cega ouve). A NBR 9050:2020 e a NBR 16537:2024 (referenciada pela NBR 9050) detalham cada modo.\n\nSinalização tátil no piso:\n- Sinalização tátil de alerta (\"círculos\"): cor contrastante, instalada em todo desnível, escada, rampa, plataforma de embarque, obstáculo suspenso, junto a portas de elevadores\n- Sinalização tátil direcional (\"linhas\"): orienta o percurso em ambientes amplos sem referência de parede, instalada em rotas acessíveis\n- Largura faixa direcional: 0,25m a 0,40m\n- Contraste cromático com piso adjacente: deve haver diferença de luminância suficiente entre a sinalização e o piso, conforme a NBR 16537\n\nSinalização tátil em corrimão e parede:\n- Placa em Braille ao final de cada corrimão de escada/rampa, indicando o pavimento\n- Plaquetas táteis nas portas de salas (instaladas a 1,50m do piso e 0,10m da lateral da porta)\n\nSinalização visual:\n- Pictogramas conforme NBR 9050\n- Símbolo internacional de acesso (cadeirante estilizado) em entradas acessíveis, sanitários acessíveis, vagas acessíveis, elevadores acessíveis\n- Letras com altura proporcional à distância de leitura\n\nSinalização sonora:\n- Elevadores: informação de pavimento por voz e sinal sonoro de chegada\n- Cruzamentos urbanos: semáforo sonoro\n- Alarme de incêndio: combinar sinal sonoro com sinal visual luminoso intermitente, conforme a NBR 17240 (sistemas de detecção e alarme de incêndio)"
     },
     {
      "h2": "Checklist 6: estacionamento e vagas acessíveis",
@@ -1647,7 +1647,7 @@
     },
     {
      "h2": "Tabela-resumo das medidas-chave (imprimível)",
-     "body": "Cole essa tabela na vistoria pra checagem rápida em obra ou em revisão de prancha. Todas as medidas são da NBR 9050:2020 e da NBR 16537:2016.\n\nPORTAS E CIRCULAÇÕES\n- Vão livre da porta: ≥ 0,80m\n- Corredor uso comum: ≥ 1,20m\n- Corredor uso público: ≥ 1,50m\n- Maçaneta tipo alavanca: entre 0,80m e 1,10m\n- Pé-direito mínimo em circulação: 2,40m\n\nBANHEIRO ACESSÍVEL\n- Área de manobra: Ø 1,50m\n- Altura da bacia (assento): 0,43m a 0,45m\n- Barra lateral da bacia: 0,80m de comprimento, a 0,75m do piso\n- Lavatório (face superior): 0,78m a 0,80m\n- Altura livre sob lavatório: ≥ 0,73m\n- Espelho inclinado: base a 0,90m\n- Mínimo de sanitários acessíveis: 5% por pavimento (≥ 1)\n\nCOZINHA ADAPTÁVEL\n- Altura da bancada: 0,75m a 0,85m\n- Altura livre inferior da bancada: ≥ 0,73m\n- Alcance manual frontal útil: 0,40m a 1,20m\n\nALTURAS DE COMANDO\n- Interruptor: 0,60m a 1,10m\n- Tomada: 0,40m a 1,00m\n- Botão de campainha/interfone: ≤ 1,00m\n\nSINALIZAÇÃO\n- Sinalização tátil direcional: faixa 0,25m a 0,40m\n- Placa Braille em porta de sala: 1,50m do piso, 0,10m do batente\n- Contraste de luminância entre sinalização e piso conforme NBR 16537\n\nESTACIONAMENTO\n- Vagas acessíveis: 2% (mínimo 1)\n- Largura da vaga: 2,50m + 1,20m de faixa lateral\n- Inclinação máxima do piso: 2%\n- Sinalização vertical a 2,10m do piso\n\nRAMPA\n- Desnível até 0,40m: inclinação máxima 8,33%\n- Desnível 0,40m a 0,80m: máxima 6,25%\n- Desnível acima de 0,80m: máxima 5,00%\n- Largura mínima: 1,20m (uso comum) ou 1,50m (uso público)\n- Patamar intermediário: ≥ 1,20m no sentido da rampa\n- Corrimão duplo: alturas 0,70m e 0,92m\n- Prolongamento horizontal do corrimão: 0,30m"
+     "body": "Cole essa tabela na vistoria pra checagem rápida em obra ou em revisão de prancha. Todas as medidas são da NBR 9050:2020 e da NBR 16537:2024.\n\nPORTAS E CIRCULAÇÕES\n- Vão livre da porta: ≥ 0,80m\n- Corredor uso comum: ≥ 1,20m\n- Corredor uso público: ≥ 1,50m\n- Maçaneta tipo alavanca: entre 0,80m e 1,10m\n- Pé-direito mínimo em circulação: 2,40m\n\nBANHEIRO ACESSÍVEL\n- Área de manobra: Ø 1,50m\n- Altura da bacia (assento): 0,43m a 0,45m\n- Barra lateral da bacia: 0,80m de comprimento, a 0,75m do piso\n- Lavatório (face superior): 0,78m a 0,80m\n- Altura livre sob lavatório: ≥ 0,73m\n- Espelho inclinado: base a 0,90m\n- Mínimo de sanitários acessíveis: 5% por pavimento (≥ 1)\n\nCOZINHA ADAPTÁVEL\n- Altura da bancada: 0,75m a 0,85m\n- Altura livre inferior da bancada: ≥ 0,73m\n- Alcance manual frontal útil: 0,40m a 1,20m\n\nALTURAS DE COMANDO\n- Interruptor: 0,60m a 1,10m\n- Tomada: 0,40m a 1,00m\n- Botão de campainha/interfone: ≤ 1,00m\n\nSINALIZAÇÃO\n- Sinalização tátil direcional: faixa 0,25m a 0,40m\n- Placa Braille em porta de sala: 1,50m do piso, 0,10m do batente\n- Contraste de luminância entre sinalização e piso conforme NBR 16537\n\nESTACIONAMENTO\n- Vagas acessíveis: 2% (mínimo 1)\n- Largura da vaga: 2,50m + 1,20m de faixa lateral\n- Inclinação máxima do piso: 2%\n- Sinalização vertical a 2,10m do piso\n\nRAMPA\n- Desnível até 0,40m: inclinação máxima 8,33%\n- Desnível 0,40m a 0,80m: máxima 6,25%\n- Desnível acima de 0,80m: máxima 5,00%\n- Largura mínima: 1,20m (uso comum) ou 1,50m (uso público)\n- Patamar intermediário: ≥ 1,20m no sentido da rampa\n- Corrimão duplo: alturas 0,70m e 0,92m\n- Prolongamento horizontal do corrimão: 0,30m"
     },
     {
      "h2": "Os 10 erros que mais reprovam projeto na prefeitura",
@@ -1659,25 +1659,25 @@
     },
     {
      "h2": "Fechamento e referências cruzadas",
-     "body": "A NBR 9050:2020 não é norma isolada — convive com outras que se complementam:\n\n- NBR 16537:2016 — Sinalização tátil no piso (detalhamento técnico que a NBR 9050 referencia)\n- NBR 9077:2001 — Saídas de emergência em edifícios (impacta sinalização sonora e rota de fuga)\n- NBR 17240:2010 — Sistemas de detecção e alarme de incêndio (sinal visual e sonoro)\n- NBR 14021:2018 — Acessibilidade no transporte aquaviário, ferroviário e metroviário\n- NBR 14022:2018 — Acessibilidade em veículos de transporte coletivo terrestre urbano\n- NBR 15599:2008 — Acessibilidade na comunicação na prestação de serviços\n- NBR 13994:2000 — Elevadores de passageiros para transporte de pessoa portadora de deficiência\n\nNa fase de aprovação, vale sempre conferir a legislação municipal — muitas cidades têm parâmetros mais rigorosos que a NBR 9050 (por exemplo, percentuais maiores de unidades adaptáveis em edifícios multifamiliares). Confirme sempre o parâmetro local com o órgão licenciador antes de fechar o projeto.\n\nE vale acompanhar a evolução da norma: a ABNT revisa periodicamente a NBR 9050, e edições futuras tendem a aprofundar temas como neurodiversidade e sinalização sensorial. Antes de protocolar, confirme qual é a edição vigente no site da ABNT."
+     "body": "A NBR 9050:2020 não é norma isolada — convive com outras que se complementam:\n\n- NBR 16537:2024 — Sinalização tátil no piso (detalhamento técnico que a NBR 9050 referencia)\n- NBR 9077:2025 — Projeto de saídas de emergência (impacta sinalização sonora e rota de fuga; a edição de 2025 substituiu a de 2001 e mudou os parâmetros de dimensionamento)\n- NBR 17240:2010 — Sistemas de detecção e alarme de incêndio (traz os requisitos do alarme visual que a NBR 9050 exige junto do sonoro; não é norma de acessibilidade)\n- NBR 14021:2005 — Acessibilidade no sistema de trem urbano ou metropolitano\n- NBR 14022:2025 — Acessibilidade em veículos de características urbanas para o transporte coletivo de passageiros\n- NBR 15599:2008 — Acessibilidade na comunicação na prestação de serviços\n- NBR 13994:2000 — Elevadores para transporte de pessoa com deficiência: norma CANCELADA; o tema passou para a série NBR 16858 (Parte 3)\n\nNa fase de aprovação, vale sempre conferir a legislação municipal — muitas cidades têm parâmetros mais rigorosos que a NBR 9050 (por exemplo, percentuais maiores de unidades adaptáveis em edifícios multifamiliares). Confirme sempre o parâmetro local com o órgão licenciador antes de fechar o projeto.\n\nE vale acompanhar a evolução da norma: a ABNT revisa periodicamente a NBR 9050, e edições futuras tendem a aprofundar temas como neurodiversidade e sinalização sensorial. Antes de protocolar, confirme qual é a edição vigente no site da ABNT."
     }
    ],
    "cta": "Pra acelerar a parte mais mecânica do atendimento à NBR 9050 — listar e contar todos os itens de acessibilidade (barras de apoio, piso tátil de alerta e direcional, sinalização vertical, placas em Braille, torneiras adaptadas, corrimãos duplos) — sobe seu CAD no AI.arq. Você recebe a planilha quantitativa por ambiente, com cada item amarrado à composição SINAPI oficial. A verificação técnica da conformidade segue sendo do arquiteto autor — a automação tira só o trabalho braçal de levantamento. No beta, é grátis — quantos projetos quiser — em ai.arq.br.",
    "sources": [
     {
      "type": "norm",
-     "title": "ABNT NBR 9050:2020",
+     "title": "ABNT NBR 9050:2020 (Versão Corrigida: 2021)",
      "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos"
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 16537:2016",
-     "description": "Acessibilidade — Sinalização tátil no piso — Diretrizes para elaboração de projetos e instalação"
+     "title": "ABNT NBR 16537:2024",
+     "description": "Acessibilidade — Sinalização tátil no piso — Diretrizes para elaboração de projetos e instalação. 2ª edição, de 08/01/2024."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 9077:2001",
-     "description": "Saídas de emergência em edifícios"
+     "title": "ABNT NBR 9077:2025",
+     "description": "Projeto de saídas de emergência. Publicada em 16/07/2025, substitui a edição de 2001."
     },
     {
      "type": "norm",
@@ -1686,8 +1686,8 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 13994:2000",
-     "description": "Elevadores de passageiros — Elevadores para transporte de pessoa portadora de deficiência"
+     "title": "ABNT NBR 13994:2000 — cancelada",
+     "description": "Elevadores de passageiros — Elevadores para transporte de pessoa portadora de deficiência. Norma cancelada; acessibilidade em elevadores passou para a série ABNT NBR 16858 (Parte 3)."
     },
     {
      "type": "law",
@@ -1948,11 +1948,11 @@
    "keywords": "memorial descritivo quantitativo, como escrever memorial descritivo, memorial descritivo arquitetura, memorial descritivo obra residencial, NBR 13531, NBR 13532, NBR 15575",
    "category": "Documentação",
    "publish_date": "2026-09-27",
-   "intro": "Na faculdade, o roteiro é claro: primeiro o arquiteto escreve o memorial descritivo, depois o orçamentista extrai a planilha de quantitativos a partir dele. Faz sentido na cabeça do professor, porque o texto vem antes do número. Só que, no canteiro real, esse fluxo cria um problema crônico: memorial e planilha sempre brigam. O memorial fala em piso porcelanato sem citar metragem, a planilha lista a metragem sem citar marca, e o analista do banco devolve o projeto pedindo coerência. Esse texto defende o caminho inverso, que muitos arquitetos experientes já fazem na prática: levantar o quantitativo da planta primeiro, e só depois redigir o memorial em cima da planilha. A norma ABNT NBR 13531:1995 não fixa essa ordem — é convenção de ensino, não regra técnica.",
+   "intro": "Na faculdade, o roteiro é claro: primeiro o arquiteto escreve o memorial descritivo, depois o orçamentista extrai a planilha de quantitativos a partir dele. Faz sentido na cabeça do professor, porque o texto vem antes do número. Só que, no canteiro real, esse fluxo cria um problema crônico: memorial e planilha sempre brigam. O memorial fala em piso porcelanato sem citar metragem, a planilha lista a metragem sem citar marca, e o analista do banco devolve o projeto pedindo coerência. Esse texto defende o caminho inverso, que muitos arquitetos experientes já fazem na prática: levantar o quantitativo da planta primeiro, e só depois redigir o memorial em cima da planilha. A norma ABNT NBR 16636-1:2017 não fixa essa ordem — é convenção de ensino, não regra técnica.",
    "sections": [
     {
      "h2": "O fluxo que a faculdade ensina (e por que ele trava na prática)",
-     "body": "O fluxo clássico do projeto executivo no ensino brasileiro é linear. Anteprojeto vira projeto legal, projeto legal vira projeto executivo, e o executivo gera três entregas: pranchas, memorial descritivo e planilha de quantitativos. A sequência ensinada é quase sempre a mesma: pranchas prontas, memorial redigido em cima das pranchas, planilha extraída do memorial.\n\nO problema é que essa ordem trata o memorial como documento-fonte. Na prática, ele é documento-síntese. Quem dita o quantitativo é a planta, não o texto. Quando o arquiteto escreve o memorial olhando só pra prancha, ele descreve materiais sem contar quantos. Aí o orçamentista entra depois, conta, e descobre que o memorial dizia uma coisa e a planta mostra outra.\n\nA ABNT NBR 13531:1995 — Elaboração de projetos de edificações — Atividades técnicas — descreve as etapas do projeto, mas não fixa a ordem interna entre memorial e quantitativo dentro do executivo. É convenção pedagógica, não obrigação normativa. A NBR 13532:1995, específica de arquitetura, segue a mesma linha: lista os produtos do projeto, sem amarrar sequência de redação."
+     "body": "O fluxo clássico do projeto executivo no ensino brasileiro é linear. Anteprojeto vira projeto legal, projeto legal vira projeto executivo, e o executivo gera três entregas: pranchas, memorial descritivo e planilha de quantitativos. A sequência ensinada é quase sempre a mesma: pranchas prontas, memorial redigido em cima das pranchas, planilha extraída do memorial.\n\nO problema é que essa ordem trata o memorial como documento-fonte. Na prática, ele é documento-síntese. Quem dita o quantitativo é a planta, não o texto. Quando o arquiteto escreve o memorial olhando só pra prancha, ele descreve materiais sem contar quantos. Aí o orçamentista entra depois, conta, e descobre que o memorial dizia uma coisa e a planta mostra outra.\n\nA ABNT NBR 16636-1:2017 — Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — descreve as etapas do projeto, mas não fixa a ordem interna entre memorial e quantitativo dentro do executivo. É convenção pedagógica, não obrigação normativa. A NBR 16636-2:2017, específica de arquitetura, segue a mesma linha: lista os produtos do projeto, sem amarrar sequência de redação."
     },
     {
      "h2": "O caminho inverso: planilha primeiro, memorial depois",
@@ -1960,7 +1960,7 @@
     },
     {
      "h2": "Vantagem 1: memorial auditável contra a planta",
-     "body": "Quando o memorial nasce da planilha, ele fica auditável. Cada afirmação do texto tem um número correspondente que pode ser conferido na planta. Isso muda a natureza do documento.\n\nEm vez de descrever genericamente — Cozinha terá piso porcelanato —, o memorial passa a descrever especificamente — Cozinha (12,4 m²) receberá 12,4 m² de piso porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4, conforme item 4.2.1 da planilha de quantitativos.\n\nQuem ler o memorial pode pegar o item 4.2.1 da planilha, ir na planta e medir. Se o número bate, o documento é coerente. Se não bate, fica óbvio onde está o erro. A conferência vira tarefa de segundos por linha.\n\nA NBR 15575:2021 — Norma de Desempenho — pede comprovação por sistema, não só descrição. Memorial auditável ajuda a comprovar desempenho, porque deixa rastro numérico de cada item. Em perícia, esse rastro é prova técnica."
+     "body": "Quando o memorial nasce da planilha, ele fica auditável. Cada afirmação do texto tem um número correspondente que pode ser conferido na planta. Isso muda a natureza do documento.\n\nEm vez de descrever genericamente — Cozinha terá piso porcelanato —, o memorial passa a descrever especificamente — Cozinha (12,4 m²) receberá 12,4 m² de piso porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4, conforme item 4.2.1 da planilha de quantitativos.\n\nQuem ler o memorial pode pegar o item 4.2.1 da planilha, ir na planta e medir. Se o número bate, o documento é coerente. Se não bate, fica óbvio onde está o erro. A conferência vira tarefa de segundos por linha.\n\nA NBR 15575-1:2024 — Norma de Desempenho — pede comprovação por sistema, não só descrição. Memorial auditável ajuda a comprovar desempenho, porque deixa rastro numérico de cada item. Em perícia, esse rastro é prova técnica."
     },
     {
      "h2": "Vantagem 2: reduz contradição entre memorial e planilha",
@@ -1972,7 +1972,7 @@
     },
     {
      "h2": "Como traduzir um item da planilha em parágrafo de memorial",
-     "body": "O coração do método está na tradução item-a-item. Cada linha da planilha vira um trecho do memorial, com referência cruzada explícita.\n\nExemplo. Planilha tem o item:\n\nCódigo: 4.2.1\nDescrição: Piso porcelanato esmaltado retificado 90×90 cm, classe PEI 4\nAmbiente: Sala de estar\nQuantidade: 145,00 m²\n\nO parágrafo correspondente no memorial fica:\n\nA sala de estar (área 145 m², conforme planta de layout PR-01) receberá piso em porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4 conforme ABNT NBR 13818, em assentamento com argamassa colante AC-III, junta 2 mm, rejunte epóxi cor cinza claro. Quantitativo: 145 m² (item 4.2.1 da planilha de quantitativos).\n\nNota como o parágrafo carrega três rastros: a planta de origem (PR-01), a norma técnica aplicável (NBR 13818) e o código da planilha (4.2.1). Cada afirmação pode ser conferida em pelo menos uma fonte cruzada.\n\nMultiplique esse padrão por todos os ambientes e disciplinas, e o memorial pronto tem coerência de cabo a rabo. Não dá pra esquecer um item, porque a planilha vira checklist. Não dá pra contradizer a planta, porque o número vem dela. Não dá pra ignorar norma técnica, porque cada classe de material puxa a NBR correspondente."
+     "body": "O coração do método está na tradução item-a-item. Cada linha da planilha vira um trecho do memorial, com referência cruzada explícita.\n\nExemplo. Planilha tem o item:\n\nCódigo: 4.2.1\nDescrição: Piso porcelanato esmaltado retificado 90×90 cm, classe PEI 4\nAmbiente: Sala de estar\nQuantidade: 145,00 m²\n\nO parágrafo correspondente no memorial fica:\n\nA sala de estar (área 145 m², conforme planta de layout PR-01) receberá piso em porcelanato esmaltado retificado, formato 90×90 cm, classe PEI 4 conforme ABNT NBR ISO 13006, em assentamento com argamassa colante AC-III, junta 2 mm, rejunte epóxi cor cinza claro. Quantitativo: 145 m² (item 4.2.1 da planilha de quantitativos).\n\nNota como o parágrafo carrega três rastros: a planta de origem (PR-01), a norma técnica aplicável (NBR ISO 13006) e o código da planilha (4.2.1). Cada afirmação pode ser conferida em pelo menos uma fonte cruzada.\n\nMultiplique esse padrão por todos os ambientes e disciplinas, e o memorial pronto tem coerência de cabo a rabo. Não dá pra esquecer um item, porque a planilha vira checklist. Não dá pra contradizer a planta, porque o número vem dela. Não dá pra ignorar norma técnica, porque cada classe de material puxa a NBR correspondente."
     },
     {
      "h2": "Quando o caminho inverso NÃO se aplica",
@@ -1991,23 +1991,23 @@
    "sources": [
     {
      "type": "norm",
-     "title": "ABNT NBR 13531:1995",
-     "description": "Elaboração de projetos de edificações — Atividades técnicas"
+     "title": "ABNT NBR 16636-1:2017",
+     "description": "Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — Parte 1: Diretrizes e terminologia. Cancelou e substituiu a ABNT NBR 13531:1995."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 13532:1995",
-     "description": "Elaboração de projetos de edificações — Arquitetura"
+     "title": "ABNT NBR 16636-2:2017",
+     "description": "Elaboração e desenvolvimento de serviços técnicos especializados de projetos arquitetônicos e urbanísticos — Parte 2: Projeto arquitetônico. Cancelou e substituiu a ABNT NBR 13532:1995."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 15575:2021",
-     "description": "Edificações habitacionais — Desempenho (revisão 2021)"
+     "title": "ABNT NBR 15575-1:2024",
+     "description": "Edificações habitacionais — Desempenho — Parte 1: Requisitos gerais. Equivale à edição de 2021 com a Emenda 1 de 23/01/2024. A norma tem 6 partes e teve 1ª edição em 2008."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 13818:1997",
-     "description": "Placas cerâmicas para revestimento — Especificação e métodos de ensaios"
+     "title": "ABNT NBR ISO 13006:2020",
+     "description": "Placas cerâmicas — Definições, classificação, características e marcação. Cancelou e substituiu a ABNT NBR 13818:1997."
     },
     {
      "type": "book",
@@ -2082,17 +2082,17 @@
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 16401:2008",
-     "description": "Instalações de ar-condicionado — Sistemas centrais e unitários"
+     "title": "ABNT NBR 16401-1:2024",
+     "description": "Instalações de condicionamento de ar — Sistemas centrais e unitários — Parte 1. Cancelou e substituiu a edição de 2008."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 14565:2019",
-     "description": "Cabeamento estruturado para edifícios comerciais e data centers"
+     "title": "ABNT NBR 14565",
+     "description": "Cabeamento estruturado para edifícios comerciais e data centers. Conferir a edição vigente: a norma teve nova edição em 2025."
     },
     {
      "type": "norm",
-     "title": "ABNT NBR 9050:2015 (Emenda 1:2020)",
+     "title": "ABNT NBR 9050:2020 (Versão Corrigida: 2021)",
      "description": "Acessibilidade a edificações, mobiliário, espaços e equipamentos urbanos — referência para adequação em retrofit"
     },
     {
