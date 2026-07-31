@@ -6426,16 +6426,21 @@ async def debug_storage_limit(request: Request, mb: int = 60):
         # o nome antes de gravar (`_sanitize_filename_for_storage`) — o delete
         # batia num caminho que não existia e deixava 250 MB parados no bucket.
         # Listar e apagar o que está lá de verdade não depende de adivinhar o nome.
+        # 🪤 Varre a pasta atual E a antiga "_diagnostico": a 1ª versão gravava com
+        # underscore (o job_id não passa pelo sanitizador, só o nome do arquivo).
+        # Ao renomear a pasta eu quase deixei 250 MB órfãos pra sempre, porque a
+        # limpeza nova só olhava o nome novo.
         apagados, erros = [], []
-        try:
-            for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{PASTA_DIAG}/"):
-                alvo = f"{PASTA_DIAG}/{_up.quote(n)}"
-                if _supabase_storage_delete(PRANCHAS_BUCKET, alvo):
-                    apagados.append(n)
-                else:
-                    erros.append(n)
-        except Exception as e:
-            erros.append(f"{type(e).__name__}: {e}")
+        for pasta in (PASTA_DIAG, "_diagnostico"):
+            try:
+                for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{pasta}/"):
+                    alvo = f"{pasta}/{_up.quote(n)}"
+                    if _supabase_storage_delete(PRANCHAS_BUCKET, alvo):
+                        apagados.append(f"{pasta}/{n}")
+                    else:
+                        erros.append(f"{pasta}/{n}")
+            except Exception as e:
+                erros.append(f"{pasta}: {type(e).__name__}: {e}")
         resp["apagado"] = (not erros)
         resp["apagados"] = apagados
         if erros:
