@@ -146,7 +146,7 @@
     },
     {
      "h2": "Passo 3: Baixar a tabela SINAPI 2026",
-     "body": "A tabela SINAPI é disponibilizada gratuitamente pela Caixa Econômica Federal todo mês. Em obras com recursos federais é a referência de preços adotada pela Lei 14.133/2021. Em obras privadas é uma referência muito usada pela maturidade e atualização mensal.\n\nComo baixar:\n- Acesse o site da Caixa, em Apoio ao Poder Público, na seção SINAPI: Insumos e Composições\n- Os arquivos vêm compactados em ZIP com planilhas XLSX\n- Escolha o estado (preços variam por UF) e o mês de referência\n\nOs 3 arquivos principais:\n- ICD (Insumos): lista de materiais e mão de obra com preço unitário por estado\n- CCD (Composições): serviços compostos (ex: assentamento de piso = mão de obra + argamassa + rejunte)\n- Analítico: detalhamento das composições com coeficientes de consumo\n\nA composição é onde mora a mágica: ela diz quantos kg de cimento, quantos m³ de areia e quantas horas de pedreiro entram em 1 m² de piso assentado, por exemplo."
+     "body": "A tabela SINAPI é disponibilizada gratuitamente pela Caixa Econômica Federal todo mês. Em obras públicas é a referência de preços adotada pela Lei 14.133/2021, que no art. 23, § 2º, inciso I manda usar composição de custo unitário menor ou igual à mediana do SINAPI — para infraestrutura de transportes, quem vale é o Sicro. Em obras privadas é uma referência muito usada pela maturidade e atualização mensal.\n\nComo baixar:\n- Acesse o site da Caixa, em Apoio ao Poder Público, na seção SINAPI: Insumos e Composições\n- Os arquivos vêm compactados em ZIP com planilhas XLSX\n- Escolha o estado (preços variam por UF) e o mês de referência\n\nAs siglas confundem, e escolher a errada muda o preço da obra. A primeira letra diz o CONTEÚDO e as duas seguintes, o REGIME DE ENCARGOS:\n\n- I = Insumo (material e mão de obra com preço unitário por estado)\n- C = Composição (serviço composto — ex.: assentamento de piso = mão de obra + argamassa + rejunte)\n- SD = Sem Desoneração · CD = Com Desoneração · SE = Sem Encargos\n\nJuntando: ISD e CSD são sem desoneração; ICD e CCD, com desoneração; ISE e CSE vêm sem encargos sociais e servem pra estudo, não pro orçamento normal.\n\nQual usar depende do regime da empresa que vai executar: regime normal usa ISD/CSD, e quem optou pela desoneração da folha (CPRB) usa ICD/CCD. Além desses, o Analítico traz o detalhamento das composições com os coeficientes de consumo.\n\nA composição é onde mora a mágica: ela diz quantos kg de cimento, quantos m³ de areia e quantas horas de pedreiro entram em 1 m² de piso assentado, por exemplo."
     },
     {
      "h2": "Passo 4: Estruturar as colunas da planilha",
@@ -174,7 +174,7 @@
     {
      "type": "norm",
      "title": "Lei 14.133/2021",
-     "description": "Nova Lei de Licitações e Contratos Administrativos — adota o SINAPI como referência de preços nas obras públicas com recursos federais"
+     "description": "Nova Lei de Licitações e Contratos Administrativos — o art. 23, § 2º, I adota o SINAPI como referência de custo nas obras e serviços de engenharia em geral, e o Sicro na infraestrutura de transportes"
     },
     {
      "type": "norm",
