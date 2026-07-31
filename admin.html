@@ -317,6 +317,14 @@
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor</span></h3>
         <div id="motor-health"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📦 Limite de upload do Storage <span class="font-normal text-gray-400">— o CAD grande consegue ser guardado?</span></h3>
+        <p class="text-sm text-gray-500 mb-3">Sobe um arquivo de teste e apaga em seguida. Se falhar, mostra o motivo exato. Projeto sem o CAD guardado não pode ser reprocessado nem complementado.</p>
+        <div class="flex items-center gap-2 mb-3">
+          <button onclick="testarLimiteStorage(60)" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">Testar 60 MB</button>
+          <button onclick="testarLimiteStorage(250)" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg font-medium">Testar 250 MB</button>
+        </div>
+        <div id="storage-limit-res"></div>
+        <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🩻 Onde a IA mais erra <span class="font-normal text-gray-400">— aprendizado com as planilhas revisadas dos clientes</span></h3>
         <div id="revision-feedback"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
@@ -1308,6 +1316,35 @@ async function costDelete(i){
   } catch(e){ alert('Não excluiu: '+((e&&e.message)||e)); }
 }
 function costAddRow(){ COSTS.push({ id:'', servico:'Novo custo', categoria:'outro', valor:0, moeda:'BRL', periodo:'mensal', confirmado:false, obs:'' }); renderCosts(); }
+
+// ══════════════════════════════════════════════
+// LIMITE DE UPLOAD DO STORAGE — testa sem usar cliente de cobaia
+// 🪤 authFetch obrigatório: endpoint tem _require_admin (senão 401 e tela vazia)
+// ══════════════════════════════════════════════
+async function testarLimiteStorage(mb){
+  const box = document.getElementById('storage-limit-res');
+  box.innerHTML = `<p class="text-gray-500 text-sm">Testando ${mb} MB… pode levar até 1 minuto.</p>`;
+  try {
+    const res = await authFetch(`${API_BASE}/api/debug/storage-limit?mb=${mb}`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'erro');
+    if (d.subiu){
+      box.innerHTML = `<div class="p-3 rounded-lg bg-green-50 border border-green-200 text-sm">
+        <p class="font-semibold text-green-800">✓ Passou com ${d.tamanho_testado_mb} MB</p>
+        <p class="text-green-700 mt-1">Levou ${d.segundos}s. O limite cobre esse tamanho.</p>
+        ${d.apagado === false ? '<p class="text-amber-700 mt-1">⚠ O arquivo de teste não foi apagado — me avise.</p>' : '<p class="text-green-600 mt-1 text-xs">Arquivo de teste apagado.</p>'}
+      </div>`;
+    } else {
+      box.innerHTML = `<div class="p-3 rounded-lg bg-red-50 border border-red-200 text-sm">
+        <p class="font-semibold text-red-800">✗ Recusou ${d.tamanho_testado_mb} MB</p>
+        <p class="text-red-700 mt-1 break-words">Motivo: ${d.motivo}</p>
+        <p class="text-red-600 mt-1 text-xs">Levou ${d.segundos}s. Se aparecer 413, o limite ainda está baixo; se for timeout, é lentidão e não limite.</p>
+      </div>`;
+    }
+  } catch(e){
+    box.innerHTML = `<p class="text-red-600 text-sm">Não consegui testar: ${(e && e.message) || e}</p>`;
+  }
+}
 
 // ══════════════════════════════════════════════
 // SAÚDE DO MOTOR — quanto o motor MEDE (branco) de verdade
