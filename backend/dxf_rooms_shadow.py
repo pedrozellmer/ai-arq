@@ -78,6 +78,52 @@ def _segmentos(dxf_path: str, fator: float, teto: int) -> list:
     return segs
 
 
+def _grupos_por_proximidade(faces: list, gap_m: float = 1.0) -> dict:
+    """Agrupa faces que se tocam/quase se tocam — cada grupo ≈ uma VISTA da folha.
+
+    Numa prancha de arquitetura convivem planta, cortes, fachadas e detalhes,
+    todos no mesmo espaço do DXF. Somar tudo conta o mesmo prédio várias vezes.
+    Faces da mesma vista estão coladas; vistas diferentes ficam separadas por
+    espaço em branco. Um "buffer + união" revela esses agrupamentos.
+
+    Só MEDE (não filtra nada): devolve quantos grupos existem e o perfil do
+    maior. Best-effort — qualquer erro devolve {} e a sombra segue sem isso.
+    """
+    try:
+        from shapely.ops import unary_union
+        from shapely.strtree import STRtree
+        if not faces or len(faces) > 4000:
+            return {}
+        uni = unary_union([f.buffer(gap_m) for f in faces])
+        comps = list(getattr(uni, "geoms", [uni]))
+        if len(comps) <= 1:
+            return {"n_grupos": len(comps)}
+        tree = STRtree(comps)
+        soma = [0.0] * len(comps)
+        cont = [0] * len(comps)
+        maior = [0.0] * len(comps)
+        for f in faces:
+            try:
+                c = f.representative_point()
+                for idx in tree.query(c):
+                    if comps[idx].contains(c):
+                        soma[idx] += f.area
+                        cont[idx] += 1
+                        maior[idx] = max(maior[idx], f.area)
+                        break
+            except Exception:
+                continue
+        i = max(range(len(comps)), key=lambda k: soma[k])
+        return {
+            "n_grupos": len(comps),
+            "grupo_maior_m2": round(soma[i], 1),
+            "grupo_maior_faces": cont[i],
+            "grupo_maior_face_max": round(maior[i], 1),
+        }
+    except Exception:
+        return {}
+
+
 def medir_um(dxf_path: str, fator: float) -> dict:
     """Mede UMA prancha. Best-effort: devolve o que conseguiu, nunca levanta."""
     out = {"file": os.path.basename(dxf_path)[:34]}
@@ -113,6 +159,18 @@ def medir_um(dxf_path: str, fator: float) -> dict:
         todas = sorted((f.area for f in faces), reverse=True)
         out["envelope_m2"] = round(todas[0], 1) if todas else None
         out["envelope_top"] = [round(a, 1) for a in todas[:4]]
+
+        # 🚨 VISTAS NA MESMA FOLHA — hipótese a medir (31/07/2026).
+        # Primeiro caso real (Rafael): casa de 75,9 m² e a soma dos "cômodos"
+        # deu 601 m² — 8× o tamanho. Quase certamente porque a prancha traz
+        # planta + cortes + fachadas + detalhes na MESMA folha, e a montagem de
+        # faces soma todas as vistas. O caminho do PDF não sofre disso porque
+        # restringe ao viewport; no DXF não existe viewport.
+        # Aqui só MEDIMOS: agrupamos as faces por proximidade (componentes
+        # conectados) e registramos quantos grupos existem e o maior deles. Se
+        # a hipótese estiver certa, o maior grupo ≈ a planta, e a área dele deve
+        # bater com a área do projeto — muito melhor que a soma de tudo.
+        out.update(_grupos_por_proximidade(faces))
     except Exception as e:
         out["err"] = f"{type(e).__name__}: {e}"[:110]
     out["secs"] = round(time.time() - t0, 1)
