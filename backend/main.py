@@ -872,7 +872,10 @@ def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str
         req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", mime)
         req.add_header("x-upsert", "true")
-        urllib.request.urlopen(req, timeout=60)
+        # Timeout proporcional ao tamanho: 60s dava conta de PDF, mas DXF de
+        # planta grande passa de 100 MB e estourava calado. ~2s por MB, teto 5min.
+        _tmo = max(60, min(300, int(_tam_mb * 2)))
+        urllib.request.urlopen(req, timeout=_tmo)
         if safe_name != filename:
             _supa_log(f"STORAGE upload prancha OK (saneado: '{filename}' → '{safe_name}')")
         _ULTIMA_FALHA_UPLOAD_PRANCHA = ""
