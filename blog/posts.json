@@ -1174,7 +1174,7 @@
         {
           "type": "link",
           "title": "Tabela de Honorários de Serviços de Arquitetura e Urbanismo do Brasil",
-          "url": "https://www.caubr.gov.br/honorarios/",
+          "url": "https://honorario.caubr.gov.br/",
           "publisher": "CAU/BR — Conselho de Arquitetura e Urbanismo do Brasil",
           "description": "Lista oficial dos serviços do arquiteto, incluindo coordenação e compatibilização de projetos e levantamento de quantidades."
         },
@@ -1320,7 +1320,7 @@
         {
           "type": "link",
           "title": "OT IBR 04/2012 — Orientação Técnica do IBRAOP sobre BDI",
-          "url": "https://www.ibraop.org.br/wp-content/uploads/2013/04/OT_IBR_004_2012.pdf",
+          "url": "https://www.ibraop.org.br/wp-content/uploads/2013/04/OT_IBR0042012.pdf",
           "publisher": "IBRAOP — Instituto Brasileiro de Auditoria de Obras Públicas"
         },
         {
@@ -1437,8 +1437,8 @@
         },
         {
           "type": "link",
-          "title": "O que é curva S e como montar pra obra de construção civil",
-          "url": "https://sienge.com.br/blog/curva-s-construcao-civil/",
+          "title": "Curva S da obra: soluções para monitorar e controlar",
+          "url": "https://sienge.com.br/blog/curva-s-da-obra/",
           "publisher": "Sienge"
         },
         {
@@ -1721,7 +1721,7 @@
         {
           "type": "link",
           "title": "Cartilha de Acessibilidade ABNT NBR 9050",
-          "url": "https://www.pessoacomdeficiencia.gov.br/app/publicacoes",
+          "url": "https://www.gov.br/mdh/pt-br/navegue-por-temas/pessoa-com-deficiencia",
           "publisher": "Ministério dos Direitos Humanos"
         }
       ]
