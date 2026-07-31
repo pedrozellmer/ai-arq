@@ -835,13 +835,29 @@ def _safe_local_filename(filename: str) -> str:
     return safe
 
 
+# Motivo da última falha de upload de prancha, pra sobreviver até o _log_error
+# do chamador (ver docstring de _supabase_storage_upload_prancha).
+_ULTIMA_FALHA_UPLOAD_PRANCHA = ""
+
+
 def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str) -> bool:
     """Upload de prancha (PDF, PNG, JPG) pro bucket aiarq-pranchas.
     Key: {job_id}/{filename_sanitizado}. Content-Type derivado da extensão.
 
     Filename é sanitizado pra remover acentos/especiais — Supabase Storage
-    rejeita certos UTF-8 multi-byte mesmo URL-encoded."""
+    rejeita certos UTF-8 multi-byte mesmo URL-encoded.
+
+    🪤 Em falha, grava o MOTIVO e o TAMANHO em _ULTIMA_FALHA_UPLOAD_PRANCHA.
+    Antes só devolvia False: o painel dizia "CAD não guardado" sem dizer por quê,
+    e o motivo real (413? timeout? tamanho?) morria no log do Render. Caso Ana
+    31/07: o DXF que MEDIU não foi guardado e não deu pra saber a causa."""
     import urllib.request, urllib.error
+    global _ULTIMA_FALHA_UPLOAD_PRANCHA
+    _tam_mb = 0.0
+    try:
+        _tam_mb = os.path.getsize(local_path) / 1048576.0
+    except Exception:
+        pass
     try:
         with open(local_path, "rb") as f:
             body = f.read()
@@ -859,10 +875,21 @@ def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str
         urllib.request.urlopen(req, timeout=60)
         if safe_name != filename:
             _supa_log(f"STORAGE upload prancha OK (saneado: '{filename}' → '{safe_name}')")
+        _ULTIMA_FALHA_UPLOAD_PRANCHA = ""
         return True
     except Exception as e:
-        _supa_log(f"STORAGE upload prancha {filename} ERR {type(e).__name__}: {e}")
-        print(f"[storage pranchas] upload {filename} error: {e}")
+        _detalhe = ""
+        if isinstance(e, urllib.error.HTTPError):
+            try:
+                _corpo = e.read().decode("utf-8", "replace")[:200]
+            except Exception:
+                _corpo = ""
+            _detalhe = f"HTTP {e.code} {_corpo}".strip()
+        else:
+            _detalhe = f"{type(e).__name__}: {e}"
+        _ULTIMA_FALHA_UPLOAD_PRANCHA = f"{_detalhe} — arquivo de {_tam_mb:.1f} MB"
+        _supa_log(f"STORAGE upload prancha {filename} ERR {_ULTIMA_FALHA_UPLOAD_PRANCHA}")
+        print(f"[storage pranchas] upload {filename} error: {_ULTIMA_FALHA_UPLOAD_PRANCHA}")
         return False
 
 
@@ -4001,10 +4028,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     _n_ok += 1
                 elif _p.lower().endswith((".dwg", ".dxf")):
                     # CAD que não subiu é grave e era INVISÍVEL: só ia pro log do
-                    # Render. Agora aparece no painel.
+                    # Render. Agora aparece no painel — COM o motivo, que antes
+                    # também se perdia (caso Ana 31/07: o DXF que mediu 72 itens
+                    # não foi guardado e não deu pra saber se foi tamanho ou timeout).
                     _log_error("storage:cad-nao-guardado",
                                f"CAD não subiu pro Storage: {_fname} — complemento ou "
-                               f"reprocesso deste projeto não vai conseguir medir de novo",
+                               f"reprocesso deste projeto não vai conseguir medir de novo. "
+                               f"Motivo: {_ULTIMA_FALHA_UPLOAD_PRANCHA or 'não registrado'}",
                                job_id, severity="warning")
             except Exception as _e:
                 print(f"[upload-pranchas] erro {os.path.basename(_p)}: {_e}")
@@ -4151,16 +4181,19 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         )
                     elif _truncados:
                         msg = (
-                            f"O arquivo chegou incompleto: {', '.join(_truncados)}\n\n"
-                            f"O leitor de CAD encontrou o fim do arquivo antes do esperado — ou "
-                            f"seja, ele está truncado ou corrompido. Reenviar o mesmo arquivo vai "
-                            f"dar no mesmo.\n\n"
-                            f"Como resolver:\n"
-                            f"1. Abra o arquivo no seu CAD e confira se abre inteiro\n"
-                            f"2. Salve de novo (Salvar Como), de preferência em DXF\n"
-                            f"3. Suba o arquivo novo aqui\n\n"
-                            f"Se ele também não abrir no seu CAD, procure a última versão salva "
-                            f"ou o backup automático (.bak) — o arquivo original se danificou."
+                            f"Não conseguimos ler: {', '.join(_truncados)}\n\n"
+                            f"Nosso conversor chegou ao fim do arquivo antes do esperado. Na "
+                            f"maioria das vezes isso é limitação dele com esse DWG específico, "
+                            f"não defeito do seu arquivo — se ele abre normal no seu CAD, o "
+                            f"problema é do nosso lado.\n\n"
+                            f"Como resolver (é o caminho que mais funciona):\n"
+                            f"1. Abra o arquivo no seu CAD\n"
+                            f"2. Salve como DXF (Salvar Como → DXF, versão 2013)\n"
+                            f"3. Suba o DXF aqui — em geral ele mede sem problema\n\n"
+                            f"Reenviar o mesmo DWG vai dar no mesmo resultado.\n\n"
+                            f"Só se ele também NÃO abrir no seu CAD é que o arquivo está mesmo "
+                            f"danificado — aí procure a última versão salva ou o backup "
+                            f"automático (.bak)."
                         )
                     else:
                         msg = (
