@@ -4327,6 +4327,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     jobs.update_field(job_id, progress=dxf_base)
                     jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: Extraindo {os.path.basename(dxf_path)}...")
 
+                    # 🪤 Nome REAL da prancha, pra cada item saber de onde veio.
+                    # Antes os itens de CAD nasciam com ref_sheet = a palavra
+                    # "DXF" — 1.798 dos 3.851 itens do banco (47%) ficaram assim.
+                    # Consequência visível: o card "Arquivos que alimentaram o
+                    # projeto" ficava VAZIO em todo projeto medido por CAD, porque
+                    # ele monta a lista a partir desse campo (Pedro, 31/07). Os
+                    # itens vindos de PDF sempre guardaram o nome — só o CAD perdia.
+                    _dxf_nome = os.path.basename(dxf_path)
                     # ── CHECKPOINT DXF (buraco tapado 21/07): se esta prancha já
                     # foi analisada num run anterior (retomada), restaura os itens
                     # + contribuições salvos e PULA extração/IA (que é o caro). A
@@ -4348,7 +4356,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                     unit=_r.get("unit", "vb") or "vb",
                                     quantity=float(_r.get("quantity") or 0),
                                     observations=_r.get("observations", "") or "",
-                                    ref_sheet=_r.get("ref_sheet", "DXF") or "DXF",
+                                    ref_sheet=_r.get("ref_sheet") or _dxf_nome,
                                     confidence=_Conf(_r.get("confidence", "estimado") or "estimado"),
                                     discipline=_r.get("discipline", "Complementares") or "Complementares",
                                     origem=_r.get("origem", "dxf_geom") or "dxf_geom",
@@ -4764,7 +4772,7 @@ Depois do raciocínio, retorne o JSON em bloco de código (```json...```):
       "unit": "m²",
       "quantity": 100,
       "observations": "Fonte: <layer/bloco/texto exato da extração>",
-      "ref_sheet": "DXF",
+      "ref_sheet": "deixe VAZIO — o código preenche com o nome real do arquivo",
       "confidence": "confirmado ou estimado — nunca inventar",
       "discipline": "Categoria"
     }}
@@ -4956,7 +4964,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     unit=normalized_unit,
                                     quantity=qty,
                                     observations=obs_raw,
-                                    ref_sheet="DXF",
+                                    ref_sheet=_dxf_nome,
                                     confidence=Confidence(conf),
                                     discipline=discipline,
                                     origem="dxf_geom",  # medido por geometria ezdxf
