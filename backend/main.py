@@ -12665,7 +12665,26 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     # NÃO apaga os itens antigos aqui: a limpeza acontece no _persist (só no
     # SUCESSO do reprocesso). Se o CAD falhar (não-convertível/0 itens), a
     # planilha estimada anterior é preservada. Aqui só marca 'queued'.
-    _supabase_update("projects", "job_id", job_id, {"status": "queued", "error_message": None})
+    #
+    # 🪤 E ATUALIZA A COMPOSIÇÃO DO PROJETO (31/07/2026). Até aqui, anexar
+    # arquivo não mexia em files_count/file_types: o projeto ficava congelado no
+    # que o cliente mandou PRIMEIRO. O painel mostrava "1 PDF" num projeto que
+    # já tinha CAD e 30 itens MEDIDOS (caso Fernando, 31/07) — e, pior, as
+    # estatísticas de "PDF mede X, CAD mede Y" contavam esses sucessos do
+    # complemento na coluna do PDF, inflando o PDF e escondendo o valor do
+    # anexo. É o mesmo vício de "contar o que entrou, não o que o projeto virou".
+    # Conta pelo que está no STORAGE (a composição real), não pelo que este run
+    # processa — o run descarta os PDFs quando há CAD, mas eles seguem no projeto.
+    _comp = {"dwg": 0, "dxf": 0, "pdf": 0}
+    for _n in names:
+        _e = os.path.splitext(_n.lower())[1].lstrip(".")
+        if _e in _comp:
+            _comp[_e] += 1
+    _upd = {"status": "queued", "error_message": None}
+    if sum(_comp.values()) > 0:
+        _upd["file_types"] = _comp
+        _upd["files_count"] = sum(_comp.values())
+    _supabase_update("projects", "job_id", job_id, _upd)
 
     jobs[job_id] = ProcessingStatus(
         job_id=job_id, status="queued", progress=0,
