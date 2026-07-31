@@ -104,6 +104,15 @@ def medir_um(dxf_path: str, fator: float) -> dict:
         out["n_rooms"] = len(areas)
         out["rooms_m2"] = round(sum(areas), 1)
         out["top"] = [round(a, 1) for a in areas[:5]]
+        # 🪤 SOMA DE AMBIENTES ≠ ÁREA TOTAL. O caminho do PDF descarta
+        # envoltórias de propósito (_middle_layer) pra achar AMBIENTE — por isso
+        # soma ~1/3 do pavimento, e isso está certo. A área TOTAL é outra coisa:
+        # é a maior face fechada (a envoltória). Registramos as duas pra decidir
+        # com dado qual serve pra quê. 🪤 Meu spike de 30/07 somou ambientes +
+        # envoltórias e deu "99% do declarado" — número inflado, não medição.
+        todas = sorted((f.area for f in faces), reverse=True)
+        out["envelope_m2"] = round(todas[0], 1) if todas else None
+        out["envelope_top"] = [round(a, 1) for a in todas[:4]]
     except Exception as e:
         out["err"] = f"{type(e).__name__}: {e}"[:110]
     out["secs"] = round(time.time() - t0, 1)

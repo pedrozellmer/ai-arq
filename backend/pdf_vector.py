@@ -138,9 +138,18 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         # envoltória: ponte proporcional à escala (1,2 m reais). Antes era 12pt
         # fixo — batia com 1,2 m só em 1:100; em 1:50 fechava apenas 0,6 m.
         env_gap_pt = 1.2 / (PT_TO_M * den)
+        # 🪤 O piso de 400 m² é arbitrário e estava DESCARTANDO setor real: no
+        # projeto de teste o setor "área sem intervenção" tem 380,9 m² e ficava
+        # de fora — por isso a envoltória não saía em 5 das 7 pranchas. Agora a
+        # busca desce a 150 m² e registramos AS DUAS leituras (a de 400, que é o
+        # comportamento atual, e a mais baixa) pra decidir o piso com dado real.
+        # Mesmo custo: continua UMA passada. 30/07/2026.
         env = detect_rooms(pdf_path, page_index, den, bbox,
-                           min_m2=400, max_m2=5000, bridge_gaps_pt=env_gap_pt)
-        out["envelope_m2"] = round(max((r["area_m2"] for r in env), default=0), 1) or None
+                           min_m2=150, max_m2=5000, bridge_gaps_pt=env_gap_pt)
+        _env_areas = sorted((r["area_m2"] for r in env), reverse=True)
+        out["envelope_m2"] = round(max((a for a in _env_areas if a >= 400), default=0), 1) or None
+        out["envelope_m2_150"] = round(_env_areas[0], 1) if _env_areas else None
+        out["envelope_top"] = [round(a, 1) for a in _env_areas[:4]]
     except Exception as e:
         out["err_rooms"] = f"{type(e).__name__}: {e}"[:120]
 
@@ -235,7 +244,8 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
         # Agora grava só o que decide se o leitor vetorial sai da sombra.
         def _resumo(r: dict) -> dict:
             keep = ("file", "page", "scale", "scale_src", "n_rooms",
-                    "rooms_m2", "envelope_m2", "skip", "err")
+                    "rooms_m2", "envelope_m2", "envelope_m2_150", "envelope_top",
+                    "skip", "err")
             d = {k: r[k] for k in keep if r.get(k) is not None}
             if isinstance(d.get("file"), str):
                 d["file"] = d["file"][:34]
