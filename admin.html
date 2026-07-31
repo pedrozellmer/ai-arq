@@ -1332,7 +1332,9 @@ async function testarLimiteStorage(mb){
       box.innerHTML = `<div class="p-3 rounded-lg bg-green-50 border border-green-200 text-sm">
         <p class="font-semibold text-green-800">✓ Passou com ${d.tamanho_testado_mb} MB</p>
         <p class="text-green-700 mt-1">Levou ${d.segundos}s. O limite cobre esse tamanho.</p>
-        ${d.apagado === false ? '<p class="text-amber-700 mt-1">⚠ O arquivo de teste não foi apagado — me avise.</p>' : '<p class="text-green-600 mt-1 text-xs">Arquivo de teste apagado.</p>'}
+        ${d.apagado === false
+          ? `<p class="text-amber-700 mt-1">⚠ Não consegui apagar o arquivo de teste: ${d.erro_ao_apagar || 'motivo não registrado'} — me avise.</p>`
+          : `<p class="text-green-600 mt-1 text-xs">Limpeza: ${(d.apagados && d.apagados.length) ? d.apagados.join(', ') + ' apagado(s).' : 'nada sobrou no bucket.'}</p>`}
       </div>`;
     } else {
       box.innerHTML = `<div class="p-3 rounded-lg bg-red-50 border border-red-200 text-sm">

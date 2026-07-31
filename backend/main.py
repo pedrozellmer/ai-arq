@@ -6396,6 +6396,7 @@ async def debug_storage_limit(request: Request, mb: int = 60):
     """
     _require_admin(request)
     import tempfile, urllib.request, urllib.parse as _up
+    PASTA_DIAG = "diagnostico"
     mb = max(1, min(600, int(mb)))
     _t0 = time.time()
     caminho = None
@@ -6412,28 +6413,33 @@ async def debug_storage_limit(request: Request, mb: int = 60):
                 fh.write(bloco)
                 escrito += len(bloco)
         tamanho_real = os.path.getsize(caminho) / 1048576.0
-        nome = "_diagnostico-limite.dxf"
-        ok = _supabase_storage_upload_prancha(caminho, "_diagnostico", nome)
+        nome = "diagnostico-limite.dxf"
+        ok = _supabase_storage_upload_prancha(caminho, PASTA_DIAG, nome)
         resp = {
             "tamanho_testado_mb": round(tamanho_real, 1),
             "subiu": ok,
             "motivo": None if ok else (_ULTIMA_FALHA_UPLOAD_PRANCHA or "não registrado"),
             "segundos": round(time.time() - _t0, 1),
         }
-        if ok:
-            # limpa na hora — diagnóstico não pode virar lixo cobrado no Storage
-            try:
-                key = f"_diagnostico/{_up.quote(nome)}"
-                req = urllib.request.Request(
-                    f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{key}",
-                    method="DELETE")
-                req.add_header("apikey", SUPABASE_KEY)
-                req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-                urllib.request.urlopen(req, timeout=30)
-                resp["apagado"] = True
-            except Exception as e:
-                resp["apagado"] = False
-                resp["erro_ao_apagar"] = f"{type(e).__name__}: {e}"
+        # Limpa TUDO que existir na pasta de diagnóstico, não só o desta rodada.
+        # 🪤 Antes eu montava a chave com o nome ORIGINAL, mas o upload sanitiza
+        # o nome antes de gravar (`_sanitize_filename_for_storage`) — o delete
+        # batia num caminho que não existia e deixava 250 MB parados no bucket.
+        # Listar e apagar o que está lá de verdade não depende de adivinhar o nome.
+        apagados, erros = [], []
+        try:
+            for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{PASTA_DIAG}/"):
+                alvo = f"{PASTA_DIAG}/{_up.quote(n)}"
+                if _supabase_storage_delete(PRANCHAS_BUCKET, alvo):
+                    apagados.append(n)
+                else:
+                    erros.append(n)
+        except Exception as e:
+            erros.append(f"{type(e).__name__}: {e}")
+        resp["apagado"] = (not erros)
+        resp["apagados"] = apagados
+        if erros:
+            resp["erro_ao_apagar"] = "; ".join(str(x) for x in erros)
         return resp
     finally:
         if caminho:
