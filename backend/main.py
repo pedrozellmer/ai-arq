@@ -7263,6 +7263,44 @@ async def admin_newsletter_schedule(request: Request):
     return {"status": "ok", "scheduled_for": when}
 
 
+@app.get("/api/admin/blog/agenda")
+async def admin_blog_agenda(request: Request):
+    """Agenda do blog (slug + título + data) pro Calendário de Conteúdo.
+
+    🪤 POR QUE ESTE ENDPOINT EXISTE (31/07/2026): o calendário lia
+    `/blog/posts.json` do site — mas o workflow de deploy APAGA esse arquivo de
+    propósito (limpeza de 28/07, pra não expor post não publicado). Resultado:
+    404, o fetch caía no catch, e o painel anunciava "a fila secou" com 10 posts
+    agendados até outubro. A decisão de apagar do site está certa; o painel é
+    que não podia depender dela. Aqui o backend lê o arquivo do próprio
+    repositório, que ele tem em disco.
+
+    Devolve só o necessário pro calendário — nunca o corpo dos posts.
+    """
+    _require_admin(request)
+    _p = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                      "blog", "posts.json")
+    try:
+        with open(_p, "r", encoding="utf-8") as _f:
+            _raw = _json.load(_f)
+    except Exception as e:
+        # Falha explícita: o painel PRECISA distinguir "não consegui ler" de
+        # "não há nada agendado" — foi essa confusão que gerou o alarme falso.
+        raise HTTPException(503, f"Não consegui ler a agenda do blog: {type(e).__name__}")
+    _posts = _raw.get("posts", _raw) if isinstance(_raw, dict) else _raw
+    _out = []
+    for _p2 in (_posts or []):
+        if not isinstance(_p2, dict):
+            continue
+        _out.append({
+            "slug": _p2.get("slug", ""),
+            "title": _p2.get("title", "") or _p2.get("slug", ""),
+            "publish_date": _p2.get("publish_date", ""),
+        })
+    _out.sort(key=lambda x: x.get("publish_date") or "")
+    return {"posts": _out, "total": len(_out)}
+
+
 @app.get("/api/admin/newsletter/scheduled")
 async def admin_newsletter_scheduled(request: Request):
     """Lista os agendamentos (admin)."""

@@ -1567,9 +1567,15 @@ async function loadCalendario(){
   const tl = document.getElementById('cal-timeline');
   tl.innerHTML = '<div class="p-6 text-center text-sm text-gray-400">Carregando…</div>';
   try {
-    // blog/posts.json é servido pelo mesmo domínio (GitHub Pages) — fetch simples.
+    // 🪤 A agenda do blog vem do BACKEND, não de /blog/posts.json do site: o
+    // deploy apaga esse arquivo de propósito (28/07, pra não expor post não
+    // publicado). O fetch dava 404, caía no catch e o painel anunciava "a fila
+    // secou" com 10 posts agendados até outubro. Falha de leitura agora vira
+    // AVISO DE FALHA, nunca "não tem nada". (31/07)
     const [blogRaw, igRaw, nlRaw] = await Promise.all([
-      fetch('/blog/posts.json?v=' + Date.now()).then(r => r.ok ? r.json() : null).catch(() => null),
+      authFetch(`${API_BASE}/api/admin/blog/agenda`)
+        .then(r => r.ok ? r.json() : { _erro: 'HTTP ' + r.status })
+        .catch(e => ({ _erro: String(e).slice(0, 60) })),
       authFetch(`${API_BASE}/api/admin/instagram/posts?limit=300`).then(r => r.json()).catch(() => ({})),
       authFetch(`${API_BASE}/api/admin/newsletter/scheduled`).then(r => r.json()).catch(() => ({})),
     ]);
@@ -1579,7 +1585,8 @@ async function loadCalendario(){
 
     const itens = [];
     // BLOG — publish_date já é data pura (sem fuso)
-    const blogPosts = blogRaw ? (blogRaw.posts || blogRaw) : [];
+    const blogFalhou = !!(blogRaw && blogRaw._erro);
+    const blogPosts = blogFalhou ? [] : (blogRaw ? (blogRaw.posts || blogRaw) : []);
     for (const p of blogPosts) {
       const d = String(p.publish_date || '');
       if (d >= ini && d <= fim) itens.push({
@@ -1639,8 +1646,9 @@ async function loadCalendario(){
       cardCobertura('📸', 'Instagram', igDias >= 2,
         igAte ? `Aprovado até <b>${calRotuloDia(igAte)}</b> · ${igEstoque} no estoque esperando aprovação`
               : `Nenhum post aprovado na fila · ${igEstoque} esperando aprovação — <b>hora de aprovar a próxima leva</b>`) +
-      cardCobertura('📝', 'Blog', blogFuturos.length > 0,
-        blogFuturos.length ? `Abastecido até <b>${calRotuloDia(blogFuturos[blogFuturos.length - 1])}</b> (${blogFuturos.length} posts na fila)`
+      cardCobertura('📝', 'Blog', !blogFalhou && blogFuturos.length > 0,
+        blogFalhou ? `<b>Não consegui ler a agenda do blog</b> — isso NÃO quer dizer que a fila secou. (${blogRaw._erro})`
+        : blogFuturos.length ? `Abastecido até <b>${calRotuloDia(blogFuturos[blogFuturos.length - 1])}</b> (${blogFuturos.length} posts na fila)`
                            : 'Sem posts futuros — a fila secou') +
       cardCobertura('📧', 'Newsletter', nlFuturas > 0,
         nlFuturas ? `${nlFuturas} agendada(s)` : 'Dormente — nenhuma agendada');
