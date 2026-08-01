@@ -10,6 +10,15 @@ Deps: só stdlib + o próprio main. Prova DUPLA:
 """
 import os
 import sys
+
+# 🪤 01/08/2026: o teste imprime "→" e o console do Windows (cp1252) não
+# codifica esse caractere — quebrava com UnicodeEncodeError NA SAÍDA, com a
+# lógica passando. Ficou invisível porque a checagem de status usada até então
+# lia o exit code do `tail` no fim do pipe, não o do Python.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
 import tempfile
 import threading
 import contextlib

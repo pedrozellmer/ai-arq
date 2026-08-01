@@ -267,8 +267,6 @@ Na dúvida real entre "confirmado" e "estimado" (você encontrou o número mas t
 
 Não use "verificar" — use "estimado" pra qualquer incerteza.
 
-- Adicionar 5-10% de perda/desperdício em materiais quando pertinente (marcar como estimado)
-
 ## PORTUGUÊS BRASILEIRO
 - Acentuação PERFEITA (é, ã, ç, ó, í, ê, â, etc.)
 - Não usar "orcamento", usar "orçamento"
