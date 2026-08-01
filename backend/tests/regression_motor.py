@@ -20,6 +20,10 @@ Regras de veredito:
   - arquivo novo na pasta = aparece como "novo" (não falha; --update adota)
   - sanidade: sala 1,5–200 m²; total de salas da prancha < 2.000 m² —
     medida fora disso = FALHA (explosão), mesmo que "maior que o golden".
+    Exceção: valor listado à mão em "sanity_ok_top" no golden da prancha
+    (com "sanity_motivo") passa — só humano escreve isso; --update preserva
+    mas nunca cria. Caso típico: forro contínuo que fecha vários ambientes
+    como uma região só (ver _sanidade_pdf).
 
 O golden é COMMITADO; as pranchas não (dados reais de cliente/projeto).
 Pranchas esperadas em: C:\\Users\\admin\\Desktop\\arq (DXF soltos e
@@ -161,10 +165,24 @@ def _qty_ok(a, b) -> bool:
     return ref > 0 and abs(a - b) / ref <= TOL_QTY
 
 
-def _sanidade_pdf(s: dict) -> list:
+def _sanidade_pdf(s: dict, g: dict = None) -> list:
+    """Explosão absoluta (escala errada infla sala). Exceção: valor que um
+    humano REVISOU e escreveu à mão no golden em "sanity_ok_top" (lista de m²,
+    com "sanity_motivo" dizendo por quê). O --update preserva mas NUNCA cria
+    essas exceções — adoção cega de golden não silencia a sanidade.
+
+    Caso que motivou (01/08/2026): FORRO do projeto 0326 devolve região de
+    263,1 m². Não é sala nem explosão de escala — planta de forro não desenha
+    vão de porta, então o forro contínuo fecha circulação + salas como UMA
+    região. O layout do MESMO pavimento tem maior ambiente real de 71,4 m².
+    Capar isso no detect_rooms quebraria open space corporativo legítimo, e o
+    m² de forro contínuo é exatamente o quantitativo dessa prancha."""
+    ok = (g or {}).get("sanity_ok_top") or []
     err = []
     for a in s.get("top_rooms") or []:
         if a and not (SANITY_SALA_MIN <= a <= SANITY_SALA_MAX):
+            if any(_qty_ok(a, v) for v in ok):
+                continue                       # revisado por humano no golden
             err.append(f"sala {a} m² fora da sanidade [{SANITY_SALA_MIN},{SANITY_SALA_MAX}]")
     if (s.get("rooms_m2") or 0) > SANITY_PRANCHA_MAX:
         err.append(f"total de salas {s['rooms_m2']} m² > {SANITY_PRANCHA_MAX}")
@@ -190,7 +208,7 @@ def comparar(golden: dict, atual: dict) -> tuple:
                 if g.get("blocos_top") != a.get("blocos_top"):
                     falhas.append(f"[dxf] {fn}: contagem de blocos mudou")
             else:
-                sane = _sanidade_pdf(a)
+                sane = _sanidade_pdf(a, g)
                 if sane:
                     falhas.append(f"[pdf] {fn}: EXPLOSÃO — " + "; ".join(sane))
                 # regressão: media e deixou de medir
@@ -219,6 +237,22 @@ def main():
     print(f"\ncoletado: {n_dxf} DXF, {n_pdf} PDF")
 
     if args.update or not os.path.exists(GOLDEN_PATH):
+        # Preserva exceções de sanidade escritas à mão no golden anterior.
+        # O --update NUNCA cria nem apaga uma exceção — só um humano.
+        if os.path.exists(GOLDEN_PATH):
+            try:
+                antigo = json.load(open(GOLDEN_PATH, encoding="utf-8"))
+            except (OSError, ValueError) as e:
+                print(f"AVISO: golden anterior ilegível ({e}) — exceções de "
+                      f"sanidade (sanity_ok_top) NÃO foram preservadas")
+                antigo = {}
+            for kind in ("dxf", "pdf"):
+                for fn, g in (antigo.get(kind) or {}).items():
+                    if fn not in (atual.get(kind) or {}):
+                        continue
+                    for k in ("sanity_ok_top", "sanity_motivo"):
+                        if k in g:
+                            atual[kind][fn][k] = g[k]
         json.dump(atual, open(GOLDEN_PATH, "w", encoding="utf-8"),
                   ensure_ascii=False, indent=1, sort_keys=True)
         print(f"golden {'atualizado' if args.update else 'criado'}: {GOLDEN_PATH}")
