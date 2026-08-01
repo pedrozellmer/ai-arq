@@ -474,11 +474,13 @@ function renderItem(it, localIndex) {
   // botões. Clicar nela abre a edição direto no campo Quantidade.
   const qtyNum = it.quantity || 0;
   const qtyFmt = qtyNum.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+  // Caixinha AZUL (01/08 — Pedro): o âmbar sumia no fundo laranja da linha.
+  // Índigo = cor de "clicável" no site; quem diz medido/estimado é a LINHA.
   const qtyBlock = qtyNum > 0
     ? `<button onclick="openEdit('${it.id}', true)" title="Clique pra corrigir a quantidade"
-         class="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg border ${isMedido ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'} hover:border-indigo-300 transition cursor-pointer">
-         <span class="text-lg font-bold leading-none ${isMedido ? 'text-gray-900' : 'text-amber-800'}">${qtyFmt}</span>
-         <span class="text-xs font-medium ${isMedido ? 'text-gray-500' : 'text-amber-700'}">${escapeHtml(it.unit)}</span>
+         class="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg border bg-white border-indigo-300 hover:border-indigo-500 hover:bg-indigo-50 transition cursor-pointer shadow-sm">
+         <span class="text-lg font-bold leading-none text-indigo-700">${qtyFmt}</span>
+         <span class="text-xs font-medium text-indigo-400">${escapeHtml(it.unit)}</span>
        </button>`
     : `<button onclick="openEdit('${it.id}', true)" title="Item sem quantidade — clique pra preencher"
          class="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg border bg-red-50 border-red-200 hover:border-red-400 transition cursor-pointer">
