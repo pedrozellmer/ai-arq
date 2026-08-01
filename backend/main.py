@@ -48,6 +48,7 @@ from engine_rules import (
     extract_type_code as _extract_type_code,
     response_truncated as _response_truncated,
     is_floor_surface as _is_floor_surface,
+    is_unit_mismatch_countable as _is_unit_mismatch_countable,
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
 )
@@ -5845,6 +5846,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
                           f"{project_data.user_pe_direito} m informado (estimado)")
         except Exception as _epd:
             print(f"[pe-direito] job={job_id}: derivação falhou: {_epd}")
+        # Coerência de unidade (caso Rafael 01/08): item CONTÁVEL (condulete,
+        # tomada, ponto...) com unidade linear/área não pode ficar CONFIRMADO —
+        # a quantidade veio de outra medição pendurada na linha errada.
+        try:
+            from models import Confidence as _Conf
+            _n_rebaixados = 0
+            for _it in all_items:
+                if (_it.confidence == _Conf.CONFIRMADO
+                        and _is_unit_mismatch_countable(_it.description, _it.unit)):
+                    _it.confidence = _Conf.ESTIMADO
+                    _it.observations = ((_it.observations + " | ") if _it.observations else "") + (
+                        "⚠ REBAIXADO: item contável (un) veio com unidade "
+                        f"{_it.unit} — a quantidade pode pertencer a outra linha "
+                        "(ex.: metros de eletroduto). Confira antes de orçar.")
+                    _n_rebaixados += 1
+            if _n_rebaixados:
+                print(f"[unidade-contavel] job={job_id}: rebaixei {_n_rebaixados} "
+                      f"item(ns) contável(is) com unidade linear (falso-medido)")
+        except Exception as _euc:
+            print(f"[unidade-contavel] job={job_id}: checagem falhou: {_euc}")
 
         for _fld, _reads in _area_readings.items():
             if len(set(_reads)) > 1:

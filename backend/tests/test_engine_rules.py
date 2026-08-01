@@ -152,3 +152,14 @@ check("contrapiso H=5cm -> SIM (espessura, nao posicao)", is_floor_surface("Cont
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
 sys.exit(1 if _failed else 0)
+
+
+# ── coerência de unidade em item contável (caso Rafael, 01/08/2026) ─────────
+from engine_rules import is_unit_mismatch_countable
+
+check("condulete em ml -> MISMATCH", is_unit_mismatch_countable("Condulete de dados", "ml") is True)
+check("condulete em un -> ok", is_unit_mismatch_countable("Condulete metálico", "un") is False)
+check("eletroduto em ml -> ok (linear de verdade)", is_unit_mismatch_countable("Eletroduto corrugado", "ml") is False)
+check("tomada em m -> MISMATCH", is_unit_mismatch_countable("Tomada 2P+T", "m") is True)
+check("luminária em m² -> MISMATCH", is_unit_mismatch_countable("Luminária LED 60x60", "m²") is True)
+check("cabeamento em ml -> ok", is_unit_mismatch_countable("Cabeamento par trançado Cat.6", "ml") is False)

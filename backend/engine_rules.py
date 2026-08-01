@@ -234,3 +234,36 @@ def is_floor_surface(desc):
     d = (desc or "").lower()
     return (any(k in d for k in FLOOR_AREA_KW)
             and not any(b in d for b in FLOOR_AREA_BLOCK_KW))
+
+
+# ── Coerência de unidade: item CONTÁVEL não sai em metro/m² ──────────────────
+# Caso Rafael (visto em 01/08/2026, job ed655532): "Condulete de dados —
+# 155,6 ml — CONFIRMADO". Condulete é caixa: conta-se em unidade. O motor mediu
+# 155,6 m de infra linear (fix do Fábio) e a IA pendurou os metros na linha
+# ERRADA — o condulete virou falso-medido e o eletroduto ficou zerado.
+# A regra só REBAIXA (confirmado → estimado) e anota; nunca apaga nem move
+# quantidade — mover seria adivinhar a qual linha os metros pertencem.
+
+COUNTABLE_KW = (
+    "condulete", "caixa de passagem", "caixa de piso", "caixa 4x2", "caixa 4x4",
+    "tomada", "interruptor", "ponto de dados", "ponto de rede", "ponto de tv",
+    "ponto de multimídia", "ponto de multimidia", "rack", "patch panel",
+    "luminária", "luminaria", "spot", "arandela", "quadro de distribuição",
+    "quadro de distribuicao", "disjuntor",
+)
+
+LINEAR_UNITS = ("m", "ml", "m linear", "metro", "metros", "m²", "m2", "m³", "m3")
+
+
+def is_unit_mismatch_countable(desc, unit):
+    """True se a descrição é de item CONTÁVEL (caixa/ponto/aparelho) mas a
+    unidade veio linear/de área — quantidade não pode ser medição desse item.
+
+    Cuidado deliberado: "eletroduto", "eletrocalha", "cabeamento" NÃO estão na
+    lista — esses são lineares de verdade. A regra pega só o que jamais deveria
+    sair em metros."""
+    d = (desc or "").lower()
+    u = (unit or "").strip().lower().replace("²", "2").replace("³", "3")
+    if u not in LINEAR_UNITS:
+        return False
+    return any(k in d for k in COUNTABLE_KW)
