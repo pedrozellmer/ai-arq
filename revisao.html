@@ -201,20 +201,25 @@
 <!-- MODAL DE EDIÇÃO                                                  -->
 <!-- ═════════════════════════════════════════════════════════════ -->
 <div id="modal-edit" role="dialog" aria-modal="true" aria-labelledby="modal-edit-title" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-  <div class="bg-white rounded-xl max-w-md w-full p-5">
+  <!-- max-w-2xl (01/08 — Pedro: modal maior; descrição longa não cabia no md) -->
+  <div class="bg-white rounded-xl max-w-2xl w-full p-6">
     <div class="flex items-center justify-between mb-4">
       <h3 id="modal-edit-title" class="font-semibold text-gray-800">Editar item</h3>
-      <button type="button" onclick="closeEditModal()" aria-label="Fechar" class="text-gray-500 hover:text-gray-600">✕</button>
+      <button type="button" onclick="closeEditModal()" aria-label="Fechar (Esc)" title="Fechar (Esc)" class="text-gray-500 hover:text-gray-600">✕</button>
     </div>
-    <form id="edit-form" class="space-y-3">
+    <form id="edit-form" class="space-y-4">
       <div>
         <label for="edit-desc" class="block text-xs font-medium text-gray-600 mb-1">Descrição</label>
-        <input id="edit-desc" type="text" class="w-full px-3 py-2 border rounded text-sm" />
+        <textarea id="edit-desc" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm resize-y"></textarea>
       </div>
-      <div class="grid grid-cols-3 gap-2">
+      <div class="grid grid-cols-3 gap-3">
+        <div class="col-span-2">
+          <label for="edit-qty" class="block text-xs font-medium text-gray-600 mb-1">Quantidade</label>
+          <input id="edit-qty" type="number" step="0.01" class="w-full px-3 py-2.5 border-2 border-indigo-200 focus:border-indigo-400 rounded-lg text-lg font-bold text-gray-900" />
+        </div>
         <div>
           <label for="edit-unit" class="block text-xs font-medium text-gray-600 mb-1">Unidade</label>
-          <select id="edit-unit" class="w-full px-2 py-2 border rounded text-sm">
+          <select id="edit-unit" class="w-full px-2 py-2.5 border rounded-lg text-sm h-[46px]">
             <option value="un">un</option><option value="m²">m²</option>
             <option value="ml">ml</option><option value="m³">m³</option>
             <option value="mês">mês</option><option value="dia">dia</option>
@@ -222,18 +227,17 @@
             <option value="%">%</option>
           </select>
         </div>
-        <div class="col-span-2">
-          <label for="edit-qty" class="block text-xs font-medium text-gray-600 mb-1">Quantidade</label>
-          <input id="edit-qty" type="number" step="0.01" class="w-full px-3 py-2 border rounded text-sm" />
-        </div>
       </div>
       <div>
         <label for="edit-obs" class="block text-xs font-medium text-gray-600 mb-1">Observações</label>
-        <textarea id="edit-obs" rows="2" class="w-full px-3 py-2 border rounded text-sm"></textarea>
+        <textarea id="edit-obs" rows="3" class="w-full px-3 py-2 border rounded-lg text-sm resize-y"></textarea>
       </div>
-      <div class="flex gap-2 justify-end pt-2">
-        <button type="button" onclick="closeEditModal()" class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancelar</button>
-        <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded">Salvar</button>
+      <div class="flex items-center justify-between gap-2 pt-1">
+        <span class="text-[11px] text-gray-400 hidden sm:inline"><kbd>Enter</kbd> na quantidade salva · <kbd>Esc</kbd> volta pra lista</span>
+        <div class="flex gap-2">
+          <button type="button" onclick="closeEditModal()" class="px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+          <button type="submit" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-lg">Salvar</button>
+        </div>
       </div>
     </form>
   </div>
@@ -461,54 +465,58 @@ function renderItem(it, localIndex) {
     rejected: '<span class="chip bg-red-100 text-red-700 ml-2"><span aria-hidden="true">✗</span> excluído</span>',
     pending:  '',
   }[state] || '';
-  // Quantidade em DESTAQUE (01/08 — Pedro: o número é o protagonista da revisão
-  // e estava apagado no meio dos metadados). Clicar nela abre a edição.
-  // Zero vira alerta vermelho "preencher" — é o item que mais precisa de gente.
+  // Quantidade em DESTAQUE (v2 01/08 — Pedro achou o número solto no canto
+  // "bem ruim"): caixinha à ESQUERDA da linha de ações, alinhada com os
+  // botões. Clicar nela abre a edição direto no campo Quantidade.
   const qtyNum = it.quantity || 0;
   const qtyFmt = qtyNum.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
   const qtyBlock = qtyNum > 0
-    ? `<button onclick="openEdit('${it.id}')" title="Clique pra corrigir a quantidade"
-         class="flex-shrink-0 w-24 text-right pt-0.5 group cursor-pointer">
-         <span class="block text-xl font-bold ${isMedido ? 'text-gray-900' : 'text-amber-700'} leading-none group-hover:underline">${qtyFmt}</span>
-         <span class="block text-[11px] text-gray-500 mt-1">${escapeHtml(it.unit)}</span>
+    ? `<button onclick="openEdit('${it.id}', true)" title="Clique pra corrigir a quantidade"
+         class="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg border ${isMedido ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'} hover:border-indigo-300 transition cursor-pointer">
+         <span class="text-lg font-bold leading-none ${isMedido ? 'text-gray-900' : 'text-amber-800'}">${qtyFmt}</span>
+         <span class="text-xs font-medium ${isMedido ? 'text-gray-500' : 'text-amber-700'}">${escapeHtml(it.unit)}</span>
        </button>`
-    : `<button onclick="openEdit('${it.id}')" title="Item sem quantidade — clique pra preencher"
-         class="flex-shrink-0 w-24 text-right pt-0.5 cursor-pointer">
-         <span class="block text-xl font-bold text-red-500 leading-none">0</span>
-         <span class="block text-[11px] font-semibold text-red-600 mt-1 underline">preencher ✎</span>
+    : `<button onclick="openEdit('${it.id}', true)" title="Item sem quantidade — clique pra preencher"
+         class="inline-flex items-baseline gap-1.5 px-3 py-1.5 rounded-lg border bg-red-50 border-red-200 hover:border-red-400 transition cursor-pointer">
+         <span class="text-lg font-bold leading-none text-red-600">0</span>
+         <span class="text-xs font-semibold text-red-600 underline">preencher ✎</span>
        </button>`;
   // Botões com PALAVRA, não ícone (01/08 — Pedro: "ao invés de ícones, a palavra").
   const btnBase = 'px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition whitespace-nowrap';
   return `
-    <div class="item-row ${state} px-4 py-3 flex flex-wrap items-start gap-x-4 gap-y-2" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
-      <div class="flex-shrink-0 w-8 text-xs text-gray-500 pt-1">${localIndex + 1}</div>
-      <div class="flex-1 min-w-[240px]">
-        <p class="text-sm text-gray-800 ${isOrange ? '' : 'font-medium'}">${escapeHtml(it.description)}</p>
-        <p class="text-xs text-gray-500 mt-1">
-          <span class="chip ${isOrange ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}">
-            ${provLabel}
-          </span>${stateChip}
-          ${it.ref_sheet ? `<span class="ml-2 text-indigo-500">📄 ${escapeHtml(it.ref_sheet).slice(0,50)}</span>` : ''}
-          ${it.observations ? `<span class="ml-2 text-gray-500" title="${escapeHtml(it.observations)}">· ${escapeHtml(it.observations.slice(0,110))}${it.observations.length > 110 ? '…' : ''}</span>` : ''}
-        </p>
+    <div class="item-row ${state} px-4 py-3" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
+      <div class="flex items-start gap-3">
+        <div class="flex-shrink-0 w-6 text-xs text-gray-500 pt-1">${localIndex + 1}</div>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm text-gray-800 ${isOrange ? '' : 'font-medium'}">${escapeHtml(it.description)}</p>
+          <p class="text-xs text-gray-500 mt-1">
+            <span class="chip ${isOrange ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}">
+              ${provLabel}
+            </span>${stateChip}
+            ${it.ref_sheet ? `<span class="ml-2 text-indigo-500">📄 ${escapeHtml(it.ref_sheet).slice(0,50)}</span>` : ''}
+            ${it.observations ? `<span class="ml-2 text-gray-500" title="${escapeHtml(it.observations)}">· ${escapeHtml(it.observations.slice(0,110))}${it.observations.length > 110 ? '…' : ''}</span>` : ''}
+          </p>
+        </div>
       </div>
-      ${qtyBlock}
-      <div class="flex-shrink-0 flex flex-wrap items-center justify-end gap-1.5 w-full sm:w-[230px]">
-        <button onclick="review('${it.id}','approve')" title="A quantidade está certa (tecla A)"
-          class="${btnBase} border-green-300 text-green-700 hover:bg-green-50">✓ Confirmar</button>
-        <button onclick="openEdit('${it.id}')" title="Corrigir quantidade, unidade ou descrição (tecla E)"
-          class="${btnBase} border-amber-300 text-amber-700 hover:bg-amber-50">✎ Editar</button>
-        <button onclick="review('${it.id}','reject')" title="Item não existe no projeto — sai da planilha (tecla D)"
-          class="${btnBase} border-red-200 text-red-600 hover:bg-red-50">✕ Excluir</button>
-        <button onclick="markExistente('${it.id}')" title="Já existe na obra — mantém na planilha sem precisar comprar, zera a quantidade (tecla M)"
-          class="${btnBase} border-slate-300 text-slate-600 hover:bg-slate-100">🏠 Já existe</button>
-        ${hasSheet ? `
-        <button onclick="openSheet('${it.id}')" title="Abrir a prancha em outra aba pra conferir medindo"
-          class="${btnBase} border-indigo-200 text-indigo-600 hover:bg-indigo-50">📄 Prancha</button>` : ''}
-        <button onclick="openComment('${it.id}')" title="Comentar — ajuda a IA a acertar mais (tecla C)"
-          class="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-        </button>
+      <div class="flex flex-wrap items-center justify-between gap-2 mt-2 pl-9">
+        ${qtyBlock}
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button onclick="review('${it.id}','approve')" title="A quantidade está certa (tecla A)"
+            class="${btnBase} border-green-300 text-green-700 hover:bg-green-50">✓ Confirmar</button>
+          <button onclick="openEdit('${it.id}')" title="Corrigir quantidade, unidade ou descrição (tecla E)"
+            class="${btnBase} border-amber-300 text-amber-700 hover:bg-amber-50">✎ Editar</button>
+          <button onclick="review('${it.id}','reject')" title="Item não existe no projeto — sai da planilha (tecla D)"
+            class="${btnBase} border-red-200 text-red-600 hover:bg-red-50">✕ Excluir</button>
+          <button onclick="markExistente('${it.id}')" title="Já existe na obra — mantém na planilha sem precisar comprar, zera a quantidade (tecla M)"
+            class="${btnBase} border-slate-300 text-slate-600 hover:bg-slate-100">🏠 Já existe</button>
+          ${hasSheet ? `
+          <button onclick="openSheet('${it.id}')" title="Abrir a prancha em outra aba pra conferir medindo"
+            class="${btnBase} border-indigo-200 text-indigo-600 hover:bg-indigo-50">📄 Prancha</button>` : ''}
+          <button onclick="openComment('${it.id}')" title="Comentar — ajuda a IA a acertar mais (tecla C)"
+            class="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -524,8 +532,10 @@ async function review(itemId, action) {
   if (action === 'approve') {
     const _it = (items || []).find(i => i.id === itemId);
     if (_it && !(parseFloat(_it.quantity) > 0)) {
-      if (window.toast) window.toast.info('Este item está sem quantidade — preencha pra confirmar');
-      openEdit(itemId);
+      if (window.toast) window.toast.info('Sem quantidade — digite o número e dê Enter');
+      // Foco direto no campo Quantidade: A → digita → Enter. (01/08, Pedro:
+      // cair na Descrição obrigava a navegar até o campo certo.)
+      openEdit(itemId, true);
       return;
     }
   }
@@ -593,15 +603,20 @@ function closeModalA11y(modalEl) {
   _modalRestoreFocus = null;
 }
 
-function openEdit(itemId) {
+function openEdit(itemId, focusQty) {
   const it = items.find(x => x.id === itemId);
   if (!it) return;
   editingItem = it;
   document.getElementById('edit-desc').value = it.description || '';
   document.getElementById('edit-unit').value = it.unit || 'vb';
-  document.getElementById('edit-qty').value = it.quantity || 0;
+  const qtyEl = document.getElementById('edit-qty');
+  qtyEl.value = it.quantity || 0;
   document.getElementById('edit-obs').value = it.observations || '';
-  openModalA11y(document.getElementById('modal-edit'), document.getElementById('edit-desc'));
+  // focusQty: veio de "confirmar sem quantidade" ou do clique no número —
+  // cai direto na Quantidade já selecionada (digita e Enter salva).
+  const first = focusQty ? qtyEl : document.getElementById('edit-desc');
+  openModalA11y(document.getElementById('modal-edit'), first);
+  if (focusQty) setTimeout(() => { try { qtyEl.select(); } catch {} }, 30);
 }
 function closeEditModal() {
   editingItem = null;
@@ -844,9 +859,9 @@ function focusedItemId() {
 }
 
 document.addEventListener('keydown', (e) => {
-  // Ignorar se estiver dentro de input/textarea ou modal aberto
-  const tag = (e.target.tagName || '').toLowerCase();
-  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+  // Modal aberto vem PRIMEIRO (01/08 — bug do Pedro): no modal o foco está
+  // sempre num input, e o return de "digitando" engolia o Esc. Esc fecha
+  // o modal mesmo com o cursor dentro de um campo.
   const modalOpen = !document.getElementById('modal-edit').classList.contains('hidden') ||
                     !document.getElementById('modal-comment').classList.contains('hidden') ||
                     !document.getElementById('modal-help').classList.contains('hidden');
@@ -857,6 +872,9 @@ document.addEventListener('keydown', (e) => {
     }
     return;
   }
+  // Fora de modal: digitando em campo (ex.: busca), atalhos não disparam
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
 
   const key = e.key;
   if (key === 'ArrowDown' || key === 'j') {
