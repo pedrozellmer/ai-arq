@@ -25,7 +25,11 @@
     .item-row.rejected { background-color:#fef2f2; border-left:6px double #ef4444; opacity: 0.6; text-decoration: line-through; }
     .item-row.edited   { background-color:#fffbeb; border-left:6px dashed #f59e0b; }
     .item-row.pending  { border-left:6px solid transparent; }
-    .item-row.focused  { outline: 2px solid #4f46e5; outline-offset: -2px; background-color: #eef2ff; }
+    /* Linhas com as cores da PLANILHA (01/08 — Pedro): laranja = estimativa,
+       branco = medido. Só enquanto pendente — depois de revisar, o estado
+       (verde/âmbar/vermelho) assume. */
+    .item-row.pending.conf-estimado { background-color:#FFF6E9; border-left-color:#FFD699; }
+    .item-row.focused, .item-row.pending.conf-estimado.focused { outline: 2px solid #4f46e5; outline-offset: -2px; background-color: #eef2ff; }
     kbd {
       display: inline-block; padding: 2px 6px; font-family: monospace;
       font-size: 10px; color: #374151; background: #f3f4f6;
@@ -484,7 +488,7 @@ function renderItem(it, localIndex) {
   // Botões com PALAVRA, não ícone (01/08 — Pedro: "ao invés de ícones, a palavra").
   const btnBase = 'px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition whitespace-nowrap';
   return `
-    <div class="item-row ${state} px-4 py-3" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
+    <div class="item-row ${state} ${isOrange ? 'conf-estimado' : 'conf-medido'} px-4 py-3" data-id="${it.id}" data-ref="${escapeHtml(it.ref_sheet || '')}" tabindex="-1">
       <div class="flex items-start gap-3">
         <div class="flex-shrink-0 w-6 text-xs text-gray-500 pt-1">${localIndex + 1}</div>
         <div class="flex-1 min-w-0">
@@ -498,7 +502,9 @@ function renderItem(it, localIndex) {
           </p>
         </div>
       </div>
-      <div class="flex flex-wrap items-center justify-between gap-2 mt-2 pl-9">
+      <div class="flex items-start gap-3 mt-2">
+        <div class="flex-shrink-0 w-6" aria-hidden="true"></div>
+        <div class="flex-1 min-w-0 flex flex-wrap items-center justify-between gap-2">
         ${qtyBlock}
         <div class="flex flex-wrap items-center gap-1.5">
           <button onclick="review('${it.id}','approve')" title="A quantidade está certa (tecla A)"
@@ -516,6 +522,7 @@ function renderItem(it, localIndex) {
             class="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
           </button>
+        </div>
         </div>
       </div>
     </div>
