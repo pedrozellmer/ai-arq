@@ -6359,6 +6359,18 @@ async def process_files(
     user_ambientes: dict[str, str] = {}
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     avisos_aec: list[str] = []   # DWGs com objetos AEC — aviso imediato (ver abaixo)
+    # Arquivos com cara de projeto ESTRUTURAL enviados em modo arquitetura
+    # (01/08/2026: só 3 de 107 projetos escolheram o modo estrutura no dropdown,
+    # enquanto FORMA.pdf/fundacao.pdf passavam como arquitetura — onde laje e
+    # aço nunca são medidos). Detecção por nome do arquivo, aviso não-bloqueante.
+    avisos_estrutural: list[str] = []
+    import re as _re_estrut
+    # 🪤 "forma" precisa de fronteira: sem ela, "inFORMAtivo" e "plataFORMA"
+    # disparavam o aviso (pego no teste antes do deploy).
+    _RX_ESTRUT = _re_estrut.compile(
+        r"estrut|(?<![a-zà-ü])f[oô]rmas?(?![a-zà-ü])|funda[cç]|arma[cç]"
+        r"|pilar|viga|laje|baldrame|sapata",
+        _re_estrut.IGNORECASE)
     # 🪤 Importar AQUI e reclamar alto se falhar. A detecção só valia a pena se
     # rodasse mesmo; escondida atrás de um try/except mudo, um ImportError
     # deixaria o aviso desligado pra sempre sem ninguém perceber.
@@ -6424,6 +6436,8 @@ async def process_files(
                 except Exception as _e_aec:
                     print(f"[upload] detecção AEC falhou em {safe_name}: {_e_aec}")
 
+        if project_type != "estrutura" and _RX_ESTRUT.search(upload_file.filename or ""):
+            avisos_estrutural.append(upload_file.filename)
         file_paths.append(file_path)
         if user_st:
             user_sheet_types[file_path] = user_st
@@ -6496,6 +6510,24 @@ async def process_files(
     resp = {"job_id": job_id, "files_received": len(file_paths),
             "file_types": file_types, "status": "queued", "typology": typology,
             "project_type": project_type}
+    if avisos_estrutural and project_type != "estrutura":
+        resp["aviso_estrutural"] = {
+            "arquivos": avisos_estrutural,
+            "titulo": "Esses arquivos parecem de projeto ESTRUTURAL",
+            "texto": ("Pelo nome, são pranchas de estrutura (fôrma, fundação, armação...). "
+                      "Este envio está no modo Arquitetura, que não mede aço, pilares nem lajes.\n\n"
+                      "Se o objetivo é o quantitativo estrutural: envie de novo escolhendo "
+                      "'Estrutura (concreto armado)' no tipo de projeto — lá o motor mede aço "
+                      "por tabela, pilares e lajes.\n\n"
+                      "Se essas pranchas são só apoio do projeto de arquitetura, ignore este aviso."),
+        }
+        try:
+            _log_error("upload:estrutural-em-modo-arquitetura",
+                       f"Arquivos com cara de estrutural em modo arquitetura: "
+                       f"{', '.join(avisos_estrutural[:5])} — cliente avisado no envio",
+                       job_id, severity="info")
+        except Exception:
+            pass
     if avisos_aec:
         _tem_alternativa = (file_types.get('dxf', 0) + file_types.get('pdf', 0)) > 0
         resp["aviso_aec"] = {
@@ -6547,6 +6579,92 @@ async def debug_supa_log(request: Request, tail: int = 50):
                 "returned": len(last), "lines": [ln.rstrip("\n") for ln in last]}
     except Exception as e:
         return {"status": "error", "error": f"{type(e).__name__}: {e}"}
+
+
+@app.get("/api/debug/libredwg-batch")
+async def debug_libredwg_batch(request: Request, limite: int = 5):
+    """Mede o fallback libredwg contra os DWG que o ODA recusou. Admin-only.
+
+    Contexto (01/08/2026): 6+ envios falharam com 'não conseguimos abrir' e o
+    caso Ana provou que às vezes o arquivo é bom — o conversor é que não lê.
+    O dwg2dxf (libredwg) está compilado no Docker desde 29/07 e NUNCA foi
+    medido contra um arquivo real recusado. Este endpoint baixa do Storage os
+    DWG de jobs com esse erro, roda o dwg2dxf em cada um e reporta:
+    converteu? o DXF resultante abre no ezdxf? quantas entidades tem?
+
+    Só LÊ e mede — não reprocessa nada, não mexe em projeto nenhum.
+    `limite` controla quantos arquivos por chamada (custo: ~5-60 s cada).
+    """
+    _require_admin(request)
+    import shutil as _sh, subprocess as _sp, tempfile as _tf
+    t0 = time.time()
+    dwg2dxf = _sh.which("dwg2dxf")
+    if not dwg2dxf:
+        return {"erro": "dwg2dxf não está no PATH deste servidor",
+                "dica": "confirmar no /api/debug/dwg se libredwg_which é null"}
+    limite = max(1, min(10, int(limite)))
+
+    rows = _supa_rest_service(
+        "GET",
+        "projects?status=eq.error&select=job_id,error_message,created_at"
+        "&order=created_at.desc&limit=60") or []
+    jobs = [r["job_id"] for r in rows
+            if "conseguimos abrir" in (r.get("error_message") or "").lower()]
+
+    resultados, testados = [], 0
+    for job in jobs:
+        if testados >= limite or time.time() - t0 > 240:
+            break
+        try:
+            nomes = [n for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job}/")
+                     if n.lower().endswith(".dwg")]
+        except Exception:
+            continue
+        for nome in nomes:
+            if testados >= limite or time.time() - t0 > 240:
+                break
+            item = {"job_id": job, "arquivo": nome}
+            try:
+                dados = _supabase_storage_download_prancha(job, nome)
+                if not dados:
+                    item["resultado"] = "não consegui baixar do Storage"
+                    resultados.append(item); testados += 1
+                    continue
+                with _tf.TemporaryDirectory() as tmp:
+                    src = os.path.join(tmp, "in.dwg")
+                    dst = os.path.join(tmp, "out.dxf")
+                    open(src, "wb").write(dados)
+                    item["mb"] = round(len(dados) / 1048576, 1)
+                    try:
+                        proc = _sp.run([dwg2dxf, "-o", dst, src],
+                                       capture_output=True, timeout=90)
+                        item["exit"] = proc.returncode
+                    except _sp.TimeoutExpired:
+                        item["resultado"] = "timeout (90s)"
+                        resultados.append(item); testados += 1
+                        continue
+                    if not os.path.exists(dst) or os.path.getsize(dst) == 0:
+                        item["resultado"] = "dwg2dxf não gerou DXF"
+                        item["stderr"] = (proc.stderr or b"")[-200:].decode("utf-8", "replace")
+                    else:
+                        item["dxf_mb"] = round(os.path.getsize(dst) / 1048576, 1)
+                        # o DXF gerado presta? tenta abrir com o mesmo leitor do motor
+                        try:
+                            import ezdxf
+                            doc = ezdxf.readfile(dst)
+                            item["resultado"] = "CONVERTEU e o DXF abre"
+                            item["entidades"] = len(doc.modelspace())
+                        except Exception as e_dxf:
+                            item["resultado"] = "converteu mas o DXF não abre no ezdxf"
+                            item["erro_leitura"] = f"{type(e_dxf).__name__}: {e_dxf}"[:120]
+            except Exception as e:
+                item["resultado"] = f"erro no teste: {type(e).__name__}: {e}"[:150]
+            resultados.append(item); testados += 1
+
+    ok = sum(1 for r in resultados if r.get("resultado") == "CONVERTEU e o DXF abre")
+    return {"testados": testados, "converteram_e_abrem": ok,
+            "jobs_na_fila": len(jobs), "segundos": round(time.time() - t0, 1),
+            "resultados": resultados}
 
 
 @app.get("/api/debug/storage-limit")

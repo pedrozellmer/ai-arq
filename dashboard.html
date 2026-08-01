@@ -2669,6 +2669,9 @@
       // AutoCAD Architecture — 13 das 29 falhas de DWG eram isso. Agora ele
       // já sai daqui sabendo o que fazer, com o arquivo ainda aberto no CAD.
       if (data.aviso_aec) mostrarAvisoAec(data.aviso_aec);
+      // Arquivos com cara de estrutural em modo arquitetura (01/08): só 3 de
+      // 107 projetos acharam o modo Estrutura no dropdown — o aviso ensina.
+      if (data.aviso_estrutural) mostrarAvisoAec(data.aviso_estrutural, 'indigo');
 
       processingStep.textContent = 'Analisando pranchas...';
       // Não setar barra manualmente aqui — startPolling() cuida da progressão
@@ -2685,9 +2688,13 @@
   // ══════════════════════════════════════════════
   // AVISO DE ARQUIVO AEC/MEP — mostrado no envio, não depois do erro
   // ══════════════════════════════════════════════
-  function mostrarAvisoAec(av) {
+  function mostrarAvisoAec(av, cor) {
     const box = document.getElementById('aviso-aec');
     if (!box) return;
+    // cor: 'indigo' pro aviso estrutural (informativo), default âmbar (AEC).
+    const tema = cor === 'indigo'
+      ? { borda: 'border-indigo-300', fundo: 'bg-indigo-50', texto: 'text-indigo-900', icone: 'ℹ' }
+      : { borda: 'border-amber-300', fundo: 'bg-amber-50', texto: 'text-amber-900', icone: '⚠' };
     const arquivos = (av.arquivos || []).map(f =>
       `<li class="font-mono text-xs break-all">${f.replace(/[<>&]/g, '')}</li>`).join('');
     const corpo = (av.texto || '').split('\n').map(l => {
@@ -2695,9 +2702,10 @@
       if (!t) return '';
       return /^\d\./.test(t) ? `<li>${t.replace(/^\d\.\s*/, '')}</li>` : `<p class="mb-2">${t}</p>`;
     }).join('');
-    box.innerHTML = `
-      <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-        <p class="font-semibold mb-2">⚠ ${av.titulo || 'Atenção com um dos arquivos'}</p>
+    // += : AEC e estrutural podem aparecer juntos no mesmo envio
+    box.innerHTML += `
+      <div class="rounded-xl border ${tema.borda} ${tema.fundo} p-4 text-sm ${tema.texto} mb-3">
+        <p class="font-semibold mb-2">${tema.icone} ${av.titulo || 'Atenção com um dos arquivos'}</p>
         <ul class="mb-3 ml-4 list-disc">${arquivos}</ul>
         <div class="[&_li]:ml-4 [&_li]:list-decimal [&_li]:mb-1">${corpo}</div>
       </div>`;
