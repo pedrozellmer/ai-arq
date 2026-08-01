@@ -671,7 +671,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.cell(row=ro, column=1).alignment = AL
     ws.cell(row=ro, column=6).alignment = AR
     ws.cell(row=ro, column=7).alignment = AR
-    ws.cell(row=ro, column=8, value='AC 4% + CF 1,5% + S 0,8% + R 0,5% + G 0,5% + L 6% + T 11%').font = F_SM
+    ws.cell(row=ro, column=8, value='Composição de referência: AC 4% + S 0,8% + R 0,5% + G 0,5% + DF 1,5% + L 6% + T 11%').font = F_SM
     bdi = ro; ro += 1
 
     # Total com BDI
@@ -798,9 +798,16 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     notas = [
         '1. REFORMA: quantitativos consideram apenas o que MUDA. Conferir in loco e em projeto executivo.',
         '2. Colunas MAT e M.O. (amarelo): preencher pelo orçamentista/fornecedor.',
+        # 🪤 31/07/2026: a fórmula aqui estava ERRADA — tratava AC, S, R e G como
+        # fatores multiplicativos separados e usava "CF". No Acórdão 2622/2013 esses
+        # quatro SOMAM dentro de um mesmo parêntese, e só DF e L são fatores à parte.
+        # Errado inflava o BDI. O post do blog tinha uma terceira versão, também errada.
         '3. BDI: 27,5% é só um ponto de partida — ajuste pro seu caso. Fórmula do Acórdão TCU '
-        '2622/2013: ((1+AC)(1+CF)(1+S)(1+R)(1+G)(1+L)/(1-T))-1. O mesmo acórdão traz faixa de '
-        '20,34% a 25% para construção de edifícios em obra pública.',
+        '2622/2013: [(1+AC+S+R+G) x (1+DF) x (1+L)] / (1-T) - 1, onde AC=administração '
+        'central, S=seguros, R=riscos, G=garantias, DF=despesas financeiras, L=lucro e '
+        'T=tributos SOBRE FATURAMENTO (PIS+COFINS+ISS, e CPRB quando aplicável). IRPJ e CSLL '
+        'não entram no BDI — o TCU veda, por incidirem sobre o lucro. O mesmo acórdão traz '
+        'faixa de 20,34% a 25% para construção de edifícios em obra pública.',
         '4. Itens em BRANCO: quantidade medida/contada diretamente do arquivo (bloco, hachura, linha). Confiável pra aprovar direto.',
         '5. Itens em LARANJA: quantidade sugerida pela IA sem medição direta — SEMPRE confirmar antes de orçar.',
         '6. Itens em CINZA (Premissas): metadados do projeto extraídos do arquivo — revisar no original.',
