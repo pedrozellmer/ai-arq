@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Memorial descritivo — AI.arq</title>
+  <meta name="robots" content="noindex,follow">
+  <link rel="stylesheet" href="/tailwind.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', -apple-system, sans-serif; }
+    /* Cabeçalho de seção: mesmo padrão da revisão (faixa de degradê 3px) */
+    .sec-header { position: relative; background: #fff; border-bottom: 1px solid #e5e7eb; }
+    .sec-header::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#7C3AED,#8B5CF6); }
+    /* Blocos editáveis: neutros em repouso, moldura ao focar */
+    .blk[contenteditable] { border-radius: 8px; padding: 6px 8px; margin: 2px -8px; transition: background .12s, box-shadow .12s; cursor: text; }
+    .blk[contenteditable]:hover { background: #F8FAFC; }
+    .blk[contenteditable]:focus { outline: none; background: #fff; box-shadow: 0 0 0 2px #7C3AED; }
+    /* [A PREENCHER] — o convite laranja pra completar ali mesmo */
+    .blk-preencher { background: #FFF7ED !important; border: 1px dashed #FDBA74; color: #B45B09; font-style: italic; }
+    .blk-preencher:focus { background: #fff !important; color: #374151; font-style: normal; }
+    .chip { padding: 1px 8px; border-radius: 9999px; font-size: 10px; font-weight: 600; white-space: nowrap; }
+    td[contenteditable]:focus { outline: 2px solid #7C3AED; outline-offset: -2px; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; } }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
+
+<div id="gate" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+  <div class="text-center">
+    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-violet-600 mx-auto"></div>
+    <p class="mt-3 text-sm text-gray-500">Preparando o memorial...</p>
+  </div>
+</div>
+
+<header class="bg-white border-b sticky top-0 z-40">
+  <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3 min-w-0">
+      <a id="link-voltar" href="dashboard.html" class="text-gray-500 hover:text-violet-600" aria-label="Voltar pro projeto">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </a>
+      <div class="min-w-0">
+        <h1 class="text-sm font-semibold text-gray-800 truncate">Memorial descritivo <span class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 align-middle">RASCUNHO</span></h1>
+        <p id="doc-meta" class="text-xs text-gray-500 truncate">Carregando...</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap justify-end">
+      <button id="btn-salvar" disabled
+        class="bg-white border border-gray-300 text-gray-400 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
+        title="Salvar as edições (Ctrl+S)">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        <span id="btn-salvar-label">Salvo</span>
+      </button>
+      <button id="btn-docx"
+        class="text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-110 transition"
+        style="background:linear-gradient(135deg,#7C3AED 0%,#8B5CF6 100%)"
+        title="Baixa o Word já com as suas edições">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <span class="hidden sm:inline">Baixar .docx</span><span class="sm:hidden">.docx</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="main" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
+
+  <!-- Como usar -->
+  <div class="bg-white rounded-2xl border shadow-sm p-4 text-xs text-gray-600">
+    <p class="mb-1"><span class="font-medium text-gray-800">Clique em qualquer parágrafo pra editar</span> — o texto é seu. Os blocos <span class="chip bg-orange-100 text-orange-700">[A PREENCHER]</span> são o que o desenho não informa: complete ali mesmo.</p>
+    <p>Cada item mostra a origem da quantidade: <span class="chip bg-green-100 text-green-700">✓ medido</span> direto do CAD · <span class="chip bg-amber-100 text-amber-700">⚠ estimativa</span> pra confirmar. O <b>.docx</b> sai com o que você salvou. Este documento é um rascunho — quem assina o memorial é o responsável técnico.</p>
+  </div>
+
+  <div id="doc-container" class="space-y-4"></div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="aiarq-utils.js"></script>
+<script>
+const API_BASE = window.API_BASE;
+const sb       = window.sb;
+
+const urlParams = new URLSearchParams(window.location.search);
+const jobId = urlParams.get('job_id');
+if (!jobId) { window.location.href = 'dashboard.html'; }
+
+let estrutura = null;   // objeto vivo — o DOM edita, o save serializa daqui
+let dirty = false;
+let salvando = false;
+
+(async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { window.location.href = 'login.html'; return; }
+  document.getElementById('link-voltar').href = `projeto.html?job_id=${jobId}`;
+  try {
+    const r = await authFetch(`${API_BASE}/api/memorial/${jobId}/estrutura`);
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+    const d = await r.json();
+    estrutura = d.estrutura;
+    render(d.salvo);
+  } catch (e) {
+    const msg = 'Erro ao carregar o memorial: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
+  }
+  document.getElementById('gate').classList.add('hidden');
+})();
+
+function render(jaSalvo) {
+  const c = document.getElementById('doc-container');
+  const r = estrutura.resumo || {};
+  document.getElementById('doc-meta').textContent =
+    `${estrutura.obra || ''} · ${(estrutura.secoes || []).length} seções · ` +
+    `${r.medidos || 0} medidos / ${r.estimados || 0} estimativas` +
+    (jaSalvo ? ' · edição salva anteriormente' : '');
+  let html = '';
+  (estrutura.secoes || []).forEach((sec, si) => {
+    html += `<section class="bg-white rounded-2xl border shadow-sm overflow-hidden">
+      <div class="sec-header px-5 py-3"><h2 class="text-sm font-bold text-gray-900">${esc(sec.titulo)}</h2></div>
+      <div class="px-5 py-4 space-y-1 text-sm text-gray-800">`;
+    (sec.blocos || []).forEach((b, bi) => {
+      const ds = `data-s="${si}" data-b="${bi}"`;
+      if (b.tipo === 'tabela') {
+        html += `<table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden my-1">`;
+        (b.linhas || []).forEach((l, li) => {
+          html += `<tr class="border-b border-gray-100 last:border-0">
+            <td class="bg-gray-50 px-3 py-2 font-medium text-gray-700 w-2/5">${esc(l[0] || '')}</td>
+            <td class="px-3 py-2" contenteditable="true" ${ds} data-l="${li}">${esc(l[1] || '')}</td></tr>`;
+        });
+        html += `</table>`;
+      } else if (b.tipo === 'item') {
+        const chip = b.origem === 'medido'
+          ? '<span class="chip bg-green-100 text-green-700 mt-1.5">✓ medido</span>'
+          : '<span class="chip bg-amber-100 text-amber-700 mt-1.5">⚠ estimativa</span>';
+        html += `<div class="flex items-start gap-2">
+          ${chip}
+          <div class="blk flex-1 min-w-0" contenteditable="true" ${ds}>${esc(b.texto || '')}</div></div>`;
+      } else if (b.tipo === 'preencher') {
+        html += `<div class="blk blk-preencher" contenteditable="true" ${ds}>${esc(b.texto || '')}</div>`;
+      } else if (b.tipo === 'assinatura') {
+        html += `<div class="pt-4 text-center text-gray-700">_________________________________________<br>
+          <span class="blk inline-block" contenteditable="true" ${ds}>${esc(b.texto || '')}</span></div>`;
+      } else {
+        html += `<div class="blk text-gray-700 leading-relaxed" contenteditable="true" ${ds}>${esc(b.texto || '')}</div>`;
+      }
+    });
+    html += `</div></section>`;
+  });
+  c.innerHTML = html;
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Edição → estrutura em memória + estado sujo ─────────────
+document.getElementById('doc-container').addEventListener('input', (e) => {
+  const el = e.target.closest('[data-s]');
+  if (!el) return;
+  const si = +el.dataset.s, bi = +el.dataset.b;
+  const bloco = estrutura.secoes?.[si]?.blocos?.[bi];
+  if (!bloco) return;
+  if (bloco.tipo === 'tabela') {
+    const li = +el.dataset.l;
+    if (bloco.linhas?.[li]) bloco.linhas[li][1] = el.innerText;
+  } else {
+    bloco.texto = el.innerText;
+  }
+  setDirty(true);
+});
+
+function setDirty(v) {
+  dirty = v;
+  const btn = document.getElementById('btn-salvar');
+  const lbl = document.getElementById('btn-salvar-label');
+  if (v) {
+    btn.disabled = false;
+    btn.classList.remove('text-gray-400');
+    btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600', 'hover:bg-indigo-700');
+    lbl.textContent = 'Salvar';
+  } else {
+    btn.disabled = true;
+    btn.classList.add('text-gray-400');
+    btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600', 'hover:bg-indigo-700');
+    lbl.textContent = 'Salvo';
+  }
+}
+
+async function salvar() {
+  if (!dirty || salvando || !estrutura) return true;
+  salvando = true;
+  const lbl = document.getElementById('btn-salvar-label');
+  lbl.textContent = 'Salvando...';
+  try {
+    const r = await authFetch(`${API_BASE}/api/memorial/${jobId}/estrutura`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ estrutura }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+    setDirty(false);
+    window.toast?.success('Memorial salvo');
+    return true;
+  } catch (e) {
+    lbl.textContent = 'Salvar';
+    const msg = 'Erro ao salvar: ' + e.message;
+    window.toast ? window.toast.error(msg) : alert(msg);
+    return false;
+  } finally {
+    salvando = false;
+  }
+}
+
+document.getElementById('btn-salvar').addEventListener('click', salvar);
+
+document.getElementById('btn-docx').addEventListener('click', async () => {
+  // Edição pendente vai junto: salva antes, o .docx sai do que está no banco
+  const ok = await salvar();
+  if (!ok) return;
+  if (window.trackEvent) trackEvent('download_memorial', { job_id: jobId, editado: true });
+  downloadProtected(`${API_BASE}/api/memorial/${jobId}`, `memorial_descritivo_rascunho_${jobId}.docx`);
+});
+
+document.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); salvar(); }
+});
+
+window.addEventListener('beforeunload', (e) => {
+  if (dirty) { e.preventDefault(); e.returnValue = ''; }
+});
+</script>
+<script src="toast.js" defer></script>
+</body>
+</html>

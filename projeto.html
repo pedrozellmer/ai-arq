@@ -638,13 +638,18 @@ function smartBack() {
             </div>
           </div>
         </div>
-        <p class="text-xs text-gray-500 mb-3">Quantidades medidas e estimadas rotuladas no texto; o que o CAD n&atilde;o informa vira campo <span class="font-medium text-amber-700">[A PREENCHER]</span>. &Eacute; uma base pra editar &mdash; n&atilde;o substitui o memorial assinado pelo respons&aacute;vel t&eacute;cnico. Dica: revise as quantidades antes, o texto sai melhor.</p>
+        <p class="text-xs text-gray-500 mb-3">Edite direto na tela: quantidades medidas e estimadas rotuladas, e o que o CAD n&atilde;o informa vira campo <span class="font-medium text-amber-700">[A PREENCHER]</span> pra completar ali mesmo. O Word sai com as suas edi&ccedil;&otilde;es. N&atilde;o substitui o memorial assinado pelo respons&aacute;vel t&eacute;cnico &mdash; e sai melhor se voc&ecirc; revisar as quantidades antes.</p>
         <div class="flex flex-wrap gap-2">
-          <a id="btn-memorial" href="#"
+          <a id="btn-memorial-abrir" href="#"
              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-semibold no-underline transition hover:brightness-110"
              style="pointer-events:none;opacity:0.6;background:linear-gradient(135deg,#7C3AED 0%,#8B5CF6 100%)">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+            Abrir e editar
+          </a>
+          <a id="btn-memorial" href="#" style="pointer-events:none;opacity:0.6"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-violet-300 bg-violet-50 hover:bg-violet-100 text-violet-700 text-sm font-semibold no-underline transition">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3"/></svg>
-            Baixar memorial (.docx)
+            .docx
           </a>
         </div>
       </div>
@@ -1111,7 +1116,12 @@ async function carregarStatsEntregas() {
     };
     wireCronExport('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
     wireCronExport('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
-    // Memorial descritivo (.docx rascunho) — mesmo padrão protegido
+    // Memorial descritivo: editor na tela (link) + .docx direto (protegido)
+    enableLink('btn-memorial-abrir', `memorial.html?job_id=${jobId}`);
+    const _memAbrir = document.getElementById('btn-memorial-abrir');
+    if (_memAbrir) _memAbrir.addEventListener('click', () => {
+      if (window.trackEvent) trackEvent('open_memorial', { job_id: jobId });
+    });
     wireCronExport('btn-memorial', `${API_BASE}/api/memorial/${jobId}`, `memorial_descritivo_rascunho_${jobId}.docx`);
     const _memBtn = document.getElementById('btn-memorial');
     if (_memBtn) _memBtn.addEventListener('click', () => {

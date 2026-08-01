@@ -11044,46 +11044,28 @@ async def get_project_items(job_id: str, request: Request):
 
 @app.get("/api/memorial/{job_id}")
 async def memorial_docx(job_id: str, request: Request):
-    """Memorial descritivo (RASCUNHO) em .docx, gerado dos itens do projeto.
+    """Memorial descritivo (RASCUNHO) em .docx.
 
     v1 determinística (01/08/2026) — texto = template + itens; zero IA, zero
-    invenção. Regras em memorial.py (medido×estimado rotulado, [A PREENCHER],
-    carimbo de rascunho). Download exige downloadProtected no frontend
-    (armadilha nº9: <a href> não manda Authorization)."""
+    invenção. v1.1: se o cliente EDITOU na tela (memorial.html), o .docx sai
+    da versão salva em project_memorial. Download exige downloadProtected no
+    frontend (armadilha nº9: <a href> não manda Authorization)."""
     _require_project_owner(request, job_id)
     import tempfile
-    import json
-    import urllib.request as _url_req
     try:
-        # Itens via mesma RPC do /api/items (bypassa RLS com service_role)
-        _u = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-        _b = json.dumps({"p_job_id": job_id}).encode("utf-8")
-        _r = _url_req.Request(_u, data=_b, method="POST")
-        _r.add_header("apikey", SUPABASE_KEY)
-        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        _r.add_header("Content-Type", "application/json")
-        items = json.loads(_url_req.urlopen(_r, timeout=15).read().decode("utf-8")) or []
-        if not items:
-            raise HTTPException(404, "Projeto sem itens — gere o quantitativo primeiro")
-        # Meta do projeto (nome, tipologia, áreas) — best-effort
-        projeto = {}
-        try:
-            _mu = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                   f"&select=project_name,typology,total_area,user_total_area&limit=1")
-            _mr = _url_req.Request(_mu, method="GET")
-            _mr.add_header("apikey", SUPABASE_KEY)
-            _mr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-            _rows = json.loads(_url_req.urlopen(_mr, timeout=10).read().decode("utf-8"))
-            if _rows:
-                projeto = _rows[0]
-        except Exception as _me:
-            print(f"[memorial] meta do projeto falhou (não crítico): {_me}")
-        from memorial import gerar_memorial_docx
+        from memorial import estrutura_para_docx
+        salvo = _memorial_carregar_salvo(job_id)
+        if salvo:
+            estrutura = salvo
+        else:
+            projeto, items = _memorial_dados_frescos(job_id)
+            from memorial import montar_estrutura
+            estrutura = montar_estrutura(projeto, items)
         tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
         tmp.close()
-        resumo = gerar_memorial_docx(tmp.name, projeto, items)
-        print(f"[memorial] job={job_id} → {resumo}")
-        fname = f"memorial_descritivo_rascunho_{_slug_filename(projeto.get('project_name') or job_id)}.docx"
+        resumo = estrutura_para_docx(tmp.name, estrutura)
+        print(f"[memorial] job={job_id} salvo={bool(salvo)} → {resumo}")
+        fname = f"memorial_descritivo_rascunho_{_slug_filename(estrutura.get('obra') or job_id)}.docx"
         return FileResponse(
             tmp.name,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -11096,6 +11078,89 @@ async def memorial_docx(job_id: str, request: Request):
         print(traceback.format_exc())
         _log_error("memorial:gerar", str(e), job_id=job_id)
         raise HTTPException(500, f"Erro ao gerar memorial: {e}")
+
+
+def _memorial_dados_frescos(job_id: str):
+    """(projeto, items) pros geradores do memorial — mesma RPC do /api/items."""
+    import json
+    import urllib.request as _url_req
+    _u = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+    _b = json.dumps({"p_job_id": job_id}).encode("utf-8")
+    _r = _url_req.Request(_u, data=_b, method="POST")
+    _r.add_header("apikey", SUPABASE_KEY)
+    _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+    _r.add_header("Content-Type", "application/json")
+    items = json.loads(_url_req.urlopen(_r, timeout=15).read().decode("utf-8")) or []
+    if not items:
+        raise HTTPException(404, "Projeto sem itens — gere o quantitativo primeiro")
+    projeto = {}
+    try:
+        _mu = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+               f"&select=project_name,typology,total_area,user_total_area&limit=1")
+        _mr = _url_req.Request(_mu, method="GET")
+        _mr.add_header("apikey", SUPABASE_KEY)
+        _mr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _rows = json.loads(_url_req.urlopen(_mr, timeout=10).read().decode("utf-8"))
+        if _rows:
+            projeto = _rows[0]
+    except Exception as _me:
+        print(f"[memorial] meta do projeto falhou (não crítico): {_me}")
+    return projeto, items
+
+
+def _memorial_carregar_salvo(job_id: str):
+    """Estrutura editada salva em project_memorial, ou None. Tupla do REST
+    helper SEMPRE desempacotada (lição do bug de 01/08 no dedupe de reviews)."""
+    import urllib.parse
+    _st, _rows = _supa_rest_service(
+        "GET", f"project_memorial?job_id=eq.{urllib.parse.quote(job_id)}&select=conteudo&limit=1")
+    if _st == 200 and isinstance(_rows, list) and _rows:
+        return _rows[0].get("conteudo") or None
+    return None
+
+
+@app.get("/api/memorial/{job_id}/estrutura")
+async def memorial_estrutura(job_id: str, request: Request):
+    """Estrutura editável do memorial pra tela memorial.html.
+    Devolve a versão SALVA se existir; senão monta fresca dos itens."""
+    _require_project_owner(request, job_id)
+    try:
+        salvo = _memorial_carregar_salvo(job_id)
+        if salvo:
+            return {"status": "ok", "salvo": True, "estrutura": salvo}
+        projeto, items = _memorial_dados_frescos(job_id)
+        from memorial import montar_estrutura
+        return {"status": "ok", "salvo": False, "estrutura": montar_estrutura(projeto, items)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_error("memorial:estrutura", str(e), job_id=job_id)
+        raise HTTPException(500, f"Erro ao montar memorial: {e}")
+
+
+@app.post("/api/memorial/{job_id}/estrutura")
+async def memorial_salvar(job_id: str, request: Request):
+    """Salva a estrutura EDITADA na tela. Valida/sanitiza tudo que vem do
+    navegador (memorial.validar_estrutura_editada) — só campos conhecidos
+    sobrevivem, textos com teto de tamanho."""
+    _require_project_owner(request, job_id)
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(400, "JSON inválido")
+    from memorial import validar_estrutura_editada
+    try:
+        limpa = validar_estrutura_editada((body or {}).get("estrutura"))
+    except ValueError as ve:
+        raise HTTPException(400, f"Estrutura inválida: {ve}")
+    _st, _resp = _supa_rest_service(
+        "POST", "project_memorial?on_conflict=job_id",
+        {"job_id": job_id, "conteudo": limpa, "updated_at": "now()"},
+        prefer="resolution=merge-duplicates")
+    if _st not in (200, 201, 204):
+        _log_error("memorial:salvar", f"REST {_st}: {str(_resp)[:300]}", job_id=job_id)
+        raise HTTPException(500, "Erro ao salvar o memorial")
+    return {"status": "ok"}
 
 
 # ═══════════════════════════════════════════════════════════════
