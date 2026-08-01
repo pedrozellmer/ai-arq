@@ -5922,7 +5922,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             if _dxfrooms_units:
                 from dxf_rooms_shadow import shadow_rooms_async
-                shadow_rooms_async(_dxfrooms_units, job_id, _log_error)
+                # Passa a área declarada pra sombra já gravar o veredito
+                # (maior grupo ÷ declarada) em vez de exigir conferência
+                # manual job a job — é assim que a regra se prova sozinha.
+                shadow_rooms_async(_dxfrooms_units, job_id, _log_error,
+                                   area_declarada=(project_data.total_area or None))
         except Exception as _sre:
             print(f"[dxfrooms] shadow não iniciado: {_sre}")
 

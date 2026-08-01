@@ -177,7 +177,8 @@ def medir_um(dxf_path: str, fator: float) -> dict:
     return out
 
 
-def _run(dxf_units: list, job_id: str, log_fn) -> None:
+def _run(dxf_units: list, job_id: str, log_fn,
+         area_declarada: float | None = None) -> None:
     time.sleep(10)  # deixa o pós-done (e-mail/DB) respirar antes do trabalho pesado
     deadline = time.time() + BUDGET_S
     results = []
@@ -197,8 +198,27 @@ def _run(dxf_units: list, job_id: str, log_fn) -> None:
                 tot += float(r.get("rooms_m2") or 0)
             except (TypeError, ValueError):
                 pass
-        payload = json.dumps({"v": 1, "n": len(results),
+        # Comparação PRONTA no log (01/08/2026). A regra do maior grupo foi
+        # descoberta em 31/07 com UM prédio; pra generalizar precisa de vários,
+        # e conferir na mão a cada job não escala. Agora cada execução já grava
+        # o veredito: maior grupo ÷ área declarada. Basta ler a coluna depois.
+        _melhor = 0.0
+        for r in results:
+            try:
+                _melhor = max(_melhor, float(r.get("grupo_maior_m2") or 0))
+            except (TypeError, ValueError):
+                pass
+        _cmp = {}
+        if area_declarada and area_declarada > 0:
+            _cmp["area_declarada"] = round(float(area_declarada), 1)
+            _cmp["maior_grupo_vs_declarada"] = (
+                round(_melhor / float(area_declarada), 3) if _melhor else None)
+            _cmp["soma_tudo_vs_declarada"] = (
+                round(tot / float(area_declarada), 3) if tot else None)
+        payload = json.dumps({"v": 2, "n": len(results),
                               "rooms_m2_total": round(tot, 1),
+                              "maior_grupo_m2": round(_melhor, 1) or None,
+                              **_cmp,
                               "pages": results}, ensure_ascii=False)
         log_fn("dxfrooms:shadow", payload[:2000], job_id, severity="info")
         print(f"[dxfrooms] shadow {job_id}: {len(results)} prancha(s), total {tot:.1f} m²")
@@ -206,7 +226,8 @@ def _run(dxf_units: list, job_id: str, log_fn) -> None:
         print(f"[dxfrooms] shadow log falhou: {e}")
 
 
-def shadow_rooms_async(dxf_units: list, job_id: str, log_fn) -> None:
+def shadow_rooms_async(dxf_units: list, job_id: str, log_fn,
+                       area_declarada: float | None = None) -> None:
     """Dispara a sombra em thread daemon. dxf_units = [(caminho_dxf, fator_unidade)].
 
     Nunca levanta e nunca bloqueia — se qualquer coisa der errado, o cliente
@@ -217,7 +238,8 @@ def shadow_rooms_async(dxf_units: list, job_id: str, log_fn) -> None:
     if not dxf_units:
         return
     try:
-        threading.Thread(target=_run, args=(dxf_units, job_id, log_fn),
+        threading.Thread(target=_run,
+                         args=(dxf_units, job_id, log_fn, area_declarada),
                          daemon=True).start()
     except Exception as e:
         print(f"[dxfrooms] shadow não iniciado: {e}")
