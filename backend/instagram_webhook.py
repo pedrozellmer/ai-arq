@@ -606,13 +606,20 @@ def _supa_update(table: str, match_field: str, match_value: str, data: dict) -> 
 
 
 @router.post("/scheduler/tick")
-async def scheduler_tick(force_slot: Optional[str] = None):
+async def scheduler_tick(request: Request, force_slot: Optional[str] = None):
     """Roda 1 ciclo do agendador.
 
     - Busca posts em 'pending' onde publish_at <= now() (ou força um slot específico via ?force_slot=dia1)
     - Pra cada um: publica via Meta API, atualiza status
-    - Pode ser chamado por cron externo, pg_cron interno, ou manualmente
+    - Chamado pelo pg_cron (que envia X-Tick-Secret desde 01/08)
+
+    Gate da auditoria 01/08/2026: era POST público — qualquer um podia disparar
+    o ciclo, e force_slot publicava post agendado ANTES da data. Retrocompatível:
+    sem TICK_SECRET no ambiente, segue aberto.
     """
+    _tick = os.getenv("TICK_SECRET", "")
+    if _tick and request.headers.get("X-Tick-Secret", "") != _tick:
+        raise HTTPException(401, "Tick não autorizado")
     api = MetaGraphAPI()
     if not api.access_token or not api.ig_user_id:
         return {"ok": False, "error": "META_ACCESS_TOKEN ou IG_USER_ID não configurados"}

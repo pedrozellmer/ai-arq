@@ -7308,10 +7308,28 @@ def _email_eh_interno(email: str) -> bool:
         return False
 
 
+TICK_SECRET = os.getenv("TICK_SECRET", "")
+
+
+def _require_tick_secret(request):
+    """Gate dos ticks de cron (achado da auditoria de 01/08/2026).
+
+    Os 3 ticks (emails, newsletter, instagram) eram POST públicos sem segredo —
+    qualquer um na internet podia disparar ciclo de envio/publicação, e o
+    force_slot do IG permitia publicar post agendado ANTES da data.
+
+    Retrocompatível: sem TICK_SECRET no ambiente, o gate fica aberto (nada
+    quebra antes de setar a env var no Render). Com a env setada, exige o
+    header X-Tick-Secret — que os pg_cron já enviam desde 01/08."""
+    if TICK_SECRET and request.headers.get("X-Tick-Secret", "") != TICK_SECRET:
+        raise HTTPException(401, "Tick não autorizado")
+
+
 @app.post("/api/emails/auto/tick")
-async def emails_auto_tick(dry: int = 0):
+async def emails_auto_tick(request: Request, dry: int = 0):
     """Varredura horária (pg_cron): decide e envia os lembretes automáticos.
     dry=1 → só lista o que ENVIARIA, sem mandar nada (ensaio)."""
+    _require_tick_secret(request)
     if os.environ.get("EMAILS_AUTO", "1") == "0":
         return {"status": "off"}
     from datetime import datetime as _dt, timezone as _tz
@@ -8282,9 +8300,10 @@ async def admin_instagram_post_update(request: Request):
 
 
 @app.post("/api/newsletter/tick")
-async def newsletter_tick():
-    """Chamado pelo pg_cron (aberto, mesma mecânica do tick do IG). Dispara 1
-    newsletter agendada vencida por vez, com claim atômico anti-duplicação."""
+async def newsletter_tick(request: Request):
+    """Chamado pelo pg_cron. Dispara 1 newsletter agendada vencida por vez, com
+    claim atômico anti-duplicação. Gate por X-Tick-Secret desde 01/08."""
+    _require_tick_secret(request)
     import urllib.request as _ur, urllib.parse as _up
     from datetime import datetime as _dt, timezone as _tz
     now_iso = _dt.now(_tz.utc).isoformat()
