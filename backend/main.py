@@ -6624,10 +6624,13 @@ async def debug_libredwg_batch(request: Request, limite: int = 5,
         import subprocess as _sp, tempfile as _tf
         t0 = time.time()
         try:
-            rows = _supa_rest_service(
+            # 🪤 _supa_rest_service devolve (status, dados) — iterar a tupla
+            # direto quebrava a thread em 0,1 s ("0 de 0" no admin, 01/08).
+            _st_lw, rows = _supa_rest_service(
                 "GET",
                 "projects?status=eq.error&select=job_id,error_message,created_at"
-                "&order=created_at.desc&limit=60") or []
+                "&order=created_at.desc&limit=60")
+            rows = rows if isinstance(rows, list) else []
             jobs = [r["job_id"] for r in rows
                     if "conseguimos abrir" in (r.get("error_message") or "").lower()]
             _LIBREDWG_TESTE["jobs_na_fila"] = len(jobs)
@@ -11488,8 +11491,10 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         import urllib.parse as _upq
         _q = (f"item_reviews?job_id=eq.{_upq.quote(job_id)}"
               f"&item_id=eq.{_upq.quote(item_id)}&action=eq.{action}&select=id&limit=1")
-        _r = _supa_rest_service("GET", _q)
-        _ja_tem = bool(_r)
+        # 🪤 (status, dados): bool da TUPLA era sempre True — o dedupe passou a
+        # engolir TODA revisao nova. Regressao de 01/08, viva por ~2 horas.
+        _st_rv, _rows_rv = _supa_rest_service("GET", _q)
+        _ja_tem = bool(_rows_rv) and isinstance(_rows_rv, list) and len(_rows_rv) > 0
     except Exception:
         pass   # na dúvida, insere (comportamento antigo)
     if not _ja_tem:
