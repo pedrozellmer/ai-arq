@@ -4170,6 +4170,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # sucesso — alimenta a SOMBRA de montagem de cômodos no fim do job.
         _dxfrooms_units: list = []
         dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
+        dwg_via_libredwg = []  # convertidos pelo plano B — aviso pro cliente conferir (escopo garantido)
         _aec_failed = []  # DWGs que falharam E são AutoCAD MEP/Architecture (objetos AEC) → aviso preciso
         if cad_paths:
             jobs.update_field(job_id, progress=5)
@@ -4189,6 +4190,20 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         if dxf_path:
                             dxf_paths.append(dxf_path)
                             jobs.update_field(job_id, current_step=f"DWG convertido: {os.path.basename(dxf_path)}")
+                            # Guarda-corpo do fallback (01/08): conversão que veio do
+                            # libredwg (sufixo _libredwg.dxf) fica REGISTRADA e o
+                            # projeto ganha um aviso pro cliente conferir medidas-chave.
+                            # Validação disponível: 5/5 recusados convertem e abrem;
+                            # 1/1 baseline com geometria idêntica (Δ 0%) — amostra de
+                            # baseline não cresce porque o ODA falha em quase tudo.
+                            if dxf_path.endswith("_libredwg.dxf"):
+                                # 🪤 project_data ainda NÃO existe aqui (nasce depois da
+                                # análise) — acumular na lista local, aplicar adiante.
+                                dwg_via_libredwg.append(os.path.basename(cad_path))
+                                _log_error("libredwg:usado-no-fluxo",
+                                           f"{os.path.basename(cad_path)} convertido via "
+                                           f"fallback libredwg (ODA recusou)",
+                                           job_id, severity="info")
                         else:
                             dwg_failed.append(os.path.basename(cad_path))
                             # É arquivo AutoCAD MEP/Architecture (objetos AEC)? Aí a falha
@@ -5716,6 +5731,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
             s = _ud.normalize("NFKD", s)
             return "".join(c for c in s if not _ud.combining(c))
         _pdf_stems = {_stem_norm(p) for p in (pdf_paths or [])}
+        # Aviso do plano B (01/08): DWG convertido via libredwg — medições saem
+        # normais, mas o cliente confere medidas-chave (honestidade sobre origem).
+        for _n_lw in (dwg_via_libredwg or []):
+            project_data.warnings = (project_data.warnings or []) + [
+                f"O arquivo {_n_lw} foi convertido pelo leitor alternativo (plano B). "
+                f"As medições saíram normalmente, mas vale conferir 2-3 medidas-chave "
+                f"da planilha contra o projeto antes de fechar orçamento."]
         _dwg_com_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) in _pdf_stems]
         _dwg_sem_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) not in _pdf_stems]
         if _dwg_com_irmao:
