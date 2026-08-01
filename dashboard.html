@@ -571,6 +571,13 @@
                 <div id="dn-rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
               </div>
               <p id="dn-rx-pct" class="text-xs text-gray-500 mt-2 text-center"></p>
+              <!-- CTA da revisão (01/08 — Pedro: deixar BEM claro, ao terminar de rodar,
+                   que o próximo passo é confirmar as estimativas). Só aparece se houver. -->
+              <a id="dn-rx-cta" href="#" class="hidden mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-sm font-bold shadow-lg shadow-amber-500/30 transition no-underline">
+                <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                <span id="dn-rx-cta-label">Confirmar as estimativas agora</span>
+              </a>
+              <p id="dn-rx-cta-sub" class="hidden text-[11px] text-gray-500 mt-1.5 text-center">Você confere item a item (ou por seção) e a planilha sai com as suas quantidades — leva poucos minutos.</p>
             </div>
 
             <!-- Aviso poucas pranchas -->
@@ -3136,6 +3143,23 @@
       document.getElementById('dn-rx-bar-medido').style.width = pctM + '%';
       document.getElementById('dn-rx-bar-confirmar').style.width = (100 - pctM) + '%';
       document.getElementById('dn-rx-pct').textContent = `${pctM}% medido · ${100 - pctM}% a confirmar`;
+      // CTA da revisão: com estimativa pendente, o botão âmbar vira o próximo
+      // passo óbvio. 100% medido (raro) esconde o CTA — nada a confirmar.
+      const cta = document.getElementById('dn-rx-cta');
+      const ctaSub = document.getElementById('dn-rx-cta-sub');
+      const aConfirmar = total - medido;
+      if (cta && ctaSub) {
+        if (aConfirmar > 0) {
+          cta.href = `revisao.html?job_id=${jobId}`;
+          document.getElementById('dn-rx-cta-label').textContent =
+            aConfirmar === 1 ? 'Confirmar a 1 estimativa agora' : `Confirmar as ${aConfirmar} estimativas agora`;
+          cta.classList.remove('hidden');
+          ctaSub.classList.remove('hidden');
+        } else {
+          cta.classList.add('hidden');
+          ctaSub.classList.add('hidden');
+        }
+      }
       card.classList.remove('hidden');
     } catch (e) { card.classList.add('hidden'); }
   }
