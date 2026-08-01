@@ -29,6 +29,63 @@ BUDGET_S = 180.0       # teto de tempo total do shadow por job
 MAX_FILE_MB = 12       # PDF maior que isso não é medido (memória)
 
 
+def _grupos_por_proximidade_pdf(rooms: list, den: float, gap_m: float = 1.0) -> dict:
+    """Agrupa cômodos que se tocam — cada grupo ≈ uma VISTA da folha.
+
+    Gêmea de `_grupos_por_proximidade` do dxf_rooms_shadow (31/07/2026), que
+    resolveu a área total no DXF: numa prancha convivem planta, cortes,
+    fachadas e detalhes, e somar tudo conta o mesmo prédio várias vezes. As
+    formas da mesma vista estão coladas; vistas diferentes ficam separadas por
+    branco. Buffer + união revela os agrupamentos, e o MAIOR grupo é a planta.
+
+    Aqui a entrada são bboxes de cômodo em PONTOS (detect_rooms), então o gap
+    é convertido pra pontos pela escala. Só MEDE — não altera rooms_m2.
+    Best-effort: qualquer erro devolve {} e a sombra segue sem isso.
+    """
+    try:
+        from shapely.geometry import box as _box
+        from shapely.ops import unary_union
+        from shapely.strtree import STRtree
+        from pdfvec_rooms import PT_TO_M as _PT_TO_M
+        if not rooms or len(rooms) > 4000 or not den:
+            return {}
+        gap_pt = gap_m / (_PT_TO_M * float(den))
+        formas, areas = [], []
+        for r in rooms:
+            try:
+                x0, y0, x1, y1 = r["bbox"]
+                formas.append(_box(float(x0), float(y0), float(x1), float(y1)))
+                areas.append(float(r["area_m2"]))
+            except (KeyError, TypeError, ValueError):
+                continue
+        if not formas:
+            return {}
+        uni = unary_union([f.buffer(gap_pt) for f in formas])
+        comps = list(getattr(uni, "geoms", [uni]))
+        if len(comps) <= 1:
+            return {"n_grupos": 1, "grupo_maior_m2": round(sum(areas), 1),
+                    "grupo_maior_comodos": len(areas)}
+        tree = STRtree(comps)
+        soma = [0.0] * len(comps)
+        cont = [0] * len(comps)
+        for f, a in zip(formas, areas):
+            try:
+                c = f.representative_point()
+                for idx in tree.query(c):
+                    if comps[idx].contains(c):
+                        soma[idx] += a
+                        cont[idx] += 1
+                        break
+            except Exception:
+                continue
+        i = max(range(len(comps)), key=lambda k: soma[k])
+        return {"n_grupos": len(comps),
+                "grupo_maior_m2": round(soma[i], 1),
+                "grupo_maior_comodos": cont[i]}
+    except Exception:
+        return {}
+
+
 def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     """Mede UMA página. Cada etapa é best-effort; devolve o que conseguiu."""
     out: dict = {"file": os.path.basename(pdf_path)[:60], "page": page_index}
@@ -164,6 +221,14 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         out["n_rooms"] = len(areas)
         out["rooms_m2"] = round(sum(areas), 1)
         out["top_rooms"] = [round(a, 1) for a in areas[:5]]
+        # Maior grupo conectado — mesma regra que resolveu a área total no DXF
+        # em 31/07. A soma de TODOS os cômodos conta o prédio várias vezes
+        # quando a folha traz planta + cortes + fachadas juntos. Sintoma visto
+        # no log: prancha elétrica devolveu 162 "cômodos" e 1.394 m².
+        # Aqui só MEDE (segue sombra) — quem decidir promover compara depois.
+        _g = _grupos_por_proximidade_pdf(rooms, den)
+        if _g:
+            out.update(_g)
         if rooms and rmeta.get("stage") == "ponte_porta":
             out["rooms_stage"] = rmeta["stage"]           # transparência no log
             out["rooms_bridges"] = rmeta.get("n_bridges")
@@ -276,7 +341,8 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
         # Agora grava só o que decide se o leitor vetorial sai da sombra.
         def _resumo(r: dict) -> dict:
             keep = ("file", "page", "scale", "scale_src", "n_rooms",
-                    "rooms_m2", "envelope_m2", "envelope_m2_150", "envelope_top",
+                    "rooms_m2", "n_grupos", "grupo_maior_m2", "grupo_maior_comodos",
+                    "envelope_m2", "envelope_m2_150", "envelope_top",
                     "skip", "err")
             d = {k: r[k] for k in keep if r.get(k) is not None}
             if isinstance(d.get("file"), str):
