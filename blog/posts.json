@@ -1375,7 +1375,7 @@
     },
     {
      "h2": "O que é cronograma físico-financeiro",
-     "body": "Cronograma físico-financeiro é o documento que cruza duas informações: o avanço da obra no tempo (físico) e o desembolso financeiro correspondente (financeiro). Em uma única tabela, você vê quanto vai estar pronto em cada mês e quanto vai ter sido gasto até ali.\n\nA parte FÍSICA responde: em que mês a fundação estará concluída? Quando a alvenaria começa? Quando a pintura termina? Geralmente é representada por um diagrama de Gantt — barras horizontais por atividade ao longo dos meses.\n\nA parte FINANCEIRA responde: quanto sai do caixa em cada mês? Qual o desembolso acumulado até o mês 6? Quando bate o pico de gasto? Geralmente é representada pela curva S — gráfico do desembolso acumulado em formato de S alongado.\n\nO cronograma físico-financeiro costuma ser exigido por:\n\n- Caixa Econômica Federal — anexo de processos de financiamento à construção, pra liberação de crédito conforme o avanço de obra\n- Obras públicas — a Lei 14.133/2021 (Nova Lei de Licitações), no art. 6º, inciso XXV, define o projeto básico como peça que inclui o cronograma físico-financeiro\n- Tribunais de contas — a fiscalização de obras públicas acompanha o avanço previsto contra o realizado, e a curva S é a ferramenta padrão dessa análise; o Acórdão TCU 2622/2013 trata de parâmetros pra análise de aditivos contratuais\n- Contratos privados de obra — base pra liberação de parcelas e medições\n- Construtoras e incorporadoras — controle de fluxo de caixa do empreendimento\n\nEm obra pública, cronograma mal feito gera problema: a fiscalização compara o avanço previsto com o realizado e, se a defasagem for relevante, pode suspender pagamento ou exigir justificativa técnica."
+     "body": "Cronograma físico-financeiro é o documento que cruza duas informações: o avanço da obra no tempo (físico) e o desembolso financeiro correspondente (financeiro). Em uma única tabela, você vê quanto vai estar pronto em cada mês e quanto vai ter sido gasto até ali.\n\nA parte FÍSICA responde: em que mês a fundação estará concluída? Quando a alvenaria começa? Quando a pintura termina? Geralmente é representada por um diagrama de Gantt — barras horizontais por atividade ao longo dos meses.\n\nA parte FINANCEIRA responde: quanto sai do caixa em cada mês? Qual o desembolso acumulado até o mês 6? Quando bate o pico de gasto? Geralmente é representada pela curva S — gráfico do desembolso acumulado em formato de S alongado.\n\nO cronograma físico-financeiro costuma ser exigido por:\n\n- Caixa Econômica Federal — anexo de processos de financiamento à construção, pra liberação de crédito conforme o avanço de obra\n- Obras públicas — a Lei 14.133/2021 (Nova Lei de Licitações) amarra pagamento a cronograma: nos regimes licitados por preço global, o art. 46 manda adotar \"sistemática de medição e pagamento associada à execução de etapas do cronograma físico-financeiro vinculadas ao cumprimento de metas de resultado\". Na contratação integrada, o § 3º do mesmo artigo exige que o cronograma físico-financeiro seja submetido à aprovação da Administração junto com desenhos, especificações e memoriais\n- Tribunais de contas — a fiscalização de obras públicas acompanha o avanço previsto contra o realizado, e a curva S é a ferramenta padrão dessa análise; o Acórdão TCU 2622/2013 trata de parâmetros pra análise de aditivos contratuais\n- Contratos privados de obra — base pra liberação de parcelas e medições\n- Construtoras e incorporadoras — controle de fluxo de caixa do empreendimento\n\nEm obra pública, cronograma mal feito gera problema: a fiscalização compara o avanço previsto com o realizado e, se a defasagem for relevante, pode suspender pagamento ou exigir justificativa técnica."
     },
     {
      "h2": "Passo 1 — Estrutura Analítica do Projeto (EAP/WBS)",
@@ -1424,7 +1424,7 @@
     {
      "type": "norm",
      "title": "Lei 14.133/2021",
-     "description": "Nova Lei de Licitações e Contratos Administrativos — art. 6º inciso XXV define o projeto básico incluindo cronograma físico-financeiro"
+     "description": "Nova Lei de Licitações e Contratos Administrativos — o art. 46 vincula medição e pagamento às etapas do cronograma físico-financeiro e, na contratação integrada (§ 3º), exige que ele seja aprovado pela Administração"
     },
     {
      "type": "norm",
@@ -1476,7 +1476,7 @@
      "file": "cronograma-fisico-financeiro-modelo.xlsx",
      "kind": "XLSX",
      "label": "Modelo de cronograma físico-financeiro",
-     "hint": "Gantt 18 meses + curva S automática · 11 KB"
+     "hint": "Gantt 18 meses + curva S automática · 12 KB"
     }
    ]
   },

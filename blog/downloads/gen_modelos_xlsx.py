@@ -12,6 +12,7 @@ import os
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.chart import LineChart, Reference
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 
@@ -194,7 +195,12 @@ def modelo_cronograma():
         c = ws.cell(row=r, column=2, value=txt); c.font = fonte; c.alignment = AL
         r += 1
 
-    disc_cron = [d.split(' ', 1)[1] for d in DISCIPLINAS]
+    # 🪤 as 12 disciplinas SÃO as que o post de 23/08 lista, nessa ordem.
+    # Se mudar aqui, mude lá — o leitor confere.
+    disc_cron = ['Serviços preliminares', 'Fundação', 'Estrutura', 'Alvenaria',
+                 'Cobertura', 'Esquadrias', 'Instalações elétricas',
+                 'Instalações hidráulicas', 'Revestimentos', 'Pisos', 'Pintura',
+                 'Limpeza final']
 
     fis = wb.create_sheet('FÍSICO')
     fis.column_dimensions['A'].width = 30
@@ -267,8 +273,21 @@ def modelo_cronograma():
         c = fin.cell(row=lin_pct, column=2 + m,
                      value=f'=IF($B{lin_mes}=0,"",{L}{lin_ac}/$B{lin_mes})')
         c.number_format = '0.0%'; c.font = HDR
+    # Gráfico da curva S já montado — o post promete "gráfico de curva S vinculado",
+    # então ele precisa vir pronto, não como instrução pro leitor montar.
+    graf = LineChart()
+    graf.title = "Curva S — desembolso acumulado"
+    graf.style = 12
+    graf.y_axis.title = '% acumulado'
+    graf.x_axis.title = 'Mês'
+    dados = Reference(fin, min_col=3, max_col=2 + MESES, min_row=lin_pct, max_row=lin_pct)
+    rotulos = Reference(fin, min_col=3, max_col=2 + MESES, min_row=3, max_row=3)
+    graf.add_data(dados, from_rows=True, titles_from_data=False)
+    graf.set_categories(rotulos)
+    graf.height, graf.width = 8, 22
+    fin.add_chart(graf, f'A{lin_pct + 3}')
     fin.cell(row=lin_pct + 2, column=1, value=(
-        'Selecione a linha "% ACUMULADO" e insira um gráfico de linhas: é a curva S da obra.'
+        'A curva S abaixo se preenche sozinha conforme você lança os valores e o avanço físico.'
     )).font = NOTA
 
     destino = os.path.join(AQUI, 'cronograma-fisico-financeiro-modelo.xlsx')
