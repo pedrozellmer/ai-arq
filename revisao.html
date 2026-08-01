@@ -849,16 +849,29 @@ let focusedIdx = -1; // índice global na lista items visuais
 function getVisibleRows() {
   return Array.from(document.querySelectorAll('.item-row'));
 }
-function applyFocus(idx) {
+function applyFocus(idx, scroll = true) {
   const rows = getVisibleRows();
   if (!rows.length) return;
   idx = Math.max(0, Math.min(rows.length - 1, idx));
   rows.forEach(r => r.classList.remove('focused'));
   focusedIdx = idx;
   rows[idx].classList.add('focused');
-  // scroll pra ficar visível
-  rows[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+  // scroll pra ficar visível (não no clique — a linha já está sob o mouse)
+  if (scroll) rows[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
 }
+
+// Clique seleciona a linha (01/08 — Pedro: só as setas selecionavam).
+// Delegado no container porque as linhas re-renderizam via innerHTML.
+// Clique em botão/link/campo não rouba a seleção do fluxo do teclado à toa —
+// mas selecionar antes de agir também não atrapalha, então seleciona sempre
+// que o clique cai na linha em si.
+document.getElementById('items-container').addEventListener('click', (e) => {
+  if (e.target.closest('button, a, input, select, textarea')) return;
+  const row = e.target.closest('.item-row');
+  if (!row) return;
+  const idx = getVisibleRows().indexOf(row);
+  if (idx >= 0) applyFocus(idx, false);
+});
 function focusedItemId() {
   const rows = getVisibleRows();
   if (focusedIdx < 0 || focusedIdx >= rows.length) return null;
