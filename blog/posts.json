@@ -646,7 +646,7 @@
     },
     {
      "h2": "Componentes do BDI segundo o TCU",
-     "body": "O Acórdão TCU 2622/2013 trata da composição do BDI, formada essencialmente por estes componentes:\n\n1. Administração Central (AC) — escritório central, gerência, contabilidade, RH, TI\n2. Seguros (S) — RCO (Responsabilidade Civil de Obra), todo risco\n3. Garantias (G) — garantia contratual, retenção\n4. Riscos (R) — imprevistos, perdas, retrabalho\n5. Despesas Financeiras (DF) — capital de giro, fluxo de caixa\n6. Lucro / Remuneração da empresa (L) — margem do construtor\n7. Tributos sobre faturamento (T) — ISS, PIS, COFINS e, quando aplicável, CPRB.\n\nAtenção a uma vedação explícita do TCU: IRPJ e CSLL NÃO entram no BDI. São tributos sobre o LUCRO da empresa, não sobre o faturamento da obra — incluí-los é um dos erros que mais gera glosa em auditoria.\n\nDeixar de considerar um componente desses no cálculo do BDI pode gerar questionamento em auditoria de obra pública.\n\nO que NÃO entra no BDI (são custos diretos, vão na planilha de quantitativos):\n- Administração local da obra (engenheiro residente, mestre, secretária no canteiro)\n- Canteiro de obras (containers, alojamento, sanitário)\n- Equipamentos do canteiro\n- Mobilização e desmobilização\n\nMuita gente confunde — pelo entendimento do TCU esses itens são custo direto, vão pra planilha, não pro BDI."
+     "body": "O Acórdão TCU 2622/2013 trata da composição do BDI, formada essencialmente por estes componentes:\n\n1. Administração Central (AC) — escritório central, gerência, contabilidade, RH, TI\n2. Seguros (S) — RCO (Responsabilidade Civil de Obra), todo risco\n3. Garantias (G) — garantia contratual, retenção\n4. Riscos (R) — imprevistos, perdas, retrabalho\n5. Despesas Financeiras (DF) — capital de giro, fluxo de caixa\n6. Lucro / Remuneração da empresa (L) — margem do construtor\n7. Tributos sobre faturamento (T) — ISS, PIS, COFINS e, quando aplicável, CPRB.\n\nAtenção a uma vedação explícita do TCU: IRPJ e CSLL NÃO entram no BDI. A Súmula TCU 254/2010 diz que os dois \"não se consubstanciam em despesa indireta passível de inclusão na taxa de BDI do orçamento-base da licitação, por terem natureza direta e personalística\" — ou seja, incidem sobre o lucro da empresa, não sobre o faturamento da obra. Incluí-los é um dos erros que mais gera glosa em auditoria.\n\nDeixar de considerar um componente desses no cálculo do BDI pode gerar questionamento em auditoria de obra pública.\n\nO que NÃO entra no BDI (são custos diretos, vão na planilha de quantitativos):\n- Administração local da obra (engenheiro residente, mestre, secretária no canteiro)\n- Canteiro de obras (containers, alojamento, sanitário)\n- Equipamentos do canteiro\n- Mobilização e desmobilização\n\nMuita gente confunde — pelo entendimento do TCU esses itens são custo direto, vão pra planilha, não pro BDI."
     },
     {
      "h2": "A fórmula do BDI usada pelo TCU",
@@ -710,6 +710,11 @@
      "title": "Entenda o Acórdão 2622/2013 do TCU sobre BDI",
      "url": "https://sienge.com.br/blog/acordao-26222013/",
      "publisher": "Sienge"
+    },
+    {
+     "type": "norm",
+     "title": "Súmula TCU 254/2010",
+     "description": "O IRPJ e a CSLL não se consubstanciam em despesa indireta passível de inclusão na taxa de BDI do orçamento-base da licitação, por terem natureza direta e personalística"
     }
    ]
   },
@@ -736,7 +741,7 @@
     },
     {
      "h2": "Estrutura do orçamento (custos diretos + indiretos + lucro)",
-     "body": "Mattos descreve a estrutura clássica do orçamento, em que o preço de venda se forma a partir dos custos diretos somados ao BDI:\n\nORÇAMENTO = Custos Diretos + Custos Indiretos + Impostos + Lucro = Preço de Venda\n\nQuebrando cada parcela:\n\n- Custos Diretos: mão de obra dos operários, materiais, equipamentos diretamente aplicados na obra (visíveis na planilha de quantitativos)\n- Custos Indiretos: equipes de supervisão e apoio, despesas gerais do canteiro, taxas administrativas\n- Impostos: ISS, PIS, COFINS, IRPJ, CSLL — incidem sobre faturamento\n- Lucro: remuneração do construtor (margem)\n\nA soma dos 3 últimos (indiretos + impostos + lucro) forma o BDI, que se aplica como percentual sobre os custos diretos."
+     "body": "Mattos descreve a estrutura clássica do orçamento, em que o preço de venda se forma a partir dos custos diretos somados ao BDI:\n\nORÇAMENTO = Custos Diretos + Custos Indiretos + Impostos + Lucro = Preço de Venda\n\nQuebrando cada parcela:\n\n- Custos Diretos: mão de obra dos operários, materiais, equipamentos diretamente aplicados na obra (visíveis na planilha de quantitativos)\n- Custos Indiretos: equipes de supervisão e apoio, despesas gerais do canteiro, taxas administrativas\n- Impostos: os que incidem sobre o FATURAMENTO — ISS, PIS, COFINS e, quando aplicável, a CPRB. Atenção: IRPJ e CSLL ficam de fora, porque incidem sobre o lucro da empresa, não sobre a receita da obra. A Súmula TCU 254/2010 é explícita ao dizer que os dois não são despesa indireta passível de inclusão no BDI\n- Lucro: remuneração do construtor (margem)\n\nA soma dos 3 últimos (indiretos + impostos + lucro) forma o BDI, que se aplica como percentual sobre os custos diretos."
     },
     {
      "h2": "Quem faz cada coisa",
@@ -744,7 +749,7 @@
     },
     {
      "h2": "Por que separar quantitativo e orçamento",
-     "body": "Razões técnicas:\n- Quantitativo é medição (matemática, geometria). Orçamento é mercado (preços variam por região, época, fornecedor).\n- Errar quantitativo afeta TODO o orçamento. Errar um preço afeta só aquele item.\n- Quantitativo é estável (a obra é a mesma). Orçamento muda ao longo do tempo.\n\nRazões comerciais:\n- Quantitativo pode ser mandado pra vários orçamentistas competirem (você mantém poder de barganha)\n- Quantitativo é propriedade do projeto. Orçamento é oferta do construtor.\n- Sem quantitativo aberto, cliente não consegue comparar propostas com transparência\n\nEm obra pública isso é estruturado pela Lei 14.133/2021: mesmo quando o valor estimado é mantido sigiloso, o edital precisa divulgar o detalhamento de quantidades e especificações, de modo que cada licitante apresente SEU orçamento sobre o mesmo quantitativo."
+     "body": "Razões técnicas:\n- Quantitativo é medição (matemática, geometria). Orçamento é mercado (preços variam por região, época, fornecedor).\n- Errar quantitativo afeta TODO o orçamento. Errar um preço afeta só aquele item.\n- Quantitativo é estável (a obra é a mesma). Orçamento muda ao longo do tempo.\n\nRazões comerciais:\n- Quantitativo pode ser mandado pra vários orçamentistas competirem (você mantém poder de barganha)\n- Quantitativo é propriedade do projeto. Orçamento é oferta do construtor.\n- Sem quantitativo aberto, cliente não consegue comparar propostas com transparência\n\nEm obra pública isso é estruturado pela Lei 14.133/2021: o art. 24 permite que o orçamento estimado seja sigiloso, mas \"sem prejuízo da divulgação do detalhamento dos quantitativos e das demais informações necessárias para a elaboração das propostas\". Ou seja: o preço pode ser segredo, o quantitativo não — cada licitante apresenta o SEU orçamento sobre a mesma base medida."
     },
     {
      "h2": "Posição honesta do AI.arq",
