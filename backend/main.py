@@ -6667,8 +6667,14 @@ async def debug_libredwg_batch(request: Request, limite: int = 5,
                 if (r.get("file_types") or {}).get("dwg", 0) > 0]
         _LIBREDWG_TESTE["jobs_na_fila"] = len(jobs)
         dwg2dxf_bin = __import__("shutil").which("dwg2dxf")
+        # 🪤 1ª rodada (print do Pedro, 01/08): 4 dos 5 sorteados eram DWGs que
+        # o ODA nem converte — projetos DONE via PDF/DXF com o DWG falhando em
+        # silêncio. Sem baseline não há comparação, então esses não podem
+        # consumir o limite; só contam num teto de tentativas separado.
+        _tentativas = 0
         for job in jobs:
-            if _LIBREDWG_TESTE["testados"] >= limite or time.time() - t0 > 600:
+            if (_LIBREDWG_TESTE["testados"] >= limite or _tentativas >= 25
+                    or time.time() - t0 > 600):
                 break
             try:
                 nomes = [n for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job}/")
@@ -6676,8 +6682,10 @@ async def debug_libredwg_batch(request: Request, limite: int = 5,
             except Exception:
                 continue
             for nome in nomes[:1]:   # 1 DWG por job basta pra amostra
-                if _LIBREDWG_TESTE["testados"] >= limite or time.time() - t0 > 600:
+                if (_LIBREDWG_TESTE["testados"] >= limite or _tentativas >= 25
+                        or time.time() - t0 > 600):
                     break
+                _tentativas += 1
                 item = {"job_id": job, "arquivo": nome}
                 try:
                     dados = _supabase_storage_download_prancha(job, nome)
@@ -6715,7 +6723,8 @@ async def debug_libredwg_batch(request: Request, limite: int = 5,
                 except Exception as e:
                     item["resultado"] = f"erro: {type(e).__name__}: {e}"[:150]
                 _LIBREDWG_TESTE["resultados"].append(item)
-                _LIBREDWG_TESTE["testados"] += 1
+                if "delta_linhas_pct" in item:
+                    _LIBREDWG_TESTE["testados"] += 1   # só comparações reais contam
         try:
             _log_error("libredwg:qualidade",
                        f"{_LIBREDWG_TESTE['converteram_e_abrem']} de "
