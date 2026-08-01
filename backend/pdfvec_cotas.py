@@ -71,6 +71,16 @@ MAX_RECTS: int = 6000            # teto de trechos de texto lidos por página
 MAX_TOKENS: int = 2000           # teto de tokens numéricos considerados
 MAX_ELEMS: int = 1200            # teto de elementos casáveis
 
+# Derivação de escala por votação das cotas (ver derive_scale_from_cotas).
+# Escalas usadas em prancha de arquitetura no Brasil — a votação só aceita
+# uma dessas, o que já descarta sozinha a maior parte do ruído.
+ESCALAS_PADRAO: tuple[float, ...] = (10, 15, 20, 25, 33.33, 50, 75, 100,
+                                     125, 150, 200, 250, 500, 1000)
+TOL_ESCALA_REL: float = 0.03     # par "vota" numa escala padrão se cair a ±3%
+MIN_VOTOS_ESCALA: int = 4        # abaixo disso é coincidência, não evidência
+DOMINANCIA: float = 2.0          # a 1ª tem que ter o dobro da 2ª colocada
+MAX_PONTAS: int = 400            # teto de extremos por eixo (custo O(n) da cadeia)
+
 # número BR com unidade opcional colada: "350", "1,20", "3.50", "0,98m", "35cm"
 _COTA_RE = re.compile(r"^(\d{1,4})(?:[.,](\d{1,2}))?(CM|M)?$", re.IGNORECASE)
 
@@ -315,6 +325,144 @@ def validate_scale(pdf_path: str, page_index: int, scale_denominator: float,
         "n_matches": len(matches),
         "validada": len(matches) >= 2,
         "exemplos": matches[:5],
+    }
+
+
+def derive_scale_from_cotas(pdf_path: str, page_index: int = 0,
+                            region_bbox: Optional[Sequence[float]] = None,
+                            walls: Optional[Sequence[dict]] = None,
+                            rooms_pt: Optional[Sequence[dict]] = None) -> dict:
+    """DESCOBRE a escala a partir das cotas escritas. Não valida — deriva.
+
+    Por que existe (medido em 01/08/2026 nas 30 pranchas da sombra):
+    47% das pranchas eram puladas com "sem escala (viewport nem carimbo)" —
+    a escala só podia vir dessas duas fontes. Mas a cota está desenhada ali:
+    uma prancha trazia 122 cotas e mesmo assim foi descartada.
+
+    A ideia: para cada par (cota, elemento próximo), a escala IMPLÍCITA é
+    `valor_escrito / comprimento_em_pontos`. Não é preciso saber a qual
+    elemento a cota se refere — pares errados espalham valores aleatórios,
+    pares certos se acumulam todos no mesmo lugar. A escala verdadeira é a
+    moda. É votação, não pareamento.
+
+    Isso contorna o problema que trava o `match_cotas`: cota brasileira vem
+    em CADEIA ("1,20 | 0,80 | 2,40"), medindo trechos entre linhas de chamada
+    e não paredes inteiras — por isso 415 cotas produziram só 22 pares. Aqui
+    a cadeia não atrapalha: basta que alguns pares caiam na escala certa.
+
+    Retorna {"scale", "votos", "total_pares", "confianca", "candidatas"} ou
+    {"scale": None, ...} quando não há acordo suficiente.
+    """
+    tokens = extract_cota_tokens(pdf_path, page_index, region_bbox)
+    if not tokens:
+        return {"scale": None, "motivo": "nenhuma cota lida"}
+
+    # Elementos em PONTOS (não em metros — a escala é justamente a incógnita).
+    elems: list[dict] = []
+    for w in walls or []:
+        try:
+            a0, a1 = w["span_pt"]
+            ln = abs(float(a1) - float(a0))
+            if ln > 0:
+                elems.append({"len_pt": ln, "axis": w["axis"],
+                              "span_pt": (float(min(a0, a1)), float(max(a0, a1))),
+                              "p_pt": float(w["p_pt"])})
+        except (KeyError, TypeError, ValueError):
+            continue
+    for room in rooms_pt or []:
+        try:
+            x0, y0, x1, y1 = room["bbox"]
+        except (KeyError, TypeError, ValueError):
+            continue
+        wx, hy = abs(float(x1) - float(x0)), abs(float(y1) - float(y0))
+        for axis, span, p, ln in (("h", (x0, x1), y0, wx), ("h", (x0, x1), y1, wx),
+                                  ("v", (y0, y1), x0, hy), ("v", (y0, y1), x1, hy)):
+            if ln > 0:
+                elems.append({"len_pt": ln, "axis": axis,
+                              "span_pt": (float(min(span)), float(max(span))),
+                              "p_pt": float(p)})
+    elems = elems[:MAX_ELEMS]
+    if not elems:
+        return {"scale": None, "motivo": "nenhum elemento medível"}
+
+    votos: dict[float, int] = {}
+    pares = 0
+    for el in elems:
+        ln_pt = el["len_pt"]
+        perp_tol = min(max(PROX_FRAC * ln_pt, PROX_MIN_PT), PROX_MAX_PT)
+        margin = AXIAL_MARGIN_FRAC * ln_pt
+        a0, a1 = el["span_pt"]
+        horizontal = el["axis"] == "h"
+        for tk in tokens:
+            val = tk.get("value_m")
+            if not val:
+                continue
+            cx, cy = tk["center"]
+            axial, perp = (cx, cy) if horizontal else (cy, cx)
+            if not (a0 - margin <= axial <= a1 + margin):
+                continue
+            if abs(perp - el["p_pt"]) > perp_tol:
+                continue
+            pares += 1
+            implicita = val / (ln_pt * PT_TO_M)      # denominador da escala
+            for padrao in ESCALAS_PADRAO:
+                if abs(implicita - padrao) <= TOL_ESCALA_REL * padrao:
+                    votos[padrao] = votos.get(padrao, 0) + 1
+                    break
+
+    # 2ª fonte de votos: CADEIA DE COTAS. Cota parcial não mede elemento
+    # inteiro — mede o vão entre duas linhas de chamada, e essas linhas caem
+    # sobre as PONTAS dos elementos (onde a parede é interrompida por porta,
+    # janela ou encontro). Então o candidato certo é a distância entre dois
+    # extremos vizinhos, não o comprimento de um elemento.
+    # Sem isto, prancha muito cotada casa zero: a de 122 cotas casou 0 pares.
+    for eixo in ("h", "v"):
+        pontas = sorted({p for el in elems if el["axis"] == eixo
+                         for p in el["span_pt"]})
+        if len(pontas) < 3:
+            continue
+        pontas = pontas[:MAX_PONTAS]
+        vaos: list[float] = []
+        for i in range(len(pontas) - 1):
+            # vãos entre pontas vizinhas e entre saltos de até 3 pontas —
+            # cobre cota parcial e cota que agrupa dois trechos
+            for j in range(i + 1, min(i + 4, len(pontas))):
+                d = pontas[j] - pontas[i]
+                if d > 0:
+                    vaos.append(d)
+        for tk in tokens:
+            val = tk.get("value_m")
+            if not val:
+                continue
+            for d_pt in vaos:
+                implicita = val / (d_pt * PT_TO_M)
+                for padrao in ESCALAS_PADRAO:
+                    if abs(implicita - padrao) <= TOL_ESCALA_REL * padrao:
+                        votos[padrao] = votos.get(padrao, 0) + 1
+                        pares += 1
+                        break
+                else:
+                    continue
+                break   # um voto por cota por eixo, pra cadeia não inflar
+
+    if not votos:
+        return {"scale": None, "motivo": "nenhum par caiu em escala padrão",
+                "total_pares": pares, "n_cotas": len(tokens)}
+
+    ranking = sorted(votos.items(), key=lambda kv: -kv[1])
+    melhor, n_melhor = ranking[0]
+    segundo = ranking[1][1] if len(ranking) > 1 else 0
+    # Só aceita com apoio real E dominância clara sobre a 2ª colocada:
+    # escala errada não junta votos, espalha.
+    ok = n_melhor >= MIN_VOTOS_ESCALA and n_melhor >= DOMINANCIA * max(segundo, 1)
+    return {
+        "scale": float(melhor) if ok else None,
+        "votos": n_melhor,
+        "segundo_lugar": segundo,
+        "total_pares": pares,
+        "n_cotas": len(tokens),
+        "confianca": round(n_melhor / max(sum(votos.values()), 1), 2),
+        "candidatas": [{"escala": k, "votos": v} for k, v in ranking[:4]],
     }
 
 

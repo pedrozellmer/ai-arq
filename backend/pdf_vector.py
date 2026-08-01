@@ -69,7 +69,39 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             out["err_carimbo"] = f"{type(e).__name__}: {e}"[:120]
 
     if not den:
-        out["skip"] = "sem escala (viewport nem carimbo)"
+        # 3ª fonte: DERIVAR a escala das cotas escritas (01/08/2026).
+        # Medido nas 30 pranchas da sombra: 47% morriam aqui, mesmo tendo cota
+        # desenhada — uma delas trazia 122 cotas. A cota até então só validava
+        # uma escala já conhecida; agora ela também descobre.
+        # Roda por último e só quando as outras duas falham: não pode regredir
+        # nada que hoje funciona.
+        try:
+            from pdfvec_cotas import derive_scale_from_cotas
+            from pdfvec_walls import detect_walls
+            # 🪤 Sondagem PERMISSIVA. O filtro de espessura do detect_walls é em
+            # METROS, então depende da escala — que é justamente o que não
+            # sabemos. Assumir 1:1 não acha parede nenhuma. Solução: sondar com
+            # 1:100 e abrir a faixa de espessura (0,02–1,0 m ⇒ ~0,6 a 28 pt),
+            # o que cobre parede desenhada de 1:20 a 1:200. Só os COMPRIMENTOS
+            # EM PONTOS (span_pt) são usados na votação, e esses não dependem
+            # da escala — o palpite de 1:100 só define o que passa no filtro.
+            _w = detect_walls(pdf_path, page_index, scale_denominator=100,
+                              region_bbox=None, thickness_range_m=(0.02, 1.0))
+            _cot = derive_scale_from_cotas(pdf_path, page_index, None,
+                                           walls=(_w or {}).get("walls"),
+                                           rooms_pt=None)
+            out["cotas_derivacao"] = {k: _cot.get(k) for k in
+                                      ("votos", "segundo_lugar", "total_pares",
+                                       "n_cotas", "confianca")}
+            if _cot.get("scale"):
+                den = float(_cot["scale"])
+                out["scale_src"] = "cotas"
+                out["scale_derivada_por_cota"] = True
+        except Exception as e:
+            out["err_cotas_derive"] = f"{type(e).__name__}: {e}"[:120]
+
+    if not den:
+        out["skip"] = "sem escala (viewport, carimbo nem cota)"
         out["secs"] = round(time.time() - t0, 1)
         return out
     out["scale"] = den
