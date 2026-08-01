@@ -9663,7 +9663,40 @@ async def admin_revision_feedback(request: Request):
     except Exception as _e:
         print(f"[revision-feedback] admin erro: {_e}")
         raise HTTPException(502, "Não consegui carregar o feedback de revisões")
-    return _rf.resumo_para_admin(rows if isinstance(rows, list) else [])
+    resumo = _rf.resumo_para_admin(rows if isinstance(rows, list) else [])
+
+    # 🪤 01/08/2026: o painel só lia revision_feedback — que depende do cliente
+    # REENVIAR um XLSX revisado, gesto que ninguém fez em 3 meses (0 linhas).
+    # Enquanto isso a revisão INLINE gravava em item_reviews (24 sinais em 5
+    # projetos) e ninguém olhava. Agora as duas fontes aparecem juntas:
+    # approve = "o número está certo" (valida a medição); edit = correção real.
+    try:
+        url2 = (f"{SUPABASE_URL}/rest/v1/item_reviews"
+                f"?select=job_id,item_id,action,edits,comment,reviewed_at"
+                f"&order=reviewed_at.desc&limit=500")
+        req2 = _url_rf.Request(url2, method="GET")
+        req2.add_header("apikey", SUPABASE_KEY)
+        req2.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        rows2 = _json_rf.loads(_url_rf.urlopen(req2, timeout=10).read().decode("utf-8"))
+        if isinstance(rows2, list):
+            aprov = [r for r in rows2 if r.get("action") == "approve"]
+            edits = [r for r in rows2 if r.get("action") == "edit"]
+            resumo["revisao_inline"] = {
+                "aprovacoes": len(aprov),
+                "edicoes": len(edits),
+                "projetos": len({r.get("job_id") for r in rows2 if r.get("job_id")}),
+                "ultimos_edits": [
+                    {"job_id": r.get("job_id"),
+                     "quando": (r.get("reviewed_at") or "")[:10],
+                     "edits": r.get("edits"),
+                     "comment": r.get("comment")}
+                    for r in edits[:10]
+                ],
+            }
+    except Exception as _e2:
+        print(f"[revision-feedback] item_reviews erro: {_e2}")
+        resumo["revisao_inline"] = {"erro": "não consegui ler item_reviews"}
+    return resumo
 
 
 # ═══════════════════════════════════════════════════════════════

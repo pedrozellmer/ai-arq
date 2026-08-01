@@ -1218,7 +1218,7 @@ function renderOps(d){
     });
     html += `</tbody></table></div>`;
   }
-  return html;
+  return inlineHtml + html;
 }
 
 // ══════════════════════════════════════════════
@@ -1465,10 +1465,28 @@ async function loadRevisionFeedback(){
 function renderRevisionFeedback(d){
   const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   const num = (v, suf='') => (v==null || v==='' ? '—' : `${v}${suf}`);
+  // Revisão INLINE (item_reviews): a fonte que os clientes DE FATO usam.
+  // Descoberto em 01/08: 24 sinais acumulados enquanto o painel olhava só
+  // a tabela de planilhas reenviadas (que ninguém usa — 0 em 3 meses).
+  const ri = d.revisao_inline || {};
+  const inlineHtml = (ri.aprovacoes || ri.edicoes) ? `
+    <div class="rounded-xl border border-gray-200 bg-white p-4 mb-4">
+      <p class="text-sm font-semibold text-gray-800 mb-1">✏️ Revisão inline (na tela de revisão)</p>
+      <p class="text-xs text-gray-600 mb-2">
+        <b class="text-green-700">${ri.aprovacoes || 0} aprovações</b> (cliente confirmou o número)
+        · <b class="text-amber-700">${ri.edicoes || 0} edições</b>
+        · ${ri.projetos || 0} projetos</p>
+      ${(ri.ultimos_edits || []).map(e => `
+        <div class="text-xs text-gray-600 border-t border-gray-100 pt-2 mt-2">
+          <span class="font-mono">${esc(e.job_id)}</span> · ${esc(e.quando)}
+          ${e.comment ? ` · "${esc(e.comment)}"` : ''}
+          <div class="text-gray-500 break-all">${esc(JSON.stringify(e.edits || {}).slice(0, 220))}</div>
+        </div>`).join('')}
+    </div>` : '';
   if (!d || !d.n_planilhas){
-    return `<div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
+    return inlineHtml + `<div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
       <div class="text-3xl mb-2">📭</div>
-      <p class="text-sm font-medium text-gray-700">Nenhuma planilha revisada ainda</p>
+      <p class="text-sm font-medium text-gray-700">Nenhuma planilha revisada (reenviada) ainda</p>
       <p class="text-xs text-gray-500 mt-1">Quando um cliente subir a planilha revisada dele, este painel mostra onde a IA mais erra — por disciplina e no recorte medido × estimado.</p>
     </div>`;
   }
