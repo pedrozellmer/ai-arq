@@ -1203,7 +1203,7 @@
    "sections": [
     {
      "h2": "O experimento involuntário: 51 projetos, dois formatos",
-     "body": "Até meados de julho de 2026, 51 projetos processados na plataforma chegaram ao fim com planilha concluída. Separamos por formato de origem: 15 vieram com pelo menos um arquivo CAD (DWG ou DXF) e 36 vieram só em PDF.\n\nO resultado, medido pela nossa própria marcação de confiança item a item:\n\n• Projetos com CAD (DWG/DXF): em média 31,5% dos itens saíram como ✓ medido — quantidade calculada direto da geometria.\n• Projetos só com PDF: em média 7,3% dos itens medidos.\n\nÉ uma diferença de aproximadamente 4,3 vezes. Mesma plataforma, mesmo tipo de projeto, mesma leitura — o que mudou foi o arquivo que entrou. (Dados internos AI.arq, julho/2026, 51 projetos concluídos; médias por projeto. Amostra de beta — o número vai se refinando conforme a base cresce.)"
+     "body": "Atualizado em 1º de agosto de 2026: 67 projetos processados na plataforma chegaram ao fim com planilha concluída. Separamos por formato de origem: 32 vieram com pelo menos um arquivo CAD (DWG ou DXF) e 35 vieram só em PDF.\n\nO resultado, medido pela nossa própria marcação de confiança item a item:\n\n• Projetos com CAD (DWG/DXF): em média 25,0% dos itens saíram como ✓ medido — quantidade calculada direto da geometria.\n• Projetos só com PDF: em média 4,7% dos itens medidos.\n\nÉ uma diferença de aproximadamente 5,3 vezes. Mesma plataforma, mesmo tipo de projeto, mesma leitura — o que mudou foi o arquivo que entrou. (Dados internos AI.arq, apuração de 01/08/2026, 67 projetos concluídos; médias por projeto. Amostra de beta.)\n\nPra deixar o histórico à vista, já que prometemos atualizar: na primeira publicação deste post, em julho, a base tinha 51 projetos e os números eram 31,5% no CAD contra 7,3% no PDF — uma diferença de 4,3 vezes. As duas médias caíram e a distância entre elas aumentou. A queda vem de projetos maiores e mais variados entrando na base; a distância aumentar reforça o ponto central do texto."
     },
     {
      "h2": "Por que o formato muda tanto: pixel não tem medida",
@@ -1219,14 +1219,14 @@
     },
     {
      "h2": "Os limites do número (transparência em primeiro lugar)",
-     "body": "Esses 31,5% × 7,3% são médias de uma base em beta — 51 projetos, tipos de prancha variados, complexidades diferentes. Projeto com prancha rica em cotas mede mais; prancha só de layout mede menos, em qualquer formato. O número vai mudar conforme a base cresce, e vamos atualizando.\n\nO que o dado já sustenta com folga é a direção: se você pode escolher o formato do arquivo, escolha o CAD. É a diferença entre a plataforma ler o seu desenho — e medir o seu desenho."
+     "body": "Esses 25,0% × 4,7% são médias de uma base em beta — 67 projetos, tipos de prancha variados, complexidades diferentes. Projeto com prancha rica em cotas mede mais; prancha só de layout mede menos, em qualquer formato. O número vai mudar conforme a base cresce, e vamos atualizando.\n\nO que o dado já sustenta com folga é a direção: se você pode escolher o formato do arquivo, escolha o CAD. É a diferença entre a plataforma ler o seu desenho — e medir o seu desenho."
     }
    ],
    "cta": "Quer ver a diferença na sua própria prancha? Suba um projeto em ai.arq.br — de preferência em DXF (ou DWG) — e receba a planilha de quantitativos com cada item marcado como medido (✓) ou estimativa a revisar (⚠). No beta, é tudo grátis, sem cartão.",
    "sources": [
     {
      "type": "official",
-     "title": "Dados internos AI.arq — painel de qualidade de leitura (julho/2026, 51 projetos concluídos; metodologia descrita no texto)",
+     "title": "Dados internos AI.arq — painel de qualidade de leitura (apuração de 01/08/2026, 67 projetos concluídos; metodologia descrita no texto)",
      "url": "https://ai.arq.br/exemplo.html"
     },
     {
