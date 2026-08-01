@@ -1194,8 +1194,8 @@
   },
   {
    "slug": "dwg-ou-pdf-quantitativo-o-que-os-dados-mostram",
-   "title": "DWG ou PDF? O que 51 projetos reais mostram sobre o seu quantitativo",
-   "description": "Comparamos a planilha de quantitativos de projetos enviados em DWG/DXF e em PDF: no CAD, a fatia de itens medidos direto do desenho foi ~4,3× maior. Entenda o porquê e como exportar.",
+   "title": "DWG, DXF ou PDF: o que os nossos dados mostram sobre qual formato medir",
+   "description": "Comparamos 67 projetos reais: quanto cada formato mede e quantas vezes cada um falha. O DWG mede mais quando abre — mas falha em 6 de cada 10 envios. Por que recomendamos DXF.",
    "keywords": "dwg ou pdf quantitativo, planilha de quantitativos dwg, exportar prancha cad, levantamento de quantitativos automatico, dxf quantitativo",
    "category": "IA e Confiança",
    "publish_date": "2026-07-22",
@@ -1204,6 +1204,10 @@
     {
      "h2": "O experimento involuntário: 51 projetos, dois formatos",
      "body": "Atualizado em 1º de agosto de 2026: 67 projetos processados na plataforma chegaram ao fim com planilha concluída. Separamos por formato de origem: 32 vieram com pelo menos um arquivo CAD (DWG ou DXF) e 35 vieram só em PDF.\n\nO resultado, medido pela nossa própria marcação de confiança item a item:\n\n• Projetos com CAD (DWG/DXF): em média 25,0% dos itens saíram como ✓ medido — quantidade calculada direto da geometria.\n• Projetos só com PDF: em média 4,7% dos itens medidos.\n\nÉ uma diferença de aproximadamente 5,3 vezes. Mesma plataforma, mesmo tipo de projeto, mesma leitura — o que mudou foi o arquivo que entrou. (Dados internos AI.arq, apuração de 01/08/2026, 67 projetos concluídos; médias por projeto. Amostra de beta.)\n\nPra deixar o histórico à vista, já que prometemos atualizar: na primeira publicação deste post, em julho, a base tinha 51 projetos e os números eram 31,5% no CAD contra 7,3% no PDF — uma diferença de 4,3 vezes. As duas médias caíram e a distância entre elas aumentou. A queda vem de projetos maiores e mais variados entrando na base; a distância aumentar reforça o ponto central do texto."
+    },
+    {
+     "h2": "DWG ou DXF? O dado nos surpreendeu",
+     "body": "Até aqui tratamos DWG e DXF juntos como \"CAD\". Quando separamos os dois, apareceu uma coisa que a gente não esperava — e que muda a recomendação.\n\nEntre os projetos que **concluíram**, o DWG mede MAIS que o DXF: 28,9% dos itens medidos contra 20,1%. Faz sentido, porque o DWG costuma vir direto do arquivo de trabalho, com toda a estrutura de blocos e layers preservada.\n\nSó que essa conta esconde metade da história: os projetos que **falharam** não entram nela. E aí a diferença é brutal.\n\n• DWG: 47 envios, 29 falharam — **61,7% não chegaram ao fim**\n• DXF: 17 envios, 3 falharam — 17,6%\n• PDF: 43 envios, 7 falharam — 16,3%\n\nSeis em cada dez DWG não passam da conversão. O motivo mais comum são os \"objetos inteligentes\" do AutoCAD Architecture/MEP, que nenhum conversor abre direto; o segundo são arquivos que o nosso conversor não consegue ler inteiros, mesmo abrindo normalmente no CAD de quem enviou.\n\nJuntando as duas pontas — a chance de funcionar vezes o quanto mede quando funciona — é isto que você pode esperar ao subir um arquivo:\n\n• **DXF: 16,6%** de itens medidos\n• DWG: 11,1%\n• PDF: 3,9%\n\nPor isso a recomendação é DXF, e não \"CAD\" genérico. Não é que o DXF seja um formato melhor: é que ele **chega inteiro**. Um DWG que abre mede lindamente — o problema é que, na nossa base, ele só abre 4 vezes em cada 10.\n\n(Base de 01/08/2026, projetos não arquivados, contando envios que terminaram em planilha ou em erro. Amostra de beta, e a de DXF ainda é pequena — 17 envios. Estamos de olho e atualizamos conforme cresce.)"
     },
     {
      "h2": "Por que o formato muda tanto: pixel não tem medida",
@@ -1215,7 +1219,7 @@
     },
     {
      "h2": "Como exportar pra aproveitar isso",
-     "body": "Se você trabalha em AutoCAD ou similar, o caminho é curto:\n\n1. Prefira DXF. Entre os dois formatos de CAD, o DXF é o mais seguro: abre em qualquer programa e não trava com os “objetos inteligentes” (AEC) de projetos feitos em AutoCAD Architecture/MEP — que às vezes impedem o DWG de ser convertido. O DWG também mede a geometria; só costuma dar mais dor de cabeça na conversão.\n2. Envie o CAD direto — sem imprimir pra PDF antes.\n3. Se o projeto tem objetos especiais (elétrica, forro modular, mobiliário paramétrico), rode EXPORTTOAUTOCAD antes de salvar em DXF: isso converte os objetos em geometria comum, que dá pra medir.\n4. Só tem PDF? Envie mesmo assim — prefira o PDF exportado do CAD (vetorial) ao escaneado, e saiba que a planilha virá com mais estimativas pra revisar.\n\nO passo a passo completo, com prints, está no nosso guia de exportação no FAQ."
+     "body": "Se você trabalha em AutoCAD ou similar, o caminho é curto:\n\n1. Mande DXF. É a recomendação nº 1, e agora com número em cima: na nossa base o DWG falha em 61,7% dos envios contra 17,6% do DXF. O DWG mede bem quando abre — o problema é abrir. Salvar em DXF leva 10 segundos e é o que mais muda o seu resultado.\n2. Envie o CAD direto — sem imprimir pra PDF antes.\n3. Se o projeto tem objetos especiais (elétrica, forro modular, mobiliário paramétrico), rode EXPORTTOAUTOCAD antes de salvar em DXF: isso converte os objetos em geometria comum, que dá pra medir.\n4. Só tem PDF? Envie mesmo assim — prefira o PDF exportado do CAD (vetorial) ao escaneado, e saiba que a planilha virá com mais estimativas pra revisar.\n\nO passo a passo completo, com prints, está no nosso guia de exportação no FAQ."
     },
     {
      "h2": "Os limites do número (transparência em primeiro lugar)",
