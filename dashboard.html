@@ -620,6 +620,12 @@
                 Baixar .xlsx direto
               </button>
             </div>
+            <!-- Memorial descritivo (.docx rascunho) — novo entregável (01/08) -->
+            <button id="btn-memorial-done" class="mt-3 w-full py-3.5 rounded-xl text-white text-sm font-semibold shadow-lg shadow-violet-500/25 transition flex items-center justify-center gap-2 hover:brightness-110" style="background:linear-gradient(135deg,#7C3AED 0%,#8B5CF6 100%)">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              Memorial descritivo em Word (rascunho) <span class="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-white/20">NOVO</span>
+            </button>
+            <p class="mt-1.5 text-center text-[11px] text-gray-500">Escrito a partir dos itens do seu CAD, com estimativas rotuladas e campos [A PREENCHER] — base pra editar, n&atilde;o substitui o memorial assinado pelo RT.</p>
             <p class="mt-2 text-center text-xs text-gray-500">
               Revisar no navegador: aprove/corrija linha a linha e exporte a versão revisada.
               Também é possível voltar depois em <a href="#" onclick="event.preventDefault(); switchTab('meus-projetos');" class="underline hover:text-indigo-600">Meus Projetos</a>.
@@ -3121,6 +3127,16 @@
       if (currentJobId) {
         window.location.href = `revisao.html?job_id=${currentJobId}`;
       }
+    });
+  }
+  // Memorial descritivo (.docx): endpoint protegido → downloadProtected
+  // (armadilha nº9: navegação direta não manda o Authorization header)
+  const btnMemorialDone = document.getElementById('btn-memorial-done');
+  if (btnMemorialDone) {
+    btnMemorialDone.addEventListener('click', () => {
+      if (!currentJobId) return;
+      if (window.trackEvent) trackEvent('download_memorial', { job_id: currentJobId });
+      downloadProtected(`${API_BASE}/api/memorial/${currentJobId}`, `memorial_descritivo_rascunho_${currentJobId}.docx`);
     });
   }
 

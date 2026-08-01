@@ -1507,11 +1507,18 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
     else:
         passos.append(("&#128221;", "Revise e ajuste",
             "Confira os itens e ajuste o que precisar. Ao subir a planilha revisada voc&ecirc; <b>afina o motor</b> pros pr&oacute;ximos projetos."))
-    # 3) Chat — sempre útil
+    # 3) Memorial descritivo (novo entregável 01/08) — logo depois da revisão
+    #    de propósito: "revise antes, o texto sai melhor" empurra a revisão.
+    passos.append(("&#128196;", "Baixe o memorial descritivo (rascunho em Word)",
+        "Escrito a partir dos itens do seu CAD, na ordem das etapas da obra &mdash; o documento "
+        "que prefeitura, banco e incorpora&ccedil;&atilde;o pedem. Estimativas rotuladas e campos "
+        "<b>[A PREENCHER]</b> pro que o desenho n&atilde;o informa. &Eacute; base pra voc&ecirc; editar "
+        "e assinar &mdash; e sai melhor se voc&ecirc; revisar as quantidades antes."))
+    # 4) Chat — sempre útil
     passos.append(("&#128172;", "Tire d&uacute;vidas no chat",
         "Pergunte sobre o seu quantitativo direto na p&aacute;gina do projeto: o que &eacute; medido, "
         "o que revisar, onde est&aacute; cada item."))
-    # 4) Cronograma — 'ver' se já existe, senão 'montar'
+    # 5) Cronograma — 'ver' se já existe, senão 'montar'
     if tem_cronograma:
         passos.append(("&#128197;", "Veja o cronograma",
             "Seu cronograma f&iacute;sico j&aacute; est&aacute; gerado &mdash; abra pra acompanhar a obra."))
@@ -11033,6 +11040,62 @@ async def get_project_items(job_id: str, request: Request):
                 "count": len(items), "project": _meta}
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar itens: {str(e)}")
+
+
+@app.get("/api/memorial/{job_id}")
+async def memorial_docx(job_id: str, request: Request):
+    """Memorial descritivo (RASCUNHO) em .docx, gerado dos itens do projeto.
+
+    v1 determinística (01/08/2026) — texto = template + itens; zero IA, zero
+    invenção. Regras em memorial.py (medido×estimado rotulado, [A PREENCHER],
+    carimbo de rascunho). Download exige downloadProtected no frontend
+    (armadilha nº9: <a href> não manda Authorization)."""
+    _require_project_owner(request, job_id)
+    import tempfile
+    import json
+    import urllib.request as _url_req
+    try:
+        # Itens via mesma RPC do /api/items (bypassa RLS com service_role)
+        _u = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+        _b = json.dumps({"p_job_id": job_id}).encode("utf-8")
+        _r = _url_req.Request(_u, data=_b, method="POST")
+        _r.add_header("apikey", SUPABASE_KEY)
+        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _r.add_header("Content-Type", "application/json")
+        items = json.loads(_url_req.urlopen(_r, timeout=15).read().decode("utf-8")) or []
+        if not items:
+            raise HTTPException(404, "Projeto sem itens — gere o quantitativo primeiro")
+        # Meta do projeto (nome, tipologia, áreas) — best-effort
+        projeto = {}
+        try:
+            _mu = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                   f"&select=project_name,typology,total_area,user_total_area&limit=1")
+            _mr = _url_req.Request(_mu, method="GET")
+            _mr.add_header("apikey", SUPABASE_KEY)
+            _mr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _rows = json.loads(_url_req.urlopen(_mr, timeout=10).read().decode("utf-8"))
+            if _rows:
+                projeto = _rows[0]
+        except Exception as _me:
+            print(f"[memorial] meta do projeto falhou (não crítico): {_me}")
+        from memorial import gerar_memorial_docx
+        tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+        tmp.close()
+        resumo = gerar_memorial_docx(tmp.name, projeto, items)
+        print(f"[memorial] job={job_id} → {resumo}")
+        fname = f"memorial_descritivo_rascunho_{_slug_filename(projeto.get('project_name') or job_id)}.docx"
+        return FileResponse(
+            tmp.name,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=fname)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[memorial] erro: {e}")
+        print(traceback.format_exc())
+        _log_error("memorial:gerar", str(e), job_id=job_id)
+        raise HTTPException(500, f"Erro ao gerar memorial: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════

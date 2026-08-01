@@ -625,6 +625,30 @@ function smartBack() {
         </div>
       </div>
 
+      <!-- CARD 3: MEMORIAL DESCRITIVO (rascunho .docx gerado dos itens — 01/08) -->
+      <div class="card-clickable-memorial md:col-span-2 rounded-2xl border-2 border-violet-200 bg-white p-5 hover:shadow-lg hover:border-violet-300 transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center gap-3">
+            <div class="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-100 text-violet-700">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            </div>
+            <div>
+              <p class="font-bold text-gray-900">Memorial descritivo <span class="align-middle inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 ml-1">NOVO</span></p>
+              <p class="text-xs text-gray-500">Rascunho em Word (.docx) escrito a partir dos itens do seu CAD</p>
+            </div>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 mb-3">Quantidades medidas e estimadas rotuladas no texto; o que o CAD n&atilde;o informa vira campo <span class="font-medium text-amber-700">[A PREENCHER]</span>. &Eacute; uma base pra editar &mdash; n&atilde;o substitui o memorial assinado pelo respons&aacute;vel t&eacute;cnico. Dica: revise as quantidades antes, o texto sai melhor.</p>
+        <div class="flex flex-wrap gap-2">
+          <a id="btn-memorial" href="#"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-semibold no-underline transition hover:brightness-110"
+             style="pointer-events:none;opacity:0.6;background:linear-gradient(135deg,#7C3AED 0%,#8B5CF6 100%)">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3"/></svg>
+            Baixar memorial (.docx)
+          </a>
+        </div>
+      </div>
+
       <!-- EM BREVE — próximas entregas do ciclo (faixa leve, ocupa a linha toda) -->
       <div class="md:col-span-2 rounded-2xl border border-dashed border-gray-300 bg-gray-50/40 p-4">
         <div class="flex items-center gap-2 mb-2.5">
@@ -633,13 +657,10 @@ function smartBack() {
         </div>
         <div class="flex flex-wrap gap-2">
           <span class="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
-            <span aria-hidden="true">📄</span> Memorial descritivo <span class="text-gray-400 hidden sm:inline">· NBR 13531</span>
-          </span>
-          <span class="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
             <span aria-hidden="true">🎨</span> Caderno de acabamentos <span class="text-gray-400 hidden sm:inline">· FF&E</span>
           </span>
           <span class="inline-flex items-center gap-1.5 text-xs text-gray-600 bg-white border border-gray-200 rounded-lg px-3 py-1.5">
-            <span aria-hidden="true">📊</span> BDI Helper <span class="text-gray-400 hidden sm:inline">· TCU 2622</span>
+            <span aria-hidden="true">📊</span> BDI Helper
           </span>
         </div>
       </div>
@@ -1090,6 +1111,12 @@ async function carregarStatsEntregas() {
     };
     wireCronExport('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
     wireCronExport('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
+    // Memorial descritivo (.docx rascunho) — mesmo padrão protegido
+    wireCronExport('btn-memorial', `${API_BASE}/api/memorial/${jobId}`, `memorial_descritivo_rascunho_${jobId}.docx`);
+    const _memBtn = document.getElementById('btn-memorial');
+    if (_memBtn) _memBtn.addEventListener('click', () => {
+      if (window.trackEvent) trackEvent('download_memorial', { job_id: jobId });
+    });
 
     // Torna os cards de entregas inteiros clicáveis (mãozinha em toda área).
     // O <a> interno continua sendo o destino — clique em qualquer lugar do card
