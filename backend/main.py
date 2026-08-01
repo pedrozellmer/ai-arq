@@ -6581,8 +6581,15 @@ async def debug_supa_log(request: Request, tail: int = 50):
         return {"status": "error", "error": f"{type(e).__name__}: {e}"}
 
 
+# Estado do teste de libredwg (roda em thread — o Render corta HTTP em ~100 s,
+# e o lote leva ate 4 min; "Load failed" no admin em 01/08 foi isso).
+_LIBREDWG_TESTE = {"rodando": False, "resultados": [], "testados": 0,
+                   "converteram_e_abrem": 0, "jobs_na_fila": 0, "fim": None}
+
+
 @app.get("/api/debug/libredwg-batch")
-async def debug_libredwg_batch(request: Request, limite: int = 5):
+async def debug_libredwg_batch(request: Request, limite: int = 5,
+                               iniciar: int = 0):
     """Mede o fallback libredwg contra os DWG que o ODA recusou. Admin-only.
 
     Contexto (01/08/2026): 6+ envios falharam com 'não conseguimos abrir' e o
@@ -6593,78 +6600,99 @@ async def debug_libredwg_batch(request: Request, limite: int = 5):
     converteu? o DXF resultante abre no ezdxf? quantas entidades tem?
 
     Só LÊ e mede — não reprocessa nada, não mexe em projeto nenhum.
-    `limite` controla quantos arquivos por chamada (custo: ~5-60 s cada).
+
+    🪤 Roda em THREAD e o navegador faz POLLING: o Render corta respostas HTTP
+    em ~100 s e o lote leva até 4 min — a 1ª versão síncrona morreu com
+    "Load failed" no admin (01/08). `?iniciar=1` dispara; sem parâmetro,
+    devolve o andamento. `limite` = arquivos por lote (1-10).
     """
     _require_admin(request)
-    import shutil as _sh, subprocess as _sp, tempfile as _tf
-    t0 = time.time()
+    import shutil as _sh
     dwg2dxf = _sh.which("dwg2dxf")
     if not dwg2dxf:
         return {"erro": "dwg2dxf não está no PATH deste servidor",
                 "dica": "confirmar no /api/debug/dwg se libredwg_which é null"}
+
+    if not iniciar or _LIBREDWG_TESTE["rodando"]:
+        return dict(_LIBREDWG_TESTE)   # snapshot do andamento (ou do último lote)
+
     limite = max(1, min(10, int(limite)))
+    _LIBREDWG_TESTE.update({"rodando": True, "resultados": [], "testados": 0,
+                            "converteram_e_abrem": 0, "jobs_na_fila": 0, "fim": None})
 
-    rows = _supa_rest_service(
-        "GET",
-        "projects?status=eq.error&select=job_id,error_message,created_at"
-        "&order=created_at.desc&limit=60") or []
-    jobs = [r["job_id"] for r in rows
-            if "conseguimos abrir" in (r.get("error_message") or "").lower()]
-
-    resultados, testados = [], 0
-    for job in jobs:
-        if testados >= limite or time.time() - t0 > 240:
-            break
+    def _rodar():
+        import subprocess as _sp, tempfile as _tf
+        t0 = time.time()
         try:
-            nomes = [n for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job}/")
-                     if n.lower().endswith(".dwg")]
-        except Exception:
-            continue
-        for nome in nomes:
-            if testados >= limite or time.time() - t0 > 240:
-                break
-            item = {"job_id": job, "arquivo": nome}
-            try:
-                dados = _supabase_storage_download_prancha(job, nome)
-                if not dados:
-                    item["resultado"] = "não consegui baixar do Storage"
-                    resultados.append(item); testados += 1
+            rows = _supa_rest_service(
+                "GET",
+                "projects?status=eq.error&select=job_id,error_message,created_at"
+                "&order=created_at.desc&limit=60") or []
+            jobs = [r["job_id"] for r in rows
+                    if "conseguimos abrir" in (r.get("error_message") or "").lower()]
+            _LIBREDWG_TESTE["jobs_na_fila"] = len(jobs)
+            for job in jobs:
+                if _LIBREDWG_TESTE["testados"] >= limite or time.time() - t0 > 600:
+                    break
+                try:
+                    nomes = [n for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job}/")
+                             if n.lower().endswith(".dwg")]
+                except Exception:
                     continue
-                with _tf.TemporaryDirectory() as tmp:
-                    src = os.path.join(tmp, "in.dwg")
-                    dst = os.path.join(tmp, "out.dxf")
-                    open(src, "wb").write(dados)
-                    item["mb"] = round(len(dados) / 1048576, 1)
+                for nome in nomes:
+                    if _LIBREDWG_TESTE["testados"] >= limite or time.time() - t0 > 600:
+                        break
+                    item = {"job_id": job, "arquivo": nome}
                     try:
-                        proc = _sp.run([dwg2dxf, "-o", dst, src],
-                                       capture_output=True, timeout=90)
-                        item["exit"] = proc.returncode
-                    except _sp.TimeoutExpired:
-                        item["resultado"] = "timeout (90s)"
-                        resultados.append(item); testados += 1
-                        continue
-                    if not os.path.exists(dst) or os.path.getsize(dst) == 0:
-                        item["resultado"] = "dwg2dxf não gerou DXF"
-                        item["stderr"] = (proc.stderr or b"")[-200:].decode("utf-8", "replace")
-                    else:
-                        item["dxf_mb"] = round(os.path.getsize(dst) / 1048576, 1)
-                        # o DXF gerado presta? tenta abrir com o mesmo leitor do motor
-                        try:
-                            import ezdxf
-                            doc = ezdxf.readfile(dst)
-                            item["resultado"] = "CONVERTEU e o DXF abre"
-                            item["entidades"] = len(doc.modelspace())
-                        except Exception as e_dxf:
-                            item["resultado"] = "converteu mas o DXF não abre no ezdxf"
-                            item["erro_leitura"] = f"{type(e_dxf).__name__}: {e_dxf}"[:120]
-            except Exception as e:
-                item["resultado"] = f"erro no teste: {type(e).__name__}: {e}"[:150]
-            resultados.append(item); testados += 1
+                        dados = _supabase_storage_download_prancha(job, nome)
+                        if not dados:
+                            item["resultado"] = "não consegui baixar do Storage"
+                        else:
+                            with _tf.TemporaryDirectory() as tmp:
+                                src = os.path.join(tmp, "in.dwg")
+                                dst = os.path.join(tmp, "out.dxf")
+                                open(src, "wb").write(dados)
+                                item["mb"] = round(len(dados) / 1048576, 1)
+                                try:
+                                    proc = _sp.run([dwg2dxf, "-o", dst, src],
+                                                   capture_output=True, timeout=90)
+                                    item["exit"] = proc.returncode
+                                    if not os.path.exists(dst) or os.path.getsize(dst) == 0:
+                                        item["resultado"] = "dwg2dxf não gerou DXF"
+                                        item["stderr"] = (proc.stderr or b"")[-200:].decode(
+                                            "utf-8", "replace")
+                                    else:
+                                        item["dxf_mb"] = round(os.path.getsize(dst) / 1048576, 1)
+                                        try:
+                                            import ezdxf
+                                            doc = ezdxf.readfile(dst)
+                                            item["resultado"] = "CONVERTEU e o DXF abre"
+                                            item["entidades"] = len(doc.modelspace())
+                                            _LIBREDWG_TESTE["converteram_e_abrem"] += 1
+                                        except Exception as e_dxf:
+                                            item["resultado"] = "converteu mas o DXF não abre no ezdxf"
+                                            item["erro_leitura"] = (
+                                                f"{type(e_dxf).__name__}: {e_dxf}"[:120])
+                                except _sp.TimeoutExpired:
+                                    item["resultado"] = "timeout (90s)"
+                    except Exception as e:
+                        item["resultado"] = f"erro no teste: {type(e).__name__}: {e}"[:150]
+                    _LIBREDWG_TESTE["resultados"].append(item)
+                    _LIBREDWG_TESTE["testados"] += 1
+            # registra o veredito no error_log — sobrevive a restart e aparece no painel
+            try:
+                _log_error("libredwg:batch",
+                           f"{_LIBREDWG_TESTE['converteram_e_abrem']} de "
+                           f"{_LIBREDWG_TESTE['testados']} DWG recusados converteram e abrem "
+                           f"({round(time.time()-t0)}s)", None, severity="info")
+            except Exception:
+                pass
+        finally:
+            _LIBREDWG_TESTE["rodando"] = False
+            _LIBREDWG_TESTE["fim"] = round(time.time() - t0, 1)
 
-    ok = sum(1 for r in resultados if r.get("resultado") == "CONVERTEU e o DXF abre")
-    return {"testados": testados, "converteram_e_abrem": ok,
-            "jobs_na_fila": len(jobs), "segundos": round(time.time() - t0, 1),
-            "resultados": resultados}
+    threading.Thread(target=_rodar, daemon=True).start()
+    return {"iniciado": True, **{k: v for k, v in _LIBREDWG_TESTE.items()}}
 
 
 @app.get("/api/debug/storage-limit")

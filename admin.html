@@ -1359,12 +1359,21 @@ async function testarLimiteStorage(mb){
 // ══════════════════════════════════════════════
 async function testarLibredwg() {
   const box = document.getElementById('libredwg-res');
-  box.innerHTML = '<p class="text-gray-500 text-sm">Testando até 5 arquivos… pode levar alguns minutos.</p>';
+  box.innerHTML = '<p class="text-gray-500 text-sm">Iniciando o teste…</p>';
   try {
-    const res = await authFetch(`${API_BASE}/api/debug/libredwg-batch?limite=5`);
-    const d = await res.json();
+    // Dispara em 2º plano e pergunta o andamento a cada 5 s. (O Render corta
+    // HTTP em ~100 s; a 1ª versão síncrona morria com "Load failed".)
+    let res = await authFetch(`${API_BASE}/api/debug/libredwg-batch?limite=5&iniciar=1`);
+    let d = await res.json();
     if (!res.ok) throw new Error(d.detail || 'erro');
     if (d.erro) { box.innerHTML = `<p class="text-red-600 text-sm">${d.erro}</p>`; return; }
+    for (let volta = 0; volta < 150; volta++) {
+      await new Promise(r => setTimeout(r, 5000));
+      res = await authFetch(`${API_BASE}/api/debug/libredwg-batch`);
+      d = await res.json();
+      if (!d.rodando) break;
+      box.innerHTML = `<p class="text-gray-500 text-sm">Testando… ${d.testados || 0} de até 5 arquivos concluídos.</p>`;
+    }
     const linhas = (d.resultados || []).map(r => {
       const ok = r.resultado === 'CONVERTEU e o DXF abre';
       return `<tr class="border-t border-gray-100">
@@ -1378,7 +1387,7 @@ async function testarLibredwg() {
     box.innerHTML = `
       <div class="rounded-xl border ${d.converteram_e_abrem > 0 ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'} p-4 text-sm">
         <p class="font-semibold mb-2">${d.converteram_e_abrem} de ${d.testados} converteram e abrem
-          <span class="font-normal text-gray-500">· ${d.jobs_na_fila} jobs na fila · ${d.segundos}s</span></p>
+          <span class="font-normal text-gray-500">· ${d.jobs_na_fila} jobs na fila · ${d.fim || '?'}s</span></p>
         <div class="overflow-x-auto"><table class="w-full text-left"><tbody>${linhas}</tbody></table></div>
         ${d.converteram_e_abrem > 0 ? '<p class="text-green-700 text-xs mt-2">Arquivo que converte aqui é projeto recuperável — me avise pra ligar o fallback no fluxo real.</p>' : ''}
       </div>`;
