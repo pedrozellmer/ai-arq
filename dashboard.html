@@ -498,6 +498,9 @@
               <p id="processing-step" class="text-sm text-gray-500">Enviando arquivos...</p>
             </div>
 
+            <!-- Aviso de DWG do AutoCAD Architecture/MEP, detectado no envio -->
+            <div id="aviso-aec" class="hidden mb-6 text-left"></div>
+
             <!-- Per-file progress list -->
             <div id="file-progress-list" class="mb-6 space-y-2"></div>
 
@@ -2651,6 +2654,12 @@
       const data = await res.json();
       currentJobId = data.job_id;
 
+      // Aviso de AEC/MEP na hora do envio (01/08/2026). Antes o cliente
+      // esperava o processamento inteiro pra descobrir que o DWG era do
+      // AutoCAD Architecture — 13 das 29 falhas de DWG eram isso. Agora ele
+      // já sai daqui sabendo o que fazer, com o arquivo ainda aberto no CAD.
+      if (data.aviso_aec) mostrarAvisoAec(data.aviso_aec);
+
       processingStep.textContent = 'Analisando pranchas...';
       // Não setar barra manualmente aqui — startPolling() cuida da progressão
       // contínua (setar 10% aqui causa volta pra trás quando creep inicia em 0)
@@ -2661,6 +2670,28 @@
       errorMessage.textContent = err.message || 'Erro ao enviar os arquivos. Tente novamente.';
       showState(stateError);
     }
+  }
+
+  // ══════════════════════════════════════════════
+  // AVISO DE ARQUIVO AEC/MEP — mostrado no envio, não depois do erro
+  // ══════════════════════════════════════════════
+  function mostrarAvisoAec(av) {
+    const box = document.getElementById('aviso-aec');
+    if (!box) return;
+    const arquivos = (av.arquivos || []).map(f =>
+      `<li class="font-mono text-xs break-all">${f.replace(/[<>&]/g, '')}</li>`).join('');
+    const corpo = (av.texto || '').split('\n').map(l => {
+      const t = l.trim();
+      if (!t) return '';
+      return /^\d\./.test(t) ? `<li>${t.replace(/^\d\.\s*/, '')}</li>` : `<p class="mb-2">${t}</p>`;
+    }).join('');
+    box.innerHTML = `
+      <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+        <p class="font-semibold mb-2">⚠ ${av.titulo || 'Atenção com um dos arquivos'}</p>
+        <ul class="mb-3 ml-4 list-disc">${arquivos}</ul>
+        <div class="[&_li]:ml-4 [&_li]:list-decimal [&_li]:mb-1">${corpo}</div>
+      </div>`;
+    box.classList.remove('hidden');
   }
 
   // Habilita/desabilita o botão conforme o checkbox de termos

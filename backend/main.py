@@ -6251,6 +6251,21 @@ async def process_files(
     user_sheet_types: dict[str, str] = {}
     user_ambientes: dict[str, str] = {}
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
+    avisos_aec: list[str] = []   # DWGs com objetos AEC — aviso imediato (ver abaixo)
+    # 🪤 Importar AQUI e reclamar alto se falhar. A detecção só valia a pena se
+    # rodasse mesmo; escondida atrás de um try/except mudo, um ImportError
+    # deixaria o aviso desligado pra sempre sem ninguém perceber.
+    try:
+        from dwg_extractor import dwg_has_aec_markers as _detecta_aec
+    except Exception as _e_imp:
+        _detecta_aec = None
+        print(f"[upload] AVISO: detecção de AEC indisponível ({type(_e_imp).__name__}: {_e_imp})")
+        try:
+            _log_error("dwg:aec-detector-indisponivel",
+                       f"Não consegui importar dwg_has_aec_markers no upload: "
+                       f"{type(_e_imp).__name__}: {_e_imp}", None, severity="warning")
+        except Exception:
+            pass
     for upload_file, user_st, user_amb in valid_pairs:
         # Anti path-traversal: nunca confiar em upload_file.filename
         safe_name = _safe_local_filename(upload_file.filename)
@@ -6288,6 +6303,19 @@ async def process_files(
                     f"(esperado iniciar com 'AC10xx'). Arquivo corrompido — "
                     f"verifique no AutoCAD ou exporte como PDF e suba o PDF."
                 )
+            # AEC/MEP: avisar AGORA, não depois de 5 min de processamento.
+            # Medido em 01/08/2026: 13 das 29 falhas de DWG são objetos AEC
+            # (AutoCAD Architecture/MEP), que nenhum conversor livre abre. A
+            # detecção já existia — mas só rodava DEPOIS da conversão falhar,
+            # então o cliente esperava o processamento inteiro pra descobrir.
+            # NÃO bloqueia: o mesmo envio pode trazer um DXF ou PDF que salve
+            # o projeto. Só entrega a informação enquanto ele ainda está na tela.
+            if _detecta_aec is not None:
+                try:
+                    if _detecta_aec(file_path):
+                        avisos_aec.append(upload_file.filename)
+                except Exception as _e_aec:
+                    print(f"[upload] detecção AEC falhou em {safe_name}: {_e_aec}")
 
         file_paths.append(file_path)
         if user_st:
@@ -6357,9 +6385,40 @@ async def process_files(
     except Exception as _na:
         print(f"[notify] alerta novo-projeto falhou: {_na}")
 
-    return {"job_id": job_id, "files_received": len(file_paths),
+    resp = {"job_id": job_id, "files_received": len(file_paths),
             "file_types": file_types, "status": "queued", "typology": typology,
             "project_type": project_type}
+    if avisos_aec:
+        _tem_alternativa = (file_types.get('dxf', 0) + file_types.get('pdf', 0)) > 0
+        resp["aviso_aec"] = {
+            "arquivos": avisos_aec,
+            "tem_alternativa": _tem_alternativa,
+            "titulo": ("Um dos seus arquivos é do AutoCAD Architecture/MEP"
+                       if len(avisos_aec) == 1 else
+                       "Alguns arquivos são do AutoCAD Architecture/MEP"),
+            "texto": (
+                "Esse tipo de DWG guarda paredes e móveis como \"objetos inteligentes\", "
+                "que nenhum conversor abre direto — nem o \"Salvar como DXF\" comum. "
+                "Não é defeito do seu arquivo.\n\n"
+                "Como resolver, em 3 passos:\n"
+                "1. No AutoCAD, com o arquivo aberto, digite EXPORTTOAUTOCAD e Enter\n"
+                "2. Escolha a versão 2013 e confirme — ele cria um arquivo novo "
+                "(o seu original não é alterado)\n"
+                "3. Abra esse arquivo novo, salve como DXF e anexe aqui\n\n"
+                + ("Seu projeto vai seguir processando com os outros arquivos, "
+                   "mas o que estiver só nesse DWG não vai ser medido."
+                   if _tem_alternativa else
+                   "Como esse é o único arquivo do envio, o processamento "
+                   "provavelmente não vai conseguir medir nada.")),
+        }
+        try:
+            _log_error("dwg:aec-detectado-no-upload",
+                       f"AEC detectado ANTES de processar: {', '.join(avisos_aec)} — "
+                       f"cliente avisado na hora (alternativa no envio: {_tem_alternativa})",
+                       job_id, severity="info")
+        except Exception:
+            pass
+    return resp
 
 
 @app.get("/api/debug/supa-log")
