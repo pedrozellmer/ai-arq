@@ -510,6 +510,17 @@ function renderItem(it, localIndex) {
 // ACTIONS
 // ═══════════════════════════════════════════════
 async function review(itemId, action) {
+  // Aprovar item com quantidade ZERO não valida nada (01/08/2026: a maioria
+  // das aprovações históricas era de item zerado — sinal vazio). Em vez de
+  // registrar um "ok" oco, abre a edição pra pessoa preencher a quantidade.
+  if (action === 'approve') {
+    const _it = (items || []).find(i => i.id === itemId);
+    if (_it && !(parseFloat(_it.quantity) > 0)) {
+      if (window.toast) window.toast.info('Este item está sem quantidade — preencha pra aprovar');
+      openEdit(itemId);
+      return;
+    }
+  }
   reviewState[itemId] = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited';
   render();
   try {
@@ -740,15 +751,29 @@ async function bulkReview(section, action) {
     : confirm(msg);
   if (!ok) return;
 
-  const secItems = items.filter(it => (it.section || 'Outros') === section);
+  let secItems = items.filter(it => (it.section || 'Outros') === section);
   if (!secItems.length) return;
+
+  // Aprovação em massa PULA itens com quantidade zero — aprovar zerado não
+  // valida nada (01/08/2026). Eles ficam pendentes, pra preencher via editar.
+  let pulados = 0;
+  if (action === 'approve') {
+    const antes = secItems.length;
+    secItems = secItems.filter(it => parseFloat(it.quantity) > 0);
+    pulados = antes - secItems.length;
+    if (!secItems.length) {
+      window.toast?.info('Todos os itens desta seção estão sem quantidade — preencha antes de aprovar');
+      return;
+    }
+  }
 
   // Atualiza estado local imediato
   secItems.forEach(it => {
     reviewState[it.id] = action === 'approve' ? 'approved' : 'rejected';
   });
   render();
-  window.toast?.info(`${action === 'approve' ? 'Aprovando' : 'Removendo'} ${secItems.length} itens...`);
+  window.toast?.info(`${action === 'approve' ? 'Aprovando' : 'Removendo'} ${secItems.length} itens...`
+    + (pulados ? ` (${pulados} sem quantidade ficaram pendentes)` : ''));
 
   // Dispara requests em paralelo (limita a 5 simultâneas pra não saturar)
   const limit = 5;

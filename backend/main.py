@@ -11305,7 +11305,9 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
     if action not in ("approve", "reject", "edit"):
         raise HTTPException(400, "action inválida (use approve/reject/edit)")
 
-    # 1) Log da revisão
+    # 1) Log da revisão — com DEDUPE de clique repetido (01/08/2026: o mesmo
+    # item aparecia aprovado 6× na tabela; duplicata infla o painel e não é
+    # sinal novo). Mesmo action pro mesmo item = atualiza, não insere.
     review_row = {
         "job_id": job_id,
         "item_id": item_id,
@@ -11314,7 +11316,17 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         "comment": payload.comment or "",
         "reviewed_by": payload.reviewed_by or "",
     }
-    _supabase_insert("item_reviews", review_row)
+    _ja_tem = False
+    try:
+        import urllib.parse as _upq
+        _q = (f"item_reviews?job_id=eq.{_upq.quote(job_id)}"
+              f"&item_id=eq.{_upq.quote(item_id)}&action=eq.{action}&select=id&limit=1")
+        _r = _supa_rest_service("GET", _q)
+        _ja_tem = bool(_r)
+    except Exception:
+        pass   # na dúvida, insere (comportamento antigo)
+    if not _ja_tem:
+        _supabase_insert("item_reviews", review_row)
 
     # 2) Aplicar edits à row original (se action=edit)
     if action == "edit" and payload.edits:
