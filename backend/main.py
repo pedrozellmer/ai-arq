@@ -3803,6 +3803,63 @@ def _salvage_layout_ai_counts(client, file_paths, crops_dir):
 # As unidades/keywords e is_floor_surface() vivem em engine_rules.py (regra
 # determinística, testável sem IA — tests/test_engine_rules.py). Importados no topo
 # como _AREA_UNITS_HONESTY / _FLOOR_M2_UNITS / _is_floor_surface.
+def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
+    """Deriva PINTURA de parede quando só temos o COMPRIMENTO das paredes.
+
+    Motivação (medido em 01/08/2026): em 22 dos 69 projetos com parede, a
+    parede veio só em METRO LINEAR — e em TODOS os 22 a pintura ficou de fora
+    da planilha. Reclamação real de cliente no chat ("não tem o quantitativo
+    em m² da pintura"). Com o pé-direito INFORMADO no upload dá pra fechar:
+    área = Σ(comprimento) × pé-direito × 2 faces.
+
+    Regras duras respeitadas:
+    - Só roda se o cliente informou o pé-direito (nunca assume 2,70).
+    - Só cria pintura se NÃO existe nenhum item de pintura (nunca sobrescreve).
+    - Sai como ESTIMADO com rótulo "pé-direito informado por você" (regra nº1).
+    - Não desconta vãos (não os conhecemos aqui) — e diz isso na observação.
+    Devolve 1 se criou o item, 0 caso contrário."""
+    if not pe_direito or pe_direito <= 0:
+        return 0
+    from models import BudgetItem, Confidence
+    tem_pintura = any(
+        ("pintura" in (getattr(i, "description", "") or "").lower()
+         or "látex" in (getattr(i, "description", "") or "").lower()
+         or "latex" in (getattr(i, "description", "") or "").lower())
+        for i in items)
+    if tem_pintura:
+        return 0
+    total_m = 0.0
+    ref = ""
+    for i in items:
+        d = (getattr(i, "description", "") or "").lower()
+        u = (getattr(i, "unit", "") or "").strip().lower()
+        if u in ("m", "ml") and ("parede" in d or "alvenaria" in d or "drywall" in d):
+            try:
+                q = float(getattr(i, "quantity", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if q > 0:
+                total_m += q
+                ref = ref or (getattr(i, "ref_sheet", "") or "")
+    if total_m <= 0:
+        return 0
+    area = round(total_m * float(pe_direito) * 2.0, 1)   # 2 faces
+    items.append(BudgetItem(
+        item_num="PD.1",
+        description=("Pintura látex sobre paredes internas — derivada do "
+                     "comprimento de paredes × pé-direito informado"),
+        unit="m²",
+        quantity=area,
+        observations=(f"⚠ ESTIMADO — {total_m:.1f} m de parede × pé-direito "
+                      f"{pe_direito:.2f} m informado por você × 2 faces. Vãos de "
+                      f"portas/janelas NÃO descontados — confira antes de orçar."),
+        ref_sheet=ref,
+        confidence=Confidence.ESTIMADO,
+        discipline="Revestimentos",
+    ))
+    return 1
+
+
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "") -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
@@ -3908,7 +3965,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 user_ambientes: dict[str, str] | None = None,
                 project_type: str = "arquitetura",
                 is_complement: bool = False,
-                user_total_area: float = 0):
+                user_total_area: float = 0,
+                user_pe_direito: float = 0):
     """Processa um job prancha por prancha. Aceita PDF, DWG e DXF.
 
     `typology` alimenta a camada de calibração por densidade — alertas
@@ -5727,6 +5785,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # a área do cliente nunca sobrescreve o que a planta forneceu. Rótulo
         # 'informado' faz a planilha dizer "informada por você, não medida"
         # (regra dura nº1: não é medição nossa, segue tratada como base a conferir).
+        # Pé-direito informado: independente da área — grava sempre que veio.
+        try:
+            _upd = float(user_pe_direito or 0)
+        except (TypeError, ValueError):
+            _upd = 0
+        if _upd > 0:
+            project_data.user_pe_direito = round(_upd, 2)
+            print(f"[pe-direito-informado] job={job_id}: {_upd} m")
         try:
             _uta = float(user_total_area or 0)
         except (TypeError, ValueError):
@@ -5770,6 +5836,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
         if _blanked:
             print(f"[honestidade-m2] job={job_id}: zerei a quantidade de {_blanked} itens de área "
                   f"não-medidos (Vision) — evita m² inventado (regra nº1)")
+        # Pintura derivada do pé-direito informado (01/08/2026) — só quando a
+        # planilha tem parede em metro linear e nenhum item de pintura.
+        try:
+            if getattr(project_data, "user_pe_direito", 0):
+                if _derive_pintura_pe_direito(all_items, project_data.user_pe_direito):
+                    print(f"[pe-direito] job={job_id}: pintura derivada de "
+                          f"{project_data.user_pe_direito} m informado (estimado)")
+        except Exception as _epd:
+            print(f"[pe-direito] job={job_id}: derivação falhou: {_epd}")
 
         for _fld, _reads in _area_readings.items():
             if len(set(_reads)) > 1:
@@ -6157,6 +6232,7 @@ async def process_files(
     user_name: str = "",
     credits_to_consume_cents: int = 0,
     user_total_area: float = 0,
+    user_pe_direito: float = 0,
 ):
     """Recebe PDF, DWG ou DXF e inicia processamento em background.
 
@@ -6220,6 +6296,12 @@ async def process_files(
         project_type = "arquitetura"
     # Área informada pelo cliente (campo opcional no upload): sanitiza contra
     # número absurdo/negativo. 0 = não informou (comportamento antigo).
+    try:
+        user_pe_direito = float(user_pe_direito or 0)
+    except (TypeError, ValueError):
+        user_pe_direito = 0
+    if not (1.8 <= user_pe_direito <= 8.0):   # fora disso não é pé-direito plausível
+        user_pe_direito = 0
     try:
         user_total_area = float(user_total_area or 0)
     except (TypeError, ValueError):
@@ -6372,7 +6454,8 @@ async def process_files(
                 "user_sheet_types": user_sheet_types,
                 "user_ambientes": user_ambientes,
                 "project_type": project_type,
-                "user_total_area": user_total_area},
+                "user_total_area": user_total_area,
+                "user_pe_direito": user_pe_direito},
         daemon=True,
     )
     t.start()

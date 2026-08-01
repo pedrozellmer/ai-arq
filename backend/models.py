@@ -56,6 +56,13 @@ class ProjectData(BaseModel):
     # "informado" (o cliente digitou a metragem no upload — NÃO é medição nossa,
     # a planilha rotula como tal e mantém confiança 'estimado', regra dura nº1).
     total_area_source: str = ""
+    # Pé-direito INFORMADO pelo cliente no upload (m). Mesmo contrato do
+    # total_area "informado": nunca sobrescreve o que a planta mediu, e tudo
+    # que derivar dele sai como 'estimado' com rótulo explícito.
+    # Motivação (01/08/2026): em 22 dos 69 projetos com parede só tínhamos o
+    # COMPRIMENTO — e em TODOS eles a pintura ficou de fora da planilha.
+    # Comprimento × pé-direito destrava pintura/revestimento nesses casos.
+    user_pe_direito: float = 0
     layout_area: float = 0
     no_intervention_area: float = 0
     workstations: int = 0
