@@ -121,6 +121,20 @@
      "url": "https://mestredaobra.com/8-documentos-tecnicos-para-financiamento-imobiliario-na-caixa/",
      "publisher": "Mestre da Obra"
     }
+   ],
+   "downloads": [
+    {
+     "file": "memorial-descritivo-obra-modelo.pdf",
+     "kind": "PDF",
+     "label": "Modelo em PDF",
+     "hint": "Pra ler e imprimir · 327 KB"
+    },
+    {
+     "file": "memorial-descritivo-obra-modelo.docx",
+     "kind": "DOCX",
+     "label": "Modelo editável (Word)",
+     "hint": "Pra editar no Word/Docs · 40 KB"
+    }
    ]
   },
   {
@@ -1456,6 +1470,14 @@
      "url": "https://blog.aecweb.com.br/eap-estrutura-analitica-de-projeto/",
      "publisher": "AECweb"
     }
+   ],
+   "downloads": [
+    {
+     "file": "cronograma-fisico-financeiro-modelo.xlsx",
+     "kind": "XLSX",
+     "label": "Modelo de cronograma físico-financeiro",
+     "hint": "Gantt 18 meses + curva S automática · 11 KB"
+    }
    ]
   },
   {
@@ -1782,10 +1804,10 @@
     },
     {
      "h2": "Como acelerar a montagem da planilha",
-     "body": "O trabalho mais demorado da planilha de quantitativos não é organizar colunas — é levantar quantidades. Contar área de alvenaria, metragem linear de rodapé, número de tomadas, m² de cobertura, m³ de concreto. Tudo isso vem da planta, e medir manualmente em PDF ou DWG leva horas.\n\nWorkflow que economiza tempo:\n\n1. Antes de abrir o Excel, organize o CAD com todas as pranchas necessárias (arquitetônico, hidráulico, elétrico, estrutural se houver).\n2. Use ferramenta de medição automatizada pra extrair áreas, comprimentos e contagens por categoria — uma ferramenta que ofereça classificação SINAPI já entrega o código vinculado.\n3. Cole os números na planilha modelo, conferindo unidade.\n4. Sinalize cada linha de forma legível: marque com check e a palavra MEDIDO as linhas que são extração direta da planta, e com alerta e a palavra ESTIMADO as que são suposição/sugestão, pra que o orçamentista saiba onde revisar com mais cuidado. Use sempre símbolo + palavra, não só cor.\n5. Mande pro orçamentista preencher os preços e calcular BDI.\n\nÉ exatamente esse workflow que o AI.arq automatiza nas etapas 1 a 3. Você sobe o CAD em PDF, DWG ou DXF e a plataforma lê as pranchas, identifica os elementos, conta e mede, e devolve a planilha XLSX já organizada em 18 disciplinas com referência SINAPI vinculada por linha. Cada linha vem sinalizada como medido (check) ou estimativa (alerta).\n\nReforço importante: a planilha gerada é um ponto de partida revisável, não verdade absoluta. O arquiteto/projetista revisa premissas, ajusta o que a IA não enxergou, e o orçamentista profissional aplica preço regional e BDI antes de fechar com o cliente. Quem precifica é gente, não software."
+     "body": "O trabalho mais demorado da planilha de quantitativos não é organizar colunas — é levantar quantidades. Contar área de alvenaria, metragem linear de rodapé, número de tomadas, m² de cobertura, m³ de concreto. Tudo isso vem da planta, e medir manualmente em PDF ou DWG leva horas.\n\nWorkflow que economiza tempo:\n\n1. Antes de abrir o Excel, organize o CAD com todas as pranchas necessárias (arquitetônico, hidráulico, elétrico, estrutural se houver).\n2. Use ferramenta de medição automatizada pra extrair áreas, comprimentos e contagens por categoria — uma ferramenta que ofereça classificação SINAPI já entrega o código vinculado.\n3. Cole os números na planilha modelo, conferindo unidade.\n4. Sinalize cada linha de forma legível: marque com check e a palavra MEDIDO as linhas que são extração direta da planta, e com alerta e a palavra ESTIMADO as que são suposição/sugestão, pra que o orçamentista saiba onde revisar com mais cuidado. Use sempre símbolo + palavra, não só cor.\n5. Mande pro orçamentista preencher os preços e calcular BDI.\n\nÉ exatamente esse workflow que o AI.arq automatiza nas etapas 1 a 3. Você sobe o CAD em PDF, DWG ou DXF e a plataforma lê as pranchas, identifica os elementos, conta e mede, e devolve a planilha XLSX organizada por disciplina, com código SINAPI nos itens em que há correspondência confiável. Uma ressalva pra não confundir: a taxonomia interna do AI.arq tem 19 disciplinas e não é idêntica à lista de 18 acima — ela agrupa de outro jeito (marcenaria e mobiliário separados, por exemplo). A lista deste post é a convenção de mercado; a do AI.arq é a que organiza a planilha que você recebe. Cada linha vem sinalizada como medido (check) ou estimativa (alerta).\n\nReforço importante: a planilha gerada é um ponto de partida revisável, não verdade absoluta. O arquiteto/projetista revisa premissas, ajusta o que a IA não enxergou, e o orçamentista profissional aplica preço regional e BDI antes de fechar com o cliente. Quem precifica é gente, não software."
     }
    ],
-   "cta": "Pra economizar as horas que se gasta levantando quantidades manualmente, sobe seu CAD no AI.arq. A plataforma devolve a planilha XLSX com as 18 disciplinas separadas e código SINAPI vinculado por linha, cada item sinalizado como medido (check) ou estimativa (alerta) — pronta pra revisão técnica e pro orçamentista preencher preço com BDI regional. No beta, é grátis — quantos projetos quiser — em ai.arq.br.",
+   "cta": "Pra economizar as horas que se gasta levantando quantidades manualmente, sobe seu CAD no AI.arq. A plataforma devolve a planilha XLSX organizada por disciplina, com código SINAPI nos itens em que há correspondência confiável, cada item sinalizado como medido (check) ou estimativa (alerta) — pronta pra revisão técnica e pro orçamentista preencher preço com BDI regional. No beta, é grátis — quantos projetos quiser — em ai.arq.br.",
    "sources": [
     {
      "type": "link",
@@ -1840,6 +1862,14 @@
      "title": "Habitação e construção — Caixa Econômica Federal",
      "url": "https://www.caixa.gov.br/voce/habitacao/construcao/Paginas/default.aspx",
      "publisher": "Caixa Econômica Federal"
+    }
+   ],
+   "downloads": [
+    {
+     "file": "quantitativo-sinapi-planilha-modelo.xlsx",
+     "kind": "XLSX",
+     "label": "Planilha modelo por disciplina",
+     "hint": "18 abas + consolidação · 34 KB"
     }
    ]
   },

@@ -125,7 +125,45 @@ def _classify_line(line):
     return ('text', s)
 
 
-DOWNLOAD_BUTTONS_HTML = '''
+_DL_CORES = {"PDF": ("red-50", "red-600"), "DOCX": ("indigo-50", "indigo-600"),
+             "XLSX": ("green-50", "green-700")}
+
+_DL_SETA = ('<svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" '
+            'viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" '
+            'stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>')
+
+
+def download_buttons_html(downloads):
+    """Monta os botões de download DO POST.
+
+    🪤 01/08/2026: isto era um bloco FIXO apontando pro memorial descritivo.
+    Qualquer post que usasse <DOWNLOAD_BUTTONS> servia o MESMO arquivo — e dois
+    posts (23/08 cronograma, 13/09 planilha SINAPI) prometiam modelo em Excel
+    NO PRÓPRIO TÍTULO e entregavam um memorial em Word. Agora cada post declara
+    seus arquivos no campo "downloads" do posts.json, e post sem declaração
+    quebra a geração em vez de servir o arquivo errado calado.
+    """
+    if not downloads:
+        raise ValueError("Post usa <DOWNLOAD_BUTTONS> sem declarar 'downloads' no posts.json")
+    cards = []
+    for d in downloads:
+        kind = d.get("kind", "PDF").upper()
+        bg, fg = _DL_CORES.get(kind, ("gray-50", "gray-600"))
+        cards.append(
+            '\n    <a href="/blog/downloads/' + d["file"] + '" download\n'
+            '       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white '
+            'border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">\n'
+            '      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-'
+            + bg + ' text-' + fg + ' font-bold text-xs">' + kind + '</div>\n'
+            '      <div class="flex-1 min-w-0">\n'
+            '        <div class="font-semibold text-gray-900 leading-tight">' + d["label"] + '</div>\n'
+            '        <div class="text-xs text-gray-500 mt-0.5">' + d.get("hint", "") + '</div>\n'
+            '      </div>\n      ' + _DL_SETA + '\n    </a>')
+    return ('<div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">\n'
+            '  <div class="grid gap-3 sm:grid-cols-2">' + "".join(cards) + '\n  </div>\n</div>\n')
+
+
+_DOWNLOAD_BUTTONS_LEGADO = '''
 <div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">
   <div class="grid gap-3 sm:grid-cols-2">
     <a href="/blog/downloads/memorial-descritivo-obra-modelo.pdf" download
@@ -165,7 +203,7 @@ def _flush_buffer(buf, kind, body_html):
     return body_html
 
 
-def render_section(s):
+def render_section(s, downloads=None):
     """Renderiza uma seção (h2 + body).
 
     Parser:
@@ -223,7 +261,7 @@ def render_section(s):
     # 3ª passada: renderiza
     for kind, items in merged:
         if kind == "download":
-            body_html += DOWNLOAD_BUTTONS_HTML
+            body_html += download_buttons_html(downloads)
         elif kind == "numbered":
             body_html += "<ol>" + "".join(f"<li>{t}</li>" for t in items) + "</ol>"
         elif kind == "bullet":
@@ -381,7 +419,7 @@ def render_related_posts(post):
 
 def render_post_html(post):
     """Gera HTML completo de um post."""
-    sections_html = "".join(render_section(s) for s in post["sections"])
+    sections_html = "".join(render_section(s, post.get("downloads")) for s in post["sections"])
 
     # Adiciona bloco de fontes no fim, se houver
     sources_html = render_sources(
