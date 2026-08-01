@@ -327,7 +327,7 @@
         <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🔧 Fallback libredwg <span class="font-normal text-gray-400">— os DWG que o conversor recusou abrem no plano B?</span></h3>
         <p class="text-sm text-gray-500 mb-3">Testa o conversor alternativo (libredwg) contra os DWG reais que falharam com "não conseguimos abrir". Se converter, dá pra recuperar esses projetos. Cada arquivo leva de 5 a 60 segundos — o teste roda 5 por clique.</p>
-        <button onclick="testarLibredwg()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium mb-3">Testar 5 arquivos recusados</button>
+        <div class="flex items-center gap-2 mb-3"><button onclick="testarLibredwg()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">Testar 5 arquivos recusados</button><button onclick="testarLibredwg('qualidade')" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg font-medium">Comparar geometria ODA × libredwg</button></div>
         <div id="libredwg-res"></div>
         <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🩻 Onde a IA mais erra <span class="font-normal text-gray-400">— aprendizado com as planilhas revisadas dos clientes</span></h3>
@@ -1357,13 +1357,13 @@ async function testarLimiteStorage(mb){
 // FALLBACK LIBREDWG — mede o plano B contra os DWG recusados
 // 🪤 authFetch obrigatório (_require_admin)
 // ══════════════════════════════════════════════
-async function testarLibredwg() {
+async function testarLibredwg(modo) {
   const box = document.getElementById('libredwg-res');
   box.innerHTML = '<p class="text-gray-500 text-sm">Iniciando o teste…</p>';
   try {
     // Dispara em 2º plano e pergunta o andamento a cada 5 s. (O Render corta
     // HTTP em ~100 s; a 1ª versão síncrona morria com "Load failed".)
-    let res = await authFetch(`${API_BASE}/api/debug/libredwg-batch?limite=5&iniciar=1`);
+    let res = await authFetch(`${API_BASE}/api/debug/libredwg-batch?limite=5&iniciar=1&modo=${modo === 'qualidade' ? 'qualidade' : 'recusados'}`);
     let d = await res.json();
     if (!res.ok) throw new Error(d.detail || 'erro');
     if (d.erro) { box.innerHTML = `<p class="text-red-600 text-sm">${d.erro}</p>`; return; }
@@ -1381,7 +1381,7 @@ async function testarLibredwg() {
         <td class="py-1.5 pr-3 text-xs break-all">${(r.arquivo || '').split('/').pop()}</td>
         <td class="py-1.5 pr-3 text-xs">${r.mb || '—'} MB</td>
         <td class="py-1.5 text-xs ${ok ? 'text-green-700 font-semibold' : 'text-red-600'}">
-          ${ok ? '✓' : '✗'} ${r.resultado || ''}${r.entidades ? ` · ${r.entidades} entidades` : ''}</td>
+          ${ok || (r.resultado||'').startsWith('GEOMETRIA BATE') ? '✓' : '✗'} ${r.resultado || ''}${r.entidades ? ` · ${r.entidades} entidades` : ''}${r.delta_linhas_pct != null ? ` · Δ linhas ${r.delta_linhas_pct}%` : ''}</td>
       </tr>`;
     }).join('');
     box.innerHTML = `

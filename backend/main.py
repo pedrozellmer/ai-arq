@@ -6587,9 +6587,40 @@ _LIBREDWG_TESTE = {"rodando": False, "resultados": [], "testados": 0,
                    "converteram_e_abrem": 0, "jobs_na_fila": 0, "fim": None}
 
 
+def _medir_dxf_geometria(dxf_path: str) -> dict:
+    """Métricas de geometria pra comparar conversores (qualidade, não estética):
+    nº de entidades, extensão do desenho e soma dos comprimentos de linha.
+    Se dois DXF do MESMO DWG batem nisso, medem igual no motor."""
+    import ezdxf, math
+    doc = ezdxf.readfile(dxf_path)
+    msp = doc.modelspace()
+    n = 0
+    total_len = 0.0
+    xs, ys = [], []
+    for e in msp:
+        n += 1
+        try:
+            t = e.dxftype()
+            if t == "LINE":
+                dx = e.dxf.end.x - e.dxf.start.x
+                dy = e.dxf.end.y - e.dxf.start.y
+                total_len += math.hypot(dx, dy)
+                xs += [e.dxf.start.x, e.dxf.end.x]; ys += [e.dxf.start.y, e.dxf.end.y]
+            elif t == "LWPOLYLINE":
+                pts = [(p[0], p[1]) for p in e.get_points()]
+                for a, b in zip(pts, pts[1:]):
+                    total_len += math.hypot(b[0]-a[0], b[1]-a[1])
+                xs += [p[0] for p in pts]; ys += [p[1] for p in pts]
+        except Exception:
+            continue
+    ext = ((max(xs)-min(xs)) if xs else 0.0, (max(ys)-min(ys)) if ys else 0.0)
+    return {"entidades": n, "soma_linhas": round(total_len, 1),
+            "extensao": (round(ext[0], 1), round(ext[1], 1))}
+
+
 @app.get("/api/debug/libredwg-batch")
 async def debug_libredwg_batch(request: Request, limite: int = 5,
-                               iniciar: int = 0):
+                               iniciar: int = 0, modo: str = "recusados"):
     """Mede o fallback libredwg contra os DWG que o ODA recusou. Admin-only.
 
     Contexto (01/08/2026): 6+ envios falharam com 'não conseguimos abrir' e o
@@ -6620,12 +6651,88 @@ async def debug_libredwg_batch(request: Request, limite: int = 5,
     _LIBREDWG_TESTE.update({"rodando": True, "resultados": [], "testados": 0,
                             "converteram_e_abrem": 0, "jobs_na_fila": 0, "fim": None})
 
+    def _rodar_qualidade(_sp, _tf, t0):
+        """Converte o MESMO DWG pelo ODA e pelo libredwg e compara a geometria.
+
+        É a validação que a trava de qualidade do fallback pede: DXF que abre
+        mas mede diferente geraria número branco falso (regra nº1). Roda nos
+        DWGs de projetos DONE (onde o ODA funcionou e dá baseline)."""
+        from dwg_extractor import convert_dwg_to_dxf
+        _st_q, rows = _supa_rest_service(
+            "GET",
+            "projects?status=eq.done&select=job_id,file_types,created_at"
+            "&order=created_at.desc&limit=80")
+        rows = rows if isinstance(rows, list) else []
+        jobs = [r["job_id"] for r in rows
+                if (r.get("file_types") or {}).get("dwg", 0) > 0]
+        _LIBREDWG_TESTE["jobs_na_fila"] = len(jobs)
+        dwg2dxf_bin = __import__("shutil").which("dwg2dxf")
+        for job in jobs:
+            if _LIBREDWG_TESTE["testados"] >= limite or time.time() - t0 > 600:
+                break
+            try:
+                nomes = [n for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job}/")
+                         if n.lower().endswith(".dwg")]
+            except Exception:
+                continue
+            for nome in nomes[:1]:   # 1 DWG por job basta pra amostra
+                if _LIBREDWG_TESTE["testados"] >= limite or time.time() - t0 > 600:
+                    break
+                item = {"job_id": job, "arquivo": nome}
+                try:
+                    dados = _supabase_storage_download_prancha(job, nome)
+                    if not dados:
+                        item["resultado"] = "não consegui baixar"
+                    else:
+                        with _tf.TemporaryDirectory() as tmp:
+                            src = os.path.join(tmp, "in.dwg")
+                            open(src, "wb").write(dados)
+                            item["mb"] = round(len(dados) / 1048576, 1)
+                            dxf_oda = convert_dwg_to_dxf(src)   # gate off ⇒ só ODA
+                            dst_lw = os.path.join(tmp, "lw.dxf")
+                            try:
+                                _sp.run([dwg2dxf_bin, "-y", "-o", dst_lw, src],
+                                        capture_output=True, timeout=90)
+                            except _sp.TimeoutExpired:
+                                pass
+                            if not dxf_oda:
+                                item["resultado"] = "ODA não converteu (sem baseline)"
+                            elif not os.path.exists(dst_lw) or os.path.getsize(dst_lw) == 0:
+                                item["resultado"] = "libredwg não converteu este"
+                            else:
+                                m_oda = _medir_dxf_geometria(dxf_oda)
+                                m_lw = _medir_dxf_geometria(dst_lw)
+                                item["oda"] = m_oda
+                                item["libredwg"] = m_lw
+                                base = m_oda["soma_linhas"] or 1e-9
+                                delta = abs(m_lw["soma_linhas"] - m_oda["soma_linhas"]) / base
+                                item["delta_linhas_pct"] = round(delta * 100, 2)
+                                iguais = delta <= 0.01
+                                item["resultado"] = ("GEOMETRIA BATE (≤1%)" if iguais
+                                                     else "GEOMETRIA DIVERGE")
+                                if iguais:
+                                    _LIBREDWG_TESTE["converteram_e_abrem"] += 1
+                except Exception as e:
+                    item["resultado"] = f"erro: {type(e).__name__}: {e}"[:150]
+                _LIBREDWG_TESTE["resultados"].append(item)
+                _LIBREDWG_TESTE["testados"] += 1
+        try:
+            _log_error("libredwg:qualidade",
+                       f"{_LIBREDWG_TESTE['converteram_e_abrem']} de "
+                       f"{_LIBREDWG_TESTE['testados']} DWGs com geometria batendo "
+                       f"ODA×libredwg (±1%, soma de linhas)", None, severity="info")
+        except Exception:
+            pass
+
     def _rodar():
         import subprocess as _sp, tempfile as _tf
         t0 = time.time()
         try:
             # 🪤 _supa_rest_service devolve (status, dados) — iterar a tupla
             # direto quebrava a thread em 0,1 s ("0 de 0" no admin, 01/08).
+            if modo == "qualidade":
+                _rodar_qualidade(_sp, _tf, t0)
+                return
             _st_lw, rows = _supa_rest_service(
                 "GET",
                 "projects?status=eq.error&select=job_id,error_message,created_at"
