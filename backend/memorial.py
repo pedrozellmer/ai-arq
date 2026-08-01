@@ -314,6 +314,69 @@ def gerar_memorial_docx(caminho, projeto: dict, items: list):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  Render PDF (WeasyPrint — mesmo motor do cronograma em produção)
+# ═══════════════════════════════════════════════════════════════
+
+def _esc(s):
+    return (str(s or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+
+
+def estrutura_para_pdf_bytes(estrutura: dict) -> bytes:
+    """PDF do memorial a partir da estrutura (original ou editada).
+    Import do weasyprint fica AQUI dentro (padrão cronograma_render:837)."""
+    partes = []
+    for secao in estrutura.get("secoes") or []:
+        partes.append(f'<h2>{_esc(secao.get("titulo"))}</h2>')
+        for b in secao.get("blocos") or []:
+            tipo = b.get("tipo") or "texto"
+            texto = _esc((b.get("texto") or "").strip())
+            if tipo == "tabela":
+                linhas = "".join(
+                    f'<tr><th>{_esc(l[0] if len(l) > 0 else "")}</th>'
+                    f'<td>{_esc(l[1] if len(l) > 1 else "")}</td></tr>'
+                    for l in (b.get("linhas") or []))
+                if linhas:
+                    partes.append(f'<table>{linhas}</table>')
+            elif tipo == "preencher" or texto.startswith(_esc(MARCA_PREENCHER)):
+                partes.append(f'<p class="preencher">{texto}</p>')
+            elif tipo == "item":
+                cls = "est" if b.get("origem") == "estimado" else ""
+                partes.append(f'<p class="item {cls}">• {texto}</p>')
+            elif tipo == "assinatura":
+                partes.append(f'<p class="ass">_________________________________________<br>{texto}</p>')
+            elif texto:
+                partes.append(f'<p>{texto}</p>')
+
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+@page {{
+  size: A4; margin: 2.4cm 2.0cm;
+  @top-center {{ content: "RASCUNHO — para revisão do responsável técnico. Não substitui o memorial assinado (RRT/ART)."; color: #B91C1C; font-size: 7.5pt; font-weight: 600; }}
+  @bottom-center {{ content: "Rascunho gerado pelo AI.arq em {_esc(estrutura.get('gerado_em') or _agora_brasilia().strftime('%d/%m/%Y'))} · página " counter(page) " de " counter(pages); color: #6B7280; font-size: 7.5pt; }}
+}}
+body {{ font-family: Helvetica, Arial, sans-serif; font-size: 10.5pt; color: #1F2937; line-height: 1.45; }}
+h1 {{ text-align: center; font-size: 21pt; margin: 0 0 2pt; }}
+.obra {{ text-align: center; font-size: 13pt; margin: 0 0 4pt; color: #374151; }}
+.carimbo {{ text-align: center; font-size: 11pt; font-weight: 700; color: #B91C1C; margin: 0 0 18pt; }}
+h2 {{ font-size: 12pt; margin: 16pt 0 6pt; padding-bottom: 3pt; border-bottom: 2pt solid #7C3AED; page-break-after: avoid; }}
+p {{ margin: 4pt 0; }}
+.item {{ margin: 2pt 0 2pt 10pt; }}
+.item.est {{ color: #92400E; }}
+.preencher {{ color: #B45B09; font-style: italic; background: #FFF7ED; border: 1pt dashed #FDBA74; border-radius: 4pt; padding: 5pt 7pt; }}
+.ass {{ text-align: center; margin-top: 26pt; }}
+table {{ width: 100%; border-collapse: collapse; margin: 6pt 0; }}
+th, td {{ border: 0.7pt solid #D1D5DB; padding: 5pt 7pt; font-size: 10pt; text-align: left; }}
+th {{ background: #F9FAFB; width: 38%; font-weight: 600; }}
+</style></head><body>
+<h1>MEMORIAL DESCRITIVO</h1>
+<p class="obra">{_esc(estrutura.get("obra") or "")}</p>
+<p class="carimbo">RASCUNHO PARA REVISÃO DO RESPONSÁVEL TÉCNICO</p>
+{''.join(partes)}
+</body></html>"""
+    from weasyprint import HTML
+    return HTML(string=html).write_pdf()
+
+
+# ═══════════════════════════════════════════════════════════════
 #  Validação da estrutura EDITADA (vinda do navegador — não confiar)
 # ═══════════════════════════════════════════════════════════════
 

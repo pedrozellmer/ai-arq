@@ -11119,6 +11119,37 @@ def _memorial_carregar_salvo(job_id: str):
     return None
 
 
+@app.get("/api/memorial/{job_id}/pdf")
+async def memorial_pdf(job_id: str, request: Request):
+    """Memorial em PDF (WeasyPrint, mesmo motor do cronograma). Prefere a
+    versão editada/salva, igual ao .docx."""
+    _require_project_owner(request, job_id)
+    import tempfile
+    try:
+        salvo = _memorial_carregar_salvo(job_id)
+        if salvo:
+            estrutura = salvo
+        else:
+            projeto, items = _memorial_dados_frescos(job_id)
+            from memorial import montar_estrutura
+            estrutura = montar_estrutura(projeto, items)
+        from memorial import estrutura_para_pdf_bytes
+        pdf = estrutura_para_pdf_bytes(estrutura)
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp.write(pdf)
+        tmp.close()
+        fname = f"memorial_descritivo_rascunho_{_slug_filename(estrutura.get('obra') or job_id)}.pdf"
+        return FileResponse(tmp.name, media_type="application/pdf", filename=fname)
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[memorial pdf] erro: {e}")
+        print(traceback.format_exc())
+        _log_error("memorial:pdf", str(e), job_id=job_id)
+        raise HTTPException(500, f"Erro ao gerar PDF: {e}")
+
+
 @app.get("/api/memorial/{job_id}/estrutura")
 async def memorial_estrutura(job_id: str, request: Request):
     """Estrutura editável do memorial pra tela memorial.html.

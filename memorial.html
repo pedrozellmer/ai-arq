@@ -25,7 +25,13 @@
     .blk-preencher:focus { background: #fff !important; color: #374151; font-style: normal; }
     .chip { padding: 1px 8px; border-radius: 9999px; font-size: 10px; font-weight: 600; white-space: nowrap; }
     td[contenteditable]:focus { outline: 2px solid #7C3AED; outline-offset: -2px; }
-    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; } }
+    /* Célula de tabela ainda pendente de preencher */
+    .td-preencher { background: #FFF7ED; color: #B45B09; font-style: italic; }
+    .td-preencher:focus { background: #fff; color: #374151; font-style: normal; }
+    /* Entrada em cascata das seções (mesma família do cr-rise da revisão) */
+    @keyframes m-rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+    .m-ready section { animation: m-rise .4s cubic-bezier(.22,.61,.36,1) both; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -50,18 +56,25 @@
       </div>
     </div>
     <div class="flex items-center gap-2 flex-wrap justify-end">
-      <button id="btn-salvar" disabled
-        class="bg-white border border-gray-300 text-gray-400 px-3 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition"
-        title="Salvar as edições (Ctrl+S)">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        <span id="btn-salvar-label">Salvo</span>
+      <!-- Status do autosave: a página salva SOZINHA ~1,5s depois que você para
+           de digitar. Sem classes responsivas — o tailwind.min.css estático
+           não tem sm:* (bug do botão fantasma, 01/08). -->
+      <span id="save-status" class="text-xs font-medium" style="color:#6B7280"></span>
+      <button id="btn-salvar" title="Salvar agora (Ctrl+S) — a página também salva sozinha"
+        style="display:none;background:#4F46E5;color:#fff"
+        class="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-110 transition">
+        Salvar
       </button>
-      <button id="btn-docx"
-        class="text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-110 transition"
-        style="background:linear-gradient(135deg,#7C3AED 0%,#8B5CF6 100%)"
-        title="Baixa o Word já com as suas edições">
+      <button id="btn-pdf" title="Baixa o PDF já com as suas edições"
+        style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C"
+        class="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-95 transition">
+        PDF
+      </button>
+      <button id="btn-docx" title="Baixa o Word já com as suas edições"
+        style="background:linear-gradient(135deg,#7C3AED 0%,#8B5CF6 100%);color:#fff"
+        class="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-110 transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        <span class="hidden sm:inline">Baixar .docx</span><span class="sm:hidden">.docx</span>
+        .docx
       </button>
     </div>
   </div>
@@ -103,6 +116,7 @@ let salvando = false;
     const d = await r.json();
     estrutura = d.estrutura;
     render(d.salvo);
+    document.body.classList.add('m-ready');
   } catch (e) {
     const msg = 'Erro ao carregar o memorial: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
@@ -119,7 +133,7 @@ function render(jaSalvo) {
     (jaSalvo ? ' · edição salva anteriormente' : '');
   let html = '';
   (estrutura.secoes || []).forEach((sec, si) => {
-    html += `<section class="bg-white rounded-2xl border shadow-sm overflow-hidden">
+    html += `<section class="bg-white rounded-2xl border shadow-sm overflow-hidden" style="animation-delay:${Math.min(si * 60, 420)}ms">
       <div class="sec-header px-5 py-3"><h2 class="text-sm font-bold text-gray-900">${esc(sec.titulo)}</h2></div>
       <div class="px-5 py-4 space-y-1 text-sm text-gray-800">`;
     (sec.blocos || []).forEach((b, bi) => {
@@ -127,9 +141,11 @@ function render(jaSalvo) {
       if (b.tipo === 'tabela') {
         html += `<table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden my-1">`;
         (b.linhas || []).forEach((l, li) => {
+          const v = l[1] || '';
+          const ph = v.startsWith('[A PREENCHER') ? ` data-ph="1" data-placeholder="${esc(v)}"` : '';
           html += `<tr class="border-b border-gray-100 last:border-0">
             <td class="bg-gray-50 px-3 py-2 font-medium text-gray-700 w-2/5">${esc(l[0] || '')}</td>
-            <td class="px-3 py-2" contenteditable="true" ${ds} data-l="${li}">${esc(l[1] || '')}</td></tr>`;
+            <td class="px-3 py-2${ph ? ' td-preencher' : ''}" contenteditable="true" ${ds} data-l="${li}"${ph}>${esc(v)}</td></tr>`;
         });
         html += `</table>`;
       } else if (b.tipo === 'item') {
@@ -140,7 +156,8 @@ function render(jaSalvo) {
           ${chip}
           <div class="blk flex-1 min-w-0" contenteditable="true" ${ds}>${esc(b.texto || '')}</div></div>`;
       } else if (b.tipo === 'preencher') {
-        html += `<div class="blk blk-preencher" contenteditable="true" ${ds}>${esc(b.texto || '')}</div>`;
+        // data-ph = comporta como placeholder: clicar LIMPA, sair vazio RESTAURA
+        html += `<div class="blk blk-preencher" contenteditable="true" ${ds} data-ph="1" data-placeholder="${esc(b.texto || '')}">${esc(b.texto || '')}</div>`;
       } else if (b.tipo === 'assinatura') {
         html += `<div class="pt-4 text-center text-gray-700">_________________________________________<br>
           <span class="blk inline-block" contenteditable="true" ${ds}>${esc(b.texto || '')}</span></div>`;
@@ -155,8 +172,11 @@ function render(jaSalvo) {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Edição → estrutura em memória + estado sujo ─────────────
-document.getElementById('doc-container').addEventListener('input', (e) => {
+// ── Edição → estrutura em memória + AUTOSAVE ────────────────
+const container = document.getElementById('doc-container');
+let autosaveTimer = null;
+
+container.addEventListener('input', (e) => {
   const el = e.target.closest('[data-s]');
   if (!el) return;
   const si = +el.dataset.s, bi = +el.dataset.b;
@@ -169,30 +189,69 @@ document.getElementById('doc-container').addEventListener('input', (e) => {
     bloco.texto = el.innerText;
   }
   setDirty(true);
+  // Autosave: 1,5s depois da última tecla. Ninguém deveria ter que lembrar
+  // de salvar — o botão manual fica de cinto de segurança.
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => salvar(), 1500);
+});
+
+// [A PREENCHER] se comporta como placeholder (01/08 — Pedro: "ao clicar vai
+// preencher, o texto tem que sumir"): focar LIMPA; sair sem escrever RESTAURA.
+container.addEventListener('focusin', (e) => {
+  const el = e.target.closest('[data-ph]');
+  if (!el) return;
+  if (el.innerText.trim() === (el.dataset.placeholder || '').trim()) {
+    el.innerText = '';
+  }
+});
+container.addEventListener('focusout', (e) => {
+  const el = e.target.closest('[data-ph]');
+  if (!el) return;
+  const vazio = el.innerText.trim() === '';
+  if (vazio) {
+    el.innerText = el.dataset.placeholder || '';
+  }
+  // Preenchido de verdade → deixa de parecer pendência (sai o laranja)
+  const aindaPh = el.innerText.trim() === (el.dataset.placeholder || '').trim();
+  el.classList.toggle('blk-preencher', aindaPh && el.classList.contains('blk'));
+  el.classList.toggle('td-preencher', aindaPh && el.tagName === 'TD');
+  // Mantém a estrutura coerente com o que está na tela
+  const si = +el.dataset.s, bi = +el.dataset.b;
+  const bloco = estrutura.secoes?.[si]?.blocos?.[bi];
+  if (bloco) {
+    if (bloco.tipo === 'tabela') {
+      const li = +el.dataset.l;
+      if (bloco.linhas?.[li]) bloco.linhas[li][1] = el.innerText;
+    } else {
+      bloco.texto = el.innerText;
+    }
+  }
 });
 
 function setDirty(v) {
   dirty = v;
   const btn = document.getElementById('btn-salvar');
-  const lbl = document.getElementById('btn-salvar-label');
+  const st = document.getElementById('save-status');
   if (v) {
-    btn.disabled = false;
-    btn.classList.remove('text-gray-400');
-    btn.classList.add('bg-indigo-600', 'text-white', 'border-indigo-600', 'hover:bg-indigo-700');
-    lbl.textContent = 'Salvar';
+    btn.style.display = 'flex';
+    st.textContent = 'edição não salva';
+    st.style.color = '#B45B09';
   } else {
-    btn.disabled = true;
-    btn.classList.add('text-gray-400');
-    btn.classList.remove('bg-indigo-600', 'text-white', 'border-indigo-600', 'hover:bg-indigo-700');
-    lbl.textContent = 'Salvo';
+    btn.style.display = 'none';
   }
+}
+
+function _horaAgora() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
 }
 
 async function salvar() {
   if (!dirty || salvando || !estrutura) return true;
   salvando = true;
-  const lbl = document.getElementById('btn-salvar-label');
-  lbl.textContent = 'Salvando...';
+  const st = document.getElementById('save-status');
+  st.textContent = 'salvando...';
+  st.style.color = '#6B7280';
   try {
     const r = await authFetch(`${API_BASE}/api/memorial/${jobId}/estrutura`, {
       method: 'POST',
@@ -201,12 +260,14 @@ async function salvar() {
     });
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
     setDirty(false);
-    window.toast?.success('Memorial salvo');
+    st.textContent = `✓ salvo às ${_horaAgora()}`;
+    st.style.color = '#059669';
     return true;
   } catch (e) {
-    lbl.textContent = 'Salvar';
-    const msg = 'Erro ao salvar: ' + e.message;
-    window.toast ? window.toast.error(msg) : alert(msg);
+    st.textContent = 'erro ao salvar — tente de novo';
+    st.style.color = '#B91C1C';
+    setDirty(true);
+    window.toast?.error('Erro ao salvar: ' + e.message);
     return false;
   } finally {
     salvando = false;
@@ -215,13 +276,17 @@ async function salvar() {
 
 document.getElementById('btn-salvar').addEventListener('click', salvar);
 
-document.getElementById('btn-docx').addEventListener('click', async () => {
-  // Edição pendente vai junto: salva antes, o .docx sai do que está no banco
+async function _baixar(formato) {
+  // Edição pendente vai junto: salva antes, o arquivo sai do que está no banco
   const ok = await salvar();
   if (!ok) return;
-  if (window.trackEvent) trackEvent('download_memorial', { job_id: jobId, editado: true });
-  downloadProtected(`${API_BASE}/api/memorial/${jobId}`, `memorial_descritivo_rascunho_${jobId}.docx`);
-});
+  if (window.trackEvent) trackEvent('download_memorial', { job_id: jobId, formato });
+  const sufixo = formato === 'pdf' ? '/pdf' : '';
+  downloadProtected(`${API_BASE}/api/memorial/${jobId}${sufixo}`,
+    `memorial_descritivo_rascunho_${jobId}.${formato}`);
+}
+document.getElementById('btn-docx').addEventListener('click', () => _baixar('docx'));
+document.getElementById('btn-pdf').addEventListener('click', () => _baixar('pdf'));
 
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); salvar(); }
