@@ -163,7 +163,14 @@ def modelo_quantitativos():
 
 
 def modelo_cronograma():
-    """Post 23/08 — Gantt físico até 18 meses + financeiro com acumulado (curva S)."""
+    """⚠️ APOSENTADA em 02/08/2026 — NÃO CHAMAR.
+
+    Esta v1 só planejava (previsto + curva S), sem lugar pra registrar o que a
+    obra executou. A v2 vive em `gen_cronograma_ff.py` (PLANEJADO + MEDIÇÃO +
+    RESUMO, peso por custo, curva S dupla) e grava no MESMO nome de arquivo —
+    então rodar esta função SOBRESCREVERIA o modelo bom. Mantida só como
+    histórico; o main abaixo não a chama mais.
+    """
     MESES = 18
     wb = Workbook()
 
@@ -296,5 +303,8 @@ def modelo_cronograma():
 
 
 if __name__ == '__main__':
-    for f in (modelo_quantitativos(), modelo_cronograma()):
+    # 🪤 modelo_cronograma() saiu daqui de propósito (02/08): a v2 é gerada por
+    # gen_cronograma_ff.py e usa o mesmo nome de arquivo. Rodar as duas apagaria
+    # a boa. Pro cronograma: python blog/downloads/gen_cronograma_ff.py
+    for f in (modelo_quantitativos(),):
         print(f'  {os.path.basename(f)}  {os.path.getsize(f)/1024:.0f} KB')
