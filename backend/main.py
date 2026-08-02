@@ -1207,7 +1207,7 @@ _WHATSAPP_LINK = (f"https://wa.me/{_WHATSAPP_NUM}"
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
                 badge_color: str = "green",
                 reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.",
-                signoff: bool = True) -> str:
+                signoff: bool = True, preheader: str = "") -> str:
     """Layout moderno e acessível dos emails (table-based + estilo inline, do
     jeito que Gmail/Outlook exigem). Logo = ícone hospedado em ai.arq.br.
 
@@ -1244,7 +1244,15 @@ def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "
                     'font-weight:600;font-family:Arial,sans-serif;">'
                     '&#128172; Falar no WhatsApp</a></div>'
                     '</div></td></tr>')
+    # Preheader: linha de preview que o Gmail/Apple Mail mostram ao lado do
+    # assunto. Invisível no corpo; o &zwnj; empurra pra fora o texto real do
+    # e-mail que apareceria no preview. (Upgrade 02/08 — vale pra todos.)
+    pre_html = ""
+    if preheader:
+        pre_html = ('<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
+                    f'{preheader}' + ('&zwnj;&nbsp;' * 30) + '</div>')
     return (
+        f'{pre_html}'
         '<div style="background:#eaeef3;padding:28px 14px;font-family:Arial,sans-serif;">'
         '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
         'style="max-width:520px;margin:0 auto;"><tr><td>'
@@ -1564,19 +1572,70 @@ def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
 
 def _build_welcome_email(name: str = ""):
     """Monta (subject, html) do email de boas-vindas. Separado do envio pra
-    reuso no preview do painel (Central de Emails)."""
+    reuso no preview do painel (Central de Emails).
+
+    Redesenhado 02/08/2026 (pedido do Pedro, benchmark = welcome de
+    concorrente bem produzido): passos numerados + o que sai do CAD + a linha
+    de honestidade medido×estimado como assinatura de marca. Tudo table-based
+    inline (Gmail/Outlook). Copy segue as 4 regras (nada interno, PT revisado,
+    nada inventado) e a regra do beta: "grátis durante o beta, quantos quiser"."""
     import html as _hw
     greet = _greeting_line(_hw.escape(name or ""))
-    body = (f"{greet}<br><br>"
-            "Que bom ter você aqui! O AI.arq lê a sua prancha (PDF, DWG ou DXF) e "
-            "devolve a <b>planilha de quantitativos em minutos</b> — o levantamento "
-            "que normalmente leva horas no Excel.<br><br>"
-            "E o melhor: estamos em <b>beta &mdash; grátis e ilimitado</b> &#129514;. Você pode subir "
-            "<b>quantos projetos quiser</b>, sem cartão e sem compromisso. Aproveite pra testar à vontade.")
-    subject = "Bem-vindo ao AI.arq"
-    html = _email_wrap("Bem-vindo ao AI.arq", body,
-                       "Subir minha primeira prancha", "https://ai.arq.br/dashboard.html",
-                       reason="Você está recebendo este e-mail porque criou sua conta no AI.arq.")
+
+    def _passo(n, titulo, texto):
+        return ('<tr><td style="padding:7px 0;vertical-align:top;width:40px;">'
+                '<div style="width:28px;height:28px;border-radius:50%;background:#4F46E5;'
+                'color:#ffffff;font-size:14px;font-weight:700;text-align:center;'
+                f'line-height:28px;font-family:Arial,sans-serif;">{n}</div></td>'
+                '<td style="padding:7px 0 7px 10px;font-size:14px;line-height:1.55;'
+                'color:#475569;font-family:Arial,sans-serif;">'
+                f'<b style="color:#0F172A;">{titulo}</b><br>{texto}</td></tr>')
+
+    def _check(texto):
+        return ('<tr><td style="padding:3px 0;vertical-align:top;width:22px;color:#15803d;'
+                'font-size:14px;font-family:Arial,sans-serif;font-weight:700;">&#10003;</td>'
+                '<td style="padding:3px 0;font-size:14px;line-height:1.5;color:#475569;'
+                f'font-family:Arial,sans-serif;">{texto}</td></tr>')
+
+    body = (
+        f"{greet}<br><br>"
+        "Que bom ter você aqui! O AI.arq <b>lê o seu projeto e mede</b> — a planilha de "
+        "quantitativos que levaria horas no Excel sai em minutos, direto do seu arquivo."
+        "<br><br>"
+        '<b style="color:#0F172A;font-size:15px;">Como funciona</b>'
+        '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:6px;">'
+        + _passo(1, "Envie o projeto",
+                 "DXF é o formato que dá o melhor resultado (medimos a geometria exata). "
+                 "DWG e PDF também funcionam.")
+        + _passo(2, "A IA mede e monta a planilha",
+                 "Itens por disciplina, com referências SINAPI onde há correspondência.")
+        + _passo(3, "Revise e baixe",
+                 "Confirme as quantidades na tela e exporte a planilha em Excel — e os "
+                 "outros documentos abaixo, sem custo extra.")
+        + "</table><br>"
+        '<b style="color:#0F172A;font-size:15px;">O que sai do seu projeto</b>'
+        '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:6px;">'
+        + _check("Planilha de quantitativos por disciplina (.xlsx)")
+        + _check("Cronograma físico da obra, com curva de avanço")
+        + _check("Memorial descritivo em rascunho — editável na tela, sai em Word ou PDF")
+        + _check("Comparativo de cotações de fornecedores")
+        + "</table><br>"
+        # A linha de honestidade É a marca — vai no primeiro e-mail de propósito.
+        '<div style="background:#FFF7ED;border:1px solid #fed7aa;border-radius:10px;'
+        'padding:12px 14px;font-size:13px;line-height:1.55;color:#7c4a12;'
+        'font-family:Arial,sans-serif;">'
+        '<b>Nosso compromisso:</b> cada número diz de onde veio. Em <b>branco</b>, o que '
+        'foi <b>medido</b> do seu arquivo; em <b>laranja</b>, o que é <b>estimativa</b> '
+        'pra você confirmar. A gente nunca vende chute como certeza.</div><br>'
+        "Estamos em <b>beta — grátis, quantos projetos você quiser</b>, sem cartão. "
+        "Aproveite pra testar com um projeto real."
+    )
+    subject = "Bem-vindo ao AI.arq — seu projeto vira planilha medida"
+    html = _email_wrap(
+        "Bem-vindo ao AI.arq", body,
+        "Enviar meu primeiro projeto", "https://ai.arq.br/dashboard.html",
+        reason="Você está recebendo este e-mail porque criou sua conta no AI.arq.",
+        preheader="Envie o CAD, receba a planilha medida — grátis durante o beta, sem cartão.")
     return subject, html
 
 
