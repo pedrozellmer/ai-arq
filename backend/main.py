@@ -1597,11 +1597,19 @@ def _build_welcome_email(name: str = ""):
                 '<td style="padding:3px 0;font-size:14px;line-height:1.5;color:#475569;'
                 f'font-family:Arial,sans-serif;">{texto}</td></tr>')
 
+    def _img(arquivo, alt, margem="14px 0 4px"):
+        return (f'<img src="https://ai.arq.br/assets/email/{arquivo}" width="460" alt="{alt}" '
+                f'style="width:100%;max-width:460px;height:auto;border-radius:12px;'
+                f'display:block;margin:{margem};border:0;">')
+
     body = (
-        f"{greet}<br><br>"
+        _img("welcome-foto.jpg", "Arquiteto trabalhando sobre a prancha do projeto", margem="2px 0 14px")
+        + f"{greet}<br><br>"
         "Que bom ter você aqui! O AI.arq <b>lê o seu projeto e mede</b> — a planilha de "
-        "quantitativos que levaria horas no Excel sai em minutos, direto do seu arquivo."
-        "<br><br>"
+        "quantitativos que levaria horas no Excel sai em minutos, direto do seu arquivo, "
+        "com cada item dizendo se foi <b>medido</b> ou <b>estimado</b>:"
+        + _img("welcome-hero.png", "Planilha de quantitativos com itens medidos e estimativas rotuladas")
+        + "<br>"
         '<b style="color:#0F172A;font-size:15px;">Como funciona</b>'
         '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:6px;">'
         + _passo(1, "Envie o projeto",
@@ -1610,16 +1618,23 @@ def _build_welcome_email(name: str = ""):
         + _passo(2, "A IA mede e monta a planilha",
                  "Itens por disciplina, com referências SINAPI onde há correspondência.")
         + _passo(3, "Revise e baixe",
-                 "Confirme as quantidades na tela e exporte a planilha em Excel — e os "
-                 "outros documentos abaixo, sem custo extra.")
+                 "Confirme as quantidades na tela e exporte em Excel — e os documentos "
+                 "abaixo saem do mesmo projeto, sem custo extra.")
         + "</table><br>"
-        '<b style="color:#0F172A;font-size:15px;">O que sai do seu projeto</b>'
-        '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin-top:6px;">'
-        + _check("Planilha de quantitativos por disciplina (.xlsx)")
-        + _check("Cronograma físico da obra, com curva de avanço")
-        + _check("Memorial descritivo em rascunho — editável na tela, sai em Word ou PDF")
-        + _check("Comparativo de cotações de fornecedores")
-        + "</table><br>"
+        '<b style="color:#0F172A;font-size:15px;">E não para na planilha</b><br>'
+        '<span style="font-size:14px;">O mesmo projeto também gera:</span>'
+        + _img("welcome-cronograma.png", "Cronograma físico com barras por etapa e curva de avanço")
+        + '<span style="font-size:14px;"><b style="color:#0F172A;">Cronograma físico</b> — '
+        'etapas na ordem da obra, com durações calculadas das suas quantidades e curva de avanço. '
+        'Baixa em PDF ou apresentação com a sua marca.</span>'
+        + _img("welcome-memorial.png", "Memorial descritivo em rascunho com campos a preencher")
+        + '<span style="font-size:14px;"><b style="color:#0F172A;">Memorial descritivo (rascunho)</b> — '
+        'escrito a partir dos itens do seu CAD, editável na tela, sai em Word ou PDF. '
+        'Você completa, o responsável técnico assina.</span>'
+        + _img("welcome-comparativo.png", "Comparativo de cotações de fornecedores lado a lado")
+        + '<span style="font-size:14px;"><b style="color:#0F172A;">Comparativo de cotações</b> — '
+        'suba as planilhas dos fornecedores e veja lado a lado, com comparação justa '
+        'e quem esqueceu o quê.</span><br><br>'
         # A linha de honestidade É a marca — vai no primeiro e-mail de propósito.
         '<div style="background:#FFF7ED;border:1px solid #fed7aa;border-radius:10px;'
         'padding:12px 14px;font-size:13px;line-height:1.55;color:#7c4a12;'
