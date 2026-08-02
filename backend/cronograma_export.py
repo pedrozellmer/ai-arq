@@ -407,7 +407,7 @@ def exportar_pdf(cronograma: Dict, output_path: str,
         # Eyebrow pequeno (letterspaced)
         canv.setFont('Helvetica-Bold', 9)
         canv.setFillColor(colors.HexColor(brand_color))
-        canv.drawString(MARGIN, PAGE_H/2 + 30*mm, 'CRONOGRAMA FÍSICO-FINANCEIRO')
+        canv.drawString(MARGIN, PAGE_H/2 + 30*mm, 'CRONOGRAMA FÍSICO DA OBRA')
 
         # Hairline divider sutil abaixo do eyebrow
         canv.setStrokeColor(colors.HexColor(COLOR_BORDER))
@@ -823,7 +823,7 @@ def exportar_pptx(cronograma: Dict, output_path: str,
               align='right')
 
     # Eyebrow letterspaced — usa cor da marca como única identidade visual
-    add_text(s1, 'CRONOGRAMA FÍSICO-FINANCEIRO', Inches(0.6), Inches(3.0),
+    add_text(s1, 'CRONOGRAMA FÍSICO DA OBRA', Inches(0.6), Inches(3.0),
               Inches(12), Inches(0.4), size=10, bold=True, color=rgb_brand)
 
     # Hairline divider abaixo do eyebrow
