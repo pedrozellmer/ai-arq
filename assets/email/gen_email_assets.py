@@ -299,6 +299,54 @@ def fotos():
         ph = ph.crop((0, topo, alvo_w, topo + alvo_h))
         ph.save(f"{OUT}/{destino}", quality=80, optimize=True)
 
+
+
+# ── FALHA REPROCESSÁVEL: setas circulares "tentar de novo resolve" ──
+def falha_retry():
+    W, H = 1200, 360
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, (245, 158, 11), (16, 185, 129))
+    # círculo de setas (retry) — dois arcos com pontas
+    cx, cy, r = 230, 190, 85
+    d.arc((cx - r, cy - r, cx + r, cy + r), start=300, end=120, fill=INDIGO, width=16)
+    d.arc((cx - r, cy - r, cx + r, cy + r), start=130, end=290, fill=INDIGO, width=16)
+    import math
+    for ang, rot in ((120, 30), (290, 210)):
+        a = math.radians(ang)
+        px_, py_ = cx + r * math.cos(a), cy - r * math.sin(a)
+        b = math.radians(rot)
+        pts = [(px_ + 30 * math.cos(b), py_ - 30 * math.sin(b)),
+               (px_ + 30 * math.cos(b + 2.4), py_ - 30 * math.sin(b + 2.4)),
+               (px_ + 30 * math.cos(b - 2.4), py_ - 30 * math.sin(b - 2.4))]
+        d.polygon(pts, fill=INDIGO)
+    check(d, cx - 22, cy - 8, cor=VERDE, t=9, s_=28)
+    d.text((420, 110), "Foi um tropeço passageiro.", font=F("Bold", 38), fill=SLATE)
+    d.text((420, 175), "Reprocessar quase sempre resolve —", font=F("Regular", 28), fill=CINZA_TXT)
+    d.text((420, 215), "é um clique, e é grátis.", font=F("Regular", 28), fill=CINZA_TXT)
+    img.save(f"{OUT}/falha-retry.png", optimize=True)
+
+
+# ── NEWSLETTER: banner de cabeçalho ─────────────────────────────
+def news_banner():
+    W, H = 1120, 280
+    img = Image.new("RGB", (W, H), SLATE)
+    d = ImageDraw.Draw(img)
+    gradiente_h(d, 0, 0, W, 8, INDIGO, CYAN)
+    d.text((60, 70), "News do AI.arq", font=F("Bold", 62), fill=BRANCO)
+    d.text((60, 158), "Uma vez por mês: uma ideia útil", font=F("Regular", 28), fill=(203, 213, 225))
+    d.text((60, 198), "e o que mudou por aqui.", font=F("Regular", 28), fill=(203, 213, 225))
+    # mini planilha decorativa à direita
+    px, py = 820, 60
+    rr(d, (px, py, px + 240, py + 160), 12, fill=BRANCO)
+    for i, (larg, laranja) in enumerate([(180, False), (150, False), (190, True), (120, False)]):
+        y = py + 22 + i * 34
+        if laranja:
+            d.rectangle((px + 8, y - 8, px + 232, y + 20), fill=(255, 247, 237))
+        d.rectangle((px + 20, y, px + 20 + larg, y + 12), fill=(226, 232, 240) if not laranja else LARANJA_BG)
+    img.save(f"{OUT}/news-banner.png", optimize=True)
+
 if __name__ == "__main__":
     import os
     os.makedirs(OUT, exist_ok=True)
@@ -310,6 +358,8 @@ if __name__ == "__main__":
     falha()
     checkin()
     calibracao()
+    falha_retry()
+    news_banner()
     fotos()
     for f in sorted(os.listdir(OUT)):
         if f.endswith(".png"):

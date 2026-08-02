@@ -1313,8 +1313,9 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
         body = (f"{greet}<br><br>"
                 f"Tivemos um problema ao processar o projeto <b>{pn}</b> e ele não "
                 f"foi concluído. Quase sempre é coisa passageira e <b>reprocessar "
-                f"resolve</b> — e o reprocessamento é grátis.<br><br>"
-                f"Se continuar dando problema, é só responder este e-mail que a gente "
+                f"resolve</b> — e o reprocessamento é grátis."
+                + _email_img("falha-retry.png", "Reprocessar quase sempre resolve — é um clique, e é grátis")
+                + f"Se continuar dando problema, é só responder este e-mail que a gente "
                 f"te ajuda pessoalmente. 🙂")
         subject = (f"{_pn_raw} — tivemos um problema no AI.arq"
                    if _pn_raw else "Tivemos um problema com seu projeto no AI.arq")
@@ -4891,6 +4892,22 @@ CASO ESPECIAL — lineares aparecem 2× no DXF:
   ml=23.24 (não un=2).
 - Rodapés, tabicas, eletrocalhas, perfis: sempre ml.
 
+CASO ESPECIAL — INFRA LINEAR (eletroduto, eletrocalha, perfilado, leito de
+cabos, conduto, tubulação): a ESPECIFICAÇÃO quase sempre está num layer de
+TEXTO (ex.: ELE-TEXTOS, ELE-CHAMADA, DI-Textos) e o DESENHO num layer próprio
+de condutos com OUTRO nome (ex.: EL-Condutos, ELE-T-EMBUTIDO, LO-Condutos,
+TV-Condutos, HID-TUB, nomes com CONDU/ELETR/PERFIL/TUB/CALHA).
+- Antes de zerar a quantidade de um item desses, PROCURE em "COMPRIMENTOS POR
+  LAYER" um layer de condutos compatível e USE o comprimento como quantity em
+  **ml**, marcando **estimado** e citando o layer e o valor na observação.
+  Deixar quantity=0 com um layer de condutos MEDIDO na lista é jogar medição fora.
+- Se VÁRIOS diâmetros/bitolas compartilham o mesmo layer de condutos, NÃO
+  repita o comprimento em cada item (dupla contagem!): ponha o TOTAL no item
+  mais genérico com observação "dividir por bitola na revisão" e deixe os
+  demais com quantity=0 apontando pra esse item.
+- Layers de CHAMADA/TEXTO/COTA/LEGENDA/TITULO **não são condutos** — o
+  comprimento deles é de setas e letras; NUNCA use como quantidade.
+
 PRIORIDADE SEMÂNTICA — a unidade do ITEM é definida pelo TIPO DE SERVIÇO, não só
 pelo dado extraído:
 - **Pisos** (carpete, cerâmica, porcelanato, vinílico, laminado, madeira) → **SEMPRE m²**
@@ -7839,9 +7856,9 @@ _NEWSLETTER_SUBJECT = "IA que só olha a planta erra quase metade"
 _NEWSLETTER_HTML = """<div style="background:#eaeef3;padding:24px 12px;font-family:Arial,Helvetica,sans-serif;color:#334155;">
 <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;">
 <div style="height:5px;background:#4F46E5;"></div>
+<img src="https://ai.arq.br/assets/email/news-banner.png" width="560" alt="News do AI.arq — uma vez por m&ecirc;s: uma ideia &uacute;til e o que mudou por aqui" style="width:100%;max-width:560px;height:auto;display:block;border:0;">
 <div style="padding:24px 30px;">
-<p style="margin:0 0 16px;color:#0F172A;font-size:20px;font-weight:700;">AI.arq</p>
-<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}<br>News do AI.arq &mdash; <b>uma vez por m&ecirc;s</b>: uma ideia &uacute;til e o que mudou por aqui.</p>
+<p style="margin:0 0 14px;font-size:15px;line-height:1.6;">{{SAUDACAO}}</p>
 <div style="padding:14px 16px;background:#F8FAFC;border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.6;margin:0 0 18px;">
 <b style="color:#0F172A;">&#129504; IA na arquitetura &mdash; o que ela ainda n&atilde;o faz bem</b><br>
 O <b>AECV-Bench</b>, estudo de 2026, testou os melhores modelos de IA do mundo lendo pranchas. Em tarefas de s&iacute;mbolo &mdash; como <b>contar portas e janelas</b> &mdash; o acerto ficou <b>entre 40% e 55%</b>. Quase metade errada, s&oacute; &ldquo;olhando&rdquo; o desenho.<br><br>
