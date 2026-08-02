@@ -573,6 +573,27 @@
           } });
         }
       } catch (e) { /* atribuição nunca bloqueia o cadastro */ }
+
+      // Boas-vindas AQUI, no cadastro (02/08/2026 — Pedro: "abriu cadastro já
+      // tem que receber, sem sentido voltar ao site pra receber"). Antes só
+      // disparava no 1º load do dashboard: quem fechava a aba nunca recebia.
+      // - keepalive: o redirect abaixo é imediato; sem isso o navegador
+      //   cancela a requisição no meio e o e-mail não sai.
+      // - o mesmo flag do dashboard é setado ANTES, pra ele não repetir.
+      // - o backend confere o JWT e a idade do perfil (recém-criado = novo),
+      //   então não dá pra disparar pra terceiros nem pra conta antiga.
+      try {
+        localStorage.setItem('aiarq_welcomed', 'true');
+        const { data: { session: _sess } } = await sbClient.auth.getSession();
+        if (_sess && window.API_BASE) {
+          fetch(`${window.API_BASE}/api/notify/welcome`, {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + _sess.access_token },
+            keepalive: true,
+          }).catch(() => {});
+        }
+      } catch (e) { /* e-mail nunca bloqueia o cadastro */ }
+
       if (window.trackEvent) trackEvent('signup_done');
       window.location.href = 'dashboard.html';
 
