@@ -1069,17 +1069,29 @@ function renderEstiloChips() {
   if (tc) {
     tc.innerHTML = CRONO_TEMPLATES.map(function (t) {
       const sel = t.id === estiloTemplate;
-      return '<button type="button" data-tpl="' + t.id + '" title="' + t.nome + ' — ' + t.desc + '" class="tpl-chip rounded-xl border overflow-hidden text-left transition ' + (sel ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-300 hover:border-slate-400') + '" style="width:150px">'
+      // 02/08 (Pedro): "poderíamos ter o preview dos modelos" — cada card ganha
+      // um "👁 Ver" que abre o PDF DE VERDADE, com os dados deste projeto.
+      return '<div class="tpl-card relative rounded-xl border overflow-hidden text-left transition ' + (sel ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-300 hover:border-slate-400') + '" style="width:150px">'
+        + '<button type="button" data-tpl="' + t.id + '" title="Usar o modelo ' + t.nome + '" class="tpl-chip block w-full text-left">'
         + '<span class="block border-b ' + (sel ? 'border-indigo-200' : 'border-slate-200') + '">' + tplThumb(t.id) + '</span>'
         + '<span class="block px-2.5 py-2 ' + (sel ? 'bg-indigo-50' : '') + '">'
         + '<span class="flex items-center gap-1 text-sm font-semibold ' + (sel ? 'text-indigo-700' : 'text-slate-800') + '">' + (sel ? _CHK : '') + t.nome + '</span>'
-        + '<span class="block text-[11px] text-slate-500">' + t.desc + '</span></span></button>';
+        + '<span class="block text-[11px] text-slate-500">' + t.desc + '</span></span></button>'
+        + '<button type="button" data-preview="' + t.id + '" title="Ver como fica com o SEU cronograma"'
+        + ' class="tpl-eye absolute top-1.5 right-1.5 px-2 py-1 rounded-md text-[11px] font-semibold bg-white/95 border border-slate-300 text-slate-700 hover:bg-white hover:border-slate-500 shadow-sm">👁 Ver</button>'
+        + '</div>';
     }).join('');
     tc.querySelectorAll('.tpl-chip').forEach(function (b) {
       b.addEventListener('click', function () {
         estiloTemplate = b.dataset.tpl;
         try { localStorage.setItem('aiarq_crono_tpl', estiloTemplate); } catch (e) {}
         renderEstiloChips(); atualizarLinksExport();
+      });
+    });
+    tc.querySelectorAll('.tpl-eye').forEach(function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();          // ver ≠ selecionar
+        abrirPreviewTemplate(b.dataset.preview);
       });
     });
   }
@@ -1102,6 +1114,52 @@ function renderEstiloChips() {
     const cu = document.getElementById('cor-custom');
     if (cu) cu.addEventListener('input', function () { estiloAccent = cu.value; renderEstiloChips(); atualizarLinksExport(); });
   }
+}
+
+// ── Preview do modelo: o PDF REAL deste projeto, no template escolhido ──
+// Melhor que thumbnail: usa /export/pdf (mesma rota do download), então o que
+// aparece É o arquivo que o cliente vai receber, com o cronograma dele.
+// 🪤 rota autenticada → fetch com Bearer e blob; <a>/iframe direto daria 401.
+let _previewBlobUrl = null;
+async function abrirPreviewTemplate(tplId) {
+  const t = CRONO_TEMPLATES.find(function (x) { return x.id === tplId; }) || { id: tplId, nome: tplId, desc: '' };
+  const modal = document.getElementById('modal-preview-tpl');
+  document.getElementById('mp-titulo').textContent = t.nome;
+  document.getElementById('mp-desc').textContent = t.desc;
+  document.getElementById('mp-corpo').innerHTML =
+    '<div class="flex flex-col items-center justify-center h-full text-slate-500 gap-3">'
+    + '<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>'
+    + '<p class="text-sm">Gerando o PDF com o seu cronograma…</p></div>';
+  modal.classList.remove('hidden');
+  document.getElementById('mp-usar').onclick = function () {
+    estiloTemplate = tplId;
+    try { localStorage.setItem('aiarq_crono_tpl', tplId); } catch (e) {}
+    fecharPreviewTemplate(); renderEstiloChips(); atualizarLinksExport();
+  };
+  try {
+    const { data: { session } } = await sbClient.auth.getSession();
+    const headers = session ? { 'Authorization': 'Bearer ' + session.access_token } : {};
+    const qs = new URLSearchParams({ template: tplId });
+    if (estiloAccent) qs.set('accent', estiloAccent);
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/export/pdf?` + qs.toString(), { headers });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const blob = await r.blob();
+    if (_previewBlobUrl) URL.revokeObjectURL(_previewBlobUrl);
+    _previewBlobUrl = URL.createObjectURL(blob);
+    document.getElementById('mp-corpo').innerHTML =
+      '<iframe src="' + _previewBlobUrl + '#toolbar=0&view=FitH" class="w-full h-full rounded-lg border border-slate-200" title="Prévia do cronograma no modelo ' + escapeAttr(t.nome) + '"></iframe>';
+  } catch (e) {
+    document.getElementById('mp-corpo').innerHTML =
+      '<div class="flex flex-col items-center justify-center h-full text-center px-6 gap-2">'
+      + '<p class="text-sm text-slate-700 font-medium">Não consegui gerar a prévia agora.</p>'
+      + '<p class="text-xs text-slate-500">Você ainda pode escolher o modelo e baixar o PDF normalmente.</p></div>';
+    console.warn('preview template:', e);
+  }
+}
+function fecharPreviewTemplate() {
+  document.getElementById('modal-preview-tpl').classList.add('hidden');
+  document.getElementById('mp-corpo').innerHTML = '';   // libera o visualizador
+  if (_previewBlobUrl) { URL.revokeObjectURL(_previewBlobUrl); _previewBlobUrl = null; }
 }
 
 function atualizarLinksExport() {
@@ -1811,7 +1869,40 @@ function renderRessalva(c) {
 // escapeHtml vem de aiarq-utils.js
 
 init();
+
+// Esc fecha a prévia do modelo
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape') {
+    const m = document.getElementById('modal-preview-tpl');
+    if (m && !m.classList.contains('hidden')) fecharPreviewTemplate();
+  }
+});
 </script>
+
+<!-- ═══ PRÉVIA DO MODELO — mostra o PDF real deste projeto (02/08) ═══ -->
+<div id="modal-preview-tpl" role="dialog" aria-modal="true" aria-labelledby="mp-titulo"
+     class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+  <div class="bg-white rounded-2xl w-full max-w-4xl flex flex-col" style="height:88vh">
+    <div class="flex items-start justify-between gap-4 px-5 py-4 border-b">
+      <div>
+        <h3 class="font-bold text-slate-900 text-lg">Modelo <span id="mp-titulo">—</span></h3>
+        <p class="text-xs text-slate-500"><span id="mp-desc"></span> · prévia com o cronograma deste projeto</p>
+      </div>
+      <button type="button" onclick="fecharPreviewTemplate()" aria-label="Fechar prévia (Esc)"
+        class="text-slate-500 hover:text-slate-800 text-xl leading-none px-2">&times;</button>
+    </div>
+    <div id="mp-corpo" class="flex-1 min-h-0 p-4 bg-slate-50"></div>
+    <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t bg-white rounded-b-2xl">
+      <p class="text-[11px] text-slate-500">A apresenta&ccedil;&atilde;o em <b>PowerPoint</b> usa o mesmo visual deste modelo.</p>
+      <div class="flex gap-2">
+        <button type="button" onclick="fecharPreviewTemplate()"
+          class="px-3 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium hover:bg-slate-50">Fechar</button>
+        <button type="button" id="mp-usar"
+          class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold">Usar este modelo</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="toast.js" defer></script>
   <footer class="border-t bg-gray-50 py-12">
