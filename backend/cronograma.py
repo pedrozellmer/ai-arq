@@ -49,7 +49,26 @@ SEQUENCIAMENTO = [
     ('COMPLEMENTAR',              'Complementares',             0.05, 0.85),
     ('LIMPEZA',                   'Limpeza e entrega',          0.93, 0.07),
     ('ENTULHO',                   'Retirada de entulho',        0.95, 0.05),
+    # 01/08/2026 — 4 disciplinas REAIS do banco caíam no vácuo (nenhuma keyword
+    # batia) e SUMIAM do cronograma em silêncio. Era a raiz dos cronogramas de
+    # 1-2 fases que minavam a confiança.
+    ('PORTA',                     'Esquadrias',                 0.45, 0.20),
+    ('ILUMIN',                    'Iluminação',                 0.60, 0.25),
+    ('DIVIS',                     'Divisórias e vidros',        0.50, 0.20),
+    ('VIDRO',                     'Divisórias e vidros',        0.50, 0.20),
+    ('PERSIANA',                  'Persianas e cortinas',       0.88, 0.08),
+    ('CORTINA',                   'Persianas e cortinas',       0.88, 0.08),
 ]
+
+
+def _mapear_fase(disc_upper: str):
+    """Disciplina (UPPER) → (label, offset%, dur%) do SEQUENCIAMENTO, ou None.
+    Compartilhado entre a criação de fases e o cálculo de produtividade
+    (cronograma_produtividade) pra nunca divergirem."""
+    for kw, label, off, dur in SEQUENCIAMENTO:
+        if kw in disc_upper:
+            return (label, off, dur)
+    return None
 
 
 def _parse_date(s: str) -> date:
@@ -149,6 +168,12 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             'depends_on': depends_on,
             'is_milestone': is_milestone,
             'parent_ordem': parent_ordem,
+            # Origem da duração (01/08): 'calculada' (das quantidades),
+            # 'padrão' (% de mercado) ou 'editada' (mexeu na mão). Preserva o
+            # esforço pro peso da curva S continuar fiel após edições.
+            'origem': ('editada' if f.get('manual') else (f.get('origem') or 'editada')),
+            'esforco_hh': f.get('esforco_hh'),
+            'origem_detalhe': f.get('origem_detalhe'),
             # Índice posicional ORIGINAL (na lista fases_custom enviada pelo
             # frontend). depends_on/parent_ordem foram gravados pelo front
             # como índices nessa lista, então guardamos a referência estável
@@ -224,25 +249,9 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             'percentuais_por_mes': pcts,
         })
 
-    # Curva S sigmoidal
-    K_SIGMOID = 10
-    curva_s = []
-    for m in meses:
-        m_fim = _parse_date(m['fim'])
-        t = max(0, (m_fim - dt_inicio).days)
-        t_norm = min(1.0, t / duracao_dias_real)
-        try:
-            pct = 100.0 / (1.0 + math.exp(-K_SIGMOID * (t_norm - 0.5)))
-        except OverflowError:
-            pct = 100.0 if t_norm > 0.5 else 0.0
-        if t_norm >= 0.99:
-            pct = 100.0
-        curva_s.append({
-            'mes_idx': m['mes_idx'],
-            'mes_label': m['label'],
-            'pct_acumulado': round(pct, 1),
-            'data_fim_mes': m['fim'],
-        })
+    # Curva S por ESFORÇO (01/08): mover/editar fase MOVE a curva —
+    # a sigmoide antiga era função só do tempo, cega ao Gantt editado.
+    curva_s = _curva_s_por_esforco(fases, meses, dt_inicio)
 
     caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
     caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias'],
@@ -261,9 +270,8 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
         'curva_s': curva_s,
         'curva_s_realizada': curva_real,
         'curva_s_modelo': {
-            'tipo': 'sigmoidal',
-            'k': K_SIGMOID,
-            'formula': 'P(t) = 100 / (1 + e^(-k(t/T - 0.5)))',
+            'tipo': 'esforco_por_fase',
+            'formula': 'P(mês) = Σ esforço concluído até o fim do mês ÷ esforço total',
         },
         'distribuicao_categoria': distrib_cat,
         'ppc': ppc,
@@ -327,26 +335,66 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
 
     disciplinas_ativas = _extract_disciplinas(items)
 
-    # Mapeia cada disciplina ativa pra uma entry do SEQUENCIAMENTO via keyword
+    # Esforço CALCULADO das quantidades medidas (01/08 — proposta A do
+    # diagnóstico): Σ(qtd × Hh SINAPI) ÷ equipe. Fase com cálculo usa a duração
+    # calculada; sem cálculo, cai no % padrão de mercado — sempre ROTULADO.
+    try:
+        from cronograma_produtividade import esforco_por_fase
+        esforcos = esforco_por_fase(items, lambda d: (_mapear_fase(d) or [None])[0])
+    except Exception:
+        esforcos = {}
+
+    # Mapeia cada disciplina ativa pra uma entry do SEQUENCIAMENTO via keyword.
+    # Disciplina SEM keyword vira fase própria (0.30→0.70) — nunca some em
+    # silêncio (bug dos cronogramas de 1-2 fases, corrigido 01/08).
     fases = []
+    warnings_geracao = []
     ja_adicionados = set()
+    avisos_cap = []
     for disc in sorted(disciplinas_ativas):
-        for kw, label, off, dur in SEQUENCIAMENTO:
-            if kw in disc and label not in ja_adicionados:
-                dt_fase_inicio = dt_inicio + timedelta(days=int(off * duracao_dias))
-                dur_dias = max(7, int(dur * duracao_dias))
-                dt_fase_fim = dt_fase_inicio + timedelta(days=dur_dias)
-                fases.append({
-                    'label': label,
-                    'inicio': dt_fase_inicio.isoformat(),
-                    'fim': dt_fase_fim.isoformat(),
-                    'dur_dias': dur_dias,
-                    'offset_pct': off,
-                    'dur_pct': dur,
-                    'cor': _cor_da_disciplina(label),
-                })
-                ja_adicionados.add(label)
-                break
+        m = _mapear_fase(disc)
+        if m:
+            label, off, dur = m
+        else:
+            label, off, dur = disc.title(), 0.30, 0.40
+            warnings_geracao.append(
+                f'Disciplina "{disc.title()}" sem etapa padrão mapeada — entrou como fase própria; ajuste as datas se precisar.')
+        if label in ja_adicionados:
+            continue
+        dt_fase_inicio = dt_inicio + timedelta(days=int(off * duracao_dias))
+        calc = esforcos.get(label)
+        if calc:
+            dur_dias = max(3, min(calc['dias_corridos'], int(duracao_dias * 0.95)))
+            if calc['dias_corridos'] > duracao_dias:
+                avisos_cap.append(
+                    f'{label}: as quantidades pedem ~{calc["dias_corridos"]} dias — mais que a obra inteira ({duracao_dias}); durações limitadas, considere aumentar a duração total.')
+            origem = 'calculada'
+        else:
+            dur_dias = max(7, int(dur * duracao_dias))
+            origem = 'padrão'
+        # Fase não pode terminar depois do fim da janela: recua o início se preciso
+        ini_dias = int(off * duracao_dias)
+        if ini_dias + dur_dias > duracao_dias:
+            ini_dias = max(0, duracao_dias - dur_dias)
+            dt_fase_inicio = dt_inicio + timedelta(days=ini_dias)
+        dt_fase_fim = dt_fase_inicio + timedelta(days=dur_dias)
+        fase = {
+            'label': label,
+            'inicio': dt_fase_inicio.isoformat(),
+            'fim': dt_fase_fim.isoformat(),
+            'dur_dias': dur_dias,
+            'offset_pct': off,
+            'dur_pct': dur,
+            'cor': _cor_da_disciplina(label),
+            'origem': origem,
+        }
+        if calc:
+            fase['esforco_hh'] = calc['esforco_hh']
+            fase['origem_detalhe'] = calc['detalhe']
+            fase['equipe_premissa'] = calc['equipe_premissa']
+        fases.append(fase)
+        ja_adicionados.add(label)
+    warnings_geracao.extend(avisos_cap)
 
     # Ordena por data de início
     fases.sort(key=lambda f: f['inicio'])
@@ -394,41 +442,20 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
             'percentuais_por_mes': pcts,
         })
 
-    # Curva S — modelo SIGMOIDAL (logístico), não linear
-    # P(t) = 100 / (1 + e^(-k(t/T - 0.5)))
-    # k=10 default (curvatura média). Maior k = curva mais brusca início/fim.
-    import math
-    K_SIGMOID = 10
-    duracao_dias_real = (max(_parse_date(f['fim']) for f in fases) - dt_inicio).days if fases else duracao_dias
-    curva_s = []
-    for m in meses:
-        m_fim = _parse_date(m['fim'])
-        # Tempo decorrido em dias até o fim do mês
-        t = max(0, (m_fim - dt_inicio).days)
-        # Normalizado 0..1 (clamp em 1.0)
-        t_norm = min(1.0, t / max(1, duracao_dias_real))
-        # Função logística sigmoidal
-        try:
-            pct = 100.0 / (1.0 + math.exp(-K_SIGMOID * (t_norm - 0.5)))
-        except OverflowError:
-            pct = 100.0 if t_norm > 0.5 else 0.0
-        # Marca 100 no último mês útil
-        if t_norm >= 0.99:
-            pct = 100.0
-        curva_s.append({
-            'mes_idx': m['mes_idx'],
-            'mes_label': m['label'],
-            'pct_acumulado': round(pct, 1),
-            'data_fim_mes': m['fim'],
-        })
+    # Curva S por ESFORÇO (01/08): derivada do próprio Gantt — peso de cada
+    # fase (Hh calculado, ou dur_dias como proxy) distribuído nos dias dela.
+    # Editar fase agora MOVE a curva. Substitui a sigmoide decorativa.
+    curva_s = _curva_s_por_esforco(fases, meses, dt_inicio)
 
-    # Caminho crítico = top 5 disciplinas com maior duração
+    # Top-5 fases mais longas (NÃO é caminho crítico — nome mantido na chave
+    # por compat com o frontend; rótulo correto aplicado na tela em 01/08)
     caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
     caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias'],
                         'categoria': f.get('categoria'), 'cor': f.get('cor')}
                        for f in caminho_critico]
 
     data_fim = max(_parse_date(f['fim']) for f in fases) if fases else dt_inicio
+    n_calculadas = sum(1 for f in fases if f.get('origem') == 'calculada')
 
     return {
         'fases': fases,
@@ -436,17 +463,19 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
         'matriz_pct': matriz,
         'curva_s': curva_s,
         'curva_s_modelo': {
-            'tipo': 'sigmoidal',
-            'k': K_SIGMOID,
-            'formula': 'P(t) = 100 / (1 + e^(-k(t/T - 0.5)))',
-            'nota': 'Curva S realista (não linear). Refletido em obra padrão BR.',
+            'tipo': 'esforco_por_fase',
+            'formula': 'P(mês) = Σ esforço concluído até o fim do mês ÷ esforço total',
+            'nota': ('Curva derivada do próprio Gantt: peso de cada fase = homem-hora '
+                     'calculado das quantidades (quando disponível) ou duração da fase.'),
         },
+        'warnings': warnings_geracao,
         'resumo': {
             'data_inicio': dt_inicio.isoformat(),
             'data_fim': data_fim.isoformat(),
             'duracao_meses': duracao_meses,
             'duracao_dias_reais': (data_fim - dt_inicio).days,
             'n_fases': len(fases),
+            'n_fases_calculadas': n_calculadas,
             'n_disciplinas_quantitativo': len(disciplinas_ativas),
             'caminho_critico': caminho_critico,
             'ppc_alvo': 0.75,           # padrão Last Planner médio porte BR
@@ -464,15 +493,58 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
             'Last Planner System (Ballard 2000) — 4 níveis + PPC',
         ],
         'ressalva': (
-            'Cronograma referência baseado em produtividade típica de mercado '
-            '(construtora médio porte) + sequenciamento construtivo padrão BR '
-            '(16 etapas construtivas, sequenciamento usual de obra brasileira) + curva S sigmoidal. '
-            'Validar com engenheiro responsável (CREA/CAU) antes de comprometer '
-            'prazo com cliente. Variáveis específicas (sondagem, fornecedor de '
-            'pré-fabricado, restrição climática, condicionantes do canteiro, '
-            'férias coletivas) podem alterar significativamente.'
+            'Fases marcadas como "calculada" têm duração derivada das QUANTIDADES do seu '
+            'quantitativo × coeficientes de mão de obra de composições SINAPI (código citado '
+            'em cada fase), com premissa de equipe declarada — ajuste se a sua equipe for '
+            'outra. Demais fases seguem sequenciamento usual de obra brasileira (% da duração '
+            'total). Quantidades estimadas (laranja no quantitativo) entram no cálculo — '
+            'revise-as pra um cronograma mais fiel. Validar com engenheiro responsável '
+            '(CREA/CAU) antes de comprometer prazo com cliente; sondagem, clima, fornecedores '
+            'e canteiro podem alterar significativamente.'
         ),
     }
+
+
+def _curva_s_por_esforco(fases: List[Dict], meses: List[Dict], dt_inicio: date) -> List[Dict]:
+    """Curva S derivada do PRÓPRIO Gantt (01/08/2026, proposta B do diagnóstico).
+
+    Peso da fase = esforco_hh (calculado das quantidades) quando existe, senão
+    dur_dias como proxy. O esforço de cada fase é distribuído uniformemente nos
+    dias dela; %% acumulado do mês = esforço concluído até o fim do mês ÷ total.
+    Editar/mover fase muda a curva — a sigmoide antiga era decorativa (função
+    do tempo, cega ao Gantt)."""
+    pesos = []
+    total = 0.0
+    for f in fases:
+        try:
+            p = float(f.get('esforco_hh') or 0) or float(f.get('dur_dias') or 1)
+        except (TypeError, ValueError):
+            p = 1.0
+        pesos.append(max(0.001, p))
+        total += pesos[-1]
+    curva = []
+    for m in meses:
+        m_fim = _parse_date(m['fim'])
+        feito = 0.0
+        for f, peso in zip(fases, pesos):
+            f_ini = _parse_date(f['inicio'])
+            f_fim = _parse_date(f['fim'])
+            dur = max(1, (f_fim - f_ini).days + 1)
+            if m_fim >= f_fim:
+                frac = 1.0
+            elif m_fim < f_ini:
+                frac = 0.0
+            else:
+                frac = ((m_fim - f_ini).days + 1) / dur
+            feito += peso * frac
+        pct = 100.0 * feito / total if total else 0.0
+        curva.append({
+            'mes_idx': m['mes_idx'],
+            'mes_label': m['label'],
+            'pct_acumulado': round(min(100.0, pct), 1),
+            'data_fim_mes': m['fim'],
+        })
+    return curva
 
 
 def sugerir_duracao(typology: Optional[str], area_m2: Optional[float],

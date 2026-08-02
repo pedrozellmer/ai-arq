@@ -590,6 +590,16 @@ function addFaseRowEditor(fase, idx) {
   row.dataset.idx = idx;
   const pctExec = fase.pct_executado != null ? fase.pct_executado : 0;
   const isMilestone = !!fase.is_milestone;
+  // 01/08 — rótulo de ORIGEM da duração (regra nº1 aplicada ao cronograma):
+  // calculada (das quantidades × SINAPI, tooltip mostra a conta) / padrão de
+  // mercado / editada por você.
+  const origemChip = fase.origem === 'calculada'
+    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 cursor-help" title="${escapeAttr(fase.origem_detalhe || 'Duração calculada das quantidades do seu quantitativo')}">⚙ calculada das quantidades</span>`
+    : fase.origem === 'editada'
+    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700" title="Você ajustou esta fase — a duração é sua">✎ editada por você</span>`
+    : fase.origem === 'padrão'
+    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-200 text-slate-600" title="Sem referência de produtividade pra esta etapa — duração proporcional padrão de obra; ajuste se quiser">padrão de mercado</span>`
+    : '';
   // Onda 3 (2026-05-25): linha 1 = controles principais (label/datas/etc).
   // Linha 2 = depende de + grupo pai + checkbox marco. Linha 2 fica retraída
   // por default e expande clicando "Avançado" — não bagunça a UI básica.
@@ -605,6 +615,7 @@ function addFaseRowEditor(fase, idx) {
       </div>
       <input type="color" value="${fase.cor || '#64748B'}" class="fase-cor w-10 h-10 rounded cursor-pointer border shrink-0" title="Cor" aria-label="Cor da fase" />
       <input type="text" value="${escapeAttr(fase.label || '')}" placeholder="Disciplina" class="fase-label basis-full sm:basis-auto sm:flex-1 sm:min-w-[180px] rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none" aria-label="Nome da disciplina" />
+      ${origemChip}
       <input type="text" value="${escapeAttr(fase.ambiente || '')}" placeholder="Ambiente" class="fase-ambiente basis-full sm:basis-auto sm:w-32 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none" title="Ambiente (opcional)" aria-label="Ambiente (opcional)" />
       <input type="date" value="${fase.inicio || ''}" class="fase-inicio rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-slate-500 focus:outline-none" title="Início" aria-label="Data de início" />
       <span class="text-slate-400 text-xs hidden sm:inline" aria-hidden="true">→</span>
@@ -897,6 +908,11 @@ async function recalcularNoServidor() {
       depends_on: f.depends_on || [],
       is_milestone: !!f.is_milestone,
       parent_ordem: f.parent_ordem != null ? f.parent_ordem : null,
+      // 01/08: origem da duração (calculada/padrão/editada) + esforço —
+      // sem repassar, o save apagava o rótulo e o peso da curva S
+      origem: f.origem || null,
+      esforco_hh: f.esforco_hh != null ? f.esforco_hh : null,
+      origem_detalhe: f.origem_detalhe || null,
     }));
     const resp = await fetch(`${API_BASE}/api/cronograma/${jobId}/preview`, {
       method: 'POST', headers,
@@ -948,6 +964,11 @@ async function salvarCronograma() {
       depends_on: Array.isArray(f.depends_on) ? f.depends_on : [],
       is_milestone: !!f.is_milestone,
       parent_ordem: f.parent_ordem != null ? f.parent_ordem : null,
+      // 01/08: origem da duração (calculada/padrão/editada) + esforço —
+      // sem repassar, o save apagava o rótulo e o peso da curva S
+      origem: f.origem || null,
+      esforco_hh: f.esforco_hh != null ? f.esforco_hh : null,
+      origem_detalhe: f.origem_detalhe || null,
     }));
 
     const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
@@ -1210,6 +1231,9 @@ async function autoSaveCronograma(cron) {
     depends_on: Array.isArray(f.depends_on) ? f.depends_on : [],
     is_milestone: !!f.is_milestone,
     parent_ordem: f.parent_ordem != null ? f.parent_ordem : null,
+    origem: f.origem || null,
+    esforco_hh: f.esforco_hh != null ? f.esforco_hh : null,
+    origem_detalhe: f.origem_detalhe || null,
   }));
 
   await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
@@ -1234,6 +1258,7 @@ function formatDateBR(iso) {
 
 function renderResumo(c) {
   const r = c.resumo;
+  renderBannerParcial(c);
   document.getElementById('r-inicio').textContent = formatDateBR(r.data_inicio);
   document.getElementById('r-fim').textContent = formatDateBR(r.data_fim);
   document.getElementById('r-fases').textContent = `${r.n_fases} ${r.n_fases === 1 ? 'fase' : 'fases'}`;
@@ -1254,6 +1279,42 @@ function renderResumo(c) {
   } else {
     card.classList.add('hidden');
   }
+}
+
+// Banner "cronograma PARCIAL" (01/08 — proposta C do diagnóstico): projeto
+// com poucas etapas gerava um cronograma-brinquedo de 1-2 fases que parecia
+// QUEBRADO. Agora a tela declara que é parcial e pede as pranchas que faltam
+// (mesmo espírito da expansão por disciplina do projeto.html). Também exibe
+// os warnings do gerador (disciplina sem etapa mapeada, prazo apertado).
+function renderBannerParcial(c) {
+  let box = document.getElementById('banner-parcial');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'banner-parcial';
+    const result = document.getElementById('result');
+    if (result && result.firstChild) result.insertBefore(box, result.firstChild);
+    else return;
+  }
+  const nFases = (c.fases || []).length;
+  const ETAPAS_COMUNS = ['Estrutura', 'Fechamentos / alvenaria', 'Alvenaria',
+    'Revestimentos', 'Pisos', 'Instalações elétricas', 'Instalações hidráulicas', 'Pintura'];
+  const presentes = new Set((c.fases || []).map(f => f.label));
+  const faltando = ETAPAS_COMUNS.filter(e => !presentes.has(e))
+    .filter(e => !(e === 'Alvenaria' && presentes.has('Fechamentos / alvenaria')))
+    .filter(e => !(e === 'Fechamentos / alvenaria' && presentes.has('Alvenaria')));
+  let html = '';
+  if (nFases > 0 && nFases < 4) {
+    html += `<div class="mb-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-4">
+      <p class="text-sm font-semibold text-amber-900">⚠ Cronograma parcial — seu CAD cobre só ${nFases} etapa${nFases > 1 ? 's' : ''} da obra</p>
+      <p class="text-xs text-amber-800 mt-1">Etapas comuns que não apareceram no quantitativo: <b>${faltando.slice(0, 5).join(', ')}</b>.
+      Envie as pranchas dessas disciplinas no mesmo projeto (de graça) que o cronograma completa sozinho.</p>
+      <a href="projeto.html?job_id=${jobId}" class="inline-block mt-2 text-xs font-semibold text-amber-900 underline">Anexar pranchas no projeto →</a>
+    </div>`;
+  }
+  (c.warnings || []).forEach(w => {
+    html += `<div class="mb-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">ℹ ${escapeHtml(w)}</div>`;
+  });
+  box.innerHTML = html;
 }
 
 function renderGantt(c) {
