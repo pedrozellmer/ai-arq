@@ -1146,20 +1146,21 @@ async function abrirPreviewTemplate(tplId) {
     const headers = session ? { 'Authorization': 'Bearer ' + session.access_token } : {};
     const qs = new URLSearchParams({ template: tplId });
     if (estiloAccent) qs.set('accent', estiloAccent);
-    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/export/pdf?` + qs.toString(), { headers });
+    // 🪤 IMAGEM, não PDF embutido (02/08): o Chrome pode estar configurado pra
+    // BAIXAR PDF em vez de exibir, e celular quase nunca renderiza PDF em
+    // iframe — nos dois casos aparecia um cartão "Abrir" no lugar da prévia.
+    // O PNG é rasterizado do MESMO PDF que o cliente baixa, então continua
+    // sendo o arquivo real.
+    const r = await fetch(`${API_BASE}/api/cronograma/${jobId}/preview.png?` + qs.toString(), { headers });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const blob = await r.blob();
     if (_previewBlobUrl) URL.revokeObjectURL(_previewBlobUrl);
     _previewBlobUrl = URL.createObjectURL(blob);
-    // 🪤 Nem todo navegador renderiza PDF embutido (celular, principalmente) —
-    // nesses o <iframe> vira um cartão "Abrir". O link abaixo garante a saída.
     document.getElementById('mp-corpo').innerHTML =
-      '<div style="display:flex;flex-direction:column;height:100%;gap:6px">'
-      + '<iframe src="' + _previewBlobUrl + '#toolbar=0&view=FitH" style="flex:1;min-height:0;width:100%" '
-      + 'class="rounded-lg border border-slate-200 bg-white" title="Prévia do cronograma no modelo ' + escapeAttr(t.nome) + '"></iframe>'
-      + '<a href="' + _previewBlobUrl + '" target="_blank" rel="noopener" '
-      + 'style="font-size:11px;color:#64748b;text-align:center;text-decoration:underline">'
-      + 'Não carregou aqui? Abrir a prévia em outra aba</a></div>';
+      '<div style="height:100%;overflow:auto;display:flex;align-items:flex-start;justify-content:center">'
+      + '<img src="' + _previewBlobUrl + '" alt="Prévia da primeira página do cronograma no modelo '
+      + escapeAttr(t.nome) + '" style="max-width:100%;height:auto;display:block;border-radius:8px;'
+      + 'border:1px solid #e2e8f0;box-shadow:0 4px 14px rgba(15,23,42,.10);background:#fff"></div>';
   } catch (e) {
     document.getElementById('mp-corpo').innerHTML =
       '<div class="flex flex-col items-center justify-center h-full text-center px-6 gap-2">'
@@ -1901,7 +1902,7 @@ document.addEventListener('keydown', function (e) {
     <div class="flex items-start justify-between gap-4 px-5 py-4 border-b">
       <div>
         <h3 class="font-bold text-slate-900 text-lg">Modelo <span id="mp-titulo">—</span></h3>
-        <p class="text-xs text-slate-500"><span id="mp-desc"></span> · prévia com o cronograma deste projeto</p>
+        <p class="text-xs text-slate-500"><span id="mp-desc"></span> · primeira p&aacute;gina, com o cronograma deste projeto</p>
       </div>
       <button type="button" onclick="fecharPreviewTemplate()" aria-label="Fechar prévia (Esc)"
         class="text-slate-500 hover:text-slate-800 text-xl leading-none px-2">&times;</button>

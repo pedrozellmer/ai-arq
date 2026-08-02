@@ -11912,6 +11912,48 @@ def _slug_filename(name: str) -> str:
 _CRONO_TEMPLATES = {"escuro", "blueprint", "claro", "editorial", "bold"}
 
 
+async def _cronograma_preview_png_impl(job_id: str, request: Request,
+                                       template: str = "", accent: str = ""):
+    """Prévia do modelo como IMAGEM (PNG da 1ª página).
+
+    Por que imagem e não o PDF embutido (02/08): o Chrome pode estar
+    configurado pra BAIXAR PDF em vez de exibir (aconteceu no PC do Pedro) e
+    celular quase nunca renderiza PDF em iframe — nos dois casos a prévia
+    virava um cartão "Abrir". PNG aparece em qualquer lugar.
+    Reusa o mesmo render do download, então a prévia continua sendo o
+    arquivo real; só muda o formato de exibição."""
+    _require_project_owner(request, job_id)
+    import tempfile
+    tmpl = (template or "").strip().lower()
+    if tmpl not in _CRONO_TEMPLATES:
+        tmpl = "escuro"
+    try:
+        cron, branding = _build_cronograma_for_export(job_id, request=request)
+        from cronograma_render import render_pdf_bytes, render_png_paginas
+        pdf = render_pdf_bytes(cron, branding, tmpl, (accent or "").strip() or None)
+        if not pdf:
+            raise RuntimeError("PDF vazio")
+        pngs = render_png_paginas(pdf, scale=1.6)
+        if not pngs:
+            raise RuntimeError("rasterização falhou")
+        tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        tmp.write(pngs[0])
+        tmp.close()
+        return FileResponse(tmp.name, media_type="image/png",
+                            headers={"Cache-Control": "no-store"})
+    except Exception as e:
+        import traceback
+        print(f"[crono preview png] {tmpl}: {e}")
+        print(traceback.format_exc())
+        raise HTTPException(500, f"Erro ao gerar prévia: {e}")
+
+
+@app.get("/api/cronograma/{job_id}/preview.png")
+async def cronograma_preview_png(job_id: str, request: Request,
+                                 template: str = "", accent: str = ""):
+    return await _cronograma_preview_png_impl(job_id, request, template, accent)
+
+
 @app.get("/api/cronograma/{job_id}/export/pdf")
 async def export_cronograma_pdf(job_id: str, request: Request,
                                 template: str = "", accent: str = ""):
