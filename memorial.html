@@ -65,6 +65,11 @@
         class="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-110 transition">
         Salvar
       </button>
+      <button id="btn-ia" title="A IA reescreve só os parágrafos de abertura de cada seção, a partir dos itens do seu projeto. Quantidades, rótulos e campos [A PREENCHER] não são tocados."
+        style="background:#fff;border:1px solid #C4B5FD;color:#6D28D9"
+        class="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-95 transition">
+        ✨ Melhorar redação
+      </button>
       <button id="btn-pdf" title="Baixa o PDF já com as suas edições"
         style="background:#fff;border:1px solid #FCA5A5;color:#B91C1C"
         class="px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:brightness-95 transition">
@@ -287,6 +292,39 @@ async function _baixar(formato) {
 }
 document.getElementById('btn-docx').addEventListener('click', () => _baixar('docx'));
 document.getElementById('btn-pdf').addEventListener('click', () => _baixar('pdf'));
+
+// ✨ Redação por IA — só os parágrafos de abertura (02/08). O backend valida
+// cada parágrafo e devolve a estrutura já salva; seção reprovada mantém o
+// texto determinístico, então nunca piora.
+document.getElementById('btn-ia').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-ia');
+  const st = document.getElementById('save-status');
+  if (dirty && !(await salvar())) return;   // não perder edição do cliente
+  const original = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = 'Escrevendo...';
+  st.textContent = 'a IA está redigindo os parágrafos...';
+  st.style.color = '#6D28D9';
+  try {
+    const r = await authFetch(`${API_BASE}/api/memorial/${jobId}/redigir`, { method: 'POST' });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
+    const d = await r.json();
+    estrutura = d.estrutura;
+    render(true);
+    setDirty(false);
+    st.textContent = `✓ ${d.reescritas} seç${d.reescritas === 1 ? 'ão reescrita' : 'ões reescritas'}`
+      + (d.puladas ? ` · ${d.puladas} mantida${d.puladas > 1 ? 's' : ''} como estava` : '');
+    st.style.color = '#059669';
+    if (window.trackEvent) trackEvent('memorial_redacao_ia', { job_id: jobId });
+  } catch (e) {
+    st.textContent = 'não consegui redigir agora';
+    st.style.color = '#B91C1C';
+    window.toast?.error('Erro ao redigir: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = original;
+  }
+});
 
 document.addEventListener('keydown', (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); salvar(); }

@@ -11361,6 +11361,59 @@ async def memorial_estrutura(job_id: str, request: Request):
         raise HTTPException(500, f"Erro ao montar memorial: {e}")
 
 
+@app.post("/api/memorial/{job_id}/redigir")
+async def memorial_redigir_ia(job_id: str, request: Request):
+    """Reescreve com IA os parágrafos de abertura das seções do memorial.
+
+    Coleira (02/08): a IA vê só as DESCRIÇÕES dos itens (nunca as quantidades)
+    e devolve um parágrafo por disciplina; o validador rejeita qualquer texto
+    com número, norma ou juízo de valor. Rejeitado = fica o texto
+    determinístico. Item, quantidade, rótulo medido/estimado e [A PREENCHER]
+    não passam pela IA em momento nenhum."""
+    _require_project_owner(request, job_id)
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise HTTPException(503, "Redação por IA indisponível agora")
+    try:
+        estrutura = _memorial_carregar_salvo(job_id)
+        if not estrutura:
+            projeto, items = _memorial_dados_frescos(job_id)
+            from memorial import montar_estrutura
+            estrutura = montar_estrutura(projeto, items)
+
+        import anthropic
+        _client = anthropic.Anthropic(api_key=api_key, timeout=60.0)
+
+        def _chamar(system, user):
+            r = _client.messages.create(
+                model="claude-haiku-4-5", max_tokens=300,
+                system=system, messages=[{"role": "user", "content": user}])
+            return r.content[0].text if r.content else ""
+
+        from memorial import redigir_intros_ia, validar_estrutura_editada
+        resumo = redigir_intros_ia(estrutura, _chamar)
+        if resumo["puladas"]:
+            print(f"[memorial ia] job={job_id} puladas: {resumo['puladas']}")
+        limpa = validar_estrutura_editada(estrutura)
+        _st, _resp = _supa_rest_service(
+            "POST", "project_memorial?on_conflict=job_id",
+            {"job_id": job_id, "conteudo": limpa, "updated_at": "now()"},
+            prefer="resolution=merge-duplicates")
+        if _st not in (200, 201, 204):
+            _log_error("memorial:redigir-salvar", f"REST {_st}", job_id=job_id)
+            raise HTTPException(500, "Texto gerado, mas falhou ao salvar")
+        return {"status": "ok", "reescritas": resumo["reescritas"],
+                "puladas": len(resumo["puladas"]), "estrutura": limpa}
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        print(f"[memorial ia] erro: {e}")
+        print(traceback.format_exc())
+        _log_error("memorial:redigir", str(e), job_id=job_id)
+        raise HTTPException(500, f"Erro ao redigir: {e}")
+
+
 @app.post("/api/memorial/{job_id}/estrutura")
 async def memorial_salvar(job_id: str, request: Request):
     """Salva a estrutura EDITADA na tela. Valida/sanitiza tudo que vem do

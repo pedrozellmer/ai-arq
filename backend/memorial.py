@@ -20,6 +20,7 @@ gerar_memorial_docx() (compat) = montar + renderizar.
 não cita norma nenhuma de propósito — só o que estiver escrito nos itens.
 """
 
+import re
 from datetime import datetime, timezone, timedelta
 
 from docx import Document
@@ -374,6 +375,127 @@ th {{ background: #F9FAFB; width: 38%; font-weight: 600; }}
 </body></html>"""
     from weasyprint import HTML
     return HTML(string=html).write_pdf()
+
+
+# ═══════════════════════════════════════════════════════════════
+#  Redação por IA — SOMENTE do parágrafo de abertura de cada seção
+# ═══════════════════════════════════════════════════════════════
+# Pedro (02/08): "não podemos usar a IA pra fazer junto? não ficaria melhor?"
+# Fica — mas com coleira. O v1 determinístico escrevia a MESMA frase genérica
+# em toda disciplina ("Os serviços de X compreendem os itens..."), o que lê
+# como lista, não como memorial. A IA melhora exatamente isso.
+#
+# O QUE A IA FAZ: reescreve só o parágrafo de ABERTURA de cada disciplina,
+# resumindo em prosa técnica o que aquela seção contém — a partir das
+# descrições dos itens daquele projeto.
+# O QUE ELA NUNCA TOCA: as linhas de item (quantidade, unidade, rótulo
+# medido/estimado), os blocos [A PREENCHER], o carimbo de rascunho, as
+# tabelas e o encerramento. Ou seja: o número nunca passa pela IA.
+#
+# 🚫 NÚMERO NENHUM no parágrafo. É a regra que torna a invenção detectável:
+# se aparecer dígito, o texto é rejeitado inteiro (validador abaixo). Assim a
+# IA não tem como inventar quantidade, bitola, diâmetro ou norma numerada.
+
+PROMPT_REDACAO = """Você escreve memoriais descritivos de obra em português do Brasil.
+
+Receberá a lista REAL de itens levantados de uma disciplina do projeto. Escreva
+UM único parágrafo de abertura para essa seção do memorial, entre 25 e 60 palavras.
+
+REGRAS ABSOLUTAS (violar qualquer uma invalida sua resposta):
+1. Escreva SOMENTE sobre o que está nos itens. Não acrescente material,
+   sistema, marca, norma, NBR, método executivo ou característica que não
+   apareça na lista.
+2. NÃO escreva NENHUM número, algarismo ou quantidade. Nem por extenso com
+   valor (ex.: "doze metros"). As quantidades ficam na lista abaixo do
+   parágrafo — não repita nada disso.
+3. Não invente cor, dimensão, espessura, traço, fabricante ou desempenho.
+4. Não prometa qualidade ("de alto padrão", "premium", "excelente") nem faça
+   juízo. Texto técnico, neutro, impessoal, no futuro ("serão executados").
+5. Não cite lei, norma, decreto ou sigla técnica que não esteja nos itens.
+
+Responda APENAS com o parágrafo, sem título, sem aspas, sem comentário."""
+
+# Palavras/padrões que denunciam invenção — checados no texto que volta.
+_PROIBIDOS_RX = None
+
+
+def _rx_proibidos():
+    global _PROIBIDOS_RX
+    if _PROIBIDOS_RX is None:
+        _PROIBIDOS_RX = re.compile(
+            r"\d"                                   # qualquer algarismo
+            r"|\bnbr\b|\babnt\b|\biso\b|\bnr[\s-]?\d*\b"   # normas
+            r"|\bconforme\s+norma\b|\blei\b|\bdecreto\b"
+            r"|\bpremium\b|\balto\s+padr[aã]o\b|\bexcelente\b|\bqualidade\s+superior\b",
+            re.I)
+    return _PROIBIDOS_RX
+
+
+def validar_paragrafo_ia(texto: str) -> tuple:
+    """(ok, motivo). Rejeita qualquer parágrafo com número, norma ou juízo de
+    valor — e limita tamanho. Na dúvida REJEITA: o texto determinístico é o
+    fallback e ele nunca mente."""
+    t = (texto or "").strip()
+    if not t:
+        return False, "vazio"
+    if len(t) > 700:
+        return False, "longo demais"
+    n_palavras = len(t.split())
+    if n_palavras < 12 or n_palavras > 90:
+        return False, f"tamanho fora da faixa ({n_palavras} palavras)"
+    m = _rx_proibidos().search(t)
+    if m:
+        return False, f"contém termo proibido: {m.group(0)!r}"
+    if "\n" in t.strip():
+        return False, "mais de um parágrafo"
+    return True, ""
+
+
+def redigir_intros_ia(estrutura: dict, chamar_llm) -> dict:
+    """Reescreve o 1º bloco de texto das seções de DISCIPLINA usando IA.
+
+    chamar_llm(system, user) -> str  (injetado pelo main.py; aqui não há
+    dependência de SDK, o que mantém este módulo testável sem rede).
+
+    Devolve {"reescritas": n, "puladas": [(secao, motivo)]} e MUTA a estrutura.
+    Seção sem item, ou cuja resposta não passa no validador, fica com o texto
+    determinístico — nunca quebra, nunca degrada pra pior."""
+    fixas = ("apresenta", "dados da obra", "responsabilidade",
+             "considerações finais", "encerramento")
+    reescritas, puladas = 0, []
+    for secao in estrutura.get("secoes") or []:
+        titulo = (secao.get("titulo") or "")
+        nome = re.sub(r"^\s*\d+\.\s*", "", titulo).strip()
+        if any(f in nome.lower() for f in fixas):
+            continue
+        blocos = secao.get("blocos") or []
+        itens = [b for b in blocos if b.get("tipo") == "item"]
+        if not itens:
+            continue
+        alvo = next((b for b in blocos if b.get("tipo") == "texto"), None)
+        if not alvo:
+            continue
+        # Só as DESCRIÇÕES — a quantidade nem entra no prompt (não há o que inventar)
+        descricoes = []
+        for b in itens[:40]:
+            d = (b.get("texto") or "").split(" — ")[0].strip()
+            if d:
+                descricoes.append(f"- {d[:160]}")
+        user = (f"Disciplina: {nome}\n\nItens levantados no projeto:\n"
+                + "\n".join(descricoes))
+        try:
+            resp = chamar_llm(PROMPT_REDACAO, user)
+        except Exception as e:
+            puladas.append((nome, f"erro na chamada: {e}"))
+            continue
+        ok, motivo = validar_paragrafo_ia(resp)
+        if not ok:
+            puladas.append((nome, motivo))
+            continue
+        alvo["texto"] = resp.strip()
+        alvo["ia"] = True
+        reescritas += 1
+    return {"reescritas": reescritas, "puladas": puladas}
 
 
 # ═══════════════════════════════════════════════════════════════
