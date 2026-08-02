@@ -1812,55 +1812,82 @@ def _send_nudge_email(email: str, name: str, kind: str, magic_link: str) -> bool
     return _send_email_smtp(email, subject, html, log_kind=_NUDGE_LOG_KIND.get(kind, "nudge"))
 
 
-def _build_calibracao_email(name: str, project_name: str):
-    """Monta (subject, html) do email de calibração: pede a PLANILHA REVISADA
-    (com as correções reais do cliente) pra afinar o motor. SEM mencionar
-    dinheiro/cashback (estamos em beta grátis). Disponível no catálogo, mas o
-    envio automático NÃO está ligado — hoje só serve pra preview/uso manual."""
+def _build_calibracao_email(name: str, project_name: str, job_id: str = ""):
+    """Monta (subject, html) do email de calibração: pede as correções reais do
+    cliente pra afinar o motor. SEM mencionar dinheiro/cashback (beta grátis).
+
+    Reescrito 02/08/2026 (revisão da esteira): o caminho principal agora é a
+    REVISÃO NA TELA (revisao.html), não o upload de planilha revisada. Motivo:
+    subir XLSX corrigido é um gesto que quase ninguém faz (o painel de
+    revision_feedback vivia vazio enquanto as revisões inline se acumulavam),
+    e a tela de revisão ficou muito mais rápida em 01/08 (clique na linha,
+    confirmar/editar por palavra, salvamento automático). O upload continua
+    citado como alternativa pra quem já trabalha no Excel."""
     import html as _hc
     pn = _hc.escape(project_name or "seu projeto")
     greet = _greeting_line(_hc.escape(name or ""))
+    _link = (f"https://ai.arq.br/revisao.html?job_id={job_id}" if job_id
+             else "https://ai.arq.br/dashboard.html")
     body = (f"{greet}<br><br>"
-            f"Você chegou a revisar o quantitativo do projeto <b>{pn}</b>? Se ajustou "
-            f"quantidades, corrigiu itens ou tirou o que não fazia sentido, essas "
-            f"<b>correções valem ouro pra gente</b>."
+            f"Você chegou a conferir o quantitativo do projeto <b>{pn}</b>? Os itens em "
+            f"<b>laranja</b> são estimativas esperando a sua palavra final — e cada "
+            f"correção sua <b>vale ouro pra gente</b>."
             + _email_img("calibracao-art.png", "Correção do cliente: estimativa vira número confirmado")
-            + f""
-            f"Se puder, suba a <b>planilha revisada</b> — a sua versão, com as correções "
-            f"reais — na página do projeto. Cada ajuste seu <b>afina o nosso motor</b>, e "
-            f"o resultado aparece pra você: os <b>seus próximos projetos saem melhores</b>, "
-            f"medindo com mais precisão o que hoje ainda sai como estimativa.<br><br>"
-            f"Leva um minutinho e ajuda demais. 🙂")
+            + f"Dá pra fazer <b>direto na tela</b>, item por item: confirmar o que está "
+            f"certo, corrigir a quantidade, tirar o que não existe. Salva sozinho, "
+            f"e leva poucos minutos.<br><br>"
+            f"Cada ajuste seu <b>afina o nosso motor</b>, e o resultado volta pra você: "
+            f"os <b>seus próximos projetos saem medindo melhor</b> exatamente o que hoje "
+            f"ainda sai como estimativa.<br><br>"
+            f"<span style=\"color:#94a3b8;font-size:13px;\">Prefere trabalhar no Excel? "
+            f"Você também pode subir a planilha corrigida na página do projeto — "
+            f"funciona igual pra nós.</span>")
     subject = "Que tal ajudar a afinar seu quantitativo?"
     html = _email_wrap("Suas correções deixam o motor mais preciso", body,
-                       "Subir minha planilha revisada", "https://ai.arq.br/dashboard.html",
-                       reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
+                       "Revisar meu quantitativo", _link,
+                       reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.",
+                       preheader="Confirme as estimativas na tela — leva poucos minutos e melhora seus próximos projetos.")
     return subject, html
 
 
 def _job_tem_planilha_revisada(job_id: str) -> bool:
-    """True se o job já recebeu upload de planilha revisada (evento de
-    cashback 'planilha_upload'). Best-effort: na dúvida diz True (não pede)."""
+    """True se o cliente JÁ deu o feedback deste job — por qualquer caminho:
+    upload da planilha revisada (evento 'planilha_upload') OU revisão inline
+    na tela (item_reviews). Se já revisou, o e-mail de calibração cala a boca.
+
+    02/08/2026: a checagem de item_reviews entrou junto com a virada do e-mail
+    pra revisão na tela — sem ela, quem revisou clicando continuaria recebendo
+    "que tal revisar?" (o gesto que a gente pede virou outro).
+    Best-effort: na dúvida diz True (não pede)."""
     if not job_id:
         return True
     import urllib.request
-    try:
-        q = (f"{SUPABASE_URL}/rest/v1/project_cashback_events?job_id=eq.{job_id}"
-             f"&event_type=eq.planilha_upload&select=id&limit=1")
-        req = urllib.request.Request(q, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        rows = _json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8"))
-        return bool(rows)
-    except Exception:
+    def _tem(url):
+        try:
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            return bool(_json.loads(urllib.request.urlopen(req, timeout=8).read().decode("utf-8")))
+        except Exception:
+            return None  # erro: não decide aqui
+    up = _tem(f"{SUPABASE_URL}/rest/v1/project_cashback_events?job_id=eq.{job_id}"
+              f"&event_type=eq.planilha_upload&select=id&limit=1")
+    if up is None:
         return True
+    if up:
+        return True
+    inline = _tem(f"{SUPABASE_URL}/rest/v1/item_reviews?job_id=eq.{job_id}&select=id&limit=1")
+    if inline is None:
+        return True
+    return bool(inline)
 
 
-def _send_email_calibracao(email: str, name: str, project_name: str) -> bool:
-    """Pede a planilha revisada (loop de aprendizado do motor). Ligado no tick
-    automático em 19/07 (janela 12-30 dias pós-done, 1x por projeto)."""
+def _send_email_calibracao(email: str, name: str, project_name: str, job_id: str = "") -> bool:
+    """Pede as correções do cliente (loop de aprendizado do motor). Ligado no
+    tick automático em 19/07 (janela 12-30 dias pós-done, 1x por projeto).
+    job_id manda o CTA direto pra revisão daquele projeto (02/08)."""
     name = _resolve_client_name(email, hint=name)
-    subject, html = _build_calibracao_email(name, project_name)
+    subject, html = _build_calibracao_email(name, project_name, job_id)
     return _send_email_smtp(email, subject, html, log_kind="calibracao")
 
 
@@ -7242,6 +7269,28 @@ def _email_auto_ja_enviado(email: str, kind: str, ref: str = "") -> bool:
         return True
 
 
+def _ja_recebeu_kind(email: str, kind: str) -> bool:
+    """True se a pessoa já recebeu um e-mail deste tipo alguma vez (consulta o
+    email_sent_log, que registra TODO envio — transacional ou automático).
+
+    Usado pelo resgate do boas-vindas (02/08): o welcome só saía quando a
+    pessoa abria o dashboard na 1ª hora de conta; quem criava conta e voltava
+    no dia seguinte NUNCA recebia. Como aquele envio grava kind='boas_vindas'
+    aqui, esta checagem cobre os dois caminhos e evita e-mail duplicado.
+    Na dúvida (erro), diz True — não envia."""
+    import urllib.request as _u, urllib.parse as _up, json as _j
+    try:
+        q = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=id"
+             f"&email=ilike.{_up.quote(email)}&kind=eq.{_up.quote(kind)}&limit=1")
+        req = _u.Request(q, method="GET")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        return bool(_j.loads(_u.urlopen(req, timeout=10).read().decode("utf-8")))
+    except Exception as e:
+        print(f"[emails-auto] checagem de kind falhou ({kind}/{email}): {e} — NÃO enviando")
+        return True
+
+
 def _email_auto_recente(email: str, dias: int = 7) -> bool:
     """True se a pessoa recebeu QUALQUER e-mail automático nos últimos `dias`.
 
@@ -7471,6 +7520,25 @@ async def emails_auto_tick(request: Request, dry: int = 0):
         print(f"[emails-auto] profiles falhou: {e}")
         return {"status": "erro", "detail": "não consegui ler perfis — abortando por segurança"}
 
+    # Quem JÁ recebeu o boas-vindas (por qualquer caminho: 1º acesso ao
+    # dashboard ou resgate deste tick). Uma query só, mesmo padrão dos perfis.
+    # 🪤 Se a leitura falhar, a lista fica "cheia" (None) e o resgate é PULADO
+    # neste tick — melhor não mandar do que mandar boas-vindas repetido.
+    emails_com_welcome: set[str] = set()
+    _welcome_ok = True
+    try:
+        qw = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=email"
+              f"&kind=eq.boas_vindas&limit=5000")
+        rw = _u.Request(qw, method="GET")
+        rw.add_header("apikey", SUPABASE_KEY)
+        rw.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        for row in _j.loads(_u.urlopen(rw, timeout=15).read().decode("utf-8")):
+            if row.get("email"):
+                emails_com_welcome.add(str(row["email"]).lower())
+    except Exception as e:
+        print(f"[emails-auto] histórico de boas-vindas falhou: {e} — pulando resgate neste tick")
+        _welcome_ok = False
+
     # projetos por email (pra saber quem nunca subiu / quem sumiu)
     proj_by_email: dict[str, list] = {}
     try:
@@ -7511,11 +7579,22 @@ async def emails_auto_tick(request: Request, dry: int = 0):
 
         tem_perfil = (str(u.get("id") or "") in ids_com_perfil) or (email in emails_com_perfil)
 
+        # 0) RESGATE DO BOAS-VINDAS (02/08/2026). O welcome só saía quando a
+        #    pessoa abria o dashboard na PRIMEIRA HORA de conta — quem criava
+        #    conta à noite e voltava no dia seguinte nunca recebia o cartão de
+        #    visita. Aqui ele alcança todo mundo: 3h de espera (dá tempo do
+        #    caminho normal acontecer) e conta de até 14 dias. Vem ANTES dos
+        #    lembretes de propósito: primeiro se apresenta, depois cutuca.
+        #    🪤 A checagem "já recebeu?" tem que estar NESTA condição (e não só
+        #    no filtro lá embaixo): como o encadeamento é elif, um candidato
+        #    descartado depois bloquearia o lembrete da mesma pessoa pra sempre.
+        if _welcome_ok and 3 <= idade_h and recente and email not in emails_com_welcome:
+            acoes.append({"kind": "boas_vindas", "email": email, "nome": nome})
         # 1) Parou ANTES de completar o cadastro (sem perfil). Vale tanto pra
         #    quem não confirmou o e-mail quanto pra quem confirmou, logou e
         #    abandonou a segunda etapa — que é o caso real que estava passando
         #    batido. 24h de espera pra não cutucar quem ainda está preenchendo.
-        if not tem_perfil and 24 <= idade_h and recente_cadastro:
+        elif not tem_perfil and 24 <= idade_h and recente_cadastro:
             acoes.append({"kind": "nudge_cadastro", "email": email, "nome": nome})
         # 2) Completou o cadastro, mas nunca subiu prancha.
         elif tem_perfil and confirmado and 48 <= idade_h and recente and email not in proj_by_email:
@@ -7718,7 +7797,9 @@ async def emails_auto_tick(request: Request, dry: int = 0):
     for a in acoes:
         ok = False
         try:
-            if a["kind"] in ("nudge_cadastro", "nudge_onboarding"):
+            if a["kind"] == "boas_vindas":
+                ok = _send_welcome_email(a["email"], a["nome"])
+            elif a["kind"] in ("nudge_cadastro", "nudge_onboarding"):
                 link = _generate_magic_link(a["email"])
                 if link:
                     ok = _send_nudge_email(a["email"], a["nome"],
@@ -7731,7 +7812,8 @@ async def emails_auto_tick(request: Request, dry: int = 0):
                 if _job_tem_planilha_revisada(a.get("job_id") or ""):
                     ok = False
                 else:
-                    ok = _send_email_calibracao(a["email"], a["nome"], a.get("projeto") or "")
+                    ok = _send_email_calibracao(a["email"], a["nome"], a.get("projeto") or "",
+                                                a.get("job_id") or "")
             elif a["kind"] == "cronograma_checkin":
                 ok = _send_email_cronograma_checkin(a["email"], a["nome"],
                                                     a.get("projeto") or "",
