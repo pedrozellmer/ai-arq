@@ -1071,14 +1071,19 @@ function renderEstiloChips() {
       const sel = t.id === estiloTemplate;
       // 02/08 (Pedro): "poderíamos ter o preview dos modelos" — cada card ganha
       // um "👁 Ver" que abre o PDF DE VERDADE, com os dados deste projeto.
-      return '<div class="tpl-card relative rounded-xl border overflow-hidden text-left transition ' + (sel ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-300 hover:border-slate-400') + '" style="width:150px">'
+      // 🪤 tailwind.min.css é build ESTÁTICO: top-1.5/right-1.5/bg-white÷95/
+      // text-[11px] NÃO existem nele (mesma armadilha dos botões do e-mail em
+      // 02/08). Posição e aparência do "Ver" vão em style inline.
+      return '<div class="tpl-card rounded-xl border overflow-hidden text-left transition ' + (sel ? 'border-indigo-500 ring-2 ring-indigo-500' : 'border-slate-300 hover:border-slate-400') + '" style="width:150px;position:relative">'
         + '<button type="button" data-tpl="' + t.id + '" title="Usar o modelo ' + t.nome + '" class="tpl-chip block w-full text-left">'
         + '<span class="block border-b ' + (sel ? 'border-indigo-200' : 'border-slate-200') + '">' + tplThumb(t.id) + '</span>'
         + '<span class="block px-2.5 py-2 ' + (sel ? 'bg-indigo-50' : '') + '">'
         + '<span class="flex items-center gap-1 text-sm font-semibold ' + (sel ? 'text-indigo-700' : 'text-slate-800') + '">' + (sel ? _CHK : '') + t.nome + '</span>'
         + '<span class="block text-[11px] text-slate-500">' + t.desc + '</span></span></button>'
         + '<button type="button" data-preview="' + t.id + '" title="Ver como fica com o SEU cronograma"'
-        + ' class="tpl-eye absolute top-1.5 right-1.5 px-2 py-1 rounded-md text-[11px] font-semibold bg-white/95 border border-slate-300 text-slate-700 hover:bg-white hover:border-slate-500 shadow-sm">👁 Ver</button>'
+        + ' class="tpl-eye" style="position:absolute;top:6px;right:6px;padding:3px 8px;border-radius:6px;'
+        + 'font-size:11px;font-weight:700;background:#fff;border:1px solid #cbd5e1;color:#334155;'
+        + 'box-shadow:0 1px 3px rgba(15,23,42,.18);cursor:pointer;line-height:1.4;z-index:2">👁 Ver</button>'
         + '</div>';
     }).join('');
     tc.querySelectorAll('.tpl-chip').forEach(function (b) {
@@ -1146,8 +1151,15 @@ async function abrirPreviewTemplate(tplId) {
     const blob = await r.blob();
     if (_previewBlobUrl) URL.revokeObjectURL(_previewBlobUrl);
     _previewBlobUrl = URL.createObjectURL(blob);
+    // 🪤 Nem todo navegador renderiza PDF embutido (celular, principalmente) —
+    // nesses o <iframe> vira um cartão "Abrir". O link abaixo garante a saída.
     document.getElementById('mp-corpo').innerHTML =
-      '<iframe src="' + _previewBlobUrl + '#toolbar=0&view=FitH" class="w-full h-full rounded-lg border border-slate-200" title="Prévia do cronograma no modelo ' + escapeAttr(t.nome) + '"></iframe>';
+      '<div style="display:flex;flex-direction:column;height:100%;gap:6px">'
+      + '<iframe src="' + _previewBlobUrl + '#toolbar=0&view=FitH" style="flex:1;min-height:0;width:100%" '
+      + 'class="rounded-lg border border-slate-200 bg-white" title="Prévia do cronograma no modelo ' + escapeAttr(t.nome) + '"></iframe>'
+      + '<a href="' + _previewBlobUrl + '" target="_blank" rel="noopener" '
+      + 'style="font-size:11px;color:#64748b;text-align:center;text-decoration:underline">'
+      + 'Não carregou aqui? Abrir a prévia em outra aba</a></div>';
   } catch (e) {
     document.getElementById('mp-corpo').innerHTML =
       '<div class="flex flex-col items-center justify-center h-full text-center px-6 gap-2">'
@@ -1880,8 +1892,11 @@ document.addEventListener('keydown', function (e) {
 </script>
 
 <!-- ═══ PRÉVIA DO MODELO — mostra o PDF real deste projeto (02/08) ═══ -->
+<!-- 🪤 bg-black/60, min-h-0 e rounded-b-2xl NÃO existem no tailwind.min.css
+     estático — o que é essencial pro layout vai em style inline. -->
 <div id="modal-preview-tpl" role="dialog" aria-modal="true" aria-labelledby="mp-titulo"
-     class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+     class="hidden fixed inset-0 z-50 flex items-center justify-center p-4"
+     style="background:rgba(0,0,0,.6)">
   <div class="bg-white rounded-2xl w-full max-w-4xl flex flex-col" style="height:88vh">
     <div class="flex items-start justify-between gap-4 px-5 py-4 border-b">
       <div>
@@ -1891,8 +1906,9 @@ document.addEventListener('keydown', function (e) {
       <button type="button" onclick="fecharPreviewTemplate()" aria-label="Fechar prévia (Esc)"
         class="text-slate-500 hover:text-slate-800 text-xl leading-none px-2">&times;</button>
     </div>
-    <div id="mp-corpo" class="flex-1 min-h-0 p-4 bg-slate-50"></div>
-    <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t bg-white rounded-b-2xl">
+    <div id="mp-corpo" class="flex-1 p-4 bg-slate-50" style="min-height:0"></div>
+    <div class="flex flex-wrap items-center justify-between gap-3 px-5 py-3 border-t bg-white"
+         style="border-bottom-left-radius:1rem;border-bottom-right-radius:1rem">
       <p class="text-[11px] text-slate-500">A apresenta&ccedil;&atilde;o em <b>PowerPoint</b> usa o mesmo visual deste modelo.</p>
       <div class="flex gap-2">
         <button type="button" onclick="fecharPreviewTemplate()"
