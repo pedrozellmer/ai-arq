@@ -1204,6 +1204,14 @@ _WHATSAPP_LINK = (f"https://wa.me/{_WHATSAPP_NUM}"
                   "?text=Ol%C3%A1%21%20Vim%20pelo%20e-mail%20do%20AI.arq.")
 
 
+def _email_img(arquivo: str, alt: str, margem: str = "14px 0 4px") -> str:
+    """Imagem dos e-mails (assets/email/ no site). Largura fixa + alt sempre
+    (Gmail bloqueia imagem por padrão — o alt segura a mensagem)."""
+    return (f'<img src="https://ai.arq.br/assets/email/{arquivo}" width="460" alt="{alt}" '
+            f'style="width:100%;max-width:460px;height:auto;border-radius:12px;'
+            f'display:block;margin:{margem};border:0;">')
+
+
 def _email_wrap(title: str, body_html: str, cta_text: str = "", cta_url: str = "", badge: str = "",
                 badge_color: str = "green",
                 reason: str = "Você está recebendo este e-mail porque tem uma conta no AI.arq.",
@@ -1337,7 +1345,9 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                    "(PDF vetorial, DWG ou DXF).")
         body = (f"{greet}<br><br>"
                 f"Recebemos o projeto <b>{pn}</b>, mas {motivo} Ou seja, <b>reprocessar o "
-                f"mesmo arquivo não vai resolver</b>.<br><br>{fix}<br><br>"
+                f"mesmo arquivo não vai resolver</b>."
+                + _email_img("falha-arquivo.png", "Um ajuste no arquivo resolve — exporte em DXF")
+                + f"{fix}<br><br>"
                 f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
                 f"preparar. 🙂")
         subject = (f"{_pn_raw} — precisamos de outro arquivo (AI.arq)"
@@ -1559,7 +1569,8 @@ def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
     _body = (f"{_greet}<br><br>"
              f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
              f"({n_total} itens). Abra seu projeto pra revisar e baixar a planilha."
-             f"{extra_body_html}")
+             + _email_img("pronta-hero.png", "Planilha de quantitativos pronta, itens rotulados medido ou estimativa")
+             + f"{extra_body_html}")
     _pn_subj = (project_name or "").strip()
     subject = (f"{_pn_subj} — sua planilha do AI.arq está pronta"
                if _pn_subj else "Sua planilha do AI.arq está pronta")
@@ -1597,11 +1608,7 @@ def _build_welcome_email(name: str = ""):
                 '<td style="padding:3px 0;font-size:14px;line-height:1.5;color:#475569;'
                 f'font-family:Arial,sans-serif;">{texto}</td></tr>')
 
-    def _img(arquivo, alt, margem="14px 0 4px"):
-        return (f'<img src="https://ai.arq.br/assets/email/{arquivo}" width="460" alt="{alt}" '
-                f'style="width:100%;max-width:460px;height:auto;border-radius:12px;'
-                f'display:block;margin:{margem};border:0;">')
-
+    _img = _email_img
     body = (
         _img("welcome-foto.jpg", "Arquiteto trabalhando sobre a prancha do projeto", margem="2px 0 14px")
         + f"{greet}<br><br>"
@@ -1758,23 +1765,28 @@ def _build_nudge_email(name: str, kind: str, magic_link: str):
     greet = _greeting_line(_hn.escape(name or ""))
     if kind == "cadastro":
         title = "Falta pouco pra começar"
-        body = (f"{greet}<br><br>Você começou seu cadastro no AI.arq mas não chegou a terminar — "
+        # 02/08: saiu o "primeiro projeto é por nossa conta" (regra velha) —
+        # no beta é "grátis, quantos projetos quiser" (feedback do Pedro 17/07).
+        body = (_email_img("nudge-foto.jpg", "Edifício em construção", margem="2px 0 14px")
+                + f"{greet}<br><br>Você começou seu cadastro no AI.arq mas não chegou a terminar — "
                 f"e falta <b>só um passo</b>. Termine pra subir sua primeira prancha: o "
-                f"levantamento de quantitativos sai em minutos, e o <b>primeiro projeto é por "
-                f"nossa conta</b>.<br><br>É só clicar abaixo pra entrar direto, sem precisar de senha:")
+                f"levantamento de quantitativos sai em minutos, e no beta está <b>grátis — "
+                f"quantos projetos você quiser</b>.<br><br>É só clicar abaixo pra entrar direto, sem precisar de senha:")
         cta = "Terminar meu cadastro"
         subject = "Falta pouco pra terminar seu cadastro no AI.arq"
     elif kind == "onboarding":
         title = "Vem subir sua primeira prancha"
-        body = (f"{greet}<br><br>Você já tem conta no AI.arq, mas ainda não testou com uma prancha. "
+        body = (_email_img("nudge-foto.jpg", "Edifício em construção", margem="2px 0 14px")
+                + f"{greet}<br><br>Você já tem conta no AI.arq, mas ainda não testou com uma prancha. "
                 f"Que tal agora? Manda um PDF, DWG ou DXF e em minutos você recebe a planilha de "
-                f"quantitativos — e o <b>primeiro projeto é por nossa conta</b>.<br><br>"
+                f"quantitativos — e no beta está <b>grátis, quantos projetos você quiser</b>.<br><br>"
                 f"Clica abaixo pra entrar direto e subir:")
         cta = "Subir minha primeira prancha"
-        subject = "Sua primeira prancha no AI.arq é por nossa conta"
+        subject = "Sua primeira prancha no AI.arq — grátis no beta"
     else:  # feedback
         title = "Como foi seu projeto no AI.arq?"
-        body = (f"{greet}<br><br>Vi que você usou o AI.arq pra levantar quantitativos — e eu "
+        body = (_email_img("feedback-foto.jpg", "Mesa de trabalho de arquitetura", margem="2px 0 14px")
+                + f"{greet}<br><br>Vi que você usou o AI.arq pra levantar quantitativos — e eu "
                 f"queria muito saber a sua opinião. Leva <b>1 minutinho</b>: você dá uma nota "
                 f"pra cada etapa (subir a prancha, processamento, precisão, a planilha) e "
                 f"deixa um comentário, se quiser.<br><br>Seu feedback vale ouro pra deixar o "
@@ -1811,7 +1823,9 @@ def _build_calibracao_email(name: str, project_name: str):
     body = (f"{greet}<br><br>"
             f"Você chegou a revisar o quantitativo do projeto <b>{pn}</b>? Se ajustou "
             f"quantidades, corrigiu itens ou tirou o que não fazia sentido, essas "
-            f"<b>correções valem ouro pra gente</b>.<br><br>"
+            f"<b>correções valem ouro pra gente</b>."
+            + _email_img("calibracao-art.png", "Correção do cliente: estimativa vira número confirmado")
+            + f""
             f"Se puder, suba a <b>planilha revisada</b> — a sua versão, com as correções "
             f"reais — na página do projeto. Cada ajuste seu <b>afina o nosso motor</b>, e "
             f"o resultado aparece pra você: os <b>seus próximos projetos saem melhores</b>, "
@@ -7287,10 +7301,12 @@ def _build_retorno30_email(name: str):
     isca: cronograma grátis. Separado do envio pra reuso no preview."""
     import html as _hn
     greet = _greeting_line(_hn.escape(name or ""))
-    body = (f"{greet}<br><br>Faz um tempinho que você não aparece por aqui — e desde a sua "
+    body = (_email_img("retorno-foto.jpg", "Interior de projeto de arquitetura", margem="2px 0 14px")
+            + f"{greet}<br><br>Faz um tempinho que você não aparece por aqui — e desde a sua "
             f"última visita o AI.arq melhorou bastante: a leitura das pranchas ficou mais "
-            f"precisa e agora todo projeto pode virar também um <b>cronograma de obra, de "
-            f"graça</b>.<br><br>Se tiver um projeto na mesa, manda a prancha (PDF, DWG ou DXF) "
+            f"precisa e agora todo projeto vira também <b>cronograma de obra</b> e <b>memorial "
+            f"descritivo em rascunho</b> (editável na tela, sai em Word ou PDF) — de graça."
+            f"<br><br>Se tiver um projeto na mesa, manda a prancha (PDF, DWG ou DXF) "
             f"que em minutos você recebe a planilha de quantitativos. Nessa fase de beta está "
             f"<b>grátis e ilimitado</b>.")
     subject = "Seu próximo quantitativo sai em minutos — e o cronograma é grátis"
@@ -7319,7 +7335,8 @@ def _build_proximo_projeto_email(name: str, project_name: str):
     import html as _hp
     pn = _hp.escape(project_name or "seu primeiro projeto")
     greet = _greeting_line(_hp.escape(name or ""))
-    body = (f"{greet}<br><br>"
+    body = (_email_img("proximo-foto.jpg", "Escritório de arquitetura moderno", margem="2px 0 14px")
+            + f"{greet}<br><br>"
             f"O quantitativo do <b>{pn}</b> te ajudou? Se tiver outro projeto na mesa — "
             f"mesmo que seja um estudo ou uma reforma pequena — manda a prancha (PDF, DWG "
             f"ou DXF): o próximo sai em minutos, e nessa fase de beta está <b>grátis e "
@@ -7355,7 +7372,9 @@ def _build_cronograma_checkin_email(name: str, project_name: str, semana: int, j
     greet = _greeting_line(_hk.escape(name or ""))
     body = (f"{greet}<br><br>"
             f"Pelo cronograma, a obra <b>{pn}</b> está na <b>semana {semana}</b>. "
-            f"Como estão as fases no canteiro?<br><br>"
+            f"Como estão as fases no canteiro?"
+            + _email_img("checkin-gantt.png", "Cronograma com percentual executado por fase")
+            + "<br>"
             f"Atualizar o % executado leva um minuto e mantém a <b>Curva S</b> e o "
             f"avanço real em dia — bom pra você enxergar atraso cedo, e pronto pra "
             f"mostrar ao cliente (dá pra exportar em PDF direto da tela).")

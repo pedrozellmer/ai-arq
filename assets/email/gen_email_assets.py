@@ -188,6 +188,117 @@ def comparativo():
     img.save(f"{OUT}/welcome-comparativo.png", optimize=True)
 
 
+
+
+# ── PLANILHA PRONTA: check + planilha saindo ────────────────────
+def pronta():
+    W, H = 1200, 360
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, (5, 150, 105), (52, 211, 153))
+    # círculo com check grande
+    d.ellipse((80, 110, 220, 250), fill=(220, 252, 231))
+    check(d, 118, 168, cor=VERDE, t=12, s_=40)
+    d.text((280, 120), "Planilha pronta", font=F("Bold", 44), fill=SLATE)
+    d.text((280, 185), "Quantitativo por disciplina, com cada item", font=F("Regular", 26), fill=CINZA_TXT)
+    d.text((280, 222), "rotulado: medido ou estimativa.", font=F("Regular", 26), fill=CINZA_TXT)
+    img.save(f"{OUT}/pronta-hero.png", optimize=True)
+
+
+# ── FALHA: arquivo com aviso + caminho DXF ──────────────────────
+def falha():
+    W, H = 1200, 360
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, (245, 158, 11), (253, 186, 116))
+    # arquivo com aviso
+    rr(d, (110, 80, 330, 300), 14, fill=FUNDO_CLARO, outline=(203, 213, 225), width=3)
+    d.text((140, 108), "DWG", font=F("Bold", 40), fill=(148, 163, 184))
+    warn(d, 250, 200, r=34)
+    # seta
+    d.line((380, 190, 520, 190), fill=CINZA_TXT, width=8)
+    d.polygon([(520, 172), (556, 190), (520, 208)], fill=CINZA_TXT)
+    # destino DXF
+    rr(d, (600, 80, 820, 300), 14, fill=(238, 242, 255), outline=INDIGO, width=3)
+    d.text((640, 108), "DXF", font=F("Bold", 40), fill=INDIGO)
+    check(d, 680, 210, cor=VERDE, t=9, s_=28)
+    d.text((870, 150), "Um ajuste no", font=F("Medium", 30), fill=CINZA_TXT)
+    d.text((870, 192), "arquivo resolve —", font=F("Medium", 30), fill=CINZA_TXT)
+    d.text((870, 234), "te mostramos como.", font=F("Medium", 30), fill=CINZA_TXT)
+    img.save(f"{OUT}/falha-arquivo.png", optimize=True)
+
+
+# ── CHECK-IN: gantt com avanço parcial ──────────────────────────
+def checkin():
+    W, H = 1200, 360
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, (8, 145, 178), CYAN)
+    dados = [("Estrutura", 1.0, INDIGO), ("Alvenaria", 0.7, (8, 145, 178)),
+             ("Elétrica", 0.35, (16, 185, 129)), ("Revestimentos", 0.0, (245, 158, 11))]
+    y = 78
+    for lb, prog, cor in dados:
+        d.text((64, y + 2), lb, font=F("Medium", 22), fill=CINZA_TXT)
+        x0, larg = 300, 560
+        rr(d, (x0, y, x0 + larg, y + 28), 9, fill=(237, 242, 247))
+        if prog > 0:
+            rr(d, (x0, y, x0 + int(larg * prog), y + 28), 9, fill=cor)
+        pct = f"{int(prog * 100)}%"
+        d.text((x0 + larg + 24, y + 2), pct, font=F("SemiBold", 22),
+               fill=VERDE if prog == 1 else CINZA_TXT)
+        y += 62
+    d.text((950, 140), "% executado", font=F("Medium", 24), fill=CINZA_TXT)
+    d.text((950, 175), "em 1 minuto", font=F("Medium", 24), fill=CINZA_TXT)
+    img.save(f"{OUT}/checkin-gantt.png", optimize=True)
+
+
+# ── CALIBRAÇÃO: correção laranja → verde ────────────────────────
+def calibracao():
+    W, H = 1200, 320
+    img = Image.new("RGB", (W, H), FUNDO_CLARO)
+    d = ImageDraw.Draw(img)
+    rr(d, (24, 24, W - 24, H - 24), 20, fill=BRANCO, outline=CINZA_CLARO, width=2)
+    gradiente_h(d, 24, 24, W - 24, 30, INDIGO, CYAN)
+    # antes (estimativa laranja)
+    rr(d, (90, 110, 470, 190), 12, fill=(255, 247, 237), outline=(253, 186, 116), width=2)
+    d.text((120, 128), "Luminárias", font=F("Medium", 26), fill=CINZA_TXT)
+    d.text((320, 128), "34 un", font=F("SemiBold", 26), fill=LARANJA_TX)
+    warn(d, 420, 128, r=14)
+    # seta
+    d.line((500, 150, 590, 150), fill=CINZA_TXT, width=7)
+    d.polygon([(590, 134), (622, 150), (590, 166)], fill=CINZA_TXT)
+    # depois (corrigido)
+    rr(d, (650, 110, 1030, 190), 12, fill=(240, 253, 244), outline=(134, 239, 172), width=2)
+    d.text((680, 128), "Luminárias", font=F("Medium", 26), fill=CINZA_TXT)
+    d.text((880, 128), "38 un", font=F("SemiBold", 26), fill=VERDE)
+    check(d, 980, 138, cor=VERDE, t=6, s_=20)
+    d.text((90, 232), "Sua correção afina o motor — o próximo projeto sai medindo melhor.",
+           font=F("Medium", 24), fill=CINZA_TXT)
+    img.save(f"{OUT}/calibracao-art.png", optimize=True)
+
+
+# ── Recortes de foto (cada e-mail com uma foto diferente) ───────
+def fotos():
+    cortes = [
+        ("building.jpg", "nudge-foto.jpg", 0.30),
+        ("workspace.jpg", "feedback-foto.jpg", 0.30),
+        ("interior.jpg", "retorno-foto.jpg", 0.35),
+        ("office_modern.jpg", "proximo-foto.jpg", 0.30),
+    ]
+    for origem, destino, frac_topo in cortes:
+        ph = Image.open(f"backend/assets/photos/{origem}")
+        w, h = ph.size
+        alvo_w, alvo_h = 1200, 360
+        esc = alvo_w / w
+        nh = int(h * esc)
+        ph = ph.resize((alvo_w, nh), Image.LANCZOS)
+        topo = max(0, min(int(nh * frac_topo), nh - alvo_h))
+        ph = ph.crop((0, topo, alvo_w, topo + alvo_h))
+        ph.save(f"{OUT}/{destino}", quality=80, optimize=True)
+
 if __name__ == "__main__":
     import os
     os.makedirs(OUT, exist_ok=True)
@@ -195,6 +306,11 @@ if __name__ == "__main__":
     cronograma()
     memorial()
     comparativo()
+    pronta()
+    falha()
+    checkin()
+    calibracao()
+    fotos()
     for f in sorted(os.listdir(OUT)):
         if f.endswith(".png"):
             print(f, os.path.getsize(f"{OUT}/{f}") // 1024, "KB")
