@@ -1156,11 +1156,14 @@ async function abrirPreviewTemplate(tplId) {
     const blob = await r.blob();
     if (_previewBlobUrl) URL.revokeObjectURL(_previewBlobUrl);
     _previewBlobUrl = URL.createObjectURL(blob);
+    // A página inteira precisa caber de cara (senão a pessoa acha que a prévia
+    // "cortou"): a imagem é limitada pela ALTURA disponível, não pela largura.
     document.getElementById('mp-corpo').innerHTML =
-      '<div style="height:100%;overflow:auto;display:flex;align-items:flex-start;justify-content:center">'
+      '<div style="height:100%;display:flex;align-items:center;justify-content:center;overflow:auto">'
       + '<img src="' + _previewBlobUrl + '" alt="Prévia da primeira página do cronograma no modelo '
-      + escapeAttr(t.nome) + '" style="max-width:100%;height:auto;display:block;border-radius:8px;'
-      + 'border:1px solid #e2e8f0;box-shadow:0 4px 14px rgba(15,23,42,.10);background:#fff"></div>';
+      + escapeAttr(t.nome) + '" style="max-height:100%;max-width:100%;width:auto;height:auto;'
+      + 'object-fit:contain;display:block;border-radius:8px;border:1px solid #e2e8f0;'
+      + 'box-shadow:0 4px 14px rgba(15,23,42,.10);background:#fff"></div>';
   } catch (e) {
     document.getElementById('mp-corpo').innerHTML =
       '<div class="flex flex-col items-center justify-center h-full text-center px-6 gap-2">'
