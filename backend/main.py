@@ -11281,7 +11281,8 @@ async def generate_cronograma(job_id: str, payload: CronogramaPayload, request: 
     frontend. Não persiste (recalcula a cada chamada — UX live).
 
     NÃO precifica. Distribui esforço no tempo seguindo sequenciamento
-    construtivo padrão BR (16 etapas alinhadas com NBR 16636).
+    construtivo padrão BR (16 etapas — convenção de mercado; a NBR 16636 foi
+    citada aqui no passado por engano: ela trata de fases de PROJETO, não de obra).
     """
     # 1. Busca os items do projeto via mesma RPC do get_project_items
     import urllib.request, json as _json

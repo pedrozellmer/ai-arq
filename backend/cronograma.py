@@ -293,7 +293,6 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             # conformidade que não temos — e roça a regra dura nº5 (não
             # precificar). Volta a entrar se/quando existir a parte financeira.
             'PMI PMBOK 7th ed. — Performance Domain Planning',
-            'NBR 16636-1/2:2017 — gerenciamento de serviços técnicos',
             'Last Planner System (Ballard 2000) — 4 níveis + PPC',
         ],
         'ressalva': (
@@ -462,13 +461,12 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
             # conformidade que não temos — e roça a regra dura nº5 (não
             # precificar). Volta a entrar se/quando existir a parte financeira.
             'PMI PMBOK 7th ed. — Performance Domain Planning',
-            'NBR 16636-1/2:2017 — gerenciamento de serviços técnicos',
             'Last Planner System (Ballard 2000) — 4 níveis + PPC',
         ],
         'ressalva': (
             'Cronograma referência baseado em produtividade típica de mercado '
             '(construtora médio porte) + sequenciamento construtivo padrão BR '
-            '(16 etapas construtivas, alinhado NBR 16636) + curva S sigmoidal. '
+            '(16 etapas construtivas, sequenciamento usual de obra brasileira) + curva S sigmoidal. '
             'Validar com engenheiro responsável (CREA/CAU) antes de comprometer '
             'prazo com cliente. Variáveis específicas (sondagem, fornecedor de '
             'pré-fabricado, restrição climática, condicionantes do canteiro, '
