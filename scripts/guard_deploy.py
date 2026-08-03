@@ -27,6 +27,16 @@ import os
 import sys
 import urllib.request
 
+# 🪤 O console do Windows é cp1252 e explode em emoji: na 1ª execução real a
+# trava bloqueou certo, mas MORREU no print e cuspiu um traceback no lugar da
+# explicação. Bloquear com mensagem ilegível é quase tão ruim quanto não
+# bloquear — quem lê não sabe o que fazer.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 HEALTH = os.environ.get("AIARQ_HEALTH_URL",
                         "https://ai-arq.onrender.com/api/health")
 TIMEOUT = 20
