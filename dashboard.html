@@ -356,7 +356,19 @@
                   <span aria-hidden="true">📋</span> Copiar
                 </button>
               </div>
-              <p class="mt-2 text-xs text-gray-500">Copia e cola direto na conversa. Se o navegador não deixar copiar a imagem, <a href="/indique/aiarq-apresentacao.png" download="aiarq-apresentacao.png" class="underline hover:text-gray-700">baixe aqui</a>.</p>
+              <!-- 03/08: o comentário lá em cima já previa "wa.me" desde 17/07, mas o
+                   botão nunca existiu — só copiar/colar, que obriga a pessoa a sair
+                   daqui, abrir o WhatsApp, achar o contato e colar. Quatro passos.
+                   🔒 A mensagem continua saindo do WhatsApp DELA, com o nome dela.
+                   É o que dá força à indicação (indicação foi a origem com maior
+                   ativação da base) — e é o que NÃO põe em risco a reputação do
+                   nosso domínio de e-mail, que carrega o "sua planilha está pronta". -->
+              <a id="indica-whatsapp" href="#" target="_blank" rel="noopener"
+                 class="mt-3 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#25D366] hover:brightness-95 text-white text-sm font-semibold no-underline transition shadow-sm">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.08-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.47-1.75-1.65-2.05-.17-.3-.02-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.51h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.06 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.69.25-1.28.17-1.41-.07-.13-.27-.2-.57-.35z"/><path d="M12 2a10 10 0 00-8.6 15.07L2 22l5.05-1.32A10 10 0 1012 2zm0 18.2a8.17 8.17 0 01-4.17-1.14l-.3-.18-3 .78.8-2.92-.2-.31A8.2 8.2 0 1112 20.2z"/></svg>
+                Enviar pelo WhatsApp
+              </a>
+              <p class="mt-2 text-xs text-gray-500">Abre o WhatsApp com a mensagem pronta — você escolhe pra quem. Prefere colar à mão? Use os botões de copiar acima. Se o navegador não deixar copiar a imagem, <a href="/indique/aiarq-apresentacao.png" download="aiarq-apresentacao.png" class="underline hover:text-gray-700">baixe aqui</a>.</p>
             </div>
           </div>
         </div>
@@ -1281,14 +1293,34 @@
     'como-funciona': 'Como Funciona',
   };
 
-  // ── Indicação manual: copiar texto e copiar imagem (padrão copy/paste) ──
-  // Decisão do Pedro: sem botão de WhatsApp — a pessoa copia e cola onde quiser.
-  // A mensagem mora SÓ no div #indica-msg (fonte única).
+  // ── Indicação manual: WhatsApp em 1 clique + copiar texto/imagem ──
+  // 🔄 A decisão de 17/07 era "sem botão de WhatsApp, a pessoa copia e cola onde
+  // quiser". O Pedro REVERTEU em 03/08: copiar e colar são 4 passos (copiar,
+  // sair, abrir o zap, achar o contato, colar) e isso segurava a indicação.
+  // 🔒 A mensagem continua saindo do WhatsApp DELA, com o nome dela — o pedido
+  // original era e-mail disparado pelo nosso servidor, e isso a) queimaria a
+  // reputação do domínio que carrega o "sua planilha está pronta", b) usaria
+  // dado de terceiro sem consentimento, e c) chegaria com cara de phishing.
+  // A mensagem mora SÓ no div #indica-msg (fonte única) — o link do wa.me lê
+  // dali, então mudar o texto num lugar muda nos dois.
   function _indicaFeedback(btn, ok) {
     const antes = btn.innerHTML;
     btn.innerHTML = ok ? '<span aria-hidden="true">✓</span> Copiado!' : antes;
     if (ok) setTimeout(() => { btn.innerHTML = antes; }, 2500);
   }
+  // Monta o href do wa.me a partir da MESMA mensagem da caixinha. Sem número
+  // de destino de propósito: o WhatsApp abre o seletor de contato e ela escolhe
+  // pra quem — a gente não sabe nem guarda pra quem ela indicou.
+  (function _wireIndicaWhatsApp() {
+    const a = document.getElementById('indica-whatsapp');
+    const msg = (document.getElementById('indica-msg')?.textContent || '').trim();
+    if (!a || !msg) return;
+    a.setAttribute('href', 'https://wa.me/?text=' + encodeURIComponent(msg));
+    a.addEventListener('click', () => {
+      if (window.trackEvent) trackEvent('indicou_whatsapp');
+    });
+  })();
+
   window.indicaCopiarTexto = async function (btn) {
     const msg = (document.getElementById('indica-msg')?.textContent || '').trim();
     if (!msg) return;
