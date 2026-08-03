@@ -49,6 +49,7 @@ from engine_rules import (
     response_truncated as _response_truncated,
     is_floor_surface as _is_floor_surface,
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
+    corrigir_comprimento_medido as _corrigir_comprimento_medido,
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
 )
@@ -1922,6 +1923,22 @@ class JobsStore:
                 # Atualização de status pra um job que sumiu do store vira no-op
                 # MUDO — deixa rastro pra não esconder "status não gravou".
                 print(f"[jobs] update_field no-op: job '{key}' fora do store {list(kwargs)}")
+
+    def em_curso(self) -> int:
+        """Quantos jobs estão na fila ou processando AGORA.
+
+        Existe pra trava de deploy (Pedro, 03/08/2026): subir código no meio de
+        um processamento mata o job do cliente — foi o caso Walter (29/07).
+        O hook de pre-push lê isto pelo /api/health e recusa o push."""
+        try:
+            return sum(1 for _j in _load_jobs().values()
+                       if isinstance(_j, dict)
+                       and _j.get("status") in ("queued", "processing"))
+        except Exception as e:
+            # Erro aqui NÃO pode virar "0 jobs" — 0 libera o deploy. Devolve -1,
+            # e o hook trata número negativo como "não sei" e bloqueia.
+            print(f"[jobs] em_curso falhou: {e}")
+            return -1
 
 jobs = JobsStore()
 
@@ -6028,6 +6045,40 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _euc:
             print(f"[unidade-contavel] job={job_id}: checagem falhou: {_euc}")
 
+        # Comprimento medido que saiu com rótulo errado ou foi descartado
+        # (caso Eloídes 03/08, job 2f9f81c2): a observação do item traz
+        # "comprimento total = N m" e a linha saiu em m² ou com quantidade 0.
+        # Só age quando a medida está na observação DO PRÓPRIO item — não move
+        # nada entre linhas. Ver o bloco de comentário em engine_rules.py.
+        try:
+            from models import Confidence as _Conf2
+            _n_uni, _n_rec = 0, 0
+            for _it in all_items:
+                _fix = _corrigir_comprimento_medido(
+                    _it.description, _it.unit, _it.quantity, _it.observations)
+                if not _fix:
+                    continue
+                if "quantity" in _fix:
+                    _it.quantity = _fix["quantity"]
+                    _n_rec += 1
+                else:
+                    _n_uni += 1
+                if "unit" in _fix:
+                    _it.unit = _fix["unit"]
+                if _fix.get("confidence") == "estimado":
+                    _it.confidence = _Conf2.ESTIMADO
+                _it.observations = ((_it.observations + " | ") if _it.observations
+                                    else "") + _fix["motivo"]
+            if _n_uni or _n_rec:
+                print(f"[comprimento] job={job_id}: {_n_uni} unidade(s) corrigida(s), "
+                      f"{_n_rec} quantidade(s) recuperada(s) de medição descartada")
+                if _n_rec:
+                    _log_error("motor:comprimento-recuperado",
+                               f"{_n_rec} item(ns) tinham medição na observação e "
+                               f"quantidade 0 — recuperados como estimado", job_id)
+        except Exception as _ecm:
+            print(f"[comprimento] job={job_id}: checagem falhou: {_ecm}")
+
         for _fld, _reads in _area_readings.items():
             if len(set(_reads)) > 1:
                 print(f"[area-consensus] {_fld}: leituras={_reads} → "
@@ -8787,6 +8838,12 @@ async def health():
             "total_projects": total_projects,
             "total_users": total_users,
         },
+        # 🚦 TRAVA DE DEPLOY (Pedro, 03/08/2026): deploy no meio de um job MATA o
+        # processamento do cliente — é o caso Walter (29/07), e em 03/08 escapou
+        # por 4 minutos da Eloídes. Este contador é PÚBLICO de propósito: o hook
+        # de pre-push precisa consultar sem credencial nenhuma. Não expõe nada
+        # do cliente, só quantos jobs estão rodando.
+        "jobs_em_curso": jobs.em_curso(),
         "features": {
             "pdf": True,
             "dxf": True,

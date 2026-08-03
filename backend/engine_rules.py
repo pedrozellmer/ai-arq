@@ -267,3 +267,102 @@ def is_unit_mismatch_countable(desc, unit):
     if u not in LINEAR_UNITS:
         return False
     return any(k in d for k in COUNTABLE_KW)
+
+
+# ── O motor mediu, escreveu na observação, e a linha saiu errada ─────────────
+# Caso Eloídes (03/08/2026, job 2f9f81c2 — projeto de incêndio, 112 MB):
+#   "Tubulação de hidrantes"  → unidade m²  · qtd 12.642,38 · obs: "= 12.642,38 m"
+#   "Tubulação de sprinklers" → unidade un  · qtd 0         · obs: "= 28.714,56 m"
+#   "Conexões RetFire"        → unidade un  · qtd 0         · obs: "= 295,04 m"
+# No MESMO projeto, 3 itens iguais saíram certos em `ml`. Ou seja: a extração
+# mediu bem; quem erra é o rótulo que a IA pendura na linha.
+#
+# 12.642,38 **m²** de tubulação de aço é número absurdo que, se passar, vira
+# erro caro no orçamento. E entregar 0 tendo medido 28,7 km é
+# `feedback_evidencia_nao_sobrevive` na veia — o dado existe, escrito ali do lado.
+#
+# 🔒 A regra é CONSERVADORA de propósito. Só age quando a medida está na
+# observação DO PRÓPRIO ITEM (não move nada entre linhas — essa é a diferença
+# em relação ao caso Rafael acima, onde mover seria adivinhar) e só em dois
+# casos sem ambiguidade:
+#   1. quantidade == medida, mas a unidade não é de comprimento → só o rótulo
+#      está errado; corrige a unidade e mantém tudo o mais.
+#   2. quantidade 0/vazia, havendo medida → a medição foi descartada; recupera
+#      o número e **rebaixa pra estimado**, nunca pra confirmado (soma de layer
+#      pode contar linha a mais; quem valida é o cliente — regra dura nº1).
+# Fora desses dois casos NÃO mexe: quantidade diferente da medida pode ser uma
+# conta legítima (comprimento × largura, desconto de trecho...).
+
+LENGTH_UNITS_OK = {"m", "ml", "metro", "metros", "m linear", "mts"}
+
+# "= 12.642,38 m" / "= 295,04m" / "= 1.285,22 metros" — exige o 'm' isolado,
+# então m² e m³ NÃO casam (senão a regra "corrigiria" uma área de verdade).
+_RE_COMPRIMENTO = _re.compile(
+    r"comprimento\s+total[^=]{0,80}?=\s*"
+    r"(\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*"
+    r"(?:m|metros?|ml)\b(?![²³23])",
+    _re.IGNORECASE)
+
+
+def medida_de_comprimento_na_observacao(obs):
+    """Devolve o comprimento em metros citado na observação, ou None.
+
+    🪤 Número em pt-BR: '12.642,38' = doze mil. Ler isso como float direto daria
+    12,64 — erro de 1000×, a mesma armadilha do valor em R$ do cronograma."""
+    if not obs:
+        return None
+    m = _RE_COMPRIMENTO.search(str(obs))
+    if not m:
+        return None
+    bruto = m.group(1)
+    if "," in bruto:
+        bruto = bruto.replace(".", "").replace(",", ".")
+    elif bruto.count(".") > 1 or (
+            "." in bruto and len(bruto.rsplit(".", 1)[1]) == 3):
+        bruto = bruto.replace(".", "")     # 12.642 / 1.285.220 = milhar
+    try:
+        v = float(bruto)
+    except ValueError:
+        return None
+    return v if v > 0 else None
+
+
+def _num_br(v):
+    """12642.38 → '12.642,38'. Formata SÓ o número: aplicar troca de vírgula e
+    ponto na frase inteira embaralha a pontuação do texto (e essa frase vai
+    parar na observação que o cliente lê)."""
+    return f"{v:,.2f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+
+
+def corrigir_comprimento_medido(desc, unit, quantity, obs):
+    """Devolve dict de correções ({} = não mexer) pro item cuja observação traz
+    um 'comprimento total = N m'. Ver o bloco de comentário acima."""
+    medida = medida_de_comprimento_na_observacao(obs)
+    if medida is None:
+        return {}
+    u = (unit or "").strip().lower()
+    try:
+        q = float(quantity or 0)
+    except (TypeError, ValueError):
+        q = 0.0
+
+    if u in LENGTH_UNITS_OK:
+        return {}                                  # já está certo
+
+    n = _num_br(medida)
+    # 1) mesmo número, rótulo errado (tolerância de centavo)
+    if q > 0 and abs(q - medida) <= max(0.01, medida * 0.001):
+        return {"unit": "m",
+                "motivo": (f"⚠ UNIDADE CORRIGIDA: a observação mede {n} m de "
+                           f"comprimento, mas o item saiu em '{unit}'. "
+                           f"Comprimento não é área nem contagem.")}
+
+    # 2) mediu e entregou zero
+    if q <= 0:
+        return {"quantity": round(medida, 2), "unit": "m", "confidence": "estimado",
+                "motivo": (f"⚠ QUANTIDADE RECUPERADA: o motor mediu {n} m neste "
+                           f"layer e a linha tinha saído zerada. Marcado como "
+                           f"ESTIMADO — a soma do layer pode incluir linha que não "
+                           f"é tubulação. Confira antes de orçar.")}
+
+    return {}
