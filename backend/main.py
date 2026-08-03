@@ -11984,6 +11984,56 @@ async def cronograma_sugestao(job_id: str, request: Request):
         files_count=files_count,
         n_disciplinas=n_disc,
     )
+
+    # ── A duração que O CLIENTE já disse manda mais que o nosso palpite ──
+    # Caso Eloídes (03/08/2026): ela corrigiu na revisão "Administração local de
+    # obra" pra **9 meses** e "container de obra" pra 9 meses. Isso É o prazo da
+    # obra, dito por quem conhece — e o cronograma ia abrir sugerindo outro
+    # número, ignorando o que ela acabou de escrever. Regra nº7: ela contou um
+    # fato e o entregável seguinte tem que escutar.
+    #
+    # 🔒 Só vale quando ela EDITOU. A própria IA chuta "Administração local —
+    # 3 meses" no quantitativo; usar esse chute aqui seria o cronograma
+    # aprendendo com o palpite dele mesmo e chamando de informação.
+    try:
+        import urllib.parse as _up2
+        _st_rv, _revs = _supa_rest_service(
+            "GET", f"item_reviews?job_id=eq.{_up2.quote(job_id)}"
+                   f"&action=eq.edit&select=edits,reviewed_at"
+                   f"&order=reviewed_at.desc&limit=50")
+        _meses_ditos = []
+        if _st_rv == 200 and isinstance(_revs, list):
+            for _rv in _revs:
+                _ed = _rv.get("edits") or {}
+                if not isinstance(_ed, dict):
+                    continue
+                if str(_ed.get("unit") or "").strip().lower() not in ("mês", "mes", "meses"):
+                    continue
+                try:
+                    _q = float(_ed.get("quantity") or 0)
+                except (TypeError, ValueError):
+                    continue
+                if 1 <= _q <= 60:
+                    _meses_ditos.append(int(round(_q)))
+        if _meses_ditos:
+            # Vários itens em mês (administração, container, escritório) e o
+            # cliente costuma repetir o mesmo prazo. O MAIOR é o que cobre a
+            # obra inteira — um container pode sair antes do fim, a obra não.
+            _dito = max(_meses_ditos)
+            sugestao = {
+                **sugestao,
+                "duracao_meses": _dito,
+                "origem": "informado_pelo_cliente",
+                "raciocinio": (
+                    f"Você mesmo informou {_dito} meses na revisão do quantitativo "
+                    f"(item medido em mês, como administração local ou canteiro). "
+                    f"Usamos o seu número, não a nossa estimativa — ajuste no controle "
+                    f"acima se quiser."),
+                "sugestao_do_sistema": sugestao.get("duracao_meses"),
+            }
+    except Exception as _esug:
+        print(f"[sugestao] duração informada indisponível ({job_id}): {_esug}")
+
     return {"status": "ok", "job_id": job_id, **sugestao}
 
 

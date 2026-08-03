@@ -534,13 +534,23 @@ async function carregarSugestao() {
     slider.value = s.duracao_meses;
     updateSliderUI();
 
-    // Mostra banner explicativo
+    // Banner. Quando o prazo veio DELE (editou um item em mês na revisão), o
+    // texto muda de "sugestão" pra "seu número" — e a cor sai do indigo de
+    // palpite pro verde de dado informado, igual ao resto do produto faz com
+    // medido × estimado (regra nº1 aplicada ao cronograma).
     const banner = document.getElementById('dur-sugestao');
-    banner.innerHTML = `
-      <strong>💡 Sugestão: ${s.duracao_meses} meses</strong>
-      <span class="text-indigo-600">· faixa típica ${s.faixa_min}-${s.faixa_max}m</span><br>
-      <span class="text-xs text-indigo-600">${escapeHtml(s.raciocinio)}</span>
-    `;
+    const dele = s.origem === 'informado_pelo_cliente';
+    banner.className = dele
+      ? 'mt-2 text-xs leading-relaxed text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2'
+      : 'mt-2 text-xs leading-relaxed text-indigo-700 bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2';
+    banner.innerHTML = dele
+      ? `<strong>✓ ${s.duracao_meses} meses — informado por você</strong>` +
+        (s.sugestao_do_sistema && s.sugestao_do_sistema !== s.duracao_meses
+          ? `<span class="text-emerald-700"> · nossa estimativa seria ${s.sugestao_do_sistema}m</span>` : '') +
+        `<br><span class="text-xs text-emerald-700">${escapeHtml(s.raciocinio)}</span>`
+      : `<strong>💡 Sugestão: ${s.duracao_meses} meses</strong>` +
+        `<span class="text-indigo-600">· faixa típica ${s.faixa_min}-${s.faixa_max}m</span><br>` +
+        `<span class="text-xs text-indigo-600">${escapeHtml(s.raciocinio)}</span>`;
     banner.classList.remove('hidden');
   } catch (e) {
     console.warn('Sugestão de duração indisponível:', e);
