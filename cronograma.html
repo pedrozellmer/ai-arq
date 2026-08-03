@@ -1340,18 +1340,36 @@ async function gerarCronograma() {
     // ordem/início, dependências FS, agregação de grupos) e casar por posição
     // poria o valor de uma etapa em outra — calado, que é o pior jeito de errar
     // com dinheiro.
-    const _valoresAntigos = new Map();
+    // A REGRA: regerar pode refazer a FORMA do cronograma (datas, durações,
+    // dependências) — é pra isso que serve, e o banner avisa. Não pode apagar o
+    // que o cliente CONTOU sobre o mundo, porque isso o motor não tem como
+    // recalcular a partir do quantitativo:
+    //   valor_previsto  → dinheiro que ele digitou
+    //   pct_executado   → avanço real da obra (mesmo bug, achado na revisão)
+    //   ambiente        → rótulo que ele escreveu
+    const _CAMPOS_DO_CLIENTE = ['valor_previsto', 'pct_executado', 'ambiente'];
+    const _guardado = new Map();
     (cronogramaAtual?.fases || []).forEach(f => {
-      const v = parseFloat(f.valor_previsto) || 0;
-      if (v > 0 && f.label) _valoresAntigos.set(String(f.label).trim().toLowerCase(), v);
+      if (!f.label) return;
+      const m = {};
+      _CAMPOS_DO_CLIENTE.forEach(c => {
+        const v = f[c];
+        // 0 e vazio não são informação: não sobrescrevem o que vier novo.
+        if (v !== null && v !== undefined && v !== '' && !(typeof v === 'number' && v === 0)
+            && !(parseFloat(v) === 0 && c !== 'ambiente')) m[c] = v;
+      });
+      if (Object.keys(m).length) _guardado.set(String(f.label).trim().toLowerCase(), m);
     });
     let _restaurados = 0;
-    if (_valoresAntigos.size) {
+    if (_guardado.size) {
       (cronog.fases || []).forEach(f => {
         const k = String(f.label || '').trim().toLowerCase();
-        if (_valoresAntigos.has(k)) { f.valor_previsto = _valoresAntigos.get(k); _restaurados++; }
+        if (!_guardado.has(k)) return;
+        Object.assign(f, _guardado.get(k));
+        _restaurados++;
       });
     }
+    const _valoresAntigos = _guardado;   // usado no aviso abaixo
 
     cronogramaAtual = cronog;
     atualizarLinksExport();
@@ -1374,8 +1392,8 @@ async function gerarCronograma() {
       recalcularNoServidor();
       const _perdidos = _valoresAntigos.size - _restaurados;
       const _m = _perdidos > 0
-        ? `Mantive o valor de ${_restaurados} etapa(s). ⚠ ${_perdidos} etapa(s) que tinham valor não existem mais no cronograma novo — confira o desembolso.`
-        : `Mantive os valores que você digitou em ${_restaurados} etapa(s); o rateio pelos meses foi refeito.`;
+        ? `Mantive o que você tinha preenchido em ${_restaurados} etapa(s). ⚠ ${_perdidos} etapa(s) não existem mais no cronograma novo — o que estava nelas (valor, % executado) se perdeu. Confira antes de enviar.`
+        : `Mantive o que você preencheu em ${_restaurados} etapa(s) — valor, % executado e ambiente. As datas e durações foram refeitas.`;
       window.toast ? (_perdidos > 0 ? window.toast.error(_m) : window.toast.success(_m)) : null;
     }
 
