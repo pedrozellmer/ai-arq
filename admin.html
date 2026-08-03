@@ -3692,11 +3692,19 @@ async function loadOrigem(){
            altura parava de representar o valor: 4, 5 e 7 saíam quase do mesmo
            tamanho. Agora a área de plotagem é uma faixa própria de altura fixa e os
            rótulos vivem FORA dela. Altura de barra = valor, sem disputa. -->
-      <div class="relative" style="height:132px">
-        <!-- linha do topo (o pico) e linha de base: referência recessiva, cinza -->
-        <div class="absolute inset-x-0 top-0 border-t border-dashed border-gray-200"></div>
-        <div class="absolute inset-x-0 bottom-0 border-t border-gray-300"></div>
-        <div class="absolute inset-0 flex gap-[3px]">
+      <!-- POSIÇÃO VAI EM STYLE INLINE, não em classe utilitária: o
+           tailwind.min.css daqui é build ESTÁTICO e não tem inset-x-0,
+           bottom-0 nem valor arbitrário tipo gap-[3px]. Na 1ª tentativa a
+           barra levou "absolute inset-x-0 bottom-0": o absolute pegou, o resto
+           não, e ela ficou com LARGURA ZERO — sumiu da tela, sobrando só os
+           números flutuando. Mesma armadilha já anotada pro text-[10px].
+           CUIDADO: este comentário mora DENTRO de um template literal do JS —
+           crase aqui encerra o template e derruba o admin inteiro. Não usar. -->
+      <div style="position:relative;height:132px">
+        <!-- linha do pico e linha de base: referência recessiva -->
+        <div style="position:absolute;left:0;right:0;top:0;border-top:1px dashed #E5E7EB"></div>
+        <div style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid #D1D5DB"></div>
+        <div style="position:absolute;inset:0;display:flex;gap:3px;align-items:stretch">
           ${weeks.map((w,i)=>{ const atual=(i===weeks.length-1);
             // Barra e número saem do FLUXO (absolute): enquanto os dois eram
             // irmãos num flex-col, o número disputava altura com a barra e o
@@ -3707,22 +3715,24 @@ async function loadOrigem(){
             // não vazar do quadro. Proporção entre as barras não muda.
             const h = maxW ? (w.n*82/maxW) : 0;
             const col = atual ? '#4F46E5' : '#A5B4FC';
+            const cNum = atual ? '#4338CA' : (w.n ? '#6B7280' : '#D1D5DB');
             return `
-            <div class="flex-1 h-full relative" title="${w.lbl}: ${w.n} cadastro${w.n===1?'':'s'}">
-              <div class="absolute bottom-0 inset-x-0 transition-all"
-                   style="height:${h}%;${w.n?'min-height:3px;':''}background:${col};border-radius:4px 4px 0 0"></div>
-              <span class="absolute inset-x-0 text-center text-[11px] font-semibold tabular-nums leading-none
-                           ${atual?'text-indigo-700':(w.n?'text-gray-500':'text-gray-300')}"
-                    style="bottom:calc(${h}% + 5px)">${w.n}</span>
+            <div style="flex:1 1 0;position:relative;height:100%"
+                 title="${w.lbl}: ${w.n} cadastro${w.n===1?'':'s'}">
+              <div style="position:absolute;left:0;right:0;bottom:0;height:${h}%;
+                          ${w.n?'min-height:3px;':''}background:${col};border-radius:4px 4px 0 0"></div>
+              <span style="position:absolute;left:0;right:0;bottom:calc(${h}% + 5px);
+                           text-align:center;font-size:11px;font-weight:600;line-height:1;
+                           font-variant-numeric:tabular-nums;color:${cNum}">${w.n}</span>
             </div>`; }).join('')}
         </div>
       </div>
       <!-- Rótulos FORA da área de plotagem — mesma grade de colunas -->
-      <div class="flex gap-[3px] mt-2">
+      <div style="display:flex;gap:3px;margin-top:8px">
         ${weeks.map((w,i)=>{ const atual=(i===weeks.length-1); return `
-          <div class="flex-1 text-center leading-tight">
-            <div class="text-[10px] ${atual?'text-indigo-700 font-semibold':'text-gray-400'}">${w.lbl}</div>
-            ${atual?'<div class="text-[9px] text-indigo-500 font-medium">últimos 7 dias</div>':''}
+          <div style="flex:1 1 0;text-align:center;line-height:1.15">
+            <div style="font-size:10px;color:${atual?'#4338CA':'#9CA3AF'};${atual?'font-weight:600;':''}">${w.lbl}</div>
+            ${atual?'<div style="font-size:9px;color:#6366F1;font-weight:500">últimos 7 dias</div>':''}
           </div>`; }).join('')}
       </div>
     </div>

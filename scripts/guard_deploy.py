@@ -89,20 +89,30 @@ def main() -> int:
         print("   Confira o painel e force: AIARQ_DEPLOY_FORCE=1 git push\n")
         return 1
 
-    if n < 0:
+    # Uploads em curso contam como cliente ativo: o arquivo ainda está subindo e
+    # a linha do projeto nem existe. Campo ausente = backend anterior à v2 da
+    # trava; trata como 0 pra não bloquear tudo, mas o job já cobre o essencial.
+    u = dados.get("uploads_em_curso") or 0
+
+    if n < 0 or u < 0:
         print("\n🚦 PUSH BLOQUEADO — o backend não conseguiu contar os jobs.")
         print("   Na dúvida, não sobe.\n")
         return 1
 
-    if n > 0:
-        plural = "projeto" if n == 1 else "projetos"
-        print(f"\n🚦 PUSH BLOQUEADO — {n} {plural} processando agora.")
-        print("   Deploy reinicia o servidor e MATA o job do cliente no meio")
-        print("   (caso Walter, 29/07). Espere terminar — costuma levar ~5 min.")
+    if n > 0 or u > 0:
+        partes = []
+        if n:
+            partes.append(f"{n} projeto{'s' if n > 1 else ''} processando")
+        if u:
+            partes.append(f"{u} arquivo{'s' if u > 1 else ''} subindo agora")
+        print(f"\n🚦 PUSH BLOQUEADO — {' e '.join(partes)}.")
+        print("   Deploy reinicia o servidor e MATA o trabalho do cliente no meio")
+        print("   (caso Walter, 29/07). Upload grande passa minutos aqui — o DXF")
+        print("   de 112 MB de 03/08 levou vários. Espere e tente de novo.")
         print("   Emergência: AIARQ_DEPLOY_FORCE=1 git push origin main\n")
         return 1
 
-    print("✓ nenhum projeto processando — pode subir")
+    print("✓ nenhum cliente ativo (0 processando, 0 subindo) — pode subir")
     return 0
 
 

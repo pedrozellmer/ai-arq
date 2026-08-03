@@ -1062,6 +1062,26 @@ app.add_middleware(
     expose_headers=["X-Filename", "Content-Disposition"],
 )
 
+
+@app.middleware("http")
+async def _contar_uploads_em_curso(request: Request, call_next):
+    """Conta as rotas que RECEBEM arquivo enquanto elas estão de pé.
+
+    Middleware (e não `with` dentro da rota) por dois motivos: pega a requisição
+    inteira, incluindo o tempo em que os bytes ainda estão chegando; e evita
+    reindentar corpos de rota de centenas de linhas só pra abrir um bloco.
+
+    Serve a trava de deploy: sem isto ela só enxergava job com linha no banco, e
+    a linha nasce DEPOIS do upload terminar. O DXF de 112 MB da Eloídes (03/08)
+    passou minutos nessa janela cega."""
+    _p = request.url.path or ""
+    _conta = request.method == "POST" and (
+        _p.endswith("/api/process") or _p.endswith("/add-file"))
+    if not _conta:
+        return await call_next(request)
+    with _ContaUpload():
+        return await call_next(request)
+
 # ── Instagram Agent (desativado por padrão, ativar manualmente via /api/instagram/toggle) ──
 app.include_router(instagram_router)
 app.include_router(whatsapp_router)  # WhatsApp Cloud API (webhook); envio dormente até setar env
@@ -1078,6 +1098,31 @@ JOBS_FILE = os.path.join(WORK_DIR, "_jobs.json")
 # por uma thread com snapshot velho — a raiz do job órfão. RLock (reentrante)
 # porque _load_jobs/_save_jobs são chamados de dentro de seções já travadas.
 _JOBS_LOCK = threading.RLock()
+
+# Uploads CHEGANDO agora (bytes ainda subindo). Não é a mesma coisa que job
+# processando: a linha do projeto só nasce quando o arquivo termina de subir, e
+# o DXF de 112 MB da Eloídes (03/08) passou minutos nessa janela — invisível pro
+# banco, pro error_log e pra 1ª versão da trava de deploy. Deploy ali mataria o
+# envio dela sem deixar rastro. Ver JobsStore.uploads_em_curso().
+_UPLOADS_LOCK = threading.RLock()
+_UPLOADS_EM_CURSO = {"n": 0}
+
+
+class _ContaUpload:
+    """`with _ContaUpload():` em volta de rota que RECEBE arquivo.
+
+    Context manager (e não incremento solto) porque o decremento tem que
+    acontecer mesmo se a rota levantar exceção — senão um upload que falha
+    deixa o contador preso pra cima e a trava de deploy nunca mais libera."""
+    def __enter__(self):
+        with _UPLOADS_LOCK:
+            _UPLOADS_EM_CURSO["n"] += 1
+        return self
+
+    def __exit__(self, *exc):
+        with _UPLOADS_LOCK:
+            _UPLOADS_EM_CURSO["n"] = max(0, _UPLOADS_EM_CURSO["n"] - 1)
+        return False
 
 def _load_jobs() -> dict:
     with _JOBS_LOCK:
@@ -1923,6 +1968,17 @@ class JobsStore:
                 # Atualização de status pra um job que sumiu do store vira no-op
                 # MUDO — deixa rastro pra não esconder "status não gravou".
                 print(f"[jobs] update_field no-op: job '{key}' fora do store {list(kwargs)}")
+
+    def uploads_em_curso(self) -> int:
+        """Uploads que estão CHEGANDO agora (bytes ainda subindo).
+
+        🪤 Buraco da 1ª versão da trava (03/08/2026): ela só via job com linha no
+        banco, e a linha nasce DEPOIS que o arquivo termina de subir. O DXF de
+        112 MB da Eloídes levou minutos nessa janela — um deploy ali mataria o
+        envio dela sem aparecer em lugar nenhum, nem no banco nem no error_log.
+        "Cliente ativo" começa no primeiro byte, não no primeiro item."""
+        with _UPLOADS_LOCK:
+            return _UPLOADS_EM_CURSO["n"]
 
     def em_curso(self) -> int:
         """Quantos jobs estão na fila ou processando AGORA.
@@ -8880,7 +8936,10 @@ async def health():
         # por 4 minutos da Eloídes. Este contador é PÚBLICO de propósito: o hook
         # de pre-push precisa consultar sem credencial nenhuma. Não expõe nada
         # do cliente, só quantos jobs estão rodando.
+        # A trava de deploy soma os dois: cliente "ativo" começa no primeiro
+        # byte subindo, não no primeiro item extraído.
         "jobs_em_curso": jobs.em_curso(),
+        "uploads_em_curso": jobs.uploads_em_curso(),
         "features": {
             "pdf": True,
             "dxf": True,
