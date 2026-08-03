@@ -22,6 +22,13 @@ name: Deploy site to GitHub Pages
 on:
   push:
     branches: [main]
+  # 🪤 03/08/2026: o blog publica por DATA (1 post/semana), mas o sitemap e os
+  # links de "posts relacionados" são gerados uma vez e commitados — então o
+  # post entrava no ar e continuava fora do sitemap, sem link interno nenhum,
+  # até alguém lembrar de rodar o generate.py. O post de 02/08 estava exatamente
+  # assim. Este cron diário faz o site se reconciliar sozinho com o calendário.
+  schedule:
+    - cron: "0 9 * * *"   # 06:00 em Brasília
   workflow_dispatch:
 
 # Evita deploys concorrentes que causam race condition
@@ -46,6 +53,19 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Regenerate blog, sitemap and robots
+        # posts.json é a fonte da verdade; tudo o que sai dele (HTMLs, index,
+        # sitemap, links relacionados) é DERIVADO e depende da data de hoje.
+        # Regerar aqui garante que o que vai pro ar corresponde ao calendário
+        # de hoje, e não ao dia em que alguém rodou o script pela última vez.
+        # Sem dependências externas: generate.py só usa a biblioteca padrão.
+        run: python blog/generate.py
 
       - name: Prepare static site directory
         # Copia apenas arquivos do frontend pro _site/, excluindo backend,

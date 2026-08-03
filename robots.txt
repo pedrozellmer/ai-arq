@@ -10,10 +10,16 @@ Disallow: /revisao.html
 Disallow: /cronograma.html
 Disallow: /meus-projetos.html
 Disallow: /visualizar-prancha.html
+# 🪤 03/08/2026: estas três nasceram depois da auditoria de 23/05 e ninguém
+# lembrou de acrescentar aqui. Página pós-login/auth nova entra NESTA lista no
+# mesmo commit em que nasce — igual à regra do sitemap logo acima.
+Disallow: /memorial.html
+Disallow: /admin-usuario.html
 
 # Páginas de autenticação: não indexar (canibalizam home)
 Disallow: /login.html
 Disallow: /cadastro.html
+Disallow: /redefinir-senha.html
 
 # Diretórios técnicos
 Disallow: /_*

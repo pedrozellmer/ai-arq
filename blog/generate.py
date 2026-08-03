@@ -719,7 +719,16 @@ def render_index_html():
 
 
 def render_sitemap():
-    """Gera sitemap.xml com URLs do site, incluindo só posts já publicados."""
+    """Gera sitemap.xml com URLs do site, incluindo só posts já publicados.
+
+    🪤 Este arquivo envelhece SOZINHO. Os posts publicam por data (1 por
+    semana), mas o sitemap só muda quando alguém roda este script — então cada
+    post novo fica fora do sitemap até a próxima regeneração. Em 03/08/2026 o
+    post do dia anterior estava no ar, indexável, e ausente do sitemap. Por
+    isso o deploy passou a regerar isto todo dia (`.github/workflows/
+    deploy-pages.yml`, gatilho `schedule`). Mesmo motivo vale pros links de
+    "posts relacionados", que também congelam na geração.
+    """
     today = date.today().isoformat()
     urls = [
         (f"{SITE_URL}/", "1.0", "weekly"),
@@ -735,19 +744,30 @@ def render_sitemap():
         # quase aconteceu com licencas.html, adicionada à mão em 27/07/2026.
         (f"{SITE_URL}/licencas.html", "0.2", "yearly"),
     ]
+    # Páginas fixas não levam lastmod: inventar "mudou hoje" toda vez que o
+    # cron roda é justamente o sinal falso que faz o Google parar de confiar no
+    # arquivo. Só o post declara data, e só a data que a gente sabe de verdade.
+    urls = [(u, p, f, None) for u, p, f in urls]
+
     for post in POSTS:
         if post["publish_date"] <= today:
             urls.append((
                 f"{SITE_URL}/blog/posts/{post['slug']}.html",
                 "0.8",
                 "monthly",
+                # `updated` é opcional em posts.json — quando o texto for
+                # corrigido depois de publicado, preencher lá pro Google saber
+                # que vale reler. Sem ele, vale a data de publicação.
+                post.get("updated") or post["publish_date"],
             ))
 
     xml = '<?xml version="1.0" encoding="UTF-8"?>\n'
     xml += '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
-    for url, priority, freq in urls:
+    for url, priority, freq, lastmod in urls:
         xml += f'  <url>\n'
         xml += f'    <loc>{url}</loc>\n'
+        if lastmod:
+            xml += f'    <lastmod>{lastmod}</lastmod>\n'
         xml += f'    <changefreq>{freq}</changefreq>\n'
         xml += f'    <priority>{priority}</priority>\n'
         xml += f'  </url>\n'
@@ -771,10 +791,16 @@ Disallow: /revisao.html
 Disallow: /cronograma.html
 Disallow: /meus-projetos.html
 Disallow: /visualizar-prancha.html
+# 🪤 03/08/2026: estas três nasceram depois da auditoria de 23/05 e ninguém
+# lembrou de acrescentar aqui. Página pós-login/auth nova entra NESTA lista no
+# mesmo commit em que nasce — igual à regra do sitemap logo acima.
+Disallow: /memorial.html
+Disallow: /admin-usuario.html
 
 # Páginas de autenticação: não indexar (canibalizam home)
 Disallow: /login.html
 Disallow: /cadastro.html
+Disallow: /redefinir-senha.html
 
 # Diretórios técnicos
 Disallow: /_*
