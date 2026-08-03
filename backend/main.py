@@ -8792,6 +8792,13 @@ async def health():
             "dxf": True,
             "dwg": shutil.which("ODAFileConverter") is not None,
             "calibrator": HAS_CALIBRATOR if 'HAS_CALIBRATOR' in dir() else False,
+            # Fallback pros DWG que o ODA recusa. Duas coisas separadas: o
+            # binário existir e a chave estar ligada no Render. Ficam à vista
+            # porque "liguei lá" e "o backend está usando" já se desencontraram
+            # antes — e sem isso só dá pra conferir com token de admin.
+            "libredwg_instalado": shutil.which("dwg2dxf") is not None,
+            "libredwg_ligado": os.getenv("LIBREDWG_FALLBACK", "0").strip().lower()
+                               in ("1", "true", "on", "sim"),
         }
     }
 
