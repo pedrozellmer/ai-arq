@@ -4264,8 +4264,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # pra arquivar o desenho — e jsonb gigante em toda linha de
                     # projeto custa banco à toa.
                     _assin["layers"] = _assin["layers"][:400]
-                    _supabase_update("projects", "job_id", job_id,
-                                     {"desenho_assinatura": _assin})
+                    _projeto_patch(job_id, {"desenho_assinatura": _assin})
                     print(f"[assinatura] job={job_id}: fp={_assin.get('fingerprint')} "
                           f"layers={_assin.get('n_layers')}")
         except Exception as _eas:
@@ -11530,6 +11529,39 @@ def _assinatura_atual(job_id: str) -> str:
         return ""
 
 
+def _projeto_patch(job_id: str, campos: dict) -> bool:
+    """Grava campos em `projects` que a RPC de status NÃO conhece.
+
+    🚨 Por que existe (achado em 03/08/2026, com a planilha da Eloídes na mão):
+    `_supabase_update("projects","job_id",…)` **não faz UPDATE** — ele roteia pra
+    RPC `update_project_status`, que aceita 7 parâmetros fixos (status,
+    items_count, áreas, erro, completed_at, warnings). Campo fora dessa lista é
+    simplesmente descartado. Resultado: `planilha_gerada_em` (02/08),
+    `comparativo_assinatura` e `desenho_assinatura` (03/08) NUNCA gravaram em
+    produção, e o `try/except` de cada carimbo engolia o erro.
+
+    O efeito prático era o pior possível: com `planilha_gerada_em` NULL, o RPC de
+    coerência devolve vazio — a cliente corrigiu 9 itens depois da planilha e
+    **não recebeu aviso nenhum** de que o .xlsx tinha ficado velho. Exatamente o
+    caso do Luciano que a regra nº7 nasceu pra impedir.
+
+    PATCH direto com service_role (que ignora RLS) resolve. Devolve True/False —
+    quem chama decide se loga; nunca mais um carimbo que falha calado.
+    """
+    import urllib.parse
+    try:
+        _st, _ = _supa_rest_service(
+            "PATCH", f"projects?job_id=eq.{urllib.parse.quote(job_id)}",
+            body=campos, prefer="return=minimal")
+        if _st not in (200, 204):
+            _log_error("projeto:patch", f"{list(campos)} → HTTP {_st}", job_id)
+            return False
+        return True
+    except Exception as e:
+        _log_error("projeto:patch", f"{list(campos)}: {e}", job_id)
+        return False
+
+
 def _carimbar_planilha(job_id: str) -> None:
     """Registra de qual quantitativo o .xlsx atual nasceu. Chamar SEMPRE depois
     de gerar/subir a planilha e depois dos itens já estarem no banco — o .xlsx é
@@ -11538,7 +11570,7 @@ def _carimbar_planilha(job_id: str) -> None:
     Best-effort: falhar aqui não pode derrubar um job que deu certo."""
     try:
         _assinatura_invalidar(job_id)   # itens acabaram de mudar
-        _supabase_update("projects", "job_id", job_id, {
+        _projeto_patch(job_id, {
             "planilha_assinatura": _assinatura_atual(job_id),
             "planilha_gerada_em": datetime.utcnow().isoformat() + "Z",
         })
@@ -11559,7 +11591,7 @@ def _carimbar_comparativo(job_id: str) -> None:
         # "desatualizado" um segundo depois de gerar — alarme inventado, que a
         # regra nº7 proíbe explicitamente.
         _assinatura_invalidar(job_id)
-        _supabase_update("projects", "job_id", job_id, {
+        _projeto_patch(job_id, {
             "comparativo_assinatura": _assinatura_atual(job_id),
             "comparativo_gerado_em": datetime.utcnow().isoformat() + "Z",
         })
