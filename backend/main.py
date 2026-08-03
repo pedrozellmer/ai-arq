@@ -5984,6 +5984,35 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 f"cota/quadro pra medir). Ela entra como BASE pros itens de área — confira antes de orçar."
             ]
             print(f"[area-informada] job={job_id}: usando área do cliente {_uta} m² (planta sem medição)")
+        elif _uta > 0 and (project_data.total_area or 0) > 0:
+            # Os DOIS existem: o cliente informou E a planta mediu. A medição da
+            # planta continua valendo (regra de sempre), mas até 03/08 a
+            # divergência sumia em silêncio — caso Eloídes: informou 31 m², a
+            # planta mediu 30.995,8 m² (1000×) e ninguém falou nada.
+            # 🪤 O corte é ALTO (25×) de propósito: informar a área de REFORMA
+            # dentro de um prédio maior é legítimo e dá 2× a 20× — alarmar ali
+            # seria inventar problema (regra nº7: aviso falso queima o aviso
+            # verdadeiro). 25× já não tem explicação inocente: é digitar em
+            # milhares, trocar m² por m, ou errar o zero.
+            _med = float(project_data.total_area or 0)
+            _razao = max(_uta, _med) / max(1e-9, min(_uta, _med))
+            if _razao >= 25:
+                # 🪤 Formatar SÓ o número. Trocar vírgula/ponto na frase inteira
+                # embaralha a pontuação do texto — errei assim há 20 minutos em
+                # engine_rules.py, e esta frase o cliente lê.
+                def _m2(v):
+                    return f"{v:,.0f}".replace(",", "\x00").replace(".", ",").replace("\x00", ".")
+                project_data.warnings = (project_data.warnings or []) + [
+                    f"⚠ Confira a área: você informou {_m2(_uta)} m² no envio e a planta "
+                    f"mede {_m2(_med)} m² — uma diferença de {_m2(_razao)}×. Usamos a "
+                    f"medição da planta. Se o número que você digitou era o certo (ou se "
+                    f"era só a área de intervenção), reenvie corrigindo — os itens em m² "
+                    f"saem dessa base."
+                ]
+                print(f"[area-divergente] job={job_id}: informada {_uta} × medida {_med} "
+                      f"({_razao:.0f}×) — avisado ao cliente")
+                _log_error("motor:area-divergente",
+                           f"informada {_uta} m² × medida {_med} m² ({_razao:.0f}×)", job_id)
         elif not (project_data.total_area or 0):
             # 🚨 63% dos projetos concluídos terminam SEM área total (47% dos com
             # CAD, 76% dos só-PDF — medido em 30/07). A área sai UNICAMENTE da IA
