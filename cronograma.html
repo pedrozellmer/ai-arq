@@ -1329,6 +1329,30 @@ async function gerarCronograma() {
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     const cronog = await r.json();
 
+    // 🚨 REGERAR NÃO PODE APAGAR O DINHEIRO DO CLIENTE (regra nº7: nunca
+    // refazer sozinho o que tem edição dele dentro).
+    // /generate remonta as fases a partir do QUANTITATIVO, sem valor nenhum, e
+    // a linha abaixo troca o estado inteiro — então cada R$ digitado sumia sem
+    // aviso. E o banner de coerência manda justamente "Regerar e depois
+    // Salvar": o próprio produto empurrava o cliente pro botão que apagava o
+    // trabalho dele.
+    // 🪤 Casa por LABEL, nunca por índice: o backend reordena (sort por
+    // ordem/início, dependências FS, agregação de grupos) e casar por posição
+    // poria o valor de uma etapa em outra — calado, que é o pior jeito de errar
+    // com dinheiro.
+    const _valoresAntigos = new Map();
+    (cronogramaAtual?.fases || []).forEach(f => {
+      const v = parseFloat(f.valor_previsto) || 0;
+      if (v > 0 && f.label) _valoresAntigos.set(String(f.label).trim().toLowerCase(), v);
+    });
+    let _restaurados = 0;
+    if (_valoresAntigos.size) {
+      (cronog.fases || []).forEach(f => {
+        const k = String(f.label || '').trim().toLowerCase();
+        if (_valoresAntigos.has(k)) { f.valor_previsto = _valoresAntigos.get(k); _restaurados++; }
+      });
+    }
+
     cronogramaAtual = cronog;
     atualizarLinksExport();
 
@@ -1341,6 +1365,19 @@ async function gerarCronograma() {
     renderMarcosLegais(cronog);
     renderRessalva(cronog);
     popularEditor();  // Onda 1: editor aberto por default
+
+    if (_valoresAntigos.size) {
+      // O `financeiro` que voltou do /generate foi calculado SEM os valores
+      // (eles não existiam lá). Manda as fases já com o dinheiro de volta pra
+      // refazer o rateio — senão a tela mostraria "sem desembolso" logo depois
+      // de eu ter restaurado tudo.
+      recalcularNoServidor();
+      const _perdidos = _valoresAntigos.size - _restaurados;
+      const _m = _perdidos > 0
+        ? `Mantive o valor de ${_restaurados} etapa(s). ⚠ ${_perdidos} etapa(s) que tinham valor não existem mais no cronograma novo — confira o desembolso.`
+        : `Mantive os valores que você digitou em ${_restaurados} etapa(s); o rateio pelos meses foi refeito.`;
+      window.toast ? (_perdidos > 0 ? window.toast.error(_m) : window.toast.success(_m)) : null;
+    }
 
     document.getElementById('result').classList.remove('hidden');
 
