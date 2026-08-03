@@ -346,23 +346,31 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
     except (TypeError, ValueError):
         q = 0.0
 
-    if u in LENGTH_UNITS_OK:
-        return {}                                  # já está certo
-
     n = _num_br(medida)
-    # 1) mesmo número, rótulo errado (tolerância de centavo)
-    if q > 0 and abs(q - medida) <= max(0.01, medida * 0.001):
-        return {"unit": "m",
-                "motivo": (f"⚠ UNIDADE CORRIGIDA: a observação mede {n} m de "
-                           f"comprimento, mas o item saiu em '{unit}'. "
-                           f"Comprimento não é área nem contagem.")}
 
-    # 2) mediu e entregou zero
+    # 1) mediu e entregou ZERO — vem primeiro, e vale mesmo com a unidade certa.
+    # 🪤 Este caso passou batido na 1ª versão: eu saía cedo quando a unidade já
+    # era de comprimento, achando "então está tudo certo". O 2º projeto da
+    # Eloídes (df4f00ca, 191 itens) mostrou 2 itens em `ml` com quantidade 0 —
+    # rótulo certo, medição jogada fora do mesmo jeito. Unidade certa não diz
+    # nada sobre a quantidade.
     if q <= 0:
-        return {"quantity": round(medida, 2), "unit": "m", "confidence": "estimado",
+        return {"quantity": round(medida, 2),
+                "unit": unit if u in LENGTH_UNITS_OK else "m",
+                "confidence": "estimado",
                 "motivo": (f"⚠ QUANTIDADE RECUPERADA: o motor mediu {n} m neste "
                            f"layer e a linha tinha saído zerada. Marcado como "
                            f"ESTIMADO — a soma do layer pode incluir linha que não "
                            f"é tubulação. Confira antes de orçar.")}
+
+    if u in LENGTH_UNITS_OK:
+        return {}                                  # unidade certa e com número
+
+    # 2) mesmo número, rótulo errado (tolerância de centavo)
+    if abs(q - medida) <= max(0.01, medida * 0.001):
+        return {"unit": "m",
+                "motivo": (f"⚠ UNIDADE CORRIGIDA: a observação mede {n} m de "
+                           f"comprimento, mas o item saiu em '{unit}'. "
+                           f"Comprimento não é área nem contagem.")}
 
     return {}
