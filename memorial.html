@@ -87,6 +87,9 @@
 
 <main id="main" class="max-w-4xl mx-auto px-4 py-6 space-y-4">
 
+  <!-- Aviso: o quantitativo mudou depois que este memorial foi salvo -->
+  <div id="aviso-coerencia" class="hidden"></div>
+
   <!-- Como usar -->
   <div class="bg-white rounded-2xl border shadow-sm p-4 text-xs text-gray-600">
     <p class="mb-1"><span class="font-medium text-gray-800">Clique em qualquer parágrafo pra editar</span> — o texto é seu. Os blocos <span class="chip bg-orange-100 text-orange-700">[A PREENCHER]</span> são o que o desenho não informa: complete ali mesmo.</p>
@@ -99,6 +102,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="aiarq-utils.js"></script>
+<script src="coerencia.js"></script>
 <script>
 const API_BASE = window.API_BASE;
 const sb       = window.sb;
@@ -122,12 +126,49 @@ let salvando = false;
     estrutura = d.estrutura;
     render(d.salvo);
     document.body.classList.add('m-ready');
+    if (window.aiArqCoerencia) {
+      window.aiArqCoerencia(jobId, 'memorial').then(wireBotaoAtualizar);
+    }
   } catch (e) {
     const msg = 'Erro ao carregar o memorial: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
   document.getElementById('gate').classList.add('hidden');
 })();
+
+// ── "Atualizar com os números de agora" ─────────────────────
+// Remonta o memorial a partir do quantitativo atual. Substitui o texto na
+// TELA, não no banco: só vira oficial quando o cliente clicar em Salvar.
+function wireBotaoAtualizar() {
+  const btn = document.getElementById('coer-refazer-memorial');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    if (!confirm('Isto refaz o texto do memorial com as quantidades atuais.\n\n'
+               + 'O que você escreveu ou completou à mão será substituído. Continuar?')) return;
+    btn.disabled = true;
+    btn.textContent = 'Atualizando…';
+    try {
+      const r = await authFetch(`${API_BASE}/api/memorial/${jobId}/estrutura?fresco=1`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const d = await r.json();
+      estrutura = d.estrutura;
+      render(false);
+      dirty = true;                       // ainda não está no banco
+      const caixa = document.getElementById('aviso-coerencia');
+      if (caixa) caixa.innerHTML =
+        '<div class="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">'
+      + '<p class="text-sm font-bold text-amber-900">Texto refeito com os números de agora</p>'
+      + '<p class="text-xs text-amber-800 leading-snug mt-1">Confira e clique em '
+      + '<strong>Salvar</strong> — até lá, o memorial guardado ainda é o antigo.</p></div>';
+      window.toast && window.toast.info && window.toast.info('Memorial atualizado — revise e salve');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Atualizar com os números de agora';
+      const msg = 'Não consegui atualizar agora: ' + e.message;
+      window.toast ? window.toast.error(msg) : alert(msg);
+    }
+  });
+}
 
 function render(jaSalvo) {
   const c = document.getElementById('doc-container');
@@ -267,6 +308,9 @@ async function salvar() {
     setDirty(false);
     st.textContent = `✓ salvo às ${_horaAgora()}`;
     st.style.color = '#059669';
+    // O salvamento carimba a assinatura do quantitativo atual — se o aviso de
+    // desatualizado estava na tela, ele some sozinho agora.
+    if (window.aiArqCoerencia) window.aiArqCoerencia(jobId, 'memorial').then(wireBotaoAtualizar);
     return true;
   } catch (e) {
     st.textContent = 'erro ao salvar — tente de novo';

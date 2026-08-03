@@ -146,6 +146,9 @@
     <p class="mt-3 text-sm text-gray-500">Gerando cronograma...</p>
   </div>
 
+  <!-- Aviso: o quantitativo mudou depois que este cronograma foi gerado -->
+  <div id="aviso-coerencia" class="hidden mb-4"></div>
+
   <!-- Resultado -->
   <div id="result" class="hidden space-y-6">
 
@@ -327,6 +330,7 @@
 <!-- supabase-js + utils compartilhados (sbClient, downloadProtected, escapeHtml, API_BASE) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="aiarq-utils.js"></script>
+<script src="coerencia.js"></script>
 <script>
 // Helpers globais (sbClient, downloadProtected, escapeHtml, API_BASE, aiArqNotify)
 // vêm de aiarq-utils.js. Reimportamos como const locais.
@@ -390,6 +394,9 @@ async function init() {
   const carregouSalvo = await tentarCarregarCronogramaPronto();
   if (carregouSalvo) {
     document.getElementById('gate').classList.add('hidden');
+    // Só o cronograma SALVO pode estar velho — o recém-gerado nasce dos itens
+    // de agora. Por isso a checagem mora aqui dentro.
+    if (window.aiArqCoerencia) window.aiArqCoerencia(jobId, 'cronograma');
     return;
   }
 
@@ -984,6 +991,9 @@ async function salvarCronograma() {
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     showSaveStatus('Cronograma salvo. Botões PDF/PPT já podem ser usados.', 'success');
+    // Salvar carimba a assinatura do quantitativo atual: se o aviso de
+    // "desatualizado" estava na tela, some agora.
+    if (window.aiArqCoerencia) window.aiArqCoerencia(jobId, 'cronograma');
   } catch (e) {
     showSaveStatus(`Erro ao salvar: ${e.message}`, 'error');
   } finally {

@@ -102,6 +102,10 @@ function smartBack() {
 
 <main id="main" class="max-w-6xl mx-auto px-4 py-6 space-y-6">
 
+  <!-- Aviso de entregável desatualizado (coerencia.js). Aparece quando o
+       cliente corrige o quantitativo depois de gerar cronograma/memorial. -->
+  <div id="aviso-coerencia" class="hidden"></div>
+
   <!-- Faixa de KPIs (visual portado do cronograma.html) — preenchida por
        renderMetrics/renderDates com o que a página JÁ carrega; sem dado = "--" -->
   <div id="kpi-strip" class="grid gap-4 grid-cols-2 md:grid-cols-4">
@@ -894,6 +898,7 @@ function smartBack() {
 <!-- supabase-js + utils compartilhados (sb, sbClient, authFetch, downloadProtected, openPdfProtected, escapeHtml, API_BASE) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="aiarq-utils.js"></script>
+<script src="coerencia.js"></script>
 <script>
 // Helpers globais (sb, sbClient, authFetch, downloadProtected, openPdfProtected,
 // escapeHtml, API_BASE, aiArqNotify) vêm de aiarq-utils.js. Reimportamos como
@@ -1054,6 +1059,9 @@ async function carregarStatsEntregas() {
       }
     }
   } catch (e) { console.warn('cronograma stats:', e); }
+
+  // ── Os três entregáveis ainda combinam entre si? ──
+  if (window.aiArqCoerencia) window.aiArqCoerencia(jobId, 'projeto');
 }
 
 (async function init() {

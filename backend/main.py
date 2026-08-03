@@ -11272,6 +11272,72 @@ async def memorial_docx(job_id: str, request: Request):
         raise HTTPException(500, f"Erro ao gerar memorial: {e}")
 
 
+def _assinatura_quantitativo(items) -> str:
+    """Impressão digital do quantitativo. Cronograma e memorial nascem DAQUI —
+    se o cliente editar/confirmar/excluir um item depois, a assinatura muda e o
+    site avisa que o entregável salvo ficou velho, em vez de entregar número
+    desatualizado calado. Regra do Pedro (02/08/2026): tudo interligado.
+
+    Entram só os campos que mudam o resultado: descrição e observação viram
+    texto do memorial; quantidade/unidade viram esforço e duração de fase;
+    disciplina vira fase; confiança vira o selo medido/estimado."""
+    import hashlib
+    partes = []
+    for it in (items or []):
+        try:
+            _q = round(float(it.get("quantity") or 0), 4)
+        except (TypeError, ValueError):
+            _q = 0.0
+        partes.append("|".join([
+            str(it.get("id") or ""),
+            (it.get("description") or "").strip(),
+            f"{_q:.4f}",
+            (it.get("unit") or "").strip(),
+            (it.get("discipline") or "").strip(),
+            (it.get("confidence") or "").strip(),
+            (it.get("observations") or "").strip(),
+        ]))
+    partes.sort()  # ordem do banco não pode mudar a assinatura
+    bruto = f"n={len(partes)}\n" + "\n".join(partes)
+    return hashlib.sha256(bruto.encode("utf-8")).hexdigest()[:32]
+
+
+_ASSINATURA_CACHE: dict = {}   # job_id -> (timestamp, assinatura)
+_ASSINATURA_TTL = 60           # seg. O autosave do memorial salva a cada 1,5s;
+                               # sem cache seria uma leitura de itens por tecla.
+
+
+def _assinatura_invalidar(job_id: str) -> None:
+    """Chamado quando um item muda — a próxima leitura recalcula na hora."""
+    _ASSINATURA_CACHE.pop(job_id, None)
+
+
+def _assinatura_atual(job_id: str) -> str:
+    """Assinatura do quantitativo que está no banco AGORA. String vazia se não
+    der pra ler — nesse caso o chamador não deve acusar desatualização (não
+    inventar alarme em cima de falha de rede)."""
+    import json
+    import time as _time
+    import urllib.request as _url_req
+    _hit = _ASSINATURA_CACHE.get(job_id)
+    if _hit and (_time.time() - _hit[0]) < _ASSINATURA_TTL:
+        return _hit[1]
+    try:
+        _u = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+        _b = json.dumps({"p_job_id": job_id}).encode("utf-8")
+        _r = _url_req.Request(_u, data=_b, method="POST")
+        _r.add_header("apikey", SUPABASE_KEY)
+        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _r.add_header("Content-Type", "application/json")
+        items = json.loads(_url_req.urlopen(_r, timeout=15).read().decode("utf-8")) or []
+        _sig = _assinatura_quantitativo(items)
+        _ASSINATURA_CACHE[job_id] = (_time.time(), _sig)
+        return _sig
+    except Exception as e:
+        print(f"[coerencia] não consegui assinar o quantitativo de {job_id}: {e}")
+        return ""
+
+
 def _memorial_dados_frescos(job_id: str):
     """(projeto, items) pros geradores do memorial — mesma RPC do /api/items."""
     import json
@@ -11345,10 +11411,15 @@ async def memorial_pdf(job_id: str, request: Request):
 @app.get("/api/memorial/{job_id}/estrutura")
 async def memorial_estrutura(job_id: str, request: Request):
     """Estrutura editável do memorial pra tela memorial.html.
-    Devolve a versão SALVA se existir; senão monta fresca dos itens."""
+    Devolve a versão SALVA se existir; senão monta fresca dos itens.
+
+    `?fresco=1` ignora a salva e remonta com os números de agora — é o botão
+    'atualizar' de quando o cliente corrige o quantitativo depois. Não grava
+    nada: o texto novo só entra no lugar quando ele salvar."""
     _require_project_owner(request, job_id)
+    fresco = str(request.query_params.get("fresco") or "") in ("1", "true", "sim")
     try:
-        salvo = _memorial_carregar_salvo(job_id)
+        salvo = None if fresco else _memorial_carregar_salvo(job_id)
         if salvo:
             return {"status": "ok", "salvo": True, "estrutura": salvo}
         projeto, items = _memorial_dados_frescos(job_id)
@@ -11397,7 +11468,8 @@ async def memorial_redigir_ia(job_id: str, request: Request):
         limpa = validar_estrutura_editada(estrutura)
         _st, _resp = _supa_rest_service(
             "POST", "project_memorial?on_conflict=job_id",
-            {"job_id": job_id, "conteudo": limpa, "updated_at": "now()"},
+            {"job_id": job_id, "conteudo": limpa, "updated_at": "now()",
+             "itens_assinatura": _assinatura_atual(job_id)},
             prefer="resolution=merge-duplicates")
         if _st not in (200, 201, 204):
             _log_error("memorial:redigir-salvar", f"REST {_st}", job_id=job_id)
@@ -11431,12 +11503,113 @@ async def memorial_salvar(job_id: str, request: Request):
         raise HTTPException(400, f"Estrutura inválida: {ve}")
     _st, _resp = _supa_rest_service(
         "POST", "project_memorial?on_conflict=job_id",
-        {"job_id": job_id, "conteudo": limpa, "updated_at": "now()"},
+        {"job_id": job_id, "conteudo": limpa, "updated_at": "now()",
+         "itens_assinatura": _assinatura_atual(job_id)},
         prefer="resolution=merge-duplicates")
     if _st not in (200, 201, 204):
         _log_error("memorial:salvar", f"REST {_st}: {str(_resp)[:300]}", job_id=job_id)
         raise HTTPException(500, "Erro ao salvar o memorial")
     return {"status": "ok"}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  COERÊNCIA ENTRE OS ENTREGÁVEIS  (regra do Pedro, 02/08/2026)
+#  Quantitativo, cronograma e memorial saem do MESMO projeto. Mexeu
+#  no quantitativo, os outros dois envelheceram — e o cliente tem que
+#  ficar sabendo, não descobrir na obra. Aqui a gente detecta e avisa;
+#  refazer é sempre escolha dele (memorial e cronograma têm edição
+#  manual dentro, ninguém sobrescreve o trabalho do cliente sozinho).
+# ═══════════════════════════════════════════════════════════════
+
+def _revisoes_depois_de(job_id: str, quando: str) -> dict:
+    """Quantos itens foram editados/excluídos depois de `quando` (ISO). É o
+    'o que mudou' que a assinatura sozinha não conta."""
+    import urllib.parse
+    out = {"editados": 0, "excluidos": 0}
+    if not quando:
+        return out
+    _st, _rows = _supa_rest_service(
+        "GET",
+        f"item_reviews?job_id=eq.{urllib.parse.quote(job_id)}"
+        f"&reviewed_at=gt.{urllib.parse.quote(quando)}"
+        f"&action=in.(edit,reject)&select=action,item_id")
+    if _st != 200 or not isinstance(_rows, list):
+        return out
+    # Mesmo item mexido 3× continua sendo 1 item mudado.
+    editados, excluidos = set(), set()
+    for r in _rows:
+        (excluidos if r.get("action") == "reject" else editados).add(r.get("item_id"))
+    out["editados"] = len(editados - excluidos)
+    out["excluidos"] = len(excluidos)
+    return out
+
+
+def _frase_mudanca(m: dict) -> str:
+    p = []
+    if m.get("editados"):
+        n = m["editados"]
+        p.append(f"{n} item corrigido" if n == 1 else f"{n} itens corrigidos")
+    if m.get("excluidos"):
+        n = m["excluidos"]
+        p.append(f"{n} item excluído" if n == 1 else f"{n} itens excluídos")
+    return " e ".join(p)
+
+
+def _coerencia_do_projeto(job_id: str) -> dict:
+    """Estado de sincronia dos três entregáveis do projeto."""
+    import urllib.parse
+    atual = _assinatura_atual(job_id)
+
+    def _avaliar(nome: str, row: Optional[dict]) -> dict:
+        if not row:
+            return {"existe": False, "desatualizado": False}
+        quando = row.get("updated_at") or row.get("created_at") or ""
+        salva = row.get("itens_assinatura")
+        mudancas = _revisoes_depois_de(job_id, quando)
+        # Duas provas independentes. A assinatura pega qualquer diferença de
+        # números; a contagem de revisões cobre os entregáveis antigos, salvos
+        # antes de existir assinatura (8 cronogramas em 02/08/2026).
+        por_assinatura = bool(atual and salva and salva != atual)
+        por_revisao = bool(mudancas["editados"] or mudancas["excluidos"])
+        return {
+            "existe": True,
+            "desatualizado": por_assinatura or por_revisao,
+            "em": quando,
+            "mudancas": mudancas,
+            "frase": _frase_mudanca(mudancas),
+        }
+
+    _st, _mem = _supa_rest_service(
+        "GET", f"project_memorial?job_id=eq.{urllib.parse.quote(job_id)}"
+               f"&select=updated_at,itens_assinatura&limit=1")
+    memorial = _avaliar("memorial", (_mem or [None])[0] if _st == 200 and _mem else None)
+    cronograma = _avaliar("cronograma", _supabase_get_cronograma(job_id))
+
+    desatualizados = [n for n, v in (("cronograma", cronograma), ("memorial", memorial))
+                      if v.get("desatualizado")]
+    return {
+        "assinatura": atual,
+        "cronograma": cronograma,
+        "memorial": memorial,
+        "desatualizados": desatualizados,
+        "tudo_em_dia": not desatualizados,
+    }
+
+
+@app.get("/api/projeto/{job_id}/coerencia")
+async def projeto_coerencia(job_id: str, request: Request):
+    """Diz quais entregáveis salvos ficaram velhos depois que o cliente mexeu
+    no quantitativo. Só leitura — quem refaz é o cliente, com um clique."""
+    _require_project_owner(request, job_id)
+    try:
+        return _coerencia_do_projeto(job_id)
+    except Exception as e:
+        print(f"[coerencia] {job_id}: {e}")
+        # Nunca derruba a tela por causa do aviso: sem resposta confiável, o
+        # front simplesmente não mostra banner nenhum.
+        return {"assinatura": "", "cronograma": {"existe": False, "desatualizado": False},
+                "memorial": {"existe": False, "desatualizado": False},
+                "desatualizados": [], "tudo_em_dia": True, "erro": True}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -11724,7 +11897,9 @@ def _supabase_upsert_cronograma(job_id: str, data: dict, request=None) -> bool:
 
     `request` opcional repassa JWT pra respeitar RLS."""
     import urllib.request, json as _json
-    payload = {"job_id": job_id, **data}
+    # Carimba de qual quantitativo este cronograma nasceu. Se o cliente mexer
+    # num item depois, /api/projeto/{job}/coerencia acusa a diferença.
+    payload = {"job_id": job_id, "itens_assinatura": _assinatura_atual(job_id), **data}
     try:
         if request is not None:
             st, _ = _supa_rest_as_user(
@@ -12140,6 +12315,11 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
             urllib.request.urlopen(req, timeout=15)
         except Exception as e:
             _supa_log(f"REVIEW reject item={item_id} ERR {e}")
+
+    # 4) O quantitativo mudou → cronograma e memorial salvos podem ter ficado
+    # velhos. Derruba o cache pra próxima leitura de coerência ser a real.
+    if action in ("edit", "reject"):
+        _assinatura_invalidar(job_id)
 
     return {"status": "ok", "action": action}
 
