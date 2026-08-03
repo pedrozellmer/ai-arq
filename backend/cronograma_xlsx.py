@@ -106,8 +106,14 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
     # disciplina, fase, desembolso. Ver feedback_nao_falar_mal_concorrente:
     # nem copiar, nem cutucar.
     FIXAS = ['Nº', 'FASE / DISCIPLINA', 'INÍCIO', 'FIM', 'DURAÇÃO (DIAS)', '% EXECUTADO']
+    tem_real = bool(fin and (fin.get('n_fases_com_realizado') or 0) > 0)
     if tem_fin:
         FIXAS.append('VALOR DA FASE (R$)')
+    if tem_real:
+        # Colunas de medição só entram quando existe lançamento. Coluna vazia
+        # numa planilha que vai pro banco parece campo que a gente esqueceu de
+        # preencher — pior do que não ter a coluna.
+        FIXAS += ['JÁ GASTO (R$)', 'DESVIO (R$)']
     n_cols = len(FIXAS) + len(meses)
 
     ro = _cabecalho(ws, branding, tem_fin, n_cols)
@@ -153,8 +159,12 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
         vals = [idx + 1, fase.get('label', ''), fase.get('inicio', ''),
                 fase.get('fim', ''), fase.get('dur_dias', 0),
                 (float(fase.get('pct_executado') or 0) / 100.0)]
+        realizado = float(fase.get('valor_realizado') or 0)
         if tem_fin:
             vals.append(valor)
+        if tem_real:
+            vals.append(realizado)
+            vals.append(round(realizado - valor, 2) if (realizado or valor) else 0)
         for i, v in enumerate(vals, start=1):
             c = ws.cell(row=ro, column=i, value=v)
             c.font = F_N
@@ -164,7 +174,7 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
                 c.fill = alt
             if i == 6:
                 c.number_format = FMT_PCT
-            if tem_fin and i == 7:
+            if tem_fin and i >= 7:
                 c.number_format = FMT_MOEDA
                 c.alignment = AR
 
@@ -248,7 +258,7 @@ def gerar_cronograma_xlsx(cronograma: dict, output_path: str,
         ro += 1
 
     # ── larguras e painel congelado
-    larguras = [8, 42, 12, 12, 14, 13] + ([16] if tem_fin else [])
+    larguras = [8, 42, 12, 12, 14, 13] + ([16] if tem_fin else []) + ([15, 15] if tem_real else [])
     for i, w in enumerate(larguras, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
     for j in range(len(meses)):

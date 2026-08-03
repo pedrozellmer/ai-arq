@@ -320,6 +320,7 @@
         O AI.arq não calcula preço — ele distribui o valor que você digitou em cada etapa
         pelos meses, no mesmo ritmo do cronograma físico. Mexeu numa fase, o desembolso anda junto.
       </p>
+      <div id="financeiro-medicao"></div>
       <div id="financeiro-resumo" class="grid gap-3 sm:grid-cols-3 mb-4"></div>
       <div id="financeiro-tabela" class="overflow-x-auto"></div>
     </div>
@@ -662,9 +663,14 @@ function addFaseRowEditor(fase, idx) {
            title="Valor desta etapa — informado por você. O AI.arq não precifica: só distribui o seu número pelos meses.">
         <span class="text-xs text-slate-500 font-semibold" aria-hidden="true">R$</span>
         <input type="text" inputmode="decimal" value="${fase.valor_previsto ? formatMoedaInput(fase.valor_previsto) : ''}"
-               placeholder="opcional"
-               class="fase-valor w-28 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-slate-500 focus:outline-none text-right"
+               placeholder="previsto"
+               class="fase-valor w-24 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-slate-500 focus:outline-none text-right"
                aria-label="Valor previsto desta etapa em reais (opcional, informado por você)" />
+        <input type="text" inputmode="decimal" value="${fase.valor_realizado ? formatMoedaInput(fase.valor_realizado) : ''}"
+               placeholder="realizado"
+               title="Quanto JÁ FOI GASTO nesta etapa — é o que o banco acompanha na medição. Opcional."
+               class="fase-realizado w-24 rounded-lg border border-emerald-300 bg-emerald-50/40 px-2 py-2 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none text-right"
+               aria-label="Valor já gasto nesta etapa em reais (opcional, informado por você)" />
       </div>
       <button class="btn-adv text-slate-400 hover:text-slate-700 p-1 shrink-0" title="Mostrar opções avançadas (dependências, grupo, marco)" aria-label="Avançado" aria-expanded="false">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -843,6 +849,7 @@ function aplicarEdits(opts) {
     // Vai o texto CRU pro backend: quem interpreta "1.234,56" é o
     // _valor_limpo, testado. Interpretar aqui também criaria um 2º parser.
     const valorRaw = (row.querySelector('.fase-valor')?.value || '').trim();
+    const realizadoRaw = (row.querySelector('.fase-realizado')?.value || '').trim();
     if (!label || !inicio || !fim) { invalido++; return; }
     // Onda 3: campos avançados (depends_on, is_milestone, parent_ordem)
     const isMilestone = !!row.querySelector('.fase-milestone')?.checked;
@@ -857,6 +864,7 @@ function aplicarEdits(opts) {
       ambiente: ambiente || undefined,
       pct_executado: pctExec,
       valor_previsto: valorRaw,
+      valor_realizado: realizadoRaw,
       ordem: idx,
       manual: true,
       depends_on: dependsOn,
@@ -953,6 +961,7 @@ async function recalcularNoServidor() {
       // perder é pior que qualquer outro campo. Regra nº7: nunca destruir o
       // que tem edição dele dentro.
       valor_previsto: f.valor_previsto != null ? f.valor_previsto : 0,
+      valor_realizado: f.valor_realizado != null ? f.valor_realizado : 0,
       categoria: f.categoria,
       ordem: f.ordem !== undefined ? f.ordem : i,
       manual: !!f.manual,
@@ -1025,6 +1034,7 @@ async function salvarCronograma() {
       // perder é pior que qualquer outro campo. Regra nº7: nunca destruir o
       // que tem edição dele dentro.
       valor_previsto: f.valor_previsto != null ? f.valor_previsto : 0,
+      valor_realizado: f.valor_realizado != null ? f.valor_realizado : 0,
       categoria: f.categoria,
       ordem: f.ordem !== undefined ? f.ordem : i,
       manual: !!f.manual,
@@ -1096,7 +1106,11 @@ function formatMoedaInput(n) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function formatMoedaBR(n) {
-  return 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR',
+  // 🪤 Sinal ANTES do R$: concatenar 'R$ ' com o número negativo dava
+  // "R$ -20.000,00", que não é como se escreve dinheiro em português — e a
+  // coluna de desvio é toda feita de negativo.
+  const v = Number(n) || 0;
+  return (v < 0 ? '-' : '') + 'R$ ' + Math.abs(v).toLocaleString('pt-BR',
     { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
@@ -1347,7 +1361,7 @@ async function gerarCronograma() {
     //   valor_previsto  → dinheiro que ele digitou
     //   pct_executado   → avanço real da obra (mesmo bug, achado na revisão)
     //   ambiente        → rótulo que ele escreveu
-    const _CAMPOS_DO_CLIENTE = ['valor_previsto', 'pct_executado', 'ambiente'];
+    const _CAMPOS_DO_CLIENTE = ['valor_previsto', 'valor_realizado', 'pct_executado', 'ambiente'];
     const _guardado = new Map();
     (cronogramaAtual?.fases || []).forEach(f => {
       if (!f.label) return;
@@ -1451,6 +1465,7 @@ async function autoSaveCronograma(cron) {
     ambiente: f.ambiente,
     pct_executado: f.pct_executado != null ? f.pct_executado : 0,
     valor_previsto: f.valor_previsto != null ? f.valor_previsto : 0,   // 🪤 ver nota acima
+    valor_realizado: f.valor_realizado != null ? f.valor_realizado : 0,
     categoria: f.categoria,
     ordem: f.ordem !== undefined ? f.ordem : i,
     manual: !!f.manual,
@@ -2025,6 +2040,51 @@ function renderFinanceiro(c) {
   bloco.classList.remove('hidden');
 
   const parciais = fin.n_fases_com_valor < fin.n_fases;
+  // Realizado × Previsto — só aparece quando o cliente lançou algum gasto.
+  // 🪤 Sem lançamento nenhum o bloco NÃO mostra "desvio de -100%": não gastar
+  // ainda não é estourar o orçamento ao contrário. Ausência de dado não é dado.
+  const temReal = (fin.n_fases_com_realizado || 0) > 0;
+  const _desvio = fin.desvio_total;
+  const _corD = !temReal ? 'slate' : (_desvio > 0 ? 'red' : 'emerald');
+  document.getElementById('financeiro-medicao').innerHTML = !temReal ? '' : `
+    <div class="grid gap-3 sm:grid-cols-3 mb-4">
+      <div class="rounded-xl border bg-slate-50 p-4">
+        <p class="text-xs text-slate-500 mb-1">Já gasto (informado por você)</p>
+        <p class="text-xl font-bold text-slate-900 tabular-nums">${formatMoedaBR(fin.realizado_total)}</p>
+        <p class="text-xs text-slate-400 mt-1">${fin.n_fases_com_realizado} de ${fin.n_fases} etapas com lançamento</p>
+      </div>
+      <div class="rounded-xl border bg-slate-50 p-4">
+        <p class="text-xs text-slate-500 mb-1">Previsto</p>
+        <p class="text-xl font-bold text-slate-900 tabular-nums">${formatMoedaBR(fin.total_informado)}</p>
+      </div>
+      <div class="rounded-xl border bg-${_corD}-50 border-${_corD}-200 p-4">
+        <p class="text-xs text-${_corD}-700 mb-1">${_desvio > 0 ? 'Acima do previsto' : 'Abaixo do previsto'}</p>
+        <p class="text-xl font-bold text-${_corD}-800 tabular-nums">${formatMoedaBR(Math.abs(_desvio || 0))}</p>
+        <p class="text-xs text-${_corD}-700 mt-1">só das etapas já lançadas</p>
+      </div>
+    </div>
+    <div class="overflow-x-auto mb-4">
+      <table class="w-full text-sm border-collapse">
+        <thead><tr>
+          <th class="text-left bg-slate-800 text-white px-3 py-2.5 text-xs uppercase tracking-wider font-semibold">Etapa</th>
+          <th class="bg-slate-800 text-slate-200 text-right px-3 py-2.5 text-xs font-medium">Previsto</th>
+          <th class="bg-slate-800 text-slate-200 text-right px-3 py-2.5 text-xs font-medium">Realizado</th>
+          <th class="bg-slate-800 text-slate-200 text-right px-3 py-2.5 text-xs font-medium">Desvio</th>
+        </tr></thead>
+        <tbody>
+          ${(fin.por_fase || []).filter(f => f.realizado > 0).map((f, i) => `
+            <tr class="${i % 2 ? 'bg-white' : 'bg-slate-50'}">
+              <td class="px-3 py-2 text-slate-800 border-b border-slate-200">${escapeHtml(f.label)}</td>
+              <td class="px-3 py-2 text-right tabular-nums text-slate-600 border-b border-slate-200">${formatMoedaBR(f.previsto)}</td>
+              <td class="px-3 py-2 text-right tabular-nums text-slate-800 font-medium border-b border-slate-200">${formatMoedaBR(f.realizado)}</td>
+              <td class="px-3 py-2 text-right tabular-nums font-semibold border-b border-slate-200 ${f.desvio > 0 ? 'text-red-700' : 'text-emerald-700'}">
+                ${f.desvio > 0 ? '+' : ''}${formatMoedaBR(f.desvio)}${f.desvio_pct !== null && f.desvio_pct !== undefined ? ` <span class="font-normal text-slate-400">(${f.desvio_pct > 0 ? '+' : ''}${String(f.desvio_pct).replace('.', ',')}%)</span>` : ''}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
   document.getElementById('financeiro-resumo').innerHTML = `
     <div class="rounded-xl border bg-slate-50 p-4">
       <p class="text-xs text-slate-500 mb-1">Total informado por você</p>

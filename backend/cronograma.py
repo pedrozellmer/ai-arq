@@ -151,8 +151,13 @@ def calcular_financeiro(fases: List[Dict], matriz: List[Dict],
     divergiriam em silêncio, que é o problema que a regra nº7 existe pra evitar.
     """
     total = round(sum(f.get('valor_previsto') or 0 for f in fases), 2)
-    if total <= 0:
+    _tem_realizado = any((f.get('valor_realizado') or 0) > 0 for f in fases)
+    if total <= 0 and not _tem_realizado:
         return None
+    # 🪤 Só realizado, sem previsto: acontece em obra que já começou antes de
+    # montar o cronograma. O rateio por mês fica vazio (não há previsto pra
+    # distribuir), mas o confronto previsto × realizado ainda vale — devolver
+    # None aqui esconderia o dinheiro que ele já lançou.
 
     n_meses = len(meses)
     por_mes = [0.0] * n_meses
@@ -186,14 +191,43 @@ def calcular_financeiro(fases: List[Dict], matriz: List[Dict],
         corrente = round(corrente + v, 2)
         acumulado.append(corrente)
 
+    # ── Realizado × Previsto (o que o banco olha na medição) ──────────────
+    # Só o TOTAL e o desvio: o realizado é informado por fase, sem data, então
+    # ratear ele pelos meses seria inventar QUANDO o dinheiro saiu. Preferimos
+    # não responder a pergunta que o cliente não respondeu.
+    realizado = round(sum(f.get('valor_realizado') or 0 for f in fases), 2)
+    n_real = sum(1 for f in fases if (f.get('valor_realizado') or 0) > 0)
+    por_fase = []
+    for f in fases:
+        _p = float(f.get('valor_previsto') or 0)
+        _r = float(f.get('valor_realizado') or 0)
+        if _p <= 0 and _r <= 0:
+            continue
+        por_fase.append({
+            'label': f.get('label', ''),
+            'previsto': round(_p, 2),
+            'realizado': round(_r, 2),
+            'desvio': round(_r - _p, 2),
+            # % só existe com previsto > 0 — dividir por zero viraria "∞% de
+            # estouro" numa fase que o cliente simplesmente não orçou.
+            'desvio_pct': (round(100 * (_r - _p) / _p, 1) if _p > 0 else None),
+        })
+
     return {
         'total_informado': total,
         'por_mes': por_mes,
         'acumulado': acumulado,
+        'realizado_total': realizado,
+        'n_fases_com_realizado': n_real,
+        'desvio_total': round(realizado - total, 2) if n_real else None,
+        'por_fase': por_fase,
         # Curva S financeira: mesma leitura da física, com peso em dinheiro.
+        # 🪤 `or 1` no divisor: com só-realizado o previsto é 0 e isto levantava
+        # ZeroDivisionError, derrubando o cronograma inteiro por causa do bloco
+        # financeiro. Sem previsto não há curva — sai tudo em 0%, que é honesto.
         'curva_s': [
             {'mes_idx': m['mes_idx'], 'data': m['inicio'], 'label': m['label'],
-             'pct_acumulado': round(100 * acumulado[i] / total, 1)}
+             'pct_acumulado': round(100 * acumulado[i] / (total or 1), 1)}
             for i, m in enumerate(meses)
         ],
         'n_fases_com_valor': sum(1 for f in fases if (f.get('valor_previsto') or 0) > 0),
@@ -282,6 +316,10 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             # por nós (regra dura nº5: não precificamos). Mesmo tratamento da
             # área total informada: entra como dado dele, rotulado como dele.
             'valor_previsto': _valor_limpo(f.get('valor_previsto')),
+            # 💸 Quanto JÁ FOI GASTO nesta fase — também dele. É o que o banco
+            # acompanha na medição: previsto × realizado. Sem isso o cronograma
+            # responde "quanto vai custar" e não "como está indo".
+            'valor_realizado': _valor_limpo(f.get('valor_realizado')),
             # Índice posicional ORIGINAL (na lista fases_custom enviada pelo
             # frontend). depends_on/parent_ordem foram gravados pelo front
             # como índices nessa lista, então guardamos a referência estável
