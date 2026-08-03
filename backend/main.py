@@ -11640,10 +11640,14 @@ async def projetos_desatualizados(request: Request):
         _st, _rows = _supa_rest_service(
             "POST", "rpc/projetos_desatualizados", {"p_user_id": user["id"]})
         if _st != 200 or not isinstance(_rows, list):
+            # Devolver lista vazia calado esconderia permissão errada no RPC:
+            # o chip some e parece que está tudo em dia. Registra pra aparecer
+            # no error_log em vez de virar "funcionou".
+            _log_error("coerencia:lista", f"RPC {_st}: {str(_rows)[:300]}")
             return {"projetos": []}
         return {"projetos": _rows}
     except Exception as e:
-        print(f"[coerencia] lista do usuário falhou: {e}")
+        _log_error("coerencia:lista", str(e))
         return {"projetos": []}
 
 
@@ -11655,9 +11659,10 @@ async def projeto_coerencia(job_id: str, request: Request):
     try:
         return _coerencia_do_projeto(job_id)
     except Exception as e:
-        print(f"[coerencia] {job_id}: {e}")
         # Nunca derruba a tela por causa do aviso: sem resposta confiável, o
-        # front simplesmente não mostra banner nenhum.
+        # front simplesmente não mostra banner nenhum. Mas registra — "nenhum
+        # aviso" por falha é indistinguível de "está tudo em dia".
+        _log_error("coerencia:projeto", str(e), job_id=job_id)
         _vazio = {"existe": False, "desatualizado": False}
         return {"assinatura": "", "planilha": _vazio, "cronograma": _vazio,
                 "memorial": _vazio, "desatualizados": [], "tudo_em_dia": True,
