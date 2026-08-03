@@ -626,6 +626,12 @@ function smartBack() {
              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-red-300 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-semibold no-underline transition">PDF</a>
           <a id="btn-cron-pptx" href="#" target="_blank" rel="noopener" style="pointer-events:none;opacity:0.6"
              class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-orange-300 bg-orange-50 hover:bg-orange-100 text-orange-700 text-sm font-semibold no-underline transition">PPT</a>
+          <!-- 03/08: a planilha do cronograma só existia dentro de cronograma.html.
+               O PDF é pra apresentar; a PLANILHA é o que o banco e o orçamentista
+               mexem — e é aqui, no card de entregas, que o cliente procura o que
+               levar. Ficar só na outra tela é esconder o formato mais usado. -->
+          <a id="btn-cron-xlsx" href="#" target="_blank" rel="noopener" style="pointer-events:none;opacity:0.6"
+             class="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-sm font-semibold no-underline transition">Planilha</a>
         </div>
       </div>
 
@@ -1124,6 +1130,7 @@ async function carregarStatsEntregas() {
     };
     wireCronExport('btn-cron-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf`, `cronograma_${jobId}.pdf`);
     wireCronExport('btn-cron-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx`, `cronograma_${jobId}.pptx`);
+    wireCronExport('btn-cron-xlsx', `${API_BASE}/api/cronograma/${jobId}/export/xlsx`, `cronograma_${jobId}.xlsx`);
     // Memorial descritivo: editor na tela (link) + .docx direto (protegido)
     enableLink('btn-memorial-abrir', `memorial.html?job_id=${jobId}`);
     const _memAbrir = document.getElementById('btn-memorial-abrir');
