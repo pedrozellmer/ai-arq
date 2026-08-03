@@ -1446,8 +1446,17 @@ function mostrarProcessando(live, session) {
         }
       } catch (e) { /* rede: tenta de novo no próximo tick */ }
     }
-    // creep suave: alvo = maior entre progresso real e tempo (~1,2%/s, teto 95%)
-    const target = Math.max(_backendPct, Math.min(95, 3 + _elapsed * 1.2));
+    // Creep suave — mas AMARRADO no progresso real (03/08/2026).
+    // 🪤 Antes era `max(real, 3 + tempo*1,2)` com teto 95: em ~77 s o creep já
+    // batia em 95% e ficava lá, ignorando o real. No projeto da Eloídes (15
+    // arquivos, 29 pranchas) a barra marcava 95% na prancha 12/29 — com uns 15
+    // minutos ainda pela frente. Barra parada em 95% por 15 min lê como travado
+    // e faz o cliente fechar a aba justamente quando está dando certo.
+    // Agora o creep só ANTECIPA um pedaço do próximo passo real: enche o tempo
+    // morto entre atualizações sem nunca contar história. Sem progresso real
+    // nenhum (backend mudo), ele para em 12% em vez de fingir 95%.
+    const _tetoCreep = Math.min(95, Math.max(12, _backendPct + 8));
+    const target = Math.max(_backendPct, Math.min(_tetoCreep, 3 + _elapsed * 1.2));
     if (target > _shown) _shown = Math.min(target, _shown + 0.7);
     paint();
     // Progresso REAL congelado tempo demais (não só tempo total): oferece a ação.

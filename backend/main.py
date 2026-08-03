@@ -5396,6 +5396,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 except Exception:
                     pass
         total = len(page_units)
+        # 🪤 O cliente subiu N ARQUIVOS e a tela mostrava "Prancha 12/29" — 29 é
+        # o total de PÁGINAS dos PDFs (cada página é uma prancha desde o fix de
+        # OOM de 06/07), mas nada na tela dizia isso. Somado ao "DXF 1/1" que
+        # aparece antes, ela via dois contadores com denominadores diferentes e
+        # nenhum batendo com o que enviou. Dizer a unidade custa uma palavra.
+        _u_total = ("página" if total == 1 else "páginas")
+        _sufixo_total = (f" de {len(pdf_infos)} PDF" + ("s" if len(pdf_infos) != 1 else "")
+                         if total != len(pdf_infos) else "")
 
         # CHECKPOINT: o cache (_ckpt_cache) já foi carregado UMA vez lá em cima,
         # antes do bloco DXF — serve os dois loops (DXF e PDF). Em RETOMADA
@@ -5410,7 +5418,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _disp = filename if page_count <= 1 else f"{filename} · pág {page_index+1}/{page_count}"
             step_pct = pdf_start_pct + int((i / max(total, 1)) * pdf_span)
             jobs.update_field(job_id, progress=step_pct)
-            jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {_disp}")
+            jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: {_disp}")
 
             # Se o auto-detect falhou E o usuário não classificou manualmente:
             # - se o nome contém palavra-chave de AMBIENTE (banh, cozinha, lavabo,
@@ -5424,11 +5432,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     sheet_type = SheetType.DETALHE_AMBIENTE
                     # Guarda auto-detect no mapa (vai ser lido por user_ambientes.get)
                     user_ambientes.setdefault(pdf_path, _auto_amb)
-                    jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (detalhe de {_auto_amb})")
+                    jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: {filename} (detalhe de {_auto_amb})")
                 else:
                     print(f"[fallback] {filename}: tipo não detectado, usando PROMPT_ARQUITETURA como genérico")
                     sheet_type = SheetType.ARQUITETURA
-                    jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {filename} (tipo não identificado — extração genérica)")
+                    jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: {filename} (tipo não identificado — extração genérica)")
 
             _stem = f"{os.path.splitext(os.path.basename(pdf_path))[0]}_p{page_index}"
             _ck_key = _sanitize_filename_for_storage(_stem)
@@ -5436,7 +5444,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # CHECKPOINT: prancha já analisada antes do restart — reusa o
                 # resultado salvo (pula texto, crops e IA).
                 result = _ckpt_cache[_ck_key]
-                jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: {_disp} — análise já concluída, retomando ✓")
+                jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: {_disp} — análise já concluída, retomando ✓")
                 print(f"[ckpt] {_stem}: análise reaproveitada do checkpoint")
             else:
                 # 1. Extrair texto (só da página desta unidade — leve, bounded)
@@ -5482,7 +5490,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     print(f"[pdfvec-promo] {_stem}: sem promoção ({_ve})")
 
                 # 3. Analisar com IA
-                jobs.update_field(job_id, current_step=f"Prancha {i+1}/{total}: Nossa IA está analisando {_disp}...")
+                jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: Nossa IA está analisando {_disp}...")
                 sheet = SheetInfo(
                     filename=filename,
                     sheet_type=sheet_type,
