@@ -12977,9 +12977,15 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
                  and "informe a metragem" not in str(w).lower()]
     _supabase_update("projects", "job_id", job_id, {
         "total_area": area,
-        "user_total_area": area,
         "warnings": _existing + [_warn],
     })
+    # 🪤 `user_total_area` NÃO existe na RPC update_project_status — ia junto no
+    # dicionário acima e era descartado sem erro (mesmo bug dos carimbos da
+    # regra nº7, achado em 03/08). O campo é o que registra que esta área foi
+    # INFORMADA e não medida: sem ele, o projeto fica com `total_area` e nada
+    # dizendo de onde veio, e o aviso de divergência (informada × medida) nunca
+    # dispara. Ninguém tinha usado este fluxo ainda — bug latente, não estrago.
+    _projeto_patch(job_id, {"user_total_area": area})
 
     return {
         "status": "ok",
