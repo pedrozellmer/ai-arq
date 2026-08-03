@@ -3665,6 +3665,7 @@ async function loadOrigem(){
     return {from,to,n:0,lbl}; });
   users.forEach(u=>{ const t=Date.parse(u.auth_created_at||u.profile_created_at||''); if(!isNaN(t)){ const w=weeks.find(w=>t>=w.from&&t<w.to); if(w)w.n++; } });
   const maxW = weeks.reduce((m,w)=>Math.max(m,w.n),0) || 1;
+  const _somaW = weeks.reduce((s,w)=>s+w.n,0);
 
   box.innerHTML = `
     <div class="grid md:grid-cols-2 gap-5">
@@ -3680,17 +3681,48 @@ async function loadOrigem(){
       </div>
     </div>
     <div class="rounded-2xl border bg-white p-5 mt-5">
-      <h3 class="font-semibold text-gray-900 mb-4">Cadastros por semana <span class="text-xs font-normal text-gray-400">(8 blocos de 7 dias · início&ndash;fim)</span></h3>
-      <div class="flex items-end gap-2" style="height:150px">
-        ${weeks.map((w,i)=>{ const h=Math.round(w.n*100/maxW); const atual=(i===weeks.length-1);
-          const col = atual ? '#4F46E5' : '#C7D2FE'; return `
-          <div class="flex-1 flex flex-col items-center justify-end h-full">
-            <span class="text-xs font-semibold mb-1 ${atual?'text-indigo-600':'text-gray-500'}">${w.n||''}</span>
-            <div class="w-full rounded-t transition-all" style="height:${Math.max(2,h)}%;background:${col}" title="${w.n} cadastro(s) entre ${w.lbl}"></div>
-            <div class="h-9 flex flex-col items-center justify-start pt-1 text-center leading-tight">
-              <span class="text-[10px] ${atual?'text-indigo-600 font-semibold':'text-gray-400'}">${w.lbl}</span>
-              ${atual?'<span class="text-[9px] text-indigo-500 font-medium">últimos 7 dias</span>':''}
-            </div>
+      <div class="flex items-baseline justify-between mb-1 flex-wrap gap-2">
+        <h3 class="font-semibold text-gray-900">Cadastros por semana</h3>
+        <span class="text-xs text-gray-400">8 blocos de 7 dias fechados · pico ${maxW}</span>
+      </div>
+      <p class="text-xs text-gray-400 mb-4">${_somaW} cadastros nas 8 semanas · média ${(_somaW/8).toFixed(1)}/semana</p>
+      <!-- 🪤 03/08: a versão anterior punha barra + número + rótulo DENTRO da mesma
+           caixa de 150px com justify-end. A barra tinha height em % dessa caixa, mas
+           dividia o espaço com ~56px de texto — então o flex ENCOLHIA a barra e a
+           altura parava de representar o valor: 4, 5 e 7 saíam quase do mesmo
+           tamanho. Agora a área de plotagem é uma faixa própria de altura fixa e os
+           rótulos vivem FORA dela. Altura de barra = valor, sem disputa. -->
+      <div class="relative" style="height:132px">
+        <!-- linha do topo (o pico) e linha de base: referência recessiva, cinza -->
+        <div class="absolute inset-x-0 top-0 border-t border-dashed border-gray-200"></div>
+        <div class="absolute inset-x-0 bottom-0 border-t border-gray-300"></div>
+        <div class="absolute inset-0 flex gap-[3px]">
+          ${weeks.map((w,i)=>{ const atual=(i===weeks.length-1);
+            // Barra e número saem do FLUXO (absolute): enquanto os dois eram
+            // irmãos num flex-col, o número disputava altura com a barra e o
+            // flex encolhia a barra — dois valores diferentes acabavam do mesmo
+            // tamanho, que foi o que o Pedro viu na tela. Fora do fluxo, a
+            // altura só depende do valor.
+            // Teto em 82%: sobra a faixa de cima pro número da barra mais alta
+            // não vazar do quadro. Proporção entre as barras não muda.
+            const h = maxW ? (w.n*82/maxW) : 0;
+            const col = atual ? '#4F46E5' : '#A5B4FC';
+            return `
+            <div class="flex-1 h-full relative" title="${w.lbl}: ${w.n} cadastro${w.n===1?'':'s'}">
+              <div class="absolute bottom-0 inset-x-0 transition-all"
+                   style="height:${h}%;${w.n?'min-height:3px;':''}background:${col};border-radius:4px 4px 0 0"></div>
+              <span class="absolute inset-x-0 text-center text-[11px] font-semibold tabular-nums leading-none
+                           ${atual?'text-indigo-700':(w.n?'text-gray-500':'text-gray-300')}"
+                    style="bottom:calc(${h}% + 5px)">${w.n}</span>
+            </div>`; }).join('')}
+        </div>
+      </div>
+      <!-- Rótulos FORA da área de plotagem — mesma grade de colunas -->
+      <div class="flex gap-[3px] mt-2">
+        ${weeks.map((w,i)=>{ const atual=(i===weeks.length-1); return `
+          <div class="flex-1 text-center leading-tight">
+            <div class="text-[10px] ${atual?'text-indigo-700 font-semibold':'text-gray-400'}">${w.lbl}</div>
+            ${atual?'<div class="text-[9px] text-indigo-500 font-medium">últimos 7 dias</div>':''}
           </div>`; }).join('')}
       </div>
     </div>
