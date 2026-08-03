@@ -6116,6 +6116,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # existem no xlsx — a revisão só poderia ser feita no Excel offline.
         _persist_items_to_supabase(job_id, all_items)
 
+        # Planilha e itens acabaram de nascer juntos: carimba a origem pra o
+        # site saber, depois, se a revisão do cliente deixou o .xlsx pra trás.
+        _carimbar_planilha(job_id)
+
         # Persistir warnings do motor (prancha órfã, legenda ausente) no
         # campo `warnings` da tabela projects — exibido em Meus Projetos
         # como alerta "precisa de complemento".
@@ -11338,6 +11342,22 @@ def _assinatura_atual(job_id: str) -> str:
         return ""
 
 
+def _carimbar_planilha(job_id: str) -> None:
+    """Registra de qual quantitativo o .xlsx atual nasceu. Chamar SEMPRE depois
+    de gerar/subir a planilha e depois dos itens já estarem no banco — o .xlsx é
+    servido de arquivo salvo, então sem este carimbo o cliente que corrige itens
+    e não clica em 'Finalizar revisão' baixa os números velhos sem saber.
+    Best-effort: falhar aqui não pode derrubar um job que deu certo."""
+    try:
+        _assinatura_invalidar(job_id)   # itens acabaram de mudar
+        _supabase_update("projects", "job_id", job_id, {
+            "planilha_assinatura": _assinatura_atual(job_id),
+            "planilha_gerada_em": datetime.utcnow().isoformat() + "Z",
+        })
+    except Exception as e:
+        print(f"[coerencia] carimbo da planilha falhou ({job_id}), não crítico: {e}")
+
+
 def _memorial_dados_frescos(job_id: str):
     """(projeto, items) pros geradores do memorial — mesma RPC do /api/items."""
     import json
@@ -11585,10 +11605,22 @@ def _coerencia_do_projeto(job_id: str) -> dict:
     memorial = _avaliar("memorial", (_mem or [None])[0] if _st == 200 and _mem else None)
     cronograma = _avaliar("cronograma", _supabase_get_cronograma(job_id))
 
-    desatualizados = [n for n, v in (("cronograma", cronograma), ("memorial", memorial))
-                      if v.get("desatualizado")]
+    # A planilha .xlsx é servida de arquivo salvo — envelhece igual aos outros.
+    _st, _prj = _supa_rest_service(
+        "GET", f"projects?job_id=eq.{urllib.parse.quote(job_id)}"
+               f"&select=planilha_assinatura,planilha_gerada_em&limit=1")
+    _row = (_prj or [None])[0] if _st == 200 and _prj else None
+    planilha = _avaliar("planilha", {
+        "updated_at": _row.get("planilha_gerada_em"),
+        "itens_assinatura": _row.get("planilha_assinatura"),
+    } if _row and _row.get("planilha_gerada_em") else None)
+
+    desatualizados = [n for n, v in (("planilha", planilha),
+                                     ("cronograma", cronograma),
+                                     ("memorial", memorial)) if v.get("desatualizado")]
     return {
         "assinatura": atual,
+        "planilha": planilha,
         "cronograma": cronograma,
         "memorial": memorial,
         "desatualizados": desatualizados,
@@ -11607,9 +11639,10 @@ async def projeto_coerencia(job_id: str, request: Request):
         print(f"[coerencia] {job_id}: {e}")
         # Nunca derruba a tela por causa do aviso: sem resposta confiável, o
         # front simplesmente não mostra banner nenhum.
-        return {"assinatura": "", "cronograma": {"existe": False, "desatualizado": False},
-                "memorial": {"existe": False, "desatualizado": False},
-                "desatualizados": [], "tudo_em_dia": True, "erro": True}
+        _vazio = {"existe": False, "desatualizado": False}
+        return {"assinatura": "", "planilha": _vazio, "cronograma": _vazio,
+                "memorial": _vazio, "desatualizados": [], "tudo_em_dia": True,
+                "erro": True}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -12422,6 +12455,8 @@ async def finalize_review(job_id: str, request: Request):
 
     # 5) Subir pra Storage sobrescrevendo o antigo
     _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
+    # A planilha agora bate com os itens revisados — tira o aviso de velha.
+    _carimbar_planilha(job_id)
 
     return {
         "status": "ok",
@@ -12551,6 +12586,7 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
 
     # 6) Persistir itens atualizados (revisão/planilha na tela refletem o preenchimento)
     _persist_items_to_supabase(job_id, items)
+    _carimbar_planilha(job_id)
 
     # 7) Atualizar projeto: área informada + warning honesto (troca avisos antigos
     #    de "informe a área" pra não duplicar)

@@ -62,24 +62,41 @@
       };
     }
 
-    // Página do projeto: o painel geral.
-    var quais = [];
-    if (cronVelho) quais.push('o cronograma');
-    if (memVelho) quais.push('o memorial');
-    var alvo = quais.join(' e ');
-    var info = cronVelho ? cron : mem;
-    var acoes = '';
-    if (cronVelho) acoes += botao('cronograma.html?job=' + d._jobId, 'Abrir cronograma', true) + ' ';
-    if (memVelho) acoes += botao('memorial.html?job=' + d._jobId, 'Abrir memorial', !cronVelho);
+    // Página do projeto: o painel geral dos três entregáveis.
+    var pl = d.planilha || {};
+    var velhos = [];
+    if (pl.desatualizado)  velhos.push({ artigo: 'a', nome: 'planilha',   info: pl  });
+    if (cronVelho)         velhos.push({ artigo: 'o', nome: 'cronograma', info: cron });
+    if (memVelho)          velhos.push({ artigo: 'o', nome: 'memorial',   info: mem });
 
+    var nomes = velhos.map(function (v) { return v.artigo + ' ' + v.nome; });
+    var alvo = nomes.length > 2
+      ? nomes.slice(0, -1).join(', ') + ' e ' + nomes[nomes.length - 1]
+      : nomes.join(' e ');
+
+    var acoes = '';
+    var primeiro = true;
+    velhos.forEach(function (v) {
+      if (v.nome === 'planilha') {
+        acoes += '<button type="button" id="coer-refazer-planilha" ' +
+                 'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
+                 'bg-amber-600 text-white">Atualizar planilha agora</button> ';
+      } else {
+        var pag = v.nome === 'cronograma' ? 'cronograma.html?job=' : 'memorial.html?job=';
+        acoes += botao(pag + d._jobId, 'Abrir ' + v.nome, primeiro) + ' ';
+      }
+      primeiro = false;
+    });
+
+    var so = velhos[0];
     return {
-      titulo: quais.length > 1
-        ? 'O cronograma e o memorial ficaram desatualizados'
-        : 'Seu ' + alvo.replace('o ', '') + ' ficou desatualizado',
-      corpo: 'Depois que ' + alvo + ' ' + plural(quais.length, 'foi gerado', 'foram gerados') +
-             ', você ajustou o quantitativo (' + motivo(info) + '). ' +
-             plural(quais.length, 'Ele ainda usa', 'Eles ainda usam') +
-             ' os números antigos — vale atualizar antes de mandar pra obra ou pro banco.',
+      titulo: velhos.length === 1
+        ? (so.artigo === 'a' ? 'Sua ' : 'Seu ') + so.nome + ' ficou desatualizad' +
+          (so.artigo === 'a' ? 'a' : 'o')
+        : 'Estes arquivos ficaram desatualizados: ' + alvo,
+      corpo: 'Você ajustou o quantitativo depois (' + motivo(so.info) + '), então ' +
+             alvo + ' ainda ' + plural(velhos.length, 'usa', 'usam') + ' os números ' +
+             'antigos. Vale atualizar antes de mandar pra obra, pro cliente ou pro banco.',
       acoes: acoes
     };
   }
@@ -100,6 +117,32 @@
     caixa.setAttribute('role', 'status');
   }
 
+  // Refazer a planilha é seguro: ela é 100% derivada dos itens, não tem nada
+  // escrito à mão dentro. Por isso aqui tem botão direto, sem confirmação —
+  // ao contrário do memorial e do cronograma.
+  function wirePlanilha(jobId, contexto) {
+    var btn = document.getElementById('coer-refazer-planilha');
+    if (!btn) return;
+    btn.addEventListener('click', async function () {
+      btn.disabled = true;
+      btn.textContent = 'Atualizando…';
+      try {
+        var r = await window.authFetch(
+          window.API_BASE + '/api/items/' + jobId + '/finalize', { method: 'POST' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        window.toast && window.toast.success
+          ? window.toast.success('Planilha atualizada com os números de agora')
+          : null;
+        aiArqCoerencia(jobId, contexto);   // recarrega o aviso já sem a planilha
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Atualizar planilha agora';
+        var msg = 'Não consegui atualizar a planilha agora: ' + e.message;
+        window.toast ? window.toast.error(msg) : alert(msg);
+      }
+    });
+  }
+
   async function aiArqCoerencia(jobId, contexto) {
     var caixa = document.getElementById('aviso-coerencia');
     if (!caixa || !jobId) return null;
@@ -116,6 +159,7 @@
       if (!mostra) { caixa.classList.add('hidden'); caixa.innerHTML = ''; return d; }
 
       render(caixa, montarTexto(contexto, d));
+      wirePlanilha(jobId, contexto);
       return d;
     } catch (e) {
       // Aviso é acessório: falhou, a página segue sem ele.
