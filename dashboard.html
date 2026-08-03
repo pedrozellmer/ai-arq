@@ -3810,6 +3810,30 @@
           } catch (e) {}
         })();
       });
+
+      // Entregável mais velho que a última correção de item. UMA chamada pra
+      // lista inteira (o exame completo, com assinatura, fica na página do
+      // projeto). Se falhar, a lista simplesmente não mostra chip nenhum.
+      (async () => {
+        try {
+          const r = await authFetch(`${API_BASE}/api/projetos/desatualizados`);
+          if (!r.ok) return;
+          const { projetos } = await r.json();
+          (projetos || []).forEach(v => {
+            const el = document.querySelector(`[data-job="${v.job_id}"] .stale-badge`);
+            if (!el) return;
+            const quais = [];
+            if (v.planilha) quais.push('planilha');
+            if (v.cronograma) quais.push('cronograma');
+            if (v.memorial) quais.push('memorial');
+            if (!quais.length) return;
+            el.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full '
+              + 'bg-amber-100 text-amber-800 text-[10px] font-semibold cursor-help" '
+              + `title="Você corrigiu itens depois de gerar: ${quais.join(', ')}. Abra o projeto pra atualizar.">`
+              + '⚠ desatualizado</span>';
+          });
+        } catch (e) { console.warn('desatualizados:', e); }
+      })();
     } catch (e) {
       loadingEl.innerHTML = `<p class="text-red-500">Erro ao carregar: ${escProj(e.message)}</p>`;
     }
@@ -3897,6 +3921,7 @@
               <span class="conf-badge"></span>
               <span class="review-pct"></span>
               <span class="cron-badge"></span>
+              <span class="stale-badge"></span>
               ${warningBadge}${archivedBadge}
             </div>
             <p class="text-xs text-gray-500 truncate mt-0.5">${sub}</p>

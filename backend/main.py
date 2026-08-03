@@ -11628,6 +11628,25 @@ def _coerencia_do_projeto(job_id: str) -> dict:
     }
 
 
+@app.get("/api/projetos/desatualizados")
+async def projetos_desatualizados(request: Request):
+    """Lista, de uma vez, os projetos do usuário logado com entregável velho —
+    pro chip de aviso em Meus Projetos. Uma consulta pra todos: recalcular a
+    assinatura projeto por projeto significaria reler os itens de cada um."""
+    user = _get_user_from_request(request)
+    if not user or not user.get("id"):
+        raise HTTPException(401, "Autenticação requerida")
+    try:
+        _st, _rows = _supa_rest_service(
+            "POST", "rpc/projetos_desatualizados", {"p_user_id": user["id"]})
+        if _st != 200 or not isinstance(_rows, list):
+            return {"projetos": []}
+        return {"projetos": _rows}
+    except Exception as e:
+        print(f"[coerencia] lista do usuário falhou: {e}")
+        return {"projetos": []}
+
+
 @app.get("/api/projeto/{job_id}/coerencia")
 async def projeto_coerencia(job_id: str, request: Request):
     """Diz quais entregáveis salvos ficaram velhos depois que o cliente mexeu
