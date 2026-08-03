@@ -9847,6 +9847,12 @@ async def compare_supplier_quotes(job_id: str, request: Request, include_referen
     except Exception as _se:
         print(f"[quotes/compare] upload Storage falhou (segue com disco): {_se}")
 
+    # Regra nº7: registra de qual quantitativo este comparativo nasceu. Sem isso
+    # ele envelhece calado — o cliente corrige uma quantidade na revisão e o
+    # comparativo salvo continua confrontando os fornecedores contra o número
+    # antigo, que é justamente o que vai pra decisão de compra.
+    _carimbar_comparativo(job_id)
+
     # ═══ ALIMENTA MOTOR ANONIMAMENTE ═══
     # Extrai heurísticas do comparativo (sem dados do projeto) e insere
     # em market_heuristics. Loop de aprendizado do motor.
@@ -11365,6 +11371,27 @@ def _carimbar_planilha(job_id: str) -> None:
         print(f"[coerencia] carimbo da planilha falhou ({job_id}), não crítico: {e}")
 
 
+def _carimbar_comparativo(job_id: str) -> None:
+    """Mesmo carimbo, pro comparativo de fornecedores. Ele é gerado usando os
+    itens do quantitativo como referência (a coluna que diz quanto cada
+    fornecedor cotou POR item nosso) e desde 19/07 fica salvo no Storage —
+    então quem corrige uma quantidade depois baixa um comparativo que compara
+    contra o número velho, sem nada avisando. Regra nº7."""
+    try:
+        # Lê a assinatura fresca em vez de aceitar até 60s de cache: gerar o
+        # comparativo já leva segundos (XLSX + PPT + Storage), então a leitura
+        # extra não pesa, e carimbar assinatura velha faria a tela acusar
+        # "desatualizado" um segundo depois de gerar — alarme inventado, que a
+        # regra nº7 proíbe explicitamente.
+        _assinatura_invalidar(job_id)
+        _supabase_update("projects", "job_id", job_id, {
+            "comparativo_assinatura": _assinatura_atual(job_id),
+            "comparativo_gerado_em": datetime.utcnow().isoformat() + "Z",
+        })
+    except Exception as e:
+        print(f"[coerencia] carimbo do comparativo falhou ({job_id}), não crítico: {e}")
+
+
 def _memorial_dados_frescos(job_id: str):
     """(projeto, items) pros geradores do memorial — mesma RPC do /api/items."""
     import json
@@ -11541,11 +11568,17 @@ async def memorial_salvar(job_id: str, request: Request):
 
 # ═══════════════════════════════════════════════════════════════
 #  COERÊNCIA ENTRE OS ENTREGÁVEIS  (regra do Pedro, 02/08/2026)
-#  Quantitativo, cronograma e memorial saem do MESMO projeto. Mexeu
-#  no quantitativo, os outros dois envelheceram — e o cliente tem que
-#  ficar sabendo, não descobrir na obra. Aqui a gente detecta e avisa;
-#  refazer é sempre escolha dele (memorial e cronograma têm edição
-#  manual dentro, ninguém sobrescreve o trabalho do cliente sozinho).
+#  Planilha, cronograma, memorial e comparativo de fornecedores saem
+#  do MESMO quantitativo. Mexeu no quantitativo, os outros envelheceram
+#  — e o cliente tem que ficar sabendo, não descobrir na obra. Aqui a
+#  gente detecta e avisa; refazer é sempre escolha dele (memorial e
+#  cronograma têm edição manual dentro, ninguém sobrescreve o trabalho
+#  do cliente sozinho; planilha e comparativo são 100% derivados, então
+#  esses dois ganham botão direto).
+#  🪤 Entregável NOVO entra aqui no mesmo commit em que nasce. O
+#  comparativo provou o custo de esquecer: nasceu antes da regra e
+#  ficou 1 dia de fora (fechado em 03/08/2026, antes do primeiro uso
+#  real — a tabela de cotações ainda estava vazia).
 # ═══════════════════════════════════════════════════════════════
 
 def _revisoes_depois_de(job_id: str, quando: str) -> dict:
@@ -11583,7 +11616,8 @@ def _frase_mudanca(m: dict) -> str:
 
 
 def _coerencia_do_projeto(job_id: str) -> dict:
-    """Estado de sincronia dos três entregáveis do projeto."""
+    """Estado de sincronia dos entregáveis do projeto: planilha, cronograma,
+    memorial e comparativo de fornecedores."""
     import urllib.parse
     atual = _assinatura_atual(job_id)
 
@@ -11615,21 +11649,32 @@ def _coerencia_do_projeto(job_id: str) -> dict:
     # A planilha .xlsx é servida de arquivo salvo — envelhece igual aos outros.
     _st, _prj = _supa_rest_service(
         "GET", f"projects?job_id=eq.{urllib.parse.quote(job_id)}"
-               f"&select=planilha_assinatura,planilha_gerada_em&limit=1")
+               f"&select=planilha_assinatura,planilha_gerada_em,"
+               f"comparativo_assinatura,comparativo_gerado_em&limit=1")
     _row = (_prj or [None])[0] if _st == 200 and _prj else None
     planilha = _avaliar("planilha", {
         "updated_at": _row.get("planilha_gerada_em"),
         "itens_assinatura": _row.get("planilha_assinatura"),
     } if _row and _row.get("planilha_gerada_em") else None)
 
+    # O comparativo de fornecedores também sai daqui: ele confronta as cotações
+    # contra os itens do quantitativo e fica salvo no Storage. Entrou na regra
+    # em 03/08/2026 — nasceu antes dela e tinha ficado de fora.
+    comparativo = _avaliar("comparativo", {
+        "updated_at": _row.get("comparativo_gerado_em"),
+        "itens_assinatura": _row.get("comparativo_assinatura"),
+    } if _row and _row.get("comparativo_gerado_em") else None)
+
     desatualizados = [n for n, v in (("planilha", planilha),
                                      ("cronograma", cronograma),
-                                     ("memorial", memorial)) if v.get("desatualizado")]
+                                     ("memorial", memorial),
+                                     ("comparativo", comparativo)) if v.get("desatualizado")]
     return {
         "assinatura": atual,
         "planilha": planilha,
         "cronograma": cronograma,
         "memorial": memorial,
+        "comparativo": comparativo,
         "desatualizados": desatualizados,
         "tudo_em_dia": not desatualizados,
     }
@@ -11672,8 +11717,8 @@ async def projeto_coerencia(job_id: str, request: Request):
         _log_error("coerencia:projeto", str(e), job_id=job_id)
         _vazio = {"existe": False, "desatualizado": False}
         return {"assinatura": "", "planilha": _vazio, "cronograma": _vazio,
-                "memorial": _vazio, "desatualizados": [], "tudo_em_dia": True,
-                "erro": True}
+                "memorial": _vazio, "comparativo": _vazio,
+                "desatualizados": [], "tudo_em_dia": True, "erro": True}
 
 
 # ═══════════════════════════════════════════════════════════════

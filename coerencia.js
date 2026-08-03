@@ -1,13 +1,15 @@
 /* ─────────────────────────────────────────────────────────────
    AVISO DE ENTREGÁVEL DESATUALIZADO  —  AI.arq, 02/08/2026
 
-   Regra do projeto: quantitativo, cronograma e memorial saem do MESMO
-   levantamento. Mexeu num item, os outros dois envelheceram. Este script
-   pergunta ao backend o que ficou velho e mostra o aviso na tela.
+   Regra do projeto: planilha, cronograma, memorial e comparativo de
+   fornecedores saem do MESMO levantamento. Mexeu num item, os outros
+   envelheceram. Este script pergunta ao backend o que ficou velho e mostra
+   o aviso na tela.
 
    Ele NUNCA refaz nada sozinho — cronograma e memorial têm edição manual
    do cliente dentro, e sobrescrever o trabalho dele sem pedir seria pior
-   do que o número velho. O botão é dele.
+   do que o número velho. O botão é dele. Planilha e comparativo são 100%
+   derivados (nada escrito à mão), então nesses dois o botão age direto.
 
    Uso: coloque <div id="aviso-coerencia" class="hidden"></div> na página e
    chame aiArqCoerencia(jobId, 'projeto' | 'cronograma' | 'memorial').
@@ -62,12 +64,14 @@
       };
     }
 
-    // Página do projeto: o painel geral dos três entregáveis.
-    var pl = d.planilha || {};
+    // Página do projeto: o painel geral de todos os entregáveis.
+    var pl = d.planilha || {}, comp = d.comparativo || {};
     var velhos = [];
     if (pl.desatualizado)  velhos.push({ artigo: 'a', nome: 'planilha',   info: pl  });
     if (cronVelho)         velhos.push({ artigo: 'o', nome: 'cronograma', info: cron });
     if (memVelho)          velhos.push({ artigo: 'o', nome: 'memorial',   info: mem });
+    if (comp.desatualizado) velhos.push({ artigo: 'o', nome: 'comparativo de fornecedores',
+                                          chave: 'comparativo', info: comp });
 
     var nomes = velhos.map(function (v) { return v.artigo + ' ' + v.nome; });
     var alvo = nomes.length > 2
@@ -81,6 +85,12 @@
         acoes += '<button type="button" id="coer-refazer-planilha" ' +
                  'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
                  'bg-amber-600 text-white">Atualizar planilha agora</button> ';
+      } else if (v.chave === 'comparativo') {
+        // Também 100% derivado: refazer só reprocessa as cotações que já estão
+        // no projeto contra os itens de agora. Nada escrito à mão se perde.
+        acoes += '<button type="button" id="coer-refazer-comparativo" ' +
+                 'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
+                 'bg-amber-600 text-white">Refazer comparativo</button> ';
       } else {
         var pag = v.nome === 'cronograma' ? 'cronograma.html?job=' : 'memorial.html?job=';
         acoes += botao(pag + d._jobId, 'Abrir ' + v.nome, primeiro) + ' ';
@@ -143,6 +153,36 @@
     });
   }
 
+  // Refazer o comparativo é seguro pelo mesmo motivo da planilha: ele só
+  // reprocessa as cotações já enviadas contra os itens atuais. Prefere chamar
+  // a função da própria página do projeto, que já sabe desenhar o resultado
+  // (ranking, quem esqueceu o quê); só cai no endpoint cru se não existir.
+  function wireComparativo(jobId, contexto) {
+    var btn = document.getElementById('coer-refazer-comparativo');
+    if (!btn) return;
+    btn.addEventListener('click', async function () {
+      btn.disabled = true;
+      btn.textContent = 'Refazendo…';
+      try {
+        if (typeof window.generateComparison === 'function') {
+          await window.generateComparison();
+        } else {
+          var r = await window.authFetch(
+            window.API_BASE + '/api/projects/' + jobId + '/quotes/compare');
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          var d = await r.json();
+          if (d && d.error) throw new Error(d.error);
+        }
+        aiArqCoerencia(jobId, contexto);
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Refazer comparativo';
+        var msg = 'Não consegui refazer o comparativo agora: ' + e.message;
+        window.toast ? window.toast.error(msg) : alert(msg);
+      }
+    });
+  }
+
   async function aiArqCoerencia(jobId, contexto) {
     var caixa = document.getElementById('aviso-coerencia');
     if (!caixa || !jobId) return null;
@@ -160,6 +200,7 @@
 
       render(caixa, montarTexto(contexto, d));
       wirePlanilha(jobId, contexto);
+      wireComparativo(jobId, contexto);
       return d;
     } catch (e) {
       // Aviso é acessório: falhou, a página segue sem ele.
