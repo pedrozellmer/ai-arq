@@ -2575,9 +2575,111 @@
     return history.length === 0;
   }
 
+  // ── "Isso não é do projeto que você acabou de mandar?" ────────────────
+  // Caso real 03/08/2026: um cliente mandou o DWG, e 6 min depois o DXF —
+  // cada um como projeto SEPARADO. Ficam dois quantitativos pela metade, e a
+  // planilha que ele leva pra obra não tem o projeto inteiro. A Eloídes fez o
+  // mesmo com BOMBEIRO 01 Rev B (.dwg e .dxf).
+  // A comparação é por NOME normalizado (o backend devolve a chave pronta em
+  // `bases`, pra não existirem duas normalizações divergindo com o tempo).
+  // 🪤 Falhar aqui NUNCA pode travar o envio: qualquer erro → segue o fluxo
+  // normal de projeto novo. É sugestão, não porteiro.
+  function _baseLocal(nome) {
+    return String(nome || '').replace(/\.[^.]+$/, '')
+      .normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/[_\-.]+/g, ' ')
+      .replace(/\(\s*\d+\s*\)/g, ' ')
+      .replace(/\b(rev|r|v|ver|versao|version)\s*[.\-]?\s*[a-z0-9]{1,3}\b/g, ' ')
+      .replace(/\b(final|copia|copy|novo|new|atualizado)\b/g, ' ')
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  async function _acharProjetoIrmao(accessToken) {
+    try {
+      const meus = selectedFiles.map(f => _baseLocal(f.name)).filter(b => b.length >= 3);
+      if (!meus.length) return null;
+      const r = await fetch(`${API_BASE}/api/projetos/candidatos-anexo?horas=72`,
+                            { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!r.ok) return null;
+      const { projetos } = await r.json();
+      for (const p of (projetos || [])) {
+        const comuns = (p.bases || []).filter(b => meus.includes(b));
+        if (comuns.length) return { ...p, comuns };
+      }
+      return null;
+    } catch (e) { return null; }   // sugestão é acessório
+  }
+
+  function _perguntarAnexo(irmao) {
+    return new Promise(resolve => {
+      const qtd = irmao.comuns.length;
+      const quando = window.fmtDataBR ? window.fmtDataBR(irmao.created_at) : '';
+      const nome = irmao.project_name || 'seu projeto anterior';
+      const msg =
+        `Você já mandou ${qtd === 1 ? 'esse mesmo desenho' : 'esses mesmos desenhos'} ` +
+        `(${irmao.comuns.slice(0, 2).join(', ')}${qtd > 2 ? '…' : ''}) no projeto ` +
+        `"${nome}"${quando ? ' em ' + quando : ''}.\n\n` +
+        `Anexar a ele deixa TUDO num quantitativo só — é o que vai pra obra. ` +
+        `Criar outro projeto deixa dois pela metade.`;
+      if (!window.toast || !window.toast.confirm) { resolve(confirm(msg)); return; }
+      window.toast.confirm(msg, { ok: 'Anexar ao projeto', cancel: 'Criar projeto novo' })
+        .then(resolve).catch(() => resolve(false));
+    });
+  }
+
   async function startProcessing() {
     // Pede permissão de notificação na 1ª vez (silencioso se já decidida)
     requestNotificationPermission();
+
+    // Pergunta ANTES de criar o projeto — depois de criado não dá pra desfazer
+    // sem deixar lixo no banco.
+    try {
+      const { data: { session: _s } } = await sbClient.auth.getSession();
+      const _tk = _s?.access_token;
+      if (_tk) {
+        const irmao = await _acharProjetoIrmao(_tk);
+        if (irmao && await _perguntarAnexo(irmao)) {
+          // 🪤 O upload tem que começar AQUI, não na outra página: objeto File
+          // não sobrevive à navegação (nem em sessionStorage). Se eu só
+          // redirecionasse, o cliente cairia na página do projeto com o campo
+          // vazio, tendo que escolher os arquivos de novo — o oposto do que a
+          // sugestão promete. Sobe primeiro, navega depois.
+          showState(stateProcessing);
+          processingStep.textContent = `Anexando ao projeto "${irmao.project_name || 'anterior'}"…`;
+          progressBar.style.width = '0%';
+          progressPercent.textContent = '0%';
+          const fdAnexo = new FormData();
+          selectedFiles.forEach(f => fdAnexo.append('files', f));
+          const okAnexo = await new Promise(resolve => {
+            const x = new XMLHttpRequest();
+            x.open('POST', `${window.API_UPLOAD_BASE}/api/project/${encodeURIComponent(irmao.job_id)}/add-file`);
+            x.setRequestHeader('Authorization', `Bearer ${_tk}`);
+            x.timeout = 900000;
+            x.upload.onprogress = e => {
+              if (!e.lengthComputable) return;
+              const p = Math.round((e.loaded / e.total) * 100);
+              progressBar.style.width = p + '%';
+              progressPercent.textContent = p + '%';
+            };
+            x.onload = () => { try { resolve(JSON.parse(x.responseText).status === 'ok'); }
+                               catch (_) { resolve(false); } };
+            x.onerror = x.ontimeout = () => resolve(false);
+            x.send(fdAnexo);
+          });
+          if (okAnexo) {
+            if (window.trackEvent) trackEvent('anexou_ao_projeto', { job_id: irmao.job_id });
+            window.location.href = `projeto.html?job_id=${encodeURIComponent(irmao.job_id)}`;
+            return;
+          }
+          // Anexo falhou: NÃO abandona o cliente. Volta e segue como projeto
+          // novo, que é o caminho que sempre funcionou.
+          const _m = 'Não consegui anexar ao projeto anterior — vou criar um projeto novo com esses arquivos.';
+          window.toast ? window.toast.info(_m) : alert(_m);
+        }
+      }
+    } catch (e) { /* segue o fluxo normal */ }
+
     showState(stateProcessing);
     processingStep.textContent = 'Enviando arquivos...';
     progressBar.style.width = '0%';

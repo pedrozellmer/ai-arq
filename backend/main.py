@@ -14372,6 +14372,87 @@ async def get_review_state(job_id: str, request: Request):
 #  INSIGHTS DE REVISÕES (pra admin entender o que ajustar no motor)
 # ═══════════════════════════════════════════════════════════════
 
+def _base_normalizada(nome: str) -> str:
+    """Nome de arquivo → chave comparável entre envios.
+
+    Tira extensão, acento, pontuação e os sufixos de VERSÃO que o pessoal de
+    projeto usa o tempo todo ("Rev B", "R02", "v3", "final", "(1)"). Sem isso,
+    'BOMBEIRO 01 Rev B.dxf' e 'BOMBEIRO 01 Rev C.dwg' — que são a mesma prancha
+    revisada — não casariam.
+    """
+    import re as _re2
+    import unicodedata as _ud
+    s = os.path.splitext(nome or "")[0]
+    s = _ud.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii").lower()
+    s = _re2.sub(r"[_\-.]+", " ", s)
+    s = _re2.sub(r"\(\s*\d+\s*\)", " ", s)                      # "(1)", "(2)"
+    s = _re2.sub(r"\b(rev|r|v|ver|versao|version)\s*[.\-]?\s*[a-z0-9]{1,3}\b", " ", s)
+    s = _re2.sub(r"\b(final|copia|copy|novo|new|atualizado)\b", " ", s)
+    s = _re2.sub(r"[^a-z0-9 ]+", " ", s)
+    return _re2.sub(r"\s+", " ", s).strip()
+
+
+@app.get("/api/projetos/candidatos-anexo")
+async def projetos_candidatos_anexo(request: Request, horas: int = 72):
+    """Projetos recentes do usuário logado, com os nomes dos arquivos que já
+    estão neles — pro site poder perguntar "isso não é do projeto X?" ANTES de
+    criar um projeto novo.
+
+    Nasceu de um caso real (03/08/2026): um cliente mandou um DWG, e minutos
+    depois um DXF, cada um como projeto SEPARADO. Ficam dois quantitativos pela
+    metade em vez de um inteiro — e a gente perde a chance de comparar os dois
+    formatos do mesmo desenho.
+
+    🔒 Só leitura, e só do dono. Devolve nome de arquivo (que é dele) e nada mais.
+    """
+    user = _get_user_from_request(request)
+    if not user or not user.get("id"):
+        raise HTTPException(401, "Autenticação requerida")
+    import urllib.parse
+    horas = max(1, min(int(horas or 72), 24 * 30))
+    try:
+        _desde = (datetime.utcnow() - timedelta(hours=horas)).isoformat() + "Z"
+        _st, _rows = _supa_rest_service(
+            "GET",
+            f"projects?user_id=eq.{urllib.parse.quote(str(user['id']))}"
+            f"&created_at=gte.{urllib.parse.quote(_desde)}"
+            f"&archived_at=is.null"
+            f"&select=job_id,project_name,status,created_at,items_count"
+            f"&order=created_at.desc&limit=8")
+        if _st != 200 or not isinstance(_rows, list):
+            return {"projetos": []}
+        out = []
+        for r in _rows:
+            job = r.get("job_id") or ""
+            if not job:
+                continue
+            try:
+                nomes = [n for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job}/")
+                         if n and not n.startswith("checkpoint")]
+            except Exception:
+                nomes = []
+            out.append({
+                "job_id": job,
+                "project_name": r.get("project_name") or "",
+                "status": r.get("status"),
+                "created_at": r.get("created_at"),
+                "items_count": r.get("items_count") or 0,
+                "arquivos": nomes,
+                # A chave de comparação sai daqui pronta: o site não precisa
+                # reimplementar a normalização (e divergir dela com o tempo).
+                # 🪤 Base VAZIA fica de fora: "rev.dwg", "v1.dxf" e "(1).pdf"
+                # normalizam pra "" (só sufixo de versão), e aí vazio casaria com
+                # vazio — TODO projeto viraria candidato de todo arquivo. E base
+                # curtíssima ("a", "01") casa por acaso: exige 3 caracteres.
+                "bases": sorted({b for b in (_base_normalizada(n) for n in nomes if n)
+                                 if len(b) >= 3}),
+            })
+        return {"projetos": out}
+    except Exception as e:
+        _log_error("candidatos-anexo", str(e))
+        return {"projetos": []}
+
+
 @app.get("/api/admin/funil-revisao")
 async def admin_funil_revisao(request: Request):
     """Onde o cliente para entre "planilha pronta" e "planilha revisada".
