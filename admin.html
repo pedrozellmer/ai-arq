@@ -747,6 +747,20 @@
           </div>
         </div>
 
+        <!-- Funil da revisão: onde o cliente para. Contas de teste do Pedro
+             ficam de fora, senão o número se maquia sozinho. -->
+        <div class="rounded-2xl border bg-white p-5 shadow-sm mb-6">
+          <div class="flex items-baseline justify-between mb-1">
+            <p class="text-sm font-semibold text-gray-800">Funil da revisão</p>
+            <p class="text-xs text-gray-400">clientes reais · contas de teste fora</p>
+          </div>
+          <p class="text-xs text-gray-500 mb-4">Cada etapa conta PROJETOS. É aqui que se
+            vê se o cliente não abre a tela ou abre e desiste — problemas opostos.</p>
+          <div id="ins-funil" class="space-y-2">
+            <p class="text-sm text-gray-500">--</p>
+          </div>
+        </div>
+
         <div class="grid gap-6 lg:grid-cols-2">
           <!-- Rejeições mais comuns -->
           <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -2463,6 +2477,35 @@ async function loadInsights() {
 
     document.getElementById('ins-total').textContent = d.total_reviews || 0;
     document.getElementById('ins-comments-count').textContent = (d.comments_recent || []).length;
+
+    // Funil da revisão. A barra é relativa à PRIMEIRA etapa (projetos
+    // concluídos), então a queda aparece pelo tamanho, não por conta na mão.
+    const funil = d.funil || [];
+    const fEl = document.getElementById('ins-funil');
+    if (!funil.length) {
+      fEl.innerHTML = '<p class="text-sm text-gray-500">Funil indisponível agora.</p>';
+    } else {
+      const topo = Math.max(1, funil[0].projetos || 0);
+      fEl.innerHTML = funil.map((f, i) => {
+        const n = f.projetos || 0;
+        const pct = Math.round((n / topo) * 100);
+        // Etapa nova: até existir histórico ela marca 0 por falta de dado, não
+        // por falta de uso. Dizer isso evita ler "ninguém abre" cedo demais.
+        const novo = (f.ordem === 2 && n === 0)
+          ? ' <span class="text-amber-600 font-medium">(medição ligada em 03/08 — conta daqui pra frente)</span>' : '';
+        return `
+          <div>
+            <div class="flex items-center justify-between text-xs mb-1">
+              <span class="text-gray-700">${i + 1}. ${esc(f.etapa)}${novo}</span>
+              <span class="font-mono text-gray-600">${n} proj · ${f.clientes || 0} ${(f.clientes || 0) === 1 ? 'cliente' : 'clientes'}</span>
+            </div>
+            <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+              <div class="h-2 rounded-full ${pct >= 50 ? 'bg-indigo-500' : pct > 0 ? 'bg-amber-500' : 'bg-gray-300'}"
+                   style="width:${Math.max(pct, n > 0 ? 2 : 0)}%"></div>
+            </div>
+          </div>`;
+      }).join('');
+    }
 
     // Rejeitados
     const rejected = d.rejected_top || [];

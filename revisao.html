@@ -359,6 +359,19 @@ async function loadItems() {
     document.getElementById('project-meta').textContent =
       `${items.length} itens · job ${jobId}` +
       (alreadyReviewed ? ` · ${alreadyReviewed} já revisados` : '');
+
+    // Termômetro da revisão (03/08/2026). Até aqui esta tela era a ÚNICA sem
+    // medição nenhuma — e é justamente a que trava o produto (91 projetos
+    // concluídos, 5 com alguma revisão, 1 com correção de verdade). Sem isto
+    // não dá pra separar "ninguém abre" de "abre e desiste", nem saber se a
+    // mexida de 02/08 na tela funcionou. Guarda o tamanho da tarefa junto:
+    // 200 estimativas pra confirmar é uma explicação plausível pra desistência.
+    if (window.trackEvent) trackEvent('view_revisao', {
+      job_id: jobId,
+      n_itens: items.length,
+      n_estimados: items.filter(it => it.confidence !== 'confirmado').length,
+      ja_revisados: alreadyReviewed,
+    });
     render();
   } catch (e) {
     const msg = 'Erro ao carregar: ' + e.message;
@@ -708,6 +721,11 @@ document.getElementById('btn-save-later').addEventListener('click', () => {
     : 'Progresso salvo! Voltando pra "Meus Projetos".';
   // Confirmação rápida via toast; a mensagem completa (com pendentes) vai
   // via notify. Sem alert bloqueante — o redirect roda em seguida.
+  // Sair no meio é o desfecho mais informativo que existe aqui: diz em que
+  // ponto a revisão cansa. Sem isso, quem abre e desiste some do mapa.
+  if (window.trackEvent) trackEvent('revisao_pausada', {
+    job_id: jobId, n_itens: items.length, pendentes: pending,
+  });
   window.toast?.success('Progresso salvo');
   notify.ok(msg);
   setTimeout(() => { window.location.href = 'meus-projetos.html'; }, 1200);
@@ -1021,6 +1039,10 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ user_id: window.currentUserId || '' }),
     }).catch(() => {});
+    if (window.trackEvent) trackEvent('revisao_concluida', {
+      job_id: jobId, n_itens: items.length,
+      confirmados: counts.approved, excluidos: counts.rejected, editados: counts.edited,
+    });
     const okMsg = 'Revisão concluída! Suas correções treinam a IA pro próximo projeto.';
     window.toast ? window.toast.success(okMsg) : alert(okMsg);
     // Redireciona pra página do projeto após 1.5s

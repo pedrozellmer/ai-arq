@@ -14175,6 +14175,23 @@ async def finalize_review(job_id: str, request: Request):
     }
 
 
+def _marcar_revisao_aberta(job_id: str) -> None:
+    """Conta que a tela de revisão deste projeto foi aberta.
+
+    Existe porque o número que mais importa hoje é `revision_feedback` = 0: o
+    motor não tem verdade de campo pra aprender. Só que "ninguém revisa" tinha
+    duas leituras opostas — não abrem, ou abrem e desistem — e não dava pra
+    escolher entre elas. Fica no servidor porque o trackEvent é opt-in de
+    cookie: mediria só quem consentiu, e a metade que falta é justamente a que
+    a gente não conhece.
+
+    Best-effort de propósito: é medição, não pode custar a tela do cliente."""
+    try:
+        _supa_rest_service("POST", "rpc/marcar_revisao_aberta", {"p_job_id": job_id})
+    except Exception as e:
+        print(f"[revisao] não consegui marcar abertura de {job_id}, não crítico: {e}")
+
+
 @app.get("/api/items/{job_id}/review-state")
 async def get_review_state(job_id: str, request: Request):
     """Retorna as revisões já feitas nesse job pra restaurar o estado no
@@ -14203,6 +14220,12 @@ async def get_review_state(job_id: str, request: Request):
                     "comment": r.get("comment") or "",
                     "reviewed_at": r.get("reviewed_at"),
                 }
+        # Esta rota é chamada SÓ pela tela de revisão, ao abrir — então ela é o
+        # sinal honesto de "abriu". Sem ele, "ninguém revisa" ficava ambíguo
+        # entre não abrir e desistir no meio, que pedem correções opostas.
+        # Best-effort e depois do trabalho útil: contador não pode derrubar a
+        # tela nem atrasar o carregamento dos itens.
+        _marcar_revisao_aberta(job_id)
         return {"status": "ok", "job_id": job_id, "state": state, "count": len(state)}
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar state: {e}")
@@ -14294,9 +14317,27 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
                 for field in edits.keys():
                     edit_patterns[field] += 1
 
+    # Funil da revisão: onde o cliente para. Sem isto, "ninguém revisa" era uma
+    # frase sem etapa — dava pra ler como "não abrem" ou "abrem e desistem", que
+    # pedem conserto oposto. Contas de teste fora, senão o número se maquia
+    # sozinho (em 03/08 elas respondiam por 25 dos 91 projetos concluídos).
+    funil = []
+    try:
+        _st, _f = _supa_rest_service("POST", "rpc/funil_revisao", {
+            "p_excluir_emails": sorted({e for e in [
+                ADMIN_EMAIL, "zarelalopes@gmail.com",
+                "pedro.zellmer@gmail.com", "pedro@email.com",
+            ] if e}),
+        })
+        if _st == 200 and isinstance(_f, list):
+            funil = _f
+    except Exception as e:
+        print(f"[review-insights] funil indisponível: {e}")
+
     return {
         "period_days": days,
         "total_reviews": len(reviews),
+        "funil": funil,
         "rejected_top": [
             {"pattern": k, "count": v}
             for k, v in rejected_patterns.most_common(limit)
