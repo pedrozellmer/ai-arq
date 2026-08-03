@@ -38,11 +38,24 @@
     var cronVelho = !!cron.desatualizado, memVelho = !!mem.desatualizado;
 
     if (ctx === 'cronograma') {
+      // Com valor informado, o que envelheceu não é só a data: o rateio do
+      // desembolso sai das durações, então o dinheiro por mês também está
+      // velho. Dizer isso é o ponto todo da regra nº7 — o cliente não pode
+      // mandar pro banco um desembolso que não vale mais.
+      var temFin = !!cron.tem_financeiro;
       return {
-        titulo: 'Este cronograma está desatualizado',
+        titulo: temFin
+          ? 'Este cronograma físico-financeiro está desatualizado'
+          : 'Este cronograma está desatualizado',
         corpo: 'Você mexeu no quantitativo depois que ele foi gerado (' +
                motivo(cron) + '). As durações das fases ainda vêm dos números ' +
-               'antigos, e é esse cronograma velho que sai no PDF e no PPT. ' +
+               'antigos, e é esse cronograma velho que sai no PDF, no PPT e na planilha. ' +
+               (temFin
+                 ? '<strong>Atenção: o desembolso por mês também mudou</strong> — ele é ' +
+                   'distribuído pelas durações, então o valor de cada mês saiu do lugar. ' +
+                   'Os valores que você digitou por etapa continuam salvos; só o rateio ' +
+                   'pelos meses precisa ser refeito. '
+                 : '') +
                'Pra corrigir: <strong>Regerar</strong> e depois <strong>Salvar</strong>' +
                ' — atenção, regerar substitui os ajustes que você tenha feito à ' +
                'mão nas fases.',

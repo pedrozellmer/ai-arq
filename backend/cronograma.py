@@ -100,6 +100,110 @@ def _extract_disciplinas(items: List[Dict]) -> set:
     return out
 
 
+def _valor_limpo(v) -> float:
+    """Valor em R$ vindo do navegador → float não-negativo. 0 = não informado.
+
+    Aceita "1.234,56" (pt-BR), "1234.56" e número. Lixo vira 0 em vez de
+    explodir: o financeiro é opcional, e um campo mal digitado não pode
+    derrubar o cronograma inteiro — que é a parte que sempre funciona."""
+    if v is None or v is True or v is False:
+        return 0.0
+    if isinstance(v, (int, float)):
+        return max(0.0, round(float(v), 2))
+    s = str(v).strip()
+    if not s:
+        return 0.0
+    s = s.replace('R$', '').replace(' ', '').replace('\xa0', '')
+    if ',' in s:
+        # Tem vírgula: pt-BR sem ambiguidade — ponto é milhar, vírgula decimal.
+        s = s.replace('.', '').replace(',', '.')
+    elif '.' in s:
+        # 🚨 Só ponto é AMBÍGUO e errar aqui erra o dinheiro por 1000×:
+        # "1.234" é mil duzentos e trinta e quatro em pt-BR e um-vírgula-dois
+        # em en. Desempate pela forma do grupo, que é como o brasileiro digita:
+        #   "1.234" / "1.234.567"  -> milhar (3 dígitos no último grupo)
+        #   "1.23"  / "1.2"        -> decimal
+        # Mesma família do erro de escala 100× do motor: número plausível e
+        # calado é pior que número que quebra.
+        grupos = s.split('.')
+        if len(grupos) > 2 or (len(grupos) == 2 and len(grupos[1]) == 3
+                               and grupos[0].isdigit()):
+            s = s.replace('.', '')
+    try:
+        return max(0.0, round(float(s), 2))
+    except ValueError:
+        return 0.0
+
+
+def calcular_financeiro(fases: List[Dict], matriz: List[Dict],
+                        meses: List[Dict]) -> Optional[Dict]:
+    """Distribui o valor QUE O CLIENTE INFORMOU por mês, usando o mesmo rateio
+    do cronograma físico (`matriz_pct`).
+
+    🔒 Regra dura nº5 — não precificamos: aqui não existe tabela de preço,
+    sugestão de valor, BDI nem SINAPI de custo. A conta é uma só:
+        desembolso(mês) = Σ_fase  valor_informado(fase) × %(fase, mês)
+    Se o cliente não informou nada, devolve None e o cronograma segue sendo
+    puramente físico — que é o comportamento de sempre.
+
+    🪤 O rateio é o MESMO da parte física de propósito: se o cliente mover uma
+    fase no Gantt, o desembolso anda junto. Dois rateios independentes
+    divergiriam em silêncio, que é o problema que a regra nº7 existe pra evitar.
+    """
+    total = round(sum(f.get('valor_previsto') or 0 for f in fases), 2)
+    if total <= 0:
+        return None
+
+    n_meses = len(meses)
+    por_mes = [0.0] * n_meses
+    # matriz[i] corresponde a fases[i] (mesma ordem, montada no mesmo laço).
+    for fase, linha in zip(fases, matriz):
+        valor = fase.get('valor_previsto') or 0
+        if valor <= 0:
+            continue
+        pcts = linha.get('percentuais_por_mes') or []
+        soma_pct = sum(pcts)
+        if soma_pct <= 0:
+            continue
+        # Normaliza pela soma real, não por 100: os percentuais são
+        # arredondados por mês e quase nunca fecham exatamente em 100. Dividir
+        # por 100 faria sumir (ou sobrar) dinheiro do total informado.
+        for i, p in enumerate(pcts):
+            if p:
+                por_mes[i] += valor * p / soma_pct
+
+    por_mes = [round(v, 2) for v in por_mes]
+    # Sobra de centavos do arredondamento vai pro último mês com desembolso —
+    # a soma dos meses TEM que bater com o total informado, senão o cliente vê
+    # dois números diferentes pra mesma coisa e não confia em nenhum.
+    dif = round(total - sum(por_mes), 2)
+    if dif:
+        ultimo = max((i for i, v in enumerate(por_mes) if v > 0), default=0)
+        por_mes[ultimo] = round(por_mes[ultimo] + dif, 2)
+
+    acumulado, corrente = [], 0.0
+    for v in por_mes:
+        corrente = round(corrente + v, 2)
+        acumulado.append(corrente)
+
+    return {
+        'total_informado': total,
+        'por_mes': por_mes,
+        'acumulado': acumulado,
+        # Curva S financeira: mesma leitura da física, com peso em dinheiro.
+        'curva_s': [
+            {'mes_idx': m['mes_idx'], 'data': m['inicio'], 'label': m['label'],
+             'pct_acumulado': round(100 * acumulado[i] / total, 1)}
+            for i, m in enumerate(meses)
+        ],
+        'n_fases_com_valor': sum(1 for f in fases if (f.get('valor_previsto') or 0) > 0),
+        'n_fases': len(fases),
+        # Carimbo de origem: este número é DELE. O front e o PDF usam isto pra
+        # rotular, do mesmo jeito que a área total informada é rotulada.
+        'origem': 'informado_pelo_cliente',
+    }
+
+
 def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
                                        duracao_meses: int) -> Dict:
     """Gera cronograma JSON a partir de lista de fases EDITADAS pelo cliente.
@@ -174,6 +278,10 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             'origem': ('editada' if f.get('manual') else (f.get('origem') or 'editada')),
             'esforco_hh': f.get('esforco_hh'),
             'origem_detalhe': f.get('origem_detalhe'),
+            # 💰 Valor da fase — SEMPRE informado pelo cliente, nunca calculado
+            # por nós (regra dura nº5: não precificamos). Mesmo tratamento da
+            # área total informada: entra como dado dele, rotulado como dele.
+            'valor_previsto': _valor_limpo(f.get('valor_previsto')),
             # Índice posicional ORIGINAL (na lista fases_custom enviada pelo
             # frontend). depends_on/parent_ordem foram gravados pelo front
             # como índices nessa lista, então guardamos a referência estável
@@ -269,6 +377,10 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
         'matriz_pct': matriz,
         'curva_s': curva_s,
         'curva_s_realizada': curva_real,
+        # None enquanto o cliente não informar valor nenhum — aí o cronograma
+        # é puramente FÍSICO, como sempre foi. Só vira físico-financeiro
+        # quando o número dele existe.
+        'financeiro': calcular_financeiro(fases, matriz, meses),
         'curva_s_modelo': {
             'tipo': 'esforco_por_fase',
             'formula': 'P(mês) = Σ esforço concluído até o fim do mês ÷ esforço total',

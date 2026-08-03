@@ -669,6 +669,59 @@ def build_matriz(cronograma: Dict) -> Dict:
     return {"labels": labels, "rows": rows, "n_meses": n, "n_fases": len(rows)}
 
 
+def _moeda_br(v) -> str:
+    """R$ 1.234.567,89 — sem depender de locale do sistema (o contêiner do
+    Render não tem pt_BR instalado, e locale.setlocale explodiria em produção)."""
+    try:
+        n = float(v or 0)
+    except (TypeError, ValueError):
+        n = 0.0
+    inteiro, _, dec = f"{abs(n):.2f}".partition(".")
+    partes = []
+    while len(inteiro) > 3:
+        partes.insert(0, inteiro[-3:])
+        inteiro = inteiro[:-3]
+    partes.insert(0, inteiro)
+    return f"{'-' if n < 0 else ''}R$ {'.'.join(partes)},{dec}"
+
+
+def build_financeiro(cronograma: Dict) -> Dict:
+    """Desembolso por mês pro documento. Vazio quando o cliente não informou
+    valor — aí o cronograma continua sendo só FÍSICO e o PDF não fala em
+    dinheiro em lugar nenhum (nem no título da capa).
+
+    🔒 Regra dura nº5: nada aqui calcula preço. É o número dele, distribuído
+    pelo mesmo rateio da parte física."""
+    fin = cronograma.get("financeiro") or None
+    if not fin or not fin.get("total_informado"):
+        return {"tem": False}
+    meses = cronograma.get("meses") or []
+    labels = [m.get("label", "") for m in meses]
+    por_mes = fin.get("por_mes") or []
+    acum = fin.get("acumulado") or []
+    total = fin.get("total_informado") or 0
+    cells = []
+    for i, lb in enumerate(labels):
+        v = por_mes[i] if i < len(por_mes) else 0
+        a = acum[i] if i < len(acum) else 0
+        cells.append({
+            "label": lb,
+            "valor": _moeda_br(v) if v else "·",
+            "acumulado": _moeda_br(a),
+            "pct": round(100 * a / total, 1) if total else 0,
+            "vazio": not v,
+        })
+    return {
+        "tem": True,
+        "total": _moeda_br(total),
+        "cells": cells,
+        "n_meses": len(labels),
+        "n_fases_com_valor": fin.get("n_fases_com_valor", 0),
+        "n_fases": fin.get("n_fases", 0),
+        "parcial": fin.get("n_fases_com_valor", 0) < fin.get("n_fases", 0),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────
 #  Geometria — Caminho crítico
 # ─────────────────────────────────────────────────────────────────────
@@ -741,6 +794,7 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
         curva_ctx, cronograma.get("curva_s_realizada") or cronograma.get("curva_realizada") or [])
     caminho_ctx = build_caminho(cronograma)
     matriz_ctx = build_matriz(cronograma)
+    fin_ctx = build_financeiro(cronograma)
 
     # Branding
     b = {
@@ -785,6 +839,12 @@ def build_context(cronograma: Dict, branding: Dict, template: str) -> Dict:
         "curva": curva_ctx,
         "caminho": caminho_ctx,
         "matriz": matriz_ctx,
+        "financeiro": fin_ctx,
+        # 02/08 a capa passou a dizer "FÍSICO DA OBRA" porque prometíamos um
+        # financeiro que não existia. Com o valor informado pelo cliente, o
+        # nome volta a ser verdade — e SÓ nesse caso.
+        "titulo_doc": ("CRONOGRAMA FÍSICO-FINANCEIRO DA OBRA"
+                       if fin_ctx.get("tem") else "CRONOGRAMA FÍSICO DA OBRA"),
         # total de páginas: 6 com matriz, 5 sem (numeração dos rodapés)
         "n_paginas": 6 if matriz_ctx.get("rows") else 5,
         "marcos_col1": marcos_col1,

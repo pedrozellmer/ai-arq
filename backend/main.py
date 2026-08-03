@@ -11644,7 +11644,20 @@ def _coerencia_do_projeto(job_id: str) -> dict:
         "GET", f"project_memorial?job_id=eq.{urllib.parse.quote(job_id)}"
                f"&select=updated_at,itens_assinatura&limit=1")
     memorial = _avaliar("memorial", (_mem or [None])[0] if _st == 200 and _mem else None)
-    cronograma = _avaliar("cronograma", _supabase_get_cronograma(job_id))
+    _cron_row = _supabase_get_cronograma(job_id)
+    cronograma = _avaliar("cronograma", _cron_row)
+    # 🪤 Cronograma com valor informado NÃO é só prazo — é dinheiro. Quando o
+    # quantitativo muda, as durações mudam, o rateio muda e o DESEMBOLSO por mês
+    # muda junto. Avisar só "o cronograma ficou velho" faria o cliente achar que
+    # é questão de data e mandar pro banco um desembolso errado. Regra nº7:
+    # o aviso tem que dizer o que de fato mudou.
+    try:
+        _fases_salvas = (_cron_row or {}).get("fases_custom") or []
+        cronograma["tem_financeiro"] = any(
+            float(f.get("valor_previsto") or 0) > 0
+            for f in _fases_salvas if isinstance(f, dict))
+    except Exception:
+        cronograma["tem_financeiro"] = False
 
     # A planilha .xlsx é servida de arquivo salvo — envelhece igual aos outros.
     _st, _prj = _supa_rest_service(
@@ -12278,6 +12291,36 @@ async def export_cronograma_pdf(job_id: str, request: Request,
         print(f"[export pdf] erro: {e}")
         print(traceback.format_exc())
         raise HTTPException(500, f"Erro ao gerar PDF: {e}")
+
+
+@app.get("/api/cronograma/{job_id}/export/xlsx")
+async def export_cronograma_xlsx(job_id: str, request: Request):
+    """Cronograma em planilha, no mesmo padrão visual do quantitativo.
+
+    Pedido do Pedro (03/08/2026). O PDF é pra apresentar; a planilha é o que o
+    banco e o orçamentista realmente mexem — a referência de mercado que ele
+    mandou (Sienge/Prevision) é justamente um .xlsx.
+
+    Vira "físico-FINANCEIRO" só quando o cliente informou valor; sem valor sai
+    o cronograma físico de sempre, sem falar em dinheiro em lugar nenhum."""
+    _require_project_owner(request, job_id)
+    import tempfile
+    from fastapi.responses import FileResponse
+    cron, branding = _build_cronograma_for_export(job_id, request=request)
+    tem_fin = bool((cron.get("financeiro") or {}).get("total_informado"))
+    sufixo = "fisico_financeiro" if tem_fin else "fisico"
+    fname = f"cronograma_{sufixo}_{_slug_filename(branding['project_name'])}.xlsx"
+    try:
+        from cronograma_xlsx import gerar_cronograma_xlsx
+        tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+        tmp.close()
+        gerar_cronograma_xlsx(cron, tmp.name, branding)
+        return FileResponse(
+            tmp.name, filename=fname,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    except Exception as e:
+        _log_error("cronograma:xlsx", str(e), job_id=job_id)
+        raise HTTPException(500, f"Erro ao gerar a planilha do cronograma: {e}")
 
 
 @app.get("/api/cronograma/{job_id}/export/pptx")

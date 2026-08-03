@@ -187,6 +187,13 @@
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         PowerPoint
       </a>
+      <!-- 03/08: a planilha é o formato que o banco e o orçamentista mexem
+           de verdade (a referência de mercado do setor é um .xlsx). Mesmo
+           padrão visual da planilha de quantitativos. -->
+      <a id="btn-export-xlsx" href="#" target="_blank" rel="noopener noreferrer" class="px-4 py-2 rounded-lg border border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-sm font-medium no-underline transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6h6v6M3 7h18M5 7v12a2 2 0 002 2h10a2 2 0 002-2V7M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        Planilha
+      </a>
     </div>
 
     <!-- Seletor de estilo do PDF/Apresentação: 5 templates + cor (marca por padrão) -->
@@ -297,6 +304,24 @@
         <p class="text-xs text-gray-500">% de cada disciplina executada por mês</p>
       </div>
       <div id="matriz" class="overflow-x-auto"></div>
+    </div>
+
+    <!-- Desembolso por mês — só aparece quando o cliente informa valor.
+         🔒 Regra dura nº5: o AI.arq NÃO precifica. Este bloco distribui o
+         número que ELE digitou; não sugere, não consulta tabela de preço. -->
+    <div id="bloco-financeiro" class="rounded-2xl bg-white border shadow-sm p-6 hidden">
+      <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+        <h2 class="text-lg font-bold text-gray-900">Desembolso por mês</h2>
+        <span class="text-xs bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-full font-medium">
+          valores informados por você
+        </span>
+      </div>
+      <p class="text-xs text-gray-500 mb-4">
+        O AI.arq não calcula preço — ele distribui o valor que você digitou em cada etapa
+        pelos meses, no mesmo ritmo do cronograma físico. Mexeu numa fase, o desembolso anda junto.
+      </p>
+      <div id="financeiro-resumo" class="grid gap-3 sm:grid-cols-3 mb-4"></div>
+      <div id="financeiro-tabela" class="overflow-x-auto"></div>
     </div>
 
     <!-- Caminho crítico -->
@@ -481,6 +506,7 @@ async function tentarCarregarCronogramaPronto() {
     renderGantt(cron);
     renderCurvaS(cron);
     renderMatriz(cron);
+    renderFinanceiro(cron);
     renderCaminhoCritico(cron);
     renderMarcosLegais(cron);
     renderRessalva(cron);
@@ -631,6 +657,14 @@ function addFaseRowEditor(fase, idx) {
         <input type="number" min="0" max="100" step="5" value="${pctExec}"
                class="fase-pct w-16 rounded-lg border border-slate-300 bg-slate-100 px-2 py-2 text-sm font-semibold text-slate-700 focus:border-slate-500 focus:outline-none text-center" aria-label="Percentual executado" />
         <span class="text-xs text-slate-500 font-semibold" aria-hidden="true">%</span>
+      </div>
+      <div class="flex items-center gap-1 shrink-0"
+           title="Valor desta etapa — informado por você. O AI.arq não precifica: só distribui o seu número pelos meses.">
+        <span class="text-xs text-slate-500 font-semibold" aria-hidden="true">R$</span>
+        <input type="text" inputmode="decimal" value="${fase.valor_previsto ? formatMoedaInput(fase.valor_previsto) : ''}"
+               placeholder="opcional"
+               class="fase-valor w-28 rounded-lg border border-slate-300 px-2 py-2 text-sm text-slate-700 focus:border-slate-500 focus:outline-none text-right"
+               aria-label="Valor previsto desta etapa em reais (opcional, informado por você)" />
       </div>
       <button class="btn-adv text-slate-400 hover:text-slate-700 p-1 shrink-0" title="Mostrar opções avançadas (dependências, grupo, marco)" aria-label="Avançado" aria-expanded="false">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -806,6 +840,9 @@ function aplicarEdits(opts) {
     const ambiente = row.querySelector('.fase-ambiente').value.trim() || null;
     const pctExecRaw = row.querySelector('.fase-pct').value;
     const pctExec = Math.max(0, Math.min(100, parseInt(pctExecRaw) || 0));
+    // Vai o texto CRU pro backend: quem interpreta "1.234,56" é o
+    // _valor_limpo, testado. Interpretar aqui também criaria um 2º parser.
+    const valorRaw = (row.querySelector('.fase-valor')?.value || '').trim();
     if (!label || !inicio || !fim) { invalido++; return; }
     // Onda 3: campos avançados (depends_on, is_milestone, parent_ordem)
     const isMilestone = !!row.querySelector('.fase-milestone')?.checked;
@@ -819,6 +856,7 @@ function aplicarEdits(opts) {
       label, inicio, fim, cor,
       ambiente: ambiente || undefined,
       pct_executado: pctExec,
+      valor_previsto: valorRaw,
       ordem: idx,
       manual: true,
       depends_on: dependsOn,
@@ -875,6 +913,7 @@ function aplicarEdits(opts) {
   renderResumo(cronogramaAtual);
   renderGantt(cronogramaAtual);
   renderMatriz(cronogramaAtual);
+  renderFinanceiro(cronogramaAtual);
   renderCaminhoCritico(cronogramaAtual);
   // Curva S, Distribuição por mês e Caminho crítico vêm calculados do servidor —
   // sem isto seguiam com os dados de ANTES da edição.
@@ -909,6 +948,11 @@ async function recalcularNoServidor() {
       label: f.label, inicio: f.inicio, fim: f.fim, cor: f.cor,
       ambiente: f.ambiente,
       pct_executado: f.pct_executado != null ? f.pct_executado : 0,
+      // 🪤 Mesma armadilha do `origem` (01/08): campo que não é repassado aqui
+      // é campo APAGADO no save. Este é dinheiro digitado pelo cliente —
+      // perder é pior que qualquer outro campo. Regra nº7: nunca destruir o
+      // que tem edição dele dentro.
+      valor_previsto: f.valor_previsto != null ? f.valor_previsto : 0,
       categoria: f.categoria,
       ordem: f.ordem !== undefined ? f.ordem : i,
       manual: !!f.manual,
@@ -935,11 +979,23 @@ async function recalcularNoServidor() {
     if (c.curva_s) cronogramaAtual.curva_s = c.curva_s;
     if (c.meses) cronogramaAtual.meses = c.meses;
     if (c.matriz_pct) cronogramaAtual.matriz_pct = c.matriz_pct;
+    // 🪤 Sem `!== undefined` o financeiro nunca SAI da tela: apagar o último
+    // valor faz o servidor devolver null, e `if (c.financeiro)` ignoraria o
+    // null, deixando na tela um desembolso que não existe mais.
+    if (c.financeiro !== undefined) cronogramaAtual.financeiro = c.financeiro;
+    // 🪤 NÃO copiar `c.fases[i].valor_previsto` de volta pelo índice: o backend
+    // reordena (sort por ordem/início, dependências FS, agregação de grupos),
+    // então o índice i da resposta pode não ser a mesma fase do índice i da
+    // tela — e casar errado poria o dinheiro de uma etapa em outra, calado.
+    // Não é preciso: o texto que ele digitou fica no campo, e o número
+    // normalizado só é usado pelo bloco de desembolso. Ao recarregar a página,
+    // o valor salvo volta já numérico e formatado.
     if (c.resumo) cronogramaAtual.resumo = { ...cronogramaAtual.resumo, ...c.resumo };
     if (c.ppc) cronogramaAtual.ppc = c.ppc;
     renderResumo(cronogramaAtual);
     renderCurvaS(cronogramaAtual);
     renderMatriz(cronogramaAtual);
+    renderFinanceiro(cronogramaAtual);
     renderCaminhoCritico(cronogramaAtual);
   } catch (e) { /* best-effort: recálculo nunca quebra a tela */ }
 }
@@ -964,6 +1020,11 @@ async function salvarCronograma() {
       cor: f.cor,
       ambiente: f.ambiente,
       pct_executado: f.pct_executado != null ? f.pct_executado : 0,
+      // 🪤 Mesma armadilha do `origem` (01/08): campo que não é repassado aqui
+      // é campo APAGADO no save. Este é dinheiro digitado pelo cliente —
+      // perder é pior que qualquer outro campo. Regra nº7: nunca destruir o
+      // que tem edição dele dentro.
+      valor_previsto: f.valor_previsto != null ? f.valor_previsto : 0,
       categoria: f.categoria,
       ordem: f.ordem !== undefined ? f.ordem : i,
       manual: !!f.manual,
@@ -1016,6 +1077,27 @@ function showSaveStatus(msg, type) {
 
 function escapeAttr(s) {
   return String(s || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// ── Dinheiro ────────────────────────────────────────────────────────
+// 🔒 Regra dura nº5: nada aqui calcula, sugere ou tabela preço. O número é
+// SEMPRE digitado pelo cliente; estas funções só formatam pra leitura.
+// 🪤 A conversão texto→número mora num lugar SÓ, no backend (_valor_limpo).
+// Dois parsers acabariam divergindo, e divergir em dinheiro é erro de 1000×
+// (o "1.234" pt-BR vale mil, en vale um vírgula dois).
+function formatMoedaInput(n) {
+  // 🪤 Enquanto o cliente digita, o valor no estado local é o TEXTO cru dele
+  // ("300.000,0"). Formatar isso com Number() daria NaN e o campo piscaria
+  // vazio no meio da digitação — apagando o que ele acabou de escrever.
+  // Texto volta como texto; só número (o que o servidor devolveu) é formatado.
+  if (typeof n === 'string') return n;
+  const v = Number(n) || 0;
+  if (!v) return '';
+  return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function formatMoedaBR(n) {
+  return 'R$ ' + (Number(n) || 0).toLocaleString('pt-BR',
+    { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ── Seletor de estilo do cronograma (5 templates + cor) ──────────────
@@ -1215,6 +1297,9 @@ function atualizarLinksExport() {
   };
   wireExport('btn-export-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf${qs}`, `cronograma_${jobId}.pdf`);
   wireExport('btn-export-pptx', `${API_BASE}/api/cronograma/${jobId}/export/pptx${qs}`, `cronograma_${jobId}.pptx`);
+  // Sem `qs`: a planilha não tem template/cor — o estilo dela é o do
+  // quantitativo, não o do PDF.
+  wireExport('btn-export-xlsx', `${API_BASE}/api/cronograma/${jobId}/export/xlsx`, `cronograma_${jobId}.xlsx`);
 }
 
 // ─── Gera cronograma ──
@@ -1251,6 +1336,7 @@ async function gerarCronograma() {
     renderGantt(cronog);
     renderCurvaS(cronog);
     renderMatriz(cronog);
+    renderFinanceiro(cronog);
     renderCaminhoCritico(cronog);
     renderMarcosLegais(cronog);
     renderRessalva(cronog);
@@ -1309,6 +1395,7 @@ async function autoSaveCronograma(cron) {
     cor: f.cor,
     ambiente: f.ambiente,
     pct_executado: f.pct_executado != null ? f.pct_executado : 0,
+    valor_previsto: f.valor_previsto != null ? f.valor_previsto : 0,   // 🪤 ver nota acima
     categoria: f.categoria,
     ordem: f.ordem !== undefined ? f.ordem : i,
     manual: !!f.manual,
@@ -1871,6 +1958,53 @@ function renderMatriz(c) {
   });
   html += '</tr></tbody></table>';
   document.getElementById('matriz').innerHTML = html;
+}
+
+function renderFinanceiro(c) {
+  const bloco = document.getElementById('bloco-financeiro');
+  if (!bloco) return;
+  const fin = c.financeiro;
+  // Sem valor informado, o cronograma é só FÍSICO — o bloco nem aparece.
+  // Nunca mostrar tabela de dinheiro zerada: parece que a gente calculou algo.
+  if (!fin || !fin.total_informado) { bloco.classList.add('hidden'); return; }
+  bloco.classList.remove('hidden');
+
+  const parciais = fin.n_fases_com_valor < fin.n_fases;
+  document.getElementById('financeiro-resumo').innerHTML = `
+    <div class="rounded-xl border bg-slate-50 p-4">
+      <p class="text-xs text-slate-500 mb-1">Total informado por você</p>
+      <p class="text-xl font-bold text-slate-900 tabular-nums">${formatMoedaBR(fin.total_informado)}</p>
+    </div>
+    <div class="rounded-xl border bg-slate-50 p-4">
+      <p class="text-xs text-slate-500 mb-1">Etapas com valor</p>
+      <p class="text-xl font-bold text-slate-900 tabular-nums">${fin.n_fases_com_valor} <span class="text-sm font-medium text-slate-500">de ${fin.n_fases}</span></p>
+    </div>
+    <div class="rounded-xl border ${parciais ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'} p-4">
+      <p class="text-xs ${parciais ? 'text-amber-700' : 'text-emerald-700'} mb-1">${parciais ? 'Parcial' : 'Completo'}</p>
+      <p class="text-xs ${parciais ? 'text-amber-800' : 'text-emerald-800'} leading-snug">${
+        parciais
+          ? 'Faltam etapas sem valor — o total acima é só do que você preencheu, não da obra inteira.'
+          : 'Todas as etapas têm valor informado.'
+      }</p>
+    </div>`;
+
+  const meses = c.meses || [];
+  let t = '<table class="w-full text-sm border-collapse"><thead><tr>';
+  t += '<th class="text-left bg-slate-800 text-white px-3 py-2.5 sticky left-0 z-10 text-xs uppercase tracking-wider font-semibold">Mês</th>';
+  meses.forEach(m => { t += `<th class="bg-slate-800 text-slate-200 text-center px-2 py-2.5 text-xs font-medium">${m.label}</th>`; });
+  t += '</tr></thead><tbody>';
+  t += '<tr class="bg-white"><td class="px-3 py-2 font-medium text-slate-800 border-b border-slate-200 sticky left-0 bg-white text-xs uppercase tracking-wider">Desembolso</td>';
+  (fin.por_mes || []).forEach(v => {
+    t += v > 0
+      ? `<td class="text-center px-2 py-2 text-slate-800 text-xs font-semibold border-b border-slate-200 tabular-nums whitespace-nowrap">${formatMoedaBR(v)}</td>`
+      : '<td class="text-center px-2 py-2 text-slate-300 text-xs border-b border-slate-200">·</td>';
+  });
+  t += '</tr><tr class="bg-slate-100"><td class="px-3 py-2.5 font-semibold text-slate-700 border-t-2 border-slate-300 sticky left-0 bg-slate-100 text-xs uppercase tracking-wider">Acumulado</td>';
+  (fin.acumulado || []).forEach(v => {
+    t += `<td class="text-center px-2 py-2.5 text-slate-700 text-xs font-semibold border-t-2 border-slate-300 tabular-nums whitespace-nowrap">${formatMoedaBR(v)}</td>`;
+  });
+  t += '</tr></tbody></table>';
+  document.getElementById('financeiro-tabela').innerHTML = t;
 }
 
 function renderCaminhoCritico(c) {
