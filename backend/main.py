@@ -14235,6 +14235,36 @@ async def get_review_state(job_id: str, request: Request):
 #  INSIGHTS DE REVISÕES (pra admin entender o que ajustar no motor)
 # ═══════════════════════════════════════════════════════════════
 
+@app.get("/api/admin/funil-revisao")
+async def admin_funil_revisao(request: Request):
+    """Onde o cliente para entre "planilha pronta" e "planilha revisada".
+
+    Endpoint próprio (não pendurado no review-insights) por dois motivos: o
+    review-insights lê até 1000 revisões e enriquece item a item — peso que o
+    funil não precisa; e a aba Insights foi cortada da navegação em b7c9d41
+    por estar morta, então pendurar ali seria esconder o número. Este vive na
+    aba Motor, junto de "Onde a IA mais erra" — que é justamente a seção que
+    fica vazia por causa do que este funil explica.
+
+    Contas de teste ficam de fora: em 03/08/2026 elas respondiam por 25 dos 91
+    projetos concluídos e por 2 dos 5 revisados, o que maquiava o número."""
+    _require_admin(request)
+    try:
+        _st, _f = _supa_rest_service("POST", "rpc/funil_revisao", {
+            "p_excluir_emails": sorted({e for e in [
+                ADMIN_EMAIL, "zarelalopes@gmail.com",
+                "pedro.zellmer@gmail.com", "pedro@email.com",
+            ] if e}),
+        })
+        if _st != 200 or not isinstance(_f, list):
+            _log_error("funil-revisao", f"RPC {_st}: {str(_f)[:300]}")
+            return {"funil": [], "erro": True}
+        return {"funil": _f}
+    except Exception as e:
+        _log_error("funil-revisao", str(e))
+        return {"funil": [], "erro": True}
+
+
 @app.get("/api/admin/review-insights")
 async def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
     """Agrega revisões recentes pra identificar padrões de erro do motor:
@@ -14317,27 +14347,9 @@ async def admin_review_insights(request: Request, days: int = 30, limit: int = 3
                 for field in edits.keys():
                     edit_patterns[field] += 1
 
-    # Funil da revisão: onde o cliente para. Sem isto, "ninguém revisa" era uma
-    # frase sem etapa — dava pra ler como "não abrem" ou "abrem e desistem", que
-    # pedem conserto oposto. Contas de teste fora, senão o número se maquia
-    # sozinho (em 03/08 elas respondiam por 25 dos 91 projetos concluídos).
-    funil = []
-    try:
-        _st, _f = _supa_rest_service("POST", "rpc/funil_revisao", {
-            "p_excluir_emails": sorted({e for e in [
-                ADMIN_EMAIL, "zarelalopes@gmail.com",
-                "pedro.zellmer@gmail.com", "pedro@email.com",
-            ] if e}),
-        })
-        if _st == 200 and isinstance(_f, list):
-            funil = _f
-    except Exception as e:
-        print(f"[review-insights] funil indisponível: {e}")
-
     return {
         "period_days": days,
         "total_reviews": len(reviews),
-        "funil": funil,
         "rejected_top": [
             {"pattern": k, "count": v}
             for k, v in rejected_patterns.most_common(limit)

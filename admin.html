@@ -312,7 +312,7 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadMotorHealth(); loadOps(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadMotorHealth(); loadOps(); loadFunilRevisao(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor</span></h3>
         <div id="motor-health"><p class="text-gray-400 text-sm">Carregando…</p></div>
@@ -329,6 +329,12 @@
         <p class="text-sm text-gray-500 mb-3">Testa o conversor alternativo (libredwg) contra os DWG reais que falharam com "não conseguimos abrir". Se converter, dá pra recuperar esses projetos. Cada arquivo leva de 5 a 60 segundos — o teste roda 5 por clique.</p>
         <div class="flex items-center gap-2 mb-3"><button onclick="testarLibredwg()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">Testar 5 arquivos recusados</button><button onclick="testarLibredwg('qualidade')" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm rounded-lg font-medium">Comparar geometria ODA × libredwg</button></div>
         <div id="libredwg-res"></div>
+        <div class="my-8 border-t border-gray-200"></div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📉 Funil da revisão <span class="font-normal text-gray-400">— onde o cliente para (contas de teste fora)</span></h3>
+        <p class="text-sm text-gray-500 mb-3">Cada etapa conta PROJETOS, não cliques. Serve pra separar
+          duas coisas que pedem conserto oposto: o cliente <strong>não abre</strong> a tela de revisão, ou
+          <strong>abre e desiste</strong>. É este funil que explica a seção logo abaixo estar vazia.</p>
+        <div id="motor-funil" class="space-y-2 mb-2"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🩻 Onde a IA mais erra <span class="font-normal text-gray-400">— aprendizado com as planilhas revisadas dos clientes</span></h3>
         <div id="revision-feedback"><p class="text-gray-400 text-sm">Carregando…</p></div>
@@ -747,20 +753,6 @@
           </div>
         </div>
 
-        <!-- Funil da revisão: onde o cliente para. Contas de teste do Pedro
-             ficam de fora, senão o número se maquia sozinho. -->
-        <div class="rounded-2xl border bg-white p-5 shadow-sm mb-6">
-          <div class="flex items-baseline justify-between mb-1">
-            <p class="text-sm font-semibold text-gray-800">Funil da revisão</p>
-            <p class="text-xs text-gray-400">clientes reais · contas de teste fora</p>
-          </div>
-          <p class="text-xs text-gray-500 mb-4">Cada etapa conta PROJETOS. É aqui que se
-            vê se o cliente não abre a tela ou abre e desiste — problemas opostos.</p>
-          <div id="ins-funil" class="space-y-2">
-            <p class="text-sm text-gray-500">--</p>
-          </div>
-        </div>
-
         <div class="grid gap-6 lg:grid-cols-2">
           <!-- Rejeições mais comuns -->
           <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -1157,7 +1149,7 @@ function switchTab(tabName) {
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadMotorHealth(); loadOps(); loadRevisionFeedback(); }
+  if (tabName === 'motor') { loadMotorHealth(); loadOps(); loadFunilRevisao(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -1511,6 +1503,52 @@ function renderMotorHealth(d){
 // ONDE A IA MAIS ERRA — feedback das planilhas revisadas pelos clientes
 // (acessibilidade: cor NUNCA sozinha — sempre cor + ícone + texto)
 // ══════════════════════════════════════════════
+// ══════════════════════════════════════════════
+// FUNIL DA REVISÃO (aba Motor) — onde o cliente para
+// ══════════════════════════════════════════════
+async function loadFunilRevisao(){
+  const el = document.getElementById('motor-funil');
+  if (!el) return;
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/funil-revisao`);
+    const d = await res.json();
+    const funil = d.funil || [];
+    if (!funil.length) {
+      // Distinguir "sem dado" de "deu erro" — senão um RPC quebrado vira
+      // "está tudo zerado" e a gente tira conclusão de um painel mudo.
+      el.innerHTML = d.erro
+        ? '<p class="text-sm text-red-600">Não consegui ler o funil agora.</p>'
+        : '<p class="text-sm text-gray-500">Nenhum projeto concluído ainda.</p>';
+      return;
+    }
+    // A barra é relativa à PRIMEIRA etapa (projetos concluídos), então a queda
+    // aparece pelo tamanho, sem precisar fazer conta na cabeça.
+    const topo = Math.max(1, funil[0].projetos || 0);
+    el.innerHTML = funil.map((f, i) => {
+      const n = f.projetos || 0;
+      const pct = Math.round((n / topo) * 100);
+      const cli = f.clientes || 0;
+      // Etapa nova: até existir histórico ela marca 0 por falta de DADO, não
+      // por falta de uso. Dizer isso evita ler "ninguém abre" cedo demais.
+      const novo = (f.ordem === 2 && n === 0)
+        ? ' <span class="text-amber-600 font-medium">(medição ligada em 03/08 — conta daqui pra frente)</span>' : '';
+      return `
+        <div>
+          <div class="flex items-center justify-between text-xs mb-1">
+            <span class="text-gray-700">${i + 1}. ${esc(f.etapa)}${novo}</span>
+            <span class="font-mono text-gray-600">${n} proj · ${cli} ${cli === 1 ? 'cliente' : 'clientes'}</span>
+          </div>
+          <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
+            <div class="h-2 rounded-full ${pct >= 50 ? 'bg-indigo-500' : pct > 0 ? 'bg-amber-500' : 'bg-gray-300'}"
+                 style="width:${Math.max(pct, n > 0 ? 2 : 0)}%"></div>
+          </div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<p class="text-sm text-red-600">Não consegui ler o funil agora.</p>';
+  }
+}
+
 async function loadRevisionFeedback(){
   const box = document.getElementById('revision-feedback');
   if (!box) return;
@@ -2477,35 +2515,6 @@ async function loadInsights() {
 
     document.getElementById('ins-total').textContent = d.total_reviews || 0;
     document.getElementById('ins-comments-count').textContent = (d.comments_recent || []).length;
-
-    // Funil da revisão. A barra é relativa à PRIMEIRA etapa (projetos
-    // concluídos), então a queda aparece pelo tamanho, não por conta na mão.
-    const funil = d.funil || [];
-    const fEl = document.getElementById('ins-funil');
-    if (!funil.length) {
-      fEl.innerHTML = '<p class="text-sm text-gray-500">Funil indisponível agora.</p>';
-    } else {
-      const topo = Math.max(1, funil[0].projetos || 0);
-      fEl.innerHTML = funil.map((f, i) => {
-        const n = f.projetos || 0;
-        const pct = Math.round((n / topo) * 100);
-        // Etapa nova: até existir histórico ela marca 0 por falta de dado, não
-        // por falta de uso. Dizer isso evita ler "ninguém abre" cedo demais.
-        const novo = (f.ordem === 2 && n === 0)
-          ? ' <span class="text-amber-600 font-medium">(medição ligada em 03/08 — conta daqui pra frente)</span>' : '';
-        return `
-          <div>
-            <div class="flex items-center justify-between text-xs mb-1">
-              <span class="text-gray-700">${i + 1}. ${esc(f.etapa)}${novo}</span>
-              <span class="font-mono text-gray-600">${n} proj · ${f.clientes || 0} ${(f.clientes || 0) === 1 ? 'cliente' : 'clientes'}</span>
-            </div>
-            <div class="h-2 rounded-full bg-gray-100 overflow-hidden">
-              <div class="h-2 rounded-full ${pct >= 50 ? 'bg-indigo-500' : pct > 0 ? 'bg-amber-500' : 'bg-gray-300'}"
-                   style="width:${Math.max(pct, n > 0 ? 2 : 0)}%"></div>
-            </div>
-          </div>`;
-      }).join('');
-    }
 
     // Rejeitados
     const rejected = d.rejected_top || [];
