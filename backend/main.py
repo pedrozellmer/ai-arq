@@ -4249,6 +4249,28 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
         cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
 
+        # Assinatura do desenho (identidade, não medição): guarda o
+        # FINGERPRINTGUID + layers do 1º DXF pra reconhecer o MESMO projeto num
+        # envio futuro, mesmo se o cliente renomear o arquivo. Lê só o começo do
+        # arquivo. Best-effort absoluto: é feature de sugestão, não pode nem
+        # atrasar nem derrubar o processamento de ninguém.
+        try:
+            _dxf_assin = next((f for f in cad_paths if f.lower().endswith('.dxf')), None)
+            if _dxf_assin:
+                from dxf_assinatura import assinatura_de_dxf
+                _assin = assinatura_de_dxf(_dxf_assin)
+                if _assin.get("fingerprint") or _assin.get("n_layers"):
+                    # Guarda no máximo 400 layers: o campo é pra comparar, não
+                    # pra arquivar o desenho — e jsonb gigante em toda linha de
+                    # projeto custa banco à toa.
+                    _assin["layers"] = _assin["layers"][:400]
+                    _supabase_update("projects", "job_id", job_id,
+                                     {"desenho_assinatura": _assin})
+                    print(f"[assinatura] job={job_id}: fp={_assin.get('fingerprint')} "
+                          f"layers={_assin.get('n_layers')}")
+        except Exception as _eas:
+            print(f"[assinatura] job={job_id}: falhou (não crítico): {_eas}")
+
         # DXF supera DWG do MESMO nome-base: se o usuário re-exportou um DWG que
         # falhava (ex.: AEC/MEP) pra DXF, o DWG velho fica no Storage e re-falha a
         # cada processamento, gerando aviso "planilha INCOMPLETA" enganoso mesmo o
@@ -14476,7 +14498,7 @@ async def projetos_candidatos_anexo(request: Request, horas: int = 72):
             f"projects?user_id=eq.{urllib.parse.quote(str(user['id']))}"
             f"&created_at=gte.{urllib.parse.quote(_desde)}"
             f"&archived_at=is.null"
-            f"&select=job_id,project_name,status,created_at,items_count"
+            f"&select=job_id,project_name,status,created_at,items_count,desenho_assinatura"
             f"&order=created_at.desc&limit=8")
         if _st != 200 or not isinstance(_rows, list):
             return {"projetos": []}
@@ -14505,11 +14527,73 @@ async def projetos_candidatos_anexo(request: Request, horas: int = 72):
                 # curtíssima ("a", "01") casa por acaso: exige 3 caracteres.
                 "bases": sorted({b for b in (_base_normalizada(n) for n in nomes if n)
                                  if len(b) >= 3}),
+                # Identidade do desenho — pega o caso que o nome NÃO pega: o
+                # cliente renomeou o arquivo. Só o fingerprint e a contagem vão
+                # pro navegador; a lista de layers fica no servidor (é o
+                # desenho dele, e mandar centenas de nomes por sugestão é peso
+                # à toa). A comparação por layers acontece no /comparar-desenho.
+                "assinatura": ({"fingerprint": (r.get("desenho_assinatura") or {}).get("fingerprint"),
+                                "n_layers": (r.get("desenho_assinatura") or {}).get("n_layers") or 0}
+                               if r.get("desenho_assinatura") else None),
             })
         return {"projetos": out}
     except Exception as e:
         _log_error("candidatos-anexo", str(e))
         return {"projetos": []}
+
+
+class AssinaturaPayload(BaseModel):
+    fingerprint: Optional[str] = None
+    layers: Optional[list] = None
+
+
+@app.post("/api/projetos/comparar-desenho")
+async def comparar_desenho(payload: AssinaturaPayload, request: Request, horas: int = 72):
+    """Recebe a assinatura do DXF que o cliente ACABOU de escolher (lida no
+    navegador, sem subir o arquivo) e diz se ela bate com algum projeto recente
+    dele.
+
+    Fecha o buraco da sugestão por nome: pega o cliente que RENOMEOU o arquivo —
+    que é justamente quando ele não lembra que já mandou aquele desenho.
+
+    🔒 A comparação acontece AQUI, não no navegador: a lista de layers do
+    projeto antigo não precisa sair do servidor.
+    """
+    user = _get_user_from_request(request)
+    if not user or not user.get("id"):
+        raise HTTPException(401, "Autenticação requerida")
+    import urllib.parse
+    nova = {"fingerprint": (payload.fingerprint or None),
+            "layers": [str(x) for x in (payload.layers or [])][:400]}
+    if not nova["fingerprint"] and len(nova["layers"]) < 5:
+        return {"achou": None}     # sinal fraco demais pra sugerir
+    try:
+        from dxf_assinatura import semelhanca
+        _desde = (datetime.utcnow() - timedelta(hours=max(1, min(int(horas or 72), 720)))).isoformat() + "Z"
+        _st, _rows = _supa_rest_service(
+            "GET",
+            f"projects?user_id=eq.{urllib.parse.quote(str(user['id']))}"
+            f"&created_at=gte.{urllib.parse.quote(_desde)}"
+            f"&archived_at=is.null&desenho_assinatura=not.is.null"
+            f"&select=job_id,project_name,created_at,items_count,desenho_assinatura"
+            f"&order=created_at.desc&limit=8")
+        if _st != 200 or not isinstance(_rows, list):
+            return {"achou": None}
+        for r in _rows:
+            v = semelhanca(nova, r.get("desenho_assinatura") or {})
+            if v.get("mesmo_desenho"):
+                return {"achou": {
+                    "job_id": r.get("job_id"),
+                    "project_name": r.get("project_name") or "",
+                    "created_at": r.get("created_at"),
+                    "items_count": r.get("items_count") or 0,
+                    "motivo": v.get("motivo"),
+                    "forca": "identificador" if v.get("jaccard") == 1.0 else "layers",
+                }}
+        return {"achou": None}
+    except Exception as e:
+        _log_error("comparar-desenho", str(e))
+        return {"achou": None}      # sugestão é acessório: erro nunca atrapalha
 
 
 @app.get("/api/admin/funil-revisao")

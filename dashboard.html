@@ -2595,8 +2595,49 @@
       .replace(/\s+/g, ' ').trim();
   }
 
+  // Lê a IDENTIDADE do DXF sem subir o arquivo: só os primeiros 8 MB, que é
+  // onde moram o $FINGERPRINTGUID (id que o AutoCAD carrega junto com o desenho
+  // e sobrevive a "Salvar como") e a tabela de layers. Num DXF de 112 MB isso
+  // leva um piscar — o resto do arquivo é geometria, que não diz identidade.
+  // Pega o caso que o nome não pega: o cliente RENOMEOU o arquivo.
+  const _LIMITE_ASSIN = 8 * 1024 * 1024;
+  async function _assinaturaLocalDXF(file) {
+    try {
+      if (!/\.dxf$/i.test(file.name)) return null;   // DWG é binário: só nome
+      const buf = await file.slice(0, _LIMITE_ASSIN).arrayBuffer();
+      const txt = new TextDecoder('latin1').decode(buf);
+      const fpM = txt.match(/\$FINGERPRINTGUID\s*\r?\n\s*430\s*\r?\n\s*\{?([0-9A-Fa-f-]{36})\}?/);
+      const re = /\r?\n\s*0\s*\r?\nLAYER\r?\n(?:[^\r\n]*\r?\n){0,12}?[ \t]*2[ \t]*\r?\n([^\r\n]+)/g;
+      const layers = new Set();
+      let m;
+      while ((m = re.exec(txt)) !== null) {
+        let n = m[1].trim();
+        if (n.includes('|')) n = n.split('|')[1];
+        n = n.toUpperCase();
+        if (n && n !== '0' && n !== 'DEFPOINTS') layers.add(n);
+        if (layers.size > 400) break;
+      }
+      return { fingerprint: fpM ? fpM[1].toLowerCase() : null, layers: [...layers] };
+    } catch (e) { return null; }
+  }
+
   async function _acharProjetoIrmao(accessToken) {
     try {
+      // 1) Identidade do desenho — prova forte, funciona com arquivo renomeado.
+      for (const f of selectedFiles) {
+        const a = await _assinaturaLocalDXF(f);
+        if (!a || (!a.fingerprint && a.layers.length < 5)) continue;
+        const rc = await fetch(`${API_BASE}/api/projetos/comparar-desenho?horas=72`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify(a),
+        });
+        if (!rc.ok) continue;
+        const { achou } = await rc.json();
+        if (achou) return { ...achou, comuns: [], porConteudo: true };
+      }
+      // 2) Nome do arquivo — pega DWG (binário, sem como ler aqui) e DXF antigo
+      // que ainda não tem assinatura guardada.
       const meus = selectedFiles.map(f => _baseLocal(f.name)).filter(b => b.length >= 3);
       if (!meus.length) return null;
       const r = await fetch(`${API_BASE}/api/projetos/candidatos-anexo?horas=72`,
@@ -2605,7 +2646,7 @@
       const { projetos } = await r.json();
       for (const p of (projetos || [])) {
         const comuns = (p.bases || []).filter(b => meus.includes(b));
-        if (comuns.length) return { ...p, comuns };
+        if (comuns.length) return { ...p, comuns, porConteudo: false };
       }
       return null;
     } catch (e) { return null; }   // sugestão é acessório
@@ -2613,13 +2654,19 @@
 
   function _perguntarAnexo(irmao) {
     return new Promise(resolve => {
-      const qtd = irmao.comuns.length;
       const quando = window.fmtDataBR ? window.fmtDataBR(irmao.created_at) : '';
       const nome = irmao.project_name || 'seu projeto anterior';
-      const msg =
-        `Você já mandou ${qtd === 1 ? 'esse mesmo desenho' : 'esses mesmos desenhos'} ` +
-        `(${irmao.comuns.slice(0, 2).join(', ')}${qtd > 2 ? '…' : ''}) no projeto ` +
-        `"${nome}"${quando ? ' em ' + quando : ''}.\n\n` +
+      // Duas provas diferentes, dois textos: por CONTEÚDO a gente afirma; por
+      // NOME a gente sugere. Dizer "é o mesmo desenho" com base só no nome do
+      // arquivo seria afirmar mais do que a prova sustenta.
+      const prova = irmao.porConteudo
+        ? `Este é o mesmo desenho que já está no projeto "${nome}"` +
+          `${quando ? ' (enviado em ' + quando + ')' : ''} — reconheci pelo conteúdo do arquivo` +
+          `${irmao.motivo ? ': ' + irmao.motivo : ''}, não pelo nome.`
+        : `O nome ${irmao.comuns.length === 1 ? 'do arquivo bate' : 'dos arquivos bate'} ` +
+          `com o que você mandou no projeto "${nome}"${quando ? ' em ' + quando : ''} ` +
+          `(${irmao.comuns.slice(0, 2).join(', ')}${irmao.comuns.length > 2 ? '…' : ''}).`;
+      const msg = prova + `\n\n` +
         `Anexar a ele deixa TUDO num quantitativo só — é o que vai pra obra. ` +
         `Criar outro projeto deixa dois pela metade.`;
       if (!window.toast || !window.toast.confirm) { resolve(confirm(msg)); return; }
