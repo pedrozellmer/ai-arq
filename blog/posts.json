@@ -2360,6 +2360,84 @@
     }
    ],
    "publish_date": "2026-08-09"
+  },
+  {
+   "slug": "quantitativo-de-duto-climatizacao-armadilhas",
+   "title": "Quantitativo de duto de climatização: 4 armadilhas que fazem o número sair errado",
+   "description": "Por que a metragem de duto quase nunca bate: linha dupla que dobra o comprimento, desenho sem unidade declarada, metro linear que o orçamento não usa e a lacuna do SINAPI em água gelada e VRF.",
+   "keywords": "quantitativo duto climatizacao, levantamento hvac, orcamento ar condicionado, duto chapa galvanizada m2, sinapi climatizacao, avac quantitativo, medir duto planta",
+   "category": "Quantitativos",
+   "intro": "Levantar duto parece o mais simples de um projeto de climatização: é linha na planta, mede e pronto. Na prática é onde o número mais erra — e erra grande, às vezes pelo dobro. Este post reúne quatro armadilhas concretas, todas encontradas em arquivos reais, e o que cada uma exige de quem levanta. Cada afirmação técnica tem a fonte aberta, e o que é medição nossa está declarado como tal.",
+   "sections": [
+    {
+     "h2": "Armadilha 1 — O duto é desenhado com duas linhas, e somar as duas dobra o comprimento",
+     "body": "Em planta, duto retangular costuma ser representado pelas duas faces: duas linhas paralelas, muitas vezes em cores diferentes para separar insuflamento de retorno. Uma projetista descreveu assim o padrão da equipe dela: duas linhas em paralelo, insuflamento em azul escuro e retorno em azul claro.\n\nA consequência é direta e cara: quem soma o comprimento de tudo que está na camada do duto conta cada trecho duas vezes. Um trecho de 10 metros aparece como 20 metros de linha.\n\nMedimos isso num arquivo real de climatização hospitalar. Separando os segmentos por camada e procurando pares paralelos com afastamento constante, o fator ficou assim: insuflamento 1,88×, exaustão 1,98×, ar exterior 1,94×, retorno 2,00×. Quatro grupos independentes, todos perto de dobrar. (Medição nossa, um arquivo, agosto de 2026 — é ordem de grandeza, não estatística de mercado.)\n\nO que fazer: se o projeto tiver camada de eixo, meça por ela. O padrão de camadas do National CAD Standard prevê exatamente isso, com o sufixo CNTR de centerline para insuflamento, retorno e exaustão. Não havendo eixo, é preciso parear as faces antes de somar — ou aceitar que o número está inflado."
+    },
+    {
+     "h2": "Armadilha 2 — O desenho pode não declarar em que unidade foi feito",
+     "body": "Todo arquivo DWG ou DXF tem um campo de cabeçalho que informa a unidade do desenho. Quando esse campo vem zerado, o arquivo não diz se está em milímetro, centímetro ou metro — e quem lê precisa deduzir.\n\nA suposição mais comum é milímetro, porque é o padrão de muito projeto de arquitetura. Se o desenho estiver em metros, tudo o que é comprimento sai mil vezes menor, sem erro nenhum na tela.\n\nVimos isso num projeto hospitalar real: o arquivo não declarava unidade, o desenho estava em metros e tinha 526 metros de largura. Lido como milímetro, o hospital inteiro virava um desenho de 53 centímetros, e um trecho de duto de 178 metros aparecia como 18 centímetros — pequeno o bastante para ser descartado como marcação de legenda.\n\nComo se proteger: compare a extensão total do desenho com o que a obra tem de verdade. Se o maior elemento da planta inteira mede poucos centímetros, a escala está errada. Um número isolado pode parecer plausível; o tamanho do desenho inteiro denuncia."
+    },
+    {
+     "h2": "Armadilha 3 — Metro linear não é a unidade que o orçamento usa",
+     "body": "Você mediu o comprimento certo. Ainda assim, a planilha pode não servir para comprar.\n\nO critério de medição do SINAPI para duto de chapa é área, não comprimento. O texto é explícito: a área considerada corresponde à medição do comprimento do trecho reto do duto multiplicado pelo perímetro da seção.\n\nNa prática: um duto de 60 × 40 cm tem perímetro de 2,00 m. Cada metro linear vale 2,00 m² de chapa. Sem a seção, o comprimento sozinho não vira quantidade de compra.\n\nE a seção não está na geometria — está escrita em texto ao lado do trecho, no formato largura × altura para duto retangular, ou o diâmetro para o circular. Quem levanta precisa casar cada texto com o trecho correspondente.\n\nDe m² para quilo, o peso vem da bitola da chapa, que o SINAPI declara no próprio insumo: bitola 26, espessura 0,50 mm, 4,00 kg/m². A bitola, por sua vez, não está desenhada: sai da classe de pressão e da dimensão do duto, definidas no memorial. É mais um dado que a planta não entrega."
+    },
+    {
+     "h2": "Armadilha 4 — O SINAPI cobre split e duto, mas não cobre água gelada nem VRF",
+     "body": "Essa é a que mais surpreende quem assume que a base oficial resolve tudo.\n\nConferimos a base SINAPI que usamos como referência (consulta feita em agosto de 2026, na base carregada no AI.arq): duto tem 57 composições, ar-condicionado e climatização 131, split 44, grelha 32.\n\nAgora o outro lado da mesma consulta: fan coil, VRF, chiller e água gelada retornam zero composições.\n\nO que isso significa na prática: obra de split e dutado, a base resolve. Obra de água gelada com chiller e fancoil — que é o caso típico de hospital, shopping e torre corporativa — tem o miolo do orçamento fora da base, e vai depender de tabela de fabricante ou composição própria.\n\nE sistema de água gelada tem itens que nenhum outro tem: bombas primária e secundária, o fechamento hidráulico de cada fancoil com filtro e válvula de balanceamento, vaso de expansão, flushing e tratamento químico. Quem copia uma planilha de split para uma obra de água gelada esquece tudo isso."
+    },
+    {
+     "h2": "O que a norma obriga e costuma ficar fora da planilha",
+     "body": "Alguns itens não nascem do desenho, nascem da lei — e são justamente os esquecidos.\n\nA Lei nº 13.589/2018 tornou o PMOC obrigatório para edificações de uso público e coletivo que possuam ambientes climatizados, sem estabelecer capacidade mínima. Isso vira dois itens: a elaboração do plano e, principalmente, o acesso para manutenção — portas de inspeção no duto e painel removível no forro. É aí que mais se esquece de orçar.\n\nOutra que muita planilha antiga ainda erra: a Resolução RE nº 09/2003 da Anvisa, referência clássica de qualidade do ar interior, foi revogada pela RDC nº 886/2024, e a referência técnica passou a ser a ABNT NBR 17037:2023. Orçamento que ainda cita a RE 09 está desatualizado.\n\nPara projeto e conforto, a referência é a NBR 16401, que define vazão de ar exterior e filtragem — e puxa para a planilha tomada de ar externo, veneziana, filtro e damper."
+    },
+    {
+     "h2": "Onde o AI.arq está hoje nisso",
+     "body": "Sendo exato sobre o que fazemos e o que ainda não fazemos, porque essa é a informação útil.\n\nO que já funciona: lemos DWG, DXF e PDF; identificamos as camadas de duto de insuflamento, retorno, exaustão, ar exterior, água gelada e frigorígena; medimos o comprimento por camada direto da geometria; e contamos equipamentos, difusores e grelhas pelos blocos inseridos no desenho. Cada item sai marcado como medido do desenho ou como estimativa que pede a sua conferência.\n\nO que ainda não fazemos: não convertemos metro linear em m² de chapa — a conversão exige casar cada trecho com a seção escrita ao lado, e isso está em desenvolvimento. Também não separamos curva, redução e transição, que o SINAPI trata como itens próprios.\n\nE a armadilha 1 vale para nós também: onde o duto é desenhado com as duas faces, o comprimento que entregamos hoje está superestimado. Preferimos dizer isso a deixar você descobrir orçando."
+    }
+   ],
+   "cta": "Tem um projeto de climatização em DWG ou DXF parado? Sobe no AI.arq e veja o que já sai medido do desenho — grátis durante o beta, quantos projetos quiser, em ai.arq.br.",
+   "sources": [
+    {
+     "type": "official",
+     "title": "SINAPI — Caderno Técnico de Composições: Dutos para Ar Condicionado (Caixa Econômica Federal)",
+     "description": "Traz o critério oficial de medição do duto de chapa: a área corresponde ao comprimento do trecho reto multiplicado pelo perímetro da seção. Base da seção sobre metro linear versus m².",
+     "url": "https://www.caixa.gov.br/Downloads/sinapi-cadernos-tecnicos/SINAPI-CT-DUTOS-PARA-AR-CONDICIONADO.pdf"
+    },
+    {
+     "type": "law",
+     "title": "Lei nº 13.589, de 4 de janeiro de 2018 — manutenção de instalações de climatização",
+     "description": "Obriga edificações de uso público e coletivo que possuam ambientes climatizados a manter Plano de Manutenção, Operação e Controle (PMOC), sem exigir capacidade mínima. Fundamenta os itens de PMOC e de acesso para manutenção.",
+     "url": "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13589.htm"
+    },
+    {
+     "type": "norm",
+     "title": "ABNT NBR 16401 — Instalações de ar-condicionado, sistemas centrais e unitários",
+     "description": "Define parâmetros de projeto, vazão de ar exterior e filtragem. Referência para os itens de tomada de ar externo, veneziana, filtro e damper citados no post."
+    },
+    {
+     "type": "norm",
+     "title": "ABNT NBR 17037:2023 — qualidade do ar interior em ambientes climatizados",
+     "description": "Passou a ser a referência técnica de qualidade do ar interior após a revogação da Resolução RE nº 09/2003 da Anvisa pela RDC nº 886/2024."
+    },
+    {
+     "type": "official",
+     "title": "AIA CAD Layer Guidelines / U.S. National CAD Standard — camadas de HVAC",
+     "description": "Lista de nomenclatura de camadas para climatização, incluindo os sufixos de eixo (CNTR) para insuflamento, retorno e exaustão. Base da recomendação de medir pelo eixo quando ele existir.",
+     "url": "https://facilities.duke.edu/sites/default/files/AIA%20CAD%20Layer%20Guidelines.pdf"
+    },
+    {
+     "type": "official",
+     "title": "ABRAVA — impactos das alterações na legislação brasileira sobre qualidade do ar interno",
+     "description": "Registra que a RDC Anvisa nº 886/2024 revogou a Resolução RE nº 09/2003 e que a referência de qualidade do ar interior passou a ser a ABNT NBR 17037, com o CO2 deixando de ser valor fixo de 1.000 ppm e passando a 700 ppm acima do ar externo.",
+     "url": "https://abrava.com.br/impactos-das-alteracoes-na-legislacao-brasileira-sobre-qualidade-do-ar-interno-foram-debatidos-em-evento-organizado-pela-abrava-e-entidades-engajadas-no-tema/"
+    },
+    {
+     "type": "official",
+     "title": "SINAPI — insumo 11051: chapa de aço galvanizada bitola GSG 26, e = 0,50 mm (4,00 kg/m²)",
+     "description": "Declara o peso por metro quadrado da chapa usada em duto. A família mantém o mesmo padrão nas outras bitolas: 24 (0,64 mm) = 5,12 kg/m², 22 (0,80 mm) = 6,40 kg/m², 20 (0,95 mm) = 7,60 kg/m². Base da conversão de m² para quilo.",
+     "url": "https://orcamentor.com/insumo/11051/"
+    }
+   ],
+   "publish_date": "2026-08-16"
   }
  ]
 }
