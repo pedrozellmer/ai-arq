@@ -373,8 +373,83 @@ def _detect_unit_factor(doc) -> float:
     except Exception:
         pass
 
+    # 🚨 Antes de chutar milímetro: com $INSUNITS=0 o desenho não declarou nada,
+    # e o chute é CEGO. A extensão do próprio desenho é evidência disponível.
+    inferido = _inferir_unidade_sem_insunits(doc)
+    if inferido is not None:
+        return inferido
+
     # Default for Brazilian architecture: millimeters
     return 0.001
+
+
+# Faixa de largura plausível pra uma prancha de edificação/implantação, em metros.
+_EXTENSAO_PLAUSIVEL_M = (10.0, 2000.0)
+# Abaixo disto o mm é aceito sem discussão (detalhe pequeno, peça, corte).
+_MM_ACEITAVEL_ATE_M = 2.0
+# Abaixo disto não é prancha, é detalhe — não arriscamos inferir nada.
+_MIN_ENTIDADES_PRA_INFERIR = 500
+
+
+def _inferir_unidade_sem_insunits(doc):
+    """Escolhe o fator quando o desenho NÃO declara unidade ($INSUNITS=0).
+
+    🚨 Esta é a função de MAIOR RISCO do extrator: o fator multiplica TODO
+    número medido de TODO projeto. Errar aqui não estraga uma linha, estraga a
+    planilha inteira. Por isso ela é deliberadamente covarde e só age quando o
+    padrão atual (mm) é COMPROVADAMENTE absurdo — em qualquer dúvida devolve
+    None e o mm de sempre prevalece. Não existe caso em que ela troque um fator
+    que hoje funciona.
+
+    Caso que a originou (04/08/2026, cliente ConfortAr — climatização
+    hospitalar): DWG sem $INSUNITS, desenho em METROS, 425 unidades de largura.
+    O mm transformava o hospital num desenho de 42 cm e dividia todo comprimento
+    por mil — 169 m de duto de insuflamento viravam 0,17 m, que a IA
+    corretamente descartou como "fragmento de legenda". A cliente tinha
+    perguntado, ANTES de criar conta, se a gente media duto.
+
+    🪤 A rede de proteção que existia (`_validate_unit_factor`) não pegou: ela
+    alerta quando o maior elemento fica < 5 cm, e aqui deu 33 cm. Um elemento de
+    33 cm passa por plausível — o absurdo só aparece quando se percebe que ele é
+    o MAIOR de uma planta hospitalar inteira. Valor isolado não denuncia escala;
+    a extensão do desenho denuncia.
+    """
+    try:
+        emin = doc.header.get("$EXTMIN")
+        emax = doc.header.get("$EXTMAX")
+        if not emin or not emax:
+            return None
+        largura = max(abs(emax[0] - emin[0]), abs(emax[1] - emin[1]))
+        if not (largura > 0) or largura != largura:      # 0, negativo ou NaN
+            return None
+
+        # Prancha de verdade tem muita entidade. Detalhe/peça solta não —
+        # e num detalhe o mm costuma estar certo. Contagem com teto: só
+        # precisamos saber se passa do mínimo, não o total.
+        n = 0
+        for _ in doc.modelspace():
+            n += 1
+            if n >= _MIN_ENTIDADES_PRA_INFERIR:
+                break
+        if n < _MIN_ENTIDADES_PRA_INFERIR:
+            return None
+
+        # Se o mm já produz um desenho de tamanho aceitável, ele fica. Este é o
+        # freio que garante "nunca mexe em arquivo que hoje funciona".
+        if largura * 0.001 >= _MM_ACEITAVEL_ATE_M:
+            return None
+
+        lo, hi = _EXTENSAO_PLAUSIVEL_M
+        for fator in (0.01, 1.0):                        # cm, depois metros
+            if lo <= largura * fator <= hi:
+                logger.warning(
+                    "[unit-inferida] $INSUNITS=0 e mm daria %.2f m de largura "
+                    "(absurdo) — adotando fator %s (%.0f m de largura)",
+                    largura * 0.001, fator, largura * fator)
+                return fator
+        return None
+    except Exception:
+        return None
 
 
 # Padrões que indicam bloco de esquadria (porta ou janela).
