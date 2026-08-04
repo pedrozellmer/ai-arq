@@ -343,7 +343,10 @@ async function loadItems() {
     // Carrega itens + state de revisão em paralelo
     const [itemsRes, stateRes] = await Promise.all([
       authFetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()),
-      authFetch(`${API_BASE}/api/items/${jobId}/review-state`).then(r => r.json()).catch(() => ({state: {}})),
+      // ?marcar=1 — SÓ esta tela conta como "abriu a revisão". O dashboard e o
+      // projeto.html chamam a mesma rota sem o parâmetro, então não inflam mais
+      // o contador (eram 54 aberturas pra 6 projetos com ação real, em 04/08).
+      authFetch(`${API_BASE}/api/items/${jobId}/review-state?marcar=1`).then(r => r.json()).catch(() => ({state: {}})),
     ]);
     items = itemsRes.items || [];
     // Restaura state persistido: aprovar/remover/editar anteriores

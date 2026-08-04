@@ -10620,6 +10620,127 @@ async def projects_confidence_summary(request: Request):
     return {"summary": summary}
 
 
+@app.get("/api/meus-entregaveis")
+async def meus_entregaveis(request: Request):
+    """Tudo que já foi gerado pro usuário, de TODOS os projetos, numa chamada só.
+
+    Alimenta as telas Downloads / Planilhas / Cronogramas / Memoriais /
+    Comparativos / Revisão do painel. Sem isso, cada uma dessas telas faria
+    N×(3 a 5) requests — com o teto de 50 projetos da RPC, até 250 idas ao
+    servidor pra desenhar uma lista.
+
+    Aqui são 4 consultas fixas, independente da quantidade de projetos.
+
+    🚨 Honestidade do que é "disponível" (regra dura nº1 aplicada a entregável):
+      - planilha    → `projects.planilha_gerada_em` preenchido. É o carimbo real.
+      - cronograma  → existe linha em `cronogramas`. O cliente montou.
+      - memorial    → o .docx nasce dos itens em qualquer projeto concluído,
+                      então `disponivel` = projeto concluído; `salvo` diz se o
+                      cliente já EDITOU (linha em `project_memorial`). São coisas
+                      diferentes e a tela mostra as duas.
+      - comparativo → `projects.comparativo_gerado_em`. Exige cotação enviada;
+                      hoje ninguém tem, e a tela precisa dizer isso em vez de
+                      aparecer vazia sem explicação.
+    """
+    user = _get_user_from_request(request)
+    if not user:
+        raise HTTPException(401, "Autenticação requerida")
+    uid = str(user.get("id") or "")
+    if not uid:
+        raise HTTPException(401, "Sessão inválida")
+
+    import urllib.request as _ur
+
+    def _rpc(nome: str, payload: dict):
+        try:
+            r = _ur.Request(f"{SUPABASE_URL}/rest/v1/rpc/{nome}",
+                            data=_json.dumps(payload).encode("utf-8"), method="POST")
+            r.add_header("apikey", SUPABASE_KEY)
+            r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            r.add_header("Content-Type", "application/json")
+            return _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8")) or []
+        except Exception as _e:
+            print(f"[entregaveis] rpc {nome} falhou: {_e}")
+            return []
+
+    # 🪤 NÃO dá pra usar a RPC list_user_projects aqui: ela devolve 21 colunas e
+    # planilha_gerada_em / comparativo_gerado_em NÃO estão entre elas (conferido
+    # no pg_get_functiondef em 04/08). Usando a RPC, a tela diria "nenhuma
+    # planilha" pra todo mundo — e existem 156 no banco. Select direto, então.
+    _, projetos = _supa_rest_service(
+        "GET", "/projects",
+        params={
+            "user_id": f"eq.{uid}",
+            "select": ("job_id,project_name,typology,status,created_at,completed_at,"
+                       "items_count,planilha_gerada_em,comparativo_gerado_em,archived"),
+            "order": "created_at.desc",
+            "limit": "200",
+        })
+    if not projetos:
+        return {"status": "ok", "projetos": [], "count": 0}
+
+    jobs = [str(p.get("job_id")) for p in projetos if p.get("job_id")]
+    filtro = "in.(" + ",".join(f'"{j}"' for j in jobs) + ")"
+
+    # Quem tem cronograma montado, quem tem memorial editado.
+    _, crons = _supa_rest_service(
+        "GET", "/cronogramas", params={"job_id": filtro, "select": "job_id,updated_at"})
+    _, memos = _supa_rest_service(
+        "GET", "/project_memorial", params={"job_id": filtro, "select": "job_id,updated_at"})
+    cron_por_job = {str(r.get("job_id")): r.get("updated_at") for r in (crons or [])}
+    memo_por_job = {str(r.get("job_id")): r.get("updated_at") for r in (memos or [])}
+
+    # Medido × estimado, pra tela de Revisão. Mesma RPC do selo de confiança.
+    conf_por_job = {}
+    for row in _rpc("user_project_confidence", {"p_user_id": uid}):
+        jid = row.get("job_id")
+        if jid:
+            conf_por_job[str(jid)] = (int(row.get("total") or 0), int(row.get("medido") or 0))
+
+    saida = []
+    for p in projetos:
+        jid = str(p.get("job_id") or "")
+        if not jid:
+            continue
+        concluido = (p.get("status") == "done")
+        total, medido = conf_por_job.get(jid, (0, 0))
+        saida.append({
+            "job_id": jid,
+            "nome": p.get("project_name") or "Projeto sem nome",
+            "status": p.get("status"),
+            "tipologia": p.get("typology"),
+            "criado_em": p.get("created_at"),
+            "concluido_em": p.get("completed_at"),
+            # Arquivado (90 dias) perde o arquivo no Storage. A tela precisa
+            # mostrar cinza e explicar, nunca oferecer um download que dá 404.
+            "arquivado": bool(p.get("archived")),
+            "itens": int(p.get("items_count") or 0),
+            "medido": medido,
+            "a_revisar": max(0, total - medido),
+            "entregaveis": {
+                "planilha": {
+                    "disponivel": bool(p.get("planilha_gerada_em")),
+                    "em": p.get("planilha_gerada_em"),
+                },
+                "cronograma": {
+                    "disponivel": jid in cron_por_job,
+                    "em": cron_por_job.get(jid),
+                },
+                "memorial": {
+                    "disponivel": concluido,
+                    "salvo": jid in memo_por_job,
+                    "em": memo_por_job.get(jid),
+                },
+                "comparativo": {
+                    "disponivel": bool(p.get("comparativo_gerado_em")),
+                    "em": p.get("comparativo_gerado_em"),
+                },
+            },
+        })
+
+    return {"status": "ok", "projetos": saida, "count": len(saida)}
+
+
 @app.get("/api/projects/{job_id}/cashback")
 async def get_project_cashback(job_id: str, request: Request):
     """Retorna eventos de cashback + total acumulado desse projeto.
@@ -14620,7 +14741,7 @@ def _marcar_revisao_aberta(job_id: str) -> None:
 
 
 @app.get("/api/items/{job_id}/review-state")
-async def get_review_state(job_id: str, request: Request):
+async def get_review_state(job_id: str, request: Request, marcar: int = 0):
     """Retorna as revisões já feitas nesse job pra restaurar o estado no
     browser quando o user volta pra terminar depois.
 
@@ -14647,12 +14768,17 @@ async def get_review_state(job_id: str, request: Request):
                     "comment": r.get("comment") or "",
                     "reviewed_at": r.get("reviewed_at"),
                 }
-        # Esta rota é chamada SÓ pela tela de revisão, ao abrir — então ela é o
-        # sinal honesto de "abriu". Sem ele, "ninguém revisa" ficava ambíguo
-        # entre não abrir e desistir no meio, que pedem correções opostas.
+        # 🚨 Só conta abertura quem DECLARA que é a tela de revisão (?marcar=1).
+        # O comentário antigo aqui dizia "esta rota é chamada SÓ pela tela de
+        # revisão" — e era falso: o dashboard chama pra CADA projeto concluído
+        # toda vez que "Meus Projetos" renderiza, e o projeto.html também chama.
+        # Resultado: em 04/08 havia 54 "aberturas" em 8 projetos, enquanto só 6
+        # projetos tinham ação real. O funil da revisão ligado em 03/08 estava
+        # medindo render de lista, não gente abrindo a tela.
         # Best-effort e depois do trabalho útil: contador não pode derrubar a
         # tela nem atrasar o carregamento dos itens.
-        _marcar_revisao_aberta(job_id)
+        if marcar == 1:
+            _marcar_revisao_aberta(job_id)
         return {"status": "ok", "job_id": job_id, "state": state, "count": len(state)}
     except Exception as e:
         raise HTTPException(500, f"Erro ao buscar state: {e}")
