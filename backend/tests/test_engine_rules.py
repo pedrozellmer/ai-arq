@@ -149,9 +149,11 @@ check("bancada H=1m do piso -> NAO (movel/altura)", is_floor_surface("Bancada/ba
 check("bebedouro de piso -> NAO (aparelho)", is_floor_surface("Bebedouro / purificador de água de coluna ou piso — vista 3D") is False)
 check("contrapiso H=5cm -> SIM (espessura, nao posicao)", is_floor_surface("Contrapiso desempenado H=5cm — regularização sobre laje") is True)
 
-print()
-print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
-sys.exit(1 if _failed else 0)
+# 🪤 O `sys.exit` morava AQUI, e tudo daqui pra baixo nunca rodava. A suíte
+# dizia "74 passaram" e saía antes dos 6 testes de unidade contável — teste que
+# existe, parece verde e não executa. Achado em 03/08/2026 ao investigar por que
+# a correção de comprimento não disparava. O exit agora é a ÚLTIMA linha do
+# arquivo; teste novo entra ANTES dele.
 
 
 # ── coerência de unidade em item contável (caso Rafael, 01/08/2026) ─────────
@@ -163,3 +165,60 @@ check("eletroduto em ml -> ok (linear de verdade)", is_unit_mismatch_countable("
 check("tomada em m -> MISMATCH", is_unit_mismatch_countable("Tomada 2P+T", "m") is True)
 check("luminária em m² -> MISMATCH", is_unit_mismatch_countable("Luminária LED 60x60", "m²") is True)
 check("cabeamento em ml -> ok", is_unit_mismatch_countable("Cabeamento par trançado Cat.6", "ml") is False)
+
+
+# ── comprimento medido descartado ou com rótulo errado (Eloídes, 03/08/2026) ──
+# 🔒 As observações abaixo são TEXTO REAL de produção, copiado de `project_items`
+# (projeto de 03/08 11:33). A regra tinha sido escrita contra um exemplo à mão e
+# nunca rodou num job de verdade — o deploy entrou 5 min DEPOIS do único job que
+# a exercitaria. Teste com dado real é o que impede isso de voltar.
+from engine_rules import (
+    corrigir_comprimento_medido as _ccm,
+    medida_de_comprimento_na_observacao as _mco,
+)
+
+_OBS_HIDRANTE = ("Fonte: comprimento total do layer 'BOMBEIRO' = 14.989,65 m. "
+                 "Inclui rede principal e ramais de hidrantes. Dividir por diâmetro "
+                 "na revisão. | Unidade ajustada de ml para m² (revisar quantidade).")
+_OBS_RETFIRE = ("Fonte: comprimento total do layer 'RETFIRE_CONEXES' = 295,04 m. "
+                "Representa o desenvolvimento linear das conexões. | Unidade "
+                "ajustada de ml para un (revisar quantidade).")
+_OBS_DRYWALL = ("Fonte: comprimento total do layer A-WALL = 1184.08 m. Inclui "
+                "todos os tipos DRY 01, 02, 05, 06, 07 identificados na legenda.")
+
+# pt-BR: 14.989,65 é quatorze mil — ler como float direto daria 14,98 (erro de 1000×)
+check("le milhar pt-BR", _mco(_OBS_HIDRANTE) == 14989.65)
+check("le decimal com virgula", _mco(_OBS_RETFIRE) == 295.04)
+check("le decimal com ponto", _mco(_OBS_DRYWALL) == 1184.08)
+
+_f = _ccm("Tubulação de aço para hidrantes", "m²", 0, _OBS_HIDRANTE)
+check("hidrante zerado: recupera a quantidade", _f.get("quantity") == 14989.65)
+check("hidrante zerado: vira metro", _f.get("unit") == "m")
+check("hidrante zerado: NUNCA confirmado", _f.get("confidence") == "estimado")
+
+_f2 = _ccm("Conexões sprinkler RetFire", "un", 0, _OBS_RETFIRE)
+check("retfire zerado: recupera", _f2.get("quantity") == 295.04)
+
+# unidade JÁ correta mas quantidade 0 — o caso que a 1ª versão deixava passar
+_f3 = _ccm("Parede drywall", "ml", 0, _OBS_DRYWALL)
+check("unidade certa + qtd 0: recupera mesmo assim", _f3.get("quantity") == 1184.08)
+check("unidade certa: mantem ml", _f3.get("unit") == "ml")
+
+# só o rótulo errado (quantidade bate com a medida) → corrige a unidade, não o número
+_f4 = _ccm("Tubulação", "m²", 295.04, _OBS_RETFIRE)
+check("rotulo errado: so troca a unidade", _f4.get("unit") == "m" and "quantity" not in _f4)
+
+# 🔒 Casos em que NÃO pode mexer
+check("sem medida na obs: nao mexe", _ccm("Parede", "m²", 0, "Área a levantar nas plantas.") == {})
+check("obs vazia: nao mexe", _ccm("Parede", "m²", 0, None) == {})
+check("area de verdade nao vira comprimento",
+      _mco("Fonte: comprimento total do layer X = 50 m². Área hachurada.") is None)
+check("quantidade diferente da medida: nao mexe (pode ser conta legitima)",
+      _ccm("Tubulação", "m²", 88.0, _OBS_RETFIRE) == {})
+check("'confirmar comprimento total' sem numero nao vira medida",
+      _mco("Comprimento individual não extraído. Confirmar comprimento total no projeto.") is None)
+
+
+print()
+print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
+sys.exit(1 if _failed else 0)

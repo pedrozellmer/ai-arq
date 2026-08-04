@@ -6183,15 +6183,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _it.confidence = _Conf2.ESTIMADO
                 _it.observations = ((_it.observations + " | ") if _it.observations
                                     else "") + _fix["motivo"]
-            if _n_uni or _n_rec:
-                print(f"[comprimento] job={job_id}: {_n_uni} unidade(s) corrigida(s), "
-                      f"{_n_rec} quantidade(s) recuperada(s) de medição descartada")
-                if _n_rec:
-                    _log_error("motor:comprimento-recuperado",
-                               f"{_n_rec} item(ns) tinham medição na observação e "
-                               f"quantidade 0 — recuperados como estimado", job_id)
+            print(f"[comprimento] job={job_id}: {_n_uni} unidade(s) corrigida(s), "
+                  f"{_n_rec} quantidade(s) recuperada(s) de medição descartada")
+            # 🪤 Registrar SEMPRE, mesmo com 0/0. Sem isso não dá pra separar
+            # "rodou e não tinha o que corrigir" de "nunca rodou" — e foi
+            # exatamente essa dúvida que custou a investigação de 03/08: a regra
+            # subiu 5 min DEPOIS do único job que a exercitaria, e o silêncio no
+            # banco era idêntico ao de uma regra quebrada.
+            # feedback_escrita_que_falha_calada: best-effort não pode ser mudo.
+            _log_error("motor:comprimento",
+                       f"varridos={len(all_items)} unidade_corrigida={_n_uni} "
+                       f"recuperados={_n_rec}", job_id)
         except Exception as _ecm:
             print(f"[comprimento] job={job_id}: checagem falhou: {_ecm}")
+            _log_error("motor:comprimento", f"FALHOU: {_ecm}", job_id)
 
         for _fld, _reads in _area_readings.items():
             if len(set(_reads)) > 1:
