@@ -19,6 +19,15 @@
 <meta property="og:title" content="AI.arq — Levantamento de quantitativos do CAD em minutos">
 <meta property="og:description" content="A IA lê DXF, DWG ou PDF e devolve a planilha por disciplina com cada item rastreável. Sem preços, sem inventar — quem precifica é seu orçamentista.">
 <meta property="og:image" content="https://ai.arq.br/og-image.png">
+<!-- Dimensoes declaradas: sem elas o buscador precisa baixar a imagem pra saber
+     se serve, e no caminho pode preferir outra que ja conhece. Em 04/08/2026 a
+     busca do Google mostrava o AI.arq com o logo do HIPERCARD - pescado das
+     bandeiras de cartao da secao de pagamento, porque o dado estruturado nao
+     declarava imagem nenhuma. -->
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:alt" content="AI.arq — levantamento de quantitativos do CAD em minutos">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:site_name" content="AI.arq">
 
@@ -30,7 +39,7 @@
 
 <!-- Schema.org SoftwareApplication -->
 <script type="application/ld+json">
-{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AI.arq","applicationCategory":"BusinessApplication","operatingSystem":"Web","offers":{"@type":"Offer","price":"0","priceCurrency":"BRL","description":"Grátis durante o beta, sem limite de projetos. Quando a cobrança for ativada (com aviso antes): R$97 / R$157 / R$247 conforme número de pranchas."},"description":"Quantitativo com IA pra arquitetos brasileiros. A IA lê PDF, DWG e DXF e devolve planilha de quantitativos por disciplina com referência SINAPI.","inLanguage":"pt-BR","url":"https://ai.arq.br/"}
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"AI.arq","applicationCategory":"BusinessApplication","operatingSystem":"Web","image":"https://ai.arq.br/og-image.png","logo":"https://ai.arq.br/og-image.png","offers":{"@type":"Offer","price":"0","priceCurrency":"BRL","description":"Grátis durante o beta, sem limite de projetos. Quando a cobrança for ativada (com aviso antes): R$97 / R$157 / R$247 conforme número de pranchas."},"description":"Quantitativo com IA pra arquitetos brasileiros. A IA lê PDF, DWG e DXF e devolve planilha de quantitativos por disciplina com referência SINAPI.","inLanguage":"pt-BR","url":"https://ai.arq.br/","publisher":{"@type":"Organization","name":"AI.arq","url":"https://ai.arq.br/","logo":{"@type":"ImageObject","url":"https://ai.arq.br/og-image.png","width":1200,"height":630}}}
 </script>
 <link rel="stylesheet" href="/tailwind.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
