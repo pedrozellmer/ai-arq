@@ -349,6 +349,125 @@ _INSUNITS_TO_METERS: dict[int, float] = {
 _INSUNITS_TO_METERS[14] = 0.1
 
 
+# ---------------------------------------------------------------------------
+# Duto desenhado pelas DUAS FACES — medir o eixo, não a soma das paralelas
+# ---------------------------------------------------------------------------
+# Em planta, duto retangular é representado pelas duas faces: duas linhas
+# paralelas. Somar o layer conta cada trecho DUAS VEZES. Uma projetista de
+# climatização descreveu o padrão dela assim: "duas linhas em paralelo,
+# geralmente com cores diferentes — insuflamento em azul escuro e retorno em
+# azul claro" (04/08/2026).
+#
+# Medido no arquivo real dela: insuflamento 1,88× · exaustão 1,98× ·
+# ar exterior 1,94× · retorno 2,00×. Quatro grupos independentes, todos perto
+# de dobrar.
+#
+# 🔒 Só age em layer de DUTO. Eletroduto, prumada e canaleta são linha ÚNICA —
+# parear ali cortaria pela metade uma medição correta, que é o erro oposto e
+# igualmente grave (regra nº1). Parede também é desenhada com duas linhas, mas
+# mexer nela mudaria todo projeto de arquitetura que hoje funciona: fora de
+# escopo, deliberadamente.
+_RE_DUTO_DUPLO = re.compile(r"(?<![a-z])duto|(?<![a-z])ducto", re.IGNORECASE)
+
+_DUTO_ANG_TOL = 3.0      # graus: paralelas de verdade
+_DUTO_SEP_MIN = 0.05     # m: abaixo disso é a mesma linha repetida, não um par
+_DUTO_SEP_MAX = 1.50     # m: acima disso não é seção de duto, são redes distintas
+_DUTO_MIN_SEG = 0.25     # m: trecho menor é legenda/símbolo, não rede
+_DUTO_MAX_SEG_LAYER = 3000   # teto anti-O(n²) por layer
+
+
+def _corrigir_duto_linha_dupla(walls):
+    """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
+
+    Devolve (walls_corrigidos, relatorio). Sem par encontrado, devolve a lista
+    original — na dúvida, não mexe.
+    """
+    if not walls:
+        return walls, ""
+    try:
+        from collections import defaultdict as _dd
+        por_layer = _dd(list)
+        for i, w in enumerate(walls):
+            if _RE_DUTO_DUPLO.search(str(getattr(w, "layer", "") or "")):
+                por_layer[w.layer].append(i)
+        if not por_layer:
+            return walls, ""
+
+        def _ang(w):
+            (x1, y1), (x2, y2) = w.start, w.end
+            return math.degrees(math.atan2(y2 - y1, x2 - x1)) % 180.0
+
+        descartar = set()
+        relato = []
+        for layer, idxs in por_layer.items():
+            # 🪤 Só pareia segmento com geometria de verdade. O caminho que mede
+            # dentro de bloco grava start/end zerados — pareá-los casaria tudo
+            # com tudo e destruiria a medição.
+            uteis = [i for i in idxs
+                     if getattr(walls[i], "length", 0) >= _DUTO_MIN_SEG
+                     and walls[i].start != walls[i].end]
+            if len(uteis) < 2 or len(uteis) > _DUTO_MAX_SEG_LAYER:
+                continue
+            bruto = sum(walls[i].length for i in uteis)
+            usados = set()
+            pares = 0
+            for pos, i in enumerate(uteis):
+                if i in usados:
+                    continue
+                a = walls[i]
+                melhor, melhor_d = None, None
+                for j in uteis[pos + 1:]:
+                    if j in usados:
+                        continue
+                    b = walls[j]
+                    d_ang = abs(_ang(a) - _ang(b))
+                    if min(d_ang, 180.0 - d_ang) > _DUTO_ANG_TOL:
+                        continue
+                    if abs(a.length - b.length) > max(0.4, 0.3 * a.length):
+                        continue
+                    (ax, ay), (bx, by) = a.start, a.end
+                    (cx, cy) = b.start
+                    sep = abs((bx - ax) * (ay - cy) - (ax - cx) * (by - ay)) / max(a.length, 1e-9)
+                    if _DUTO_SEP_MIN < sep < _DUTO_SEP_MAX and (melhor_d is None or sep < melhor_d):
+                        melhor, melhor_d = j, sep
+                if melhor is not None:
+                    usados.add(i)
+                    usados.add(melhor)
+                    descartar.add(melhor)      # fica UMA das duas faces = o eixo
+                    pares += 1
+            if pares:
+                eixo = bruto - sum(walls[k].length for k in descartar if k in uteis)
+                relato.append(f"{layer}: {bruto:.1f}m de face -> {eixo:.1f}m de eixo "
+                              f"({pares} par(es))")
+
+        # 🚨 Layer dominado por MICRO-SEGMENTO não mede rede, mede HACHURA.
+        # No arquivo de 04/08 o layer 'IM DUCTO SUMINISTRO' somava 169 m — e
+        # tinha 3.699 linhas, 3.246 arcos e NENHUM segmento acima de 1 m. Os
+        # 169 m eram o padrão gráfico que preenche o duto, não o trecho. Somar
+        # isso e chamar de comprimento é inventar número (regra nº1), então o
+        # certo é avisar em vez de entregar um total com cara de medição.
+        for layer, idxs in por_layer.items():
+            tot = sum(walls[i].length for i in idxs)
+            if tot <= 0:
+                continue
+            micro = sum(walls[i].length for i in idxs
+                        if getattr(walls[i], "length", 0) < _DUTO_MIN_SEG)
+            if micro / tot > 0.60:
+                relato.append(
+                    f"{layer}: {micro / tot * 100:.0f}% do comprimento está em "
+                    f"segmentos < {_DUTO_MIN_SEG:.2f} m — isso é hachura/padrão "
+                    f"gráfico, não trecho de rede; total NÃO confiável")
+
+        if not descartar:
+            return walls, (" | ".join(relato) if relato else "")
+        novos = [w for i, w in enumerate(walls) if i not in descartar]
+        logger.warning("[duto-linha-dupla] %s", " | ".join(relato))
+        return novos, " | ".join(relato)
+    except Exception as e:
+        logger.warning("[duto-linha-dupla] falhou, mantendo medição original: %s", e)
+        return walls, ""
+
+
 def _detect_unit_factor(doc) -> float:
     """Return the multiplier to convert drawing units to meters.
 
@@ -2028,6 +2147,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         metadata["xref_nao_resolvido"] = "; ".join(_xref_files[:5])
     if unit_warnings:
         metadata["unidade_suspeita"] = " | ".join(unit_warnings)
+
+    # Duto desenhado pelas DUAS FACES: mede o eixo, não a soma das paralelas.
+    walls, _rel_duto = _corrigir_duto_linha_dupla(walls)
+    if _rel_duto:
+        metadata["duto_linha_dupla"] = _rel_duto
 
     return DXFExtraction(
         filename=os.path.basename(filepath),
