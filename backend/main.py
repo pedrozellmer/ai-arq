@@ -2106,10 +2106,36 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
             )
         except Exception as _se:
             print(f"[recovery-retomar] {job_id}: falha ao semear status local: {_se}")
+        # 🪤 O que o cliente INFORMOU no upload precisa voltar aqui, senão a
+        # retomada devolve uma planilha diferente da que ele pediu. Achado em
+        # 03/08/2026: `user_total_area` e `user_pe_direito` não eram relidos, e
+        # todo job retomado por reinício de servidor perdia calado a metragem
+        # informada — as áreas que dependiam dela sumiam da planilha.
+        _u_area, _u_pd = 0.0, 0.0
+        try:
+            _qi = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                   f"&select=user_total_area,user_pe_direito&limit=1")
+            _ri = urllib.request.Request(_qi, method="GET")
+            _ri.add_header("apikey", SUPABASE_KEY)
+            _ri.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            _pi = _j.loads(urllib.request.urlopen(_ri, timeout=10).read().decode("utf-8"))
+            if _pi:
+                _u_area = float(_pi[0].get("user_total_area") or 0)
+                _u_pd = float(_pi[0].get("user_pe_direito") or 0)
+        except Exception as _ei:
+            # Não é fatal: sem o valor o motor mede o que der. Mas registrar,
+            # senão a perda volta a ser silenciosa — que é o bug original.
+            _log_error("recovery:informados",
+                       f"não consegui reler área/pé-direito informados: {_ei}", job_id)
+        if _u_area or _u_pd:
+            print(f"[recovery-retomar] {job_id}: preservando informados — "
+                  f"area={_u_area} pe_direito={_u_pd}")
         import threading as _t
         _t.Thread(target=_process_job_throttled,
                   args=(job_id, file_paths, work_dir),
-                  kwargs={"typology": typology, "project_type": project_type}, daemon=True).start()
+                  kwargs={"typology": typology, "project_type": project_type,
+                          "user_total_area": _u_area, "user_pe_direito": _u_pd},
+                  daemon=True).start()
         print(f"[recovery-retomar] {job_id}: RETOMADO com {len(file_paths)} arquivo(s)")
         return True
     except Exception as e:
@@ -2333,8 +2359,15 @@ def _recover_stuck_jobs_on_startup(skip_local_active: bool = False,
         typ = "office"
         ptype = "arquitetura"
         try:
+            # 🪤 O que NÃO for lido aqui o cliente PERDE na retomada. Achado em
+            # 03/08: `user_total_area` e `user_pe_direito` ficavam de fora, então
+            # todo job retomado por reinício de servidor voltava como se a pessoa
+            # nunca tivesse informado a metragem — e as áreas que dependiam dela
+            # sumiam, sem aviso nenhum. Campo novo que o motor consome no upload
+            # tem que entrar NESTA lista também.
             q = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
-                 f"&select=auto_resume_count,typology,project_type")
+                 f"&select=auto_resume_count,typology,project_type"
+                 f",user_total_area,user_pe_direito")
             qreq = urllib.request.Request(q, method="GET")
             qreq.add_header("apikey", SUPABASE_KEY)
             qreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -6134,12 +6167,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Pintura derivada do pé-direito informado (01/08/2026) — só quando a
         # planilha tem parede em metro linear e nenhum item de pintura.
         try:
-            if getattr(project_data, "user_pe_direito", 0):
-                if _derive_pintura_pe_direito(all_items, project_data.user_pe_direito):
-                    print(f"[pe-direito] job={job_id}: pintura derivada de "
-                          f"{project_data.user_pe_direito} m informado (estimado)")
+            _pd_inf = float(getattr(project_data, "user_pe_direito", 0) or 0)
+            if _pd_inf:
+                _n_pd = _derive_pintura_pe_direito(all_items, _pd_inf)
+                print(f"[pe-direito] job={job_id}: informado {_pd_inf} m, "
+                      f"{_n_pd} item(ns) de pintura derivado(s)")
+                # 🪤 Registrar mesmo com 0 derivados. Em 03/08 a feature tinha
+                # ZERO itens derivados em produção e não havia como saber se era
+                # falta de uso ou defeito — o pé-direito nem chegava ao banco.
+                _log_error("motor:pe-direito",
+                           f"informado={_pd_inf} derivados={_n_pd}", job_id)
         except Exception as _epd:
             print(f"[pe-direito] job={job_id}: derivação falhou: {_epd}")
+            _log_error("motor:pe-direito", f"FALHOU: {_epd}", job_id)
         # Coerência de unidade (caso Rafael 01/08): item CONTÁVEL (condulete,
         # tomada, ponto...) com unidade linear/área não pode ficar CONFIRMADO —
         # a quantidade veio de outra medição pendurada na linha errada.
@@ -6837,6 +6877,12 @@ async def process_files(
         "file_types": file_types,
         "status": "queued",
         "user_total_area": user_total_area if user_total_area > 0 else None,
+        # 🪤 Gravar o pé-direito NÃO é só pra retomada: sem ele no banco era
+        # impossível saber se a derivação de pintura tinha 0 casos por falta de
+        # uso ou por estar quebrada (03/08: 0 itens derivados, e nenhuma forma
+        # de distinguir os dois). Campo que o cliente informa tem que ficar
+        # registrado, nem que seja só pra medir.
+        "user_pe_direito": user_pe_direito if user_pe_direito > 0 else None,
     })
 
     # Consome créditos de cashback/cupom se o frontend declarou uso
