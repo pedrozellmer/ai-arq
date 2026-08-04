@@ -312,7 +312,7 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadMotorHealth(); loadOps(); loadFunilRevisao(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor</span></h3>
         <div id="motor-health"><p class="text-gray-400 text-sm">Carregando…</p></div>
@@ -335,6 +335,13 @@
           duas coisas que pedem conserto oposto: o cliente <strong>não abre</strong> a tela de revisão, ou
           <strong>abre e desiste</strong>. É este funil que explica a seção logo abaixo estar vazia.</p>
         <div id="motor-funil" class="space-y-2 mb-2"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <div class="my-8 border-t border-gray-200"></div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🗣️ Voz do cliente <span class="font-normal text-gray-400">— o que ele perguntou e o que ele corrigiu</span></h3>
+        <p class="text-sm text-gray-500 mb-3">As duas fontes que dizem o que falta no motor sem a gente
+          adivinhar. A pergunta do chat vira pauta de post e de FAQ; a edição na revisão mostra
+          onde a medição não chegou. <strong>Linha marcada como zerada</strong> é o caso que mais
+          se repete — o motor sabia o quê, não sabia quanto.</p>
+        <div id="voz-cliente" class="mb-2"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🩻 Onde a IA mais erra <span class="font-normal text-gray-400">— aprendizado com as planilhas revisadas dos clientes</span></h3>
         <div id="revision-feedback"><p class="text-gray-400 text-sm">Carregando…</p></div>
@@ -1149,7 +1156,7 @@ function switchTab(tabName) {
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadMotorHealth(); loadOps(); loadFunilRevisao(); loadRevisionFeedback(); }
+  if (tabName === 'motor') { loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -1546,6 +1553,66 @@ async function loadFunilRevisao(){
     }).join('');
   } catch (e) {
     el.innerHTML = '<p class="text-sm text-red-600">Não consegui ler o funil agora.</p>';
+  }
+}
+
+// ══════════════════════════════════════════════
+// VOZ DO CLIENTE (aba Motor) — o que ele perguntou e o que ele corrigiu
+// Pedido do Pedro 03/08: "sempre ver o que o cliente revisou e sempre ver o
+// chat". Enquanto depender de alguém lembrar de rodar consulta, não acontece.
+// ══════════════════════════════════════════════
+async function loadVozCliente(){
+  const el = document.getElementById('voz-cliente');
+  if (!el) return;
+  const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+  const dt = s => { try { return new Date(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); } catch(_) { return ''; } };
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/voz-do-cliente`);
+    const d = await res.json();
+    const perg = d.perguntas || [], edic = d.edicoes || [];
+
+    // Metade quebrada não pode virar "está zerado" — o painel diz qual falhou.
+    const vazio = (erro, txt) => erro
+      ? '<p class="text-sm text-red-600">Não consegui ler agora.</p>'
+      : `<p class="text-sm text-gray-500">${txt}</p>`;
+
+    const colPerg = perg.length ? perg.map(p => `
+      <div class="border-l-2 border-indigo-300 pl-3 py-1">
+        <p class="text-sm text-gray-800">${esc(p.question)}</p>
+        <p class="text-xs text-gray-400 mt-1">${dt(p.created_at)}</p>
+      </div>`).join('') : vazio(d.erro_perguntas, 'Ninguém perguntou nada no chat ainda.');
+
+    const colEdic = edic.length ? edic.map(r => {
+      const q = (r.edits && (r.edits.quantity ?? r.edits.qty));
+      const zer = r.era_zerada
+        ? '<span class="text-xs font-medium text-amber-700 bg-amber-50 px-2 py-1 rounded">estava zerada</span>'
+        : '';
+      return `
+      <div class="border-l-2 border-emerald-300 pl-3 py-1">
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-sm text-gray-800">${esc(String(r.descricao || '').slice(0,90))}</p>
+          ${zer}
+        </div>
+        <p class="text-xs text-gray-500 mt-1">
+          ${q != null ? `corrigiu para <strong>${esc(q)}</strong> ${esc(r.unidade || '')} · ` : ''}${dt(r.reviewed_at)}
+        </p>
+        ${r.comment ? `<p class="text-xs text-gray-600 mt-1 italic">"${esc(r.comment)}"</p>` : ''}
+      </div>`;
+    }).join('') : vazio(d.erro_edicoes, 'Nenhuma edição na tela de revisão ainda.');
+
+    el.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">💬 Perguntou no chat (${perg.length})</h4>
+          <div class="space-y-2">${colPerg}</div>
+        </div>
+        <div>
+          <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">✏️ Corrigiu na revisão (${edic.length})</h4>
+          <div class="space-y-2">${colEdic}</div>
+        </div>
+      </div>`;
+  } catch (e) {
+    el.innerHTML = '<p class="text-sm text-red-600">Não consegui carregar a voz do cliente.</p>';
   }
 }
 

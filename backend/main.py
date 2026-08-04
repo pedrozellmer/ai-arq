@@ -14719,6 +14719,79 @@ async def admin_funil_revisao(request: Request):
         return {"funil": [], "erro": True}
 
 
+@app.get("/api/admin/voz-do-cliente")
+async def admin_voz_do_cliente(request: Request, limit: int = 12):
+    """O que o cliente PERGUNTOU no chat e o que ele CORRIGIU na revisão.
+
+    Pedido do Pedro em 03/08/2026: "sempre ver o que o cliente revisou e sempre
+    ver o chat pra ver se ele falou algo". Enquanto isso depender de alguém
+    lembrar de rodar uma consulta, não acontece — então vira painel.
+
+    O material estava lá e ninguém olhava: em 03/08 havia 11 perguntas reais no
+    `agent_conversations` (uma delas virou post de Instagram) e as edições da
+    primeira revisão de verdade mostravam que o cliente corrige LINHA ZERADA,
+    não linha errada. Duas fontes que respondem "o que falta no motor" melhor
+    que qualquer palpite nosso.
+
+    Best-effort: cada metade falha sozinha e devolve lista vazia + `erro`, pra
+    um lado quebrado não apagar o outro (nem virar painel mudo que parece zero).
+    """
+    _require_admin(request)
+    out: dict = {"perguntas": [], "edicoes": [], "erro_perguntas": False,
+                 "erro_edicoes": False}
+
+    # ── 1. perguntas feitas ao chat do quantitativo
+    try:
+        _st, _rows = _supa_rest_service(
+            "GET", "agent_conversations?select=question,job_id,created_at"
+                   f"&order=created_at.desc&limit={max(1, min(limit, 50))}")
+        if _st == 200 and isinstance(_rows, list):
+            out["perguntas"] = [r for r in _rows if (r.get("question") or "").strip()]
+        else:
+            out["erro_perguntas"] = True
+            _log_error("voz-do-cliente", f"perguntas HTTP {_st}")
+    except Exception as e:
+        out["erro_perguntas"] = True
+        _log_error("voz-do-cliente", f"perguntas: {e}")
+
+    # ── 2. o que o cliente EDITOU na tela de revisão
+    # Duas chamadas em vez de embed do PostgREST: o embed depende de a FK estar
+    # declarada, e se ela não estiver o endpoint devolve 400 silencioso.
+    try:
+        _st, _revs = _supa_rest_service(
+            "GET", "item_reviews?select=item_id,job_id,edits,comment,reviewed_at"
+                   "&action=eq.edit&order=reviewed_at.desc"
+                   f"&limit={max(1, min(limit, 50))}")
+        if _st == 200 and isinstance(_revs, list):
+            _ids = [r.get("item_id") for r in _revs if r.get("item_id")]
+            _desc: dict = {}
+            if _ids:
+                _lista = ",".join(f'"{i}"' for i in _ids)
+                _st2, _itens = _supa_rest_service(
+                    "GET", f"project_items?select=id,description,unit,quantity"
+                           f"&id=in.({_lista})")
+                if _st2 == 200 and isinstance(_itens, list):
+                    _desc = {i["id"]: i for i in _itens if i.get("id")}
+            for r in _revs:
+                _it = _desc.get(r.get("item_id")) or {}
+                _antes = _it.get("quantity")
+                r["descricao"] = _it.get("description") or "(item removido)"
+                r["unidade"] = _it.get("unit")
+                # 🎯 O achado de 03/08: 8 das 9 edições do 1º cliente que revisou
+                # de verdade caíram em linha que o motor deixou ZERADA. Marcar
+                # isso aqui é o que transforma o painel em pauta de motor.
+                r["era_zerada"] = (_antes is not None and float(_antes or 0) == 0)
+            out["edicoes"] = _revs
+        else:
+            out["erro_edicoes"] = True
+            _log_error("voz-do-cliente", f"edicoes HTTP {_st}")
+    except Exception as e:
+        out["erro_edicoes"] = True
+        _log_error("voz-do-cliente", f"edicoes: {e}")
+
+    return out
+
+
 @app.get("/api/admin/review-insights")
 async def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
     """Agrega revisões recentes pra identificar padrões de erro do motor:
