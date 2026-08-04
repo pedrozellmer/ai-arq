@@ -136,6 +136,16 @@
   .side-cta:hover { background: #4338CA; }
   #aiarq-burger { display: inline-flex; }
 
+  /* Usadas pelas telas agregadas. Existem aqui porque py-0.5 e
+     hover:bg-amber-600 NÃO estão no build estático — conferido classe a
+     classe. Utilitária ausente não avisa, só não pinta. */
+  .pill-mini {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; line-height: 1.5;
+  }
+  .btn-revisar { background: #F59E0B; }
+  .btn-revisar:hover { background: #D97706; }
+
   /* A partir de 1024px o menu vira fixo e o conteúdo anda pro lado.
      Este é o ÚNICO lugar que define o deslocamento — não use lg:ml-64. */
   @media (min-width: 1024px) {
@@ -1783,7 +1793,7 @@
           + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>'
           + '<a href="' + cfg.abrir(p.job_id) + '" class="px-3 py-1.5 rounded-lg border hover:bg-gray-50 text-gray-700 text-xs font-medium no-underline">Abrir</a>';
       const selo = (tipo === 'memorial' && !e.salvo)
-        ? '<span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">rascunho automático</span>' : '';
+        ? '<span class="pill-mini" style="background:#F1F5F9;color:#475569">rascunho automático</span>' : '';
       return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
         + '<div style="min-width:0"><div class="flex items-center gap-2 flex-wrap">'
         + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(p.nome) + '</span>' + selo + '</div>'
@@ -1824,7 +1834,7 @@
       return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
         + '<div style="min-width:0">'
         + '<div class="flex items-center gap-2 flex-wrap">'
-        + '<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">' + cfg.rotulo + '</span>'
+        + '<span class="pill-mini" style="background:#EEF2FF;color:#4338CA">' + cfg.rotulo + '</span>'
         + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(l.p.nome) + '</span></div>'
         + '<p class="text-xs text-gray-500 mt-0.5">' + _dataCurta(l.em) + '</p></div>'
         + '<div class="flex items-center gap-2">' + acao + '</div></div>';
@@ -1862,7 +1872,7 @@
           + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(p.nome) + '</span>'
           + '<p class="text-xs text-gray-500 mt-0.5">' + p.medido + ' medidos do CAD · <b class="text-amber-700">'
           + p.a_revisar + ' a conferir</b> · ' + pct + '% medido</p></div>'
-          + '<a href="revisao.html?job_id=' + p.job_id + '" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold no-underline">Revisar</a>'
+          + '<a href="revisao.html?job_id=' + p.job_id + '" class="px-3 py-1.5 rounded-lg btn-revisar text-white text-xs font-semibold no-underline">Revisar</a>'
           + '</div>';
       }).join('') + '</div>';
   }

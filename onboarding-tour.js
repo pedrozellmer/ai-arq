@@ -23,7 +23,10 @@
     {
       icon: '📤',
       title: '1 · Suba seu CAD',
-      body: 'No menu (avatar no canto superior direito) → <strong>Novo projeto</strong>. Aceita PDF, DWG ou DXF. Pode ser uma prancha ou várias num zip.',
+      // 04/08/2026: a navegação saiu do avatar e virou menu lateral — fixo no
+      // computador, atrás do botão de três traços no celular. Instrução de tour
+      // que aponta pra lugar que não existe mais é pior que tour nenhum.
+      body: 'No menu à esquerda (no celular, o botão ☰ no topo) → <strong>Novo projeto</strong>. Aceita PDF, DWG ou DXF. Pode ser uma prancha ou várias num zip.',
       cta: 'Próximo',
     },
     {
