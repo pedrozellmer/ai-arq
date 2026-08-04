@@ -175,6 +175,7 @@ check("cabeamento em ml -> ok", is_unit_mismatch_countable("Cabeamento par tran�
 from engine_rules import (
     corrigir_comprimento_medido as _ccm,
     medida_de_comprimento_na_observacao as _mco,
+    medida_e_base_de_calculo as _base,
 )
 
 _OBS_HIDRANTE = ("Fonte: comprimento total do layer 'BOMBEIRO' = 14.989,65 m. "
@@ -200,9 +201,64 @@ _f2 = _ccm("Conexões sprinkler RetFire", "un", 0, _OBS_RETFIRE)
 check("retfire zerado: recupera", _f2.get("quantity") == 295.04)
 
 # unidade JÁ correta mas quantidade 0 — o caso que a 1ª versão deixava passar
-_f3 = _ccm("Parede drywall", "ml", 0, _OBS_DRYWALL)
-check("unidade certa + qtd 0: recupera mesmo assim", _f3.get("quantity") == 1184.08)
+_OBS_LIMPO = "Fonte: comprimento total do layer 'PROYECTO-OBRA-PLUVIAL' = 350,94 m."
+_f3 = _ccm("Rede de drenagem pluvial", "ml", 0, _OBS_LIMPO)
+check("unidade certa + qtd 0: recupera mesmo assim", _f3.get("quantity") == 350.94)
 check("unidade certa: mantem ml", _f3.get("unit") == "ml")
+
+
+# ── 🚨 o número citado é BASE DE CÁLCULO, não a resposta (achado 03/08) ───────
+# Textos reais das linhas zeradas de drywall. Preencher o total nessas linhas
+# daria número ERRADO — pior que deixar vazio.
+_BASES = [
+    ("guia = 2x o comprimento",
+     "Derivado do comprimento total de paredes (layer A-WALL = 722,39 ml). "
+     "Quantidade de guia = 2 × comprimento linear."),
+    ("total cobre VÁRIOS tipos",
+     "Fonte: comprimento total do layer A-WALL = 1184.08 m. Inclui todos os "
+     "tipos DRY 01, 02, 05, 06, 07 identificados na legenda."),
+    ("comprimento por tipo indisponível",
+     "Tipo identificado na legenda. Comprimento total = 965,77 ml. "
+     "Comprimento por tipo não disponível."),
+    ("fita estimada A PARTIR da parede",
+     "Comprimento de juntas estimado a partir do comprimento total de paredes "
+     "(layer A-WALL = 965,77 ml)."),
+    ("área precisa de pé-direito",
+     "Área total não calculável sem pé-direito do mezanino. Comprimento total "
+     "de paredes = 722,39 ml."),
+    ("layer soma múltiplas vistas",
+     "Comprimento total = 453,08 ml, incluindo múltiplas vistas "
+     "(planta baixa + cortes + elevações)."),
+]
+for _nome, _obs in _BASES:
+    check(f"base de calculo detectada: {_nome}", _base(_obs) is True)
+    check(f"NAO recupera quando e base: {_nome}", _ccm("Item", "m²", 0, _obs) == {})
+
+check("base: perfis PROPORCIONAIS ao comprimento",
+      _base("Quantidade de perfis proporcional ao comprimento total de paredes "
+            "(item 4 = 545,52 ml).") is True)
+check("base: forma de viga SEM DISCRIMINACAO por secao",
+      _base("Comprimento total de vigas: layer FO-VIGAS = 77.36 ml. Área de fôrma "
+            "= comprimento × (largura + 2 × altura). Sem discriminação de "
+            "comprimento por seção no DXF.") is True)
+
+# 🪤 O vão até o "=" não pode atravessar frase. Este texto real fazia a regra
+# ler a ALTURA de um corrimão ('CORRIMO-h=1,00m') como comprimento do
+# guarda-corpo — número inventado numa linha que devia ficar vazia.
+_OBS_CORRIMAO = ("Múltiplos blocos 'Guarda-corpo' nas fachadas. Layer "
+                 "A-FLOR-HRAL: 15.47 m. Comprimento total não calculado — "
+                 "confirmar com projeto. Texto ARQ_CAIXILHOS: 'CORRIMO-h=1,00m'.")
+check("nao pesca numero da frase seguinte", _mco(_OBS_CORRIMAO) is None)
+check("guarda-corpo fica vazio", _ccm("Guarda-corpo", "ml", 0, _OBS_CORRIMAO) == {})
+
+# e o contrário: medição legítima não pode ser confundida com base de cálculo
+check("medicao direta NAO e base (hidrante)", _base(_OBS_HIDRANTE) is False)
+check("medicao direta NAO e base (retfire)", _base(_OBS_RETFIRE) is False)
+check("medicao direta NAO e base (pluvial)", _base(_OBS_LIMPO) is False)
+check("soma explicita do proprio item recupera",
+      _ccm("Isolamento de dutos", "m", 0,
+           "Estimativa baseada no comprimento total de dutos circulares Ø150 "
+           "(~55m) + Ø100 (~3,5m) = 58,5m.").get("quantity") == 58.5)
 
 # só o rótulo errado (quantidade bate com a medida) → corrige a unidade, não o número
 _f4 = _ccm("Tubulação", "m²", 295.04, _OBS_RETFIRE)

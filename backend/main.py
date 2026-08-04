@@ -50,6 +50,8 @@ from engine_rules import (
     is_floor_surface as _is_floor_surface,
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
+    medida_de_comprimento_na_observacao as _medida_comprimento_obs,
+    medida_e_base_de_calculo as _medida_e_base_de_calculo,
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
 )
@@ -6166,11 +6168,40 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # nada entre linhas. Ver o bloco de comentário em engine_rules.py.
         try:
             from models import Confidence as _Conf2
-            _n_uni, _n_rec = 0, 0
+            _n_uni, _n_rec, _n_ambiguo = 0, 0, 0
+
+            # 🚨 Trava de RATEIO (03/08): quando DUAS linhas zeradas do mesmo
+            # projeto citam o MESMO total, o número é de um layer que cobre as
+            # duas — preencher o total em cada uma multiplicaria a quantidade.
+            # Real: 3 linhas (parede DRY 23, fita de junta, pintura) citando o
+            # mesmo "layer A-WALL = 965,77 ml". Sem esta trava, a planilha sairia
+            # com 965,77 três vezes. Quem sabe dividir é o cliente, na revisão.
+            _cita = {}
+            for _it in all_items:
+                try:
+                    if float(_it.quantity or 0) > 0:
+                        continue
+                except (TypeError, ValueError):
+                    pass
+                _m = _medida_comprimento_obs(_it.observations)
+                if _m is None or _medida_e_base_de_calculo(_it.observations):
+                    continue
+                _k = round(_m, 2)
+                _cita[_k] = _cita.get(_k, 0) + 1
+
             for _it in all_items:
                 _fix = _corrigir_comprimento_medido(
                     _it.description, _it.unit, _it.quantity, _it.observations)
                 if not _fix:
+                    continue
+                if "quantity" in _fix and _cita.get(round(_fix["quantity"], 2), 0) > 1:
+                    _n_ambiguo += 1
+                    _it.observations = ((_it.observations + " | ") if _it.observations
+                                        else "") + (
+                        "⚠ MEDIÇÃO COMPARTILHADA: o motor mediu este layer, mas o "
+                        "mesmo total serve a mais de um item desta planilha — "
+                        "dividir por conta própria daria número errado. Informe "
+                        "quanto cabe a esta linha na revisão.")
                     continue
                 if "quantity" in _fix:
                     _it.quantity = _fix["quantity"]
@@ -6184,7 +6215,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _it.observations = ((_it.observations + " | ") if _it.observations
                                     else "") + _fix["motivo"]
             print(f"[comprimento] job={job_id}: {_n_uni} unidade(s) corrigida(s), "
-                  f"{_n_rec} quantidade(s) recuperada(s) de medição descartada")
+                  f"{_n_rec} quantidade(s) recuperada(s), {_n_ambiguo} deixada(s) "
+                  f"em branco por medição compartilhada")
             # 🪤 Registrar SEMPRE, mesmo com 0/0. Sem isso não dá pra separar
             # "rodou e não tinha o que corrigir" de "nunca rodou" — e foi
             # exatamente essa dúvida que custou a investigação de 03/08: a regra
@@ -6193,7 +6225,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # feedback_escrita_que_falha_calada: best-effort não pode ser mudo.
             _log_error("motor:comprimento",
                        f"varridos={len(all_items)} unidade_corrigida={_n_uni} "
-                       f"recuperados={_n_rec}", job_id)
+                       f"recuperados={_n_rec} ambiguos={_n_ambiguo}", job_id)
         except Exception as _ecm:
             print(f"[comprimento] job={job_id}: checagem falhou: {_ecm}")
             _log_error("motor:comprimento", f"FALHOU: {_ecm}", job_id)

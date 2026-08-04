@@ -297,11 +297,57 @@ LENGTH_UNITS_OK = {"m", "ml", "metro", "metros", "m linear", "mts"}
 
 # "= 12.642,38 m" / "= 295,04m" / "= 1.285,22 metros" — exige o 'm' isolado,
 # então m² e m³ NÃO casam (senão a regra "corrigiria" uma área de verdade).
+# 🪤 O vão entre "comprimento total" e o "=" NÃO pode atravessar frase. Com
+# `[^=]{0,80}` a regra pescou a altura de um corrimão: a observação dizia
+# "Comprimento total não calculado — confirmar com projeto. Texto ARQ_CAIXILHOS:
+# 'CORRIMO-h=1,00m'", e ela pulou até o "=" da frase SEGUINTE e leu 1,00 m como
+# se fosse o comprimento do guarda-corpo. Proibir '.' e '|' no vão prende a
+# leitura na mesma frase — que é a única em que o "=" se refere ao comprimento.
 _RE_COMPRIMENTO = _re.compile(
-    r"comprimento\s+total[^=]{0,80}?=\s*"
+    r"comprimento\s+total[^=.|]{0,60}?=\s*"
     r"(\d{1,3}(?:\.\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)\s*"
     r"(?:m|metros?|ml)\b(?![²³23])",
     _re.IGNORECASE)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🚨 O número citado nem sempre É a resposta — muitas vezes é a BASE DE CÁLCULO.
+#
+# Achado em 03/08/2026 varrendo as linhas zeradas reais. Nestes 4 casos a regra
+# original preencheria um número ERRADO, que é pior que deixar vazio:
+#
+#   "Derivado do comprimento total de paredes (layer A-WALL = 722,39 ml).
+#    Quantidade de guia = 2 × comprimento linear"     → certo é 1444,78, não 722,39
+#   "Comprimento por tipo não disponível"             → 965,77 é a soma de TODOS
+#                                                        os tipos; a linha é UM tipo
+#   "Comprimento de juntas estimado A PARTIR DO
+#    comprimento total de paredes"                    → fita não mede o mesmo que parede
+#   "Área de pintura não calculável ... o comprimento
+#    total de paredes = ..."                          → área precisa de pé-direito
+#
+# Quando a própria observação diz que o número é ponto de partida, a regra sai
+# de fininho. Vazio o cliente preenche; errado ele compra errado — e é a tese que
+# a gente publica ("planilha honesta e incompleta é melhor que completa e errada").
+_RE_BASE_DE_CALCULO = _re.compile(
+    r"deriv[ao]d[ao]\s+d|"
+    r"estimad[ao]\s+a\s+partir|"
+    r"calculad[ao]\s+a\s+partir|"
+    r"proporcional\s+a|"          # "perfis proporcional ao comprimento de paredes"
+    r"sem\s+discrimina|"          # "sem discriminação de comprimento por seção"
+    r"n[ãa]o\s+calcul[áa]vel|"
+    r"n[ãa]o\s+[ée]\s+poss[íi]vel\s+(?:separar|discriminar|dividir)|"
+    r"por\s+tipo\s+n[ãa]o\s+(?:dispon[íi]vel|discriminad|segregad)|"
+    r"n[ãa]o\s+(?:segregad|discriminad)[ao]\s+(?:no|por)|"
+    r"inclui\s+todos\s+os\s+tipos|"
+    r"m[úu]ltiplas\s+vistas|"
+    r"sem\s+p[ée][-\s]?direito",
+    _re.IGNORECASE)
+
+
+def medida_e_base_de_calculo(obs):
+    """True quando a observação diz que o número citado é PONTO DE PARTIDA
+    (derivação, soma de vários tipos, falta de pé-direito) e não a quantidade
+    daquela linha. Nesse caso não se recupera nada."""
+    return bool(obs) and bool(_RE_BASE_DE_CALCULO.search(str(obs)))
 
 
 def medida_de_comprimento_na_observacao(obs):
@@ -339,6 +385,9 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
     um 'comprimento total = N m'. Ver o bloco de comentário acima."""
     medida = medida_de_comprimento_na_observacao(obs)
     if medida is None:
+        return {}
+    # 🚨 O número é base de cálculo, não resposta — ver _RE_BASE_DE_CALCULO.
+    if medida_e_base_de_calculo(obs):
         return {}
     u = (unit or "").strip().lower()
     try:
