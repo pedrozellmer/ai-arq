@@ -198,6 +198,35 @@
       <svg viewBox="0 0 24 24"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 17.5z"/></svg>
       Meus projetos
     </button>
+    <button class="side-it" data-tab="revisao" onclick="switchTab('revisao')">
+      <svg viewBox="0 0 24 24"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 13.5l2 2 4-4.5"/></svg>
+      Revisão
+      <span id="selo-revisao" class="side-badge" style="display:none"></span>
+    </button>
+  </div>
+
+  <div class="side-grp">
+    <p class="side-grp-t">Entregáveis</p>
+    <button class="side-it" data-tab="planilhas" onclick="switchTab('planilhas')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 10v10M3 15h18"/></svg>
+      Planilhas
+    </button>
+    <button class="side-it" data-tab="cronogramas" onclick="switchTab('cronogramas')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7 14h5M10 17.5h6"/></svg>
+      Cronogramas
+    </button>
+    <button class="side-it" data-tab="memoriais" onclick="switchTab('memoriais')">
+      <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/></svg>
+      Memoriais
+    </button>
+    <button class="side-it" data-tab="comparativos" onclick="switchTab('comparativos')">
+      <svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3M20 16H7l3 3"/></svg>
+      Comparativos
+    </button>
+    <button class="side-it" data-tab="downloads" onclick="switchTab('downloads')">
+      <svg viewBox="0 0 24 24"><path d="M12 3v11M8 10.5l4 4 4-4M4 18.5h16"/></svg>
+      Downloads
+    </button>
   </div>
 
   <div class="side-grp">
@@ -1248,6 +1277,63 @@
         </div>
       </div>
 
+      <!-- ══════════════════════════════════════════════════════════
+           TELAS AGREGADAS — 04/08/2026
+           Até aqui, planilha, cronograma, memorial e comparativo só existiam
+           DENTRO de cada projeto. Quem gerou algo semana passada não sabia
+           onde procurar. Estas 6 abas juntam por tipo, de todos os projetos.
+           Todas comem da MESMA chamada: GET /api/meus-entregaveis (4 consultas
+           fixas no servidor). Nada de N requests por projeto.
+           ══════════════════════════════════════════════════════════ -->
+
+      <div id="tab-revisao" class="tab-content hidden">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Esperando sua revisão</h1>
+          <p class="text-gray-500 mt-1 text-sm">Os itens que a IA marcou como <b>estimativa</b> são os que mais precisam do seu olho. Confirmar ou corrigir aqui ensina o motor pro seu próximo projeto.</p>
+        </div>
+        <div id="lista-revisao"></div>
+      </div>
+
+      <div id="tab-planilhas" class="tab-content hidden">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Planilhas</h1>
+          <p class="text-gray-500 mt-1 text-sm">O quantitativo em XLSX de cada projeto.</p>
+        </div>
+        <div id="lista-planilhas"></div>
+      </div>
+
+      <div id="tab-cronogramas" class="tab-content hidden">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Cronogramas</h1>
+          <p class="text-gray-500 mt-1 text-sm">Cronograma físico-financeiro montado a partir das quantidades.</p>
+        </div>
+        <div id="lista-cronogramas"></div>
+      </div>
+
+      <div id="tab-memoriais" class="tab-content hidden">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Memoriais descritivos</h1>
+          <p class="text-gray-500 mt-1 text-sm">Rascunho gerado dos itens medidos. É um ponto de partida pra você editar — não um documento pronto pra assinar.</p>
+        </div>
+        <div id="lista-memoriais"></div>
+      </div>
+
+      <div id="tab-comparativos" class="tab-content hidden">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Comparativos de fornecedores</h1>
+          <p class="text-gray-500 mt-1 text-sm">Quadro que cruza as cotações que você enviou com os itens do projeto.</p>
+        </div>
+        <div id="lista-comparativos"></div>
+      </div>
+
+      <div id="tab-downloads" class="tab-content hidden">
+        <div class="mb-6">
+          <h1 class="text-2xl font-bold text-gray-900">Downloads</h1>
+          <p class="text-gray-500 mt-1 text-sm">Tudo que já foi gerado pra você, do mais recente pro mais antigo.</p>
+        </div>
+        <div id="lista-downloads"></div>
+      </div>
+
     </div>
   </main>
 
@@ -1420,6 +1506,12 @@
     'meu-cadastro': 'Meu Cadastro',
     'meus-pagamentos': 'Meus Pagamentos',
     'como-funciona': 'Como Funciona',
+    'revisao': 'Esperando sua revisão',
+    'planilhas': 'Planilhas',
+    'cronogramas': 'Cronogramas',
+    'memoriais': 'Memoriais descritivos',
+    'comparativos': 'Comparativos de fornecedores',
+    'downloads': 'Downloads',
   };
 
   // ── Indicação manual: WhatsApp em 1 clique + copiar texto/imagem ──
@@ -1522,6 +1614,13 @@
     if (tabName === 'meus-pagamentos') renderPayments();
     if (tabName === 'cashback') { loadCashbackAggregated(); loadCashbackProjects(); renderPendingReviews(); }
     if (tabName === 'home') loadHomeStats();
+    // Telas agregadas — todas comem do mesmo cache de /api/meus-entregaveis.
+    if (tabName === 'revisao') renderRevisaoAgregada();
+    if (tabName === 'planilhas') renderEntregaveis('planilha');
+    if (tabName === 'cronogramas') renderEntregaveis('cronograma');
+    if (tabName === 'memoriais') renderEntregaveis('memorial');
+    if (tabName === 'comparativos') renderEntregaveis('comparativo');
+    if (tabName === 'downloads') renderDownloads();
   }
 
   // Avatar dropdown
@@ -1582,6 +1681,203 @@
   // Nomes antigos mantidos: eram shims mortos, agora fazem o que prometem.
   function closeSidebar() { fecharMenuLateral(); }
   function openSidebar() { abrirMenuLateral(); }
+
+  // ══════════════════════════════════════════════
+  //  TELAS AGREGADAS DE ENTREGÁVEIS
+  // ══════════════════════════════════════════════
+  // Uma chamada só (/api/meus-entregaveis) alimenta as 6 abas. O cache evita
+  // refazer a chamada a cada troca de aba; quem quiser dado fresco passa true.
+  let _entregaveisCache = null;
+  let _entregaveisVoando = null;
+
+  async function carregarEntregaveis(forcar) {
+    if (_entregaveisCache && !forcar) return _entregaveisCache;
+    if (_entregaveisVoando) return _entregaveisVoando;
+    _entregaveisVoando = (async () => {
+      const r = await authFetch(API_BASE + '/api/meus-entregaveis');
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const d = await r.json();
+      _entregaveisCache = d.projetos || [];
+      return _entregaveisCache;
+    })();
+    try { return await _entregaveisVoando; }
+    finally { _entregaveisVoando = null; }
+  }
+
+  function _dataCurta(iso) {
+    if (!iso) return '';
+    try {
+      // Horário de Brasília — sem fuso explícito a tela mostra +3h.
+      return new Date(iso).toLocaleDateString('pt-BR',
+        { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Sao_Paulo' });
+    } catch (_) { return ''; }
+  }
+
+  // Cada entregável: onde mora o arquivo, como se chama, e o que dizer quando
+  // não existe nenhum. O texto do vazio importa tanto quanto a lista: tela
+  // vazia sem explicação faz o cliente achar que quebrou.
+  const ENTREGAVEIS_CFG = {
+    planilha: {
+      rotulo: 'Planilha', alvo: 'lista-planilhas', cor: 'emerald',
+      arquivo: j => [API_BASE + '/api/download/' + j, 'quantitativos_aiarq_' + j + '.xlsx'],
+      abrir: j => 'projeto.html?job_id=' + j,
+      vazio: 'Nenhuma planilha ainda. Ela nasce sozinha assim que um projeto termina de ser lido.',
+    },
+    cronograma: {
+      rotulo: 'Cronograma', alvo: 'lista-cronogramas', cor: 'indigo',
+      arquivo: j => [API_BASE + '/api/cronograma/' + j + '/export/xlsx', 'cronograma_' + j + '.xlsx'],
+      abrir: j => 'cronograma.html?job_id=' + j,
+      vazio: 'Você ainda não montou nenhum cronograma. Abra um projeto concluído e clique em Cronograma — as durações saem das quantidades medidas.',
+    },
+    memorial: {
+      rotulo: 'Memorial', alvo: 'lista-memoriais', cor: 'violet',
+      arquivo: j => [API_BASE + '/api/memorial/' + j, 'memorial_descritivo_' + j + '.docx'],
+      abrir: j => 'memorial.html?job_id=' + j,
+      vazio: 'Nenhum projeto concluído ainda — o memorial é montado a partir dos itens medidos.',
+    },
+    comparativo: {
+      rotulo: 'Comparativo', alvo: 'lista-comparativos', cor: 'amber',
+      arquivo: j => [API_BASE + '/api/projects/' + j + '/quotes/download/xlsx', 'comparativo_fornecedores_' + j + '.xlsx'],
+      abrir: j => 'projeto.html?job_id=' + j,
+      vazio: 'Nenhum comparativo ainda. Ele precisa das cotações dos fornecedores: abra um projeto, envie as propostas em XLSX e o quadro sai cruzado com os seus itens.',
+    },
+  };
+
+  function _cartaoVazio(msg) {
+    return '<div class="rounded-2xl border border-dashed bg-white p-8 text-center">'
+      + '<p class="text-sm text-gray-500" style="max-width:520px;margin:0 auto;line-height:1.6">'
+      + escapeHtml(msg) + '</p></div>';
+  }
+
+  function _cartaoErro(alvo, recarregar) {
+    document.getElementById(alvo).innerHTML =
+      '<div class="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">'
+      + '<p class="text-sm text-amber-900">Não consegui carregar agora. '
+      + '<button onclick="' + recarregar + '" class="underline font-medium">Tentar de novo</button></p></div>';
+  }
+
+  async function renderEntregaveis(tipo) {
+    const cfg = ENTREGAVEIS_CFG[tipo];
+    const box = document.getElementById(cfg.alvo);
+    if (!box) return;
+    box.innerHTML = '<p class="text-sm text-gray-400 py-8 text-center">Carregando…</p>';
+    let projetos;
+    try { projetos = await carregarEntregaveis(); }
+    catch (_) { return _cartaoErro(cfg.alvo, 'renderEntregaveis(\'' + tipo + '\')'); }
+
+    const tem = projetos.filter(p => p.entregaveis[tipo] && p.entregaveis[tipo].disponivel);
+    if (!tem.length) { box.innerHTML = _cartaoVazio(cfg.vazio); return; }
+
+    tem.sort((a, b) => String(b.entregaveis[tipo].em || b.concluido_em || '')
+                       .localeCompare(String(a.entregaveis[tipo].em || a.concluido_em || '')));
+
+    box.innerHTML = '<div class="space-y-2">' + tem.map(p => {
+      const e = p.entregaveis[tipo];
+      const [url, nome] = cfg.arquivo(p.job_id);
+      const quando = _dataCurta(e.em || p.concluido_em);
+      // Projeto arquivado perdeu o arquivo no Storage (90 dias): oferecer o
+      // download daria 404. Melhor dizer a verdade do que entregar um erro.
+      const acoes = p.arquivado
+        ? '<span class="text-xs text-gray-400">arquivado — arquivo removido</span>'
+        : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\')"'
+          + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>'
+          + '<a href="' + cfg.abrir(p.job_id) + '" class="px-3 py-1.5 rounded-lg border hover:bg-gray-50 text-gray-700 text-xs font-medium no-underline">Abrir</a>';
+      const selo = (tipo === 'memorial' && !e.salvo)
+        ? '<span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">rascunho automático</span>' : '';
+      return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
+        + '<div style="min-width:0"><div class="flex items-center gap-2 flex-wrap">'
+        + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(p.nome) + '</span>' + selo + '</div>'
+        + '<p class="text-xs text-gray-500 mt-0.5">' + (quando ? cfg.rotulo + ' de ' + quando : cfg.rotulo) + '</p></div>'
+        + '<div class="flex items-center gap-2">' + acoes + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  async function renderDownloads() {
+    const box = document.getElementById('lista-downloads');
+    if (!box) return;
+    box.innerHTML = '<p class="text-sm text-gray-400 py-8 text-center">Carregando…</p>';
+    let projetos;
+    try { projetos = await carregarEntregaveis(); }
+    catch (_) { return _cartaoErro('lista-downloads', 'renderDownloads()'); }
+
+    // Achata: cada par projeto+entregável vira uma linha própria.
+    const linhas = [];
+    projetos.forEach(p => {
+      Object.keys(ENTREGAVEIS_CFG).forEach(tipo => {
+        const e = p.entregaveis[tipo];
+        if (e && e.disponivel) linhas.push({ p, tipo, em: e.em || p.concluido_em });
+      });
+    });
+    if (!linhas.length) {
+      box.innerHTML = _cartaoVazio('Nada gerado ainda. Assim que o primeiro projeto for lido, a planilha aparece aqui.');
+      return;
+    }
+    linhas.sort((a, b) => String(b.em || '').localeCompare(String(a.em || '')));
+
+    box.innerHTML = '<div class="space-y-2">' + linhas.map(l => {
+      const cfg = ENTREGAVEIS_CFG[l.tipo];
+      const [url, nome] = cfg.arquivo(l.p.job_id);
+      const acao = l.p.arquivado
+        ? '<span class="text-xs text-gray-400">arquivado</span>'
+        : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\')"'
+          + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>';
+      return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
+        + '<div style="min-width:0">'
+        + '<div class="flex items-center gap-2 flex-wrap">'
+        + '<span class="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 font-semibold">' + cfg.rotulo + '</span>'
+        + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(l.p.nome) + '</span></div>'
+        + '<p class="text-xs text-gray-500 mt-0.5">' + _dataCurta(l.em) + '</p></div>'
+        + '<div class="flex items-center gap-2">' + acao + '</div></div>';
+    }).join('') + '</div>';
+  }
+
+  async function renderRevisaoAgregada() {
+    const box = document.getElementById('lista-revisao');
+    if (!box) return;
+    box.innerHTML = '<p class="text-sm text-gray-400 py-8 text-center">Carregando…</p>';
+    let projetos;
+    try { projetos = await carregarEntregaveis(); }
+    catch (_) { return _cartaoErro('lista-revisao', 'renderRevisaoAgregada()'); }
+
+    // 🪤 De propósito NÃO usa /api/items/{job}/review-state: essa rota GRAVA
+    // (incrementa revisao_aberturas) e uma tela agregada chamando por projeto
+    // multiplicaria a inflação do funil. O número aqui vem da mesma RPC do selo
+    // de confiança, que só lê.
+    const pend = projetos.filter(p => !p.arquivado && p.a_revisar > 0);
+    if (!pend.length) {
+      box.innerHTML = _cartaoVazio('Nada esperando você. Quando um projeto tiver item marcado como estimativa, ele aparece aqui.');
+      return;
+    }
+    pend.sort((a, b) => b.a_revisar - a.a_revisar);
+
+    const total = pend.reduce((s, p) => s + p.a_revisar, 0);
+    box.innerHTML =
+      '<div class="rounded-xl border border-amber-200 bg-amber-50 p-4 mb-4">'
+      + '<p class="text-sm text-amber-900"><b>' + total + '</b> ' + (total === 1 ? 'item marcado como estimativa' : 'itens marcados como estimativa')
+      + ' em ' + pend.length + (pend.length === 1 ? ' projeto' : ' projetos') + '.</p></div>'
+      + '<div class="space-y-2">' + pend.map(p => {
+        const pct = p.itens ? Math.round((p.medido / (p.medido + p.a_revisar)) * 100) : 0;
+        return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
+          + '<div style="min-width:0">'
+          + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(p.nome) + '</span>'
+          + '<p class="text-xs text-gray-500 mt-0.5">' + p.medido + ' medidos do CAD · <b class="text-amber-700">'
+          + p.a_revisar + ' a conferir</b> · ' + pct + '% medido</p></div>'
+          + '<a href="revisao.html?job_id=' + p.job_id + '" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold no-underline">Revisar</a>'
+          + '</div>';
+      }).join('') + '</div>';
+  }
+
+  // Contador no menu — some quando não há nada esperando.
+  async function atualizarSeloRevisao() {
+    try {
+      const projetos = await carregarEntregaveis();
+      const n = projetos.filter(p => !p.arquivado && p.a_revisar > 0).length;
+      const el = document.getElementById('selo-revisao');
+      if (!el) return;
+      if (n > 0) { el.textContent = n; el.style.display = ''; }
+      else { el.style.display = 'none'; }
+    } catch (_) { /* selo é acessório: falhou, não mostra nada */ }
+  }
 
   // ══════════════════════════════════════════════
   //  HOME — métricas agregadas do usuário
@@ -2002,6 +2298,9 @@
     } else {
       switchTab('home');
     }
+    // Contador de "esperando revisão" no menu. Last: é acessório, e nada
+    // depois dele pode depender disso. Falhou, o selo só não aparece.
+    atualizarSeloRevisao();
   }
   checkAuth();
 
