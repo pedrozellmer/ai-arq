@@ -115,6 +115,13 @@
   }
   .side-it:hover { background: #F1F5F9; }
   .side-it.on { background: #EEF2FF; color: #4F46E5; font-weight: 600; }
+  /* 🚨 SEM ESTA REGRA O LINK DE ADMIN APARECE PRA TODO CLIENTE LOGADO.
+     .side-it declara display:flex e mora neste <style>, que vem DEPOIS do
+     /tailwind.min.css: mesma especificidade (0,1,0), e quem vem depois ganha
+     — então a classe .hidden do Tailwind fica inerte em qualquer .side-it.
+     .side-it.hidden é (0,2,0) e vence as duas. Vale pra qualquer item do menu
+     que nasça escondido, não só o de admin. */
+  .side-it.hidden { display: none; }
   .side-it svg {
     width: 19px; height: 19px; flex: none; stroke: currentColor; fill: none;
     stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;

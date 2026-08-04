@@ -9538,12 +9538,17 @@ PUBLIC_CHAT_SYSTEM_PROMPT = """Você é o assistente virtual do AI.arq — uma p
 
 ## PREÇOS
 
-- **1º projeto: GRÁTIS**
+- **DURANTE O BETA: TUDO GRÁTIS**, quantos projetos a pessoa quiser, sem cartão.
+  🚨 NUNCA diga "1º projeto grátis" nem "primeiro projeto é grátis" — a promessa
+  pública é ILIMITADO no beta. Os valores abaixo são a tabela que passa a valer
+  quando a cobrança ligar; só cite se perguntarem de preço futuro.
 - **Pequeno** (1-5 pranchas): R$ 97
 - **Médio** (6-10 pranchas): R$ 157 (mais comum — -19% por prancha vs Pequeno)
 - **Grande** (11-20 pranchas): R$ 247 (-36% por prancha)
 - **Acima de 20**: R$ 247 + R$ 10/prancha extra
-- Pagamento via Stripe (cartão/PIX). **Sem mensalidade.** Paga só quando usa.
+- Pagamento via Stripe, **cartão de crédito**. **Sem mensalidade.** Paga só quando usa.
+  🚨 NUNCA anuncie PIX. O checkout tenta PIX e cai pra cartão quando o Stripe
+  não tem PIX ativo, então prometer PIX vira promessa quebrada na hora de pagar.
 - Todas as outras features (memória técnica, comparativo, PPT) estão INCLUÍDAS no preço do projeto. Sem taxas extras. Cada feature é OPCIONAL — use só se fizer sentido. Se perguntarem de cashback: no beta está tudo grátis, não há o que abater; créditos ficam guardados pra quando a cobrança ativar.
 
 ## CASHBACK
@@ -10667,7 +10672,7 @@ async def meus_entregaveis(request: Request):
     # planilha_gerada_em / comparativo_gerado_em NÃO estão entre elas (conferido
     # no pg_get_functiondef em 04/08). Usando a RPC, a tela diria "nenhuma
     # planilha" pra todo mundo — e existem 156 no banco. Select direto, então.
-    _, projetos = _supa_rest_service(
+    st_proj, projetos = _supa_rest_service(
         "GET", "/projects",
         params={
             "user_id": f"eq.{uid}",
@@ -10676,6 +10681,11 @@ async def meus_entregaveis(request: Request):
             "order": "created_at.desc",
             "limit": "200",
         })
+    # 🚨 Consulta que falha NÃO pode virar "você não tem nada". Devolver lista
+    # vazia com HTTP 200 faz a tela dizer, com todas as letras, que o cliente
+    # nunca gerou planilha nenhuma — e ele tem. Erro tem que soar como erro.
+    if st_proj != 200:
+        raise HTTPException(503, "Não consegui ler seus projetos agora. Tente de novo em instantes.")
     if not projetos:
         return {"status": "ok", "projetos": [], "count": 0}
 
@@ -10697,6 +10707,22 @@ async def meus_entregaveis(request: Request):
         if jid:
             conf_por_job[str(jid)] = (int(row.get("total") or 0), int(row.get("medido") or 0))
 
+    # 🚨 Quem o cliente JÁ conferiu não pode continuar sendo cobrado.
+    # 'medido' conta confidence='confirmado', e aprovar ou editar item NÃO mexe
+    # em confidence — de propósito: olhar uma estimativa não a transforma em
+    # medição (regra dura nº1). Só que, sem descontar o que já foi revisado, a
+    # tela pede pra sempre o trabalho que a pessoa já fez: no projeto de 03/08
+    # foram 28 ações e o contador seguiu em 170, igualzinho.
+    # Então: 'medido' continua puro, e 'a_revisar' desconta o já conferido.
+    revisados_por_job = {}
+    _, revs = _supa_rest_service(
+        "GET", "/item_reviews",
+        params={"job_id": filtro, "select": "job_id,item_id", "limit": "10000"})
+    for r in (revs or []):
+        jid = str(r.get("job_id") or "")
+        if jid:
+            revisados_por_job.setdefault(jid, set()).add(r.get("item_id"))
+
     saida = []
     for p in projetos:
         jid = str(p.get("job_id") or "")
@@ -10716,10 +10742,18 @@ async def meus_entregaveis(request: Request):
             "arquivado": bool(p.get("archived")),
             "itens": int(p.get("items_count") or 0),
             "medido": medido,
-            "a_revisar": max(0, total - medido),
+            "revisados": len(revisados_por_job.get(jid, ())),
+            "a_revisar": max(0, total - medido - len(revisados_por_job.get(jid, ()))),
             "entregaveis": {
                 "planilha": {
-                    "disponivel": bool(p.get("planilha_gerada_em")),
+                    # 🚨 Carimbo NÃO é arquivo. _carimbar_planilha roda ANTES do
+                    # upload pro Storage e antes de status='done'; se o servidor
+                    # reinicia nessa janela, sobra carimbo sem arquivo nenhum.
+                    # Medido em produção 04/08: 88 projetos em erro, 54 com
+                    # carimbo, e 7 não arquivados sem arquivo no bucket. Sem o
+                    # status aqui, a tela listava a planilha de um projeto que
+                    # nunca funcionou e o botão Baixar devolvia 404.
+                    "disponivel": bool(p.get("planilha_gerada_em")) and concluido,
                     "em": p.get("planilha_gerada_em"),
                 },
                 "cronograma": {

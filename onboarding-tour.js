@@ -44,7 +44,10 @@
     {
       icon: '🎁',
       title: 'Lembrete importante',
-      body: 'Seu <strong>1º projeto é 100% grátis</strong>. Sem cartão, sem mensalidade. Se gostar, paga só pelos próximos. Bora?',
+      // 🚨 NUNCA voltar a escrever "1º projeto grátis" aqui. A promessa pública
+      // é ILIMITADO durante o beta, sem cartão — e o rodapé do menu lateral diz
+      // exatamente isso na mesma tela. As duas frases juntas se contradiziam.
+      body: 'Durante o beta é <strong>tudo grátis</strong>: quantos projetos você quiser, sem cartão e sem mensalidade. Bora?',
       cta: 'Bora subir o primeiro projeto',
       ctaAction: 'goToUpload',
     },
