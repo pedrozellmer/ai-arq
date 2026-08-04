@@ -277,6 +277,7 @@
             <div class="rounded-xl bg-emerald-50 p-4">
               <p class="text-xs text-emerald-800">&#10003; Conclu&#237;dos hoje</p>
               <p id="stat-op-donetoday" class="text-2xl font-bold text-emerald-900 mt-1">--</p>
+              <p id="stat-op-donetoday-detail" class="text-xs text-emerald-700 mt-1">&nbsp;</p>
             </div>
           </div>
         </div>
@@ -460,6 +461,7 @@
           <div class="rounded-xl border bg-emerald-50 border-emerald-200 p-4">
             <p class="text-xs uppercase tracking-wide font-semibold text-emerald-700">Conclu&#237;dos hoje</p>
             <p id="proj-stat-done" class="text-2xl font-bold text-emerald-900 mt-1">0</p>
+            <p id="proj-stat-done-detail" class="text-xs text-emerald-700 mt-1">&nbsp;</p>
           </div>
           <div class="rounded-xl border bg-gray-50 border-gray-200 p-4">
             <p class="text-xs uppercase tracking-wide font-semibold text-gray-700">Erros (24h)</p>
@@ -2866,15 +2868,22 @@ async function loadProjects() {
     const stuck = realProjects.filter(p => (p.status === 'queued' || p.status === 'processing')
                                         && minutesSince(p.created_at) > STUCK_MINUTES
                                         && !((p.reprocess_count || 0) > 0)).length;  // retomado != travado
-    const doneToday = realProjects.filter(p => p.status === 'done'
+    // 🪤 Mesma armadilha do card da aba Motor: contar pelo fim do job faz
+    // reprocessamento de projeto velho virar "movimento de hoje". Separado.
+    const doneTodayAll = realProjects.filter(p => p.status === 'done'
                                              && p.completed_at
-                                             && new Date(p.completed_at) >= today0).length;
+                                             && new Date(p.completed_at) >= today0);
+    const doneToday = doneTodayAll.filter(p => p.created_at
+                                             && new Date(p.created_at) >= today0).length;
+    const doneTodayReproc = doneTodayAll.length - doneToday;
     const errors24h = realProjects.filter(p => p.status === 'error'
                                              && p.created_at
                                              && new Date(p.created_at).getTime() >= last24h).length;
     document.getElementById('proj-stat-running').textContent = running;
     document.getElementById('proj-stat-stuck').textContent = stuck;
     document.getElementById('proj-stat-done').textContent = doneToday;
+    document.getElementById('proj-stat-done-detail').textContent =
+      doneTodayReproc ? ('+ ' + doneTodayReproc + ' reprocessado' + (doneTodayReproc > 1 ? 's' : '')) : ' ';
     document.getElementById('proj-stat-errors').textContent = errors24h;
 
     // Filtro
@@ -3313,10 +3322,20 @@ async function loadDashboardStats() {
     const stuck = running.filter(p => _mins(p.created_at) > STUCK && !((p.reprocess_count || 0) > 0));
     const err24 = proj.filter(p => p.status === 'error' && p.created_at && Date.parse(p.created_at) >= d1);
     const doneToday = proj.filter(p => p.status === 'done' && p.completed_at && new Date(p.completed_at) >= today0);
+    // 🪤 Este número contava pelo momento em que o job TERMINOU, sem olhar quando
+    // o projeto entrou. Em 04/08/2026 ele marcou 5 "concluídos hoje" e os 5 eram
+    // reprocessamento de projeto velho — um deles de 04/05. Ninguém tinha subido
+    // nada naquele dia. Campanha de resgate inflava o painel e fazia o negócio
+    // parecer movimentado. Agora o número grande é só o que ENTROU hoje; o
+    // resgate aparece do lado, com o nome certo.
+    const doneTodayNovos = doneToday.filter(p => p.created_at && new Date(p.created_at) >= today0);
+    const doneTodayReproc = doneToday.length - doneTodayNovos.length;
     set('stat-op-running', running.length);
     set('stat-op-stuck', stuck.length);
     set('stat-op-errors', err24.length);
-    set('stat-op-donetoday', doneToday.length);
+    set('stat-op-donetoday', doneTodayNovos.length);
+    set('stat-op-donetoday-detail',
+        doneTodayReproc ? ('+ ' + doneTodayReproc + ' reprocessado' + (doneTodayReproc > 1 ? 's' : '')) : ' ');
 
     // Leitura & qualidade (30d)
     const comArea = done30.filter(p => p.total_area > 0);
