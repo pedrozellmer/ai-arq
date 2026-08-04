@@ -42,6 +42,36 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Layers de INFRA LINEAR que podem ser medidos DENTRO de bloco
+# ---------------------------------------------------------------------------
+# 🔒 Regra nº1: esta lista é ALLOWLIST de propósito. Comprimento medido vira
+# linha BRANCA, então termo frouxo aqui INVENTA medição. Só entra vocabulário
+# de infraestrutura cuja quantidade legítima É o comprimento.
+#
+# Nasceu do caso de eletroduto (Engie, 21/07/2026) e por isso só falava a língua
+# da ELÉTRICA. Em 04/08/2026 uma cliente de climatização (projeto hospitalar,
+# ConfortAr) subiu um DWG com os dutos desenhados DENTRO de blocos: o motor
+# achou as camadas `LCVP_DUTOS_INS`, `LCVP_DUTO_RET`, `LCVP_DUTO_EXAUSTAO`,
+# `LCVP_TUBUL AAG` e `LCVP_TUB_FRIG`, mas NENHUMA casava aqui — 'duto' não
+# existia e 'tubula' não pegava as abreviações. Resultado: 0 metro em todas as
+# redes, que era exatamente a pergunta que ela tinha feito antes de se cadastrar.
+#
+# 🪤 Vive no MÓDULO, não dentro da função, pra poder ser testada. Enquanto
+# morava lá dentro nenhum teste a alcançava — foi por isso que envelheceu
+# faltando metade do vocabulário sem ninguém perceber.
+#
+# 🪤 `duto` exige que o caractere anterior NÃO seja letra, senão casa com
+# "PRODUTO". Underscore e hífen (separadores de nome de layer) passam.
+INFRA_LINEAR_RX = re.compile(
+    r'eletrodut|eletrocal|condul|condut|condu[íi]t|conduit|prumad|'
+    r'ramal|canaleta|perfilad|barramen|'      # 'leito' removido: colidia com LEITO HOSPITALAR
+    r'tubul|'                                 # era 'tubula': não pegava TUBUL_AAG / TUB_FRIG
+    r'(?<![a-z])duto|'                        # duto, dutos, dutoflex — mas NÃO produto
+    r'(?<![a-z])frig',                        # TUB_FRIG, frigorígena, frigorífica
+    re.IGNORECASE)
+
+
+# ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
 
@@ -1609,11 +1639,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # comprimento é a quantidade legítima. Pulamos blocos de anotação/carimbo.
     # Interruptor de emergência: DXF_MEASURE_BLOCK_INFRA=0 desliga sem deploy.
     if os.getenv("DXF_MEASURE_BLOCK_INFRA", "1") != "0":
-        import re as _re_infra
-        _INFRA_LINEAR_RX = _re_infra.compile(
-            r'eletrodut|eletrocal|condul|condut|condu[íi]t|conduit|tubula|prumad|'
-            r'ramal|canaleta|perfilad|barramen',   # 'leito' removido: colidia com LEITO HOSPITALAR
-            _re_infra.IGNORECASE)
+        _INFRA_LINEAR_RX = INFRA_LINEAR_RX
         _MAX_BLOCK_WALLS = 40000     # teto de segmentos adicionados (anti-explosão)
         _MAX_BLOCK_SCAN = 400000     # teto de entidades varridas dentro de blocos
         _n_block_walls = 0

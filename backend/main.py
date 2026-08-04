@@ -7434,6 +7434,19 @@ async def notify_welcome(request: Request):
             # Os dois existem de propósito e se completam: este é imediato mas só
             # dispara quando a pessoa ABRE o painel; o do tick pega também quem
             # criou conta e nunca voltou. Quem chegar primeiro cala o outro.
+            #
+            # 🚨 04/08/2026 — o duplicado voltou, e a culpa era desta função:
+            # ela ESCREVIA a chave de dedup e nunca a LIA. O gate de "novo" é
+            # perfil com menos de 1h, e este endpoint dispara a cada 1º load do
+            # dashboard NAQUELE navegador. Cliente que se cadastrou 12:10 e voltou
+            # 13:08 (58 min, ainda dentro da janela) gerou o segundo alerta — os
+            # dois com o MESMO assunto, o que fez o Pedro perguntar se era outro
+            # cliente. Alerta duplicado não é barulho: é alerta em que não se
+            # confia mais. Agora confere antes de mandar.
+            _ref_dedup = (email or "").strip().lower()
+            if _email_auto_ja_enviado(NOTIFY_EMAIL, "alerta_novo_cadastro", ref=_ref_dedup):
+                print(f"[notify] alerta de novo cliente já saiu pra {_ref_dedup} — pulando")
+                return
             if _notify_admin("Novo cliente cadastrado", _ab):
                 try:
                     _email_auto_registrar(NOTIFY_EMAIL, "alerta_novo_cadastro",
