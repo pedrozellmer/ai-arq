@@ -14510,6 +14510,31 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         current_step=f"Refazendo com o novo arquivo ({len(file_paths)} no total)",
         total_steps=3,
     )
+    # 🚨 Alerta interno pro Pedro. O /api/process avisava desde sempre; o
+    # /add-file, NÃO — 173 linhas de função sem um único aviso. E este é o
+    # cliente mais quente que existe: já recebeu uma planilha, não gostou do
+    # resultado em PDF e voltou pra mandar o CAD. Também é o de maior risco
+    # técnico (DWG de MEP é o que mais falha), então era justamente aqui que
+    # dava pra socorrer — e ninguém ficava sabendo.
+    # Achado em 04/08/2026 com uma cliente de climatização prestes a anexar.
+    try:
+        import html as _h5, threading as _th5
+        _comp_str = ", ".join(f"{v} {k.upper()}" for k, v in _comp.items() if v > 0)
+        _novos = ", ".join(_h5.escape(os.path.basename(str(p))) for p in file_paths[:4])
+        _tem_cad = "SIM" if _cads else "não — só PDF"
+        _alert5 = (f"<b>Projeto:</b> {_h5.escape(str(job_id))}<br>"
+                   f"<b>Arquivos anexados agora:</b> {_novos}<br>"
+                   f"<b>Veio CAD junto?</b> {_tem_cad}<br>"
+                   f"<b>Composição do projeto:</b> {_comp_str or '—'}<br>"
+                   f"<b>Itens medidos antes:</b> {_job_medidos_count(job_id)}<br>"
+                   f"https://ai.arq.br/projeto.html?job_id={job_id}")
+        _th5.Thread(target=_notify_admin,
+                    args=("Cliente anexou arquivo a um projeto", _alert5),
+                    daemon=True).start()
+    except Exception as _na5:
+        print(f"[notify] alerta add-file falhou: {_na5}")
+        _log_error("notify:add-file", f"alerta nao saiu: {_na5}", job_id)
+
     import threading
     threading.Thread(
         target=_process_job_throttled,
