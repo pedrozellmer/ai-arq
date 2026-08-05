@@ -104,44 +104,9 @@ function smartBack() {
 
   <!-- Aviso de entregável desatualizado (coerencia.js). Aparece quando o
        cliente corrige o quantitativo depois de gerar cronograma/memorial. -->
-  
   <!-- ══ VISTA: visao ══ -->
   <div class="vista" data-vista="visao">
 <div id="aviso-coerencia" class="hidden"></div>
-<div id="kpi-strip" class="grid gap-4 grid-cols-2 md:grid-cols-4">
-    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg></span>
-        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Itens</p>
-      </div>
-      <p id="kpi-itens" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
-      <p class="text-[10px] text-gray-400 mt-0.5">detectados na leitura</p>
-    </div>
-    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
-        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Medido</p>
-      </div>
-      <p id="kpi-medido" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
-      <p class="text-[10px] text-gray-400 mt-0.5">dos itens, direto do CAD</p>
-    </div>
-    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M13 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V9l-6-6zM13 3v6h6"/></svg></span>
-        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Arquivos</p>
-      </div>
-      <p id="kpi-arquivos" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
-      <p class="text-[10px] text-gray-400 mt-0.5">pranchas enviadas</p>
-    </div>
-    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div class="flex items-center gap-2 mb-2">
-        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
-        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Processamento</p>
-      </div>
-      <p id="kpi-tempo" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
-      <p class="text-[10px] text-gray-400 mt-0.5">tempo total da leitura</p>
-    </div>
-  </div>
 <div id="proc-block" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
     <div class="flex items-center gap-3 mb-1">
       <span class="aiarq-build shrink-0" aria-hidden="true">
@@ -223,6 +188,166 @@ function smartBack() {
       </div>
     </div>
   </div>
+<div id="kpi-strip" class="grid gap-4 grid-cols-2 md:grid-cols-4">
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Itens</p>
+      </div>
+      <p id="kpi-itens" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">detectados na leitura</p>
+    </div>
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Medido</p>
+      </div>
+      <p id="kpi-medido" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">dos itens, direto do CAD</p>
+    </div>
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M13 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V9l-6-6zM13 3v6h6"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Arquivos</p>
+      </div>
+      <p id="kpi-arquivos" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">pranchas enviadas</p>
+    </div>
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Processamento</p>
+      </div>
+      <p id="kpi-tempo" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
+      <p class="text-[10px] text-gray-400 mt-0.5">tempo total da leitura</p>
+    </div>
+  </div>
+<div id="dados-card" class="rounded-xl border-2 border-indigo-200 bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
+      <div>
+        <h2 class="text-base font-bold text-gray-900">📇 Projeto e cliente</h2>
+        <p class="text-xs text-gray-500 mt-0.5">De quem é este projeto — aparece no cabeçalho da planilha, no PDF do cronograma e nos PPTs</p>
+      </div>
+      <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
+    </div>
+    <div id="client-view" class="p-5 text-sm">
+      <div id="client-loading" class="text-gray-500">Carregando...</div>
+      <div id="client-empty" class="text-gray-500 hidden">Nenhum dado preenchido. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Preencher agora →</button></div>
+      <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
+    </div>
+    <div id="client-edit" class="p-5 hidden">
+
+      <!-- Seção 1: DADOS DO PROJETO -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do projeto</p>
+      <div class="grid gap-3 md:grid-cols-2 mb-5">
+        <div class="md:col-span-2">
+          <label for="p-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do projeto</label>
+          <input id="p-name" type="text" maxlength="120" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex.: Escritório Regional Americana"/>
+        </div>
+        <div>
+          <label for="p-typology" class="text-xs font-medium text-gray-500 block mb-1">Tipologia</label>
+          <select id="p-typology" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="office">Corporativo / Escritório</option>
+            <option value="residential">Residencial</option>
+            <option value="retail">Varejo / Comércio</option>
+            <option value="hospital">Hospital / Saúde</option>
+            <option value="educational">Educacional</option>
+          </select>
+        </div>
+        <div>
+          <label for="p-phase" class="text-xs font-medium text-gray-500 block mb-1">Fase do projeto</label>
+          <select id="p-phase" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="Estudo preliminar">Estudo preliminar</option>
+            <option value="Anteprojeto">Anteprojeto</option>
+            <option value="Projeto legal">Projeto legal</option>
+            <option value="Projeto executivo">Projeto executivo</option>
+            <option value="Reforma">Reforma</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label for="p-address" class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra</label>
+          <input id="p-address" type="text" maxlength="240" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
+        </div>
+      </div>
+
+      <!-- Seção 2: DADOS DO CLIENTE FINAL -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 mt-2">Cliente final do projeto</p>
+      <div class="grid gap-3 md:grid-cols-2">
+        <div>
+          <label for="c-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do contato</label>
+          <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Nome do cliente final"/>
+        </div>
+        <div>
+          <label for="c-company" class="text-xs font-medium text-gray-500 block mb-1">Empresa / Razão Social</label>
+          <input id="c-company" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Empresa do cliente"/>
+        </div>
+        <div>
+          <label for="c-email" class="text-xs font-medium text-gray-500 block mb-1">E-mail</label>
+          <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="email@empresa.com"/>
+        </div>
+        <div>
+          <label for="c-phone" class="text-xs font-medium text-gray-500 block mb-1">WhatsApp / Telefone</label>
+          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 9 0000-0000"/>
+        </div>
+        <div class="md:col-span-2 hidden">
+          <!-- Mantido por compat com fluxo antigo; agora endereço fica em p-address -->
+          <input id="c-address" type="hidden"/>
+        </div>
+        <div class="md:col-span-2">
+          <label for="c-notes" class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-500">(só você vê)</span></label>
+          <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>.</p>
+      <div id="edit-status" class="mt-2 text-xs hidden"></div>
+      <div class="mt-4 flex gap-2 justify-end">
+        <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+        <button onclick="saveProjectAndClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar tudo</button>
+      </div>
+    </div>
+  </div>
+<div id="metadados-strip" class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Área da laje</span><span id="m-area" class="font-semibold text-gray-900">--</span></span>
+    <!-- Arquivos e Itens agora vivem na faixa de KPIs no topo (18/07). Os ids
+         ficam no DOM (escondidos) porque renderMetrics ainda escreve neles. -->
+    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
+    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Itens</span><span id="m-items" class="font-semibold text-gray-900">--</span></span>
+  </div>
+<div id="raiox-card" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
+    <div class="flex items-center gap-2 mb-3">
+      <svg class="w-5 h-5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      <span class="font-semibold text-gray-900">Raio-X da leitura</span>
+      <span class="text-xs text-gray-500">— no que dá pra confiar</span>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-xl bg-emerald-50 p-4">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+          <span id="rx-medido" class="text-3xl font-bold text-emerald-800">0</span>
+        </div>
+        <p class="text-xs text-emerald-700 mt-1">medidos — direto do CAD, em branco na planilha</p>
+      </div>
+      <div class="rounded-xl bg-amber-50 p-4">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
+          <span id="rx-confirmar" class="text-3xl font-bold text-amber-800">0</span>
+        </div>
+        <p class="text-xs text-amber-700 mt-1">a confirmar — você revisa, em laranja</p>
+      </div>
+    </div>
+    <div class="flex h-3 rounded-full overflow-hidden mt-3 bg-gray-100">
+      <div id="rx-bar-medido" class="bg-emerald-500" style="width:0%"></div>
+      <div id="rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
+    </div>
+    <p id="rx-pct" class="text-xs text-gray-500 mt-2"></p>
+  </div>
+  </div>
+
+  <!-- ══ VISTA: quantitativo ══ -->
+  <div class="vista" data-vista="quantitativo" hidden>
 <section id="entregas-section">
     <div class="flex items-baseline justify-between mb-3">
       <h2 class="text-lg font-bold text-gray-900">Entregas do projeto</h2>
@@ -350,52 +475,6 @@ function smartBack() {
 
     </div>
   </section>
-<div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
-    <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
-    <p class="text-xs text-indigo-600 mb-3">Seu retorno ajuda a gente a melhorar — leva 5 segundos.</p>
-    <div id="fb-buttons" class="flex flex-wrap gap-2">
-      <button type="button" onclick="sendFeedback(9)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👍 Ajudou bastante</button>
-      <button type="button" onclick="sendFeedback(7)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">😐 Mais ou menos</button>
-      <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
-    </div>
-    <div id="fb-comment-wrap" class="hidden mt-3">
-      <textarea id="fb-comment" rows="2" oninput="_fbArm(20000)" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
-      <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
-    </div>
-    <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
-  </div>
-  </div>
-
-  <!-- ══ VISTA: quantitativo ══ -->
-  <div class="vista" data-vista="quantitativo" hidden>
-<div id="raiox-card" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
-    <div class="flex items-center gap-2 mb-3">
-      <svg class="w-5 h-5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-      <span class="font-semibold text-gray-900">Raio-X da leitura</span>
-      <span class="text-xs text-gray-500">— no que dá pra confiar</span>
-    </div>
-    <div class="grid grid-cols-2 gap-3">
-      <div class="rounded-xl bg-emerald-50 p-4">
-        <div class="flex items-center gap-1.5">
-          <svg class="w-4 h-4 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-          <span id="rx-medido" class="text-3xl font-bold text-emerald-800">0</span>
-        </div>
-        <p class="text-xs text-emerald-700 mt-1">medidos — direto do CAD, em branco na planilha</p>
-      </div>
-      <div class="rounded-xl bg-amber-50 p-4">
-        <div class="flex items-center gap-1.5">
-          <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
-          <span id="rx-confirmar" class="text-3xl font-bold text-amber-800">0</span>
-        </div>
-        <p class="text-xs text-amber-700 mt-1">a confirmar — você revisa, em laranja</p>
-      </div>
-    </div>
-    <div class="flex h-3 rounded-full overflow-hidden mt-3 bg-gray-100">
-      <div id="rx-bar-medido" class="bg-emerald-500" style="width:0%"></div>
-      <div id="rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
-    </div>
-    <p id="rx-pct" class="text-xs text-gray-500 mt-2"></p>
-  </div>
 <div id="expansao-disciplinas" class="hidden rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-5">
     <div class="flex items-start gap-3">
       <span class="text-2xl shrink-0" aria-hidden="true">🧩</span>
@@ -443,6 +522,29 @@ function smartBack() {
     </div>
     <p class="px-5 pb-3 text-[11px] text-gray-400"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Respostas geradas a partir dos dados do seu projeto. O AI.arq entrega quantitativo, não preço.</p>
   </section>
+<div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+    <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
+    <p class="text-xs text-indigo-600 mb-3">Seu retorno ajuda a gente a melhorar — leva 5 segundos.</p>
+    <div id="fb-buttons" class="flex flex-wrap gap-2">
+      <button type="button" onclick="sendFeedback(9)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👍 Ajudou bastante</button>
+      <button type="button" onclick="sendFeedback(7)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">😐 Mais ou menos</button>
+      <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
+    </div>
+    <div id="fb-comment-wrap" class="hidden mt-3">
+      <textarea id="fb-comment" rows="2" oninput="_fbArm(20000)" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+      <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
+    </div>
+    <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
+  </div>
+<div id="arquivos-box" class="rounded-xl border bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50">
+      <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
+      <p class="text-xs text-gray-500 mt-0.5">Clique pra abrir o PDF em nova aba — DWG/DXF baixam direto</p>
+    </div>
+    <div id="proj-files" class="divide-y">
+      <div class="p-8 text-center text-sm text-gray-500">Carregando arquivos...</div>
+    </div>
+  </div>
   </div>
 
   <!-- ══ VISTA: cotacoes ══ -->
@@ -545,111 +647,8 @@ function smartBack() {
   </section>
   </div>
 
-  <!-- ══ VISTA: dados ══ -->
-  <div class="vista" data-vista="dados" hidden>
-<div id="dados-card" class="rounded-xl border-2 border-indigo-200 bg-white overflow-hidden">
-    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
-      <div>
-        <h2 class="text-base font-bold text-gray-900">📇 Projeto e cliente</h2>
-        <p class="text-xs text-gray-500 mt-0.5">De quem é este projeto — aparece no cabeçalho da planilha, no PDF do cronograma e nos PPTs</p>
-      </div>
-      <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
-    </div>
-    <div id="client-view" class="p-5 text-sm">
-      <div id="client-loading" class="text-gray-500">Carregando...</div>
-      <div id="client-empty" class="text-gray-500 hidden">Nenhum dado preenchido. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Preencher agora →</button></div>
-      <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
-    </div>
-    <div id="client-edit" class="p-5 hidden">
-
-      <!-- Seção 1: DADOS DO PROJETO -->
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do projeto</p>
-      <div class="grid gap-3 md:grid-cols-2 mb-5">
-        <div class="md:col-span-2">
-          <label for="p-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do projeto</label>
-          <input id="p-name" type="text" maxlength="120" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex.: Escritório Regional Americana"/>
-        </div>
-        <div>
-          <label for="p-typology" class="text-xs font-medium text-gray-500 block mb-1">Tipologia</label>
-          <select id="p-typology" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="">— manter atual —</option>
-            <option value="office">Corporativo / Escritório</option>
-            <option value="residential">Residencial</option>
-            <option value="retail">Varejo / Comércio</option>
-            <option value="hospital">Hospital / Saúde</option>
-            <option value="educational">Educacional</option>
-          </select>
-        </div>
-        <div>
-          <label for="p-phase" class="text-xs font-medium text-gray-500 block mb-1">Fase do projeto</label>
-          <select id="p-phase" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="">— manter atual —</option>
-            <option value="Estudo preliminar">Estudo preliminar</option>
-            <option value="Anteprojeto">Anteprojeto</option>
-            <option value="Projeto legal">Projeto legal</option>
-            <option value="Projeto executivo">Projeto executivo</option>
-            <option value="Reforma">Reforma</option>
-          </select>
-        </div>
-        <div class="md:col-span-2">
-          <label for="p-address" class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra</label>
-          <input id="p-address" type="text" maxlength="240" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
-        </div>
-      </div>
-
-      <!-- Seção 2: DADOS DO CLIENTE FINAL -->
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 mt-2">Cliente final do projeto</p>
-      <div class="grid gap-3 md:grid-cols-2">
-        <div>
-          <label for="c-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do contato</label>
-          <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Nome do cliente final"/>
-        </div>
-        <div>
-          <label for="c-company" class="text-xs font-medium text-gray-500 block mb-1">Empresa / Razão Social</label>
-          <input id="c-company" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Empresa do cliente"/>
-        </div>
-        <div>
-          <label for="c-email" class="text-xs font-medium text-gray-500 block mb-1">E-mail</label>
-          <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="email@empresa.com"/>
-        </div>
-        <div>
-          <label for="c-phone" class="text-xs font-medium text-gray-500 block mb-1">WhatsApp / Telefone</label>
-          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 9 0000-0000"/>
-        </div>
-        <div class="md:col-span-2 hidden">
-          <!-- Mantido por compat com fluxo antigo; agora endereço fica em p-address -->
-          <input id="c-address" type="hidden"/>
-        </div>
-        <div class="md:col-span-2">
-          <label for="c-notes" class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-500">(só você vê)</span></label>
-          <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
-        </div>
-      </div>
-      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>.</p>
-      <div id="edit-status" class="mt-2 text-xs hidden"></div>
-      <div class="mt-4 flex gap-2 justify-end">
-        <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-        <button onclick="saveProjectAndClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar tudo</button>
-      </div>
-    </div>
-  </div>
-<div id="metadados-strip" class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
-    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
-    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Área da laje</span><span id="m-area" class="font-semibold text-gray-900">--</span></span>
-    <!-- Arquivos e Itens agora vivem na faixa de KPIs no topo (18/07). Os ids
-         ficam no DOM (escondidos) porque renderMetrics ainda escreve neles. -->
-    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
-    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Itens</span><span id="m-items" class="font-semibold text-gray-900">--</span></span>
-  </div>
-<div id="arquivos-box" class="rounded-xl border bg-white overflow-hidden">
-    <div class="px-5 py-4 border-b bg-gray-50">
-      <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
-      <p class="text-xs text-gray-500 mt-0.5">Clique pra abrir o PDF em nova aba — DWG/DXF baixam direto</p>
-    </div>
-    <div id="proj-files" class="divide-y">
-      <div class="p-8 text-center text-sm text-gray-500">Carregando arquivos...</div>
-    </div>
-  </div>
+  <!-- ══ VISTA: processamento ══ -->
+  <div class="vista" data-vista="processamento" hidden>
 <section id="detalhes-processamento">
     <h2 class="text-sm font-bold text-gray-700 mb-3">Detalhes do processamento</h2>
     <div class="grid gap-3 sm:grid-cols-2">
@@ -721,6 +720,7 @@ function smartBack() {
     </div>
   </section>
   </div>
+
 
 
   <!-- Faixa de KPIs (visual portado do cronograma.html) — preenchida por

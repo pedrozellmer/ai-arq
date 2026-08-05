@@ -76,8 +76,17 @@
     window.sbClient.auth.getSession().then(function (r) {
       var logado = !!(r && r.data && r.data.session);
       var existe = !!document.getElementById('aiarq-side');
+      // Só ACRESCENTA. Nunca tira.
       if (logado && !existe) { subir(); preencherUsuario(); atualizarSelo(); }
-      if (!logado && existe) desmontar();
+      // 🚨 A versão anterior desmontava o menu quando o getSession não
+      // confirmava — e o Pedro viu o menu aparecer e SUMIR depois de um
+      // segundo. A sessão pode demorar a ser restaurada, o cliente pode estar
+      // offline, a chamada pode falhar: em todos esses casos o menu evaporava
+      // na cara de quem está logado. Menu que some é muito pior que menu a
+      // mais numa página pública, e quem realmente barra o acesso e' a guarda
+      // de sessão de cada página, não o desenho do menu.
+      // Só chegamos aqui com menu na tela se o localStorage tinha token —
+      // então a aposta certa e' manter.
     }).catch(function () {});
   }
 
@@ -154,21 +163,24 @@
       // dados) em vez de 17 blocos empilhados na mesma rolagem. As que moram
       // lá dentro trocam SEM recarregar; revisão, cronograma e memorial
       // continuam sendo páginas próprias.
+      // 🚨 SÓ O PROJETO. Nada de item de conta aqui.
+      // A 1ª versão tinha um grupo "Sua conta" com Downloads e Meu cadastro, e
+      // o Pedro apontou o problema na hora: "dentro do projeto tem download e
+      // volta pro menu de fora, não dá isso, confunde". Clicar num item de
+      // conta desfixava o projeto SEM avisar — o menu inteiro trocava debaixo
+      // da pessoa. Menu de contexto fala do contexto; a ponte pra sair é o
+      // "← Todos os projetos", que está lá em cima e é explícito.
       { titulo: '', itens: [
-        { href: url('projeto.html') + '#visao',    rotulo: 'Visão geral',  ic: 'painel' },
-        { href: url('projeto.html') + '#quantitativo', rotulo: 'Quantitativo', ic: 'planilha',   chave: 'quantitativo' },
-        { href: url('revisao.html'),               rotulo: 'Revisão',      ic: 'revisao',    chave: 'revisao' },
-        { href: url('cronograma.html'),            rotulo: 'Cronograma',   ic: 'cronograma', chave: 'cronograma' },
-        { href: url('memorial.html'),              rotulo: 'Memorial',     ic: 'memorial',   chave: 'memorial' },
-        { href: url('projeto.html') + '#cotacoes', rotulo: 'Comparativo',  ic: 'comparativo', chave: 'comparativo' },
-        { href: url('projeto.html') + '#dados',    rotulo: 'Dados e arquivos', ic: 'pasta' }
-      ]},
-      // 🚨 A conta continua alcançável com projeto fixado. Fixar um projeto não
-      // pode esconder o resto do sistema.
-      { titulo: 'Sua conta', itens: [
-        { aba: 'downloads',      rotulo: 'Downloads',       ic: 'download' },
-        { aba: 'meu-cadastro',   rotulo: 'Meu cadastro',    ic: 'pessoa' },
-        { href: 'faq.html',      rotulo: 'Dúvidas frequentes', ic: 'duvida' }
+        { href: url('projeto.html') + '#visao',        rotulo: 'Visão geral',  ic: 'painel' },
+        { href: url('projeto.html') + '#quantitativo', rotulo: 'Quantitativo', ic: 'planilha',    chave: 'quantitativo' },
+        { href: url('revisao.html'),                   rotulo: 'Revisão',      ic: 'revisao',     chave: 'revisao' },
+        { href: url('cronograma.html'),                rotulo: 'Cronograma',   ic: 'cronograma',  chave: 'cronograma' },
+        { href: url('memorial.html'),                  rotulo: 'Memorial',     ic: 'memorial',    chave: 'memorial' },
+        { href: url('projeto.html') + '#cotacoes',     rotulo: 'Comparativo',  ic: 'comparativo', chave: 'comparativo' },
+        // 🪤 A vista se chama 'processamento'. Ela já se chamou 'dados', e o
+        // menu ficou apontando pro nome velho: o item caía calado na visão
+        // geral. Nome de vista e link nascem no mesmo lugar, de propósito.
+        { href: url('projeto.html') + '#processamento', rotulo: 'Processamento', ic: 'duvida' }
       ]}
     ];
   }

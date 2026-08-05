@@ -1508,6 +1508,16 @@
   // Cada entregável: onde mora o arquivo, como se chama, e o que dizer quando
   // não existe nenhum. O texto do vazio importa tanto quanto a lista: tela
   // vazia sem explicação faz o cliente achar que quebrou.
+  // Uma cor por entregável, usada no selo e no filtro. Cor sozinha não carrega
+  // informação nenhuma aqui — o nome do tipo está escrito do lado, sempre.
+  // Ela serve pra varrer a lista com o olho, não pra substituir o rótulo.
+  const CORES_ENTREGAVEL = {
+    planilha:    { fundo: '#ECFDF5', texto: '#047857', borda: '#A7F3D0' },
+    cronograma:  { fundo: '#EEF2FF', texto: '#4338CA', borda: '#C7D2FE' },
+    memorial:    { fundo: '#F5F3FF', texto: '#6D28D9', borda: '#DDD6FE' },
+    comparativo: { fundo: '#FFFBEB', texto: '#B45309', borda: '#FDE68A' },
+  };
+
   const ENTREGAVEIS_CFG = {
     planilha: {
       rotulo: 'Planilha', alvo: 'lista-planilhas', cor: 'emerald',
@@ -1569,9 +1579,63 @@
       return;
     }
     linhas.sort((a, b) => String(b.em || '').localeCompare(String(a.em || '')));
+    _downloadsLinhas = linhas;
+    _pintarDownloads();
+  }
 
-    box.innerHTML = '<div class="space-y-2">' + linhas.map(l => {
+  // Filtro por tipo. Guardado fora da função pra trocar sem refazer a chamada.
+  let _downloadsLinhas = [];
+  let _downloadsFiltro = 'todos';
+
+  function filtrarDownloads(tipo) {
+    _downloadsFiltro = tipo;
+    _pintarDownloads();
+  }
+
+  function _pintarDownloads() {
+    const box = document.getElementById('lista-downloads');
+    if (!box) return;
+    const linhas = _downloadsLinhas;
+
+    // Contagem por tipo — o filtro mostra QUANTOS tem antes de você clicar.
+    const conta = { todos: linhas.length };
+    Object.keys(ENTREGAVEIS_CFG).forEach(t => {
+      conta[t] = linhas.filter(l => l.tipo === t).length;
+    });
+
+    const botao = (tipo, rotulo) => {
+      const n = conta[tipo] || 0;
+      const ativo = _downloadsFiltro === tipo;
+      const c = CORES_ENTREGAVEL[tipo];
+      const estilo = ativo
+        ? (c ? 'background:' + c.fundo + ';color:' + c.texto + ';border-color:' + c.borda
+             : 'background:#EEF2FF;color:#4338CA;border-color:#C7D2FE')
+        : 'background:#fff;color:#64748B;border-color:#E2E8F0';
+      // Tipo sem nenhum arquivo fica apagado e não clicável: botão que não
+      // filtra nada só faz o cliente achar que quebrou.
+      const morto = n === 0 && tipo !== 'todos';
+      return '<button ' + (morto ? 'disabled ' : 'onclick="filtrarDownloads(\'' + tipo + '\')" ')
+        + 'style="' + estilo + (morto ? ';opacity:.45;cursor:default' : '') + '" '
+        + 'class="px-3 py-1.5 rounded-lg border text-xs font-semibold transition">'
+        + rotulo + ' <span style="opacity:.7">' + n + '</span></button>';
+    };
+
+    const filtros = '<div class="flex items-center gap-2 flex-wrap mb-4">'
+      + botao('todos', 'Todos')
+      + Object.keys(ENTREGAVEIS_CFG).map(t => botao(t, ENTREGAVEIS_CFG[t].rotulo)).join('')
+      + '</div>';
+
+    const visiveis = _downloadsFiltro === 'todos'
+      ? linhas : linhas.filter(l => l.tipo === _downloadsFiltro);
+
+    if (!visiveis.length) {
+      box.innerHTML = filtros + _cartaoVazio('Nenhum arquivo deste tipo ainda.');
+      return;
+    }
+
+    box.innerHTML = filtros + '<div class="space-y-2">' + visiveis.map(l => {
       const cfg = ENTREGAVEIS_CFG[l.tipo];
+      const c = CORES_ENTREGAVEL[l.tipo] || { fundo: '#EEF2FF', texto: '#4338CA', borda: '#C7D2FE' };
       const [url, nome] = cfg.arquivo(l.p.job_id);
       const acao = l.p.arquivado
         ? '<span class="text-xs text-gray-400">arquivado</span>'
@@ -1579,10 +1643,14 @@
           + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>';
       const velho = l.p.entregaveis[l.tipo].desatualizado
         ? '<span class="pill-mini" style="background:#FEF3C7;color:#92400E" title="O quantitativo mudou depois que este arquivo foi gerado">desatualizado</span>' : '';
-      return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
+      // A faixa de cor à esquerda deixa varrer a lista com o olho. O tipo
+      // continua ESCRITO no selo — cor nunca é a única informação.
+      return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap"'
+        + ' style="border-left:4px solid ' + c.texto + '">'
         + '<div style="min-width:0">'
         + '<div class="flex items-center gap-2 flex-wrap">'
-        + '<span class="pill-mini" style="background:#EEF2FF;color:#4338CA">' + cfg.rotulo + '</span>'
+        + '<span class="pill-mini" style="background:' + c.fundo + ';color:' + c.texto + '">'
+        + cfg.rotulo + '</span>'
         + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(l.p.nome) + '</span>' + velho + '</div>'
         + '<p class="text-xs text-gray-500 mt-0.5">' + _dataCurta(l.em) + '</p></div>'
         + '<div class="flex items-center gap-2">' + acao + '</div></div>';

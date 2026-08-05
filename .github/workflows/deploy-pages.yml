@@ -113,6 +113,34 @@ jobs:
           ls -la _site/ | head -40
           echo "=== Total de arquivos: $(find _site -type f | wc -l) ==="
 
+      - name: Carimbar versao nos JS e CSS proprios
+        # 🚨 O HTML e cacheado por 10 MINUTOS e os .js/.css por 4 HORAS
+        # (Cache-Control: max-age=600 vs max-age=14400). Ou seja: depois de todo
+        # deploy, por ate 4 horas o cliente roda HTML NOVO com JS VELHO.
+        # Em 04/08 isso apareceu como "o menu nao tem Visao geral" logo depois
+        # de subir a feature -- o HTML tinha as vistas novas e o menu-lateral.js
+        # em cache era o da versao anterior. Nao e bug do codigo; e as duas
+        # metades da pagina envelhecendo em ritmos diferentes.
+        #
+        # Carimbar o SHA do commit na URL do arquivo faz o navegador tratar
+        # cada deploy como arquivo novo. O cache longo continua valendo (e bom:
+        # economiza banda), mas deixa de servir a versao errada.
+        # So mexe em caminho RELATIVO: CDN e link externo ficam intactos.
+        run: |
+          V="${GITHUB_SHA::8}"
+          echo "carimbando versao $V"
+          find _site -name "*.html" -type f -print0 | xargs -0 sed -i -E \
+            's#(src|href)="([A-Za-z0-9_./-]+\.(js|css))"#\1="\2?v='"$V"'"#g'
+          echo "=== conferindo: quantos ficaram carimbados ==="
+          grep -oh 'src="[^"]*\.js?v=[^"]*"' _site/*.html 2>/dev/null | head -5 || true
+          CARIMBADOS=$(grep -oh '\.\(js\|css\)?v=' _site/*.html 2>/dev/null | wc -l)
+          echo "referencias carimbadas: $CARIMBADOS"
+          if [ "$CARIMBADOS" -lt 5 ]; then
+            echo "ERRO: quase nada foi carimbado — o padrao nao casou."
+            echo "Sem isso o deploy sobe com o problema de versao mista. Abortando."
+            exit 1
+          fi
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
