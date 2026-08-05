@@ -71,7 +71,7 @@
                'antigas. Você pode atualizar o texto com os números de agora — ' +
                'o que você escreveu à mão será substituído, e nada é salvo até ' +
                'você clicar em Salvar.',
-        acoes: '<button type="button" id="coer-refazer-memorial" ' +
+        acoes: '<button type="button" data-coer="memorial" ' +
                'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
                'bg-amber-600 text-white">Atualizar com os números de agora</button>'
       };
@@ -95,13 +95,13 @@
     var primeiro = true;
     velhos.forEach(function (v) {
       if (v.nome === 'planilha') {
-        acoes += '<button type="button" id="coer-refazer-planilha" ' +
+        acoes += '<button type="button" data-coer="planilha" ' +
                  'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
                  'bg-amber-600 text-white">Atualizar planilha agora</button> ';
       } else if (v.chave === 'comparativo') {
         // Também 100% derivado: refazer só reprocessa as cotações que já estão
         // no projeto contra os itens de agora. Nada escrito à mão se perde.
-        acoes += '<button type="button" id="coer-refazer-comparativo" ' +
+        acoes += '<button type="button" data-coer="comparativo" ' +
                  'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
                  'bg-amber-600 text-white">Refazer comparativo</button> ';
       } else {
@@ -126,8 +126,11 @@
     };
   }
 
+  // Pinta TODAS as caixas de aviso da página, não só a primeira: com a
+  // página do projeto dividida em vistas, o alerta precisa aparecer tanto
+  // na Visão geral quanto ao lado dos botões de baixar.
   function render(caixa, txt) {
-    caixa.innerHTML =
+    var html =
       '<div class="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">' +
         '<div class="flex items-start gap-3">' +
           '<span class="text-amber-700 font-bold" aria-hidden="true">⚠</span>' +
@@ -138,19 +141,46 @@
           '</div>' +
         '</div>' +
       '</div>';
-    caixa.classList.remove('hidden');
-    caixa.setAttribute('role', 'status');
+    _todasAsCaixas().forEach(function (c) {
+      c.innerHTML = html;
+      c.classList.remove('hidden');
+      c.setAttribute('role', 'status');
+    });
+  }
+
+  function _todasAsCaixas() {
+    return [].slice.call(document.querySelectorAll(
+      '#aviso-coerencia, .aviso-coerencia'));
   }
 
   // Refazer a planilha é seguro: ela é 100% derivada dos itens, não tem nada
   // escrito à mão dentro. Por isso aqui tem botão direto, sem confirmação —
   // ao contrário do memorial e do cronograma.
+  // Liga o MESMO clique em todos os botões daquele tipo — o aviso aparece em
+  // mais de uma caixa e cada uma tem o seu. E, quando um é clicado, os dois
+  // mudam de estado juntos: ver "Atualizar" ainda ativo do outro lado enquanto
+  // a coisa já está rodando faz a pessoa clicar de novo.
+  function ligarTodos(tipo, aoClicar) {
+    var btns = [].slice.call(document.querySelectorAll('[data-coer="' + tipo + '"]'));
+    if (!btns.length) return null;
+    var estado = function (texto, travado) {
+      btns.forEach(function (b) {
+        if (texto != null) b.textContent = texto;
+        b.disabled = !!travado;
+      });
+    };
+    btns.forEach(function (b) {
+      b.addEventListener('click', function () { aoClicar(estado); });
+    });
+    return estado;
+  }
+
   function wirePlanilha(jobId, contexto) {
-    var btn = document.getElementById('coer-refazer-planilha');
-    if (!btn) return;
-    btn.addEventListener('click', async function () {
-      btn.disabled = true;
-      btn.textContent = 'Atualizando…';
+    // 🪤 querySelectorAll, nao getElementById: o aviso agora aparece em
+    // DUAS caixas (Visao geral e Sua planilha) e o id so pegaria a
+    // primeira -- o botao da segunda ficaria bonito e morto.
+    ligarTodos('planilha', async function (estado) {
+      estado('Atualizando…', true);
       try {
         var r = await window.authFetch(
           window.API_BASE + '/api/items/' + jobId + '/finalize', { method: 'POST' });
@@ -160,8 +190,7 @@
           : null;
         aiArqCoerencia(jobId, contexto);   // recarrega o aviso já sem a planilha
       } catch (e) {
-        btn.disabled = false;
-        btn.textContent = 'Atualizar planilha agora';
+        estado('Atualizar planilha agora', false);
         var msg = 'Não consegui atualizar a planilha agora: ' + e.message;
         window.toast ? window.toast.error(msg) : alert(msg);
       }
@@ -173,11 +202,8 @@
   // a função da própria página do projeto, que já sabe desenhar o resultado
   // (ranking, quem esqueceu o quê); só cai no endpoint cru se não existir.
   function wireComparativo(jobId, contexto) {
-    var btn = document.getElementById('coer-refazer-comparativo');
-    if (!btn) return;
-    btn.addEventListener('click', async function () {
-      btn.disabled = true;
-      btn.textContent = 'Refazendo…';
+    ligarTodos('comparativo', async function (estado) {
+      estado('Refazendo…', true);
       try {
         if (typeof window.generateComparison === 'function') {
           await window.generateComparison();
@@ -190,8 +216,7 @@
         }
         aiArqCoerencia(jobId, contexto);
       } catch (e) {
-        btn.disabled = false;
-        btn.textContent = 'Refazer comparativo';
+        estado('Refazer comparativo', false);
         var msg = 'Não consegui refazer o comparativo agora: ' + e.message;
         window.toast ? window.toast.error(msg) : alert(msg);
       }
@@ -199,7 +224,16 @@
   }
 
   async function aiArqCoerencia(jobId, contexto) {
-    var caixa = document.getElementById('aviso-coerencia');
+    // 🚨 REGRA DURA nº7 — o aviso tem que estar ONDE O CLIENTE BAIXA.
+    // A página do projeto virou 4 vistas em 04/08 e este aviso ficou só na
+    // "Visão geral", enquanto os botões de baixar foram pra "Sua planilha".
+    // O cliente entrava direto no Quantitativo, baixava um arquivo velho e
+    // mandava pro cliente dele sem nunca ver o alerta. Agora todo elemento
+    // marcado como caixa de aviso recebe o mesmo conteúdo — quem põe uma na
+    // página só precisa dar a classe, sem tocar neste arquivo.
+    var caixas = [].slice.call(document.querySelectorAll(
+      '#aviso-coerencia, .aviso-coerencia'));
+    var caixa = caixas[0];
     if (!caixa || !jobId) return null;
     try {
       var r = await window.authFetch(window.API_BASE + '/api/projeto/' + jobId + '/coerencia');
@@ -211,7 +245,12 @@
       var mostra = contexto === 'cronograma' ? (d.cronograma || {}).desatualizado
                  : contexto === 'memorial'   ? (d.memorial || {}).desatualizado
                  : !d.tudo_em_dia;
-      if (!mostra) { caixa.classList.add('hidden'); caixa.innerHTML = ''; return d; }
+      if (!mostra) {
+        _todasAsCaixas().forEach(function (c) {
+          c.classList.add('hidden'); c.innerHTML = '';
+        });
+        return d;
+      }
 
       render(caixa, montarTexto(contexto, d));
       wirePlanilha(jobId, contexto);

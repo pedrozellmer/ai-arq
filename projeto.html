@@ -19,6 +19,14 @@
   /* Entrada escalonada: a classe é aplicada UMA vez no load (ordenarCardsProjeto).
      Re-render de innerHTML dentro do card não re-dispara a animação. */
   .pj-rise { animation: cr-rise .45s cubic-bezier(.22,.61,.36,1) both; }
+
+  /* O respiro entre os cards. Vive aqui, e não no space-y-6 do <main>, porque
+     os cards agora são netos: o utilitário separava as VISTAS (que nunca
+     aparecem juntas) e deixava os cards colados. Em CSS próprio também não
+     depende de classe existir no build estático — e continua funcionando com o
+     atributo [hidden], que é quem esconde a vista. */
+  .vista { display: flex; flex-direction: column; gap: 1.5rem; }
+  .vista[hidden] { display: none; }
   .kpi { position:relative; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease; }
   .kpi:hover { transform:translateY(-3px); box-shadow:0 2px 4px rgba(15,23,42,.06), 0 18px 38px -16px rgba(79,70,229,.30); }
   .kpi::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
@@ -87,7 +95,12 @@
 // smartBack saiu junto com a seta de voltar: o menu lateral resolve.
 </script>
 
-<main id="main" class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+<!-- 🪤 O space-y-6 espaça os FILHOS DIRETOS. Quando a página virou 4 vistas, os
+     cards desceram um nível e viraram netos: o espaçamento passou a separar as
+     vistas (que nunca aparecem juntas) e os cards ficaram colados um no outro.
+     Por isso o respiro vive agora em .vista, no <style> — e não numa classe
+     utilitária, que o build estático pode não ter. -->
+<main id="main" class="max-w-6xl mx-auto px-4 py-6">
   <!-- ══ VISTA: visao ══ -->
   <div class="vista" data-vista="visao">
 <div id="aviso-coerencia" class="hidden"></div>
@@ -332,6 +345,11 @@
 
   <!-- ══ VISTA: quantitativo ══ -->
   <div class="vista" data-vista="quantitativo" hidden>
+    <!-- 🚨 Regra dura nº7: o aviso de "entregável desatualizado" tem que
+         estar ONDE O CLIENTE BAIXA. Antes vivia só na Visão geral, e quem
+         entrava direto aqui baixava arquivo velho sem nunca ver o alerta.
+         coerencia.js pinta todas as caixas com esta classe. -->
+    <div class="aviso-coerencia hidden"></div>
 <section id="entregas-section">
     <div class="flex items-baseline justify-between mb-3">
       <h2 class="text-lg font-bold text-gray-900">Sua planilha</h2>
@@ -1492,6 +1510,15 @@ function mostrarVista(nome) {
   document.querySelectorAll('.vista').forEach(function (v) {
     v.hidden = (v.getAttribute('data-vista') !== nome);
   });
+  // 🪤 CORRIGIR A URL JUNTO. Quando a rede acima troca o nome (hash antigo,
+  // favorito velho, ou o "#main" do "Pular pro conteúdo"), a tela ia pra Visão
+  // geral mas o endereço continuava com o hash errado — e o menu, que se
+  // orienta pelo hash, não acendia NENHUM item. O cliente via o menu inteiro
+  // apagado sem entender onde estava.
+  try {
+    var atual = (location.hash || '').replace(/^#/, '');
+    if (atual !== nome) history.replaceState(null, '', '#' + nome);
+  } catch (_) {}
   // A aba de cotações mora dentro da vista 'cotacoes'; só dá pra mexer nela
   // depois que a vista aparece, senão o painel ainda está escondido.
   if (nome === 'cotacoes') { try { switchUploadTab('cotacoes'); } catch (_) {} }

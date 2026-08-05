@@ -145,7 +145,13 @@ let salvando = false;
 // Remonta o memorial a partir do quantitativo atual. Substitui o texto na
 // TELA, não no banco: só vira oficial quando o cliente clicar em Salvar.
 function wireBotaoAtualizar() {
-  const btn = document.getElementById('coer-refazer-memorial');
+  // 🪤 Era getElementById('coer-refazer-memorial'). O botão do aviso de
+  // coerência trocou de id pra atributo em 05/08, porque o aviso passou a
+  // aparecer em DUAS caixas na página do projeto e id repetido só ligaria a
+  // primeira. Aqui só existe uma, mas o seletor tem que casar com o que o
+  // coerencia.js gera — senão o botão "Atualizar com os números de agora" fica
+  // na tela e não faz nada.
+  const btn = document.querySelector('[data-coer="memorial"]');
   if (!btn) return;
   btn.addEventListener('click', async () => {
     if (!confirm('Isto refaz o texto do memorial com as quantidades atuais.\n\n'

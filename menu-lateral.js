@@ -463,6 +463,12 @@
       if (typeof window.mostrarVista !== 'function') return;
       ev.preventDefault();
       var h = dArq.indexOf('#') > -1 ? dArq.split('#')[1] : 'visao';
+      // 🪤 Clicar no item da vista em que já se está empilhava uma entrada nova
+      // no histórico. Tocar 5 vezes em "Quantitativo" enterrava a página
+      // anterior sob 5 entradas iguais — e o Voltar do navegador virava um
+      // botão que "não faz nada", cinco vezes, antes de finalmente sair.
+      var atual = (location.hash || '').replace(/^#/, '');
+      if (atual === h) { fechar(); return; }     // já estamos aqui
       // O hash na URL mantém o endereço compartilhável e o voltar do
       // navegador funcionando (há um listener de hashchange na página).
       try { history.pushState(null, '', '#' + h); } catch (_) {}
