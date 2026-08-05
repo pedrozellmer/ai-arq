@@ -1591,6 +1591,38 @@ const _RECEITAS_ERRO = [
     acao: 'Se ele também não abrir no seu CAD, procure a última versão salva ou o backup automático (.bak).',
   },
   {
+    // 🪤 Falha declaradamente NOSSA. Caía no texto padrão e virava "converta o
+    // seu arquivo pra DXF" — cobrando do cliente uma conta que é da casa.
+    quando: /problema t[ée]cnico do nosso lado|problema t[ée]cnico ao processar|instabilidade moment[âa]nea no servidor/i,
+    semMotivo: true,
+    botao: 'Enviar o arquivo de novo',
+    acao: 'Não foi o seu desenho — foi um problema nosso. É só enviar o mesmo arquivo de novo no botão abaixo.',
+  },
+  {
+    // Estouro de memória: o caminho é DIVIDIR. Mandar converter pra DXF piora,
+    // porque DXF é bem maior que o DWG equivalente.
+    quando: /estourou a mem[óo]ria|muito pesado|pesado demais/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD',
+      'Exporte <b>uma prancha por vez</b> (ou só as que você quer medir)',
+      'Envie as pranchas separadas aqui — pode mandar várias de uma vez',
+    ],
+    acao: 'Separado, cada prancha mede igual — o que estoura é o arquivo inteiro de uma vez. Não adianta converter pra DXF: o DXF fica ainda maior.',
+  },
+  {
+    // PDF escaneado/fotografado: as cotas viraram pixel. Não existe "salvar
+    // como DXF" que resolva — é preciso o arquivo original.
+    quando: /nenhum item quantific[áa]vel|imagem escaneada|escaneado ou fotografado/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Procure o arquivo <b>original</b> do projeto (o CAD, não o PDF escaneado)',
+      'Salve em <b>DXF</b> — ou, se só tiver PDF, exporte um PDF direto do CAD (não digitalizado)',
+      'Envie esse arquivo aqui',
+    ],
+    acao: 'Num PDF escaneado as cotas viraram imagem, e imagem não tem medida pra ler. Só o arquivo que saiu do CAD tem.',
+  },
+  {
     quando: /vers[ãa]o (muito )?recente|n[ãa]o conseguimos abrir automaticamente/i,
     titulo: 'Como resolver',
     passos: [
@@ -1622,7 +1654,12 @@ function _erroEmTopicos(txt) {
            '<p class="mt-3 font-bold text-red-900">' + _esc(PADRAO) + '</p>';
   }
 
-  const bruto = String(txt);
+  // 🚨 VAZAMENTO: o backend anexa "Detalhe técnico: <erro cru do provedor>"
+  // em algumas mensagens. Em 3 projetos de um cliente externo isso pôs na
+  // tela, em inglês, o aviso de saldo da NOSSA conta da Anthropic
+  // ("Your credit balance is too low"). O cliente não pode ler o nosso
+  // problema de conta — e não há nada que ele possa fazer com isso.
+  const bruto = String(txt).replace(/\n?\s*Detalhe t[ée]cnico:[\s\S]*$/i, '').trim();
   // 🪤 Mensagem gravada antes de 05/08 tem exatamente 500 caracteres e morre no
   // meio de uma palavra. Verificável, não é palpite.
   const cortada = bruto.length === 500 || /[:;,]\s*$/.test(bruto);
@@ -1642,7 +1679,23 @@ function _erroEmTopicos(txt) {
   if (cortada) {
     const ultimaEhPasso = linhas.length &&
       /^[^\wÀ-ÿ(]*\d+[.)]/.test(linhas[linhas.length - 1]);
-    if (ultimaEhPasso) passosDoTexto.pop(); else paragrafos.pop();
+    if (ultimaEhPasso) {
+      passosDoTexto.pop();
+    } else if (paragrafos.length > 1) {
+      paragrafos.pop();
+    } else if (paragrafos.length === 1) {
+      // 🪤 Mensagem de 500 chars SEM nenhuma quebra de linha é um parágrafo só.
+      // Jogar ele fora deixava o card sem diagnóstico nenhum — o cliente não
+      // via nem QUAIS arquivos falharam (5 projetos AEC estavam assim). Apara
+      // até a última frase completa; sem frase completa, até a última palavra.
+      const p = paragrafos[0];
+      const corte = Math.max(p.lastIndexOf('. '), p.lastIndexOf('! '), p.lastIndexOf('? '));
+      if (corte > 60) paragrafos[0] = p.slice(0, corte + 1);
+      else {
+        const esp = p.lastIndexOf(' ');
+        paragrafos[0] = (esp > 60 ? p.slice(0, esp) : p) + '…';
+      }
+    }
   }
   // Parágrafo que termina em dois pontos é promessa sem continuação.
   while (paragrafos.length && /[:;]\s*$/.test(paragrafos[paragrafos.length - 1])) {
