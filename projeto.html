@@ -1413,7 +1413,19 @@ function mostrarErro(msg, session) {
   const bloco = document.getElementById('erro-block');
   if (!bloco) return;
   const msgEl = document.getElementById('erro-msg');
-  msgEl.innerHTML = _erroEmTopicos(String(msg || '').trim());
+  const _txtErro = String(msg || '').trim();
+  msgEl.innerHTML = _erroEmTopicos(_txtErro);
+  // O botão tem que combinar com a instrução: 'Enviar outro arquivo' está
+  // errado quando o problema foi o NOSSO servidor (é o mesmo arquivo), e
+  // não faz sentido nenhum num reenvio duplicado.
+  const _rec = _receitaPara(_txtErro);
+  const _btnArq = document.getElementById('erro-btn-arquivo');
+  if (_btnArq) {
+    _btnArq.classList.toggle('hidden', !!(_rec && _rec.semUpload));
+    const _rot = _btnArq.querySelector('svg') ? _btnArq.lastChild : null;
+    if (_rot && _rot.nodeType === 3) _rot.textContent = '\n            ' +
+      ((_rec && _rec.botao) || 'Enviar outro arquivo') + '\n          ';
+  }
   bloco.classList.remove('hidden');
   // O card de erro já é o convite pra mandar arquivo — banner CAD duplicaria o CTA.
   const banner = document.getElementById('cad-upgrade-banner');
@@ -1498,66 +1510,167 @@ const VISTAS_PROJETO = [...document.querySelectorAll('.vista')]
 //
 // 🚨 O texto vem do banco e NUNCA pode ser interpretado como HTML. Tudo passa
 // por _esc antes de entrar; o único HTML aqui é o que este código escreve.
+// ══════════════════════════════════════════════════════════════════════
+//  RECEITAS DOS ERROS CONHECIDOS
+// ══════════════════════════════════════════════════════════════════════
+// 🚨 Os passos NÃO podem depender do texto gravado no banco. Até 05/08 o
+// backend cortava error_message em 500 caracteres, e as mensagens de arquivo
+// AEC/MEP morriam exatamente em "1. Abra o arqui" — o cliente lia o
+// diagnóstico e nunca recebia a solução. O teto subiu pra 2000, mas isso só
+// vale pros erros novos: o texto perdido não volta.
+// Aqui os passos vivem no front, completos e sempre atuais. O texto do banco
+// segue sendo o MOTIVO (é o que explica aquele projeto); a receita dá o
+// caminho. Caso desconhecido cai no comportamento antigo.
+const _RECEITAS_ERRO = [
+  {
+    // Reenvio duplicado: não existe nada pra fazer. Pedir arquivo aqui é
+    // pedir trabalho à toa — o botão de upload some.
+    quando: /reenvio duplicado/i,
+    semMotivo: true,
+    semUpload: true,
+    acao: 'Não precisa fazer nada aqui: este projeto foi reenviado e a versão boa é a mais recente, que está no seu painel.',
+  },
+  {
+    // 🪤 53 dos 74 erros do banco são ESTE — o servidor reiniciou no meio do
+    // processamento. O desenho do cliente não tem defeito nenhum, e mandar
+    // ele converter pra DXF é jogar a nossa falha no colo dele.
+    quando: /rein[íi]cio do servidor|redeploy do backend|interrompido por reinicializa/i,
+    semMotivo: true,
+    botao: 'Enviar o arquivo de novo',
+    acao: 'Não foi o seu desenho: o nosso servidor reiniciou no meio do processamento. É só enviar o mesmo arquivo de novo no botão abaixo.',
+  },
+  {
+    quando: /servidores de IA estavam sobrecarregados|sobrecarga tempor[áa]ria do servidor/i,
+    botao: 'Enviar o arquivo de novo',
+    acao: 'Não foi o seu desenho, e não precisa mexer nele: espere alguns minutos e envie o mesmo arquivo de novo no botão abaixo.',
+  },
+  {
+    // Arquivo maior que o teto de processamento.
+    quando: /grande demais|limite \d+ ?MB|excede o limite/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD',
+      'Exporte <b>só as pranchas que você quer medir</b> (ou divida em partes menores)',
+      'Envie os arquivos menores aqui — pode mandar vários de uma vez',
+    ],
+    acao: 'Cada prancha separada mede igual: o que pesa é o arquivo inteiro de uma vez.',
+  },
+  {
+    // DWG do AutoCAD Architecture/MEP com objetos "inteligentes" (proxy).
+    // O passo a passo existe no motor desde sempre, mas nunca chegou ao
+    // cliente: a mensagem era cortada em 500 caracteres no banco e morria
+    // exatamente em "1. Abra o arqui".
+    quando: /AEC|proxy|objetos? (inteligentes|especiais)|MEP ?\/ ?Architecture|Architecture ?\/ ?MEP/i,
+    titulo: 'Como resolver, em 3 passos',
+    passos: [
+      'No AutoCAD, com o arquivo aberto, digite <b>EXPORTTOAUTOCAD</b> e Enter',
+      'Escolha a versão <b>2013</b> e confirme — ele cria um arquivo novo, e o seu original não é alterado',
+      'Abra esse arquivo novo, salve como <b>DXF</b> e envie aqui',
+    ],
+    botao: 'Enviar o DXF',
+    acao: 'É esse DXF que a gente consegue medir — o "Salvar como DXF" direto não resolve neste caso.',
+  },
+  {
+    quando: /chegou incompleto|truncado|corrompido/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD e confira se ele abre inteiro',
+      'Salve de novo (Salvar Como), de preferência em <b>DXF</b>',
+      'Envie o arquivo novo aqui',
+    ],
+    acao: 'Se ele também não abrir no seu CAD, procure a última versão salva ou o backup automático (.bak).',
+  },
+  {
+    quando: /vers[ãa]o (muito )?recente|n[ãa]o conseguimos abrir automaticamente/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD',
+      'Salve como <b>DXF</b> (Salvar Como → DXF), versão 2013 ou mais antiga',
+      'Envie o DXF aqui',
+    ],
+    botao: 'Enviar o DXF',
+    acao: 'DXF é o formato que a gente lê melhor — nele a medição sai do desenho, não de estimativa.',
+  },
+];
+
+function _receitaPara(txt) {
+  for (var i = 0; i < _RECEITAS_ERRO.length; i++) {
+    if (_RECEITAS_ERRO[i].quando.test(txt)) return _RECEITAS_ERRO[i];
+  }
+  return null;
+}
+
 function _erroEmTopicos(txt) {
   const _esc = (x) => String(x).replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  // A ação é sempre a última linha, em negrito, e NUNCA sai de um pedaço do
-  // texto: o cliente precisa saber o que fazer, e frase cortada não é
-  // instrução. (Na 1ª versão o negrito calhou de pegar "...O jeito que
-  // resolve:" — uma promessa sem continuação.)
-  const ACAO = 'Salve o arquivo em DXF e envie de novo no botão abaixo. ' +
-               'Se não resolver, use "Reportar problema" que a gente olha.';
+  const PADRAO = 'Salve o arquivo em DXF e envie de novo no botão abaixo. ' +
+                 'Se não resolver, use "Reportar problema" que a gente olha.';
 
   if (!txt) {
     return '<p>Não foi possível processar os arquivos deste projeto.</p>' +
-           '<p class="mt-3 font-bold text-red-900">' + _esc(ACAO) + '</p>';
+           '<p class="mt-3 font-bold text-red-900">' + _esc(PADRAO) + '</p>';
   }
 
-  // 🪤 Como saber que a mensagem foi CORTADA, sem chutar.
-  // Tentei antes "não termina com ponto" e era fraco: passo de instrução quase
-  // nunca termina com ponto ("3. Suba o arquivo novo aqui"), então mensagem
-  // inteira perdia o último passo.
-  // O sinal preciso: até 05/08 o backend gravava error_message[:500], e TODAS
-  // as linhas antigas do banco têm exatamente 500 caracteres. Isso é
-  // verificável, não é palpite. O segundo sinal é a frase que termina em dois
-  // pontos — promessa de continuação que nunca veio.
   const bruto = String(txt);
-  const mensagemCortada = bruto.length === 500 || /[:;,]\s*$/.test(bruto);
+  // 🪤 Mensagem gravada antes de 05/08 tem exatamente 500 caracteres e morre no
+  // meio de uma palavra. Verificável, não é palpite.
+  const cortada = bruto.length === 500 || /[:;,]\s*$/.test(bruto);
 
-  const linhas = txt.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
-  const passos = [];
+  const linhas = bruto.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+  const passosDoTexto = [];
   const paragrafos = [];
   linhas.forEach((l) => {
-    const limpa = l.replace(/^[^\wÀ-ÿ(]+/, '').trim();   // tira ⚠ 📋 ✗ • - do começo
+    const limpa = l.replace(/^[^\wÀ-ÿ(]+/, '').trim();
     if (!limpa) return;
-    if (/^\d+[.)]\s*/.test(limpa)) {
-      passos.push(limpa.replace(/^\d+[.)]\s*/, ''));
-      return;
-    }
+    if (/^\d+[.)]\s*/.test(limpa)) { passosDoTexto.push(limpa.replace(/^\d+[.)]\s*/, '')); return; }
     if (/^(como resolver|o que fazer)/i.test(limpa)) return;
     paragrafos.push(limpa);
   });
 
-  // Se a mensagem foi cortada, o último pedaço que apareceu está incompleto.
-  const ultimoEhPasso = linhas.length && /^[^\wÀ-ÿ(]*\d+[.)]/.test(linhas[linhas.length - 1]);
-  if (mensagemCortada) {
-    if (ultimoEhPasso) passos.pop();
-    else paragrafos.pop();
+  // Frase que morreu no meio não vai pra tela.
+  if (cortada) {
+    const ultimaEhPasso = linhas.length &&
+      /^[^\wÀ-ÿ(]*\d+[.)]/.test(linhas[linhas.length - 1]);
+    if (ultimaEhPasso) passosDoTexto.pop(); else paragrafos.pop();
+  }
+  // Parágrafo que termina em dois pontos é promessa sem continuação.
+  while (paragrafos.length && /[:;]\s*$/.test(paragrafos[paragrafos.length - 1])) {
+    paragrafos.pop();
   }
 
+  const receita = _receitaPara(bruto);
   let html = '';
-  if (paragrafos.length) html += '<p>' + _esc(paragrafos[0]) + '</p>';
 
-  if (passos.length) {
+  // O motivo é o que explica ESTE projeto — vem do texto do banco. Só que
+  // quando a receita já diz tudo (servidor reiniciou, reenvio duplicado),
+  // repetir a frase técnica do banco embaixo só confunde.
+  if (paragrafos.length && !(receita && receita.semMotivo)) {
+    html += '<p>' + _esc(paragrafos[0]) + '</p>';
+  }
+
+  // Os passos vêm da receita quando o caso é conhecido; senão, do texto.
+  // 🪤 Receita conhecida NEM SEMPRE tem passos: "o servidor reiniciou" e
+  // "reenvio duplicado" não têm o que ensinar, só a ação. Sem esta guarda,
+  // `receita.passos.map` estoura e derruba o bloco de erro inteiro.
+  if (receita) {
+    if (receita.passos && receita.passos.length) {
+      html += '<p class="mt-3 font-semibold text-red-900">' + _esc(receita.titulo) + '</p>' +
+        '<ol class="mt-1 space-y-1" style="list-style:decimal;padding-left:1.2rem">' +
+        receita.passos.map((x) => '<li>' + x + '</li>').join('') + '</ol>';
+    }
+  } else if (passosDoTexto.length) {
     html += '<p class="mt-3 font-semibold text-red-900">Como resolver</p>' +
       '<ol class="mt-1 space-y-1" style="list-style:decimal;padding-left:1.2rem">' +
-      passos.map((x) => '<li>' + _esc(x) + '</li>').join('') + '</ol>';
+      passosDoTexto.map((x) => '<li>' + _esc(x) + '</li>').join('') + '</ol>';
   }
 
-  paragrafos.slice(1).forEach((p) => { html += '<p class="mt-2">' + _esc(p) + '</p>'; });
+  if (!(receita && receita.semMotivo)) {
+    paragrafos.slice(1).forEach((p) => { html += '<p class="mt-2">' + _esc(p) + '</p>'; });
+  }
 
-  html += '<p class="mt-3 font-bold text-red-900">' + _esc(ACAO) + '</p>';
+  html += '<p class="mt-3 font-bold text-red-900">' +
+          _esc(receita ? receita.acao : PADRAO) + '</p>';
   return html;
 }
 
