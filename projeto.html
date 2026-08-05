@@ -104,11 +104,11 @@ function smartBack() {
 
   <!-- Aviso de entregável desatualizado (coerencia.js). Aparece quando o
        cliente corrige o quantitativo depois de gerar cronograma/memorial. -->
-  <div id="aviso-coerencia" class="hidden"></div>
-
-  <!-- Faixa de KPIs (visual portado do cronograma.html) — preenchida por
-       renderMetrics/renderDates com o que a página JÁ carrega; sem dado = "--" -->
-  <div id="kpi-strip" class="grid gap-4 grid-cols-2 md:grid-cols-4">
+  
+  <!-- ══ VISTA: visao ══ -->
+  <div class="vista" data-vista="visao">
+<div id="aviso-coerencia" class="hidden"></div>
+<div id="kpi-strip" class="grid gap-4 grid-cols-2 md:grid-cols-4">
     <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="flex items-center gap-2 mb-2">
         <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5"/></svg></span>
@@ -142,10 +142,7 @@ function smartBack() {
       <p class="text-[10px] text-gray-400 mt-0.5">tempo total da leitura</p>
     </div>
   </div>
-
-  <!-- Estado vivo: PROCESSANDO — some tudo que depende de resultado e mostra
-       a barra de progresso (mesmo padrão de creep+poll do add-file). -->
-  <div id="proc-block" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
+<div id="proc-block" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
     <div class="flex items-center gap-3 mb-1">
       <span class="aiarq-build shrink-0" aria-hidden="true">
         <svg class="h-7 w-7" viewBox="0 0 24 24" fill="none">
@@ -162,9 +159,7 @@ function smartBack() {
     <p id="proc-pct" class="text-xs text-gray-500 mt-2" aria-live="polite">3%</p>
     <p class="text-xs text-gray-400 mt-3">Pode deixar esta aba aberta — a página recarrega sozinha quando terminar.</p>
   </div>
-
-  <!-- Estado vivo: ERRO — mostra o motivo real vindo do backend + saídas -->
-  <div id="erro-block" class="hidden rounded-2xl border-2 border-red-200 bg-red-50 p-6" role="alert">
+<div id="erro-block" class="hidden rounded-2xl border-2 border-red-200 bg-red-50 p-6" role="alert">
     <div class="flex items-start gap-3">
       <svg class="w-6 h-6 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       <div class="flex-1">
@@ -184,9 +179,7 @@ function smartBack() {
       </div>
     </div>
   </div>
-
-  <!-- Warnings do motor -->
-  <div id="proj-warnings" class="hidden rounded-xl border-2 border-amber-200 bg-amber-50 p-5" role="alert" aria-live="polite">
+<div id="proj-warnings" class="hidden rounded-xl border-2 border-amber-200 bg-amber-50 p-5" role="alert" aria-live="polite">
     <div class="flex items-start gap-3">
       <svg class="w-6 h-6 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
       <div class="flex-1">
@@ -195,11 +188,7 @@ function smartBack() {
       </div>
     </div>
   </div>
-
-  <!-- Área inteligente: aparece SÓ quando a planta não tinha cota de área e há
-       itens de piso/forro/laje em branco. Pergunta a metragem DEPOIS pra completar
-       esses itens (sem inventar — fica estimado/laranja, informado por você). -->
-  <div id="area-prompt" class="hidden rounded-xl border-2 border-indigo-200 bg-indigo-50 p-5">
+<div id="area-prompt" class="hidden rounded-xl border-2 border-indigo-200 bg-indigo-50 p-5">
     <div class="flex items-start gap-3">
       <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
       <div class="flex-1">
@@ -215,139 +204,7 @@ function smartBack() {
       </div>
     </div>
   </div>
-
-  <!-- Dados do Projeto + Cliente Final — NO TOPO (de quem é o projeto vem primeiro) -->
-  <div id="dados-card" class="rounded-xl border-2 border-indigo-200 bg-white overflow-hidden">
-    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
-      <div>
-        <h2 class="text-base font-bold text-gray-900">📇 Projeto e cliente</h2>
-        <p class="text-xs text-gray-500 mt-0.5">De quem é este projeto — aparece no cabeçalho da planilha, no PDF do cronograma e nos PPTs</p>
-      </div>
-      <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
-    </div>
-    <div id="client-view" class="p-5 text-sm">
-      <div id="client-loading" class="text-gray-500">Carregando...</div>
-      <div id="client-empty" class="text-gray-500 hidden">Nenhum dado preenchido. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Preencher agora →</button></div>
-      <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
-    </div>
-    <div id="client-edit" class="p-5 hidden">
-
-      <!-- Seção 1: DADOS DO PROJETO -->
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do projeto</p>
-      <div class="grid gap-3 md:grid-cols-2 mb-5">
-        <div class="md:col-span-2">
-          <label for="p-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do projeto</label>
-          <input id="p-name" type="text" maxlength="120" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex.: Escritório Regional Americana"/>
-        </div>
-        <div>
-          <label for="p-typology" class="text-xs font-medium text-gray-500 block mb-1">Tipologia</label>
-          <select id="p-typology" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="">— manter atual —</option>
-            <option value="office">Corporativo / Escritório</option>
-            <option value="residential">Residencial</option>
-            <option value="retail">Varejo / Comércio</option>
-            <option value="hospital">Hospital / Saúde</option>
-            <option value="educational">Educacional</option>
-          </select>
-        </div>
-        <div>
-          <label for="p-phase" class="text-xs font-medium text-gray-500 block mb-1">Fase do projeto</label>
-          <select id="p-phase" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
-            <option value="">— manter atual —</option>
-            <option value="Estudo preliminar">Estudo preliminar</option>
-            <option value="Anteprojeto">Anteprojeto</option>
-            <option value="Projeto legal">Projeto legal</option>
-            <option value="Projeto executivo">Projeto executivo</option>
-            <option value="Reforma">Reforma</option>
-          </select>
-        </div>
-        <div class="md:col-span-2">
-          <label for="p-address" class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra</label>
-          <input id="p-address" type="text" maxlength="240" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
-        </div>
-      </div>
-
-      <!-- Seção 2: DADOS DO CLIENTE FINAL -->
-      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 mt-2">Cliente final do projeto</p>
-      <div class="grid gap-3 md:grid-cols-2">
-        <div>
-          <label for="c-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do contato</label>
-          <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Nome do cliente final"/>
-        </div>
-        <div>
-          <label for="c-company" class="text-xs font-medium text-gray-500 block mb-1">Empresa / Razão Social</label>
-          <input id="c-company" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Empresa do cliente"/>
-        </div>
-        <div>
-          <label for="c-email" class="text-xs font-medium text-gray-500 block mb-1">E-mail</label>
-          <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="email@empresa.com"/>
-        </div>
-        <div>
-          <label for="c-phone" class="text-xs font-medium text-gray-500 block mb-1">WhatsApp / Telefone</label>
-          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 9 0000-0000"/>
-        </div>
-        <div class="md:col-span-2 hidden">
-          <!-- Mantido por compat com fluxo antigo; agora endereço fica em p-address -->
-          <input id="c-address" type="hidden"/>
-        </div>
-        <div class="md:col-span-2">
-          <label for="c-notes" class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-500">(só você vê)</span></label>
-          <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
-        </div>
-      </div>
-      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>.</p>
-      <div id="edit-status" class="mt-2 text-xs hidden"></div>
-      <div class="mt-4 flex gap-2 justify-end">
-        <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
-        <button onclick="saveProjectAndClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar tudo</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Metadados do projeto (faixa compacta) -->
-  <div id="metadados-strip" class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
-    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
-    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Área da laje</span><span id="m-area" class="font-semibold text-gray-900">--</span></span>
-    <!-- Arquivos e Itens agora vivem na faixa de KPIs no topo (18/07). Os ids
-         ficam no DOM (escondidos) porque renderMetrics ainda escreve neles. -->
-    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
-    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Itens</span><span id="m-items" class="font-semibold text-gray-900">--</span></span>
-  </div>
-
-  <!-- Raio-X da leitura: medido vs a confirmar (a promessa do site, in-app).
-       Herói da página (18/07): accent degradê no topo, sombra e entrada cr-rise. -->
-  <div id="raiox-card" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
-    <div class="flex items-center gap-2 mb-3">
-      <svg class="w-5 h-5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
-      <span class="font-semibold text-gray-900">Raio-X da leitura</span>
-      <span class="text-xs text-gray-500">— no que dá pra confiar</span>
-    </div>
-    <div class="grid grid-cols-2 gap-3">
-      <div class="rounded-xl bg-emerald-50 p-4">
-        <div class="flex items-center gap-1.5">
-          <svg class="w-4 h-4 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
-          <span id="rx-medido" class="text-3xl font-bold text-emerald-800">0</span>
-        </div>
-        <p class="text-xs text-emerald-700 mt-1">medidos — direto do CAD, em branco na planilha</p>
-      </div>
-      <div class="rounded-xl bg-amber-50 p-4">
-        <div class="flex items-center gap-1.5">
-          <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
-          <span id="rx-confirmar" class="text-3xl font-bold text-amber-800">0</span>
-        </div>
-        <p class="text-xs text-amber-700 mt-1">a confirmar — você revisa, em laranja</p>
-      </div>
-    </div>
-    <div class="flex h-3 rounded-full overflow-hidden mt-3 bg-gray-100">
-      <div id="rx-bar-medido" class="bg-emerald-500" style="width:0%"></div>
-      <div id="rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
-    </div>
-    <p id="rx-pct" class="text-xs text-gray-500 mt-2"></p>
-  </div>
-
-  <!-- Aviso "manda o CAD" — aparece só quando veio de PDF e 0 medido (ver renderMetrics).
-       Campo que anexa o DWG/DXF ao MESMO projeto e reprocessa in-place (/add-file). -->
-  <div id="cad-upgrade-banner" class="hidden rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
+<div id="cad-upgrade-banner" class="hidden rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
     <div class="flex items-start gap-3">
       <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
       <div class="flex-1">
@@ -366,196 +223,7 @@ function smartBack() {
       </div>
     </div>
   </div>
-
-  <script>
-  (function(){
-    var btn = document.getElementById('cad-upload-btn');
-    var input = document.getElementById('cad-file-input');
-    var statusEl = document.getElementById('cad-upload-status');
-    var jid = new URLSearchParams(location.search).get('job_id');
-    if (!btn || !input || !statusEl || !jid) return;
-    function setStatus(msg, cls){ statusEl.className = 'text-sm mt-2 ' + (cls || ''); statusEl.textContent = msg; statusEl.classList.remove('hidden'); }
-    var originalHTML = btn.innerHTML;
-    var uploading = false;
-    function resetBtn(){ uploading = false; btn.disabled = false; btn.innerHTML = originalHTML; input.value = ''; }
-    btn.addEventListener('click', function(){ if (!uploading) input.click(); });
-    input.addEventListener('change', async function(){
-      var fs = input.files ? Array.prototype.slice.call(input.files) : [];
-      if (!fs.length) return;
-      for (var i = 0; i < fs.length; i++){
-        var ext = (fs[i].name.split('.').pop() || '').toLowerCase();
-        if (['dwg','dxf','pdf'].indexOf(ext) < 0){ setStatus('✗ Envie só arquivos DWG, DXF ou PDF.', 'text-red-700'); input.value = ''; return; }
-      }
-      uploading = true; btn.disabled = true;
-      btn.textContent = 'Enviando ' + fs.length + (fs.length > 1 ? ' arquivos…' : ' arquivo…');
-      setStatus('Enviando e refazendo… isso leva alguns minutos.', 'text-amber-800');
-      try {
-        var sess = (await sb.auth.getSession()).data.session;
-        if (!sess){ resetBtn(); setStatus('Faça login pra enviar.', 'text-red-700'); return; }
-        var fd = new FormData(); for (var j = 0; j < fs.length; j++) fd.append('files', fs[j]);
-        var r = await fetch(window.API_UPLOAD_BASE + '/api/project/' + jid + '/add-file', {
-          method: 'POST', body: fd,
-          headers: { 'Authorization': 'Bearer ' + sess.access_token }
-        });
-        var data = await r.json().catch(function(){ return {}; });
-        if (r.ok && data.status === 'ok'){
-          document.getElementById('cad-upgrade-form').classList.add('hidden');
-          setStatus('⏳ Refazendo com o CAD… 3%', 'text-amber-800');
-          // Progresso ao vivo + reload automático quando terminar. Antes só mostrava
-          // "recarregue a página" e o usuário ficava perdido (Pedro 15/07). A barra
-          // agora ANDA suave por tempo (nunca congela na fase da IA, que fica parada em
-          // ~41% no backend): mostra o MAIOR entre o progresso real e um creep temporal,
-          // sem passar de 95% até concluir de verdade.
-          var _shown = 3, _elapsed = 0, _lastFetch = 0, _backendPct = 0, _stopped = false;
-          var _tick = setInterval(async function(){
-            if (_stopped) return;
-            _elapsed += 0.6;
-            // busca o status real a cada ~3s (o creep abaixo roda a cada 0,6s)
-            if (_elapsed - _lastFetch >= 3) {
-              _lastFetch = _elapsed;
-              try {
-                var sr = await fetch(window.API_BASE + '/api/status/' + jid, { headers: { 'Authorization': 'Bearer ' + sess.access_token } });
-                if (sr.ok) {
-                  var sd = await sr.json().catch(function(){ return {}; });
-                  _backendPct = Math.max(_backendPct, Math.round(sd.progress || 0));
-                  var st = sd.status || '';
-                  if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || _backendPct >= 100) {
-                    _stopped = true; clearInterval(_tick);
-                    // Verde só no sucesso de verdade; erro = âmbar/neutro (não mentir "Pronto").
-                    if (st === 'error' || st === 'failed') {
-                      setStatus('⚠ Terminou — atualizando a página…', 'text-amber-800');
-                    } else {
-                      setStatus('✅ Pronto! Atualizando a página…', 'text-emerald-700 font-medium');
-                    }
-                    setTimeout(function(){ location.reload(); }, 800);
-                    return;
-                  }
-                }
-              } catch(e){ /* rede: tenta de novo no próximo tick */ }
-            }
-            // creep suave: alvo = maior entre progresso real e tempo (~1,2%/s, teto 95%)
-            var target = Math.max(_backendPct, Math.min(95, 3 + _elapsed * 1.2));
-            if (target > _shown) _shown = Math.min(target, _shown + 0.7);
-            setStatus('⏳ Refazendo com o CAD… ' + Math.round(_shown) + '%', 'text-amber-800');
-            if (_elapsed > 600) { _stopped = true; clearInterval(_tick); setStatus('Ainda processando… recarregue a página em instantes.', 'text-amber-800'); }
-          }, 600);
-        } else {
-          resetBtn();
-          setStatus('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');
-        }
-      } catch (e){
-        resetBtn();
-        setStatus('✗ Erro de rede. Tenta de novo.', 'text-red-700');
-      }
-    });
-  })();
-  </script>
-
-  <!-- Feedback rápido pós-projeto (NPS leve) -->
-  <div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
-    <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
-    <p class="text-xs text-indigo-600 mb-3">Seu retorno ajuda a gente a melhorar — leva 5 segundos.</p>
-    <div id="fb-buttons" class="flex flex-wrap gap-2">
-      <button type="button" onclick="sendFeedback(9)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👍 Ajudou bastante</button>
-      <button type="button" onclick="sendFeedback(7)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">😐 Mais ou menos</button>
-      <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
-    </div>
-    <div id="fb-comment-wrap" class="hidden mt-3">
-      <textarea id="fb-comment" rows="2" oninput="_fbArm(20000)" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
-      <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
-    </div>
-    <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
-  </div>
-
-  <!-- (Botão reprocessar foi rebaixado pra seção "Detalhes do processamento", no fim.) -->
-
-  <!-- ═════ CHAT: Pergunte sobre o seu quantitativo (ancorado nos itens) ═════ -->
-  <section id="chat-quant" class="rounded-2xl border-2 border-indigo-200 bg-white overflow-hidden">
-    <div class="flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
-      <div class="flex h-10 w-10 items-center justify-center rounded-xl gradient-main text-white shrink-0" aria-hidden="true">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-      </div>
-      <div>
-        <p class="font-bold text-gray-900">Pergunte sobre o seu quantitativo</p>
-        <p class="text-xs text-gray-500">Tire d&uacute;vidas &mdash; ou aponte o que faltou. A gente lê.</p>
-      </div>
-    </div>
-    <div id="chat-msgs" class="px-5 py-4 space-y-3 max-h-96 overflow-y-auto text-sm">
-      <div class="text-gray-500">Oi! 👋 Posso te ajudar a entender a sua planilha — só não faço preço (isso é com o orçamentista). Pergunte à vontade:</div>
-    </div>
-    <div id="chat-chips" class="px-5 pb-1 flex flex-wrap gap-2">
-      <!-- 🪤 Este 1º chip nasceu do uso REAL (30/07): das 11 conversas do chat, 3
-           eram "faltou X na planilha" — a pergunta mais comum, e a mais valiosa
-           pra gente. O cliente tinha que descobrir sozinho que podia apontar
-           isso aqui. Agora é convite explícito, e dispara alerta pro dono. -->
-      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition">Faltou um item na minha planilha</button>
-      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Por que tem item "estimativa"?</button>
-      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Como ter mais itens medidos?</button>
-      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Resume as disciplinas do projeto</button>
-    </div>
-    <div class="px-5 py-3 border-t border-gray-100 flex gap-2">
-      <input id="chat-input" type="text" autocomplete="off" placeholder="Escreva sua pergunta..." aria-label="Pergunte sobre o seu quantitativo" class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
-      <button id="chat-send" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">Enviar</button>
-    </div>
-    <p class="px-5 pb-3 text-[11px] text-gray-400"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Respostas geradas a partir dos dados do seu projeto. O AI.arq entrega quantitativo, não preço.</p>
-  </section>
-
-  <script>
-  (function(){
-    var msgsEl = document.getElementById('chat-msgs');
-    var inputEl = document.getElementById('chat-input');
-    var sendBtn = document.getElementById('chat-send');
-    var jid = new URLSearchParams(location.search).get('job_id');
-    if (!msgsEl || !inputEl || !sendBtn || !jid) return;
-    var history = [];
-    var busy = false;
-    function esc(s){ return window.escapeHtml ? window.escapeHtml(s) : String(s == null ? '' : s); }
-    function bubble(role, text){
-      var wrap = document.createElement('div');
-      wrap.className = role === 'user' ? 'text-right' : 'text-left';
-      var span = document.createElement('span');
-      span.style.cssText = 'display:inline-block;padding:8px 12px;border-radius:12px;max-width:85%;white-space:pre-wrap;text-align:left;' +
-        (role === 'user' ? 'background:#4F46E5;color:#fff;border-bottom-right-radius:3px;' : 'background:#f1f5f9;color:#0f172a;border-bottom-left-radius:3px;');
-      span.textContent = text;
-      wrap.appendChild(span);
-      msgsEl.appendChild(wrap);
-      msgsEl.scrollTop = msgsEl.scrollHeight;
-      return span;
-    }
-    async function send(q){
-      q = (q || '').trim();
-      if (!q || busy) return;
-      busy = true; sendBtn.disabled = true; inputEl.value = '';
-      bubble('user', q);
-      history.push({ role: 'user', content: q });
-      var thinking = bubble('assistant', '…');
-      try {
-        var r = await window.authFetch(window.API_BASE + '/api/projeto/' + jid + '/chat', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ messages: history.slice(-8) })
-        });
-        var data = await r.json();
-        var reply = data.reply || data.message || 'Não consegui responder agora.';
-        thinking.textContent = reply;
-        if (data.status === 'ok') history.push({ role: 'assistant', content: reply });
-      } catch (e) {
-        thinking.textContent = 'Ops, erro de rede. Tenta de novo.';
-      }
-      msgsEl.scrollTop = msgsEl.scrollHeight;
-      busy = false; sendBtn.disabled = false; inputEl.focus();
-    }
-    sendBtn.addEventListener('click', function(){ send(inputEl.value); });
-    inputEl.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); send(inputEl.value); } });
-    Array.prototype.forEach.call(document.querySelectorAll('.chat-chip'), function(b){
-      b.addEventListener('click', function(){ send(b.textContent); });
-    });
-  })();
-  </script>
-
-  <!-- ═════════════════════════════════════════════════════════════════ -->
-  <!-- ENTREGAS DO PROJETO — cards expandíveis (cada um é uma fase do roadmap) -->
-  <!-- ═════════════════════════════════════════════════════════════════ -->
-  <section id="entregas-section">
+<section id="entregas-section">
     <div class="flex items-baseline justify-between mb-3">
       <h2 class="text-lg font-bold text-gray-900">Entregas do projeto</h2>
       <p class="text-xs text-gray-500">Cada entrega é uma etapa do ciclo de quantificação → cronograma → documentação</p>
@@ -682,11 +350,53 @@ function smartBack() {
 
     </div>
   </section>
+<div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+    <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
+    <p class="text-xs text-indigo-600 mb-3">Seu retorno ajuda a gente a melhorar — leva 5 segundos.</p>
+    <div id="fb-buttons" class="flex flex-wrap gap-2">
+      <button type="button" onclick="sendFeedback(9)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👍 Ajudou bastante</button>
+      <button type="button" onclick="sendFeedback(7)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">😐 Mais ou menos</button>
+      <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
+    </div>
+    <div id="fb-comment-wrap" class="hidden mt-3">
+      <textarea id="fb-comment" rows="2" oninput="_fbArm(20000)" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+      <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
+    </div>
+    <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
+  </div>
+  </div>
 
-  <!-- Expansão por disciplina: detecta o que JÁ está nos itens e sugere anexar
-       as pranchas que faltam no MESMO projeto (mesmo /add-file do banner CAD).
-       Só aparece com o projeto pronto e com ao menos 1 disciplina comum faltando. -->
-  <div id="expansao-disciplinas" class="hidden rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-5">
+  <!-- ══ VISTA: quantitativo ══ -->
+  <div class="vista" data-vista="quantitativo" hidden>
+<div id="raiox-card" class="hidden rounded-2xl border-2 border-indigo-200 bg-white p-6 shadow-lg hero-accent">
+    <div class="flex items-center gap-2 mb-3">
+      <svg class="w-5 h-5 text-indigo-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+      <span class="font-semibold text-gray-900">Raio-X da leitura</span>
+      <span class="text-xs text-gray-500">— no que dá pra confiar</span>
+    </div>
+    <div class="grid grid-cols-2 gap-3">
+      <div class="rounded-xl bg-emerald-50 p-4">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-emerald-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+          <span id="rx-medido" class="text-3xl font-bold text-emerald-800">0</span>
+        </div>
+        <p class="text-xs text-emerald-700 mt-1">medidos — direto do CAD, em branco na planilha</p>
+      </div>
+      <div class="rounded-xl bg-amber-50 p-4">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-amber-700 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0l-7.1 12.25A2 2 0 004.99 19z"/></svg>
+          <span id="rx-confirmar" class="text-3xl font-bold text-amber-800">0</span>
+        </div>
+        <p class="text-xs text-amber-700 mt-1">a confirmar — você revisa, em laranja</p>
+      </div>
+    </div>
+    <div class="flex h-3 rounded-full overflow-hidden mt-3 bg-gray-100">
+      <div id="rx-bar-medido" class="bg-emerald-500" style="width:0%"></div>
+      <div id="rx-bar-confirmar" class="bg-amber-400" style="width:0%"></div>
+    </div>
+    <p id="rx-pct" class="text-xs text-gray-500 mt-2"></p>
+  </div>
+<div id="expansao-disciplinas" class="hidden rounded-xl border-2 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-5">
     <div class="flex items-start gap-3">
       <span class="text-2xl shrink-0" aria-hidden="true">🧩</span>
       <div class="flex-1">
@@ -704,17 +414,40 @@ function smartBack() {
       </div>
     </div>
   </div>
+<section id="chat-quant" class="rounded-2xl border-2 border-indigo-200 bg-white overflow-hidden">
+    <div class="flex items-center gap-3 px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-white">
+      <div class="flex h-10 w-10 items-center justify-center rounded-xl gradient-main text-white shrink-0" aria-hidden="true">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+      </div>
+      <div>
+        <p class="font-bold text-gray-900">Pergunte sobre o seu quantitativo</p>
+        <p class="text-xs text-gray-500">Tire d&uacute;vidas &mdash; ou aponte o que faltou. A gente lê.</p>
+      </div>
+    </div>
+    <div id="chat-msgs" class="px-5 py-4 space-y-3 max-h-96 overflow-y-auto text-sm">
+      <div class="text-gray-500">Oi! 👋 Posso te ajudar a entender a sua planilha — só não faço preço (isso é com o orçamentista). Pergunte à vontade:</div>
+    </div>
+    <div id="chat-chips" class="px-5 pb-1 flex flex-wrap gap-2">
+      <!-- 🪤 Este 1º chip nasceu do uso REAL (30/07): das 11 conversas do chat, 3
+           eram "faltou X na planilha" — a pergunta mais comum, e a mais valiosa
+           pra gente. O cliente tinha que descobrir sozinho que podia apontar
+           isso aqui. Agora é convite explícito, e dispara alerta pro dono. -->
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-amber-300 text-amber-800 bg-amber-50 hover:bg-amber-100 transition">Faltou um item na minha planilha</button>
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Por que tem item "estimativa"?</button>
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Como ter mais itens medidos?</button>
+      <button type="button" class="chat-chip text-xs px-3 py-1.5 rounded-full border border-indigo-200 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition">Resume as disciplinas do projeto</button>
+    </div>
+    <div class="px-5 py-3 border-t border-gray-100 flex gap-2">
+      <input id="chat-input" type="text" autocomplete="off" placeholder="Escreva sua pergunta..." aria-label="Pergunte sobre o seu quantitativo" class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
+      <button id="chat-send" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">Enviar</button>
+    </div>
+    <p class="px-5 pb-3 text-[11px] text-gray-400"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Respostas geradas a partir dos dados do seu projeto. O AI.arq entrega quantitativo, não preço.</p>
+  </section>
+  </div>
 
-  <!-- Card "Cashback deste projeto" removido 22/07 (cashback 100% fora do palco no
-       beta, decisão Pedro). Re-adicionar a UI ao religar a cobrança — ver loadProjectCashback(). -->
-
-  <!-- (Card "Dados do projeto e cliente" foi movido pro TOPO da página, logo após os avisos.) -->
-
-  <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- ENVIAR ARQUIVOS — planilha revisada (ouro) × cotações            -->
-  <!-- Reposicionado via JS (moveUploadAfterRaioX) pra logo após o Raio-X -->
-  <!-- ═══════════════════════════════════════════════════════════════ -->
-  <section id="cotacoes-section" class="rounded-xl border bg-white overflow-hidden">
+  <!-- ══ VISTA: cotacoes ══ -->
+  <div class="vista" data-vista="cotacoes" hidden>
+<section id="cotacoes-section" class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50">
       <h2 class="font-semibold text-gray-800">📤 Enviar planilhas deste projeto</h2>
     </div>
@@ -810,11 +543,105 @@ function smartBack() {
     </div>
     <!-- /tab-revisada -->
   </section>
+  </div>
 
-  <!-- (Reportar problema foi rebaixado pra seção "Detalhes do processamento", no fim.) -->
+  <!-- ══ VISTA: dados ══ -->
+  <div class="vista" data-vista="dados" hidden>
+<div id="dados-card" class="rounded-xl border-2 border-indigo-200 bg-white overflow-hidden">
+    <div class="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
+      <div>
+        <h2 class="text-base font-bold text-gray-900">📇 Projeto e cliente</h2>
+        <p class="text-xs text-gray-500 mt-0.5">De quem é este projeto — aparece no cabeçalho da planilha, no PDF do cronograma e nos PPTs</p>
+      </div>
+      <button id="btn-edit-client" class="text-xs text-indigo-600 hover:text-indigo-800 font-medium">Editar</button>
+    </div>
+    <div id="client-view" class="p-5 text-sm">
+      <div id="client-loading" class="text-gray-500">Carregando...</div>
+      <div id="client-empty" class="text-gray-500 hidden">Nenhum dado preenchido. <button onclick="openClientEdit()" class="text-indigo-600 hover:underline">Preencher agora →</button></div>
+      <dl id="client-data" class="grid gap-3 md:grid-cols-2 hidden"></dl>
+    </div>
+    <div id="client-edit" class="p-5 hidden">
 
-  <!-- Arquivos da prancha -->
-  <div id="arquivos-box" class="rounded-xl border bg-white overflow-hidden">
+      <!-- Seção 1: DADOS DO PROJETO -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do projeto</p>
+      <div class="grid gap-3 md:grid-cols-2 mb-5">
+        <div class="md:col-span-2">
+          <label for="p-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do projeto</label>
+          <input id="p-name" type="text" maxlength="120" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Ex.: Escritório Regional Americana"/>
+        </div>
+        <div>
+          <label for="p-typology" class="text-xs font-medium text-gray-500 block mb-1">Tipologia</label>
+          <select id="p-typology" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="office">Corporativo / Escritório</option>
+            <option value="residential">Residencial</option>
+            <option value="retail">Varejo / Comércio</option>
+            <option value="hospital">Hospital / Saúde</option>
+            <option value="educational">Educacional</option>
+          </select>
+        </div>
+        <div>
+          <label for="p-phase" class="text-xs font-medium text-gray-500 block mb-1">Fase do projeto</label>
+          <select id="p-phase" class="w-full px-3 py-2 border rounded-lg text-sm bg-white">
+            <option value="">— manter atual —</option>
+            <option value="Estudo preliminar">Estudo preliminar</option>
+            <option value="Anteprojeto">Anteprojeto</option>
+            <option value="Projeto legal">Projeto legal</option>
+            <option value="Projeto executivo">Projeto executivo</option>
+            <option value="Reforma">Reforma</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label for="p-address" class="text-xs font-medium text-gray-500 block mb-1">Endereço da obra</label>
+          <input id="p-address" type="text" maxlength="240" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Rua exemplo, 123 — Cidade/UF"/>
+        </div>
+      </div>
+
+      <!-- Seção 2: DADOS DO CLIENTE FINAL -->
+      <p class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2 mt-2">Cliente final do projeto</p>
+      <div class="grid gap-3 md:grid-cols-2">
+        <div>
+          <label for="c-name" class="text-xs font-medium text-gray-500 block mb-1">Nome do contato</label>
+          <input id="c-name" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Nome do cliente final"/>
+        </div>
+        <div>
+          <label for="c-company" class="text-xs font-medium text-gray-500 block mb-1">Empresa / Razão Social</label>
+          <input id="c-company" type="text" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Empresa do cliente"/>
+        </div>
+        <div>
+          <label for="c-email" class="text-xs font-medium text-gray-500 block mb-1">E-mail</label>
+          <input id="c-email" type="email" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="email@empresa.com"/>
+        </div>
+        <div>
+          <label for="c-phone" class="text-xs font-medium text-gray-500 block mb-1">WhatsApp / Telefone</label>
+          <input id="c-phone" type="tel" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="(00) 9 0000-0000"/>
+        </div>
+        <div class="md:col-span-2 hidden">
+          <!-- Mantido por compat com fluxo antigo; agora endereço fica em p-address -->
+          <input id="c-address" type="hidden"/>
+        </div>
+        <div class="md:col-span-2">
+          <label for="c-notes" class="text-xs font-medium text-gray-500 block mb-1">Notas internas <span class="text-gray-500">(só você vê)</span></label>
+          <textarea id="c-notes" rows="2" class="w-full px-3 py-2 border rounded-lg text-sm" placeholder="Observações internas sobre o cliente / projeto"></textarea>
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-gray-500">Você declara ter autorização do cliente final pra cadastrar esses dados (LGPD: você = controlador, AI.arq = operador). Ao salvar, concorda com os <a href="termos.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Termos</a> e a <a href="privacidade.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-gray-700">Privacidade</a>.</p>
+      <div id="edit-status" class="mt-2 text-xs hidden"></div>
+      <div class="mt-4 flex gap-2 justify-end">
+        <button onclick="closeClientEdit()" class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">Cancelar</button>
+        <button onclick="saveProjectAndClient()" class="px-4 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-medium">Salvar tudo</button>
+      </div>
+    </div>
+  </div>
+<div id="metadados-strip" class="rounded-xl border bg-white px-5 py-3 flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Tipologia</span><span id="m-typology" class="font-semibold text-gray-900 capitalize">--</span></span>
+    <span class="inline-flex items-center gap-1.5"><span class="text-gray-500">Área da laje</span><span id="m-area" class="font-semibold text-gray-900">--</span></span>
+    <!-- Arquivos e Itens agora vivem na faixa de KPIs no topo (18/07). Os ids
+         ficam no DOM (escondidos) porque renderMetrics ainda escreve neles. -->
+    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Arquivos</span><span id="m-files" class="font-semibold text-gray-900">--</span></span>
+    <span class="hidden items-center gap-1.5"><span class="text-gray-500">Itens</span><span id="m-items" class="font-semibold text-gray-900">--</span></span>
+  </div>
+<div id="arquivos-box" class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50">
       <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
       <p class="text-xs text-gray-500 mt-0.5">Clique pra abrir o PDF em nova aba — DWG/DXF baixam direto</p>
@@ -823,12 +650,7 @@ function smartBack() {
       <div class="p-8 text-center text-sm text-gray-500">Carregando arquivos...</div>
     </div>
   </div>
-
-  <!-- ═══════════════════════════════════════════════════════════════ -->
-  <!-- DETALHES DO PROCESSAMENTO — cards secundários rebaixados (18/07): -->
-  <!-- Reprocessar, Reportar problema, Datas e Identificação, compactos.  -->
-  <!-- ═══════════════════════════════════════════════════════════════ -->
-  <section id="detalhes-processamento">
+<section id="detalhes-processamento">
     <h2 class="text-sm font-bold text-gray-700 mb-3">Detalhes do processamento</h2>
     <div class="grid gap-3 sm:grid-cols-2">
 
@@ -898,8 +720,187 @@ function smartBack() {
 
     </div>
   </section>
+  </div>
 
-</main>
+
+  <!-- Faixa de KPIs (visual portado do cronograma.html) — preenchida por
+       renderMetrics/renderDates com o que a página JÁ carrega; sem dado = "--" -->
+  <!-- Estado vivo: PROCESSANDO — some tudo que depende de resultado e mostra
+       a barra de progresso (mesmo padrão de creep+poll do add-file). -->
+  <!-- Estado vivo: ERRO — mostra o motivo real vindo do backend + saídas -->
+  <!-- Warnings do motor -->
+  <!-- Área inteligente: aparece SÓ quando a planta não tinha cota de área e há
+       itens de piso/forro/laje em branco. Pergunta a metragem DEPOIS pra completar
+       esses itens (sem inventar — fica estimado/laranja, informado por você). -->
+  <!-- Dados do Projeto + Cliente Final — NO TOPO (de quem é o projeto vem primeiro) -->
+  <!-- Metadados do projeto (faixa compacta) -->
+  <!-- Raio-X da leitura: medido vs a confirmar (a promessa do site, in-app).
+       Herói da página (18/07): accent degradê no topo, sombra e entrada cr-rise. -->
+  <!-- Aviso "manda o CAD" — aparece só quando veio de PDF e 0 medido (ver renderMetrics).
+       Campo que anexa o DWG/DXF ao MESMO projeto e reprocessa in-place (/add-file). -->
+  <script>
+  (function(){
+    var btn = document.getElementById('cad-upload-btn');
+    var input = document.getElementById('cad-file-input');
+    var statusEl = document.getElementById('cad-upload-status');
+    var jid = new URLSearchParams(location.search).get('job_id');
+    if (!btn || !input || !statusEl || !jid) return;
+    function setStatus(msg, cls){ statusEl.className = 'text-sm mt-2 ' + (cls || ''); statusEl.textContent = msg; statusEl.classList.remove('hidden'); }
+    var originalHTML = btn.innerHTML;
+    var uploading = false;
+    function resetBtn(){ uploading = false; btn.disabled = false; btn.innerHTML = originalHTML; input.value = ''; }
+    btn.addEventListener('click', function(){ if (!uploading) input.click(); });
+    input.addEventListener('change', async function(){
+      var fs = input.files ? Array.prototype.slice.call(input.files) : [];
+      if (!fs.length) return;
+      for (var i = 0; i < fs.length; i++){
+        var ext = (fs[i].name.split('.').pop() || '').toLowerCase();
+        if (['dwg','dxf','pdf'].indexOf(ext) < 0){ setStatus('✗ Envie só arquivos DWG, DXF ou PDF.', 'text-red-700'); input.value = ''; return; }
+      }
+      uploading = true; btn.disabled = true;
+      btn.textContent = 'Enviando ' + fs.length + (fs.length > 1 ? ' arquivos…' : ' arquivo…');
+      setStatus('Enviando e refazendo… isso leva alguns minutos.', 'text-amber-800');
+      try {
+        var sess = (await sb.auth.getSession()).data.session;
+        if (!sess){ resetBtn(); setStatus('Faça login pra enviar.', 'text-red-700'); return; }
+        var fd = new FormData(); for (var j = 0; j < fs.length; j++) fd.append('files', fs[j]);
+        var r = await fetch(window.API_UPLOAD_BASE + '/api/project/' + jid + '/add-file', {
+          method: 'POST', body: fd,
+          headers: { 'Authorization': 'Bearer ' + sess.access_token }
+        });
+        var data = await r.json().catch(function(){ return {}; });
+        if (r.ok && data.status === 'ok'){
+          document.getElementById('cad-upgrade-form').classList.add('hidden');
+          setStatus('⏳ Refazendo com o CAD… 3%', 'text-amber-800');
+          // Progresso ao vivo + reload automático quando terminar. Antes só mostrava
+          // "recarregue a página" e o usuário ficava perdido (Pedro 15/07). A barra
+          // agora ANDA suave por tempo (nunca congela na fase da IA, que fica parada em
+          // ~41% no backend): mostra o MAIOR entre o progresso real e um creep temporal,
+          // sem passar de 95% até concluir de verdade.
+          var _shown = 3, _elapsed = 0, _lastFetch = 0, _backendPct = 0, _stopped = false;
+          var _tick = setInterval(async function(){
+            if (_stopped) return;
+            _elapsed += 0.6;
+            // busca o status real a cada ~3s (o creep abaixo roda a cada 0,6s)
+            if (_elapsed - _lastFetch >= 3) {
+              _lastFetch = _elapsed;
+              try {
+                var sr = await fetch(window.API_BASE + '/api/status/' + jid, { headers: { 'Authorization': 'Bearer ' + sess.access_token } });
+                if (sr.ok) {
+                  var sd = await sr.json().catch(function(){ return {}; });
+                  _backendPct = Math.max(_backendPct, Math.round(sd.progress || 0));
+                  var st = sd.status || '';
+                  if (st === 'done' || st === 'completed' || st === 'error' || st === 'failed' || _backendPct >= 100) {
+                    _stopped = true; clearInterval(_tick);
+                    // Verde só no sucesso de verdade; erro = âmbar/neutro (não mentir "Pronto").
+                    if (st === 'error' || st === 'failed') {
+                      setStatus('⚠ Terminou — atualizando a página…', 'text-amber-800');
+                    } else {
+                      setStatus('✅ Pronto! Atualizando a página…', 'text-emerald-700 font-medium');
+                    }
+                    setTimeout(function(){ location.reload(); }, 800);
+                    return;
+                  }
+                }
+              } catch(e){ /* rede: tenta de novo no próximo tick */ }
+            }
+            // creep suave: alvo = maior entre progresso real e tempo (~1,2%/s, teto 95%)
+            var target = Math.max(_backendPct, Math.min(95, 3 + _elapsed * 1.2));
+            if (target > _shown) _shown = Math.min(target, _shown + 0.7);
+            setStatus('⏳ Refazendo com o CAD… ' + Math.round(_shown) + '%', 'text-amber-800');
+            if (_elapsed > 600) { _stopped = true; clearInterval(_tick); setStatus('Ainda processando… recarregue a página em instantes.', 'text-amber-800'); }
+          }, 600);
+        } else {
+          resetBtn();
+          setStatus('✗ ' + (data.detail || data.message || 'Não consegui enviar. Tenta de novo.'), 'text-red-700');
+        }
+      } catch (e){
+        resetBtn();
+        setStatus('✗ Erro de rede. Tenta de novo.', 'text-red-700');
+      }
+    });
+  })();
+  </script>
+
+  <!-- Feedback rápido pós-projeto (NPS leve) -->
+  <!-- (Botão reprocessar foi rebaixado pra seção "Detalhes do processamento", no fim.) -->
+
+  <!-- ═════ CHAT: Pergunte sobre o seu quantitativo (ancorado nos itens) ═════ -->
+  <script>
+  (function(){
+    var msgsEl = document.getElementById('chat-msgs');
+    var inputEl = document.getElementById('chat-input');
+    var sendBtn = document.getElementById('chat-send');
+    var jid = new URLSearchParams(location.search).get('job_id');
+    if (!msgsEl || !inputEl || !sendBtn || !jid) return;
+    var history = [];
+    var busy = false;
+    function esc(s){ return window.escapeHtml ? window.escapeHtml(s) : String(s == null ? '' : s); }
+    function bubble(role, text){
+      var wrap = document.createElement('div');
+      wrap.className = role === 'user' ? 'text-right' : 'text-left';
+      var span = document.createElement('span');
+      span.style.cssText = 'display:inline-block;padding:8px 12px;border-radius:12px;max-width:85%;white-space:pre-wrap;text-align:left;' +
+        (role === 'user' ? 'background:#4F46E5;color:#fff;border-bottom-right-radius:3px;' : 'background:#f1f5f9;color:#0f172a;border-bottom-left-radius:3px;');
+      span.textContent = text;
+      wrap.appendChild(span);
+      msgsEl.appendChild(wrap);
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+      return span;
+    }
+    async function send(q){
+      q = (q || '').trim();
+      if (!q || busy) return;
+      busy = true; sendBtn.disabled = true; inputEl.value = '';
+      bubble('user', q);
+      history.push({ role: 'user', content: q });
+      var thinking = bubble('assistant', '…');
+      try {
+        var r = await window.authFetch(window.API_BASE + '/api/projeto/' + jid + '/chat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages: history.slice(-8) })
+        });
+        var data = await r.json();
+        var reply = data.reply || data.message || 'Não consegui responder agora.';
+        thinking.textContent = reply;
+        if (data.status === 'ok') history.push({ role: 'assistant', content: reply });
+      } catch (e) {
+        thinking.textContent = 'Ops, erro de rede. Tenta de novo.';
+      }
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+      busy = false; sendBtn.disabled = false; inputEl.focus();
+    }
+    sendBtn.addEventListener('click', function(){ send(inputEl.value); });
+    inputEl.addEventListener('keydown', function(e){ if (e.key === 'Enter'){ e.preventDefault(); send(inputEl.value); } });
+    Array.prototype.forEach.call(document.querySelectorAll('.chat-chip'), function(b){
+      b.addEventListener('click', function(){ send(b.textContent); });
+    });
+  })();
+  </script>
+
+  <!-- ═════════════════════════════════════════════════════════════════ -->
+  <!-- ENTREGAS DO PROJETO — cards expandíveis (cada um é uma fase do roadmap) -->
+  <!-- ═════════════════════════════════════════════════════════════════ -->
+  <!-- Expansão por disciplina: detecta o que JÁ está nos itens e sugere anexar
+       as pranchas que faltam no MESMO projeto (mesmo /add-file do banner CAD).
+       Só aparece com o projeto pronto e com ao menos 1 disciplina comum faltando. -->
+  <!-- Card "Cashback deste projeto" removido 22/07 (cashback 100% fora do palco no
+       beta, decisão Pedro). Re-adicionar a UI ao religar a cobrança — ver loadProjectCashback(). -->
+
+  <!-- (Card "Dados do projeto e cliente" foi movido pro TOPO da página, logo após os avisos.) -->
+
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- ENVIAR ARQUIVOS — planilha revisada (ouro) × cotações            -->
+  <!-- Reposicionado via JS (moveUploadAfterRaioX) pra logo após o Raio-X -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- (Reportar problema foi rebaixado pra seção "Detalhes do processamento", no fim.) -->
+
+  <!-- Arquivos da prancha -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  <!-- DETALHES DO PROCESSAMENTO — cards secundários rebaixados (18/07): -->
+  <!-- Reprocessar, Reportar problema, Datas e Identificação, compactos.  -->
+  <!-- ═══════════════════════════════════════════════════════════════ -->
+  </main>
 
 <!-- supabase-js + utils compartilhados (sb, sbClient, authFetch, downloadProtected, openPdfProtected, escapeHtml, API_BASE) -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1548,20 +1549,43 @@ function mostrarErro(msg, session) {
 }
 
 // Alterna entre as 2 sub-tabs do bloco "Enviar planilhas" (Cotações × Revisada)
-// 04/08: o menu do projeto fixado tem uma entrada "Comparativo", e ela aponta
-// pra projeto.html?job_id=X#cotacoes. Sem alguém lendo o hash, o link levava o
-// cliente pra página certa e pra aba errada — parecia que o Comparativo não
-// existia. Roda depois do DOM porque o painel só existe aí.
+// ══════════════════════════════════════════════════════════════════════
+//  VISTAS DO PROJETO — 04/08/2026
+// ══════════════════════════════════════════════════════════════════════
+// Esta página empilhava 17 blocos numa rolagem só: números, erro, dados do
+// cliente, raio-x, chat, entregas, envio de planilha revisada, cotações,
+// arquivos e detalhes do processamento. Agora são 4 vistas, escolhidas pelo
+// menu do projeto. Como não recarrega nada, a troca é instantânea.
+const VISTAS_PROJETO = ['visao', 'quantitativo', 'cotacoes', 'dados'];
+
+function mostrarVista(nome) {
+  if (VISTAS_PROJETO.indexOf(nome) === -1) nome = 'visao';   // rede: hash torto cai na visão geral
+  document.querySelectorAll('.vista').forEach(function (v) {
+    v.hidden = (v.getAttribute('data-vista') !== nome);
+  });
+  // A aba de cotações mora dentro da vista 'cotacoes'; só dá pra mexer nela
+  // depois que a vista aparece, senão o painel ainda está escondido.
+  if (nome === 'cotacoes') { try { switchUploadTab('cotacoes'); } catch (_) {} }
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  if (window.aiarqMenu) window.aiarqMenu.marcarAtivo();
+  return nome;
+}
+// O menu chama isto pra trocar SEM recarregar a página.
+window.mostrarVista = mostrarVista;
+
 document.addEventListener('DOMContentLoaded', function () {
   const h = (location.hash || '').replace(/^#/, '');
-  if (h === 'cotacoes' || h === 'revisada') {
-    // espera o próximo quadro: switchUploadTab depende do painel montado
-    setTimeout(function () {
-      try { switchUploadTab(h); } catch (_) {}
-      const alvo = document.getElementById('tab-btn-' + h);
-      if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ block: 'center' });
-    }, 0);
+  // 'revisada' é a outra aba do mesmo bloco de envio — mora na vista cotacoes.
+  if (h === 'revisada') {
+    mostrarVista('cotacoes');
+    setTimeout(function () { try { switchUploadTab('revisada'); } catch (_) {} }, 0);
+  } else {
+    mostrarVista(h || 'visao');
   }
+});
+// Voltar/avançar do navegador troca a vista, não recarrega.
+window.addEventListener('hashchange', function () {
+  mostrarVista((location.hash || '').replace(/^#/, '') || 'visao');
 });
 
 function switchUploadTab(name) {

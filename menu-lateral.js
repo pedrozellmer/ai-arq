@@ -150,13 +150,18 @@
   // As páginas já existem; o menu só aponta pra elas com o job_id.
   function gruposProjeto() {
     return [
+      // 🔑 A página do projeto virou 4 VISTAS (visao/quantitativo/cotacoes/
+      // dados) em vez de 17 blocos empilhados na mesma rolagem. As que moram
+      // lá dentro trocam SEM recarregar; revisão, cronograma e memorial
+      // continuam sendo páginas próprias.
       { titulo: '', itens: [
-        { href: url('projeto.html'),    rotulo: 'Quantitativo', ic: 'planilha',    chave: 'quantitativo' },
-        { href: url('revisao.html'),    rotulo: 'Revisão',      ic: 'revisao',     chave: 'revisao' },
-        { href: url('cronograma.html'), rotulo: 'Cronograma',   ic: 'cronograma',  chave: 'cronograma' },
-        { href: url('memorial.html'),   rotulo: 'Memorial',     ic: 'memorial',    chave: 'memorial' },
-        // O comparativo é uma ABA dentro do projeto.html, não página própria.
-        { href: url('projeto.html') + '#cotacoes', rotulo: 'Comparativo', ic: 'comparativo', chave: 'comparativo' }
+        { href: url('projeto.html') + '#visao',    rotulo: 'Visão geral',  ic: 'painel' },
+        { href: url('projeto.html') + '#quantitativo', rotulo: 'Quantitativo', ic: 'planilha',   chave: 'quantitativo' },
+        { href: url('revisao.html'),               rotulo: 'Revisão',      ic: 'revisao',    chave: 'revisao' },
+        { href: url('cronograma.html'),            rotulo: 'Cronograma',   ic: 'cronograma', chave: 'cronograma' },
+        { href: url('memorial.html'),              rotulo: 'Memorial',     ic: 'memorial',   chave: 'memorial' },
+        { href: url('projeto.html') + '#cotacoes', rotulo: 'Comparativo',  ic: 'comparativo', chave: 'comparativo' },
+        { href: url('projeto.html') + '#dados',    rotulo: 'Dados e arquivos', ic: 'pasta' }
       ]},
       // 🚨 A conta continua alcançável com projeto fixado. Fixar um projeto não
       // pode esconder o resto do sistema.
@@ -351,6 +356,25 @@
     document.body.appendChild(side);
 
     side.querySelector('#aiarq-fechar').addEventListener('click', fechar);
+    // Troca de VISTA dentro da própria página, sem recarregar. É o que faz a
+    // navegação entre as partes do projeto ser instantânea — e o menu nem
+    // pisca, porque a página nunca é descartada.
+    side.addEventListener('click', function (ev) {
+      var link = ev.target.closest('a[data-arq]');
+      if (!link) return;
+      var dArq = link.getAttribute('data-arq') || '';
+      var arq = dArq.split('?')[0].split('#')[0];
+      if (arq !== ARQ) return;                       // outra página: deixa navegar
+      if (typeof window.mostrarVista !== 'function') return;
+      ev.preventDefault();
+      var h = dArq.indexOf('#') > -1 ? dArq.split('#')[1] : 'visao';
+      // O hash na URL mantém o endereço compartilhável e o voltar do
+      // navegador funcionando (há um listener de hashchange na página).
+      try { history.pushState(null, '', '#' + h); } catch (_) {}
+      window.mostrarVista(h);
+      fecharMenuLateral();
+    });
+
     side.addEventListener('click', function (ev) {
       var alvo = ev.target.closest('[data-tab]');
       if (!alvo) return;
@@ -428,6 +452,10 @@
       : null);
     var itens = document.querySelectorAll('#aiarq-side .side-it');
     var hash = (location.hash || '').replace(/^#/, '');
+    // 🪤 Numa página de vistas, chegar SEM hash é estar na visão geral. Sem
+    // esta linha, abrir o projeto direto (sem #) não acendia item nenhum: o
+    // cliente via o menu inteiro apagado sem entender onde estava.
+    if (!hash && document.querySelector('.vista')) hash = 'visao';
     for (var i = 0; i < itens.length; i++) {
       var e = itens[i];
       var porAba = alvo && e.getAttribute('data-tab') === alvo;
