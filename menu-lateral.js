@@ -247,6 +247,26 @@
     '#aiarq-scrim{display:none}',
     '#aiarq-burger,#aiarq-fechar{display:none}',
     'body{padding-left:248px}',
+    '}',
+
+    // ── O "deslizar" entre as features ──────────────────────────────────
+    // Quantitativo, cronograma, memorial e revisão são PÁGINAS separadas, então
+    // clicar num item recarrega tudo — o menu piscava junto e a troca parecia
+    // um solavanco. Refazer as quatro como painéis de uma página só seria o
+    // caminho "certo" e é caro; isto entrega a mesma sensação de graça:
+    //   @view-transition liga a transição entre documentos do mesmo site, e
+    //   dar um nome próprio ao menu o EXCLUI da animação — ele fica parado
+    //   enquanto só o conteúdo desliza.
+    // Navegador que não suporta simplesmente navega como antes. Nada quebra.
+    '@view-transition{navigation:auto}',
+    '#aiarq-side{view-transition-name:aiarq-menu}',
+    '::view-transition-old(root){animation:aiarq-sai .16s ease both}',
+    '::view-transition-new(root){animation:aiarq-entra .22s ease both}',
+    '@keyframes aiarq-entra{from{opacity:0;transform:translateX(16px)}}',
+    '@keyframes aiarq-sai{to{opacity:0;transform:translateX(-10px)}}',
+    // Quem pediu menos movimento no sistema não ganha movimento nenhum.
+    '@media (prefers-reduced-motion:reduce){',
+    '::view-transition-old(root),::view-transition-new(root){animation:none}',
     '}'
   ].join('');
 
