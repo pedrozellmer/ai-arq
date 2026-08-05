@@ -1134,37 +1134,9 @@
         <div id="lista-revisao"></div>
       </div>
 
-      <div id="tab-planilhas" class="tab-content hidden">
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Planilhas</h1>
-          <p class="text-gray-500 mt-1 text-sm">O quantitativo em XLSX de cada projeto.</p>
-        </div>
-        <div id="lista-planilhas"></div>
-      </div>
 
-      <div id="tab-cronogramas" class="tab-content hidden">
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Cronogramas</h1>
-          <p class="text-gray-500 mt-1 text-sm">Cronograma físico-financeiro montado a partir das quantidades.</p>
-        </div>
-        <div id="lista-cronogramas"></div>
-      </div>
 
-      <div id="tab-memoriais" class="tab-content hidden">
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Memoriais descritivos</h1>
-          <p class="text-gray-500 mt-1 text-sm">Rascunho gerado dos itens medidos. É um ponto de partida pra você editar — não um documento pronto pra assinar.</p>
-        </div>
-        <div id="lista-memoriais"></div>
-      </div>
 
-      <div id="tab-comparativos" class="tab-content hidden">
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Comparativos de fornecedores</h1>
-          <p class="text-gray-500 mt-1 text-sm">Quadro que cruza as cotações que você enviou com os itens do projeto.</p>
-        </div>
-        <div id="lista-comparativos"></div>
-      </div>
 
       <div id="tab-downloads" class="tab-content hidden">
         <div class="mb-6">
@@ -1348,10 +1320,6 @@
     'meus-pagamentos': 'Meus Pagamentos',
     'como-funciona': 'Como Funciona',
     'revisao': 'Esperando sua revisão',
-    'planilhas': 'Planilhas',
-    'cronogramas': 'Cronogramas',
-    'memoriais': 'Memoriais descritivos',
-    'comparativos': 'Comparativos de fornecedores',
     'downloads': 'Downloads',
   };
 
@@ -1419,7 +1387,15 @@
     // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     // Show target
-    const target = document.getElementById('tab-' + tabName);
+    let target = document.getElementById('tab-' + tabName);
+    if (!target) {
+      // 🚨 Sem esta rede, aba inexistente escondia TODAS e deixava o main EM
+      // BRANCO — sem erro no console, sem nada. As abas Planilhas/Cronogramas/
+      // Memoriais/Comparativos sairam em 04/08 (viraram o menu do projeto
+      // fixado), entao favorito antigo cai exatamente aqui.
+      tabName = 'home';
+      target = document.getElementById('tab-home');
+    }
     if (target) target.classList.remove('hidden');
 
     // Breadcrumb: mostra só quando NÃO é home
@@ -1457,10 +1433,6 @@
     if (tabName === 'home') loadHomeStats();
     // Telas agregadas — todas comem do mesmo cache de /api/meus-entregaveis.
     if (tabName === 'revisao') renderRevisaoAgregada();
-    if (tabName === 'planilhas') renderEntregaveis('planilha');
-    if (tabName === 'cronogramas') renderEntregaveis('cronograma');
-    if (tabName === 'memoriais') renderEntregaveis('memorial');
-    if (tabName === 'comparativos') renderEntregaveis('comparativo');
     if (tabName === 'downloads') renderDownloads();
   }
 
@@ -1574,47 +1546,6 @@
       '<div class="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center">'
       + '<p class="text-sm text-amber-900">Não consegui carregar agora. '
       + '<button onclick="' + recarregar + '" class="underline font-medium">Tentar de novo</button></p></div>';
-  }
-
-  async function renderEntregaveis(tipo) {
-    const cfg = ENTREGAVEIS_CFG[tipo];
-    const box = document.getElementById(cfg.alvo);
-    if (!box) return;
-    box.innerHTML = '<p class="text-sm text-gray-400 py-8 text-center">Carregando…</p>';
-    let projetos;
-    try { projetos = await carregarEntregaveis(); }
-    catch (_) { return _cartaoErro(cfg.alvo, 'renderEntregaveis(\'' + tipo + '\')'); }
-
-    const tem = projetos.filter(p => p.entregaveis[tipo] && p.entregaveis[tipo].disponivel);
-    if (!tem.length) { box.innerHTML = _cartaoVazio(cfg.vazio); return; }
-
-    tem.sort((a, b) => String(b.entregaveis[tipo].em || b.concluido_em || '')
-                       .localeCompare(String(a.entregaveis[tipo].em || a.concluido_em || '')));
-
-    box.innerHTML = '<div class="space-y-2">' + tem.map(p => {
-      const e = p.entregaveis[tipo];
-      const [url, nome] = cfg.arquivo(p.job_id);
-      const quando = _dataCurta(e.em || p.concluido_em);
-      // Projeto arquivado perdeu o arquivo no Storage (90 dias): oferecer o
-      // download daria 404. Melhor dizer a verdade do que entregar um erro.
-      const acoes = p.arquivado
-        ? '<span class="text-xs text-gray-400">arquivado — arquivo removido</span>'
-        : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\')"'
-          + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>'
-          + '<a href="' + cfg.abrir(p.job_id) + '" class="px-3 py-1.5 rounded-lg border hover:bg-gray-50 text-gray-700 text-xs font-medium no-underline">Abrir</a>';
-      // 🚨 Regra dura nº7: entregável que ficou pra trás do quantitativo TEM
-      // que avisar. Sem isso o cliente baixa um cronograma velho e manda pro
-      // cliente dele achando que está em dia.
-      const seloVelho = e.desatualizado
-        ? '<span class="pill-mini" style="background:#FEF3C7;color:#92400E" title="O quantitativo mudou depois que este arquivo foi gerado">desatualizado</span>' : '';
-      const selo = seloVelho + ((tipo === 'memorial' && !e.salvo)
-        ? '<span class="pill-mini" style="background:#F1F5F9;color:#475569">rascunho automático</span>' : '');
-      return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
-        + '<div style="min-width:0"><div class="flex items-center gap-2 flex-wrap">'
-        + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(p.nome) + '</span>' + selo + '</div>'
-        + '<p class="text-xs text-gray-500 mt-0.5">' + (quando ? cfg.rotulo + ' de ' + quando : cfg.rotulo) + '</p></div>'
-        + '<div class="flex items-center gap-2">' + acoes + '</div></div>';
-    }).join('') + '</div>';
   }
 
   async function renderDownloads() {

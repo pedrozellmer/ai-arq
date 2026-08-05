@@ -1544,6 +1544,22 @@ function mostrarErro(msg, session) {
 }
 
 // Alterna entre as 2 sub-tabs do bloco "Enviar planilhas" (Cotações × Revisada)
+// 04/08: o menu do projeto fixado tem uma entrada "Comparativo", e ela aponta
+// pra projeto.html?job_id=X#cotacoes. Sem alguém lendo o hash, o link levava o
+// cliente pra página certa e pra aba errada — parecia que o Comparativo não
+// existia. Roda depois do DOM porque o painel só existe aí.
+document.addEventListener('DOMContentLoaded', function () {
+  const h = (location.hash || '').replace(/^#/, '');
+  if (h === 'cotacoes' || h === 'revisada') {
+    // espera o próximo quadro: switchUploadTab depende do painel montado
+    setTimeout(function () {
+      try { switchUploadTab(h); } catch (_) {}
+      const alvo = document.getElementById('tab-btn-' + h);
+      if (alvo && alvo.scrollIntoView) alvo.scrollIntoView({ block: 'center' });
+    }, 0);
+  }
+});
+
 function switchUploadTab(name) {
   const tabs = ['cotacoes', 'revisada'];
   tabs.forEach(t => {

@@ -109,29 +109,61 @@
     engrenagem: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'
   };
 
-  var GRUPOS = [
-    { titulo: 'Trabalho', itens: [
-      { aba: 'home',           rotulo: 'Painel',          ic: 'painel' },
-      { aba: 'meus-projetos',  rotulo: 'Meus projetos',   ic: 'pasta' },
-      { aba: 'revisao',        rotulo: 'Revisão',         ic: 'revisao', selo: 'selo-revisao' }
-    ]},
-    { titulo: 'Entregáveis', itens: [
-      { aba: 'planilhas',      rotulo: 'Planilhas',       ic: 'planilha' },
-      { aba: 'cronogramas',    rotulo: 'Cronogramas',     ic: 'cronograma' },
-      { aba: 'memoriais',      rotulo: 'Memoriais',       ic: 'memorial' },
-      { aba: 'comparativos',   rotulo: 'Comparativos',    ic: 'comparativo' },
-      { aba: 'downloads',      rotulo: 'Downloads',       ic: 'download' }
+  // ── O projeto FIXADO ────────────────────────────────────────────────────
+  // 🔑 A fixação mora na URL (?job_id=), nunca guardada no navegador. Decisão
+  // do Pedro em 04/08: fechar a página e voltar depois abre o painel LIMPO.
+  // Guardado, um link de e-mail abriria mostrando o menu de OUTRO projeto —
+  // e o endereço deixaria de ser compartilhável.
+  var JOB = (function () {
+    try { return new URLSearchParams(location.search).get('job_id') || ''; }
+    catch (_) { return ''; }
+  })();
+  var FIXADO = !!JOB;
+
+  function url(pagina) { return pagina + '?job_id=' + encodeURIComponent(JOB); }
+
+  // Menu da CONTA — quando ninguém está fixado.
+  var GRUPOS_CONTA = [
+    { titulo: '', itens: [
+      { aba: 'home',            rotulo: 'Painel',          ic: 'painel' },
+      { aba: 'meus-projetos',   rotulo: 'Meus projetos',   ic: 'pasta' },
+      { aba: 'revisao',         rotulo: 'Revisão',         ic: 'revisao', selo: 'selo-revisao' },
+      { aba: 'downloads',       rotulo: 'Downloads',       ic: 'download' }
     ]},
     { titulo: 'Conta', itens: [
-      { aba: 'meu-cadastro',   rotulo: 'Meu cadastro',    ic: 'pessoa' },
-      { aba: 'cashback',       rotulo: 'Contribuições',   ic: 'presente' },
+      { aba: 'meu-cadastro',    rotulo: 'Meu cadastro',    ic: 'pessoa' },
+      { aba: 'cashback',        rotulo: 'Contribuições',   ic: 'presente' },
       { aba: 'meus-pagamentos', rotulo: 'Meus pagamentos', ic: 'cartao' }
     ]},
     { titulo: 'Ajuda', itens: [
-      { aba: 'como-funciona',  rotulo: 'Como funciona',   ic: 'duvida' },
-      { href: 'faq.html',      rotulo: 'Dúvidas frequentes', ic: 'duvida' }
+      { aba: 'como-funciona',   rotulo: 'Como funciona',   ic: 'duvida' },
+      { href: 'faq.html',       rotulo: 'Dúvidas frequentes', ic: 'duvida' }
     ]}
   ];
+
+  // Menu do PROJETO — os mesmos nomes, agora falando de UM projeto.
+  // As páginas já existem; o menu só aponta pra elas com o job_id.
+  function gruposProjeto() {
+    return [
+      { titulo: '', itens: [
+        { href: url('projeto.html'),    rotulo: 'Quantitativo', ic: 'planilha',    chave: 'quantitativo' },
+        { href: url('revisao.html'),    rotulo: 'Revisão',      ic: 'revisao',     chave: 'revisao' },
+        { href: url('cronograma.html'), rotulo: 'Cronograma',   ic: 'cronograma',  chave: 'cronograma' },
+        { href: url('memorial.html'),   rotulo: 'Memorial',     ic: 'memorial',    chave: 'memorial' },
+        // O comparativo é uma ABA dentro do projeto.html, não página própria.
+        { href: url('projeto.html') + '#cotacoes', rotulo: 'Comparativo', ic: 'comparativo', chave: 'comparativo' }
+      ]},
+      // 🚨 A conta continua alcançável com projeto fixado. Fixar um projeto não
+      // pode esconder o resto do sistema.
+      { titulo: 'Sua conta', itens: [
+        { aba: 'downloads',      rotulo: 'Downloads',       ic: 'download' },
+        { aba: 'meu-cadastro',   rotulo: 'Meu cadastro',    ic: 'pessoa' },
+        { href: 'faq.html',      rotulo: 'Dúvidas frequentes', ic: 'duvida' }
+      ]}
+    ];
+  }
+
+  var GRUPOS = FIXADO ? gruposProjeto() : GRUPOS_CONTA;
 
   // ── CSS próprio ─────────────────────────────────────────────────────────
   var CSS = [
@@ -171,6 +203,25 @@
     'border:0;cursor:pointer;width:calc(100% - 4px);text-decoration:none;font-family:inherit;',
     'box-shadow:0 6px 16px -6px rgba(79,70,229,.55)}',
     '.side-cta:hover{background:#4338CA}',
+    // ── projeto fixado ──
+    '.aiarq-sair-proj{display:flex;align-items:center;gap:7px;font-size:12px;color:#64748B;',
+    'text-decoration:none;padding:7px 9px;border-radius:8px;margin-bottom:10px}',
+    '.aiarq-sair-proj:hover{background:#F1F5F9;color:#334155}',
+    '.aiarq-sair-proj svg{width:15px;height:15px;flex:none}',
+    '.aiarq-fixado{background:linear-gradient(180deg,#F5F7FF,#fff);border:1.5px solid #4F46E5;',
+    'border-radius:11px;padding:10px 11px;margin:0 2px 14px}',
+    '.aiarq-fixado .tag{font-size:9.5px;font-weight:700;letter-spacing:.07em;',
+    'text-transform:uppercase;color:#4F46E5}',
+    '.aiarq-fixado b{display:block;font-size:13.5px;font-weight:700;margin-top:4px;',
+    'line-height:1.3;color:#0F172A}',
+    '.aiarq-fixado span#aiarq-proj-sub{font-size:11.5px;color:#64748B}',
+    // estado de cada entregavel, ao lado do item
+    '.side-est{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;',
+    'border-radius:99px;white-space:nowrap}',
+    '.side-est.ok{background:#ECFDF5;color:#059669}',
+    '.side-est.velho{background:#FEF3C7;color:#92400E}',
+    '.side-est.nao{background:#F1F5F9;color:#94A3B8}',
+    '.side-est.pend{background:#FEF3C7;color:#92400E}',
     '.aiarq-rodape{margin-top:auto;border-top:1px solid #E2E8F0;padding-top:12px}',
     '.aiarq-beta{background:#ECFDF5;border-radius:9px;padding:9px 11px}',
     '.aiarq-beta b{display:block;font-size:12px;color:#065F46}',
@@ -201,12 +252,18 @@
   function montarItens() {
     var out = '';
     GRUPOS.forEach(function (g) {
-      out += '<div class="side-grp"><p class="side-grp-t">' + g.titulo + '</p>';
+      out += '<div class="side-grp">'
+           + (g.titulo ? '<p class="side-grp-t">' + g.titulo + '</p>' : '');
       g.itens.forEach(function (it) {
         var selo = it.selo
           ? '<span id="' + it.selo + '" class="side-badge" style="display:none"></span>' : '';
+        // No menu do projeto cada item carrega o ESTADO do entregável, e é isso
+        // que faz a regra nº7 virar navegação: dá pra ver o que está velho
+        // antes de clicar. Preenchido depois, quando os dados chegam.
+        if (it.chave) selo = '<span class="side-est" data-est="' + it.chave + '"></span>';
         if (it.href) {
-          out += '<a class="side-it" href="' + it.href + '" data-arq="' + it.href + '">'
+          out += '<a class="side-it" href="' + it.href + '" data-arq="' + it.href + '"'
+               + (it.chave ? ' data-chave="' + it.chave + '"' : '') + '>'
                + svg(it.ic) + it.rotulo + selo + '</a>';
         } else {
           // Sempre <a>: o link e o comportamento base e funciona sem JS. Se a
@@ -240,9 +297,20 @@
       + '<button id="aiarq-fechar" aria-label="Fechar menu">'
       + '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>'
       + '</button></div>'
-      + '<a class="side-cta" href="dashboard.html#novo-projeto" data-tab="novo-projeto">'
-      + '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
-      + 'Novo projeto</a>'
+      + (FIXADO
+          // 🚨 A SAÍDA VEM PRIMEIRO, não escondida no fim. Cliente preso dentro
+          // de um projeto sem achar como voltar é pior que o problema que isto
+          // resolve.
+          ? '<a class="aiarq-sair-proj" href="dashboard.html#meus-projetos">'
+            + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
+            + 'Todos os projetos</a>'
+            + '<div class="aiarq-fixado">'
+            + '<span class="tag">📌 Trabalhando em</span>'
+            + '<b id="aiarq-proj-nome">Carregando…</b>'
+            + '<span id="aiarq-proj-sub"></span></div>'
+          : '<a class="side-cta" href="dashboard.html#novo-projeto" data-tab="novo-projeto">'
+            + '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+            + 'Novo projeto</a>')
       + montarItens()
       + '<div class="side-grp">'
       + '<a id="btn-admin" class="side-it hidden" href="admin.html" style="color:#DC2626">'
@@ -334,10 +402,18 @@
       ? ((location.hash || '#home').replace(/^#/, '') || 'home')
       : null);
     var itens = document.querySelectorAll('#aiarq-side .side-it');
+    var hash = (location.hash || '').replace(/^#/, '');
     for (var i = 0; i < itens.length; i++) {
       var e = itens[i];
       var porAba = alvo && e.getAttribute('data-tab') === alvo;
-      var porArq = e.getAttribute('data-arq') === ARQ;
+      // 🪤 No menu do projeto o data-arq carrega a query
+      // (projeto.html?job_id=...), então comparar com o nome do arquivo cru
+      // nunca casaria e NENHUM item acenderia. Compara só o arquivo — e o
+      // hash desempata Quantitativo × Comparativo, que moram na mesma página.
+      var dArq = e.getAttribute('data-arq') || '';
+      var arqDoItem = dArq.split('?')[0].split('#')[0];
+      var hashDoItem = dArq.indexOf('#') > -1 ? dArq.split('#')[1] : '';
+      var porArq = arqDoItem === ARQ && (hashDoItem ? hashDoItem === hash : !hash || !dArq);
       e.classList.toggle('on', !!(porAba || porArq));
     }
   }
@@ -383,7 +459,8 @@
     });
   }
 
-  // Contador de "esperando revisão". Acessório: falhou, não mostra nada.
+  // Uma chamada só alimenta o contador do menu da conta E o bloco do projeto
+  // fixado com o estado de cada entregável. Acessório: falhou, não mostra nada.
   function atualizarSelo() {
     var base = window.API_BASE;
     if (!base || !window.authFetch) return;
@@ -391,13 +468,55 @@
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {
         if (!d) return;
-        var n = (d.projetos || []).filter(function (p) {
-          return !p.arquivado && p.a_revisar > 0;
-        }).length;
+        var lista = d.projetos || [];
+
+        // contador global (menu da conta)
         var el = document.getElementById('selo-revisao');
-        if (!el) return;
-        if (n > 0) { el.textContent = n; el.style.display = ''; }
-        else { el.style.display = 'none'; }
+        if (el) {
+          var n = lista.filter(function (p) {
+            return !p.arquivado && p.a_revisar > 0;
+          }).length;
+          if (n > 0) { el.textContent = n; el.style.display = ''; }
+          else { el.style.display = 'none'; }
+        }
+
+        if (!FIXADO) return;
+        var p = null;
+        for (var i = 0; i < lista.length; i++) {
+          if (lista[i].job_id === JOB) { p = lista[i]; break; }
+        }
+        if (!p) {
+          // O projeto da URL não é deste usuário (ou não existe). Não invente
+          // nome: diga o que se sabe e deixe a saída à mão.
+          var nx = document.getElementById('aiarq-proj-nome');
+          if (nx) nx.textContent = 'Projeto não encontrado';
+          return;
+        }
+        var nm = document.getElementById('aiarq-proj-nome');
+        if (nm) nm.textContent = p.nome;
+        var sb = document.getElementById('aiarq-proj-sub');
+        if (sb) {
+          sb.textContent = [p.tipologia, (p.itens || 0) + ' itens']
+            .filter(Boolean).join(' · ');
+        }
+
+        // estado de cada entregável ao lado do item
+        function pinta(chave, texto, classe) {
+          var e = document.querySelector('.side-est[data-est="' + chave + '"]');
+          if (!e) return;
+          e.textContent = texto;
+          e.className = 'side-est ' + classe;
+        }
+        var ent = p.entregaveis || {};
+        pinta('quantitativo', p.medido + ' medidos', p.medido > 0 ? 'ok' : 'nao');
+        if (p.a_revisar > 0) pinta('revisao', String(p.a_revisar), 'pend');
+        else pinta('revisao', 'ok', 'ok');
+        ['cronograma', 'memorial', 'comparativo'].forEach(function (k) {
+          var e = ent[k] || {};
+          if (!e.disponivel) pinta(k, '—', 'nao');
+          else if (e.desatualizado) pinta(k, 'velho', 'velho');
+          else pinta(k, 'ok', 'ok');
+        });
       })
       .catch(function () {});
   }
