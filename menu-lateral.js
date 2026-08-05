@@ -467,7 +467,13 @@
       // navegador funcionando (há um listener de hashchange na página).
       try { history.pushState(null, '', '#' + h); } catch (_) {}
       window.mostrarVista(h);
-      fecharMenuLateral();
+      // 🪤 `fechar()`, NÃO `fecharMenuLateral()`. A função do componente chama-se
+      // fechar; fecharMenuLateral só existe como global no dashboard.html. Aqui
+      // dentro, o nome errado resolvia pro global NO DASHBOARD (funcionava por
+      // acidente) e estourava ReferenceError em projeto.html — onde este
+      // handler é justamente o que mais roda. No celular a gaveta ficava aberta
+      // cobrindo a tela depois de escolher a vista.
+      fechar();
     });
 
     side.addEventListener('click', function (ev) {
