@@ -444,7 +444,10 @@
 
     var scrim = document.createElement('div');
     scrim.id = 'aiarq-scrim';
-    scrim.addEventListener('click', fechar);
+    scrim.addEventListener('click', function (ev) {
+      if (_fantasma(ev)) return;      // clique tardio do toque que ABRIU
+      fechar();
+    });
 
     var side = document.createElement('aside');
     side.id = 'aiarq-side';
@@ -488,13 +491,18 @@
     document.body.appendChild(scrim);
     document.body.appendChild(side);
 
-    side.querySelector('#aiarq-fechar').addEventListener('click', fechar);
+    side.querySelector('#aiarq-fechar').addEventListener('click', function (ev) {
+      if (_fantasma(ev)) return;
+      fechar();
+    });
     // Troca de VISTA dentro da própria página, sem recarregar. É o que faz a
     // navegação entre as partes do projeto ser instantânea — e o menu nem
     // pisca, porque a página nunca é descartada.
     side.addEventListener('click', function (ev) {
       var link = ev.target.closest('a[data-arq]');
       if (!link) return;
+      // 🚨 Fantasma aqui é pior que fechar: NAVEGA pra outra página.
+      if (_fantasma(ev)) return;
       var dArq = link.getAttribute('data-arq') || '';
       var arq = dArq.split('?')[0].split('#')[0];
       if (arq !== ARQ) return;                       // outra página: deixa navegar
@@ -544,7 +552,19 @@
     b.setAttribute('aria-expanded', 'false');
     b.setAttribute('aria-controls', 'aiarq-side');
     b.innerHTML = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
-    b.addEventListener('click', abrir);
+    // Alterna: com o menu aberto, tocar no ☰ fecha — é o que a própria
+    // aria-label já prometia (ela vira 'Fechar menu' ao abrir).
+    b.addEventListener('click', function (ev) {
+      var s0 = document.getElementById('aiarq-side');
+      if (s0 && s0.classList.contains('aberto')) {
+        if (_fantasma(ev)) return;
+        fechar();
+      } else {
+        abrir();
+      }
+    });
+    // Sem isto o navegador pode segurar o clique esperando um duplo-toque.
+    b.style.touchAction = 'manipulation';
     var casa = document.querySelector('header > div, nav > div');
     if (casa) {
       // 🪤 Entrar como PRIMEIRO FILHO de um flex justify-between faz o botão
@@ -588,6 +608,27 @@
     }
   }
 
+
+  // ══════════════════════════════════════════════════════════════════════
+  //  TRAVA ANTI-CLIQUE-FANTASMA
+  // ══════════════════════════════════════════════════════════════════════
+  // 🪤 No celular, o ☰ fica no canto superior ESQUERDO e a gaveta desliza da
+  // esquerda cobrindo exatamente aquele ponto. Qualquer evento tardio do mesmo
+  // toque (clique de compatibilidade despachado depois do touchend, clique
+  // duplicado, ou o clique chegando depois da transição de 280ms) é entregue a
+  // quem estiver NAQUELE PONTO — que agora é a gaveta, um item dela, ou o véu.
+  // Todos esses têm fechador ligado, então o menu abria e fechava sozinho no
+  // primeiro toque (relatado pelo Pedro em 05/08).
+  // Pior que fechar: clique fantasma em item de outra página NAVEGA.
+  // Por 400ms depois de abrir, nenhum clique fecha nem navega. Toque
+  // deliberado nunca vem tão rápido depois do toque que abriu; fantasma sempre.
+  var _abertoEm = 0;
+  function _fantasma(ev) {
+    if (Date.now() - _abertoEm >= 400) return false;
+    if (ev) { try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {} }
+    return true;
+  }
+
   // ── Abrir / fechar ──────────────────────────────────────────────────────
   var ehDesktop = function () { return window.matchMedia('(min-width: 1024px)').matches; };
 
@@ -608,6 +649,7 @@
     var c = document.getElementById('aiarq-scrim');
     if (s) s.classList.add('aberto');
     if (c) c.classList.add('aberto');
+    _abertoEm = Date.now();
     document.body.style.overflow = 'hidden';
     sincronizarInerte();
     // Guarda de onde o foco veio, pra devolver ao fechar. Sem isso o foco
