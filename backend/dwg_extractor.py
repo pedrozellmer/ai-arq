@@ -96,6 +96,11 @@ class WallSegment:
     length: float  # in meters
     start: tuple = (0, 0)
     end: tuple = (0, 0)
+    # ARC/CIRCLE: `length` é o comprimento do ARCO, mas start/end são as pontas
+    # da CORDA. Quem faz geometria com start/end precisa saber disso — sem a
+    # marca, o pareamento de faces de duto tratava curva como reta e o aviso
+    # de "curva ficou de fora" nunca disparava.
+    curvo: bool = False
 
 
 @dataclass
@@ -376,29 +381,40 @@ _DUTO_MIN_SEG = 0.25     # m: trecho menor é legenda/símbolo, não rede
 _DUTO_MAX_SEG_LAYER = 3000   # teto anti-O(n²) por layer
 
 
-def _corrigir_duto_linha_dupla(walls):
+def _corrigir_duto_linha_dupla(walls, unit_factor: float = 1.0):
     """Troca a soma das duas faces pelo comprimento do EIXO, em layer de duto.
 
-    Devolve (walls_corrigidos, relatorio). Sem par encontrado, devolve a lista
-    original — na dúvida, não mexe.
+    Devolve (walls_corrigidos, relato_eixo, ressalva_hachura).
+    Sem par encontrado, devolve a lista original — na dúvida, não mexe.
+
+    🪤 As coordenadas de `start`/`end` são CRUAS (unidade do desenho), mas
+    `length` já vem em METRO (bruto × unit_factor). Misturar as duas escalas na
+    mesma conta foi o defeito da 1ª versão: a separação entre as faces saía
+    dividida pelo fator ao quadrado, então em desenho de milímetro dava 600.000
+    e NADA pareava. O conserto era inerte em quase todo DXF real — funcionou no
+    arquivo de 04/08 só porque aquele estava em metro. Agora toda a geometria é
+    feita em unidade bruta e só o resultado vira metro.
     """
     if not walls:
-        return walls, ""
+        return walls, "", ""
     try:
         from collections import defaultdict as _dd
+        uf = float(unit_factor) if unit_factor else 1.0
         por_layer = _dd(list)
         for i, w in enumerate(walls):
             if _RE_DUTO_DUPLO.search(str(getattr(w, "layer", "") or "")):
                 por_layer[w.layer].append(i)
         if not por_layer:
-            return walls, ""
+            return walls, "", ""
 
-        def _ang(w):
-            (x1, y1), (x2, y2) = w.start, w.end
-            return math.degrees(math.atan2(y2 - y1, x2 - x1)) % 180.0
+        def _geo(w):
+            """(ax, ay, dx, dy, comprimento_bruto) — tudo na unidade do desenho."""
+            (ax, ay), (bx, by) = w.start, w.end
+            dx, dy = bx - ax, by - ay
+            return ax, ay, dx, dy, math.hypot(dx, dy)
 
         descartar = set()
-        relato = []
+        relato, ressalva = [], []
         for layer, idxs in por_layer.items():
             # 🪤 Só pareia segmento com geometria de verdade. O caminho que mede
             # dentro de bloco grava start/end zerados — pareá-los casaria tudo
@@ -414,22 +430,47 @@ def _corrigir_duto_linha_dupla(walls):
             for pos, i in enumerate(uteis):
                 if i in usados:
                     continue
-                a = walls[i]
-                melhor, melhor_d = None, None
+                ax, ay, adx, ady, alen = _geo(walls[i])
+                if alen <= 0:
+                    continue
+                ux, uy = adx / alen, ady / alen          # direção unitária de A
+                melhor, melhor_sobrep = None, 0.0
                 for j in uteis[pos + 1:]:
                     if j in usados:
                         continue
-                    b = walls[j]
-                    d_ang = abs(_ang(a) - _ang(b))
+                    bx0, by0, bdx, bdy, blen = _geo(walls[j])
+                    if blen <= 0:
+                        continue
+                    # mesma direção?
+                    d_ang = abs(math.degrees(math.atan2(ady, adx)) % 180.0
+                                - math.degrees(math.atan2(bdy, bdx)) % 180.0)
                     if min(d_ang, 180.0 - d_ang) > _DUTO_ANG_TOL:
                         continue
-                    if abs(a.length - b.length) > max(0.4, 0.3 * a.length):
+                    if abs(walls[i].length - walls[j].length) > max(0.4, 0.3 * walls[i].length):
                         continue
-                    (ax, ay), (bx, by) = a.start, a.end
-                    (cx, cy) = b.start
-                    sep = abs((bx - ax) * (ay - cy) - (ax - cx) * (by - ay)) / max(a.length, 1e-9)
-                    if _DUTO_SEP_MIN < sep < _DUTO_SEP_MAX and (melhor_d is None or sep < melhor_d):
-                        melhor, melhor_d = j, sep
+                    # separação perpendicular, em METRO
+                    sep = abs(adx * (ay - by0) - (ax - bx0) * ady) / alen * uf
+                    if not (_DUTO_SEP_MIN < sep < _DUTO_SEP_MAX):
+                        continue
+                    # 🚨 SOBREPOSIÇÃO ao longo da direção. Sem isso, dois trechos
+                    # paralelos que nem se olham (um ramal 60cm ao lado de outro
+                    # tronco) viravam "par" e um deles era jogado fora. Pior: o
+                    # eixo tracejado desenhado no MESMO layer, por estar mais
+                    # perto, ganhava do outro lado do duto — as duas faces
+                    # ficavam de pé, o dobro continuava, e o relato ainda
+                    # anunciava um conserto que não aconteceu.
+                    t0 = 0.0
+                    t1 = alen
+                    s0 = (bx0 - ax) * ux + (by0 - ay) * uy
+                    s1 = (bx0 + bdx - ax) * ux + (by0 + bdy - ay) * uy
+                    if s0 > s1:
+                        s0, s1 = s1, s0
+                    sobrep = min(t1, s1) - max(t0, s0)
+                    if sobrep < 0.5 * min(alen, blen):
+                        continue
+                    # prefere quem mais se sobrepõe, não quem está mais perto
+                    if sobrep > melhor_sobrep:
+                        melhor, melhor_sobrep = j, sobrep
                 if melhor is not None:
                     usados.add(i)
                     usados.add(melhor)
@@ -446,6 +487,8 @@ def _corrigir_duto_linha_dupla(walls):
         # 169 m eram o padrão gráfico que preenche o duto, não o trecho. Somar
         # isso e chamar de comprimento é inventar número (regra nº1), então o
         # certo é avisar em vez de entregar um total com cara de medição.
+        # Vai numa chave SEPARADA porque é RESSALVA, não conserto: quem lê
+        # rebaixa a procedência do desenho inteiro. O relato de eixo, não.
         for layer, idxs in por_layer.items():
             tot = sum(walls[i].length for i in idxs)
             if tot <= 0:
@@ -453,19 +496,36 @@ def _corrigir_duto_linha_dupla(walls):
             micro = sum(walls[i].length for i in idxs
                         if getattr(walls[i], "length", 0) < _DUTO_MIN_SEG)
             if micro / tot > 0.60:
-                relato.append(
+                ressalva.append(
                     f"{layer}: {micro / tot * 100:.0f}% do comprimento está em "
                     f"segmentos < {_DUTO_MIN_SEG:.2f} m — isso é hachura/padrão "
                     f"gráfico, não trecho de rede; total NÃO confiável")
 
+        # 🚨 ARCO fica FORA do pareamento e isso desequilibra o total: o trecho
+        # reto vira eixo (cai pela metade) enquanto o cotovelo continua contando
+        # as duas faces. Numa rede com muitas curvas o resultado SUPERESTIMA, e
+        # o cliente não tem como saber. Enquanto não parear arco por
+        # concentricidade, no mínimo ele fica sabendo.
+        for layer, idxs in por_layer.items():
+            if not any(k in descartar for k in idxs):
+                continue
+            arcos = sum(walls[i].length for i in idxs
+                        if getattr(walls[i], "curvo", False))
+            if arcos > 0:
+                ressalva.append(
+                    f"{layer}: {arcos:.1f}m em curva (ARC) ficaram FORA do "
+                    f"pareamento — nessas o duto ainda conta as duas faces")
+
+        rel_eixo = " | ".join(relato)
+        rel_ressalva = " | ".join(ressalva)
         if not descartar:
-            return walls, (" | ".join(relato) if relato else "")
+            return walls, rel_eixo, rel_ressalva
         novos = [w for i, w in enumerate(walls) if i not in descartar]
-        logger.warning("[duto-linha-dupla] %s", " | ".join(relato))
-        return novos, " | ".join(relato)
+        logger.warning("[duto-linha-dupla] %s %s", rel_eixo, rel_ressalva)
+        return novos, rel_eixo, rel_ressalva
     except Exception as e:
         logger.warning("[duto-linha-dupla] falhou, mantendo medição original: %s", e)
-        return walls, ""
+        return walls, "", ""
 
 
 def _detect_unit_factor(doc) -> float:
@@ -1801,6 +1861,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     length=length,
                     start=(c.x + r * math.cos(start_angle), c.y + r * math.sin(start_angle)),
                     end=(c.x + r * math.cos(end_angle), c.y + r * math.sin(end_angle)),
+                    curvo=True,
                 ))
         except Exception:
             continue
@@ -2149,9 +2210,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         metadata["unidade_suspeita"] = " | ".join(unit_warnings)
 
     # Duto desenhado pelas DUAS FACES: mede o eixo, não a soma das paralelas.
-    walls, _rel_duto = _corrigir_duto_linha_dupla(walls)
+    # 🪤 unit_factor é OBRIGATÓRIO aqui: start/end são coordenadas cruas e
+    # length já está em metro. Sem o fator, a separação entre as faces sai
+    # errada por ordens de grandeza e nada pareia em desenho de milímetro.
+    walls, _rel_duto, _ress_duto = _corrigir_duto_linha_dupla(walls, unit_factor)
     if _rel_duto:
         metadata["duto_linha_dupla"] = _rel_duto
+    # Chave SEPARADA e com leitor: entra em extraction_has_quality_caveat, que
+    # rebaixa o desenho todo pra estimado. A de cima é informativa; esta é
+    # ressalva de qualidade — sem leitor, o aviso morria no log e o número
+    # saía carimbado como MEDIDO (regra dura nº1).
+    if _ress_duto:
+        metadata["duto_medicao_suspeita"] = _ress_duto
 
     return DXFExtraction(
         filename=os.path.basename(filepath),

@@ -137,6 +137,12 @@ def extraction_has_quality_caveat(metadata) -> bool:
         or metadata.get("unidade_suspeita")
         or metadata.get("alerta_unidade")
         or metadata.get("xref_nao_resolvido")
+        # 04/08: layer de duto que é HACHURA (o comprimento todo em
+        # micro-segmento), ou curva de duto que ficou fora do pareamento e
+        # ainda conta as duas faces. Nos dois casos o número existe, parece
+        # medição e NÃO é. Sem entrar aqui, o aviso morria no log e o item
+        # saía branco na planilha. Ver _corrigir_duto_linha_dupla.
+        or metadata.get("duto_medicao_suspeita")
     )
 
 
