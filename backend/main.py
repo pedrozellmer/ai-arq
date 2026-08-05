@@ -6290,12 +6290,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     continue
                 if "quantity" in _fix and _cita.get(round(_fix["quantity"], 2), 0) > 1:
                     _n_ambiguo += 1
-                    _it.observations = ((_it.observations + " | ") if _it.observations
-                                        else "") + (
-                        "⚠ MEDIÇÃO COMPARTILHADA: o motor mediu este layer, mas o "
-                        "mesmo total serve a mais de um item desta planilha — "
-                        "dividir por conta própria daria número errado. Informe "
-                        "quanto cabe a esta linha na revisão.")
+                    # 🚨 NA FRENTE, não no fim. Medido em 05/08: revisao.html
+                    # mostra só os 110 primeiros caracteres da observação (o
+                    # resto fica no hover, que não existe no celular) e o
+                    # insert corta em 1000. 92,8% das linhas zeradas passam de
+                    # 110 — colado no fim, este aviso nunca foi lido por
+                    # ninguém. Mesma família do texto cortado em 500 chars que
+                    # nunca chegou a um cliente.
+                    _it.observations = (
+                        "⚠ MEDIÇÃO COMPARTILHADA: o mesmo total do layer serve a "
+                        "mais de um item — informe quanto cabe a esta linha."
+                        + ((" | " + _it.observations) if _it.observations else ""))
                     continue
                 if "quantity" in _fix:
                     _it.quantity = _fix["quantity"]
@@ -6306,8 +6311,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _it.unit = _fix["unit"]
                 if _fix.get("confidence") == "estimado":
                     _it.confidence = _Conf2.ESTIMADO
-                _it.observations = ((_it.observations + " | ") if _it.observations
-                                    else "") + _fix["motivo"]
+                # 🚨 NA FRENTE (ver comentário acima): o motivo diz que a
+                # quantidade foi RECUPERADA de texto, e é a coisa mais
+                # importante da linha pro cliente decidir se confia.
+                _it.observations = (_fix["motivo"]
+                                    + ((" | " + _it.observations) if _it.observations else ""))
             print(f"[comprimento] job={job_id}: {_n_uni} unidade(s) corrigida(s), "
                   f"{_n_rec} quantidade(s) recuperada(s), {_n_ambiguo} deixada(s) "
                   f"em branco por medição compartilhada")

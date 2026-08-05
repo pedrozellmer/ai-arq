@@ -431,7 +431,49 @@ def count_pillars(extraction) -> dict | None:
     Nomes P1/P2... vêm de TEXTOs próximos ao centro do retângulo (só rótulo —
     a QUANTIDADE é sempre a contagem geométrica). Retorna None se nada achou."""
     rects = list(getattr(extraction, "struct_rects", None) or [])
+    _rects_todos = rects
     rects = [r for r in rects if layer_is_pilar(getattr(r, "layer", ""))]
+
+    # 🪤 DESENHO QUE NUMERA OS LAYERS (Isabelle, 05/08/2026). A planta de fôrma
+    # de um prédio de 7 pavimentos entregou 1 item medido porque os layers dela
+    # se chamam '02', '4', '5', '100' — layer_is_pilar não casa com nada e a
+    # geometria inteira era descartada aqui em cima, antes de qualquer medição.
+    # Numerar layer é convenção comum em estrutural; não é defeito do desenho.
+    #
+    # Quando NENHUM retângulo passa pelo nome do layer, o RÓTULO vira o filtro:
+    # retângulo com um texto "P12" DENTRO dele é pilar. O mecanismo de rótulo já
+    # existia logo abaixo (labels por proximidade) — só rodava tarde demais.
+    #
+    # 🔒 Critério apertado de propósito: o texto tem que cair DENTRO do
+    # retângulo, não "perto". Porta, mobiliário e moldura não têm P12 no meio.
+    rotulo_foi_o_filtro = False
+    if not rects and _rects_todos:
+        _txts = []
+        for _t in (getattr(extraction, "texts", None) or []):
+            _s = (getattr(_t, "text", "") or "").strip()
+            _p = getattr(_t, "position", None)
+            if _p and _PNAME_RE.match(_s):
+                _txts.append((_s, _p))
+        if _txts:
+            _achados = []
+            for _r in _rects_todos:
+                # 🔒 Sanidade de seção. Sem isso, QUADRO DE ESQUADRIAS vira
+                # pilar: as células dele são retângulos com "P1", "P2" escritos
+                # dentro, exatamente o padrão que este atalho procura. Pilar de
+                # concreto tem lado entre 10 cm e 2,5 m — célula de tabela e
+                # moldura de prancha caem fora.
+                _menor, _maior = sorted((_r.w_m, _r.h_m))
+                if not (0.10 <= _menor <= 2.50 and _maior <= 3.00):
+                    continue
+                _hw, _hh = _r.w_raw / 2.0, _r.h_raw / 2.0
+                for _s, _p in _txts:
+                    if abs(_p[0] - _r.cx) <= _hw and abs(_p[1] - _r.cy) <= _hh:
+                        _achados.append(_r)
+                        break
+            # 2 é o mínimo pra não transformar um acaso em medição.
+            if len(_achados) >= 2:
+                rects = _achados
+                rotulo_foi_o_filtro = True
 
     # dedupe por centro: contorno duplo/repetido do mesmo pilar conta 1
     kept: list = []
@@ -504,6 +546,10 @@ def count_pillars(extraction) -> dict | None:
         "layers": sorted({r.layer for r in kept}),
         "por_secao": sorted(por_secao.values(), key=lambda d: -d["qtd"]),
         "blocos": blocos,
+        # Quem monta o texto pro modelo precisa saber que a identificação veio
+        # do rótulo, não do nome do layer — a contagem é geométrica igual, mas
+        # a procedência muda e o cliente tem direito de saber.
+        "por_rotulo": rotulo_foi_o_filtro,
     }
 
 

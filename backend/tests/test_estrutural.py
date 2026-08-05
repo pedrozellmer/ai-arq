@@ -265,5 +265,41 @@ check("prompt de arquitetura SEM seção estrutural",
       "MEDIÇÕES ESTRUTURAIS" not in prompt2)
 
 print()
+
+# ══════════════════════════════════════════════════════════════════════
+#  DESENHO QUE NUMERA OS LAYERS (Isabelle, 05/08/2026)
+# ══════════════════════════════════════════════════════════════════════
+# A planta de fôrma de um prédio de 7 pavimentos entregou 1 item medido: os
+# layers dela se chamam '02', '4', '5', '100' e layer_is_pilar não casa com
+# nada, então a geometria era descartada antes de qualquer medição.
+# Quando nenhum layer tem significado, o RÓTULO vira o filtro.
+_n1 = StructRect(layer="4", w_m=0.19, h_m=0.40, w_raw=190, h_raw=400, cx=0, cy=0)
+_n2 = StructRect(layer="4", w_m=0.19, h_m=0.40, w_raw=190, h_raw=400, cx=3000, cy=0)
+_n3 = StructRect(layer="4", w_m=0.25, h_m=0.25, w_raw=250, h_raw=250, cx=6000, cy=0)
+_rot = count_pillars(NS(struct_rects=[_n1, _n2, _n3],
+                        texts=[T("P10", 0, 0), T("P11", 3000, 0), T("P12", 6000, 0)],
+                        blocks=[]))
+check("layer numerado: conta pelos rotulos", _rot and _rot["total"] == 3)
+check("layer numerado: marca procedencia", _rot and _rot.get("por_rotulo") is True)
+
+# 🔒 O atalho NAO pode disparar quando o layer JA tem significado — ali quem
+# manda e o nome, e rotulo solto nao entra.
+_ok = count_pillars(NS(struct_rects=[StructRect("EST-PILAR", 0.19, 0.40, 190, 400, 0, 0),
+                                     StructRect("EST-PILAR", 0.19, 0.40, 190, 400, 3000, 0)],
+                       texts=[T("P1", 0, 0)], blocks=[]))
+check("layer com significado: nao usa o atalho", _ok and _ok.get("por_rotulo") is False)
+
+# 🔒 QUADRO DE ESQUADRIAS: celulas retangulares com P1/P2 dentro. E exatamente
+# o padrao que o atalho procura — a sanidade de secao tem que barrar.
+_cel = [StructRect(layer="3", w_m=6.0, h_m=1.2, w_raw=6000, h_raw=1200, cx=0, cy=0),
+        StructRect(layer="3", w_m=6.0, h_m=1.2, w_raw=6000, h_raw=1200, cx=0, cy=1500)]
+check("quadro de esquadrias NAO vira pilar",
+      count_pillars(NS(struct_rects=_cel,
+                       texts=[T("P1", 0, 0), T("P2", 0, 1500)], blocks=[])) is None)
+
+# 🔒 Um retangulo rotulado sozinho e acaso, nao medicao.
+check("um rotulo so nao basta",
+      count_pillars(NS(struct_rects=[_n1], texts=[T("P10", 0, 0)], blocks=[])) is None)
+
 print(f"RESULTADO: {_passed} ok, {_failed} falhas")
 sys.exit(1 if _failed else 0)
