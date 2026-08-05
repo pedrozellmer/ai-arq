@@ -2457,7 +2457,15 @@ function renderMetrics(p, items) {
   // nº de ITENS como se fosse arquivos). Só usa files_count do backend se não der pra derivar.
   const _files = collectCadFiles(items);
   document.getElementById('m-files').textContent = _files.size || p.files_count || '--';
-  document.getElementById('m-items').textContent = p.items_count || items.length || '--';
+  // 🪤 `p.items_count` é contador GUARDADO e mente: 12 projetos concluídos
+  // dizem ter item e têm ZERO linha em project_items (conferido 05/08). Vinha
+  // PRIMEIRO no ||, então ganhava da contagem real e a mesma tela mostrava
+  // "144 itens" no topo enquanto o menu, já corrigido, dizia "0 itens".
+  // A verdade é o que carregou: se `items` é lista, o número dela manda —
+  // inclusive quando é 0, que é uma resposta, não uma ausência.
+  const _nItensTxt = Array.isArray(items) ? String(items.length)
+                   : (p.items_count ? String(p.items_count) : '--');
+  document.getElementById('m-items').textContent = _nItensTxt;
 
   // Guarda valores pra o modal de edição (project_name, typology, address, phase)
   // O modal lê window.__projTypologyRaw/Address/Phase pra pré-preencher.
@@ -2476,7 +2484,7 @@ function renderMetrics(p, items) {
   // sem dado mostra "--", nunca inventa. "% medido" = o número do Raio-X
   // (confidence 'confirmado', direto do CAD) — estimado NUNCA conta como medido.
   const setKpi = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  setKpi('kpi-itens', String(p.items_count || items.length || '--'));
+  setKpi('kpi-itens', _nItensTxt);          // mesma verdade do bloco acima
   setKpi('kpi-medido', _total > 0 ? `${Math.round((_medido / _total) * 100)}%` : '--');
   setKpi('kpi-arquivos', String(_files.size || p.files_count || '--'));
 

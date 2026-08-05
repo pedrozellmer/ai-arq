@@ -785,9 +785,16 @@
         if (p.status !== 'done' || !(p.itens > 0)) pinta('revisao', '—', 'nao');
         else if (p.a_revisar > 0) pinta('revisao', String(p.a_revisar), 'pend');
         else pinta('revisao', 'ok', 'ok');
+        // 🚨 Os três saem do MESMO quantitativo (regra dura nº7). Sem item não
+        // existe nada pra descrever, ordenar no tempo nem cotar — e "ok" aqui
+        // é verde, a mesma cor que este arquivo usa três linhas acima pra
+        // dizer "está conferido". Num projeto concluído com ZERO item o
+        // Memorial vinha `disponivel` (o backend gera sob demanda) e pintava
+        // verde: conferido em 05/08, na tela.
+        var temQuantitativo = (p.status === 'done') && (p.itens > 0);
         ['cronograma', 'memorial', 'comparativo'].forEach(function (k) {
           var e = ent[k] || {};
-          if (!e.disponivel) pinta(k, '—', 'nao');
+          if (!temQuantitativo || !e.disponivel) pinta(k, '—', 'nao');
           else if (e.desatualizado) pinta(k, 'velho', 'velho');
           else pinta(k, 'ok', 'ok');
         });
