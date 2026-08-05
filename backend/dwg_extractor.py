@@ -828,6 +828,180 @@ def _dim_effective_dimlfac(doc, dim) -> float:
     return lf if lf > 0 else 1.0
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  UNIDADE PELO DIMLFAC — quando o cabeçalho mente e não há cota digitada
+# ══════════════════════════════════════════════════════════════════════
+# Caso Isabelle (05/08/2026): DXF declara $INSUNITS=4 (mm) e está em METRO.
+# Os 36 pilares somem no filtro de seção porque viram 0,34 mm. O validador por
+# COTAS não salva: exige ≥3 cotas DIGITADAS à mão e o arquivo tem ZERO.
+#
+# O DIMLFAC não depende de escala — ele converte UNIDADE (a escala mora no
+# DIMSCALE, botão separado). Identidade:
+#       unidade_do_desenho = DIMLFAC × unidade_exibida_na_cota
+#
+# 🔒 POR QUE É SEGURO CONTRA O ERRO DE 1000×: desenho honesto em milímetro,
+# cotado em milímetro, tem DIMLFAC = 1 OBRIGATORIAMENTE, por mais ampliado que
+# esteja. A regra se abstém nele por CONSTRUÇÃO (passo 5), não por sorte — foi
+# assim que ela sobreviveu ao contraexemplo do cético (rodapé em mm ampliado).
+#
+# 🪤 Ler o $DIMLFAC do CABEÇALHO não serve: nos 7 contraexemplos ele deu 100
+# em todos, enquanto o valor EFETIVO por cota (override → estilo → 1) era 1 em
+# três deles. Sempre o efetivo.
+
+# DIMLFAC → unidade do desenho, assumindo a unidade exibida mais provável.
+# Só entram os DIMLFAC que têm leitura única e usual em projeto brasileiro.
+# 🚨 SÓ ENTRA DIMLFAC COM LEITURA ÚNICA. O 1000 ficou de FORA de propósito:
+# ele lê como "cota em mm, desenho em m" E como "cota em mícron, desenho em
+# mm" — as duas válidas, separadas por mil. Foi assim que o contraexemplo
+# CX2_micron_mm_ampliada passou pela plausibilidade: cotas de 18, 3 e 6
+# unidades viram 18 m, 3 m e 6 m, que são medidas de cômodo normais.
+# Recusar custa pouco (desenho em metro cotado em mm fica como hoje) e evitar
+# um erro de 1000× vale muito mais. O caso Isabelle é DIMLFAC=100.
+_LFAC_PARA_FATOR = {
+    100.0: 1.0,      # cota em cm, desenho em m   ← caso Isabelle
+    10.0: 0.01,      # cota em mm, desenho em cm
+    0.1: 0.001,      # cota em cm, desenho em mm
+    0.01: 0.01,      # cota em m,  desenho em cm
+    0.001: 0.001,    # cota em m,  desenho em mm
+}
+_LFAC_TOL = 0.005            # ±0,5% pra encaixar no canônico
+_LFAC_MIN_COTAS = 3
+_LFAC_CONSENSO = 0.80
+# Plausibilidade sob a unidade escolhida: a cota tem que virar tamanho de obra.
+_LFAC_COMP_MIN, _LFAC_COMP_MAX = 0.01, 500.0
+_LFAC_MEDIANA_MIN, _LFAC_MEDIANA_MAX = 0.10, 50.0
+
+# Nota de ampliação escrita na prancha ("ESC 10:1"). Se o desenho declara que
+# está AMPLIADO, não se mexe na unidade dele.
+_RE_ESC_AMPLIADA = re.compile(r"\bESC(?:ALA)?\.?\s*[:\-]?\s*(\d{1,3})\s*[:/]\s*1\b",
+                               re.IGNORECASE)
+# Vocabulário de desenho MECÂNICO — não é o nosso domínio, e é onde mora o
+# milímetro ampliado. 'INOX' e 'TEMPERA' ficam FORA de propósito: aparecem em
+# 10 pranchas de arquitetura do acervo (bancada inox, vidro temperado).
+_TOKENS_MECANICO = ("TOLERANC", "ISO 2768", "RUGOSID", "TRAT. TERMICO",
+                    "TRAT TERMICO", "USINAG", "LISTA DE PECAS", "NBR 8404")
+
+
+def _unidade_por_dimlfac(doc, unit_factor):
+    """Decide a unidade pelo DIMLFAC das cotas. Devolve dict (nunca levanta).
+
+    status: None (abstém) | "corrigida_lfac" | "recusada_<motivo>"
+    """
+    out = {"status": None}
+    try:
+        msp = doc.modelspace()
+
+        # VETO A — a prancha declara que está AMPLIADA.
+        for e in msp.query("TEXT MTEXT"):
+            txt = getattr(e.dxf, "text", "") or getattr(e, "text", "") or ""
+            m = _RE_ESC_AMPLIADA.search(str(txt))
+            if m and int(m.group(1)) >= 2:
+                return {"status": "recusada_ampliada",
+                        "motivo": f"prancha declara ampliação {m.group(0)}"}
+
+        # VETO B — vocabulário de desenho mecânico.
+        for e in msp.query("TEXT MTEXT"):
+            up = str(getattr(e.dxf, "text", "") or getattr(e, "text", "") or "").upper()
+            for tok in _TOKENS_MECANICO:
+                if tok in up:
+                    return {"status": "recusada_mecanico",
+                            "motivo": f"vocabulário mecânico: {tok}"}
+
+        # Passo 1-2: DIMLFAC efetivo por cota que imprime número.
+        lfacs, medidas = [], []
+        for dim in msp.query("DIMENSION"):
+            try:
+                med = dim.get_measurement()
+            except Exception:
+                continue
+            if not isinstance(med, (int, float)) or abs(med) <= 1e-9:
+                continue
+            txt = (getattr(dim.dxf, "text", "") or "").strip()
+            if txt and txt not in ("<>",):
+                # override que NÃO imprime número (ex.: " " suprimido, "VER DET")
+                if not re.search(r"\d", txt):
+                    continue
+            lf = _dim_effective_dimlfac(doc, dim)
+            if not isinstance(lf, (int, float)) or lf <= 0:
+                lf = 1.0
+            lfacs.append(lf)
+            medidas.append(abs(med))
+
+        if len(lfacs) < _LFAC_MIN_COTAS:
+            return {"status": None, "motivo": f"só {len(lfacs)} cota(s)"}
+
+        # Passo 3: encaixar no canônico e achar o dominante.
+        def _encaixa(lf):
+            for c in _LFAC_PARA_FATOR:
+                if abs(lf / c - 1.0) <= _LFAC_TOL:
+                    return c
+            if abs(lf - 1.0) <= _LFAC_TOL:
+                return 1.0
+            return None
+
+        enc = [_encaixa(l) for l in lfacs]
+        from collections import Counter as _C
+        dom, n_dom = _C([e for e in enc if e is not None]).most_common(1)[0] \
+            if any(e is not None for e in enc) else (None, 0)
+
+        # Passo 4: massa e consenso.
+        if n_dom < _LFAC_MIN_COTAS or n_dom < _LFAC_CONSENSO * len(lfacs):
+            return {"status": None,
+                    "motivo": f"sem consenso ({n_dom}/{len(lfacs)})"}
+
+        # Passo 5 — O FREIO CONTRA O ERRO DE 1000×.
+        # DIMLFAC = 1 significa "a cota está na unidade do próprio desenho":
+        # não há informação de unidade nenhuma ali. É onde cai TODO desenho
+        # honesto em mm, ampliado ou não. Abstém, sempre.
+        if dom is None or dom == 1.0:
+            return {"status": None, "motivo": "DIMLFAC=1 (cota na unidade do desenho)"}
+
+        novo = _LFAC_PARA_FATOR.get(dom)
+        if not novo:
+            return {"status": None, "motivo": f"DIMLFAC {dom:g} sem leitura única"}
+
+        # Passo 7: plausibilidade sob a unidade escolhida.
+        comps = sorted(m * novo for m, e in zip(medidas, enc) if e == dom)
+        if not comps:
+            return {"status": None, "motivo": "sem medida no dominante"}
+        dentro = sum(1 for c in comps if _LFAC_COMP_MIN <= c <= _LFAC_COMP_MAX)
+        med_c = comps[len(comps) // 2]
+        # 🚨 MESMA guarda de absurdo físico do validador por cotas. Sem ela esta
+        # regra corrigia os contraexemplos CX1 (esquadria em mm ampliada, 60% das
+        # cotas acima de 30 m) e CX2 — exatamente o erro de 1000× que ela existe
+        # pra evitar. Medido em 05/08 antes de ligar no fluxo.
+        if correcao_e_absurda(comps):
+            return {"status": "recusada_absurdo",
+                    "motivo": f"sob {novo:g} as cotas viram tamanhos impossíveis"}
+        if dentro < 0.80 * len(comps) or not (_LFAC_MEDIANA_MIN <= med_c <= _LFAC_MEDIANA_MAX):
+            return {"status": "recusada_implausivel",
+                    "motivo": (f"sob {novo:g} a mediana das cotas daria "
+                               f"{med_c:.2f} m")}
+
+        # Passo 8: só troca no degrau de 1000×. 100× e 10× ficam de fora —
+        # o degrau menor é onde moram os falsos positivos, e recusar é o
+        # comportamento de hoje, que é seguro.
+        razao = novo / unit_factor if unit_factor else 0
+        if abs(razao - 1000.0) > 1.0:
+            return {"status": None,
+                    "motivo": f"degrau {razao:g}× (só 1000× é corrigido)"}
+
+        return {
+            "status": "corrigida_lfac",
+            "fator_original": unit_factor,
+            "fator_corrigido": novo,
+            "n_cotas": n_dom,
+            "dimlfac": dom,
+            "unidade_nome": _UNIT_FACTOR_NAMES.get(novo, str(novo)),
+            "mensagem": (
+                f"unidade corrigida pelo DIMLFAC das cotas: fator {unit_factor:g} → "
+                f"{novo:g} ({_UNIT_FACTOR_NAMES.get(novo, novo)}) — DIMLFAC {dom:g} "
+                f"em {n_dom} de {len(lfacs)} cotas, mediana {med_c:.2f} m"),
+        }
+    except Exception as exc:
+        logger.warning("[unit-lfac] falhou (ignorado): %s", exc)
+        return {"status": None, "motivo": f"erro {exc}"}
+
 def _dim_displayed_number(doc, dim, measurement: float):
     """Número que a cota EXIBE na prancha, ou None se não serve como régua.
 
@@ -1630,6 +1804,17 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # os avisos antigos foram computados com o fator ERRADO — refaz a
         # heurística de extensão com o fator provado pelas cotas
         _, unit_warnings = _validate_unit_factor(doc, unit_factor)
+    elif dim_check.get("status") is None:
+        # Cotas não decidiram (sem número digitado, sem consenso). Última régua:
+        # o DIMLFAC, que converte UNIDADE e não depende de escala de plotagem.
+        # Caso Isabelle (05/08): 28 cotas com DIMLFAC=100 provam metro num
+        # arquivo que declara milímetro — e sem isso os 36 pilares somem.
+        _lfac = _unidade_por_dimlfac(doc, unit_factor)
+        if _lfac.get("status") == "corrigida_lfac":
+            unit_factor = _lfac["fator_corrigido"]
+            logger.warning("[unit-lfac] %s", _lfac["mensagem"])
+            dim_check = _lfac
+            _, unit_warnings = _validate_unit_factor(doc, unit_factor)
     elif dim_check.get("status") == "validada" and unit_warnings:
         # fator PROVADO por cota: a heurística de extensão vira rastro em
         # metadata em vez de rebaixar tudo pra estimado

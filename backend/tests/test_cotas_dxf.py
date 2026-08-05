@@ -30,6 +30,7 @@ from dwg_extractor import (  # noqa: E402
     extract_dxf,
     _validate_unit_by_dimensions,
     correcao_e_absurda,
+    _unidade_por_dimlfac,
 )
 
 _passed = 0
@@ -218,6 +219,43 @@ check("galpao com vao grande nao e barrado (1 de 12 acima de 30 m)",
       correcao_e_absurda([2.0, 3.5, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0,
                           15.0, 20.0, 28.0, 42.0]) is False)
 check("lista vazia nao quebra", correcao_e_absurda([]) is False)
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  UNIDADE PELO DIMLFAC — quando o cabeçalho mente e não há cota digitada
+# ══════════════════════════════════════════════════════════════════════
+# Caso Isabelle (05/08/2026): DXF declara mm, está em metro, e as 28 cotas dele
+# exibem texto automático — o validador por cotas exige ≥3 DIGITADAS e abstém.
+# O DIMLFAC salva porque converte UNIDADE, não escala.
+# Medido no arquivo real: DIMLFAC=100 em 28/28 cotas → metro → 36 pilares
+# voltam (33 de 34×68 cm + 3 de 17×34 cm). Antes: 0 retângulos.
+_d_lf = novo_doc(4)                          # declara milímetro
+_m_lf = _d_lf.modelspace()
+# pilares de 34×68 cm desenhados em METRO, cotados em CENTÍMETRO (dimlfac=100)
+for _i, (_a, _b) in enumerate(((0.34, 0.68), (0.34, 0.68), (0.34, 0.68), (0.17, 0.34))):
+    cota_linear(_m_lf, (0, _i * 2.0), (_a, _i * 2.0), text="<>", dimlfac=100)
+_r_lf = _unidade_por_dimlfac(_d_lf, 0.001)
+check("DIMLFAC=100 corrige mm->m", _r_lf.get("status") == "corrigida_lfac"
+      and _r_lf.get("fator_corrigido") == 1.0)
+
+# 🔒 O FREIO CONTRA 1000×: desenho honesto em mm cotado em mm tem DIMLFAC=1,
+# por mais ampliado que esteja. Abstém por CONSTRUÇÃO.
+_d_mm = novo_doc(4)
+_m_mm = _d_mm.modelspace()
+for _i, _v in enumerate((80, 45, 66, 15)):
+    cota_linear(_m_mm, (0, _i * 200), (_v, _i * 200), text="<>", dimlfac=1)
+check("DIMLFAC=1 nunca corrige (detalhe honesto em mm)",
+      _unidade_por_dimlfac(_d_mm, 0.001).get("status") is None)
+
+# 🔒 DIMLFAC=1000 é AMBÍGUO (cota em mm/desenho em m OU cota em mícron/desenho
+# em mm) — fora da tabela de propósito. Recusar custa pouco; errar custa 1000×.
+_d_am = novo_doc(4)
+_m_am = _d_am.modelspace()
+for _i, _v in enumerate((18, 3, 6, 6)):
+    cota_linear(_m_am, (0, _i * 40), (_v, _i * 40), text="<>", dimlfac=1000)
+check("DIMLFAC=1000 (ambiguo) nao corrige",
+      _unidade_por_dimlfac(_d_am, 0.001).get("status") != "corrigida_lfac")
+
 
 print(f"RESULTADO: {_passed} ok, {_failed} falhas")
 sys.exit(1 if _failed else 0)
