@@ -50,7 +50,7 @@
   // se houver sessão — o FAQ é público e não pode mostrar menu pra visitante.
   // A checagem é SÍNCRONA (localStorage) de propósito: o botão Sair carrega
   // id="btn-logout" e precisa existir no DOM antes do script da página rodar.
-  function temSessao() {
+  function pareceLogado() {
     if (EH_PAINEL) return true;
     try {
       for (var i = 0; i < localStorage.length; i++) {
@@ -60,7 +60,34 @@
     } catch (_) {}
     return false;
   }
-  if (!temSessao()) return;
+
+  // 🪤 O palpite no localStorage NÃO pode ser a palavra final. O nome da chave
+  // (`sb-<ref>-auth-token`) é detalhe interno do Supabase: se mudar de versão,
+  // ou se a sessão ainda não tiver sido gravada, o cliente logado ficaria sem
+  // menu — foi exatamente o que apareceu no FAQ. Então são DUAS passadas:
+  //   1. o palpite síncrono monta na hora (sem piscar pra quem já está logado
+  //      e com o #btn-logout no DOM antes do script da página rodar);
+  //   2. o getSession() assíncrono é a verdade — monta se o palpite errou, e
+  //      desmonta se acertou pra menos.
+  // Quem manda é a resposta do Supabase, nunca o palpite.
+  function confirmarComSupabase() {
+    if (EH_PAINEL) return;                       // painel exige login de qualquer jeito
+    if (!window.sbClient || !window.sbClient.auth) return;
+    window.sbClient.auth.getSession().then(function (r) {
+      var logado = !!(r && r.data && r.data.session);
+      var existe = !!document.getElementById('aiarq-side');
+      if (logado && !existe) { subir(); preencherUsuario(); atualizarSelo(); }
+      if (!logado && existe) desmontar();
+    }).catch(function () {});
+  }
+
+  function desmontar() {
+    ['aiarq-side', 'aiarq-scrim', 'aiarq-burger', 'aiarq-menu-css'].forEach(function (id) {
+      var e = document.getElementById(id);
+      if (e && e.parentNode) e.parentNode.removeChild(e);
+    });
+    document.body.style.overflow = '';
+  }
 
   // ── Itens ───────────────────────────────────────────────────────────────
   // `aba` = destino no dashboard. No próprio dashboard vira switchTab (sem
@@ -376,11 +403,27 @@
   }
 
   // ── Sobe ────────────────────────────────────────────────────────────────
-  montar();
-  plantarBurger();
-  marcarAtivo();
-  sincronizarInerte();
-  ligarSair();
+  // 🪤 O componente NÃO pode exigir estar dentro do <body>. No faq.html os
+  // scripts moram no <head>, então document.body ainda é null quando este
+  // arquivo roda — appendChild estourava e o menu simplesmente não nascia, sem
+  // nada na tela explicando. Nas outras 5 páginas o script fica no body e
+  // monta na hora. Quem decide não é a página: é aqui.
+  function subir() {
+    if (document.getElementById('aiarq-side')) return;   // já está de pé
+    montar();
+    plantarBurger();
+    marcarAtivo();
+    sincronizarInerte();
+    ligarSair();
+  }
+
+  function arrancar() {
+    if (pareceLogado()) subir();
+    // A confirmação roda SEMPRE: ela corrige o palpite nos dois sentidos.
+    confirmarComSupabase();
+  }
+  if (document.body) arrancar();
+  else document.addEventListener('DOMContentLoaded', arrancar);
 
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') fechar();
