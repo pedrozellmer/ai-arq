@@ -10723,6 +10723,28 @@ async def meus_entregaveis(request: Request):
         if jid:
             revisados_por_job.setdefault(jid, set()).add(r.get("item_id"))
 
+    # 🚨 REGRA DURA nº7: mexeu no quantitativo, os entregáveis ficam velhos e o
+    # site AVISA. Esse aviso existia só DENTRO da página do projeto — nestas
+    # telas um cronograma desatualizado aparecia igualzinho a um atualizado, e
+    # o cliente baixava e mandava pro cliente dele sem saber.
+    # Reaproveita a MESMA RPC do chip de "desatualizado" em Meus Projetos:
+    # devolve planilha/cronograma/memorial/comparativo por job numa consulta só.
+    velho_por_job = {}
+    try:
+        _stv, _rowsv = _supa_rest_service(
+            "POST", "rpc/projetos_desatualizados", {"p_user_id": uid})
+        for r in (_rowsv or []) if _stv == 200 else ():
+            jid = str(r.get("job_id") or "")
+            if jid:
+                velho_por_job[jid] = {
+                    k: bool(r.get(k)) for k in
+                    ("planilha", "cronograma", "memorial", "comparativo")
+                }
+    except Exception as _e:
+        # Aviso é acessório: falhou a leitura, não mostra alarme nenhum. Mas
+        # registra — "nenhum aviso" por falha é indistinguível de "está em dia".
+        _log_error("coerencia:entregaveis", str(_e))
+
     saida = []
     for p in projetos:
         jid = str(p.get("job_id") or "")
@@ -10755,19 +10777,23 @@ async def meus_entregaveis(request: Request):
                     # nunca funcionou e o botão Baixar devolvia 404.
                     "disponivel": bool(p.get("planilha_gerada_em")) and concluido,
                     "em": p.get("planilha_gerada_em"),
+                    "desatualizado": bool(velho_por_job.get(jid, {}).get("planilha")),
                 },
                 "cronograma": {
                     "disponivel": jid in cron_por_job,
                     "em": cron_por_job.get(jid),
+                    "desatualizado": bool(velho_por_job.get(jid, {}).get("cronograma")),
                 },
                 "memorial": {
                     "disponivel": concluido,
                     "salvo": jid in memo_por_job,
                     "em": memo_por_job.get(jid),
+                    "desatualizado": bool(velho_por_job.get(jid, {}).get("memorial")),
                 },
                 "comparativo": {
                     "disponivel": bool(p.get("comparativo_gerado_em")),
                     "em": p.get("comparativo_gerado_em"),
+                    "desatualizado": bool(velho_por_job.get(jid, {}).get("comparativo")),
                 },
             },
         })

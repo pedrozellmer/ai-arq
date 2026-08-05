@@ -151,7 +151,12 @@
   .proj-nums { display: none; align-items: center; flex: none; text-align: center; }
   .proj-nums > div { width: 62px; }
   .proj-nums > div:last-child { width: 92px; }
-  .proj-acoes { display: flex; align-items: center; gap: 10px; flex: none; justify-content: flex-end; }
+  /* 🪤 flex-END alinha a CAIXA, não os BOTÕES. Com a caixa colada à direita, a
+     linha que só tem "Abrir" jogava o botão pro fim enquanto a linha com
+     "Abrir · Revisar · XLSX" começava 100px antes — o botão principal pulava
+     de lugar a cada linha. Medi a caixa, dei alinhamento por certo, e estava
+     torto na tela. Alinhado à ESQUERDA, o "Abrir" fica sempre na mesma coluna. */
+  .proj-acoes { display: flex; align-items: center; gap: 10px; flex: none; justify-content: flex-start; }
   @media (min-width: 768px) {
     .proj-nums { display: flex; }
     .proj-acoes { width: 206px; }
@@ -1685,6 +1690,20 @@
   // ══════════════════════════════════════════════
   // Acima de 1024px o menu é fixo e essas funções não fazem diferença: o CSS
   // ignora a classe .aberto porque já aplica translateX(0) na media query.
+  const _ehDesktop = () => window.matchMedia('(min-width: 1024px)').matches;
+
+  // 🪤 Gaveta FECHADA continua no DOM, só deslocada pra fora da tela — então
+  // ela continua no caminho do teclado: o 1º Tab no celular caía dentro de um
+  // menu invisível. `inert` tira o bloco todo de foco, clique e leitor de tela.
+  // No computador o menu está visível e navegável, então nunca é inerte.
+  function _sincronizarInerte() {
+    const s = document.getElementById('aiarq-side');
+    if (!s) return;
+    const escondida = !_ehDesktop() && !s.classList.contains('aberto');
+    if (escondida) { s.setAttribute('inert', ''); s.setAttribute('aria-hidden', 'true'); }
+    else { s.removeAttribute('inert'); s.removeAttribute('aria-hidden'); }
+  }
+
   function abrirMenuLateral() {
     const s = document.getElementById('aiarq-side');
     const c = document.getElementById('aiarq-scrim');
@@ -1692,6 +1711,10 @@
     if (c) c.classList.add('aberto');
     // Trava o fundo pra não rolar por baixo da gaveta.
     document.body.style.overflow = 'hidden';
+    _sincronizarInerte();
+    // Leva o foco pra dentro: quem abriu com o teclado precisa continuar nele.
+    const primeiro = s && s.querySelector('.side-cta, .side-it');
+    if (primeiro) { try { primeiro.focus({ preventScroll: true }); } catch (_) {} }
   }
   function fecharMenuLateral() {
     const s = document.getElementById('aiarq-side');
@@ -1699,11 +1722,24 @@
     if (s) s.classList.remove('aberto');
     if (c) c.classList.remove('aberto');
     document.body.style.overflow = '';
+    _sincronizarInerte();
   }
   // Esc fecha, como qualquer gaveta.
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') fecharMenuLateral();
   });
+
+  // 🪤 Virar o celular (ou arrastar a janela) com a gaveta ABERTA deixava
+  // body.overflow travado em 'hidden': acima de 1024px o menu vira fixo, o
+  // fundo escuro some por CSS, e não sobra nada pra clicar e destravar — a
+  // página inteira ficava sem rolagem, sem causa visível.
+  try {
+    const _mq = window.matchMedia('(min-width: 1024px)');
+    const _aoCruzar = () => { fecharMenuLateral(); _sincronizarInerte(); };
+    if (_mq.addEventListener) _mq.addEventListener('change', _aoCruzar);
+    else if (_mq.addListener) _mq.addListener(_aoCruzar);   // Safari antigo
+  } catch (_) {}
+  _sincronizarInerte();
 
   // Pinta o item da aba atual. Chamado de dentro do switchTab porque o
   // roteador de hash só resolve no FIM do checkAuth (é async): marcar no
@@ -1818,8 +1854,13 @@
         : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\')"'
           + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>'
           + '<a href="' + cfg.abrir(p.job_id) + '" class="px-3 py-1.5 rounded-lg border hover:bg-gray-50 text-gray-700 text-xs font-medium no-underline">Abrir</a>';
-      const selo = (tipo === 'memorial' && !e.salvo)
-        ? '<span class="pill-mini" style="background:#F1F5F9;color:#475569">rascunho automático</span>' : '';
+      // 🚨 Regra dura nº7: entregável que ficou pra trás do quantitativo TEM
+      // que avisar. Sem isso o cliente baixa um cronograma velho e manda pro
+      // cliente dele achando que está em dia.
+      const seloVelho = e.desatualizado
+        ? '<span class="pill-mini" style="background:#FEF3C7;color:#92400E" title="O quantitativo mudou depois que este arquivo foi gerado">desatualizado</span>' : '';
+      const selo = seloVelho + ((tipo === 'memorial' && !e.salvo)
+        ? '<span class="pill-mini" style="background:#F1F5F9;color:#475569">rascunho automático</span>' : '');
       return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
         + '<div style="min-width:0"><div class="flex items-center gap-2 flex-wrap">'
         + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(p.nome) + '</span>' + selo + '</div>'
@@ -1857,11 +1898,13 @@
         ? '<span class="text-xs text-gray-400">arquivado</span>'
         : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\')"'
           + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>';
+      const velho = l.p.entregaveis[l.tipo].desatualizado
+        ? '<span class="pill-mini" style="background:#FEF3C7;color:#92400E" title="O quantitativo mudou depois que este arquivo foi gerado">desatualizado</span>' : '';
       return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
         + '<div style="min-width:0">'
         + '<div class="flex items-center gap-2 flex-wrap">'
         + '<span class="pill-mini" style="background:#EEF2FF;color:#4338CA">' + cfg.rotulo + '</span>'
-        + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(l.p.nome) + '</span></div>'
+        + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(l.p.nome) + '</span>' + velho + '</div>'
         + '<p class="text-xs text-gray-500 mt-0.5">' + _dataCurta(l.em) + '</p></div>'
         + '<div class="flex items-center gap-2">' + acao + '</div></div>';
     }).join('') + '</div>';
@@ -3769,6 +3812,15 @@
 
         // Save to history
         saveProjectToHistory('done');
+
+        // 🪤 O cache das telas agregadas mente JUSTO na hora que mais importa:
+        // o cliente termina o 1º projeto, clica em Planilhas e lê "nenhuma
+        // planilha ainda" — porque a resposta guardada é de antes do upload.
+        // Zerar aqui é o único ponto onde a gente SABE que os dados mudaram.
+        try {
+          _entregaveisCache = null;
+          atualizarSeloRevisao();
+        } catch (_) {}
 
         // Mostrar aviso se poucas pranchas
         if (selectedFiles.length <= 3) {
