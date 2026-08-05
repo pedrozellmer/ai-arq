@@ -115,8 +115,13 @@
   // Guardado, um link de e-mail abriria mostrando o menu de OUTRO projeto —
   // e o endereço deixaria de ser compartilhável.
   var JOB = (function () {
-    try { return new URLSearchParams(location.search).get('job_id') || ''; }
-    catch (_) { return ''; }
+    try {
+      var q = new URLSearchParams(location.search);
+      // 🪤 O cronograma nasceu com ?job= e as outras com ?job_id=. Lendo só um
+      // nome, o menu não fixava numa das telas e a pessoa perdia o contexto no
+      // meio do caminho. Lê os dois, e a página do cronograma também.
+      return q.get('job_id') || q.get('job') || '';
+    } catch (_) { return ''; }
   })();
   var FIXADO = !!JOB;
 

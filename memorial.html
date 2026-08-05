@@ -109,7 +109,11 @@ const API_BASE = window.API_BASE;
 const sb       = window.sb;
 
 const urlParams = new URLSearchParams(window.location.search);
-const jobId = urlParams.get('job_id');
+// 🪤 ACEITA OS DOIS NOMES. O aviso de "memorial desatualizado" (coerencia.js)
+// montava memorial.html?job= enquanto esta página só lia ?job_id= — ou seja, o
+// link do próprio mecanismo da regra nº7 não abria o memorial. Defeito anterior
+// ao menu do projeto, achado em 04/08 quando o cronograma deu o mesmo sintoma.
+const jobId = urlParams.get('job_id') || urlParams.get('job');
 if (!jobId) { window.location.href = 'dashboard.html'; }
 
 let estrutura = null;   // objeto vivo — o DOM edita, o save serializa daqui

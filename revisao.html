@@ -310,7 +310,11 @@ const sb       = window.sb;
 const notify   = window.aiArqNotify;
 
 const urlParams = new URLSearchParams(window.location.search);
-const jobId = urlParams.get('job_id');
+// 🪤 Aceita ?job_id= e ?job=. As 4 telas do projeto nasceram com nomes
+// diferentes e isso quebrou DOIS links em 04/08 (o menu do projeto e o
+// aviso de desatualizado). Aceitar os dois custa uma linha; descobrir o
+// descompasso custou uma tela dizendo "falta job_id" com o id na barra.
+const jobId = urlParams.get('job_id') || urlParams.get('job');
 if (!jobId) { notify.warn('job_id não informado na URL'); window.location.href = 'dashboard.html'; }
 
 let currentUser = null;

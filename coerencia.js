@@ -105,7 +105,9 @@
                  'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
                  'bg-amber-600 text-white">Refazer comparativo</button> ';
       } else {
-        var pag = v.nome === 'cronograma' ? 'cronograma.html?job=' : 'memorial.html?job=';
+        // job_id nos dois: e o nome que projeto/revisao/memorial usam. As duas
+        // paginas aceitam os dois, mas link novo nasce no padrao certo.
+        var pag = v.nome === 'cronograma' ? 'cronograma.html?job_id=' : 'memorial.html?job_id=';
         acoes += botao(pag + d._jobId, 'Abrir ' + v.nome, primeiro) + ' ';
       }
       primeiro = false;

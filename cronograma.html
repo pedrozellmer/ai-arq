@@ -367,7 +367,12 @@ const notify   = window.aiArqNotify;
 
 // Pega job_id da URL: ?job=abc123
 const params = new URLSearchParams(window.location.search);
-const jobId = params.get('job') || '';
+// 🪤 ACEITA OS DOIS NOMES. Esta página nasceu com ?job= enquanto projeto.html,
+// revisao.html e memorial.html usam ?job_id= — e ninguém tinha percebido
+// porque só o botão interno linkava pra cá. Quando o menu do projeto passou a
+// apontar pra cronograma.html?job_id=, a página dizia "Falta job_id" com o
+// job_id ali na barra de endereço. Aceitar os dois mantém link antigo vivo.
+const jobId = params.get('job') || params.get('job_id') || '';
 
 if (!jobId) {
   document.body.innerHTML = '<div class="p-8 text-center text-gray-600">Falta job_id. Volte ao <a href="dashboard.html" class="text-indigo-600 underline">dashboard</a> e abra um projeto.</div>';
