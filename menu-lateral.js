@@ -30,6 +30,68 @@
   if (window.__aiarqMenuLateral) return;          // idempotente
   window.__aiarqMenuLateral = true;
 
+  // ══════════════════════════════════════════════════════════════════════
+  //  PÁGINA VELHA SE RECARREGA SOZINHA
+  // ══════════════════════════════════════════════════════════════════════
+  // O HTML é cacheado 10 min e os .js/.css 4 horas. Depois de um deploy, o
+  // cliente pode ficar rodando uma página antiga sem saber — e foi isso que
+  // aconteceu em 04/08: o Pedro via "não funciona" em coisa que já estava no
+  // ar, três vezes seguidas, e a única saída era ele saber apertar
+  // Ctrl+Shift+R. Ninguém deveria precisar saber disso.
+  //
+  // O deploy grava /version.txt com o SHA e carimba o mesmo SHA na URL deste
+  // arquivo. Se o que está no ar for diferente do que este HTML carregou, a
+  // página está velha: recarrega UMA vez.
+  //
+  // 🪤 Recarga automática é perigosa — laço de reload deixa o site inutilizável.
+  // Por isso: marca em sessionStorage ANTES de recarregar, e só tenta uma vez
+  // por aba. Qualquer falha (offline, 404, versão vazia) não faz nada.
+  (function conferirVersao() {
+    try {
+      var meu = '';
+      var tags = document.querySelectorAll('script[src*="menu-lateral.js"]');
+      for (var i = 0; i < tags.length; i++) {
+        var m = /[?&]v=([^&"']+)/.exec(tags[i].getAttribute('src') || '');
+        if (m) { meu = m[1]; break; }
+      }
+      if (!meu) return;                       // sem carimbo: nada a comparar
+
+      fetch('/version.txt?t=' + Date.now(), { cache: 'no-store' })
+        .then(function (r) { return r.ok ? r.text() : null; })
+        .then(function (t) {
+          if (!t) return;
+          var noAr = String(t).trim();
+          if (!noAr || noAr === meu) return;   // já estamos na versão do ar
+
+          // 🚨 A TRAVA COMPARA COM `noAr`, NÃO COM `meu`.
+          // Com `meu` ela não travaria NADA: depois da recarga a página velha
+          // volta com o mesmo `meu`, a marca guardada seria diferente, e o
+          // código recarregaria de novo — laço infinito, site inutilizável.
+          // Guardando o ALVO, a segunda tentativa reconhece "já tentei chegar
+          // nesta versão e não consegui" e desiste em silêncio.
+          if (sessionStorage.getItem('aiarq_alvo') === noAr) return;
+          sessionStorage.setItem('aiarq_alvo', noAr);
+
+          // Recarga simples pode servir do cache de novo (o HTML tem 10 min de
+          // validade). Mudar a URL força busca nova; o parâmetro é limpo
+          // logo abaixo, então o cliente não fica com sujeira no endereço.
+          var u = location.href.split('#')[0];
+          u += (u.indexOf('?') > -1 ? '&' : '?') + '_v=' + encodeURIComponent(noAr);
+          location.replace(u + (location.hash || ''));
+        })
+        .catch(function () {});
+    } catch (_) {}
+  })();
+
+  // Limpa o ?_v= da barra de endereço depois que a recarga cumpriu o papel.
+  try {
+    if (/[?&]_v=/.test(location.search)) {
+      var limpa = location.search.replace(/[?&]_v=[^&]*/, '').replace(/^&/, '?');
+      if (limpa === '?') limpa = '';
+      history.replaceState(null, '', location.pathname + limpa + (location.hash || ''));
+    }
+  } catch (_) {}
+
   var ARQ = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
 
   // 🪤 NÃO decida comportamento por nome de arquivo. A pergunta certa não é
@@ -181,6 +243,13 @@
         // menu ficou apontando pro nome velho: o item caía calado na visão
         // geral. Nome de vista e link nascem no mesmo lugar, de propósito.
         { href: url('projeto.html') + '#processamento', rotulo: 'Processamento', ic: 'duvida' }
+      ]},
+      // Próximas entregas do ciclo, já no roadmap. Não são links: item de menu
+      // que não leva a lugar nenhum vira reclamação. Aqui está escrito que
+      // ainda não existe, e é só isso que ele promete.
+      { titulo: 'Em breve', embreve: true, itens: [
+        { rotulo: 'Caderno de acabamentos', nota: 'FF&E', ic: 'memorial' },
+        { rotulo: 'BDI Helper',             ic: 'planilha' }
       ]}
     ];
   }
@@ -244,6 +313,12 @@
     '.side-est.velho{background:#FEF3C7;color:#92400E}',
     '.side-est.nao{background:#F1F5F9;color:#94A3B8}',
     '.side-est.pend{background:#FEF3C7;color:#92400E}',
+    // "Em breve": visivelmente inerte, pra ninguem tentar clicar
+    '.side-embreve{color:#94A3B8;cursor:default}',
+    '.side-embreve:hover{background:transparent}',
+    '.side-embreve svg{color:#CBD5E1}',
+    '.side-nota{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;',
+    'border-radius:99px;background:#F1F5F9;color:#94A3B8}',
     '.aiarq-rodape{margin-top:auto;border-top:1px solid #E2E8F0;padding-top:12px}',
     '.aiarq-beta{background:#ECFDF5;border-radius:9px;padding:9px 11px}',
     '.aiarq-beta b{display:block;font-size:12px;color:#065F46}',
@@ -297,6 +372,14 @@
       out += '<div class="side-grp">'
            + (g.titulo ? '<p class="side-grp-t">' + g.titulo + '</p>' : '');
       g.itens.forEach(function (it) {
+        // "Em breve": não é link. Item de menu que não leva a lugar nenhum
+        // vira reclamação; aqui está escrito que ainda não existe.
+        if (g.embreve) {
+          out += '<div class="side-it side-embreve">' + svg(it.ic) + it.rotulo
+               + (it.nota ? '<span class="side-nota">' + it.nota + '</span>' : '')
+               + '</div>';
+          return;
+        }
         var selo = it.selo
           ? '<span id="' + it.selo + '" class="side-badge" style="display:none"></span>' : '';
         // No menu do projeto cada item carrega o ESTADO do entregável, e é isso

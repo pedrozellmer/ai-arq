@@ -79,9 +79,9 @@
 <!-- Header -->
 <header class="bg-white border-b sticky top-0 z-40">
   <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-    <button onclick="smartBack()" class="text-gray-500 hover:text-indigo-600" title="Voltar">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-    </button>
+    <!-- 04/08: seta de voltar removida. O menu lateral tem
+         "← Todos os projetos" no topo e existe em todas as telas do
+         cliente — dois caminhos pra mesma saída era ruído. -->
     <div class="flex-1 min-w-0">
       <nav class="text-[11px] text-gray-500 flex items-center gap-1">
         <a href="dashboard.html" class="hover:text-indigo-600">Início</a>
@@ -379,13 +379,7 @@ if (!jobId) {
   throw new Error('no job');
 }
 
-function smartBack() {
-  if (document.referrer.startsWith(window.location.origin) && window.history.length > 1) {
-    window.history.back();
-  } else {
-    window.location.href = `projeto.html?job_id=${jobId}`;
-  }
-}
+// smartBack saiu junto com a seta de voltar: o menu lateral resolve.
 
 // Link de volta pro projeto
 document.getElementById('back-projeto').href = `projeto.html?job_id=${jobId}`;

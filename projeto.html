@@ -69,15 +69,10 @@
 
 <header class="bg-white border-b sticky top-0 z-40">
   <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
-    <button onclick="smartBack()" class="text-gray-500 hover:text-indigo-600" title="Voltar">
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-    </button>
+    <!-- 04/08: seta de voltar e trilha "Início › Meus Projetos" saíram daqui.
+         O menu lateral tem "← Todos os projetos" no topo, e ele existe em
+         TODAS as telas do cliente — três caminhos pra mesma saída era ruído. -->
     <div class="flex-1 min-w-0">
-      <nav class="text-[11px] text-gray-500 flex items-center gap-1">
-        <a href="dashboard.html" class="hover:text-indigo-600">Início</a>
-        <span>›</span>
-        <a href="dashboard.html#meus-projetos" class="hover:text-indigo-600">Meus Projetos</a>
-      </nav>
       <h1 id="proj-title" class="text-lg md:text-xl font-bold text-gray-900 truncate leading-tight">Projeto</h1>
     </div>
     <div class="flex items-center gap-2">
@@ -89,15 +84,7 @@
 <script>
 // Volta pro local de onde o usuário veio. Se abriu direto (document.referrer
 // vazio ou de fora), vai pra dashboard home.
-function smartBack() {
-  const ref = document.referrer || '';
-  const sameOrigin = ref.startsWith(window.location.origin);
-  if (sameOrigin && window.history.length > 1) {
-    window.history.back();
-  } else {
-    window.location.href = 'dashboard.html';
-  }
-}
+// smartBack saiu junto com a seta de voltar: o menu lateral resolve.
 </script>
 
 <main id="main" class="max-w-6xl mx-auto px-4 py-6 space-y-6">

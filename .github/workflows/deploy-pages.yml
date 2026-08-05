@@ -113,6 +113,13 @@ jobs:
           ls -la _site/ | head -40
           echo "=== Total de arquivos: $(find _site -type f | wc -l) ==="
 
+      - name: Gravar a versao do deploy
+        # Arquivo minusculo que diz qual e a versao NO AR agora. O menu compara
+        # com a versao carimbada no HTML que o navegador esta rodando; se
+        # divergir, a pagina esta velha e ela se recarrega sozinha uma vez.
+        # Sem isso, a unica saida era o cliente saber apertar Ctrl+Shift+R.
+        run: echo "${GITHUB_SHA::8}" > _site/version.txt
+
       - name: Carimbar versao nos JS e CSS proprios
         # 🚨 O HTML e cacheado por 10 MINUTOS e os .js/.css por 4 HORAS
         # (Cache-Control: max-age=600 vs max-age=14400). Ou seja: depois de todo
