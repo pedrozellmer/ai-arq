@@ -343,6 +343,10 @@
     '#aiarq-side{transform:translateX(0)}',
     '#aiarq-scrim{display:none}',
     '#aiarq-burger,#aiarq-fechar{display:none}',
+    // A marca do topo some quando o menu lateral aparece: os dois juntos
+    // deixavam "AI.arq" duas vezes na mesma tela, lado a lado. No celular ela
+    // volta, porque lá o menu está fechado e ela é a única marca visível.
+    '#aiarq-marca-topo{display:none}',
     'body{padding-left:248px}',
     '}',
 

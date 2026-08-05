@@ -132,8 +132,12 @@
   <header class="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b">
     <div class="mx-auto max-w-7xl flex items-center justify-between h-16 px-4 md:px-6">
       <div class="flex items-center gap-2">
-        <!-- Logo clicável — vai pra página inicial pública (site) -->
-        <a href="index.html" class="flex items-center gap-2 hover:opacity-80 transition no-underline" title="Ir pra página inicial do site">
+        <!-- Logo clicável — vai pra página inicial pública (site).
+             🪤 SÓ NO CELULAR. No computador o menu lateral já mostra a marca no
+             topo, e ela aparecia DUAS vezes na mesma tela, uma do lado da
+             outra. No celular a barra some, então aqui ele volta a ser a única
+             marca visível — por isso some por media query, não por remoção. -->
+        <a id="aiarq-marca-topo" href="index.html" class="flex items-center gap-2 hover:opacity-80 transition no-underline" title="Ir pra página inicial do site">
           <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
           <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
         </a>
@@ -4263,53 +4267,57 @@
         __projectsPollTimer = null;
       }
 
-      // Selo de confiança (medido vs estimativa) — 1 fetch só pra todos os projetos
+      // ── Selos dos cartões: UMA chamada pra tudo ──────────────────────
+      // 🚨 Antes eram 2 chamadas POR PROJETO (review-state + cronograma) mais
+      // o projects-confidence. Medido em 05/08: 57 requisições na página e uma
+      // dúzia levando ~4,8s cada, presas na fila de 6 conexões do navegador.
+      // /api/meus-entregaveis devolve medido, a_revisar, revisados e a
+      // existência de cada entregável pra TODOS os projetos de uma vez.
+      // 🚨 E para de chamar /api/items/{job}/review-state ao renderizar a
+      // lista — essa rota GRAVA (incrementa revisao_aberturas) e era ela que
+      // inflava o funil: 54 aberturas pra 6 projetos com ação real.
       (async () => {
         try {
-          const cr = await authFetch(`${API_BASE}/api/projects-confidence`);
-          const summ = (await cr.json()).summary || {};
+          const dados = await carregarEntregaveis();
+          const porJob = {};
+          dados.forEach(p => { porJob[p.job_id] = p; });
+
           projects.forEach(p => {
-            const s = summ[p.job_id];
-            const el = document.querySelector(`[data-job="${p.job_id}"] .conf-badge`);
-            if (!el || !s || !s.total) return;
-            el.innerHTML = s.medido > 0
-              ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold" title="${s.medido} de ${s.total} itens medidos direto do CAD">✓ ${s.medido} medido${s.medido > 1 ? 's' : ''}</span>`
-              : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-semibold" title="Nenhum item medido — tudo estimativa pra revisar">⚠ só estimativa</span>';
+            const d = porJob[p.job_id];
+            if (!d) return;
+            const raiz = document.querySelector(`[data-job="${p.job_id}"]`);
+            if (!raiz) return;
+
+            // medido × estimativa
+            const conf = raiz.querySelector('.conf-badge');
+            const total = (d.medido || 0) + (d.a_revisar || 0) + (d.revisados || 0);
+            if (conf && total > 0) {
+              conf.innerHTML = d.medido > 0
+                ? `<span class="pill-mini" style="background:#D1FAE5;color:#047857" title="${d.medido} de ${total} itens medidos direto do CAD">✓ ${d.medido} medido${d.medido > 1 ? 's' : ''}</span>`
+                : '<span class="pill-mini" style="background:#FEF3C7;color:#92400E" title="Nenhum item medido — tudo estimativa pra revisar">⚠ só estimativa</span>';
+            }
+
+            // quanto da revisão já foi feito
+            const rev = raiz.querySelector('.review-pct');
+            const aConferir = d.a_revisar || 0;
+            const jaFeito = d.revisados || 0;
+            if (rev && (jaFeito > 0 || aConferir > 0)) {
+              rev.innerHTML = aConferir === 0
+                ? '<span class="pill-mini" style="background:#D1FAE5;color:#047857">✓ revisão concluída</span>'
+                : (jaFeito > 0
+                    ? `<span class="pill-mini" style="background:#E0E7FF;color:#4338CA">${jaFeito} de ${jaFeito + aConferir} revisados</span>`
+                    : '');
+            }
+
+            // cronograma existe?
+            const cron = raiz.querySelector('.cron-badge');
+            if (cron && d.entregaveis && d.entregaveis.cronograma
+                && d.entregaveis.cronograma.disponivel) {
+              cron.innerHTML = '<span class="pill-mini" style="background:#CFFAFE;color:#0E7490">📅 Cronograma</span>';
+            }
           });
         } catch (e) {}
       })();
-
-      // Badge de % revisado + cronograma (carregados em background, sem bloquear)
-      projects.forEach(p => {
-        if (p.status !== 'done') return;
-        // % revisado
-        (async () => {
-          try {
-            const r = await authFetch(`${API_BASE}/api/items/${p.job_id}/review-state`);
-            const d = await r.json();
-            const reviewed = d.count || 0;
-            const total = p.items_count || 1;
-            const pct = Math.round((reviewed / total) * 100);
-            const el = document.querySelector(`[data-job="${p.job_id}"] .review-pct`);
-            if (el && reviewed > 0) {
-              el.innerHTML = reviewed >= total
-                ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-semibold">✓ 100% revisado</span>'
-                : `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-semibold">${pct}% revisado</span>`;
-            }
-          } catch (e) {}
-        })();
-        // Cronograma gerado?
-        (async () => {
-          try {
-            const r = await authFetch(`${API_BASE}/api/cronograma/${p.job_id}`);
-            const d = await r.json();
-            const el = document.querySelector(`[data-job="${p.job_id}"] .cron-badge`);
-            if (el && d && d.status === 'ok' && d.saved) {
-              el.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 text-[10px] font-semibold">📅 Cronograma</span>';
-            }
-          } catch (e) {}
-        })();
-      });
 
       // Entregável mais velho que a última correção de item. UMA chamada pra
       // lista inteira (o exame completo, com assinatura, fica na página do
