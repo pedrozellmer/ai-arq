@@ -26,7 +26,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 import ezdxf  # noqa: E402
 
-from dwg_extractor import extract_dxf  # noqa: E402
+from dwg_extractor import (  # noqa: E402
+    extract_dxf,
+    _validate_unit_by_dimensions,
+    correcao_e_absurda,
+)
 
 _passed = 0
 _failed = 0
@@ -186,5 +190,34 @@ check("validada por EXATAMENTE 3 cotas (overrides não-numéricos fora)",
 check("fator de mm mantido (0.001)", ext5.metadata.get("fator_para_metros") == "0.001")
 
 print()
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  DETALHE EM MILÍMETRO NÃO PODE VIRAR METRO (erro de 1000×)
+# ══════════════════════════════════════════════════════════════════════
+# Achado em 05/08/2026 por contraexemplo adversarial: num desenho de DETALHE
+# honesto em mm (rodapé, esquadria), o texto da cota diz "80" e a geometria
+# mede 80 unidades — o validador concluía METRO e trocava 0,001 por 1,0,
+# multiplicando a planilha por mil. Estava ARMADO em produção (nunca disparou:
+# 0 de 132 projetos CAD).
+# 🪤 DIMLFAC não separa os casos: o rodapé (correção errada) e a casa_quadra02
+# (correção CERTA) têm os dois LFAC efetivo = 1. Quem separa é a física.
+# Números medidos nos arquivos REAIS, sob o fator que seria adotado:
+#     casa_quadra02 (certa)   : 580 cotas, mediana 1,20 m,  0% acima de 30 m
+#     CX5 / CX6     (erradas) :   4 cotas, mediana 11,50 m, 25% acima de 30 m
+#     CX1           (errada)  :   5 cotas, mediana 34,00 m, 60% acima de 30 m
+check("rodape em mm lido como metro e recusado",
+      correcao_e_absurda([80.0, 45.0, 66.0, 15.0]) is True)
+check("esquadria em mm lida como metro e recusada",
+      correcao_e_absurda([34.0, 38.0, 45.0, 30.5, 33.0]) is True)
+# 🔒 O legitimo NAO pode ser barrado — casa_quadra02 tem cotas de comodo e
+# nenhuma passa de 30 m.
+check("planta de casa continua sendo corrigida",
+      correcao_e_absurda([1.2, 2.8, 4.1, 6.15, 22.55, 3.0]) is False)
+check("galpao com vao grande nao e barrado (1 de 12 acima de 30 m)",
+      correcao_e_absurda([2.0, 3.5, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0,
+                          15.0, 20.0, 28.0, 42.0]) is False)
+check("lista vazia nao quebra", correcao_e_absurda([]) is False)
+
 print(f"RESULTADO: {_passed} ok, {_failed} falhas")
 sys.exit(1 if _failed else 0)

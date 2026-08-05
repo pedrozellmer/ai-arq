@@ -777,6 +777,32 @@ _DIM_MED_MIN, _DIM_MED_MAX = 0.5, 100.0    # plausibilidade da MEDIANA (metros)
 _DIM_MAX_SCAN = 4000         # teto defensivo de cotas varridas
 
 
+# Guarda de absurdo físico da correção por cotas (05/08/2026). Cota acima disto
+# é rara em prancha de edificação — a casa_quadra02, cuja correção é CERTA, tem
+# 580 cotas e ZERO acima. Detalhe em mm lido como metro estoura na hora: um
+# rodapé de 8 cm vira 80 m.
+_DIM_ABSURDO_M = 30.0
+_DIM_ABSURDO_FRACAO = 0.10
+
+
+def correcao_e_absurda(medidas_m) -> bool:
+    """True quando as cotas, sob o fator NOVO, viram tamanhos impossíveis.
+
+    Cota acima de 30 m é rara em prancha de edificação. Uma prancha em que
+    mais de 10% delas passa disso não é planta: é DETALHE em milímetro lido
+    como metro — um rodapé de 8 cm virando 80 m.
+
+    Medido em 05/08/2026 nos arquivos reais, sob o fator que seria adotado:
+        casa_quadra02 (correção CERTA) : 580 cotas, mediana 1,20 m,  0% > 30 m
+        CX5 / CX6     (erradas)        :   4 cotas, mediana 11,50 m, 25% > 30 m
+        CX1           (errada)         :   5 cotas, mediana 34,00 m, 60% > 30 m
+    """
+    if not medidas_m:
+        return False
+    gigantes = sum(1 for v in medidas_m if v > _DIM_ABSURDO_M)
+    return gigantes > _DIM_ABSURDO_FRACAO * len(medidas_m)
+
+
 def _dim_effective_dimlfac(doc, dim) -> float:
     """DIMLFAC efetivo de uma cota (fator que multiplica a medida geométrica
     pra virar o texto default). Ordem: override na entidade (XDATA DSTYLE — o
@@ -963,6 +989,32 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
         if detected is not None and len(proven) == 1 and n_digitadas >= _DIM_MIN_COTAS:
             novo = proven[0]
             n = len(support[novo])
+            # 🚨 GUARDA DE ABSURDO FÍSICO (05/08/2026) — fecha um erro de 1000×
+            # que estava ARMADO aqui. Num desenho de DETALHE em milímetro
+            # (rodapé, esquadria) o texto da cota diz "80" e a geometria mede 80
+            # unidades: este código concluía METRO e trocava 0,001 por 1,0.
+            # Reproduzido no contraexemplo CX5_rodape_mm_lfac1.dxf, com
+            # $INSUNITS=4 honesto e cotas digitadas em mm.
+            # 🪤 DIMLFAC NÃO serve de guarda: medido, o rodapé (correção errada)
+            # e a casa_quadra02 (correção CERTA) têm os dois LFAC efetivo = 1.
+            # O que separa é a física. Sob o fator novo:
+            #     casa_quadra02 (certa) : 580 cotas, mediana 1,20 m, 0% > 30 m
+            #     CX5/CX6     (erradas) :   4 cotas, mediana 11,50 m, 25% > 30 m
+            #     CX1         (errada)  :   5 cotas, mediana 34,00 m, 60% > 30 m
+            # Cota de mais de 30 m é rara em prancha de edificação; uma prancha
+            # em que um quarto delas passa disso é detalhe lido como metro.
+            _sob_novo = [abs(v) * novo for v in support[novo]]
+            _gigantes = sum(1 for v in _sob_novo if v > _DIM_ABSURDO_M)
+            if correcao_e_absurda(_sob_novo):
+                logger.warning(
+                    "[unit-cotas] correção RECUSADA: sob o fator %g, %d de %d cotas "
+                    "passariam de %g m — é detalhe lido como metro, não prancha",
+                    novo, _gigantes, len(_sob_novo), _DIM_ABSURDO_M)
+                out["status"] = "recusada_absurdo"
+                out["motivo"] = (
+                    f"cotas implausíveis sob o fator {novo:g}: {_gigantes} de "
+                    f"{len(_sob_novo)} passariam de {_DIM_ABSURDO_M:g} m")
+                return out
             out.update({
                 "status": "corrigida",
                 "fator_original": unit_factor,
