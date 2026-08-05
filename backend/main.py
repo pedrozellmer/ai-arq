@@ -7547,6 +7547,40 @@ async def admin_send_nudge(request: Request):
 # registrado em email_auto_log (unique). Janela de recência evita ressuscitar
 # cadastros antigos. EMAILS_AUTO=0 no ambiente desliga tudo. ?dry=1 = ensaio.
 
+
+def _perfil_existe_agora(email: str, uid: str = "") -> bool | None:
+    """Confere o perfil AGORA, não no retrato tirado no início do tick.
+
+    🚨 O alerta de cadastro novo sai 4 a 8 segundos DEPOIS de a pessoa
+    completar o cadastro (medido em 6 casos reais em 05/08). O retrato de
+    `profiles` do início do tick está velho justamente pra quem acabou de
+    completar — e o e-mail anunciava "parou antes de completar" pra quem
+    tinha terminado. Como a dedup do alerta é vitalícia, o veredito errado
+    nunca se corrigia.
+
+    Devolve None quando não deu pra saber: aí o chamador PULA, em vez de
+    chutar. Chutar aqui vira e-mail errado permanente.
+    """
+    try:
+        st, rows = _supa_rest_service(
+            "GET", "/profiles",
+            params={"select": "user_id", "email": f"eq.{email}", "limit": "1"})
+        if st != 200:
+            return None
+        if rows:
+            return True
+        if uid:
+            st2, rows2 = _supa_rest_service(
+                "GET", "/profiles",
+                params={"select": "user_id", "user_id": f"eq.{uid}", "limit": "1"})
+            if st2 != 200:
+                return None
+            return bool(rows2)
+        return False
+    except Exception as e:
+        _log_error("alerta-cadastro:perfil-agora", str(e))
+        return None
+
 def _email_auto_ja_enviado(email: str, kind: str, ref: str = "") -> bool:
     """True se este lembrete já saiu (ou se a checagem falhar — na dúvida, NÃO envia)."""
     import urllib.request as _u, urllib.parse as _up, json as _j
@@ -8005,15 +8039,34 @@ async def emails_auto_tick(request: Request, dry: int = 0):
             continue
         novos.append({
             "email": _e2,
+            "uid": str(_u2.get("id") or ""),
             "nome": ((_u2.get("user_metadata") or {}).get("full_name")
                      or (_u2.get("user_metadata") or {}).get("name") or ""),
             "tem_perfil": (str(_u2.get("id") or "") in ids_com_perfil) or (_e2 in emails_com_perfil),
+            # Minutos desde a criação da conta: não dá pra chamar de "parou"
+            # quem ainda pode estar digitando.
+            "idade_min": (now - _c2).total_seconds() / 60.0,
         })
 
     if not dry and novos:
         import html as _ha
         for _n in novos:
-            _sit = ("✅ completou o cadastro" if _n["tem_perfil"]
+            # 🚨 O retrato de perfis é do INÍCIO do tick, e este alerta sai 4 a
+            # 8 segundos depois de a pessoa completar — ou seja, o retrato está
+            # velho justamente pra quem acabou de completar. Confere agora.
+            _tem = _n["tem_perfil"]
+            if not _tem:
+                _agora = _perfil_existe_agora(_n["email"], _n.get("uid", ""))
+                if _agora is None:
+                    # Não deu pra saber: pula sem registrar dedup (a dedup é
+                    # vitalícia — errar aqui é errar pra sempre). Próximo tick.
+                    continue
+                _tem = _agora
+            # Sem perfil e conta recém-criada: não dá pra distinguir "desistiu"
+            # de "ainda preenchendo". Deixa o próximo tick julgar.
+            if not _tem and _n.get("idade_min", 999) < 30:
+                continue
+            _sit = ("✅ completou o cadastro" if _tem
                     else "⚠️ <b>parou antes de completar o cadastro</b>")
             _corpo = (
                 f"<b>{_ha.escape(_n['nome']) or '(ainda sem nome)'}</b> criou uma conta.<br>"
