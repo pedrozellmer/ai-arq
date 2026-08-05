@@ -161,6 +161,20 @@ let salvando = false;
           '<a href="projeto.html?job_id=' + encodeURIComponent(jobId) + '#visao" ' +
           'class="inline-block mt-3 text-sm font-semibold text-indigo-600 underline">Abrir o projeto →</a></div>';
     }
+    // Sem documento, nada da barra de ação funciona: Salvar não tem o que
+    // salvar, e PDF/.docx/IA batem no mesmo 404. Botão que existe e não
+    // funciona é pior que botão ausente.
+    ['btn-salvar', 'btn-ia', 'btn-pdf', 'btn-docx'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.disabled = true;
+      el.style.opacity = '0.45';
+      el.style.pointerEvents = 'none';
+      el.title = semItens ? 'Disponível depois que o quantitativo sair'
+                          : 'Indisponível: o memorial não carregou';
+    });
+    const meta = document.getElementById('doc-meta');
+    if (meta) meta.textContent = semItens ? 'Sem quantitativo ainda' : 'Não carregou';
     document.body.classList.add('m-ready');
   }
   document.getElementById('gate').classList.add('hidden');
