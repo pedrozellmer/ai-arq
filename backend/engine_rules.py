@@ -345,6 +345,18 @@ _RE_BASE_DE_CALCULO = _re.compile(
     r"n[ãa]o\s+(?:segregad|discriminad)[ao]\s+(?:no|por)|"
     r"inclui\s+todos\s+os\s+tipos|"
     r"m[úu]ltiplas\s+vistas|"
+    # 🚨 Termos do caso REAL que passou reto (rafaelcmnz@, 05/08): a
+    # observação avisava "inclui faces duplas ... e possíveis duplicações
+    # ... dividir por 2" e a regra gravou 1960,75 ml assim mesmo. Quando o
+    # próprio texto diz que o número está dobrado ou somado de mais, ele não
+    # é a quantidade da linha.
+    r"faces?\s+dupla|"
+    r"duplica[çc]|"
+    r"dividir\s+por\s*\d|"
+    r"ambos\s+os\s+pavimentos|"
+    r"todos\s+os\s+pavimentos|"
+    r"soma\s+de\s+todas\s+as\s+linhas|"
+    r"multiplicar\s+pel|"
     r"sem\s+p[ée][-\s]?direito",
     _re.IGNORECASE)
 
@@ -413,10 +425,14 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
         return {"quantity": round(medida, 2),
                 "unit": unit if u in LENGTH_UNITS_OK else "m",
                 "confidence": "estimado",
+                # 🪤 A frase dizia "pode incluir linha que não é TUBULAÇÃO" —
+                # texto fixo, colado em item de alvenaria, de peitoril e de
+                # revestimento de pilar. Falar de tubulação numa linha de
+                # alvenaria faz o cliente desconfiar do aviso inteiro.
                 "motivo": (f"⚠ QUANTIDADE RECUPERADA: o motor mediu {n} m neste "
                            f"layer e a linha tinha saído zerada. Marcado como "
-                           f"ESTIMADO — a soma do layer pode incluir linha que não "
-                           f"é tubulação. Confira antes de orçar.")}
+                           f"ESTIMADO — a soma do layer pode incluir traço que "
+                           f"não é deste item. Confira antes de orçar.")}
 
     if u in LENGTH_UNITS_OK:
         return {}                                  # unidade certa e com número

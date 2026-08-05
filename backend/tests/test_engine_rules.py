@@ -305,6 +305,28 @@ for _n in ("Fachada Fundos", "FUNDOS", "LOGRADOURO", "LCVP_LEGENDA 2",
 check("carimbo: vazio nao quebra", _lic("") is False and _lic(None) is False)
 
 
+# 🚨 Observação que DENUNCIA o próprio número não pode virar quantidade.
+# Caso real (rafaelcmnz@, 05/08/2026): a regra gravou 1960,75 ml de alvenaria
+# a partir de uma observação que dizia "inclui faces duplas ... e possíveis
+# duplicações ... dividir por 2". O freio não cobria esses termos.
+_OBS_FACES_DUPLAS = (
+    "Fonte: comprimento total do layer 'Alvenaria' = 1960.75 m. ATENCAO: este "
+    "valor representa a soma de todas as linhas do layer (inclui faces duplas de "
+    "parede, ambos os pavimentos e possiveis duplicacoes). Para converter em m2 "
+    "de parede, multiplicar pelo pe-direito liquido e dividir por 2 (faces duplas).")
+check("faces duplas: freio pega", _base(_OBS_FACES_DUPLAS) is True)
+check("faces duplas: NAO grava quantidade",
+      _ccm("Alvenaria de bloco ceramico", "ml", 0, _OBS_FACES_DUPLAS) == {})
+for _t in ("inclui faces duplas", "possiveis duplicacoes", "dividir por 2",
+           "ambos os pavimentos", "soma de todas as linhas", "multiplicar pelo pe-direito"):
+    check(f"freio pega '{_t}'", _base(f"Comprimento total = 100 m. {_t}.") is True)
+# 🔒 O legítimo continua passando — o freio não pode virar mordaça.
+check("medicao limpa continua recuperando",
+      _ccm("Rodape", "ml", 0,
+           "Fonte: comprimento total do layer A-WALL = 722,39 m medido na "
+           "geometria.").get("quantity") == 722.39)
+
+
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
 sys.exit(1 if _failed else 0)
