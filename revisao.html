@@ -980,6 +980,13 @@ function updateCounters() {
   const counts = { approved: 0, rejected: 0, edited: 0, pending: 0 };
   items.forEach(it => {
     const s = reviewState[it.id] || 'pending';
+    // 🚨 PENDENTE É ESTIMATIVA NÃO CONFERIDA — não "item que ninguém tocou".
+    // Contando todo item sem ação, os 48 já MEDIDOS do CAD entravam como
+    // trabalho a fazer: a tela dizia "191 pendentes" logo abaixo de "48
+    // medidos · 143 a confirmar", contradizendo a si mesma e o menu (143).
+    // Item medido não precisa de conferência; é o que a regra dura nº1 chama
+    // de branco. Confirmar um medido continua contando em "confirmados".
+    if (s === 'pending' && it.confidence === 'confirmado') return;
     counts[s] = (counts[s] || 0) + 1;
   });
   document.getElementById('count-approved').textContent = counts.approved;

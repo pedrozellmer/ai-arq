@@ -10714,14 +10714,33 @@ async def meus_entregaveis(request: Request):
     # tela pede pra sempre o trabalho que a pessoa já fez: no projeto de 03/08
     # foram 28 ações e o contador seguiu em 170, igualzinho.
     # Então: 'medido' continua puro, e 'a_revisar' desconta o já conferido.
+    # 🪤 DESCONTAR DUAS VEZES. A 1ª versão fazia
+    #     a_revisar = total - medido - len(revisados)
+    # contando TODA linha de item_reviews. Só que o cliente também confirma item
+    # que já era MEDIDO — e esse item saía da conta duas vezes: uma por estar em
+    # `medido`, outra por estar em `revisados`. Com 143 estimativas abertas e o
+    # cliente passeando pelos medidos, o contador chegava a ZERO com o trabalho
+    # todo por fazer.
+    # O certo é contar diretamente o que a tela promete: ESTIMATIVA QUE AINDA
+    # NÃO FOI CONFERIDA. Então precisamos dos ids dos estimados, não só do total.
+    estimados_por_job = {}
+    _, itens_est = _supa_rest_service(
+        "GET", "/project_items",
+        params={"job_id": filtro, "confidence": "neq.confirmado",
+                "select": "job_id,id", "limit": "20000"})
+    for r in (itens_est or []):
+        jid = str(r.get("job_id") or "")
+        if jid:
+            estimados_por_job.setdefault(jid, set()).add(str(r.get("id")))
+
     revisados_por_job = {}
     _, revs = _supa_rest_service(
         "GET", "/item_reviews",
-        params={"job_id": filtro, "select": "job_id,item_id", "limit": "10000"})
+        params={"job_id": filtro, "select": "job_id,item_id", "limit": "20000"})
     for r in (revs or []):
         jid = str(r.get("job_id") or "")
         if jid:
-            revisados_por_job.setdefault(jid, set()).add(r.get("item_id"))
+            revisados_por_job.setdefault(jid, set()).add(str(r.get("item_id")))
 
     # 🚨 REGRA DURA nº7: mexeu no quantitativo, os entregáveis ficam velhos e o
     # site AVISA. Esse aviso existia só DENTRO da página do projeto — nestas
@@ -10764,8 +10783,13 @@ async def meus_entregaveis(request: Request):
             "arquivado": bool(p.get("archived")),
             "itens": int(p.get("items_count") or 0),
             "medido": medido,
-            "revisados": len(revisados_por_job.get(jid, ())),
-            "a_revisar": max(0, total - medido - len(revisados_por_job.get(jid, ()))),
+            # Estimativa que o cliente ainda NÃO conferiu — a interseção, não a
+            # subtração. Confirmar item medido não mexe neste número, porque
+            # item medido nunca esteve aqui dentro.
+            "revisados": len(estimados_por_job.get(jid, set())
+                             & revisados_por_job.get(jid, set())),
+            "a_revisar": len(estimados_por_job.get(jid, set())
+                             - revisados_por_job.get(jid, set())),
             "entregaveis": {
                 "planilha": {
                     # 🚨 Carimbo NÃO é arquivo. _carimbar_planilha roda ANTES do

@@ -283,8 +283,36 @@ def main() -> int:
             failures.append(f"projeto.html?job_id={job_id} não carregou em 30s")
             return _close_and_report(browser, failures)
 
-        # ── 3. Esperar btn-download habilitar (JS remove pointer-events:none) ──
+        # ── 2b. ABRIR A VISTA DO QUANTITATIVO ────────────────────
+        # 🚨 Em 04/08/2026 a página do projeto foi dividida em 4 VISTAS e o
+        # #btn-download passou a morar dentro de <div class="vista"
+        # data-vista="quantitativo" hidden>. A vista que abre por padrão é a
+        # 'visao', então o botão EXISTE no DOM e está invisível: o clique do
+        # bloco 4 estourava por falta de visibilidade e a mensagem de falha
+        # acusava "provável 401 ou 404 do backend" — diagnóstico errado, num
+        # alarme que passaria a soar a cada push. Alarme que é sempre falso é
+        # alarme que se aprende a ignorar.
+        # De quebra, agora o teste cobre a navegação por vistas — justamente o
+        # que quebrou naquela noite.
         try:
+            page.evaluate(
+                """() => {
+                    if (typeof window.mostrarVista === 'function') {
+                        window.mostrarVista('quantitativo');
+                    } else {
+                        location.hash = '#quantitativo';
+                    }
+                }"""
+            )
+        except Exception as e:
+            failures.append(f"não consegui abrir a vista 'quantitativo': {e}")
+            return _close_and_report(browser, failures)
+
+        # ── 3. Esperar btn-download habilitar E ficar VISÍVEL ────
+        # `state="visible"` é o ponto: sem ele, o teste aprovava um botão dentro
+        # de uma vista escondida e só quebrava no clique, com a mensagem errada.
+        try:
+            page.wait_for_selector("#btn-download", state="visible", timeout=20_000)
             page.wait_for_function(
                 """() => {
                     const b = document.getElementById('btn-download');
@@ -295,7 +323,10 @@ def main() -> int:
                 timeout=20_000,
             )
         except PlaywrightTimeoutError:
-            failures.append("#btn-download nunca habilitou (pointer-events ficou em 'none')")
+            failures.append(
+                "#btn-download não ficou clicável: ou continua invisível (a vista "
+                "'quantitativo' não abriu) ou o pointer-events ficou em 'none'"
+            )
             return _close_and_report(browser, failures)
 
         # ── 4. Clicar e capturar o download ──────────────────────

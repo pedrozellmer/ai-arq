@@ -664,7 +664,12 @@
         }
         var ent = p.entregaveis || {};
         pinta('quantitativo', p.medido + ' medidos', p.medido > 0 ? 'ok' : 'nao');
-        if (p.a_revisar > 0) pinta('revisao', String(p.a_revisar), 'pend');
+        // 🚨 "ok" verde é uma AFIRMAÇÃO: quer dizer "está conferido". Projeto
+        // que falhou no processamento ou que não tem item nenhum não conferiu
+        // coisa alguma — dizer "ok" ali é dar por resolvido o que nunca
+        // aconteceu. Nesse caso o certo é o traço: não há o que revisar.
+        if (p.status !== 'done' || !(p.itens > 0)) pinta('revisao', '—', 'nao');
+        else if (p.a_revisar > 0) pinta('revisao', String(p.a_revisar), 'pend');
         else pinta('revisao', 'ok', 'ok');
         ['cronograma', 'memorial', 'comparativo'].forEach(function (k) {
           var e = ent[k] || {};
