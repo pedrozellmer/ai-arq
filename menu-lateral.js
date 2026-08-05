@@ -641,7 +641,8 @@
           return;
         }
         var nm = document.getElementById('aiarq-proj-nome');
-        if (nm) nm.textContent = p.nome;
+        // Vitrine: primeira letra maiúscula. O dado no banco não muda.
+        if (nm) nm.textContent = (window.tituloProjeto || String)(p.nome);
         var sb = document.getElementById('aiarq-proj-sub');
         if (sb) {
           sb.textContent = [p.tipologia, (p.itens || 0) + ' itens']

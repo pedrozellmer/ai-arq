@@ -1651,7 +1651,7 @@
         + '<div class="flex items-center gap-2 flex-wrap">'
         + '<span class="pill-mini" style="background:' + c.fundo + ';color:' + c.texto + '">'
         + cfg.rotulo + '</span>'
-        + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(l.p.nome) + '</span>' + velho + '</div>'
+        + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(tituloProjeto(l.p.nome)) + '</span>' + velho + '</div>'
         + '<p class="text-xs text-gray-500 mt-0.5">' + _dataCurta(l.em) + '</p></div>'
         + '<div class="flex items-center gap-2">' + acao + '</div></div>';
     }).join('') + '</div>';
@@ -1685,7 +1685,7 @@
         const pct = p.itens ? Math.round((p.medido / (p.medido + p.a_revisar)) * 100) : 0;
         return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
           + '<div style="min-width:0">'
-          + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(p.nome) + '</span>'
+          + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(tituloProjeto(p.nome)) + '</span>'
           + '<p class="text-xs text-gray-500 mt-0.5">' + p.medido + ' medidos do CAD · <b class="text-amber-700">'
           + p.a_revisar + ' a conferir</b> · ' + pct + '% medido</p></div>'
           + '<a href="revisao.html?job_id=' + p.job_id + '" class="px-3 py-1.5 rounded-lg btn-revisar text-white text-xs font-semibold no-underline">Revisar</a>'
@@ -4424,7 +4424,7 @@
           <div class="hidden sm:flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${tip.bg} text-xl" aria-hidden="true">${tip.icon}</div>
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
-              <h3 class="font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition">${escProj(p.project_name || 'Projeto sem nome')}</h3>
+              <h3 class="font-semibold text-gray-900 truncate group-hover:text-indigo-700 transition">${escProj(tituloProjeto(p.project_name || 'Projeto sem nome'))}</h3>
               ${statusBadge}
               <span class="conf-badge"></span>
               <span class="review-pct"></span>

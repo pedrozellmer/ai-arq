@@ -2121,7 +2121,8 @@ async function generateComparison() {
 }
 
 function renderHeader(p) {
-  document.getElementById('proj-title').textContent = p.project_name || 'Projeto sem nome';
+  document.getElementById('proj-title').textContent =
+    (window.tituloProjeto || String)(p.project_name || 'Projeto sem nome');
   // FIX 2026-05-14: elemento #proj-id foi removido do header (código mostrado
   // só no card "Identificação" agora — #d-jobid). Sem este guard, a função
   // quebrava no safeRun e nem o badge de status era setado.

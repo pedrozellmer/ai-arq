@@ -108,6 +108,29 @@
     );
   };
 
+  // ─── Nome do projeto pra exibir ──────────────────────────────
+  // O cliente digita "teste 22/07" e a tela mostrava assim, minúsculo, em
+  // título, no menu e no cartão. Fica feio.
+  //
+  // 🚨 SÓ NA EXIBIÇÃO. Nunca grave isto de volta: o nome é dado DELE, e
+  // reescrever o que ele digitou é mexer no dado do cliente. Aqui é maquiagem
+  // de vitrine, e some se ele renomear.
+  //
+  // 🪤 Sobe só a PRIMEIRA letra e não encosta no resto. Nada de Title Case:
+  // "ConfortAr — Expansão HSM" viraria "Confortar — Expansão Hsm", e "HSM",
+  // "FF&E", "AVAC" são siglas que o cliente escreveu de propósito.
+  // Nome que começa com número ("22/07 teste") não tem o que capitalizar.
+  window.tituloProjeto = function (nome) {
+    var s = String(nome == null ? '' : nome).trim();
+    if (!s) return 'Projeto sem nome';
+    // Acha a primeira letra de verdade (pula aspas, hífen, número, emoji).
+    var i = s.search(/[a-zA-ZÀ-ÿ]/);
+    if (i === -1) return s;
+    var c = s[i];
+    if (c === c.toUpperCase()) return s;      // já está maiúscula: não mexe
+    return s.slice(0, i) + c.toUpperCase() + s.slice(i + 1);
+  };
+
   // ─── Datas/horas em horário de Brasília ──────────────────────
   // Postgres/Supabase guardam TUDO em UTC (timestamptz). Se a gente formatar
   // com toLocaleString SEM fixar o fuso, ele usa o RELÓGIO DO NAVEGADOR — muda
