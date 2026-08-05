@@ -975,7 +975,12 @@ const _origRender = render;
 render = function() {
   _origRender();
   if (focusedIdx < 0) {
-    setTimeout(() => applyFocus(0), 50);
+    // 🪤 `scroll = false` NA CARGA. applyFocus rola a linha pro CENTRO da tela,
+    // e no primeiro render isso jogava o cabeçalho, os contadores e a legenda
+    // pra fora: a página abria no meio, como se o cliente já tivesse rolado.
+    // O objetivo aqui é só deixar os atalhos de teclado prontos — quem navega
+    // com as setas continua sendo acompanhado pela rolagem.
+    setTimeout(() => applyFocus(0, false), 50);
   }
 };
 
