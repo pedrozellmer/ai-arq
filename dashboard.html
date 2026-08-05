@@ -305,13 +305,6 @@
               <p class="text-xs text-gray-500 truncate">Histórico e revisar</p>
             </div>
           </button>
-          <button onclick="switchTab('cashback')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-amber-300 hover:shadow-sm p-4 text-left transition">
-            <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-lg" aria-hidden="true">🤝</span>
-            <div class="min-w-0">
-              <p class="font-semibold text-gray-900 truncate">Contribuições</p>
-              <p class="text-xs text-gray-500 truncate">Planilhas revisadas e cotações</p>
-            </div>
-          </button>
           <button onclick="switchTab('meu-cadastro')" class="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm p-4 text-left transition">
             <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-lg" aria-hidden="true">👤</span>
             <div class="min-w-0">
@@ -4489,11 +4482,7 @@
       ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   }
 
-  function startReview(projectIdx) {
-    switchTab('cashback');
-    // Store which project is being reviewed
-    window._reviewingProjectIdx = projectIdx;
-  }
+  // startReview saiu junto: era codigo morto, ninguem chamava.
 
   // ══════════════════════════════════════════════
   //  CASHBACK - UPLOAD CORRECTED SPREADSHEET

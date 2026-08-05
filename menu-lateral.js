@@ -208,7 +208,12 @@
     ]},
     { titulo: 'Conta', itens: [
       { aba: 'meu-cadastro',    rotulo: 'Meu cadastro',    ic: 'pessoa' },
-      { aba: 'cashback',        rotulo: 'Contribuições',   ic: 'presente' },
+      // 🚫 'Contribuições' saiu do menu em 05/08. Era formulário DUPLICADO —
+      // o envio da planilha revisada e das cotações já vive dentro do
+      // projeto, com o contexto aberto. E o contador mostrava 0 pra todo
+      // mundo: em 102 projetos prontos, ZERO planilha revisada e ZERO
+      // cotação enviadas. Entrada permanente de menu pra uma tela que nunca
+      // teve conteúdo. A aba continua existindo pra link antigo não morrer.
       { aba: 'meus-pagamentos', rotulo: 'Meus pagamentos', ic: 'cartao' }
     ]},
     { titulo: 'Ajuda', itens: [
