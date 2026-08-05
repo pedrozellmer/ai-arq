@@ -6007,13 +6007,37 @@ bloco — só cite os que estão no inventário deste arquivo."""
             s = _ud.normalize("NFKD", s)
             return "".join(c for c in s if not _ud.combining(c))
         _pdf_stems = {_stem_norm(p) for p in (pdf_paths or [])}
-        # Aviso do plano B (01/08): DWG convertido via libredwg — medições saem
-        # normais, mas o cliente confere medidas-chave (honestidade sobre origem).
-        for _n_lw in (dwg_via_libredwg or []):
-            project_data.warnings = (project_data.warnings or []) + [
-                f"O arquivo {_n_lw} foi convertido pelo leitor alternativo (plano B). "
-                f"As medições saíram normalmente, mas vale conferir 2-3 medidas-chave "
-                f"da planilha contra o projeto antes de fechar orçamento."]
+        # Aviso do plano B (01/08): DWG convertido via libredwg.
+        # 🚨 CORREÇÃO 05/08 — o texto afirmava "As medições saíram normalmente,
+        # mas vale conferir 2-3 medidas-chave". No 1º caso real em produção
+        # (HOTEL BRISAS, 4 DWG estruturais, todos recusados pelo ODA) NENHUMA
+        # medição saiu: 12 itens, 11 com quantidade zero, zero medidos do CAD.
+        # O aviso mandava conferir medidas que não existiam. Afirmar resultado
+        # antes de olhar o resultado é a regra nº1 pelo avesso.
+        if dwg_via_libredwg:
+            try:
+                _n_medidos = sum(
+                    1 for _it in (all_items or [])
+                    if str(getattr(_it, "confidence", "") or "") == "confirmado")
+            except Exception:
+                _n_medidos = -1          # não deu pra saber: não afirma nada
+            _lista_lw = ", ".join(dwg_via_libredwg)[:220]
+            _quantos = len(dwg_via_libredwg)
+            _cab = (f"{_quantos} arquivo(s) precisaram do leitor alternativo "
+                    f"(plano B): {_lista_lw}. ")
+            if _n_medidos == 0:
+                _fim = ("Ele abriu os desenhos, mas **nenhuma quantidade foi medida da "
+                        "geometria** — o que saiu na planilha veio de texto lido das "
+                        "pranchas. Trate a planilha como um mapa do que existe, não "
+                        "como quantitativo fechado.")
+            elif _n_medidos > 0:
+                _fim = (f"As medições saíram ({_n_medidos} item(ns) medido(s) do CAD), "
+                        "mas vale conferir 2-3 medidas-chave contra o projeto antes de "
+                        "fechar orçamento.")
+            else:
+                _fim = ("Confira as medidas-chave contra o projeto antes de fechar "
+                        "orçamento.")
+            project_data.warnings = (project_data.warnings or []) + [_cab + _fim]
         _dwg_com_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) in _pdf_stems]
         _dwg_sem_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) not in _pdf_stems]
         if _dwg_com_irmao:
