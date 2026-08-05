@@ -304,12 +304,12 @@
     'text-decoration:none;padding:7px 9px;border-radius:8px;margin-bottom:10px}',
     '.aiarq-sair-proj:hover{background:#F1F5F9;color:#334155}',
     '.aiarq-sair-proj svg{width:15px;height:15px;flex:none}',
-    '.aiarq-fixado{background:linear-gradient(180deg,#F5F7FF,#fff);border:1.5px solid #4F46E5;',
-    'border-radius:11px;padding:10px 11px;margin:0 2px 14px}',
-    '.aiarq-fixado .tag{font-size:9.5px;font-weight:700;letter-spacing:.07em;',
-    'text-transform:uppercase;color:#4F46E5}',
-    '.aiarq-fixado b{display:block;font-size:13.5px;font-weight:700;margin-top:4px;',
-    'line-height:1.3;color:#0F172A}',
+    '.aiarq-fixado{background:#F8FAFC;border:1px solid #E2E8F0;border-left:3px solid #4F46E5;',
+    'border-radius:8px;padding:9px 11px;margin:0 2px 14px}',
+    '.aiarq-fixado .tag{font-size:10px;font-weight:600;letter-spacing:.04em;',
+    'text-transform:uppercase;color:#94A3B8}',
+    '.aiarq-fixado b{display:block;font-size:13.5px;font-weight:600;margin-top:3px;',
+    'line-height:1.35;color:#0F172A}',
     '.aiarq-fixado span#aiarq-proj-sub{font-size:11.5px;color:#64748B}',
     // estado de cada entregavel, ao lado do item
     '.side-est{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;',
@@ -325,9 +325,11 @@
     '.side-nota{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;',
     'border-radius:99px;background:#F1F5F9;color:#94A3B8}',
     '.aiarq-rodape{margin-top:auto;border-top:1px solid #E2E8F0;padding-top:12px}',
-    '.aiarq-beta{background:#ECFDF5;border-radius:9px;padding:9px 11px}',
-    '.aiarq-beta b{display:block;font-size:12px;color:#065F46}',
-    '.aiarq-beta span{font-size:11px;color:#047857}',
+    '.aiarq-beta{display:flex;align-items:flex-start;gap:8px;padding:2px 4px 4px}',
+    '.aiarq-beta i{width:7px;height:7px;border-radius:50%;background:#10B981;',
+    'flex:none;margin-top:5px}',
+    '.aiarq-beta b{display:block;font-size:12px;font-weight:600;color:#334155}',
+    '.aiarq-beta span{display:block;font-size:11px;color:#94A3B8;margin-top:1px}',
     '.aiarq-eu{display:flex;align-items:center;gap:9px;padding:11px 6px 6px}',
     '.aiarq-ini{width:30px;height:30px;border-radius:50%;background:#EEF2FF;color:#4F46E5;display:flex;',
     'align-items:center;justify-content:center;font-weight:600;font-size:11px;flex:none}',
@@ -454,7 +456,7 @@
             + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
             + 'Todos os projetos</a>'
             + '<div class="aiarq-fixado">'
-            + '<span class="tag">📌 Trabalhando em</span>'
+            + '<span class="tag">Projeto aberto</span>'
             + '<b id="aiarq-proj-nome">Carregando…</b>'
             + '<span id="aiarq-proj-sub"></span></div>'
           : '<a class="side-cta" href="dashboard.html#novo-projeto" data-tab="novo-projeto">'
@@ -465,7 +467,8 @@
       + '<a id="btn-admin" class="side-it hidden" href="admin.html" style="color:#DC2626">'
       + svg('engrenagem') + 'Painel Admin</a></div>'
       + '<div class="aiarq-rodape">'
-      + '<div class="aiarq-beta"><b>Beta gratuito</b><span>Projetos ilimitados, sem cartão</span></div>'
+      + '<div class="aiarq-beta"><i></i><div><b>Beta — acesso completo</b>'
+      + '<span>Projetos ilimitados, sem cartão</span></div></div>'
       + '<div class="aiarq-eu"><span id="side-user-initials" class="aiarq-ini">·</span>'
       + '<span id="side-user-name"></span></div>'
       + '<button id="btn-logout" class="side-it" style="color:#DC2626">'
