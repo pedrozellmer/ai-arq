@@ -4830,6 +4830,30 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             (dxf_path, float(extraction.metadata.get("fator_para_metros") or 1.0)))
                     except (TypeError, ValueError):
                         pass
+                    # 🪤 GRAVAR SEMPRE a decisão de unidade — inclusive quando não
+                    # há nada de errado. Até 05/08 o motor escolhia a unidade e não
+                    # registrava em lugar consultável nenhum: `error_log` com stage
+                    # de unidade = 0 linhas, `projects.warnings` idem. Por isso o
+                    # cabeçalho mentiroso do DXF da Isabelle (declara mm, está em
+                    # metro, 36 pilares descartados por "pequenos demais") só foi
+                    # achado abrindo o arquivo na mão.
+                    # Sem esta linha não dá pra perguntar ao banco quantos projetos
+                    # sofrem do mesmo. É a família do "gravação que falha calada":
+                    # best-effort não pode ser mudo.
+                    try:
+                        _md_u = extraction.metadata or {}
+                        _log_error(
+                            "motor:unidade",
+                            f"arq={os.path.basename(dxf_path)} "
+                            f"declarada={_md_u.get('unidade_desenho', '?')} "
+                            f"fator={_md_u.get('fator_para_metros', '?')} "
+                            f"cotas={_md_u.get('unidade_validada_por_cotas', '-')} "
+                            f"corrigida={_md_u.get('unidade_corrigida_por_cotas', '-')} "
+                            f"alerta={(_md_u.get('alerta_unidade') or '-')[:120]} "
+                            f"ressalva={_dxf_sem_procedencia}",
+                            job_id)
+                    except Exception as _eu:
+                        print(f"[unidade] log falhou (nao-fatal): {_eu}")
                     # Aviso ao usuário (não só rebaixar a cor): xref não-resolvido é a
                     # causa nº1 de "planilha só laranja" em CAD — o sinal existe na
                     # metadata mas antes morria no downgrade. Agora orienta a dar BIND
