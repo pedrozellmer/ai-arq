@@ -135,8 +135,33 @@ let salvando = false;
       window.aiArqCoerencia(jobId, 'memorial').then(wireBotaoAtualizar);
     }
   } catch (e) {
-    const msg = 'Erro ao carregar o memorial: ' + e.message;
-    window.toast ? window.toast.error(msg) : alert(msg);
+    // 🪤 Antes daqui só saía um toast, que some em segundos — e a página ficava
+    // com a caixa "Clique em qualquer parágrafo pra editar" acima de uma folha
+    // VAZIA. O cliente clicava no menu "Memorial" de um projeto sem itens e
+    // recebia uma instrução impossível de cumprir, sem dizer por quê.
+    // O caso mais comum não é erro nenhum: é projeto que ainda não tem
+    // quantitativo (o backend devolve 404 "Projeto sem itens").
+    const semItens = /sem itens|gere o quantitativo|404/i.test(e.message || '');
+    const como = document.querySelector('#main > .bg-white');
+    if (como) como.classList.add('hidden');       // a instrução não serve agora
+    const cx = document.getElementById('doc-container');
+    if (cx) {
+      cx.innerHTML = semItens
+        ? '<div class="rounded-2xl border-2 border-indigo-200 bg-indigo-50 p-6" role="status">' +
+          '<p class="font-bold text-indigo-900">Este projeto ainda não tem quantitativo</p>' +
+          '<p class="text-sm text-indigo-800 mt-1">O memorial descreve os itens medidos, então ele só existe depois que a planilha sai. ' +
+          'Se o projeto falhou ou ainda está processando, o motivo está na página do projeto.</p>' +
+          '<a href="projeto.html?job_id=' + encodeURIComponent(jobId) + '#visao" ' +
+          'class="inline-block mt-3 text-sm font-semibold text-indigo-600 underline">Abrir o projeto →</a></div>'
+        : '<div class="rounded-2xl border-2 border-red-200 bg-red-50 p-6" role="alert">' +
+          '<p class="font-bold text-red-900">Não consegui carregar o memorial</p>' +
+          '<p class="text-sm text-red-800 mt-1">' +
+          String(e.message || '').replace(/[&<>"]/g, '') + '</p>' +
+          '<p class="text-sm text-red-800 mt-2">Recarregue a página. Se continuar, use "Reportar problema" na página do projeto.</p>' +
+          '<a href="projeto.html?job_id=' + encodeURIComponent(jobId) + '#visao" ' +
+          'class="inline-block mt-3 text-sm font-semibold text-indigo-600 underline">Abrir o projeto →</a></div>';
+    }
+    document.body.classList.add('m-ready');
   }
   document.getElementById('gate').classList.add('hidden');
 })();

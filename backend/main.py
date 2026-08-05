@@ -10793,7 +10793,13 @@ async def meus_entregaveis(request: Request):
             # Arquivado (90 dias) perde o arquivo no Storage. A tela precisa
             # mostrar cinza e explicar, nunca oferecer um download que dá 404.
             "arquivado": bool(p.get("archived")),
-            "itens": int(p.get("items_count") or 0),
+            # 🪤 `items_count` é contador GUARDADO na tabela projects e mente:
+            # 12 projetos concluídos dizem ter item (de 6 a 144) e têm ZERO
+            # linha em project_items — conferido no banco em 05/08. O menu
+            # lateral usava esse número pra decidir o selo da Revisão e pintava
+            # "ok" VERDE ("está conferido") num projeto sem item nenhum.
+            # `total` vem da RPC user_project_confidence, que CONTA as linhas.
+            "itens": total,
             "medido": medido,
             # Estimativa que o cliente ainda NÃO conferiu — a interseção, não a
             # subtração. Confirmar item medido não mexe neste número, porque

@@ -1674,7 +1674,13 @@
       + '<p class="text-sm text-amber-900"><b>' + total + '</b> ' + (total === 1 ? 'item marcado como estimativa' : 'itens marcados como estimativa')
       + ' em ' + pend.length + (pend.length === 1 ? ' projeto' : ' projetos') + '.</p></div>'
       + '<div class="space-y-2">' + pend.map(p => {
-        const pct = p.itens ? Math.round((p.medido / (p.medido + p.a_revisar)) * 100) : 0;
+        // 🚨 O denominador era (medido + a_revisar) e ESQUECIA os `revisados`.
+        // Como revisar move o item de `a_revisar` pra `revisados`, o
+        // denominador encolhia e o "% medido" SUBIA sozinho — o número dizia
+        // que mais coisa veio do CAD só porque o cliente conferiu estimativa.
+        // Isso é exatamente o que a regra nº1 proíbe. O total é `p.itens`
+        // (medido + a_revisar + revisados), que não se mexe ao revisar.
+        const pct = p.itens ? Math.round((p.medido / p.itens) * 100) : 0;
         return '<div class="rounded-xl border bg-white p-4 flex items-center justify-between gap-3 flex-wrap">'
           + '<div style="min-width:0">'
           + '<span class="font-semibold text-gray-900 text-sm">' + escapeHtml(tituloProjeto(p.nome)) + '</span>'
