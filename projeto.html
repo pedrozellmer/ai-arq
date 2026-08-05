@@ -1544,7 +1544,12 @@ function mostrarErro(msg, session) {
 // cliente, raio-x, chat, entregas, envio de planilha revisada, cotações,
 // arquivos e detalhes do processamento. Agora são 4 vistas, escolhidas pelo
 // menu do projeto. Como não recarrega nada, a troca é instantânea.
-const VISTAS_PROJETO = ['visao', 'quantitativo', 'cotacoes', 'dados'];
+// 🪤 LIDA DO PRÓPRIO HTML, nunca escrita à mão. A lista fixa dizia
+// ['visao','quantitativo','cotacoes','dados'] enquanto a 4ª vista já tinha
+// virado 'processamento' — o item do menu caía CALADO na visão geral, sem erro
+// nenhum. Lista escrita à mão e marcação divergem sempre; derivar não diverge.
+const VISTAS_PROJETO = [...document.querySelectorAll('.vista')]
+  .map(v => v.getAttribute('data-vista')).filter(Boolean);
 
 function mostrarVista(nome) {
   if (VISTAS_PROJETO.indexOf(nome) === -1) nome = 'visao';   // rede: hash torto cai na visão geral
@@ -1634,7 +1639,16 @@ window.switchUploadTab = switchUploadTab;
     ordem.forEach(id => {
       const el = document.getElementById(id);
       if (!el) return;
-      main.appendChild(el);
+      // 🚨 REORDENA DENTRO DO PAI, NUNCA JOGA NO #main.
+      // Esta linha era `main.appendChild(el)` — e appendChild MOVE o nó. Com a
+      // página dividida em vistas (04/08), ela arrancava os 16 blocos de dentro
+      // das <div class="vista"> e os pendurava direto no #main. As vistas
+      // ficavam VAZIAS, e esconder uma vista deixava de esconder qualquer
+      // coisa: as 4 telas do menu mostravam a página inteira, idênticas.
+      // O HTML estava certo o tempo todo; era o JS que desfazia meio segundo
+      // depois — por isso toda conferência no arquivo passava e a tela do
+      // cliente mostrava tudo.
+      (el.parentNode || main).appendChild(el);
       el.classList.add('pj-rise');
       if (!el.classList.contains('hidden')) {
         el.style.animationDelay = Math.min(vis * 0.06, 0.42).toFixed(2) + 's';
