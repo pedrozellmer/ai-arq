@@ -5420,7 +5420,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     gc.collect()
 
             except Exception as e:
-                jobs.update_field(job_id, error_message=f"Erro extração DXF: {str(e)[:500]}")
+                jobs.update_field(job_id, error_message=f"Erro extração DXF: {str(e)[:2000]}")
                 jobs.update_field(job_id, current_step=f"ERRO DXF: {str(e)[:200]}")
                 import traceback
                 traceback.print_exc()
@@ -6573,7 +6573,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Atualizar erro no Supabase
         _supabase_update("projects", "job_id", job_id, {
             "status": "error",
-            "error_message": str(e)[:500],
+            # 🚨 ERA [:500] E CORTAVA A INSTRUCAO NO MEIO. As mensagens de erro
+            # amigaveis tem ~800 caracteres e terminam com os PASSOS pra
+            # resolver ("1. Abra o arquivo no seu CAD... 3. Suba o arquivo
+            # novo"). Cortando em 500, o cliente lia o diagnostico e a frase
+            # morria em "1. Abra o arqui" -- ficava sabendo que deu errado e
+            # nao o que fazer. A coluna e `text`, sem limite; o teto so existe
+            # pra um traceback gigante nao virar mensagem de cliente.
+            "error_message": str(e)[:2000],
         })
 
         # Email pro cliente (best-effort; sem jargão técnico). Distingue falha

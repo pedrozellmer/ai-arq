@@ -407,11 +407,23 @@
     return out;
   }
 
-  function montar() {
+  // 🪤 O CSS ENTRA ANTES DO MENU, de propósito.
+  // No faq.html os scripts moram no <head>, então o menu só pode nascer quando
+  // o <body> existir — e a página desenhava inteira, com o conteúdo colado na
+  // esquerda, até o menu chegar e EMPURRAR tudo 248px. Parecia bug.
+  // O <head> já existe durante o parse, então o estilo entra na hora: o espaço
+  // fica reservado desde o primeiro quadro e nada pula quando o menu monta.
+  // Só injeta pra quem vai ver o menu — visitante anônimo não ganha margem.
+  function injetarCSS() {
+    if (document.getElementById('aiarq-menu-css')) return;
     var st = document.createElement('style');
     st.id = 'aiarq-menu-css';
     st.textContent = CSS;
-    document.head.appendChild(st);
+    (document.head || document.documentElement).appendChild(st);
+  }
+
+  function montar() {
+    injetarCSS();
 
     var scrim = document.createElement('div');
     scrim.id = 'aiarq-scrim';
@@ -766,6 +778,10 @@
     // A confirmação roda SEMPRE: ela corrige o palpite nos dois sentidos.
     confirmarComSupabase();
   }
+  // Reserva o espaço JÁ, antes mesmo de o <body> existir. É isto que tira o
+  // "pulo" do FAQ: quando o menu finalmente monta, a margem já está lá.
+  if (pareceLogado()) injetarCSS();
+
   if (document.body) arrancar();
   else document.addEventListener('DOMContentLoaded', arrancar);
 

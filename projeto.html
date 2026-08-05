@@ -126,7 +126,7 @@
       <svg class="w-6 h-6 text-red-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
       <div class="flex-1">
         <p class="font-bold text-red-900"><span aria-hidden="true">✗</span> O processamento deste projeto falhou</p>
-        <p id="erro-msg" class="text-sm text-red-800 mt-1">Não foi possível processar os arquivos.</p>
+        <div id="erro-msg" class="text-sm text-red-800 mt-1">Não foi possível processar os arquivos.</div>
         <div class="mt-4 flex flex-wrap gap-2">
           <input id="erro-file-input" type="file" multiple accept=".dwg,.dxf,.pdf" class="hidden"/>
           <button id="erro-btn-arquivo" type="button" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition disabled:opacity-60">
@@ -1427,10 +1427,7 @@ function mostrarErro(msg, session) {
   const bloco = document.getElementById('erro-block');
   if (!bloco) return;
   const msgEl = document.getElementById('erro-msg');
-  // textContent nunca interpreta HTML — o error_message do banco entra como
-  // texto puro (mesma garantia do esc(), sem passar por innerHTML).
-  msgEl.textContent = String(msg || '').trim() ||
-    'Não foi possível processar os arquivos deste projeto. Tenta enviar de novo — se persistir, reporta pra gente.';
+  msgEl.innerHTML = _erroEmTopicos(String(msg || '').trim());
   bloco.classList.remove('hidden');
   // O card de erro já é o convite pra mandar arquivo — banner CAD duplicaria o CTA.
   const banner = document.getElementById('cad-upgrade-banner');
@@ -1504,6 +1501,58 @@ function mostrarErro(msg, session) {
 // nenhum. Lista escrita à mão e marcação divergem sempre; derivar não diverge.
 const VISTAS_PROJETO = [...document.querySelectorAll('.vista')]
   .map(v => v.getAttribute('data-vista')).filter(Boolean);
+
+// ══════════════════════════════════════════════════════════════════════
+//  MENSAGEM DE ERRO EM TÓPICOS
+// ══════════════════════════════════════════════════════════════════════
+// Era um parágrafo único de ~800 caracteres: diagnóstico, motivo, passos e
+// ressalva tudo emendado. O cliente batia o olho e não achava o que FAZER —
+// que é a única coisa que ele quer ali. Agora: o motivo em uma frase, os
+// passos em lista numerada, e a ação em negrito no fim.
+//
+// 🚨 O texto vem do banco e NUNCA pode ser interpretado como HTML. Tudo passa
+// por _esc antes de entrar; o único HTML aqui é o que este código escreve.
+function _erroEmTopicos(txt) {
+  const _esc = (x) => String(x).replace(/[&<>"']/g, (c) =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  if (!txt) {
+    return '<p>Não foi possível processar os arquivos deste projeto.</p>' +
+      '<p class="mt-2 font-bold">Envie o arquivo de novo — se acontecer outra vez, use "Reportar problema".</p>';
+  }
+
+  // Quebra em blocos, tira o ruído de rótulo ("COMO RESOLVER:", "📋", "⚠").
+  const linhas = txt.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+  const passos = [];
+  const paragrafos = [];
+  linhas.forEach((l) => {
+    const limpa = l.replace(/^[⚠📋✗•\-\s]+/, '').trim();
+    if (!limpa) return;
+    if (/^\d+[.)]\s/.test(limpa)) { passos.push(limpa.replace(/^\d+[.)]\s*/, '')); return; }
+    if (/^(como resolver|o que fazer)/i.test(limpa)) return;   // vira o título da lista
+    paragrafos.push(limpa);
+  });
+
+  let html = '';
+  // O primeiro parágrafo é o motivo — é o que responde "por quê".
+  if (paragrafos.length) html += '<p>' + _esc(paragrafos[0]) + '</p>';
+
+  if (passos.length) {
+    html += '<p class="mt-3 font-semibold text-red-900">Como resolver</p>' +
+      '<ol class="mt-1 space-y-1" style="list-style:decimal;padding-left:1.2rem">' +
+      passos.map((x) => '<li>' + _esc(x) + '</li>').join('') + '</ol>';
+  }
+
+  // O resto vira um parágrafo só, e o ÚLTIMO é a direção — em negrito.
+  const resto = paragrafos.slice(1);
+  if (resto.length) {
+    resto.slice(0, -1).forEach((x) => { html += '<p class="mt-2">' + _esc(x) + '</p>'; });
+    html += '<p class="mt-3 font-bold text-red-900">' + _esc(resto[resto.length - 1]) + '</p>';
+  } else if (passos.length) {
+    html += '<p class="mt-3 font-bold text-red-900">Depois de salvar, use o botão abaixo pra enviar o arquivo novo.</p>';
+  }
+  return html;
+}
 
 function mostrarVista(nome) {
   if (VISTAS_PROJETO.indexOf(nome) === -1) nome = 'visao';   // rede: hash torto cai na visão geral
