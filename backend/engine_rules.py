@@ -429,3 +429,45 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
                            f"Comprimento não é área nem contagem.")}
 
     return {}
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  LAYER DE CARIMBO ≠ DESENHO DA OBRA
+# ══════════════════════════════════════════════════════════════════════
+# 🪤 Caso HOTEL BRISAS (05/08/2026): o motor leu texto do layer
+# "Fundo Logotipo" — o fundo do CARIMBO da prancha — e criou dois serviços
+# ("Lastro de concreto magro", "Viga de baldrame"). Serviço que nasce do
+# carimbo pode nem existir na obra.
+#
+# 🚨 "LEGENDA" NÃO ENTRA NESTA LISTA, de propósito. Legenda é conteúdo de
+# engenharia legítimo e costuma ser a MELHOR fonte: os 4.638 kg de aço do
+# próprio HOTEL BRISAS saíram do quadro de aço, e a potência de 1990 W do
+# caso ConfortAr saiu do layer 'LCVP_LEGENDA 2'. Bloquear legenda quebraria
+# medição boa. O alvo é a MOBÍLIA da prancha (selo, moldura, logotipo).
+#
+# Lista curta e conferida no banco: os únicos layers de carimbo que
+# realmente produziram item são 'Fundo Logotipo', 'FUNDO' e 'Muldura'.
+_CARIMBO_SPLIT = _re.compile(r"[-_\s./\\|:$]+")
+# Prefixo só pra token longo e sem ambiguidade.
+# 🪤 'LOGO' NÃO pode ser prefixo: casaria com LOGRADOURO, que é conteúdo de
+# implantação. Por isso vive na lista de igualdade exata.
+_CARIMBO_PREFIXO = ("CARIMB", "LOGOTIP", "MOLDUR", "MULDUR", "TIMBRE")
+_CARIMBO_EXATO = {"FUNDO", "LOGO", "SELO", "MARGEM"}
+
+
+def layer_is_carimbo(layer_name) -> bool:
+    """True se o layer é a MOBÍLIA da prancha (selo/moldura/logotipo).
+
+    Compara por TOKEN, nunca por substring: 'Fachada Fundos' e 'ESCADA' não
+    podem cair aqui. Quem chama nunca apaga o item — avisa e rebaixa.
+    """
+    if not layer_name:
+        return False
+    for tok in _CARIMBO_SPLIT.split(str(layer_name).upper()):
+        if not tok:
+            continue
+        if tok in _CARIMBO_EXATO:
+            return True
+        if tok.startswith(_CARIMBO_PREFIXO):
+            return True
+    return False

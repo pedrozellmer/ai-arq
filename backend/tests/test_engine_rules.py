@@ -275,6 +275,36 @@ check("'confirmar comprimento total' sem numero nao vira medida",
       _mco("Comprimento individual não extraído. Confirmar comprimento total no projeto.") is None)
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  CARIMBO DA PRANCHA ≠ DESENHO DA OBRA
+# ══════════════════════════════════════════════════════════════════════
+# Caso HOTEL BRISAS (05/08/2026): texto do layer "Fundo Logotipo" — o fundo
+# do carimbo — virou dois serviços na planilha ("Lastro de concreto magro",
+# "Viga de baldrame"). Serviço que nasce do carimbo pode nem existir na obra.
+from engine_rules import layer_is_carimbo as _lic
+
+# Os que TÊM que pegar. 'Fundo Logotipo', 'FUNDO' e 'Muldura' são os três
+# layers de carimbo que realmente produziram item no banco.
+for _n in ("Fundo Logotipo", "FUNDO", "Muldura", "CARIMBO", "carimb-01",
+           "Logo AIarq", "LOGOTIPO_A1", "SELO", "MARGEM", "MOLDURA", "Timbre"):
+    check(f"carimbo pega '{_n}'", _lic(_n) is True)
+
+# 🔒 Os que NUNCA podem cair. Todos são layers REAIS do banco que produziram
+# medição legítima — alargar os tokens e derrubar um destes tira linha da
+# planilha de um cliente.
+#   · 'Fachada Fundos' e 'FUNDOS' — o token FUNDO é igualdade exata por isso
+#   · 'LOGRADOURO' — por isso LOGO não pode ser prefixo
+#   · 'LCVP_LEGENDA 2' — legenda elétrica deu os 1990 W do caso ConfortAr
+#   · 'AR-ALVENARIA' — 98,53 m² medidos
+for _n in ("Fachada Fundos", "FUNDOS", "LOGRADOURO", "LCVP_LEGENDA 2",
+           "AR-ALVENARIA", "AR-ALV", "POSTE LUZ", "ESCADA-EST", "FORRO-GESSO",
+           "ARQ-REVESTIMENTO", "IND-LEG", "A-WALL-IDEN", "NM-ALV", "NM-PISO",
+           "Q TEXTO TITULO", "ACABAMENTO - Rotulos_Caneta_No__19"):
+    check(f"carimbo NAO pega '{_n}'", _lic(_n) is False)
+
+check("carimbo: vazio nao quebra", _lic("") is False and _lic(None) is False)
+
+
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
 sys.exit(1 if _failed else 0)

@@ -50,6 +50,7 @@ from engine_rules import (
     is_floor_surface as _is_floor_surface,
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
+    layer_is_carimbo as _layer_is_carimbo,
     medida_de_comprimento_na_observacao as _medida_comprimento_obs,
     medida_e_base_de_calculo as _medida_e_base_de_calculo,
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
@@ -3339,6 +3340,19 @@ def _extract_layer_from_obs(obs: str) -> str:
     return m.group(1).upper() if m else ""
 
 
+def _layers_da_obs(obs: str) -> list:
+    """TODOS os layers citados na observação, não só o primeiro.
+
+    🪤 _extract_layer_from_obs devolve o PRIMEIRO. Quando a observação cita
+    carimbo E um layer de verdade (o item 'Poste de iluminação' cita
+    'Muldura' e 'POSTE LUZ'), olhar só o primeiro rebaixaria um item que tem
+    lastro real no desenho. Pra chamar de carimbo, TODOS têm que ser carimbo.
+    """
+    if not obs:
+        return []
+    return [m.upper() for m in _LAYER_RE.findall(obs)]
+
+
 def _detect_multifamiliar_signal(items: list, current_typology: str) -> tuple[bool, list]:
     """Retorna (is_multifamiliar_provavel, lista_de_evidencias).
 
@@ -5112,6 +5126,10 @@ Passo 1 — Inventário de layers:
   Para cada LAYER relevante, uma linha:
     "<nome do layer>: <tipo de dado> — <quantidade extraída> — representa <item>"
   Use os nomes de layer DESTE arquivo. Ignore layers de anotação, xrefs e aux.
+  🚨 NUNCA crie item cuja ÚNICA fonte é o CARIMBO da prancha (selo, moldura,
+  logotipo, formato de folha, texto de revisão). Isso é mobília do desenho, não
+  serviço da obra. ATENÇÃO: LEGENDA e QUADRO (de áreas, de aço, de esquadrias)
+  NÃO são carimbo — são fonte legítima e devem ser usados.
 
 Passo 2 — Checagem de LEV vs FOR:
   Liste pares conflitantes (mesmo tipo em layer LEV/existente e FOR/novo).
@@ -5296,6 +5314,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 if item_data.get("_procedencia_rebaixada"):
                                     obs_raw = (f"{obs_raw} | Procedência: extração com ressalva "
                                                f"(estéril/unidade/xref) — quantidade não confirmada, revisar").strip(" |")
+
+                                # 🪤 CARIMBO DA PRANCHA ≠ DESENHO DA OBRA (HOTEL BRISAS, 05/08).
+                                # Só rebaixa quando TODAS as fontes citadas são carimbo — item
+                                # que cita carimbo E um layer real tem lastro no desenho.
+                                # O aviso vai na FRENTE: revisao.html mostra só os primeiros
+                                # 110 caracteres da observação (o resto fica no hover, que não
+                                # existe no celular) e o insert corta em 1000.
+                                _lys = _layers_da_obs(obs_raw)
+                                if _lys and all(_layer_is_carimbo(_l) for _l in _lys):
+                                    conf = "estimado"
+                                    obs_raw = ("⚠ FONTE = CARIMBO DA PRANCHA, não o desenho — "
+                                               "confirme se este serviço existe na obra. " + obs_raw)
 
                                 # CROSS-CHECK determinístico (opt-in via env DXF_CONFIRM_CROSSCHECK):
                                 # promove 'estimado' → 'confirmado' SÓ quando TODAS batem:
