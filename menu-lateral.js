@@ -335,14 +335,25 @@
     'align-items:center;justify-content:center;font-weight:600;font-size:11px;flex:none}',
     '#side-user-name{font-size:13px;font-weight:500;color:#334155;overflow:hidden;',
     'text-overflow:ellipsis;white-space:nowrap;min-width:0}',
+    // 🪤 Medido no ar em 05/08: com padding 6px o botão dava 33×33px, abaixo do
+    // mínimo confortável pro dedo (44×44). O ícone continua do mesmo tamanho —
+    // quem cresce é a área que aceita o toque.
     '#aiarq-burger,#aiarq-fechar{display:inline-flex;align-items:center;justify-content:center;',
-    'background:transparent;border:0;cursor:pointer;padding:6px;border-radius:8px}',
+    'background:transparent;border:0;cursor:pointer;padding:6px;border-radius:8px;',
+    'min-width:44px;min-height:44px}',
     '#aiarq-burger:hover,#aiarq-fechar:hover{background:#F1F5F9}',
     // A partir de 1024px o menu vira fixo e o conteúdo anda pro lado. O
     // deslocamento é padding no <body> porque cada página tem uma estrutura
     // diferente — não dá pra contar com um wrapper comum.
     '@media (min-width:1024px){',
     '#aiarq-side{transform:translateX(0)}',
+    // 🪤 O z-index 10000 existe por causa do botão do WhatsApp (9998), que
+    // só atrapalha quando a GAVETA cobre a tela — isso é celular. No
+    // computador o menu é uma coluna parada, e ficar em 10000 fazia ele
+    // passar por cima de TODO modal das páginas (.z-50): a faixa de 248px
+    // não escurecia e continuava clicável. O banner de cookies (9999)
+    // também ficava metade escondido atrás dele.
+    '#aiarq-side{z-index:40}',
     '#aiarq-scrim{display:none}',
     '#aiarq-burger,#aiarq-fechar{display:none}',
     // A marca do topo some quando o menu lateral aparece: os dois juntos
@@ -541,11 +552,30 @@
       // 4 das 6 telas. Entrar DENTRO do primeiro filho (que costuma ser o
       // grupo da logo) mantém o cabeçalho como estava.
       var primeiroFilho = casa.firstElementChild;
+      // 🪤 DOIS erros moravam nesta checagem, os dois confirmados em 05/08:
+      //  a) `/flex|items-center/` testava SUBSTRING, e "flex" casa com
+      //     "flex-1" — a classe da coluna do título em projeto.html e
+      //     cronograma.html. O ☰ ia parar dentro do título, sozinho numa
+      //     linha acima dele. Token não é substring: classList.contains('flex')
+      //     é FALSO pra 'flex-1', que é o comportamento certo aqui.
+      //  b) no faq.html o primeiro filho é o <a> da marca. Enfiar um <button>
+      //     dentro de um <a> é HTML inválido e, no celular, tocar no ☰
+      //     navegava pra index.html em vez de abrir o menu.
+      var interativo = /^(A|BUTTON|INPUT|SELECT|TEXTAREA|LABEL|SUMMARY)$/;
       var ehGrupo = primeiroFilho &&
-        /flex|items-center/.test(primeiroFilho.className || '') &&
+        !interativo.test(primeiroFilho.tagName) &&
+        (primeiroFilho.classList.contains('flex') ||
+         primeiroFilho.classList.contains('items-center')) &&
         primeiroFilho.children.length > 0;
-      if (ehGrupo) primeiroFilho.insertBefore(b, primeiroFilho.firstChild);
-      else { casa.insertBefore(b, casa.firstChild); b.style.marginRight = 'auto'; }
+      if (ehGrupo) {
+        primeiroFilho.insertBefore(b, primeiroFilho.firstChild);
+      } else {
+        casa.insertBefore(b, casa.firstChild);
+        // margin-right:auto só faz falta quando NÃO há um filho que já engole
+        // a sobra (flex-1); com ele, o auto ainda empurraria o cabeçalho.
+        var jaTemElastico = casa.querySelector('.flex-1');
+        if (!jaTemElastico) b.style.marginRight = 'auto';
+      }
     }
     else {
       b.style.position = 'fixed';

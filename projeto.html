@@ -368,7 +368,7 @@
               <p class="text-xs text-gray-500">Planilha por disciplina + SINAPI</p>
             </div>
           </div>
-          <span class="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700"><span aria-hidden="true">✓</span> PRONTO</span>
+          <span id="entrega-q-selo" class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700"><span aria-hidden="true">✓</span> PRONTO</span>
         </div>
         <!-- contagens vivem no Raio-X acima (sem repetir aqui); ids mantidos p/ o JS -->
         <span id="entrega-q-items" class="hidden"></span>
@@ -1293,6 +1293,7 @@ function mostrarProcessando(live, session) {
     if (el) el.classList.add('hidden');
   });
   bloco.classList.remove('hidden');
+  aplicarEstadoNasVistas('processando');
 
   const stepEl = document.getElementById('proc-step');
   const barEl = document.getElementById('proc-bar');
@@ -1427,6 +1428,15 @@ function mostrarErro(msg, session) {
       ((_rec && _rec.botao) || 'Enviar outro arquivo') + '\n          ';
   }
   bloco.classList.remove('hidden');
+  // 🪤 Projeto que falhou NÃO tem planilha. Deixar entregas-section, o chat
+  // do quantitativo e o comparativo visíveis fazia a vista Quantitativo
+  // anunciar '✓ PRONTO' com Revisar/XLSX — conferido na tela em 05/08.
+  ['entregas-section', 'chat-quant', 'expansao-disciplinas', 'feedback-card',
+   'cotacoes-section'].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+  aplicarEstadoNasVistas('erro');
   // O card de erro já é o convite pra mandar arquivo — banner CAD duplicaria o CTA.
   const banner = document.getElementById('cad-upgrade-banner');
   if (banner) banner.classList.add('hidden');
@@ -1672,6 +1682,74 @@ function _erroEmTopicos(txt) {
   html += '<p class="mt-3 font-bold text-red-900">' +
           _esc(receita ? receita.acao : PADRAO) + '</p>';
   return html;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  ESTADO DO PROJETO DENTRO DAS VISTAS
+// ══════════════════════════════════════════════════════════════════════
+// 🪤 Esconder bloco por id era suficiente quando projeto.html era UMA rolagem:
+// o cliente continuava vendo o resto. Depois que as vistas viraram DESTINOS de
+// menu (04/08), esconder tudo virou tela em branco — e pior, o que sobrava
+// visível num projeto que falhou dizia "✓ PRONTO".
+// Toda vista que depende da planilha ganha uma faixa dizendo o estado real e
+// levando pra onde está a ação. A faixa é injetada DENTRO da vista (o bug de
+// 04/08 foi exatamente um bloco que saía de dentro da vista em tempo de
+// execução — aqui a inserção é sempre em vista.firstChild).
+const _VISTAS_QUE_DEPENDEM_DA_PLANILHA = {
+  quantitativo: 'A planilha',
+  cotacoes: 'O comparativo de fornecedores',
+};
+
+function _faixaEstado(vista, estado, titulo) {
+  const cor = estado === 'erro'
+    ? { borda: 'border-red-200', fundo: 'bg-red-50', texto: 'text-red-900', sub: 'text-red-800' }
+    : { borda: 'border-indigo-200', fundo: 'bg-indigo-50', texto: 'text-indigo-900', sub: 'text-indigo-800' };
+  const cabeca = estado === 'erro'
+    ? '<span aria-hidden="true">✗</span> O processamento deste projeto falhou'
+    : '<span aria-hidden="true">⏳</span> Ainda estamos lendo as suas pranchas';
+  const corpo = estado === 'erro'
+    ? titulo + ' não foi gerada, então não há nada pra mostrar aqui. O motivo e o que fazer estão na Visão geral.'
+    : titulo + ' aparece aqui assim que a leitura terminar. O andamento está na Visão geral — pode deixar esta aba aberta.';
+  const acao = estado === 'erro' ? 'Ver o motivo e o que fazer' : 'Ver o andamento';
+
+  const d = document.createElement('div');
+  d.className = 'aiarq-faixa-estado rounded-2xl border-2 ' + cor.borda + ' ' + cor.fundo + ' p-6';
+  d.setAttribute('role', 'status');
+  d.innerHTML =
+    '<p class="font-bold ' + cor.texto + '">' + cabeca + '</p>' +
+    '<p class="text-sm ' + cor.sub + ' mt-1">' + corpo + '</p>' +
+    // 🪤 `hover:underline` NÃO existe no build estático do Tailwind daqui
+    // (conferido: só há `.underline` e `.no-underline`) — seria classe inerte.
+    '<a href="#visao" class="inline-block mt-3 text-sm font-semibold text-indigo-600 underline">' +
+    acao + ' →</a>';
+  return d;
+}
+
+// estado: 'processando' | 'erro' | 'done'
+function aplicarEstadoNasVistas(estado) {
+  document.querySelectorAll('.aiarq-faixa-estado').forEach(function (e) { e.remove(); });
+
+  // Selo do card de quantitativo: estava chumbado como "✓ PRONTO" verde no
+  // HTML. Só é verdade quando o projeto concluiu.
+  const selo = document.getElementById('entrega-q-selo');
+  if (selo) {
+    if (estado === 'done') {
+      selo.className = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-emerald-100 text-emerald-700';
+      selo.innerHTML = '<span aria-hidden="true">✓</span> PRONTO';
+    } else {
+      selo.className = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600';
+      selo.innerHTML = estado === 'erro' ? 'NÃO GERADA' : 'GERANDO…';
+    }
+  }
+
+  if (estado === 'done') return;
+
+  Object.keys(_VISTAS_QUE_DEPENDEM_DA_PLANILHA).forEach(function (nome) {
+    const vista = document.querySelector('.vista[data-vista="' + nome + '"]');
+    if (!vista) return;
+    vista.insertBefore(_faixaEstado(nome, estado, _VISTAS_QUE_DEPENDEM_DA_PLANILHA[nome]),
+                       vista.firstChild);
+  });
 }
 
 function mostrarVista(nome) {
