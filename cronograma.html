@@ -1246,6 +1246,10 @@ async function abrirPreviewTemplate(tplId) {
   const t = CRONO_TEMPLATES.find(function (x) { return x.id === tplId; }) || { id: tplId, nome: tplId, desc: '' };
   const modal = document.getElementById('modal-preview-tpl');
   document.getElementById('mp-titulo').textContent = (window.tituloProjeto || String)(t.nome);
+  // No celular a gaveta fica fechada e o cliente nao ve de que projeto
+  // sao os itens do menu. O nome no cabecalho resolve sem abrir nada.
+  var _bp = document.getElementById('back-projeto');
+  if (_bp && t.nome) _bp.textContent = (window.tituloProjeto || String)(t.nome);
   document.getElementById('mp-desc').textContent = t.desc;
   document.getElementById('mp-corpo').innerHTML =
     '<div class="flex flex-col items-center justify-center h-full text-slate-500 gap-3">'

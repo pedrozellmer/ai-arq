@@ -364,8 +364,14 @@ async function loadItems() {
                           : 'pending';
     });
     const alreadyReviewed = Object.keys(reviewState).length;
+    // 🪤 No celular a gaveta fica fechada e o cliente não vê de que projeto são
+    // os itens do menu. O código do job não diz nada a ele; o NOME diz. Vem do
+    // mesmo payload de /api/items (campo project), então não custa chamada.
+    const _nomeProj = (window.tituloProjeto || String)(
+      (itemsRes.project && itemsRes.project.project_name) || '');
     document.getElementById('project-meta').textContent =
-      `${items.length} itens · job ${jobId}` +
+      (_nomeProj ? `${_nomeProj} · ` : '') +
+      `${items.length} itens` +
       (alreadyReviewed ? ` · ${alreadyReviewed} já revisados` : '');
 
     // Termômetro da revisão (03/08/2026). Até aqui esta tela era a ÚNICA sem

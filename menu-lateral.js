@@ -309,12 +309,12 @@
     // estado de cada entregavel, ao lado do item
     '.side-est{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;',
     'border-radius:99px;white-space:nowrap}',
-    '.side-est.ok{background:#ECFDF5;color:#059669}',
+    '.side-est.ok{background:#ECFDF5;color:#065F46}',
     '.side-est.velho{background:#FEF3C7;color:#92400E}',
-    '.side-est.nao{background:#F1F5F9;color:#94A3B8}',
+    '.side-est.nao{background:#F1F5F9;color:#475569}',
     '.side-est.pend{background:#FEF3C7;color:#92400E}',
     // "Em breve": visivelmente inerte, pra ninguem tentar clicar
-    '.side-embreve{color:#94A3B8;cursor:default}',
+    '.side-embreve{color:#64748B;cursor:default}',
     '.side-embreve:hover{background:transparent}',
     '.side-embreve svg{color:#CBD5E1}',
     '.side-nota{margin-left:auto;font-size:10px;font-weight:700;padding:1px 6px;',
@@ -414,6 +414,9 @@
 
     var side = document.createElement('aside');
     side.id = 'aiarq-side';
+    // role=navigation: pra leitor de tela um <aside> e "conteudo lateral", nao
+    // "menu". Com o papel certo, da pra pular direto pra navegacao.
+    side.setAttribute('role', 'navigation');
     side.setAttribute('aria-label', 'Menu principal');
     side.innerHTML =
       '<div class="aiarq-topo">'
@@ -503,10 +506,23 @@
     var b = document.createElement('button');
     b.id = 'aiarq-burger';
     b.setAttribute('aria-label', 'Abrir menu');
+    b.setAttribute('aria-expanded', 'false');
+    b.setAttribute('aria-controls', 'aiarq-side');
     b.innerHTML = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#334155" stroke-width="1.9" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
     b.addEventListener('click', abrir);
     var casa = document.querySelector('header > div, nav > div');
-    if (casa) casa.insertBefore(b, casa.firstChild);
+    if (casa) {
+      // 🪤 Entrar como PRIMEIRO FILHO de um flex justify-between faz o botão
+      // virar um "item" da distribuição e empurra a logo/título pro centro em
+      // 4 das 6 telas. Entrar DENTRO do primeiro filho (que costuma ser o
+      // grupo da logo) mantém o cabeçalho como estava.
+      var primeiroFilho = casa.firstElementChild;
+      var ehGrupo = primeiroFilho &&
+        /flex|items-center/.test(primeiroFilho.className || '') &&
+        primeiroFilho.children.length > 0;
+      if (ehGrupo) primeiroFilho.insertBefore(b, primeiroFilho.firstChild);
+      else { casa.insertBefore(b, casa.firstChild); b.style.marginRight = 'auto'; }
+    }
     else {
       b.style.position = 'fixed';
       b.style.top = '10px';
@@ -540,8 +556,34 @@
     if (c) c.classList.add('aberto');
     document.body.style.overflow = 'hidden';
     sincronizarInerte();
+    // Guarda de onde o foco veio, pra devolver ao fechar. Sem isso o foco
+    // ficava perdido no começo da página e quem navega por teclado tinha que
+    // percorrer tudo de novo pra voltar ao botão.
+    _focoAntes = document.activeElement;
+    var burg0 = document.getElementById('aiarq-burger');
+    if (burg0) { burg0.setAttribute('aria-expanded', 'true'); burg0.setAttribute('aria-label', 'Fechar menu'); }
     var primeiro = s && s.querySelector('.side-cta, .side-it');
     if (primeiro) { try { primeiro.focus({ preventScroll: true }); } catch (_) {} }
+    document.addEventListener('keydown', _prenderTab, true);
+  }
+
+  var _focoAntes = null;
+
+  // Enquanto a gaveta está aberta no celular, o Tab não pode passear pela
+  // página atrás dela: quem usa teclado ou leitor de tela sai do menu sem
+  // perceber e fica navegando um conteúdo que está coberto.
+  function _prenderTab(ev) {
+    if (ev.key !== 'Tab') return;
+    var s = document.getElementById('aiarq-side');
+    if (!s || !s.classList.contains('aberto') || ehDesktop()) return;
+    var focaveis = s.querySelectorAll('a[href], button:not([disabled])');
+    if (!focaveis.length) return;
+    var primeiro = focaveis[0], ultimo = focaveis[focaveis.length - 1];
+    if (ev.shiftKey && document.activeElement === primeiro) {
+      ev.preventDefault(); ultimo.focus();
+    } else if (!ev.shiftKey && document.activeElement === ultimo) {
+      ev.preventDefault(); primeiro.focus();
+    }
   }
 
   function fechar() {
@@ -550,6 +592,18 @@
     if (s) s.classList.remove('aberto');
     if (c) c.classList.remove('aberto');
     document.body.style.overflow = '';
+    document.removeEventListener('keydown', _prenderTab, true);
+    var burg1 = document.getElementById('aiarq-burger');
+    if (burg1) { burg1.setAttribute('aria-expanded', 'false'); burg1.setAttribute('aria-label', 'Abrir menu'); }
+    // Devolve o foco ANTES de marcar inerte: com o inert já aplicado o
+    // navegador recusa o foco e ele cai no começo da página.
+    if (_focoAntes && document.contains(_focoAntes)) {
+      try { _focoAntes.focus({ preventScroll: true }); } catch (_) {}
+    } else {
+      var burg = document.getElementById('aiarq-burger');
+      if (burg) { try { burg.focus({ preventScroll: true }); } catch (_) {} }
+    }
+    _focoAntes = null;
     sincronizarInerte();
   }
 
@@ -727,9 +781,14 @@
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function () {
-      preencherUsuario(); atualizarSelo();
+      if (document.getElementById('aiarq-side')) { preencherUsuario(); atualizarSelo(); }
     });
-  } else { preencherUsuario(); atualizarSelo(); }
+  } else if (document.getElementById('aiarq-side')) {
+    // So chama o backend se o menu existe. Visitante anonimo no FAQ estava
+    // acordando o Render com uma chamada autenticada que nunca ia servir pra
+    // nada -- e o Render dorme; a primeira chamada custa 30 a 60 segundos.
+    preencherUsuario(); atualizarSelo();
+  }
 
   // API pública, usada pelo dashboard (switchTab chama marcarAtivo/fechar).
   window.aiarqMenu = {

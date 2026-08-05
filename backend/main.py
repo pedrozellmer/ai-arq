@@ -6504,8 +6504,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                if _pn_r_raw else "Reprocessamos seu projeto no AI.arq — planilha atualizada")
                     _ok_r = _send_email_smtp(
                         _pe, _subj_r,
+                        # 🪤 O e-mail fala de UM projeto e o botão abria o painel
+                        # genérico: o cliente caía numa lista e tinha que
+                        # procurar de qual projeto era a mensagem. Agora vai
+                        # direto na vista onde o XLSX mora.
                         _email_wrap("Planilha atualizada", _body_r,
-                                    "Ver minha planilha", "https://ai.arq.br/dashboard.html",
+                                    "Ver minha planilha",
+                                    f"https://ai.arq.br/projeto.html?job_id={job_id}#quantitativo",
                                     badge="&#10003; Atualizado"))
                     if _ok_r:
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
