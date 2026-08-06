@@ -46,6 +46,30 @@
   // 🪤 Recarga automática é perigosa — laço de reload deixa o site inutilizável.
   // Por isso: marca em sessionStorage ANTES de recarregar, e só tenta uma vez
   // por aba. Qualquer falha (offline, 404, versão vazia) não faz nada.
+  // 🚨 NUNCA recarregar depois que a pessoa começou a usar a página.
+  // Relatado pelo Pedro DUAS vezes: no celular o menu fecha sozinho no
+  // primeiro toque do ☰. A causa não é clique — é ISTO. A busca do
+  // /version.txt resolve DEPOIS do toque (no celular a rede demora), a
+  // gaveta abre, e o location.replace() abaixo recarrega a página com a
+  // gaveta aberta. Some tudo, e acontece UMA vez por aba — que é
+  // exatamente o sintoma "sempre no primeiro clique".
+  // 🪤 Minha primeira tentativa de conserto foi uma trava anti-clique-fantasma
+  // de 400ms. Não podia funcionar: não passa por clique nenhum. Palpite
+  // subido sem reproduzir.
+  // Medido em 05/08 no navegador do Pedro: página carregada em 534e07be, no ar
+  // d57184cb, `vai_recarregar = true` — e a aba JÁ tinha recarregado uma vez.
+  // Num dia de muitos deploys isso dispara quase toda visita.
+  // Página velha é um problema pequeno; página que se recarrega na mão do
+  // cliente é um problema grande. Se ele já interagiu, desiste — a próxima
+  // navegação pega a versão nova de qualquer jeito.
+  var _jaInteragiu = false;
+  try {
+    ['pointerdown', 'touchstart', 'keydown', 'click'].forEach(function (ev) {
+      document.addEventListener(ev, function () { _jaInteragiu = true; },
+                                { once: true, capture: true, passive: true });
+    });
+  } catch (_) {}
+
   (function conferirVersao() {
     try {
       var meu = '';
@@ -70,6 +94,12 @@
           // Guardando o ALVO, a segunda tentativa reconhece "já tentei chegar
           // nesta versão e não consegui" e desiste em silêncio.
           if (sessionStorage.getItem('aiarq_alvo') === noAr) return;
+          // 🚨 A pessoa já tocou em alguma coisa: não puxa o tapete.
+          if (_jaInteragiu) return;
+          // Gaveta aberta é interação em curso, mesmo que o listener acima
+          // não tenha pegado (toque sintético, teclado de leitor de tela).
+          var _sideAberta = document.getElementById('aiarq-side');
+          if (_sideAberta && _sideAberta.classList.contains('aberto')) return;
           sessionStorage.setItem('aiarq_alvo', noAr);
 
           // Recarga simples pode servir do cache de novo (o HTML tem 10 min de
