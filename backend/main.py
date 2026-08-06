@@ -2787,6 +2787,47 @@ def _drop_nonsense_items(items: list) -> list:
     return kept
 
 
+# Prefixo de AVISO escrito pela IA como se fosse item. As 3 condições (prefixo
+# + unidade 'vb' + quantidade 0) são exigidas juntas de propósito: serviço
+# legítimo que comece com "Nota" não pode ser engolido.
+_RE_ITEM_QUE_E_AVISO = _re.compile(
+    r"^\s*(AVISO|ATEN[ÇC][ÃA]O|OBSERVA[ÇC][ÃA]O|NOTA)\b\s*[:\-—]", _re.IGNORECASE)
+
+
+def _mover_avisos_para_warnings(items: list, project_data) -> list:
+    """Aviso da IA não é linha de planilha — vira AVISO do projeto.
+
+    🪤 Caso HOTEL BRISAS (06/08/2026): a planilha trazia a linha
+    "AVISO: Arquivo DXF é Projeto Legal de Arquitetura — NÃO contém projeto
+    estrutural" com unidade 'vb' e quantidade 0 — numa leitura que tinha
+    acabado de contar 36 pilares estruturais. Conclusão de UMA prancha virou
+    afirmação sobre o projeto inteiro, e virou linha de quantitativo.
+    Medido: 7 itens em 7 projetos, todos com o mesmo formato.
+
+    O orçamentista lê linha por linha esperando item de obra; texto que não se
+    compra no meio disso queima a confiança na planilha toda.
+    NÃO descarta — MOVE pro lugar certo, onde a tela já mostra num bloco
+    próprio e o cliente continua lendo.
+    """
+    ficam, avisos = [], []
+    for it in items:
+        desc = (getattr(it, "description", "") or "").strip()
+        unid = (getattr(it, "unit", "") or "").strip().lower()
+        try:
+            qtd = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            qtd = 0.0
+        if desc and unid == "vb" and qtd == 0 and _RE_ITEM_QUE_E_AVISO.match(desc):
+            avisos.append(desc)
+        else:
+            ficam.append(it)
+    if avisos and project_data is not None:
+        atuais = list(getattr(project_data, "warnings", None) or [])
+        project_data.warnings = atuais + avisos
+        print(f"[limpeza] {len(avisos)} aviso(s) movido(s) de item pra warnings")
+    return ficam
+
+
 def _consolidate_by_type_code(items: list) -> list:
     """Funde o MESMO tipo de divisória/parede (DRY 07, DW-12...) que aparece em
     VÁRIAS pranchas: SOMA as qtys (paredes diferentes em ambientes diferentes),
@@ -4049,6 +4090,49 @@ def _salvage_layout_ai_counts(client, file_paths, crops_dir):
 # As unidades/keywords e is_floor_surface() vivem em engine_rules.py (regra
 # determinística, testável sem IA — tests/test_engine_rules.py). Importados no topo
 # como _AREA_UNITS_HONESTY / _FLOOR_M2_UNITS / _is_floor_surface.
+def _anotar_area_parede_pe_direito(items, pe_direito: float) -> int:
+    """Escreve a ÁREA derivada na observação da linha de parede em metro linear.
+
+    Medido em 05/08/2026: 67 linhas de parede têm o COMPRIMENTO medido e
+    nenhuma tem a área — o orçamentista precisa de m² pra alvenaria e drywall.
+    Com o pé-direito informado, a conta fecha: comprimento × pé-direito.
+
+    🚫 NÃO cria linha nova, de propósito. Seria a MESMA parede em duas linhas
+    (comprimento + área) e quem precificasse as duas pagaria dobrado. A
+    derivação de PINTURA pode criar linha porque pintura é outro serviço;
+    área de parede é a mesma coisa medida de outro jeito.
+
+    🚨 A conta vai no COMEÇO da observação: revisao.html corta em 110
+    caracteres e o insert em 1000 — texto no fim não chega ao cliente.
+    Não desconta vãos (não os conhecemos aqui) e diz isso.
+    """
+    if not pe_direito or pe_direito <= 0:
+        return 0
+    n = 0
+    for it in items:
+        d = (getattr(it, "description", "") or "").lower()
+        u = (getattr(it, "unit", "") or "").strip().lower()
+        if u not in ("m", "ml"):
+            continue
+        if not ("parede" in d or "alvenaria" in d or "drywall" in d or "divisória" in d):
+            continue
+        try:
+            q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if q <= 0:
+            continue
+        obs = getattr(it, "observations", "") or ""
+        if "ÁREA COM O PÉ-DIREITO" in obs:
+            continue
+        area = round(q * float(pe_direito), 2)
+        marca = (f"📐 ÁREA COM O PÉ-DIREITO QUE VOCÊ INFORMOU: {q:g} m × "
+                 f"{float(pe_direito):g} m = {area:g} m² por face (não desconta vãos). ")
+        it.observations = marca + obs
+        n += 1
+    return n
+
+
 def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
     """Deriva PINTURA de parede quando só temos o COMPRIMENTO das paredes.
 
@@ -5832,6 +5916,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         all_items = _consolidate_items(all_items)
         all_items = _dedupe_by_block(all_items)  # funde itens do mesmo bloco CAD (anti-duplicação)
         all_items = _drop_nonsense_items(all_items)       # tira "seção transversal" e afins
+        # Aviso da IA não é item de planilha — vai pro bloco de avisos.
+        all_items = _mover_avisos_para_warnings(all_items, project_data)
         all_items = _consolidate_by_type_code(all_items)  # funde mesmo tipo (DRY 07) entre pranchas
         # Validar qty/unit após consolidação
         for it in all_items:
@@ -6248,13 +6334,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pd_inf = float(getattr(project_data, "user_pe_direito", 0) or 0)
             if _pd_inf:
                 _n_pd = _derive_pintura_pe_direito(all_items, _pd_inf)
+                # Parede em metro linear ganha a ÁREA na própria observação —
+                # sem criar linha nova, que duplicaria a mesma parede.
+                _n_ap = _anotar_area_parede_pe_direito(all_items, _pd_inf)
                 print(f"[pe-direito] job={job_id}: informado {_pd_inf} m, "
-                      f"{_n_pd} item(ns) de pintura derivado(s)")
+                      f"{_n_pd} item(ns) de pintura derivado(s), "
+                      f"{_n_ap} parede(s) com área anotada")
                 # 🪤 Registrar mesmo com 0 derivados. Em 03/08 a feature tinha
                 # ZERO itens derivados em produção e não havia como saber se era
                 # falta de uso ou defeito — o pé-direito nem chegava ao banco.
                 _log_error("motor:pe-direito",
-                           f"informado={_pd_inf} derivados={_n_pd}", job_id)
+                           f"informado={_pd_inf} derivados={_n_pd} areas_anotadas={_n_ap}", job_id)
         except Exception as _epd:
             print(f"[pe-direito] job={job_id}: derivação falhou: {_epd}")
             _log_error("motor:pe-direito", f"FALHOU: {_epd}", job_id)

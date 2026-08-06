@@ -440,6 +440,11 @@
           <!-- Pé-direito (opcional): destrava pintura quando a planta só dá o comprimento das paredes -->
           <div class="mb-6">
             <label for="project-pe-direito" class="block text-sm font-medium text-gray-700 mb-2">P&eacute;-direito (m) <span class="text-gray-400 font-normal">&mdash; opcional</span></label>
+            <!-- 🪤 Preenchido em 0 de 184 projetos (medido 05/08/2026). Campo
+                 opcional que não diz o que destrava é campo ignorado — e sem ele
+                 a parede fica em metro linear e nunca vira m². O motivo agora
+                 aparece embaixo do rótulo. -->
+            <p class="text-xs text-gray-500 mb-2">Com ele a gente fecha a <b>área de parede</b> e a <b>pintura</b> em m² &mdash; sem ele a parede sai só em metro corrido.</p>
             <input type="number" id="project-pe-direito" min="1.8" max="8" step="0.01" inputmode="decimal" placeholder="Ex: 2,70" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
             <p class="text-xs text-gray-500 mt-1.5">Quando a planta s&oacute; d&aacute; o <b>comprimento</b> das paredes, o p&eacute;-direito permite calcular a <b>&aacute;rea de pintura</b> (comprimento &times; altura &times; 2 faces). Entra como <b>estimativa rotulada</b>, nunca como medi&ccedil;&atilde;o &mdash; e s&oacute; &eacute; usado se a planilha ficaria sem pintura sem ele.</p>
           </div>
