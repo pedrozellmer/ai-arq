@@ -13798,10 +13798,19 @@ class TrackPayload(BaseModel):
 # então SÓ nomes conhecidos entram — mata XSS armazenado (nome de evento cru
 # renderizado no admin) e evita poluição com eventos arbitrários. Ao criar
 # evento novo no front, adicione aqui também.
+# 🪤 Evento fora desta lista é DESCARTADO EM SILÊNCIO, com resposta 200
+# ({"status": "ignored"} logo abaixo). Esquecer de incluir um nome aqui
+# produz exatamente o pior tipo de falha: um mês depois a gente conclui
+# "ninguém preenche o formulário" quando na verdade nada foi gravado.
 _TRACK_ALLOWED = {
     "view_landing", "view_cadastro", "signup_done", "view_dashboard",
     "start_project", "open_project", "download_xlsx",
     "use_cronograma", "use_comparativo", "review_item", "review_finish",
+    # 05/08/2026 — os dois marcos que faltavam pra saber se cadastro longo
+    # espanta. Sem eles a discussão "formulário antes ou depois do Google"
+    # é palpite dos dois lados:
+    "view_login",          # chegou na PORTA (login/criar conta)
+    "signup_form_start",   # TOCOU no primeiro campo do formulário
 }
 
 

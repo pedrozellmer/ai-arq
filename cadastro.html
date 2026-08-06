@@ -251,6 +251,20 @@
   // Rastreio anônimo do funil (chegou na página de cadastro).
   if (window.trackEvent) trackEvent('view_cadastro');
 
+  // 🎯 PRIMEIRO TOQUE no formulário (05/08/2026). É o marco que separa
+  // "bateu o olho e foi embora" (desinteresse) de "tentou preencher e
+  // desistiu" (o formulário assustou) — a pergunta exata que o Pedro fez
+  // ao questionar se cadastro longo intimida. Sem ele, view_cadastro e
+  // signup_done não distinguem as duas coisas.
+  // Dispara UMA vez, no primeiro focus em qualquer campo.
+  (function () {
+    var f = document.getElementById('form-cadastro');
+    if (!f) return;
+    f.addEventListener('focusin', function () {
+      if (window.trackEvent) trackEvent('signup_form_start');
+    }, { once: true });
+  })();
+
   // ══════════════════════════════════════════════
   //  DOM REFS
   // ══════════════════════════════════════════════

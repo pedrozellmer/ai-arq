@@ -149,6 +149,12 @@
 <!-- toast.js: usar window.toast.error em vez de alert() pra UX consistente. -->
 <script src="toast.js" defer></script>
 <script>
+  // 🎯 A PORTA (05/08/2026). Até hoje o login.html não tinha rastreio nenhum,
+  // então a gente contava quem CRIOU conta e nunca quem chegou na porta e foi
+  // embora. Sem esse denominador, discutir se o cadastro espanta é discutir
+  // no escuro: o abandono medido hoje (13,7%) é sobre quem JÁ passou daqui.
+  if (window.trackEvent) trackEvent('view_login');
+
   // sbClient vem de aiarq-utils.js
   const sbClient = window.sbClient;
 
