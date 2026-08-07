@@ -3732,26 +3732,58 @@ async function loadOrigem(){
     n, label: `<span class="font-semibold text-gray-700">${uf}</span> <span class="text-gray-400 text-xs">${UF_NOME[uf]||''}</span>`
   })).sort((a,b)=>b.n-a.n);
 
-  // Cadastros por semana (últimas 8). Rótulo = intervalo início–fim pra ficar
-  // claro que cada barra é uma SEMANA (não um dia).
-  // 27/07: as janelas agora fecham em DIA INTEIRO (meia-noite local = Brasília),
-  // não na hora atual. Antes o corte caía no meio do dia, então o rótulo mostrava
-  // o mesmo dia em 2 barras ("01–08/06" e "08–15/06") e um cadastro podia cair de
-  // um lado ou do outro dependendo da hora. Agora cada barra = 7 dias fechados.
+  // Cadastros por SEMANA FIXA do calendário (segunda 00:00 → domingo 23:59),
+  // desde o 1º cadastro do site.
+  //
+  // 🚨 07/08/2026, Pedro: "toda hora esse gráfico muda, ele tem que ser fixo nas
+  // semanas, não pode ser móvel, senão não faz sentido". Ele está certo. A versão
+  // anterior montava as barras como "now-(7-i)*7*DAY" — blocos de 7 dias contados
+  // PRA TRÁS a partir de hoje. Consequência: amanhã cada barra cobre um intervalo
+  // diferente, então o número de uma semana JÁ PASSADA mudava sozinho e não dava
+  // pra comparar nada com nada.
+  //
+  // Agora a grade é do calendário e não se move. Ganho colateral: semana com ZERO
+  // aparece como buraco (medido 06/08: 27/04, 25/05 e 08/06 tiveram zero) — a
+  // janela móvel diluía esses vazios entre dois blocos e escondia.
+  //
+  // 🪤 A última barra é a semana EM CURSO e continua mudando de tamanho durante a
+  // semana — isso é legítimo, mas TEM que estar rotulado, senão parece queda. Ela
+  // fica fora da média, porque comparar 4 dias com semanas de 7 mente.
   const DAY=86400000;
-  const _mn = new Date(); _mn.setHours(24,0,0,0);   // meia-noite do fim de HOJE
-  const now = _mn.getTime();
   const _dd = n => String(n).padStart(2,'0');
-  const _rangeLbl = (from,to)=>{ const a=new Date(from), b=new Date(to-DAY);
-    return a.getMonth()===b.getMonth()
-      ? `${_dd(a.getDate())}–${_dd(b.getDate())}/${_dd(b.getMonth()+1)}`
-      : `${_dd(a.getDate())}/${_dd(a.getMonth()+1)}–${_dd(b.getDate())}/${_dd(b.getMonth()+1)}`; };
-  const weeks = Array.from({length:8},(_,i)=>{ const to=now-(7-i)*7*DAY; const from=to-7*DAY;
-    let lbl='--'; try{ lbl=_rangeLbl(from,to); }catch(e){}
-    return {from,to,n:0,lbl}; });
-  users.forEach(u=>{ const t=Date.parse(u.auth_created_at||u.profile_created_at||''); if(!isNaN(t)){ const w=weeks.find(w=>t>=w.from&&t<w.to); if(w)w.n++; } });
+  // Segunda-feira 00:00 no fuso local (o admin roda em Brasília) da semana de `d`.
+  // getDay(): 0=domingo..6=sábado → (getDay()+6)%7 dá 0=segunda..6=domingo.
+  const _segunda = d => { const x=new Date(d); x.setHours(0,0,0,0);
+    x.setDate(x.getDate()-((x.getDay()+6)%7)); return x.getTime(); };
+  const _lblIni = ini => { const a=new Date(ini);
+    return `${_dd(a.getDate())}/${_dd(a.getMonth()+1)}`; };
+  const _lblFaixa = ini => { const a=new Date(ini), b=new Date(ini+6*DAY);
+    return `${_dd(a.getDate())}/${_dd(a.getMonth()+1)}–${_dd(b.getDate())}/${_dd(b.getMonth()+1)}`; };
+
+  const _tsUsers = users.map(u=>Date.parse(u.auth_created_at||u.profile_created_at||''))
+                        .filter(t=>!isNaN(t));
+  const semAtual = _segunda(Date.now());
+  const semIni   = _tsUsers.length ? _segunda(Math.min(..._tsUsers)) : semAtual;
+  const weeks = [];
+  // Avança de 7 em 7 pelo CALENDÁRIO (setDate), não somando 7*DAY: com mudança de
+  // horário a soma em milissegundos escorregaria uma hora e quebraria o alinhamento.
+  for (let ini=semIni; ini<=semAtual; ){
+    weeks.push({ini, n:0, lbl:_lblIni(ini), faixa:_lblFaixa(ini)});
+    const nx=new Date(ini); nx.setDate(nx.getDate()+7); ini=nx.getTime();
+  }
+  const _porIni = new Map(weeks.map(w=>[w.ini,w]));
+  _tsUsers.forEach(t=>{ const w=_porIni.get(_segunda(t)); if(w) w.n++; });
+
+  const iAtual = weeks.length-1;
   const maxW = weeks.reduce((m,w)=>Math.max(m,w.n),0) || 1;
   const _somaW = weeks.reduce((s,w)=>s+w.n,0);
+  const _fechadas = weeks.slice(0,-1);                    // sem a semana em curso
+  const _mediaF = _fechadas.length ? _fechadas.reduce((s,w)=>s+w.n,0)/_fechadas.length : 0;
+  const _diasCorridos = Math.min(7, Math.floor((Date.now()-semAtual)/DAY)+1);
+  // Com muitas semanas os rótulos colidem: mostra 1 a cada N (e sempre o atual).
+  const _passo = Math.max(1, Math.ceil(weeks.length/9));
+  const _gap = weeks.length>20 ? 2 : 3;
+  const _cabeNum = weeks.length<=26;                      // número em cima da barra
 
   box.innerHTML = `
     <div class="grid md:grid-cols-2 gap-5">
@@ -3769,9 +3801,9 @@ async function loadOrigem(){
     <div class="rounded-2xl border bg-white p-5 mt-5">
       <div class="flex items-baseline justify-between mb-1 flex-wrap gap-2">
         <h3 class="font-semibold text-gray-900">Cadastros por semana</h3>
-        <span class="text-xs text-gray-400">8 blocos de 7 dias fechados · pico ${maxW}</span>
+        <span class="text-xs text-gray-400">semana fixa do calendário (seg&rarr;dom) &middot; pico ${maxW}</span>
       </div>
-      <p class="text-xs text-gray-400 mb-4">${_somaW} cadastros nas 8 semanas · média ${(_somaW/8).toFixed(1)}/semana</p>
+      <p class="text-xs text-gray-400 mb-4">${_somaW} cadastros em ${weeks.length} semanas, desde ${_lblIni(semIni)} &middot; m&eacute;dia <b>${_mediaF.toFixed(1)}</b>/semana nas ${_fechadas.length} semanas fechadas &middot; a semana em curso (${weeks[iAtual].n} em ${_diasCorridos} de 7 dias) fica <b>fora</b> da m&eacute;dia</p>
       <!-- 🪤 03/08: a versão anterior punha barra + número + rótulo DENTRO da mesma
            caixa de 150px com justify-end. A barra tinha height em % dessa caixa, mas
            dividia o espaço com ~56px de texto — então o flex ENCOLHIA a barra e a
@@ -3790,8 +3822,8 @@ async function loadOrigem(){
         <!-- linha do pico e linha de base: referência recessiva -->
         <div style="position:absolute;left:0;right:0;top:0;border-top:1px dashed #E5E7EB"></div>
         <div style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid #D1D5DB"></div>
-        <div style="position:absolute;inset:0;display:flex;gap:3px;align-items:stretch">
-          ${weeks.map((w,i)=>{ const atual=(i===weeks.length-1);
+        <div style="position:absolute;inset:0;display:flex;gap:${_gap}px;align-items:stretch">
+          ${weeks.map((w,i)=>{ const atual=(i===iAtual);
             // Barra e número saem do FLUXO (absolute): enquanto os dois eram
             // irmãos num flex-col, o número disputava altura com a barra e o
             // flex encolhia a barra — dois valores diferentes acabavam do mesmo
@@ -3802,23 +3834,30 @@ async function loadOrigem(){
             const h = maxW ? (w.n*82/maxW) : 0;
             const col = atual ? '#4F46E5' : '#A5B4FC';
             const cNum = atual ? '#4338CA' : (w.n ? '#6B7280' : '#D1D5DB');
+            // min-width:0 é obrigatório: sem ele um item flex nunca encolhe abaixo
+            // do conteúdo e, com muitas semanas, as colunas estouram a caixa.
+            // 🪤 03/08 eu subi com as barras de LARGURA ZERO por medir só altura —
+            // ao mexer aqui, conferir as DUAS dimensões na tela.
             return `
-            <div style="flex:1 1 0;position:relative;height:100%"
-                 title="${w.lbl}: ${w.n} cadastro${w.n===1?'':'s'}">
+            <div style="flex:1 1 0;min-width:0;position:relative;height:100%"
+                 title="${w.faixa}${atual?' (em curso)':''}: ${w.n} cadastro${w.n===1?'':'s'}">
               <div style="position:absolute;left:0;right:0;bottom:0;height:${h}%;
-                          ${w.n?'min-height:3px;':''}background:${col};border-radius:4px 4px 0 0"></div>
-              <span style="position:absolute;left:0;right:0;bottom:calc(${h}% + 5px);
+                          ${w.n?'min-height:3px;':''}background:${col};border-radius:4px 4px 0 0
+                          ${atual?';opacity:.92;box-shadow:inset 0 2px 0 #C7D2FE':''}"></div>
+              ${_cabeNum?`<span style="position:absolute;left:0;right:0;bottom:calc(${h}% + 5px);
                            text-align:center;font-size:11px;font-weight:600;line-height:1;
-                           font-variant-numeric:tabular-nums;color:${cNum}">${w.n}</span>
+                           font-variant-numeric:tabular-nums;color:${cNum}">${w.n}</span>`:''}
             </div>`; }).join('')}
         </div>
       </div>
-      <!-- Rótulos FORA da área de plotagem — mesma grade de colunas -->
-      <div style="display:flex;gap:3px;margin-top:8px">
-        ${weeks.map((w,i)=>{ const atual=(i===weeks.length-1); return `
-          <div style="flex:1 1 0;text-align:center;line-height:1.15">
-            <div style="font-size:10px;color:${atual?'#4338CA':'#9CA3AF'};${atual?'font-weight:600;':''}">${w.lbl}</div>
-            ${atual?'<div style="font-size:9px;color:#6366F1;font-weight:500">últimos 7 dias</div>':''}
+      <!-- Rótulos FORA da área de plotagem — mesma grade de colunas.
+           Com 18+ semanas eles colidem, então só 1 a cada _passo aparece (o da
+           semana em curso aparece sempre). A faixa completa fica no title. -->
+      <div style="display:flex;gap:${_gap}px;margin-top:8px">
+        ${weeks.map((w,i)=>{ const atual=(i===iAtual); const most=atual||(i%_passo===0); return `
+          <div style="flex:1 1 0;min-width:0;text-align:center;line-height:1.15">
+            <div style="font-size:10px;white-space:nowrap;color:${atual?'#4338CA':'#9CA3AF'};${atual?'font-weight:600;':''}">${most?w.lbl:'&nbsp;'}</div>
+            ${atual?`<div style="font-size:9px;color:#6366F1;font-weight:500;white-space:nowrap">em curso &middot; ${_diasCorridos}/7</div>`:''}
           </div>`; }).join('')}
       </div>
     </div>
