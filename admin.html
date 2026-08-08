@@ -1465,9 +1465,15 @@ function renderFilhotes(L){
           ${f.liberado
             ? `<span class="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">✓ liberado pro cliente</span>
                <button onclick="liberarFilhote('${f.job_id}', true)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Revogar</button>`
-            : (pronto
-              ? `<button onclick="liberarFilhote('${f.job_id}', false)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Liberar pro cliente</button>`
-              : `<span class="text-xs text-gray-400">aguarde concluir</span>`)}
+            : (!pronto
+              ? `<span class="text-xs text-gray-400">aguarde concluir</span>`
+              // 🚨 08/08, Pedro olhando esta tela: "tem coisa que não ficou melhor
+              // e tem um botão para liberar. Nem precisa colocar isso lá."
+              // Oferecer uma ação que nunca seria tomada é ruído — e pior, um
+              // clique errado manda pro cliente uma versão PIOR que a dele.
+              : (f.melhorou
+                ? `<button onclick="liberarFilhote('${f.job_id}', false)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Liberar pro cliente</button>`
+                : `<span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">não vale liberar</span>`))}
         </div>
       </div>
       <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
@@ -1491,7 +1497,10 @@ function renderFilhotes(L){
         : ''}
       ${(!f.melhorou && pronto)
         ? `<p class="mt-3 text-xs rounded-lg bg-red-50 border border-red-200 text-red-800 px-3 py-2">
-             ⚠ Esta versão <b>não ficou melhor</b> que a original. Liberar seria passo atrás.</p>`
+             ${f.mediu_menos
+               ? `⚠ A versão nova <b>MEDIU MENOS</b> (${f.antes?.medidos} → ${f.depois?.medidos}).
+                  Mais linhas estimadas não compensam perder medição — botão escondido de propósito.`
+               : `⚠ Esta versão <b>não ficou melhor</b> que a original — botão escondido de propósito.`}</p>`
         : ''}
     </div>`;
   }).join('');

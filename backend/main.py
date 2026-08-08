@@ -549,6 +549,102 @@ _DISCIPLINE_TO_SECTION = {
 }
 
 
+def _norm_desc(s: str) -> str:
+    """Normaliza descrição pra casar o MESMO item entre duas leituras.
+
+    🪤 Não existe chave estável: `item_num` é sequencial e muda a cada leitura
+    (medido — o mesmo DWG deu numerações totalmente diferentes em 3 rodadas), e
+    o `id` é UUID novo por job. Sobra o texto.
+    """
+    import unicodedata as _ud
+    s = _ud.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
+    s = _re.sub(r"\[[^\]]*\]", " ", s)          # tira marcadores tipo [EXISTENTE - manter]
+    s = _re.sub(r"[^a-zA-Z0-9]+", " ", s).lower().strip()
+    return " ".join(s.split()[:9])               # 9 primeiras palavras bastam pra casar
+
+
+def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
+    """Faz a releitura PRESERVAR o que o cliente corrigiu à mão.
+
+    Pedro, 08/08: *"o cliente que mudou os itens na tela, os itens que ele mediu
+    são a verdade mais pura, mesmo que a gente tenha revisado o motor"* e
+    *"se a gente leu de novo, a gente só vai corrigir outros itens e manter o
+    que o cliente revisou sem alterar esses itens"*.
+
+    É a regra dura nº7 levada a sério: nunca trocar trabalho humano por medição
+    de máquina. O motor melhora TUDO menos as linhas que o cliente já corrigiu.
+
+    🔒 GARANTIA: a linha revisada NUNCA se perde. Se casar com um item da
+    leitura nova, sobrescreve; se não casar, é ACRESCENTADA. Nos dois caminhos
+    o valor do cliente sobrevive — errar pra duplicado é aceitável, errar pra
+    sumiço não é.
+
+    Devolve (items, resumo) — resumo vai pro log e pra tela do admin.
+    """
+    resumo = {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
+    if not parent_job_id:
+        return items, resumo
+    try:
+        revs = _supa_rest_service("GET", "item_reviews", params={
+            "job_id": f"eq.{parent_job_id}", "action": "eq.edit",
+            "select": "edits,reviewed_at", "order": "reviewed_at.asc"}) or []
+    except Exception as _e:
+        print(f"[fusao-revisao] nao consegui ler as revisoes: {_e}")
+        return items, resumo
+    if not revs:
+        return items, resumo
+
+    # Última edição de cada item vence (o cliente pode ter mexido duas vezes).
+    porchave = {}
+    for r in revs:
+        ed = (r or {}).get("edits") or {}
+        if not isinstance(ed, dict) or not ed.get("description"):
+            continue
+        porchave[_norm_desc(ed["description"])] = ed
+    resumo["revisoes"] = len(porchave)
+    if not porchave:
+        return items, resumo
+
+    indice = {}
+    for it in items:
+        indice.setdefault(_norm_desc(getattr(it, "description", "")), it)
+
+    for chave, ed in porchave.items():
+        alvo = indice.get(chave)
+        if alvo is not None:
+            # Casou: o valor do CLIENTE manda nos 4 campos que ele edita.
+            try:
+                alvo.description = ed.get("description", alvo.description)
+                alvo.unit = ed.get("unit", alvo.unit)
+                alvo.quantity = ed.get("quantity", alvo.quantity)
+                _obs = (ed.get("observations") or "").strip()
+                alvo.observations = ("✏️ REVISADO POR VOCÊ — este número é o que você "
+                                     "corrigiu, não a leitura nova. " + _obs)[:1000]
+                resumo["casadas"] += 1
+            except Exception:
+                pass
+        else:
+            # Não casou: acrescenta, pra NUNCA perder o que o cliente corrigiu.
+            try:
+                import copy as _copy   # local: `copy` não é importado no topo
+                novo = _copy.deepcopy(items[0]) if items else None
+                if novo is None:
+                    continue
+                novo.description = ed.get("description", "")
+                novo.unit = ed.get("unit", "")
+                novo.quantity = ed.get("quantity", 0)
+                novo.observations = ("✏️ REVISADO POR VOCÊ — mantido da sua revisão "
+                                     "anterior; a leitura nova não achou esta linha. "
+                                     + (ed.get("observations") or ""))[:1000]
+                items.append(novo)
+                resumo["acrescentadas"] += 1
+            except Exception:
+                pass
+    print(f"[fusao-revisao] pai={parent_job_id} revisoes={resumo['revisoes']} "
+          f"casadas={resumo['casadas']} acrescentadas={resumo['acrescentadas']}")
+    return items, resumo
+
+
 def _persist_items_to_supabase(job_id: str, items: list) -> int:
     """Insere cada BudgetItem como row em project_items.
     Permite revisão inline no navegador via endpoint /api/items/{job_id}.
@@ -6548,6 +6644,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _t2.Thread(target=_render_cad_previews_bg, daemon=True).start()
             except Exception:
                 pass
+
+        # 🔒 ANTES de gravar: se este job é releitura de um projeto que o cliente
+        # REVISOU à mão, preserva o que ele corrigiu. O motor melhora todo o
+        # resto; as linhas dele ficam intactas. (Pedro, 08/08 — regra dura nº7.)
+        # Roda antes do persist pra que planilha, contagens e tela já nasçam com
+        # a verdade fundida, e não só o banco.
+        _fusao = {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
+        try:
+            _pai = (_supa_rest_service("GET", "projects", params={
+                "job_id": f"eq.{job_id}", "select": "parent_job_id"}) or [{}])[0]
+            _pai_id = _pai.get("parent_job_id")
+            if _pai_id:
+                all_items, _fusao = _fundir_revisoes_do_cliente(all_items, _pai_id)
+                if _fusao["revisoes"]:
+                    _log_error("motor:fusao-revisao",
+                               f"pai={_pai_id} revisoes={_fusao['revisoes']} "
+                               f"casadas={_fusao['casadas']} "
+                               f"acrescentadas={_fusao['acrescentadas']}", job_id)
+                    project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                        f"✏️ Esta releitura MANTEVE as {_fusao['revisoes']} correção(ões) que "
+                        f"você fez à mão — elas não foram sobrescritas. O motor novo corrigiu "
+                        f"apenas as outras linhas."]
+        except Exception as _ef:
+            print(f"[fusao-revisao] nao-fatal: {_ef}")
 
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
