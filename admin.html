@@ -313,8 +313,11 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">👶 Filhotes <span class="font-normal text-gray-400">— reprocessos prontos pra liberar pro cliente</span></h3>
+        <div id="filhotes"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📈 Evolução semanal <span class="font-normal text-gray-400">— o motor está melhorando?</span></h3>
         <div id="qualidade-semanal"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
@@ -1161,7 +1164,7 @@ function switchTab(tabName) {
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
+  if (tabName === 'motor') { loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -1415,6 +1418,99 @@ async function testarLibredwg(modo) {
 }
 
 // ══════════════════════════════════════════════
+// FILHOTES — reprocessos prontos pra liberar pro cliente
+// ══════════════════════════════════════════════
+// Ideia do Pedro (05/08): quando a gente conserta o motor, o conserto só vale
+// pra projeto NOVO. O filhote roda os MESMOS arquivos no motor de hoje, num job
+// isolado, e aqui o Pedro decide se libera pro cliente ver.
+//
+// Prova de que vale (08/08, ev65bf81 sobre o 21df33ea de 27/06): o mesmo
+// arquivo saiu de 8 itens / 0 medidos / sem área total para 21 itens /
+// 2 medidos / 458,54 m².
+//
+// 🚨 Até 08/08 isso era UPDATE na mão no banco. O botão existe pra ter trava:
+// avisa quando o original tem revisão do cliente (regra dura nº7 — nunca trocar
+// trabalho humano por medição de máquina calado) e dá pra revogar.
+async function loadFilhotes(){
+  const box = document.getElementById('filhotes');
+  box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/filhotes`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'erro');
+    box.innerHTML = renderFilhotes(d.filhotes || []);
+  } catch(e){
+    box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e && e.message) || e}</p>`;
+  }
+}
+function renderFilhotes(L){
+  if (!L.length) return `<p class="text-gray-400 text-sm">Nenhum filhote ainda. Rode &ldquo;Avaliação&rdquo; num projeto pra criar um.</p>`;
+  const n = (v) => (v==null ? '–' : v);
+  return L.map(f => {
+    const dm = (f.depois?.medidos||0) - (f.antes?.medidos||0);
+    const di = (f.depois?.itens||0)  - (f.antes?.itens||0);
+    const seta = v => v>0 ? `<span class="text-emerald-700 font-semibold">+${v}</span>`
+                  : (v<0 ? `<span class="text-red-700 font-semibold">${v}</span>` : '<span class="text-gray-400">=</span>');
+    const pronto = f.status === 'done';
+    return `
+    <div class="rounded-xl border bg-white p-4 mb-3">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div class="min-w-0">
+          <p class="font-semibold text-gray-900 truncate">${f.projeto}</p>
+          <p class="text-xs text-gray-500">${f.cliente} &middot;
+            <span class="font-mono">${f.job_id}</span> &larr; <span class="font-mono">${f.parent_job_id}</span>
+            &middot; ${pronto ? 'concluído' : f.status}</p>
+        </div>
+        <div class="flex items-center gap-2">
+          ${f.liberado
+            ? `<span class="text-xs px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">✓ liberado pro cliente</span>
+               <button onclick="liberarFilhote('${f.job_id}', true)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-gray-300 hover:bg-gray-50">Revogar</button>`
+            : (pronto
+              ? `<button onclick="liberarFilhote('${f.job_id}', false)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Liberar pro cliente</button>`
+              : `<span class="text-xs text-gray-400">aguarde concluir</span>`)}
+        </div>
+      </div>
+      <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
+        <div class="rounded-lg bg-gray-50 p-2">
+          <span class="text-gray-500">itens</span>
+          <div class="font-semibold text-gray-800">${n(f.antes?.itens)} &rarr; ${n(f.depois?.itens)} ${seta(di)}</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-2">
+          <span class="text-gray-500">medidos</span>
+          <div class="font-semibold text-gray-800">${n(f.antes?.medidos)} &rarr; ${n(f.depois?.medidos)} ${seta(dm)}</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-2">
+          <span class="text-gray-500">área total</span>
+          <div class="font-semibold text-gray-800">${f.area_antes ? f.area_antes+' m²' : '–'} &rarr; ${f.area_depois ? f.area_depois+' m²' : '–'}</div>
+        </div>
+      </div>
+      ${f.revisoes_no_original
+        ? `<p class="mt-3 text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2">
+             ⚠ O original tem <b>${f.revisoes_no_original} revisão(ões) feita(s) pelo cliente</b>.
+             A versão nova <b>não tem</b> essas correções &mdash; diga isso no e-mail.</p>`
+        : ''}
+      ${(!f.melhorou && pronto)
+        ? `<p class="mt-3 text-xs rounded-lg bg-red-50 border border-red-200 text-red-800 px-3 py-2">
+             ⚠ Esta versão <b>não ficou melhor</b> que a original. Liberar seria passo atrás.</p>`
+        : ''}
+    </div>`;
+  }).join('');
+}
+async function liberarFilhote(jobId, revogar){
+  const acao = revogar ? 'REVOGAR (esconder do cliente)' : 'LIBERAR pro cliente ver no painel dele';
+  if (!confirm(`${acao}\n\nFilhote ${jobId}.\n\nNenhum e-mail é enviado — quem avisa o cliente é você.`)) return;
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/liberar-filhote/${jobId}${revogar?'?revogar=1':''}`, {method:'POST'});
+    const d = await res.json().catch(()=>({}));
+    if (!res.ok) throw new Error(d.detail || ('HTTP '+res.status));
+    _adminToast(revogar ? 'Revogado ✓' : 'Liberado pro cliente ✓', 'success');
+    if (d.aviso) alert(d.aviso);
+    loadFilhotes();
+  } catch(e){
+    _adminToast('Falhou: ' + ((e && e.message) || e), 'error');
+  }
+}
+
 // EVOLUÇÃO SEMANAL DA QUALIDADE — o motor está melhorando?
 // ══════════════════════════════════════════════
 // Pedro, 07/08/2026: "evolução semanal de % de acertos".

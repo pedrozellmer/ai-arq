@@ -14639,6 +14639,143 @@ def _ai_suggest_combine(files_meta: list, base_type: str = "") -> dict:
         return _fallback()
 
 
+@app.get("/api/admin/filhotes")
+async def admin_listar_filhotes(request: Request):
+    """ADMIN — lista os jobs "filhote" (eval-reprocess) com a comparação contra o
+    original, pra decidir quais valem liberar pro cliente.
+
+    Prova de que vale (medido 08/08, job ev65bf81 sobre o 21df33ea de 27/06):
+    o MESMO arquivo saiu de 8 itens / 0 medidos / sem área total para
+    21 itens / 2 medidos / 458,54 m². O motor melhorou o bastante pra que
+    reprocessar projeto antigo entregue valor real.
+    """
+    _require_admin(request)
+    filhotes = (_supa_rest_service("GET", "projects", params={
+        "is_eval": "is.true", "select": "job_id,parent_job_id,status,user_id,created_at,total_area",
+        "order": "created_at.desc", "limit": "40"}) or [])
+
+    def _conta(jid):
+        r = _supa_rest_service("GET", "project_items",
+                               params={"job_id": f"eq.{jid}", "select": "confidence,quantity"}) or []
+        return {"itens": len(r),
+                "medidos": sum(1 for x in r if (x or {}).get("confidence") == "confirmado"),
+                "zerados": sum(1 for x in r if not (x or {}).get("quantity"))}
+
+    out = []
+    for f in filhotes:
+        pai_id = f.get("parent_job_id")
+        if not pai_id:
+            continue
+        pai = (_supa_rest_service("GET", "projects", params={
+            "job_id": f"eq.{pai_id}",
+            "select": "project_name,user_email,user_id,total_area"}) or [{}])[0]
+        antes, depois = _conta(pai_id), _conta(f["job_id"])
+        revisoes = len(_supa_rest_service("GET", "item_reviews",
+                       params={"job_id": f"eq.{pai_id}", "select": "id"}) or [])
+        out.append({
+            "job_id": f["job_id"], "parent_job_id": pai_id, "status": f.get("status"),
+            "projeto": pai.get("project_name") or "(sem nome)",
+            "cliente": pai.get("user_email") or "(sem e-mail)",
+            "criado": f.get("created_at"),
+            # já liberado = o filhote aponta pro dono do original, não pra 'eval'
+            "liberado": bool(f.get("user_id")) and f.get("user_id") == pai.get("user_id"),
+            "antes": antes, "depois": depois,
+            "area_antes": pai.get("total_area"), "area_depois": f.get("total_area"),
+            "melhorou": depois["medidos"] > antes["medidos"] or depois["itens"] > antes["itens"],
+            "revisoes_no_original": revisoes,
+        })
+    return {"filhotes": out}
+
+
+@app.post("/api/admin/liberar-filhote/{eval_job_id}")
+async def admin_liberar_filhote(eval_job_id: str, request: Request):
+    """ADMIN — libera um job "filhote" (eval-reprocess) pro cliente VER no painel.
+
+    Ideia do Pedro (05/08): quando a gente conserta o motor, o conserto só vale
+    pra projeto novo. O filhote roda os MESMOS arquivos no motor de hoje, num job
+    isolado; liberar é apontar esse job pro dono do original.
+
+    Até 08/08 isso era feito com **UPDATE na mão no banco** — funcionava, mas sem
+    registro e sem as travas abaixo. Agora é ação de admin.
+
+    🔑 Por que basta trocar o `user_id`: `list_user_projects` filtra **só** por
+    user_id, não por `is_eval`. Então o filhote aparece pro cliente e continua
+    fora das varreduras de auto-retry/alerta (que filtram is_eval). E
+    `user_email` fica VAZIO, o que mantém todo e-mail automático desligado —
+    quem avisa o cliente é o Pedro.
+
+    🚨 Travas (as três armadilhas de [[project_filhote_reprocesso_20260805]]):
+    1. **Edição do cliente.** Se o original tem revisão feita à mão, a versão
+       nova vem SEM ela. O endpoint CONTA as revisões e devolve em
+       `revisoes_no_original` — a tela avisa. Regra dura nº7: nunca trocar
+       trabalho humano por medição de máquina calado.
+    2. **Vazamento.** O dono vem SEMPRE do `parent_job_id`, nunca de parâmetro
+       da requisição — não há como liberar o filhote de um cliente pra outro.
+    3. **Piorou?** Devolve a comparação medido/itens dos dois lados. Liberar
+       algo pior que o original é passo atrás; a decisão é do Pedro, mas o
+       número vai na cara dele.
+
+    `?revogar=1` desfaz (volta o user_id pra 'eval'), porque errar e não poder
+    voltar atrás é pior que não ter o botão.
+    """
+    _require_admin(request)
+    revogar = str(request.query_params.get("revogar", "")).strip() in ("1", "true", "sim")
+
+    filho = (_supa_rest_service("GET", "projects",
+             params={"job_id": f"eq.{eval_job_id}",
+                     "select": "job_id,parent_job_id,is_eval,user_id,project_name,status"}) or [])
+    if not filho:
+        raise HTTPException(404, "Filhote não encontrado")
+    filho = filho[0]
+    if not filho.get("is_eval"):
+        raise HTTPException(400, "Este job não é um filhote (is_eval=false) — não libero")
+    pai_id = filho.get("parent_job_id")
+    if not pai_id:
+        raise HTTPException(400, "Filhote sem parent_job_id — não sei de quem é")
+    if filho.get("status") != "done":
+        raise HTTPException(400, f"Filhote ainda não concluiu (status={filho.get('status')})")
+
+    pai = (_supa_rest_service("GET", "projects",
+           params={"job_id": f"eq.{pai_id}",
+                   "select": "job_id,user_id,user_email,project_name"}) or [])
+    if not pai:
+        raise HTTPException(404, "Projeto original não encontrado")
+    pai = pai[0]
+    if not pai.get("user_id"):
+        raise HTTPException(400, "Original sem dono (user_id vazio) — não libero")
+
+    def _conta(jid):
+        r = _supa_rest_service("GET", "project_items",
+                               params={"job_id": f"eq.{jid}", "select": "confidence"}) or []
+        return {"itens": len(r),
+                "medidos": sum(1 for x in r if (x or {}).get("confidence") == "confirmado")}
+
+    antes, depois = _conta(pai_id), _conta(eval_job_id)
+    revisoes = len(_supa_rest_service("GET", "item_reviews",
+                   params={"job_id": f"eq.{pai_id}", "select": "id"}) or [])
+
+    novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
+                 + " — nova leitura (motor atualizado)")
+    patch = ({"user_id": "eval", "project_name": filho.get("project_name")} if revogar
+             else {"user_id": pai["user_id"], "project_name": novo_nome})
+    _supa_rest_service("PATCH", "projects", body=patch,
+                       params={"job_id": f"eq.{eval_job_id}"})
+
+    _log_error("admin:filhote",
+               f"{'revogado' if revogar else 'liberado'} {eval_job_id} (pai {pai_id}) "
+               f"antes={antes['medidos']}/{antes['itens']} depois={depois['medidos']}/{depois['itens']} "
+               f"revisoes_no_original={revisoes}", eval_job_id)
+
+    return {"ok": True, "revogado": revogar, "eval_job_id": eval_job_id, "parent_job_id": pai_id,
+            "dono": pai.get("user_email") or "(sem e-mail)",
+            "antes": antes, "depois": depois,
+            "melhorou": (depois["medidos"] > antes["medidos"]),
+            "revisoes_no_original": revisoes,
+            "aviso": (f"⚠ O original tem {revisoes} revisão(ões) feita(s) pelo cliente. "
+                      f"A versão nova NÃO tem essas correções — avise isso no e-mail."
+                      if revisoes else None)}
+
+
 @app.get("/api/admin/combine-preview/{job_id}")
 async def admin_combine_preview(job_id: str, request: Request):
     """PRÉVIA do Combinar: lista os arquivos do MESMO cliente (nome/tipo/tamanho/
