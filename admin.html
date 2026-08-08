@@ -1654,10 +1654,15 @@ async function loadMotorHealth(){
 }
 function renderMotorHealth(d){
   const esc = s => String(s==null?'':s);
-  const porFonte = d.por_fonte || [];
-  const cad = porFonte.find(x => (x.fonte||'').indexOf('CAD')===0) || {pct_medido_medio:0, projetos:0};
-  const pdf = porFonte.find(x => (x.fonte||'').indexOf('PDF')===0) || {pct_medido_medio:0, projetos:0};
-  const mult = (pdf.pct_medido_medio>0) ? (cad.pct_medido_medio/pdf.pct_medido_medio).toFixed(1) : '—';
+  // 🚨 08/08 — Pedro: "a gente sempre fala CAD x PDF, na verdade é DXF x DWG x
+  // PDF né? Pelo que vejo DXF funciona MUITO mais." Ele está certo, e esta tela
+  // apagava a diferença: juntava 'CAD (DWG/DXF)' num cartão só.
+  // Medido em 08/08 (só cliente): DXF mede em 55% dos envios · DWG 35% · PDF 20%.
+  // E o que só aparece separando: PDF é o pior DISFARÇADO DE MELHOR — conclui
+  // mais que todos (80%) e mede 3% dos itens; DWG falha em metade, mas quando
+  // abre mede mais fundo (28% dos itens) que o DXF (19%).
+  const funil = d.por_formato_funil || [];
+  const _CORES = {DXF:['emerald','#059669'], DWG:['amber','#F59E0B'], PDF:['rose','#E11D48']};
   const itens = d.itens || {total:0, medidos:0};
   const pctGeral = itens.total>0 ? Math.round(100*itens.medidos/itens.total) : 0;
   const faixas = d.faixas || [];
@@ -1666,20 +1671,23 @@ function renderMotorHealth(d){
   const maxFalha = Math.max(1, ...falhas.map(f=>f.n||0));
   const totais = d.totais || {};
   let html = `
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-    <div class="rounded-xl border-2 border-emerald-200 bg-emerald-50 p-5">
-      <div class="text-emerald-800 text-sm font-semibold">📐 CAD (DWG/DXF)</div>
-      <div class="mt-1 text-4xl font-bold text-emerald-700">${esc(cad.pct_medido_medio)}%</div>
-      <div class="text-xs text-emerald-700">medido em média · ${esc(cad.projetos)} projetos</div>
-    </div>
-    <div class="rounded-xl border-2 border-amber-200 bg-amber-50 p-5">
-      <div class="text-amber-800 text-sm font-semibold">📄 PDF só</div>
-      <div class="mt-1 text-4xl font-bold text-amber-700">${esc(pdf.pct_medido_medio)}%</div>
-      <div class="text-xs text-amber-700">medido em média · ${esc(pdf.projetos)} projetos</div>
-    </div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+    ${['DXF','DWG','PDF'].map(k => { const f = funil.find(x=>x.formato===k) || {};
+      const c = _CORES[k][0];
+      return `<div class="rounded-xl border-2 border-${c}-200 bg-${c}-50 p-5">
+        <div class="text-${c}-800 text-sm font-semibold">${k==='PDF'?'📄':'📐'} ${k}
+          <span class="font-normal">&middot; ${esc(f.enviados||0)} envios</span></div>
+        <div class="mt-1 text-4xl font-bold text-${c}-700">${esc(f.pct_mediu==null?'–':f.pct_mediu)}%</div>
+        <div class="text-xs text-${c}-700">dos envios saíram <b>com medição</b></div>
+        <div class="text-xs text-${c}-700 mt-2 pt-2 border-t border-${c}-200">
+          concluiu ${esc(f.pct_concluiu==null?'–':f.pct_concluiu)}% &middot;
+          ${esc(f.erro||0)} erro &middot; mede ${esc(f.pct_itens_medidos==null?'–':f.pct_itens_medidos)}% dos itens
+        </div>
+      </div>`; }).join('')}
   </div>
   <div class="rounded-xl bg-indigo-50 border border-indigo-100 px-4 py-3 mb-6 text-sm text-indigo-900">
-    🎯 <b>CAD mede ${mult}× mais que PDF.</b> Prova do wedge: puxar o cliente pro DWG/DXF é a maior alavanca de "medido".
+    🎯 <b>DXF é a aposta mais segura</b> (${esc((funil.find(x=>x.formato==='DXF')||{}).pct_mediu ?? '–')}% saem com medição, contra ${esc((funil.find(x=>x.formato==='DWG')||{}).pct_mediu ?? '–')}% do DWG).
+    ⚠️ <b>PDF é o pior disfarçado de melhor:</b> conclui mais que todos e mede só ${esc((funil.find(x=>x.formato==='PDF')||{}).pct_itens_medidos ?? '–')}% dos itens &mdash; ele infla a taxa de sucesso entregando quase nada.
   </div>
   <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(totais.projetos_done||0)}</div><div class="text-xs text-gray-500">projetos concluídos</div></div>
