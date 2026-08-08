@@ -14673,6 +14673,62 @@ def _ai_suggest_combine(files_meta: list, base_type: str = "") -> dict:
         return _fallback()
 
 
+def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) -> bool:
+    """Avisa o cliente de que a leitura do projeto dele foi refeita e ficou melhor.
+
+    Pedro, 08/08: *"a gente reprocessou o projeto, a gente melhorou o projeto,
+    como que o cliente vai ficar sabendo que agora ele pode entrar no site e
+    pegar um projeto melhor? Então o aviso por e-mail tem que ser isso."*
+    Aviso só na tela não resolve: quem não volta ao site nunca descobre — e
+    medido em 08/08, só **1 de 44** clientes voltou numa semana diferente.
+
+    🚨 TRAVA DURA — cliente que revisou NÃO recebe.
+    Pedro, na mesma conversa: *"o cliente que mudou os itens na tela, os itens
+    que ele mediu são a verdade mais pura, mesmo que a gente tenha revisado o
+    motor."* Se ele corrigiu linha à mão, a versão nova **não tem** essas
+    correções, e um e-mail dizendo "ficou melhor" empurraria ele a adotar algo
+    que apaga o trabalho dele. Nesse caso o contato é do Pedro, à mão, com
+    conversa — não automático. É a regra dura nº7.
+
+    🚫 Também não manda se a versão nova não mediu MAIS que a original: avisar
+    sem ganho é gastar a confiança dele por nada.
+    """
+    email = (pai.get("user_email") or "").strip()
+    if not email:
+        return False
+    nome = (pai.get("user_name") or "").strip().split(" ")[0] or "Olá"
+    proj = (pai.get("project_name") or "seu projeto")[:60]
+    ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
+    ganho_itens = depois.get("itens", 0) - antes.get("itens", 0)
+
+    linha_ganho = []
+    if ganho_itens > 0:
+        linha_ganho.append(f"<b>{antes.get('itens',0)} → {depois.get('itens',0)} itens</b>")
+    if ganho_med > 0:
+        linha_ganho.append(f"<b>{antes.get('medidos',0)} → {depois.get('medidos',0)} medidos do CAD</b>")
+    ganho_html = " e ".join(linha_ganho) if linha_ganho else "uma leitura mais completa"
+
+    html = f"""<div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1F2937;max-width:600px">
+<p>{nome}, tudo bem?</p>
+<p>Melhoramos o motor que lê os desenhos e <b>refizemos a leitura do seu projeto
+&ldquo;{proj}&rdquo;</b> &mdash; sem você precisar reenviar nada.</p>
+<p>O que mudou: {ganho_html}.</p>
+<p>A versão nova está no seu painel, ao lado da original. <b>A sua continua lá</b>
+&mdash; você compara e usa a que preferir.</p>
+<p style="margin:22px 0">
+  <a href="https://ai.arq.br/dashboard.html" style="background:#4F46E5;color:#fff;
+     padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600;
+     display:inline-block">Ver a leitura nova</a></p>
+<p style="color:#6B7280;font-size:13px">Reprocessar não consumiu nada seu, e continua
+tudo grátis no beta. Se a versão nova não te servir, é só ignorar.</p>
+<p>Abraço,<br>Pedro Zellmer<br>
+<span style="color:#6B7280">AI.arq &mdash; <a href="https://ai.arq.br" style="color:#4F46E5;text-decoration:none">ai.arq.br</a></span></p>
+</div>"""
+    return _send_email_smtp(
+        email, f"Refizemos a leitura do seu projeto — {proj}", html,
+        log_kind="leitura_nova")
+
+
 @app.get("/api/admin/filhotes")
 async def admin_listar_filhotes(request: Request):
     """ADMIN — lista os jobs "filhote" (eval-reprocess) com a comparação contra o
@@ -14755,7 +14811,7 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
 
     pai = (_supa_rest_service("GET", "projects",
            params={"job_id": f"eq.{pai_id}",
-                   "select": "job_id,user_id,user_email,project_name"}) or [])
+                   "select": "job_id,user_id,user_email,user_name,project_name"}) or [])
     if not pai:
         raise HTTPException(404, "Projeto original não encontrado")
     pai = pai[0]
@@ -14779,6 +14835,34 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
     _supa_rest_service("PATCH", "projects", body=patch,
                        params={"job_id": f"eq.{eval_job_id}"})
 
+    # ── Avisar o cliente ────────────────────────────────────────────────────
+    # Pedro, 08/08: melhorar sem avisar não serve de nada — só 1 de 44 clientes
+    # voltou ao site numa semana diferente. O e-mail é o canal.
+    #
+    # 🚨 As três travas, nesta ordem:
+    #  1. quem REVISOU não recebe. "Os itens que ele mediu são a verdade mais
+    #     pura, mesmo que a gente tenha revisado o motor" (Pedro). A versão nova
+    #     não tem as correções dele; empurrar por e-mail apagaria trabalho
+    #     humano. Esse contato é do Pedro, à mão. (Regra dura nº7.)
+    #  2. só avisa se MELHOROU de fato — avisar sem ganho gasta a confiança.
+    #  3. nunca no `revogar`.
+    email_enviado, email_motivo = False, None
+    if not revogar:
+        if revisoes > 0:
+            email_motivo = (f"NÃO enviado: o cliente revisou {revisoes} item(ns) à mão. "
+                            f"A versão nova não tem essas correções — fale com ele você, "
+                            f"pessoalmente.")
+        elif depois["medidos"] <= antes["medidos"] and depois["itens"] <= antes["itens"]:
+            email_motivo = "NÃO enviado: a versão nova não ficou melhor que a original."
+        else:
+            try:
+                email_enviado = _email_leitura_nova(pai, eval_job_id, antes, depois)
+                email_motivo = ("enviado ✓" if email_enviado
+                                else "falhou no envio (SMTP) — avise à mão")
+            except Exception as _ee:
+                email_motivo = f"falhou: {_ee}"
+                print(f"[filhote] email nao enviado (nao-fatal): {_ee}")
+
     _log_error("admin:filhote",
                f"{'revogado' if revogar else 'liberado'} {eval_job_id} (pai {pai_id}) "
                f"antes={antes['medidos']}/{antes['itens']} depois={depois['medidos']}/{depois['itens']} "
@@ -14789,8 +14873,12 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
             "antes": antes, "depois": depois,
             "melhorou": (depois["medidos"] > antes["medidos"]),
             "revisoes_no_original": revisoes,
+            "email_enviado": email_enviado,
+            "email_motivo": email_motivo,
             "aviso": (f"⚠ O original tem {revisoes} revisão(ões) feita(s) pelo cliente. "
-                      f"A versão nova NÃO tem essas correções — avise isso no e-mail."
+                      f"A versão nova NÃO tem essas correções, então NÃO mandei e-mail "
+                      f"automático — o que ele mediu à mão vale mais que a nossa releitura. "
+                      f"Fale com ele pessoalmente."
                       if revisoes else None)}
 
 
