@@ -24,6 +24,7 @@ from engine_rules import (  # noqa: E402
     extract_type_code,
     response_truncated,
     is_floor_surface,
+    linhas_pai_e_filho,
 )
 
 _passed = 0
@@ -325,6 +326,94 @@ check("medicao limpa continua recuperando",
       _ccm("Rodape", "ml", 0,
            "Fonte: comprimento total do layer A-WALL = 722,39 m medido na "
            "geometria.").get("quantity") == 722.39)
+
+
+# ── Regra dos 100% (WBS): o pai não pode ser irmão do filho ──────────────────
+# Casos REAIS medidos em 08/08/2026 nos 69 projetos de cliente.
+def _pf(itens, **kw):
+    return linhas_pai_e_filho(itens, **kw)
+
+
+def _i(d, u, q, disc="Estrutura"):
+    return {"description": d, "unit": u, "quantity": q, "discipline": disc}
+
+
+# 🐛 job 7f7ef56a: SUBTOTAL de concreto ao lado das sapatas que o compõem.
+_sapatas = [
+    _i("SUBTOTAL — Concreto C25/30 — Todas as sapatas", "m³", 12.4),
+    _i("Concreto C25/30 — Sapata S1", "m³", 7.1),
+    _i("Concreto C25/30 — Sapata S2", "m³", 7.2),
+]
+check("pega SUBTOTAL de concreto convivendo com as sapatas", len(_pf(_sapatas)) == 1)
+check("aponta a linha-total, não as partes", _pf(_sapatas)[0]["indice"] == 0)
+check("conta as partes certas", _pf(_sapatas)[0]["n_partes"] == 2)
+
+# 🐛 job 66ebe2d9: "Armadura total de aço" ao lado das 4 armaduras.
+check("pega 'Armadura total de aço' com as armaduras irmãs",
+      len(_pf([
+          _i("Armadura total de aço — peso total conforme quadro", "kg", 362.7),
+          _i("Armadura CA-50 Ø8,0 mm — vigas", "kg", 91.7),
+          _i("Armadura CA-60 Ø5,0 mm — radier", "kg", 88.8),
+          _i("Armadura CA-50 Ø6,3 mm — radier", "kg", 53.41),
+          _i("Armadura CA-50 Ø10,0 mm — pilares", "kg", 128.6),
+      ])) == 1)
+
+# 🔒 FALSO POSITIVO REAL (job 60837aaf): "uso geral" não é somatório.
+check("'tomadas de uso geral' NÃO é linha-total",
+      _pf([_i("Tomadas elétricas 2P+T — pontos de uso geral", "un", 60, "Elétrica"),
+           _i("Tomada 2P+T sala", "un", 30, "Elétrica"),
+           _i("Tomada 2P+T quarto", "un", 30, "Elétrica")]) == [])
+
+# 🔒 "vb" é sempre 1 — casaria sempre e não prova nada (8 dos 17 casos brutos).
+check("unidade vb fica de fora",
+      _pf([_i("Limpeza final de obra — total", "vb", 1, "Serviços"),
+           _i("Limpeza final de obra", "vb", 1, "Serviços")]) == [])
+
+# 🔒 Disciplina diferente não é irmã: senão "área total" casa com qualquer m².
+check("não compara entre disciplinas diferentes",
+      _pf([_i("Área total de piso", "m²", 100, "Pisos"),
+           _i("Forro de gesso", "m²", 100, "Forros")]) == [])
+
+# 🔒 Unidade diferente não é irmã.
+check("não compara entre unidades diferentes",
+      _pf([_i("Comprimento total de parede", "m", 100),
+           _i("Parede drywall", "m²", 100)]) == [])
+
+# 🔒 Total SEM partes que fechem (metadado legítimo, job 2f9f81c2) fica quieto.
+check("'Área total construída' sozinha não dispara",
+      _pf([_i("Área total construída da edificação", "m²", 30995.8, "Metadados"),
+           _i("Piso porcelanato", "m²", 120.0, "Pisos")]) == [])
+
+# 🔒 Partes que NÃO fecham (soma bem longe) não disparam — é outra coisa.
+check("soma distante do total não dispara",
+      _pf([_i("Área total dos quartos", "m²", 124.4, "Pisos"),
+           _i("Quarto 1", "m²", 12.0, "Pisos")]) == [])
+
+# 🔒 Total zerado nunca dispara (a linha zerada tem regra própria).
+check("linha-total zerada não dispara",
+      _pf([_i("Concreto total", "m³", 0),
+           _i("Sapata S1", "m³", 7.1)]) == [])
+
+# 🔒 "totalmente" não é "total" — a fronteira de palavra tem que valer.
+check("'totalmente' não vira linha-total",
+      _pf([_i("Parede totalmente revestida", "m²", 100, "Rev"),
+           _i("Parede revestida trecho A", "m²", 100, "Rev")]) == [])
+
+# 🔒 A regra NUNCA muda quantidade — só descreve.
+_antes = [dict(x) for x in _sapatas]
+_pf(_sapatas)
+check("a regra não altera os itens de entrada", _sapatas == _antes)
+
+# Aceita objeto, não só dict (o motor passa BudgetItem).
+class _It:
+    def __init__(s_, d, u, q, disc):
+        s_.description, s_.unit, s_.quantity, s_.discipline = d, u, q, disc
+
+
+check("funciona com objeto, não só dict",
+      len(_pf([_It("Concreto total das sapatas", "m³", 12.4, "Estrutura"),
+               _It("Sapata S1", "m³", 6.2, "Estrutura"),
+               _It("Sapata S2", "m³", 6.2, "Estrutura")])) == 1)
 
 
 print()

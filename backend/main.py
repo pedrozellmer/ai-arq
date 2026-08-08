@@ -55,6 +55,7 @@ from engine_rules import (
     medida_e_base_de_calculo as _medida_e_base_de_calculo,
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
+    linhas_pai_e_filho as _linhas_pai_e_filho,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -6500,6 +6501,52 @@ bloco — só cite os que estão no inventário deste arquivo."""
                       f"item(ns) contável(is) com unidade linear (falso-medido)")
         except Exception as _euc:
             print(f"[unidade-contavel] job={job_id}: checagem falhou: {_euc}")
+
+        # Regra dos 100% (EAP/WBS): numa lista PLANA, uma linha que É UM TOTAL
+        # convivendo com as linhas que a compõem faz o cliente contar duas vezes
+        # ao somar a coluna. Medido em 08/08/2026: 7 dos 69 projetos reais (10%).
+        # Ex.: "SUBTOTAL — Concreto C25/30 — Todas as sapatas" 12,42 m³ ao lado
+        # das 2 sapatas (14,34 m³); "Armadura total de aço" 362,7 kg ao lado das
+        # 4 armaduras (262,5 kg).
+        # Só AVISA e REBAIXA — nunca apaga, soma nem move quantidade: escolher
+        # qual das duas linhas fica seria adivinhar (mesma doutrina do bloco
+        # acima e de `corrigir_comprimento_medido`).
+        #
+        # 🪤 ORDEM IMPORTA, NÃO MOVER PRA BAIXO: isto roda ANTES de
+        # `_fundir_revisoes_do_cliente` (~6715), que sobrescreve a observação
+        # inteira com "✏️ REVISADO POR VOCÊ". Ou seja, na linha que o cliente já
+        # corrigiu a revisão DELE vence e este aviso some — que é o certo (regra
+        # dura nº7). Mover este bloco pra depois da fusão carimbaria por cima da
+        # correção do cliente.
+        try:
+            from models import Confidence as _Conf
+            _paifilho = _linhas_pai_e_filho(all_items)
+            for _a in _paifilho:
+                _it = all_items[_a["indice"]]
+                # 🪤 O aviso vai no COMEÇO: a tela de revisão corta a observação
+                # em 110 caracteres (revisao.html) — no fim, ninguém lê.
+                _av = (f"⚠ NÃO SOME COM AS DE BAIXO: esta linha parece ser o TOTAL "
+                       f"de {_a['n_partes']} linha(s) da mesma disciplina, que somam "
+                       f"{_a['soma_partes']:.2f} {_a['unidade']}. Some uma OU outra, "
+                       f"nunca as duas. ")
+                _it.observations = _av + (_it.observations or "")
+                if _it.confidence == _Conf.CONFIRMADO:
+                    _it.confidence = _Conf.ESTIMADO
+            if _paifilho:
+                project_data.warnings = (project_data.warnings or []) + [
+                    f"{len(_paifilho)} linha(s) que parecem ser um TOTAL estão na mesma "
+                    "lista das linhas que as compõem — somar a coluna inteira contaria "
+                    "o mesmo serviço duas vezes. As linhas estão marcadas na planilha."]
+                print(f"[pai-e-filho] job={job_id}: {len(_paifilho)} linha(s)-total "
+                      f"convivendo com as partes")
+                _log_error("motor:pai-e-filho",
+                           f"n={len(_paifilho)} " + "; ".join(
+                               f"{a['descricao'][:40]}={a['quantidade']} vs "
+                               f"{a['n_partes']}p={a['soma_partes']}" for a in _paifilho[:4]),
+                           job_id)
+        except Exception as _epf:
+            print(f"[pai-e-filho] job={job_id}: checagem falhou: {_epf}")
+            _log_error("motor:pai-e-filho", f"FALHOU: {_epf}", job_id)
 
         # Comprimento medido que saiu com rótulo errado ou foi descartado
         # (caso Eloídes 03/08, job 2f9f81c2): a observação do item traz

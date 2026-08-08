@@ -553,3 +553,90 @@ def areas_do_texto_da_prancha(textos):
             if v and 1.0 <= v <= 1_000_000.0:
                 achados.append(v)
     return achados
+
+
+# ── Regra dos 100%: numa lista PLANA, o pai não pode ser irmão do filho ──────
+#
+# Princípio clássico de EAP/WBS: a soma dos filhos fecha o pai, e nenhum
+# entregável aparece em dois ramos. A planilha do AI.arq é uma lista PLANA — não
+# existe coluna de pai. Quando o motor entrega uma linha que É UM TOTAL ao lado
+# das linhas que a compõem, quem soma a coluna conta DUAS VEZES o mesmo serviço.
+#
+# Medido em 08/08/2026 sobre 69 projetos reais (contas de teste fora):
+#   7f7ef56a  "SUBTOTAL — Concreto C25/30 — Todas as sapatas"  12,4 m³ vs 2 sapatas  = 14,3 m³
+#   66ebe2d9  "Armadura total de aço — peso total conforme"   362,7 kg vs 4 armaduras = 262,5 kg
+#   1d995d72  "Quartos — área total dos quartos do pavimento" 124,4 m² vs 6 quartos   = 120,7 m²
+#   d7c82c39  "Forro — ... área total"                        335,4 m² vs 1 parte     = 335,4 m² (idêntico)
+#
+# 🪤 Unidade "vb" fica DE FORA: verba é sempre 1, então "total=1 / parte=1" casa
+#    sempre e não prova nada — eram 8 dos 17 casos brutos, todos ruído.
+# 🪤 A palavra "geral" sozinha NÃO conta como total: "tomadas de uso geral" é
+#    tipo de tomada, não somatório (falso positivo real, job 60837aaf).
+# 🪤 Compara só entre IRMÃS de verdade — mesma unidade E mesma disciplina. Sem
+#    isso, "área total" casaria com a soma de qualquer m² do projeto.
+#
+# A regra só APONTA. Quem aplica (main.py) rebaixa confirmado→estimado e escreve
+# o aviso; NUNCA apaga, soma nem move quantidade — decidir qual das duas linhas
+# fica seria adivinhar. Mesmo desenho de `is_unit_mismatch_countable`.
+
+# 🪤 É `tota(?:l|is)`, NÃO `totais?` — "totais?" quer dizer "totai" + s opcional e
+# nunca casa com "total". O teste da camada 1 pegou; a olho passaria batido.
+_RE_LINHA_TOTAL = _re.compile(
+    r"(?i)\b(?:sub\s*-?\s*)?tota(?:l|is)\b|\bsomat[óo]rios?\b|\bsoma\s+d[eoa]s?\b")
+
+# Unidade sem grandeza: "1" casa com "1" e não prova nada.
+UNIDADES_SEM_GRANDEZA = {"", "vb", "vb.", "verba", "cj", "cj.", "gl", "un.g"}
+
+
+def _campo_do_item(it, nome, padrao=""):
+    """Lê o campo tanto de dict quanto de objeto (BudgetItem)."""
+    v = it.get(nome, padrao) if isinstance(it, dict) else getattr(it, nome, padrao)
+    return padrao if v is None else v
+
+
+def linhas_pai_e_filho(items, tolerancia=0.35):
+    """Acha a linha que é um TOTAL convivendo com as linhas que a compõem.
+
+    `items`: lista de dicts ou de objetos com description/unit/quantity/discipline.
+    Devolve lista de dicts — só os suspeitos, na ordem em que aparecem:
+      {indice, descricao, unidade, quantidade, n_partes, soma_partes, folga,
+       indices_partes}
+
+    Dispara quando a soma das linhas IRMÃS (mesma unidade e mesma disciplina,
+    sem a palavra "total") fica dentro de `tolerancia` do valor da linha-total.
+    """
+    norm = []
+    for it in (items or []):
+        desc = str(_campo_do_item(it, "description", "") or "")
+        unidade = str(_campo_do_item(it, "unit", "") or "").strip().lower()
+        try:
+            q = float(_campo_do_item(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            q = 0.0
+        disc = str(_campo_do_item(it, "discipline", "") or "").strip().lower()
+        norm.append((desc, unidade, q, disc, bool(_RE_LINHA_TOTAL.search(desc))))
+
+    achados = []
+    for i, (desc, unidade, q, disc, e_total) in enumerate(norm):
+        if not e_total or q <= 0 or unidade in UNIDADES_SEM_GRANDEZA:
+            continue
+        partes = [(j, n) for j, n in enumerate(norm)
+                  if j != i and n[1] == unidade and n[3] == disc and n[2] > 0 and not n[4]]
+        if not partes:
+            continue
+        soma = sum(n[2] for _, n in partes)
+        if soma <= 0:
+            continue
+        folga = abs(soma - q) / q
+        if folga < tolerancia:
+            achados.append({
+                "indice": i,
+                "descricao": desc,
+                "unidade": unidade,
+                "quantidade": q,
+                "n_partes": len(partes),
+                "soma_partes": round(soma, 2),
+                "folga": round(folga, 3),
+                "indices_partes": [j for j, _ in partes],
+            })
+    return achados
