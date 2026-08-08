@@ -2204,6 +2204,98 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             logger.info("[infra-bloco] +%d segmentos de infra linear medidos dentro de blocos",
                         _n_block_walls)
 
+    # ---- Geometria dentro de ACAD_PROXY_ENTITY (AEC/MEP) --------------------
+    # 🎯 08/08/2026 — a maior perda medida do DWG. Desenho de AutoCAD
+    # Architecture/MEP guarda parede/duto como ACAD_PROXY_ENTITY: um invólucro
+    # que carrega uma CÓPIA da geometria dentro (é assim que visualizador sem
+    # AutoCAD consegue desenhar). O motor nunca varreu esse tipo — só
+    # LINE/LWPOLYLINE/POLYLINE/ARC/CIRCLE/INSERT/TEXT/MTEXT/DIMENSION/HATCH.
+    #
+    # Medido: AEC/MEP é 13 das 25 falhas de DWG de cliente, e quando o DWG abre
+    # direito ele mede bem (18 de 27). Explica o caso do João (07/08): o
+    # libredwg abriu, o texto virou 41 itens e a geometria não apareceu —
+    # estava toda dentro dos proxies.
+    #
+    # 🪤 O código JÁ SABIA que eles existem: logo acima há um comentário
+    # silenciando o aviso "copy process ignored ACAD_PROXY_OBJECT" do ezdxf.
+    # A gente calava o aviso e seguia sem ler.
+    #
+    # 🚨 RISCO = CONTAGEM DOBRADA. A proxy graphic pode repetir geometria que
+    # também está como entidade normal. Por isso esta 1ª versão é ESTREITA de
+    # propósito: só camadas de INFRA LINEAR (o mesmo filtro do bloco de INSERT
+    # acima), mesmos tetos, e um log que diz QUANTO veio daqui — pra dar pra
+    # medir a contribuição antes de alargar. Kill switch: DXF_MEASURE_PROXY_AEC=0.
+    if os.getenv("DXF_MEASURE_PROXY_AEC", "1") != "0":
+        _PX_RX = INFRA_LINEAR_RX
+        _MAX_PX_WALLS, _MAX_PX_SCAN = 40000, 400000
+        _n_px_walls = _n_px_scan = _n_px_ents = 0
+        _ezlog2 = logging.getLogger("ezdxf")
+        _ez_prev2 = _ezlog2.level
+        _ezlog2.setLevel(max(_ez_prev2 or logging.WARNING, logging.ERROR))
+        try:
+            for _px in msp.query("ACAD_PROXY_ENTITY"):
+                _n_px_ents += 1
+                if _n_px_walls >= _MAX_PX_WALLS or _n_px_scan >= _MAX_PX_SCAN:
+                    break
+                try:
+                    try:
+                        _pv = _px.virtual_entities()
+                    except Exception:
+                        continue
+                    # next() protegido: a explosão do ezdxf é LAZY e um proxy
+                    # degenerado não pode derrubar a prancha (regra nº1 — perder
+                    # o que já foi medido é pior que não ganhar o novo).
+                    while True:
+                        try:
+                            _pe = next(_pv)
+                        except StopIteration:
+                            break
+                        except Exception:
+                            break
+                        _n_px_scan += 1
+                        if _n_px_walls >= _MAX_PX_WALLS or _n_px_scan >= _MAX_PX_SCAN:
+                            break
+                        _pt = _pe.dxftype()
+                        if _pt not in ("LINE", "LWPOLYLINE", "POLYLINE", "ARC"):
+                            continue
+                        _play = _pe.dxf.layer
+                        if not _PX_RX.search(str(_play)):
+                            continue
+                        try:
+                            if _pt == "LINE":
+                                _pL = _line_length((_pe.dxf.start.x, _pe.dxf.start.y),
+                                                   (_pe.dxf.end.x, _pe.dxf.end.y))
+                            elif _pt == "LWPOLYLINE":
+                                _pL = _lwpolyline_length(_pe)
+                            elif _pt == "POLYLINE":
+                                _pL = _polyline_length(_pe)
+                            else:
+                                _pr = _pe.dxf.radius
+                                _pa0 = math.radians(_pe.dxf.start_angle)
+                                _pa1 = math.radians(_pe.dxf.end_angle)
+                                if _pa1 < _pa0:
+                                    _pa1 += 2 * math.pi
+                                _pL = abs(_pr * (_pa1 - _pa0))
+                            _pL *= unit_factor
+                        except Exception:
+                            continue
+                        if _pL > 0:
+                            walls.append(WallSegment(layer=_play, length=_pL,
+                                                     start=(0, 0), end=(0, 0)))
+                            _n_px_walls += 1
+                except Exception:
+                    continue
+        except Exception:
+            pass          # query pode nem existir no doc — nunca derruba
+        finally:
+            _ezlog2.setLevel(_ez_prev2)
+        if _n_px_ents:
+            # Log SEMPRE que houver proxy, mesmo com 0 medido: é assim que dá
+            # pra saber se a prancha é AEC/MEP e se o conserto rendeu.
+            logger.info("[proxy-aec] %d ACAD_PROXY_ENTITY na prancha · %d entidades "
+                        "varridas · +%d segmentos de infra linear medidos",
+                        _n_px_ents, _n_px_scan, _n_px_walls)
+
     # ---- Áreas de polilinha FECHADA — SÓ camadas de superfície física -------
     # Conservador de propósito (regra nº1: nunca inflar/forjar medida):
     #  - ALLOWLIST: só conta polilinha fechada em layer claramente de piso/forro/laje.
