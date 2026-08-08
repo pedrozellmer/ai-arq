@@ -13420,6 +13420,31 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
     # 1) Log da revisão — com DEDUPE de clique repetido (01/08/2026: o mesmo
     # item aparecia aprovado 6× na tabela; duplicata infla o painel e não é
     # sinal novo). Mesmo action pro mesmo item = atualiza, não insere.
+    # 🎯 08/08/2026 — GRAVAR O "ANTES", que é o que faltava pra revisão virar
+    # aprendizado. Pedro: *"com esses itens revisados que ele fez a gente tem
+    # que treinar a nossa inteligência pra saber como ler o projeto. Nada mais
+    # fidedigno do que o cliente revisando no site."*
+    #
+    # 🚨 O buraco medido hoje: `item_reviews.edits` guardava SÓ o valor NOVO, e
+    # o item em `project_items` era sobrescrito logo abaixo. Resultado: as 54
+    # revisões existentes dizem o que o cliente PÔS, e não o que o motor ERROU.
+    # Sem o par (antes, depois) não há erro pra aprender — só um valor solto.
+    #
+    # 🪤 Lido do BANCO, não do que o navegador manda: o cliente pode ter a tela
+    # aberta há uma hora com valor velho em memória. A verdade é o que está
+    # gravado no instante da edição.
+    _antes = None
+    if action == "edit":
+        try:
+            _st_a, _rows_a = _supa_rest_service(
+                "GET", f"project_items?id=eq.{item_id}&job_id=eq.{job_id}"
+                       f"&select=description,unit,quantity,observations,confidence"
+                       f",discipline,ref_sheet&limit=1")
+            if _rows_a and isinstance(_rows_a, list):
+                _antes = _rows_a[0]
+        except Exception as _ea:
+            print(f"[revisao] nao consegui ler o 'antes' (nao-fatal): {_ea}")
+
     review_row = {
         "job_id": job_id,
         "item_id": item_id,
@@ -13428,6 +13453,11 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         "comment": payload.comment or "",
         "reviewed_by": payload.reviewed_by or "",
     }
+    if _antes:
+        # Vai dentro de `edits` sob a chave `_antes` pra não exigir migração de
+        # coluna (edits é jsonb). Quem lê o par usa edits['_antes'].
+        review_row["edits"] = dict(payload.edits or {})
+        review_row["edits"]["_antes"] = _antes
     _ja_tem = False
     try:
         import urllib.parse as _upq
@@ -14863,6 +14893,32 @@ tudo grátis no beta. Se a versão nova não te servir, é só ignorar.</p>
     return _send_email_smtp(
         email, f"Refizemos a leitura do seu projeto — {proj}", html,
         log_kind="leitura_nova")
+
+
+@app.get("/api/admin/onde-o-motor-erra")
+async def admin_onde_o_motor_erra(request: Request):
+    """O que o CLIENTE corrigiu — a única verdade de campo que existe.
+
+    Pedro, 08/08: *"com esses itens revisados que ele fez a gente tem que treinar
+    a nossa inteligência pra saber como ler o projeto. Nada mais fidedigno do que
+    o cliente revisando no site."*
+
+    🚨 REGRA DURA nº2: isto é DIAGNÓSTICO, não realimentação de valor. O número
+    que um cliente corrigiu NUNCA pode ser copiado pra outro projeto. O que se
+    aprende aqui é ONDE o motor erra (padrão), nunca QUANTO vale (valor).
+    """
+    _require_admin(request)
+    import urllib.request as _ur
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/admin_onde_o_motor_erra"
+        req = _ur.Request(url, data=b"{}", method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        return _json.loads(_ur.urlopen(req, timeout=20).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[onde-erra] erro: {_e}")
+        raise HTTPException(502, "Não consegui carregar")
 
 
 @app.get("/api/admin/filhotes")

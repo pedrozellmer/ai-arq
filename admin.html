@@ -313,8 +313,11 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadOndeErra(); loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🎯 Onde o motor erra <span class="font-normal text-gray-400">— o que o cliente corrigiu à mão</span></h3>
+        <div id="onde-erra"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">👶 Filhotes <span class="font-normal text-gray-400">— reprocessos prontos pra liberar pro cliente</span></h3>
         <div id="filhotes"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
@@ -1164,7 +1167,7 @@ function switchTab(tabName) {
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
+  if (tabName === 'motor') { loadOndeErra(); loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -1418,6 +1421,71 @@ async function testarLibredwg(modo) {
 }
 
 // ══════════════════════════════════════════════
+// ONDE O MOTOR ERRA — o que o cliente corrigiu à mão
+// ══════════════════════════════════════════════
+// Pedro, 08/08: "com esses itens revisados que ele fez a gente tem que treinar
+// a nossa inteligência pra saber como ler o projeto. Nada mais fidedigno do que
+// o cliente revisando no site."
+//
+// 🚨 O buraco que esta tela expõe: até 08/08 a revisão gravava só o valor NOVO
+// e o item era sobrescrito. As 10 edições existentes dizem o que o cliente PÔS,
+// não o que o motor ERROU — sem o par (antes, depois) não há erro pra aprender.
+// O endpoint passou a gravar o "antes" hoje; a tela mostra "revisão antiga" nas
+// que não têm, em vez de fingir que sabe.
+//
+// 🚨 REGRA DURA nº2: isto é DIAGNÓSTICO. O número que um cliente corrigiu NUNCA
+// pode ser copiado pra outro projeto. Aprende-se ONDE erra, nunca QUANTO vale.
+async function loadOndeErra(){
+  const box = document.getElementById('onde-erra');
+  box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/onde-o-motor-erra`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'erro');
+    box.innerHTML = renderOndeErra(d);
+  } catch(e){
+    box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e && e.message) || e}</p>`;
+  }
+}
+function renderOndeErra(d){
+  const tot = d.total_edicoes || 0, com = d.com_antes || 0, sem = d.sem_antes || 0;
+  if (!tot) return `<p class="text-gray-400 text-sm">Nenhuma correção de cliente ainda. Cada uma delas é a única verdade de campo que a gente tem.</p>`;
+  const pad = (d.padroes || []).map(p => `
+    <div class="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
+      <span class="text-gray-700">${p.padrao}</span>
+      <span class="font-semibold text-gray-900">${p.n}</span>
+    </div>`).join('');
+  const ex = (d.exemplos || []).map(x => `
+    <div class="flex items-center justify-between text-xs py-1.5 border-b last:border-0 gap-3">
+      <span class="text-gray-700 truncate">${x.item}</span>
+      <span class="shrink-0 text-gray-500">motor <b class="text-red-700">${x.motor_disse ?? '–'}</b>
+        → cliente <b class="text-emerald-700">${x.cliente_disse ?? '–'}</b></span>
+    </div>`).join('');
+  return `
+  <div class="grid sm:grid-cols-3 gap-3 mb-4">
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-2xl font-bold text-gray-900">${tot}</p>
+      <p class="text-xs text-gray-500">correções de cliente</p></div>
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-2xl font-bold ${com ? 'text-emerald-700' : 'text-gray-400'}">${com}</p>
+      <p class="text-xs text-gray-500">com o &ldquo;antes&rdquo; &mdash; dá pra medir o erro</p></div>
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-2xl font-bold ${sem ? 'text-amber-700' : 'text-gray-400'}">${sem}</p>
+      <p class="text-xs text-gray-500">sem o &ldquo;antes&rdquo; &mdash; anteriores a 08/08</p></div>
+  </div>
+  ${sem === tot ? `<p class="text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2 mb-4">
+      ⚠ Nenhuma correção tem o &ldquo;antes&rdquo; ainda: até 08/08 a revisão guardava só o valor
+      novo e o item era sobrescrito. A partir de agora o par fica gravado &mdash; esta tela
+      enche sozinha conforme os clientes revisarem.</p>` : ''}
+  <div class="rounded-2xl border bg-white p-5">
+    <h4 class="font-semibold text-gray-900 mb-0.5">Como o motor erra</h4>
+    <p class="text-xs text-gray-400 mb-3">🚨 diagnóstico, não realimentação: o número de um cliente <b>nunca</b> vai pro projeto de outro (regra dura nº2)</p>
+    ${pad}
+  </div>
+  ${ex ? `<div class="rounded-2xl border bg-white p-5 mt-4">
+    <h4 class="font-semibold text-gray-900 mb-3">Últimas correções</h4>${ex}</div>` : ''}`;
+}
+
 // FILHOTES — reprocessos prontos pra liberar pro cliente
 // ══════════════════════════════════════════════
 // Ideia do Pedro (05/08): quando a gente conserta o motor, o conserto só vale
