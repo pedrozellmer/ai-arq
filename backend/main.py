@@ -8622,6 +8622,42 @@ async def admin_newsletter_scheduled(request: Request):
     return {"scheduled": rows}
 
 
+@app.get("/api/admin/qualidade-semanal")
+async def admin_qualidade_semanal(request: Request):
+    """QUALIDADE DA ENTREGA por semana FIXA do calendário (admin).
+
+    Por que existe (Pedro, 07/08/2026 — "evolução semanal de acertos"): a
+    "Taxa de Sucesso" do painel responde só *"o job terminou?"*. Ela contou
+    como SUCESSO o job 454200a5 daquele mesmo dia — 41 itens entregues e
+    **zero medidos**. Pro cliente isso não é sucesso.
+
+    A RPC quebra cada semana em três estados que somam 100% dos finalizados:
+      mediu     → concluiu E tirou ≥1 quantidade da geometria do CAD
+      sem_medir → concluiu, mas tudo veio de texto/estimativa
+      erro      → falhou
+    A taxa de sucesso atual é (mediu + sem_medir). A fatia `mediu` é o que
+    de fato virou quantitativo.
+
+    🪤 Critério de QUEM entra: trabalho de cliente (tem e-mail e não é o
+    Pedro). NÃO filtra por `archived` — dos 72 arquivados, 59 são ruído de
+    teste mas 13 são de cliente real, com 8 erros dentro; filtrar por
+    arquivado apagaria fracasso que aconteceu de verdade.
+    🪤 Semana FIXA, nunca janela móvel (senão número do passado muda sozinho).
+    """
+    _require_admin(request)
+    import urllib.request as _ur
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/admin_qualidade_semanal"
+        req = _ur.Request(url, data=b"{}", method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        return _json.loads(_ur.urlopen(req, timeout=20).read().decode("utf-8"))
+    except Exception as _e:
+        print(f"[qualidade-semanal] erro: {_e}")
+        raise HTTPException(502, "Não consegui carregar a qualidade semanal")
+
+
 @app.get("/api/admin/motor-health")
 async def admin_motor_health(request: Request):
     """Painel de SAÚDE DO MOTOR (admin): % medido por fonte (CAD vs PDF), distribuição

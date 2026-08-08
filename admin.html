@@ -313,8 +313,11 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📈 Evolução semanal <span class="font-normal text-gray-400">— o motor está melhorando?</span></h3>
+        <div id="qualidade-semanal"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor</span></h3>
         <div id="motor-health"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
@@ -1158,7 +1161,7 @@ function switchTab(tabName) {
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
+  if (tabName === 'motor') { loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -1412,6 +1415,144 @@ async function testarLibredwg(modo) {
 }
 
 // ══════════════════════════════════════════════
+// EVOLUÇÃO SEMANAL DA QUALIDADE — o motor está melhorando?
+// ══════════════════════════════════════════════
+// Pedro, 07/08/2026: "evolução semanal de % de acertos".
+//
+// 🚨 A "Taxa de Sucesso" do topo do painel responde só "o job terminou?".
+// Ela contou como SUCESSO o job 454200a5 daquele mesmo dia — 41 itens
+// entregues e ZERO medidos. Pro cliente isso não é sucesso.
+//
+// Aqui cada semana vira uma barra empilhada com 3 estados que somam o total:
+//   verde   = concluiu E mediu (≥1 quantidade tirada da geometria do CAD)
+//   âmbar   = concluiu, mas tudo veio de texto/estimativa
+//   vermelho= erro
+// A "taxa de sucesso" antiga é (verde + âmbar). O VERDE é o que virou
+// quantitativo de verdade — é essa linha que vale acompanhar.
+//
+// 🪤 ALTURA = VOLUME, de propósito. Barra 100%-empilhada esconderia que uma
+// semana teve 20 projetos e outra teve 1 — e 100% de 1 projeto viraria
+// "semana perfeita". Com altura proporcional ao total, semana pequena
+// aparece pequena e não engana.
+// 🪤 Semana FIXA do calendário. Ver o gráfico de cadastros: janela móvel faz
+// número de semana passada mudar sozinho.
+async function loadQualidadeSemanal(){
+  const box = document.getElementById('qualidade-semanal');
+  box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/qualidade-semanal`);
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'erro');
+    box.innerHTML = renderQualidadeSemanal(d);
+  } catch(e){
+    box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e && e.message) || e}</p>`;
+  }
+}
+function renderQualidadeSemanal(d){
+  const S = (d.semanas || []).filter(w => w && w.semana);
+  if (!S.length) return '<p class="text-gray-400 text-sm">Sem dados ainda.</p>';
+  const _dd = n => String(n).padStart(2,'0');
+  const lbl = iso => { const p=String(iso).split('-'); return _dd(p[2])+'/'+_dd(p[1]); };
+  const faixa = iso => { const a=new Date(iso+'T12:00:00'); const b=new Date(a); b.setDate(b.getDate()+6);
+    return _dd(a.getDate())+'/'+_dd(a.getMonth()+1)+'–'+_dd(b.getDate())+'/'+_dd(b.getMonth()+1); };
+  const pct = (n,t) => t>0 ? Math.round(100*n/t) : null;
+
+  const maxFin = S.reduce((m,w)=>Math.max(m, w.finalizados||0), 0) || 1;
+  const iAtual = S.length-1, atual = S[iAtual];
+  // Comparação: última semana FECHADA com dado vs a anterior a ela com dado.
+  // A semana em curso não serve de comparação — ainda não teve 7 dias.
+  const comDado = S.slice(0,-1).filter(w => (w.finalizados||0) > 0);
+  const ultFech = comDado[comDado.length-1] || null;
+  const penult  = comDado[comDado.length-2] || null;
+  const pctAtual = pct(atual.mediu, atual.finalizados);
+  const pctAnt   = ultFech ? pct(ultFech.mediu, ultFech.finalizados) : null;
+
+  const _passo = Math.max(1, Math.ceil(S.length/9));
+  const _gap = S.length>20 ? 2 : 3;
+
+  const card = (rot,val,sub,cor) => `
+    <div class="rounded-xl border bg-white p-4">
+      <p class="text-xs font-medium text-gray-500">${rot}</p>
+      <p class="text-2xl font-bold ${cor||'text-gray-900'} mt-0.5">${val}</p>
+      <p class="text-xs text-gray-400 mt-0.5">${sub}</p>
+    </div>`;
+
+  let delta = 'sem semana fechada anterior pra comparar';
+  if (pctAtual!=null && pctAnt!=null){
+    const dif = pctAtual - pctAnt;
+    delta = (dif>0?'▲ +':(dif<0?'▼ ':'')) + dif + ' pp vs ' + lbl(ultFech.semana)
+          + ' (' + pctAnt + '%)';
+  }
+
+  const barras = S.map((w,i)=>{
+    const fin = w.finalizados||0, atualW = (i===iAtual);
+    const H = 118 * (fin/maxFin);                 // ALTURA = VOLUME
+    const seg = (n,cor) => { if(!n||!fin) return '';
+      return `<div style="height:${(n/fin)*100}%;background:${cor};min-height:2px"></div>`; };
+    const p = pct(w.mediu, fin);
+    return `
+      <div style="flex:1 1 0;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%"
+           title="${faixa(w.semana)}${atualW?' (em curso)':''} — ${fin} finalizado(s): ${w.mediu} mediu · ${w.sem_medir} sem medir · ${w.erro} erro">
+        <div style="text-align:center;font-size:10px;font-weight:600;line-height:1;color:${p==null?'#D1D5DB':(p>=50?'#047857':(p>=25?'#B45309':'#B91C1C'))};margin-bottom:3px">${p==null?'–':p+'%'}</div>
+        <div style="height:${H}px;display:flex;flex-direction:column;gap:1px;border-radius:4px 4px 0 0;overflow:hidden">
+          ${seg(w.mediu,'#059669')}${seg(w.sem_medir,'#F59E0B')}${seg(w.erro,'#EF4444')}
+        </div>
+      </div>`;
+  }).join('');
+
+  const rotulos = S.map((w,i)=>{ const at=(i===iAtual), most=at||(i%_passo===0); return `
+    <div style="flex:1 1 0;min-width:0;text-align:center;line-height:1.15">
+      <div style="font-size:10px;white-space:nowrap;color:${at?'#4338CA':'#9CA3AF'};${at?'font-weight:600;':''}">${most?lbl(w.semana):'&nbsp;'}</div>
+      ${at?'<div style="font-size:9px;color:#6366F1;font-weight:500;white-space:nowrap">em curso</div>':''}
+    </div>`; }).join('');
+
+  const fmt = (d.por_formato||[]).map(f=>{
+    const pc = f.total>0 ? Math.round(100*f.mediu/f.total) : 0;
+    return `<div class="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
+      <span class="font-medium text-gray-700">${f.formato}</span>
+      <span class="text-gray-500 text-xs">${f.mediu} mediram de ${f.total}
+        <b class="${pc>=50?'text-emerald-700':(pc>=25?'text-amber-700':'text-red-700')} ml-1">${pc}%</b></span>
+    </div>`; }).join('');
+
+  return `
+  <div class="grid sm:grid-cols-3 gap-3 mb-5">
+    ${card('Mediu de verdade — semana em curso',
+           pctAtual==null?'–':pctAtual+'%',
+           `${atual.mediu} de ${atual.finalizados} finalizados · ${delta}`,
+           pctAtual>=50?'text-emerald-700':(pctAtual>=25?'text-amber-700':'text-red-700'))}
+    ${card('Taxa de sucesso (a antiga)',
+           atual.finalizados?Math.round(100*(atual.mediu+atual.sem_medir)/atual.finalizados)+'%':'–',
+           'só diz que o job terminou — conta quem entregou sem medir nada')}
+    ${card('Tempo até a planilha',
+           atual.min_mediana==null?'–':atual.min_mediana+' min',
+           'mediana da semana' + ((atual.resgatados|0)>0 ? ` · ${atual.resgatados} só fechou após resgate` : ''))}
+  </div>
+
+  <div class="rounded-2xl border bg-white p-5">
+    <div class="flex items-baseline justify-between mb-1 flex-wrap gap-2">
+      <h4 class="font-semibold text-gray-900">Qualidade por semana</h4>
+      <span class="text-xs text-gray-400">semana fixa (seg&rarr;dom) &middot; altura da barra = nº de projetos</span>
+    </div>
+    <p class="text-xs text-gray-400 mb-1">Só trabalho de <b>cliente</b> &mdash; fora testes internos e reprocessos de avaliação. O número em cima de cada barra é o <b>% que mediu</b>.</p>
+    <div class="flex flex-wrap gap-3 text-xs text-gray-600 mb-4">
+      <span class="inline-flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:2px;background:#059669;display:inline-block"></span> mediu do CAD</span>
+      <span class="inline-flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:2px;background:#F59E0B;display:inline-block"></span> entregou sem medir</span>
+      <span class="inline-flex items-center gap-1.5"><span style="width:10px;height:10px;border-radius:2px;background:#EF4444;display:inline-block"></span> erro</span>
+    </div>
+    <div style="position:relative;height:136px">
+      <div style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid #D1D5DB"></div>
+      <div style="position:absolute;inset:0;display:flex;gap:${_gap}px;align-items:flex-end">${barras}</div>
+    </div>
+    <div style="display:flex;gap:${_gap}px;margin-top:8px">${rotulos}</div>
+  </div>
+
+  ${fmt ? `<div class="rounded-2xl border bg-white p-5 mt-4">
+    <h4 class="font-semibold text-gray-900 mb-0.5">Por formato de arquivo</h4>
+    <p class="text-xs text-gray-400 mb-3">Quantos projetos <b>mediram</b>, do total enviado em cada formato</p>
+    ${fmt}
+  </div>` : ''}`;
+}
+
 // SAÚDE DO MOTOR — quanto o motor MEDE (branco) de verdade
 // ══════════════════════════════════════════════
 async function loadMotorHealth(){
