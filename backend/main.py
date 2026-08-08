@@ -1043,6 +1043,13 @@ def get_planilha_path(job_id: str) -> Optional[str]:
 # a superfície da API pra reconhecimento (achado auditoria 27/07). Os endpoints
 # seguem protegidos por auth — isto só tira o mapa de bandeja do atacante.
 _EXPOSE_DOCS = os.environ.get("EXPOSE_API_DOCS", "0") == "1"
+# Modelo da extração de DXF. Trocável por env SEM deploy (A/B de precisão).
+# 🪤 Lido UMA vez e exposto no /api/health: antes, o motor lia o env direto e o
+# health não mostrava nada — não dava pra saber qual modelo mediu a planta de um
+# cliente. E importa: `temperature=0` não é aceita por Opus 4.7/4.8 nem Fable,
+# então o modelo escolhido decide se a leitura é determinística.
+_DXF_MODEL_ATUAL = os.environ.get("DXF_EXTRACT_MODEL", "claude-sonnet-4-6")
+
 app = FastAPI(
     title="AI.arq API",
     description="Motor de processamento de pranchas de arquitetura com IA",
@@ -5311,7 +5318,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # Default Opus 4.8 (teste de precisão vs Sonnet 4.6). Atenção:
                         # Opus 4.7/4.8 e Fable NÃO aceitam `temperature` (dá 400) —
                         # só mando pros modelos que aceitam (Sonnet/Haiku).
-                        _dxf_model = os.environ.get("DXF_EXTRACT_MODEL", "claude-sonnet-4-6")
+                        _dxf_model = _DXF_MODEL_ATUAL
                         _dxf_kwargs = dict(
                             tag=f"dxf:{os.path.basename(dxf_path)}",
                             model=_dxf_model,
@@ -9359,6 +9366,20 @@ async def health():
             "libredwg_instalado": shutil.which("dwg2dxf") is not None,
             "libredwg_ligado": os.getenv("LIBREDWG_FALLBACK", "0").strip().lower()
                                in ("1", "true", "on", "sim"),
+            # 🚨 08/08 — ponto cego fechado. O motor roda o modelo de
+            # `DXF_EXTRACT_MODEL`, que é trocável por env SEM deploy (A/B). Eu
+            # não conseguia responder "qual modelo está medindo a planta dos
+            # clientes agora?" olhando o health — só lendo o painel do Render.
+            #
+            # Importa porque `temperature=0` NÃO é aplicada a Opus 4.7/4.8 nem
+            # Fable (esses modelos recusam o parâmetro com 400). Ou seja: o
+            # modelo em uso decide se a leitura é determinística ou não. Medido
+            # em 08/08: o MESMO arquivo rodado 2× deu 36 e 74 itens (20/07) e
+            # área 458,54 e 177 m² (08/08). Sem esta linha não dá pra ligar a
+            # variação ao modelo.
+            "dxf_extract_model": _DXF_MODEL_ATUAL,
+            "dxf_temperature_zero": not any(
+                _t in _DXF_MODEL_ATUAL for _t in ("opus-4-8", "opus-4-7", "fable")),
         }
     }
 
