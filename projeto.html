@@ -2467,6 +2467,28 @@ function renderMetrics(p, items) {
                    : (p.items_count ? String(p.items_count) : '--');
   document.getElementById('m-items').textContent = _nItensTxt;
 
+  // 🚨 CONCLUÍDO com ZERO item não é "PRONTO". A armadilha nº10 do CLAUDE.md é
+  // explícita: "0 itens extraídos = SEMPRE falha". O selo do card é chumbado
+  // como "✓ PRONTO" verde no HTML e só é reescrito por aplicarEstadoNasVistas()
+  // nos estados 'processando' e 'erro' — o caminho feliz nunca passa por lá.
+  // Resultado: projeto done-com-0-itens mostrava PRONTO verde e nada dentro.
+  //
+  // Caso real e vivo (medido 08/08): "Vivacor", de 14/07, status done, o
+  // contador guardado dizia 7 itens, o projeto tem ZERO, e o cliente recebeu o
+  // e-mail de "planilha pronta". São 12 projetos assim no banco; este é o único
+  // de cliente e não arquivado.
+  //
+  // Isto NÃO conserta o projeto — conserta a MENTIRA na tela. O projeto em si
+  // precisa de reprocesso (o arquivo dele ainda está guardado).
+  if (p.status === 'done' && Array.isArray(items) && items.length === 0) {
+    const _selo0 = document.getElementById('entrega-q-selo');
+    if (_selo0) {
+      _selo0.className = 'inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800';
+      _selo0.innerHTML = '<span aria-hidden="true">⚠</span> SEM ITENS';
+      _selo0.title = 'O processamento terminou, mas nenhum item foi extraído. Fale com a gente — dá pra reprocessar.';
+    }
+  }
+
   // Guarda valores pra o modal de edição (project_name, typology, address, phase)
   // O modal lê window.__projTypologyRaw/Address/Phase pra pré-preencher.
   window.__projTypologyRaw = p.typology || '';
