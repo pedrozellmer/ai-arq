@@ -2289,9 +2289,22 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             pass          # query pode nem existir no doc — nunca derruba
         finally:
             _ezlog2.setLevel(_ez_prev2)
+        # 🕳️ 08/08 — a 1ª versão disto era `logger.info`, que só existe no fluxo
+        # do Render e NÃO é consultável. Reprocessei o arquivo do João pra medir
+        # o conserto e fiquei sem saber se ele achou proxy ou não — instrumento
+        # feito, evidência jogada fora. É a armadilha de
+        # [[feedback-evidencia-nao-sobrevive]], e foi ela que fez o log de
+        # unidade nascer (sem ele, o cabeçalho mentiroso da Isabelle só apareceu
+        # abrindo o arquivo na mão).
+        #
+        # Agora vai pro `metadata`, que o main.py grava no error_log — o mesmo
+        # caminho de `motor:unidade`. Grava SEMPRE que houver proxy, mesmo com 0
+        # medido: "achou 300 proxies e mediu 0" e "não tem proxy nenhum" são
+        # diagnósticos OPOSTOS e sem isso viram a mesma linha em branco.
         if _n_px_ents:
-            # Log SEMPRE que houver proxy, mesmo com 0 medido: é assim que dá
-            # pra saber se a prancha é AEC/MEP e se o conserto rendeu.
+            metadata["proxy_aec_entidades"] = _n_px_ents
+            metadata["proxy_aec_varridas"] = _n_px_scan
+            metadata["proxy_aec_segmentos"] = _n_px_walls
             logger.info("[proxy-aec] %d ACAD_PROXY_ENTITY na prancha · %d entidades "
                         "varridas · +%d segmentos de infra linear medidos",
                         _n_px_ents, _n_px_scan, _n_px_walls)

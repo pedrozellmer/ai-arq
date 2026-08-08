@@ -4936,6 +4936,19 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"alerta={(_md_u.get('alerta_unidade') or '-')[:120]} "
                             f"ressalva={_dxf_sem_procedencia}",
                             job_id)
+                        # 🎯 Proxy AEC/MEP: grava SEMPRE que a prancha tiver
+                        # proxies. "achou 300 e mediu 0" e "não tem proxy" são
+                        # diagnósticos OPOSTOS — sem esta linha viram a mesma
+                        # ausência no banco, e foi exatamente o que me deixou
+                        # adivinhando no reprocesso do João (08/08).
+                        if _md_u.get("proxy_aec_entidades"):
+                            _log_error(
+                                "motor:proxy-aec",
+                                f"arq={os.path.basename(dxf_path)} "
+                                f"proxies={_md_u.get('proxy_aec_entidades')} "
+                                f"varridas={_md_u.get('proxy_aec_varridas')} "
+                                f"segmentos_medidos={_md_u.get('proxy_aec_segmentos')}",
+                                job_id)
                     except Exception as _eu:
                         print(f"[unidade] log falhou (nao-fatal): {_eu}")
                     # Aviso ao usuário (não só rebaixar a cor): xref não-resolvido é a
