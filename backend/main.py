@@ -5029,6 +5029,22 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # best-effort não pode ser mudo.
                     try:
                         _md_u = extraction.metadata or {}
+                        # 🎯 ÁREA lida do quadro por REGRA entra no consenso.
+                        # A área é o número que mais varia entre rodadas do MESMO
+                        # arquivo (medido 08/08: 458,54 m² vs 177 m²), porque sai
+                        # da IA lendo o quadro de áreas. Esta leitura é
+                        # determinística e vira só MAIS UM voto no
+                        # `_pick_area_consensus` — que agrupa por ±5% e tira a
+                        # moda. Não sobrepõe a IA; ancora ela.
+                        try:
+                            _ar = (_md_u.get("areas_do_quadro_texto") or [])
+                            if _ar:
+                                _area_readings["total_area"].extend(_ar)
+                                _log_error("motor:area-regra",
+                                           f"arq={os.path.basename(dxf_path)} "
+                                           f"candidatos={_ar[:8]}", job_id)
+                        except Exception as _eaq:
+                            print(f"[area-regra] nao-fatal: {_eaq}")
                         _log_error(
                             "motor:unidade",
                             f"arq={os.path.basename(dxf_path)} "

@@ -368,17 +368,19 @@ def medida_e_base_de_calculo(obs):
     return bool(obs) and bool(_RE_BASE_DE_CALCULO.search(str(obs)))
 
 
-def medida_de_comprimento_na_observacao(obs):
-    """Devolve o comprimento em metros citado na observação, ou None.
+def num_br_para_float(bruto):
+    """'12.642,38' → 12642.38. O parser pt-BR ÚNICO do motor.
 
-    🪤 Número em pt-BR: '12.642,38' = doze mil. Ler isso como float direto daria
-    12,64 — erro de 1000×, a mesma armadilha do valor em R$ do cronograma."""
-    if not obs:
+    🪤 '12.642,38' vale doze mil. Ler como float direto daria 12,64 — erro de
+    1000×, a mesma armadilha do valor em R$ do cronograma (onde a regra é
+    "1 parser só"). Esta lógica estava enterrada dentro de
+    `medida_de_comprimento_na_observacao`; foi extraída em 08/08 pra que a
+    leitura de ÁREA do quadro da prancha use exatamente ela, em vez de eu
+    escrever uma segunda e as duas divergirem com o tempo.
+    """
+    if bruto is None:
         return None
-    m = _RE_COMPRIMENTO.search(str(obs))
-    if not m:
-        return None
-    bruto = m.group(1)
+    bruto = str(bruto).strip()
     if "," in bruto:
         bruto = bruto.replace(".", "").replace(",", ".")
     elif bruto.count(".") > 1 or (
@@ -389,6 +391,16 @@ def medida_de_comprimento_na_observacao(obs):
     except ValueError:
         return None
     return v if v > 0 else None
+
+
+def medida_de_comprimento_na_observacao(obs):
+    """Devolve o comprimento em metros citado na observação, ou None."""
+    if not obs:
+        return None
+    m = _RE_COMPRIMENTO.search(str(obs))
+    if not m:
+        return None
+    return num_br_para_float(m.group(1))
 
 
 def _num_br(v):
@@ -487,3 +499,57 @@ def layer_is_carimbo(layer_name) -> bool:
         if tok.startswith(_CARIMBO_PREFIXO):
             return True
     return False
+
+
+# ─── Área total lida do QUADRO DE ÁREAS, por regra (08/08/2026) ──────────────
+# 🚨 POR QUE existe: a área total do projeto sai HOJE só da IA lendo o quadro de
+# áreas da prancha. Medido em 08/08 — o MESMO arquivo, rodado duas vezes no
+# mesmo motor, deu **458,54 m² e 177 m²**. E a temperatura já é 0 (conferido no
+# /api/health): temperatura zero é decodificação gulosa, não garantia de
+# determinismo. Não existe flag que conserte.
+#
+# 🔑 A conclusão que isso força: número que dá pra ler por REGRA não deveria ser
+# lido por modelo de linguagem. O quadro de áreas é TEXTO dentro do DXF — o
+# motor já extrai esses textos e os manda pro prompt. Ler daqui é determinístico
+# e de graça.
+#
+# ⚠️ Isto NÃO substitui a IA: entra como mais uma leitura no consenso
+# (`_pick_area_consensus`), que já agrupa por ±5% e tira a moda. Se o quadro não
+# existir ou não casar, nada muda — o comportamento antigo continua.
+_RE_AREA_QUADRO = _re.compile(
+    r"(?ix)"
+    r"\b(?:a|[áa]rea)\s*\.?\s*"                       # "A." ou "ÁREA"
+    r"(total|constru[íi]da|constr\.?|do\s+terreno|terreno|[úu]til|privativa)?"
+    r"\s*[:=]?\s*"
+    r"([0-9][0-9\.,]{1,14})"                          # o número, formato pt-BR
+    r"\s*(?:m2|m²|m\^2)\b"                            # exige a unidade
+)
+
+# Rótulos que NÃO são a área do projeto — terreno é o lote, não a construção.
+_AREA_ROTULO_IGNORAR = ("terreno", "do terreno")
+
+
+def areas_do_texto_da_prancha(textos):
+    """Extrai candidatos a ÁREA TOTAL do texto da prancha, sem IA.
+
+    Recebe uma lista de strings (os TEXT/MTEXT do DXF) e devolve lista de
+    floats em m², já com o parser pt-BR único (`num_br_para_float`).
+
+    🪤 Descarta 'área do terreno' de propósito: é o lote, não a obra — usar isso
+    como área do projeto infla tudo que depende dela.
+    🪤 Descarta valores absurdos (>1.000.000 m²), que em prancha normalmente são
+    número de cota ou coordenada capturados por engano.
+    """
+    achados = []
+    for t in (textos or []):
+        s = str(t or "")
+        if not s or "m" not in s.lower():
+            continue
+        for m in _RE_AREA_QUADRO.finditer(s):
+            rotulo = (m.group(1) or "").strip().lower()
+            if any(r in rotulo for r in _AREA_ROTULO_IGNORAR):
+                continue
+            v = num_br_para_float(m.group(2))
+            if v and 1.0 <= v <= 1_000_000.0:
+                achados.append(v)
+    return achados

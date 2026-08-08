@@ -2565,6 +2565,28 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     if _ress_duto:
         metadata["duto_medicao_suspeita"] = _ress_duto
 
+    # ── ÁREA lida do quadro por REGRA, não por IA (08/08/2026) ──────────────
+    # 🚨 A área total sai hoje só da IA lendo o quadro de áreas. Medido: o MESMO
+    # arquivo, rodado 2× no mesmo motor, deu 458,54 m² e 177 m². E a temperatura
+    # já é 0 (conferido no /api/health) — temperatura zero é decodificação
+    # gulosa, não garantia de determinismo. Não há flag que conserte.
+    #
+    # O quadro de áreas é TEXTO, e o texto está aqui. Ler por regra é
+    # determinístico: o mesmo arquivo dá sempre o mesmo número.
+    #
+    # ⚠️ NÃO substitui a IA — entra como leitura ADICIONAL no consenso do
+    # main.py (`_pick_area_consensus`, que agrupa por ±5% e tira a moda). Se o
+    # quadro não existir, nada muda.
+    try:
+        from engine_rules import areas_do_texto_da_prancha as _areas_regra
+        _cand = _areas_regra([getattr(t, "text", "") for t in texts])
+        if _cand:
+            metadata["areas_do_quadro_texto"] = _cand
+            logger.info("[area-regra] %d candidato(s) de área lidos do texto: %s",
+                        len(_cand), _cand[:6])
+    except Exception as _ea:
+        logger.warning("[area-regra] falhou (não-fatal): %s", _ea)
+
     return DXFExtraction(
         filename=os.path.basename(filepath),
         blocks=blocks,
