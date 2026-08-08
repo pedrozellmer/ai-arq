@@ -1514,6 +1514,39 @@ function renderQualidadeSemanal(d){
         <b class="${pc>=50?'text-emerald-700':(pc>=25?'text-amber-700':'text-red-700')} ml-1">${pc}%</b></span>
     </div>`; }).join('');
 
+  // ── LINHA ZERADA por semana ────────────────────────────────────────────
+  // O motor sabe O QUÊ, mas não QUANTO. É a fronteira seguinte depois de
+  // "mediu ou não": entre os que mediram, quantas linhas ficaram em zero.
+  // Mesma grade de colunas do gráfico de cima, pra alinhar na vertical.
+  const zer = S.map((w,i)=>{
+    const t = w.itens||0, z = w.itens_zerados||0;
+    const p = t>0 ? Math.round(100*z/t) : null;
+    const H = p==null ? 0 : (p*0.46);          // 46px = 100%
+    return `<div style="flex:1 1 0;min-width:0;position:relative;height:100%"
+                 title="${faixa(w.semana)}: ${z} de ${t} linhas em zero${p==null?'':' ('+p+'%)'}">
+      ${p==null?'':`<div style="position:absolute;left:0;right:0;bottom:0;height:${H}px;background:#C7D2FE;border-radius:3px 3px 0 0;min-height:2px"></div>`}
+      <div style="position:absolute;left:0;right:0;bottom:${H+2}px;text-align:center;font-size:9px;color:#6B7280">${p==null?'':p+'%'}</div>
+    </div>`; }).join('');
+
+  // ── POR QUE não mediu ──────────────────────────────────────────────────
+  const nm = S.reduce((a,w)=>({pdf:a.pdf+(w.nm_pdf||0), pb:a.pb+(w.nm_cad_planob||0),
+                               out:a.out+(w.nm_cad_outro||0)}), {pdf:0,pb:0,out:0});
+  const nmTot = nm.pdf+nm.pb+nm.out;
+  const linhaNm = (rot,n,cor,nota) => !n ? '' : `
+    <div class="flex items-center justify-between text-sm py-1.5 border-b last:border-0">
+      <span class="flex items-center gap-2">
+        <span style="width:9px;height:9px;border-radius:2px;background:${cor};display:inline-block"></span>
+        <span class="text-gray-700">${rot}</span>
+      </span>
+      <span class="text-gray-500 text-xs">${n}<span class="text-gray-400"> · ${Math.round(100*n/nmTot)}%</span></span>
+    </div>
+    ${nota?`<p class="text-xs text-gray-400 -mt-1 mb-1.5 pl-4">${nota}</p>`:''}`;
+
+  // ── RETENÇÃO ───────────────────────────────────────────────────────────
+  const R = d.retencao || {};
+  const totCli = R.clientes||0;
+  const pctVolta = totCli ? Math.round(100*(R.voltaram_outra_sem||0)/totCli) : 0;
+
   return `
   <div class="grid sm:grid-cols-3 gap-3 mb-5">
     ${card('Mediu de verdade — semana em curso',
@@ -1544,13 +1577,65 @@ function renderQualidadeSemanal(d){
       <div style="position:absolute;inset:0;display:flex;gap:${_gap}px;align-items:flex-end">${barras}</div>
     </div>
     <div style="display:flex;gap:${_gap}px;margin-top:8px">${rotulos}</div>
+
+    <div class="mt-6 pt-5 border-t">
+      <p class="text-xs font-medium text-gray-600 mb-0.5">Linha zerada &mdash; % dos itens entregues com quantidade <b>0</b></p>
+      <p class="text-xs text-gray-400 mb-3">O motor sabe <b>o quê</b>, mas não <b>quanto</b>. É a fronteira seguinte depois de &ldquo;mediu ou não&rdquo;.</p>
+      <div style="position:relative;height:58px">
+        <div style="position:absolute;left:0;right:0;bottom:0;border-top:1px solid #E5E7EB"></div>
+        <div style="position:absolute;inset:0;display:flex;gap:${_gap}px;align-items:stretch">${zer}</div>
+      </div>
+    </div>
   </div>
 
-  ${fmt ? `<div class="rounded-2xl border bg-white p-5 mt-4">
-    <h4 class="font-semibold text-gray-900 mb-0.5">Por formato de arquivo</h4>
-    <p class="text-xs text-gray-400 mb-3">Quantos projetos <b>mediram</b>, do total enviado em cada formato</p>
-    ${fmt}
-  </div>` : ''}`;
+  <div class="grid md:grid-cols-2 gap-4 mt-4">
+    <div class="rounded-2xl border bg-white p-5">
+      <h4 class="font-semibold text-gray-900 mb-0.5">Por que não mediu</h4>
+      <p class="text-xs text-gray-400 mb-3">Os ${nmTot} projetos que <b>concluíram sem medir nada</b></p>
+      ${linhaNm('PDF &mdash; não tem geometria', nm.pdf, '#94A3B8',
+                'Esperado, não é defeito: PDF não carrega a geometria pra medir.')}
+      ${linhaNm('CAD abriu só no leitor reserva', nm.pb, '#F59E0B',
+                'O conversor principal recusou; o reserva lê texto mas não mede.')}
+      ${linhaNm('CAD abriu e não mediu', nm.out, '#EF4444',
+                '🎯 Estes são defeito de verdade &mdash; é onde mexer no motor rende.')}
+      ${nmTot ? '' : '<p class="text-sm text-gray-400">Nenhum. Todos os concluídos mediram algo.</p>'}
+    </div>
+
+    ${fmt ? `<div class="rounded-2xl border bg-white p-5">
+      <h4 class="font-semibold text-gray-900 mb-0.5">Por formato de arquivo</h4>
+      <p class="text-xs text-gray-400 mb-3">Quantos projetos <b>mediram</b>, do total enviado</p>
+      ${fmt}
+    </div>` : ''}
+  </div>
+
+  <div class="rounded-2xl border bg-white p-5 mt-4">
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-0.5">
+      <h4 class="font-semibold text-gray-900">O cliente volta?</h4>
+      <span class="text-xs text-gray-400">${totCli} clientes que já enviaram algum projeto</span>
+    </div>
+    <!-- 🚨 08/08: eu tinha reportado "57% de retorno" contando quem mandou 2+
+         projetos. Dos 25, 24 fizeram tudo na MESMA semana — é uma sessão só,
+         não alguém voltando. As três faixas abaixo somam o total e deixam a
+         diferença explícita, pra ninguém (inclusive eu) confundir de novo. -->
+    <p class="text-xs text-gray-400 mb-3">Mandar vários arquivos de uma vez é <b>uso</b>, não retorno. Voltar é aparecer em <b>outra semana</b>.</p>
+    <div class="grid sm:grid-cols-3 gap-3">
+      <div class="rounded-xl border p-3">
+        <p class="text-2xl font-bold ${pctVolta>=20?'text-emerald-700':'text-red-700'}">${R.voltaram_outra_sem||0}</p>
+        <p class="text-xs font-medium text-gray-700">voltaram outra semana</p>
+        <p class="text-xs text-gray-400">${pctVolta}% &mdash; a retenção de verdade</p>
+      </div>
+      <div class="rounded-xl border p-3">
+        <p class="text-2xl font-bold text-gray-900">${R.varios_no_mesmo_dia||0}</p>
+        <p class="text-xs font-medium text-gray-700">vários de uma vez só</p>
+        <p class="text-xs text-gray-400">mandaram 2+ na mesma semana e não voltaram</p>
+      </div>
+      <div class="rounded-xl border p-3">
+        <p class="text-2xl font-bold text-gray-900">${R.so_um_projeto||0}</p>
+        <p class="text-xs font-medium text-gray-700">um projeto só</p>
+        <p class="text-xs text-gray-400">experimentaram e pararam</p>
+      </div>
+    </div>
+  </div>`;
 }
 
 // SAÚDE DO MOTOR — quanto o motor MEDE (branco) de verdade
