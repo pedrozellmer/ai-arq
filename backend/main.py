@@ -14661,43 +14661,27 @@ async def admin_listar_filhotes(request: Request):
     o MESMO arquivo saiu de 8 itens / 0 medidos / sem área total para
     21 itens / 2 medidos / 458,54 m². O motor melhorou o bastante pra que
     reprocessar projeto antigo entregue valor real.
+
+    🚨 08/08: a 1ª versão disto era um N+1 — 1 consulta pra listar e, pra CADA
+    filhote, mais 3 (pai, itens do pai, itens do filho) + 1 de revisões. Com 15
+    filhotes viravam ~60 chamadas HTTP em série ao Supabase; no 4G do celular
+    do Pedro o navegador desistiu antes e a tela mostrou "Load failed".
+    🪤 Eu JÁ tinha evitado isso no admin_qualidade_semanal ("agregação no banco
+    em vez de 4.686 linhas trafegando") e repeti no endpoint seguinte. Agregar
+    no banco é a regra, não a exceção. Agora é 1 chamada só.
     """
     _require_admin(request)
-    filhotes = (_supa_rest_service("GET", "projects", params={
-        "is_eval": "is.true", "select": "job_id,parent_job_id,status,user_id,created_at,total_area",
-        "order": "created_at.desc", "limit": "40"}) or [])
-
-    def _conta(jid):
-        r = _supa_rest_service("GET", "project_items",
-                               params={"job_id": f"eq.{jid}", "select": "confidence,quantity"}) or []
-        return {"itens": len(r),
-                "medidos": sum(1 for x in r if (x or {}).get("confidence") == "confirmado"),
-                "zerados": sum(1 for x in r if not (x or {}).get("quantity"))}
-
-    out = []
-    for f in filhotes:
-        pai_id = f.get("parent_job_id")
-        if not pai_id:
-            continue
-        pai = (_supa_rest_service("GET", "projects", params={
-            "job_id": f"eq.{pai_id}",
-            "select": "project_name,user_email,user_id,total_area"}) or [{}])[0]
-        antes, depois = _conta(pai_id), _conta(f["job_id"])
-        revisoes = len(_supa_rest_service("GET", "item_reviews",
-                       params={"job_id": f"eq.{pai_id}", "select": "id"}) or [])
-        out.append({
-            "job_id": f["job_id"], "parent_job_id": pai_id, "status": f.get("status"),
-            "projeto": pai.get("project_name") or "(sem nome)",
-            "cliente": pai.get("user_email") or "(sem e-mail)",
-            "criado": f.get("created_at"),
-            # já liberado = o filhote aponta pro dono do original, não pra 'eval'
-            "liberado": bool(f.get("user_id")) and f.get("user_id") == pai.get("user_id"),
-            "antes": antes, "depois": depois,
-            "area_antes": pai.get("total_area"), "area_depois": f.get("total_area"),
-            "melhorou": depois["medidos"] > antes["medidos"] or depois["itens"] > antes["itens"],
-            "revisoes_no_original": revisoes,
-        })
-    return {"filhotes": out}
+    import urllib.request as _ur
+    try:
+        url = f"{SUPABASE_URL}/rest/v1/rpc/admin_filhotes"
+        req = _ur.Request(url, data=b"{}", method="POST")
+        req.add_header("apikey", SUPABASE_KEY)
+        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        req.add_header("Content-Type", "application/json")
+        return {"filhotes": _json.loads(_ur.urlopen(req, timeout=20).read().decode("utf-8"))}
+    except Exception as _e:
+        print(f"[filhotes] erro: {_e}")
+        raise HTTPException(502, "Não consegui carregar os filhotes")
 
 
 @app.post("/api/admin/liberar-filhote/{eval_job_id}")
