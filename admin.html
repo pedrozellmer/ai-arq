@@ -233,7 +233,7 @@
           </button>
 
           <!-- Card: Projetos Processados — clicavel, leva pra aba Projetos -->
-          <button type="button" onclick="switchTab('projetos')" aria-label="Ver todos os projetos"
+          <button type="button" onclick="irParaProjetos()" aria-label="Ver todos os projetos"
                   class="kpi-link w-full text-left rounded-2xl border bg-white p-6 shadow-sm transition">
             <div class="flex items-center gap-3 mb-4">
               <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-500">
@@ -246,29 +246,33 @@
             <p id="stat-projects-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
           </button>
 
-          <!-- Card: Receita Total -->
-          <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
+          <!-- Card: Taxa de Sucesso — clicavel, cai direto na lista FILTRADA por erro -->
+          <button type="button" onclick="irParaProjetosComErro()" aria-label="Ver os projetos que deram erro"
+                  class="kpi-link w-full text-left rounded-2xl border bg-white p-6 shadow-sm transition">
             <div class="flex items-center gap-3 mb-4">
               <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-500">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               </div>
               <p class="text-sm font-medium text-gray-500">Taxa de Sucesso (30 dias)</p>
+              <span class="kpi-seta" aria-hidden="true">&rsaquo;</span>
             </div>
             <p id="stat-success" class="text-3xl font-bold text-gray-900">--</p>
             <p id="stat-success-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
-          </div>
+          </button>
 
-          <!-- Card: Itens gerados (30 dias) -->
-          <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
+          <!-- Card: Itens gerados — clicavel, leva pro Motor (qualidade do que foi gerado) -->
+          <button type="button" onclick="switchTab('motor')" aria-label="Ver a qualidade do que o motor gerou"
+                  class="kpi-link w-full text-left rounded-2xl border bg-white p-6 shadow-sm transition">
             <div class="flex items-center gap-3 mb-4">
               <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
               </div>
               <p class="text-sm font-medium text-gray-500">Itens gerados (30 dias)</p>
+              <span class="kpi-seta" aria-hidden="true">&rsaquo;</span>
             </div>
             <p id="stat-items" class="text-3xl font-bold text-gray-900">--</p>
             <p id="stat-items-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
-          </div>
+          </button>
         </div>
 
         <!-- ═══ Operação agora ═══ -->
@@ -3240,6 +3244,23 @@ document.addEventListener('DOMContentLoaded', () => {
 let _projectsFilter = 'tudo';
 let _projectsRefreshTimer = null;
 const STUCK_MINUTES = 15;  // queued há mais de 15min = travado
+
+// Atalhos dos cards de KPI pra aba Projetos.
+// 🪤 A ordem importa: switchTab primeiro, porque setProjectsFilter mexe nos
+// chips `.proj-filter-btn`, que só existem depois da aba estar visível.
+// 🪤 CADA UM FIXA O PRÓPRIO FILTRO. `_projectsFilter` é estado global e fica
+// preso: sem o 'tudo' abaixo, quem clicasse em "Taxa de Sucesso" (que filtra
+// por erro) e depois em "Projetos" cairia vendo só os 28 com erro, achando que
+// era o total. Pego no teste de clique em 09/08.
+function irParaProjetos() {
+  switchTab('projetos');
+  setProjectsFilter('tudo');
+}
+
+function irParaProjetosComErro() {
+  switchTab('projetos');
+  setProjectsFilter('erros');
+}
 
 function setProjectsFilter(filter) {
   _projectsFilter = filter;
