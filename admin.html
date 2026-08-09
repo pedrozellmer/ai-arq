@@ -24,6 +24,18 @@
   .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
   .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
   .shadow-btn { box-shadow: 0 8px 30px -8px rgba(79,70,229,0.4); }
+  /* Card de KPI que leva pra aba correspondente (Pedro pediu em 09/08).
+     🪤 A classe `hover:shadow-gradient` que os cards usavam é INERTE neste
+     build estático do Tailwind (conferido: 0 ocorrências no .css) — o hover
+     nunca funcionou. Por isso a regra abaixo é própria, não utilitária.
+     🪤 Celular NÃO tem hover: a seta `.kpi-seta` fica SEMPRE visível, senão
+     não há pista nenhuma de que o card é clicável. O Pedro usa no celular. */
+  .kpi-link { appearance: none; -webkit-appearance: none; font: inherit; color: inherit;
+              cursor: pointer; display: block; }
+  .kpi-link:hover { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); border-color: #a5b4fc; }
+  .kpi-link:active { transform: scale(0.995); }
+  .kpi-link:focus-visible { outline: 2px solid #4f46e5; outline-offset: 2px; }
+  .kpi-seta { margin-left: auto; color: #9ca3af; font-size: 22px; line-height: 1; }
 
   .sidebar {
     transition: transform 0.3s ease;
@@ -206,29 +218,33 @@
         </div>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <!-- Card: Total de Usuarios -->
-          <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
+          <!-- Card: Total de Usuarios — clicavel, leva pra aba Usuarios -->
+          <button type="button" onclick="switchTab('usuarios')" aria-label="Ver todos os usu&#225;rios"
+                  class="kpi-link w-full text-left rounded-2xl border bg-white p-6 shadow-sm transition">
             <div class="flex items-center gap-3 mb-4">
               <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-500">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
               </div>
               <p class="text-sm font-medium text-gray-500">Total de Usu&#225;rios</p>
+              <span class="kpi-seta" aria-hidden="true">&rsaquo;</span>
             </div>
             <p id="stat-users" class="text-3xl font-bold text-gray-900">--</p>
             <p id="stat-users-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
-          </div>
+          </button>
 
-          <!-- Card: Projetos Processados -->
-          <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
+          <!-- Card: Projetos Processados — clicavel, leva pra aba Projetos -->
+          <button type="button" onclick="switchTab('projetos')" aria-label="Ver todos os projetos"
+                  class="kpi-link w-full text-left rounded-2xl border bg-white p-6 shadow-sm transition">
             <div class="flex items-center gap-3 mb-4">
               <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-100 text-cyan-500">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
               </div>
               <p class="text-sm font-medium text-gray-500">Projetos (30 dias)</p>
+              <span class="kpi-seta" aria-hidden="true">&rsaquo;</span>
             </div>
             <p id="stat-projects" class="text-3xl font-bold text-gray-900">--</p>
             <p id="stat-projects-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
-          </div>
+          </button>
 
           <!-- Card: Receita Total -->
           <div class="rounded-2xl border bg-white p-6 shadow-sm hover:shadow-gradient transition">
