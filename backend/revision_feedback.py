@@ -510,6 +510,99 @@ def buscar_itens_originais(job_id: str) -> list[dict]:
         return []
 
 
+def _buscar_itens_com_id(job_id: str) -> list[dict]:
+    """Igual a buscar_itens_originais, mas traz o `id` — preciso dele pra casar
+    com item_reviews.item_id."""
+    try:
+        jid = urllib.parse.quote(str(job_id), safe="")
+        url = (f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{jid}"
+               f"&select=id,item_num,description,unit,quantity,confidence,discipline"
+               f"&order=sort_order.asc&limit=3000")
+        req = urllib.request.Request(url, method="GET")
+        for k, v in _service_headers().items():
+            req.add_header(k, v)
+        rows = json.loads(urllib.request.urlopen(req, timeout=10).read().decode("utf-8"))
+        return rows if isinstance(rows, list) else []
+    except Exception as e:
+        print(f"[revision_feedback] itens+id job={job_id}: {type(e).__name__}: {e}")
+        return []
+
+
+def _buscar_antes_das_edicoes(job_id: str) -> dict:
+    """{item_id: estado ANTES da edição} a partir de item_reviews.edits._antes.
+
+    O `_antes` é gravado desde 08/08 (main.py, submit_item_review) justamente
+    pra existir o PAR — sem ele a correção do cliente diz o que ficou, mas não
+    o que a IA tinha errado, que é a informação que ensina."""
+    try:
+        jid = urllib.parse.quote(str(job_id), safe="")
+        url = (f"{SUPABASE_URL}/rest/v1/item_reviews?job_id=eq.{jid}"
+               f"&action=eq.edit&select=item_id,edits&limit=5000")
+        req = urllib.request.Request(url, method="GET")
+        for k, v in _service_headers().items():
+            req.add_header(k, v)
+        rows = json.loads(urllib.request.urlopen(req, timeout=10).read().decode("utf-8"))
+        out = {}
+        for r in (rows or []):
+            _a = ((r.get("edits") or {}).get("_antes")) or {}
+            if r.get("item_id") and _a:
+                out[str(r["item_id"])] = _a
+        return out
+    except Exception as e:
+        print(f"[revision_feedback] antes job={job_id}: {type(e).__name__}: {e}")
+        return {}
+
+
+def processar_revisao_inline(job_id: str) -> bool:
+    """Transforma a revisão FEITA NA TELA em linha de revision_feedback.
+
+    🔑 Por que existe: a tabela só enchia por upload de XLSX revisado, gesto que
+    quase ninguém faz — em 09/08/2026 ela tinha **0 linhas** enquanto 54 revisões
+    inline de 5 clientes estavam guardadas em item_reviews e eram jogadas fora.
+    A correção do cliente é a única verdade de campo que temos (Pedro, 08/08:
+    "nada mais fidedigno do que o cliente revisando no site").
+
+    Reusa o `comparar()` do caminho do XLSX — mesma agregação, mesma tabela,
+    mesmo painel "Onde a IA mais erra". A única diferença é de onde vem o par:
+      revisados = project_items HOJE (já com as edições aplicadas)
+      originais = o mesmo, com o `_antes` no lugar de quem foi editado
+
+    🪤 Item EXCLUÍDO não entra: o `_antes` só é gravado em action='edit', e a
+    linha some de project_items no reject. Isso SUBESTIMA os removidos — honesto
+    registrar. Em 09/08 não havia nenhum reject, então não muda nada hoje.
+    🪤 Sem nenhuma edição, não grava: aprovar sem corrigir não ensina.
+    Nunca levanta exceção.
+    """
+    try:
+        atuais = _buscar_itens_com_id(job_id)
+        if not atuais:
+            return False
+        antes = _buscar_antes_das_edicoes(job_id)
+        if not antes:
+            print(f"[revision_feedback] job={job_id} inline: nenhuma edição com "
+                  f"'antes' — nada a aprender")
+            return False
+
+        _campos = ("item_num", "description", "unit", "quantity", "confidence", "discipline")
+        revisados, originais = [], []
+        for r in atuais:
+            _rev = {k: r.get(k) for k in _campos}
+            revisados.append(_rev)
+            _a = antes.get(str(r.get("id")))
+            # quem não foi editado é idêntico dos dois lados
+            originais.append({**_rev, **{k: _a[k] for k in _campos if _a and k in _a}} if _a else dict(_rev))
+
+        resultado = comparar(originais, revisados)
+        ok = salvar_feedback(job_id, resultado, arquivo="(revisão na tela)")
+        t = resultado["totais"]
+        print(f"[revision_feedback] job={job_id} INLINE salvo={ok} "
+              f"alterados={t['n_alterados']}/{t['n_itens']} pares={len(antes)}")
+        return ok
+    except Exception as e:
+        print(f"[revision_feedback] inline job={job_id}: {type(e).__name__}: {e}")
+        return False
+
+
 def salvar_feedback(job_id: str, resultado: dict, arquivo: str = "") -> bool:
     """Grava o resultado de comparar() na tabela revision_feedback."""
     if not resultado or not isinstance(resultado, dict):

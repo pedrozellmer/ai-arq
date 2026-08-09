@@ -56,6 +56,7 @@ from engine_rules import (
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
     linhas_pai_e_filho as _linhas_pai_e_filho,
+    unidade_conflita_com_sinapi as _unidade_conflita_sinapi,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -6663,6 +6664,38 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 if e["candidates"]:
                     e["_item"].sinapi_matches = e["candidates"][:3]
             print(f"[sinapi] {n_conf}/{len(lote)} itens com código conferido pela IA")
+
+            # 🔑 A unidade OFICIAL do serviço vem junto no match e nunca foi
+            # conferida (a tabela está no banco desde abril). Se a IA confirmou
+            # um código cuja unidade é M2 e a nossa linha saiu em `ml`, uma das
+            # duas está errada — e dá pra ver de graça.
+            # ⚖️ SÓ AVISA. O conflito diz que uma está errada, não QUAL; o código
+            # foi escolhido por IA e é o lado menos confiável. Rebaixar puniria
+            # medição boa por causa de match ruim. Mesma doutrina da regra nº3.
+            # 🪤 Só olha o código que a IA CONFIRMOU (`_llm_picked`): candidato
+            # por nota de similaridade erra demais e viraria alarme falso.
+            try:
+                _n_unid = 0
+                for e in lote:
+                    _it_u = e["_item"]
+                    _m = (getattr(_it_u, "sinapi_matches", None) or [None])[0]
+                    if not _m or not _m.get("_llm_picked"):
+                        continue
+                    if not _unidade_conflita_sinapi(getattr(_it_u, "unit", ""), _m.get("unidade")):
+                        continue
+                    _av_u = (f"⚠ CONFERIR A UNIDADE: o serviço SINAPI {_m.get('codigo')} "
+                             f"é medido em {_m.get('unidade')}, e esta linha saiu em "
+                             f"{getattr(_it_u, 'unit', '') or '—'}. Uma das duas está errada. ")
+                    _obs_u = getattr(_it_u, "observations", "") or ""
+                    if "CONFERIR A UNIDADE" not in _obs_u:
+                        _it_u.observations = (_av_u + _obs_u)[:1000]
+                        _n_unid += 1
+                if _n_unid:
+                    print(f"[sinapi-unidade] job={job_id}: {_n_unid} item(ns) com unidade "
+                          f"divergente do código SINAPI confirmado")
+                    _log_error("motor:sinapi-unidade", f"n={_n_unid}", job_id)
+            except Exception as _eu:
+                print(f"[sinapi-unidade] job={job_id}: checagem falhou: {_eu}")
             # Libera o pool 60-wide de candidatos SINAPI (de TODAS as pranchas)
             # antes da geração do XLSX + upload — não é mais usado. (higiene de RAM)
             for e in lote:
@@ -15616,6 +15649,21 @@ async def finalize_review(job_id: str, request: Request):
     except Exception:
         body = {}
     user_id = body.get("user_id", "")
+
+    # 🔑 A revisão na tela vira APRENDIZADO (09/08). Até hoje revision_feedback
+    # só enchia por upload de XLSX revisado — gesto que quase ninguém faz — e
+    # estava com 0 linhas, enquanto 54 revisões inline de 5 clientes eram
+    # jogadas fora. Agora o mesmo agregador do XLSX roda sobre o par
+    # (`edits._antes` × item_items de hoje) e alimenta o painel "Onde a IA erra".
+    # 🪤 Em thread e best-effort: NUNCA pode atrasar nem derrubar o "Concluir
+    # revisão" do cliente — mesma doutrina do caminho do upload.
+    try:
+        import threading as _th
+        import revision_feedback as _rfi
+        _th.Thread(target=_rfi.processar_revisao_inline,
+                   args=(job_id,), daemon=True).start()
+    except Exception as _erfi:
+        print(f"[revision-feedback] inline não iniciou job={job_id}: {_erfi}")
 
     # Cashback inline removido em 2026-05-13. Política nova:
     # - Revisar itens dentro do site: agradecimento, sem cashback (treinava IA

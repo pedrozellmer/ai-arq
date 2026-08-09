@@ -688,6 +688,52 @@ def contar_textos_repetidos(texts, min_len=3):
     return saida
 
 
+# ── Unidade do item × unidade oficial do SINAPI ──────────────────────────────
+#
+# 🔑 A tabela `sinapi_composicao` tem 10.284 serviços com a UNIDADE OFICIAL de
+# cada um, está no banco desde abril e nunca foi usada pra conferir nada. Quando
+# a IA escolhe um código SINAPI cuja unidade é M2 e a nossa linha sai em `ml`,
+# uma das duas está errada — e isso dá pra ver de graça.
+#
+# Medido em 09/08: 8,9% dos itens em m² tinham a unidade CONVERTIDA de `ml`/`un`
+# pelo próprio motor ("Unidade ajustada de ml para m²"), ~6.971 m² fabricados.
+#
+# ⚖️ SÓ AVISA, nunca rebaixa nem corrige. Motivo: o conflito diz que UMA das
+# duas está errada, não QUAL. O código SINAPI foi escolhido por IA e é o lado
+# menos confiável — rebaixar puniria medição boa por causa de um match ruim.
+# Mesma doutrina da calibração por densidade (regra dura nº3: ratio ALERTA).
+
+# Grandeza de cada unidade. O que não está aqui é incomparável de propósito:
+# 'vb'/'cj' (verba, conjunto) são coringas nossos, 'H'/'MES'/'CHP'/'CHI' são
+# mão de obra e equipamento do SINAPI e nunca descrevem um item de prancha.
+_GRANDEZA_DA_UNIDADE = {
+    "m2": "area", "m²": "area", "m2.": "area", "m².": "area",
+    "m3": "volume", "m³": "volume",
+    "m": "comprimento", "ml": "comprimento", "mts": "comprimento",
+    "metro": "comprimento", "metros": "comprimento", "m linear": "comprimento",
+    "un": "contagem", "und": "contagem", "unid": "contagem", "pc": "contagem",
+    "pç": "contagem", "peca": "contagem", "peça": "contagem",
+    "kg": "massa", "t": "massa", "ton": "massa",
+    "l": "capacidade", "lt": "capacidade", "litro": "capacidade",
+}
+
+
+def grandeza_da_unidade(u):
+    """'m²'→'area', 'ML'→'comprimento', 'vb'→None (incomparável)."""
+    return _GRANDEZA_DA_UNIDADE.get(" ".join(str(u or "").split()).lower())
+
+
+def unidade_conflita_com_sinapi(unidade_item, unidade_sinapi):
+    """True quando as duas descrevem GRANDEZAS diferentes (área × comprimento,
+    contagem × área...). False quando batem, quando são a mesma grandeza, ou
+    quando qualquer uma é incomparável — na dúvida, cala a boca."""
+    a = grandeza_da_unidade(unidade_item)
+    b = grandeza_da_unidade(unidade_sinapi)
+    if not a or not b:
+        return False
+    return a != b
+
+
 def _campo_do_item(it, nome, padrao=""):
     """Lê o campo tanto de dict quanto de objeto (BudgetItem)."""
     v = it.get(nome, padrao) if isinstance(it, dict) else getattr(it, nome, padrao)

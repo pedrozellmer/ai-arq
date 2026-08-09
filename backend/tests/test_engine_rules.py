@@ -27,6 +27,8 @@ from engine_rules import (  # noqa: E402
     linhas_pai_e_filho,
     contar_textos_repetidos,
     texto_conta_objeto,
+    unidade_conflita_com_sinapi,
+    grandeza_da_unidade,
 )
 
 _passed = 0
@@ -467,6 +469,29 @@ for _h in ("descrição", "Descrição", "DESCRIÇÃO", "descricao", "legenda", 
 for _r in ("Descrição do forro", "Item de marcenaria", "Área de serviço",
            "Total de tomadas da sala", "LM1", "Bebedouro", "Porta PM2", "Tipo A"):
     check(f"'{_r}' CONTA objeto", texto_conta_objeto(_r) is True)
+
+# ── Unidade do item × unidade oficial do SINAPI ──────────────────────────────
+# 🔑 sinapi_composicao tem a unidade de 10.284 serviços desde abril e nunca foi
+# usada pra conferir nada. 8,9% dos itens em m² tinham a unidade CONVERTIDA.
+_uc = unidade_conflita_com_sinapi
+
+# 🐛 O caso real: linha em metro linear com código SINAPI de área.
+check("m² do SINAPI vs ml do item CONFLITA", _uc("ml", "M2") is True)
+check("M2 vs m² é a MESMA grandeza", _uc("m²", "M2") is False)
+check("UN do SINAPI vs m² do item CONFLITA", _uc("m²", "UN") is True)
+check("KG vs UN conflita", _uc("un", "KG") is True)
+check("M3 vs M2 conflita", _uc("m²", "M3") is True)
+# 🔒 Mesma grandeza escrita diferente NÃO pode alarmar.
+for _a, _b in (("m","M"), ("ml","M"), ("mts","M"), ("und","UN"), ("m3","M3"), ("t","KG")):
+    check(f"'{_a}' e '{_b}' não conflitam", _uc(_a, _b) is False)
+# 🔒 Incomparável fica quieto: verba/conjunto são coringas nossos; H/MES/CHP são
+# mão de obra e equipamento do SINAPI, nunca descrevem item de prancha.
+for _u in ("vb", "cj", "gl", "", None):
+    check(f"unidade nossa '{_u}' é incomparável", _uc(_u, "M2") is False)
+for _s in ("H", "MES", "CHP", "CHI", "UNXKM", "", None):
+    check(f"unidade SINAPI '{_s}' é incomparável", _uc("m²", _s) is False)
+check("grandeza reconhece caixa e espaço", grandeza_da_unidade("  M²  ") == "area")
+check("grandeza de desconhecida é None", grandeza_da_unidade("xyz") is None)
 
 
 print()
