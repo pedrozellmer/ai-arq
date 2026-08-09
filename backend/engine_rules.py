@@ -476,6 +476,22 @@ def corrigir_comprimento_medido(desc, unit, quantity, obs):
 #
 # Lista curta e conferida no banco: os únicos layers de carimbo que
 # realmente produziram item são 'Fundo Logotipo', 'FUNDO' e 'Muldura'.
+#
+# 🔁 REPROPOSTO E REJEITADO DE NOVO em 09/08/2026. A auditoria do board pediu
+# "observação cuja fonte é texto/legenda nunca vira confirmado". Fui conferir os
+# 23 itens (de 595 confirmados, 3,9%) que declaram fonte de texto:
+#   66ebe2d9  91,7 / 88,8 / 53,41 / 28,6 kg — "linha Ø8.0 da TABELA DE QUANTITATIVOS"
+#   6c986633  809,55 / 806,31 / 803,07 kg  — "QUADRO/RESUMO DE AÇO lido da prancha"
+#   04c3f98e  60 un                        — "'60 ESTACAS DE CONCRETO fck > 30,0 MPa'"
+# É o quadro do próprio projetista. A regra proposta rebaixaria TUDO isso —
+# quebraria medição boa, exatamente o que o parágrafo acima já protegia.
+# 🔑 E o cliente não fica no escuro: a observação começa com "Fonte: texto layer
+# X", e a tela de revisão mostra os primeiros 110 caracteres — ele lê a
+# procedência antes de qualquer outra coisa.
+# ⚖️ O que sobra é nuance de PALAVRA, não de correção: o selo diz "MEDIDO do CAD"
+# para número que veio do arquivo mas não da geometria. Resolver isso pede um
+# TERCEIRO estado ("lido da prancha"), que mexe no sistema de cores inteiro —
+# decisão de produto do Pedro, não conserto de motor. Não fazer por conta.
 _CARIMBO_SPLIT = _re.compile(r"[-_\s./\\|:$]+")
 # Prefixo só pra token longo e sem ambiguidade.
 # 🪤 'LOGO' NÃO pode ser prefixo: casaria com LOGRADOURO, que é conteúdo de
