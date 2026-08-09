@@ -25,6 +25,8 @@ from engine_rules import (  # noqa: E402
     response_truncated,
     is_floor_surface,
     linhas_pai_e_filho,
+    contar_textos_repetidos,
+    texto_conta_objeto,
 )
 
 _passed = 0
@@ -414,6 +416,57 @@ check("funciona com objeto, não só dict",
       len(_pf([_It("Concreto total das sapatas", "m³", 12.4, "Estrutura"),
                _It("Sapata S1", "m³", 6.2, "Estrutura"),
                _It("Sapata S2", "m³", 6.2, "Estrutura")])) == 1)
+
+
+# ── Contagem de texto repetido (o número que o set() jogava fora) ────────────
+# 🐛 Bug real: `set(textos)` matava a contagem antes da IA ver. 468 das 1.080
+# linhas zeradas de 08/08 nasciam de "Fonte: texto layer 'txt' — 'Bebedouro'.
+# Quantidade não indicada explicitamente."
+_ctr = contar_textos_repetidos
+
+check("conta repetido: 7 bebedouros viram ×7",
+      _ctr(["Bebedouro"] * 7) == [("Bebedouro", 7)])
+check("texto único não ganha contagem inflada",
+      _ctr(["Bebedouro", "Banco"]) == [("Banco", 1), ("Bebedouro", 1)])
+# 🔒 Caixa e espaço repetido são o MESMO texto — senão a contagem se fragmenta.
+check("ignora caixa e espaço duplicado",
+      _ctr(["Bebedouro", "BEBEDOURO", "bebedouro", "Bebedouro  "])[0][1] == 4)
+check("devolve a forma mais frequente",
+      _ctr(["BEBEDOURO", "Bebedouro", "Bebedouro"])[0][0] == "Bebedouro")
+# 🔒 Ordem por contagem DESC: quem corta em 50 tem que pegar os contáveis.
+# O código antigo ordenava alfabeticamente e descartava repetido por azar da letra.
+check("ordena por contagem, não alfabético",
+      [t for t, _ in _ctr(["Zzz", "Zzz", "Zzz", "Aaa"])] == ["Zzz", "Aaa"])
+check("empate de contagem desempata alfabético",
+      [t for t, _ in _ctr(["Bbb", "Aaa"])] == ["Aaa", "Bbb"])
+# 🔒 Lixo curto fica de fora (era `len > 2` no código original).
+check("descarta texto curto demais", _ctr(["ok", "a", "  ", "sim"]) == [("sim", 1)])
+check("lista vazia não quebra", _ctr([]) == [])
+check("None na lista não quebra", _ctr([None, "Porta"]) == [("Porta", 1)])
+check("número vira texto sem quebrar", len(_ctr([123, 123])) == 1)
+# 🔒 Determinístico: mesma entrada, mesma saída — o motor já sofre com variação.
+check("é determinístico entre chamadas",
+      _ctr(["A1", "A1", "B2", "C3", "B2"]) == _ctr(["B2", "C3", "A1", "B2", "A1"]))
+
+# 🪤 Cota/nível repetido NÃO é objeto. Visto no DXF real AFP-AQ-LO-229 (08/08):
+# "+0,00" ×18 e "+0,01" ×18 — 18 marcações de nível, zero objetos.
+for _n in ("+0,00", "-1.50", "0,00", "12", "3,75", "±0,00", " +0,01 "):
+    check(f"'{_n.strip()}' NÃO conta objeto", texto_conta_objeto(_n) is False)
+for _r in ("Bebedouro", "P1", "PM2", "Porta 80", "Sala 01", "V-12"):
+    check(f"'{_r}' CONTA objeto", texto_conta_objeto(_r) is True)
+check("vazio não conta objeto", texto_conta_objeto("") is True)
+
+# 🪤 Cabeçalho de quadro/legenda repete 1× por linha da tabela e NÃO é item.
+# Visto nas pranchas reais 0326.CGR e 0226.HWB (08/08): "descrição" ×4, "repr." ×4.
+# 🚨 O ×N PIORAVA isso — a palavra passava a parecer quantidade.
+for _h in ("descrição", "Descrição", "DESCRIÇÃO", "descricao", "legenda", "observações",
+           "obs", "Repr.", "quantidade", "qtd", "item", "unid.", "código", "área",
+           "escala", "prancha", "total", "material"):
+    check(f"cabeçalho '{_h}' NÃO conta objeto", texto_conta_objeto(_h) is False)
+# 🔒 Só a palavra SOZINHA é cabeçalho — composta continua contando.
+for _r in ("Descrição do forro", "Item de marcenaria", "Área de serviço",
+           "Total de tomadas da sala", "LM1", "Bebedouro", "Porta PM2", "Tipo A"):
+    check(f"'{_r}' CONTA objeto", texto_conta_objeto(_r) is True)
 
 
 print()

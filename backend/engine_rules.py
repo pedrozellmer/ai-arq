@@ -10,6 +10,7 @@ REGRA: só stdlib aqui (re, json). NUNCA importar anthropic/supabase/fastapi —
 """
 import json as _json
 import re as _re
+import unicodedata as _ud
 
 
 def extract_balanced_obj(s, start):
@@ -586,6 +587,89 @@ _RE_LINHA_TOTAL = _re.compile(
 
 # Unidade sem grandeza: "1" casa com "1" e não prova nada.
 UNIDADES_SEM_GRANDEZA = {"", "vb", "vb.", "verba", "cj", "cj.", "gl", "un.g"}
+
+
+# ── Contagem de texto repetido: o número que a gente jogava fora ─────────────
+#
+# 🐛 O extrator fazia `set(textos)` antes de montar o prompt. Isso DESTRUÍA a
+# contagem: se "Bebedouro" aparecia 7× na prancha, a IA via a palavra UMA vez e
+# devolvia quantidade 0 — "Quantidade não indicada explicitamente".
+#
+# Medido em 08/08/2026 nos 69 projetos reais: **1.080 de 3.408 linhas zeradas
+# (31,7%)**, e **514 delas (47,6%) já citavam a camada de origem**. Dessas, 468
+# seguem exatamente este molde:
+#     "Fonte: texto layer 'txt' — 'Bebedouro'. Quantidade não indicada."
+# Ou seja: o motor sabia O QUÊ e ONDE, e mesmo assim entregou zero.
+#
+# 🔑 Regra da casa (08/08): número que dá pra CONTAR não pode depender de IA.
+# Contar quantas vezes o texto aparece é determinístico — sai do arquivo.
+#
+# 🪤 Isto conta OCORRÊNCIA DE TEXTO, não objeto. Duas etiquetas podem apontar o
+# mesmo equipamento, e um título se repete em toda prancha. Por isso entra no
+# prompt como EVIDÊNCIA FORTE, nunca como verdade — a regra dura nº1 continua
+# valendo: só vira "confirmado" o que foi medido na geometria.
+
+# 🪤 Cota de nível repetida NÃO é contagem de objeto. Medido no DXF real
+# AFP-AQ-LO-229 em 08/08: os 2 textos mais repetidos eram "+0,00" (×18) e
+# "+0,01" (×18) — 18 marcações de nível, zero objetos. Se isso entrasse como
+# evidência de quantidade, a IA criaria "18 unidades" do nada.
+_RE_SO_NUMERO = _re.compile(r"^[+\-±]?\s*\d[\d.,]*\s*$")
+
+# 🪤 Cabeçalho de quadro/legenda repete uma vez por linha da tabela e NÃO é item.
+# Visto nas pranchas reais 0326.CGR e 0226.HWB em 08/08: "descrição" ×4,
+# "legenda" ×4, "observações" ×4, "repr." ×4 — são as colunas do quadro.
+# 🚨 Sem isto, o ×N que eu acabei de ligar PIORA o problema: antes a palavra
+# aparecia solta; agora vem com "×4" do lado, parecendo quantidade.
+# Só casa a palavra SOZINHA — "Descrição do forro" continua contando.
+_CABECALHO_DE_QUADRO = {
+    "descricao", "descricoes", "legenda", "legendas", "observacao", "observacoes",
+    "obs", "repr", "representacao", "quantidade", "quant", "qtd", "qtde",
+    "item", "itens", "unid", "unidade", "un", "und", "codigo", "cod",
+    "referencia", "ref", "tipo", "nome", "area", "escala", "data", "folha",
+    "prancha", "revisao", "rev", "total", "subtotal", "material", "acabamento",
+}
+
+
+def _sem_acento(s):
+    _t = _ud.normalize("NFKD", str(s or ""))
+    return "".join(c for c in _t if not _ud.combining(c))
+
+
+def texto_conta_objeto(s):
+    """False quando repetir o texto NÃO diz quantos objetos existem:
+    (a) texto que é só número — cota, nível, elevação;
+    (b) cabeçalho de quadro/legenda isolado — "Descrição", "Qtd", "Obs".
+    True para rótulo de verdade ("LM1", "Bebedouro", "Porta PM2")."""
+    t = " ".join(str(s or "").split())
+    if _RE_SO_NUMERO.match(t):
+        return False
+    chave = _sem_acento(t).lower().strip(" .:;-–—()[]")
+    return chave not in _CABECALHO_DE_QUADRO
+
+
+def contar_textos_repetidos(texts, min_len=3):
+    """Agrupa textos iguais (ignorando caixa e espaço repetido) e devolve
+    [(forma_mais_comum, n)] ordenado por n DESC e depois alfabético.
+
+    A ordem importa: quem corta a lista em N pega primeiro os mais repetidos —
+    justamente os contáveis. Ordenar alfabeticamente (o que o código antigo
+    fazia) descartava os repetidos por acaso da letra inicial.
+    """
+    grupos = {}
+    for t in (texts or []):
+        s = " ".join(str(t if t is not None else "").split())
+        if len(s) < min_len:
+            continue
+        grupos.setdefault(s.casefold(), {})
+        grupos[s.casefold()][s] = grupos[s.casefold()].get(s, 0) + 1
+
+    saida = []
+    for _k, formas in grupos.items():
+        # forma mais frequente; empate resolve pela que vem antes, pra ser estável
+        forma = sorted(formas.items(), key=lambda kv: (-kv[1], kv[0]))[0][0]
+        saida.append((forma, sum(formas.values())))
+    saida.sort(key=lambda x: (-x[1], x[0].casefold()))
+    return saida
 
 
 def _campo_do_item(it, nome, padrao=""):

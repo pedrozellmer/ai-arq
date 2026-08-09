@@ -307,16 +307,46 @@ class DXFExtraction:
             except Exception as _e_struct:
                 logger.warning("[estrutural] medição determinística falhou: %s", _e_struct)
 
-        # Key texts
+        # Key texts — COM a contagem de repetição.
+        # 🐛 Aqui existia `set(texts)`, que jogava a contagem fora antes da IA ver:
+        # "Bebedouro" 7× na prancha chegava como 1 palavra e voltava com qtd 0.
+        # Medido em 08/08: 468 das 1.080 linhas zeradas nasciam desse molde.
+        # Ver `contar_textos_repetidos` em engine_rules.py.
         texts_by_layer = self.get_texts_by_layer()
         if texts_by_layer:
+            try:
+                from engine_rules import (contar_textos_repetidos as _contar,
+                                          texto_conta_objeto as _conta_obj)
+            except Exception:                      # nunca derruba o prompt
+                _contar = None
             lines.append("TEXTOS/LEGENDAS:")
+            if _contar is not None:
+                lines.append("  (×N = quantas vezes o MESMO texto aparece na prancha. É contagem")
+                lines.append("   DETERMINÍSTICA feita no arquivo, não estimativa. Para item CONTÁVEL")
+                lines.append("   rotulado no desenho — louça, luminária, porta, equipamento — o ×N é a")
+                lines.append("   melhor evidência de quantidade que existe: USE. Sem ×N, o texto")
+                lines.append("   apareceu 1 vez. ⚠ Conta OCORRÊNCIA DE TEXTO, não objeto: duas")
+                lines.append("   etiquetas podem apontar a mesma peça e título se repete por prancha —")
+                lines.append("   então marque 'estimado', não 'confirmado', salvo medição na geometria.)")
             for layer, texts in sorted(texts_by_layer.items()):
-                unique_texts = list(set(t.strip() for t in texts if len(t.strip()) > 2))
-                if unique_texts:
-                    lines.append(f"  [{layer}]:")
-                    for t in sorted(unique_texts)[:50]:
-                        lines.append(f"    {t}")
+                if _contar is None:                # comportamento antigo, de emergência
+                    unique_texts = list(set(t.strip() for t in texts if len(t.strip()) > 2))
+                    if unique_texts:
+                        lines.append(f"  [{layer}]:")
+                        for t in sorted(unique_texts)[:50]:
+                            lines.append(f"    {t}")
+                    continue
+                contagem = _contar(texts)
+                if not contagem:
+                    continue
+                lines.append(f"  [{layer}]:")
+                for t, n in contagem[:50]:
+                    # 🪤 Só número (cota/nível) repetido não conta objeto — sai sem ×N.
+                    _badge = f"   ×{n}" if (n > 1 and _conta_obj(t)) else ""
+                    lines.append(f"    {t}{_badge}")
+                if len(contagem) > 50:
+                    # honestidade: a IA precisa saber que a lista foi cortada
+                    lines.append(f"    (+{len(contagem) - 50} texto(s) desta camada não listado(s))")
             lines.append("")
 
         # Dimensions
