@@ -13526,6 +13526,28 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         for k, v in payload.edits.items():
             if k in allowed and v is not None:
                 safe_edits[k] = v
+
+        # 🚨 REGRA DURA Nº1. Quantidade digitada à mão NÃO é "medido do CAD".
+        # `allowed` nunca incluiu confidence, então o selo BRANCO sobrevivia à
+        # edição: o cliente trocava o número e a planilha continuava dizendo que
+        # aquilo veio do desenho. Achado da auditoria de 09/08 — estava ARMADO
+        # (843 itens 'confirmado' editáveis) e só não estourou porque as 10
+        # edições existentes caíram em itens que já eram 'estimado'.
+        # 🪤 Rebaixa SÓ quando a QUANTIDADE muda. Corrigir descrição, unidade ou
+        # disciplina não desfaz a medição da geometria — rebaixar ali puniria o
+        # cliente por melhorar o texto do próprio item.
+        if "quantity" in safe_edits:
+            safe_edits["confidence"] = "estimado"
+            # 🪤 Se o cliente mexeu SÓ na quantidade, `observations` não vem no
+            # payload — escrever a marca sozinha APAGARIA a observação original,
+            # que é onde mora a procedência ("Fonte: área hachurada do layer X").
+            # Cai no `_antes` (lido no começo desta função) pra preservar.
+            _obs_cli = str(safe_edits.get("observations")
+                           or (_antes or {}).get("observations") or "").strip()
+            _marca = "✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
+            if _marca not in _obs_cli:
+                safe_edits["observations"] = (_marca + _obs_cli)[:1000]
+
         if safe_edits:
             try:
                 # Segurança: amarra o item ao job_id JÁ validado como do dono
