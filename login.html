@@ -172,7 +172,16 @@
     const { error } = await sbClient.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'https://ai.arq.br/dashboard.html'
+        // 🚨 A volta do Google vai pro CADASTRO, não pro painel (09/08/2026).
+        // Antes vinha pro dashboard.html, que pinta 126 KB de painel montado
+        // ANTES de conferir o perfil — a pessoa via o painel pronto, achava
+        // que tinha entrado, e só então era arrancada pro formulário.
+        // Medido em 09/08: 6 dos 12 cadastros por Google dos últimos 7 dias
+        // (50%) nunca completaram; por e-mail/senha, ZERO. A ordem era o
+        // problema, não o formulário.
+        // 🪤 Quem JÁ tem perfil não fica preso aqui: o cadastro.html confere e
+        // manda pro painel sozinho, sem mostrar formulário nenhum.
+        redirectTo: 'https://ai.arq.br/cadastro.html'
       }
     });
     if (error) {

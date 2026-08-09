@@ -56,6 +56,22 @@
         <span class="text-3xl font-extrabold text-gray-900">AI<span class="gradient-text">.arq</span></span>
       </div>
 
+      <!-- Enquanto não sabemos quem é, NADA de formulário.
+           🚨 09/08: a volta do Google agora cai AQUI (era no dashboard.html).
+           Quem já tem perfil é mandado pro painel sem ver formulário nenhum —
+           sem este bloqueio, todo login existente piscaria uma tela de
+           "cadastre-se", que confunde quem já é cliente. -->
+      <div id="verificando" class="py-10 text-center" role="status" aria-live="polite">
+        <!-- 🪤 `border-t-indigo-600` é INERTE neste build estático do Tailwind
+             (0 ocorrências no .css): sem a borda colorida o círculo giraria
+             sem parecer que gira. Cor no estilo direto, que não depende do build. -->
+        <div class="mx-auto h-8 w-8 rounded-full border-2 border-indigo-200 animate-spin"
+             style="border-top-color:#4f46e5" aria-hidden="true"></div>
+        <p class="text-sm text-gray-500 mt-4">Verificando sua conta&#8230;</p>
+      </div>
+
+      <div id="bloco-cadastro" class="hidden">
+
       <!-- Title -->
       <!-- 03/08: 4 de 43 cadastros pelo Google (9%) morrem NESTA tela — vi um
            acontecer ao vivo. Quem clica "Entrar com Google" acha que já entrou,
@@ -211,6 +227,7 @@
         </button>
 
       </form>
+      </div><!-- /bloco-cadastro -->
     </div>
   </div>
 </main>
@@ -302,6 +319,21 @@
 
   let currentUser = null;
 
+  // Mostra o formulário. Chamado SÓ quando já sabemos que a pessoa precisa
+  // dele — antes disso a tela fica no "Verificando sua conta…".
+  function mostrarFormulario(aviso) {
+    const _v = document.getElementById('verificando');
+    const _b = document.getElementById('bloco-cadastro');
+    if (_v) _v.classList.add('hidden');
+    if (_b) _b.classList.remove('hidden');
+    if (aviso && _b) {
+      const p = document.createElement('p');
+      p.className = 'text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5';
+      p.textContent = aviso;
+      _b.insertBefore(p, _b.firstChild);
+    }
+  }
+
   // ══════════════════════════════════════════════
   //  AUTH CHECK & PRE-FILL
   // ══════════════════════════════════════════════
@@ -317,27 +349,57 @@
     currentUser = session.user;
     const meta = currentUser.user_metadata || {};
 
-    // Pre-fill from Google session
-    nomeInput.value = meta.full_name || meta.name || '';
+    // Pre-fill from Google session.
+    // 🪤 O NOME só entra se o campo estiver VAZIO. O `restoreDraft()` do fim do
+    // script já rodou e pode ter devolvido o que a pessoa digitou antes de ir
+    // pro Google; sem esta guarda, o nome da conta Google sobrescrevia a edição
+    // dela (quem escreveu "Maria S. Souza Neta" virava "Maria Souza").
+    // Pego no teste de rascunho em 09/08 — o restoreDraft não conserta depois,
+    // porque ele só preenche campo vazio, de propósito.
+    // O E-MAIL sempre vem do Google: é o e-mail da conta, não uma preferência.
+    if (!nomeInput.value) nomeInput.value = meta.full_name || meta.name || '';
     emailInput.value = currentUser.email || '';
 
-    // If profile already exists, redirect to dashboard
-    try {
-      const { data: profile } = await sbClient
-        .from('profiles')
-        .select('user_id')
-        .eq('user_id', currentUser.id)
-        .maybeSingle();
+    // Já tem perfil? Vai direto pro painel, SEM mostrar formulário nenhum.
+    // 🪤 Uma tentativa só não basta: esta página virou a porta de entrada de
+    // TODO login pelo Google (09/08), então um piscar de rede aqui mandaria um
+    // cliente antigo preencher cadastro de novo. Tenta 2×, com respiro.
+    let erroDaChecagem = null;
+    for (let tentativa = 1; tentativa <= 2; tentativa++) {
+      try {
+        const { data: profile, error } = await sbClient
+          .from('profiles')
+          .select('user_id')
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+        if (error) throw error;
 
-      if (profile) {
-        clearDraft();
+        if (profile) {
+          clearDraft();
           localStorage.setItem('aiarq_profile_complete', 'true');
-        window.location.href = 'dashboard.html';
-        return;
+          window.location.href = 'dashboard.html';
+          return;
+        }
+        erroDaChecagem = null;
+        break;                                  // respondeu: não tem perfil mesmo
+      } catch (err) {
+        erroDaChecagem = err;
+        console.error(`[cadastro] checagem de perfil falhou (tentativa ${tentativa}):`, err);
+        if (tentativa === 1) await new Promise(r => setTimeout(r, 800));
       }
-    } catch (err) {
-      console.error('Erro ao verificar perfil:', err);
     }
+
+    // Chegou aqui = precisa preencher (ou não deu pra confirmar).
+    mostrarFormulario(erroDaChecagem
+      ? 'Não consegui confirmar se você já tem cadastro. Se já preencheu antes, '
+        + 'atualize a página; se não, é só continuar daqui.'
+      : null);
+    // 🪤 De propósito DEPOIS do pré-preenchimento do Google: o que a pessoa
+    // digitou tem que vencer o nome que vem da conta Google. Há um
+    // restoreDraft() no fim do script, mas ele roda ANTES desta função async
+    // terminar — sem esta segunda chamada, o valor do Google sobrescreveria
+    // o rascunho de quem já tinha começado a preencher.
+    restoreDraft();
   }
   checkAuth();
 

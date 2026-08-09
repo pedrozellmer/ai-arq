@@ -2041,25 +2041,39 @@
     const meta = user.user_metadata || {};
 
     // Check if profile is complete (onboarding)
-    const profileComplete = localStorage.getItem('aiarq_profile_complete');
-    if (!profileComplete) {
-      try {
-        const { data: profile } = await sbClient
-          .from('profiles')
-          .select('user_id')
-          .eq('user_id', user.id)
-          .maybeSingle();
-
-        if (profile) {
-          localStorage.setItem('aiarq_profile_complete', 'true');
+    // 🪤 CONSERTO 09/08: antes, se a consulta ao banco FALHASSE, o catch só
+    // logava e a linha seguinte mandava pro cadastro assim mesmo — ou seja, um
+    // piscar de rede obrigava um cliente ANTIGO a se recadastrar. Agora só
+    // manda quando a resposta confirma que não existe perfil; se não deu pra
+    // confirmar, deixa entrar (o painel vazio é bem menos grave que mandar
+    // alguém refazer cadastro que já fez).
+    let temPerfil = localStorage.getItem('aiarq_profile_complete') === 'true';
+    let naoConsegiConfirmar = false;
+    if (!temPerfil) {
+      for (let tentativa = 1; tentativa <= 2; tentativa++) {
+        try {
+          const { data: profile, error } = await sbClient
+            .from('profiles')
+            .select('user_id')
+            .eq('user_id', user.id)
+            .maybeSingle();
+          if (error) throw error;
+          if (profile) {
+            temPerfil = true;
+            localStorage.setItem('aiarq_profile_complete', 'true');
+          }
+          naoConsegiConfirmar = false;
+          break;
+        } catch (err) {
+          naoConsegiConfirmar = true;
+          console.error(`[dashboard] checagem de perfil falhou (tentativa ${tentativa}):`, err);
+          if (tentativa === 1) await new Promise(r => setTimeout(r, 800));
         }
-      } catch (err) {
-        console.error('Erro ao verificar perfil:', err);
       }
     }
 
-    // Se não completou cadastro, redirecionar obrigatoriamente
-    if (!localStorage.getItem('aiarq_profile_complete')) {
+    // Só redireciona quando temos CERTEZA de que falta o cadastro.
+    if (!temPerfil && !naoConsegiConfirmar) {
       window.location.href = 'cadastro.html';
       return;
     }
