@@ -575,6 +575,21 @@ async function review(itemId, action) {
       return;
     }
   }
+  // 🚨 Excluir APAGA a linha do banco e não tem desfazer (main.py faz DELETE).
+  // O botão da lixeira e a tecla D disparavam direto — um toque errado no
+  // celular e o item sumia pra sempre. A exclusão em massa já perguntava
+  // (bulkReview); a de um item, não. Achado da auditoria de 09/08.
+  // 🪤 bulkReview NÃO passa por aqui (chama a API direto), então não há
+  // confirmação dupla.
+  if (action === 'reject') {
+    const _it = (items || []).find(i => i.id === itemId);
+    const _nome = _it ? String(_it.description || '').slice(0, 60) : 'este item';
+    const _msg = `Excluir "${_nome}"? Ele sai da planilha e não dá pra desfazer.`;
+    const _ok = window.toast
+      ? await window.toast.confirm(_msg, { ok: 'Excluir', cancel: 'Cancelar' })
+      : confirm(_msg);
+    if (!_ok) return;
+  }
   reviewState[itemId] = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited';
   render();
   try {

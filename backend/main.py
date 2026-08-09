@@ -13506,18 +13506,39 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         review_row["edits"] = dict(payload.edits or {})
         review_row["edits"]["_antes"] = _antes
     _ja_tem = False
+    _id_existente = None
     try:
         import urllib.parse as _upq
         _q = (f"item_reviews?job_id=eq.{_upq.quote(job_id)}"
-              f"&item_id=eq.{_upq.quote(item_id)}&action=eq.{action}&select=id&limit=1")
+              f"&item_id=eq.{_upq.quote(item_id)}&action=eq.{action}&select=id,comment&limit=1")
         # 🪤 (status, dados): bool da TUPLA era sempre True — o dedupe passou a
         # engolir TODA revisao nova. Regressao de 01/08, viva por ~2 horas.
         _st_rv, _rows_rv = _supa_rest_service("GET", _q)
         _ja_tem = bool(_rows_rv) and isinstance(_rows_rv, list) and len(_rows_rv) > 0
+        if _ja_tem:
+            _id_existente = _rows_rv[0].get("id")
     except Exception:
         pass   # na dúvida, insere (comportamento antigo)
+
+    _comentario = str(getattr(payload, "comment", "") or "").strip()
     if not _ja_tem:
         _supabase_insert("item_reviews", review_row)
+    elif _comentario and _id_existente:
+        # 🚨 CONSERTO 09/08. O modal "Comentar" manda action='approve' com o
+        # texto. Se a pessoa JÁ tinha aprovado o item, o dedupe acima pulava o
+        # insert e o comentário era JOGADO FORA — e a tela ainda dizia
+        # "Comentário enviado". Silencioso, e justamente no dado que mais vale:
+        # comentário do cliente é a única verdade de campo que temos.
+        # 🪤 Não insere linha nova (inflaria a contagem de aprovações, que é o
+        # motivo do dedupe existir): anexa no registro que já está lá.
+        try:
+            _ant = str((_rows_rv[0] or {}).get("comment") or "").strip()
+            _novo = (_ant + "\n---\n" + _comentario) if _ant else _comentario
+            _supa_rest_service(
+                "PATCH", f"item_reviews?id=eq.{_upq.quote(str(_id_existente))}",
+                {"comment": _novo[:4000]})
+        except Exception as _ec:
+            _supa_log(f"REVIEW comentario item={item_id} NAO GRAVOU: {_ec}")
 
     # 2) Aplicar edits à row original (se action=edit)
     if action == "edit" and payload.edits:
