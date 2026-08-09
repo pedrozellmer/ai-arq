@@ -14028,16 +14028,25 @@ class NPSDetailedPayload(BaseModel):
 
 
 @app.post("/api/nps")
-async def submit_nps(payload: NPSPayload):
-    """Registra uma resposta NPS. Score 0-10 obrigatório, comentário opcional."""
+async def submit_nps(payload: NPSPayload, request: Request):
+    """Registra uma resposta NPS. Score 0-10 obrigatório, comentário opcional.
+
+    🚨 IDENTIDADE VEM DO TOKEN, não do corpo (conserto 09/08). Antes a rota não
+    recebia `request` e gravava o `user_id`/`user_email` que viessem no JSON —
+    qualquer um podia lançar NPS em nome de qualquer cliente. NPS é número de
+    decisão; contaminá-lo é barato pra quem quer e caro pra nós.
+    🪤 Não quebra ninguém: os dois chamadores (dashboard.html:4882 e
+    projeto.html:2596) usam `authFetch`, que já manda o Bearer."""
     if payload.score < 0 or payload.score > 10:
         raise HTTPException(400, "score deve estar entre 0 e 10")
-    if not payload.user_id:
-        raise HTTPException(400, "user_id obrigatório")
+
+    _u = _get_user_from_request(request)
+    if not _u:
+        raise HTTPException(401, "sessão inválida — entre de novo pra enviar sua nota")
 
     row = {
-        "user_id": payload.user_id,
-        "user_email": payload.user_email or "",
+        "user_id": _u["id"],
+        "user_email": _u["email"] or "",
         "user_name": payload.user_name or "",
         "score": int(payload.score),
         "comment": (payload.comment or "")[:2000],
@@ -14231,11 +14240,20 @@ _TRACK_ALLOWED = {
 
 
 @app.post("/api/track")
-async def track_event(payload: TrackPayload):
+async def track_event(payload: TrackPayload, request: Request):
     """Registra um evento de uso (best-effort, nunca falha pro cliente).
     Chamado pelo trackEvent() do front. Aberto (sem auth), MAS só aceita nomes
     de evento da allowlist e só as chaves de meta conhecidas (cid/type) —
-    segurança: nada de HTML/JS arbitrário chega ao painel admin."""
+    segurança: nada de HTML/JS arbitrário chega ao painel admin.
+
+    🚨 IDENTIDADE VEM DO TOKEN quando alguém se diz logado (conserto 09/08).
+    Antes o `user_id`/`user_email` do corpo era gravado como veio — dava pra
+    encher a atividade de qualquer cliente com evento inventado.
+    🪤 A rota CONTINUA aberta de propósito: visitante deslogado é o caso normal
+    aqui (aiarq-utils.js:329 usa `fetch` puro, sem token). Evento anônimo segue
+    gravando, só que sem identidade.
+    🪤 E só valida quando o corpo AFIRMA uma identidade — assim o caminho
+    anônimo, que é a maioria, não paga uma chamada HTTP extra por evento."""
     ev = (payload.event or "").strip()
     if ev not in _TRACK_ALLOWED:
         return {"status": "ignored"}
@@ -14251,10 +14269,14 @@ async def track_event(payload: TrackPayload):
             _meta["type"] = _type
         if _src:
             _meta["src"] = _src
+    # Identidade: só entra se o TOKEN provar. Sem token, evento é anônimo.
+    _u_track = None
+    if (payload.user_id or payload.user_email):
+        _u_track = _get_user_from_request(request)
     row = {
         "event": ev,  # já validado contra a allowlist
-        "user_id": (payload.user_id or "")[:80],
-        "user_email": (payload.user_email or "")[:200],
+        "user_id": (_u_track["id"] if _u_track else "")[:80],
+        "user_email": (_u_track["email"] if _u_track else "")[:200],
         "job_id": (payload.job_id or "")[:80],
         "path": (payload.path or "")[:200],
         "meta": _meta,

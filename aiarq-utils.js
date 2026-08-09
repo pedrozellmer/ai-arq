@@ -324,11 +324,20 @@
           path: (location.pathname || '').slice(0, 200),
           meta: Object.assign({ cid: _cid, src: _src }, meta || {}),
         });
+        // 🚨 Manda o token quando há sessão (09/08). O backend passou a IGNORAR
+        // user_id/user_email do corpo e só aceitar identidade que o token prove
+        // — sem este header, todo evento de quem está logado viraria anônimo e
+        // o painel de Atividade esvaziaria. Deslogado segue sem header, que é o
+        // caso normal aqui: a rota é aberta de propósito.
+        const _h = { 'Content-Type': 'application/json' };
+        if (session && session.access_token) {
+          _h['Authorization'] = 'Bearer ' + session.access_token;
+        }
         // keepalive: o evento sobrevive mesmo se a página for fechada logo
         // após (ex.: clicou em baixar e saiu). Erro engolido de propósito.
         fetch(API_BASE + '/api/track', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: _h,
           body: body,
           keepalive: true,
         }).catch(() => {});
