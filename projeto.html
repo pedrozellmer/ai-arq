@@ -2695,7 +2695,16 @@ function renderDates(p) {
 // Compartilhada pela faixa de métricas (#m-files) E pela lista abaixo, pra as duas
 // nunca divergirem (antes #m-files caía em items.length = nº de itens, não de arquivos).
 function collectCadFiles(items) {
-  const filesSet = new Map();  // filename → contagem de items
+  // filename → { itens, medidos, zerados }
+  // 🚨 Guarda MEDIDOS por prancha, não só a contagem. Até 10/08/2026 a lista
+  // dizia "22 itens extraídos" numa prancha em que NADA foi medido do CAD —
+  // do lado do cliente isso é indistinguível de uma prancha que mediu bem.
+  // A Amanda (349e75a5) viu a elétrica vazia na planilha, concluiu que as
+  // pranchas não tinham subido, REENVIOU 4 arquivos que já estavam lá, esperou
+  // 40 min e abriu um projeto novo. As 7 pranchas mudas eram as 7 elétricas —
+  // padrão que salta aos olhos numa lista e é invisível numa planilha de 260
+  // linhas. Ela nunca escreveu pra gente: o chat está vazio o dia todo.
+  const filesSet = new Map();
   (items || []).forEach(it => {
     const raw = (it.ref_sheet || '').trim();
     if (!raw) return;
@@ -2703,7 +2712,11 @@ function collectCadFiles(items) {
     const cleanName = raw.split('(')[0].trim();
     const low = cleanName.toLowerCase();
     if (low.endsWith('.pdf') || low.endsWith('.dwg') || low.endsWith('.dxf')) {
-      filesSet.set(cleanName, (filesSet.get(cleanName) || 0) + 1);
+      const s = filesSet.get(cleanName) || { itens: 0, medidos: 0, zerados: 0 };
+      s.itens++;
+      if (String(it.confidence || '') === 'confirmado') s.medidos++;
+      if (!(Number(it.quantity) > 0)) s.zerados++;
+      filesSet.set(cleanName, s);
     }
   });
   return filesSet;
@@ -2720,7 +2733,8 @@ function renderFiles(proj, items) {
 
   const rows = Array.from(filesSet.entries())
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([fname, count]) => {
+    .map(([fname, st]) => {
+      const count = st.itens;
       const ext = fname.toLowerCase().split('.').pop();
       // URL direta do arquivo (sem página intermediária visualizar-prancha).
       // target="_blank" abre o PDF em nova aba; DWG/DXF baixam direto porque
@@ -2747,7 +2761,11 @@ function renderFiles(proj, items) {
           <span class="text-xl shrink-0">${icon}</span>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium text-gray-800 truncate">${esc(fname)}</p>
-            <p class="text-xs text-gray-500">${count} ${count === 1 ? 'item extraído' : 'itens extraídos'}</p>
+            <p class="text-xs text-gray-500">${count} ${count === 1 ? 'item extraído' : 'itens extraídos'}${
+              st.medidos > 0
+                ? ` · <span class="text-emerald-700 font-medium">${st.medidos} medido${st.medidos === 1 ? '' : 's'} do CAD</span>`
+                : ` · <span class="text-amber-700 font-medium">lida, mas nada medido do CAD</span>`
+            }</p>
           </div>
           <a href="#" ${onclickAttr} class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 no-underline cursor-pointer">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">${btnIcon}</svg>

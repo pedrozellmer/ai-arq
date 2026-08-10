@@ -6573,6 +6573,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
         project_data.total_area = _pick_area_consensus(_area_readings["total_area"])
         project_data.layout_area = _pick_area_consensus(_area_readings["layout_area"])
         project_data.no_intervention_area = _pick_area_consensus(_area_readings["no_intervention_area"])
+
+        # 📊 GRAVAR COMO A ÁREA FOI ESCOLHIDA — sempre, mesmo com 1 voto ou zero.
+        # Até 10/08 isso só existia como `print` que nem sequer disparava quando
+        # as leituras concordavam, e `error_log` tinha ZERO linha de consenso.
+        # Resultado prático: no projeto DWG da Amanda (fa371b0c) a área saiu 68,2
+        # m² pra uma escola de 9 salas e eu não consigo dizer de onde veio — as
+        # leituras da rodada não existem em lugar nenhum.
+        # 🚨 É INSTRUMENTO, não conserto: não melhora um número sozinho. Serve pra
+        # parar de discutir consenso sem dado, que é o que me travou hoje.
+        for _fld in ("total_area", "layout_area", "no_intervention_area"):
+            try:
+                _reads = [round(float(v), 2) for v in (_area_readings.get(_fld) or []) if v]
+                _escolhido = round(float(getattr(project_data, _fld, 0) or 0), 2)
+                _log_error(
+                    "motor:consenso-area",
+                    f"campo={_fld} n={len(_reads)} escolhido={_escolhido} "
+                    f"leituras={sorted(_reads)[:20]}"
+                    + ("" if len(_reads) <= 20 else f" (+{len(_reads)-20})"),
+                    job_id)
+            except Exception as _eca:
+                print(f"[consenso-area] log de {_fld} falhou (nao-fatal): {_eca}")
         # ÁREA INFORMADA PELO CLIENTE (campo no upload): só usa como base quando a
         # planta NÃO deu área nenhuma (típico de estudo de layout sem cota, ex.
         # Catarina). Geometria/leitura da própria planta SEMPRE tem prioridade —

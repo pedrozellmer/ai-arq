@@ -110,9 +110,20 @@
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         <span class="hidden sm:inline">Exportar .xlsx</span>
       </button>
-      <button id="btn-finish" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 opacity-50 cursor-not-allowed" disabled
-        title="Conclua todos os itens pra finalizar" aria-label="Concluir revisão">
+      <!-- 🚨 O RÓTULO APARECE NO CELULAR. Até 10/08/2026 este era o único texto
+           escondido atrás de `hidden sm:inline`, e o resultado é que no telefone
+           o botão virava um escudo verde sem legenda. `revision_feedback` está
+           com ZERO linhas desde que o produto existe, e este botão é a única
+           porta pra ela: o Felipe (job 6cd52d01, 10/08 10:20) abriu a revisão,
+           editou um item e foi embora sem clicar.
+           No telefone o texto encurta pra "Concluir" e no resto some a dúvida.
+           🪤 O `title` estático dizia "Conclua todos os itens pra finalizar" —
+           regra que NÃO existe mais (o JS libera o botão com qualquer pendência,
+           ver o comentário em ~1030). Tooltip velho ensinava o cliente errado. -->
+      <button id="btn-finish" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-1 sm:gap-2 opacity-50 cursor-not-allowed whitespace-nowrap" disabled
+        title="Finaliza a revisão e atualiza a planilha" aria-label="Concluir revisão">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        <span class="sm:hidden">Concluir</span>
         <span class="hidden sm:inline">Concluir revisão</span>
       </button>
     </div>
