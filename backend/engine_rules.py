@@ -734,6 +734,71 @@ def unidade_conflita_com_sinapi(unidade_item, unidade_sinapi):
     return a != b
 
 
+# ── O elo que faltava: o RÓTULO está dentro de QUAL região? ──────────────────
+#
+# 🔑 O motor sabia as duas metades e nunca as juntava:
+#   "texto 'PISO CERÂMICO' no layer 'txt'"        → O QUÊ
+#   "contorno fechado no layer 'ARQ' = 289,97 m²" → QUANTO
+# Medido em 09/08: 1.080 de 3.408 linhas (31,7%) saem ZERADAS, e 514 delas já
+# citam a camada de origem. O motor sabe o quê e onde, e entrega zero.
+#
+# É o mesmo mecanismo que os líderes chineses de 算量 usam (Glodon: 提取边线 +
+# 提取标注 e cruza) e que o paper de Zhao et al. (Automation in Construction 180,
+# 2025) mediu em 20.306/20.306 trechos com 1,83% de desvio.
+#
+# ⚖️ Aqui a regra só PROPÕE o par. Quem decide usar é o prompt — e a linha
+# resultante sai `estimado`, nunca `confirmado`: o texto estar dentro da região
+# é forte indício de que fala dela, não prova.
+
+def casar_texto_com_regiao(textos, regioes, max_por_regiao=1):
+    """Para cada região fechada, acha o texto que cai DENTRO dela.
+
+    `textos`:  itens com `.position` (x, y) e `.text`/`.layer`
+    `regioes`: itens com `.bbox` (x_min, y_min, x_max, y_max), `.area`, `.layer`
+
+    Devolve [{area, layer_da_regiao, texto, layer_do_texto}] — só os pares.
+
+    🪤 Casa com a MENOR região que contém o texto. Sem isso, o contorno do
+    pavimento inteiro engoliria todos os rótulos e cada cômodo receberia a área
+    do andar — erro pior que não medir.
+    🪤 Região sem bbox (hachura) fica de fora, não chuta.
+    """
+    _regs = []
+    for r in (regioes or []):
+        b = getattr(r, "bbox", None) or (r.get("bbox") if isinstance(r, dict) else None)
+        a = getattr(r, "area", None) if not isinstance(r, dict) else r.get("area")
+        if not b or len(b) != 4 or not a or a <= 0:
+            continue
+        _regs.append((float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(a),
+                      (getattr(r, "layer", "") if not isinstance(r, dict) else r.get("layer")) or ""))
+    if not _regs:
+        return []
+    # menor primeiro: o cômodo ganha do pavimento
+    _regs.sort(key=lambda z: (z[2] - z[0]) * (z[3] - z[1]))
+
+    usados, pares = {}, []
+    for t in (textos or []):
+        p = getattr(t, "position", None) if not isinstance(t, dict) else t.get("position")
+        s = (getattr(t, "text", "") if not isinstance(t, dict) else t.get("text")) or ""
+        if not p or len(p) < 2 or not str(s).strip():
+            continue
+        x, y = float(p[0]), float(p[1])
+        for i, (x0, y0, x1, y1, a, ly) in enumerate(_regs):
+            if x0 <= x <= x1 and y0 <= y <= y1:
+                if usados.get(i, 0) >= max_por_regiao:
+                    break
+                usados[i] = usados.get(i, 0) + 1
+                pares.append({
+                    "area": round(a, 2),
+                    "layer_da_regiao": ly,
+                    "texto": " ".join(str(s).split())[:80],
+                    "layer_do_texto": (getattr(t, "layer", "") if not isinstance(t, dict)
+                                       else t.get("layer")) or "",
+                })
+                break
+    return pares
+
+
 def _campo_do_item(it, nome, padrao=""):
     """Lê o campo tanto de dict quanto de objeto (BudgetItem)."""
     v = it.get(nome, padrao) if isinstance(it, dict) else getattr(it, nome, padrao)

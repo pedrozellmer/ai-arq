@@ -29,6 +29,7 @@ from engine_rules import (  # noqa: E402
     texto_conta_objeto,
     unidade_conflita_com_sinapi,
     grandeza_da_unidade,
+    casar_texto_com_regiao,
 )
 
 _passed = 0
@@ -492,6 +493,40 @@ for _s in ("H", "MES", "CHP", "CHI", "UNXKM", "", None):
     check(f"unidade SINAPI '{_s}' é incomparável", _uc("m²", _s) is False)
 check("grandeza reconhece caixa e espaço", grandeza_da_unidade("  M²  ") == "area")
 check("grandeza de desconhecida é None", grandeza_da_unidade("xyz") is None)
+
+# ── Casar o RÓTULO com a REGIÃO (o elo que faltava) ─────────────────────────
+class _T:
+    def __init__(s_, t, pos, layer="txt"): s_.text, s_.position, s_.layer = t, pos, layer
+class _R:
+    def __init__(s_, area, bbox, layer="ARQ"): s_.area, s_.bbox, s_.layer = area, bbox, layer
+
+# 🐛 Caso real (job ccd0c8c1): "Piso — Sala de Aula 02" saía com quantidade 0
+# enquanto a área da sala estava medida no desenho.
+_sala = casar_texto_com_regiao([_T("Sala de Aula 02", (5, 5))],
+                               [_R(48.0, (0, 0, 10, 10))])
+check("rótulo dentro da região casa com a área", len(_sala) == 1 and _sala[0]["area"] == 48.0)
+check("o par leva o texto junto", _sala[0]["texto"] == "Sala de Aula 02")
+
+# 🔒 O MAIOR não pode engolir: sem isso o contorno do pavimento daria a área do
+# andar inteiro pra cada cômodo — erro pior que não medir.
+_dois = casar_texto_com_regiao([_T("Sala de Aula 02", (5, 5))],
+                               [_R(900.0, (0, 0, 100, 100)), _R(48.0, (0, 0, 10, 10))])
+check("casa com a MENOR região que contém", _dois[0]["area"] == 48.0)
+
+# 🔒 Fora de qualquer região não inventa par.
+check("texto fora não casa", casar_texto_com_regiao([_T("Legenda", (999, 999))],
+                                                    [_R(48.0, (0, 0, 10, 10))]) == [])
+# 🔒 Uma região não vira quantidade pra vários rótulos por padrão.
+_multi = casar_texto_com_regiao([_T("A", (1, 1)), _T("B", (2, 2))], [_R(48.0, (0, 0, 10, 10))])
+check("1 região = 1 rótulo por padrão", len(_multi) == 1)
+# 🔒 Região sem bbox (hachura) fica de fora — não chuta.
+check("região sem bbox é ignorada",
+      casar_texto_com_regiao([_T("X", (1, 1))], [_R(48.0, ())]) == [])
+check("área zero é ignorada",
+      casar_texto_com_regiao([_T("X", (1, 1))], [_R(0, (0, 0, 10, 10))]) == [])
+check("listas vazias não quebram", casar_texto_com_regiao([], []) == [])
+check("texto sem posição não quebra",
+      casar_texto_com_regiao([_T("X", None)], [_R(48.0, (0, 0, 10, 10))]) == [])
 
 
 print()

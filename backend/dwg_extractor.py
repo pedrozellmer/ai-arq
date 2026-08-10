@@ -109,6 +109,12 @@ class HatchArea:
     layer: str
     area: float  # in m²
     pattern: str = ""
+    # 🔑 Retângulo envolvente (x_min, y_min, x_max, y_max) na unidade do desenho.
+    # Serve pra saber QUE TEXTO está DENTRO desta região — é o elo que faltava
+    # entre "o rótulo diz PISO CERÂMICO" e "esta região tem 289,97 m²".
+    # 🪤 O caminho do polígono fechado já calculava esse bbox e jogava fora.
+    # Vazio () quando desconhecido (hachura ainda não preenche).
+    bbox: tuple = ()
 
 
 @dataclass
@@ -292,6 +298,30 @@ class DXFExtraction:
                          "NÃO some com ÁREAS HACHURADAS da MESMA região — é a mesma área medida de outro jeito)")
             for layer, area in sorted(poly_areas.items(), key=lambda x: -x[1]):
                 lines.append(f"  {layer}: {area:.2f} m²")
+            lines.append("")
+
+        # 🔑 O RÓTULO DE CADA REGIÃO — o elo que faltava (09/08/2026).
+        # O prompt já trazia "o texto X existe" e "a região Y tem N m²" em listas
+        # SEPARADAS, e a IA tinha que adivinhar qual texto fala de qual região.
+        # Aqui vem o par pronto, calculado na geometria: qual rótulo cai DENTRO
+        # de cada contorno fechado. É o que ataca a linha zerada — 31,7% das
+        # linhas saíam sem quantidade, e 514 delas já citavam a camada.
+        try:
+            from engine_rules import casar_texto_com_regiao as _casar
+            _pares = _casar(self.texts, self.polygon_areas)
+        except Exception:
+            _pares = []
+        if _pares:
+            lines.append("RÓTULO ↔ ÁREA DA REGIÃO (casado na geometria, não é chute):")
+            lines.append("  (o texto está DENTRO do contorno fechado, então quase sempre fala DELE."
+                         " Use como a quantidade daquele ambiente. ⚠ Continua ESTIMADO: estar dentro"
+                         " é indício forte, não prova — e um rótulo solto pode cair em cima de outra"
+                         " coisa.)")
+            for p in _pares[:60]:
+                lines.append(f"  \"{p['texto']}\"  →  {p['area']:.2f} m²"
+                             f"  (região no layer {p['layer_da_regiao']})")
+            if len(_pares) > 60:
+                lines.append(f"  (+{len(_pares) - 60} par(es) não listado(s))")
             lines.append("")
 
         # Medições ESTRUTURAIS determinísticas (tabela de aço lida dos textos,
@@ -2395,7 +2425,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             continue  # contido em um maior já aceito → aninhado, não soma
         _accepted.append(_cand)
     for _a, _bb, _ly in _accepted:
-        polygon_areas.append(HatchArea(layer=_ly, area=_a, pattern="contorno fechado"))
+        # 🔑 `_bb` já era calculado aqui pra descartar polígono aninhado e era
+        # jogado fora. Guardando: é o que permite casar o RÓTULO do ambiente com
+        # a ÁREA dele (ver `casar_texto_com_regiao` em engine_rules).
+        polygon_areas.append(HatchArea(layer=_ly, area=_a,
+                                       pattern="contorno fechado", bbox=tuple(_bb)))
 
     # ---- PILARES: retângulos/círculos FECHADOS em layer de PILAR ------------
     # Medição estrutural determinística (regra nº1): pilar em planta de fôrma é
