@@ -4777,20 +4777,26 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     print(f"[cad-preview] import erro: {_imp_e}")
                     _log_error("motor:preview-prancha", f"IMPORT FALHOU: {_imp_e}", job_id)
                     return
-                for _cad in cad_paths:
-                    _fname = os.path.basename(_cad)
-                    # Procura o DXF convertido (se era DWG) ou usa direto
-                    _dxf_path = _cad
-                    if _cad.lower().endswith('.dwg'):
-                        # Procurar DXF equivalente em work_dir
-                        _base = os.path.splitext(_fname)[0]
-                        for _cand in os.listdir(work_dir):
-                            if _cand.lower().endswith('.dxf') and _base.lower() in _cand.lower():
-                                _dxf_path = os.path.join(work_dir, _cand)
-                                break
-                        else:
-                            _prev["sem_dxf"] += 1
-                            continue  # DWG sem DXF convertido — pula
+                # 🚨 Itera `dxf_paths`, NÃO `cad_paths`. A versão anterior pegava o
+                # DWG e ia procurar o DXF convertido dentro do `work_dir` — onde
+                # ele NUNCA esteve: `convert_dwg_to_dxf` grava em
+                # `tempfile.mkdtemp(prefix="arq_dxf_")` (dwg_extractor.py:1402).
+                # Resultado: TODO projeto de DWG pulava o preview, sempre, calado.
+                # Medido em 10/08/2026 no Storage: o projeto de 8 DWG da Amanda
+                # (fa371b0c) gerou ZERO PNG; o cliente franweldon (f9ccf0e4) deu
+                # `sem_dxf=1` no contador novo — foi ele que entregou a causa, 1h
+                # depois de o contador subir. Eu tinha apostado em timeout.
+                # `dxf_paths` já guarda o caminho REAL: o original quando veio DXF,
+                # o convertido quando veio DWG. É a fonte certa.
+                for _dxf_path in dxf_paths:
+                    if not os.path.isfile(_dxf_path):
+                        _prev["sem_dxf"] += 1
+                        continue
+                    # Nome do PNG pelo arquivo do CLIENTE, sem o sufixo do
+                    # conversor — "planta_libredwg.png" não diz nada pra ele.
+                    _fname = os.path.basename(_dxf_path)
+                    if _fname.endswith("_libredwg.dxf"):
+                        _fname = _fname[: -len("_libredwg.dxf")] + ".dxf"
                     # Render
                     _png_path = os.path.join(work_dir, os.path.splitext(_fname)[0] + '.png')
                     try:
@@ -4823,10 +4829,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # Resumo SEMPRE — inclusive quando tudo deu certo. Ausência de
                 # linha aqui passa a significar "o preview nem rodou", que é
                 # informação diferente de "rodou e falhou".
+                # 🪤 Os DOIS números: `enviadas` é o que o cliente mandou,
+                # `legiveis` é o que virou DXF. A diferença entre eles é DWG que
+                # não converteu — problema de conversão, não de render.
                 _log_error("motor:preview-prancha",
-                           f"resumo pranchas={len(cad_paths)} ok={_prev['ok']} "
-                           f"falhou={_prev['falhou']} sem_dxf={_prev['sem_dxf']} "
-                           f"erro={_prev['erro']}", job_id)
+                           f"resumo enviadas={len(cad_paths)} legiveis={len(dxf_paths)} "
+                           f"ok={_prev['ok']} falhou={_prev['falhou']} "
+                           f"sem_dxf={_prev['sem_dxf']} erro={_prev['erro']}", job_id)
             # NÃO inicia o preview aqui (fix OOM 2026-07-22): rodar o matplotlib
             # concorrente com a análise soma o pico de RAM do render EM CIMA do
             # pico da análise — justamente a janela de perigo em projeto com muitas
