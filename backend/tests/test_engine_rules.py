@@ -546,6 +546,36 @@ check("texto sem posição não quebra",
 
 
 
+# ── selo BRANCO com quantidade 0 (achado no job 349e75a5, Amanda, 10/08) ──────
+from engine_rules import selos_sem_medida  # noqa: E402
+
+
+class _Selo:                       # imita o Enum Confidence do models.py
+    def __init__(self, v): self.value = v
+
+
+def _I(conf, qtd, desc="Cobertura", un="m²"):
+    return {"confidence": conf, "quantity": qtd, "description": desc, "unit": un}
+
+
+check("branco com 0 é pego", [a["indice"] for a in selos_sem_medida([_I("confirmado", 0)])] == [0])
+check("branco com número não é pego", selos_sem_medida([_I("confirmado", 12.5)]) == [])
+check("estimado com 0 não é pego", selos_sem_medida([_I("estimado", 0)]) == [])
+check("quantity None conta como 0", [a["indice"] for a in selos_sem_medida([_I("confirmado", None)])] == [0])
+# 🪤 No fluxo real o campo é o Enum Confidence, não string — a 1ª versão lia
+# str(Enum) e virava "Confidence.CONFIRMADO", que nunca casava com "confirmado".
+check("Enum Confidence é lido igual",
+      [a["indice"] for a in selos_sem_medida([_I(_Selo("confirmado"), 0)])] == [0])
+check("quantity lixo não quebra", [a["indice"] for a in selos_sem_medida([_I("confirmado", "n/a")])] == [0])
+check("maiúscula/espaço no selo não escapa", [a["indice"] for a in selos_sem_medida([_I(" CONFIRMADO ", 0)])] == [0])
+check("lista vazia não quebra", selos_sem_medida([]) == [])
+check("None não quebra", selos_sem_medida(None) == [])
+_mix = selos_sem_medida([_I("confirmado", 5), _I("confirmado", 0, "Eletroduto", "ml"),
+                         _I("estimado", 0), _I("confirmado", 0, "Alvenaria", "ml")])
+check("acha só os certos, na ordem", [a["indice"] for a in _mix] == [1, 3])
+check("devolve descrição e unidade", _mix[0]["descricao"] == "Eletroduto" and _mix[0]["unidade"] == "ml")
+
+
 print()
 print(f"RESULTADO: {_passed} passaram, {_failed} falharam")
 sys.exit(1 if _failed else 0)

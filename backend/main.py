@@ -56,6 +56,7 @@ from engine_rules import (
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
     linhas_pai_e_filho as _linhas_pai_e_filho,
+    selos_sem_medida as _selos_sem_medida,
     unidade_conflita_com_sinapi as _unidade_conflita_sinapi,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
@@ -4336,6 +4337,14 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             filled += 1
         elif q > 0:
             it.quantity = 0
+            # 🪤 Zerar sem soltar o selo deixa a linha BRANCA ("medido do CAD")
+            # com quantidade 0 — o ramo de cima rebaixa e este não rebaixava.
+            # Achado no job 349e75a5 (Amanda, 10/08). A rede de segurança geral
+            # é `selos_sem_medida`, mas a origem se conserta na origem.
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
             _obs = it.observations or ""
             if "não medida" not in _obs.lower():
                 it.observations = (
@@ -6727,6 +6736,38 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     pass  # alertas são best-effort
         except ImportError:
             pass  # market_heuristics opcional
+
+        # ÚLTIMA passada antes da planilha: linha BRANCA ("✓ MEDIDO do CAD") com
+        # quantidade 0 é contradição — afirma que mediu e que deu nada. Cai o
+        # branco, vira laranja "a confirmar". NUNCA preenche número (ver o bloco
+        # de comentário de `selos_sem_medida` em engine_rules.py).
+        #
+        # 🪤 TEM QUE FICAR AQUI, depois de TODOS os blocos que zeram quantidade
+        # (`_apply_area_honesty` ~6456, unidade-contável, pai-e-filho, comprimento)
+        # e ANTES do `generate_spreadsheet` — senão a planilha sai com o selo
+        # velho e só o banco fica certo, que é o erro de "arquivo certo, tela
+        # errada" que já me pegou.
+        try:
+            from models import Confidence as _Conf3
+            _sem_medida = _selos_sem_medida(all_items)
+            for _s in _sem_medida:
+                _it = all_items[_s["indice"]]
+                _it.confidence = _Conf3("estimado")
+                # Aviso no COMEÇO: a tela de revisão corta em 110 caracteres.
+                _it.observations = ("⚠ NÃO MEDIDO: esta linha estava marcada como medida "
+                                    "do CAD, mas saiu sem quantidade — o motor identificou "
+                                    "o serviço e não conseguiu medir. Informe a quantidade. "
+                                    + (_it.observations or ""))
+            if _sem_medida:
+                print(f"[selo-sem-medida] job={job_id}: rebaixei {len(_sem_medida)} "
+                      f"linha(s) branca(s) que estavam com quantidade 0")
+                _log_error("motor:selo-sem-medida",
+                           f"n={len(_sem_medida)} " + "; ".join(
+                               f"{s['descricao'][:40]}({s['unidade']})" for s in _sem_medida[:4]),
+                           job_id)
+        except Exception as _esm:
+            print(f"[selo-sem-medida] job={job_id}: checagem falhou: {_esm}")
+            _log_error("motor:selo-sem-medida", f"FALHOU: {_esm}", job_id)
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)

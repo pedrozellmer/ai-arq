@@ -831,6 +831,60 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
     return pares
 
 
+# ══════════════════════════════════════════════════════════════════════
+#  SELO BRANCO COM QUANTIDADE ZERO — é contradição, não é medição
+#
+# 🚨 Regra dura nº1 pelo avesso. O BRANCO ("✓ MEDIDO do CAD") é a afirmação
+# mais forte da planilha: este número saiu da geometria. Uma linha branca com
+# quantidade 0 afirma duas coisas incompatíveis — que o motor mediu, e que o
+# resultado é nada. O cliente lê "medido: 0" e conclui que o serviço não
+# existe no projeto, quando a verdade é que a gente não conseguiu medir.
+#
+# Achado em 10/08/2026 no 1º projeto da Amanda (349e75a5, escola FNDE de 14
+# pranchas): 4 linhas brancas com 0 — e a observação de cada uma CARREGAVA o
+# número medido ("área de contorno fechado no layer ARQ-COBERTURA = 752,21
+# m²"; "comprimento do layer 'EL-Condutos (Teto)' = 79,65 m"). O número se
+# perdeu entre a medição e a coluna; o selo ficou para trás.
+#
+# 🪤 Não é só descuido do modelo. `_apply_area_honesty` (main.py:4337) zera a
+# quantidade DE PROPÓSITO quando a área veio de Vision e não da geometria, e
+# esse ramo não toca no selo — enquanto o ramo vizinho, que preenche, rebaixa
+# pra estimado (linha 4327). Mas aquele caminho só olha unidade de ÁREA, e 3
+# das 4 linhas da Amanda eram `ml`. Por isso a regra mora AQUI, no fim da
+# esteira e valendo pra qualquer origem, em vez de remendar um por um os
+# caminhos que zeram.
+#
+# 🚨 Esta regra NUNCA inventa número — tentar adivinhar a quantidade a partir
+# da observação foi proposto em 10/08 e MORREU sob 3 céticos em dado real
+# (ver `corrigir_comprimento_medido` e o bloco de _RE_BASE_DE_CALCULO). Aqui
+# só se desfaz uma afirmação que o projeto não sustenta: cai o branco, a
+# linha vira laranja "a confirmar", e a quantidade continua exatamente 0.
+def selos_sem_medida(items):
+    """Índices das linhas seladas como MEDIDAS que saíram sem quantidade.
+
+    `items`: lista de dicts ou de objetos com confidence/quantity.
+    Devolve lista de dicts {indice, descricao, unidade} — na ordem original.
+    """
+    achados = []
+    for i, it in enumerate(items or []):
+        selo = _campo_do_item(it, "confidence", "")
+        selo = str(getattr(selo, "value", selo) or "").strip().lower()
+        if selo != "confirmado":
+            continue
+        try:
+            q = float(_campo_do_item(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            q = 0.0
+        if q > 0:
+            continue
+        achados.append({
+            "indice": i,
+            "descricao": str(_campo_do_item(it, "description", "") or "")[:60],
+            "unidade": str(_campo_do_item(it, "unit", "") or "").strip(),
+        })
+    return achados
+
+
 def _campo_do_item(it, nome, padrao=""):
     """Lê o campo tanto de dict quanto de objeto (BudgetItem)."""
     v = it.get(nome, padrao) if isinstance(it, dict) else getattr(it, nome, padrao)
