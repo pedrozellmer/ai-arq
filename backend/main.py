@@ -648,6 +648,113 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     return items, resumo
 
 
+_CAMPOS_ITEM_VERSAO = ("item_num", "description", "unit", "quantity", "observations",
+                       "ref_sheet", "confidence", "discipline", "section", "sort_order")
+
+
+def _arquivar_versao_anterior(job_id: str) -> dict:
+    """Copia os itens que estão no banco pra `project_items_versoes` antes do swap.
+
+    Devolve {versao, n_itens, n_medidos} da versão arquivada, ou {} quando não
+    havia nada pra guardar (1º processamento) ou quando falhou.
+
+    🚨 NUNCA levanta: perder a versão velha é ruim, mas não entregar a nova é
+    pior. Todo erro vira log e segue.
+    """
+    import urllib.request as _ur, json as _js
+    try:
+        _sel = ",".join(_CAMPOS_ITEM_VERSAO)
+        _req = _ur.Request(
+            f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}&select={_sel}&limit=5000")
+        _req.add_header("apikey", SUPABASE_KEY)
+        _req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        atuais = _js.loads(_ur.urlopen(_req, timeout=20).read().decode("utf-8")) or []
+    except Exception as e:
+        print(f"[versao] job={job_id}: não consegui ler os itens atuais ({e})")
+        return {}
+    if not atuais:
+        return {}                      # 1º processamento — não há versão anterior
+
+    # Próxima versão: 1 + a maior já arquivada deste job.
+    versao = 1
+    try:
+        _rv = _ur.Request(f"{SUPABASE_URL}/rest/v1/project_items_versoes"
+                          f"?job_id=eq.{job_id}&select=versao&order=versao.desc&limit=1")
+        _rv.add_header("apikey", SUPABASE_KEY)
+        _rv.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _ant = _js.loads(_ur.urlopen(_rv, timeout=15).read().decode("utf-8")) or []
+        if _ant:
+            versao = int(_ant[0].get("versao") or 0) + 1
+    except Exception as e:
+        print(f"[versao] job={job_id}: não li a última versão, assumo 1 ({e})")
+
+    linhas = [{**{c: it.get(c) for c in _CAMPOS_ITEM_VERSAO},
+               "job_id": job_id, "versao": versao} for it in atuais]
+    try:
+        _ins = _ur.Request(f"{SUPABASE_URL}/rest/v1/project_items_versoes",
+                           data=_js.dumps(linhas).encode("utf-8"), method="POST")
+        _ins.add_header("apikey", SUPABASE_KEY)
+        _ins.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _ins.add_header("Content-Type", "application/json")
+        _ins.add_header("Prefer", "return=minimal")
+        _ur.urlopen(_ins, timeout=30)
+    except Exception as e:
+        print(f"[versao] job={job_id}: ARQUIVAMENTO FALHOU ({e}) — segue o reprocesso")
+        _log_error("motor:versao-anterior", f"FALHOU v{versao}: {e}", job_id)
+        return {}
+
+    _med = sum(1 for it in atuais if (it.get("confidence") or "") == "confirmado")
+    print(f"[versao] job={job_id}: arquivei v{versao} ({len(atuais)} itens, {_med} medidos)")
+    _log_error("motor:versao-anterior",
+               f"v{versao} arquivada: itens={len(atuais)} medidos={_med}", job_id)
+    return {"versao": versao, "n_itens": len(atuais), "n_medidos": _med}
+
+
+def _comparar_com_versao_anterior(job_id: str, n_medidos: int, n_itens: int) -> dict:
+    """Compara a leitura recém-feita com a última versão arquivada deste job.
+
+    Devolve {} quando não há versão anterior. Senão:
+      {versao, antes_itens, antes_medidos, perdeu_medidos, frase}
+    `perdeu_medidos` > 0 significa que a leitura NOVA mediu MENOS que a velha.
+
+    🚨 Por que isto existe: em 10/08 a Amanda anexou arquivo, o motor releu as
+    mesmas pranchas, entregou 28 medidos no lugar de 47 — e o e-mail automático
+    anunciou "planilha atualizada", como se fosse melhora. A gente sabia o
+    número e não contou. Fato que a gente tem, o cliente tem que ter.
+    """
+    import urllib.request as _ur, json as _js
+    try:
+        _r = _ur.Request(f"{SUPABASE_URL}/rest/v1/project_items_versoes"
+                         f"?job_id=eq.{job_id}&select=versao,confidence"
+                         f"&order=versao.desc&limit=5000")
+        _r.add_header("apikey", SUPABASE_KEY)
+        _r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        linhas = _js.loads(_ur.urlopen(_r, timeout=15).read().decode("utf-8")) or []
+    except Exception as e:
+        print(f"[versao] job={job_id}: comparação falhou ({e})")
+        return {}
+    if not linhas:
+        return {}
+    _ultima = max(int(l.get("versao") or 0) for l in linhas)
+    _da_ultima = [l for l in linhas if int(l.get("versao") or 0) == _ultima]
+    antes_itens = len(_da_ultima)
+    antes_med = sum(1 for l in _da_ultima if (l.get("confidence") or "") == "confirmado")
+    perdeu = max(0, antes_med - n_medidos)
+    out = {"versao": _ultima, "antes_itens": antes_itens, "antes_medidos": antes_med,
+           "perdeu_medidos": perdeu, "frase": ""}
+    if perdeu > 0:
+        _it = "item" if perdeu == 1 else "itens"
+        out["frase"] = (
+            f"Esta leitura mediu {perdeu} {_it} A MENOS que a anterior "
+            f"({n_medidos} contra {antes_med} medidos do CAD). Os arquivos podem ser "
+            f"os mesmos e o resultado mudar — é limitação nossa, não do seu projeto. "
+            f"Compare antes de usar: a versão anterior continua guardada.")
+        _log_error("motor:leitura-pior",
+                   f"v{_ultima}: medidos {antes_med} -> {n_medidos} "
+                   f"(itens {antes_itens} -> {n_itens})", job_id)
+    return out
+
+
 def _persist_items_to_supabase(job_id: str, items: list) -> int:
     """Insere cada BudgetItem como row em project_items.
     Permite revisão inline no navegador via endpoint /api/items/{job_id}.
@@ -687,6 +794,18 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
     if not rows:
         _supa_log(f"PERSIST items job={job_id} SKIP (empty)")
         return 0
+
+    # 📦 ANTES de apagar: guarda a versão que está lá. O /add-file reprocessa NO
+    # MESMO job_id, então o swap abaixo é destrutivo — e o desenho dele assume
+    # que anexar arquivo só MELHORA ("veio PDF, agora mando o CAD"). Com o motor
+    # não-determinístico essa premissa caiu: em 10/08 a Amanda (349e75a5) anexou
+    # 4 arquivos que JÁ estavam no projeto, o motor releu as mesmas 14 pranchas e
+    # a planilha saiu com 28 medidos no lugar de 47. A versão boa sumiu.
+    # Best-effort: se arquivar falhar, o reprocesso segue — perder a versão velha
+    # é ruim, não entregar a nova é pior.
+    # (quem precisa dos números da versão velha lê a tabela — ver o aviso de
+    #  "esta leitura mediu menos" no bloco de e-mail; aqui só arquiva.)
+    _arquivar_versao_anterior(job_id)
 
     # SWAP no caminho de SUCESSO: apaga os itens antigos deste job SÓ agora (com os
     # novos itens já prontos) e insere. Assim um reprocesso que FALHA antes daqui
@@ -6838,6 +6957,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # existem no xlsx — a revisão só poderia ser feita no Excel offline.
         _persist_items_to_supabase(job_id, all_items)
 
+        # 🚨 A releitura mediu MENOS que a versão anterior? O cliente tem que
+        # saber. Roda AQUI de propósito: `_persist_items_to_supabase` acabou de
+        # arquivar a versão velha, e os warnings só vão pro banco na linha ~6990
+        # — é a única janela em que os dois números existem juntos.
+        # Caso Amanda (349e75a5, 10/08): 47 medidos viraram 28 numa releitura dos
+        # MESMOS arquivos, e o e-mail automático anunciou "planilha atualizada".
+        try:
+            _n_med_versao = sum(
+                1 for _it in all_items
+                if str(getattr(getattr(_it, "confidence", None), "value",
+                               getattr(_it, "confidence", "")) or "") == "confirmado")
+            _cmp_v = _comparar_com_versao_anterior(job_id, _n_med_versao, len(all_items))
+            if _cmp_v.get("frase"):
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ " + _cmp_v["frase"]]
+        except Exception as _ecv:
+            print(f"[versao] comparação não-fatal falhou: {_ecv}")
+
         # Planilha e itens acabaram de nascer juntos: carimba a origem pra o
         # site saber, depois, se a revisão do cliente deixou o .xlsx pra trás.
         _carimbar_planilha(job_id)
@@ -6949,17 +7086,35 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                    if str(getattr(getattr(it, "confidence", None), "value",
                                                   getattr(it, "confidence", "")) or "") == "confirmado")
                     _proximos_c = _next_steps_html(job_id, _n_med_c, len(all_items), _n_cad_c == 0 and _n_pdf_c > 0)
-                    _body_c = (f"{_greet_c}<br><br>Refizemos o projeto <b>{_pn_c}</b> medindo pelo <b>CAD</b> "
-                               f"que você anexou — a planilha foi atualizada, agora com <b>{len(all_items)} itens</b>."
-                               f"{_diag_c}{_proximos_c}")
+                    # 🚨 A releitura pode sair PIOR (motor não-determinístico). Não
+                    # anunciar "atualizada" como se fosse melhora quando não foi —
+                    # caso Amanda 10/08: 47 medidos viraram 28 e o e-mail comemorou.
+                    _cmp_c = _comparar_com_versao_anterior(job_id, _n_med_c, len(all_items))
+                    _piorou_c = bool(_cmp_c.get("perdeu_medidos"))
+                    if _piorou_c:
+                        _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> com os arquivos que você "
+                                   f"anexou, e preciso ser direto sobre o resultado.<br><br>"
+                                   f"<b>&#9888; {_cmp_c['frase']}</b>")
+                    else:
+                        _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> medindo pelo <b>CAD</b> "
+                                   f"que você anexou — a planilha foi atualizada, agora com "
+                                   f"<b>{len(all_items)} itens</b>.")
+                    _body_c = f"{_greet_c}<br><br>{_abre_c}{_diag_c}{_proximos_c}"
                     _pn_c_raw = (_rows[0].get("project_name") or "").strip()
-                    _subj_c = (f"{_pn_c_raw} — medimos com o CAD, planilha atualizada"
-                               if _pn_c_raw else "Medimos seu projeto com o CAD — planilha atualizada")
+                    if _piorou_c:
+                        _subj_c = (f"{_pn_c_raw} — refizemos, mas a leitura saiu pior"
+                                   if _pn_c_raw else "Refizemos seu projeto — mas a leitura saiu pior")
+                    else:
+                        _subj_c = (f"{_pn_c_raw} — medimos com o CAD, planilha atualizada"
+                                   if _pn_c_raw else "Medimos seu projeto com o CAD — planilha atualizada")
                     _ok_c = _send_email_smtp(
                         _pe, _subj_c,
-                        _email_wrap("Planilha atualizada com o CAD", _body_c,
-                                    "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
-                                    badge="&#10003; Medido"))
+                        _email_wrap(
+                            "Leitura refeita — saiu pior" if _piorou_c
+                            else "Planilha atualizada com o CAD",
+                            _body_c,
+                            "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
+                            badge="&#9888; Mediu menos" if _piorou_c else "&#10003; Medido"))
                     if _ok_c:
                         _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
                     print(f"[email] complemento-pronto -> enviado={_ok_c}")
