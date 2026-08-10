@@ -4760,10 +4760,22 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # em thread separada.
         if cad_paths:
             def _render_cad_previews_bg():
+                # 🚨 A FALHA TEM QUE GRITAR. Medido em 10/08/2026: o projeto da
+                # Amanda (349e75a5, 14 pranchas) gerou **1 PNG**, e o de 8 DWG
+                # (fa371b0c) gerou **ZERO** — 1 imagem em 22 pranchas. Ninguém
+                # sabia, porque o render morre no timeout de 60s e não grava
+                # nada em lugar nenhum. É a "gravação que falha calada": o botão
+                # "Ver prancha" simplesmente não aparece e parece feature
+                # ausente, não defeito.
+                # Este contador NÃO conserta o render — faz ele parar de falhar
+                # escondido, pra o próximo projeto dizer se é tempo, memória ou
+                # arquivo. Sem isso eu só posso chutar qual dos três é.
+                _prev = {"ok": 0, "falhou": 0, "sem_dxf": 0, "erro": 0}
                 try:
                     from dxf_render import render_dxf_to_png_safe
                 except Exception as _imp_e:
                     print(f"[cad-preview] import erro: {_imp_e}")
+                    _log_error("motor:preview-prancha", f"IMPORT FALHOU: {_imp_e}", job_id)
                     return
                 for _cad in cad_paths:
                     _fname = os.path.basename(_cad)
@@ -4777,13 +4789,44 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 _dxf_path = os.path.join(work_dir, _cand)
                                 break
                         else:
+                            _prev["sem_dxf"] += 1
                             continue  # DWG sem DXF convertido — pula
                     # Render
                     _png_path = os.path.join(work_dir, os.path.splitext(_fname)[0] + '.png')
-                    if render_dxf_to_png_safe(_dxf_path, _png_path, timeout_s=60):
+                    try:
+                        _t_r0 = time.time()
+                        _deu = render_dxf_to_png_safe(_dxf_path, _png_path, timeout_s=60)
+                        _dur = time.time() - _t_r0
+                    except Exception as _er:
+                        _prev["erro"] += 1
+                        print(f"[cad-preview] {_fname}: {type(_er).__name__}: {_er}")
+                        continue
+                    if _deu:
+                        _prev["ok"] += 1
                         # Upload PNG pro Storage
                         _png_fname = os.path.splitext(_fname)[0] + '.png'
                         _supabase_storage_upload_prancha(_png_path, job_id, _png_fname)
+                    else:
+                        # 🪤 O tempo é o que separa "estourou os 60s" de "abriu e
+                        # não desenhou". Sem ele os dois viram o mesmo False.
+                        _prev["falhou"] += 1
+                        _mb = 0
+                        try:
+                            _mb = round(os.path.getsize(_dxf_path) / (1024 * 1024), 1)
+                        except OSError:
+                            pass
+                        print(f"[cad-preview] FALHOU {_fname} ({_dur:.0f}s, {_mb} MB)")
+                        _log_error("motor:preview-prancha",
+                                   f"falhou arq={_fname} dur={_dur:.0f}s tam={_mb}MB "
+                                   f"{'(bateu no timeout)' if _dur >= 58 else '(nao foi tempo)'}",
+                                   job_id)
+                # Resumo SEMPRE — inclusive quando tudo deu certo. Ausência de
+                # linha aqui passa a significar "o preview nem rodou", que é
+                # informação diferente de "rodou e falhou".
+                _log_error("motor:preview-prancha",
+                           f"resumo pranchas={len(cad_paths)} ok={_prev['ok']} "
+                           f"falhou={_prev['falhou']} sem_dxf={_prev['sem_dxf']} "
+                           f"erro={_prev['erro']}", job_id)
             # NÃO inicia o preview aqui (fix OOM 2026-07-22): rodar o matplotlib
             # concorrente com a análise soma o pico de RAM do render EM CIMA do
             # pico da análise — justamente a janela de perigo em projeto com muitas
