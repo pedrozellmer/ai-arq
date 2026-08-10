@@ -629,7 +629,9 @@ UNIDADES_SEM_GRANDEZA = {"", "vb", "vb.", "verba", "cj", "cj.", "gl", "un.g"}
 # AFP-AQ-LO-229 em 08/08: os 2 textos mais repetidos eram "+0,00" (×18) e
 # "+0,01" (×18) — 18 marcações de nível, zero objetos. Se isso entrasse como
 # evidência de quantidade, a IA criaria "18 unidades" do nada.
-_RE_SO_NUMERO = _re.compile(r"^[+\-±]?\s*\d[\d.,]*\s*$")
+# 🪤 Aceita espaço NO MEIO: fragmento de cota vem como "4, 42" ou "6,28 32" e
+# escapava do padrão antigo (`[\d.,]*` sem \s), casando com área de região.
+_RE_SO_NUMERO = _re.compile(r"^[+\-±]?\s*\d[\d.,\s]*$")
 
 # 🪤 Cabeçalho de quadro/legenda repete uma vez por linha da tabela e NÃO é item.
 # Visto nas pranchas reais 0326.CGR e 0226.HWB em 08/08: "descrição" ×4,
@@ -750,7 +752,7 @@ def unidade_conflita_com_sinapi(unidade_item, unidade_sinapi):
 # resultante sai `estimado`, nunca `confirmado`: o texto estar dentro da região
 # é forte indício de que fala dela, não prova.
 
-def casar_texto_com_regiao(textos, regioes, max_por_regiao=1):
+def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=0.55):
     """Para cada região fechada, acha o texto que cai DENTRO dela.
 
     `textos`:  itens com `.position` (x, y) e `.text`/`.layer`
@@ -761,7 +763,15 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1):
     🪤 Casa com a MENOR região que contém o texto. Sem isso, o contorno do
     pavimento inteiro engoliria todos os rótulos e cada cômodo receberia a área
     do andar — erro pior que não medir.
-    🪤 Região sem bbox (hachura) fica de fora, não chuta.
+    🪤 Região sem bbox fica de fora, não chuta.
+    🪤 EXIGE PREENCHIMENTO (`min_preenchimento`): retângulo NÃO é a forma. Uma
+    hachura em L, em anel ou espalhada tem um retângulo enorme que engole texto
+    que não é dela — medido em 09/08 numa prancha real: "Sili da Silva" (nome no
+    carimbo) casou com 982 m² e "proj. armário" com 2.768 m². Se a área real
+    ocupa pouco do próprio retângulo, o retângulo não diz nada sobre o que está
+    dentro. Fill = area / (largura × altura).
+    🪤 Texto que não nomeia objeto (só número, cabeçalho de quadro) fica de fora
+    — reusa `texto_conta_objeto`, a mesma trava da contagem de repetidos.
     """
     _regs = []
     for r in (regioes or []):
@@ -769,8 +779,25 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1):
         a = getattr(r, "area", None) if not isinstance(r, dict) else r.get("area")
         if not b or len(b) != 4 or not a or a <= 0:
             continue
+        _pat = (getattr(r, "pattern", "") if not isinstance(r, dict) else r.get("pattern")) or ""
+        _larg, _alt = float(b[2]) - float(b[0]), float(b[3]) - float(b[1])
+        if _larg <= 0 or _alt <= 0:
+            continue
+        # 🪤 A trava do preenchimento: forma esparsa tem retângulo mentiroso.
+        # 🚨 O valor vem PRONTO do extrator (`preenchimento`), NUNCA calculado
+        # aqui: `area` está em m² e `bbox` na unidade crua do desenho — dividir
+        # um pelo outro deu 0,000 em 310 de 310 hachuras reais. Se o campo não
+        # existir (dado antigo/dict de teste), calcula pelo bbox assumindo que
+        # as duas estão na mesma unidade.
+        _fill = (getattr(r, "preenchimento", None) if not isinstance(r, dict)
+                 else r.get("preenchimento"))
+        if _fill is None:
+            _fill = float(a) / (_larg * _alt)
+        if float(_fill) < min_preenchimento:
+            continue
         _regs.append((float(b[0]), float(b[1]), float(b[2]), float(b[3]), float(a),
-                      (getattr(r, "layer", "") if not isinstance(r, dict) else r.get("layer")) or ""))
+                      (getattr(r, "layer", "") if not isinstance(r, dict) else r.get("layer")) or "",
+                      "contorno fechado" if "contorno" in _pat.lower() else "hachura"))
     if not _regs:
         return []
     # menor primeiro: o cômodo ganha do pavimento
@@ -782,8 +809,12 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1):
         s = (getattr(t, "text", "") if not isinstance(t, dict) else t.get("text")) or ""
         if not p or len(p) < 2 or not str(s).strip():
             continue
+        # Só número ou cabeçalho de quadro não nomeia objeto — mesma trava da
+        # contagem de repetidos. Mata par tipo "4, 42" → 31,87 m².
+        if not texto_conta_objeto(s):
+            continue
         x, y = float(p[0]), float(p[1])
-        for i, (x0, y0, x1, y1, a, ly) in enumerate(_regs):
+        for i, (x0, y0, x1, y1, a, ly, orig) in enumerate(_regs):
             if x0 <= x <= x1 and y0 <= y <= y1:
                 if usados.get(i, 0) >= max_por_regiao:
                     break
@@ -791,6 +822,7 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1):
                 pares.append({
                     "area": round(a, 2),
                     "layer_da_regiao": ly,
+                    "origem": orig,
                     "texto": " ".join(str(s).split())[:80],
                     "layer_do_texto": (getattr(t, "layer", "") if not isinstance(t, dict)
                                        else t.get("layer")) or "",

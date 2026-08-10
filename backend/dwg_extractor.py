@@ -113,8 +113,14 @@ class HatchArea:
     # Serve pra saber QUE TEXTO está DENTRO desta região — é o elo que faltava
     # entre "o rótulo diz PISO CERÂMICO" e "esta região tem 289,97 m²".
     # 🪤 O caminho do polígono fechado já calculava esse bbox e jogava fora.
-    # Vazio () quando desconhecido (hachura ainda não preenche).
+    # Vazio () quando desconhecido.
     bbox: tuple = ()
+    # Quanto da própria caixa a forma ocupa (0..1). 🚨 Calculado AQUI porque só
+    # aqui as duas unidades são conhecidas: `area` sai em m² (já multiplicada
+    # pelo fator) e `bbox` fica em unidade CRUA do desenho, pra casar com
+    # TextAnnotation.position. Dividir um pelo outro lá fora dava 0,000 em 310
+    # de 310 hachuras — o mesmo erro de 1000× que persigo o dia todo.
+    preenchimento: float = 0.0
 
 
 @dataclass
@@ -308,7 +314,13 @@ class DXFExtraction:
         # linhas saíam sem quantidade, e 514 delas já citavam a camada.
         try:
             from engine_rules import casar_texto_com_regiao as _casar
-            _pares = _casar(self.texts, self.polygon_areas)
+            # Hachura JUNTO com contorno fechado: medi em 09/08 que polilinha
+            # fechada quase não existe nos projetos reais, e a hachura é a fonte
+            # mais comum das medições que funcionam.
+            # 🪤 Não duplica: cada região aceita 1 rótulo e cada rótulo casa com
+            # UMA região (a menor que o contém) — se a mesma área existe como
+            # hachura E como contorno, o texto vai pra uma só.
+            _pares = _casar(self.texts, list(self.polygon_areas) + list(self.hatches))
         except Exception:
             _pares = []
         if _pares:
@@ -319,7 +331,7 @@ class DXFExtraction:
                          " coisa.)")
             for p in _pares[:60]:
                 lines.append(f"  \"{p['texto']}\"  →  {p['area']:.2f} m²"
-                             f"  (região no layer {p['layer_da_regiao']})")
+                             f"  ({p.get('origem', 'região')} no layer {p['layer_da_regiao']})")
             if len(_pares) > 60:
                 lines.append(f"  (+{len(_pares) - 60} par(es) não listado(s))")
             lines.append("")
@@ -1639,6 +1651,51 @@ def _polyline_length(entity) -> float:
     return total
 
 
+def _hatch_bbox(entity):
+    """Retângulo envolvente (x_min, y_min, x_max, y_max) de um HATCH, em
+    COORDENADA CRUA do desenho — a mesma de `TextAnnotation.position`, senão o
+    casamento rótulo↔área compararia unidades diferentes.
+
+    🔑 Por que existe (09/08/2026): o casamento rótulo↔área só funcionava em
+    polilinha fechada, e medi que os projetos reais quase não têm — 0 região em
+    2 de 3 pranchas de cliente. A área que de fato mede vem de HACHURA
+    ("Fonte: área hachurada do layer X" é o padrão mais comum das medições que
+    dão certo), e ela não guardava posição nenhuma.
+
+    Reusa a MESMA travessia de `_hatch_area` (make_path + flattening), então o
+    que mede a área é o que dá o contorno — sem segunda interpretação da
+    geometria. Devolve () quando não conseguir; nunca levanta.
+    """
+    try:
+        from ezdxf import path as ezdxf_path
+        pr = ezdxf_path.make_path(entity)
+        if pr:
+            xs, ys = [], []
+            for p in (pr if isinstance(pr, list) else [pr]):
+                try:
+                    for v in p.flattening(0.5):
+                        xs.append(v.x)
+                        ys.append(v.y)
+                except Exception:
+                    continue
+            if len(xs) >= 3:
+                return (min(xs), min(ys), max(xs), max(ys))
+    except Exception:
+        pass
+    # Último recurso: vértices crus dos boundary paths (perde arco, serve pro bbox)
+    try:
+        xs, ys = [], []
+        for _p in entity.paths:
+            for _v in (getattr(_p, "vertices", None) or []):
+                xs.append(_v[0])
+                ys.append(_v[1])
+        if len(xs) >= 3:
+            return (min(xs), min(ys), max(xs), max(ys))
+    except Exception:
+        pass
+    return ()
+
+
 def _hatch_area(entity) -> float:
     """Calculate area of a HATCH entity.
 
@@ -2428,8 +2485,12 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # 🔑 `_bb` já era calculado aqui pra descartar polígono aninhado e era
         # jogado fora. Guardando: é o que permite casar o RÓTULO do ambiente com
         # a ÁREA dele (ver `casar_texto_com_regiao` em engine_rules).
-        polygon_areas.append(HatchArea(layer=_ly, area=_a,
-                                       pattern="contorno fechado", bbox=tuple(_bb)))
+        _w_p, _h_p = _bb[2] - _bb[0], _bb[3] - _bb[1]
+        # 🪤 `_a` já vem em m² (multiplicado por area_factor em _consider_poly) e
+        # `_bb` está cru — normaliza antes de dividir, senão dá 0 sempre.
+        _fill_p = min(1.0, (_a / area_factor) / (_w_p * _h_p)) if (_w_p > 0 and _h_p > 0 and area_factor) else 0.0
+        polygon_areas.append(HatchArea(layer=_ly, area=_a, pattern="contorno fechado",
+                                       bbox=tuple(_bb), preenchimento=round(_fill_p, 4)))
 
     # ---- PILARES: retângulos/círculos FECHADOS em layer de PILAR ------------
     # Medição estrutural determinística (regra nº1): pilar em planta de fôrma é
@@ -2506,17 +2567,31 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
 
     for hatch in msp.query("HATCH"):
         try:
-            area = _hatch_area(hatch) * area_factor
+            _area_crua = _hatch_area(hatch)          # unidade do desenho²
+            area = _area_crua * area_factor          # m²
             pattern = ""
             try:
                 pattern = hatch.dxf.pattern_name
             except Exception:
                 pass
             if area > 0:
+                # 🔑 Sem o bbox o casamento rótulo↔área fica dormente: medi em
+                # 09/08 que polilinha fechada quase não existe nos projetos
+                # reais (0 região em 2 de 3 pranchas), enquanto a hachura é a
+                # fonte mais comum das medições que dão certo.
+                _bb = _hatch_bbox(hatch)
+                _fill = 0.0
+                if _bb and len(_bb) == 4:
+                    _w, _h = _bb[2] - _bb[0], _bb[3] - _bb[1]
+                    if _w > 0 and _h > 0:
+                        # CRUA / CRUA — as duas na unidade do desenho.
+                        _fill = min(1.0, _area_crua / (_w * _h))
                 hatches.append(HatchArea(
                     layer=hatch.dxf.layer,
                     area=area,
                     pattern=pattern,
+                    bbox=_bb,
+                    preenchimento=round(_fill, 4),
                 ))
         except Exception:
             continue

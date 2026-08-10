@@ -498,35 +498,52 @@ check("grandeza de desconhecida é None", grandeza_da_unidade("xyz") is None)
 class _T:
     def __init__(s_, t, pos, layer="txt"): s_.text, s_.position, s_.layer = t, pos, layer
 class _R:
-    def __init__(s_, area, bbox, layer="ARQ"): s_.area, s_.bbox, s_.layer = area, bbox, layer
+    def __init__(s_, area, bbox, layer="ARQ", pattern=""):
+        s_.area, s_.bbox, s_.layer, s_.pattern = area, bbox, layer, pattern
 
 # 🐛 Caso real (job ccd0c8c1): "Piso — Sala de Aula 02" saía com quantidade 0
 # enquanto a área da sala estava medida no desenho.
-_sala = casar_texto_com_regiao([_T("Sala de Aula 02", (5, 5))],
-                               [_R(48.0, (0, 0, 10, 10))])
+# 🪤 bbox REALISTA: sala de 48 m² ocupa ~todo o próprio retângulo (7×7=49).
+_sala = casar_texto_com_regiao([_T("Sala de Aula 02", (3, 3))], [_R(48.0, (0, 0, 7, 7))])
 check("rótulo dentro da região casa com a área", len(_sala) == 1 and _sala[0]["area"] == 48.0)
 check("o par leva o texto junto", _sala[0]["texto"] == "Sala de Aula 02")
+check("o par diz de onde veio", _sala[0]["origem"] == "hachura")
+check("contorno fechado é identificado",
+      casar_texto_com_regiao([_T("Sala", (3, 3))],
+                             [_R(48.0, (0,0,7,7), pattern="contorno fechado")])[0]["origem"] == "contorno fechado")
 
 # 🔒 O MAIOR não pode engolir: sem isso o contorno do pavimento daria a área do
 # andar inteiro pra cada cômodo — erro pior que não medir.
-_dois = casar_texto_com_regiao([_T("Sala de Aula 02", (5, 5))],
-                               [_R(900.0, (0, 0, 100, 100)), _R(48.0, (0, 0, 10, 10))])
+_dois = casar_texto_com_regiao([_T("Sala de Aula 02", (3, 3))],
+                               [_R(950.0, (0, 0, 31, 31)), _R(48.0, (0, 0, 7, 7))])
 check("casa com a MENOR região que contém", _dois[0]["area"] == 48.0)
 
+# 🚨 A TRAVA DO PREENCHIMENTO. Retângulo NÃO é a forma: hachura em L/anel tem
+# retângulo enorme e engole texto alheio. Medido em prancha real (09/08):
+# "Sili da Silva" (nome no carimbo) casou com 982 m²; "proj. armário" com 2.768 m².
+_esparsa = _R(50.0, (0, 0, 100, 100))     # ocupa 0,5% do próprio retângulo
+check("forma esparsa NÃO casa (retângulo mentiroso)",
+      casar_texto_com_regiao([_T("Sili da Silva", (50, 50))], [_esparsa]) == [])
+check("forma cheia casa normalmente",
+      len(casar_texto_com_regiao([_T("Sala", (3, 3))], [_R(48.0, (0, 0, 7, 7))])) == 1)
+
+# 🔒 Texto que não nomeia objeto fica de fora — mata par tipo "4, 42" → 31,87 m².
+check("só número não vira rótulo de área",
+      casar_texto_com_regiao([_T("4, 42", (3, 3))], [_R(48.0, (0, 0, 7, 7))]) == [])
+check("cabeçalho de quadro não vira rótulo",
+      casar_texto_com_regiao([_T("descrição", (3, 3))], [_R(48.0, (0, 0, 7, 7))]) == [])
+
 # 🔒 Fora de qualquer região não inventa par.
-check("texto fora não casa", casar_texto_com_regiao([_T("Legenda", (999, 999))],
-                                                    [_R(48.0, (0, 0, 10, 10))]) == [])
-# 🔒 Uma região não vira quantidade pra vários rótulos por padrão.
-_multi = casar_texto_com_regiao([_T("A", (1, 1)), _T("B", (2, 2))], [_R(48.0, (0, 0, 10, 10))])
+check("texto fora não casa",
+      casar_texto_com_regiao([_T("Legenda", (999, 999))], [_R(48.0, (0, 0, 7, 7))]) == [])
+_multi = casar_texto_com_regiao([_T("Sala A", (1, 1)), _T("Sala B", (2, 2))], [_R(48.0, (0, 0, 7, 7))])
 check("1 região = 1 rótulo por padrão", len(_multi) == 1)
-# 🔒 Região sem bbox (hachura) fica de fora — não chuta.
-check("região sem bbox é ignorada",
-      casar_texto_com_regiao([_T("X", (1, 1))], [_R(48.0, ())]) == [])
-check("área zero é ignorada",
-      casar_texto_com_regiao([_T("X", (1, 1))], [_R(0, (0, 0, 10, 10))]) == [])
+check("região sem bbox é ignorada", casar_texto_com_regiao([_T("Sala", (1, 1))], [_R(48.0, ())]) == [])
+check("área zero é ignorada", casar_texto_com_regiao([_T("Sala", (1, 1))], [_R(0, (0, 0, 7, 7))]) == [])
 check("listas vazias não quebram", casar_texto_com_regiao([], []) == [])
 check("texto sem posição não quebra",
-      casar_texto_com_regiao([_T("X", None)], [_R(48.0, (0, 0, 10, 10))]) == [])
+      casar_texto_com_regiao([_T("Sala", None)], [_R(48.0, (0, 0, 7, 7))]) == [])
+
 
 
 print()
