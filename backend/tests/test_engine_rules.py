@@ -546,6 +546,28 @@ check("texto sem posição não quebra",
 
 
 
+# ── unidade IMPERIAL sem cota que prove a escala (Amanda 10/08, 7 elétricas) ──
+from engine_rules import aviso_unidade_imperial  # noqa: E402
+
+check("polegada sem cota avisa", bool(aviso_unidade_imperial(1, None)))
+check("polegada sem cota diz 25x", "25×" in (aviso_unidade_imperial(1, None) or ""))
+check("pé sem cota diz 305x", "305×" in (aviso_unidade_imperial(2, None) or ""))
+check("jarda sem cota avisa", bool(aviso_unidade_imperial(10, None)))
+# 🔒 Cota que PROVOU a escala cala o aviso — o cabeçalho deixou de ser a fonte.
+check("cota validada cala", aviso_unidade_imperial(1, "validada") is None)
+check("cota corrigida cala", aviso_unidade_imperial(1, "corrigida") is None)
+check("cota que não provou nada ainda avisa", bool(aviso_unidade_imperial(1, "sem_cotas")))
+# 🔒 Métrico NUNCA entra aqui — mm/cm/m/km têm as próprias travas.
+check("milímetro não avisa", aviso_unidade_imperial(4, None) is None)
+check("centímetro não avisa", aviso_unidade_imperial(5, None) is None)
+check("metro não avisa", aviso_unidade_imperial(6, None) is None)
+check("quilômetro não avisa", aviso_unidade_imperial(7, None) is None)
+check("sem unidade declarada não avisa", aviso_unidade_imperial(0, None) is None)
+check("insunits lixo não quebra", aviso_unidade_imperial("abc", None) is None)
+check("insunits None não quebra", aviso_unidade_imperial(None, None) is None)
+check("insunits como texto numérico funciona", bool(aviso_unidade_imperial("1", None)))
+
+
 # ── selo BRANCO com quantidade 0 (achado no job 349e75a5, Amanda, 10/08) ──────
 from engine_rules import selos_sem_medida  # noqa: E402
 

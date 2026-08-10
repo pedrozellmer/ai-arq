@@ -2012,6 +2012,31 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         logger.info("[unit-consenso] %s: fator %s -> %s (escala provada por cota em "
                     "outra prancha do projeto)", os.path.basename(filepath),
                     _unit_consenso[0], _unit_consenso[1])
+    # ── Unidade IMPERIAL em projeto brasileiro: desconfiar, nunca corrigir ────
+    # Medido em 10/08/2026 no `error_log` (stage motor:unidade): 9 pranchas
+    # declararam Polegadas — 6 da escola FNDE da Amanda (349e75a5, todas as
+    # elétricas) e 3 de outros clientes. Nas NOVE, `cotas=-`: nenhuma tinha
+    # cota pra confirmar ou desmentir o cabeçalho, e nenhuma foi corrigida.
+    # Projeto de escola pública brasileira não é desenhado em polegada — é o
+    # template do CAD que nunca foi configurado. Se o desenho está em mm e a
+    # gente aplica 0,0254, cada medida sai 25,4× maior.
+    #
+    # 🚨 SÓ AVISA — não mexe no fator (regra dura nº3). Adivinhar "deve ser mm"
+    # seria copiar valor de outro contexto, e foi exatamente o tipo de conserto
+    # esperto que 3 céticos derrubaram hoje de manhã no resgate da linha zerada.
+    # Quem prova escala aqui é a cota da prancha; sem ela, o cliente decide.
+    #
+    # 🪤 Fica DEPOIS do bloco de consenso de propósito: `unit_warnings` entra em
+    # `_deteccao_local_forte` (linha ~2002), e avisar antes mudaria qual fator o
+    # projeto escolhe. Aviso não pode ter efeito colateral de medição.
+    try:
+        from engine_rules import aviso_unidade_imperial as _aviso_imperial
+        _av_imp = _aviso_imperial(_insunits_local, dim_check.get("status"))
+        if _av_imp:
+            unit_warnings.append(_av_imp)
+    except Exception as _eai:      # regra nunca pode derrubar a extração
+        logger.warning("[unit-imperial] checagem falhou: %s", _eai)
+
     for w in unit_warnings:
         logger.warning("[unit-sanity] %s", w)
     area_factor = unit_factor * unit_factor  # for m² conversion

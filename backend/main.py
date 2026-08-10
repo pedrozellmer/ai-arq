@@ -1656,7 +1656,8 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
 
 
 def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
-                     veio_pdf: bool = False, tem_cronograma: bool = False) -> str:
+                     veio_pdf: bool = False, tem_cronograma: bool = False,
+                     n_zerado: int = 0, n_alerta_unidade: int = 0) -> str:
     """Bloco 'o que fazer agora' PERSONALIZADO pro email de planilha pronta — os
     caminhos dependem do resultado real do projeto, pra não empurrar passo que não
     faz sentido. Tudo mora na página do projeto (o botão principal do email leva lá).
@@ -1672,15 +1673,41 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
             f"Sua prancha veio em <b>PDF</b>, ent&atilde;o os {n_total} itens sa&iacute;ram como "
             f"<b>estimativa</b>. Suba o <b>DWG ou DXF</b> da mesma prancha no pr&oacute;prio projeto "
             f"que a gente <b>refaz medindo de verdade</b> &mdash; de gra&ccedil;a."))
-    # 2) Revisar — sempre; se há estimativa, cita o número
-    if n_est > 0:
-        _it = "item" if n_est == 1 else "itens"
-        passos.append(("&#128221;", f"Revise os {n_est} {_it} em laranja",
-            "Esses sa&iacute;ram como <b>estimativa</b> pra voc&ecirc; conferir. Ajuste o que precisar &mdash; "
-            "e ao subir a planilha revisada voc&ecirc; <b>afina o motor</b>: os pr&oacute;ximos projetos saem medindo melhor."))
-    else:
-        passos.append(("&#128221;", "Revise e ajuste",
-            "Confira os itens e ajuste o que precisar. Ao subir a planilha revisada voc&ecirc; <b>afina o motor</b> pros pr&oacute;ximos projetos."))
+    # 2) Revisar — mas apontando ONDE, não mandando revisar tudo.
+    # 🪤 Até 10/08 este passo dizia "Revise os N itens em laranja", e N era
+    # `total - medido`: pra escola da Amanda (349e75a5) deu **198**. Pedir 198
+    # revisões não é pedido, é muro — e `revision_feedback` está em 0 linhas
+    # desde que o produto existe. Os dois grupos abaixo somam 101 no mesmo
+    # projeto, cada um com um motivo concreto, e são onde o cliente realmente
+    # mexe: em 03/08, 8 das 9 edições reais caíram em linha ZERADA.
+    # Ordem importa: primeiro o que ele sabe responder de cabeça.
+    _fez_passo_foco = False
+    if n_zerado > 0:
+        _lz = "pela linha" if n_zerado == 1 else f"pelas {n_zerado} linhas"
+        _saiu = "saiu" if n_zerado == 1 else "sa&iacute;ram"
+        passos.append(("&#128221;", f"Comece {_lz} sem quantidade",
+            f"Essas {_saiu} sem n&uacute;mero: o motor reconheceu o servi&ccedil;o na prancha e "
+            f"<b>n&atilde;o conseguiu medir quanto</b>. N&atilde;o &eacute; falha do seu projeto &mdash; "
+            f"&eacute; onde o desenho n&atilde;o respondeu. Preencha as que voc&ecirc; j&aacute; sabe: sua "
+            f"planilha fecha, e voc&ecirc; <b>afina o motor</b> pros pr&oacute;ximos projetos."))
+        _fez_passo_foco = True
+    if n_alerta_unidade > 0:
+        _la = ("a linha" if n_alerta_unidade == 1
+               else f"as {n_alerta_unidade} linhas")
+        passos.append(("&#9888;&#65039;", f"Confira {_la} com aviso de unidade",
+            "Nessas, a refer&ecirc;ncia SINAPI cobra o servi&ccedil;o numa unidade e a linha saiu "
+            "noutra (m&sup2; contra metro linear, por exemplo). J&aacute; deixamos cada uma marcada. "
+            "Vale conferir antes de mandar pra or&ccedil;amento &mdash; unidade trocada vira erro grande na cota&ccedil;&atilde;o."))
+        _fez_passo_foco = True
+    if not _fez_passo_foco:
+        if n_est > 0:
+            _it = "item" if n_est == 1 else "itens"
+            passos.append(("&#128221;", f"Revise os {n_est} {_it} em laranja",
+                "Esses sa&iacute;ram como <b>estimativa</b> pra voc&ecirc; conferir. Ajuste o que precisar &mdash; "
+                "e ao subir a planilha revisada voc&ecirc; <b>afina o motor</b>: os pr&oacute;ximos projetos saem medindo melhor."))
+        else:
+            passos.append(("&#128221;", "Revise e ajuste",
+                "Confira os itens e ajuste o que precisar. Ao subir a planilha revisada voc&ecirc; <b>afina o motor</b> pros pr&oacute;ximos projetos."))
     # 3) Memorial descritivo (novo entregável 01/08) — logo depois da revisão
     #    de propósito: "revise antes, o texto sai melhor" empurra a revisão.
     passos.append(("&#128196;", "Baixe o memorial descritivo (rascunho em Word)",
@@ -7007,12 +7034,70 @@ bloco — só cite os que estão no inventário deste arquivo."""
                              if str(getattr(getattr(it, "confidence", None), "value",
                                             getattr(it, "confidence", "")) or "") == "confirmado")
                 _veio_pdf = (_n_cad == 0 and _n_pdf > 0)
-                _proximos = _next_steps_html(job_id, _n_med, len(all_items), _veio_pdf)
-                _subj_pp, _html_pp = _build_planilha_pronta_email(
-                    _nm,
-                    _rows[0].get("project_name") or "seu projeto",
-                    job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}")
-                _send_email_smtp(_pe, _subj_pp, _html_pp, log_kind="planilha_pronta")
+                # Os DOIS grupos que o cliente consegue atacar — no lugar de
+                # "revise os 198 em laranja". Ver o comentário em _next_steps_html.
+                def _qtd_do_item(_it):
+                    try:
+                        return float(getattr(_it, "quantity", 0) or 0)
+                    except (TypeError, ValueError):
+                        return 0.0
+                _n_zerado = sum(1 for it in all_items if _qtd_do_item(it) <= 0)
+                _n_alerta_un = sum(
+                    1 for it in all_items
+                    if "CONFERIR A UNIDADE" in str(getattr(it, "observations", "") or ""))
+                _proximos = _next_steps_html(job_id, _n_med, len(all_items), _veio_pdf,
+                                             n_zerado=_n_zerado,
+                                             n_alerta_unidade=_n_alerta_un)
+                # 🚨 NENHUM número na planilha inteira: não é planilha pronta,
+                # é um recado. O Felipe (job 6cd52d01, 10/08 10:15) subiu um
+                # rascunho feito à mão sem escala, recebeu 1 linha chamada
+                # "ATENÇÃO — Item placeholder" e o e-mail "sua planilha do AI.arq
+                # está pronta". Anunciar isso como entrega é pior que dizer que
+                # não deu — o cliente abre esperando planilha.
+                # A trava do guard de 0 itens (Vinícius 21/05) não pega este
+                # caso: tem item, o que não tem é número.
+                # 🪤 Critério ESTREITO de propósito: zero item com quantidade E
+                # zero medido. Medido em 10/08 sobre todos os projetos `done` da
+                # história: bate em 1 (o do Felipe) e em nenhum outro. Afrouxar
+                # pra "poucos itens" ou "muitos zerados" pegaria entrega boa —
+                # a escola da Amanda tem 84 linhas zeradas e é planilha legítima.
+                _nada_medido = (len(all_items) > 0 and _n_med == 0
+                                and _n_zerado == len(all_items))
+                if _nada_medido:
+                    _pn_nm = (_rows[0].get("project_name") or "").strip()
+                    _subj_pp = (f"{_pn_nm} — não consegui medir esse arquivo"
+                                if _pn_nm else "Não consegui medir esse arquivo")
+                    _corpo_nm = (
+                        f"{_greeting_line(_html.escape(_nm))}<br><br>"
+                        f"Li o que você enviou, mas <b>não consegui tirar nenhuma "
+                        f"quantidade</b> — então não tem planilha pra entregar ainda, "
+                        f"e prefiro te dizer isso do que mandar uma lista vazia.<br><br>"
+                        f"O motivo está no diagnóstico abaixo. Na maioria das vezes é "
+                        f"escala: sem cota, sem carimbo e sem viewport, não dá pra saber "
+                        f"o tamanho real do que está desenhado — e a gente não inventa "
+                        f"medida.<br><br>"
+                        f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> "
+                        f"(no AutoCAD ou BricsCAD: Salvar Como → DXF 2013) no mesmo "
+                        f"projeto. A gente refaz medindo de verdade, de graça. Se só "
+                        f"existe o desenho à mão, me diga a área total no upload que eu "
+                        f"uso como base — rotulada como informada por você, não medida."
+                        f"{_aviso_html}{_diag}")
+                    _html_pp = _email_wrap(
+                        "Não consegui medir esse arquivo", _corpo_nm,
+                        "Abrir meu projeto",
+                        f"https://ai.arq.br/projeto.html?job_id={job_id}",
+                        badge="&#9888; Sem medida",
+                        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
+                    _log_error("motor:sem-medida-nenhuma",
+                               f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
+                               f"— e-mail trocado por 'não consegui medir'", job_id)
+                else:
+                    _subj_pp, _html_pp = _build_planilha_pronta_email(
+                        _nm,
+                        _rows[0].get("project_name") or "seu projeto",
+                        job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}")
+                _send_email_smtp(_pe, _subj_pp, _html_pp,
+                                 log_kind="sem_medida" if _nada_medido else "planilha_pronta")
         except Exception as _ee:
             print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
 
@@ -13631,7 +13716,27 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         # 🪤 Rebaixa SÓ quando a QUANTIDADE muda. Corrigir descrição, unidade ou
         # disciplina não desfaz a medição da geometria — rebaixar ali puniria o
         # cliente por melhorar o texto do próprio item.
-        if "quantity" in safe_edits:
+        # 🪤 É `mudou`, NÃO `"quantity" in safe_edits`. A tela manda o item
+        # INTEIRO ao salvar, então a quantidade vem no pacote sempre — inclusive
+        # quando o cliente só trocou a unidade. A versão anterior testava
+        # presença e disparava em toda edição: o Felipe (job 6cd52d01, 10/08
+        # 10:20) mudou m² → vb e a linha dele saiu carimbada "QUANTIDADE
+        # CORRIGIDA POR VOCÊ" com a quantidade intacta em 0.
+        # O comentário acima já dizia "só quando a quantidade muda" — quem
+        # estava errado era o código, não a regra.
+        def _qtd_num(v):
+            try:
+                return round(float(v or 0), 4)
+            except (TypeError, ValueError):
+                return None
+        _q_depois = _qtd_num(safe_edits.get("quantity"))
+        _q_antes = _qtd_num((_antes or {}).get("quantity"))
+        # Sem `_antes` não dá pra comparar: mantém o comportamento conservador
+        # (rebaixa), porque errar pro lado de "estimado" é barato e errar pro
+        # lado de "confirmado" viola a regra dura nº1.
+        _mudou_qtd = "quantity" in safe_edits and (
+            _antes is None or "quantity" not in (_antes or {}) or _q_depois != _q_antes)
+        if _mudou_qtd:
             safe_edits["confidence"] = "estimado"
             # 🪤 Se o cliente mexeu SÓ na quantidade, `observations` não vem no
             # payload — escrever a marca sozinha APAGARIA a observação original,

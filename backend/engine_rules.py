@@ -832,6 +832,55 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
 
 
 # ══════════════════════════════════════════════════════════════════════
+#  UNIDADE IMPERIAL EM PROJETO BRASILEIRO — desconfiar, nunca corrigir
+#
+# Medido em 10/08/2026 no `error_log` (stage motor:unidade): 9 pranchas
+# declararam Polegadas — 7 da escola FNDE da Amanda (349e75a5) e 2 de outros
+# clientes. As 7 da Amanda são TODAS as elétricas do projeto: não é arquivo
+# estragado, é o template de elétrica do projetista saindo em polegada.
+# Nas nove, `cotas=-`: nenhuma tinha cota pra confirmar nem desmentir o
+# cabeçalho, e nenhuma foi corrigida.
+#
+# Escola pública brasileira não é desenhada em polegada. Se o desenho está em
+# mm e a gente aplica 0,0254, cada medida sai 25,4× maior.
+#
+# 🚨 SÓ AVISA. Adivinhar "deve ser mm" seria copiar valor de outro contexto
+# (regra dura nº3) — e é o mesmo tipo de conserto esperto que 3 céticos
+# derrubaram em 10/08 no resgate da linha zerada. Quem prova escala é a cota da
+# prancha; sem ela, quem decide é o cliente.
+_IMPERIAIS_INSUNITS = {
+    1: ("polegadas", 0.0254),
+    2: ("pés", 0.3048),
+    3: ("milhas", 1609.344),
+    8: ("micropolegadas", 0.0000254),
+    10: ("jardas", 0.9144),
+}
+
+
+def aviso_unidade_imperial(insunits, dim_status=None):
+    """Frase de alerta quando o cabeçalho declara unidade imperial e as cotas
+    NÃO provaram a escala. Devolve None quando não há o que avisar.
+
+    `dim_status`: resultado da validação por cotas — 'validada' ou 'corrigida'
+    significam escala provada, e aí não se avisa nada.
+    """
+    try:
+        _ins = int(insunits)
+    except (TypeError, ValueError):
+        return None
+    if _ins not in _IMPERIAIS_INSUNITS:
+        return None
+    if dim_status in ("validada", "corrigida"):
+        return None
+    nome, fator = _IMPERIAIS_INSUNITS[_ins]
+    return (f"o cabeçalho do arquivo declara {nome} (unidade imperial) e a "
+            f"prancha não tem cota que confirme a escala. Em projeto brasileiro "
+            f"isso costuma ser configuração do CAD, não o desenho: se estiver "
+            f"errado, as medidas desta prancha saem cerca de {fator / 0.001:.0f}× "
+            f"maiores que o real. Confira a escala antes de orçar")
+
+
+# ══════════════════════════════════════════════════════════════════════
 #  SELO BRANCO COM QUANTIDADE ZERO — é contradição, não é medição
 #
 # 🚨 Regra dura nº1 pelo avesso. O BRANCO ("✓ MEDIDO do CAD") é a afirmação
