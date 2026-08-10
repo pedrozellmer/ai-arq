@@ -2906,6 +2906,13 @@ def _pick_area_consensus(readings: list) -> float:
     if len(vals) == 1:
         return vals[0]
 
+    # 🚨 ORDENAR antes de agrupar. O bucketing abaixo é GULOSO: cada leitura cai
+    # no primeiro balde cuja média fica dentro de ±5%, e a média muda a cada
+    # inserção. Com as MESMAS leituras em ordem diferente, os baldes saem
+    # diferentes — e a ordem das leituras vinha da ordem das pranchas, que não
+    # era garantida. Ordenar não torna o agrupamento mais certo; torna repetível.
+    vals.sort()
+
     buckets: list[list[float]] = []
     for v in vals:
         placed = False
@@ -2920,7 +2927,10 @@ def _pick_area_consensus(readings: list) -> float:
 
     # Mais leituras = mais confiável. Empate: maior valor (laje bruta
     # costuma ser o maior dos candidatos na dúvida).
-    buckets.sort(key=lambda b: (-len(b), -max(b)))
+    # 🪤 `-sum(b)` fecha o último empate: dois baldes com mesmo tamanho E mesmo
+    # máximo ainda eram decididos pela ordem de criação — que é a ordem das
+    # pranchas. Com ele, a mesma lista de leituras dá sempre o mesmo vencedor.
+    buckets.sort(key=lambda b: (-len(b), -max(b), -sum(b), b))
     winner = buckets[0]
     return round(sum(winner) / len(winner), 2)
 
@@ -2984,6 +2994,24 @@ def _dedupe_rooms(rooms: list) -> list:
     return out
 
 
+def _desempate_estavel(it) -> tuple:
+    """Critério de desempate dos `max(group, ...)` da consolidação.
+
+    🚨 Por que existe: `max()` devolve o PRIMEIRO máximo, então quando dois itens
+    empatam no critério (e empatar em "comprimento da descrição" é comum) quem
+    ganha é quem chegou antes — ou seja, a ORDEM da lista decide a planilha.
+    A ordem vem da ordem das pranchas, que até 10/08 não era garantida: o upload
+    manda na ordem do cliente e o /add-file relista o Storage. Mesma entrada,
+    saídas diferentes.
+
+    Não tenta ser "mais certo" — tenta ser SEMPRE O MESMO. Empate resolvido por
+    prancha e descrição, que são estáveis entre rodadas.
+    """
+    return (str(getattr(it, "ref_sheet", "") or ""),
+            str(getattr(it, "description", "") or ""),
+            str(getattr(it, "unit", "") or ""))
+
+
 def _dedupe_by_block(items: list) -> list:
     """Funde itens que citam o MESMO bloco CAD (nome entre aspas na descrição).
     A IA às vezes cria o mesmo bloco em 2-3 disciplinas (ex: 'cad-escr-02' como
@@ -3012,6 +3040,7 @@ def _dedupe_by_block(items: list) -> list:
         best = max(group, key=lambda it: (
             1 if (_conf_ok is not None and it.confidence == _conf_ok) else 0,
             len(getattr(it, "description", "") or ""),
+            _desempate_estavel(it),
         ))
         try:
             best.quantity = max((float(it.quantity or 0) for it in group),
@@ -3100,7 +3129,8 @@ def _consolidate_by_type_code(items: list) -> list:
         if len(group) == 1:
             merged.append(group[0])
             continue
-        best = max(group, key=lambda it: len(getattr(it, "description", "") or ""))
+        best = max(group, key=lambda it: (len(getattr(it, "description", "") or ""),
+                                          _desempate_estavel(it)))
         try:
             best.quantity = round(sum(float(it.quantity or 0) for it in group), 2)
         except Exception:
@@ -3170,7 +3200,7 @@ def _consolidate_items(items: list) -> list:
         # independente de qtys serem idênticas, porque itens "Contabilidade"
         # e "RH" costumam bater mesmo quando são na verdade áreas distintas.
         if max(quantities) < 2.0 and len(group) >= 4:
-            best = max(group, key=lambda x: len(x.description or ""))
+            best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
             clean_desc = best.description
             for sep in (' - ', ' — ', ' departamento ', ' deptos ', ' da sala '):
                 clean_desc = clean_desc.split(sep)[0]
@@ -3191,7 +3221,7 @@ def _consolidate_items(items: list) -> list:
             )
             pass1.append(consolidated)
         elif len(unique_qtys) == 1:
-            best = max(group, key=lambda x: len(x.description or ""))
+            best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
             pass1.append(best)
         else:
             pass1.extend(group)
@@ -3379,7 +3409,7 @@ def _consolidate_items(items: list) -> list:
             continue
 
         # Consolida
-        best = max(group, key=lambda x: len(x.description or ""))
+        best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
         total_qty = round(sum(float(it.quantity or 0) for it in group), 2)
         # Remove sufixo numérico da legenda pra descrição limpa
         clean = _re.sub(r"\s*(conforme\s+)?(especifica[çc][aã]o\s+\d+|especifica[çc][aã]o\b).*$",
@@ -3429,7 +3459,7 @@ def _consolidate_items(items: list) -> list:
         if len(group) == 1:
             pass4.append(group[0])
             continue
-        best = max(group, key=lambda x: len(x.description or ""))
+        best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
         total_qty = round(sum(float(it.quantity or 0) for it in group), 2)
         total_qty_int = int(total_qty) if total_qty == int(total_qty) else total_qty
         consolidated = BudgetItem(
@@ -3483,7 +3513,7 @@ def _consolidate_items(items: list) -> list:
             pass5.append(group[0])
             continue
         # 2+ itens vagos mesma disciplina → consolida em 1 linha
-        best = max(group, key=lambda x: len(x.description or ""))
+        best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
         consolidated = BudgetItem(
             item_num=best.item_num,
             description=f"Itens de {disc.lower()} a especificar em projeto executivo",
@@ -3578,7 +3608,7 @@ def _consolidate_items(items: list) -> list:
             continue
 
         # Confirmada duplicação cross-prancha. Manter o item de MAIOR especificidade.
-        winner = max(group, key=_item_score)
+        winner = max(group, key=lambda it: (_item_score(it), _desempate_estavel(it)))
         losers = [it for it in group if id(it) != id(winner)]
         total_pranchas = len(ref_sheets)
 
@@ -4638,9 +4668,21 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
             except Exception:
                 pass
 
-        # Separar PDFs de DWG/DXF
-        pdf_paths = [f for f in file_paths if f.lower().endswith('.pdf')]
-        cad_paths = [f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))]
+        # Separar PDFs de DWG/DXF — SEMPRE na mesma ordem.
+        # 🚨 A ordem das pranchas muda o resultado: a consolidação resolve empate
+        # por "quem chegou primeiro" e o consenso de área faz bucketing guloso na
+        # ordem de chegada. Sem ordenar, a MESMA lista de arquivos podia render
+        # planilhas diferentes — e as duas portas de entrada entregam ordens
+        # diferentes: o upload manda na ordem que o cliente escolheu, o
+        # /add-file relista o Storage (main.py ~15730), que não garante ordem.
+        # Foi por essa porta que a Amanda passou em 10/08: mesmas 14 pranchas,
+        # 47 medidos viraram 28.
+        # 🪤 Ordem alfabética NÃO é "mais correta" que a do cliente — é apenas
+        # REPETÍVEL. O ganho aqui é acabar com a loteria, não com o erro.
+        _ordem = lambda p: (os.path.basename(p).casefold(), p)   # noqa: E731
+        pdf_paths = sorted((f for f in file_paths if f.lower().endswith('.pdf')), key=_ordem)
+        cad_paths = sorted((f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))),
+                           key=_ordem)
 
         # Assinatura do desenho (identidade, não medição): guarda o
         # FINGERPRINTGUID + layers do 1º DXF pra reconhecer o MESMO projeto num
