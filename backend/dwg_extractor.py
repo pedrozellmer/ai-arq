@@ -145,6 +145,10 @@ class DXFExtraction:
     metadata: dict = field(default_factory=dict)
     polygon_areas: list = field(default_factory=list)  # áreas de polilinha FECHADA (ambiente/piso/forro) — m² medido, fonte distinta de HATCH
     struct_rects: list = field(default_factory=list)  # retângulos/círculos FECHADOS em layer de PILAR (StructRect) — contagem de pilar medida
+    # Atributos de bloco (ATTRIB): dado ESTRUTURADO que o projetista escreveu
+    # com nome de campo — quadro de áreas, etiqueta de ambiente, carimbo.
+    # [{bloco, layer, campos:{tag: valor}}]
+    block_attributes: list = field(default_factory=list)
 
     # -- convenience helpers ------------------------------------------------
 
@@ -306,6 +310,30 @@ class DXFExtraction:
                 lines.append(f"  {layer}: {area:.2f} m²")
             lines.append("")
 
+        # 🔑 ATRIBUTOS DE BLOCO — o quadro que o projetista já preencheu.
+        # Único "fazer-agora" que sobreviveu à pesquisa de 09-10/08 (24 propostas,
+        # 10 descartadas por cético que rodou DXF real). Valor com NOME DE CAMPO,
+        # escrito pelo autor do projeto — não é texto solto pra IA adivinhar.
+        # 🪤 NÃO SOMAR ENTRE PRANCHAS: o mesmo quadro repete em várias folhas e o
+        # valor às vezes DIVERGE (118,1 × 128,7 m² no CGR). Somar é o caso Eloídes.
+        if getattr(self, "block_attributes", None):
+            lines.append("QUADROS E ETIQUETAS DO PROJETISTA (atributos de bloco):")
+            lines.append("  (o próprio autor do projeto escreveu estes valores com nome de campo."
+                         " É a MELHOR fonte depois da geometria. ⚠ Vale só para ESTA prancha —"
+                         " o mesmo quadro se repete em outras folhas e às vezes com valor"
+                         " diferente; NUNCA some entre pranchas.)")
+            _vistos_attr = set()
+            for _ba in self.block_attributes[:40]:
+                _linha = "; ".join(f"{k}={v}" for k, v in (_ba.get("campos") or {}).items())
+                _chave = (_ba.get("bloco", ""), _linha)
+                if _chave in _vistos_attr:
+                    continue
+                _vistos_attr.add(_chave)
+                lines.append(f"  [{_ba.get('bloco','?')}] {_linha[:150]}")
+            if len(self.block_attributes) > 40:
+                lines.append(f"  (+{len(self.block_attributes) - 40} bloco(s) com atributo não listado(s))")
+            lines.append("")
+
         # 🔑 O RÓTULO DE CADA REGIÃO — o elo que faltava (09/08/2026).
         # O prompt já trazia "o texto X existe" e "a região Y tem N m²" em listas
         # SEPARADAS, e a IA tinha que adivinhar qual texto fala de qual região.
@@ -393,9 +421,27 @@ class DXFExtraction:
 
         # Dimensions
         if self.dimensions:
-            lines.append("COTAS/DIMENSÕES:")
+            # 🔑 COTA REPETIDA VIRA ×N (10/08/2026). Medido nos DXF reais: a
+            # seção de cotas é 53% do prompt na CGR PISO e 44% no DET FORRO — e
+            # a repetição é 38% e **76%** (74 cotas distintas de 300). A IA
+            # gastava metade do que lê relendo a mesma cota em vez de olhar o
+            # resto do desenho.
+            # 🪤 NÃO some nem encadeia: verifiquei a proposta de "cadeia de
+            # cotas" da pesquisa e ela NÃO se sustenta — as cadeias saem com 2 a
+            # 4 parcelas e a maior cobre 4% da largura do desenho. Aqui é só
+            # deduplicação literal, que não inventa nada.
+            # 🪤 O ×N é informação, não ruído: 8 portas iguais cotadas 8 vezes é
+            # contagem, mesma lógica do `contar_textos_repetidos`.
+            _cot = {}
             for label, value in self.dimensions:
-                lines.append(f"  {label}: {value}")
+                _k = f"  {label}: {value}"
+                _cot[_k] = _cot.get(_k, 0) + 1
+            lines.append("COTAS/DIMENSÕES:")
+            if any(n > 1 for n in _cot.values()):
+                lines.append("  (×N = a MESMA cota aparece N vezes na prancha —"
+                             " para item contável, é evidência de quantidade)")
+            for _k, _n in _cot.items():
+                lines.append(_k + (f"   ×{_n}" if _n > 1 else ""))
 
         return "\n".join(lines)
 
@@ -2082,6 +2128,41 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         _block_def_bbox_cache[bname] = bbox
         return bbox
 
+    # ── ATRIBUTOS DE BLOCO (ATTRIB) — dado ESTRUTURADO pelo projetista ───────
+    # 🔑 Quando o arquiteto usa bloco com atributo (quadro de áreas, etiqueta de
+    # ambiente, carimbo), o valor vem com NOME DE CAMPO — não é texto solto pra
+    # IA interpretar. Medido em 09/08 nos 26 DXF de teste: 3.158 ATTRIB em 1.215
+    # INSERTs. O bloco 'area' da prancha HWB 201 traz 5 ambientes somando
+    # 85,20 m², e NADA disso existe como TEXT/MTEXT — hoje era perdido inteiro.
+    #
+    # 🚨 PASSADA PRÓPRIA, ANTES DOS FILTROS. O laço de contagem abaixo pula
+    # bloco de anotação (`_is_annotation_block`) e bloco com "$" no nome — e é
+    # justamente aí que mora o quadro de áreas (AREA3, em todo o projeto CGR).
+    # Ler junto com a contagem devolveria zero, calado.
+    block_attributes: list = []
+    try:
+        for _ins in msp.query("INSERT"):
+            try:
+                _ats = list(getattr(_ins, "attribs", None) or [])
+                if not _ats:
+                    continue
+                _campos = {}
+                for _a in _ats:
+                    _tag = str(getattr(_a.dxf, "tag", "") or "").strip()
+                    _val = " ".join(str(getattr(_a.dxf, "text", "") or "").split())
+                    if _tag and _val:
+                        _campos[_tag[:40]] = _val[:80]
+                if _campos:
+                    block_attributes.append({
+                        "bloco": str(getattr(_ins.dxf, "name", "") or "")[:60],
+                        "layer": str(getattr(_ins.dxf, "layer", "") or "")[:60],
+                        "campos": _campos,
+                    })
+            except Exception:
+                continue
+    except Exception as _eat:
+        logger.warning("[attrib] leitura falhou: %s", _eat)
+
     for insert in msp.query("INSERT"):
         try:
             bname = insert.dxf.name
@@ -2737,6 +2818,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         metadata=metadata,
         polygon_areas=polygon_areas,
         struct_rects=struct_rects,
+        block_attributes=block_attributes,
     )
 
 
