@@ -16073,13 +16073,43 @@ async def finalize_review(job_id: str, request: Request):
     # (`edits._antes` × item_items de hoje) e alimenta o painel "Onde a IA erra".
     # 🪤 Em thread e best-effort: NUNCA pode atrasar nem derrubar o "Concluir
     # revisão" do cliente — mesma doutrina do caminho do upload.
+    # 📊 GRAVA O CLIQUE, SEMPRE — antes da thread. `revision_feedback` está em 0
+    # linhas desde que o produto existe, e até 11/08/2026 não havia como saber
+    # POR QUÊ: `projects` só guarda `revisao_aberta_em`/`revisao_aberturas`, que
+    # medem a PORTA e não a SAÍDA. Sem isto, "o cliente não concluiu" e "concluiu
+    # mas não havia nada pra aprender" produzem o mesmo zero — e em 10/08 eu
+    # afirmei o primeiro sobre o Felipe sem ter como saber.
+    # Dois clientes entraram na tela em 2 dias: Felipe (6cd52d01) editou a
+    # unidade, franweldon (4b2db70b) clicou approve. Nenhum dos dois deixou
+    # rastro do passo final.
+    try:
+        _n_rev_log = len(_supa_rest_service("GET", "item_reviews", params={
+            "job_id": f"eq.{job_id}", "select": "action", "limit": "5000"}) or [])
+    except Exception:
+        _n_rev_log = -1
+    _log_error("motor:revisao-concluida",
+               f"cliente clicou Concluir · itens tocados={_n_rev_log}", job_id)
+
     try:
         import threading as _th
         import revision_feedback as _rfi
-        _th.Thread(target=_rfi.processar_revisao_inline,
-                   args=(job_id,), daemon=True).start()
+
+        def _esteira_com_log():
+            # 🪤 A thread é daemon e best-effort: se ela morre, some sem deixar
+            # nada. O resultado dela É a resposta da pergunta "por que
+            # revision_feedback não enche" — tem que ficar gravado.
+            try:
+                _gerou = _rfi.processar_revisao_inline(job_id)
+                _log_error("motor:revisao-aprendizado",
+                           f"gerou_linha={bool(_gerou)}", job_id)
+            except Exception as _e:
+                _log_error("motor:revisao-aprendizado",
+                           f"ESTEIRA FALHOU: {type(_e).__name__}: {_e}", job_id)
+
+        _th.Thread(target=_esteira_com_log, daemon=True).start()
     except Exception as _erfi:
         print(f"[revision-feedback] inline não iniciou job={job_id}: {_erfi}")
+        _log_error("motor:revisao-aprendizado", f"NAO INICIOU: {_erfi}", job_id)
 
     # Cashback inline removido em 2026-05-13. Política nova:
     # - Revisar itens dentro do site: agradecimento, sem cashback (treinava IA
