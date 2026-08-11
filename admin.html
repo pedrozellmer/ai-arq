@@ -893,7 +893,24 @@
             <button onclick="loadActivity()" class="text-xs text-indigo-600 hover:underline">recarregar</button>
           </div>
         </div>
-        <p class="text-sm text-gray-500 mb-5">Quem usou o qu&ecirc; e onde parou &mdash; eventos do pr&oacute;prio site, sem ferramenta de fora.</p>
+        <p class="text-sm text-gray-500 mb-3">Quem usou o qu&ecirc; e onde parou &mdash; eventos do pr&oacute;prio site, sem ferramenta de fora.</p>
+
+        <!-- 🚨 O DENOMINADOR MORA AQUI, NA TELA. Sem isto, daqui a um mês alguém
+             (eu, provavelmente) lê "42% clicaram em X" como se fosse 42% dos
+             clientes. Já cometi esse erro com os "57% de retenção" que eram 2%.
+             Medido em 11/08/2026: 19 de 51 clientes com cadastro nos últimos 90
+             dias aparecem em `usage_events`. Método: profiles × distinct
+             user_id/user_email de usage_events. Repetir a conta antes de citar. -->
+        <div class="flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-100 px-4 py-3 mb-5">
+          <span class="text-base shrink-0" aria-hidden="true">&#9888;&#65039;</span>
+          <p class="text-xs text-amber-900 leading-relaxed">
+            <strong>Estes n&uacute;meros cobrem ~37% dos clientes.</strong> A telemetria s&oacute; dispara pra quem
+            aceitou o cookie de an&aacute;lise &mdash; medido em <b>11/08/2026: 19 de 51</b> cadastrados aparecem aqui.
+            Serve pra <b>comparar</b> (o bot&atilde;o A &eacute; mais clicado que o B); <b>n&atilde;o serve</b> pra n&uacute;mero
+            absoluto (&ldquo;X% dos clientes fazem tal coisa&rdquo;) &mdash; quem aceita cookie n&atilde;o &eacute; uma amostra
+            neutra. Antes de citar em qualquer lugar, refa&ccedil;a a conta: <code>profiles</code> &times; <code>usage_events</code>.
+          </p>
+        </div>
 
         <div id="act-cards" class="grid gap-4 sm:grid-cols-3 mb-5"></div>
 

@@ -344,4 +344,42 @@
       }).catch(() => {});
     } catch (e) { /* telemetria nunca quebra nada */ }
   };
+
+  // ─── clique marcado: data-track ──────────────────────────────
+  // Um ouvinte SÓ, delegado no documento. Elemento com `data-track="nome"`
+  // (ou dentro de um) vira evento `clique:nome`.
+  //
+  // 🚨 POR QUE MARCADO E NÃO "TUDO" (11/08/2026): capturar todo clique gera
+  // milhares de eventos de <div> sem nome — muito dado e nenhuma resposta — e
+  // aumenta a superfície de dado pessoal sem necessidade. Marcamos só os pontos
+  // que respondem uma dúvida MEDIDA. Hoje são duas:
+  //   1) a janela de 2 minutos: 39 de 39 clientes que subiram projeto em 60
+  //      dias fizeram isso em menos de 30 min, mediana 2 min. Ninguém voltou
+  //      depois. Queremos saber onde os 17% que nunca sobem param.
+  //   2) o funil da revisão: `revision_feedback` tem 0 linhas desde sempre.
+  //
+  // 🪤 O DENOMINADOR É 37%. `trackEvent` só dispara pra quem aceitou cookie de
+  // análise — medido em 11/08: 19 de 51 clientes. Serve pra COMPARAR (o botão A
+  // é mais clicado que o B), NÃO pra número absoluto ("42% dos clientes
+  // clicam"). Ver o aviso no painel de Atividade.
+  document.addEventListener('click', function (ev) {
+    try {
+      var alvo = ev.target && ev.target.closest ? ev.target.closest('[data-track]') : null;
+      if (!alvo) return;
+      var nome = (alvo.getAttribute('data-track') || '').trim();
+      if (!nome) return;
+      var meta = {};
+      // rótulo visível ajuda a ler o painel sem abrir o HTML
+      var _t = (alvo.getAttribute('aria-label') || alvo.textContent || '').replace(/\s+/g, ' ').trim();
+      if (_t) meta.rotulo = _t.slice(0, 60);
+      // 🪤 NÃO dá pra registrar clique em botão desabilitado: por especificação
+      // o navegador não dispara evento nenhum em `<button disabled>`. Cheguei a
+      // escrever `if (alvo.disabled) meta.desabilitado = true` e o teste no DOM
+      // provou que era código morto. Se um dia quisermos medir "tentou clicar
+      // sem poder", tem que ser um envelope clicável em volta do botão.
+      var _job = new URLSearchParams(location.search).get('job_id');
+      if (_job) meta.job_id = _job;
+      window.trackEvent('clique:' + nome.slice(0, 40), meta);
+    } catch (e) { /* nunca quebra o clique do cliente */ }
+  }, true);   // captura: pega mesmo se o handler do elemento parar a propagação
 })();
