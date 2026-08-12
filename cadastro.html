@@ -183,6 +183,14 @@
             <option value="google">Pesquisa no Google</option>
             <option value="linkedin">LinkedIn</option>
             <option value="blog">Blog / artigo</option>
+            <!-- 🆕 12/08/2026: canal REAL que a gente não enxergava. Três
+                 clientes chegaram por recomendação de IA e tiveram que escolher
+                 "Outro" e explicar por escrito: "O NotebookLM me indicou vocês",
+                 "indicação do ChatGPT", "Indicado por outra I.A. Gemini" — o
+                 último ficou até em "indicacao", então o canal estava partido
+                 entre duas categorias e invisível nas duas.
+                 3 de 69 cadastros. Se cresce, a gente quer saber ANTES. -->
+            <option value="ia">Uma IA me indicou (ChatGPT, Gemini, Copilot&hellip;)</option>
             <option value="evento">Evento / palestra</option>
             <option value="outro">Outro</option>
           </select>
@@ -306,11 +314,15 @@
   // sabemos qual outro, nem quem indicou). A validação no submit cobra.
   referralSourceSelect.addEventListener('change', function () {
     const v = this.value;
-    if (v === 'indicacao' || v === 'outro') {
+    if (v === 'indicacao' || v === 'outro' || v === 'ia') {
       referralDetailInput.classList.remove('hidden');
-      referralDetailInput.placeholder = (v === 'indicacao')
-        ? 'Quem indicou? (nome ou @ no Instagram) *'
-        : 'Conta mais — onde nos viu? *';
+      // 🪤 Pra 'ia' o campo é OPCIONAL na prática (a categoria já é o dado que
+      // faltava), mas perguntar QUAL IA vale muito: saber se vem do ChatGPT ou
+      // do Gemini muda onde a gente trabalharia esse canal.
+      referralDetailInput.placeholder =
+        (v === 'indicacao') ? 'Quem indicou? (nome ou @ no Instagram) *'
+      : (v === 'ia')        ? 'Qual? (ChatGPT, Gemini, Copilot, Perplexity…)'
+      :                       'Conta mais — onde nos viu? *';
     } else {
       referralDetailInput.classList.add('hidden');
       referralDetailInput.value = '';

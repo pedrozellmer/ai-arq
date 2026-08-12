@@ -4116,11 +4116,13 @@ const UF_NOME = { SP:'São Paulo', RJ:'Rio de Janeiro', ES:'Espírito Santo', MG
   PI:'Piauí', PA:'Pará', AM:'Amazonas', RR:'Roraima', AP:'Amapá', MA:'Maranhão' };
 const OG_SRC_LABEL = { google:'🔍 Google', instagram:'📷 Instagram', facebook:'📘 Facebook',
   linkedin:'💼 LinkedIn', indicacao:'🤝 Indicação', evento:'🎤 Evento', blog:'📝 Blog',
-  anuncio:'📢 Anúncio', youtube:'▶️ YouTube', outro:'✏️ Outro' };
+  anuncio:'📢 Anúncio', youtube:'▶️ YouTube', outro:'✏️ Outro',
+  // canal novo (12/08): recomendação de IA — ver _fonteNormalizada
+  ia:'🤖 Uma IA indicou' };
 // Cores de marca por fonte + paleta pra regiões/semanas (dashboard colorido).
 const OG_SRC_COLOR = { google:'#4285F4', instagram:'#E1306C', facebook:'#1877F2',
   linkedin:'#0A66C2', indicacao:'#10B981', evento:'#F59E0B', blog:'#8B5CF6',
-  anuncio:'#EF4444', youtube:'#FF0000', outro:'#64748B', __none:'#CBD5E1' };
+  anuncio:'#EF4444', youtube:'#FF0000', outro:'#64748B', ia:'#7C3AED', __none:'#CBD5E1' };
 const OG_PALETTE = ['#6366F1','#06B6D4','#10B981','#F59E0B','#EF4444','#8B5CF6',
   '#EC4899','#14B8A6','#F97316','#3B82F6','#A855F7','#22C55E','#EAB308','#0EA5E9'];
 
@@ -4177,8 +4179,33 @@ async function loadOrigem(){
   const ativos7 = users.filter(u=>u.last_sign_in_at && (Date.now()-Date.parse(u.last_sign_in_at))<=7*86400000).length;
 
   // Fonte declarada ("como nos conheceu?")
+  //
+  // 🚨 NORMALIZA NA LEITURA (12/08/2026, Pedro: "vários colocaram outro e
+  // escrevem Google, ficar de olho pro dash ficar correto"). Quem escolheu
+  // "Outro" e digitou "google"/"GOOGLE" no campo livre É Google — eram 2, e o
+  // painel mostrava 38 em vez de 40.
+  //
+  // E o mesmo problema escondia um canal INTEIRO: três pessoas chegaram por
+  // recomendação de IA ("O NotebookLM me indicou vocês", "indicação do
+  // ChatGPT", "Indicado por outra I.A. Gemini") — partidas entre 'outro' e
+  // 'indicacao', invisíveis nas duas. Desde hoje existe a opção 'ia' no
+  // cadastro; isto aqui recupera as antigas.
+  //
+  // 🪤 Normaliza na EXIBIÇÃO, não no banco: `referral_source` é o que a pessoa
+  // declarou e não se reescreve. Se a regra estiver errada, some o mapeamento e
+  // o dado original continua lá.
+  const _RX_IA = /chatgpt|gemini|copilot|perplexity|notebooklm|claude|\bi\.?a\b|intelig[êe]ncia artificial/i;
+  function _fonteNormalizada(u){
+    const k = (u.referral_source || '').trim().toLowerCase();
+    const d = (u.referral_detail || '').trim();
+    if (d) {
+      if (_RX_IA.test(d)) return 'ia';
+      if (k === 'outro' && /^google$/i.test(d)) return 'google';
+    }
+    return k || '__none';
+  }
   const bySrc = {};
-  users.forEach(u=>{ const k = u.referral_source || '__none'; bySrc[k]=(bySrc[k]||0)+1; });
+  users.forEach(u=>{ const k = _fonteNormalizada(u); bySrc[k]=(bySrc[k]||0)+1; });
   const srcRows = Object.entries(bySrc).map(([k,n])=>({
     key:k, n, color: OG_SRC_COLOR[k] || '#6366F1',
     label: k==='__none' ? '<span class="text-gray-400">&mdash; não informado</span>' : (OG_SRC_LABEL[k] || ('✏️ '+esc(k)))
