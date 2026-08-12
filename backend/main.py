@@ -4036,13 +4036,17 @@ def _abort_job_mem(job_id: str, done: int, total: int):
         pass
 
 
-def _extract_dxf_inprocess(dxf_path, unit_consensus):
+def _extract_dxf_inprocess(dxf_path, unit_consensus, job_id: str = ""):
     """Extração IN-PROCESS (fallback): emagrece + extrai + gera o prompt. Mesmo
-    resultado do worker isolado, mas roda no processo do servidor (sem teto de RAM)."""
+    resultado do worker isolado, mas roda no processo do servidor (sem teto de RAM).
+
+    `job_id` só serve pra o emagrecimento poder REGISTRAR quando falha — sem
+    ele o passo que protege a memória some do banco (ver dxf_slim.py)."""
     p = dxf_path
     try:
         from dxf_slim import emagrecer_dxf_se_preciso
-        _s = emagrecer_dxf_se_preciso(p)
+        _s = emagrecer_dxf_se_preciso(
+            p, log=(lambda st, msg: _log_error(st, msg, job_id)) if job_id else None)
         if _s:
             p = _s
     except Exception as _sl_e:
@@ -4052,7 +4056,7 @@ def _extract_dxf_inprocess(dxf_path, unit_consensus):
     return _ext, _ext.to_structured_prompt(), p
 
 
-def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900):
+def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str = ""):
     """Extrai UMA prancha DXF num SUBPROCESSO matável com teto de memória (fix
     confiabilidade 2026-07-22). Uma prancha densa que estouraria a RAM mata só o
     filho — o servidor fica de pé. Retorna (extraction, structured_text, path).
@@ -4068,7 +4072,7 @@ def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900):
     import pickle as _pk
     _worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dxf_extract_worker.py")
     if not os.path.exists(_worker):
-        return _extract_dxf_inprocess(dxf_path, unit_consensus)   # sem worker → in-process
+        return _extract_dxf_inprocess(dxf_path, unit_consensus, job_id)   # sem worker → in-process
     _fd, _out = tempfile.mkstemp(suffix=".pkl", prefix="dxfext_")
     os.close(_fd)
     # Teto de memória do filho (POSIX). Prancha legítima cabe; densa patológica morre
@@ -4103,7 +4107,7 @@ def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900):
         try: os.remove(_out)
         except OSError: pass
         print(f"[dxf-isolado] subprocesso não lançou ({type(_le).__name__}: {_le}) — fallback in-process")
-        return _extract_dxf_inprocess(dxf_path, unit_consensus)
+        return _extract_dxf_inprocess(dxf_path, unit_consensus, job_id)
     if _proc.returncode != 0:
         _err = (_proc.stderr or b"").decode("utf-8", "replace")[-600:]
         try: os.remove(_out)
@@ -5230,7 +5234,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # timeout → _cf.TimeoutError (pula prancha); filho morto/erro →
                         # RuntimeError (pula prancha); sem subprocesso → fallback in-process.
                         extraction, structured_text, dxf_path = _extract_dxf_isolated(
-                            dxf_path, _unit_consensus, timeout_s=900)
+                            dxf_path, _unit_consensus, timeout_s=900, job_id=job_id)
                     except _cf.TimeoutError:
                         _bn_dxf = os.path.basename(dxf_path)
                         print(f"[dxf] extração ESTOUROU 900s em {_bn_dxf} — pulando (job segue)")

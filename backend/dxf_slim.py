@@ -34,7 +34,8 @@ _KEEP = {
 }
 
 
-def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB) -> Optional[str]:
+def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
+                             log=None) -> Optional[str]:
     """Se o DXF passa do limiar, gera `<nome>.slim.dxf` só com o que o motor
     usa e devolve o caminho novo. Devolve None quando: arquivo já é pequeno,
     o emagrecimento não rendeu (>95% do original) ou qualquer erro — nesses
@@ -68,6 +69,27 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB) -> Opti
     except Exception as exc:
         print(f"[dxf-slim] {os.path.basename(path)}: emagrecimento falhou "
               f"({type(exc).__name__}: {exc}) — segue com o original")
+        # 🚨 A FALHA TEM QUE APARECER NO BANCO. Este passo existe pra evitar
+        # ESTOURO DE MEMÓRIA em DXF grande (fix do OOM multi-DXF). Quando ele
+        # falha, o arquivo segue INTEIRO pro extrator — ou seja, a proteção
+        # some justamente no caso que ela deveria cobrir.
+        # Até 11/08/2026 isto era só `print`: `error_log` tinha ZERO linha de
+        # slim, e não dava pra saber a frequência. Medido no mesmo dia: falhou
+        # em 4 de 4 arquivos testados (HWB e rafael), todos com
+        # "AssertionError: dictionary handle não resolvido" — um padrão, não
+        # azar. É a mesma família do preview que falhava calado.
+        # 🪤 O registrador vem por PARÂMETRO, não por import de `main`: este
+        # módulo também roda dentro do `dxf_extract_worker`, num subprocesso —
+        # importar a app FastAPI lá seria pesado e circular. Sem `log`, cai no
+        # print de sempre e nada quebra.
+        if log is not None:
+            try:
+                log("motor:dxf-slim",
+                    f"arq={os.path.basename(path)} FALHOU {type(exc).__name__}: "
+                    f"{str(exc)[:160]} — segue com o arquivo INTEIRO (sem "
+                    f"proteção de memória)")
+            except Exception:
+                pass      # log nunca pode derrubar o processamento
         try:
             if os.path.exists(out):
                 os.remove(out)
