@@ -7326,22 +7326,43 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # não deu — o cliente abre esperando planilha.
                 # A trava do guard de 0 itens (Vinícius 21/05) não pega este
                 # caso: tem item, o que não tem é número.
-                # 🪤 Critério ESTREITO de propósito: zero item com quantidade E
-                # zero medido. Medido em 10/08 sobre todos os projetos `done` da
-                # história: bate em 1 (o do Felipe) e em nenhum outro. Afrouxar
-                # pra "poucos itens" ou "muitos zerados" pegaria entrega boa —
-                # a escola da Amanda tem 84 linhas zeradas e é planilha legítima.
+                # 🚨 AFROUXADO EM 11/08/2026, com medição. A versão anterior
+                # exigia zerado == TODOS, e o lpleonardo (97392e5b) mostrou o
+                # custo: 29 itens, ZERO medidos, 27 zerados — **dois itens com
+                # número desligaram a proteção inteira**. Ele recebeu "sua
+                # planilha está pronta" pra uma planilha com 93% das linhas em
+                # branco, e passou 12 minutos preenchendo as 28 na mão.
+                #
+                # 🔑 Quem protege contra falso positivo é o `_n_med == 0`, NÃO a
+                # exigência de 100%: projeto com UMA medição do CAD já escapa.
+                # A escola da Amanda (84 zeradas, planilha legítima) tem 28
+                # medidos — nunca cairia aqui, nem antes nem agora.
+                #
+                # Conferido sobre todos os `done` não-eval: a 80% passam a ser
+                # pegos 4 casos históricos (93%, 92%, 88%, 86% de linhas em
+                # branco, todos com ZERO medição) + o Leonardo. Os de 76% pra
+                # baixo ficam de fora, inclusive o estudo de layout da Catarina
+                # (60%), que é entrega legítima de planta sem cota.
+                _LIMITE_BRANCO = 0.8
                 _nada_medido = (len(all_items) > 0 and _n_med == 0
-                                and _n_zerado == len(all_items))
+                                and _n_zerado >= _LIMITE_BRANCO * len(all_items))
                 if _nada_medido:
                     _pn_nm = (_rows[0].get("project_name") or "").strip()
                     _subj_pp = (f"{_pn_nm} — não consegui medir esse arquivo"
                                 if _pn_nm else "Não consegui medir esse arquivo")
                     _corpo_nm = (
                         f"{_greeting_line(_html.escape(_nm))}<br><br>"
-                        f"Li o que você enviou, mas <b>não consegui tirar nenhuma "
-                        f"quantidade</b> — então não tem planilha pra entregar ainda, "
-                        f"e prefiro te dizer isso do que mandar uma lista vazia.<br><br>"
+                        # 🪤 A frase tem que caber nos DOIS casos. Com o limite em
+                        # 80%, até 1 em cada 5 linhas pode ter número (chute da
+                        # IA, nunca medição) — dizer "nenhuma quantidade" seria
+                        # falso. O que é sempre verdade aqui é `_n_med == 0`:
+                        # não medimos NADA do CAD. E o número de linhas em branco
+                        # vai explícito, pra ele não precisar contar.
+                        f"Li o que você enviou, mas <b>não consegui medir nada do "
+                        f"CAD</b> — {_n_zerado} das {len(all_items)} linhas saíram "
+                        f"sem quantidade. Não tem planilha pra entregar ainda, e "
+                        f"prefiro te dizer isso do que mandar uma lista pra você "
+                        f"preencher na mão.<br><br>"
                         f"O motivo está no diagnóstico abaixo. Na maioria das vezes é "
                         f"escala: sem cota, sem carimbo e sem viewport, não dá pra saber "
                         f"o tamanho real do que está desenhado — e a gente não inventa "
