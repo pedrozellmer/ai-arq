@@ -397,6 +397,22 @@ def shadow_measure_async(page_units: list, job_id: str, api_key: str, log_fn) ->
     if not page_units:
         _av("nenhuma página de PDF chegou ao shadow")
         return
+    # 🚨 A SÉTIMA SAÍDA MUDA (12/08/2026). Instrumentei seis e o caminho AINDA
+    # ficou calado no job do Hospital 2 de julho (70556e26, 1 PDF): nenhum
+    # evento pdfvec, com o código já no ar desde as 09:40 (conferido no stage
+    # `boot`, v 044eee9e).
+    # Motivo: os seis avisos moram DENTRO da thread — e ela é daemon, dorme 8s
+    # antes de começar e trabalha por minutos. Se o processo reinicia nesse
+    # meio (o Render reinicia sozinho), ela morre sem executar UMA linha de
+    # registro, e "não disparou" fica idêntico a "disparou e não achou".
+    # Este log sai ANTES, no fluxo síncrono do job: se ele existe e o resultado
+    # não, a thread morreu no caminho — que é uma resposta, não um silêncio.
+    try:
+        log_fn("pdfvec:shadow", json.dumps(
+            {"v": 2, "fase": "disparado", "paginas": len(page_units)},
+            ensure_ascii=False), job_id, severity="info")
+    except Exception:
+        pass
     try:
         t = threading.Thread(target=_run, args=(list(page_units), job_id, api_key, log_fn),
                              daemon=True, name=f"pdfvec-shadow-{job_id}")
