@@ -331,6 +331,17 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
                             "err": f"{type(e).__name__}: {e}"[:120]})
 
     if not results:
+        # 🚨 Sair calado aqui é indistinguível de "a sombra nem rodou". Medido
+        # em 12/08 no job do Guilherme (428d2688, 3 PDFs): ZERO evento pdfvec no
+        # banco, e não dava pra saber qual das seis saídas mudas tinha disparado.
+        # PDF é o caminho mais cego que temos — 38 envios, 27 sem medir nada.
+        try:
+            log_fn("pdfvec:shadow", json.dumps(
+                {"v": 2, "n": 0, "skip": "nenhuma página processada",
+                 "recebidas": len(page_units)}, ensure_ascii=False),
+                job_id, severity="info")
+        except Exception:
+            pass
         return
     try:
         # 🪤 A coluna do log corta em 2.000 caracteres. Despejar o dict inteiro
@@ -368,10 +379,27 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
 def shadow_measure_async(page_units: list, job_id: str, api_key: str, log_fn) -> None:
     """Dispara o shadow em thread daemon. page_units = lista de tuplas
     (pdf_path, filename, sheet_type, page_index, ...) do process_job."""
+    # 🪤 As duas saídas abaixo eram MUDAS. "Desligado por env" e "sem páginas"
+    # são diagnósticos OPOSTOS e viravam a mesma ausência no banco — o mesmo
+    # vício que fez o preview de prancha ficar 100% quebrado por meses sem
+    # ninguém notar. Agora cada uma diz seu nome.
+    def _av(motivo, extra=None):
+        try:
+            log_fn("pdfvec:shadow", json.dumps(
+                {"v": 2, "n": 0, "skip": motivo, **(extra or {})},
+                ensure_ascii=False), job_id, severity="info")
+        except Exception:
+            pass
+
     if os.environ.get("PDFVEC_SHADOW", "1") == "0":
+        _av("desligado por PDFVEC_SHADOW=0")
         return
     if not page_units:
+        _av("nenhuma página de PDF chegou ao shadow")
         return
-    t = threading.Thread(target=_run, args=(list(page_units), job_id, api_key, log_fn),
-                         daemon=True, name=f"pdfvec-shadow-{job_id}")
-    t.start()
+    try:
+        t = threading.Thread(target=_run, args=(list(page_units), job_id, api_key, log_fn),
+                             daemon=True, name=f"pdfvec-shadow-{job_id}")
+        t.start()
+    except Exception as e:
+        _av(f"thread não iniciou: {type(e).__name__}: {e}"[:120])

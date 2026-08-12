@@ -7186,12 +7186,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # comparação com o Vision. Zero impacto no cliente; PDFVEC_SHADOW=0
         # desliga. work_dir sobrevive ao fim do job (sem rmtree), então a
         # thread lê os arquivos numa boa; se sumirem (restart), ela só pula.
+        # 🪤 O `if` daqui duplicava a checagem que já existe DENTRO do
+        # shadow_measure_async e engolia o caso "sem página" antes de chegar
+        # lá — por isso o job do Guilherme (428d2688, 3 PDFs, 12/08) terminou
+        # com ZERO evento pdfvec e eu não soube dizer o motivo. A decisão agora
+        # mora num lugar só, e lá ela é registrada.
         try:
-            if page_units and os.environ.get("PDFVEC_SHADOW", "1") != "0":
-                from pdf_vector import shadow_measure_async
-                shadow_measure_async(page_units, job_id, api_key, _log_error)
+            from pdf_vector import shadow_measure_async
+            shadow_measure_async(page_units, job_id, api_key, _log_error)
         except Exception as _sve:
             print(f"[pdfvec] shadow não iniciado: {_sve}")
+            _log_error("pdfvec:shadow",
+                       f'{{"v":2,"n":0,"skip":"não iniciou: {type(_sve).__name__}"}}',
+                       job_id)
 
         # ── SHADOW: montagem de cômodos a partir do DXF (dxf_rooms_shadow.py) ──
         # A área total falta em 63% dos projetos porque o motor só reconhece
