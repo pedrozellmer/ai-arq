@@ -5319,6 +5319,49 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"varridas={_md_u.get('proxy_aec_varridas')} "
                                 f"segmentos_medidos={_md_u.get('proxy_aec_segmentos')}",
                                 job_id)
+
+                        # 📐 O QUE A PRANCHA ENTREGOU DE GEOMETRIA — sempre, uma
+                        # linha por arquivo. É a matéria-prima de TODA medição:
+                        # hachura e polígono fechado viram m², parede vira ml,
+                        # bloco vira contagem, cota valida a escala.
+                        #
+                        # 🚨 Até 11/08/2026 isto não existia em lugar consultável
+                        # — só um `print` dentro do bloco de linha de comando
+                        # (dwg_extractor.py ~3166), que produção nunca executa.
+                        # O custo apareceu com o lpleonardo (97392e5b): 29 itens
+                        # com quantidade ZERO num DWG, ele preencheu 28 na mão, e
+                        # eu não consigo dizer se o arquivo veio sem hachura ou
+                        # se a gente falhou em ler as que vieram. São diagnósticos
+                        # OPOSTOS e viram a mesma ausência no banco.
+                        # Mesmo raciocínio do `motor:proxy-aec` acima e do
+                        # contador do preview, que em 10/08 achou em 1 hora um bug
+                        # que eu tinha atribuído ao motivo errado.
+                        # 🪤 Os nomes abaixo são os campos REAIS de `CADExtraction`
+                        # (dwg_extractor.py ~138). Escrevi `block_attribs` de
+                        # cabeça e o campo é `block_attributes` — com `getattr`
+                        # tolerante isso viraria 0 pra sempre, uma métrica que
+                        # mente calada. Por isso o acesso aqui é DIRETO: se
+                        # alguém renomear um campo, este log explode no `except`
+                        # e aparece, em vez de reportar zero pra sempre.
+                        try:
+                            _log_error(
+                                "motor:geometria",
+                                f"arq={os.path.basename(dxf_path)} "
+                                f"hachuras={len(extraction.hatches or [])} "
+                                f"poligonos={len(extraction.polygon_areas or [])} "
+                                f"paredes={len(extraction.walls or [])} "
+                                f"blocos={len(extraction.blocks or [])} "
+                                f"textos={len(extraction.texts or [])} "
+                                f"cotas={len(extraction.dimensions or [])} "
+                                f"layers={len(extraction.layers or [])} "
+                                f"attribs={len(extraction.block_attributes or [])} "
+                                f"pilares={len(extraction.struct_rects or [])}",
+                                job_id)
+                        except Exception as _eg:
+                            print(f"[geometria] log falhou (nao-fatal): {_eg}")
+                            _log_error("motor:geometria",
+                                       f"arq={os.path.basename(dxf_path)} FALHOU: {_eg}",
+                                       job_id)
                     except Exception as _eu:
                         print(f"[unidade] log falhou (nao-fatal): {_eu}")
                     # Aviso ao usuário (não só rebaixar a cor): xref não-resolvido é a
