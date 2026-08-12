@@ -5248,6 +5248,26 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     except Exception as _ex_dxf:
                         _bn_dxf = os.path.basename(dxf_path)
                         print(f"[dxf] extração falhou em {_bn_dxf}: {_ex_dxf}")
+                        # 🚨 REGISTRAR, igual faz o ramo do timeout 6 linhas acima.
+                        # A assimetria custou caro em 12/08 no projeto da Karlla
+                        # (9bf827fc): dos 3 DWG dela, o do MEIO
+                        # (AZU-AIT-PE-10602) converteu e depois sumiu na extração
+                        # sem deixar UM evento consultável. Ela foi avisada
+                        # ("1 prancha não entrou"); NÓS não — o motivo morreu num
+                        # `print`. Perguntada "por que a 10602 não entrou?", a
+                        # resposta honesta era "não sei".
+                        # 🪤 O tipo da exceção é o diagnóstico: RuntimeError =
+                        # filho morto por RAM; MemoryError, parse do ezdxf e
+                        # corrompido são coisas DIFERENTES com consertos
+                        # diferentes, e viravam todas a mesma ausência.
+                        try:
+                            _log_error(
+                                "dxf:extract-falhou",
+                                f"{_bn_dxf}: {type(_ex_dxf).__name__}: "
+                                f"{str(_ex_dxf)[:200]} — prancha FORA do "
+                                f"quantitativo (job segue)", job_id)
+                        except Exception:
+                            pass
                         dxf_errors.append(f"{_bn_dxf}: não consegui ler a geometria desse arquivo (pode estar corrompido ou ter objetos não suportados)")
                         continue
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
