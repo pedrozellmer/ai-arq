@@ -10641,8 +10641,15 @@ async def public_chat(request: Request):
 
     try:
         import anthropic
+        from llm_retry import call_with_retry
         client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(
+        # 🪤 Retry CURTO de propósito: o visitante está olhando a tela do chat.
+        # O padrão do módulo (8 tentativas, backoff até 90s) faria ele esperar
+        # minutos achando que travou — num chat, falhar rápido é melhor que
+        # insistir muito. 2 tentativas cobrem o 429 de rajada, que é o caso real.
+        resp = call_with_retry(
+            client,
+            tag="chat-publico", max_retries=2, base_delay=1.0, max_delay=6.0,
             model="claude-haiku-4-5",
             max_tokens=600,
             system=PUBLIC_CHAT_SYSTEM_PROMPT,
@@ -10761,8 +10768,15 @@ async def project_chat(job_id: str, request: Request):
         return {"error": "Chat indisponível no momento."}
     try:
         import anthropic
+        from llm_retry import call_with_retry
         client = anthropic.Anthropic(api_key=api_key, timeout=60.0)
-        resp = client.messages.create(
+        # Mesmo raciocínio do chat público: cliente esperando, retry curto.
+        # Aqui o `context` carrega descrição de item vinda da leitura do CAD —
+        # é o call site com mais chance de trazer texto de origem duvidosa, e
+        # agora ele herda o `_scrub_payload` do wrapper junto com o retry.
+        resp = call_with_retry(
+            client,
+            tag="chat-projeto", max_retries=2, base_delay=1.0, max_delay=6.0,
             model="claude-haiku-4-5",
             max_tokens=500,
             system=PROJECT_CHAT_SYSTEM.format(context=context),
@@ -13008,10 +13022,16 @@ async def memorial_redigir_ia(job_id: str, request: Request):
             estrutura = montar_estrutura(projeto, items)
 
         import anthropic
+        from llm_retry import call_with_retry as _cwr
         _client = anthropic.Anthropic(api_key=api_key, timeout=60.0)
 
         def _chamar(system, user):
-            r = _client.messages.create(
+            # Memorial: o cliente clicou e espera o documento. Retry moderado —
+            # `redigir_intros_ia` chama isto uma vez POR SEÇÃO, então backoff
+            # longo multiplicaria pelo nº de seções.
+            r = _cwr(
+                _client,
+                tag="memorial-intro", max_retries=3, base_delay=1.5, max_delay=12.0,
                 model="claude-haiku-4-5", max_tokens=300,
                 system=system, messages=[{"role": "user", "content": user}])
             return r.content[0].text if r.content else ""
@@ -15523,9 +15543,13 @@ def _ai_suggest_combine(files_meta: list, base_type: str = "") -> dict:
             "\"excluded\":[{\"filename\":\"nome\",\"reason\":\"motivo curto\"}],"
             "\"summary\":\"1-2 frases pro admin (pt-br): o que combinar e por quê\"}"
         )
+        from llm_retry import call_with_retry as _cwr2
         client = anthropic.Anthropic(api_key=api_key)
-        resp = client.messages.create(model="claude-haiku-4-5", max_tokens=900,
-                                      messages=[{"role": "user", "content": prompt}])
+        # Ferramenta de admin (sugestão de quais arquivos combinar): ninguém do
+        # lado do cliente está esperando, então vale insistir com o padrão.
+        resp = _cwr2(client, tag="admin-sugestao-anexo",
+                     model="claude-haiku-4-5", max_tokens=900,
+                     messages=[{"role": "user", "content": prompt}])
         txt = resp.content[0].text if resp.content else ""
         _s, _e = txt.find("{"), txt.rfind("}")
         data = _j.loads(txt[_s:_e + 1]) if (_s >= 0 and _e > _s) else {}

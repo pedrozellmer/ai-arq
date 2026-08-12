@@ -161,7 +161,15 @@ def _ask_model(client, model: str, jpegs: list[bytes]) -> Optional[dict]:
         for j in jpegs
     ]
     content.append({"type": "text", "text": _PROMPT})
-    response = client.messages.create(
+    # 🚨 Esta é a 3ª e ÚLTIMA fonte de escala do PDF (depois de viewport e
+    # cotas). Se ela falhar por um 429 de rajada, a prancha fica SEM ESCALA e
+    # não mede nada — medido em 11/08: 14 de 14 skips do motor vetorial são
+    # "sem escala". Perder isto por erro transitório sai caro, então retry
+    # generoso: roda dentro do processamento, ninguém está esperando na tela.
+    from llm_retry import call_with_retry
+    response = call_with_retry(
+        client,
+        tag="pdfvec-carimbo", max_retries=5, base_delay=2.0, max_delay=30.0,
         model=model,
         max_tokens=300,
         messages=[{"role": "user", "content": content}],
