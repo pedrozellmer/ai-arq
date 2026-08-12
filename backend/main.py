@@ -14052,8 +14052,85 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
     # velhos. Derruba o cache pra próxima leitura de coerência ser a real.
     if action in ("edit", "reject"):
         _assinatura_invalidar(job_id)
+        # 🚨 APRENDER SEM DEPENDER DO BOTÃO "CONCLUIR". Até 11/08/2026 a esteira
+        # só rodava no `/review-finalize`, e o cliente lpleonardo (97392e5b)
+        # provou o custo: fez 57 ações e 28 correções REAIS de quantidade em 12
+        # minutos, e foi embora sem clicar. As correções ficaram em
+        # `item_reviews` e `revision_feedback` seguiu com ZERO linhas — a
+        # primeira verdade de campo do produto, quase perdida por um clique que
+        # não aconteceu.
+        # A correção já está no banco no instante em que ele salva o item; nada
+        # justifica esperar um botão pra aprender com ela.
+        _agendar_aprendizado_revisao(job_id)
 
     return {"status": "ok", "action": action}
+
+
+_APRENDIZADO_TIMERS: dict = {}
+_APRENDIZADO_LOCK = threading.Lock()
+
+
+def _agendar_aprendizado_revisao(job_id: str, atraso_s: int = 90) -> None:
+    """Roda a esteira de aprendizado ~90s depois da ÚLTIMA edição do cliente.
+
+    Debounce de verdade: cada edição nova cancela o timer anterior e reagenda.
+    Quem edita 28 itens em 12 minutos dispara UMA passada no fim, com o estado
+    final — não 28 passadas com estados intermediários.
+
+    🪤 Timer morre em restart do processo. É best-effort de propósito: o gatilho
+    manual (`POST /api/admin/revision-learn/{job_id}`) cobre o que escapar, e a
+    correção NUNCA se perde — ela mora em `item_reviews`, isto aqui só agrega.
+    Nunca levanta: aprendizado não pode derrubar a edição do cliente.
+    """
+    try:
+        with _APRENDIZADO_LOCK:
+            _t_antigo = _APRENDIZADO_TIMERS.pop(job_id, None)
+            if _t_antigo is not None:
+                try:
+                    _t_antigo.cancel()
+                except Exception:
+                    pass
+
+            def _rodar():
+                with _APRENDIZADO_LOCK:
+                    _APRENDIZADO_TIMERS.pop(job_id, None)
+                try:
+                    import revision_feedback as _rfi
+                    _gerou = _rfi.processar_revisao_inline(job_id)
+                    _log_error("motor:revisao-aprendizado",
+                               f"automatico (sem clique) gerou_linha={bool(_gerou)}", job_id)
+                except Exception as _e:
+                    _log_error("motor:revisao-aprendizado",
+                               f"AUTOMATICO FALHOU: {type(_e).__name__}: {_e}", job_id)
+
+            _t = threading.Timer(atraso_s, _rodar)
+            _t.daemon = True
+            _APRENDIZADO_TIMERS[job_id] = _t
+            _t.start()
+    except Exception as _e:
+        print(f"[revision-feedback] agendamento falhou job={job_id}: {_e}")
+
+
+@app.post("/api/admin/revision-learn/{job_id}")
+async def admin_revision_learn(job_id: str, request: Request):
+    """Roda a esteira de aprendizado num job à mão (admin).
+
+    Existe porque as correções ficam em `item_reviews` desde o instante em que o
+    cliente salva, mas até 11/08/2026 só viravam aprendizado se ele clicasse em
+    "Concluir revisão". Serve pra recuperar o que ficou pra trás — o caso
+    97392e5b tinha 28 correções reais paradas — e pra cobrir timer perdido em
+    restart. Idempotente: reprocessa o job inteiro a partir do estado atual.
+    """
+    _require_admin(request)
+    try:
+        import revision_feedback as _rfi
+        gerou = _rfi.processar_revisao_inline(job_id)
+        _log_error("motor:revisao-aprendizado",
+                   f"manual (admin) gerou_linha={bool(gerou)}", job_id)
+        return {"status": "ok", "job_id": job_id, "gerou_linha": bool(gerou)}
+    except Exception as e:
+        _log_error("motor:revisao-aprendizado", f"MANUAL FALHOU: {e}", job_id)
+        raise HTTPException(500, f"Falhou: {e}")
 
 
 @app.post("/api/items/{job_id}/finalize")
