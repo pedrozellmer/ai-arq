@@ -6186,8 +6186,58 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             "(medição geométrica validada). Qualquer outro valor segue 'estimado'.")
                         _vet_secao = "\n".join(_linhas)
                         print(f"[pdfvec-promo] {_stem}: escala validada por cota — seção injetada")
+                        _log_error("pdfvec:promo",
+                                   f"{_stem}: escala 1:{_vm.get('scale')} PROVADA por "
+                                   f"{_vm.get('cotas_batem')} cota(s) — pode sair confirmado",
+                                   job_id)
+                    elif (_vm.get("n_rooms") or _vm.get("walls_m")) and _vm.get("scale"):
+                        # 🎯 ESCALA SEM PROVA (12/08/2026) — entrega como ESTIMADO.
+                        #
+                        # O Hospital 2 de julho (70556e26) escancarou o custo de
+                        # não fazer nada aqui: a sombra mediu **56 ambientes,
+                        # 910 m² numa página, 1.167 m² no total**, com escala
+                        # lida do CARIMBO — e o cliente recebeu ZERO medições e
+                        # área 0. A medição existia e era jogada fora.
+                        #
+                        # 🚨 Por que NÃO vira 'confirmado': carimbo é DECLARAÇÃO,
+                        # cota é PROVA. PDF impresso reduzido de A1 pra A3 tem
+                        # carimbo dizendo 1:175 e geometria noutra escala — é a
+                        # mesma família do "cabeçalho mente a unidade", que já
+                        # nos deu erro de 1000×. A regra dura nº1 fica de pé: sem
+                        # prova, é laranja.
+                        #
+                        # 🔑 Mas "sem prova" ≠ "sem valor". Estimativa com a
+                        # procedência escrita é o que o produto promete entregar
+                        # quando não dá pra medir — e é infinitamente melhor que
+                        # a linha em branco que o cliente recebeu hoje.
+                        _fonte = _vm.get("scale_src") or "?"
+                        _l2 = [
+                            "",
+                            "=== MEDIÇÕES VETORIAIS DA PRANCHA (escala NÃO validada por cota) ===",
+                            f"Escala 1:{_vm.get('scale')} lida de: {_fonte}. "
+                            f"NÃO foi confirmada por cota da prancha.",
+                        ]
+                        if _vm.get("n_rooms"):
+                            _l2.append(f"Ambientes medidos geometricamente: {_vm['n_rooms']} "
+                                       f"somando {_vm.get('rooms_m2', 0)} m².")
+                        if _vm.get("walls_m"):
+                            _l2.append(f"Paredes/divisórias medidas: {_vm['walls_m']} m "
+                                       f"({_vm.get('n_walls')} segmentos).")
+                        _l2.append(
+                            "REGRA: use estes valores como base para itens de ÁREA e COMPRIMENTO, "
+                            "SEMPRE com confidence 'estimado' — NUNCA 'confirmado', porque a escala "
+                            f"veio de {_fonte} e não foi provada por cota. Na observação, escreva a "
+                            f"procedência: 'medido do desenho com escala 1:{_vm.get('scale')} lida "
+                            f"do {_fonte} — confira a escala do seu PDF'.")
+                        _vet_secao = "\n".join(_l2)
+                        print(f"[pdfvec-promo] {_stem}: escala de {_fonte} sem prova — seção ESTIMADA injetada")
+                        _log_error("pdfvec:promo",
+                                   f"{_stem}: escala 1:{_vm.get('scale')} de {_fonte} SEM prova de cota "
+                                   f"— injetado como estimado (ambientes={_vm.get('n_rooms')} "
+                                   f"m2={_vm.get('rooms_m2')})", job_id)
                 except Exception as _ve:
                     print(f"[pdfvec-promo] {_stem}: sem promoção ({_ve})")
+                    _log_error("pdfvec:promo", f"{_stem}: FALHOU {type(_ve).__name__}: {_ve}"[:200], job_id)
 
                 # 3. Analisar com IA
                 jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: Nossa IA está analisando {_disp}...")
