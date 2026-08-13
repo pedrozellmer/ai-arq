@@ -4285,7 +4285,16 @@ async function loadOrigem(){
   // 🪤 `dias_com_projeto` já vem do RPC ignorando is_eval — job de avaliação é
   // nosso, contar inflaria a retenção com o nosso próprio teste.
   const _DIA = 86400000;
-  const _comProj = users.filter(u => Number(u.num_projects) > 0);
+  // 🚨 CONTAS DE TESTE FORA (Pedro, 12/08: "tira Dani e Pedro Zellmer").
+  // São nossas, não de cliente — o Pedro tem 18 projetos e a Daniela 12, os
+  // dois maiores da base. Deixar dentro faria a retenção parecer o dobro do
+  // que é, que é o mesmo vício dos "57%" que na real eram 2%.
+  // 🪤 O painel MOSTRA que foram tiradas. Excluir calado é como número honesto
+  // vira mentira daqui a um mês.
+  const _CONTAS_TESTE = ['zarelalopes@gmail.com', 'danielatp@gmail.com'];
+  const _ehTeste = u => _CONTAS_TESTE.includes(String(u.email || '').toLowerCase());
+  const _nTeste = users.filter(u => _ehTeste(u) && Number(u.num_projects) > 0).length;
+  const _comProj = users.filter(u => Number(u.num_projects) > 0 && !_ehTeste(u));
   const _voltou = _comProj.filter(u => Number(u.dias_com_projeto) > 1);
   // 🪤 NÃO usar `_gap`: esse nome JÁ EXISTE nesta função (espaçamento das barras
   // do gráfico de semanas, mais abaixo). `const` repetido no mesmo escopo é
@@ -4315,7 +4324,8 @@ async function loadOrigem(){
     <div class="rounded-2xl border-2 border-emerald-100 bg-white p-5 mb-5">
       <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
         <h3 class="font-semibold text-gray-900">Clientes que voltaram</h3>
-        <span class="text-xs text-gray-400">subiu projeto em <b>outro dia</b> — não é "mais de 1 projeto"</span>
+        <span class="text-xs text-gray-400">subiu projeto em <b>outro dia</b> — não é "mais de 1 projeto"${
+          _nTeste ? ` · <b class="text-gray-500">${_nTeste} conta(s) de teste fora</b>` : ''}</span>
       </div>
       <div class="grid grid-cols-3 gap-3 my-4">
         <div><div class="text-2xl font-bold text-emerald-600">${_voltou.length}</div>
