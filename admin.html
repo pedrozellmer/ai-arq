@@ -4287,17 +4287,21 @@ async function loadOrigem(){
   const _DIA = 86400000;
   const _comProj = users.filter(u => Number(u.num_projects) > 0);
   const _voltou = _comProj.filter(u => Number(u.dias_com_projeto) > 1);
-  const _gap = u => (u.primeiro_projeto && u.ultimo_projeto)
+  // 🪤 NÃO usar `_gap`: esse nome JÁ EXISTE nesta função (espaçamento das barras
+  // do gráfico de semanas, mais abaixo). `const` repetido no mesmo escopo é
+  // SyntaxError e derruba o arquivo INTEIRO — o admin parou de abrir em 12/08
+  // por causa disso, e a página não mostra erro nenhum: só fica em branco.
+  const _intervalo = u => (u.primeiro_projeto && u.ultimo_projeto)
     ? (Date.parse(u.ultimo_projeto) - Date.parse(u.primeiro_projeto)) / _DIA : 0;
-  const _voltou7 = _voltou.filter(u => _gap(u) >= 7);
+  const _voltou7 = _voltou.filter(u => _intervalo(u) >= 7);
   const _multiProj = _comProj.filter(u => Number(u.num_projects) > 1);
   const _pctVoltou = _comProj.length
     ? Math.round(1000 * _voltou.length / _comProj.length) / 10 : 0;
 
   const _linhasVolta = _voltou
-    .sort((a, b) => _gap(b) - _gap(a))
+    .sort((a, b) => _intervalo(b) - _intervalo(a))
     .map(u => {
-      const d = _gap(u);
+      const d = _intervalo(u);
       const quando = d >= 1 ? `${Math.round(d)} dia${Math.round(d) === 1 ? '' : 's'} depois`
                             : 'no mesmo dia seguinte';
       return `<div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
