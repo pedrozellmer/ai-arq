@@ -4273,7 +4273,57 @@ async function loadOrigem(){
   const _gap = weeks.length>20 ? 2 : 3;
   const _cabeNum = weeks.length<=26;                      // número em cima da barra
 
+  // ── QUEM VOLTOU (retenção) ────────────────────────────────────────────
+  //
+  // 🚨 "Voltou" = subiu projeto em OUTRO DIA. NÃO é "tem mais de 1 projeto".
+  // Medido em 12/08/2026: 28 de 50 clientes têm >1 projeto (56%) e só 5
+  // voltaram noutro dia (10%) — quase todo mundo sobe 2-3 arquivos na MESMA
+  // sessão. Foi esse engano que virou os "57% de retenção" que eram 2%.
+  // O card mostra os DOIS números de propósito, com o enganoso rotulado, pra
+  // ninguém (eu inclusive) reler errado daqui a um mês.
+  //
+  // 🪤 `dias_com_projeto` já vem do RPC ignorando is_eval — job de avaliação é
+  // nosso, contar inflaria a retenção com o nosso próprio teste.
+  const _DIA = 86400000;
+  const _comProj = users.filter(u => Number(u.num_projects) > 0);
+  const _voltou = _comProj.filter(u => Number(u.dias_com_projeto) > 1);
+  const _gap = u => (u.primeiro_projeto && u.ultimo_projeto)
+    ? (Date.parse(u.ultimo_projeto) - Date.parse(u.primeiro_projeto)) / _DIA : 0;
+  const _voltou7 = _voltou.filter(u => _gap(u) >= 7);
+  const _multiProj = _comProj.filter(u => Number(u.num_projects) > 1);
+  const _pctVoltou = _comProj.length
+    ? Math.round(1000 * _voltou.length / _comProj.length) / 10 : 0;
+
+  const _linhasVolta = _voltou
+    .sort((a, b) => _gap(b) - _gap(a))
+    .map(u => {
+      const d = _gap(u);
+      const quando = d >= 1 ? `${Math.round(d)} dia${Math.round(d) === 1 ? '' : 's'} depois`
+                            : 'no mesmo dia seguinte';
+      return `<div class="flex items-center justify-between text-sm py-1.5 border-b border-gray-50 last:border-0">
+        <span class="text-gray-700 truncate">${esc(u.full_name || u.email || '?')}</span>
+        <span class="text-gray-500 tabular-nums whitespace-nowrap ml-3">
+          ${u.num_projects} proj · <b class="text-emerald-700">${quando}</b></span>
+      </div>`;
+    }).join('') || '<p class="text-gray-400 text-sm">Ninguém voltou ainda.</p>';
+
   box.innerHTML = `
+    <div class="rounded-2xl border-2 border-emerald-100 bg-white p-5 mb-5">
+      <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+        <h3 class="font-semibold text-gray-900">Clientes que voltaram</h3>
+        <span class="text-xs text-gray-400">subiu projeto em <b>outro dia</b> — não é "mais de 1 projeto"</span>
+      </div>
+      <div class="grid grid-cols-3 gap-3 my-4">
+        <div><div class="text-2xl font-bold text-emerald-600">${_voltou.length}</div>
+          <div class="text-xs text-gray-500">voltaram (${_pctVoltou}% de ${_comProj.length} que usaram)</div></div>
+        <div><div class="text-2xl font-bold text-emerald-700">${_voltou7.length}</div>
+          <div class="text-xs text-gray-500">voltaram depois de <b>7+ dias</b></div></div>
+        <div><div class="text-2xl font-bold text-gray-300">${_multiProj.length}</div>
+          <div class="text-xs text-gray-400">têm +1 projeto &mdash; <b>não é retenção</b>, quase todo
+            mundo sobe vários arquivos na mesma sessão</div></div>
+      </div>
+      <div class="border-t pt-3">${_linhasVolta}</div>
+    </div>
     <div class="grid md:grid-cols-2 gap-5">
       <div class="rounded-2xl border bg-white p-5">
         <h3 class="font-semibold text-gray-900 mb-0.5">De onde vêm</h3>
