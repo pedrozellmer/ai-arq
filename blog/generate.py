@@ -112,6 +112,32 @@ import re
 NUMBERED_RE = re.compile(r'^\d+[\.\)]\s+(.+)$')
 BULLET_RE   = re.compile(r'^[\-\u2022]\s+(.+)$')
 
+# \u2500\u2500 <title>: a marca s\u00f3 entra se COUBER \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+# O Google corta o t\u00edtulo por LARGURA (~580px, na pr\u00e1tica ~60 caracteres). O
+# " | AI.arq" custa 9 desses 60 e \u00e9 a parte MENOS valiosa: marca desconhecida
+# n\u00e3o ganha clique por aparecer no fim \u2014 quem ganha \u00e9 o assunto, que fica no
+# come\u00e7o. Gastar os \u00faltimos 9 caracteres com a marca \u00e9 trocar informa\u00e7\u00e3o por
+# assinatura.
+#
+# Medido em 14/08/2026: com o sufixo fixo, 8 dos 9 posts futuros passavam de 60
+# (59\u201368); com ele condicional, TODOS ficam em 52\u201359.
+#
+# \ud83d\udea8 GATE POR DATA \u2014 Pedro, 14/08: "o que j\u00e1 publicou n\u00e3o mexe". Os 17 posts
+# publicados j\u00e1 ranqueiam (1\u00ba ranking org\u00e2nico em 04/08) e mudar o <title> de
+# post indexado pode custar posi\u00e7\u00e3o. Eles seguem com o sufixo fixo, mesmo os 16
+# que passam de 60. Se um dia a decis\u00e3o mudar, \u00e9 s\u00f3 apagar este gate: o TEXTO do
+# t\u00edtulo n\u00e3o muda em caso nenhum \u2014 s\u00f3 cai a assinatura.
+MARCA_SUFIXO = " | AI.arq"
+LIMITE_TITULO = 60
+CORTE_REGRA_NOVA = "2026-08-15"   # posts a partir daqui usam sufixo condicional
+
+
+def _titulo_html(post):
+    t = post["title"]
+    if post.get("publish_date", "") < CORTE_REGRA_NOVA:
+        return t + MARCA_SUFIXO          # publicados: comportamento antigo
+    return t if len(t) + len(MARCA_SUFIXO) > LIMITE_TITULO else t + MARCA_SUFIXO
+
 
 def _classify_line(line):
     """Retorna ('numbered'|'bullet'|'text', texto_limpo)."""
@@ -477,7 +503,7 @@ def render_post_html(post):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-<title>{post["title"]} | AI.arq</title>
+<title>{_titulo_html(post)}</title>
 <meta name="description" content="{post["description"]}">
 <meta name="keywords" content="{post["keywords"]}">
 <meta name="author" content="AI.arq">
