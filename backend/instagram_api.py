@@ -13,6 +13,34 @@ GRAPH_API_BASE = "https://graph.instagram.com/v21.0"
 GRAPH_FB_BASE = "https://graph.facebook.com/v21.0"
 
 
+def _id_ou_erro(resp: dict):
+    """Devolve o id do container, ou o MOTIVO da recusa da Meta.
+
+    🚨 Por que existe (13/08/2026): as 6 funções de criar container faziam
+    `return resp.get("id")`. Quando a Meta recusa, `_request` devolve
+    {"error": ..., "status_code": ..., "details": "<mensagem real da Meta>"} —
+    e o `.get("id")` jogava isso fora, virando `None`.
+
+    Resultado prático: 4 posts falharam entre 09/08 e 13/08 e o painel só
+    dizia "Container falhou: None" / "item falhou: None". O motivo verdadeiro
+    (token expirado? permissão? imagem recusada?) existia na resposta e era
+    descartado a um passo de ser gravado.
+
+    Quem chama testa `"error" in str(...)` pra decidir falha, então devolver a
+    string do erro mantém esse contrato E leva o motivo pro banco.
+    """
+    if not isinstance(resp, dict):
+        return None
+    _id = resp.get("id")
+    if _id:
+        return _id
+    if resp.get("error") or resp.get("details"):
+        _det = str(resp.get("details") or resp.get("error") or "")[:300]
+        _cod = resp.get("status_code")
+        return f"error: HTTP {_cod} — {_det}" if _cod else f"error: {_det}"
+    return None
+
+
 class MetaGraphAPI:
     """Wrapper para a Meta Graph API (Instagram Business)."""
 
@@ -85,7 +113,7 @@ class MetaGraphAPI:
             # Stories nao tem caption (ignorada pelo Meta)
 
         resp = self._request("POST", url, json=payload)
-        return resp.get("id")
+        return _id_ou_erro(resp)
 
     def create_reel_container(
         self,
@@ -113,7 +141,7 @@ class MetaGraphAPI:
             payload["cover_url"] = thumbnail_url
 
         resp = self._request("POST", url, json=payload)
-        return resp.get("id")
+        return _id_ou_erro(resp)
 
     def create_carousel_item(
         self,
@@ -130,7 +158,7 @@ class MetaGraphAPI:
             "is_carousel_item": True,
         }
         resp = self._request("POST", url, json=payload)
-        return resp.get("id")
+        return _id_ou_erro(resp)
 
     def create_carousel_container(
         self,
@@ -150,7 +178,7 @@ class MetaGraphAPI:
             "children": ",".join(children_ids),
         }
         resp = self._request("POST", url, json=payload)
-        return resp.get("id")
+        return _id_ou_erro(resp)
 
     def create_story_container(
         self,
@@ -167,14 +195,14 @@ class MetaGraphAPI:
             "media_type": "STORIES",
         }
         resp = self._request("POST", url, json=payload)
-        return resp.get("id")
+        return _id_ou_erro(resp)
 
     def publish_media(self, creation_id: str) -> Optional[str]:
         """Publica o container de midia (passo 2)."""
         url = f"{GRAPH_API_BASE}/{self.ig_user_id}/media_publish"
         payload = {"creation_id": creation_id}
         resp = self._request("POST", url, json=payload)
-        return resp.get("id")
+        return _id_ou_erro(resp)
 
     def check_media_status(self, creation_id: str) -> str:
         """Verifica status do container (FINISHED, IN_PROGRESS, ERROR)."""
