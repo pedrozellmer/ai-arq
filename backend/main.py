@@ -4430,20 +4430,42 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
 
     Regras duras respeitadas:
     - Só roda se o cliente informou o pé-direito (nunca assume 2,70).
-    - Só cria pintura se NÃO existe nenhum item de pintura (nunca sobrescreve).
+    - Nunca sobrescreve pintura COM quantidade. Pintura ZERADA não conta como
+      existente: linha zerada é a pergunta do cliente, não uma resposta (medido
+      em 03/08: 8 das 9 edições reais foram em linha zerada). Caso Giovani
+      (75a774af, 15/08): o modelo criou "Pintura de paredes internas" com
+      qtd 0 e observação "requer pé-direito" — e esta trava, lendo a linha
+      zerada como "já tem pintura", recusava exatamente a derivação pedida.
+      Quando há linha de pintura de PAREDE zerada, PREENCHE essa linha (mesmo
+      movimento do _apply_area_honesty com a área informada) em vez de criar
+      uma segunda linha do mesmo serviço.
     - Sai como ESTIMADO com rótulo "pé-direito informado por você" (regra nº1).
     - Não desconta vãos (não os conhecemos aqui) — e diz isso na observação.
-    Devolve 1 se criou o item, 0 caso contrário."""
+    Devolve 1 se criou/preencheu o item, 0 caso contrário."""
     if not pe_direito or pe_direito <= 0:
         return 0
     from models import BudgetItem, Confidence
-    tem_pintura = any(
-        ("pintura" in (getattr(i, "description", "") or "").lower()
-         or "látex" in (getattr(i, "description", "") or "").lower()
-         or "latex" in (getattr(i, "description", "") or "").lower())
-        for i in items)
-    if tem_pintura:
-        return 0
+
+    def _e_pintura(i):
+        _d = (getattr(i, "description", "") or "").lower()
+        return "pintura" in _d or "látex" in _d or "latex" in _d
+
+    def _qtd(i):
+        try:
+            return float(getattr(i, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if any(_e_pintura(i) and _qtd(i) > 0 for i in items):
+        return 0        # já existe pintura com número — não sobrescreve
+    # Pintura de PAREDE zerada, se houver, é a linha que vamos preencher.
+    # Teto/forro fica de fora: a conta comprimento × pé-direito é de parede.
+    _alvo_zerado = next(
+        (i for i in items
+         if _e_pintura(i) and _qtd(i) <= 0
+         and "teto" not in (getattr(i, "description", "") or "").lower()
+         and "forro" not in (getattr(i, "description", "") or "").lower()),
+        None)
     total_m = 0.0
     ref = ""
     for i in items:
@@ -4460,15 +4482,24 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
     if total_m <= 0:
         return 0
     area = round(total_m * float(pe_direito) * 2.0, 1)   # 2 faces
+    _obs = (f"⚠ ESTIMADO — {total_m:.1f} m de parede × pé-direito "
+            f"{pe_direito:.2f} m informado por você × 2 faces. Vãos de "
+            f"portas/janelas NÃO descontados — confira antes de orçar.")
+    if _alvo_zerado is not None:
+        # Preenche a linha zerada que o modelo criou, em vez de deixar a
+        # pergunta sem resposta E criar uma linha irmã do mesmo serviço.
+        _alvo_zerado.quantity = area
+        _alvo_zerado.unit = getattr(_alvo_zerado, "unit", "") or "m²"
+        _alvo_zerado.observations = _obs + " " + (getattr(_alvo_zerado, "observations", "") or "")
+        _alvo_zerado.confidence = Confidence.ESTIMADO
+        return 1
     items.append(BudgetItem(
         item_num="PD.1",
         description=("Pintura látex sobre paredes internas — derivada do "
                      "comprimento de paredes × pé-direito informado"),
         unit="m²",
         quantity=area,
-        observations=(f"⚠ ESTIMADO — {total_m:.1f} m de parede × pé-direito "
-                      f"{pe_direito:.2f} m informado por você × 2 faces. Vãos de "
-                      f"portas/janelas NÃO descontados — confira antes de orçar."),
+        observations=_obs,
         ref_sheet=ref,
         confidence=Confidence.ESTIMADO,
         discipline="Revestimentos",
@@ -5533,10 +5564,36 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         "Se houver quadro/resumo de aço nos dados, use o peso de lá (medido). Volume/área/"
                         "peso que você calcular é 'estimado'. Não invente bitola/fck.\n"
                     ) if is_structural else ""
+                    # 🔑 PÉ-DIREITO INFORMADO ENTRA NO PROMPT (15/08/2026).
+                    # O prompt SEMPRE mandou o modelo derivar parede/pintura por
+                    # "perímetro × pé-direito" e extrair o PD "da legenda" — mas o
+                    # PD que o CLIENTE digita no upload nunca chegava aqui: ficava
+                    # guardado pro pós-processamento. Caso Giovani (75a774af): ele
+                    # informou 3,73 m e a linha de pintura saiu 0 com a observação
+                    # "requer pé-direito". O modelo pediu o dado que a gente tinha.
+                    # Mesmo padrão do pdfvec:promo — dado determinístico entra no
+                    # prompt; regra nº1 preservada (derivado = SEMPRE estimado).
+                    _pd_directive = ""
+                    try:
+                        _pd_cli = float(user_pe_direito or 0)
+                    except (TypeError, ValueError):
+                        _pd_cli = 0.0
+                    if _pd_cli > 0 and not is_structural:
+                        _pd_directive = (
+                            f"\n=== PÉ-DIREITO INFORMADO PELO CLIENTE NO UPLOAD: {_pd_cli:.2f} m ===\n"
+                            f"Use este valor para derivar áreas verticais (pintura, revestimento de "
+                            f"parede, alvenaria em m²): perímetro ou comprimento de parede × {_pd_cli:.2f}. "
+                            f"REGRAS: (a) todo item derivado assim é 'estimado', NUNCA 'confirmado' — o "
+                            f"pé-direito foi informado, não medido do desenho; (b) escreva na observação "
+                            f"a conta feita e 'pé-direito informado por você'; (c) se a prancha trouxer "
+                            f"pé-direito DIFERENTE em legenda/corte, prefira o da prancha e anote a "
+                            f"divergência; (d) NÃO deixe pintura/revestimento com quantidade 0 por falta "
+                            f"de pé-direito — ele está aqui.\n"
+                        )
                     dxf_prompt = f"""Analise os dados extraídos de um arquivo DXF de projeto de {_proj_kind}.
 Os dados abaixo foram extraídos automaticamente do arquivo CAD (blocos, textos, layers, comprimentos, áreas).
 Gere itens quantitativos (descrição + unidade + quantidade, SEM preço) com base nesses dados.
-{_estrutura_directive}
+{_estrutura_directive}{_pd_directive}
 {structured_text}
 
 ════════════════════════════════════════════════════════
