@@ -4812,7 +4812,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     _png_path = os.path.join(work_dir, os.path.splitext(_fname)[0] + '.png')
                     try:
                         _t_r0 = time.time()
-                        _deu = render_dxf_to_png_safe(_dxf_path, _png_path, timeout_s=60)
+                        _motivo: list = []
+                        _deu = render_dxf_to_png_safe(_dxf_path, _png_path,
+                                                      timeout_s=60,
+                                                      motivo_out=_motivo)
                         _dur = time.time() - _t_r0
                     except Exception as _er:
                         _prev["erro"] += 1
@@ -4832,10 +4835,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _mb = round(os.path.getsize(_dxf_path) / (1024 * 1024), 1)
                         except OSError:
                             pass
-                        print(f"[cad-preview] FALHOU {_fname} ({_dur:.0f}s, {_mb} MB)")
+                        # 🚨 O MOTIVO, vindo do subprocesso. Sem ele o log dizia
+                        # só "(nao foi tempo)" — que descarta o timeout e não diz
+                        # mais nada. Medido em 15/08 no 1º DWG do Giovani: o
+                        # arquivo estava lá (sem_dxf=0), falhou em 10s, e a razão
+                        # exata existia impressa no filho e era descartada.
+                        _pq = (_motivo[0] if _motivo else "sem motivo capturado")
+                        print(f"[cad-preview] FALHOU {_fname} ({_dur:.0f}s, {_mb} MB): {_pq}")
                         _log_error("motor:preview-prancha",
                                    f"falhou arq={_fname} dur={_dur:.0f}s tam={_mb}MB "
-                                   f"{'(bateu no timeout)' if _dur >= 58 else '(nao foi tempo)'}",
+                                   f"{'(bateu no timeout)' if _dur >= 58 else '(nao foi tempo)'} "
+                                   f"motivo={_pq}",
                                    job_id)
                 # Resumo SEMPRE — inclusive quando tudo deu certo. Ausência de
                 # linha aqui passa a significar "o preview nem rodou", que é

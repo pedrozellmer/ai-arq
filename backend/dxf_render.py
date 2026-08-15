@@ -91,6 +91,11 @@ def render_dxf_to_png(
         True se OK; False se falhou.
     """
     if not os.path.exists(dxf_path):
+        # 🪤 Este era o ÚNICO return False sem uma palavra. Quem chama via
+        # subprocesso lê a saída do filho pra saber o motivo — e aqui ele saía
+        # mudo, virando "codigo 1, sem mensagem". Arquivo sumido é justamente a
+        # falha que a gente mais viu no preview (todo DWG, até 14/08/2026).
+        print(f"[dxf_render] arquivo nao existe: {dxf_path}")
         return False
 
     try:
@@ -177,8 +182,17 @@ def render_dxf_to_png(
 
 
 def render_dxf_to_png_safe(dxf_path: str, output_png_path: str,
-                            timeout_s: int = 60) -> bool:
+                            timeout_s: int = 60,
+                            motivo_out: Optional[list] = None) -> bool:
     """Wrapper com timeout REAL: roda o render num SUBPROCESSO.
+
+    `motivo_out`: lista opcional onde este wrapper DEPOSITA o motivo da falha.
+    🚨 Por que existe (15/08/2026): o filho já imprime a razão exata — "preview
+    PULADO: N entidades", "Erro ao abrir", "Erro ao renderizar: <exceção>" — e
+    o `capture_output=True` daqui jogava tudo fora. No 1º DWG do Giovani o
+    preview falhou em 10s com `sem_dxf=0` (arquivo presente!) e o log só sabia
+    dizer "falhou (nao foi tempo)". A causa existia, escrita, a um passo de ser
+    gravada — a mesma falha silenciosa que este arquivo inteiro combate.
 
     Era via threading (17/07): quando dava timeout, o t.join só parava de
     ESPERAR — a thread do matplotlib continuava viva alocando memória (não dá
@@ -214,19 +228,43 @@ def render_dxf_to_png_safe(dxf_path: str, output_png_path: str,
         _preexec = _cap_mem
     except Exception:
         _preexec = None
+    def _anota(txt):
+        if motivo_out is not None:
+            motivo_out.append(str(txt)[:300])
+
     try:
         _kw = dict(cwd=os.path.dirname(os.path.abspath(__file__)),
-                   timeout=timeout_s, capture_output=True)
+                   timeout=timeout_s, capture_output=True, text=True,
+                   errors="replace")
         if _preexec is not None:
             _kw["preexec_fn"] = _preexec
         proc = subprocess.run(
             [sys.executable, "-c", code, dxf_path, output_png_path], **_kw
         )
-        return proc.returncode == 0 and os.path.exists(output_png_path)
+        _ok = proc.returncode == 0 and os.path.exists(output_png_path)
+        if not _ok:
+            # A razão VEM do filho — ele já a imprime. Pega a última linha útil
+            # de stdout (onde o dxf_render escreve) ou de stderr (onde vai o
+            # traceback quando o filho morre feio, ex.: estourou o RLIMIT).
+            _saida = (proc.stdout or "").strip().splitlines()
+            _erro = (proc.stderr or "").strip().splitlines()
+            _linha = (_saida[-1] if _saida else "") or (_erro[-1] if _erro else "")
+            if not _linha:
+                # Sem uma palavra do filho: o returncode é o que sobra. Negativo
+                # em POSIX = morreu por sinal (-9 é OOM-killer / RLIMIT).
+                _linha = (f"filho morreu com sinal {-proc.returncode} "
+                          f"(provavel estouro de memoria)" if proc.returncode < 0
+                          else f"filho saiu com codigo {proc.returncode}, sem mensagem")
+            elif proc.returncode == 0:
+                _linha = f"render disse OK mas o PNG nao existe — {_linha}"
+            _anota(_linha)
+        return _ok
     except subprocess.TimeoutExpired:
         # subprocess.run já matou o filho ao estourar o timeout — memória liberada.
         print(f"[dxf_render] Timeout ({timeout_s}s) em {dxf_path} — subprocesso morto, memória liberada")
+        _anota(f"timeout de {timeout_s}s — subprocesso morto")
         return False
     except Exception as e:
         print(f"[dxf_render] subprocesso não lançou ({type(e).__name__}: {e}) — fallback in-process")
+        _anota(f"subprocesso nao lancou ({type(e).__name__}) — caiu no fallback in-process")
         return render_dxf_to_png(dxf_path, output_png_path)
