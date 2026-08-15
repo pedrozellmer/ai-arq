@@ -28,15 +28,42 @@ import ezdxf
 from ezdxf.addons.drawing import RenderContext, Frontend
 from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 
-# Teto de entidades pro PREVIEW. Medido em 17/07 com o DXF do Rômulo (CEM Profa
-# Isabel Castro Viana): 9.766 entidades → o matplotlib acumulou 2,4 GB e nem
-# completou (o process_job inteiro chegou a 4,3 GB). Num servidor de 2 GB isso
-# sozinho já derruba o processo (OOM → reinício → job órfão). O preview é só
-# enfeite (visualizar-prancha), então acima deste teto a gente PULA o render —
-# nunca vale arriscar o servidor e o quantitativo inteiro por uma imagem.
-# 3000 pega o caso denso com folga e deixa passar prancha de arquitetura normal
-# (centenas a ~2 mil entidades).
-MAX_RENDER_ENTITIES = 3000
+# Teto de entidades pro PREVIEW.
+#
+# Origem (17/07): o DXF do Rômulo (CEM Profa Isabel Castro Viana) com 9.766
+# entidades fez o matplotlib acumular 2,4 GB sem completar, e o process_job
+# inteiro chegou a 4,3 GB — num servidor de 2 GB, OOM → reinício → job órfão.
+# O teto virou 3000 pra proteger o SERVIDOR.
+#
+# Revisto em 14/08/2026 — o teto estava calibrado contra o inimigo errado.
+# Medido pela porta da produção (subprocesso), pico de RSS por psutil:
+#
+#   entidades | segundos | pico RSS | % do RLIMIT de 1.536 MB
+#      3.000  |    3,0   |  131 MB  |   9%    <- teto antigo
+#     12.000  |   31,4   |  255 MB  |  17%    <- teto novo
+#     20.000  |   31,0   |  362 MB  |  24%
+#     40.000  |   66,2   |  627 MB  |  41%    <- só aqui passa dos 60s
+#
+# Quem aperta é o TEMPO, não a memória: nem 40.000 entidades usam metade do
+# RLIMIT_AS de 1,5 GB que o subprocesso ganhou em 22/07. Esse RLIMIT + o
+# timeout de 60s já fazem o que o teto de 3000 tentava fazer sozinho em 17/07,
+# e fazem melhor — o filho morre sozinho, sem levar o servidor junto.
+#
+# 12.000 é conservador de propósito: roda em ~31s, metade do timeout, deixando
+# 2× de folga. Acima do teto o preview daquela prancha é pulado; acima de
+# ~35.000 ele bateria no timeout, seria MATADO e ficaria REGISTRADO — falha
+# cosmética, contida e visível.
+#
+# 🪤 A medição usou geometria SINTÉTICA (linha, texto, círculo, hachura SOLID
+# simples). Prancha real com hachura de contorno complexo, bloco aninhado e
+# fonte SHX custa mais por entidade — daí a folga de 2×, e daí o teto se apoiar
+# no timeout em vez de tentar substituí-lo.
+#
+# 🪤 Duas medições ANTERIORES desta mesma tabela estavam erradas e foram
+# descartadas: uma somava o boot do matplotlib ao tempo do render (4× a mais),
+# e a outra media RAM com tracemalloc — que só enxerga alocação do Python e
+# ignora os buffers do Agg, que são em C.
+MAX_RENDER_ENTITIES = int(os.getenv("MAX_RENDER_ENTITIES", "12000"))
 
 
 def render_dxf_to_png(
@@ -125,8 +152,18 @@ def render_dxf_to_png(
         fig.savefig(output_png_path, dpi=dpi, bbox_inches="tight",
                     pad_inches=0.2, facecolor="white")
         plt.close(fig)
-        print(f"[dxf_render] OK: {os.path.basename(dxf_path)} → "
-              f"{os.path.basename(output_png_path)} ({os.path.getsize(output_png_path)} bytes)")
+        # 🪤 O print de SUCESSO não pode derrubar o sucesso. Ele ficava dentro
+        # do try e usava "→": num console que não é UTF-8 (cp1252 do Windows,
+        # ou container com locale C) o próprio print levanta UnicodeEncodeError,
+        # cai no except lá embaixo e a função devolve False — com o PNG já
+        # gravado no disco. Achado em 14/08/2026 testando o teto de entidades:
+        # o render de 6.000 entidades "falhou" e o PNG estava lá, 1.830 bytes.
+        try:
+            print(f"[dxf_render] OK: {os.path.basename(dxf_path)} -> "
+                  f"{os.path.basename(output_png_path)} "
+                  f"({os.path.getsize(output_png_path)} bytes)")
+        except Exception:
+            pass
         return True
 
     except Exception as e:

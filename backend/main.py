@@ -4583,6 +4583,13 @@ def _dedupe_revisoes(file_paths: list) -> tuple:
     return mantidos, descartados
 
 
+# Teto pra GUARDAR o DXF convertido de DWG até a hora do preview (14/08/2026).
+# Acima disso o render bate no timeout de 60s de qualquer jeito — o DXF de
+# 262 MB do job 9bf827fc estourou em 12/08 —, então segurar o arquivo só ocupa
+# disco. Não é um teto de qualidade: é o ponto onde guardar deixa de ter uso.
+_PREVIEW_MOVE_MAX_MB = float(os.getenv("PREVIEW_MOVE_MAX_MB", "50"))
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -5997,11 +6004,60 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         pass
                     # Libera o DXF convertido (temp dir arq_dxf_*) desta prancha —
                     # senão os N DXFs convertidos acumulam no /tmp do dyno durante o
-                    # job (leak achado na auditoria 06/07; caso Thamiry, 22 DWGs). O
-                    # preview lê de work_dir, não desses temp dirs, então é seguro.
+                    # job (leak achado na auditoria 06/07; caso Thamiry, 22 DWGs).
+                    #
+                    # 🚨 O comentário antigo aqui dizia "o preview lê de work_dir,
+                    # então é seguro" — e era FALSO. O DXF convertido de DWG nunca
+                    # esteve em work_dir: `convert_dwg_to_dxf` grava num
+                    # tempfile.mkdtemp(prefix="arq_dxf_"). Esta linha apagava o
+                    # arquivo ~1.200 linhas ANTES de a thread de preview começar
+                    # (main.py:7159). Medido em 14/08/2026: **10 jobs seguidos com
+                    # ok=0**, todo projeto de DWG marcando `sem_dxf` — o preview de
+                    # DWG nunca funcionou, nem uma vez.
+                    #
+                    # Conserto: MOVE pro work_dir (que sobrevive ao job) em vez de
+                    # apagar. `shutil.move` no mesmo filesystem é rename, custo
+                    # ~zero. O temp dir some do mesmo jeito, então o leak de 06/07
+                    # continua fechado. Atualiza `dxf_paths[idx]` pra todo mundo
+                    # depois daqui ver o caminho vivo.
+                    #
+                    # 🪤 Teto de tamanho: acima dele o render estoura o timeout de
+                    # 60s de qualquer forma (o DXF de 262 MB do job 9bf827fc bateu
+                    # no timeout em 12/08), então guardar o arquivo seria só ocupar
+                    # disco à toa. Quando pula, GRAVA o motivo — "sem preview" nunca
+                    # pode voltar a ser silêncio.
                     try:
                         _dxf_dir = os.path.dirname(dxf_path)
                         if os.path.basename(_dxf_dir).startswith("arq_dxf_"):
+                            try:
+                                _tam_mb = os.path.getsize(dxf_path) / (1024 * 1024)
+                            except OSError:
+                                _tam_mb = 0.0
+                            if _tam_mb <= _PREVIEW_MOVE_MAX_MB:
+                                # 🚨 Subpasta própria, NUNCA a raiz do work_dir: o
+                                # conversor ODA devolve "<nome>.dxf", então um
+                                # cliente que sobe `planta.dwg` E `planta.dxf`
+                                # teria o DXF ORIGINAL dele sobrescrito aqui
+                                # (shutil.move sobrescreve calado). O arquivo do
+                                # cliente é intocável — o preview usa o cantinho
+                                # dele.
+                                _prev_dir = os.path.join(work_dir, "_preview")
+                                os.makedirs(_prev_dir, exist_ok=True)
+                                _destino = os.path.join(
+                                    _prev_dir, os.path.basename(dxf_path))
+                                try:
+                                    shutil.move(dxf_path, _destino)
+                                    dxf_paths[idx] = _destino
+                                except Exception as _mv_e:
+                                    _log_error("motor:preview-prancha",
+                                               f"nao consegui guardar {os.path.basename(dxf_path)} "
+                                               f"pro preview: {type(_mv_e).__name__}: {_mv_e}",
+                                               job_id)
+                            else:
+                                _log_error("motor:preview-prancha",
+                                           f"preview pulado arq={os.path.basename(dxf_path)} "
+                                           f"tam={_tam_mb:.1f}MB > teto {_PREVIEW_MOVE_MAX_MB}MB "
+                                           f"(renderizar estouraria o timeout)", job_id)
                             shutil.rmtree(_dxf_dir, ignore_errors=True)
                     except Exception:
                         pass
@@ -7153,6 +7209,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Preview das pranchas (cosmético): inicia SÓ AGORA, depois do pico de RAM
         # da análise+planilha, pra o matplotlib não coincidir com o momento crítico
         # (fix OOM 2026-07-22). Lê os DXF do work_dir, que sobrevive ao fim do job.
+        # 🪤 "Lê do work_dir" só passou a ser VERDADE em 14/08/2026: até então o
+        # DXF convertido de DWG morava num temp dir apagado lá em cima (ver o
+        # bloco de limpeza em process_job), e por isso o preview de DWG nunca
+        # rodou — 10 jobs seguidos com ok=0. Agora o arquivo é movido pra cá.
         if cad_paths:
             try:
                 import threading as _t2
