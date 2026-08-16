@@ -752,6 +752,50 @@ async def scheduler_tick(request: Request, force_slot: Optional[str] = None):
             })
             results.append({"slot": slot, "status": "failed", "error": str(e)})
 
+    # ── Vigia do VENCIMENTO DO TOKEN (16/08/2026) ────────────────────────────
+    # Por que existe: o token venceu em 08/08 12:54 e NINGUÉM soube — 5 posts
+    # falharam calados por uma semana ("Container falhou: None") e a conta que
+    # mais trazia cadastro ficou muda. A renovação é manual (Pedro no painel da
+    # Meta), então o mínimo é avisar ANTES, com folga.
+    # Âncora durável: linha `instagram:token-renovado` no error_log do Supabase
+    # (o _config.json do agente mora em /tmp e evapora a cada restart do
+    # Render). Toda renovação de token DEVE gravar essa linha — a de 16/08 foi
+    # gravada à mão. Avisa a partir do dia 53 (D-7 do vencimento de 60 dias) e
+    # repete no máximo 1×/semana. Best-effort: nunca derruba o tick.
+    try:
+        _tok = _supa_select("error_log",
+                            "stage=eq.instagram%3Atoken-renovado"
+                            "&select=created_at&order=created_at.desc&limit=1")
+        if _tok:
+            _set_at = datetime.fromisoformat(
+                _tok[0]["created_at"].replace("Z", "+00:00"))
+            _idade_d = (datetime.now(timezone.utc) - _set_at).days
+            if _idade_d >= 53:
+                _av = _supa_select("error_log",
+                                   "stage=eq.instagram%3Atoken-aviso"
+                                   "&select=created_at&order=created_at.desc&limit=1")
+                _pode = True
+                if _av:
+                    _ult = datetime.fromisoformat(
+                        _av[0]["created_at"].replace("Z", "+00:00"))
+                    _pode = (datetime.now(timezone.utc) - _ult).days >= 6
+                if _pode:
+                    from main import _log_error, _notify_admin  # deferred: evita import circular
+                    _rest = max(0, 60 - _idade_d)
+                    _log_error("instagram:token-aviso",
+                               f"token com {_idade_d} dias — vence em ~{_rest} dia(s)")
+                    _notify_admin(
+                        f"⏰ Token do Instagram vence em ~{_rest} dia(s)",
+                        f"O token do Meta foi renovado há {_idade_d} dias e vale 60.<br><br>"
+                        f"Renovar (5 min): developers.facebook.com → app AI.arq → "
+                        f"API do Instagram → Configuração da API → <b>Gerar token</b> na conta "
+                        f"ai.arq.br → copiar → Render → ai-arq → Environment → "
+                        f"<b>META_ACCESS_TOKEN</b> → colar → Save.<br><br>"
+                        f"Em 08/08 ele venceu sem aviso e o Instagram ficou mudo por uma "
+                        f"semana — este e-mail existe pra isso não repetir.")
+    except Exception as _e_tok:
+        logger.warning(f"vigia do token falhou (não-fatal): {_e_tok}")
+
     return {"ok": True, "processed": len(results), "results": results}
 
 
