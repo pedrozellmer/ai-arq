@@ -120,6 +120,41 @@
     </div>
     <p id="proc-pct" class="text-xs text-gray-500 mt-2" aria-live="polite">3%</p>
     <p class="text-xs text-gray-400 mt-3">Pode deixar esta aba aberta — a página recarrega sozinha quando terminar.</p>
+
+    <!-- Card das 3 perguntas (16/08): respostas que MELHORAM esta planilha.
+         Só o cliente sabe pé-direito, área e prazo — e são as linhas que mais
+         saem zeradas (medido nas revisões reais). Resposta entra no job em
+         andamento (a consolidação relê a linha do projeto). -->
+    <div id="proc-perguntas" class="mt-5 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+      <p class="text-sm font-semibold text-gray-800">Enquanto a IA lê, 3 respostas que deixam a sua planilha melhor:</p>
+      <div class="grid sm:grid-cols-3 gap-3 mt-3">
+        <label class="block">
+          <span class="text-xs text-gray-600">Pé-direito (m)</span>
+          <input id="pp-pd" type="text" inputmode="decimal" placeholder="ex.: 2,80"
+                 class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <span class="text-[11px] text-gray-400">destrava pintura e revestimento em m²</span>
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Área total aproximada (m²)</span>
+          <input id="pp-area" type="text" inputmode="decimal" placeholder="ex.: 192"
+                 class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <span class="text-[11px] text-gray-400">usada só se a planta não medir sozinha</span>
+        </label>
+        <label class="block">
+          <span class="text-xs text-gray-600">Prazo previsto da obra (meses)</span>
+          <input id="pp-prazo" type="text" inputmode="numeric" placeholder="ex.: 12"
+                 class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <span class="text-[11px] text-gray-400">preenche a administração local</span>
+        </label>
+      </div>
+      <div class="flex items-center gap-3 mt-3">
+        <button id="pp-enviar" onclick="enviarRespostasProc()"
+                class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium">
+          Usar na planilha</button>
+        <span id="pp-status" class="text-xs text-gray-500"></span>
+      </div>
+      <p class="text-[11px] text-gray-400 mt-2">O que vier daqui entra como <b>estimado</b>, rotulado "informado por você" — nunca como medido.</p>
+    </div>
   </div>
 <div id="erro-block" class="hidden rounded-2xl border-2 border-red-200 bg-red-50 p-6" role="alert">
     <div class="flex items-start gap-3">
@@ -1283,9 +1318,43 @@ async function carregarStatsEntregas() {
 // do fluxo add-file acima: a barra ANDA suave por tempo (nunca congela na
 // fase da IA), sem passar de 95% até concluir de verdade. Quando o status
 // virar done/error, a página recarrega sozinha.
+// Card das 3 perguntas: envia o que o cliente preencheu; o backend valida
+// faixas (PD 1,8–8 m; área 5–1M m²; prazo 1–120) e a consolidação relê antes
+// das derivações. Já respondeu neste job → card some (localStorage).
+async function enviarRespostasProc() {
+  const st = document.getElementById('pp-status');
+  const corpo = {};
+  const v = id => (document.getElementById(id).value || '').trim();
+  if (v('pp-pd')) corpo.pe_direito = v('pp-pd');
+  if (v('pp-area')) corpo.area_total = v('pp-area');
+  if (v('pp-prazo')) corpo.prazo_meses = v('pp-prazo');
+  if (!Object.keys(corpo).length) { st.textContent = 'Preencha ao menos um campo.'; return; }
+  st.textContent = 'Enviando…';
+  try {
+    const r = await authFetch(`${API_BASE}/api/project/${jobId}/respostas-processamento`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(corpo)
+    });
+    const b = await r.json().catch(() => ({}));
+    if (!r.ok) { st.textContent = b.detail || 'Não consegui salvar — confira os valores.'; return; }
+    try { localStorage.setItem('pp_respondido_' + jobId, '1'); } catch (_) {}
+    const card = document.getElementById('proc-perguntas');
+    if (card) card.innerHTML = '<p class="text-sm text-emerald-700 font-medium">✓ Valeu! Suas respostas entram nesta leitura.</p>';
+  } catch (e) {
+    st.textContent = 'Falha de rede — tenta de novo em instantes.';
+  }
+}
+
 function mostrarProcessando(live, session) {
   const bloco = document.getElementById('proc-block');
   if (!bloco) return;
+  // já respondeu neste job → não pergunta de novo
+  try {
+    if (localStorage.getItem('pp_respondido_' + jobId) === '1') {
+      const _c = document.getElementById('proc-perguntas');
+      if (_c) _c.classList.add('hidden');
+    }
+  } catch (_) {}
   ['kpi-strip', 'erro-block', 'raiox-card', 'entregas-section', 'chat-quant',
    'cotacoes-section', 'cad-upgrade-banner', 'expansao-disciplinas',
    'feedback-card', 'reprocess-box', 'arquivos-box'].forEach(id => {

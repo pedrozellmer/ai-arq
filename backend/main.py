@@ -4507,6 +4507,46 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
     return 1
 
 
+def _derive_admin_prazo(items, prazo_meses: float) -> int:
+    """Preenche ADMINISTRAÇÃO LOCAL zerada com o prazo INFORMADO pelo cliente.
+
+    Por que (16/08/2026): a linha "administração local — X meses" sai zerada em
+    praticamente todo projeto ("quantidade em meses a definir conforme
+    cronograma") — e o Giovani a preencheu NA MÃO com 12 nas duas planilhas
+    dele. Só o cliente sabe o prazo; agora ele pode responder durante o
+    processamento (card das 3 perguntas). Mesmas regras da derivação de
+    pintura: nunca sobrescreve valor existente, sai ESTIMADO rotulado
+    "informado por você" (regra nº1), devolve quantos preencheu."""
+    if not prazo_meses or prazo_meses <= 0:
+        return 0
+    n = 0
+    for it in items:
+        d = (getattr(it, "description", "") or "").lower()
+        u = (getattr(it, "unit", "") or "").strip().lower()
+        if u not in ("mês", "mes", "meses"):
+            continue
+        if "administra" not in d and "canteiro" not in d and "encarregado" not in d:
+            continue
+        try:
+            q = float(getattr(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if q > 0:
+            continue                      # cliente/modelo já pôs número: intocável
+        it.quantity = round(float(prazo_meses), 1)
+        it.observations = (f"⚠ ESTIMADO — prazo de {prazo_meses:g} mês(es) informado "
+                           f"por você durante o processamento. Confira contra o "
+                           f"cronograma antes de orçar. "
+                           + (getattr(it, "observations", "") or ""))
+        try:
+            from models import Confidence
+            it.confidence = Confidence.ESTIMADO
+        except Exception:
+            pass
+        n += 1
+    return n
+
+
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "") -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
@@ -6897,6 +6937,25 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _upd = float(user_pe_direito or 0)
         except (TypeError, ValueError):
             _upd = 0
+        # 🔑 RELÊ a linha do projeto ANTES das derivações (16/08/2026): o
+        # cliente agora pode responder pé-direito/área/prazo ENQUANTO o job
+        # roda (card das 3 perguntas). Os kwargs trazem o que ele informou no
+        # UPLOAD; a linha traz o que ele respondeu DEPOIS. Resposta dada antes
+        # deste ponto entra nesta leitura — sem esta releitura, cairia só no
+        # reprocesso. Best-effort: falhou a leitura, seguimos com os kwargs.
+        _uprazo = 0.0
+        try:
+            _rrows = _supa_rest_service(
+                "GET", "projects",
+                params={"job_id": f"eq.{job_id}",
+                        "select": "user_total_area,user_pe_direito,user_prazo_meses"}) or []
+            if _rrows:
+                _r0 = _rrows[0]
+                _upd = float(_r0.get("user_pe_direito") or 0) or _upd
+                user_total_area = float(_r0.get("user_total_area") or 0) or user_total_area
+                _uprazo = float(_r0.get("user_prazo_meses") or 0)
+        except Exception as _erl:
+            print(f"[respostas] releitura falhou (não-fatal): {_erl}")
         if _upd > 0:
             project_data.user_pe_direito = round(_upd, 2)
             print(f"[pe-direito-informado] job={job_id}: {_upd} m")
@@ -6992,6 +7051,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _epd:
             print(f"[pe-direito] job={job_id}: derivação falhou: {_epd}")
             _log_error("motor:pe-direito", f"FALHOU: {_epd}", job_id)
+        # Prazo informado (card das 3 perguntas, 16/08) → administração local.
+        # Gravar SEMPRE que veio prazo, mesmo com 0 preenchidos — mesma lição
+        # do pé-direito em 03/08: sem a linha no log não dá pra distinguir
+        # "ninguém respondeu" de "respondeu e não derivou nada".
+        try:
+            if _uprazo and _uprazo > 0:
+                _n_adm = _derive_admin_prazo(all_items, _uprazo)
+                _log_error("motor:prazo-informado",
+                           f"informado={_uprazo} administracao_preenchida={_n_adm}", job_id)
+        except Exception as _epz:
+            _log_error("motor:prazo-informado", f"FALHOU: {_epz}", job_id)
         # Coerência de unidade (caso Rafael 01/08): item CONTÁVEL (condulete,
         # tomada, ponto...) com unidade linear/área não pode ficar CONFIRMADO —
         # a quantidade veio de outra medição pendurada na linha errada.
@@ -8453,6 +8523,57 @@ async def get_status(job_id: str, request: Request):
     if job_id not in jobs:
         raise HTTPException(404, "Job não encontrado")
     return jobs[job_id]
+
+
+@app.post("/api/project/{job_id}/respostas-processamento")
+async def respostas_processamento(job_id: str, request: Request):
+    """Recebe as respostas do cliente ENQUANTO o job processa (Pedro, 16/08:
+    "enquanto o projeto estiver rodando, o cliente esperando, fazer umas 3
+    perguntas pra ele").
+
+    Por que essas 3 perguntas: são as respostas das linhas que MAIS saem
+    zeradas, medido nas revisões reais da semana —
+    - pé-direito  → pintura/revestimento/alvenaria em m² (Giovani informou
+      3,73 e a pintura saiu 597 m² no filhote);
+    - área total  → base honesta quando a planta não mede (caso Catarina);
+    - prazo (meses) → administração local (Giovani digitou 12 nas DUAS
+      planilhas — só o cliente sabe o prazo).
+
+    As respostas caem na linha do projeto; a consolidação RELÊ a linha antes
+    das derivações, então resposta dada antes do fim do job entra NESTA
+    leitura. Depois do fim, vale pra reprocesso/filhote. Tudo que deriva
+    daqui é ESTIMADO rotulado "informado por você" (regra nº1)."""
+    _require_project_owner(request, job_id)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+
+    def _num(campo, lo, hi):
+        try:
+            v = float(str(body.get(campo, "")).replace(",", "."))
+        except (TypeError, ValueError):
+            return None
+        return v if lo <= v <= hi else None
+
+    patch = {}
+    _pd = _num("pe_direito", 1.8, 8.0)       # mesma faixa do upload
+    _ar = _num("area_total", 5.0, 1_000_000)
+    _pz = _num("prazo_meses", 1, 120)
+    if _pd is not None:
+        patch["user_pe_direito"] = round(_pd, 2)
+    if _ar is not None:
+        patch["user_total_area"] = round(_ar, 2)
+    if _pz is not None:
+        patch["user_prazo_meses"] = round(_pz, 1)
+    if not patch:
+        raise HTTPException(400, "Nenhuma resposta válida (pe_direito 1,8–8 m; "
+                                 "area_total 5–1.000.000 m²; prazo_meses 1–120).")
+    _supa_rest_service("PATCH", "projects", body=patch,
+                       params={"job_id": f"eq.{job_id}"})
+    _log_error("motor:respostas-processamento",
+               f"cliente respondeu durante o job: {patch}", job_id)
+    return {"ok": True, "salvo": sorted(patch.keys())}
 
 
 @app.get("/api/download/{job_id}")
