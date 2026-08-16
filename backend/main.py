@@ -15464,6 +15464,37 @@ def _find_prancha_file(job_id: str, ref: str) -> Optional[str]:
     return best if best_score >= 1 else None
 
 
+@app.get("/api/admin/baixar-arquivo/{job_id}")
+async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
+    """ADMIN — baixa um ARQUIVO ORIGINAL do job direto do Storage.
+
+    Por que existe (16/08/2026): investigar o motor exige o arquivo real do
+    cliente (caso Eduarda: ver o que os 504 ATTRIBs contêm; caso Giovani:
+    143 hachuras somando 0,00 m²). O caminho era o painel do Supabase à mão —
+    a UI virtualizada resiste à automação e o /api/sheet só entende PDF
+    (`_find_prancha_file` filtra .pdf). Sem `nome`, lista os arquivos do job.
+    Uso legítimo: depuração interna pelo Pedro/admin (LGPD: operador)."""
+    _require_admin(request)
+    from fastapi.responses import Response
+    from urllib.parse import unquote as _unq
+    nomes = []
+    try:
+        nomes = [_unq(n) for n in _supabase_storage_list(PRANCHAS_BUCKET, f"{job_id}/")]
+    except Exception as _e:
+        raise HTTPException(502, f"Storage não respondeu: {_e}")
+    if not nome:
+        return {"job_id": job_id, "arquivos": nomes}
+    alvo = next((n for n in nomes if n == nome or _unq(n) == nome), None)
+    if not alvo:
+        raise HTTPException(404, f"'{nome}' não está no job (tem: {nomes[:10]})")
+    data = _supabase_storage_download_prancha(job_id, alvo)
+    if not data:
+        raise HTTPException(404, "download vazio — arquivo sumiu do Storage?")
+    return Response(content=data, media_type="application/octet-stream",
+                    headers={"Content-Disposition": f'attachment; filename="{alvo}"',
+                             "X-Filename": alvo})
+
+
 @app.get("/api/sheet/{job_id}")
 async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
     """Serve a prancha (PDF, PNG, etc) inline pro viewer. Pra DWG/DXF
