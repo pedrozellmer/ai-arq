@@ -15720,6 +15720,13 @@ async def admin_eval_reprocess(job_id: str, request: Request):
         daemon=True,
     ).start()
 
+    # Vigia de auto-liberação (Pedro, 15/08): quando o filhote concluir, uma IA
+    # juíza compara as duas planilhas e libera sozinha se a nova for claramente
+    # melhor. Desligável por env; qualquer dúvida deixa na fila manual.
+    if os.getenv("AUTO_LIBERAR_FILHOTE", "1") != "0":
+        threading.Thread(target=_auto_liberar_filhote_quando_pronto,
+                         args=(eval_job_id, job_id), daemon=True).start()
+
     print(f"[eval] avaliação {eval_job_id} disparada a partir de {job_id} "
           f"({len(eval_file_paths)} arquivo(s), {types_summary})")
     return {
@@ -15789,6 +15796,161 @@ def _ai_suggest_combine(files_meta: list, base_type: str = "") -> dict:
     except Exception as _e:
         print(f"[combine-preview] IA falhou, fallback: {_e}")
         return _fallback()
+
+
+def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
+                                        timeout_min: int = 45):
+    """Espera o filhote concluir e, se uma IA JUÍZA disser que a planilha nova
+    é claramente melhor, libera pro cliente sozinha (Pedro, 15/08/2026:
+    "quando fizermos um filhote e ficar melhor, já libera automático").
+
+    🔑 Por que JUÍZA e não contagem: no mesmo dia do pedido, o filhote BOM do
+    Giovani (ev988ba9) tinha números PIORES que o original (5 medidos vs 7,
+    5 zerados vs 4) e era a planilha certa — preencheu pintura (597 m²) e
+    forro (256 m²) que estavam em branco. Contagem teria recusado o caso que
+    motivou a feature; e teria LIBERADO o reprocesso ruim do meio-dia (14
+    zerados). "Melhor" aqui é juízo de conteúdo, não aritmética.
+
+    Travas DURAS (não passam pela juíza, decidem antes dela):
+    - original com revisão do cliente → NUNCA auto (regra nº7; o contato é do
+      Pedro, à mão — mesma trava do botão manual);
+    - original sem dono, filhote com erro, ou já liberado → não faz nada;
+    - juíza em dúvida ou indisponível → fica na fila 👶 Filhotes, como hoje.
+    Tudo que a juíza decidir (liberar ou não) sai no error_log stage
+    `filhote:auto` e o Pedro é avisado por e-mail interno; `?revogar=1` no
+    endpoint manual continua desfazendo.
+    """
+    import time as _t
+    import json as _j
+    fim = _t.time() + timeout_min * 60
+    status = ""
+    while _t.time() < fim:
+        _t.sleep(30)
+        try:
+            rows = _supa_rest_service("GET", "projects",
+                   params={"job_id": f"eq.{eval_job_id}", "select": "status,user_id"}) or []
+        except Exception:
+            continue
+        if not rows:
+            continue
+        status = rows[0].get("status") or ""
+        if status in ("done", "error"):
+            break
+    try:
+        if status != "done":
+            _log_error("filhote:auto",
+                       f"não avaliei: filhote terminou como '{status or 'timeout'}'",
+                       eval_job_id)
+            return
+        if (rows[0].get("user_id") or "") != "eval":
+            return          # alguém já liberou à mão no meio do caminho
+        pai = (_supa_rest_service("GET", "projects",
+               params={"job_id": f"eq.{pai_id}",
+                       "select": "job_id,user_id,user_email,user_name,project_name"}) or [])
+        if not pai or not pai[0].get("user_id"):
+            _log_error("filhote:auto", "não liberei: original sem dono", eval_job_id)
+            return
+        pai = pai[0]
+        revisoes = len(_supa_rest_service("GET", "item_reviews",
+                       params={"job_id": f"eq.{pai_id}", "select": "id"}) or [])
+        if revisoes > 0:
+            _log_error("filhote:auto",
+                       f"não liberei: original tem {revisoes} revisão(ões) do cliente "
+                       f"(regra nº7) — fica pro Pedro decidir à mão", eval_job_id)
+            return
+
+        def _linhas(jid):
+            r = _supa_rest_service("GET", "project_items",
+                params={"job_id": f"eq.{jid}",
+                        "select": "description,unit,quantity,confidence",
+                        "limit": "120"}) or []
+            out = []
+            for x in r:
+                out.append(f"{str(x.get('description',''))[:70]} | "
+                           f"{x.get('quantity')} {x.get('unit','')} | "
+                           f"{x.get('confidence','')}")
+            return out
+        la, lb = _linhas(pai_id), _linhas(eval_job_id)
+        antes = {"itens": len(la),
+                 "medidos": sum(1 for x in la if x.endswith("confirmado"))}
+        depois = {"itens": len(lb),
+                  "medidos": sum(1 for x in lb if x.endswith("confirmado"))}
+
+        prompt = (
+            "Você compara DUAS versões da planilha de quantitativos do MESMO projeto "
+            "e decide se a NOVA deve substituir a ATUAL na tela do cliente.\n\n"
+            "=== ATUAL (o que o cliente vê hoje) ===\n" + "\n".join(la) +
+            "\n\n=== NOVA (releitura com o motor atualizado) ===\n" + "\n".join(lb) +
+            "\n\nCritérios, nesta ordem:\n"
+            "1. LIBERE se a nova preenche com número justificado linhas de serviço que "
+            "estavam ZERADAS (qtd 0) — especialmente m²/m de pintura, forro, piso, "
+            "revestimento — sem perder medições que a atual tinha.\n"
+            "2. NÃO libere se a nova perde itens medidos importantes, traz quantidade "
+            "absurda/incoerente, ou é só uma reorganização sem ganho real.\n"
+            "3. Linha zerada de decisão do cliente (verba, administração, especificação "
+            "a definir) não conta contra nenhuma das duas.\n"
+            "4. NA DÚVIDA, NÃO LIBERE — um humano decide depois; liberar errado custa a "
+            "confiança do cliente.\n\n"
+            "Responda SÓ com JSON: {\"liberar\": true|false, \"motivo\": \"1-2 frases "
+            "em pt-br, citando as linhas que decidiram\"}"
+        )
+        try:
+            import anthropic as _an
+            from llm_retry import call_with_retry as _cwr
+            _cli = _an.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""), timeout=120.0)
+            _r = _cwr(_cli, tag="filhote-juiz", model="claude-sonnet-4-6",
+                      max_tokens=600, temperature=0,
+                      messages=[{"role": "user", "content": prompt}])
+            _txt = _r.content[0].text if _r.content else ""
+            _s, _e = _txt.find("{"), _txt.rfind("}")
+            veredito = _j.loads(_txt[_s:_e + 1]) if (_s >= 0 and _e > _s) else {}
+        except Exception as _je:
+            _log_error("filhote:auto", f"juíza indisponível ({_je}) — fica na fila",
+                       eval_job_id)
+            return
+        motivo = str(veredito.get("motivo") or "")[:300]
+        if not veredito.get("liberar"):
+            _log_error("filhote:auto",
+                       f"juíza NÃO liberou: {motivo or 'sem motivo'} "
+                       f"(antes={antes['medidos']}/{antes['itens']} "
+                       f"depois={depois['medidos']}/{depois['itens']}) — na fila 👶",
+                       eval_job_id)
+            return
+
+        # LIBERAR — mesmo movimento do botão manual
+        novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
+                     + " — nova leitura (motor atualizado)")
+        _supa_rest_service("PATCH", "projects",
+                           body={"user_id": pai["user_id"], "project_name": novo_nome},
+                           params={"job_id": f"eq.{eval_job_id}"})
+        try:
+            _email_ok = _email_leitura_nova(pai, eval_job_id, antes, depois)
+        except Exception as _ee:
+            _email_ok = False
+            print(f"[filhote:auto] email nao saiu (nao-fatal): {_ee}")
+        _log_error("filhote:auto",
+                   f"LIBERADO automático (pai {pai_id}): {motivo} | "
+                   f"antes={antes['medidos']}/{antes['itens']} "
+                   f"depois={depois['medidos']}/{depois['itens']} | "
+                   f"email={'ok' if _email_ok else 'não saiu'}", eval_job_id)
+        try:
+            _notify_admin(
+                "Filhote liberado AUTOMÁTICO pro cliente",
+                f"Filhote <b>{eval_job_id}</b> (original {pai_id}) liberado pra "
+                f"<b>{pai.get('user_email') or '?'}</b>.<br>"
+                f"Juíza: {motivo}<br>"
+                f"antes {antes['medidos']}/{antes['itens']} → "
+                f"depois {depois['medidos']}/{depois['itens']} · "
+                f"e-mail ao cliente: {'enviado' if _email_ok else 'NÃO saiu'}<br>"
+                f"Desfazer: botão Revogar na seção 👶 Filhotes.")
+        except Exception:
+            pass
+    except Exception as _e_auto:
+        # vigia é best-effort: qualquer tropeço deixa o filhote na fila manual
+        try:
+            _log_error("filhote:auto", f"FALHOU (fica na fila): {_e_auto}", eval_job_id)
+        except Exception:
+            pass
 
 
 def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) -> bool:
