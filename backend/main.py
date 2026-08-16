@@ -15544,6 +15544,10 @@ async def reprocess_project(job_id: str, request: Request):
         _uta_orig = float(orig.get("user_total_area") or 0)
     except (TypeError, ValueError):
         _uta_orig = 0
+    try:
+        _upd_orig = float(orig.get("user_pe_direito") or 0)
+    except (TypeError, ValueError):
+        _upd_orig = 0
     _supabase_insert("projects", {
         "job_id": new_job_id,
         "user_id": orig.get("user_id") or "anonymous",
@@ -15557,6 +15561,7 @@ async def reprocess_project(job_id: str, request: Request):
         "status": "queued",
         "parent_job_id": job_id,  # rastreabilidade: novo projeto é filho do original
         "user_total_area": _uta_orig if _uta_orig > 0 else None,  # propaga área informada
+        "user_pe_direito": _upd_orig if _upd_orig > 0 else None,  # idem (faltou até 15/08)
     })
 
     # Incrementar contador do ORIGINAL via RPC atômica
@@ -15577,7 +15582,12 @@ async def reprocess_project(job_id: str, request: Request):
         target=_process_job_throttled,
         args=(new_job_id, new_file_paths, new_work_dir),
         kwargs={"typology": typology, "project_type": ptype,
-                "user_total_area": _uta_orig},
+                "user_total_area": _uta_orig,
+                # O reprocesso do Giovani (4680313d, 15/08) rodou SEM o pé-direito
+                # que ele informou — o campo parava aqui. Caçada completa dos
+                # caminhos que redisparam job feita em 15/08: upload e retomada
+                # já passavam; reprocesso, filhote e avaliação-por-etapa não.
+                "user_pe_direito": _upd_orig},
         daemon=True,
     )
     t.start()
@@ -15687,6 +15697,7 @@ async def admin_eval_reprocess(job_id: str, request: Request):
         "status": "queued",
         "parent_job_id": job_id,  # rastreabilidade + guarda extra contra email
         "user_total_area": orig.get("user_total_area"),  # espelha a área informada do original
+        "user_pe_direito": orig.get("user_pe_direito"),  # idem — pé-direito informado
         "is_eval": True,
     })
 
@@ -15695,10 +15706,17 @@ async def admin_eval_reprocess(job_id: str, request: Request):
     threading.Thread(
         target=_process_job_throttled,
         args=(eval_job_id, eval_file_paths, eval_work_dir),
-        # Passa a área INFORMADA pelo cliente no original — sem isso a avaliação
-        # não é fiel (cai no ramo que zera todo m²). 0 se não houve área informada.
+        # Passa TUDO que o cliente informou no original — sem isso a avaliação
+        # não é fiel. A área já vinha (senão cai no ramo que zera todo m²); o
+        # pé-direito ficou de fora até 15/08/2026 e o 1º eval do Giovani
+        # (eve19aa5) rodou SEM o 3,73 m que ele informou — a pintura saiu 0 e
+        # por um momento pareceu defeito do prompt novo, não do repasse. É o
+        # "campo informado em 3 lugares" de novo: quem adiciona campo informado
+        # tem que caçar TODOS os caminhos que re-disparam job (retomada, filhote,
+        # reprocesso) — cada um monta os kwargs na mão.
         kwargs={"typology": typology, "project_type": ptype,
-                "user_total_area": float(orig.get("user_total_area") or 0)},
+                "user_total_area": float(orig.get("user_total_area") or 0),
+                "user_pe_direito": float(orig.get("user_pe_direito") or 0)},
         daemon=True,
     ).start()
 
@@ -16203,17 +16221,32 @@ async def admin_eval_combine(job_id: str, request: Request):
         current_step=f"Avaliação combinada: {len(eval_file_paths)} arquivo(s) ({types_summary})",
         total_steps=3,
     )
+    # Campos INFORMADOS pelo cliente no projeto-base — sem repassar, a avaliação
+    # roda "mais burra" que o original e o resultado não é comparável (caçada
+    # dos caminhos que redisparam job, 15/08/2026).
+    try:
+        _uta_b = float(base.get("user_total_area") or 0)
+    except (TypeError, ValueError):
+        _uta_b = 0
+    try:
+        _upd_b = float(base.get("user_pe_direito") or 0)
+    except (TypeError, ValueError):
+        _upd_b = 0
     _supabase_insert("projects", {
         "job_id": eval_job_id, "user_id": "eval", "user_email": "", "user_name": "",
         "project_name": f"[TESTE] {_pname or 'Projeto'} — combinado ({types_summary})",
         "typology": typology, "project_type": ptype,
         "files_count": len(eval_file_paths), "file_types": file_types,
         "status": "queued", "parent_job_id": job_id, "is_eval": True,
+        "user_total_area": _uta_b if _uta_b > 0 else None,
+        "user_pe_direito": _upd_b if _upd_b > 0 else None,
     })
     import threading
     threading.Thread(target=_process_job_throttled,
                      args=(eval_job_id, eval_file_paths, eval_work_dir),
-                     kwargs={"typology": typology, "project_type": ptype}, daemon=True).start()
+                     kwargs={"typology": typology, "project_type": ptype,
+                             "user_total_area": _uta_b,
+                             "user_pe_direito": _upd_b}, daemon=True).start()
     print(f"[combine] avaliação combinada {eval_job_id}: {len(sibling_ids)} projeto(s) → "
           f"{len(eval_file_paths)} arquivo(s) ({types_summary})")
     return {
@@ -16260,10 +16293,14 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     if _clen and _clen.isdigit() and int(_clen) > 450 * 1024 * 1024:
         raise HTTPException(413, "Arquivos muito grandes (máx. ~450 MB no total). Envie só as pranchas necessárias.")
 
-    # Projeto original: tipologia/tipo + guarda contra reprocesso concorrente
+    # Projeto original: tipologia/tipo + guarda contra reprocesso concorrente.
+    # Os campos INFORMADOS (área, pé-direito) também — o reprocesso in-place
+    # rodava sem eles até 15/08/2026 (caçada dos caminhos que redisparam job).
     typology, ptype = "office", "arquitetura"
+    _uta_af, _upd_af = 0.0, 0.0
     try:
-        purl = f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}&select=typology,project_type,status"
+        purl = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
+                f"&select=typology,project_type,status,user_total_area,user_pe_direito")
         preq = urllib.request.Request(purl, method="GET")
         preq.add_header("apikey", SUPABASE_KEY)
         preq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -16271,6 +16308,14 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         if prows:
             typology = prows[0].get("typology") or "office"
             ptype = prows[0].get("project_type") or "arquitetura"
+            try:
+                _uta_af = float(prows[0].get("user_total_area") or 0)
+            except (TypeError, ValueError):
+                _uta_af = 0.0
+            try:
+                _upd_af = float(prows[0].get("user_pe_direito") or 0)
+            except (TypeError, ValueError):
+                _upd_af = 0.0
             if (prows[0].get("status") or "") in ("queued", "processing"):
                 raise HTTPException(409, "Esse projeto ainda está processando. Espera terminar e tenta de novo.")
     except HTTPException:
@@ -16418,7 +16463,8 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     threading.Thread(
         target=_process_job_throttled,
         args=(job_id, file_paths, work_dir),
-        kwargs={"typology": typology, "project_type": ptype, "is_complement": True},
+        kwargs={"typology": typology, "project_type": ptype, "is_complement": True,
+                "user_total_area": _uta_af, "user_pe_direito": _upd_af},
         daemon=True,
     ).start()
 
