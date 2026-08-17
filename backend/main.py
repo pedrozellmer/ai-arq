@@ -15007,7 +15007,51 @@ async def submit_nps(payload: NPSPayload, request: Request):
     }
     ok = _supabase_insert("nps_responses", row)
     category = "promoter" if payload.score >= 9 else "passive" if payload.score >= 7 else "detractor"
+    if category == "detractor":
+        _alerta_detrator(row)
     return {"status": "ok" if ok else "error", "category": category}
+
+
+def _alerta_detrator(row: dict):
+    """Detrator (NPS ≤ 6) vira e-mail interno NA HORA — em thread, best-effort.
+
+    Por que (16/08/2026): a Eduarda deu nota 2 às 19:18 e o Pedro só viu
+    olhando o painel por acaso. Detrator engajado é a janela de recuperação
+    mais curta que existe — ela mesma voltou 1h30 depois com as pranchas de
+    armação; um alerta imediato teria posto o Pedro na conversa ANTES.
+    Junta o contexto do projeto (se houver job_id) pra ligação ser 1 clique."""
+    import threading as _tal
+
+    def _envia():
+        try:
+            _ctx = ""
+            _jid = (row.get("job_id") or "").strip()
+            if _jid:
+                try:
+                    _p = _supa_rest_service(
+                        "GET", "projects",
+                        params={"job_id": f"eq.{_jid}",
+                                "select": "project_name,status,files_count,file_types"}) or []
+                    if _p:
+                        _ctx = (f"<br><b>Projeto:</b> {_p[0].get('project_name') or '?'} "
+                                f"({_p[0].get('status')}, {_p[0].get('files_count')} arquivo(s)) — "
+                                f"https://ai.arq.br/projeto.html?job_id={_jid}")
+                except Exception:
+                    pass
+            _notify_admin(
+                f"🔴 NPS {row.get('score')} — detrator: {row.get('user_email') or 'sem e-mail'}",
+                f"<b>Nota:</b> {row.get('score')}/10<br>"
+                f"<b>Cliente:</b> {row.get('user_name') or '?'} ({row.get('user_email') or '?'})<br>"
+                f"<b>Comentário:</b> {row.get('comment') or '(sem comentário)'}"
+                f"{_ctx}<br><br>"
+                f"Detrator engajado responde melhor a contato pessoal RÁPIDO — "
+                f"a janela é de horas, não dias (caso Eduarda, 16/08).")
+            _log_error("nps:detrator-alerta",
+                       f"score={row.get('score')} {row.get('user_email')}", _jid)
+        except Exception as _e:
+            print(f"[nps] alerta de detrator falhou (não-fatal): {_e}")
+
+    _tal.Thread(target=_envia, daemon=True).start()
 
 
 _NPS_STAGES = ("upload", "tempo", "precisao", "planilha")
@@ -15041,6 +15085,8 @@ async def submit_nps_detailed(payload: NPSDetailedPayload, request: Request):
         "stage_ratings": stages,
     }
     ok = _supabase_insert("nps_responses", row)
+    if cat == "detractor":
+        _alerta_detrator(row)
     return {"status": "ok" if ok else "error", "category": cat}
 
 
