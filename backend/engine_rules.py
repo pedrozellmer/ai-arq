@@ -996,3 +996,90 @@ def linhas_pai_e_filho(items, tolerancia=0.35):
                 "indices_partes": [j for j, _ in partes],
             })
     return achados
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  ATRIBUTO DISTINTIVO — o que NUNCA pode ser fundido (regra dura nº4)
+# ══════════════════════════════════════════════════════════════════════
+# 🚨 Por que existe (17/08/2026, caso Eduarda): a passada 2 do
+# `_consolidate_items` funde dois itens quando as descrições têm >= 2
+# palavras em comum. Em projeto ESTRUTURAL toda linha compartilha
+# "armadura" + "vigas" — então Ø8, Ø12,5 e Ø16 caíam na mesma família e a
+# linha fundida ficava com a quantidade de UMA só.
+#
+# Medido em bancada com o padrão real (12 pranchas × 6 bitolas):
+#   72 linhas / 18.168 kg  ->  1 linha / 508 kg   (97% da obra evaporou)
+#
+# Bitola é atributo que muda a COMPRA: aço Ø8 e Ø16 são materiais
+# diferentes, com preço e dobra diferentes. Fundir viola a regra dura nº4
+# ("cor, PD, tipo específico nunca somem porque afetam compra real") e
+# ainda entrega um número que não corresponde a nada (regra nº1).
+#
+# Esta função extrai os atributos que IDENTIFICAM o item dentro da
+# família. Se dois itens têm atributos distintos e não-vazios, eles NÃO
+# são duplicata um do outro — seja qual for a semelhança do texto.
+
+# 🪤 1ª versão comparava por INTERSEÇÃO de todos os atributos juntos — e
+# "CA-50" em comum fazia Ø8 e Ø16 parecerem o mesmo item (o teste pegou).
+# O certo é comparar POR CATEGORIA: bitola com bitola, classe com classe.
+# Mesma categoria + valor diferente = item diferente, ponto.
+_ATRIB_POR_CATEGORIA = (
+    # bitola/diâmetro — a que motivou tudo (aço Ø8 ≠ aço Ø16)
+    ("bitola", (
+        _re.compile(r"(?:ø|\bo\b|diam[eê]tro|diam|bitola)\s*(\d{1,3}(?:[.,]\d)?)\s*mm", _re.I),
+        _re.compile(r"ø\s*(\d{1,3}(?:[.,]\d)?)", _re.I),
+    )),
+    # classe do aço: CA-50 ≠ CA-60 (materiais diferentes, preço diferente)
+    ("classe_aco", (_re.compile(r"\bca[\s\-]?(\d{2})\b", _re.I),)),
+    # resistência do concreto: fck 25 ≠ fck 30
+    ("fck", (_re.compile(r"\bfck\s*(\d{2,3})\b", _re.I),)),
+    # dimensão: 10x10 ≠ 25x15
+    ("dimensao", (_re.compile(r"\b(\d{1,3}(?:[.,]\d{1,2})?\s*[x×]\s*\d{1,3}(?:[.,]\d{1,2})?)\b", _re.I),)),
+    # código de projeto/legenda: LM1 ≠ LM2, P3 ≠ P7
+    # código de projeto/legenda. 🪤 Aceita HÍFEN e prefixo de 2 letras: sem
+    # isso "Porta de madeira PM-01" e "Porta de vidro PV-01" fundiam numa linha
+    # só — bug PRÉ-EXISTENTE que o controle negativo desta correção revelou.
+    # Inclui V\d (viga) e P\d (pilar): "vigas V1 a V12" e "vigas V13 a V31" são
+    # trechos DIFERENTES da obra e não devem ser deduplicados entre si.
+    ("codigo", (_re.compile(
+        r"\b((?:pm|pv|pe|lm|ln|lum|dry|dw|div|pd|ve|vm|p|j|v)[\s\-]?\d{1,3})\b",
+        _re.I),)),
+)
+
+
+def atributos_distintivos(desc: str) -> dict:
+    """{categoria: valor} dos atributos que IDENTIFICAM o item na família.
+
+    Categorias: bitola, classe_aco, fck, dimensao, codigo. Vazio = nada
+    distintivo (a fusão segue as regras antigas).
+    """
+    out = {}
+    if not desc:
+        return out
+    s = str(desc)
+    for cat, regexes in _ATRIB_POR_CATEGORIA:
+        for rx in regexes:
+            m = rx.search(s)
+            if m:
+                v = (m.group(1) or "").strip().lower()
+                v = _re.sub(r"\s+", "", v).replace(",", ".")
+                v = v.lstrip("0") or "0"
+                if v:
+                    out[cat] = v
+                break
+    return out
+
+
+def pode_fundir(desc_a: str, desc_b: str) -> bool:
+    """False quando os dois itens têm a MESMA categoria com valor DIFERENTE.
+
+    🪤 Categoria presente em só um dos dois não bloqueia: "Armadura — total"
+    (sem bitola) continua fundível com qualquer irmã pelas regras antigas —
+    senão isto viraria um "nunca funde" e desfaria consolidação legítima
+    (réplica por departamento, variante de legenda).
+    """
+    a, b = atributos_distintivos(desc_a), atributos_distintivos(desc_b)
+    for cat in set(a) & set(b):
+        if a[cat] != b[cat]:
+            return False
+    return True

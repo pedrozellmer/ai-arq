@@ -56,6 +56,7 @@ from engine_rules import (
     AREA_UNITS_HONESTY as _AREA_UNITS_HONESTY,
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
     linhas_pai_e_filho as _linhas_pai_e_filho,
+    pode_fundir as _pode_fundir,
     selos_sem_medida as _selos_sem_medida,
     unidade_conflita_com_sinapi as _unidade_conflita_sinapi,
 )
@@ -3196,6 +3197,14 @@ def _consolidate_items(items: list) -> list:
         quantities = [round(float(it.quantity), 2) for it in group]
         unique_qtys = set(quantities)
 
+        # 🚨 GUARDA DE ATRIBUTO na passada 1 também: se o grupo mistura
+        # atributos distintivos (bitola/classe/fck/dimensão/código), NÃO é
+        # duplicata — são itens diferentes que a chave normalizada achatou.
+        # Mantém todos e sai. (Caso Eduarda, 17/08/2026.)
+        if any(not _pode_fundir(group[0].description, _o.description) for _o in group[1:]):
+            pass1.extend(group)
+            continue
+
         # Réplica por departamento tem prioridade (4+ itens com qty < 2) —
         # independente de qtys serem idênticas, porque itens "Contabilidade"
         # e "RH" costumam bater mesmo quando são na verdade áreas distintas.
@@ -3264,6 +3273,16 @@ def _consolidate_items(items: list) -> list:
                 fam_noun = _primary_noun(fam[0].description)
                 fam_tokens = set(_normalize_description_key(fam[0].description).split())
                 overlap = key_tokens & fam_tokens
+                # 🚨 GUARDA DE ATRIBUTO (17/08/2026, caso Eduarda): bitola,
+                # classe de aço, fck, dimensão e código IDENTIFICAM o item —
+                # aço Ø8 e Ø16 são materiais diferentes (regra dura nº4). O
+                # critério de "2 palavras em comum" fundia os dois, porque toda
+                # linha estrutural compartilha "armadura"+"vigas", e a linha
+                # fundida ficava com a quantidade de UMA só. Medido em bancada
+                # com o padrão real (12 pranchas × 6 bitolas): 72 linhas /
+                # 18.168 kg viravam 1 linha / 508 kg — 97% da obra evaporava.
+                if not _pode_fundir(it.description, fam[0].description):
+                    continue
                 if noun and noun == fam_noun:
                     fam.append(it); placed = True; break
                 if len(overlap) >= 2:
@@ -3604,6 +3623,26 @@ def _consolidate_items(items: list) -> list:
         if not sig_common:
             # Mesmo noun mas sem outras palavras significativas em comum — provavelmente
             # itens distintos (ex: "porta" em 2 pranchas diferentes = 2 portas diferentes)
+            pass6.extend(group)
+            continue
+
+        # 🚨 GUARDA DE ATRIBUTO (17/08/2026) — ESTA passada era a que matava o
+        # aço da Eduarda, e é a única que faz winner/losers (descarta de
+        # verdade, não funde). Ela agrupa por (substantivo, disciplina): as 6
+        # bitolas caíam todas em ("armadura","Estrutura"), vinham de pranchas
+        # diferentes, tinham "armadura" em comum → declarava "duplicação
+        # cross-prancha" e mantinha UMA. O Ø16 sempre vencia porque
+        # `_item_score` premia a maior quantidade.
+        #
+        # Medido em bancada: 2 pranchas × 6 bitolas = 12 linhas / 3.028 kg
+        # viravam 1 linha / 508 kg. Com 12 pranchas, 18.168 kg → 508 kg.
+        #
+        # Bitola/classe/fck/dimensão/código IDENTIFICAM o item (regra dura
+        # nº4): aço Ø8 e Ø16 não são a mesma linha em pranchas diferentes —
+        # são materiais diferentes. Se o grupo mistura atributos, NÃO é
+        # duplicata: mantém todos.
+        _refs = [it.description or "" for it in group]
+        if any(not _pode_fundir(_refs[0], _d) for _d in _refs[1:]):
             pass6.extend(group)
             continue
 
