@@ -5952,6 +5952,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
 
                         # Extrair itens
+                        _n_item_perdido = 0   # quantos morreram no except do laço
                         for item_data in result.get("items", []):
                             try:
                                 desc = item_data.get("description", "")
@@ -6063,7 +6064,28 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     origem="dxf_geom",  # medido por geometria ezdxf
                                 )
                                 dxf_items.append(item)
-                            except: continue
+                            except Exception as _e_item:
+                                # 🚨 ERA UM `except: continue` NU (17/08/2026).
+                                # Caso Eduarda: a IA devolveu 125 itens em 13
+                                # pranchas e só 25 chegaram ao banco. O
+                                # consolidador foi inocentado em bancada
+                                # (96→95 com os itens reais); os ~100 morriam
+                                # AQUI, um a um, em silêncio absoluto — nem
+                                # print, nem log, nem contador. Bare except é a
+                                # armadilha nº11 do CLAUDE.md na sua forma mais
+                                # pura. Agora cada item perdido diz seu nome e
+                                # o tipo do erro; o resumo por prancha sai na
+                                # ficha (motor:prancha-itens).
+                                _n_item_perdido += 1
+                                if _n_item_perdido <= 3:   # amostra, não enxurrada
+                                    _log_error("motor:item-perdido",
+                                               f"arq={os.path.basename(dxf_path)} "
+                                               f"desc={str(item_data.get('description',''))[:70]!r} "
+                                               f"unit={item_data.get('unit')!r} "
+                                               f"qty={item_data.get('quantity')!r} "
+                                               f"erro={type(_e_item).__name__}: {str(_e_item)[:120]}",
+                                               job_id)
+                                continue
 
                         print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
                         # 🚨 A FICHA DA PRANCHA — SEMPRE, sucesso incluso (17/08/2026).
@@ -6079,6 +6101,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             _log_error("motor:prancha-itens",
                                        f"arq={os.path.basename(dxf_path)} "
                                        f"itens={len(result.get('items', []))} "
+                                       f"perdidos={_n_item_perdido} "
                                        f"stop={getattr(response, 'stop_reason', '?')} "
                                        f"truncado={_dxf_truncado} "
                                        f"resp_chars={len(text)}", job_id)
@@ -6563,7 +6586,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         origem="vision_pdf",  # lido por Vision, não medido em geometria
                     )
                     all_items.append(item)
-                except: continue
+                except Exception as _e_item_pdf:
+                    # Mesmo engolidor do caminho DXF (ver motor:item-perdido):
+                    # item que não constrói morria sem deixar rastro. O do PDF
+                    # nunca foi flagrado porque prancha de PDF gera poucos itens
+                    # — mas o silêncio é idêntico.
+                    try:
+                        _log_error("motor:item-perdido",
+                                   f"pdf={filename} "
+                                   f"desc={str(item_data.get('description',''))[:70]!r} "
+                                   f"unit={item_data.get('unit')!r} "
+                                   f"qty={item_data.get('quantity')!r} "
+                                   f"erro={type(_e_item_pdf).__name__}: {str(_e_item_pdf)[:120]}",
+                                   job_id)
+                    except Exception:
+                        pass
+                    continue
 
             # 6. Liberar memória desta prancha
             del text, crop_paths, sheet, result
