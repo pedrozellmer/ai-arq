@@ -5959,8 +5959,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 discipline = item_data.get("discipline", "Complementares")
                                 conf = item_data.get("confidence", "estimado")
                                 if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
-                                # trava de procedência: extração com ressalva → nunca confirmado
-                                if _dxf_sem_procedencia and conf == "confirmado":
+                                # trava de procedência: extração com ressalva → nunca confirmado.
+                                # 🔑 EXCEÇÃO (16/08/2026, caso Eduarda 42c354a1): peso de aço
+                                # lido de QUADRO/RESUMO em texto não depende da escala do
+                                # desenho — a ressalva de unidade fala da GEOMETRIA. As 12
+                                # pranchas de armação dela ("maior elemento 19mm") rebaixaram
+                                # 63 linhas de kg copiadas verbatim da tabela do projetista.
+                                # A exceção é ESTREITA: kg + aço/armadura + a observação
+                                # citando quadro/resumo/tabela (o modelo escreve a fonte).
+                                _e_kg_quadro = (
+                                    str(item_data.get("unit", "")).strip().lower() == "kg"
+                                    and any(t in desc.lower() for t in ("aço", "aco", "armadura", "ca-50", "ca-60"))
+                                    and any(t in str(item_data.get("observations", "")).lower()
+                                            for t in ("quadro", "resumo", "tabela"))
+                                )
+                                if _dxf_sem_procedencia and conf == "confirmado" and not _e_kg_quadro:
                                     conf = "estimado"
                                     item_data["_procedencia_rebaixada"] = True
                                 qty = sf(item_data.get("quantity", 0))

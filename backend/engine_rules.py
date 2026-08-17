@@ -960,14 +960,24 @@ def linhas_pai_e_filho(items, tolerancia=0.35):
         except (TypeError, ValueError):
             q = 0.0
         disc = str(_campo_do_item(it, "discipline", "") or "").strip().lower()
-        norm.append((desc, unidade, q, disc, bool(_RE_LINHA_TOTAL.search(desc))))
+        prancha = str(_campo_do_item(it, "ref_sheet", "") or "").strip().lower()
+        norm.append((desc, unidade, q, disc, bool(_RE_LINHA_TOTAL.search(desc)), prancha))
 
     achados = []
-    for i, (desc, unidade, q, disc, e_total) in enumerate(norm):
+    for i, (desc, unidade, q, disc, e_total, prancha) in enumerate(norm):
         if not e_total or q <= 0 or unidade in UNIDADES_SEM_GRANDEZA:
             continue
         partes = [(j, n) for j, n in enumerate(norm)
                   if j != i and n[1] == unidade and n[3] == disc and n[2] > 0 and not n[4]]
+        # 🔑 PRANCHA PRIMEIRO (16/08/2026, caso Eduarda 42c354a1): o quadro de
+        # aço tem UM total POR PRANCHA, e as partes dele são as bitolas DA
+        # MESMA prancha. Misturar as 12 pranchas somava tudo contra cada total
+        # e a folga estourava — 0 marcados em 71 linhas de kg com totais
+        # óbvios. Se a mesma prancha tem partes, compara só com elas; senão,
+        # cai no comportamento antigo (total geral do projeto).
+        _mesma_prancha = [(j, n) for j, n in partes if prancha and n[5] == prancha]
+        if _mesma_prancha:
+            partes = _mesma_prancha
         if not partes:
             continue
         soma = sum(n[2] for _, n in partes)
