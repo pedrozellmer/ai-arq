@@ -6066,6 +6066,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             except: continue
 
                         print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
+                        # 🚨 A FICHA DA PRANCHA — SEMPRE, sucesso incluso (17/08/2026).
+                        # Na combinada da Eduarda (ev02f710/ev704ee8), 8 de 12
+                        # armações devolveram ZERO item SEM erro, sem truncamento e
+                        # sem exceção — e não havia UMA linha consultável dizendo o
+                        # que a IA respondeu. As duas rodadas (11 e 40 itens do
+                        # mesmo insumo) ficaram indiagnosticáveis. Com esta linha,
+                        # a próxima rodada se diagnostica sozinha: itens=0 com
+                        # stop=end_turn e resposta curta é o modelo DECIDINDO não
+                        # emitir; resp_chars alto com itens=0 é parse perdendo.
+                        try:
+                            _log_error("motor:prancha-itens",
+                                       f"arq={os.path.basename(dxf_path)} "
+                                       f"itens={len(result.get('items', []))} "
+                                       f"stop={getattr(response, 'stop_reason', '?')} "
+                                       f"truncado={_dxf_truncado} "
+                                       f"resp_chars={len(text)}", job_id)
+                        except Exception:
+                            pass
 
                         # ── CHECKPOINT DXF: guarda os itens + contribuições desta
                         # prancha pra retomada não recomeçar do zero. Só chega aqui
