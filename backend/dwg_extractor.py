@@ -884,8 +884,19 @@ _UNIT_FACTOR_NAMES = {1.0: "metros", 0.1: "decímetros",
 # Texto de cota BR: número (vírgula OU ponto decimal) com sufixo de unidade
 # opcional. Prefixo de aproximação (~ ≈ ±) tolerado; qualquer outra palavra
 # ("VER DETALHE", "VAR.") invalida o uso como régua.
+# 🚨 COMENTÁRIO ENTRE PARÊNTESES depois do número é comum e NÃO invalida a
+# cota (17/08/2026, caso Giovani): o arquivo dele tem "11.70 (RGI)" e
+# "35.70 (RGI)" — o projetista anota a fonte da medida. O `$` no fim exigia
+# que o texto ACABASSE no número, então TODAS essas cotas eram descartadas,
+# a régua da prancha não rodava, e o cabeçalho mentiroso ($INSUNITS=4, mm,
+# num desenho em METRO) passava batido: 143 hachuras somaram 0,0019 m² e o
+# cliente recebeu alvenaria/revestimento zerados.
+# 🪤 O parêntese só é tolerado DEPOIS do número. "VER DETALHE", "VAR." e
+# qualquer palavra ANTES continuam invalidando — a cota tem que começar com
+# a medida pra servir de régua.
 _DIM_TEXT_NUM_RE = re.compile(
-    r"^\s*[~≈±]?\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\s*\.?\s*$", re.IGNORECASE)
+    r"^\s*[~≈±]?\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)?\s*\.?\s*(?:\([^)]*\))?\s*$",
+    re.IGNORECASE)
 _DIM_TEXT_UNIT_SCALE = {"m": 1.0, "cm": 0.01, "mm": 0.001}
 _DIM_RATIO_TOL = 0.02        # ±2% — consistência exigida entre texto e medida
 _DIM_MIN_COTAS = 3           # mínimo de cotas consistentes pra provar algo
