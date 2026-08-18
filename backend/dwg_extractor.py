@@ -2103,6 +2103,13 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         elif _dim_status == "corrigida":
             metadata["unidade_corrigida_por_cotas"] = dim_check["mensagem"]
             metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
+        elif _dim_status == "provada_por_rotulo":
+            # 5ª RÉGUA: o rótulo de área da própria prancha bate com a
+            # geometria. Prova de verdade (dado escrito × dado medido, mesma
+            # natureza da cota) — então NÃO vira ressalva e a medição pode
+            # sair 'confirmado'.
+            metadata["unidade_provada_por_rotulo"] = dim_check["mensagem"]
+            metadata["unidade_nome_provada"] = dim_check.get("unidade_nome", "")
         elif _dim_status == "corrigida_plausibilidade":
             # 🚨 NÃO é prova — vai pra `alerta_unidade`, que entra em
             # `extraction_has_quality_caveat`: nenhum item deste DXF sai
@@ -2862,6 +2869,40 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                         len(_cand), _cand[:6])
     except Exception as _ea:
         logger.warning("[area-regra] falhou (não-fatal): %s", _ea)
+
+    # ── 5ª RÉGUA: o RÓTULO DE ÁREA confere com a geometria? ────────────────
+    # 🚨 Roda no FIM, porque precisa das hachuras e dos textos já medidos com o
+    # fator escolhido. Não muda o fator — VERIFICA. Se ≥2 rótulos que dizem
+    # "57,16m²" caem em regiões que medem 57,16 m², a escala está PROVADA pelo
+    # próprio desenho (dado escrito × dado medido, mesma natureza da cota).
+    #
+    # 💰 O que isso destrava (medido em 30 dias): de 492 linhas em m², só 2
+    # saíram MEDIDAS — 0,4%. Contar bloco funciona (28%), medir superfície não.
+    # Com a prova do rótulo, a ressalva de escala cai e o m² pode sair medido.
+    #
+    # 🪤 Só derruba ressalva de ESCALA. Extração estéril e xref não resolvido
+    # continuam valendo — o rótulo prova a régua, não a completude do desenho.
+    try:
+        from engine_rules import (casar_texto_com_regiao as _casar5,
+                                  unidade_provada_por_rotulo as _prova5)
+        _p5 = _casar5(texts, list(polygon_areas) + list(hatches))
+        _v5 = _prova5(_p5)
+        if _v5.get("provada"):
+            _ex = "; ".join(f'"{e["texto"]}"={e["medida"]}' for e in _v5["exemplos"][:3])
+            metadata["unidade_provada_por_rotulo"] = (
+                f"{_v5['n_batem']} rótulo(s) de área da própria prancha conferem "
+                f"com a geometria medida ({_ex}) — escala provada pelo desenho.")
+            # a prova supera a ressalva de ESCALA (não as outras)
+            for _k in ("unidade_suspeita", "alerta_unidade"):
+                if metadata.get(_k):
+                    metadata[f"{_k}_superada_por_rotulo"] = metadata.pop(_k)
+            logger.info("[unit-rotulo] %s", metadata["unidade_provada_por_rotulo"])
+        elif _v5.get("n_rotulos_area"):
+            metadata["rotulos_area_sem_prova"] = (
+                f"{_v5['n_rotulos_area']} rótulo(s) de área na prancha, "
+                f"{_v5['n_batem']} conferem com a geometria")
+    except Exception as _e5:
+        logger.warning("[unit-rotulo] falhou (não-fatal): %s", _e5)
 
     return DXFExtraction(
         filename=os.path.basename(filepath),

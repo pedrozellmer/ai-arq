@@ -1135,3 +1135,92 @@ def caveat_atinge_unidade(metadata, unidade: str) -> bool:
     if not _so_escala:
         return False
     return (unidade or "").strip().lower() in _UNIDADES_QUE_DEPENDEM_DE_ESCALA
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  5ª RÉGUA — o rótulo de área que BATE com a geometria prova a unidade
+# ══════════════════════════════════════════════════════════════════════
+# 🚨 Descoberta em 17/08/2026 no arquivo do Giovani (75a774af), depois de
+# corrigir a unidade por plausibilidade. O pareamento rótulo↔região devolveu:
+#
+#     "57,16m²"  →  hachura mede  57.16 m²
+#     "55,49m²"  →  hachura mede  55.49 m²
+#     "62,70m²"  →  hachura mede  62.70 m²
+#     "60,87m²"  →  hachura mede  60.87 m²
+#
+# O número que o PROJETISTA escreveu e o que a GEOMETRIA mede, batendo na
+# segunda casa decimal, em quatro ambientes. Isso é a mesma natureza de prova
+# da régua das cotas — dado escrito × dado medido — e é a prova mais forte de
+# unidade que existe num DXF: se a escala estivesse errada por 10×, 100× ou
+# 1000×, nenhum par bateria.
+#
+# 💰 Por que importa: medido em 30 dias, de 492 linhas em m² só 2 saíram
+# MEDIDAS (0,4%). Contar bloco funciona (28%); medir superfície não. Esta é a
+# única evidência que vi capaz de virar esse número — e m² é o que o
+# orçamentista mais usa (piso, forro, pintura, revestimento).
+#
+# 🚨 Ela PROMOVE pra 'confirmado' — a direção perigosa da regra nº1. Por isso
+# as travas são duras: mínimo de 2 pares independentes, tolerância apertada,
+# e o rótulo tem que ser inequivocamente uma ÁREA (traz "m²" escrito).
+
+_RE_ROTULO_AREA = _re.compile(
+    r"^\s*(\d{1,5}(?:[.,]\d{1,2})?)\s*(?:m²|m2|M²|M2)\s*$")
+
+_AREA_MIN_PARES = 2       # 1 par pode ser coincidência; 2 independentes, não
+_AREA_TOL = 0.02          # ±2%, mesma régua das cotas
+_AREA_MIN_M2 = 1.0        # ambiente menor que 1 m² não serve de prova
+
+
+def rotulo_area_como_numero(texto: str):
+    """Número (em m²) de um rótulo que é INEQUIVOCAMENTE uma área.
+
+    Exige o "m²" escrito: "57,16m²" → 57.16. "57,16" sozinho devolve None —
+    poderia ser cota, nível, código. Sem ambiguidade não há prova.
+    """
+    m = _RE_ROTULO_AREA.match(str(texto or ""))
+    if not m:
+        return None
+    try:
+        v = float(m.group(1).replace(",", "."))
+    except ValueError:
+        return None
+    return v if v >= _AREA_MIN_M2 else None
+
+
+def unidade_provada_por_rotulo(pares, tol: float = _AREA_TOL) -> dict:
+    """A unidade está PROVADA pelos rótulos de área da própria prancha?
+
+    `pares`: saída de `casar_texto_com_regiao` — [{texto, area, ...}].
+    Devolve {'provada': bool, 'n_batem', 'n_rotulos_area', 'exemplos'}.
+
+    Prova = pelo menos `_AREA_MIN_PARES` rótulos de área batendo ±tol com a
+    região que rotulam. 🪤 Só conta rótulos DISTINTOS: a mesma área repetida
+    em 4 ambientes iguais é uma evidência, não quatro.
+    """
+    vistos = set()
+    batem = []
+    n_rot = 0
+    for p in (pares or []):
+        alvo = rotulo_area_como_numero(p.get("texto"))
+        if alvo is None:
+            continue
+        n_rot += 1
+        try:
+            medida = float(p.get("area") or 0)
+        except (TypeError, ValueError):
+            continue
+        if medida <= 0:
+            continue
+        if abs(medida - alvo) / alvo <= tol:
+            chave = round(alvo, 2)
+            if chave in vistos:
+                continue
+            vistos.add(chave)
+            batem.append({"texto": p.get("texto"), "alvo": alvo,
+                          "medida": round(medida, 2)})
+    return {
+        "provada": len(batem) >= _AREA_MIN_PARES,
+        "n_batem": len(batem),
+        "n_rotulos_area": n_rot,
+        "exemplos": batem[:5],
+    }
