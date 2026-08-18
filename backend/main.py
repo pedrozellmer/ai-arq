@@ -5051,6 +5051,9 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         _dxfrooms_units: list = []
         dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
         dwg_via_libredwg = []  # convertidos pelo plano B — aviso pro cliente conferir (escopo garantido)
+        # Pranchas cujo DXF nasceu acima da trava dura e foram APAGADAS na hora.
+        # Ver o bloco "DESCARTA NA CONVERSÃO" logo abaixo.
+        _dxf_grandes_msgs: list = []
         _aec_failed = []  # DWGs que falharam E são AutoCAD MEP/Architecture (objetos AEC) → aviso preciso
         if cad_paths:
             jobs.update_field(job_id, progress=5)
@@ -5067,6 +5070,63 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         jobs.update_field(job_id, progress=base)
                         jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF ({ci+1}/{n_cad}): {os.path.basename(cad_path)}")
                         dxf_path = convert_dwg_to_dxf(cad_path)
+                        # ── DESCARTA NA CONVERSÃO ───────────────────────────
+                        # 🚨 O JOB CONVERTIA TODAS AS PRANCHAS ANTES DE EXTRAIR
+                        # UMA. Caso Patrick, 18/08/2026: 9 DWG de ~50 MB viram
+                        # ~350 MB de DXF cada = ~3 GB em disco ANTES da primeira
+                        # medição, com o disco do Render em 83%. O servidor caiu
+                        # 14:13:59 e 14:16:13, o disjuntor pôs o job em
+                        # quarentena, e a extração NUNCA CHEGOU na prancha de
+                        # 0,7 MB que teria medido sem problema.
+                        #
+                        # Quem já passa da trava dura do extrator não tem chance
+                        # nenhuma de ser lido — então não faz sentido guardar em
+                        # disco esperando a extração recusar depois. Apaga aqui,
+                        # registra, e segue. O pico de disco cai de N pranchas
+                        # pra UMA.
+                        #
+                        # 🔑 O efeito que importa pro cliente: as pranchas
+                        # pequenas do MESMO envio passam a ser medidas em vez de
+                        # morrerem junto. Planilha parcial com aviso honesto é
+                        # muito melhor que zero.
+                        if dxf_path:
+                            try:
+                                from dwg_extractor import _MAX_DXF_BYTES as _TETO_DXF
+                            except Exception:
+                                _TETO_DXF = 150 * 1024 * 1024
+                            try:
+                                _tam_conv = os.path.getsize(dxf_path)
+                            except OSError:
+                                _tam_conv = 0
+                            if _tam_conv > _TETO_DXF:
+                                _bn_conv = os.path.basename(cad_path)
+                                try:
+                                    os.remove(dxf_path)
+                                except OSError:
+                                    pass
+                                try:
+                                    _log_error(
+                                        "motor:prancha-grande-demais",
+                                        f"{_bn_conv}: DXF nasceu com "
+                                        f"{_tam_conv // 1048576} MB (teto "
+                                        f"{_TETO_DXF // 1048576} MB) — APAGADO na "
+                                        f"conversão pra não ocupar disco; as outras "
+                                        f"pranchas do envio seguem", job_id)
+                                except Exception:
+                                    pass
+                                _dxf_grandes_msgs.append(
+                                    f"{_bn_conv}: essa prancha é grande demais pro "
+                                    f"nosso limite de memória de hoje "
+                                    f"({_tam_conv // 1048576} MB depois de "
+                                    f"convertida) — o arquivo não tem defeito. "
+                                    f"Sobe ela em DXF, ou só a área que você "
+                                    f"precisa medir, que a gente lê")
+                                jobs.update_field(
+                                    job_id,
+                                    current_step=f"{_bn_conv}: prancha grande demais "
+                                                 f"({_tam_conv // 1048576} MB) — "
+                                                 f"seguindo com as outras")
+                                dxf_path = None
                         if dxf_path:
                             dxf_paths.append(dxf_path)
                             jobs.update_field(job_id, current_step=f"DWG convertido: {os.path.basename(dxf_path)}")
@@ -5205,6 +5265,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # reprocesse grátis". Declarado ANTES do loop pra estar em escopo no
         # except da IA (armadilha #11 do CLAUDE.md reaparecendo no caminho DXF).
         dxf_errors: list[str] = []
+        # As pranchas descartadas na conversão precisam chegar ao cliente pela
+        # MESMA porta das outras falhas — senão o descarte silencia o motivo e a
+        # planilha sai parcial sem explicar o que faltou.
+        if _dxf_grandes_msgs:
+            dxf_errors.extend(_dxf_grandes_msgs)
         xref_warnings: list[str] = []  # xref não-resolvido / extração estéril → orienta o usuário (BIND / PDF)
         # Cross-check determinístico (promove estimado→confirmado por geometria).
         # 🚫 NÃO LIGAR EM PRODUÇÃO. Três rodadas de revisão adversarial (15/07) acharam,
