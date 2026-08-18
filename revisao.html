@@ -236,7 +236,9 @@
           <label for="edit-unit" class="block text-xs font-medium text-gray-600 mb-1">Unidade</label>
           <select id="edit-unit" class="w-full px-2 py-2.5 border rounded-lg text-sm h-[46px]">
             <option value="un">un</option><option value="m²">m²</option>
-            <option value="ml">ml</option><option value="m³">m³</option>
+            <option value="ml">ml</option><option value="m">m</option>
+            <option value="m³">m³</option><option value="kg">kg</option>
+            <option value="t">t</option><option value="l">l</option>
             <option value="mês">mês</option><option value="dia">dia</option>
             <option value="vb">vb</option><option value="cj">cj</option>
             <option value="%">%</option>
@@ -670,7 +672,21 @@ function openEdit(itemId, focusQty) {
   if (!it) return;
   editingItem = it;
   document.getElementById('edit-desc').value = it.description || '';
-  document.getElementById('edit-unit').value = it.unit || 'vb';
+  // 🚨 O select MATAVA a unidade que ele não conhecia (18/08). Medido em
+  // produção: 8 de 8 edições em linha com unidade fora da lista (kg=7, m=1)
+  // saíram com unidade VAZIA; 0 de 78 com unidade da lista perderam. Atribuir
+  // .value = "kg" num select sem essa opção zera o campo em silêncio, e a
+  // armadura — 232 itens em 20 projetos — é justamente medida em kg.
+  // 🪤 Acrescentar kg/m/t/l à lista NÃO basta: o motor pode emitir unidade
+  // nova amanhã. A garantia é injetar a unidade do item quando ela faltar.
+  const _selUnit = document.getElementById('edit-unit');
+  const _u = (it.unit || '').trim();
+  if (_u && ![..._selUnit.options].some(o => o.value === _u)) {
+    const _op = document.createElement('option');
+    _op.value = _u; _op.textContent = _u;
+    _selUnit.appendChild(_op);
+  }
+  _selUnit.value = _u || 'vb';
   const qtyEl = document.getElementById('edit-qty');
   qtyEl.value = it.quantity || 0;
   document.getElementById('edit-obs').value = it.observations || '';

@@ -14510,6 +14510,25 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
             if k in allowed and v is not None:
                 safe_edits[k] = v
 
+        # 🚨 UNIDADE NUNCA PODE SUMIR NUMA EDIÇÃO (regra dura nº4 — atributo que
+        # afeta compra real não evapora). Medido em 18/08/2026: das 86 edições
+        # de clientes, 8 chegaram com unidade VAZIA — e as 8 eram exatamente as
+        # linhas cuja unidade não existia no <select> da tela (kg ×7, m ×1).
+        # Nenhuma das 78 com unidade da lista perdeu o campo. O select zerava
+        # sozinho ao receber .value = "kg", e a armadura (232 itens em 20
+        # projetos) é medida em kg. A tela foi consertada no mesmo commit; esta
+        # trava existe porque o motor pode emitir unidade nova amanhã e a tela
+        # do cliente pode estar em cache.
+        if "unit" in safe_edits and not str(safe_edits.get("unit") or "").strip():
+            _u_antes = str((_antes or {}).get("unit") or "").strip()
+            if _u_antes:
+                safe_edits["unit"] = _u_antes
+                _log_error("motor:unidade-apagada",
+                           f"item={item_id} chegou unidade vazia; mantida '{_u_antes}'",
+                           job_id)
+            else:
+                safe_edits.pop("unit", None)
+
         # 🚨 REGRA DURA Nº1. Quantidade digitada à mão NÃO é "medido do CAD".
         # `allowed` nunca incluiu confidence, então o selo BRANCO sobrevivia à
         # edição: o cliente trocava o número e a planilha continuava dizendo que
