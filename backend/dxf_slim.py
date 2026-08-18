@@ -166,6 +166,27 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         # disco e 0% de RAM — ele NÃO resolve estouro de memória sozinho. Vale
         # porque nunca quebra e porque 4% de proteção é mais que 0%. Quem
         # prometer que isto conserta OOM está inventando.
+        # 🚨 NÃO ESCREVER CÓPIA QUE NÃO SALVA NINGUÉM (18/08/2026, mesmo dia).
+        # O plano B rende ~4% (medido em 11 arquivos). Se 96% do tamanho ainda
+        # passa da trava dura do extrator (150 MB), a cópia vai ser escrita,
+        # medida e apagada — só queima disco. No filhote do Patrick isso
+        # aconteceu com 5 pranchas de 370 MB, com o disco do Render em 83%:
+        # 1,85 GB de DXF + a tentativa do ezdxf + mais 355 MB do plano B.
+        # 🪤 Quem introduziu esse custo fui eu, horas antes, "de graça".
+        _LIMITE_DURO = 150 * 1024 * 1024        # espelha _MAX_DXF_BYTES
+        if size * 0.96 > _LIMITE_DURO:
+            if log is not None:
+                try:
+                    log("motor:dxf-slim",
+                        f"arq={os.path.basename(path)} plano B textual PULADO: "
+                        f"{size // 1048576} MB, nem 4% de ganho traria pra baixo "
+                        f"do limite de {_LIMITE_DURO // 1048576} MB — evitando "
+                        f"escrever cópia inútil em disco")
+                except Exception:
+                    pass
+            try: os.remove(out)
+            except OSError: pass
+            return None
         try:
             _m, _d = emagrecer_por_texto(path, out)
             _novo = os.path.getsize(out)
