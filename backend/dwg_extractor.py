@@ -1567,7 +1567,8 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
             timeout=300,
         )
         if result.returncode == 0 and os.path.isfile(out_path):
-            return out_path
+            _resgatado = _resgatar_dxf_gigante(dwg2dxf, dwg_path, out_path, output_dir)
+            return _resgatado or out_path
         logger.warning("libredwg dwg2dxf retornou %d: %s",
                        result.returncode, result.stderr[:300])
     except subprocess.TimeoutExpired:
@@ -1575,6 +1576,118 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
     except Exception as e:
         logger.warning("libredwg dwg2dxf erro: %s", e)
     return None
+
+
+# Teto duro de DXF que o extrator aceita carregar. Era LOCAL dentro de
+# extract_dxf; virou de módulo em 18/08/2026 porque o resgate por --minimal
+# precisa saber se o arquivo enxuto ficou abaixo dele. Duas cópias do mesmo
+# número em arquivos diferentes é como um limite vira mentira com o tempo.
+_MAX_DXF_BYTES = 150 * 1024 * 1024  # 150 MB — prancha normal é <20 MB
+
+# Fator em metros por $INSUNITS, lido direto do TEXTO do cabeçalho (sem ezdxf).
+_RX_INSUNITS = re.compile(r"\$INSUNITS\s*\n\s*70\s*\n\s*(\d+)")
+
+
+def unidade_do_cabecalho_dxf(dxf_path: str, limite_bytes: int = 2_000_000):
+    """Lê $INSUNITS lendo só o COMEÇO do DXF, sem carregar o arquivo.
+
+    O HEADER é a primeira seção do DXF, então o dado que decide a escala de
+    TODO o projeto custa alguns KB de leitura. Medido em 6 arquivos reais:
+    64 KB bastaram em todos.
+
+    Devolve o fator em metros, ou None quando o desenho não declara unidade.
+    """
+    dados = b""
+    try:
+        with open(dxf_path, "rb") as f:
+            while len(dados) < limite_bytes:
+                ch = f.read(65536)
+                if not ch:
+                    break
+                dados += ch
+                if b"$INSUNITS" in dados and b"ENDSEC" in dados:
+                    break
+    except OSError:
+        return None
+    m = _RX_INSUNITS.search(dados.decode("latin-1", "replace"))
+    if not m:
+        return None
+    ins = int(m.group(1))
+    if ins and ins in _INSUNITS_TO_METERS:
+        return _INSUNITS_TO_METERS[ins]
+    return None
+
+
+def _resgatar_dxf_gigante(dwg2dxf: str, dwg_path: str, cheio: str, output_dir: str):
+    """Reconverte com `--minimal` o DXF que passou da trava dura, e devolve o enxuto.
+
+    🎯 Caso Patrick (18/08/2026): 5 DWG de ~50 MB viraram DXF de **370 MB** cada.
+    A trava de 150 MB do extrator recusou as 5 e o cliente recebeu ZERO. O
+    `dwg2dxf -m` grava só $ACADVER, HANDSEED e ENTITIES — medido em 6 arquivos
+    reais, encolhe **90 a 96%** e derruba a RAM da extração de 77-202 MB para
+    ~45 MB, praticamente CONSTANTE em vez de crescer com o arquivo.
+
+    🚨 O `-m` joga fora o cabeçalho, e com ele o $INSUNITS. Sem isso a extração
+    cai no chute de milímetro e a área sai **100× errada** — medido, 5 de 6
+    arquivos. Por isso a unidade é lida ANTES, do arquivo cheio, e devolvida
+    junto: quem chama TEM que repassar como `unit_factor_override`.
+    🪤 Sem unidade declarada não há resgate: entregar geometria com escala
+    adivinhada violaria a regra dura nº1. Melhor a falha honesta.
+
+    Só age em arquivo que HOJE já resulta em zero — o caminho que funciona não
+    muda em nada.
+
+    Devolve o caminho do enxuto, ou None (aí o chamador segue com o cheio).
+    """
+    try:
+        tam = os.path.getsize(cheio)
+    except OSError:
+        return None
+    if tam <= _MAX_DXF_BYTES:
+        return None                      # cabe no caminho normal — não mexe
+
+    fator = unidade_do_cabecalho_dxf(cheio)
+    if fator is None:
+        logger.warning("[resgate-minimal] %s tem %d MB mas NÃO declara $INSUNITS "
+                       "— sem unidade não há resgate (regra dura nº1)",
+                       os.path.basename(cheio), tam // 1048576)
+        return None
+
+    enxuto = os.path.join(output_dir, Path(dwg_path).stem + "_libredwg_min.dxf")
+    try:
+        r = subprocess.run([dwg2dxf, "-y", "-m", "-o", enxuto, dwg_path],
+                           capture_output=True, text=True, timeout=300)
+    except Exception as e:
+        logger.warning("[resgate-minimal] dwg2dxf -m falhou: %s", e)
+        return None
+    if r.returncode != 0 or not os.path.isfile(enxuto):
+        logger.warning("[resgate-minimal] dwg2dxf -m retornou %d", r.returncode)
+        return None
+
+    novo = os.path.getsize(enxuto)
+    if novo > _MAX_DXF_BYTES:
+        logger.warning("[resgate-minimal] %s: %d MB -> %d MB, ainda acima do "
+                       "limite de %d MB", os.path.basename(cheio), tam // 1048576,
+                       novo // 1048576, _MAX_DXF_BYTES // 1048576)
+        try: os.remove(enxuto)
+        except OSError: pass
+        return None
+
+    # 🪤 O arquivo cheio some AGORA. São centenas de MB por prancha e o disco do
+    # Render estava em 83% no dia do caso — 5 pranchas dessas enchem 1,85 GB.
+    try:
+        os.remove(cheio)
+    except OSError:
+        pass
+    logger.info("[resgate-minimal] %s: %d MB -> %d MB (unidade %.4f m do cabeçalho)",
+                os.path.basename(dwg_path), tam // 1048576, novo // 1048576, fator)
+    _UNIDADE_DE_RESGATE[os.path.abspath(enxuto)] = fator
+    return enxuto
+
+
+# Fator de unidade descoberto no resgate, por caminho de arquivo. O `-m` apaga o
+# cabeçalho, então esta é a ÚNICA fonte de escala pro arquivo enxuto.
+_UNIDADE_DE_RESGATE: dict = {}
 
 
 def dwg_has_aec_markers(dwg_path: str) -> bool:
@@ -1924,7 +2037,20 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         _sz = os.path.getsize(filepath)
     except OSError:
         _sz = 0
-    _MAX_DXF_BYTES = 150 * 1024 * 1024  # 150 MB — prancha normal é <20 MB
+    # 🔑 ARQUIVO RESGATADO NÃO TEM CABEÇALHO. O `dwg2dxf -m` grava só
+    # $ACADVER, HANDSEED e ENTITIES: o $INSUNITS foi embora junto. Sem repor a
+    # unidade aqui, a extração cai no chute de milímetro e a área sai 100×
+    # errada — medido em 5 de 6 arquivos, 18/08/2026. A escala foi lida do
+    # arquivo CHEIO antes de ele ser apagado e guardada por caminho.
+    # 🪤 Não sobrescreve override de quem chama: cota PROVADA em outra prancha
+    # continua valendo mais que o cabeçalho (o cabeçalho mente, 05/08).
+    if unit_factor_override is None:
+        _f_resgate = _UNIDADE_DE_RESGATE.get(os.path.abspath(filepath))
+        if _f_resgate:
+            unit_factor_override = _f_resgate
+            logger.info("[resgate-minimal] usando unidade %.4f m/unidade guardada "
+                        "para %s", _f_resgate, os.path.basename(filepath))
+
     if _sz > _MAX_DXF_BYTES:
         raise RuntimeError(
             f"DXF grande demais pra processar com segurança "
