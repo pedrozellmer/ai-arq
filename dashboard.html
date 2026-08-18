@@ -442,10 +442,20 @@
             </select>
             <p class="text-xs text-gray-500 mt-1.5">Ensina a IA a ler certo: <b>arquitetura</b> (paredes, piso, forro, esquadrias) ou <b>estrutura</b> (concreto em m&sup3;, f&ocirc;rma em m&sup2;, a&ccedil;o em kg &mdash; <b>ainda em beta</b>). Na d&uacute;vida, deixe <b>Arquitetura</b>.</p>
           </div>
-          <!-- Área total (opcional): base honesta pras áreas quando a planta é layout sem cota -->
-          <div class="mb-6">
+          <!-- Área total (opcional): base honesta pras áreas quando a planta é layout sem cota.
+               🎯 18/08/2026 — GANHOU DESTAQUE POR MEDIÇÃO. Em 90 dias, 53 de 89
+               projetos concluídos saíram SEM área nenhuma na capa (28 de 31
+               quando o envio é só PDF). Não é falha do motor: ele só extrai
+               área declarada explicitamente na prancha, e a maioria não declara.
+               🔑 E dos 53 com capa vazia, ZERO tinham este campo preenchido —
+               enquanto 6 dos que têm capa vieram justamente daqui. O campo
+               resolve, só que ninguém vê que ele existe.
+               🪤 Classes usadas já existem no dashboard (Tailwind é build
+               ESTÁTICO — classe nova sairia inerte). -->
+          <div class="mb-6 rounded-xl border border-amber-200 bg-amber-50 p-4">
             <label for="project-area" class="block text-sm font-medium text-gray-700 mb-2">&Aacute;rea total do projeto (m&sup2;) <span class="text-gray-400 font-normal">&mdash; opcional</span></label>
             <input type="number" id="project-area" min="0" step="0.01" inputmode="decimal" placeholder="Ex: 120" class="w-full px-4 py-3 rounded-xl border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none">
+            <p class="text-xs text-amber-800 mt-1.5"><b>Vale preencher:</b> 6 em cada 10 projetos n&atilde;o trazem a metragem escrita no desenho &mdash; e a gente n&atilde;o inventa &aacute;rea. Sem esse n&uacute;mero, a capa da planilha sai sem &aacute;rea e os itens de piso, forro e pintura ficam sem base.</p>
             <p class="text-xs text-gray-500 mt-1.5">Se voc&ecirc; j&aacute; sabe a metragem, a gente usa como <b>base pras &aacute;reas</b> (piso, forro, pintura) e marca como <b>&ldquo;informada por voc&ecirc;&rdquo;</b>. Deixe em branco que a gente tenta medir pela planta &mdash; <b>a medi&ccedil;&atilde;o da planta sempre vem primeiro</b>, sua &aacute;rea s&oacute; entra se a planta n&atilde;o tiver cota (t&iacute;pico de estudo de layout).</p>
           </div>
           <!-- Pé-direito (opcional): destrava pintura quando a planta só dá o comprimento das paredes -->

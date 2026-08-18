@@ -362,6 +362,30 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     if project.workstations and typology in ("office", "educational"):
         premissas.append(('0.4', 'Posições de trabalho', 'un', project.workstations, 'Conforme quadro de departamentos', ''))
 
+    # 🚨 SILÊNCIO NÃO É RESPOSTA (18/08/2026). Medido em 90 dias: **53 de 89**
+    # projetos concluídos saem sem área NENHUMA na capa — 28 de 31 quando o
+    # envio é só PDF (90%). E isso NÃO é bug: o prompt manda "extrair APENAS se
+    # estiver explicitamente indicada na planta/legenda", e a maioria das
+    # pranchas não declara área construída. O motor está certo em não inventar.
+    #
+    # O problema é o cliente não ter como saber disso. Capa vazia é ambígua:
+    # pode ser "o desenho não diz" ou "a leitura falhou". As duas doem, mas só
+    # uma tem conserto do lado dele — e é o lado dele que sabe a metragem.
+    #
+    # 🪤 Esta linha NÃO inventa número: ela ocupa o lugar do número com o
+    # motivo. Regra dura nº1 continua de pé — o que não foi medido não vira
+    # quantidade, nem aqui.
+    if not (project.total_area or project.layout_area or project.no_intervention_area):
+        premissas.append((
+            '0.1',
+            'Área do projeto — NÃO DECLARADA no desenho',
+            '—', None,
+            'O desenho não traz quadro de áreas nem legenda com a metragem, e nós '
+            'não estimamos área por conta própria. Se você informar a área total '
+            'ao reprocessar (campo "Área total" no envio), ela vira a base dos '
+            'itens de piso, forro e pintura.',
+            ''))
+
     # Premissas são metadados do projeto (não itens orçáveis) — fill cinza claro
     P_PREMISSA = PatternFill('solid', fgColor='F3F4F6')
     for num, desc, un, qtd, obs, ref in premissas:
