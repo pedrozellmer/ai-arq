@@ -57,6 +57,7 @@ from engine_rules import (
     FLOOR_M2_UNITS as _FLOOR_M2_UNITS,
     linhas_pai_e_filho as _linhas_pai_e_filho,
     pode_fundir as _pode_fundir,
+    caveat_atinge_unidade as _caveat_atinge_unidade,
     selos_sem_medida as _selos_sem_medida,
     unidade_conflita_com_sinapi as _unidade_conflita_sinapi,
 )
@@ -6013,7 +6014,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     and any(t in str(item_data.get("observations", "")).lower()
                                             for t in ("quadro", "resumo", "tabela"))
                                 )
-                                if _dxf_sem_procedencia and conf == "confirmado" and not _e_kg_quadro:
+                                # 🔑 RESSALVA POR DIMENSÃO (17/08/2026): ressalva de
+                                # ESCALA (unidade suspeita/corrigida) não pode
+                                # rebaixar CONTAGEM — 32 janelas são 32 INSERTs
+                                # contados, meça-se em milímetro ou em milha.
+                                # Medido em 30 dias: de 1.090 linhas em `un`, só
+                                # 28% saem medidas, e parte é contagem legítima
+                                # rebaixada por escala. As outras ressalvas
+                                # (estéril, xref, duto) seguem atingindo tudo.
+                                _ressalva_atinge = _caveat_atinge_unidade(
+                                    extraction.metadata,
+                                    str(item_data.get("unit", "")))
+                                if _ressalva_atinge and conf == "confirmado" and not _e_kg_quadro:
                                     conf = "estimado"
                                     item_data["_procedencia_rebaixada"] = True
                                 qty = sf(item_data.get("quantity", 0))

@@ -1083,3 +1083,55 @@ def pode_fundir(desc_a: str, desc_b: str) -> bool:
         if a[cat] != b[cat]:
             return False
     return True
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  RESSALVA POR DIMENSÃO — nem toda ressalva atinge todo item
+# ══════════════════════════════════════════════════════════════════════
+# 🚨 Por que existe (17/08/2026): `extraction_has_quality_caveat` é
+# tudo-ou-nada. Uma ressalva de UNIDADE (escala suspeita, corrigida por
+# plausibilidade) rebaixa TODOS os itens do DXF pra estimado — inclusive
+# CONTAGEM DE BLOCO, que não depende de escala nenhuma: 32 janelas são 32
+# INSERTs contados, meça-se em milímetro ou em milha.
+#
+# Custo medido nos últimos 30 dias: de 1.090 linhas em `un`, só 28% saem
+# medidas — e parte disso é contagem legítima rebaixada por ressalva de
+# escala. No arquivo do Giovani, as 32 janelas e as 4 geladeiras viraram
+# estimado por causa do cabeçalho mentiroso, que não tem nada a ver com
+# contar bloco.
+#
+# 🪤 As outras ressalvas CONTINUAM valendo pra tudo:
+#   - extração estéril (0 medições) → nada é confiável, nem contagem;
+#   - xref não resolvido → a geometria contada pode estar incompleta;
+#   - duto com medição suspeita → é sobre comprimento, mas o item é de duto.
+# Só a de UNIDADE é dimensional por natureza.
+
+_UNIDADES_QUE_DEPENDEM_DE_ESCALA = {
+    "m", "ml", "m²", "m2", "m³", "m3", "km", "cm", "mm",
+}
+
+_RESSALVAS_SO_DE_ESCALA = ("unidade_suspeita", "alerta_unidade")
+
+
+def caveat_atinge_unidade(metadata, unidade: str) -> bool:
+    """A ressalva desta extração impede confirmar um item DESTA unidade?
+
+    - Sem ressalva nenhuma → False.
+    - Ressalva NÃO-dimensional (estéril, xref, duto) → True pra qualquer item.
+    - Ressalva SÓ de escala → True apenas pra unidade que depende de escala
+      (m, m², m³ e afins). Contagem (`un`), peso (`kg`), verba (`vb`) e tempo
+      (`mês`) passam — não se medem com régua.
+    """
+    if not metadata:
+        return False
+    _outras = bool(
+        metadata.get("extracao_esteril")
+        or metadata.get("xref_nao_resolvido")
+        or metadata.get("duto_medicao_suspeita")
+    )
+    if _outras:
+        return True
+    _so_escala = any(metadata.get(k) for k in _RESSALVAS_SO_DE_ESCALA)
+    if not _so_escala:
+        return False
+    return (unidade or "").strip().lower() in _UNIDADES_QUE_DEPENDEM_DE_ESCALA
