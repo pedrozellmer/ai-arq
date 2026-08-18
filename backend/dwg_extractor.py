@@ -1567,8 +1567,25 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
             timeout=300,
         )
         if result.returncode == 0 and os.path.isfile(out_path):
-            _resgatado = _resgatar_dxf_gigante(dwg2dxf, dwg_path, out_path, output_dir)
-            return _resgatado or out_path
+            # 🚫 RESGATE POR --minimal DESLIGADO EM 18/08/2026, horas depois de
+            # ligado, por medição própria. `_resgatar_dxf_gigante` continua aqui
+            # (testada, funciona) mas NÃO é chamada: o `-m` apaga a seção BLOCKS
+            # e com ela TODA a geometria de dentro dos blocos.
+            # Medido em 5 arquivos reais: 3.762 blocos com definição -> 0, e
+            # 198.461 entidades que saíam da explosão -> 0. Cem por cento.
+            # 🪤 A bancada anterior disse "5 de 5 IGUAL" porque comparava
+            # hachura, texto e área — tudo do NÍVEL DE CIMA. O que mora dentro
+            # do bloco não aparecia na comparação. Bloco nomeado é como as 385
+            # estacas da Eduarda foram medidas.
+            # Entregar planilha sem isso pareceria completa e não seria: pior
+            # que a falha honesta que o cliente recebe hoje (ver a mensagem de
+            # `motor:prancha-grande-demais`).
+            # ⚰️ `--as r12` foi testado como alternativa que preserva BLOCKS:
+            # o libredwg não converte esses arquivos pra R12 (não gera saída).
+            # Pra religar: resolver a perda de bloco OU avisar o cliente de
+            # forma inescapável E rebaixar tudo da prancha resgatada a
+            # 'estimado'. Nada disso está feito.
+            return out_path
         logger.warning("libredwg dwg2dxf retornou %d: %s",
                        result.returncode, result.stderr[:300])
     except subprocess.TimeoutExpired:
