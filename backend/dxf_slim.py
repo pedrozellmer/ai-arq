@@ -34,6 +34,97 @@ _KEEP = {
 }
 
 
+# 🚨 SUB-ENTIDADES. No arquivo, POLYLINE é seguido de N VERTEX e um SEQEND
+# como entidades SEPARADAS (o mesmo vale pros ATTRIB de um INSERT). Quem filtra
+# por TEXTO tem que manter esses três, senão a POLYLINE fica sem vértice e o DXF
+# vira lixo. O caminho do ezdxf não precisa disso porque lá a POLYLINE já vem
+# montada com os vértices dentro — armadilha exclusiva do filtro textual.
+_KEEP_TEXTO = _KEEP | {"VERTEX", "SEQEND", "ATTDEF"}
+
+
+def emagrecer_por_texto(path: str, out: str) -> tuple:
+    """Emagrece um DXF SEM ezdxf, lendo o arquivo como bytes em pares de linhas.
+
+    🎯 Por que existe (18/08/2026, caso Patrick): o caminho do `iterdxf` quebra
+    em `AssertionError: dictionary handle #X not resolved` na hora de ESCREVER.
+    Medido em 11 DXF reais convertidos por libredwg: **9 falharam**; um DXF
+    escrito pelo próprio ezdxf passou (controle negativo). Ou seja, o
+    emagrecedor funciona — quem quebra ele é a saída do libredwg, que é o
+    caminho de TODO cliente que manda DWG (o ODA recusa quase tudo).
+    Descartar o dicionário de extensão antes de escrever só salvou 3 de 11.
+
+    Como o DXF é um formato de pares (código, valor) em linhas alternadas, dá
+    pra filtrar a seção ENTITIES sem interpretar handle nenhum. Memória O(1):
+    só uma entidade por vez fica no buffer.
+
+    🪤 Trabalha em BYTES, nunca decodifica. DXF de AutoCAD antigo vem em cp1252
+    e um `decode('utf-8')` estoura em acento — foi assim que um dos 11 trocou
+    AssertionError por UnicodeEncodeError na tentativa anterior.
+
+    HEADER, TABLES, BLOCKS e OBJECTS são copiados intactos, então INSERT
+    continua resolvendo o bloco dele.
+
+    Devolve (mantidas, descartadas).
+    """
+    keep = {t.encode("ascii") for t in _KEEP_TEXTO}
+    mantidas = descartadas = 0
+    dentro_entities = False
+    esperando_nome = False
+    buf = None
+    tipo = None
+
+    def _despeja(fo):
+        nonlocal buf, tipo, mantidas, descartadas
+        if buf is None:
+            return
+        if tipo in keep:
+            fo.write(b"".join(buf))
+            mantidas += 1
+        else:
+            descartadas += 1
+        buf = None
+        tipo = None
+
+    with open(path, "rb") as fi, open(out, "wb") as fo:
+        while True:
+            l_cod = fi.readline()
+            if not l_cod:
+                break
+            l_val = fi.readline()
+            cod = l_cod.strip()
+            val = l_val.strip()
+
+            if cod == b"0":
+                _despeja(fo)
+                if val == b"SECTION":
+                    esperando_nome = True
+                    fo.write(l_cod); fo.write(l_val)
+                elif val == b"ENDSEC":
+                    dentro_entities = False
+                    fo.write(l_cod); fo.write(l_val)
+                elif val == b"EOF":
+                    fo.write(l_cod); fo.write(l_val)
+                elif dentro_entities:
+                    buf = [l_cod, l_val]      # começa entidade nova
+                    tipo = val
+                else:
+                    fo.write(l_cod); fo.write(l_val)
+                continue
+
+            if esperando_nome and cod == b"2":
+                esperando_nome = False
+                dentro_entities = (val == b"ENTITIES")
+                fo.write(l_cod); fo.write(l_val)
+                continue
+
+            if buf is not None:
+                buf.append(l_cod); buf.append(l_val)
+            else:
+                fo.write(l_cod); fo.write(l_val)
+        _despeja(fo)
+    return mantidas, descartadas
+
+
 def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
                              log=None) -> Optional[str]:
     """Se o DXF passa do limiar, gera `<nome>.slim.dxf` só com o que o motor
@@ -67,6 +158,37 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         finally:
             doc.close()
     except Exception as exc:
+        # 🔁 PLANO B: o caminho do ezdxf quebra em 9 de 11 DXF de libredwg
+        # (medido 18/08/2026) — e libredwg é o caminho de TODO cliente que
+        # manda DWG, porque o ODA recusa quase tudo. Cair fora aqui deixava o
+        # arquivo INTEIRO ir pro extrator, sem proteção nenhuma.
+        # 🪤 O ganho do filtro textual nos 11 arquivos medidos foi de só 4% de
+        # disco e 0% de RAM — ele NÃO resolve estouro de memória sozinho. Vale
+        # porque nunca quebra e porque 4% de proteção é mais que 0%. Quem
+        # prometer que isto conserta OOM está inventando.
+        try:
+            _m, _d = emagrecer_por_texto(path, out)
+            _novo = os.path.getsize(out)
+            if _d > 0 and _novo < size * 0.95:
+                if log is not None:
+                    try:
+                        log("motor:dxf-slim",
+                            f"arq={os.path.basename(path)} ezdxf falhou "
+                            f"({type(exc).__name__}) mas o filtro TEXTUAL salvou: "
+                            f"{size // 1048576} MB -> {_novo // 1048576} MB "
+                            f"({_m} mantidas, {_d} descartadas)")
+                    except Exception:
+                        pass
+                print(f"[dxf-slim] {os.path.basename(path)}: plano B textual "
+                      f"{size // 1048576} MB -> {_novo // 1048576} MB")
+                return out
+            try: os.remove(out)
+            except OSError: pass
+        except Exception as _e2:
+            print(f"[dxf-slim] {os.path.basename(path)}: plano B textual também "
+                  f"falhou ({type(_e2).__name__}: {_e2})")
+            try: os.remove(out)
+            except OSError: pass
         print(f"[dxf-slim] {os.path.basename(path)}: emagrecimento falhou "
               f"({type(exc).__name__}: {exc}) — segue com o original")
         # 🚨 A FALHA TEM QUE APARECER NO BANCO. Este passo existe pra evitar
@@ -101,9 +223,19 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         novo = os.path.getsize(out)
     except OSError:
         return None
-    print(f"[dxf-slim] {os.path.basename(path)}: {size // 1048576} MB → "
-          f"{novo // 1048576} MB ({mantidas} entidades mantidas, "
-          f"{descartadas} descartadas)")
+    # 🚨 O PRINT DE SUCESSO NÃO PODE MATAR O SUCESSO. A seta unicode aqui
+    # estourava UnicodeEncodeError em stdout cp1252 — e como o print vem DEPOIS
+    # do emagrecimento dar certo, a exceção subia e o arquivo emagrecido era
+    # descartado. Medido em 18/08/2026: dos 11 DXF testados, os DOIS únicos em
+    # que o ezdxf conseguiu emagrecer eram justamente os que morriam aqui.
+    # 🪤 Mesma armadilha do preview de prancha (dxf_render), que já tinha
+    # custado o mesmo diagnóstico errado: "falhou" quando na verdade funcionou.
+    try:
+        print(f"[dxf-slim] {os.path.basename(path)}: {size // 1048576} MB -> "
+              f"{novo // 1048576} MB ({mantidas} entidades mantidas, "
+              f"{descartadas} descartadas)")
+    except Exception:
+        pass
     if novo >= size * 0.95:
         # não rendeu — evita duplicar disco à toa
         try:
