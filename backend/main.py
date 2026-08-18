@@ -5069,6 +5069,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     if ext == 'dwg':
                         jobs.update_field(job_id, progress=base)
                         jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF ({ci+1}/{n_cad}): {os.path.basename(cad_path)}")
+                        _descartou_por_tamanho = False
                         dxf_path = convert_dwg_to_dxf(cad_path)
                         # ── DESCARTA NA CONVERSÃO ───────────────────────────
                         # 🚨 O JOB CONVERTIA TODAS AS PRANCHAS ANTES DE EXTRAIR
@@ -5126,8 +5127,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                     current_step=f"{_bn_conv}: prancha grande demais "
                                                  f"({_tam_conv // 1048576} MB) — "
                                                  f"seguindo com as outras")
-                                dxf_path = None
-                        if dxf_path:
+                                # 🪤 NÃO zerar dxf_path aqui. Zerar fazia o descarte
+                                # cair no ramo de "DWG não converteu" logo abaixo, e
+                                # a MESMA prancha entrava em dwg_failed E em
+                                # _dxf_grandes_msgs. Resultado que o Patrick leu às
+                                # 14:48: "16 pranchas não entraram" quando eram 8,
+                                # cada nome listado duas vezes — e com o conselho
+                                # errado ("o DWG não abriu, salve como DXF"), quando
+                                # o arquivo dele ABRIU e o problema era tamanho.
+                                # Contar errado é tão ruim quanto não contar.
+                                _descartou_por_tamanho = True
+                        if dxf_path and not _descartou_por_tamanho:
                             dxf_paths.append(dxf_path)
                             jobs.update_field(job_id, current_step=f"DWG convertido: {os.path.basename(dxf_path)}")
                             # Guarda-corpo do fallback (01/08): conversão que veio do
@@ -5144,6 +5154,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                            f"{os.path.basename(cad_path)} convertido via "
                                            f"fallback libredwg (ODA recusou)",
                                            job_id, severity="info")
+                        elif _descartou_por_tamanho:
+                            # Já foi contado e explicado com precisão em
+                            # _dxf_grandes_msgs. Entrar aqui também duplicaria o
+                            # nome na lista de "não entraram" e trocaria o motivo
+                            # verdadeiro (tamanho) por um falso (não converteu).
+                            pass
                         else:
                             dwg_failed.append(os.path.basename(cad_path))
                             # É arquivo AutoCAD MEP/Architecture (objetos AEC)? Aí a falha
