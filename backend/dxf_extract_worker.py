@@ -33,14 +33,31 @@ def main():
                 unit_factor = None
 
     # Mesmo pré-passo do caminho in-process: emagrece o DXF grande (best-effort).
+    # 🪤 O RESULTADO TEM QUE SAIR DAQUI POR stderr. Este processo não pode
+    # importar a app FastAPI pra chamar `_log_error` (pesado e circular), então
+    # ele imprime com o marcador `[dxf-slim...]` e o PAI copia pro `error_log`
+    # (ver `_extract_dxf_isolado`). Antes de 18/08/2026 nada era impresso no
+    # caminho de sucesso e o `emagrecer_dxf_se_preciso` era chamado sem `log=`:
+    # a proteção de memória podia estar falhando em toda prancha e o banco
+    # continuava sem uma linha sequer a respeito.
     p = dxf_path
     try:
         from dxf_slim import emagrecer_dxf_se_preciso
-        s = emagrecer_dxf_se_preciso(p)
+        _tam = os.path.getsize(p)
+        s = emagrecer_dxf_se_preciso(
+            p, log=lambda _st, _msg: print(f"[dxf-slim] {_msg}", file=sys.stderr))
         if s:
             p = s
+            print(f"[dxf-slim] {os.path.basename(dxf_path)}: emagreceu "
+                  f"{_tam // 1048576} MB -> {os.path.getsize(p) // 1048576} MB",
+                  file=sys.stderr)
+        else:
+            print(f"[dxf-slim] {os.path.basename(dxf_path)}: NAO emagreceu "
+                  f"({_tam // 1048576} MB) — segue com o arquivo inteiro",
+                  file=sys.stderr)
     except Exception as e:  # noqa: BLE001
-        print(f"[worker dxf-slim] pulando ({e})", file=sys.stderr)
+        print(f"[dxf-slim] {os.path.basename(dxf_path)}: passo pulado "
+              f"({type(e).__name__}: {e})", file=sys.stderr)
 
     from dwg_extractor import extract_from_file
     ext = extract_from_file(p, unit_factor_override=unit_factor)

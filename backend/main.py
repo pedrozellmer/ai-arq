@@ -4096,6 +4096,31 @@ def _extract_dxf_inprocess(dxf_path, unit_consensus, job_id: str = ""):
     return _ext, _ext.to_structured_prompt(), p
 
 
+def _diag_excecao(exc, limite: int = 260) -> str:
+    """O DIAGNÓSTICO DE UM TRACEBACK MORA NO FIM, NÃO NO COMEÇO.
+
+    🚨 18/08/2026, caso Patrick (job dbd0d97e, 5 DWG de ~50 MB): duas pranchas
+    caíram com `RuntimeError: extração isolada falhou (rc=1)` e o log gravou
+    `str(exc)[:200]` — os 200 PRIMEIROS caracteres. Como a mensagem já começa
+    com "extração isolada falhou (rc=N): " seguida do traceback do filho, os
+    200 caracteres pegavam só o cabeçalho ("line 46, in main / ext =
+    extract_from_file(...)"), e a ÚLTIMA linha — a que diz se foi MemoryError,
+    DXFStructureError ou UnicodeDecodeError — era cortada fora.
+    Três causas com consertos completamente diferentes viravam o mesmo texto.
+
+    🪤 O `[-600:]` do stderr lá em `_extract_dxf_isolado` já estava certo; quem
+    desfazia era este corte pela frente. Não adianta preservar o fim numa camada
+    e jogá-lo fora na seguinte.
+
+    Mantém o começo (que traz o rc) E o fim (que traz a exceção real).
+    """
+    _t = " ".join(str(exc or "").split())
+    if len(_t) <= limite:
+        return _t
+    _cabeca = max(60, limite // 3)
+    return _t[:_cabeca] + " …CORTADO… " + _t[-(limite - _cabeca):]
+
+
 def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str = ""):
     """Extrai UMA prancha DXF num SUBPROCESSO matável com teto de memória (fix
     confiabilidade 2026-07-22). Uma prancha densa que estouraria a RAM mata só o
@@ -4148,8 +4173,27 @@ def _extract_dxf_isolated(dxf_path, unit_consensus, timeout_s=900, job_id: str =
         except OSError: pass
         print(f"[dxf-isolado] subprocesso não lançou ({type(_le).__name__}: {_le}) — fallback in-process")
         return _extract_dxf_inprocess(dxf_path, unit_consensus, job_id)
+    # 🚨 O EMAGRECEDOR FALHAVA CALADO NO CAMINHO REAL (18/08/2026, caso Patrick).
+    # `dxf_slim.emagrecer_dxf_se_preciso` é a proteção de memória: quando ele
+    # falha, o DXF vai INTEIRO pro ezdxf — exatamente o estouro que ele existe
+    # pra evitar. O `main.py` in-process passa `log=` e grava em `error_log`; o
+    # `dxf_extract_worker` — que é o caminho de produção — chama sem `log`, e o
+    # subprocesso não pode importar a app pra registrar. Resultado: em 11/08 o
+    # emagrecimento falhou em 4 de 4 arquivos testados e `error_log` tinha ZERO
+    # linha de slim, porque as falhas medidas vieram do caminho in-process.
+    # 🪤 Lido SEMPRE, não só quando rc != 0: o caso perigoso é justamente a
+    # prancha que emagreceu mal e MESMO ASSIM foi lida — ela envenena a memória
+    # do container pra prancha seguinte, e sem isto some.
+    _stderr_txt = (_proc.stderr or b"").decode("utf-8", "replace")
+    if job_id and "[dxf-slim" in _stderr_txt:
+        for _ln in _stderr_txt.splitlines():
+            if "[dxf-slim" in _ln:
+                try:
+                    _log_error("motor:dxf-slim", _ln.strip()[:400], job_id)
+                except Exception:
+                    pass
     if _proc.returncode != 0:
-        _err = (_proc.stderr or b"").decode("utf-8", "replace")[-600:]
+        _err = _stderr_txt[-600:]
         try: os.remove(_out)
         except OSError: pass
         # rc != 0 = filho morto pelo teto de RAM OU erro de parse → NÃO faz fallback
@@ -5392,7 +5436,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _log_error(
                                 "dxf:extract-falhou",
                                 f"{_bn_dxf}: {type(_ex_dxf).__name__}: "
-                                f"{str(_ex_dxf)[:200]} — prancha FORA do "
+                                f"{_diag_excecao(_ex_dxf)} — prancha FORA do "
                                 f"quantitativo (job segue)", job_id)
                         except Exception:
                             pass
