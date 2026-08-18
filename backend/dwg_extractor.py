@@ -1989,6 +1989,20 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             logger.warning("[unit-lfac] %s", _lfac["mensagem"])
             dim_check = _lfac
             _, unit_warnings = _validate_unit_factor(doc, unit_factor)
+        else:
+            # 4ª e ÚLTIMA régua (17/08/2026, caso Giovani): cota e DIMLFAC se
+            # calaram — o desenho, na unidade declarada, é fisicamente
+            # possível? Núcleo denso de 1,2 cm × 2,1 cm num prédio de 4
+            # apartamentos não é. Corrige SÓ no regime impossível e a
+            # correção NÃO é prova: entra como ressalva (nada sai
+            # 'confirmado') e o cliente lê a procedência.
+            _plaus = _unidade_por_plausibilidade(doc, unit_factor)
+            if _plaus.get("status") == "corrigida_plausibilidade":
+                unit_factor = _plaus["fator_corrigido"]
+                logger.warning("[unit-plausibilidade] %s", _plaus["mensagem"])
+                dim_check = _plaus
+                _, unit_warnings = _validate_unit_factor(doc, unit_factor)
+                unit_warnings.append(_plaus["mensagem"])
     elif dim_check.get("status") == "validada" and unit_warnings:
         # fator PROVADO por cota: a heurística de extensão vira rastro em
         # metadata em vez de rebaixar tudo pra estimado
@@ -2089,6 +2103,12 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         elif _dim_status == "corrigida":
             metadata["unidade_corrigida_por_cotas"] = dim_check["mensagem"]
             metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
+        elif _dim_status == "corrigida_plausibilidade":
+            # 🚨 NÃO é prova — vai pra `alerta_unidade`, que entra em
+            # `extraction_has_quality_caveat`: nenhum item deste DXF sai
+            # 'confirmado'. É medição destravada COM ressalva, não promoção.
+            metadata["unidade_corrigida_por_plausibilidade"] = dim_check["mensagem"]
+            metadata["alerta_unidade"] = dim_check["mensagem"]
         if _unit_consenso:
             metadata["unidade_por_consenso_projeto"] = (
                 f"prancha sem cota própria: usei a escala provada por cota em outra "
@@ -3186,3 +3206,106 @@ if __name__ == "__main__":
                       f"({item['confidence']})")
     else:
         print("Uso: python dwg_extractor.py <arquivo.dxf|dwg>")
+
+
+# ---------------------------------------------------------------------------
+# Régua da PLAUSIBILIDADE FÍSICA — a última, quando cota e DIMLFAC não decidem
+# ---------------------------------------------------------------------------
+# 🚨 Por que existe (17/08/2026, caso Giovani 75a774af): o arquivo declara
+# MILÍMETRO ($INSUNITS=4) e está desenhado em METRO. O fator errado entra ao
+# QUADRADO na área: as 143 hachuras somaram 0,0019 m² e o cliente recebeu
+# alvenaria, revestimento e forro zerados — foi ele que digitou "100" de
+# frustração em 14 linhas.
+#
+# As três réguas anteriores não decidiram, cada uma por um motivo legítimo:
+#   cotas   — 3 de 5 concordam (60% < 80% exigido) → recusa, corretamente;
+#   DIMLFAC — 1,0 em 253 de 253 cotas → não diz nada;
+#   maior elemento — 16,6 cm, acima do piso de 5 cm → não dispara.
+#
+# Esta olha o NÚCLEO DENSO do desenho (percentis 25–75, que ignora carimbo e
+# geometria perdida longe da planta). Medido no arquivo dele: 12,1 × 21,3
+# unidades — a pegada de um prédio de 4 apartamentos de ~57 m². Em metro
+# fecha; em milímetro seria 1,2 cm × 2,1 cm, fisicamente impossível.
+#
+# 🪤 Só corrige no regime IMPOSSÍVEL, nunca no meramente suspeito, e exige
+# volume de desenho (detalhe de dobradiça é legitimamente pequeno e tem pouca
+# entidade). O resultado NÃO é prova: entra como ressalva, então nenhum item
+# sai 'confirmado' (regra dura nº1) e o cliente lê a procedência.
+
+_PLAUS_CORE_MAX_M = 0.5      # núcleo denso menor que isto = impossível
+_PLAUS_OK_MIN_M, _PLAUS_OK_MAX_M = 2.0, 200.0   # faixa plausível pós-correção
+_PLAUS_MIN_PONTOS = 1000     # volume mínimo — detalhe pequeno não qualifica
+
+
+def _nucleo_denso(doc, limite_pontos: int = 20000):
+    """(largura, altura) do núcleo denso do desenho em unidades CRUAS.
+
+    Percentis 25–75 dos pontos de LINE/LWPOLYLINE/TEXT. Ignora carimbo e
+    entidade solta longe da planta, que inflam a extensão total (no arquivo do
+    Giovani: total 2.837 × 610, núcleo 12,1 × 21,3).
+    """
+    xs: list = []
+    ys: list = []
+    try:
+        msp = doc.modelspace()
+        for ent in msp:
+            if len(xs) >= limite_pontos:
+                break
+            try:
+                t = ent.dxftype()
+                if t == "LINE":
+                    xs.extend((ent.dxf.start.x, ent.dxf.end.x))
+                    ys.extend((ent.dxf.start.y, ent.dxf.end.y))
+                elif t == "LWPOLYLINE":
+                    for p in ent.get_points():
+                        xs.append(p[0]); ys.append(p[1])
+                elif t in ("TEXT", "MTEXT"):
+                    xs.append(ent.dxf.insert.x); ys.append(ent.dxf.insert.y)
+            except Exception:
+                continue
+    except Exception:
+        return None
+    if len(xs) < _PLAUS_MIN_PONTOS or len(ys) < _PLAUS_MIN_PONTOS:
+        return None
+    xs.sort(); ys.sort()
+    def _p(v, q):
+        return v[min(len(v) - 1, int(len(v) * q))]
+    return (_p(xs, 0.75) - _p(xs, 0.25), _p(ys, 0.75) - _p(ys, 0.25))
+
+
+def _unidade_por_plausibilidade(doc, unit_factor: float) -> dict:
+    """Última régua: o desenho, na unidade declarada, é fisicamente possível?
+
+    Devolve {'status': 'corrigida_plausibilidade', 'fator_corrigido', 'mensagem'}
+    ou {'status': None, 'motivo'}. Nunca lança.
+    """
+    try:
+        nucleo = _nucleo_denso(doc)
+        if not nucleo:
+            return {"status": None, "motivo": "desenho pequeno demais pra julgar"}
+        larg_m, alt_m = nucleo[0] * unit_factor, nucleo[1] * unit_factor
+        if not (0 < larg_m < _PLAUS_CORE_MAX_M and 0 < alt_m < _PLAUS_CORE_MAX_M):
+            return {"status": None,
+                    "motivo": f"núcleo {larg_m:.2f}×{alt_m:.2f} m é plausível"}
+        for fator in _CANONICAL_METRIC_FACTORS:
+            if fator <= unit_factor:
+                continue
+            nl, na = nucleo[0] * fator, nucleo[1] * fator
+            if (_PLAUS_OK_MIN_M <= nl <= _PLAUS_OK_MAX_M
+                    and _PLAUS_OK_MIN_M <= na <= _PLAUS_OK_MAX_M):
+                return {
+                    "status": "corrigida_plausibilidade",
+                    "fator_corrigido": fator,
+                    "mensagem": (
+                        f"unidade corrigida por PLAUSIBILIDADE: com "
+                        f"{_UNIT_FACTOR_NAMES.get(unit_factor, unit_factor)} o "
+                        f"desenho inteiro mediria {larg_m:.2f}×{alt_m:.2f} m "
+                        f"(impossível); em "
+                        f"{_UNIT_FACTOR_NAMES.get(fator, fator)} mede "
+                        f"{nl:.1f}×{na:.1f} m. NÃO é prova — quantidades entram "
+                        f"como estimado, confira a escala do seu arquivo."),
+                }
+        return {"status": None,
+                "motivo": f"núcleo {larg_m:.3f}×{alt_m:.3f} m sem correção limpa"}
+    except Exception as e:
+        return {"status": None, "motivo": f"falhou: {type(e).__name__}"}
