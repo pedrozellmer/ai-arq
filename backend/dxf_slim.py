@@ -42,6 +42,80 @@ _KEEP = {
 _KEEP_TEXTO = _KEEP | {"VERTEX", "SEQEND", "ATTDEF"}
 
 
+def prever_ganho_textual(path: str) -> tuple:
+    """Mede quanto o filtro textual encolheria — SEM ESCREVER NADA em disco.
+
+    🚨 POR QUE EXISTE (18/08/2026, 12:45): eu tinha religado o plano B pra
+    rodar sempre que o arquivo passasse da trava dura. No arquivo real do
+    Patrick isso escreveu uma cópia de **369 MB** (e outra de 349 MB) pra ganhar
+    **0,17%** — e o servidor CAIU às 12:45:26, com o disco do Render em 83%.
+    Alerta do Render e tudo. Foi a segunda vez no mesmo dia que uma mudança
+    minha "de graça" custou caro.
+
+    O erro conceitual: pra saber se vale escrever, eu estava escrevendo. Uma
+    varredura de leitura responde a mesma pergunta sem custar um byte de disco —
+    e ler 370 MB sequencialmente é barato, memória O(1).
+
+    Devolve (bytes_previstos, mantidas, descartadas).
+    """
+    keep = {t.encode("ascii") for t in _KEEP_TEXTO}
+    total = 0
+    mantidas = descartadas = 0
+    dentro_entities = False
+    esperando_nome = False
+    buf_tam = None
+    tipo = None
+
+    with open(path, "rb") as fi:
+        while True:
+            l_cod = fi.readline()
+            if not l_cod:
+                break
+            l_val = fi.readline()
+            cod, val = l_cod.strip(), l_val.strip()
+            par = len(l_cod) + len(l_val)
+
+            if cod == b"0":
+                if buf_tam is not None:
+                    if tipo in keep:
+                        total += buf_tam
+                        mantidas += 1
+                    else:
+                        descartadas += 1
+                    buf_tam = None
+                    tipo = None
+                if val == b"SECTION":
+                    esperando_nome = True
+                    total += par
+                elif val in (b"ENDSEC", b"EOF"):
+                    dentro_entities = False
+                    total += par
+                elif dentro_entities:
+                    buf_tam = par
+                    tipo = val
+                else:
+                    total += par
+                continue
+
+            if esperando_nome and cod == b"2":
+                esperando_nome = False
+                dentro_entities = (val == b"ENTITIES")
+                total += par
+                continue
+
+            if buf_tam is not None:
+                buf_tam += par
+            else:
+                total += par
+        if buf_tam is not None:
+            if tipo in keep:
+                total += buf_tam
+                mantidas += 1
+            else:
+                descartadas += 1
+    return total, mantidas, descartadas
+
+
 def emagrecer_por_texto(path: str, out: str) -> tuple:
     """Emagrece um DXF SEM ezdxf, lendo o arquivo como bytes em pares de linhas.
 
@@ -187,6 +261,25 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         # o instante da avaliação.
         _LIMITE_DURO = 150 * 1024 * 1024        # espelha _MAX_DXF_BYTES
         try:
+            # 🚦 MEDE ANTES DE ESCREVER. Sem isto, um arquivo de 370 MB que só
+            # encolhe 0,17% gera uma cópia de 369 MB em disco pra ser apagada
+            # em seguida — foi assim que o servidor caiu em 18/08 12:45:26.
+            _prev, _pm, _pd = prever_ganho_textual(path)
+            _vale_resgate = size > _LIMITE_DURO and _prev <= _LIMITE_DURO
+            _vale_economia = size <= _LIMITE_DURO and _pd > 0 and _prev < size * 0.95
+            if not (_vale_resgate or _vale_economia):
+                if log is not None:
+                    try:
+                        log("motor:dxf-slim",
+                            f"arq={os.path.basename(path)} filtro textual NÃO "
+                            f"compensa: {size // 1048576} MB -> "
+                            f"{_prev // 1048576} MB previstos ({_pd} descartadas "
+                            f"de {_pm + _pd}) — NADA escrito em disco")
+                    except Exception:
+                        pass
+                try: os.remove(out)
+                except OSError: pass
+                return None
             _m, _d = emagrecer_por_texto(path, out)
             _novo = os.path.getsize(out)
             # Dois motivos DIFERENTES pra aceitar o enxuto:
