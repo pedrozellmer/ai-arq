@@ -5440,7 +5440,42 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"quantitativo (job segue)", job_id)
                         except Exception:
                             pass
-                        dxf_errors.append(f"{_bn_dxf}: não consegui ler a geometria desse arquivo (pode estar corrompido ou ter objetos não suportados)")
+                        # 🧯 A MENSAGEM NÃO PODE CULPAR O ARQUIVO DO CLIENTE
+                        # QUANDO O LIMITE É NOSSO (caso Patrick, 18/08/2026).
+                        # "pode estar corrompido" foi o que o Patrick leria — e
+                        # os DWG dele estavam perfeitos: 5 pranchas de ~50 MB que
+                        # viram ~245 MB de DXF, e a extração come 11,2× o tamanho
+                        # do DXF em RAM (mediana de 11 medidas; 8,4× nos grandes)
+                        # contra um teto de 2.560 MB no subprocesso. É estouro de
+                        # memória NOSSO, não defeito dele.
+                        # 🪤 Decide pelo TAMANHO MEDIDO, não pelo tipo da exceção:
+                        # o filho morto por RAM chega aqui como RuntimeError
+                        # genérico, indistinguível de um parse quebrado.
+                        _mb_dxf = 0.0
+                        try:
+                            _mb_dxf = os.path.getsize(dxf_path) / 1048576
+                        except OSError:
+                            pass
+                        _teto_mb = int(os.environ.get("DXF_EXTRACT_MEM_MB", "2560"))
+                        _ram_prevista = _mb_dxf * 9.6      # fator dos arquivos GRANDES
+                        if _mb_dxf > 0 and _ram_prevista > _teto_mb * 0.8:
+                            try:
+                                _log_error(
+                                    "motor:prancha-grande-demais",
+                                    f"{_bn_dxf}: DXF {_mb_dxf:.0f} MB · RAM prevista "
+                                    f"~{_ram_prevista:.0f} MB contra teto {_teto_mb} MB "
+                                    f"— limite NOSSO, arquivo do cliente está ok", job_id)
+                            except Exception:
+                                pass
+                            dxf_errors.append(
+                                f"{_bn_dxf}: essa prancha é grande demais pro nosso "
+                                f"limite de memória de hoje ({_mb_dxf:.0f} MB depois de "
+                                f"convertida) — o arquivo não tem defeito. Sobe ela "
+                                f"em DXF, ou uma prancha por vez, que a gente lê")
+                        else:
+                            dxf_errors.append(
+                                f"{_bn_dxf}: não consegui ler a geometria desse arquivo "
+                                f"(pode estar corrompido ou ter objetos não suportados)")
                         continue
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
                     # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
@@ -6931,6 +6966,31 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         "seu arquivo. O sistema já tentou sozinho várias vezes "
                         "(alguns minutos) antes de desistir. É só reprocessar daqui "
                         "a alguns minutos — é grátis e não conta no seu limite."
+                    )
+                # 🧯 ESTOURO DE MEMÓRIA NÃO SE RESOLVE REPROCESSANDO. O caso
+                # Patrick (18/08/2026) terminou com a mensagem genérica abaixo,
+                # que manda "Reprocesse" — e reprocessar os MESMOS 250 MB dá
+                # exatamente no mesmo, como o próprio job dele provou: foi
+                # retomado sozinho e as 5 pranchas morreram de novo, uma a uma.
+                # Conselho errado é pior que conselho nenhum: gasta a paciência
+                # do cliente numa tentativa que a gente já sabe que falha.
+                # 🪤 Só quando TODAS as falhas forem de tamanho. Num job misto
+                # (uma prancha grande + uma corrompida) culpar só o tamanho é
+                # meia-verdade, e meia-verdade manda o cliente pro caminho
+                # errado: ele reexporta em DXF e a corrompida continua fora.
+                _n_grandes = sum(1 for _e in ai_errors
+                                 if "grande demais pro nosso limite de memória" in str(_e))
+                if _n_grandes and _n_grandes == len(ai_errors):
+                    _quantas = _n_grandes
+                    raise RuntimeError(
+                        f"⚠ {'Suas pranchas são' if _quantas > 1 else 'Sua prancha é'} "
+                        f"grande{'s' if _quantas > 1 else ''} demais pro nosso limite "
+                        f"de memória de hoje — e isso é limitação NOSSA, não defeito "
+                        f"do seu arquivo. Reprocessar do jeito que está vai dar no "
+                        f"mesmo. Dois caminhos que funcionam agora: (1) suba em DXF "
+                        f"em vez de DWG — a conversão do DWG é o que multiplica o "
+                        f"tamanho; ou (2) mande uma prancha por vez. Já estamos "
+                        f"trabalhando pra levantar esse teto."
                     )
                 # permanent OU unknown: NUNCA culpar o provedor sem prova. Mensagem
                 # honesta — problema técnico do nosso lado, reprocessável, com suporte.
