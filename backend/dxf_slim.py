@@ -166,43 +166,72 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         # disco e 0% de RAM — ele NÃO resolve estouro de memória sozinho. Vale
         # porque nunca quebra e porque 4% de proteção é mais que 0%. Quem
         # prometer que isto conserta OOM está inventando.
-        # 🚨 NÃO ESCREVER CÓPIA QUE NÃO SALVA NINGUÉM (18/08/2026, mesmo dia).
-        # O plano B rende ~4% (medido em 11 arquivos). Se 96% do tamanho ainda
-        # passa da trava dura do extrator (150 MB), a cópia vai ser escrita,
-        # medida e apagada — só queima disco. No filhote do Patrick isso
-        # aconteceu com 5 pranchas de 370 MB, com o disco do Render em 83%:
-        # 1,85 GB de DXF + a tentativa do ezdxf + mais 355 MB do plano B.
-        # 🪤 Quem introduziu esse custo fui eu, horas antes, "de graça".
+        # 🔑 QUANDO O ARQUIVO PASSA DA TRAVA DURA, O PLANO B É A ÚNICA SAÍDA.
+        # De manhã eu pus aqui um atalho que PULAVA o plano B acima de ~156 MB,
+        # com base nos 4% de ganho medidos em 11 arquivos pequenos — e com isso
+        # desliguei o resgate exatamente no caso que precisava dele (Patrick,
+        # DXF de 370 MB). Os 4% valem pra arquivo que já é quase só entidade
+        # útil; num DWG de AEC recusado pelo ODA, o lastro (proxy, 3DSOLID,
+        # MESH, WIPEOUT) pode ser a maior parte do arquivo. Não dá pra decidir
+        # por estimativa: mede.
+        #
+        # ✅ SEGURO PRA BLOCO, ao contrário do `dwg2dxf -m`. O filtro textual
+        # copia HEADER/TABLES/BLOCKS intactos e só peneira a seção ENTITIES.
+        # Medido em 5 arquivos: 56.949 entidades de dentro de bloco -> 56.949,
+        # 100% preservadas, contra 0% do `-m`. É por isso que este caminho pode
+        # ficar ligado e o outro não.
+        #
+        # 🪤 Disco: o Render estava em 83% no dia. Por isso o original é apagado
+        # ASSIM QUE o enxuto prova que vale, e o enxuto é apagado na hora se
+        # não valer — nunca ficam os dois grandes ao mesmo tempo por mais que
+        # o instante da avaliação.
         _LIMITE_DURO = 150 * 1024 * 1024        # espelha _MAX_DXF_BYTES
-        if size * 0.96 > _LIMITE_DURO:
-            if log is not None:
-                try:
-                    log("motor:dxf-slim",
-                        f"arq={os.path.basename(path)} plano B textual PULADO: "
-                        f"{size // 1048576} MB, nem 4% de ganho traria pra baixo "
-                        f"do limite de {_LIMITE_DURO // 1048576} MB — evitando "
-                        f"escrever cópia inútil em disco")
-                except Exception:
-                    pass
-            try: os.remove(out)
-            except OSError: pass
-            return None
         try:
             _m, _d = emagrecer_por_texto(path, out)
             _novo = os.path.getsize(out)
-            if _d > 0 and _novo < size * 0.95:
+            # Dois motivos DIFERENTES pra aceitar o enxuto:
+            #   RESGATE — o original não passava da trava dura e o enxuto passa.
+            #             É a diferença entre planilha e zero.
+            #   ECONOMIA — os dois cabem, mas o enxuto poupa RAM na extração.
+            _resgatou = size > _LIMITE_DURO and _novo <= _LIMITE_DURO
+            _economizou = _d > 0 and _novo < size * 0.95
+            if _resgatou or _economizou:
+                _motivo = "RESGATE (passou a caber)" if _resgatou else "economia"
                 if log is not None:
                     try:
                         log("motor:dxf-slim",
                             f"arq={os.path.basename(path)} ezdxf falhou "
-                            f"({type(exc).__name__}) mas o filtro TEXTUAL salvou: "
-                            f"{size // 1048576} MB -> {_novo // 1048576} MB "
-                            f"({_m} mantidas, {_d} descartadas)")
+                            f"({type(exc).__name__}) e o filtro TEXTUAL "
+                            f"{_motivo}: {size // 1048576} MB -> "
+                            f"{_novo // 1048576} MB ({_m} mantidas, "
+                            f"{_d} descartadas)")
                     except Exception:
                         pass
-                print(f"[dxf-slim] {os.path.basename(path)}: plano B textual "
-                      f"{size // 1048576} MB -> {_novo // 1048576} MB")
+                # 🪤 O original vai embora AGORA. São centenas de MB por prancha
+                # e o disco do Render estava em 83% no dia do caso Patrick —
+                # deixar os dois de pé é o que enche o disco de cliente.
+                # Só apaga depois que o enxuto provou que serve.
+                if _resgatou:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+                try:
+                    print(f"[dxf-slim] {os.path.basename(path)}: plano B textual "
+                          f"{_motivo} {size // 1048576} MB -> {_novo // 1048576} MB")
+                except Exception:
+                    pass
                 return out
+            # Não serviu: some com a cópia na hora, não deixa lastro em disco.
+            if log is not None and size > _LIMITE_DURO:
+                try:
+                    log("motor:dxf-slim",
+                        f"arq={os.path.basename(path)} filtro textual NÃO salvou: "
+                        f"{size // 1048576} MB -> {_novo // 1048576} MB, ainda "
+                        f"acima do limite de {_LIMITE_DURO // 1048576} MB "
+                        f"({_d} descartadas de {_m + _d}) — prancha vai falhar")
+                except Exception:
+                    pass
             try: os.remove(out)
             except OSError: pass
         except Exception as _e2:
