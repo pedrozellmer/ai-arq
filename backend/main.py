@@ -15953,6 +15953,16 @@ async def reprocess_project(job_id: str, request: Request):
     """Baixa os arquivos originais do Storage e cria novo job com os mesmos
     arquivos + tipologia. Usa a última versão do motor (prompts + regras).
 
+    🆕 18/08/2026 — ACEITA TROCAR O TIPO (`project_type` no corpo).
+
+    Caso Elizeu (orçamentista, 1º dia): escolheu "Estrutura" e subiu a prancha
+    de ARQUITETURA. Não havia estrutura pra medir, então saíram 10 itens, todos
+    estimados por índice. E o MESMO arquivo tinha 2.453 hachuras, 53.894 linhas
+    de parede e 2.920 cotas que o motor nem olhou — porque a pergunta foi outra.
+    Sem esta rota, a saída dele era subir os mesmos 15 MB de novo num projeto
+    novo. O arquivo JÁ está no nosso Storage; quem tinha que mudar era a
+    pergunta, não o upload.
+
     Política: 1 reprocessamento grátis por projeto. Tentativas adicionais
     retornam 402 (Payment Required) com mensagem orientando o user."""
     _require_project_owner(request, job_id)
@@ -15961,6 +15971,25 @@ async def reprocess_project(job_id: str, request: Request):
     if not _rate_limit_ok(f"reprocess:{job_id}", request, limit=6, window_s=600):
         raise HTTPException(429, "Muitos reprocessamentos em pouco tempo. Espere alguns minutos.")
     import urllib.request, urllib.error, json, shutil
+
+    # Tipo pedido pra ESTA rodada (opcional). Corpo vazio = mantém o de antes,
+    # que é o comportamento histórico.
+    # 🪤 Lista fechada: `project_type` escolhe o PROMPT do motor. Aceitar
+    # string livre daqui deixaria um cliente mandar o motor pra um caminho que
+    # não existe — e o sintoma seria planilha vazia, não erro.
+    _TIPOS_VALIDOS = {"arquitetura", "estrutura"}
+    _tipo_pedido = None
+    try:
+        _corpo = await request.json()
+        _tp = str((_corpo or {}).get("project_type") or "").strip().lower()
+        if _tp:
+            if _tp not in _TIPOS_VALIDOS:
+                raise HTTPException(400, f"Tipo inválido: use {' ou '.join(sorted(_TIPOS_VALIDOS))}.")
+            _tipo_pedido = _tp
+    except HTTPException:
+        raise
+    except Exception:
+        _tipo_pedido = None      # sem corpo / corpo não-JSON: mantém o tipo
 
     # 1) Buscar projeto original + checar contador.
     # Bug fix 2026-05-25: antes a query usava anon key como Bearer e RLS
@@ -16062,6 +16091,15 @@ async def reprocess_project(job_id: str, request: Request):
 
     typology = orig.get("typology") or "office"
     ptype = orig.get("project_type") or "arquitetura"
+    _ptype_antes = ptype
+    if _tipo_pedido and _tipo_pedido != ptype:
+        ptype = _tipo_pedido
+        try:
+            _log_error("motor:reprocess-troca-tipo",
+                       f"cliente pediu {_ptype_antes} -> {ptype} nos MESMOS arquivos "
+                       f"(sem novo upload)", job_id, severity="info")
+        except Exception:
+            pass
     try:
         _uta_orig = float(orig.get("user_total_area") or 0)
     except (TypeError, ValueError):

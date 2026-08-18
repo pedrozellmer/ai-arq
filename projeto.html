@@ -619,6 +619,18 @@
           <p class="text-xs font-semibold text-gray-800">Reprocessar com motor atualizado</p>
           <p id="reprocess-desc" class="text-xs text-gray-500">Gere a planilha de novo com a versão mais nova do motor. <strong>1× grátis por projeto.</strong></p>
         </div>
+        <!-- 🆕 18/08/2026: dá pra reprocessar MUDANDO A PERGUNTA, sem subir
+             arquivo de novo. Caso Elizeu (orçamentista): pediu Estrutura e
+             mandou a prancha de arquitetura — saíram 10 itens, todos de índice,
+             e o mesmo arquivo tinha 2.453 hachuras que o motor nem olhou.
+             Antes disso, a saída dele era subir os mesmos 15 MB num projeto
+             novo. O arquivo já está no Storage; quem muda é a pergunta. -->
+        <select id="reprocess-tipo" class="px-2 py-2 border border-indigo-200 rounded-lg text-xs bg-white shrink-0"
+                aria-label="Tipo de leitura para o reprocessamento">
+          <option value="">Mesmo tipo de antes</option>
+          <option value="arquitetura">Ler como Arquitetura</option>
+          <option value="estrutura">Ler como Estrutura</option>
+        </select>
         <button id="btn-reprocess" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs rounded-lg font-medium shrink-0">
           Reprocessar
         </button>
@@ -2483,17 +2495,38 @@ function renderHeader(p) {
       document.getElementById('reprocess-desc').innerHTML =
         'Este projeto já foi reprocessado 1×. Para rodar de novo, crie um <a href="dashboard.html" class="text-indigo-600 underline">novo projeto</a> com os mesmos arquivos.';
     } else {
+      // Rotula a opção "mesmo tipo" com o tipo REAL do projeto — "mesmo de
+      // antes" sozinho não diz nada a quem não lembra o que escolheu no upload.
+      const _selTipo = document.getElementById('reprocess-tipo');
+      const _tipoAtual = (p.project_type || 'arquitetura');
+      if (_selTipo) {
+        const _rot = _tipoAtual === 'estrutura' ? 'Estrutura' : 'Arquitetura';
+        _selTipo.options[0].textContent = `Mesmo tipo (${_rot})`;
+        // Some a opção que repete o tipo atual: escolher "Estrutura" num projeto
+        // que já é estrutura não muda nada e só confunde.
+        [..._selTipo.options].forEach(o => {
+          if (o.value && o.value === _tipoAtual) o.remove();
+        });
+      }
       btnReprocess.addEventListener('click', async () => {
+        const _novoTipo = _selTipo ? _selTipo.value : '';
+        const _aviso = _novoTipo
+          ? `Reprocessar lendo este projeto como ${_novoTipo === 'estrutura' ? 'ESTRUTURA' : 'ARQUITETURA'}? ` +
+            `São os mesmos arquivos — muda o que o motor procura neles. ` +
+            `A planilha atual será substituída. Você tem 1 reprocessamento grátis por projeto.`
+          : 'Reprocessar este projeto com a última versão do motor? A planilha atual será substituída. Itens já revisados ficam junto ao projeto original. Você tem 1 reprocessamento grátis por projeto.';
         const ok = window.toast
-          ? await window.toast.confirm(
-              'Reprocessar este projeto com a última versão do motor? A planilha atual será substituída. Itens já revisados ficam junto ao projeto original. Você tem 1 reprocessamento grátis por projeto.',
-              { ok: 'Reprocessar', cancel: 'Cancelar' })
-          : confirm('Reprocessar este projeto com a última versão do motor? A planilha atual será substituída. Você tem 1 reprocessamento grátis por projeto.');
+          ? await window.toast.confirm(_aviso, { ok: 'Reprocessar', cancel: 'Cancelar' })
+          : confirm(_aviso);
         if (!ok) return;
         btnReprocess.disabled = true;
         btnReprocess.innerHTML = '<svg class="animate-spin w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reprocessando...';
         try {
-          const res = await authFetch(`${API_BASE}/api/project/${jobId}/reprocess`, {method: 'POST'});
+          const res = await authFetch(`${API_BASE}/api/project/${jobId}/reprocess`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(_novoTipo ? { project_type: _novoTipo } : {}),
+          });
           const data = await res.json();
           if (res.status === 402) {
             notify.warn(data.detail || 'Limite de reprocessamento atingido.');
