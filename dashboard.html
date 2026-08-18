@@ -3281,8 +3281,28 @@
   // servidor é flip-day (ver docs/COBRANCA_FLIP_DAY.md).
   const BETA_FREE = true;
 
+  // 🚨 CLIQUE DUPLO CRIAVA DOIS PROJETOS (medido 18/08/2026). Entre o clique e
+  // o envio existe um `await ensureAgeConfirmed()`; nesse intervalo o segundo
+  // clique passa direto e vira um job novo. Medido no banco: **12+ pares** de
+  // projetos do mesmo cliente criados com menos de 2 min de diferença, mesmo
+  // número de arquivos — Ana Paula, Rafael (2×), Catarina, Marco, Romulo,
+  // Elizeu. O do Elizeu saiu no MESMO SEGUNDO.
+  // Custo: processamento e IA em dobro. E pior pro cliente — na Catarina saiu
+  // 48 itens num e 0 no outro; no Marco 43 e 0. Ele vê um projeto quebrado no
+  // painel e não faz ideia do porquê.
+  // 🪤 Trava por TEMPO, não por flag booleana: flag exige limpar em todo
+  // caminho de saída (termos, idade, erro de rede, 402...) e esquecer UM deixa
+  // o botão morto pra sempre — trocaria um problema raro por um pior. Janela de
+  // 3 s: duplo clique fica abaixo de 500 ms, e projeto novo de verdade leva
+  // minutos.
+  let _ultimoEnvioMs = 0;
   btnProcess.addEventListener('click', async () => {
     if (selectedFiles.length === 0) return;
+    if (Date.now() - _ultimoEnvioMs < 3000) {
+      console.log('[upload] clique repetido ignorado (< 3s do anterior)');
+      return;
+    }
+    _ultimoEnvioMs = Date.now();
 
     const termsCheckbox = document.getElementById('terms-checkbox');
     if (termsCheckbox && !termsCheckbox.checked) {
