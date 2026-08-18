@@ -5280,6 +5280,20 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # ("troque o arquivo / PDF escaneado") em vez de "IA sobrecarregada,
         # reprocesse grátis". Declarado ANTES do loop pra estar em escopo no
         # except da IA (armadilha #11 do CLAUDE.md reaparecendo no caminho DXF).
+        # 🔍 DE ONDE VEM CADA LEITURA DE ÁREA (18/08/2026). No job do Elizeu o
+        # consenso recebeu 27 leituras de `total_area` e escolheu 11,78 m² num
+        # projeto de 310 — mas só 8 vinham da regra do quadro de texto. Passei a
+        # noite tentando descobrir a origem das outras 19 lendo indentação, e o
+        # arquivo tem 17 mil linhas: cheguei a DUAS conclusões estruturais
+        # contraditórias, as duas erradas. Ler código não estava respondendo.
+        # 🪤 Contador só de LOG: não muda nenhum número, não entra em decisão.
+        # Serve pra um job real dizer o que a leitura estática não disse.
+        _area_origem: dict = {}
+
+        def _reg_area(_fonte: str, _campo: str, _n: int = 1):
+            if _n:
+                _area_origem[f"{_campo}:{_fonte}"] = _area_origem.get(f"{_campo}:{_fonte}", 0) + _n
+
         dxf_errors: list[str] = []
         # As pranchas descartadas na conversão precisam chegar ao cliente pela
         # MESMA porta das outras falhas — senão o descarte silencia o motivo e a
@@ -5444,6 +5458,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         for _k, _vs in (_cp.get("area_readings") or {}).items():
                             if _k in _area_readings:
                                 _area_readings[_k].extend(_vs)
+                                _reg_area("checkpoint", _k, len(_vs or []))
                         if _cp.get("name") and not project_data.name:
                             project_data.name = _cp["name"]
                         jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: análise já concluída, retomando ✓")
@@ -5603,6 +5618,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _ar = (_md_u.get("areas_do_quadro_texto") or [])
                             if _ar:
                                 _area_readings["total_area"].extend(_ar)
+                                _reg_area("regra-quadro-texto", "total_area", len(_ar or []))
                                 _log_error("motor:area-regra",
                                            f"arq={os.path.basename(dxf_path)} "
                                            f"candidatos={_ar[:8]}", job_id)
@@ -6146,6 +6162,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     _vf = sf(_v)
                                     if _vf > 0:
                                         _area_readings[_fld].append(_vf)
+                                        _reg_area("ia-dxf", _fld)
                             if pd.get("name") and not project_data.name: project_data.name = pd["name"]
                             if pd.get("demolition_notes"): project_data.demolition_notes.extend(pd["demolition_notes"])
                             if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
@@ -6722,6 +6739,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _vf = sf(_v)
                         if _vf > 0:
                             _area_readings[_fld].append(_vf)
+                            _reg_area("ia-pdf", _fld)
                 if pd.get("workstations"):
                     try: project_data.workstations = int(float(str(pd["workstations"]).replace('un','').strip()))
                     except: pass
@@ -7226,6 +7244,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _log_error(
                     "motor:consenso-area",
                     f"campo={_fld} n={len(_reads)} escolhido={_escolhido} "
+                    f"origem={ {k.split(':',1)[1]: v for k, v in _area_origem.items() if k.startswith(_fld + ':')} } "
                     f"leituras={sorted(_reads)[:20]}"
                     + ("" if len(_reads) <= 20 else f" (+{len(_reads)-20})"),
                     job_id)
