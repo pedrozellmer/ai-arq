@@ -5628,12 +5628,35 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             except Exception:
                                 pass
                             _ar = (_md_u.get("areas_do_quadro_texto") or [])
-                            if _ar:
+                            # 🚨 LISTA DE CÔMODOS NÃO É LEITURA DA ÁREA TOTAL.
+                            # Medido com a instrumentação de origem (filhote
+                            # evdcedd7, 19/08/2026): das 27 leituras de
+                            # total_area no arquivo do Elizeu, **26 vinham
+                            # daqui** e 1 da IA. Cada área de ambiente virava um
+                            # "voto" sobre a área do PROJETO e a moda escolhia o
+                            # tamanho de cômodo mais comum: capa de **11,78 m²**
+                            # num projeto de 310,38.
+                            # 🪤 Eu "sabia" que eram só 8 da regra — porque o
+                            # log imprimia `candidatos={_ar[:8]}` e eu li o
+                            # CORTE DE EXIBIÇÃO como se fosse a lista inteira.
+                            # Um dia de caça por causa de um [:8]. Por isso o
+                            # log novo diz n= sempre.
+                            # Só entra quando a regra achou UMA área: aí é de
+                            # fato candidata a total (a intenção original de
+                            # ancorar a IA). Lista = quadro de ambientes.
+                            if len(_ar) == 1:
                                 _area_readings["total_area"].extend(_ar)
-                                _reg_area("regra-quadro-texto", "total_area", len(_ar or []))
+                                _reg_area("regra-quadro-texto", "total_area", 1)
                                 _log_error("motor:area-regra",
                                            f"arq={os.path.basename(dxf_path)} "
-                                           f"candidatos={_ar[:8]}", job_id)
+                                           f"n=1 candidato ÚNICO={_ar[0]} — entra no consenso",
+                                           job_id)
+                            elif _ar:
+                                _log_error("motor:area-regra",
+                                           f"arq={os.path.basename(dxf_path)} "
+                                           f"n={len(_ar)} candidatos (quadro de AMBIENTES, "
+                                           f"não área total) — NÃO entram no consenso: "
+                                           f"primeiros={_ar[:8]}", job_id)
                         except Exception as _eaq:
                             print(f"[area-regra] nao-fatal: {_eaq}")
                         _log_error(
