@@ -5615,6 +5615,18 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # `_pick_area_consensus` — que agrupa por ±5% e tira a
                         # moda. Não sobrepõe a IA; ancora ela.
                         try:
+                            # 📊 Sombra da concordância rótulo × geometria: some
+                            # pro banco pra virar N ao longo dos dias. Só leitura.
+                            try:
+                                _cc = (_md_u.get("concordancia_rotulo") or {})
+                                if _cc.get("rotulos"):
+                                    _log_error(
+                                        "motor:concordancia-rotulo",
+                                        f"arq={os.path.basename(dxf_path)} "
+                                        f"rotulos={_cc.get('rotulos')} "
+                                        f"batem={_cc.get('batem')}", job_id)
+                            except Exception:
+                                pass
                             _ar = (_md_u.get("areas_do_quadro_texto") or [])
                             if _ar:
                                 _area_readings["total_area"].extend(_ar)

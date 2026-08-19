@@ -3044,6 +3044,22 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             metadata["rotulos_area_sem_prova"] = (
                 f"{_v5['n_rotulos_area']} rótulo(s) de área na prancha, "
                 f"{_v5['n_batem']} conferem com a geometria")
+        # 📊 SOMBRA DA CONCORDÂNCIA (19/08/2026) — guarda SEMPRE, prove ou não.
+        # A pergunta que decide se área lida do quadro pode virar "medido" é:
+        # quando o rótulo diz 57,16 m² E a região que ele rotula MEDE 57,16, os
+        # dois concordam com que frequência? São fontes independentes —
+        # declaração do projetista × geometria medida por nós.
+        # 🚨 Até aqui só ficava registro quando a prova DAVA CERTO. As
+        # DISCORDÂNCIAS — que são exatamente o que diria se promover é
+        # perigoso — não deixavam rastro. Contar só o sucesso é a forma mais
+        # fácil de provar o que já se quer acreditar.
+        # 🪤 Sombra pura: não muda fator, não muda selo, não muda quantidade.
+        # Só acumula evidência pra decidir com N, e não com 4 casos de um
+        # arquivo só (foi onde meu experimento local empacou).
+        metadata["concordancia_rotulo"] = {
+            "rotulos": int(_v5.get("n_rotulos_area") or 0),
+            "batem": int(_v5.get("n_batem") or 0),
+        }
     except Exception as _e5:
         logger.warning("[unit-rotulo] falhou (não-fatal): %s", _e5)
 
