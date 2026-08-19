@@ -7177,9 +7177,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # antes de olhar o resultado é a regra nº1 pelo avesso.
         if dwg_via_libredwg:
             try:
+                # 🪤 MESMO bug de enum do aviso de estrutura (19/08): str(enum)
+                # dá "Confidence.CONFIRMADO", nunca "confirmado" — este contador
+                # SEMPRE via zero e o aviso afirmava "nenhuma quantidade foi
+                # medida da geometria" mesmo com itens em branco na planilha
+                # (Patrick, dbd0d97e: 4 medidos e o aviso dizendo zero).
                 _n_medidos = sum(
                     1 for _it in (all_items or [])
-                    if str(getattr(_it, "confidence", "") or "") == "confirmado")
+                    if getattr(_it, "confidence", None) == "confirmado")
             except Exception:
                 _n_medidos = -1          # não deu pra saber: não afirma nada
             _lista_lw = ", ".join(dwg_via_libredwg)[:220]
@@ -7390,8 +7395,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # 🪤 Basta 1 item confirmado pra NÃO disparar: estacas medidas por bloco
         # (caso Eduarda, hipótese confirmada) são medição de verdade.
         if is_structural and all_items:
+            # 🪤 Confidence é Enum(str): `str(enum)` dá "Confidence.CONFIRMADO",
+            # NUNCA "confirmado" — meu contador original não achava confirmado
+            # nenhum e o aviso disparou FALSO no 1º projeto com medição real
+            # (Cassia, 62c49fe6: 171+37 pilares contados em branco, e o topo
+            # dizendo "nada foi medido"). A igualdade direta funciona porque o
+            # enum herda de str. Meu teste de ontem usou strings puras — testei
+            # o fácil, de novo.
             _n_conf_est = sum(1 for _it in all_items
-                              if str(getattr(_it, "confidence", "") or "") == "confirmado")
+                              if getattr(_it, "confidence", None) == "confirmado")
             _n_indice = sum(1 for _it in all_items
                             if "ndice" in str(getattr(_it, "observations", "") or "").lower())
             if _n_conf_est == 0:
