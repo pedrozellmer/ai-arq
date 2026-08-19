@@ -7374,6 +7374,42 @@ bloco — só cite os que estão no inventário deste arquivo."""
             ]
             print(f"[area-ausente] job={job_id}: sem área total e sem área informada")
 
+        # ── ESTRUTURA SEM MEDIÇÃO NÃO PASSA POR LEVANTAMENTO (19/08/2026) ──
+        # Três casos medidos numa semana: Eduarda (16/08, NPS 2 — armadura,
+        # concreto e fôrma ZERADOS), Silveira (14/08 — 0 medido, digitou
+        # 100/500/1500 kg na mão), Elizeu (18/08, orçamentista — 10 itens TODOS
+        # "Estimativa por índice": 310 m² × 25 kg/m² = 7.759 kg de tabela).
+        # O selo laranja e a fórmula na observação JÁ existem item a item; o que
+        # faltava era o aviso de TOPO dizendo o conjunto: "nada de estrutura
+        # aqui foi medido do desenho, e é ESTE arquivo que falta". Sem isso, o
+        # cliente descobre sozinho (a Eduarda levou 2h pra achar que faltava a
+        # prancha de armação — e deu nota 2).
+        # 🪤 Aviso ADITIVO: nenhuma quantidade nem selo muda (regra dura nº1).
+        # 🪤 Só project_type=estrutura, onde a dor foi medida. Não generalizar
+        # pra arquitetura sem medir de novo.
+        # 🪤 Basta 1 item confirmado pra NÃO disparar: estacas medidas por bloco
+        # (caso Eduarda, hipótese confirmada) são medição de verdade.
+        if is_structural and all_items:
+            _n_conf_est = sum(1 for _it in all_items
+                              if str(getattr(_it, "confidence", "") or "") == "confirmado")
+            _n_indice = sum(1 for _it in all_items
+                            if "ndice" in str(getattr(_it, "observations", "") or "").lower())
+            if _n_conf_est == 0:
+                project_data.warnings = (project_data.warnings or []) + [
+                    "⚠ ESTRUTURA: nenhum número desta planilha foi MEDIDO do desenho. "
+                    "O arquivo enviado não traz o que a medição de estrutura precisa "
+                    "(planta de fôrma, detalhamento de armação ou quadro de ferros). "
+                    "Os valores de aço/concreto/fôrma que aparecem são pré-dimensionamento "
+                    "por índice (área × índice típico) ou ficaram zerados — servem de ordem "
+                    "de grandeza, não de levantamento. Pra medir de verdade: envie a prancha "
+                    "de fôrma/armação ou o quadro de ferros. Se o desenho enviado for de "
+                    "arquitetura, reprocesse escolhendo 'Ler como Arquitetura' pra "
+                    "aproveitar o que ele tem."
+                ]
+                _log_error("motor:estrutura-sem-medida",
+                           f"itens={len(all_items)} por_indice={_n_indice} "
+                           f"confirmados=0 — aviso de pré-dimensionamento emitido", job_id)
+
         # ── HONESTIDADE DE ÁREA (regra dura nº1) — helper _apply_area_honesty ──
         # Vision (PDF) às vezes CHUTA metragem numa planta sem cota ("Forro Sala 52 m²")
         # — número que parece medido mas é inventado (caso Catarina 20/07): ZERA.
