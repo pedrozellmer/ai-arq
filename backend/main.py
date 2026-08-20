@@ -17954,6 +17954,25 @@ async def cleanup_old_projects(request: Request):
         if not job_id:
             continue
 
+        # 🧪 A CONTA DE SMOKE É FIXTURE PERMANENTE, NÃO DADO ENVELHECÍVEL
+        # (20/08/2026). O projeto 0de29633 (zarelalopes+smoke@gmail.com, criado
+        # 22/05) cruzou os 90 dias na madrugada e foi arquivado — a listagem
+        # filtra arquivado, o nível 2 do smoke morreu em "0 projetos", e o
+        # teste de produção ficou VERMELHO num código são. Passou 19/08 21:45 e
+        # falhou 20/08 06:39 no MESMO commit; foi assim que se achou.
+        # Sem esta trava, o conserto de hoje re-quebra em novembro, quando o
+        # próximo projeto de teste envelhecer.
+        try:
+            _own = _supa_rest_service(
+                "GET", "projects",
+                params={"job_id": f"eq.{job_id}", "select": "user_email"}) or []
+            _mail_own = str(((_own[1] if isinstance(_own, tuple) else _own) or [{}])[0].get("user_email") or "")
+        except Exception:
+            _mail_own = ""
+        if "+smoke@" in _mail_own.lower():
+            stats["jobs"].append({"job_id": job_id, "skip": "conta de smoke (fixture)"})
+            continue
+
         # 2a) Arquivos originais (bucket aiarq-pranchas/{job_id}/)
         pranchas_list = _supabase_storage_list(PRANCHAS_BUCKET, f"{job_id}/")
         files_ok = 0
