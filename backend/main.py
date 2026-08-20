@@ -9016,7 +9016,28 @@ async def download_file(job_id: str, request: Request):
     # arquivo está no Storage, ainda servimos pra não perder o cliente.
     output_path = get_planilha_path(job_id)
     if not output_path:
-        raise HTTPException(404, "Planilha não encontrada (nem em cache nem no Storage)")
+        # ── REGENERA DO BANCO ANTES DE DIZER 404 (20/08/2026) ──────────────
+        # O cleanup de 90 dias apaga o ARQUIVO da planilha, mas os itens e o
+        # projeto ficam no banco — e a planilha é 100% derivada (regra nº7).
+        # Sem isto, todo projeto com 90+ dias ficava com o botão Baixar morto:
+        # foi o smoke test diário que pegou (passou 19/08 21:45, falhou no cron
+        # de 20/08 06:39 SEM push no meio — o cleanup da meia-noite levou o
+        # arquivo do projeto de teste).
+        # `finalize_review` já faz exatamente a reconstrução certa: busca
+        # projeto+itens (com as revisões do cliente aplicadas), gera o xlsx e
+        # sobe pro Storage. Reusar em vez de duplicar.
+        try:
+            await finalize_review(job_id, request)
+            output_path = get_planilha_path(job_id)
+            if output_path:
+                _log_error("motor:download-regen",
+                           "planilha regenerada do banco no download (arquivo "
+                           "tinha sido limpo pela retenção de 90 dias)", job_id,
+                           severity="info")
+        except Exception as _erg:
+            print(f"[download] regeneração falhou job={job_id}: {_erg}")
+        if not output_path:
+            raise HTTPException(404, "Planilha não encontrada (nem em cache nem no Storage)")
 
     return FileResponse(
         output_path,
