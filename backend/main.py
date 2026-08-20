@@ -4503,6 +4503,97 @@ def _anotar_area_parede_pe_direito(items, pe_direito: float) -> int:
     return n
 
 
+_RX_SECAO_PILAR = _re.compile(r"(\d{1,3})\s*[x×]\s*(\d{1,3})\s*cm", _re.I)
+
+
+def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
+    """Deriva volume e fôrma de PILARES a partir de seção × pé-direito × contagem.
+
+    🎯 Por que existe (20/08/2026): o aviso de estrutura passou a prometer
+    "informe o pé-direito e dá pra calcular volume e fôrma dos pilares" — e a
+    derivação não existia. Promessa no ar sem motor atrás é o pior tipo de bug.
+
+    📏 Medido no acervo (108 jobs, 5.175 itens) ANTES de codar:
+    - 14 itens de pilar com "AxB cm" na descrição + contagem em un (8 projetos);
+    - ZERO projetos com concreto-de-pilar zerado ao lado (a IA preenche por
+      índice), e só 2 com fôrma zerada.
+    Por isso o formato: PREENCHE só alvo ZERADO; quando o alvo já tem número
+    (índice), ANOTA a conferência na observação — o orçamentista vê os dois
+    números e a divergência. Nunca sobrescreve quantidade, nunca mexe em selo.
+
+    🚨 Regra dura nº1: tudo que sai daqui é derivado de PD INFORMADO — vira
+    'estimado' com procedência explícita, nunca 'confirmado'.
+    """
+    if not items or not pe_direito or pe_direito <= 0:
+        return 0
+    h = float(pe_direito)
+
+    # 1) Coleta seções contadas: [(area_secao_m2, perimetro_m, N), ...]
+    secoes = []
+    for it in items:
+        try:
+            if str(getattr(it, "unit", "") or "").strip().lower() != "un":
+                continue
+            if (getattr(it, "quantity", 0) or 0) <= 0:
+                continue
+            d = str(getattr(it, "description", "") or "")
+            if "pilar" not in d.lower():
+                continue
+            m = _RX_SECAO_PILAR.search(d)
+            if not m:
+                continue
+            a_cm, b_cm = int(m.group(1)), int(m.group(2))
+            if not (5 <= a_cm <= 300 and 5 <= b_cm <= 300):
+                continue          # seção implausível não entra
+            n = float(it.quantity)
+            secoes.append((a_cm * b_cm / 10000.0, 2 * (a_cm + b_cm) / 100.0, n))
+        except Exception:
+            continue
+    if not secoes:
+        return 0
+
+    vol_m3 = round(sum(a * h * n for a, _, n in secoes), 2)
+    forma_m2 = round(sum(p * h * n for _, p, n in secoes), 2)
+    n_pilares = int(sum(n for _, _, n in secoes))
+    _proc = (f"Derivado das seções contadas: {len(secoes)} seção(ões) × "
+             f"pé-direito {h:g} m (informado por você) × contagem "
+             f"({n_pilares} pilares)")
+
+    tocados = 0
+    for it in items:
+        try:
+            d = str(getattr(it, "description", "") or "").lower()
+            u = str(getattr(it, "unit", "") or "").strip().lower()
+            if "pilar" not in d:
+                continue
+            alvo = None
+            if "concreto" in d and u in ("m³", "m3"):
+                alvo, valor, un_rot = "conc", vol_m3, "m³"
+            elif ("fôrma" in d or "forma" in d) and u in ("m²", "m2"):
+                alvo, valor, un_rot = "forma", forma_m2, "m²"
+            if not alvo:
+                continue
+            obs = str(getattr(it, "observations", "") or "")
+            if (getattr(it, "quantity", 0) or 0) <= 0:
+                # alvo ZERADO: preenche, estimado, com procedência
+                it.quantity = valor
+                try:
+                    it.confidence = Confidence("estimado")
+                except Exception:
+                    pass
+                it.observations = (f"{_proc} = {valor} {un_rot} — NÃO é medição "
+                                   f"do CAD. " + obs)[:1000]
+                tocados += 1
+            elif "Conferência por seção×PD" not in obs:
+                # alvo já preenchido (índice da IA): só anota a conferência.
+                it.observations = (obs + f" | Conferência por seção×PD: "
+                                   f"{valor} {un_rot} ({_proc.lower()})")[:1000]
+                tocados += 1
+        except Exception:
+            continue
+    return tocados
+
+
 def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
     """Deriva PINTURA de parede quando só temos o COMPRIMENTO das paredes.
 
@@ -7468,6 +7559,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pd_inf = float(getattr(project_data, "user_pe_direito", 0) or 0)
             if _pd_inf:
                 _n_pd = _derive_pintura_pe_direito(all_items, _pd_inf)
+                try:
+                    _n_est = _derive_estrutura_pe_direito(all_items, _pd_inf)
+                    if _n_est:
+                        _log_error("motor:pd-estrutura",
+                                   f"pd={_pd_inf} itens_tocados={_n_est} "
+                                   f"(volume/fôrma de pilar por seção×PD)", job_id)
+                except Exception as _epde:
+                    print(f"[pd-estrutura] nao-fatal: {_epde}")
                 # Parede em metro linear ganha a ÁREA na própria observação —
                 # sem criar linha nova, que duplicaria a mesma parede.
                 _n_ap = _anotar_area_parede_pe_direito(all_items, _pd_inf)
