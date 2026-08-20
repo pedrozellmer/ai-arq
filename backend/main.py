@@ -7415,6 +7415,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _n_indice = sum(1 for _it in all_items
                             if "ndice" in str(getattr(_it, "observations", "") or "").lower())
             if _n_conf_est == 0:
+                # 🔑 Caso Allan (20/08): a IA leu 17 seções de pilar e contou 42
+                # pilares, e o volume saiu 0 SÓ porque falta a ALTURA — que é o
+                # campo pé-direito do upload, que ele não preencheu. Quando há
+                # pilar contado e PD ausente, o aviso diz exatamente qual campo
+                # destrava o quê, em vez do genérico.
+                _tem_pilar_contado = any(
+                    "pilar" in str(getattr(_it, "description", "") or "").lower()
+                    and (getattr(_it, "quantity", 0) or 0) > 0
+                    and str(getattr(_it, "unit", "") or "").strip().lower() == "un"
+                    for _it in all_items)
+                _sem_pd = not float(getattr(project_data, "user_pe_direito", 0) or 0)
+                _dica_pd = (
+                    " Dica: esta prancha tem pilares contados com as seções lidas — "
+                    "se você reprocessar informando o PÉ-DIREITO (campo do envio), "
+                    "dá pra calcular o volume e a fôrma dos pilares a partir do que "
+                    "já foi contado." if (_tem_pilar_contado and _sem_pd) else "")
                 project_data.warnings = (project_data.warnings or []) + [
                     "⚠ ESTRUTURA: nenhum número desta planilha foi MEDIDO do desenho. "
                     "O arquivo enviado não traz o que a medição de estrutura precisa "
@@ -7424,7 +7440,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     "de grandeza, não de levantamento. Pra medir de verdade: envie a prancha "
                     "de fôrma/armação ou o quadro de ferros. Se o desenho enviado for de "
                     "arquitetura, reprocesse escolhendo 'Ler como Arquitetura' pra "
-                    "aproveitar o que ele tem."
+                    "aproveitar o que ele tem." + _dica_pd
                 ]
                 _log_error("motor:estrutura-sem-medida",
                            f"itens={len(all_items)} por_indice={_n_indice} "
