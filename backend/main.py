@@ -1831,11 +1831,18 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
                 "Confira os itens e ajuste o que precisar. Ao subir a planilha revisada voc&ecirc; <b>afina o motor</b> pros pr&oacute;ximos projetos."))
     # 3) Memorial descritivo (novo entregável 01/08) — logo depois da revisão
     #    de propósito: "revise antes, o texto sai melhor" empurra a revisão.
+    # 🔗 LINK DIRETO NOS CARDS (20/08/2026). O e-mail já anunciava memorial e
+    # cronograma desde 02/08 — e a adoção medida é ZERO aberturas de memorial e
+    # cronograma parado desde 03/08 (2 pessoas na vida). Os cards eram TEXTO
+    # sem link: o cliente lia "baixe o memorial", clicava no único botão
+    # ("Abrir meu projeto"), caía na visão geral e o memorial sumia. Cada
+    # entregável agora leva direto pra própria página.
     passos.append(("&#128196;", "Baixe o memorial descritivo (rascunho em Word)",
         "Escrito a partir dos itens do seu CAD, na ordem das etapas da obra &mdash; o documento "
         "que prefeitura, banco e incorpora&ccedil;&atilde;o pedem. Estimativas rotuladas e campos "
         "<b>[A PREENCHER]</b> pro que o desenho n&atilde;o informa. &Eacute; base pra voc&ecirc; editar "
-        "e assinar &mdash; e sai melhor se voc&ecirc; revisar as quantidades antes."))
+        "e assinar &mdash; e sai melhor se voc&ecirc; revisar as quantidades antes.",
+        f"https://ai.arq.br/memorial.html?job_id={job_id}"))
     # 4) Chat — sempre útil
     passos.append(("&#128172;", "Tire d&uacute;vidas no chat",
         "Pergunte sobre o seu quantitativo direto na p&aacute;gina do projeto: o que &eacute; medido, "
@@ -1843,16 +1850,23 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
     # 5) Cronograma — 'ver' se já existe, senão 'montar'
     if tem_cronograma:
         passos.append(("&#128197;", "Veja o cronograma",
-            "Seu cronograma f&iacute;sico j&aacute; est&aacute; gerado &mdash; abra pra acompanhar a obra."))
+            "Seu cronograma f&iacute;sico j&aacute; est&aacute; gerado &mdash; abra pra acompanhar a obra.",
+            f"https://ai.arq.br/cronograma.html?job_id={job_id}"))
     else:
         passos.append(("&#128197;", "Monte o cronograma",
             "Gere o cronograma f&iacute;sico da obra a partir do quantitativo &mdash; as etapas "
-            "distribu&iacute;das no tempo, com o peso de cada uma. Tamb&eacute;m &eacute; de gra&ccedil;a."))
+            "distribu&iacute;das no tempo, com o peso de cada uma. Tamb&eacute;m &eacute; de gra&ccedil;a.",
+            f"https://ai.arq.br/cronograma.html?job_id={job_id}"))
     cards = ""
-    for emoji, titulo, desc in passos:
+    for _passo in passos:
+        emoji, titulo, desc = _passo[0], _passo[1], _passo[2]
+        _link = _passo[3] if len(_passo) > 3 else None
+        _link_html = (f'<a href="{_link}" style="display:inline-block;margin-top:6px;'
+                      f'font-size:13px;font-weight:600;color:#4F46E5;'
+                      f'text-decoration:none;">Abrir &#8594;</a>' if _link else "")
         cards += (f'<div style="margin:10px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:10px;background:#ffffff;">'
                   f'<div style="font-weight:600;color:#111827;font-size:14px;">{emoji} {titulo}</div>'
-                  f'<div style="font-size:13px;color:#4b5563;margin-top:3px;line-height:1.5;">{desc}</div>'
+                  f'<div style="font-size:13px;color:#4b5563;margin-top:3px;line-height:1.5;">{desc}{_link_html}</div>'
                   f'</div>')
     return (f'<div style="margin-top:20px;">'
             f'<div style="font-weight:700;color:#111827;margin-bottom:4px;font-size:15px;">O que voc&ecirc; pode fazer agora</div>'

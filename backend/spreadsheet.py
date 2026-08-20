@@ -386,6 +386,19 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             'itens de piso, forro e pintura.',
             ''))
 
+    # 🔗 OS IRMÃOS DA PLANILHA (20/08/2026). Medido: memorial com ZERO
+    # aberturas na vida e cronograma parado desde 03/08 (2 pessoas) — enquanto
+    # o XLSX tem download ativo. O único lugar que TODO cliente abre é esta
+    # planilha; ela passa a contar que os outros entregáveis existem.
+    # 🪤 "também GERA", não "gerou": cronograma e memorial nascem sob demanda
+    # do mesmo quantitativo — prometer arquivo já pronto seria mentira.
+    premissas.append((
+        '0.9',
+        'Este quantitativo também gera: cronograma físico-financeiro e memorial descritivo',
+        '—', None,
+        'De graça, na página do seu projeto em ai.arq.br — sempre derivados desta planilha',
+        ''))
+
     # Premissas são metadados do projeto (não itens orçáveis) — fill cinza claro
     P_PREMISSA = PatternFill('solid', fgColor='F3F4F6')
     for num, desc, un, qtd, obs, ref in premissas:
