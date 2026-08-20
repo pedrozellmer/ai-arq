@@ -7402,8 +7402,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # dizendo "nada foi medido"). A igualdade direta funciona porque o
             # enum herda de str. Meu teste de ontem usou strings puras — testei
             # o fácil, de novo.
-            _n_conf_est = sum(1 for _it in all_items
-                              if getattr(_it, "confidence", None) == "confirmado")
+            # 🪤 "Confirmado" em unidade SEM GRANDEZA (vb, cj, verba) não é
+            # medição — é rótulo em verba. Caso Allan (20b33b03, 20/08): o único
+            # confirmado era "1 vb — Especificação de concreto", e ele suprimiu
+            # o aviso num projeto com concreto/fôrma/aço TODOS zerados. A lista
+            # é a mesma do engine_rules (fonte única).
+            from engine_rules import UNIDADES_SEM_GRANDEZA as _U_SEM
+            _n_conf_est = sum(
+                1 for _it in all_items
+                if getattr(_it, "confidence", None) == "confirmado"
+                and str(getattr(_it, "unit", "") or "").strip().lower() not in _U_SEM)
             _n_indice = sum(1 for _it in all_items
                             if "ndice" in str(getattr(_it, "observations", "") or "").lower())
             if _n_conf_est == 0:
