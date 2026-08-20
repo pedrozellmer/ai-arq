@@ -9148,6 +9148,16 @@ async def download_file(job_id: str, request: Request):
                            "tinha sido limpo pela retenção de 90 dias)", job_id,
                            severity="info")
         except Exception as _erg:
+            # 🚨 O print morria no stdout do Render e a falha da regeneração era
+            # invisível — o smoke ficou vermelho um dia inteiro e o motivo real
+            # nunca chegou ao banco (20/08). Mesma lição da semana: exceção que
+            # importa vai pro error_log, com o FIM do traceback.
+            try:
+                _log_error("motor:download-regen-falhou",
+                           f"{type(_erg).__name__}: {_diag_excecao(_erg)}",
+                           job_id)
+            except Exception:
+                pass
             print(f"[download] regeneração falhou job={job_id}: {_erg}")
         if not output_path:
             raise HTTPException(404, "Planilha não encontrada (nem em cache nem no Storage)")
