@@ -9140,7 +9140,7 @@ async def download_file(job_id: str, request: Request):
         # projeto+itens (com as revisões do cliente aplicadas), gera o xlsx e
         # sobe pro Storage. Reusar em vez de duplicar.
         try:
-            await finalize_review(job_id, request)
+            await rebuild_planilha_from_review(job_id, request)
             output_path = get_planilha_path(job_id)
             if output_path:
                 _log_error("motor:download-regen",
@@ -15141,9 +15141,14 @@ async def admin_revision_learn(job_id: str, request: Request):
 
 
 @app.post("/api/items/{job_id}/finalize")
-async def finalize_review(job_id: str, request: Request):
+async def rebuild_planilha_from_review(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     """Regenera o .xlsx com as revisões aplicadas e sobe pro Storage.
+    (Era `finalize_review` — MESMO NOME de outra função 2.300 linhas abaixo,
+    a de "Concluir revisão"/cashback. Em Python a última definição vence:
+    a chamada interna do /api/download resolvia pra ERRADA — regenerava nada
+    e ainda marcava a revisão do cliente como concluída. Um dia inteiro de
+    smoke vermelho, 20/08/2026. Rota HTTP inalterada.)
     Busca items atuais do Supabase (já com edits/rejects aplicados) e
     passa pro generate_spreadsheet. Retorna URL de download."""
     import urllib.request, urllib.error, json
