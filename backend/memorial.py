@@ -20,7 +20,8 @@ gerar_memorial_docx() (compat) = montar + renderizar.
 não cita norma nenhuma de propósito — só o que estiver escrito nos itens.
 """
 
-import re as _re
+import re
+import re as _re   # 🪤 21/08: duas funções usavam `re` sem alias — NameError escondido
 from datetime import datetime, timezone, timedelta
 
 from docx import Document

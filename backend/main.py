@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """API Backend AI.arq — Processamento de pranchas de arquitetura."""
 import os
+import json
+import urllib.request, urllib.error, urllib.parse   # 🪤 21/08/2026: 14 funções usavam urllib/json sem importar;
+                                                    # dentro de try/except, falhavam CALADO (anexo do contato, lead do chat, listagens do admin)
 import time
 import uuid
 import shutil
@@ -4538,6 +4541,7 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
     🚨 Regra dura nº1: tudo que sai daqui é derivado de PD INFORMADO — vira
     'estimado' com procedência explícita, nunca 'confirmado'.
     """
+    from models import Confidence   # 🪤 faltava: o selo "estimado" era pulado calado pelo except
     if not items or not pe_direito or pe_direito <= 0:
         return 0
     h = float(pe_direito)
@@ -11035,7 +11039,7 @@ async def health():
             "pdf": True,
             "dxf": True,
             "dwg": shutil.which("ODAFileConverter") is not None,
-            "calibrator": HAS_CALIBRATOR if 'HAS_CALIBRATOR' in dir() else False,
+            "calibrator": bool(globals().get("HAS_CALIBRATOR", False)),
             # Fallback pros DWG que o ODA recusa. Duas coisas separadas: o
             # binário existir e a chave estar ligada no Render. Ficam à vista
             # porque "liguei lá" e "o backend está usando" já se desencontraram
