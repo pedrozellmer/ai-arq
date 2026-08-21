@@ -2719,7 +2719,7 @@ function renderWarnings(warnings) {
   // diluir os avisos de verdade (regra nº7: aviso falso queima o verdadeiro).
   document.getElementById('proj-warnings-list').innerHTML = warnings.map(w => {
     const pos = typeof w === 'string' && w.startsWith('✅');
-    const txt = pos ? w.slice(1).trim() : w;
+    const txt = (pos ? w.slice(1) : String(w).replace(/^\s*⚠\s*/, '')).trim();   // texto antigo já vinha com ⚠ → ficava "⚠ ⚠"
     return `<li class="flex items-start gap-2"><span class="mt-0.5">${pos ? '✅' : '⚠'}</span><span>${esc(txt)}</span></li>`;
   }).join('');
 }
