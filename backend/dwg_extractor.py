@@ -661,12 +661,34 @@ def _detect_unit_factor(doc) -> float:
     except Exception:
         pass
 
-    # Fallback: $MEASUREMENT
+    # Fallback: $MEASUREMENT=0 ("imperial") → pés, MAS só com corroboração.
+    # 🚨 21/08/2026: $MEASUREMENT=0 é o que o template imperial padrão do
+    # AutoCAD (acad.dwt) grava. Projetista brasileiro que parte desse template
+    # entrega um DWG "imperial" desenhado em metros. Em 20/08 os DOIS clientes
+    # reais do dia caíram aqui; a prancha de fôrma do Allan (42 × 35 unidades,
+    # DIMLFAC=100 — assinatura de metro com cota em cm) virou 12,8 × 10,7 m:
+    # erro de 3,28× em TODO comprimento. E pés é o único palpite que NENHUMA
+    # régua conserta: a das cotas abstém de fator não-métrico por desenho, e a
+    # do DIMLFAC só troca no degrau de 1000×. Um palpite métrico errado ainda
+    # tem 4 réguas atrás dele; o de pés não tem nenhuma.
+    # O que distingue imperial de verdade é o FORMATO das cotas: $LUNITS /
+    # $DIMLUNIT 3 (engineering, 1'-2.5") ou 4 (architectural, 1'-2 1/2").
+    # Sem isso, $MEASUREMENT=0 é ruído de template e o fluxo segue pra
+    # inferência por extensão (e, na dúvida, mm — o comportamento métrico).
     try:
         measurement = doc.header.get("$MEASUREMENT", 1)
         if measurement == 0:
-            # Imperial — assume feet
-            return 0.3048
+            _fmt = set()
+            for _k in ("$LUNITS", "$DIMLUNIT"):
+                try:
+                    _fmt.add(int(doc.header.get(_k, 2) or 2))
+                except Exception:
+                    pass
+            if _fmt & {3, 4}:
+                return 0.3048          # formato pés-polegadas: imperial de verdade
+            logger.warning(
+                "[unit-pes] $MEASUREMENT=0 sem formato imperial (LUNITS/DIMLUNIT=%s) "
+                "— tratado como ruído de template, NÃO assume pés", sorted(_fmt))
     except Exception:
         pass
 
