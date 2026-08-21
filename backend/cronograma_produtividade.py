@@ -77,6 +77,19 @@ REFS_POR_FASE = {
         'equipe': 2,
         'm2': ('96370', 0.456, 'parede drywall face simples'),
     },
+    # 20/08/2026 — Hh derivado da NOSSA base analítica no banco:
+    # soma dos insumos de mão de obra (unidade H) da composição 103247
+    # (split hi-wall inverter 12.000 BTU, o porte mais comum). A composição é
+    # "fornecimento e instalação", mas o Hh somado é SÓ trabalho — serve pro
+    # esforço de cronograma. Representante conservador (portes maiores chegam
+    # a 9,15 Hh).
+    # ⚰️ Incêndio ficou FORA de propósito: a base não tem composição limpa de
+    # extintor com mão de obra (só abrigo de hidrante, 4,2 Hh — representaria
+    # mal um extintor de parede). Sem representante honesto, sem coeficiente.
+    'Ar-condicionado': {
+        'equipe': 2,
+        'un': ('103247', 4.667, 'split hi-wall 12.000 BTU — instalação'),
+    },
 }
 
 

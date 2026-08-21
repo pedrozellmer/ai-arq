@@ -20,7 +20,7 @@ gerar_memorial_docx() (compat) = montar + renderizar.
 não cita norma nenhuma de propósito — só o que estiver escrito nos itens.
 """
 
-import re
+import re as _re
 from datetime import datetime, timezone, timedelta
 
 from docx import Document
@@ -98,6 +98,57 @@ def _bloco_preencher(detalhe):
     return {"tipo": "preencher", "texto": f"{MARCA_PREENCHER}: {detalhe}.]"}
 
 
+_RX_SEG_ABERTO = _re.compile(
+    r"^(?:material|tipo|cor|dimens[aã]o|especifica[cç][aã]o|fabricante|modelo|capacidade|acabamento)?"
+    r"[^,;.]{0,40}?a (?:definir|especificar|confirmar)(?=$|[\s,;.)])", _re.I)
+
+
+def _poda_boilerplate(desc: str) -> str:
+    """Remove da PROSA do memorial os segmentos "— material a especificar —"
+    que a IA repete em quase todo item (20/08/2026: no projeto de teste, o eco
+    aparecia em ~todas as linhas e o documento inteiro gritava rascunho).
+
+    🪤 Só na renderização do memorial — a planilha continua intacta. E só cai o
+    SEGMENTO entre travessões que é puro "a definir/especificar"; segmento com
+    conteúdo real ("vidro temperado 10 mm") fica. A lacuna continua declarada
+    UMA vez por seção, no bloco [A PREENCHER] que já existe.
+    """
+    partes = [p.strip() for p in _re.split(r"\s+—\s+", desc or "") if p.strip()]
+    if len(partes) <= 1:
+        return (desc or "").strip()
+    mantidas = [partes[0]] + [p for p in partes[1:] if not _RX_SEG_ABERTO.match(p)]
+    return " — ".join(mantidas)
+
+
+def _agrupar_por_prefixo(itens: list, minimo: int = 4):
+    """Agrupa itens que compartilham prefixo (antes do 1º "—") e unidade.
+
+    20/08/2026: a seção de Pisos do memorial tinha 24 blocos, um por ambiente
+    — lista telefônica, não prosa. Com >=`minimo` itens do mesmo prefixo+unidade,
+    viram UM bloco com total e ambientes listados.
+    Devolve lista de ("grupo", prefixo_exibicao, itens) | ("solto", None, [item]),
+    na ordem de chegada.
+    """
+    buckets, ordem = {}, []
+    for it in itens:
+        d = (it.get("description") or "").strip()
+        pref = _re.split(r"\s+—\s+", d)[0].strip()
+        k = (pref.lower(), (it.get("unit") or "").strip().lower())
+        if k not in buckets:
+            buckets[k] = []
+            ordem.append((k, pref))
+        buckets[k].append(it)
+    saida = []
+    for k, pref in ordem:
+        grupo = buckets[k]
+        if len(grupo) >= minimo and pref:
+            saida.append(("grupo", pref, grupo))
+        else:
+            for it in grupo:
+                saida.append(("solto", None, [it]))
+    return saida
+
+
 def montar_estrutura(projeto: dict, items: list) -> dict:
     """Monta a estrutura editável do memorial a partir do projeto + itens.
 
@@ -163,12 +214,36 @@ def montar_estrutura(projeto: dict, items: list) -> dict:
         blocos = [{"tipo": "texto", "texto": (
             f"Os serviços de {disc.lower()} compreendem os itens identificados no projeto, "
             "conforme relação abaixo:")}]
-        for it in sorted(grupos[disc], key=lambda x: (x.get("sort_order") or 0, x.get("item_num") or "")):
-            qty = 0.0
+        _ordenados = sorted(grupos[disc], key=lambda x: (x.get("sort_order") or 0, x.get("item_num") or ""))
+
+        def _qtd(it):
             try:
-                qty = float(it.get("quantity") or 0)
+                return float(it.get("quantity") or 0)
             except (TypeError, ValueError):
-                pass
+                return 0.0
+
+        for _tipo, _pref, _its in _agrupar_por_prefixo(_ordenados):
+            if _tipo == "grupo":
+                # UM bloco pro conjunto: total + ambientes. Regra nº1 no
+                # agregado: "medido" só se TODOS forem; regra nº4 preservada —
+                # cada quantidade continua listada, a prosa é que agrega.
+                _un = (_its[0].get("unit") or "").strip()
+                _tot = sum(_qtd(x) for x in _its)
+                _todos_medidos = all((x.get("confidence") or "") == "confirmado" for x in _its)
+                _rot = "medido do CAD" if _todos_medidos else "estimativa — a confirmar"
+                _partes = []
+                for x in _its:
+                    _resto = _re.split(r"\s+—\s+", (x.get("description") or "").strip(), maxsplit=1)
+                    _amb = _poda_boilerplate(_resto[1] if len(_resto) > 1 else "").strip() or "item"
+                    _q = _qtd(x)
+                    _partes.append(f"{_amb} ({_fmt_qty(_q)} {_un})" if _q > 0 else f"{_amb} (a confirmar)")
+                texto = (f"{_pref} — {len(_its)} itens, total {_fmt_qty(_tot)} {_un} "
+                         f"({_rot}): " + "; ".join(_partes) + ".")
+                blocos.append({"tipo": "item", "texto": texto,
+                               "origem": "medido" if _todos_medidos else "estimado"})
+                continue
+            it = _its[0]
+            qty = _qtd(it)
             unit = (it.get("unit") or "").strip()
             medido = (it.get("confidence") or "") == "confirmado"
             if qty > 0:
@@ -176,7 +251,7 @@ def montar_estrutura(projeto: dict, items: list) -> dict:
                 sufixo = f" — {_fmt_qty(qty)} {unit} ({origem_txt})"
             else:
                 sufixo = " — quantidade a confirmar"
-            texto = (it.get("description") or "").strip() + sufixo
+            texto = _poda_boilerplate((it.get("description") or "").strip()) + sufixo
             obs = (it.get("observations") or "").strip()
             if obs:
                 texto += f" Obs.: {obs[:220]}"

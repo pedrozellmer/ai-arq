@@ -399,7 +399,19 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
     # a sigmoide antiga era função só do tempo, cega ao Gantt editado.
     curva_s = _curva_s_por_esforco(fases, meses, dt_inicio)
 
-    caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
+    # 🚨 GUARDA-CHUVA NÃO É ATIVIDADE (20/08/2026). O "caminho crítico" era só
+    # top-5 por duração — e as fases 'padrão' que atravessam a obra inteira
+    # (Serviços preliminares com dur_pct 0.95 = 171 dias em 180; Complementares
+    # 0.85) LIDERAVAM a lista. Nenhum engenheiro leva a sério um caminho
+    # crítico cujo gargalo é "preliminares": é faixa contínua, não gargalo.
+    # Fase padrão que ocupa >80% da obra sai da ANÁLISE (segue no gráfico).
+    # 🪤 Fallback: se o filtro zerar (obra só de guarda-chuvas), volta ao
+    # comportamento antigo — caminho crítico vazio seria pior que impreciso.
+    _atividades = [f for f in fases
+                   if not (f.get('origem') == 'padrão' and (f.get('dur_pct') or 0) > 0.8)]
+    if not _atividades:
+        _atividades = fases
+    caminho_critico = sorted(_atividades, key=lambda f: f['dur_dias'], reverse=True)[:5]
     caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias'],
                         'categoria': f.get('categoria'), 'cor': f.get('cor')}
                        for f in caminho_critico]
