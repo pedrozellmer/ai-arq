@@ -34,7 +34,32 @@ jobs:
         with:
           python-version: '3.13'
 
+      # 🪤 21/08/2026: push só de frontend (precos.html) NÃO faz o Render
+      # rebuildar — o poll esperava um commit que nunca ia chegar, o loop era
+      # de 10 min e o timeout do job de 8: cancelado antes do "seguindo".
+      # Agora: se o push não tocou no backend, não há deploy a esperar — o
+      # smoke roda direto contra o que está no ar. E o loop cabe no timeout.
+      - name: Mudou o backend neste push?
+        id: diff
+        env:
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ "${{ github.event_name }}" != "push" ] || [ -z "$BEFORE" ] || echo "$BEFORE" | grep -q '^0*$'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          git fetch --quiet --depth=50 origin "$BEFORE" 2>/dev/null || true
+          changed=$(git diff --name-only "$BEFORE" "$SHA" 2>/dev/null || echo "backend/?")
+          echo "$changed" | sed 's/^/  /'
+          if echo "$changed" | grep -qE '^(backend/|Dockerfile|requirements|render.yaml)'; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "backend=false" >> "$GITHUB_OUTPUT"
+            echo "Push sem backend — o Render não rebuilda; smoke roda contra o deploy atual."
+          fi
+
       - name: Aguarda o deploy DESTE commit subir no Render (poll)
+        if: steps.diff.outputs.backend != 'false'
         env:
           SHA: ${{ github.sha }}
         run: |
@@ -46,7 +71,7 @@ jobs:
           # Agora esperamos o `commit` do endpoint raiz bater com o do push.
           SHORT="${SHA:0:7}"
           echo "Esperando o backend reportar commit $SHORT (build Docker leva 5-8min)."
-          for i in $(seq 1 40); do
+          for i in $(seq 1 26); do   # 26×15s = 6,5 min, cabe no timeout de 8
             body=$(curl -sS --max-time 30 https://ai-arq.onrender.com/ 2>/dev/null || true)
             got=$(echo "$body" | sed -n 's/.*"commit"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
             if [ -n "$got" ] && [ "$got" = "$SHORT" ]; then
@@ -54,7 +79,7 @@ jobs:
               sleep 10   # margem pro worker assentar
               exit 0
             fi
-            echo "tentativa $i/40: no ar=[${got:-nenhum}] esperado=[$SHORT] — aguardando 15s..."
+            echo "tentativa $i/26: no ar=[${got:-nenhum}] esperado=[$SHORT] — aguardando 15s..."
             sleep 15
           done
           # Não falha o job: pode ser deploy só de frontend (o Render nem
