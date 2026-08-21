@@ -4850,6 +4850,80 @@ def _dedupe_revisoes(file_paths: list) -> tuple:
 _PREVIEW_MOVE_MAX_MB = float(os.getenv("PREVIEW_MOVE_MAX_MB", "50"))
 
 
+_RX_N_COTAS_ESCALA = re.compile(r"(\d+)\s+(?:de\s+\d+\s+)?cotas", re.I)
+
+
+def _nome_prancha_bonito(caminho: str) -> str:
+    n = os.path.basename(caminho or "")
+    for suf in (".slim.dxf", "_libredwg.dxf", "_libredwg", ".dxf", ".dwg", ".DXF", ".DWG"):
+        if n.endswith(suf):
+            n = n[: -len(suf)]
+    return n.replace("_libredwg", "").strip() or "prancha"
+
+
+def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
+    """Resume, por prancha, COMO a escala foi decidida — pra contar ao cliente.
+
+    🎯 21/08/2026: o motor prova a escala pelas cotas (Allan: 171, Gabriela:
+    244) e guardava isso SÓ no log. Em 45 dias: 23 pranchas provadas ou
+    corrigidas por cota, 149 sem prova nenhuma — e o cliente nunca soube de um
+    nem de outro. Isto só LÊ o metadata; não muda fator, selo nem quantidade.
+    """
+    md = md or {}
+    nome = _nome_prancha_bonito(caminho)
+    uni = (md.get("unidade_nome_provada") or "").strip()
+    try:
+        if md.get("unidade_validada_por_cotas"):
+            return {"nome": nome, "status": "cotas",
+                    "n": int(md["unidade_validada_por_cotas"]), "unidade": uni}
+        msg = md.get("unidade_corrigida_por_cotas")
+        if msg:
+            m = _RX_N_COTAS_ESCALA.search(str(msg))
+            return {"nome": nome, "status": "cotas", "n": int(m.group(1)) if m else 0,
+                    "unidade": uni, "corrigida": True}
+        if md.get("unidade_provada_por_rotulo"):
+            return {"nome": nome, "status": "rotulo", "n": 0, "unidade": uni}
+        if md.get("unidade_por_consenso_projeto"):
+            return {"nome": nome, "status": "consenso", "n": 0, "unidade": uni}
+        if md.get("alerta_unidade") or md.get("unidade_corrigida_por_plausibilidade"):
+            return {"nome": nome, "status": "alerta"}   # já vira ressalva por outro caminho
+    except Exception:
+        pass
+    return {"nome": nome, "status": "sem_prova",
+            "declarada": md.get("unidade_desenho") or "?"}
+
+
+def _linhas_escala_projeto(arqs: list) -> list:
+    """Uma linha ✅ (provadas) e/ou uma linha de atenção (sem prova) por projeto.
+    O ✅ no início é sinal pro projeto.html mostrar ✅ em vez de ⚠ (regra nº7:
+    conferência positiva não pode diluir aviso de verdade)."""
+    provadas = [a for a in arqs if a.get("status") in ("cotas", "rotulo", "consenso")]
+    sem = [a for a in arqs if a.get("status") == "sem_prova"]
+    out = []
+    if provadas:
+        partes = []
+        for a in provadas:
+            u = f" ({a['unidade']})" if a.get("unidade") else ""
+            if a["status"] == "cotas":
+                n = a.get("n") or 0
+                q = f"{n} cotas batem" if n else "as cotas batem"
+                partes.append(f"{a['nome']}: {q} com a geometria{u}"
+                              + (" — unidade do arquivo corrigida por elas" if a.get("corrigida") else ""))
+            elif a["status"] == "rotulo":
+                partes.append(f"{a['nome']}: a área rotulada na prancha bate com a geometria{u}")
+            else:
+                partes.append(f"{a['nome']}: usa a escala provada por cota em outra prancha deste projeto{u}")
+        out.append("✅ Escala conferida pelo próprio desenho — " + "; ".join(partes) + ".")
+    if sem:
+        nomes = ", ".join(f"{a['nome']} (arquivo declara: {a.get('declarada') or '?'})" for a in sem[:4])
+        if len(sem) > 4:
+            nomes += f" e mais {len(sem) - 4}"
+        out.append(f"Escala não conferida por cota em {nomes} — nenhuma cota da prancha pôde "
+                   f"provar a unidade. Antes de fechar o orçamento, confira uma medida-chave "
+                   f"(a largura de um ambiente, por exemplo) contra a planilha.")
+    return out
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -5500,6 +5574,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
                 n_dxf = len(dxf_paths)
                 dxf_span = cad_end_pct - extract_start
+                _escala_arqs = []   # 21/08: como a escala de cada prancha foi decidida
                 for idx, dxf_path in enumerate(dxf_paths):
                     # 🛡️ Freio de MEMÓRIA: se o container está chegando perto do limite
                     # de RAM, aborta ANTES do OOM matar o servidor inteiro. Um projeto
@@ -5775,6 +5850,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"ressalva={_dxf_sem_procedencia} "
                             f"cab={_md_u.get('diag_unidade') or '-'}",
                             job_id)
+                        try:
+                            _escala_arqs.append(_resumo_escala_arquivo(dxf_path, _md_u))
+                        except Exception as _eea:
+                            print(f"[escala-resumo] nao-fatal: {_eea}")
                         # 🎯 Proxy AEC/MEP: grava SEMPRE que a prancha tiver
                         # proxies. "achou 300 e mediu 0" e "não tem proxy" são
                         # diagnósticos OPOSTOS — sem esta linha viram a mesma
@@ -7484,6 +7563,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 "campo do envio, ou mande também a prancha que tem o quadro de áreas."
             ]
             print(f"[area-ausente] job={job_id}: sem área total e sem área informada")
+
+        # ── ESCALA: CONTA AO CLIENTE COMO FOI CONFERIDA (21/08/2026) ──────────
+        # Prova por cota existe desde 05/08 e ficava só no log. Linha ✅ quando
+        # alguma prancha provou; linha de atenção quando nenhuma cota provou.
+        # Só leitura do metadata — não muda fator, selo nem quantidade.
+        try:
+            _linhas_esc = _linhas_escala_projeto(_escala_arqs)
+        except NameError:
+            _linhas_esc = []            # job sem CAD (só PDF): nada a dizer
+        except Exception as _ele:
+            print(f"[escala-aviso] nao-fatal: {_ele}")
+            _linhas_esc = []
+        if _linhas_esc:
+            project_data.warnings = (project_data.warnings or []) + _linhas_esc
+            _log_error("motor:escala-aviso",
+                       " || ".join(l[:160] for l in _linhas_esc), job_id)
 
         # ── ESTRUTURA SEM MEDIÇÃO NÃO PASSA POR LEVANTAMENTO (19/08/2026) ──
         # Três casos medidos numa semana: Eduarda (16/08, NPS 2 — armadura,

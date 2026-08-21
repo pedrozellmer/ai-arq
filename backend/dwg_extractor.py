@@ -2313,7 +2313,8 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             if dim_check.get("heuristica_superada"):
                 metadata["heuristica_extensao_superada_por_cotas"] = \
                     dim_check["heuristica_superada"]
-        elif _dim_status == "corrigida":
+        elif _dim_status in ("corrigida", "corrigida_lfac"):
+            # corrigida_lfac (caso Isabelle) não deixava rastro no metadata — 21/08
             metadata["unidade_corrigida_por_cotas"] = dim_check["mensagem"]
             metadata["unidade_nome_provada"] = dim_check["unidade_nome"]
         elif _dim_status == "provada_por_rotulo":

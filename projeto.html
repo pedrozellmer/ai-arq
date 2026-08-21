@@ -2714,9 +2714,14 @@ async function postNps(score, comment) {
 function renderWarnings(warnings) {
   if (!Array.isArray(warnings) || !warnings.length) return;
   document.getElementById('proj-warnings').classList.remove('hidden');
-  document.getElementById('proj-warnings-list').innerHTML = warnings.map(w =>
-    `<li class="flex items-start gap-2"><span class="mt-0.5">⚠</span><span>${esc(w)}</span></li>`
-  ).join('');
+  // 21/08/2026: aviso que começa com ✅ é conferência POSITIVA do motor (ex.:
+  // "escala confirmada por 244 cotas") — mostra o ✅ em vez do ⚠, sem
+  // diluir os avisos de verdade (regra nº7: aviso falso queima o verdadeiro).
+  document.getElementById('proj-warnings-list').innerHTML = warnings.map(w => {
+    const pos = typeof w === 'string' && w.startsWith('✅');
+    const txt = pos ? w.slice(1).trim() : w;
+    return `<li class="flex items-start gap-2"><span class="mt-0.5">${pos ? '✅' : '⚠'}</span><span>${esc(txt)}</span></li>`;
+  }).join('');
 }
 
 // Área inteligente — mostra o prompt SÓ quando: (a) o projeto não tem área medida
