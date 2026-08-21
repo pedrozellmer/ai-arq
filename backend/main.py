@@ -5772,7 +5772,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"cotas={_md_u.get('unidade_validada_por_cotas', '-')} "
                             f"corrigida={_md_u.get('unidade_corrigida_por_cotas', '-')} "
                             f"alerta={(_md_u.get('alerta_unidade') or '-')[:120]} "
-                            f"ressalva={_dxf_sem_procedencia}",
+                            f"ressalva={_dxf_sem_procedencia} "
+                            f"cab={_md_u.get('diag_unidade') or '-'}",
                             job_id)
                         # 🎯 Proxy AEC/MEP: grava SEMPRE que a prancha tiver
                         # proxies. "achou 300 e mediu 0" e "não tem proxy" são

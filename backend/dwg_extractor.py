@@ -749,6 +749,50 @@ def _inferir_unidade_sem_insunits(doc):
         return None
 
 
+def _diag_unidade_cabecalho(doc) -> dict:
+    """SOMBRA da unidade (21/08/2026) — só leitura, nada muda pro cliente.
+
+    Por que existe: `_detect_unit_factor` assume PÉS quando $INSUNITS=0 e
+    $MEASUREMENT=0. Mas $MEASUREMENT=0 é o que o template imperial padrão do
+    AutoCAD (acad.dwt) grava — um projetista brasileiro que começa do template
+    errado entrega um DWG "imperial" desenhado em metros. Em 20/08/2026 os DOIS
+    clientes reais do dia (FRUTMEL, 800 m²; fôrma do 1º pavimento do Allan)
+    caíram nessa regra, e a régua das cotas NÃO consegue corrigir fator
+    não-métrico (abstém de propósito). Antes de trocar a regra — função que
+    multiplica TODO número de TODO projeto — precisamos de N: o que o cabeçalho
+    diz ($LUNITS/$DIMLUNIT 3-4 = formato imperial de verdade) e qual fator a
+    cadeia daria sem a regra dos pés. Este dict vai pro log motor:unidade.
+    """
+    d: dict = {}
+    try:
+        h = doc.header
+        for k in ("$INSUNITS", "$MEASUREMENT", "$LUNITS", "$DIMLUNIT", "$DIMLFAC"):
+            try:
+                v = h.get(k, None)
+                if v is not None:
+                    d[k.lstrip("$").lower()] = v
+            except Exception:
+                pass
+        try:
+            emin = h.get("$EXTMIN")
+            emax = h.get("$EXTMAX")
+            if emin and emax:
+                d["ext"] = (round(abs(emax[0] - emin[0]), 1),
+                            round(abs(emax[1] - emin[1]), 1))
+        except Exception:
+            pass
+        try:
+            if (int(d.get("insunits", 0) or 0) == 0
+                    and int(d.get("measurement", 1) or 0) == 0):
+                inf = _inferir_unidade_sem_insunits(doc)
+                d["sem_regra_pes"] = inf if inf is not None else 0.001
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return d
+
+
 # Padrões que indicam bloco de esquadria (porta ou janela).
 # Matching case-insensitive via startswith OU contains.
 _ESQUADRIA_PATTERNS = (
@@ -2231,6 +2275,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         metadata["fator_para_metros"] = f"{unit_factor}"
         if unit_warnings:
             metadata["alerta_unidade"] = " | ".join(unit_warnings)
+    except Exception:
+        pass
+    try:
+        metadata["diag_unidade"] = _diag_unidade_cabecalho(doc)
     except Exception:
         pass
     # "Régua da prancha" — resultado da validação da unidade pelas cotas.
