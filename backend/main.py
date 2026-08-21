@@ -4850,7 +4850,8 @@ def _dedupe_revisoes(file_paths: list) -> tuple:
 _PREVIEW_MOVE_MAX_MB = float(os.getenv("PREVIEW_MOVE_MAX_MB", "50"))
 
 
-_RX_N_COTAS_ESCALA = re.compile(r"(\d+)\s+(?:de\s+\d+\s+)?cotas", re.I)
+import re as _re_escala   # 🪤 `re` NÃO está importado no topo deste módulo (só aliases); sem isto o deploy 8d597a6 morreu na partida
+_RX_N_COTAS_ESCALA = _re_escala.compile(r"(\d+)\s+(?:de\s+\d+\s+)?cotas", _re_escala.I)
 
 
 def _nome_prancha_bonito(caminho: str) -> str:
