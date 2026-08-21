@@ -611,7 +611,15 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
 
     # Top-5 fases mais longas (NÃO é caminho crítico — nome mantido na chave
     # por compat com o frontend; rótulo correto aplicado na tela em 01/08)
-    caminho_critico = sorted(fases, key=lambda f: f['dur_dias'], reverse=True)[:5]
+    # 🪤 SEGUNDO construtor de caminho crítico no MESMO arquivo (o outro está
+    # ~200 linhas acima) — patchei o primeiro e o /generate usa ESTE. Mesma
+    # doença do finalize_review duplicado, no mesmo dia. Filtro idêntico:
+    # guarda-chuva ('padrão' cobrindo >80% da obra) fora da análise.
+    _atividades = [f for f in fases
+                   if not (f.get('origem') == 'padrão' and (f.get('dur_pct') or 0) > 0.8)]
+    if not _atividades:
+        _atividades = fases
+    caminho_critico = sorted(_atividades, key=lambda f: f['dur_dias'], reverse=True)[:5]
     caminho_critico = [{'label': f['label'], 'dur_dias': f['dur_dias'],
                         'categoria': f.get('categoria'), 'cor': f.get('cor')}
                        for f in caminho_critico]
