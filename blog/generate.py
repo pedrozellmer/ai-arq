@@ -96,6 +96,7 @@ FOOTER = '''
       <ul class="space-y-2 text-sm text-gray-600">
         <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
         <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+        <li><a href="/licencas.html" class="hover:text-indigo-600">Licenças</a></li>
       </ul>
     </div>
   </div>

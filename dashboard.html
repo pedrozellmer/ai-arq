@@ -1314,7 +1314,7 @@
 </div>
 
 <!-- supabase-js + utils compartilhados (sb, sbClient, authFetch, downloadProtected, escapeHtml, API_BASE) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3" integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC" crossorigin="anonymous"></script>
 <script src="aiarq-utils.js"></script>
 <script src="menu-lateral.js"></script>
 <script>
@@ -1743,6 +1743,7 @@
 
     try {
       const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
+      if (!res.ok) throw new Error('HTTP ' + res.status);   // 23/08: erro não é "cliente sem projeto"
       const data = await res.json();
       __backendProjects = data.projects || [];  // espelho compartilhado (isFirstProject)
       const projects = (data.projects || []).filter(p => p.status === 'done');
@@ -1847,6 +1848,9 @@
       }
     } catch (e) {
       console.error('loadHomeStats:', e);
+      // 23/08 (board): antes ficava "Carregando…" pra sempre, ou o hero de
+      // "primeira prancha" aparecia pra cliente antigo. Agora diz o que houve.
+      try { notify.warn('N\u00e3o consegui carregar seus projetos agora (' + ((e && e.message) || 'erro') + '). Recarregue a p\u00e1gina em instantes.'); } catch (_) {}
     }
   }
   function escapeH(s) {
@@ -2316,7 +2320,11 @@
 
     const tierLabel = tier ? ` &middot; Plano <strong>${tier}</strong>` : '';
 
-    if (unlimited) {
+    if (BETA_FREE) {
+      // 23/08/2026 (board): durante o beta a promessa pública é "grátis e
+      // ilimitado" — mostrar R$ riscado e "1º projeto" aqui contradizia o site.
+      priceLabel.innerHTML = `${n} pranchas detectadas${detail} — <span class="text-green-600 font-bold">Grátis durante o beta</span> <span class="text-xs">(sem limite de projetos)</span>`;
+    } else if (unlimited) {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="text-purple-600 font-bold">GR\u00c1TIS (ilimitado)</span>`;
     } else if (free) {
       priceLabel.innerHTML = `${n} pranchas detectadas${detail}${tierLabel} \u2014 <span class="line-through text-gray-500">R$ ${price}</span> <span class="text-green-600 font-bold">GR\u00c1TIS</span> <span class="text-xs">(1\u00ba projeto)</span>`;
@@ -2571,8 +2579,11 @@
   //  ADD FILES
   // ══════════════════════════════════════════════
   function addFiles(newFiles) {
+    const _ignorados = [];   // 23/08 (board): zip/rvt/plt sumiam em silêncio
     for (const f of newFiles) {
-      if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf') || f.name.toLowerCase().endsWith('.dwg') || f.name.toLowerCase().endsWith('.dxf')) {
+      const _ok = f.type === 'application/pdf' || /\.(pdf|dwg|dxf)$/i.test(f.name || '');
+      if (!_ok) { _ignorados.push(f.name || 'arquivo'); continue; }
+      if (true) {
         if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) {
           selectedFiles.push(f);
           // Aviso preventivo (2026-06-02): detecta PDF vetorial sem texto extraível
@@ -2591,6 +2602,11 @@
     }
     renderFiles();
     checkBigFilesAndWarn(newFiles);
+    if (_ignorados.length) {
+      const _z = _ignorados.some(n => /\.zip$/i.test(n));
+      notify.warn(`Ignorei ${_ignorados.length === 1 ? _ignorados[0] : _ignorados.length + ' arquivos'}: só PDF, DWG e DXF entram.` +
+        (_z ? ' Descompacte o zip e envie as pranchas separadas.' : ''));
+    }
   }
 
   // ══════════════════════════════════════════════
@@ -3348,7 +3364,7 @@
       // continua grátis e processamos. Quando ligar a cobrança, é só pôr
       // BETA_FREE=false que este ramo some e cai no checkout abaixo.
       window.__creditsToConsumeCents = 0;
-      notify.ok('🎉 Ainda estamos em beta — seu projeto continua GRÁTIS! Aproveite enquanto dura. 🙌');
+      notify.ok('🎉 Beta: seu projeto é grátis, sem limite de projetos. 🙌');
       startProcessing();
     } else {
       // Precisa pagar — pede CPF/CNPJ se ainda não tiver (cadastro 2 etapas).
@@ -3564,6 +3580,9 @@
         // Ainda sem prancha: provavelmente na FILA (1 projeto por vez). Render é
         // PAGO — não dorme; nunca dizer "standby/free tier" (regra do Pedro).
         timeEstimate.textContent = 'Seu projeto entrou na fila — processamos um de cada vez pra garantir qualidade. Já começa. Pode fechar a aba: te avisamos por email quando a planilha ficar pronta.';
+      } else if (!inFinal && estimatedTotalSeconds > 0 && elapsed > estimatedTotalSeconds * 1.5 + 60) {
+        // 23/08 (board): a estimativa vencia e o texto ficava "~5s" pra sempre.
+        timeEstimate.textContent = `${themed}  ·  est\u00e1 demorando mais que o previsto, mas continua rodando. Pode fechar a aba: a planilha chega por e-mail.`;
       } else {
         const timeStr = mins > 0 ? `~${mins}min ${secs}s` : `~${secs}s`;
         timeEstimate.textContent = `${themed}  ·  ${timeStr}`;
@@ -3575,6 +3594,12 @@
     if (!currentJobId) return;
 
     try {
+      // 23/08 (board): o token era capturado UMA vez no login; fila + processamento
+      // mais longos que a sessão viravam "Não foi possível concluir". Renova aqui.
+      try {
+        const { data: { session: _s } } = await sbClient.auth.getSession();
+        if (_s && _s.access_token) accessToken = _s.access_token;
+      } catch (_) {}
       const res = await fetch(`${API_BASE}/api/status/${currentJobId}`, {
         headers: { 'Authorization': `Bearer ${accessToken}` }
       });
@@ -3585,7 +3610,9 @@
           clearInterval(pollTimer);
           clearInterval(timeEstimateTimer);
           pollTimer = null;
-          errorMessage.textContent = 'O servidor perdeu a conex\u00e3o. Por favor, tente novamente.';
+          errorMessage.textContent = 'O servidor reiniciou no meio do caminho (acontece em deploy). ' +
+            'Se o processamento j\u00e1 tinha come\u00e7ado, ele continua sozinho e a planilha chega por e-mail \u2014 ' +
+            'confira em Meus projetos antes de enviar de novo.';
           showState(stateError);
         }
         return;
@@ -3685,7 +3712,8 @@
         clearInterval(pollTimer);
         clearInterval(timeEstimateTimer);
         pollTimer = null;
-        errorMessage.textContent = 'N\u00e3o foi poss\u00edvel conectar ao servidor. Tente novamente.';
+        errorMessage.textContent = 'N\u00e3o consegui falar com o servidor por 5 minutos. ' +
+          'Seu projeto pode ter continuado: confira em Meus projetos (e no e-mail) antes de enviar de novo.';
         showState(stateError);
       }
     }

@@ -312,7 +312,7 @@
 </script>
 
 <!-- supabase-js + utils compartilhados (sb, authFetch, downloadProtected, escapeHtml, API_BASE) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3" integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC" crossorigin="anonymous"></script>
 <script src="aiarq-utils.js"></script>
 <script src="menu-lateral.js"></script>
 <script>
@@ -360,7 +360,11 @@ async function loadItems() {
   try {
     // Carrega itens + state de revisão em paralelo
     const [itemsRes, stateRes] = await Promise.all([
-      authFetch(`${API_BASE}/api/items/${jobId}`).then(r => r.json()),
+      authFetch(`${API_BASE}/api/items/${jobId}`).then(r => {
+        // 23/08 (board): 401/404/500 viravam "Nenhum item." — erro não é vazio.
+        if (!r.ok) throw new Error(r.status === 401 ? 'sua sess\u00e3o expirou \u2014 entre de novo' : 'o servidor respondeu ' + r.status + ' \u2014 tente recarregar');
+        return r.json();
+      }),
       // ?marcar=1 — SÓ esta tela conta como "abriu a revisão". O dashboard e o
       // projeto.html chamam a mesma rota sem o parâmetro, então não inflam mais
       // o contador (eram 54 aberturas pra 6 projetos com ação real, em 04/08).
@@ -401,7 +405,7 @@ async function loadItems() {
     });
     render();
   } catch (e) {
-    const msg = 'Erro ao carregar: ' + e.message;
+    const msg = 'N\u00e3o consegui carregar os itens: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
 }

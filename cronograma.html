@@ -67,6 +67,7 @@
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
 
 <!-- Loading gate -->
 <div id="gate" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
@@ -101,7 +102,7 @@
   </div>
 </header>
 
-<main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+<main id="main" class="max-w-6xl mx-auto px-4 py-6 space-y-6">
 
   <!-- Sem itens? -->
   <div id="no-items" class="hidden rounded-2xl border-2 border-amber-200 bg-amber-50 p-6">
@@ -356,7 +357,7 @@
 </main>
 
 <!-- supabase-js + utils compartilhados (sbClient, downloadProtected, escapeHtml, API_BASE) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3" integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC" crossorigin="anonymous"></script>
 <script src="aiarq-utils.js"></script>
 <script src="menu-lateral.js"></script>
 <script src="coerencia.js"></script>
@@ -433,6 +434,7 @@ async function init() {
     const { data: { session: s2 } } = await sbClient.auth.getSession();
     const h2 = s2 ? { 'Authorization': `Bearer ${s2.access_token}` } : {};
     const r = await fetch(`${API_BASE}/api/items/${jobId}`, { headers: h2 });
+    if (!r.ok) throw new Error(r.status === 401 ? 'sua sess\u00e3o expirou \u2014 entre de novo' : 'o servidor respondeu ' + r.status);
     const data = await r.json();
     const items = data.items || [];
 
@@ -466,7 +468,12 @@ async function init() {
     await carregarSugestao();
     autoGerarPrimeiraVisita();
   } catch (e) {
-    document.getElementById('no-items').classList.remove('hidden');
+    // 23/08 (board): erro de servidor/sessão era mostrado como "projeto sem itens".
+    const _ni = document.getElementById('no-items');
+    const _h = _ni.querySelector('h3'), _p = _ni.querySelector('p');
+    if (_h) _h.textContent = 'N\u00e3o consegui carregar os itens deste projeto';
+    if (_p) _p.textContent = ((e && e.message) || 'erro inesperado') + '. Recarregue a p\u00e1gina; se persistir, abra o projeto e tente de novo.';
+    _ni.classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
   }
 }
