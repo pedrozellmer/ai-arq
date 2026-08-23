@@ -753,23 +753,21 @@
         </div>
 
         <!-- Q13 -->
-        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="calcula quantidades formulas tecnicas pintura perimetro paredes pisos perda luminarias nbr sprinklers eletrica tomadas dados tcpo sinapi">
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="calcula quantidades medido estimado geometria comprimento area contagem blocos pe-direito perda cotas escala sinapi">
           <button class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
             <span class="text-sm font-semibold text-gray-800 pr-4">Como a IA calcula as quantidades?</span>
             <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p class="mb-3">Quando a legenda informa a quantidade, ela &eacute; usada diretamente. Quando n&atilde;o, a IA aplica f&oacute;rmulas t&eacute;cnicas reais, seguindo crit&eacute;rios de medi&ccedil;&atilde;o consagrados no Brasil:</p>
+              <p class="mb-3">Quando a legenda ou o quadro da prancha informa a quantidade, ela &eacute; usada diretamente. Quando n&atilde;o, o motor <strong>mede a geometria do CAD</strong>:</p>
               <ul class="space-y-2 ml-1">
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Pintura:</strong> Per&iacute;metro das paredes &times; p&eacute;-direito &minus; v&atilde;os (crit&eacute;rio TCPO: v&atilde;o de at&eacute; 2 m&sup2; n&atilde;o se desconta)</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Pisos:</strong> &Aacute;rea l&iacute;quida do ambiente, medida do desenho</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Lumin&aacute;rias:</strong> F&oacute;rmula NBR 8995 (500 lux para escrit&oacute;rio)</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Sprinklers:</strong> NBR 10897 &mdash; 1 a cada 20,9 m&sup2; para risco leve</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>El&eacute;trica:</strong> 2 tomadas comuns + 2 estabilizadas + 1 dado por posi&ccedil;&atilde;o de trabalho</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>AR-Condicionado:</strong> 600&ndash;800 BTU/m&sup2; + carga por pessoa e equipamento</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Comprimentos</strong> de paredes, dutos e tubula&ccedil;&otilde;es, por camada do desenho</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>&Aacute;reas</strong> de ambientes e de hachuras (piso, forro, revestimento)</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Contagens</strong> de blocos: portas, janelas, lumin&aacute;rias, pilares, lou&ccedil;as</li>
               </ul>
-              <p class="mt-3">Uma coisa que a gente <strong>n&atilde;o</strong> faz: acrescentar percentual de perda ou desperd&iacute;cio. A quantidade entregue &eacute; a medida do projeto. Perda varia com material, m&eacute;todo de assentamento e equipe &mdash; &eacute; decis&atilde;o do or&ccedil;amentista ao compor o custo, e embutir isso no quantitativo esconderia de voc&ecirc; o n&uacute;mero real.</p>
+              <p class="mt-3">Cada linha sai com um selo: <strong>medido</strong> (veio da geometria) ou <strong>estimado</strong> (veio de &iacute;ndice ou de um dado informado por voc&ecirc;, como o p&eacute;-direito &mdash; nesse caso a conta aparece na observa&ccedil;&atilde;o do item, ex.: &ldquo;per&iacute;metro das paredes &times; p&eacute;-direito informado&rdquo;). A escala da prancha &eacute; conferida pelas pr&oacute;prias cotas do desenho, e o projeto mostra quantas bateram.</p>
+              <p class="mt-3">O que a gente <strong>n&atilde;o</strong> faz: aplicar dimensionamento normativo por conta pr&oacute;pria (lux de ilumina&ccedil;&atilde;o, sprinklers por &aacute;rea, tomadas por posto, BTU por m&sup2;) nem acrescentar percentual de perda ou desperd&iacute;cio. Isso &eacute; decis&atilde;o de projeto e do or&ccedil;amentista &mdash; o quantitativo entrega a medida do desenho, com a origem de cada n&uacute;mero rastre&aacute;vel.</p>
               <p class="mt-3 text-xs text-gray-500">Base técnica: catálogo oficial SINAPI (Caixa), com ~10 mil composições carregadas no sistema como vocabulário de referência.</p>
             </div>
           </div>
