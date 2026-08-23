@@ -341,8 +341,10 @@ async def serve_image(filename: str):
 # ══════════════════════════════════════════════════
 
 @router.get("/status")
-async def agent_status():
-    """Retorna status do agente Instagram."""
+async def agent_status(request: Request):
+    """Retorna status do agente Instagram. Só admin (board 23/08: era a
+    única rota do módulo sem gate — pendente #2 da revisão de 28/07)."""
+    _admin(request)
     config = store.get_config()
     return {
         "agent_enabled": config.get("agent_enabled", False),

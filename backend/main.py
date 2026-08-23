@@ -11233,6 +11233,10 @@ async def save_chat_lead(request: Request):
     Chamado quando o visitante preenche nome + email ANTES da primeira
     mensagem. Usa email como chave de dedupe — se já existir, atualiza.
     """
+    # 23/08/2026 (board): rota pública que grava PII com service_role e
+    # SOBRESCREVE por e-mail — era a única sem freio. Mesmo limite do chat.
+    if not _rate_limit_ok("chatlead", request, limit=15, window_s=600):
+        return {"error": "Muitas tentativas em pouco tempo. Espere alguns minutos."}
     try:
         body = await request.json()
     except Exception:
@@ -15921,7 +15925,22 @@ _TRACK_ALLOWED = {
     # é palpite dos dois lados:
     "view_login",          # chegou na PORTA (login/criar conta)
     "signup_form_start",   # TOCOU no primeiro campo do formulário
+    # 23/08/2026 — board do site achou 9 eventos que o front dispara há semanas
+    # e esta lista descartava CALADA (200 {"status":"ignored"}). "Memorial 0
+    # aberturas na vida" era, em parte, isto. Cliques marcados com data-track
+    # chegam como "clique:<slug>" e são aceitos abaixo, com slug saneado.
+    # 🧪 tests/test_track_allowlist.py varre o front e falha se um nome novo
+    # não estiver aqui — pra não repetir 7 semanas de funil medido errado.
+    "open_memorial", "download_memorial", "memorial_redacao_ia",
+    "view_revisao", "revisao_pausada", "revisao_concluida",
+    "indicou_whatsapp", "anexou_ao_projeto",
 }
+_TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
+
+
+def _track_evento_aceito(ev: str) -> bool:
+    """Allowlist + prefixo 'clique:' com slug saneado (só [a-z0-9-], ≤40)."""
+    return ev in _TRACK_ALLOWED or bool(_TRACK_CLIQUE_RX.match(ev))
 
 
 @app.post("/api/track")
@@ -15940,7 +15959,7 @@ async def track_event(payload: TrackPayload, request: Request):
     🪤 E só valida quando o corpo AFIRMA uma identidade — assim o caminho
     anônimo, que é a maioria, não paga uma chamada HTTP extra por evento."""
     ev = (payload.event or "").strip()
-    if ev not in _TRACK_ALLOWED:
+    if not _track_evento_aceito(ev):
         return {"status": "ignored"}
     # meta capado: só cid (id anônimo), type e src (origem first-touch), curtos.
     _meta = {}
