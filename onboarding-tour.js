@@ -218,6 +218,7 @@
   };
 
   window.aiArqTourSkip = function () {
+    window.__aiArqTourPulado = true;   // 23/08: medir quem pula vs quem conclui
     markOnboarded();
     overlay.classList.remove('open');
   };
@@ -247,6 +248,7 @@
     // Atalho local pra não pedir o tour de novo nesta sessão, mesmo se o
     // updateUser falhar (sem rede, sessão expirada, etc).
     try { localStorage.setItem('aiarq_onboarded', 'true'); } catch (e) {}
+    try { if (window.trackEvent) window.trackEvent(window.__aiArqTourPulado ? 'tour_pulado' : 'tour_concluido'); } catch (e) {}
     try {
       var sb = getSupabaseClient();
       if (sb && sb.auth && typeof sb.auth.updateUser === 'function') {

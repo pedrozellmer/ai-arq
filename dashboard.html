@@ -2586,6 +2586,7 @@
       if (true) {
         if (!selectedFiles.some(sf => sf.name === f.name && sf.size === f.size)) {
           selectedFiles.push(f);
+          try { trackEvent('arquivo_escolhido', { type: ((f.name || '').split('.').pop() || '').toLowerCase().slice(0, 8) }); } catch (_) {}
           // Aviso preventivo (2026-06-02): detecta PDF vetorial sem texto extraível
           // e sugere DWG/DXF. Sem bloquear upload — só alerta o usuário pra precisão.
           // Caso Daniela Granado: PDFs exportados do CAD em modo desenho viraram
@@ -2604,6 +2605,7 @@
     checkBigFilesAndWarn(newFiles);
     if (_ignorados.length) {
       const _z = _ignorados.some(n => /\.zip$/i.test(n));
+      try { trackEvent('arquivo_ignorado', { type: _z ? 'zip' : 'outro' }); } catch (_) {}
       notify.warn(`Ignorei ${_ignorados.length === 1 ? _ignorados[0] : _ignorados.length + ' arquivos'}: só PDF, DWG e DXF entram.` +
         (_z ? ' Descompacte o zip e envie as pranchas separadas.' : ''));
     }
@@ -3239,6 +3241,7 @@
 
       if (!res.ok) {
         const errText = await res.text();
+        try { trackEvent('upload_erro', { type: String(res.status) }); } catch (_) {}
         throw new Error(errText || `Erro HTTP ${res.status}`);
       }
 

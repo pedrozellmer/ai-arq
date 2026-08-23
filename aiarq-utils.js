@@ -294,6 +294,18 @@
   // nunca bloqueia a UI, nunca lança. POST /api/track → grava em usage_events
   // (RLS on, só o backend lê). Sem ferramenta de 3rd-party (LGPD tranquilo).
   //   trackEvent('open_project', { job_id: '...' })
+  // 23/08/2026 (board): na PRIMEIRA visita o consentimento ainda é nulo, então
+  // view_landing/view_login/view_cadastro eram descartados — e depois do "aceitar"
+  // ninguém reenviava. Agora: sem resposta → fila (máx. 20); aceitou → a fila
+  // sai; recusou → a fila morre. Nada grava sem o "sim" (LGPD intacta).
+  var _trackFila = [];
+  window.addEventListener('aiarq:consent-changed', function (ev) {
+    try {
+      var d = ev && ev.detail;
+      var fila = _trackFila; _trackFila = [];
+      if (d && d.analytics === true) fila.forEach(function (q) { window.trackEvent(q.event, q.meta); });
+    } catch (e) {}
+  });
   window.trackEvent = function (event, meta) {
     try {
       if (!event) return;
@@ -302,7 +314,8 @@
       // não grava nada. Honra a promessa "telemetria só com seu sim".
       try {
         var _consent = JSON.parse(localStorage.getItem('aiarq_cookie_consent') || 'null');
-        if (!_consent || _consent.analytics !== true) return;
+        if (!_consent) { if (_trackFila.length < 20) _trackFila.push({ event: event, meta: meta }); return; }
+        if (_consent.analytics !== true) return;
       } catch (e) { return; }
       // cid = id anônimo do navegador (localStorage) → dá pra contar VISITANTE
       // único e seguir o funil (visita → cadastro) mesmo sem login.

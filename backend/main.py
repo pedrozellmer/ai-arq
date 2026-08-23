@@ -15934,6 +15934,10 @@ _TRACK_ALLOWED = {
     "open_memorial", "download_memorial", "memorial_redacao_ia",
     "view_revisao", "revisao_pausada", "revisao_concluida",
     "indicou_whatsapp", "anexou_ao_projeto",
+    # 23/08 (lote 3) — os passos que decidem a PRIMEIRA HORA, que não tinham evento:
+    "tour_pulado", "tour_concluido",        # onboarding-tour.js
+    "arquivo_escolhido", "arquivo_ignorado", # dashboard addFiles (meta.type = extensão)
+    "upload_erro",                           # dashboard /api/process falhou (meta.type = HTTP)
 }
 _TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
 
