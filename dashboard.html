@@ -1742,9 +1742,7 @@
     document.getElementById('home-name').textContent = displayName.split(' ')[0];
 
     try {
-      const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
-      if (!res.ok) throw new Error('HTTP ' + res.status);   // 23/08: erro não é "cliente sem projeto"
-      const data = await res.json();
+      const data = await fetchByUser();   // 23/08: uma chamada compartilhada entre as abas
       __backendProjects = data.projects || [];  // espelho compartilhado (isFirstProject)
       const projects = (data.projects || []).filter(p => p.status === 'done');
 
@@ -2053,6 +2051,16 @@
   // ══════════════════════════════════════════════
   //  AUTH CHECK
   // ══════════════════════════════════════════════
+  // 23/08 (board): a lista de projetos era pedida 3× ao abrir o painel.
+  let __byUserPromise = null;
+  function fetchByUser() {
+    if (!__byUserPromise) {
+      __byUserPromise = authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`)
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .finally(() => { setTimeout(() => { __byUserPromise = null; }, 15000); });
+    }
+    return __byUserPromise;
+  }
   async function checkAuth() {
     const { data: { session } } = await sbClient.auth.getSession();
     if (!session) {
@@ -2062,6 +2070,16 @@
 
     accessToken = session.access_token;
     currentUser = session.user;
+    // 23/08 (board): quem veio de login.html?redirect=… (ex.: cronograma) volta pra lá.
+    try {
+      const _dest = localStorage.getItem('aiarq_redirect');
+      if (_dest) {
+        localStorage.removeItem('aiarq_redirect');
+        if (/^[a-z0-9_-]+\.html(\?[^\s]*)?(#[^\s]*)?$/i.test(_dest) && !/^dashboard\.html/i.test(_dest)) {
+          window.location.href = _dest; return;
+        }
+      }
+    } catch (_) {}
     const user = currentUser;
     const meta = user.user_metadata || {};
 
@@ -3264,7 +3282,7 @@
 
     } catch (err) {
       console.error('Erro ao enviar:', err);
-      errorMessage.textContent = err.message || 'Erro ao enviar os arquivos. Tente novamente.';
+      errorMessage.textContent = (window.aiArqErroComReceita ? aiArqErroComReceita(err.message) : err.message) || 'Erro ao enviar os arquivos. Tente novamente.';
       showState(stateError);
     }
   }
@@ -3703,7 +3721,8 @@
         clearInterval(pollTimer);
         clearInterval(timeEstimateTimer);
         pollTimer = null;
-        errorMessage.textContent = data.error_message || data.error || data.message || 'Ocorreu um erro durante o processamento.';
+        const _txtErro = data.error_message || data.error || data.message || 'Ocorreu um erro durante o processamento.';
+        errorMessage.textContent = window.aiArqErroComReceita ? aiArqErroComReceita(_txtErro) : _txtErro;
         saveProjectToHistory('error');
         showState(stateError);
       }
@@ -4124,8 +4143,7 @@
 
     let payments = [];
     try {
-      const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
-      const data = await res.json();
+      const data = await fetchByUser();   // 23/08: uma chamada compartilhada entre as abas
       const projects = data.projects || [];
       __backendProjects = projects;  // espelho compartilhado (isFirstProject)
       // Concluídos = o que o usuário "levou" (no beta, tudo grátis de propósito)
@@ -4337,8 +4355,7 @@
     }
 
     try {
-      const res = await authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`);
-      const data = await res.json();
+      const data = await fetchByUser();   // 23/08: uma chamada compartilhada entre as abas
       const projects = data.projects || [];
       __backendProjects = projects;  // espelho compartilhado (isFirstProject)
 

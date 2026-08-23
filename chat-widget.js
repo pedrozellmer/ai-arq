@@ -239,6 +239,22 @@
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-modal', 'true');
   panel.setAttribute('aria-labelledby', 'aiarq-chat-title');
+  // 23/08 (board): diálogo fechava só no X; sem Esc, sem prender o foco.
+  panel.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      var btn = document.getElementById('aiarq-chat-close');
+      if (btn) { e.preventDefault(); btn.click(); }
+      return;
+    }
+    if (e.key === 'Tab') {
+      var foc = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      var vis = Array.prototype.filter.call(foc, function (el) { return el.offsetParent !== null && !el.disabled; });
+      if (!vis.length) return;
+      var first = vis[0], last = vis[vis.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
   panel.innerHTML = `
     <div id="aiarq-chat-header">
       <div class="title">

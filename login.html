@@ -158,6 +158,12 @@
   // sbClient vem de aiarq-utils.js
   const sbClient = window.sbClient;
 
+  // 23/08 (board): cronograma e outras páginas mandam ?redirect=… e ninguém lia.
+  // Guarda no localStorage porque o login com Google sai da página; o dashboard consome.
+  try {
+    const _r = new URLSearchParams(location.search).get('redirect');
+    if (_r && /^[a-z0-9_-]+\.html(\?[^\s]*)?(#[^\s]*)?$/i.test(_r)) localStorage.setItem('aiarq_redirect', _r);
+  } catch (_) {}
   // Check if already logged in
   async function checkSession() {
     const { data: { session } } = await sbClient.auth.getSession();

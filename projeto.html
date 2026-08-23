@@ -132,19 +132,19 @@
           <span class="text-xs text-gray-600">Pé-direito (m)</span>
           <input id="pp-pd" type="text" inputmode="decimal" placeholder="ex.: 2,80"
                  class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-          <span class="text-[11px] text-gray-400">destrava pintura e revestimento em m²</span>
+          <span class="text-[11px] text-gray-500">destrava pintura e revestimento em m²</span>
         </label>
         <label class="block">
           <span class="text-xs text-gray-600">Área total aproximada (m²)</span>
           <input id="pp-area" type="text" inputmode="decimal" placeholder="ex.: 192"
                  class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-          <span class="text-[11px] text-gray-400">usada só se a planta não medir sozinha</span>
+          <span class="text-[11px] text-gray-500">usada só se a planta não medir sozinha</span>
         </label>
         <label class="block">
           <span class="text-xs text-gray-600">Prazo previsto da obra (meses)</span>
           <input id="pp-prazo" type="text" inputmode="numeric" placeholder="ex.: 12"
                  class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
-          <span class="text-[11px] text-gray-400">preenche a administração local</span>
+          <span class="text-[11px] text-gray-500">preenche a administração local</span>
         </label>
       </div>
       <div class="flex items-center gap-3 mt-3">
@@ -153,7 +153,7 @@
           Usar na planilha</button>
         <span id="pp-status" class="text-xs text-gray-500"></span>
       </div>
-      <p class="text-[11px] text-gray-400 mt-2">O que vier daqui entra como <b>estimado</b>, rotulado "informado por você" — nunca como medido.</p>
+      <p class="text-[11px] text-gray-500 mt-2">O que vier daqui entra como <b>estimado</b>, rotulado "informado por você" — nunca como medido.</p>
     </div>
   </div>
 <div id="erro-block" class="hidden rounded-2xl border-2 border-red-200 bg-red-50 p-6" role="alert">
@@ -479,7 +479,7 @@
       <input id="chat-input" type="text" autocomplete="off" placeholder="Escreva sua pergunta..." aria-label="Pergunte sobre o seu quantitativo" class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none">
       <button id="chat-send" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">Enviar</button>
     </div>
-    <p class="px-5 pb-3 text-[11px] text-gray-400"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Respostas geradas a partir dos dados do seu projeto. O AI.arq entrega quantitativo, não preço.</p>
+    <p class="px-5 pb-3 text-[11px] text-gray-500"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Respostas geradas a partir dos dados do seu projeto. O AI.arq entrega quantitativo, não preço.</p>
   </section>
 <div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
     <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
@@ -1612,109 +1612,9 @@ const VISTAS_PROJETO = [...document.querySelectorAll('.vista')]
 // Aqui os passos vivem no front, completos e sempre atuais. O texto do banco
 // segue sendo o MOTIVO (é o que explica aquele projeto); a receita dá o
 // caminho. Caso desconhecido cai no comportamento antigo.
-const _RECEITAS_ERRO = [
-  {
-    // Reenvio duplicado: não existe nada pra fazer. Pedir arquivo aqui é
-    // pedir trabalho à toa — o botão de upload some.
-    quando: /reenvio duplicado/i,
-    semMotivo: true,
-    semUpload: true,
-    acao: 'Não precisa fazer nada aqui: este projeto foi reenviado e a versão boa é a mais recente, que está no seu painel.',
-  },
-  {
-    // 🪤 53 dos 74 erros do banco são ESTE — o servidor reiniciou no meio do
-    // processamento. O desenho do cliente não tem defeito nenhum, e mandar
-    // ele converter pra DXF é jogar a nossa falha no colo dele.
-    quando: /rein[íi]cio do servidor|redeploy do backend|interrompido por reinicializa/i,
-    semMotivo: true,
-    botao: 'Enviar o arquivo de novo',
-    acao: 'Não foi o seu desenho: o nosso servidor reiniciou no meio do processamento. É só enviar o mesmo arquivo de novo no botão abaixo.',
-  },
-  {
-    quando: /servidores de IA estavam sobrecarregados|sobrecarga tempor[áa]ria do servidor/i,
-    botao: 'Enviar o arquivo de novo',
-    acao: 'Não foi o seu desenho, e não precisa mexer nele: espere alguns minutos e envie o mesmo arquivo de novo no botão abaixo.',
-  },
-  {
-    // Arquivo maior que o teto de processamento.
-    quando: /grande demais|limite \d+ ?MB|excede o limite/i,
-    titulo: 'Como resolver',
-    passos: [
-      'Abra o arquivo no seu CAD',
-      'Exporte <b>só as pranchas que você quer medir</b> (ou divida em partes menores)',
-      'Envie os arquivos menores aqui — pode mandar vários de uma vez',
-    ],
-    acao: 'Cada prancha separada mede igual: o que pesa é o arquivo inteiro de uma vez.',
-  },
-  {
-    // DWG do AutoCAD Architecture/MEP com objetos "inteligentes" (proxy).
-    // O passo a passo existe no motor desde sempre, mas nunca chegou ao
-    // cliente: a mensagem era cortada em 500 caracteres no banco e morria
-    // exatamente em "1. Abra o arqui".
-    quando: /AEC|proxy|objetos? (inteligentes|especiais)|MEP ?\/ ?Architecture|Architecture ?\/ ?MEP/i,
-    titulo: 'Como resolver, em 3 passos',
-    passos: [
-      'No AutoCAD, com o arquivo aberto, digite <b>EXPORTTOAUTOCAD</b> e Enter',
-      'Escolha a versão <b>2013</b> e confirme — ele cria um arquivo novo, e o seu original não é alterado',
-      'Abra esse arquivo novo, salve como <b>DXF</b> e envie aqui',
-    ],
-    botao: 'Enviar o DXF',
-    acao: 'É esse DXF que a gente consegue medir — o "Salvar como DXF" direto não resolve neste caso.',
-  },
-  {
-    quando: /chegou incompleto|truncado|corrompido/i,
-    titulo: 'Como resolver',
-    passos: [
-      'Abra o arquivo no seu CAD e confira se ele abre inteiro',
-      'Salve de novo (Salvar Como), de preferência em <b>DXF</b>',
-      'Envie o arquivo novo aqui',
-    ],
-    acao: 'Se ele também não abrir no seu CAD, procure a última versão salva ou o backup automático (.bak).',
-  },
-  {
-    // 🪤 Falha declaradamente NOSSA. Caía no texto padrão e virava "converta o
-    // seu arquivo pra DXF" — cobrando do cliente uma conta que é da casa.
-    quando: /problema t[ée]cnico do nosso lado|problema t[ée]cnico ao processar|instabilidade moment[âa]nea no servidor/i,
-    semMotivo: true,
-    botao: 'Enviar o arquivo de novo',
-    acao: 'Não foi o seu desenho — foi um problema nosso. É só enviar o mesmo arquivo de novo no botão abaixo.',
-  },
-  {
-    // Estouro de memória: o caminho é DIVIDIR. Mandar converter pra DXF piora,
-    // porque DXF é bem maior que o DWG equivalente.
-    quando: /estourou a mem[óo]ria|muito pesado|pesado demais/i,
-    titulo: 'Como resolver',
-    passos: [
-      'Abra o arquivo no seu CAD',
-      'Exporte <b>uma prancha por vez</b> (ou só as que você quer medir)',
-      'Envie as pranchas separadas aqui — pode mandar várias de uma vez',
-    ],
-    acao: 'Separado, cada prancha mede igual — o que estoura é o arquivo inteiro de uma vez. Não adianta converter pra DXF: o DXF fica ainda maior.',
-  },
-  {
-    // PDF escaneado/fotografado: as cotas viraram pixel. Não existe "salvar
-    // como DXF" que resolva — é preciso o arquivo original.
-    quando: /nenhum item quantific[áa]vel|imagem escaneada|escaneado ou fotografado/i,
-    titulo: 'Como resolver',
-    passos: [
-      'Procure o arquivo <b>original</b> do projeto (o CAD, não o PDF escaneado)',
-      'Salve em <b>DXF</b> — ou, se só tiver PDF, exporte um PDF direto do CAD (não digitalizado)',
-      'Envie esse arquivo aqui',
-    ],
-    acao: 'Num PDF escaneado as cotas viraram imagem, e imagem não tem medida pra ler. Só o arquivo que saiu do CAD tem.',
-  },
-  {
-    quando: /vers[ãa]o (muito )?recente|n[ãa]o conseguimos abrir automaticamente/i,
-    titulo: 'Como resolver',
-    passos: [
-      'Abra o arquivo no seu CAD',
-      'Salve como <b>DXF</b> (Salvar Como → DXF), versão 2013 ou mais antiga',
-      'Envie o DXF aqui',
-    ],
-    botao: 'Enviar o DXF',
-    acao: 'DXF é o formato que a gente lê melhor — nele a medição sai do desenho, não de estimativa.',
-  },
-];
+// 23/08 (board): a tabela vive em aiarq-utils.js (window.AIARQ_RECEITAS_ERRO) — o
+// dashboard usa a mesma receita na hora do erro, em vez do texto cru do banco.
+const _RECEITAS_ERRO = window.AIARQ_RECEITAS_ERRO || [];
 
 function _receitaPara(txt) {
   for (var i = 0; i < _RECEITAS_ERRO.length; i++) {

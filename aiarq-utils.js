@@ -164,9 +164,140 @@
     } catch (e) { return String(iso); }
   };
 
+  // ─── Receitas de erro (compartilhadas: projeto.html e dashboard.html) ──
+  // 23/08/2026 (board): a receita por família de erro existia só na página do
+  // projeto; o dashboard mostrava o texto cru do banco na hora do upload.
+  window.AIARQ_RECEITAS_ERRO = [
+  {
+    // Reenvio duplicado: não existe nada pra fazer. Pedir arquivo aqui é
+    // pedir trabalho à toa — o botão de upload some.
+    quando: /reenvio duplicado/i,
+    semMotivo: true,
+    semUpload: true,
+    acao: 'Não precisa fazer nada aqui: este projeto foi reenviado e a versão boa é a mais recente, que está no seu painel.',
+  },
+  {
+    // 🪤 53 dos 74 erros do banco são ESTE — o servidor reiniciou no meio do
+    // processamento. O desenho do cliente não tem defeito nenhum, e mandar
+    // ele converter pra DXF é jogar a nossa falha no colo dele.
+    quando: /rein[íi]cio do servidor|redeploy do backend|interrompido por reinicializa/i,
+    semMotivo: true,
+    botao: 'Enviar o arquivo de novo',
+    acao: 'Não foi o seu desenho: o nosso servidor reiniciou no meio do processamento. É só enviar o mesmo arquivo de novo no botão abaixo.',
+  },
+  {
+    quando: /servidores de IA estavam sobrecarregados|sobrecarga tempor[áa]ria do servidor/i,
+    botao: 'Enviar o arquivo de novo',
+    acao: 'Não foi o seu desenho, e não precisa mexer nele: espere alguns minutos e envie o mesmo arquivo de novo no botão abaixo.',
+  },
+  {
+    // Arquivo maior que o teto de processamento.
+    quando: /grande demais|limite \d+ ?MB|excede o limite/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD',
+      'Exporte <b>só as pranchas que você quer medir</b> (ou divida em partes menores)',
+      'Envie os arquivos menores aqui — pode mandar vários de uma vez',
+    ],
+    acao: 'Cada prancha separada mede igual: o que pesa é o arquivo inteiro de uma vez.',
+  },
+  {
+    // DWG do AutoCAD Architecture/MEP com objetos "inteligentes" (proxy).
+    // O passo a passo existe no motor desde sempre, mas nunca chegou ao
+    // cliente: a mensagem era cortada em 500 caracteres no banco e morria
+    // exatamente em "1. Abra o arqui".
+    quando: /AEC|proxy|objetos? (inteligentes|especiais)|MEP ?\/ ?Architecture|Architecture ?\/ ?MEP/i,
+    titulo: 'Como resolver, em 3 passos',
+    passos: [
+      'No AutoCAD, com o arquivo aberto, digite <b>EXPORTTOAUTOCAD</b> e Enter',
+      'Escolha a versão <b>2013</b> e confirme — ele cria um arquivo novo, e o seu original não é alterado',
+      'Abra esse arquivo novo, salve como <b>DXF</b> e envie aqui',
+    ],
+    botao: 'Enviar o DXF',
+    acao: 'É esse DXF que a gente consegue medir — o "Salvar como DXF" direto não resolve neste caso.',
+  },
+  {
+    quando: /chegou incompleto|truncado|corrompido/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD e confira se ele abre inteiro',
+      'Salve de novo (Salvar Como), de preferência em <b>DXF</b>',
+      'Envie o arquivo novo aqui',
+    ],
+    acao: 'Se ele também não abrir no seu CAD, procure a última versão salva ou o backup automático (.bak).',
+  },
+  {
+    // 🪤 Falha declaradamente NOSSA. Caía no texto padrão e virava "converta o
+    // seu arquivo pra DXF" — cobrando do cliente uma conta que é da casa.
+    quando: /problema t[ée]cnico do nosso lado|problema t[ée]cnico ao processar|instabilidade moment[âa]nea no servidor/i,
+    semMotivo: true,
+    botao: 'Enviar o arquivo de novo',
+    acao: 'Não foi o seu desenho — foi um problema nosso. É só enviar o mesmo arquivo de novo no botão abaixo.',
+  },
+  {
+    // Estouro de memória: o caminho é DIVIDIR. Mandar converter pra DXF piora,
+    // porque DXF é bem maior que o DWG equivalente.
+    quando: /estourou a mem[óo]ria|muito pesado|pesado demais/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD',
+      'Exporte <b>uma prancha por vez</b> (ou só as que você quer medir)',
+      'Envie as pranchas separadas aqui — pode mandar várias de uma vez',
+    ],
+    acao: 'Separado, cada prancha mede igual — o que estoura é o arquivo inteiro de uma vez. Não adianta converter pra DXF: o DXF fica ainda maior.',
+  },
+  {
+    // PDF escaneado/fotografado: as cotas viraram pixel. Não existe "salvar
+    // como DXF" que resolva — é preciso o arquivo original.
+    quando: /nenhum item quantific[áa]vel|imagem escaneada|escaneado ou fotografado/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Procure o arquivo <b>original</b> do projeto (o CAD, não o PDF escaneado)',
+      'Salve em <b>DXF</b> — ou, se só tiver PDF, exporte um PDF direto do CAD (não digitalizado)',
+      'Envie esse arquivo aqui',
+    ],
+    acao: 'Num PDF escaneado as cotas viraram imagem, e imagem não tem medida pra ler. Só o arquivo que saiu do CAD tem.',
+  },
+  {
+    quando: /vers[ãa]o (muito )?recente|n[ãa]o conseguimos abrir automaticamente/i,
+    titulo: 'Como resolver',
+    passos: [
+      'Abra o arquivo no seu CAD',
+      'Salve como <b>DXF</b> (Salvar Como → DXF), versão 2013 ou mais antiga',
+      'Envie o DXF aqui',
+    ],
+    botao: 'Enviar o DXF',
+    acao: 'DXF é o formato que a gente lê melhor — nele a medição sai do desenho, não de estimativa.',
+  },
+];
+  window.aiArqReceitaPara = function (txt) {
+    try {
+      var t = String(txt || '');
+      for (var i = 0; i < window.AIARQ_RECEITAS_ERRO.length; i++) {
+        if (window.AIARQ_RECEITAS_ERRO[i].quando.test(t)) return window.AIARQ_RECEITAS_ERRO[i];
+      }
+    } catch (e) {}
+    return null;
+  };
+  // Texto simples (sem HTML) pra elementos com white-space: pre-line.
+  window.aiArqErroComReceita = function (txt) {
+    var r = window.aiArqReceitaPara(txt);
+    if (!r) return String(txt || '');
+    var semTag = function (s) { return String(s).replace(/<[^>]+>/g, ''); };
+    var partes = [];
+    if (!r.semMotivo && txt) partes.push(String(txt).replace(/\n?\s*Detalhe t[ée]cnico:[\s\S]*$/i, '').trim());
+    if (r.passos && r.passos.length) partes.push((r.titulo || 'Como resolver') + ':\n' + r.passos.map(function (p, k) { return (k + 1) + '. ' + semTag(p); }).join('\n'));
+    if (r.acao) partes.push(semTag(r.acao));
+    return partes.join('\n\n');
+  };
+
   // ─── authFetch ───────────────────────────────────────────────
   // Fetch com Bearer do Supabase. Backend exige JWT em endpoints
   // com ownership check (/api/items, /api/projects, /api/admin/*, etc).
+  // 23/08/2026 (board): sem timeout, servidor pendurado virava "Carregando…"
+  // eterno; 401 virava "Erro ao salvar: …" técnico. Agora: 45 s de teto (a não
+  // ser que quem chamou passe o próprio signal) e aviso único de sessão expirada.
+  var _avisouSessao = false;
   window.authFetch = async function (url, options) {
     options = options || {};
     const { data: { session } } = await _sbClient.auth.getSession();
@@ -174,7 +305,30 @@
     if (session && session.access_token) {
       headers['Authorization'] = 'Bearer ' + session.access_token;
     }
-    return fetch(url, Object.assign({}, options, { headers }));
+    var ctrl = null, timer = null;
+    var init = Object.assign({}, options, { headers });
+    if (!init.signal && typeof AbortController !== 'undefined') {
+      ctrl = new AbortController(); init.signal = ctrl.signal;
+      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, options.timeoutMs || 45000);
+    }
+    try {
+      var resp = await fetch(url, init);
+      if (resp.status === 401 && !_avisouSessao) {
+        _avisouSessao = true;
+        try {
+          var dest = encodeURIComponent(location.pathname.replace(/^\//, '') + location.search + location.hash);
+          notify.warn('Sua sessão expirou. <a href="login.html?redirect=' + dest + '" class="underline font-semibold">Entrar de novo</a>');
+        } catch (e) {}
+      }
+      return resp;
+    } catch (err) {
+      if (err && err.name === 'AbortError' && ctrl) {
+        throw new Error('o servidor demorou mais de 45 s pra responder — tente de novo em instantes');
+      }
+      throw err;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   };
 
   // ─── downloadProtected ───────────────────────────────────────
