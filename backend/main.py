@@ -2055,11 +2055,39 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
                        "m&sup2; e aço em kg — o peso de aço sai medido quando a prancha tem um "
                        "<b>quadro/resumo de aço</b>.")
 
+        # 🚨 24/08/2026 (caso Alan, job e1c48ed7): isto era `[:2]` e mandava os
+        # DOIS PRIMEIROS avisos, na ordem em que o motor calhou de gerar. Ele
+        # tinha 7. Os dois que sairam por e-mail foram "leitura incompleta" e
+        # "usamos o leitor alternativo". O TERCEIRO, que nunca saiu, era:
+        #     "⚠ 3 prancha(s) não entraram nesta planilha"
+        # — 3 das 7 pranchas dele, incluindo as DUAS de arquitetura. O aviso que
+        # explicava metade do projeto sumido ficou so na tela, que ele pode
+        # nunca ter aberto (medido em 08/08: 1 de 44 clientes volta ao site).
+        #
+        # Ordem por GRAVIDADE, nao por acaso; e o que nao couber e ANUNCIADO,
+        # nunca descartado calado.
+        def _peso_aviso(t: str) -> int:
+            b = str(t).lower()
+            if "não entraram" in b or "nao entraram" in b:
+                return 0                      # prancha inteira faltando
+            if "incompleta" in b:
+                return 1
+            if b.lstrip().startswith("✅"):
+                return 9                      # boa noticia vai por ultimo
+            if "⚠" in b:
+                return 2
+            return 5
+
+        _avisos = [str(w).strip() for w in (getattr(project_data, "warnings", None) or [])
+                   if str(w).strip()]
+        _avisos.sort(key=_peso_aviso)
+        _TETO_EMAIL = 6
         extra = ""
-        for w in (getattr(project_data, "warnings", None) or [])[:2]:
-            ws = str(w).strip()
-            if ws:
-                extra += f"<br>&bull; {_hd.escape(ws)}"
+        for w in _avisos[:_TETO_EMAIL]:
+            extra += f"<br>&bull; {_hd.escape(w)}"
+        if len(_avisos) > _TETO_EMAIL:
+            extra += (f"<br>&bull; <i>e mais {len(_avisos) - _TETO_EMAIL} aviso(s) "
+                      f"na pagina do projeto.</i>")
 
         return (f"<div style='margin-top:14px;padding:12px 14px;background:#F8FAFC;"
                 f"border-left:3px solid #4F46E5;border-radius:6px;font-size:14px;line-height:1.55;'>"
@@ -6878,10 +6906,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         if _dxf_truncado:
                             try:
                                 _n_salv = len(result.get("items", []))
+                                # 🚨 24/08 (caso Alan): este aviso dizia
+                                # "Reprocessar pode completar a planilha" — conselho
+                                # IMPOSSIVEL. Na prancha de eletrica dele o corte
+                                # aconteceu nas 3 leituras (162, 156 e 112 itens); o
+                                # reprocesso mudou ONDE o corte cai, nao SE ele cai —
+                                # e a terceira vez deu MENOS. Mandar reprocessar aqui
+                                # gasta o unico reprocesso gratis do cliente por nada.
+                                # 🪤 e citava '4366-EL-E_libredwg.dxf': ele mandou
+                                # .dwg, o "_libredwg" e artefato NOSSO de conversao.
                                 project_data.warnings = (project_data.warnings or []) + [
-                                    f"A leitura de '{os.path.basename(dxf_path)}' pode estar INCOMPLETA "
-                                    f"(a resposta da IA foi cortada por tamanho — li {_n_salv} itens, mas "
-                                    f"pode faltar algum). Reprocessar pode completar a planilha."
+                                    f"A leitura da prancha '{_nome_prancha_bonito(dxf_path)}' ficou "
+                                    f"INCOMPLETA: ela tem itens demais para uma leitura só, e a IA foi "
+                                    f"cortada no meio da lista (li {_n_salv} itens; os que vieram estão "
+                                    f"certos, mas faltam itens do final). Reprocessar normalmente NÃO "
+                                    f"resolve — o corte vem da densidade da prancha, não de uma falha "
+                                    f"passageira. Para ter a prancha inteira, exporte-a em partes (por "
+                                    f"exemplo um pavimento ou uma disciplina por arquivo) e reenvie, ou "
+                                    f"fale com a gente que a gente divide aqui."
                                 ]
                             except Exception:
                                 pass
@@ -7917,7 +7959,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         partial_errors = (sheet_errors or []) + (dxf_errors or []) + _dwg_failed_msgs
         partial_failure = bool(partial_errors)
         if partial_failure:
-            _falhos = "; ".join(e.split(":")[0] for e in partial_errors)
+            # 🪤 24/08 (caso Alan): saia daqui "3073-AQ-E_libredwg.dxf". Ele
+            # mandou "3073-AQ-E.dwg" — o "_libredwg.dxf" e artefato NOSSO de
+            # conversao. O cliente procura na pasta dele um arquivo que nao
+            # existe e conclui que a gente leu outra coisa.
+            _falhos = "; ".join(_nome_prancha_bonito(e.split(":")[0]) for e in partial_errors)
             # 🪤 "Reprocesse (grátis)" é conselho ERRADO quando o que falhou foi um
             # DWG que não converte: reprocessar roda o MESMO arquivo no MESMO
             # conversor e falha igual. Foi o que fez o cliente Thalison (29/07)

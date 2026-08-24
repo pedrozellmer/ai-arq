@@ -243,7 +243,7 @@
         <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Arquivos</p>
       </div>
       <p id="kpi-arquivos" class="text-lg font-bold text-gray-900 tabular-nums">--</p>
-      <p class="text-[10px] text-gray-400 mt-0.5">pranchas enviadas</p>
+      <p id="kpi-arquivos-sub" class="text-[10px] text-gray-400 mt-0.5">pranchas enviadas</p>
     </div>
     <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <div class="flex items-center gap-2 mb-2">
@@ -2596,7 +2596,24 @@ function renderMetrics(p, items) {
   const setKpi = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   setKpi('kpi-itens', _nItensTxt);          // mesma verdade do bloco acima
   setKpi('kpi-medido', _total > 0 ? `${Math.round((_medido / _total) * 100)}%` : '--');
-  setKpi('kpi-arquivos', String(_files.size || p.files_count || '--'));
+  // 🚨 24/08 (caso Alan, job e1c48ed7): este KPI mostrava `_files.size` — o
+  // número de pranchas que RENDERAM item — sob o rótulo "pranchas enviadas".
+  // Ele enviou 7 e a tela dizia 4, porque 3 morreram na leitura. O número que
+  // faltava era exatamente a notícia: ele não tinha como saber que perdeu
+  // prancha olhando a tela.
+  const _enviadas = Number(p.files_count || 0);
+  const _renderam = Number((_files && _files.size) || 0);
+  setKpi('kpi-arquivos', String(_enviadas || _renderam || '--'));
+  const _sub = document.getElementById('kpi-arquivos-sub');
+  if (_sub) {
+    if (_enviadas && _renderam && _renderam < _enviadas) {
+      _sub.textContent = (_enviadas - _renderam) + ' não renderam itens';
+      _sub.className = 'text-[10px] text-amber-600 font-semibold mt-0.5';
+    } else {
+      _sub.textContent = 'pranchas enviadas';
+      _sub.className = 'text-[10px] text-gray-400 mt-0.5';
+    }
+  }
 
   if (_total > 0) {
     const _rx = document.getElementById('raiox-card');
