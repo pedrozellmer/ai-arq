@@ -115,6 +115,11 @@
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
       <span>Projetos</span>
     </button>
+    <button onclick="switchTab('filhotes')" data-tab="filhotes" class="nav-item w-full flex items-center gap-3 pl-11 pr-4 py-2.5 rounded-lg text-white/75 text-sm font-medium">
+      <span aria-hidden="true">👶</span>
+      <span>Filhotes</span>
+      <span id="menu-filhotes-badge" class="ml-auto text-[11px] px-1.5 py-0.5 rounded-full bg-white/15"></span>
+    </button>
     <button onclick="switchTab('atividade')" data-tab="atividade" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       <span>Atividade</span>
@@ -333,13 +338,13 @@
             <h2 class="text-xl font-bold text-gray-900">🔧 Motor</h2>
             <p class="text-sm text-gray-500">Números (quanto o motor mede) + ações (recuperar falhas, puxar PDF-só pro CAD).</p>
           </div>
-          <button onclick="loadOndeErra(); loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
+          <button onclick="loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback();" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium self-start">Atualizar</button>
         </div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">🎯 Onde o motor erra <span class="font-normal text-gray-400">— o que o cliente corrigiu à mão</span></h3>
         <div id="onde-erra"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
-        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">👶 Filhotes <span class="font-normal text-gray-400">— reprocessos prontos pra liberar pro cliente</span></h3>
-        <div id="filhotes"><p class="text-gray-400 text-sm">Carregando…</p></div>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">👶 Filhotes</h3>
+        <p class="text-sm text-gray-500">Viraram tela propria: <button onclick="switchTab('filhotes')" class="text-indigo-600 hover:underline font-medium">abrir Filhotes</button></p>
         <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📈 Evolução semanal <span class="font-normal text-gray-400">— o motor está melhorando?</span></h3>
         <div id="qualidade-semanal"><p class="text-gray-400 text-sm">Carregando…</p></div>
@@ -531,6 +536,27 @@
       <!-- ════════════════════════════════════════ -->
       <!-- TAB: PAGAMENTOS                         -->
       <!-- ════════════════════════════════════════ -->
+      <!-- 23/08/2026 (pedido do Pedro): os filhotes viviam num bloco perdido
+           dentro de Motor. Viraram tela propria, com o ciclo inteiro:
+           feito -> liberado -> avisado -> o cliente VOLTOU? A ultima coluna e
+           a que responde se reprocessar projeto antigo vale a pena. -->
+      <div id="tab-filhotes" class="tab-content hidden">
+        <div class="mb-6 flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 class="text-2xl font-bold text-gray-900">👶 Filhotes</h1>
+            <p class="text-sm text-gray-500 mt-1">Reprocessos no motor de hoje &middot; o projeto original do cliente nunca e alterado</p>
+          </div>
+          <button onclick="loadFilhotes()" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-medium text-gray-700 hover:bg-gray-50">Atualizar</button>
+        </div>
+        <div id="filhotes-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+        <div class="flex flex-wrap gap-2 mb-4" id="filhotes-filtros">
+          <button data-fil="pendentes" onclick="filtrarFilhotes('pendentes')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 bg-indigo-50 text-indigo-700">Pra liberar</button>
+          <button data-fil="liberados" onclick="filtrarFilhotes('liberados')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados</button>
+          <button data-fil="todos" onclick="filtrarFilhotes('todos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Todos</button>
+        </div>
+        <div id="filhotes"><p class="text-gray-400 text-sm">Carregando...</p></div>
+      </div>
+
       <div id="tab-pagamentos" class="tab-content hidden">
         <div class="mb-6">
           <h1 class="text-2xl font-bold text-gray-900">Pagamentos</h1>
@@ -1193,6 +1219,7 @@ function switchTab(tabName) {
   // Load data for tab
   if (tabName === 'usuarios') loadUsers();
   if (tabName === 'projetos') loadProjects();
+  if (tabName === 'filhotes') loadFilhotes();
   if (tabName === 'dashboard') { loadDashboardStats(); loadOrigem(); }
   if (tabName === 'calibracao') loadCalibrationFactors();
   if (tabName === 'agente') loadAgentData();
@@ -1204,7 +1231,7 @@ function switchTab(tabName) {
   if (tabName === 'newsletter') { loadNewsletterPreview(); loadNewsletterScheduled(); }
   if (tabName === 'instagram') loadInstagramPosts();
   if (tabName === 'calendario') loadCalendario();
-  if (tabName === 'motor') { loadOndeErra(); loadFilhotes(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
+  if (tabName === 'motor') { loadOndeErra(); loadQualidadeSemanal(); loadMotorHealth(); loadOps(); loadFunilRevisao(); loadVozCliente(); loadRevisionFeedback(); }
   if (tabName === 'financeiro') loadCosts();
 }
 
@@ -1536,17 +1563,63 @@ function renderOndeErra(d){
 // 🚨 Até 08/08 isso era UPDATE na mão no banco. O botão existe pra ter trava:
 // avisa quando o original tem revisão do cliente (regra dura nº7 — nunca trocar
 // trabalho humano por medição de máquina calado) e dá pra revogar.
+let _filhotes = [];
+let _filFiltro = 'pendentes';
 async function loadFilhotes(){
   const box = document.getElementById('filhotes');
+  if (!box) return;
   box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
   try {
     const res = await authFetch(`${API_BASE}/api/admin/filhotes`);
     const d = await res.json();
     if (!res.ok) throw new Error(d.detail || 'erro');
-    box.innerHTML = renderFilhotes(d.filhotes || []);
+    _filhotes = d.filhotes || [];
+    pintarFilhotes();
   } catch(e){
     box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e && e.message) || e}</p>`;
   }
+}
+function filtrarFilhotes(qual){
+  _filFiltro = qual;
+  document.querySelectorAll('#filhotes-filtros .fil-btn').forEach(b => {
+    const on = b.getAttribute('data-fil') === qual;
+    b.className = 'fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border ' +
+      (on ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-gray-300 text-gray-700 hover:bg-gray-50');
+  });
+  pintarFilhotes();
+}
+// O ciclo de vida do filhote, da esquerda pra direita: pronto -> liberado ->
+// avisado -> voltou. A última é a que diz se reprocessar projeto antigo paga.
+function pintarFilhotes(){
+  const L = _filhotes || [];
+  const pendentes = L.filter(f => !f.liberado && f.status === 'done' && f.melhorou);
+  const liberados = L.filter(f => f.liberado);
+  const voltaram  = liberados.filter(f => f.voltou_apos_liberar);
+  const avisados  = liberados.filter(f => f.email_em);
+  const kpi = (v, rot, cor) => `<div class="rounded-xl border bg-white p-3">
+      <div class="text-2xl font-bold ${cor || 'text-gray-900'}">${v}</div>
+      <div class="text-xs text-gray-500 mt-0.5 leading-snug">${rot}</div></div>`;
+  const box2 = document.getElementById('filhotes-kpis');
+  if (box2) box2.innerHTML =
+      kpi(pendentes.length, 'prontos pra liberar', 'text-indigo-600')
+    + kpi(liberados.length, 'liberados pro cliente', 'text-emerald-700')
+    + kpi(avisados.length, 'avisados por e-mail')
+    + kpi(voltaram.length, 'voltaram ao site depois de avisados',
+          voltaram.length ? 'text-emerald-700' : 'text-gray-400');
+  const badge = document.getElementById('menu-filhotes-badge');
+  if (badge) badge.textContent = pendentes.length ? String(pendentes.length) : '';
+  const lista = _filFiltro === 'pendentes' ? L.filter(f => !f.liberado)
+              : (_filFiltro === 'liberados' ? liberados : L);
+  const box = document.getElementById('filhotes');
+  if (box) box.innerHTML = renderFilhotes(lista);
+}
+function _dataCurta(iso){
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' ' +
+           d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+  } catch(e){ return ''; }
 }
 function renderFilhotes(L){
   if (!L.length) return `<p class="text-gray-400 text-sm">Nenhum filhote ainda. Rode &ldquo;Avaliação&rdquo; num projeto pra criar um.</p>`;
@@ -1595,6 +1668,16 @@ function renderFilhotes(L){
           <div class="font-semibold text-gray-800">${f.area_antes ? f.area_antes+' m²' : '–'} &rarr; ${f.area_depois ? f.area_depois+' m²' : '–'}</div>
         </div>
       </div>
+      ${f.liberado ? `<div class="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">liberado ${_dataCurta(f.liberado_em)}</span>
+          ${f.email_em
+            ? `<span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">avisado por e-mail ${_dataCurta(f.email_em)}</span>`
+            : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">sem e-mail${f.revisoes_no_original ? ' (cliente revisou — avise você)' : ''}</span>`}
+          ${f.voltou_apos_liberar
+            ? `<span class="px-2 py-1 rounded-full bg-emerald-600 text-white">voltou ao site ${_dataCurta(f.ultima_visita)}</span>`
+            : `<span class="px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">ainda não voltou</span>`}
+          ${f.downloads_cliente ? `<span class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">baixou a planilha</span>` : ''}
+        </div>` : ''}
       ${f.revisoes_no_original
         ? `<p class="mt-3 text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2">
              ⚠ O original tem <b>${f.revisoes_no_original} revisão(ões) feita(s) pelo cliente</b>.
