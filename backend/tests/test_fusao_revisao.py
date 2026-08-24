@@ -127,7 +127,12 @@ def test_quando_casa_o_valor_do_cliente_manda():
     assert resumo["casadas"] == 1 and resumo["acrescentadas"] == 0
     piso = [i for i in itens if "porcelanato" in i.description.lower()][0]
     assert piso.quantity == 130.0, "a leitura nova sobrescreveu a correção do cliente"
-    assert "REVISADO POR VOCÊ" in piso.observations
+    # 24/08: o texto mudou porque a QUANTIDADE mudou. Antes esta linha voltava
+    # com o selo 'confirmado' e dizia "✓ MEDIDO do CAD" ao lado de "este número é
+    # o que você corrigiu" — regra dura nº1. Ver test_regressoes_24_08.py.
+    assert "CORRIGIDA POR VOCÊ" in piso.observations
+    assert "não é medida do CAD" in piso.observations
+    assert str(getattr(piso.confidence, "value", piso.confidence)) == "estimado"
 
 
 def test_sem_revisao_nao_mexe_em_nada():

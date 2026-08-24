@@ -713,17 +713,55 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     for chave, ed in porchave.items():
         alvo = indice.get(chave)
         if alvo is not None:
-            # Casou: o valor do CLIENTE manda nos 4 campos que ele edita.
+            # Casou: o valor do CLIENTE manda nos campos que ele edita.
             try:
-                alvo.description = ed.get("description", alvo.description)
-                alvo.unit = ed.get("unit", alvo.unit)
-                alvo.quantity = ed.get("quantity", alvo.quantity)
+                from models import Confidence as _CfC
+
+                def _nao_vazio(chave, atual):
+                    """🚨 24/08: `ed.get(k, atual)` devolvia a STRING VAZIA quando a
+                    chave existia vazia — e ela existe. O endpoint de revisão conserta
+                    a unidade apagada pelo dropdown (bug de 18/08) antes de gravar em
+                    `project_items`, mas `item_reviews.edits` guarda o payload CRU, com
+                    unit=''. Medido no banco: 8 linhas assim, 7 de armadura CA-50 em kg
+                    e 1 de estaca em m, todas no job 2933cc30 — que ainda não tem
+                    filhote. A fusão contornava a trava de 18/08 por não passar por ela."""
+                    v = ed.get(chave, None)
+                    if v is None or (isinstance(v, str) and not v.strip()):
+                        return atual
+                    return v
+
+                _qtd_antes = float(getattr(alvo, "quantity", 0) or 0)
+                alvo.description = _nao_vazio("description", alvo.description)
+                alvo.unit = _nao_vazio("unit", alvo.unit)
+                alvo.quantity = _nao_vazio("quantity", alvo.quantity)
+                try:
+                    _mudou_qtd = abs(float(alvo.quantity or 0) - _qtd_antes) > 1e-9
+                except (TypeError, ValueError):
+                    _mudou_qtd = True
                 _obs = (ed.get("observations") or "").strip()
-                alvo.observations = ("✏️ REVISADO POR VOCÊ — este número é o que você "
-                                     "corrigiu, não a leitura nova. " + _obs)[:1000]
+                if _mudou_qtd:
+                    # 🚨 REGRA DURA Nº1: número digitado à mão não é medição do CAD.
+                    # O endpoint /api/items/{job}/review/{item} já força 'estimado'
+                    # quando a quantidade muda; a fusão fazia o contrário e DEVOLVIA o
+                    # selo 'confirmado' à linha. O cliente baixava uma célula que dizia,
+                    # na mesma frase, "✓ MEDIDO do CAD" e "este número é o que você
+                    # corrigiu, não a leitura nova".
+                    try:
+                        alvo.confidence = _CfC.ESTIMADO
+                    except Exception:
+                        pass
+                    alvo.origem = "revisao_cliente"
+                    alvo.observations = ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida "
+                                         "do CAD. Mantida da sua revisão anterior; a "
+                                         "leitura nova não vale por cima. " + _obs)[:1000]
+                else:
+                    # Só descrição/unidade mudou: o selo da medição continua valendo.
+                    alvo.observations = ("✏️ REVISADO POR VOCÊ — este número é o que você "
+                                         "corrigiu, não a leitura nova. " + _obs)[:1000]
                 resumo["casadas"] += 1
-            except Exception:
-                pass
+            except Exception as _ec:
+                print(f"[fusao-revisao] falhei ao aplicar a correção casada: {_ec}")
+                resumo["falhou_casar"] = resumo.get("falhou_casar", 0) + 1
         else:
             # Não casou: acrescenta, pra NUNCA perder o que o cliente corrigiu.
             #
@@ -902,6 +940,12 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
             "confidence": str(getattr(getattr(it, "confidence", None), "value", "estimado"))
                           if hasattr(getattr(it, "confidence", None), "value")
                           else str(getattr(it, "confidence", "estimado") or "estimado"),
+            # 🚨 24/08/2026: a origem NUNCA era gravada. Toda rota que reidrata os
+            # itens do banco reconstruía BudgetItem com origem='' — e a honestidade
+            # de área, que decide POR ORIGEM, passava a decidir com menos informação
+            # do que o motor tinha quando mediu. Foi assim que /inform-area voltou a
+            # zerar e GRAVAR por cima de área com procedência.
+            "origem": (str(getattr(it, "origem", "") or "") or None),
             "discipline": disc,
             "section": section,
             "sort_order": idx,
@@ -4901,6 +4945,58 @@ def _tem_comprimento_medido(items) -> bool:
     return False
 
 
+def _derivacao_vai_repor(items, descricao: str, pe_direito: float) -> bool:
+    """A nossa conta determinística vai MESMO preencher esta linha depois?
+
+    🚨 24/08/2026: ontem eu passei a NEGAR a preservação de pintura de parede e
+    fôrma de pilar, apostando que `_derive_pintura_pe_direito` /
+    `_derive_estrutura_pe_direito` repunham o número logo em seguida. A aposta
+    falha em casos comuns, e aí a linha simplesmente some:
+      - `_derive_pintura_pe_direito` desiste se JÁ existe qualquer pintura com
+        número (uma "Pintura em teto" medida do CAD basta) e se não houver
+        comprimento de PAREDE em m/ml (eletroduto e viga não contam);
+      - `_derive_estrutura_pe_direito` desiste se nenhum item de pilar em `un`
+        trouxer a seção "AxB cm" na descrição.
+    Medido A/B: nesses cenários a linha ia de 540 m² (estimada, com procedência)
+    para 0,00 m² com "Área NÃO medida". Zerar só é honesto quando a reposição é
+    certa — senão a gente destrói dado em nome da honestidade.
+    """
+    d = (descricao or "").lower()
+    _pd = float(pe_direito or 0)
+    if _pd <= 0:
+        return False
+
+    def _q(i):
+        try:
+            return float(getattr(i, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    if "pintura" in d or "látex" in d or "latex" in d:
+        # mesma condição de desistência da _derive_pintura_pe_direito
+        for i in items:
+            _dd = (getattr(i, "description", "") or "").lower()
+            if ("pintura" in _dd or "látex" in _dd or "latex" in _dd) and _q(i) > 0:
+                if i is not None and getattr(i, "description", "") != descricao:
+                    return False      # outra pintura com número bloqueia a derivação
+        total_m = 0.0
+        for i in items:
+            _dd = (getattr(i, "description", "") or "").lower()
+            _u = (getattr(i, "unit", "") or "").strip().lower()
+            if _u in ("m", "ml") and ("parede" in _dd or "alvenaria" in _dd or "drywall" in _dd):
+                total_m += max(0.0, _q(i))
+        return total_m > 0
+
+    if "pilar" in d and ("fôrma" in d or "forma" in d):
+        return any(
+            str(getattr(i, "unit", "") or "").strip().lower() == "un"
+            and _q(i) > 0
+            and "pilar" in (getattr(i, "description", "") or "").lower()
+            and _RX_SECAO_PILAR.search(str(getattr(i, "description", "") or ""))
+            for i in items)
+    return False
+
+
 def _tem_derivacao_deterministica(descricao: str, unidade: str) -> bool:
     """O item é alvo de uma conta NOSSA, feita depois da honestidade?
 
@@ -4942,7 +5038,8 @@ def _limpa_aviso_nao_medida(obs: str) -> str:
 
 
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "",
-                        pe_direito: float = 0) -> tuple[int, int]:
+                        pe_direito: float = 0,
+                        apenas_preencher: bool = False) -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -4969,6 +5066,12 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # 🚨 23/08 (auditoria): duas travas na preservação, porque texto não é prova.
     _mediu_linear = _tem_comprimento_medido(items)
     filled = blanked = preservados = 0
+    # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
+    # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
+    # a partir de linhas que perderam metade do contexto, é decidir com MENOS
+    # informação e não com mais. Esta rota preenche o que está em branco e não
+    # encosta em número que já existe. Medido: sem isso ela zerava e GRAVAVA
+    # pintura de 1.641 m² e massa corrida de 817 m² do caso Tammyres.
     for it in items:
         if getattr(it, "origem", "") == "dxf_geom":
             continue
@@ -4992,11 +5095,15 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                          "projeto. Confira antes de orçar.")
             it.observations = " | ".join(s for s in _segs if s)
             filled += 1
+        elif apenas_preencher:
+            continue          # não zera, não rebaixa: a decisão já foi tomada
         elif (q > 0 and _pd_ok
               and (str(getattr(it, "origem", "") or "") == "deriv_pd"
                    or (_mediu_linear
-                       and not _tem_derivacao_deterministica(
-                           getattr(it, "description", ""), u)
+                       and not (_tem_derivacao_deterministica(
+                                    getattr(it, "description", ""), u)
+                                and _derivacao_vai_repor(
+                                    items, getattr(it, "description", ""), pe_direito))
                        and _RX_DERIV_PD.search(str(getattr(it, "observations", "") or "")))
                    )):
             # Preserva quando a procedência se sustenta sem depender do texto:
@@ -15600,6 +15707,7 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
                 observations=r.get("observations", "") or "",
                 ref_sheet=r.get("ref_sheet", "") or "",
                 confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
+                origem=r.get("origem") or "",     # NULL = linha anterior a 24/08
                 discipline=r.get("discipline", "Complementares") or "Complementares",
             ))
         except Exception:
@@ -15729,6 +15837,7 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
                 observations=r.get("observations", "") or "",
                 ref_sheet=r.get("ref_sheet", "") or "",
                 confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
+                origem=r.get("origem") or "",     # NULL = linha anterior a 24/08
                 discipline=r.get("discipline", "Complementares") or "Complementares",
             ))
         except Exception:
@@ -15741,7 +15850,8 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
     # dado por ter informado MAIS dado.
     filled, _ = _apply_area_honesty(
         items, area, "informado",
-        pe_direito=float((proj or {}).get("user_pe_direito") or 0))
+        pe_direito=float((proj or {}).get("user_pe_direito") or 0),
+        apenas_preencher=True)
 
     # 5) Enriquecimento (TCPO + heurísticas) igual ao finalize + gerar xlsx in-place
     typology = proj.get("typology") or "office"
