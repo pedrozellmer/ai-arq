@@ -445,6 +445,15 @@ def render_related_posts(post):
 
 
 def render_post_html(post):
+    # 24/08/2026: nota de atualizacao datada, pra post JA PUBLICADO cujo
+    # numero envelheceu. Mora aqui (na fonte) e nao no HTML gerado: o deploy
+    # regenera os posts, e uma edicao a mao no HTML e apagada antes de chegar
+    # ao ar. Foi exatamente o que aconteceu com a nota de 23/08 deste post.
+    _nota = (post.get("update_note") or "").strip()
+    _cls = "mb-8 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900"
+    update_note_html = (
+        '<div class="' + _cls + '">' + _nota + '</div>') if _nota else ""
+
     """Gera HTML completo de um post."""
     sections_html = "".join(render_section(s, post.get("downloads")) for s in post["sections"])
 
@@ -581,6 +590,7 @@ def render_post_html(post):
     <span>⏱️ {post["estimated_read_min"]} min de leitura</span>
   </div>
 
+  {update_note_html}
   <!-- Intro destacada -->
   <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">{post["intro"]}</p>
 

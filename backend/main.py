@@ -177,6 +177,11 @@ def _log_error(stage, message, job_id=None, severity="error"):
     `severity` só cai pra "info" sozinho quando o stage é de diagnóstico E quem
     chamou não pediu outra coisa — assim ninguém precisa lembrar do parâmetro,
     e um `severity="critical"` explícito continua valendo."""
+    # 🪤 24/08: só rebaixa quando quem chamou NÃO disse nada (severity é o
+    # padrão "error"). Um `severity="critical"` explícito — como o do bloco que
+    # avisa que a planilha não foi refeita com as correções do cliente — tem que
+    # aparecer no painel mesmo estando num stage de diagnóstico. Era o que este
+    # docstring já prometia e o código não cumpria.
     if severity == "error" and str(stage) in _STAGES_DIAGNOSTICO:
         severity = "info"
     try:
@@ -8378,8 +8383,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # a verdade fundida, e não só o banco.
         _fusao = {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
         try:
-            _pai = (_supa_rows("GET", "projects", params={
-                "job_id": f"eq.{job_id}", "select": "parent_job_id"}) or [{}])[0]
+            # 🚨 24/08: `_supa_rows` devolve [] tanto pra "não tem pai" quanto
+            # pra "a consulta falhou". Um 500 de 2 s aqui e a releitura sai SEM
+            # as correções do cliente, com mensagem de sucesso e error_log
+            # limpo — o rastro que eu acrescentei ontem cobria a fusão, não
+            # este request, que é o que decide se ela roda.
+            _st_pai, _pai_rows = _supa_rest_service("GET", "projects", params={
+                "job_id": f"eq.{job_id}", "select": "parent_job_id"})
+            if _st_pai != 200:
+                _log_error("motor:fusao-revisao",
+                           f"🚨 NÃO consegui saber se este job tem pai (HTTP {_st_pai}) — "
+                           f"se tiver, as correções manuais do cliente NÃO foram fundidas",
+                           job_id, severity="critical")
+                raise RuntimeError(f"leitura do parent_job_id falhou (HTTP {_st_pai})")
+            _pai = ((_pai_rows or [{}]) or [{}])[0]
             _pai_id = _pai.get("parent_job_id")
             if _pai_id:
                 all_items, _fusao = _fundir_revisoes_do_cliente(all_items, _pai_id)

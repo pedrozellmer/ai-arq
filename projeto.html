@@ -2078,12 +2078,19 @@ function openClientEdit() {
   // (timeout, 401, 500), os quatro campos ficavam VAZIOS — igualzinho a um
   // cliente que nunca foi preenchido. Salvar por cima apagava os dados reais.
   // Agora: falhou, o formulário se tranca e diz por quê.
+  // 🚨 24/08: travar o campo NÃO impede o Salvar de enviar string vazia por
+  // cima. Esta flag é a proteção de verdade — sem ela, um 503 de 2 s no
+  // /client fazia o "Salvar tudo" apagar nome, empresa, e-mail, telefone e
+  // notas do cliente FINAL do arquiteto, com a tela respondendo "✓ Dados
+  // salvos". Só vira true quando os dados chegaram de fato.
+  window.__clienteCarregou = false;
   const _cCampos = ['c-name', 'c-company', 'c-email', 'c-phone', 'c-notes'];
   _cCampos.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
   authFetch(`${API_BASE}/api/projects/${jobId}/client`)
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(d => {
       _cCampos.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
+      window.__clienteCarregou = true;
       if (d) {
         document.getElementById('c-name').value = d.client_name || '';
         document.getElementById('c-company').value = d.client_company || '';
@@ -2164,6 +2171,16 @@ async function saveProjectAndClient() {
   }
 
   // 2) Dados do CLIENTE (endpoint legado, sem JWT obrigatório)
+  // 🚨 24/08: se a leitura do /client falhou, os 5 campos estão VAZIOS na tela
+  // porque nunca foram preenchidos — não porque o cliente os apagou. Enviar
+  // isso é apagar a PII do cliente final dele no banco. O projeto ainda é
+  // salvo (aquele campo o usuário viu e editou); o bloco do cliente é pulado.
+  if (window.__clienteCarregou === false) {
+    showEditStatus('Salvei os dados do projeto. Os dados do cliente NÃO foram '
+      + 'carregados (o servidor não respondeu), então não mexi neles — feche e '
+      + 'abra de novo pra editá-los.', 'info');
+    return;
+  }
   const fd = new FormData();
   fd.append('client_name', document.getElementById('c-name').value);
   fd.append('client_company', document.getElementById('c-company').value);
