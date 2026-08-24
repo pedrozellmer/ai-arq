@@ -15581,6 +15581,11 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         # coluna (edits é jsonb). Quem lê o par usa edits['_antes'].
         review_row["edits"] = dict(payload.edits or {})
         review_row["edits"]["_antes"] = _antes
+    # 24/08: flags de "a escrita PEGOU?" — ver o bloco do return, no fim.
+    _escreveu = False
+    _tentou_escrever = False      # só 502 quando TENTOU e falhou
+    _erro_escrita = ""
+    _rev_gravou = None
     _ja_tem = False
     _id_existente = None
     try:
@@ -15598,7 +15603,7 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
 
     _comentario = str(getattr(payload, "comment", "") or "").strip()
     if not _ja_tem:
-        _supabase_insert("item_reviews", review_row)
+        _rev_gravou = _supabase_insert("item_reviews", review_row)
     elif _comentario and _id_existente:
         # 🚨 CONSERTO 09/08. O modal "Comentar" manda action='approve' com o
         # texto. Se a pessoa JÁ tinha aprovado o item, o dedupe acima pulava o
@@ -15697,9 +15702,12 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
                 req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
                 req.add_header('Content-Type', 'application/json')
                 req.add_header('Prefer', 'return=minimal')
+                _tentou_escrever = True
                 urllib.request.urlopen(req, timeout=15)
+                _escreveu = True
             except Exception as e:
                 _supa_log(f"REVIEW edit item={item_id} ERR {e}")
+                _erro_escrita = str(e)[:200]
 
     # 3) Se rejeitado, deleta row do item (mantém review pra histórico)
     if action == "reject":
@@ -15710,9 +15718,12 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
             req.add_header('apikey', SUPABASE_KEY)
             req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
             req.add_header('Prefer', 'return=minimal')
+            _tentou_escrever = True
             urllib.request.urlopen(req, timeout=15)
+            _escreveu = True
         except Exception as e:
             _supa_log(f"REVIEW reject item={item_id} ERR {e}")
+            _erro_escrita = str(e)[:200]
 
     # 4) O quantitativo mudou → cronograma e memorial salvos podem ter ficado
     # velhos. Derruba o cache pra próxima leitura de coerência ser a real.
@@ -15729,7 +15740,27 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
         # justifica esperar um botão pra aprender com ela.
         _agendar_aprendizado_revisao(job_id)
 
-    return {"status": "ok", "action": action}
+    # 🚨 24/08/2026 (2ª validação): esta rota respondia 200 {"status":"ok"}
+    # mesmo quando NADA tinha sido gravado — o insert tinha o retorno
+    # descartado e o PATCH/DELETE viviam num try/except com log mudo.
+    # Consequências medidas: (a) a aprovação em massa contava 12 itens salvos
+    # com zero escritas (o conserto de ontem no revisao.html conferia `r.ok`,
+    # que era sempre true); (b) o cliente via "Salvo", fechava o navegador, e a
+    # correção existia só em item_reviews — na releitura a fusão devolvia o
+    # número do MOTOR chamando de "sua revisão".
+    # Agora a rota falha quando a escrita que o `action` exige não confirmou.
+    # O front já está pronto: revisao.html trata !r.ok e devolve o item pra
+    # pendente na tela.
+    if _tentou_escrever and not _escreveu:
+        raise HTTPException(
+            502, "Não consegui salvar esta alteração agora — ela NÃO foi gravada. "
+                 "Tente de novo em instantes." +
+                 (f" ({_erro_escrita})" if _erro_escrita else ""))
+    if action == "approve" and _rev_gravou is False:
+        raise HTTPException(
+            502, "Não consegui registrar esta aprovação agora — tente de novo.")
+
+    return {"status": "ok", "action": action, "gravou": bool(_escreveu or _rev_gravou)}
 
 
 _APRENDIZADO_TIMERS: dict = {}
