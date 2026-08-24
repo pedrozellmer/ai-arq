@@ -2055,9 +2055,12 @@
   let __byUserPromise = null;
   function fetchByUser() {
     if (!__byUserPromise) {
+      // 23/08 (auditoria): guardar a promessa REJEITADA por 15 s fazia as três
+      // abas herdarem a mesma falha sem nova tentativa. Erro limpa o cache na hora.
       __byUserPromise = authFetch(`${API_BASE}/api/projects/by-user/${currentUser.id}`)
         .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-        .finally(() => { setTimeout(() => { __byUserPromise = null; }, 15000); });
+        .then(d => { setTimeout(() => { __byUserPromise = null; }, 15000); return d; })
+        .catch(e => { __byUserPromise = null; throw e; });
     }
     return __byUserPromise;
   }

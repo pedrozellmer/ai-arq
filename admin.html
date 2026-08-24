@@ -1706,7 +1706,7 @@ async function liberarFilhote(jobId, revogar){
     const res = await authFetch(`${API_BASE}/api/admin/liberar-filhote/${jobId}${revogar?'?revogar=1':''}`, {method:'POST'});
     const d = await res.json().catch(()=>({}));
     if (!res.ok) throw new Error(d.detail || ('HTTP '+res.status));
-    _adminToast(revogar ? 'Revogado ✓' : 'Liberado pro cliente ✓', 'success');
+    _adminToast(revogar ? 'Revogado ✓' : ('Liberado ✓ · ' + (d.email_motivo || 'e-mail em envio')), 'success');
     if (d.aviso) alert(d.aviso);
     loadFilhotes();
   } catch(e){

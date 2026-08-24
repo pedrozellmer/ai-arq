@@ -614,13 +614,25 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     resumo = {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
     if not parent_job_id:
         return items, resumo
+    # 23/08 (auditoria): "a consulta falhou" e "o cliente não revisou" davam o
+    # MESMO resultado, sem rastro — e é a regra dura nº7 que depende disto.
     try:
-        revs = _supa_rows("GET", "item_reviews", params={
+        _st_r, _revs = _supa_rest_service("GET", "item_reviews", params={
             "job_id": f"eq.{parent_job_id}", "action": "eq.edit",
             "select": "edits,reviewed_at", "order": "reviewed_at.asc"})
     except Exception as _e:
+        _st_r, _revs = 0, None
         print(f"[fusao-revisao] nao consegui ler as revisoes: {_e}")
+    if _st_r != 200:
+        resumo["erro_leitura"] = f"HTTP {_st_r}"
+        try:
+            _log_error("motor:fusao-revisao",
+                       f"pai={parent_job_id} NÃO consegui ler as revisões (HTTP {_st_r}) — "
+                       f"a releitura segue SEM fundir; confira antes de entregar", parent_job_id)
+        except Exception:
+            pass
         return items, resumo
+    revs = _revs or []
     if not revs:
         return items, resumo
 
@@ -17185,12 +17197,21 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
         raise HTTPException(400, "Original sem dono (user_id vazio) — não libero")
 
     def _conta(jid):
-        r = _supa_rows("GET", "project_items",
-                       params={"job_id": f"eq.{jid}", "select": "confidence"})
-        return {"itens": len(r),
-                "medidos": sum(1 for x in r if (x or {}).get("confidence") == "confirmado")}
+        # 23/08 (auditoria): com _supa_rows, falha de leitura devolvia [] — o
+        # original virava "0 itens", tudo parecia "melhorou" e o e-mail dizia
+        # "0 → 46 itens". Erro tem que ser erro.
+        _st, _r = _supa_rest_service("GET", "project_items",
+                                     params={"job_id": f"eq.{jid}", "select": "confidence"})
+        if _st != 200:
+            return None
+        _r = _r or []
+        return {"itens": len(_r),
+                "medidos": sum(1 for x in _r if (x or {}).get("confidence") == "confirmado")}
 
     antes, depois = _conta(pai_id), _conta(eval_job_id)
+    if antes is None or depois is None:
+        raise HTTPException(502, "Não consegui contar os itens dos dois projetos agora — "
+                                 "não libero sem saber se a versão nova é melhor.")
     # Falha FECHADA aqui também: se a leitura das revisões falhar, o e-mail
     # automático não pode sair achando que o cliente não revisou nada.
     _st_rev, _rows_rev = _supa_rest_service(
@@ -17242,8 +17263,11 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
                                f"{eval_job_id} FALHOU: {type(_ee).__name__}: {_ee}", eval_job_id)
             import threading as _th_fil
             _th_fil.Thread(target=_enviar_email_filhote, daemon=True).start()
-            email_enviado = True
-            email_motivo = "enviando em segundo plano (confira em admin:filhote-email)"
+            # 23/08 (auditoria): dizer "enviado" antes de o SMTP responder é
+            # mentir pro Pedro. Fica "em envio"; o resultado real vai pro log
+            # admin:filhote-email e aparece na aba Filhotes no próximo refresh.
+            email_enviado = None
+            email_motivo = "em envio — confira em instantes na aba Filhotes"
 
     _log_error("admin:filhote",
                f"{'revogado' if revogar else 'liberado'} {eval_job_id} (pai {pai_id}) "
