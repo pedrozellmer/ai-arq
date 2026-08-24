@@ -75,3 +75,65 @@ def test_as_duas_rotas_continuam_sendo_diferentes():
     assert "/api/admin/eval-reprocess/" in src, "sumiu a rota isolada"
     assert "}/reprocess`" in src, "sumiu a rota que age no projeto do cliente"
     assert src.count("adminEvalReprocess(") >= 2, "o botão Avaliar sumiu da tela"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 O conserto de 18h05 quebrou o botão às 18h23
+# ══════════════════════════════════════════════════════════════════════════
+def _funcao(nome):
+    src = _admin()
+    i = src.index("async function " + nome)
+    j = src.index("\nasync function ", i + 10)
+    return src[i:j]
+
+
+def test_confirm_vem_ANTES_do_window_open():
+    """🚨 24/08 18h23. Ao "melhorar" o aviso do botão seguro eu acrescentei um
+    SEGUNDO confirm — e ele caiu DEPOIS do `window.open`.
+
+    No Safari do iPhone o navegador troca pra a aba nova assim que ela abre, e o
+    confirm dispara na aba de TRÁS, onde ninguém o vê. O Pedro clicou, viu tela
+    preta, e a função ficou parada esperando resposta de um diálogo invisível.
+    Nenhum job de avaliação foi criado — conferido no banco.
+
+    Regra: diálogo bloqueante SEMPRE antes de abrir janela."""
+    corpo = _funcao("adminEvalReprocess")
+    i_conf = corpo.index("confirm(")
+    i_open = corpo.index("window.open(")
+    assert i_conf < i_open, (
+        "tem confirm DEPOIS do window.open — no celular ele abre numa aba que o "
+        "usuário não está vendo e trava o botão")
+
+
+def test_um_confirm_so_por_botao():
+    """Dois diálogos seguidos pro mesmo clique é ruído; e foi o segundo que
+    quebrou tudo."""
+    for nome in ("adminEvalReprocess", "adminReprocess"):
+        n = _funcao(nome).count("confirm(")
+        assert n == 1, "%s tem %d confirms — esperado 1" % (nome, n)
+
+
+def test_o_confirm_unico_do_avaliar_ainda_diz_que_e_seguro():
+    """O aviso que eu queria dar não podia sumir junto com o conserto."""
+    corpo = _funcao("adminEvalReprocess")
+    for termo in ("NÃO vê nada", "NÃO manda e-mail", "NÃO gasta o reprocesso"):
+        assert termo in corpo, "sumiu do confirm: " + termo
+
+
+def test_nenhum_botao_do_admin_abre_janela_antes_de_perguntar():
+    """Guarda geral: a mesma armadilha vale pra qualquer função futura."""
+    src = _admin()
+    ruins = []
+    for m in __import__("re").finditer(r"async function (\w+)\(", src):
+        nome = m.group(1)
+        try:
+            corpo = _funcao(nome)
+        except ValueError:
+            continue
+        if "window.open(" not in corpo or "confirm(" not in corpo:
+            continue
+        if corpo.index("confirm(") > corpo.index("window.open("):
+            ruins.append(nome)
+    assert not ruins, (
+        "estas funções abrem janela ANTES de perguntar — no celular o diálogo "
+        "fica invisível e o botão trava: %s" % ruins)

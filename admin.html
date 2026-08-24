@@ -3742,7 +3742,20 @@ async function adminReprocess(jobId) {
 // marcado como TESTE, com botão "Abrir" pra comparar lado a lado.
 async function adminEvalReprocess(jobId) {
   if (!jobId) return;
-  if (!confirm('Avaliar o projeto ' + jobId + ' num TESTE isolado?\n\nRe-roda os mesmos arquivos com o motor atual, SEM tocar no projeto do cliente, sem gastar o reprocesso dele e sem avisar ninguém.\n\nAbre numa aba nova — ambiente de teste.')) return;
+  // 🚨 24/08, 18h23: eu tinha acrescentado um SEGUNDO confirm mais abaixo, e ele
+  // caiu DEPOIS do window.open. No Safari do iPhone o navegador troca pra a aba
+  // nova assim que ela abre, então o confirm disparava na aba de TRÁS — onde
+  // ninguém o vê. O Pedro clicou, viu tela preta, e a função ficou parada
+  // esperando resposta de um diálogo invisível. Nada chegou na API.
+  // 🪤 Qualquer confirm/prompt TEM que vir ANTES do window.open. E o aviso que
+  // eu queria dar já morava aqui: bastava reforçar este texto.
+  if (!confirm('Avaliar o projeto ' + jobId + ' num TESTE isolado?\n\n'
+      + '• o cliente NÃO vê nada\n'
+      + '• NÃO manda e-mail\n'
+      + '• NÃO gasta o reprocesso grátis dele (1 por projeto)\n'
+      + '• o projeto dele fica intacto\n\n'
+      + 'Re-roda os mesmos arquivos com o motor atual pra comparar.\n'
+      + 'Abre numa aba nova — ambiente de teste.')) return;
   // Abre a aba de teste JÁ, síncrono no clique (senão o navegador bloqueia o
   // popup por vir depois de um await). Redireciona pro resultado quando o job
   // de avaliação nasce.
@@ -3756,15 +3769,6 @@ async function adminEvalReprocess(jobId) {
         + 'Isso abre o resultado aqui automaticamente — pode deixar a aba aberta.</p></body>');
     } catch (_) {}
   }
-  // Contrapeso do aviso do outro botão: sem dizer que ESTE é seguro, o medo de
-  // clicar errado paralisa os dois.
-  if (!confirm(
-      'Teste ISOLADO do projeto ' + jobId + '.\n\n'
-      + '\u2022 o cliente NÃO vê nada\n'
-      + '\u2022 NÃO manda e-mail\n'
-      + '\u2022 NÃO gasta o reprocesso grátis dele\n'
-      + '\u2022 o projeto dele fica intacto\n\n'
-      + 'Serve pra comparar o motor novo com o resultado atual. Rodar?')) return;
   _adminToast('Iniciando avaliação de ' + jobId + '…', 'warn');
   try {
     const res = await authFetch(`${API_BASE}/api/admin/eval-reprocess/${jobId}`, { method: 'POST' });
