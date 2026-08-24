@@ -2190,13 +2190,11 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # subprocesso isolado (`dxf_extract_worker`), então o pior caso é o
         # filho morrer, que é exatamente o que acontece hoje sem tentar.
         try:
-            import ezdxf.recover as _rec
-            doc, _auditor = _rec.readfile(filepath)
-            _n_erros = len(getattr(_auditor, "errors", []) or [])
-            _n_fix = len(getattr(_auditor, "fixes", []) or [])
-            print(f"[dxf] readfile falhou ({_erro_estrutura}); ezdxf.recover "
-                  f"ABRIU o arquivo — {_n_fix} conserto(s), {_n_erros} erro(s) "
-                  f"que nem o recover resolveu")
+            # 24/08: o recover mora em dxf_open.py — o preview abria DXF por
+            # outra porta e morria no MESMO KeyError. Consertar "o" lugar nao e
+            # consertar; agora ha um lugar so.
+            from dxf_open import recuperar_dxf
+            doc = recuperar_dxf(filepath, str(_erro_estrutura))
         except Exception as _erec:
             if doc is None:
                 raise RuntimeError(
@@ -3301,17 +3299,28 @@ def probe_unit(filepath: str) -> Optional[float]:
         if os.path.getsize(filepath) > 150 * 1024 * 1024:
             return None
         doc = None
+        _erro = None
         for enc in ("utf-8", "latin-1", None):
             try:
                 doc = ezdxf.readfile(filepath, **({"encoding": enc} if enc else {}))
                 break
             except UnicodeDecodeError:
                 continue
-            except Exception:
+            except Exception as _e:
+                _erro = f"{type(_e).__name__}: {_e}"
                 if enc is None:
-                    return None
+                    break
         if doc is None:
-            return None
+            # 24/08: erro de ESTRUTURA (KeyError de layout, caso Alan) devolvia
+            # None calado e esta leitura sumia do consenso de area sem deixar
+            # rastro. Agora tenta o recover, igual as outras portas.
+            if _erro is None:
+                return None
+            try:
+                from dxf_open import recuperar_dxf
+                doc = recuperar_dxf(filepath, _erro)
+            except Exception:
+                return None
         uf = _detect_unit_factor(doc)
         uf, _ = _validate_unit_factor(doc, uf)
         dim = _validate_unit_by_dimensions(doc, uf)

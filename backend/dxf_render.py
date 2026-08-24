@@ -24,7 +24,6 @@ import matplotlib
 matplotlib.use("Agg")  # backend sem GUI (Render server)
 import matplotlib.pyplot as plt
 
-import ezdxf
 from ezdxf.addons.drawing import RenderContext, Frontend
 from ezdxf.addons.drawing.matplotlib import MatplotlibBackend
 
@@ -99,7 +98,14 @@ def render_dxf_to_png(
         return False
 
     try:
-        doc = ezdxf.readfile(dxf_path)
+        # 🚨 24/08: o preview do Alan morreu aqui com KeyError: 'LAYOUT' — o
+        # MESMO bug que eu tinha consertado no dwg_extractor no dia anterior,
+        # pela segunda porta. `abrir_dxf` tem o recover embaixo.
+        # 🪤 recover come mais RAM; este arquivo já roda em subprocesso e o
+        # guarda de densidade (teto de entidades) vem DEPOIS, entao o pior caso
+        # aqui e o mesmo de hoje: o filho morre e o preview fica sem imagem.
+        from dxf_open import abrir_dxf
+        doc = abrir_dxf(dxf_path)
     except Exception as e:
         print(f"[dxf_render] Erro ao abrir {dxf_path}: {e}")
         return False

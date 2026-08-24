@@ -55,8 +55,8 @@ MAX_ROOM_M2 = 500.0
 
 def _segmentos(dxf_path: str, fator: float, teto: int) -> list:
     """Extrai segmentos de LINE/LWPOLYLINE já convertidos pra METROS."""
-    import ezdxf
-    doc = ezdxf.readfile(dxf_path)
+    from dxf_open import abrir_dxf
+    doc = abrir_dxf(dxf_path)   # 24/08: mesma rede do preview (KeyError de layout)
     msp = doc.modelspace()
     segs = []
     for e in msp:
