@@ -3593,9 +3593,9 @@ async function loadProjects() {
       const _btns = [];
       const _isEval = !!p.is_eval;
       if (p.status === 'done') _btns.push('<button onclick="adminDownloadXlsx(\'' + jid + '\')" class="text-[11px] px-2 py-0.5 rounded border border-indigo-200 text-indigo-700 hover:bg-indigo-50">&#11015; Planilha</button>');
-      if ((p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminReprocess(\'' + jid + '\')" class="text-[11px] px-2 py-0.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">&#8635; Reprocessar</button>');
+      if ((p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminReprocess(\'' + jid + '\')" title="AGE NO PROJETO DO CLIENTE: ele passa a ver a versao nova, recebe e-mail e GASTA o unico reprocesso gratis dele. Pra testar o motor sem encostar nele, use Avaliar (isolado)." class="text-[11px] px-2 py-0.5 rounded border border-amber-400 text-amber-900 bg-amber-50 hover:bg-amber-100">&#8635; Reprocessar (do cliente)</button>');
       // "Avaliar" (teste isolado) só em projeto REAL (não numa avaliação) e concluído/erro/travado.
-      if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalReprocess(\'' + jid + '\')" title="Re-roda os arquivos num teste isolado, sem tocar no projeto do cliente" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#129514; Avaliar</button>');
+      if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalReprocess(\'' + jid + '\')" title="Re-roda os arquivos num teste isolado, sem tocar no projeto do cliente" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#129514; Avaliar (isolado)</button>');
       if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalCombine(\'' + jid + '\')" title="Junta os arquivos de TODOS os projetos deste cliente com o mesmo nome (DWG+DXF+PDF) num teste combinado — mede pelo CAD e completa pelo PDF" class="text-[11px] px-2 py-0.5 rounded border border-violet-300 text-violet-800 hover:bg-violet-50">&#129513; Combinar</button>');
       // Numa avaliação: link pra abrir e comparar.
       if (_isEval && jid) _btns.push('<a href="projeto.html?job_id=' + jid + '" target="_blank" rel="noopener" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#128269; Abrir teste</a>');
@@ -3672,7 +3672,7 @@ async function enrichActiveProgress(projects) {
       badge.className = 'px-2 py-1 rounded-full text-xs font-medium text-red-700 bg-red-100 animate-pulse';
       badge.textContent = '⚠ TRAVADO';
       prog.innerHTML = '<span class="text-red-600">sumiu do servidor (reinício) — precisa reprocessar</span> ' +
-        '<button onclick="adminReprocess(\'' + jid + '\')" class="ml-1 text-[11px] px-2 py-0.5 rounded border border-gray-300 text-gray-700 hover:bg-gray-50">↻ Reprocessar</button>';
+        '<button onclick="adminReprocess(\'' + jid + '\')" title="AGE NO PROJETO DO CLIENTE: ele passa a ver a versao nova, recebe e-mail e GASTA o unico reprocesso gratis dele. Pra testar o motor sem encostar nele, use Avaliar (isolado)." class="ml-1 text-[11px] px-2 py-0.5 rounded border border-amber-400 text-amber-900 bg-amber-50 hover:bg-amber-100">↻ Reprocessar (do cliente)</button>';
       return;
     }
     if (!res.ok) { prog.textContent = 'servidor respondeu ' + res.status; return; }
@@ -3714,7 +3714,18 @@ startProjectsAutoRefresh();
 // authFetch injeta o Bearer do admin; o backend aceita admin via _require_project_owner.
 async function adminReprocess(jobId) {
   if (!jobId) return;
-  if (!confirm('Reprocessar o projeto ' + jobId + ' com o motor atual? (cria um novo job)')) return;
+  // 🚨 24/08: o Pedro perguntou "tem avaliar e reprocessar, isso não confunde?".
+  // Confunde: os dois re-rodam os arquivos, mas este QUEIMA o reprocesso grátis
+  // do cliente (1 por projeto, a rota devolve 402 depois) e o outro não encosta
+  // em nada. O confirm dizia só "(cria um novo job)", que soa inofensivo.
+  if (!confirm(
+      'ATENÇÃO — isto age NO PROJETO DO CLIENTE.\n\n'
+      + 'Projeto: ' + jobId + '\n\n'
+      + '\u2022 o cliente PASSA A VER esta versão nova\n'
+      + '\u2022 ele RECEBE e-mail avisando\n'
+      + '\u2022 GASTA o reprocesso grátis dele (1 por projeto, não volta)\n\n'
+      + 'Só quer TESTAR o motor sem encostar nele? Cancele e use "Avaliar (isolado)".\n\n'
+      + 'Confirma reprocessar no projeto do cliente?')) return;
   _adminToast('Reprocessando ' + jobId + '…', 'warn');
   try {
     const res = await authFetch(`${API_BASE}/api/project/${jobId}/reprocess`, { method: 'POST' });
@@ -3745,6 +3756,15 @@ async function adminEvalReprocess(jobId) {
         + 'Isso abre o resultado aqui automaticamente — pode deixar a aba aberta.</p></body>');
     } catch (_) {}
   }
+  // Contrapeso do aviso do outro botão: sem dizer que ESTE é seguro, o medo de
+  // clicar errado paralisa os dois.
+  if (!confirm(
+      'Teste ISOLADO do projeto ' + jobId + '.\n\n'
+      + '\u2022 o cliente NÃO vê nada\n'
+      + '\u2022 NÃO manda e-mail\n'
+      + '\u2022 NÃO gasta o reprocesso grátis dele\n'
+      + '\u2022 o projeto dele fica intacto\n\n'
+      + 'Serve pra comparar o motor novo com o resultado atual. Rodar?')) return;
   _adminToast('Iniciando avaliação de ' + jobId + '…', 'warn');
   try {
     const res = await authFetch(`${API_BASE}/api/admin/eval-reprocess/${jobId}`, { method: 'POST' });
