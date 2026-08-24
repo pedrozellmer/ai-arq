@@ -643,7 +643,7 @@ _DISCIPLINE_TO_SECTION = {
 }
 
 
-def _norm_desc(s: str) -> str:
+def _norm_desc(s: str, cortar: bool = True) -> str:
     """Normaliza descrição pra casar o MESMO item entre duas leituras.
 
     🪤 Não existe chave estável: `item_num` é sequencial e muda a cada leitura
@@ -654,36 +654,48 @@ def _norm_desc(s: str) -> str:
     s = _ud.normalize("NFKD", str(s or "")).encode("ascii", "ignore").decode()
     s = _re.sub(r"\[[^\]]*\]", " ", s)          # tira marcadores tipo [EXISTENTE - manter]
     s = _re.sub(r"[^a-zA-Z0-9]+", " ", s).lower().strip()
-    return " ".join(s.split()[:9])               # 9 primeiras palavras bastam pra casar
+    palavras = s.split()
+    # 🪤 24/08: o corte em 9 palavras cria COLISÃO entre linhas irmãs — em
+    # "Porta de madeira 80x210 SUITE 1/2/3" e "Alvenaria PAV 1/PAV 2" o que
+    # distingue mora justamente no fim, que é o pedaço jogado fora. A fusão
+    # passou a tentar a chave CHEIA primeiro (cortar=False) e só cair no corte
+    # quando ele for inequívoco.
+    return " ".join(palavras[:9] if cortar else palavras)
 
 
 def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
-    """Faz a releitura PRESERVAR o que o cliente corrigiu à mão.
+    """Faz a releitura PRESERVAR o que o cliente corrigiu à mão (regra dura nº7).
 
     Pedro, 08/08: *"o cliente que mudou os itens na tela, os itens que ele mediu
-    são a verdade mais pura, mesmo que a gente tenha revisado o motor"* e
-    *"se a gente leu de novo, a gente só vai corrigir outros itens e manter o
-    que o cliente revisou sem alterar esses itens"*.
+    são a verdade mais pura, mesmo que a gente tenha revisado o motor"*.
 
-    É a regra dura nº7 levada a sério: nunca trocar trabalho humano por medição
-    de máquina. O motor melhora TUDO menos as linhas que o cliente já corrigiu.
+    🚨 24/08/2026 — DE ONDE VÊM OS VALORES. Antes vinham de `item_reviews.edits`,
+    que é o payload CRU do navegador na PRIMEIRA edição. Isso trazia de volta
+    três coisas que o endpoint de revisão já tinha consertado: a unidade apagada
+    pelo dropdown (8 linhas reais no banco, 7 de armadura em kg), o selo
+    'confirmado' num número digitado à mão, e a 1ª versão de um número que o
+    cliente depois corrigiu (o dedupe do endpoint não atualiza `edits`).
+    Agora `item_reviews` responde só QUAIS itens ele tocou (`item_id`), e os
+    VALORES saem da linha do pai em `project_items` — que é exatamente o que ele
+    vê na tela e baixa na planilha. Conferido: 88 de 88 revisões têm item_id, e
+    os 88 ids ainda existem.
 
-    🔒 GARANTIA: a linha revisada NUNCA se perde. Se casar com um item da
-    leitura nova, sobrescreve; se não casar, é ACRESCENTADA. Nos dois caminhos
-    o valor do cliente sobrevive — errar pra duplicado é aceitável, errar pra
-    sumiço não é.
+    🔒 GARANTIA: a linha revisada NUNCA se perde. Casou → sobrescreve; não casou
+    ou casou com MAIS DE UMA → é acrescentada e o resumo registra. Errar pra
+    duplicado é aceitável, errar pra sumiço não é.
 
-    Devolve (items, resumo) — resumo vai pro log e pra tela do admin.
+    Devolve (items, resumo).
     """
-    resumo = {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
+    resumo = {"revisoes": 0, "casadas": 0, "acrescentadas": 0, "ambiguas": 0}
     if not parent_job_id:
         return items, resumo
-    # 23/08 (auditoria): "a consulta falhou" e "o cliente não revisou" davam o
-    # MESMO resultado, sem rastro — e é a regra dura nº7 que depende disto.
+
+    # 1) QUAIS itens o cliente tocou. "consulta falhou" e "não revisou" davam o
+    #    mesmo resultado, sem rastro — e é a regra nº7 que depende disto.
     try:
         _st_r, _revs = _supa_rest_service("GET", "item_reviews", params={
             "job_id": f"eq.{parent_job_id}", "action": "eq.edit",
-            "select": "edits,reviewed_at", "order": "reviewed_at.asc"})
+            "select": "item_id,edits,reviewed_at", "order": "reviewed_at.asc"})
     except Exception as _e:
         _st_r, _revs = 0, None
         print(f"[fusao-revisao] nao consegui ler as revisoes: {_e}")
@@ -691,8 +703,9 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
         resumo["erro_leitura"] = f"HTTP {_st_r}"
         try:
             _log_error("motor:fusao-revisao",
-                       f"pai={parent_job_id} NÃO consegui ler as revisões (HTTP {_st_r}) — "
-                       f"a releitura segue SEM fundir; confira antes de entregar", parent_job_id)
+                       f"🚨 pai={parent_job_id} NÃO consegui ler as revisões (HTTP {_st_r}) — "
+                       f"a releitura segue SEM fundir; confira antes de entregar",
+                       parent_job_id, severity="critical")
         except Exception:
             pass
         return items, resumo
@@ -700,110 +713,158 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     if not revs:
         return items, resumo
 
-    # Última edição de cada item vence (o cliente pode ter mexido duas vezes).
-    porchave = {}
+    # 2) OS VALORES: a linha do pai HOJE (já corrigida, já rebaixada).
+    try:
+        _st_i, _linhas = _supa_rest_service("GET", "project_items", params={
+            "job_id": f"eq.{parent_job_id}",
+            "select": "id,description,unit,quantity,observations,confidence",
+            "limit": "5000"})
+    except Exception as _ei:
+        _st_i, _linhas = 0, None
+        print(f"[fusao-revisao] nao consegui ler os itens do pai: {_ei}")
+    if _st_i != 200:
+        resumo["erro_leitura"] = f"project_items HTTP {_st_i}"
+        try:
+            _log_error("motor:fusao-revisao",
+                       f"🚨 pai={parent_job_id} NÃO consegui ler os itens do original "
+                       f"(HTTP {_st_i}) — sem eles não dá pra saber o valor CORRETO das "
+                       f"correções; a releitura segue SEM fundir",
+                       parent_job_id, severity="critical")
+        except Exception:
+            pass
+        return items, resumo
+    _atuais = {str((l or {}).get("id")): l for l in (_linhas or []) if (l or {}).get("id")}
+
+    # Um item tocado = uma correção, mesmo que o cliente tenha editado 2×.
+    corrigidos, _vistos = [], set()
     for r in revs:
+        _iid = str((r or {}).get("item_id") or "")
         ed = (r or {}).get("edits") or {}
-        if not isinstance(ed, dict) or not ed.get("description"):
+        if not isinstance(ed, dict):
+            ed = {}
+        chave_rev = _iid or ("desc:" + _norm_desc(ed.get("description", ""), cortar=False))
+        if not chave_rev.strip(":") or chave_rev in _vistos:
             continue
-        porchave[_norm_desc(ed["description"])] = ed
-    resumo["revisoes"] = len(porchave)
-    if not porchave:
+        _vistos.add(chave_rev)
+        linha = _atuais.get(_iid)
+        if linha:
+            corrigidos.append({
+                "description": str(linha.get("description") or ""),
+                "unit": str(linha.get("unit") or ""),
+                "quantity": linha.get("quantity"),
+                "observations": str(linha.get("observations") or ""),
+                "confidence": str(linha.get("confidence") or "estimado"),
+                "fonte": "project_items",
+            })
+        elif ed.get("description"):
+            # A linha sumiu do pai (item apagado): sobra o payload da revisão.
+            corrigidos.append({
+                "description": str(ed.get("description") or ""),
+                "unit": str(ed.get("unit") or ""),
+                "quantity": ed.get("quantity"),
+                "observations": str(ed.get("observations") or ""),
+                "confidence": "estimado",
+                "fonte": "item_reviews",
+            })
+    resumo["revisoes"] = len(corrigidos)
+    if not corrigidos:
         return items, resumo
 
-    indice = {}
+    # 3) Casar com a leitura nova. Chave CHEIA primeiro; o corte de 9 palavras
+    #    só entra quando não for ambíguo dos dois lados.
+    def _ch(desc, unit, cortar):
+        return (_norm_desc(desc, cortar=cortar), str(unit or "").strip().lower())
+
+    _cheia, _curta = {}, {}
     for it in items:
-        indice.setdefault(_norm_desc(getattr(it, "description", "")), it)
+        _d, _u = getattr(it, "description", ""), getattr(it, "unit", "")
+        _cheia.setdefault(_ch(_d, _u, False), []).append(it)
+        _curta.setdefault(_ch(_d, _u, True), []).append(it)
 
-    for chave, ed in porchave.items():
-        alvo = indice.get(chave)
-        if alvo is not None:
-            # Casou: o valor do CLIENTE manda nos campos que ele edita.
-            try:
-                from models import Confidence as _CfC
+    _usados = set()
 
-                def _nao_vazio(chave, atual):
-                    """🚨 24/08: `ed.get(k, atual)` devolvia a STRING VAZIA quando a
-                    chave existia vazia — e ela existe. O endpoint de revisão conserta
-                    a unidade apagada pelo dropdown (bug de 18/08) antes de gravar em
-                    `project_items`, mas `item_reviews.edits` guarda o payload CRU, com
-                    unit=''. Medido no banco: 8 linhas assim, 7 de armadura CA-50 em kg
-                    e 1 de estaca em m, todas no job 2933cc30 — que ainda não tem
-                    filhote. A fusão contornava a trava de 18/08 por não passar por ela."""
-                    v = ed.get(chave, None)
-                    if v is None or (isinstance(v, str) and not v.strip()):
-                        return atual
-                    return v
+    def _aplicar(alvo, c):
+        from models import Confidence as _CfC
+        _qtd_leitura = 0.0
+        try:
+            _qtd_leitura = float(getattr(alvo, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            pass
+        alvo.description = c["description"] or alvo.description
+        if c["unit"]:
+            alvo.unit = c["unit"]
+        if c["quantity"] is not None:
+            alvo.quantity = c["quantity"]
+        # O selo vem do PAI: lá o endpoint já rebaixou pra 'estimado' quando o
+        # cliente mudou a quantidade, e manteve 'confirmado' quando ele só
+        # arrumou o texto de uma linha medida.
+        try:
+            alvo.confidence = _CfC(c["confidence"])
+        except Exception:
+            alvo.confidence = _CfC.ESTIMADO
+        try:
+            _mudou = abs(float(alvo.quantity or 0) - _qtd_leitura) > 1e-9
+        except (TypeError, ValueError):
+            _mudou = True
+        if _mudou:
+            alvo.origem = "revisao_cliente"
+        _obs = (c["observations"] or "").strip()
+        _sel = ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
+                if _mudou else "✏️ REVISADO POR VOCÊ — ")
+        alvo.observations = (_sel + "Mantido da sua revisão anterior; a leitura "
+                             "nova não vale por cima. " + _obs)[:1000]
 
-                _qtd_antes = float(getattr(alvo, "quantity", 0) or 0)
-                alvo.description = _nao_vazio("description", alvo.description)
-                alvo.unit = _nao_vazio("unit", alvo.unit)
-                alvo.quantity = _nao_vazio("quantity", alvo.quantity)
-                try:
-                    _mudou_qtd = abs(float(alvo.quantity or 0) - _qtd_antes) > 1e-9
-                except (TypeError, ValueError):
-                    _mudou_qtd = True
-                _obs = (ed.get("observations") or "").strip()
-                if _mudou_qtd:
-                    # 🚨 REGRA DURA Nº1: número digitado à mão não é medição do CAD.
-                    # O endpoint /api/items/{job}/review/{item} já força 'estimado'
-                    # quando a quantidade muda; a fusão fazia o contrário e DEVOLVIA o
-                    # selo 'confirmado' à linha. O cliente baixava uma célula que dizia,
-                    # na mesma frase, "✓ MEDIDO do CAD" e "este número é o que você
-                    # corrigiu, não a leitura nova".
-                    try:
-                        alvo.confidence = _CfC.ESTIMADO
-                    except Exception:
-                        pass
-                    alvo.origem = "revisao_cliente"
-                    alvo.observations = ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida "
-                                         "do CAD. Mantida da sua revisão anterior; a "
-                                         "leitura nova não vale por cima. " + _obs)[:1000]
-                else:
-                    # Só descrição/unidade mudou: o selo da medição continua valendo.
-                    alvo.observations = ("✏️ REVISADO POR VOCÊ — este número é o que você "
-                                         "corrigiu, não a leitura nova. " + _obs)[:1000]
+    def _acrescentar(c, motivo):
+        from models import BudgetItem as _BI, Confidence as _Cf
+        _n = resumo["acrescentadas"] + 1
+        try:
+            _q = float(c["quantity"] or 0)
+        except (TypeError, ValueError):
+            _q = 0.0
+        items.append(_BI(
+            item_num=f"REV.{_n}",
+            description=c["description"],
+            unit=c["unit"],
+            quantity=_q,
+            observations=("✏️ REVISADO POR VOCÊ — mantido da sua revisão anterior; "
+                          + motivo + " " + (c["observations"] or ""))[:1000],
+            ref_sheet="",
+            confidence=_Cf.ESTIMADO,
+            origem="revisao_cliente",
+            discipline="",
+            sinapi_matches=[],
+            tcpo_matches=[],
+        ))
+        resumo["acrescentadas"] += 1
+
+    for c in corrigidos:
+        alvos = [x for x in _cheia.get(_ch(c["description"], c["unit"], False), [])
+                 if id(x) not in _usados]
+        if not alvos:
+            alvos = [x for x in _curta.get(_ch(c["description"], c["unit"], True), [])
+                     if id(x) not in _usados]
+        try:
+            if len(alvos) == 1:
+                _aplicar(alvos[0], c)
+                _usados.add(id(alvos[0]))
                 resumo["casadas"] += 1
-            except Exception as _ec:
-                print(f"[fusao-revisao] falhei ao aplicar a correção casada: {_ec}")
-                resumo["falhou_casar"] = resumo.get("falhou_casar", 0) + 1
-        else:
-            # Não casou: acrescenta, pra NUNCA perder o que o cliente corrigiu.
-            #
-            # 🚨 23/08/2026 (auditoria): aqui era `deepcopy(items[0])` com 4
-            # campos reescritos. A linha do cliente herdava do PRIMEIRO item da
-            # leitura: o selo (em 23 de 147 projetos ele é 'confirmado' → a
-            # linha digitada à mão sairia como MEDIDO DO CAD, regra dura nº1),
-            # o item_num (duplicado), a prancha em ref_sheet (apontando pro
-            # desenho errado), a disciplina e o código SINAPI de OUTRO serviço.
-            # Nunca apareceu em produção só porque a fusão nunca chegou a rodar
-            # (o bug da tupla). Agora a linha é CONSTRUÍDA: só o que o cliente
-            # digitou entra, o resto nasce vazio.
-            try:
-                from models import BudgetItem as _BI, Confidence as _Cf
-                _n_novo = resumo["acrescentadas"] + 1
-                novo = _BI(
-                    item_num=f"REV.{_n_novo}",
-                    description=ed.get("description", "") or "",
-                    unit=ed.get("unit", "") or "",
-                    quantity=float(ed.get("quantity", 0) or 0),
-                    observations=("✏️ REVISADO POR VOCÊ — mantido da sua revisão "
-                                  "anterior; a leitura nova não achou esta linha. "
-                                  + (ed.get("observations") or ""))[:1000],
-                    ref_sheet="",             # não é de prancha nenhuma
-                    confidence=_Cf.ESTIMADO,  # número digitado não é medição do CAD
-                    origem="revisao_cliente",
-                    discipline="",            # cai em "Complementares", não na do item[0]
-                    sinapi_matches=[],
-                    tcpo_matches=[],
-                )
-                items.append(novo)
-                resumo["acrescentadas"] += 1
-            except Exception as _enovo:
-                print(f"[fusao-revisao] NAO consegui acrescentar a linha do cliente: {_enovo}")
-                resumo["falhou_acrescentar"] = resumo.get("falhou_acrescentar", 0) + 1
+            elif len(alvos) > 1:
+                # 🚨 Escolher entre linhas irmãs seria adivinhar, e adivinhar
+                # errado apaga a descrição da linha certa. Não escolhe:
+                # acrescenta e registra, seguindo o mesmo princípio do resto do
+                # motor ("só AVISA, nunca decide no escuro").
+                _acrescentar(c, "a leitura nova tem mais de uma linha igual a esta, "
+                                "então não sobrescrevi nenhuma —")
+                resumo["ambiguas"] += 1
+            else:
+                _acrescentar(c, "a leitura nova não achou esta linha.")
+        except Exception as _ec:
+            print(f"[fusao-revisao] falhei numa correção: {_ec}")
+            resumo["falhou"] = resumo.get("falhou", 0) + 1
+
     print(f"[fusao-revisao] pai={parent_job_id} revisoes={resumo['revisoes']} "
-          f"casadas={resumo['casadas']} acrescentadas={resumo['acrescentadas']}")
+          f"casadas={resumo['casadas']} acrescentadas={resumo['acrescentadas']} "
+          f"ambiguas={resumo['ambiguas']}")
     return items, resumo
 
 

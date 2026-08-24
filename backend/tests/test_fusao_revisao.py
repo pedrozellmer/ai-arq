@@ -4,26 +4,22 @@
 Pedro, 08/08/2026: *"o cliente que mudou os itens na tela, os itens que ele
 mediu são a verdade mais pura, mesmo que a gente tenha revisado o motor"*.
 
-🚨 Esta função NUNCA rodou em produção: até 23/08/2026 ela morria no bug da
-leitura da tupla do Supabase, dentro de um try/except que engolia o erro
-(`error_log` com stage `motor:fusao-revisao` = 0 linhas). Ou seja, ela foi
-escrita, revisada e liberada sem nunca ter sido exercida — e a auditoria do dia
-achou dois defeitos que estavam esperando o primeiro cliente:
+🚨 Esta função nunca rodou em produção: até 23/08 morria no bug da leitura da
+tupla, dentro de um try/except que engolia o erro. Foi escrita, revisada e
+liberada sem NUNCA ter sido exercida. Cada rodada de auditoria achou defeitos
+que estavam esperando o primeiro cliente:
 
-  23) a linha acrescentada era `deepcopy(items[0])` com 4 campos reescritos.
-      Herdava o SELO do primeiro item da leitura — e em 23 de 147 projetos
-      (16%) esse primeiro item é 'confirmado'. Resultado: a linha que o cliente
-      DIGITOU sairia marcada "✓ MEDIDO do CAD". Herdava também item_num
-      (duplicado), ref_sheet (prancha errada), disciplina e código SINAPI de
-      outro serviço.
+  23/08 — a linha acrescentada era `deepcopy(items[0])`: herdava selo
+          'confirmado', item_num, prancha, disciplina e SINAPI de outro serviço.
+  24/08 — os VALORES vinham de `item_reviews.edits`, o payload CRU do navegador
+          na PRIMEIRA edição. Isso desfazia três consertos que o endpoint de
+          revisão já tinha feito: unidade apagada pelo dropdown, selo rebaixado
+          e a versão mais nova do número. Além disso, o casamento por 9 palavras
+          jogava a correção na linha ERRADA quando havia linhas irmãs.
 
-  22) o .xlsx era gerado ANTES da fusão — a tela mostrava as correções, o
-      arquivo baixado não, e o carimbo de coerência jurava que estava em dia.
-      (Testado aqui pela ORDEM no código, que é o que dá pra afirmar sem subir
-      um job inteiro.)
-
-Como a fusão lê o Supabase, os testes injetam a leitura em vez de bater na
-rede — o que interessa é a decisão, não o transporte.
+🪤 O harness antigo TROCAVA o `_norm_desc` por um stub bobo — então o casamento
+de verdade (que tira acento, tira [marcadores] e corta em 9 palavras) nunca era
+exercido, e a colisão passou batido. Aqui a fatia carrega o `_norm_desc` REAL.
 """
 import io
 import os
@@ -33,35 +29,46 @@ _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
 
-def _carrega(revs, status=200):
-    """Executa só a função de fusão, com a leitura do banco injetada."""
+def _carrega(revs, itens_do_pai=None, status_rev=200, status_itens=200):
+    """Executa a fatia REAL (do `_norm_desc` até a fusão) com o banco injetado.
+
+    `revs`         -> o que `item_reviews` devolve
+    `itens_do_pai` -> o que `project_items` do PAI devolve (a fonte dos valores)
+    """
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("def _fundir_revisoes_do_cliente")
+    i = src.index("def _norm_desc(")
     j = src.index("\n_CAMPOS_ITEM_VERSAO", i)
     chamadas = []
 
-    def _fake_rest(method, path, **kw):
+    def _fake(method, path, **kw):
         chamadas.append((method, path))
-        return status, revs
+        if path == "item_reviews":
+            return status_rev, revs
+        if path == "project_items":
+            return status_itens, (itens_do_pai or [])
+        return 200, []
 
-    ns = {
-        "__name__": "fusao_ns",
-        "_supa_rest_service": _fake_rest,
-        "_log_error": lambda *a, **k: None,
-        "_norm_desc": lambda d: " ".join(str(d or "").lower().split()),
-    }
+    import re as _re
+    ns = {"__name__": "fusao_ns", "_re": _re, "re": _re,
+          "_supa_rest_service": _fake, "_log_error": lambda *a, **k: None}
     exec(compile(src[i:j], "main_slice", "exec"), ns)
-    return ns["_fundir_revisoes_do_cliente"], chamadas
+    return ns["_fundir_revisoes_do_cliente"], chamadas, ns
 
 
-def _rev(desc, unit, qtd, obs=""):
-    return {"edits": {"description": desc, "unit": unit, "quantity": qtd,
-                      "observations": obs},
-            "reviewed_at": "2026-08-23T10:00:00Z"}
+def _rev(item_id, desc="", unit="", qtd=None):
+    """Uma linha de item_reviews. O que importa agora é o item_id."""
+    return {"item_id": item_id, "reviewed_at": "2026-08-23T10:00:00Z",
+            "edits": {"description": desc, "unit": unit, "quantity": qtd}}
+
+
+def _linha_pai(item_id, desc, unit, qtd, conf="estimado", obs=""):
+    """Uma linha de project_items do PAI — já corrigida e já rebaixada."""
+    return {"id": item_id, "description": desc, "unit": unit, "quantity": qtd,
+            "confidence": conf, "observations": obs}
 
 
 def _itens_da_leitura():
-    """Primeiro item MEDIDO — é justamente ele que o deepcopy clonava."""
+    """Primeiro item MEDIDO — era ele que o deepcopy antigo clonava."""
     from models import BudgetItem, Confidence
     return [
         BudgetItem(item_num="1.1", description="Laje maciça h=12cm", unit="m²",
@@ -73,112 +80,210 @@ def _itens_da_leitura():
     ]
 
 
+def _selo(it):
+    return str(getattr(it.confidence, "value", it.confidence))
+
+
 # ══════════════════════════════════════════════════════════════════════════
-#  ACHADO 23 — a linha do cliente não pode herdar nada do item[0]
+#  A FONTE DOS VALORES (achados 7, 2 e 1 na raiz)
 # ══════════════════════════════════════════════════════════════════════════
-def test_linha_acrescentada_nao_herda_o_selo_medido():
-    f, _ = _carrega([_rev("Alvenaria de bloco 14 cm", "m²", 96.0)])
-    itens = _itens_da_leitura()
-    itens, resumo = f(itens, "pai123")
+def test_o_valor_vem_da_linha_do_pai_e_nao_do_payload_antigo():
+    """🚨 #7: o endpoint deduplica e NÃO atualiza `edits`. O cliente digita 100
+    por engano, corrige pra 250 e sai: `project_items` fica 250 (o que ele vê),
+    `item_reviews` continua 100. A fusão trazia o 100 de volta e ainda carimbava
+    "este número é o que você corrigiu"."""
+    f, _, _ = _carrega(
+        revs=[_rev("id-1", "Piso porcelanato", "m²", 100.0)],          # 1ª edição
+        itens_do_pai=[_linha_pai("id-1", "Piso porcelanato", "m²", 250.0)])
+    itens, resumo = f(_itens_da_leitura(), "pai123")
+    piso = [i for i in itens if "porcelanato" in i.description.lower()][0]
+    assert piso.quantity == 250.0, (
+        "voltou %s — a fusão ressuscitou a 1ª edição em vez da correção final"
+        % piso.quantity)
+
+
+def test_unidade_vazia_do_payload_nunca_chega_na_planilha():
+    """🚨 #2: 8 linhas reais no banco têm unit='' em item_reviews (7 de armadura
+    CA-50 em kg). O endpoint conserta antes de gravar em project_items; a fusão
+    lia item_reviews e contornava a trava de 18/08."""
+    f, _, _ = _carrega(
+        revs=[_rev("id-9", "Pilares — armadura CA-50", "", 1500.0)],
+        itens_do_pai=[_linha_pai("id-9", "Pilares — armadura CA-50", "kg", 1500.0)])
+    from models import BudgetItem, Confidence
+    alvo = BudgetItem(item_num="3.1", description="Pilares — armadura CA-50",
+                      unit="kg", quantity=18168.0, confidence=Confidence.CONFIRMADO,
+                      origem="dxf_geom")
+    f([alvo], "pai123")
+    assert alvo.unit == "kg", "a unidade foi apagada (%r)" % alvo.unit
+    assert alvo.quantity == 1500.0
+
+
+def test_o_selo_vem_do_pai_ja_rebaixado():
+    """🚨 #1: número digitado à mão não é medição do CAD. O endpoint já rebaixa;
+    a fusão devolvia 'confirmado'."""
+    f, _, _ = _carrega(
+        revs=[_rev("id-2")],
+        itens_do_pai=[_linha_pai("id-2", "Piso porcelanato", "m²", 130.0,
+                                 conf="estimado")])
+    itens, _ = f(_itens_da_leitura(), "pai123")
+    piso = [i for i in itens if "porcelanato" in i.description.lower()][0]
+    assert piso.quantity == 130.0
+    assert _selo(piso) == "estimado", "saiu como '%s'" % _selo(piso)
+    assert piso.origem == "revisao_cliente"
+    assert "não é medida do CAD" in piso.observations
+
+
+def test_correcao_so_de_texto_preserva_o_selo_da_medicao():
+    """Controle do outro lado: se o cliente só arrumou o NOME, a medição
+    continua sendo medição — o pai guarda 'confirmado' e isso tem que passar."""
+    f, _, _ = _carrega(
+        revs=[_rev("id-3")],
+        itens_do_pai=[_linha_pai("id-3", "Laje maciça h=12cm", "m²", 210.0,
+                                 conf="confirmado")])
+    itens, _ = f(_itens_da_leitura(), "pai123")
+    laje = [i for i in itens if "laje" in i.description.lower()][0]
+    assert _selo(laje) == "confirmado", "rebaixou uma medição que não mudou de número"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  O CASAMENTO (achados 8 e 9)
+# ══════════════════════════════════════════════════════════════════════════
+def _porta(sufixo, qtd):
+    from models import BudgetItem, Confidence
+    return BudgetItem(item_num="4.1",
+                      description="Porta de madeira 80x210 cm folha lisa branca " + sufixo,
+                      unit="un", quantity=qtd, confidence=Confidence.ESTIMADO)
+
+
+def test_linhas_irmas_nao_recebem_a_correcao_no_lugar_errado():
+    """🚨 #8: a chave corta em 9 palavras, e o que distingue "SUITE 1/2/3" mora
+    justamente no fim. A correção da SUITE 2 caía na SUITE 1 e ainda reescrevia
+    a descrição dela — o cliente ficava com duas "SUITE 2" e nenhuma "SUITE 1"."""
+    f, _, _ = _carrega(
+        revs=[_rev("id-4")],
+        itens_do_pai=[_linha_pai(
+            "id-4", "Porta de madeira 80x210 cm folha lisa branca SUITE 2", "un", 3.0)])
+    itens, _ = f([_porta("SUITE 1", 1.0), _porta("SUITE 2", 1.0), _porta("SUITE 3", 1.0)],
+                 "pai123")
+    s1 = [i for i in itens if i.description.endswith("SUITE 1")]
+    s2 = [i for i in itens if i.description.endswith("SUITE 2")]
+    assert len(s1) == 1, "a SUITE 1 foi renomeada — a correção caiu na linha errada"
+    assert len(s2) == 1 and s2[0].quantity == 3.0, "a correção não chegou na SUITE 2"
+
+
+def test_ambiguidade_nao_e_resolvida_no_escuro():
+    """Quando a leitura nova tem DUAS linhas idênticas, escolher é adivinhar.
+    Não escolhe: acrescenta e registra."""
+    f, _, _ = _carrega(
+        revs=[_rev("id-5")],
+        itens_do_pai=[_linha_pai("id-5", "Ponto de tomada 220V", "un", 40.0)])
+    from models import BudgetItem, Confidence
+    a = BudgetItem(item_num="5.1", description="Ponto de tomada 220V", unit="un",
+                   quantity=10.0, confidence=Confidence.ESTIMADO)
+    b = BudgetItem(item_num="5.2", description="Ponto de tomada 220V", unit="un",
+                   quantity=12.0, confidence=Confidence.ESTIMADO)
+    itens, resumo = f([a, b], "pai123")
+    assert resumo["ambiguas"] == 1
+    assert a.quantity == 10.0 and b.quantity == 12.0, "sobrescreveu no escuro"
+    assert resumo["acrescentadas"] == 1, "a correção do cliente se perdeu"
+    assert itens[-1].quantity == 40.0
+
+
+def test_duas_correcoes_nao_colapsam_uma_na_outra():
+    """🚨 #9: com a chave cortada, duas correções de linhas irmãs viravam UMA —
+    a outra sumia em silêncio, e o contador dizia revisoes=1."""
+    f, _, _ = _carrega(
+        revs=[_rev("id-6"), _rev("id-7")],
+        itens_do_pai=[
+            _linha_pai("id-6", "Porta de madeira 80x210 cm folha lisa branca SUITE 1", "un", 2.0),
+            _linha_pai("id-7", "Porta de madeira 80x210 cm folha lisa branca SUITE 2", "un", 3.0),
+        ])
+    itens, resumo = f([_porta("SUITE 1", 1.0), _porta("SUITE 2", 1.0)], "pai123")
+    assert resumo["revisoes"] == 2, "uma das duas correções sumiu do contador"
+    q = {i.description[-7:]: i.quantity for i in itens}
+    assert q.get("SUITE 1") == 2.0 and q.get("SUITE 2") == 3.0, q
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A linha acrescentada (achado de 23/08) — não pode herdar nada
+# ══════════════════════════════════════════════════════════════════════════
+def test_linha_acrescentada_nasce_limpa():
+    f, _, _ = _carrega(
+        revs=[_rev("id-8")],
+        itens_do_pai=[_linha_pai("id-8", "Alvenaria de bloco 14 cm", "m²", 96.0)])
+    itens, resumo = f(_itens_da_leitura(), "pai123")
     assert resumo["acrescentadas"] == 1
     nova = itens[-1]
-    selo = str(getattr(nova.confidence, "value", nova.confidence))
-    assert selo == "estimado", (
-        "número digitado à mão saiu como '%s' — regra dura nº1: só o que veio "
-        "da geometria do CAD pode ser 'confirmado'" % selo)
-
-
-def test_linha_acrescentada_nao_herda_prancha_numero_disciplina_nem_sinapi():
-    f, _ = _carrega([_rev("Alvenaria de bloco 14 cm", "m²", 96.0)])
-    itens, resumo = f(_itens_da_leitura(), "pai123")
-    nova = itens[-1]
-    assert nova.ref_sheet == "", "apontava pra prancha de outro serviço"
-    assert nova.item_num != "1.1", "item_num duplicado com o primeiro item"
-    assert nova.discipline != "Estrutura", "caiu na disciplina do item[0]"
-    assert not nova.sinapi_matches, "levou o código SINAPI de outro serviço"
+    assert _selo(nova) == "estimado", "número digitado saiu como MEDIDO do CAD"
+    assert nova.ref_sheet == "" and nova.item_num != "1.1"
+    assert nova.discipline != "Estrutura" and not nova.sinapi_matches
     assert nova.origem == "revisao_cliente"
-
-
-def test_a_linha_do_cliente_sobrevive_com_os_valores_dele():
-    f, _ = _carrega([_rev("Alvenaria de bloco 14 cm", "m²", 96.0, "medi na obra")])
-    itens, _ = f(_itens_da_leitura(), "pai123")
-    nova = itens[-1]
-    assert nova.description == "Alvenaria de bloco 14 cm"
-    assert nova.unit == "m²" and nova.quantity == 96.0
-    assert "REVISADO POR VOCÊ" in nova.observations
-    assert "medi na obra" in nova.observations
-
-
-def test_duas_linhas_acrescentadas_ganham_numeros_diferentes():
-    f, _ = _carrega([_rev("Alvenaria de bloco 14 cm", "m²", 96.0),
-                     _rev("Chapisco interno", "m²", 210.0)])
-    itens, resumo = f(_itens_da_leitura(), "pai123")
-    assert resumo["acrescentadas"] == 2
-    nums = [i.item_num for i in itens[-2:]]
-    assert len(set(nums)) == 2, "duas linhas com o mesmo item_num: %s" % nums
+    assert nova.quantity == 96.0
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  O que a fusão já fazia certo e não pode regredir
+#  Falha de leitura NUNCA pode passar por "o cliente não revisou"
 # ══════════════════════════════════════════════════════════════════════════
-def test_quando_casa_o_valor_do_cliente_manda():
-    f, _ = _carrega([_rev("Piso porcelanato", "m²", 130.0)])
-    itens, resumo = f(_itens_da_leitura(), "pai123")
-    assert resumo["casadas"] == 1 and resumo["acrescentadas"] == 0
-    piso = [i for i in itens if "porcelanato" in i.description.lower()][0]
-    assert piso.quantity == 130.0, "a leitura nova sobrescreveu a correção do cliente"
-    # 24/08: o texto mudou porque a QUANTIDADE mudou. Antes esta linha voltava
-    # com o selo 'confirmado' e dizia "✓ MEDIDO do CAD" ao lado de "este número é
-    # o que você corrigiu" — regra dura nº1. Ver test_regressoes_24_08.py.
-    assert "CORRIGIDA POR VOCÊ" in piso.observations
-    assert "não é medida do CAD" in piso.observations
-    assert str(getattr(piso.confidence, "value", piso.confidence)) == "estimado"
+def test_falha_ao_ler_as_revisoes_deixa_rastro():
+    f, _, _ = _carrega(revs=None, status_rev=500)
+    _, resumo = f(_itens_da_leitura(), "pai123")
+    assert resumo.get("erro_leitura")
+
+
+def test_falha_ao_ler_os_itens_do_pai_tambem_deixa_rastro():
+    """Sem os itens do pai não dá pra saber o valor CORRETO — e continuar
+    seria voltar a usar o payload velho, que é o bug que este redesenho fecha."""
+    f, _, _ = _carrega(revs=[_rev("id-1")], itens_do_pai=None, status_itens=503)
+    _, resumo = f(_itens_da_leitura(), "pai123")
+    assert resumo.get("erro_leitura")
+    assert resumo["casadas"] == 0 and resumo["acrescentadas"] == 0
 
 
 def test_sem_revisao_nao_mexe_em_nada():
-    f, _ = _carrega([])
+    f, _, _ = _carrega(revs=[])
     antes = _itens_da_leitura()
     itens, resumo = f(list(antes), "pai123")
-    assert resumo == {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
+    assert resumo["revisoes"] == 0 and resumo["casadas"] == 0
     assert len(itens) == len(antes)
 
 
-def test_falha_de_leitura_nao_pode_passar_por_cliente_sem_revisao():
-    """🚨 O erro que fez esta função morrer calada por semanas."""
-    f, _ = _carrega(None, status=500)
-    itens, resumo = f(_itens_da_leitura(), "pai123")
-    assert resumo.get("erro_leitura"), (
-        "consulta falhou e o resumo não registrou — 'não deu pra ler' virou "
-        "'o cliente não revisou', que é como o bug ficou invisível")
-
-
-def test_sem_pai_nao_tenta_ler_o_banco():
-    f, chamadas = _carrega([_rev("X", "un", 1)])
+def test_sem_pai_nao_toca_o_banco():
+    f, chamadas, _ = _carrega(revs=[_rev("id-1")])
     f(_itens_da_leitura(), "")
-    assert not chamadas, "leu o banco sem ter projeto pai"
+    assert not chamadas
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  ACHADO 22 — a planilha entregue tem que ser a de DEPOIS da fusão
+#  ORDEM no process_job: a planilha entregue é a de DEPOIS da fusão
 # ══════════════════════════════════════════════════════════════════════════
 def test_a_planilha_e_refeita_depois_da_fusao():
-    """Sem subir um job, o que dá pra afirmar é a ORDEM no código: a chamada que
-    refaz o .xlsx tem que estar entre a fusão e o upload pro Storage."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i_fusao = src.index("all_items, _fusao = _fundir_revisoes_do_cliente(")
     i_regen = src.index("generate_spreadsheet(project_data, all_items, output_path", i_fusao)
     i_carimbo = src.index("_carimbar_planilha(job_id)", i_fusao)
     i_upload = src.index("_supabase_storage_upload(output_path", i_fusao)
     assert i_fusao < i_regen < i_carimbo, (
-        "a planilha não é refeita entre a fusão e o carimbo — o cliente baixa "
-        "um .xlsx sem as correções dele e o carimbo diz que está em dia")
-    assert i_regen < i_upload, "refez o arquivo depois de já ter subido pro Storage"
+        "a planilha não é refeita entre a fusão e o carimbo — o cliente baixa um "
+        ".xlsx sem as correções dele e o carimbo diz que está em dia")
+    assert i_regen < i_upload
 
 
 def test_o_regen_so_roda_quando_a_fusao_mudou_alguma_coisa():
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i_fusao = src.index("all_items, _fusao = _fundir_revisoes_do_cliente(")
-    trecho = src[i_fusao:src.index("_persist_items_to_supabase(job_id, all_items)", i_fusao)]
-    assert 'if (_fusao.get("casadas") or 0) or (_fusao.get("acrescentadas") or 0):' in trecho, (
-        "refazer a planilha em todo job custa tempo à toa — tem que ser "
-        "condicionado a a fusão ter mudado alguma coisa")
+    i = src.index("all_items, _fusao = _fundir_revisoes_do_cliente(")
+    trecho = src[i:src.index("_persist_items_to_supabase(job_id, all_items)", i)]
+    assert 'if (_fusao.get("casadas") or 0) or (_fusao.get("acrescentadas") or 0):' in trecho
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Controle positivo do casamento: o _norm_desc REAL colide mesmo?
+# ══════════════════════════════════════════════════════════════════════════
+def test_o_corte_de_9_palavras_realmente_colide():
+    """Se este teste parar de valer, o das linhas irmãs virou decorativo."""
+    _, _, ns = _carrega(revs=[])
+    n = ns["_norm_desc"]
+    a = "Porta de madeira 80x210 cm folha lisa branca SUITE 1"
+    b = "Porta de madeira 80x210 cm folha lisa branca SUITE 2"
+    assert n(a) == n(b), "o corte não colide mais — reveja o teste das irmãs"
+    assert n(a, cortar=False) != n(b, cortar=False), (
+        "a chave cheia também colide — aí o casamento não tem como distinguir")

@@ -178,87 +178,47 @@ def test_derivacao_vai_repor_responde_certo_nos_dois_sentidos():
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  #1 e #2 — o ramo "casou" da fusão
+#  #1 e #2 — resolvidos na RAIZ, e testados em test_fusao_revisao.py
 # ══════════════════════════════════════════════════════════════════════════
-def _rev(desc, unit, qtd, obs=""):
-    return {"edits": {"description": desc, "unit": unit, "quantity": qtd,
-                      "observations": obs}, "reviewed_at": "2026-08-23T10:00:00Z"}
+# O primeiro conserto (24/08 de manhã) remendou o ramo "casou": ignorar campo
+# vazio e rebaixar o selo quando a quantidade mudasse. Funcionava, mas atacava o
+# sintoma — a fusão continuava lendo `item_reviews.edits`, que é o payload CRU
+# da PRIMEIRA edição do navegador.
+#
+# O conserto de raiz veio junto: `item_reviews` passou a responder só QUAIS
+# itens o cliente tocou (`item_id`), e os VALORES saem da linha do pai em
+# `project_items` — que já está com a unidade consertada, o selo rebaixado e a
+# ÚLTIMA versão do número. Isso mata #1, #2 e #7 de uma vez.
+#
+# Os testes desse comportamento moram em test_fusao_revisao.py. Aqui fica só o
+# controle que prova que o jeito ANTIGO seria reprovado.
 
 
-def _medido(desc="Piso porcelanato 60x60", unit="m²", qtd=210.0):
+def test_o_controle_prova_que_o_ramo_casado_antigo_seria_reprovado():
+    """Reprodução do ramo 'casou' como era até 24/08: escrevia os 4 campos
+    direto do payload, sem olhar vazio nem selo."""
     from models import BudgetItem, Confidence
-    return BudgetItem(item_num="2.1", description=desc, unit=unit, quantity=qtd,
-                      confidence=Confidence.CONFIRMADO, origem="dxf_geom",
-                      ref_sheet="ARQ-01", discipline="Pisos")
 
+    def _velho(alvo, ed):
+        alvo.description = ed.get("description", alvo.description)
+        alvo.unit = ed.get("unit", alvo.unit)
+        alvo.quantity = ed.get("quantity", alvo.quantity)
 
-def test_quantidade_corrigida_a_mao_perde_o_selo_de_medido():
-    """🚨 REGRA DURA Nº1. A linha ACRESCENTADA já saía 'estimado' (conserto de
-    ontem), mas a CASADA continuava devolvendo 'confirmado' ao número digitado —
-    e a célula dizia, na mesma frase, "✓ MEDIDO do CAD" e "este número é o que
-    você corrigiu". O endpoint de revisão já faz o certo; a fusão desfazia."""
-    f = _fatia_fusao([_rev("Piso porcelanato 60x60", "m²", 130.0)])
-    it = _medido()
-    f([it], "pai123")
-    assert it.quantity == 130.0, "a correção do cliente não sobreviveu (regra nº7)"
-    assert _selo(it) == "estimado", (
-        "número digitado à mão saiu como '%s' — a planilha ia marcar "
-        "'✓ MEDIDO do CAD'" % _selo(it))
-    assert it.origem == "revisao_cliente"
-    assert "não é medida do CAD" in it.observations
-
-
-def test_correcao_so_de_texto_nao_derruba_o_selo_da_medicao():
-    """Controle do outro lado: se o cliente só arrumou o NOME do serviço, a
-    medição continua sendo medição. Rebaixar tudo seria o exagero simétrico."""
-    f = _fatia_fusao([_rev("Piso porcelanato 60x60 retificado", "m²", 210.0)])
-    it = _medido()
-    # a chave de casamento é a descrição normalizada, então o alvo tem que ser
-    # o mesmo texto que o cliente editou
-    it.description = "Piso porcelanato 60x60 retificado"
-    f([it], "pai123")
-    assert _selo(it) == "confirmado", "rebaixou uma medição que não mudou de número"
-
-
-def test_unidade_vazia_do_payload_nao_apaga_a_unidade_consertada():
-    """🚨 Medido no banco: 8 linhas com unit='' em item_reviews, 7 de armadura
-    CA-50 em kg. O endpoint conserta antes de gravar em project_items, mas
-    item_reviews guarda o payload CRU — e a fusão lê item_reviews, contornando
-    a trava de 18/08 por não passar por ela."""
-    f = _fatia_fusao([_rev("Pilares — armadura CA-50", "", 1500.0)])
-    it = _medido(desc="Pilares — armadura CA-50", unit="kg", qtd=18168.0)
-    f([it], "pai123")
-    assert it.unit == "kg", (
-        "a unidade voltou a ser apagada (%r): quem cota não sabe se é kg, t ou "
-        "barra" % it.unit)
-    assert it.quantity == 1500.0, "a correção de quantidade do cliente se perdeu"
-
-
-def test_descricao_vazia_tambem_e_ignorada():
-    f = _fatia_fusao([{"edits": {"description": "Piso porcelanato 60x60",
-                                 "unit": "m²", "quantity": 130.0},
-                       "reviewed_at": "2026-08-23T10:00:00Z"}])
-    it = _medido()
-    f([it], "pai123")
-    assert it.description == "Piso porcelanato 60x60"
-
-
-def test_o_controle_prova_que_o_ramo_casado_seria_reprovado():
-    """Controle positivo do #1/#2: o comportamento ANTIGO (escrever os 4 campos
-    direto, sem olhar vazio nem selo) seria reprovado pelos dois testes acima."""
-    from models import Confidence
-
-    class _Velho:
-        """Reprodução do ramo 'casou' como era até 24/08."""
-        @staticmethod
-        def aplicar(alvo, ed):
-            alvo.description = ed.get("description", alvo.description)
-            alvo.unit = ed.get("unit", alvo.unit)
-            alvo.quantity = ed.get("quantity", alvo.quantity)
-            alvo.observations = "✏️ REVISADO POR VOCÊ — este número é o que você corrigiu."
-
-    it = _medido(desc="Pilares — armadura CA-50", unit="kg", qtd=18168.0)
-    _Velho.aplicar(it, {"description": "Pilares — armadura CA-50", "unit": "",
-                        "quantity": 1500.0})
+    it = BudgetItem(item_num="3.1", description="Pilares — armadura CA-50",
+                    unit="kg", quantity=18168.0,
+                    confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    _velho(it, {"description": "Pilares — armadura CA-50", "unit": "",
+                "quantity": 1500.0})
     assert it.unit == "", "o cenário do bug não reproduz mais"
     assert it.confidence == Confidence.CONFIRMADO, "o cenário do bug não reproduz mais"
+
+
+def test_a_fusao_le_os_valores_do_project_items_do_pai():
+    """Guarda estrutural: se alguém voltar a tirar valor de `edits`, os bugs
+    #1, #2 e #7 voltam juntos."""
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index("def _fundir_revisoes_do_cliente")
+    corpo = src[i:src.index("_CAMPOS_ITEM_VERSAO", i)]
+    assert '"select": "id,description,unit,quantity,observations,confidence"' in corpo, (
+        "a fusão parou de ler os itens do pai — voltou a confiar no payload cru")
+    assert '"fonte": "project_items"' in corpo
