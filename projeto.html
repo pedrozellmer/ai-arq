@@ -1310,7 +1310,7 @@ async function carregarStatsEntregas() {
 
   // Estado vivo por cima dos renders (esconde o que não vale ainda):
   if (emProcesso) {
-    safeRun(() => mostrarProcessando(live, session), 'mostrarProcessando');
+    safeRun(() => mostrarProcessando(live, session, pmeta), 'mostrarProcessando');
   } else if (emErro) {
     const msgErro = (live && live.error_message) || proj.error_message || '';
     safeRun(() => mostrarErro(msgErro, session), 'mostrarErro');
@@ -1357,7 +1357,7 @@ async function enviarRespostasProc() {
   }
 }
 
-function mostrarProcessando(live, session) {
+function mostrarProcessando(live, session, pmeta) {
   const bloco = document.getElementById('proc-block');
   if (!bloco) return;
   // já respondeu neste job → não pergunta de novo
@@ -1365,6 +1365,37 @@ function mostrarProcessando(live, session) {
     if (localStorage.getItem('pp_respondido_' + jobId) === '1') {
       const _c = document.getElementById('proc-perguntas');
       if (_c) _c.classList.add('hidden');
+    }
+  } catch (_) {}
+  // 23/08/2026 (Tammyres): ela informou o pé-direito NO ENVIO e a tela pediu de
+  // novo, com o campo vazio — parecia que o dado tinha sido ignorado. Agora o
+  // que já veio informado aparece preenchido e travado, com "informado no envio";
+  // se os três já vieram, o card some.
+  try {
+    const _m = pmeta || {};
+    const _ja = [
+      ['pp-pd', _m.user_pe_direito, v => String(v).replace('.', ',') + ' m'],
+      ['pp-area', _m.user_total_area, v => String(v).replace('.', ',') + ' m²'],
+      ['pp-prazo', _m.user_prazo_meses, v => String(v) + ' meses'],
+    ];
+    let _faltam = 0;
+    _ja.forEach(([id, val, fmt]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const n = parseFloat(val);
+      if (val !== null && val !== undefined && !isNaN(n) && n > 0) {
+        el.value = fmt(val);
+        el.readOnly = true;
+        el.classList.add('bg-gray-100', 'text-gray-600');
+        const hint = el.parentElement && el.parentElement.querySelector('span:last-child');
+        if (hint) { hint.textContent = '✓ informado no envio — já entra nesta leitura'; hint.classList.add('text-emerald-700'); }
+      } else { _faltam++; }
+    });
+    const _card = document.getElementById('proc-perguntas');
+    if (_card && _faltam === 0) _card.classList.add('hidden');
+    else if (_card && _faltam < 3) {
+      const _t = _card.querySelector('p');
+      if (_t) _t.textContent = 'Enquanto a IA lê, o que falta pra deixar a sua planilha melhor:';
     }
   } catch (_) {}
   ['kpi-strip', 'erro-block', 'raiox-card', 'entregas-section', 'chat-quant',

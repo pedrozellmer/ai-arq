@@ -13727,7 +13727,8 @@ async def get_project_items(job_id: str, request: Request):
         try:
             _murl = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
                      f"&select=project_name,status,typology,files_count,items_count,"
-                     f"total_area,user_total_area,created_at,completed_at,phase&limit=1")
+                     f"total_area,user_total_area,user_pe_direito,user_prazo_meses,"
+                     f"created_at,completed_at,phase&limit=1")
             _mreq = urllib.request.Request(_murl, method="GET")
             _mreq.add_header("apikey", SUPABASE_KEY)
             _mreq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
