@@ -556,10 +556,13 @@
           <button data-fil="mudos" onclick="filtrarFilhotes('mudos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados sem aviso<span id="fil-mudos-n" class="font-semibold"></span></button>
           <button data-fil="todos" onclick="filtrarFilhotes('todos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Todos</button>
         </div>
+        <!-- 🧬 24/08: estudo do merge (ideia do Pedro). Nasceu EMBAIXO da lista
+             e o Pedro clicou, a página desceu até o fim e ele não soube dizer
+             se tinha rodado ("desceu tudo de novo, mas acho que rodou"). Um
+             resultado que aparece no fim de uma lista longa se confunde com a
+             lista. Lugar fixo, logo abaixo dos filtros, antes da lista. -->
+        <div id="merge-estudo" class="mb-6"></div>
         <div id="filhotes"><p class="text-gray-400 text-sm">Carregando...</p></div>
-        <!-- 🧬 24/08: estudo do merge (ideia do Pedro). Só aparece depois de
-             clicar em "Estudar merge" numa linha acima. -->
-        <div id="merge-estudo" class="mt-6"></div>
       </div>
 
       <div id="tab-pagamentos" class="tab-content hidden">
