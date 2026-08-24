@@ -1258,6 +1258,10 @@ function renderOps(d){
   const falhas = d.recent_failures || [];
   const pdfOnly = d.pdf_only || [];
   const erros = d.motor_errors || [];
+  // 23/08 (auditoria): metade do painel "Erros do motor" era migalha de
+  // diagnostico gravada com severity padrao. Agora vem separado do erro real.
+  const diag = d.motor_diag || [];
+  const erros24 = Number(d.motor_errors_24h || 0);
   let html = '';
 
   // 1) FALHAS RECENTES — recuperar 1-a-1
@@ -1297,7 +1301,7 @@ function renderOps(d){
   }
 
   // 3) ERROS DO MOTOR (read-only)
-  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">🔧 Erros do motor <span class="text-xs font-normal text-gray-400">(${erros.length} recentes)</span></h3>`;
+  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">🔧 Erros do motor <span class="text-xs font-normal ${erros24 ? 'text-red-600 font-semibold' : 'text-gray-400'}">${erros24 ? erros24 + ' nas últimas 24 h' : 'nenhum nas últimas 24 h'} &middot; ${erros.length} recentes</span></h3>`;
   if (!erros.length) html += `<p class="text-xs text-gray-400">Nenhum erro recente.</p>`;
   else {
     html += `<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Etapa</th><th class="pr-2">Mensagem</th><th class="pr-2">Job</th></tr></thead><tbody>`;
@@ -1311,6 +1315,28 @@ function renderOps(d){
     });
     html += `</tbody></table></div>`;
   }
+
+  // 4) DIAGNÓSTICO — migalha que o motor deixa de propósito. NÃO é erro.
+  //    Fechado por padrão: em 30 dias foram 166 motor:unidade, 139
+  //    motor:preview-prancha, 135 motor:consenso-area — todas empurrando erro
+  //    de verdade pra fora das 40 linhas do painel.
+  html += `<details class="mt-6">
+    <summary class="cursor-pointer text-sm font-semibold text-gray-500 hover:text-gray-700">🔬 Diagnóstico do motor <span class="font-normal text-gray-400">(${diag.length}) — não é erro, é migalha proposital</span></summary>`;
+  if (!diag.length) html += `<p class="text-xs text-gray-400 mt-2">Nada registrado.</p>`;
+  else {
+    html += `<div class="overflow-x-auto mt-2"><table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Etapa</th><th class="pr-2">Mensagem</th><th class="pr-2">Job</th></tr></thead><tbody>`;
+    diag.forEach(e => {
+      html += `<tr class="border-b align-top text-gray-400">
+        <td class="py-2 pr-2 whitespace-nowrap">${opsEsc(e.quando)}</td>
+        <td class="pr-2 whitespace-nowrap">${opsEsc(e.stage||'')}</td>
+        <td class="pr-2">${opsEsc(e.msg||'')}</td>
+        <td class="pr-2 whitespace-nowrap">${e.job_id?`<a href="projeto.html?job_id=${opsEsc(e.job_id)}" class="text-indigo-400 hover:underline">${opsEsc(String(e.job_id).slice(0,8))}</a>`:'—'}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  html += `</details>`;
+
   return inlineHtml + html;
 }
 

@@ -142,10 +142,43 @@ def _supabase_insert(table, data):
         return False
 
 
+# 🚨 23/08/2026 (auditoria): o painel "Erros do motor" mostra as 40 linhas mais
+# recentes do error_log — e 20 delas eram BOOKKEEPING, não erro. Em 30 dias:
+# motor:unidade 166, motor:preview-prancha 139, motor:consenso-area 135,
+# motor:geometria 115... todas gravadas com o severity padrão ("error"), porque
+# _log_error é o único caminho que existe pra deixar rastro no banco.
+# Resultado: um erro de verdade (dxf:extract-falhou teve 20 no mesmo período)
+# nascia empurrado pra fora da tela pelo próprio diagnóstico.
+# Estes stages são MIGALHA DE DIAGNÓSTICO: entram como "info" mesmo quando
+# quem chamou não disse nada. Falha de verdade continua "error".
+_STAGES_DIAGNOSTICO = frozenset({
+    "boot",
+    "motor:unidade", "motor:preview-prancha", "motor:consenso-area",
+    "motor:geometria", "motor:comprimento", "motor:dxf-slim",
+    "motor:prancha-itens", "motor:sinapi-unidade", "motor:area-regra",
+    "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
+    "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
+    "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
+    "motor:respostas-releitura",
+    "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
+    "pdfvec:shadow", "pdfvec:promo", "dxfrooms:shadow",
+    "dwg:aec-detectado-no-upload",
+    "admin:filhote", "admin:filhote-inicio", "admin:filhote-email",
+    "admin:desarquivar-fixture", "admin:reparo-aviso-falso",
+    "instagram:token-renovado",
+})
+
+
 def _log_error(stage, message, job_id=None, severity="error"):
     """Grava um erro técnico do motor na tabela error_log do Supabase, pra ser
     lido via MCP/admin SEM precisar abrir o log do Render. Best-effort, NUNCA
-    levanta (não pode atrapalhar quem já está num except)."""
+    levanta (não pode atrapalhar quem já está num except).
+
+    `severity` só cai pra "info" sozinho quando o stage é de diagnóstico E quem
+    chamou não pediu outra coisa — assim ninguém precisa lembrar do parâmetro,
+    e um `severity="critical"` explícito continua valendo."""
+    if severity == "error" and str(stage) in _STAGES_DIAGNOSTICO:
+        severity = "info"
     try:
         _supabase_insert("error_log", {
             "stage": str(stage)[:80],
@@ -7578,8 +7611,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _upd = float(_r0.get("user_pe_direito") or 0) or _upd
                 user_total_area = float(_r0.get("user_total_area") or 0) or user_total_area
                 _uprazo = float(_r0.get("user_prazo_meses") or 0)
+            elif _rrows == []:
+                # 🚨 23/08 (auditoria): com _supa_rows, "a consulta falhou" e "o
+                # cliente não respondeu nada" viram os dois uma lista vazia — e o
+                # except abaixo virou inalcançável. Se a leitura falha, o
+                # pé-direito que o cliente digitou DURANTE o job é descartado em
+                # silêncio e a planilha nasce sem ele. Tem que deixar rastro.
+                _st_ck, _ = _supa_rest_service(
+                    "GET", "projects", params={"job_id": f"eq.{job_id}", "select": "job_id"})
+                if _st_ck != 200:
+                    _log_error("motor:respostas-releitura",
+                               f"NÃO consegui reler as respostas do cliente (HTTP {_st_ck}) — "
+                               f"se ele respondeu durante o processamento, isto NÃO entrou",
+                               job_id)
         except Exception as _erl:
             print(f"[respostas] releitura falhou (não-fatal): {_erl}")
+            _log_error("motor:respostas-releitura", f"exceção: {_erl}", job_id)
         if _upd > 0:
             project_data.user_pe_direito = round(_upd, 2)
             print(f"[pe-direito-informado] job={job_id}: {_upd} m")
@@ -8104,6 +8151,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         f"apenas as outras linhas."]
         except Exception as _ef:
             print(f"[fusao-revisao] nao-fatal: {_ef}")
+            # Regra dura nº7: se isto falha, a releitura sai SEM as correções do
+            # cliente e ninguém fica sabendo. Rastro obrigatório.
+            _log_error("motor:fusao-revisao",
+                       f"NÃO fundi: {type(_ef).__name__}: {_ef}", job_id)
 
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
@@ -17768,9 +17819,14 @@ async def finalize_review(job_id: str, request: Request):
     # Dois clientes entraram na tela em 2 dias: Felipe (6cd52d01) editou a
     # unidade, franweldon (4b2db70b) clicou approve. Nenhum dos dois deixou
     # rastro do passo final.
+    # 🚨 23/08 (auditoria): aqui era `len(_supa_rest_service(...))`. O retorno é
+    # a TUPLA (status, dados), e len(tupla) é SEMPRE 2 — este log vinha dizendo
+    # "itens tocados=2" desde que nasceu, em toda revisão concluída. Justo o log
+    # criado pra responder POR QUE `revision_feedback` não enche.
     try:
-        _n_rev_log = len(_supa_rest_service("GET", "item_reviews", params={
-            "job_id": f"eq.{job_id}", "select": "action", "limit": "5000"}) or [])
+        _st_rl, _rows_rl = _supa_rest_service("GET", "item_reviews", params={
+            "job_id": f"eq.{job_id}", "select": "action", "limit": "5000"})
+        _n_rev_log = len(_rows_rl or []) if _st_rl == 200 else -1
     except Exception:
         _n_rev_log = -1
     _log_error("motor:revisao-concluida",
@@ -18360,13 +18416,19 @@ async def cleanup_old_projects(request: Request):
         # falhou 20/08 06:39 no MESMO commit; foi assim que se achou.
         # Sem esta trava, o conserto de hoje re-quebra em novembro, quando o
         # próximo projeto de teste envelhecer.
-        try:
-            _own = _supa_rows(
-                "GET", "projects",
-                params={"job_id": f"eq.{job_id}", "select": "user_email"})
-            _mail_own = str((_own or [{}])[0].get("user_email") or "")
-        except Exception:
-            _mail_own = ""
+        # 🚨 23/08 (auditoria): esta trava tinha voltado a falhar ABERTA. Com
+        # _supa_rows, erro de leitura devolve [] → _mail_own = "" → o cleanup
+        # NÃO reconhece a fixture e apaga o projeto do smoke. É exatamente o
+        # incidente de 20/08 que o comentário acima jura que não pode repetir.
+        # Agora: na dúvida, PULA (não apagar é sempre reversível; apagar não).
+        _st_own, _own = _supa_rest_service(
+            "GET", "projects",
+            params={"job_id": f"eq.{job_id}", "select": "user_email"})
+        if _st_own != 200:
+            stats["jobs"].append({"job_id": job_id,
+                                  "skip": f"não consegui ler o dono (HTTP {_st_own}) — não apago no escuro"})
+            continue
+        _mail_own = str(((_own or [{}]) or [{}])[0].get("user_email") or "")
         if "+smoke@" in _mail_own.lower():
             stats["jobs"].append({"job_id": job_id, "skip": "conta de smoke (fixture)"})
             continue
