@@ -338,17 +338,11 @@ def _recompute_level(typology: str, level: str) -> int:
 
         if _supabase_upsert("density_benchmarks", record, "typology,item_type,unit"):
             updated += 1
+    # 23/08/2026: aqui havia 9 linhas DEPOIS deste return, com `ratios` e
+    # `new_types` — dois nomes que não existem nesta função. Sobra de uma
+    # versão antiga: nunca executou, e por isso ninguém notou. Quem achou foi o
+    # pyflakes do CI novo, na primeira vez que ele rodou. Removidas.
     return updated
-
-    # Invalida cache
-    _benchmarks_cache["data"] = None
-    _benchmarks_cache["timestamp"] = 0
-
-    return {
-        "items_parsed": len(ratios),
-        "benchmarks_updated": updated,
-        "new_item_types": new_types,
-    }
 
 
 def reclassify_raws(typology: Optional[str] = None,
