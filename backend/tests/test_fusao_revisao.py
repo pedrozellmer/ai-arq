@@ -256,23 +256,68 @@ def test_sem_pai_nao_toca_o_banco():
 # ══════════════════════════════════════════════════════════════════════════
 #  ORDEM no process_job: a planilha entregue é a de DEPOIS da fusão
 # ══════════════════════════════════════════════════════════════════════════
-def test_a_planilha_e_refeita_depois_da_fusao():
+def test_a_planilha_entregue_e_a_ULTIMA_versao():
+    """A ordem no process_job é o que garante que o arquivo baixado bate com a tela.
+
+    Duas coisas nascem DEPOIS da primeira planilha: a fusão das revisões (regra
+    nº7) e o aviso "esta releitura mediu MENOS que a versão anterior". As duas
+    precisam estar no .xlsx, e o carimbo de coerência é calculado sobre o banco —
+    então se o arquivo for o antigo, o detector jura que está tudo em dia.
+    """
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i_fusao = src.index("all_items, _fusao = _fundir_revisoes_do_cliente(")
-    i_regen = src.index("generate_spreadsheet(project_data, all_items, output_path", i_fusao)
+    i_cmp = src.index("_cmp_v = _comparar_com_versao_anterior(", i_fusao)
+    i_regen = src.index("generate_spreadsheet(project_data, all_items, output_path", i_cmp)
     i_carimbo = src.index("_carimbar_planilha(job_id)", i_fusao)
     i_upload = src.index("_supabase_storage_upload(output_path", i_fusao)
-    assert i_fusao < i_regen < i_carimbo, (
-        "a planilha não é refeita entre a fusão e o carimbo — o cliente baixa um "
-        ".xlsx sem as correções dele e o carimbo diz que está em dia")
-    assert i_regen < i_upload
+    assert i_fusao < i_cmp < i_regen < i_carimbo < i_upload, (
+        "a planilha tem que ser refeita DEPOIS da fusão E do aviso de versão, e "
+        "antes do carimbo e do upload")
 
 
-def test_o_regen_so_roda_quando_a_fusao_mudou_alguma_coisa():
+def test_o_aviso_de_mediu_menos_entra_no_arquivo():
+    """🚨 24/08: o aviso ia pra tela e nunca pro .xlsx — o cliente encaminhava o
+    arquivo pro orçamentista sem a ressalva, justo no caso em que a ressalva É o
+    produto (caso Amanda, 10/08: 47 medidos viraram 28 e o e-mail dizia
+    'planilha atualizada')."""
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index("_cmp_v = _comparar_com_versao_anterior(")
+    trecho = src[i:i + 1200]
+    assert "_refazer_planilha.append" in trecho, (
+        "o aviso de 'mediu menos' não marca a planilha pra ser refeita — ele "
+        "nasce depois do arquivo e morre na tela")
+
+
+def test_o_regen_nao_roda_a_toa():
+    """Refazer a planilha custa tempo em todo job. Só quando há motivo."""
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index("_cmp_v = _comparar_com_versao_anterior(")
+    i_regen = src.index("generate_spreadsheet(project_data, all_items, output_path", i)
+    trecho = src[i:i_regen]
+    assert "if _refazer_planilha:" in trecho, (
+        "a refação virou incondicional — passa a rodar em todo job sem motivo")
+
+
+def test_a_fusao_ainda_marca_a_planilha_pra_refazer():
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i = src.index("all_items, _fusao = _fundir_revisoes_do_cliente(")
     trecho = src[i:src.index("_persist_items_to_supabase(job_id, all_items)", i)]
     assert 'if (_fusao.get("casadas") or 0) or (_fusao.get("acrescentadas") or 0):' in trecho
+    assert "_refazer_planilha.append" in trecho
+
+
+def test_o_aviso_ao_cliente_conta_as_linhas_NOVAS():
+    """🚨 #10: o aviso garantia que 'o motor corrigiu apenas as outras linhas'
+    mesmo quando a correção entrou como linha NOVA convivendo com a do motor —
+    quem somasse a coluna contava duas vezes, com o aviso dizendo que estava
+    tudo certo."""
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index("MANTEVE as {_fusao['revisoes']}")
+    trecho = src[max(0, i - 800):i + 1500]
+    assert "LINHA NOVA" in trecho, "o aviso não distingue sobrescrita de linha acrescentada"
+    assert "antes de somar a coluna" in trecho, "não alerta sobre a soma em dobro"
+    assert "ambiguas={_amb}" in trecho or "ambiguas=" in trecho, (
+        "o contador de ambíguas continua sem chegar ao log")
 
 
 # ══════════════════════════════════════════════════════════════════════════

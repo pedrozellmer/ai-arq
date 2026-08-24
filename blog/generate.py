@@ -490,7 +490,12 @@ def render_post_html(post):
         "headline": post["title"],
         "description": post["description"],
         "datePublished": publish_date_iso,
-        "dateModified": publish_date_iso,
+        # 24/08/2026: o post com nota de atualizacao dizia "Atualizado em 23/08"
+        # na tela e dateModified de um mes antes no dado estruturado. Dado
+        # estruturado contradizendo o visivel e o que tira o rich result da
+        # pagina, e o Google trata a pagina como velha justamente quando ela
+        # acabou de ser atualizada.
+        "dateModified": (post.get("update_date") or publish_date_iso),
         "author": {"@type": "Organization", "name": "AI.arq"},
         "publisher": {
             "@type": "Organization",

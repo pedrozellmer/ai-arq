@@ -1732,7 +1732,10 @@ function renderFilhotes(L){
       </div>
       ${f.ja_liberado ? `<div class="mt-3 flex flex-wrap gap-2 text-[11px]">
           <span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">liberado ${_dataCurta(f.liberado_em) || '(sem registro de quando)'}</span>
-          ${f.revogado_em
+          ${/* 24/08: era `f.revogado_em`, que fica preenchido pra SEMPRE. Um filhote
+                 revogado e depois liberado de novo desenhava "liberado" e "revogado"
+                 lado a lado. O RPC já entrega `ato_atual` pronto — a tela é que não lia. */''}
+          ${f.ato_atual === 'revogado'
             ? `<span class="px-2 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">revogado ${_dataCurta(f.revogado_em)}</span>` : ''}
           ${f.email_em
             ? `<span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">avisado por e-mail ${_dataCurta(f.email_em)}</span>`
@@ -1742,7 +1745,7 @@ function renderFilhotes(L){
             : `<span class="px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">ainda não voltou</span>`}
           ${f.downloads_cliente ? `<span class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">baixou a planilha</span>` : ''}
         </div>` : ''}
-      ${(f.ja_liberado && !f.liberado)
+      ${(f.ja_liberado && !f.liberado && f.ato_atual !== 'liberado')
         ? `<p class="mt-3 text-xs rounded-lg bg-red-50 border border-red-200 text-red-800 px-3 py-2">
              &#8617; <b>Revogado</b> ${_dataCurta(f.revogado_em)} &mdash; o cliente n&atilde;o v&ecirc; mais esta vers&atilde;o.
              ${f.email_em

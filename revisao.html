@@ -886,6 +886,13 @@ async function bulkReview(section, action) {
     }
   }
 
+  // 🚨 24/08 (2ª validação): o rollback fazia `delete reviewState[id]`, que apaga
+  // o estado ANTERIOR junto. Um item que o cliente já tinha aprovado (ou editado
+  // à mão) numa sessão passada voltava a aparecer como PENDENTE só porque este
+  // POST falhou — e ele reaprovava, gerando revisão duplicada. Guardar o que
+  // havia antes é o que permite desfazer de verdade.
+  const _antesDoLote = {};
+  secItems.forEach(it => { _antesDoLote[it.id] = reviewState[it.id]; });
   // Atualiza estado local imediato
   secItems.forEach(it => {
     reviewState[it.id] = action === 'approve' ? 'approved' : 'rejected';
@@ -920,11 +927,14 @@ async function bulkReview(section, action) {
     ));
   }
   if (falhou.length) {
-    falhou.forEach(f => { delete reviewState[f.it.id]; });
+    falhou.forEach(f => {
+      if (_antesDoLote[f.it.id] === undefined) delete reviewState[f.it.id];
+      else reviewState[f.it.id] = _antesDoLote[f.it.id];   // volta ao que era
+    });
     render();
     const msg = _salvos
-      ? `${_salvos} de ${secItems.length} salvos. ${falhou.length} não foram — ficaram pendentes na tela.`
-      : `Nenhum item foi salvo (${falhou[0].erro}). Nada mudou — tente de novo.`;
+      ? `${_salvos} de ${secItems.length} salvos. ${falhou.length} não foram — esses voltaram ao estado anterior na tela.`
+      : `Nenhum item foi salvo (${falhou[0].erro}). Tudo voltou ao estado anterior — tente de novo.`;
     window.toast ? window.toast.error(msg) : alert(msg);
     console.error('[revisao] falhas na aprovação em massa', falhou);
   } else {

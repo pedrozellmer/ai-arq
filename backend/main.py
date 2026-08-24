@@ -5385,10 +5385,22 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
             "declarada": md.get("unidade_desenho") or "?"}
 
 
-def _linhas_escala_projeto(arqs: list) -> list:
+def _linhas_escala_projeto(arqs: list, n_medidos: int = -1) -> list:
     """Uma linha ✅ (provadas) e/ou uma linha de atenção (sem prova) por projeto.
     O ✅ no início é sinal pro projeto.html mostrar ✅ em vez de ⚠ (regra nº7:
-    conferência positiva não pode diluir aviso de verdade)."""
+    conferência positiva não pode diluir aviso de verdade).
+
+    🚨 24/08/2026 (caso Karlla, job 503fe0d7): quando o projeto sai com ZERO
+    itens medidos, este ✅ aparece logo abaixo do aviso "nenhuma quantidade foi
+    medida da geometria" — e os dois juntos se contradizem na cara da cliente.
+    Ela leu, no mesmo bloco, que a gente conferiu a escala CONTRA A GEOMETRIA e
+    que não mediu nada DELA.
+    A contradição é real: provar a escala e atribuir a medida a um item são
+    passos diferentes, e é no segundo que o motor para (mesmo gargalo do caso
+    Eng. Silveira, 14/08). Então o ✅ não é escondido — ele passa a dizer onde
+    a gente parou. `n_medidos = -1` significa "não deu pra saber", e aí nada é
+    afirmado.
+    """
     provadas = [a for a in arqs if a.get("status") in ("cotas", "rotulo", "consenso")]
     sem = [a for a in arqs if a.get("status") == "sem_prova"]
     out = []
@@ -5405,7 +5417,13 @@ def _linhas_escala_projeto(arqs: list) -> list:
                 partes.append(f"{a['nome']}: a área rotulada na prancha bate com a geometria{u}")
             else:
                 partes.append(f"{a['nome']}: usa a escala provada por cota em outra prancha deste projeto{u}")
-        out.append("✅ Escala conferida pelo próprio desenho — " + "; ".join(partes) + ".")
+        _linha_ok = "✅ Escala conferida pelo próprio desenho — " + "; ".join(partes) + "."
+        if n_medidos == 0:
+            _linha_ok += (" ⚠ Mesmo assim, NENHUM item desta planilha saiu com quantidade "
+                          "medida do desenho: saber a escala é um passo, ligar a medida a "
+                          "um item da lista é outro, e foi nesse que o motor parou aqui. "
+                          "Os números que você vê vieram de texto lido das pranchas.")
+        out.append(_linha_ok)
     if sem:
         nomes = ", ".join(f"{a['nome']} (arquivo declara: {a.get('declarada') or '?'})" for a in sem[:4])
         if len(sem) > 4:
@@ -8075,7 +8093,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # alguma prancha provou; linha de atenção quando nenhuma cota provou.
         # Só leitura do metadata — não muda fator, selo nem quantidade.
         try:
-            _linhas_esc = _linhas_escala_projeto(_escala_arqs)
+            _n_med_esc = -1
+            try:
+                _n_med_esc = sum(
+                    1 for _it in (all_items or [])
+                    if str(getattr(getattr(_it, "confidence", None), "value",
+                                   getattr(_it, "confidence", "")) or "") == "confirmado")
+            except Exception:
+                _n_med_esc = -1
+            _linhas_esc = _linhas_escala_projeto(_escala_arqs, n_medidos=_n_med_esc)
         except NameError:
             _linhas_esc = []            # job sem CAD (só PDF): nada a dizer
         except Exception as _ele:
@@ -8537,14 +8563,28 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if _pai_id:
                 all_items, _fusao = _fundir_revisoes_do_cliente(all_items, _pai_id)
                 if _fusao["revisoes"]:
+                    _amb = int(_fusao.get("ambiguas") or 0)
+                    _acr = int(_fusao.get("acrescentadas") or 0)
                     _log_error("motor:fusao-revisao",
                                f"pai={_pai_id} revisoes={_fusao['revisoes']} "
                                f"casadas={_fusao['casadas']} "
-                               f"acrescentadas={_fusao['acrescentadas']}", job_id)
-                    project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
-                        f"✏️ Esta releitura MANTEVE as {_fusao['revisoes']} correção(ões) que "
-                        f"você fez à mão — elas não foram sobrescritas. O motor novo corrigiu "
-                        f"apenas as outras linhas."]
+                               f"acrescentadas={_acr} ambiguas={_amb}", job_id)
+                    # 🚨 24/08 (2ª validação): o aviso garantia que "o motor corrigiu
+                    # apenas as outras linhas" mesmo quando a correção entrou como
+                    # linha NOVA convivendo com a do motor. Quem somasse a coluna
+                    # contava duas vezes — e o aviso dizia que estava tudo certo.
+                    _txt = (f"✏️ Esta releitura MANTEVE as {_fusao['revisoes']} correção(ões) "
+                            f"que você fez à mão — elas não foram sobrescritas.")
+                    if _fusao["casadas"]:
+                        _txt += (f" {_fusao['casadas']} entraram por cima da linha "
+                                 f"correspondente da leitura nova.")
+                    if _acr:
+                        _txt += (f" ⚠ {_acr} entraram como LINHA NOVA (marcadas REV.), porque a "
+                                 f"leitura nova não achou a linha equivalente"
+                                 + (f" ou achou mais de uma igual ({_amb} caso(s))" if _amb else "")
+                                 + ". Confira essas antes de somar a coluna — pode haver a "
+                                   "linha do motor e a sua lado a lado.")
+                    project_data.warnings = (getattr(project_data, "warnings", None) or []) + [_txt]
         except Exception as _ef:
             print(f"[fusao-revisao] nao-fatal: {_ef}")
             # Regra dura nº7: se isto falha, a releitura sai SEM as correções do
@@ -8563,21 +8603,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # fusão de propósito, pra a correção do cliente vencer o carimbo. Então
         # o conserto é ao contrário: refazer o arquivo aqui, com os itens já
         # fundidos, antes de persistir, carimbar e subir pro Storage (~8320).
+        # 🪤 24/08 (2ª validação): antes a planilha era refeita AQUI. Só que o
+        # aviso "esta releitura mediu MENOS que a versão anterior" nasce mais
+        # abaixo, depois do persist — então ele ia pra tela e NUNCA pro .xlsx.
+        # O cliente encaminhava o arquivo pro orçamentista sem a ressalva, justo
+        # no caso em que a ressalva É o produto. Agora a refação acontece UMA vez
+        # só, no fim, quando todos os motivos já são conhecidos.
+        _refazer_planilha = []
         if (_fusao.get("casadas") or 0) or (_fusao.get("acrescentadas") or 0):
-            try:
-                generate_spreadsheet(project_data, all_items, output_path, typology=typology)
-                _log_error("motor:fusao-revisao",
-                           f"planilha REFEITA com as {_fusao['revisoes']} correção(ões) do "
-                           f"cliente (casadas={_fusao['casadas']} "
-                           f"acrescentadas={_fusao['acrescentadas']})", job_id)
-            except Exception as _ers:
-                # Não é fatal: o banco e a tela já têm a verdade fundida. Mas o
-                # cliente vai baixar um arquivo defasado, então isso GRITA.
-                print(f"[fusao-revisao] refazer a planilha falhou: {_ers}")
-                _log_error("motor:fusao-revisao",
-                           f"🚨 planilha NÃO foi refeita ({type(_ers).__name__}: {_ers}) — "
-                           f"o .xlsx sai SEM as correções do cliente, mas a tela tem",
-                           job_id, severity="critical")
+            _refazer_planilha.append(
+                f"{_fusao['revisoes']} correção(ões) do cliente "
+                f"(casadas={_fusao['casadas']} acrescentadas={_fusao['acrescentadas']})")
 
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
@@ -8599,8 +8635,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if _cmp_v.get("frase"):
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
                     "⚠ " + _cmp_v["frase"]]
+                _refazer_planilha.append("aviso de que esta releitura mediu MENOS")
         except Exception as _ecv:
             print(f"[versao] comparação não-fatal falhou: {_ecv}")
+
+        # ── REFAZ A PLANILHA UMA VEZ, com tudo que apareceu depois dela ──────
+        # Fusão das revisões (regra nº7) e o aviso de "mediu menos" só existem
+        # agora. O arquivo que o cliente baixa tem que ser este, não o de antes.
+        if _refazer_planilha:
+            try:
+                generate_spreadsheet(project_data, all_items, output_path, typology=typology)
+                _log_error("motor:planilha-refeita",
+                           "planilha REFEITA antes do carimbo: " + " | ".join(_refazer_planilha),
+                           job_id)
+            except Exception as _ers:
+                # Não é fatal: banco e tela já têm a verdade. Mas o cliente vai
+                # baixar um arquivo defasado, então isso GRITA.
+                print(f"[planilha] refazer falhou: {_ers}")
+                _log_error("motor:planilha-refeita",
+                           f"🚨 planilha NÃO foi refeita ({type(_ers).__name__}: {_ers}) — "
+                           f"o .xlsx sai sem: {' | '.join(_refazer_planilha)}",
+                           job_id, severity="critical")
 
         # Planilha e itens acabaram de nascer juntos: carimba a origem pra o
         # site saber, depois, se a revisão do cliente deixou o .xlsx pra trás.
