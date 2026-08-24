@@ -934,6 +934,64 @@ def selos_sem_medida(items):
     return achados
 
 
+# Provas de que a quantidade saiu da GEOMETRIA do desenho (o que autoriza o selo
+# branco "✓ MEDIDO do CAD"). São as frases que o próprio motor escreve quando
+# mede: hachura, INSERT de bloco, comprimento de layer, polilinha.
+_PROVA_GEOMETRIA = (
+    "hachura", "insert", "contagem de blocos", "polilinha", "polyline",
+    "comprimento do layer", "comprimento total do layer", "somatória de linhas",
+    "somatoria de linhas", "área hachurada", "area hachurada",
+)
+
+# Procedências que são LEITURA DE TEXTO — legítimas como estimativa, nunca como
+# medição. O projetista escreveu um número na prancha; a gente não mediu nada.
+_PROCEDENCIA_TEXTO = (
+    "texto", "carimbo", "legenda", "rótulo", "rotulo", "tabela", "quadro",
+)
+
+
+def selos_sem_geometria(items):
+    """Índices das linhas seladas como MEDIDAS cuja procedência é só TEXTO.
+
+    🚨 24/08/2026: medido no acervo, 61 itens em 19 projetos de 15 clientes
+    saíram com "✓ MEDIDO do CAD" tendo como fonte apenas um texto lido da
+    prancha — 33.962 m² entre eles. Exemplos reais entregues:
+      • "Fonte: texto layer 'ARQ-TEXTO 1': 'AREA TOTAL CLINICA = 264,54 m²'"
+        colado na linha "Piso — revestimento de piso interno" (o total do prédio
+        virou a metragem de um acabamento);
+      • "Conforme legenda código 06 — área APROXIMADA explícita" com selo de
+        medido.
+    Ler a quantidade da legenda é comportamento documentado e desejado; o que
+    não pode é ela usar o selo que o produto reserva para a geometria.
+
+    Só REBAIXA. Nunca promove nada — na dúvida, o item continua como está.
+    Devolve [{indice, descricao, unidade, motivo}].
+    """
+    achados = []
+    for i, it in enumerate(items or []):
+        selo = _campo_do_item(it, "confidence", "")
+        selo = str(getattr(selo, "value", selo) or "").strip().lower()
+        if selo != "confirmado":
+            continue
+        # Origem explícita de geometria fecha a questão sem olhar texto nenhum.
+        if str(_campo_do_item(it, "origem", "") or "").strip().lower() == "dxf_geom":
+            continue
+        obs = str(_campo_do_item(it, "observations", "") or "").lower()
+        if not obs:
+            continue                     # sem procedência escrita: não acusa
+        if any(p in obs for p in _PROVA_GEOMETRIA):
+            continue                     # mediu de verdade
+        if not any(p in obs for p in _PROCEDENCIA_TEXTO):
+            continue                     # não sabemos o que é: não acusa
+        achados.append({
+            "indice": i,
+            "descricao": str(_campo_do_item(it, "description", "") or "")[:60],
+            "unidade": str(_campo_do_item(it, "unit", "") or "").strip(),
+            "motivo": "procedência é leitura de texto, não medição da geometria",
+        })
+    return achados
+
+
 def _campo_do_item(it, nome, padrao=""):
     """Lê o campo tanto de dict quanto de objeto (BudgetItem)."""
     v = it.get(nome, padrao) if isinstance(it, dict) else getattr(it, nome, padrao)

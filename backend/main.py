@@ -8092,6 +8092,40 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Prova por cota existe desde 05/08 e ficava só no log. Linha ✅ quando
         # alguma prancha provou; linha de atenção quando nenhuma cota provou.
         # Só leitura do metadata — não muda fator, selo nem quantidade.
+        # ── REGRA DURA Nº1: selo MEDIDO exige procedência de GEOMETRIA ──────
+        # 24/08/2026: medido no acervo, 61 itens em 19 projetos de 15 clientes
+        # já saíram com "✓ MEDIDO do CAD" tendo como fonte apenas um texto lido
+        # da prancha (33.962 m² entre eles). A rede que existia
+        # (`selos_sem_medida`) só pegava confirmado com quantidade ZERO.
+        # 🪤 Esta decide olhando TEXTO, e ontem eu aprendi que texto não é prova.
+        # A diferença é a direção: ela só REBAIXA. Errar pro lado de "estimado"
+        # custa uma revisão; errar pro lado de "medido" põe número sem lastro
+        # com selo de confiança.
+        try:
+            from engine_rules import selos_sem_geometria as _ssg
+            from models import Confidence as _CfG
+            _sem_geo = _ssg(all_items)
+            for _a in _sem_geo:
+                _it = all_items[_a["indice"]]
+                try:
+                    _it.confidence = _CfG.ESTIMADO
+                except Exception:
+                    pass
+                _o = str(getattr(_it, "observations", "") or "")
+                if "não é medição da geometria" not in _o:
+                    _it.observations = (
+                        "⚠ ESTIMADO — este número foi LIDO de um texto da prancha, "
+                        "não medido da geometria. " + _o)[:1000]
+            if _sem_geo:
+                _log_error("motor:selo-sem-geometria",
+                           f"rebaixei {len(_sem_geo)} item(ns) que estavam MEDIDOS "
+                           f"com procedência só de texto: " + "; ".join(
+                               f"{x['descricao'][:34]}({x['unidade']})" for x in _sem_geo[:4]),
+                           job_id)
+        except Exception as _esg:
+            print(f"[selo-sem-geometria] checagem falhou: {_esg}")
+            _log_error("motor:selo-sem-geometria", f"FALHOU: {_esg}", job_id)
+
         try:
             _n_med_esc = -1
             try:
