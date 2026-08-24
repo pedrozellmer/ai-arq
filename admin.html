@@ -552,6 +552,7 @@
         <div class="flex flex-wrap gap-2 mb-4" id="filhotes-filtros">
           <button data-fil="pendentes" onclick="filtrarFilhotes('pendentes')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 bg-indigo-50 text-indigo-700">Pra liberar</button>
           <button data-fil="liberados" onclick="filtrarFilhotes('liberados')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados</button>
+          <button data-fil="mudos" onclick="filtrarFilhotes('mudos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados sem aviso<span id="fil-mudos-n" class="font-semibold"></span></button>
           <button data-fil="todos" onclick="filtrarFilhotes('todos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Todos</button>
         </div>
         <div id="filhotes"><p class="text-gray-400 text-sm">Carregando...</p></div>
@@ -1616,12 +1617,19 @@ function filtrarFilhotes(qual){
 }
 // O ciclo de vida do filhote, da esquerda pra direita: pronto -> liberado ->
 // avisado -> voltou. A última é a que diz se reprocessar projeto antigo paga.
+// 23/08 (auditoria): o KPI contava `!liberado && done && melhorou` e a lista do
+// mesmo filtro mostrava `!liberado` — o número no menu nunca batia com a tela.
+// Agora existe UMA definição, usada pelos dois.
+function _filPendente(f){ return !f.liberado && f.status === 'done' && f.melhorou; }
 function pintarFilhotes(){
   const L = _filhotes || [];
-  const pendentes = L.filter(f => !f.liberado && f.status === 'done' && f.melhorou);
+  const pendentes = L.filter(_filPendente);
   const liberados = L.filter(f => f.liberado);
   const voltaram  = liberados.filter(f => f.voltou_apos_liberar);
   const avisados  = liberados.filter(f => f.email_em);
+  // 🚨 liberado e NUNCA avisado: o cliente tem uma versão nova na conta dele e
+  //    não faz ideia. Medido em 23/08: 11 filhotes nesta situação.
+  const mudos = liberados.filter(f => !f.email_em);
   const kpi = (v, rot, cor) => `<div class="rounded-xl border bg-white p-3">
       <div class="text-2xl font-bold ${cor || 'text-gray-900'}">${v}</div>
       <div class="text-xs text-gray-500 mt-0.5 leading-snug">${rot}</div></div>`;
@@ -1632,10 +1640,13 @@ function pintarFilhotes(){
     + kpi(avisados.length, 'avisados por e-mail')
     + kpi(voltaram.length, 'voltaram ao site depois de avisados',
           voltaram.length ? 'text-emerald-700' : 'text-gray-400');
+  const bMudos = document.getElementById('fil-mudos-n');
+  if (bMudos) bMudos.textContent = mudos.length ? ' (' + mudos.length + ')' : '';
   const badge = document.getElementById('menu-filhotes-badge');
   if (badge) badge.textContent = pendentes.length ? String(pendentes.length) : '';
-  const lista = _filFiltro === 'pendentes' ? L.filter(f => !f.liberado)
-              : (_filFiltro === 'liberados' ? liberados : L);
+  const lista = _filFiltro === 'pendentes' ? L.filter(_filPendente)
+              : (_filFiltro === 'liberados' ? liberados
+              : (_filFiltro === 'mudos' ? mudos : L));
   const box = document.getElementById('filhotes');
   if (box) box.innerHTML = renderFilhotes(lista);
 }
@@ -1646,6 +1657,30 @@ function _dataCurta(iso){
     return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' ' +
            d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
   } catch(e){ return ''; }
+}
+// 23/08 (auditoria, achado 47): quando o cliente revisou itens à mão, o e-mail
+// automático NÃO sai (regra dura nº7 — a versão nova não tem as correções
+// dele). Só que aí ninguém avisava, e o filhote ficava mudo na conta do
+// cliente. Medido: 11 filhotes liberados sem nenhum aviso.
+// Este rascunho diz a verdade em três frases: o que mudou, o que NÃO veio
+// junto, e que o original continua intacto.
+function _mailtoFilhote(f){
+  const primeiro = String(f.cliente || '').split('@')[0].split('.')[0];
+  const nome = primeiro ? primeiro.charAt(0).toUpperCase() + primeiro.slice(1) : '';
+  const ganho = (f.depois && f.antes) ? (f.depois.medidos || 0) - (f.antes.medidos || 0) : 0;
+  const corpo =
+    'Ola' + (nome ? ' ' + nome : '') + ', tudo bem?\n\n' +
+    'Melhoramos o motor de leitura do AI.arq e refizemos a leitura do seu projeto "' +
+    (f.projeto || '') + '". A versao nova ja esta na sua conta' +
+    (ganho > 0 ? ', com ' + ganho + ' item(ns) a mais medidos direto do desenho' : '') + '.\n\n' +
+    (f.revisoes_no_original
+      ? 'Importante: as ' + f.revisoes_no_original + ' correcao(oes) que voce fez a mao NAO estao nesta ' +
+        'versao nova. O seu projeto original continua intacto, do jeito que voce deixou — ' +
+        'compare as duas e fique com a que preferir.\n\n'
+      : 'Seu projeto original continua la, intacto.\n\n') +
+    'Ver: https://ai.arq.br/projeto.html?job_id=' + f.job_id + '\n\n' +
+    'Qualquer duvida e so responder este e-mail.\n\nAbraco,\nPedro — AI.arq';
+  return opsMailto(f.cliente, 'Refizemos a leitura do seu projeto no AI.arq', corpo);
 }
 function renderFilhotes(L){
   if (!L.length) return `<p class="text-gray-400 text-sm">Nenhum filhote ainda. Rode &ldquo;Avaliação&rdquo; num projeto pra criar um.</p>`;
@@ -1694,16 +1729,31 @@ function renderFilhotes(L){
           <div class="font-semibold text-gray-800">${f.area_antes ? f.area_antes+' m²' : '–'} &rarr; ${f.area_depois ? f.area_depois+' m²' : '–'}</div>
         </div>
       </div>
-      ${f.liberado ? `<div class="mt-3 flex flex-wrap gap-2 text-[11px]">
-          <span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">liberado ${_dataCurta(f.liberado_em)}</span>
+      ${f.ja_liberado ? `<div class="mt-3 flex flex-wrap gap-2 text-[11px]">
+          <span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">liberado ${_dataCurta(f.liberado_em) || '(sem registro de quando)'}</span>
+          ${f.revogado_em
+            ? `<span class="px-2 py-1 rounded-full bg-red-50 text-red-700 border border-red-200">revogado ${_dataCurta(f.revogado_em)}</span>` : ''}
           ${f.email_em
             ? `<span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">avisado por e-mail ${_dataCurta(f.email_em)}</span>`
-            : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">sem e-mail${f.revisoes_no_original ? ' (cliente revisou — avise você)' : ''}</span>`}
+            : `<span class="px-2 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">sem e-mail${f.revisoes_no_original ? ' (cliente revisou — o automático não sai)' : ''}</span>`}
           ${f.voltou_apos_liberar
             ? `<span class="px-2 py-1 rounded-full bg-emerald-600 text-white">voltou ao site ${_dataCurta(f.ultima_visita)}</span>`
             : `<span class="px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">ainda não voltou</span>`}
           ${f.downloads_cliente ? `<span class="px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">baixou a planilha</span>` : ''}
         </div>` : ''}
+      ${(f.ja_liberado && !f.liberado)
+        ? `<p class="mt-3 text-xs rounded-lg bg-red-50 border border-red-200 text-red-800 px-3 py-2">
+             &#8617; <b>Revogado</b> ${_dataCurta(f.revogado_em)} &mdash; o cliente n&atilde;o v&ecirc; mais esta vers&atilde;o.
+             ${f.email_em
+               ? `&#9888; Mas o e-mail de ${_dataCurta(f.email_em)} <b>j&aacute; saiu</b> e continua na caixa dele.
+                  Se ele clicar no link, n&atilde;o acha nada &mdash; vale um e-mail explicando.`
+               : `Nenhum e-mail chegou a sair &mdash; nada a desfazer do lado dele.`}</p>`
+        : ''}
+      ${(f.liberado && !f.email_em)
+        ? `<p class="mt-3 text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2 flex items-start justify-between gap-3 flex-wrap">
+             <span>&#128235; Liberado, mas <b>nenhum aviso chegou at&eacute; o cliente</b> &mdash; ele tem a vers&atilde;o nova na conta e n&atilde;o sabe.</span>
+             <a href="${_mailtoFilhote(f)}" class="shrink-0 px-2 py-1 rounded bg-amber-600 text-white font-medium">&#9993; Avisar &agrave; m&atilde;o</a></p>`
+        : ''}
       ${f.revisoes_no_original
         ? `<p class="mt-3 text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-800 px-3 py-2">
              ⚠ O original tem <b>${f.revisoes_no_original} revisão(ões) feita(s) pelo cliente</b>.
@@ -1739,8 +1789,12 @@ async function liberarFilhote(jobId, revogar){
     // 23/08: erro sem status nao da pra investigar. Se a requisicao nem saiu
     // (TypeError: Failed to fetch), diz isso - e rede/extensao, nao o servidor.
     const _m = (e && e.message) || String(e);
+    // 🚨 23/08: aqui dizia "tente numa aba anônima". Era eu culpando o
+    // navegador do Pedro por um erro NOSSO — o 500 saía sem cabeçalho CORS
+    // (leitura errada da tupla do Supabase) e o browser reportava como falha
+    // de rede. Enquanto a causa não é conhecida, a mensagem não chuta culpado.
     const _rede = /failed to fetch|networkerror|load failed/i.test(_m);
-    _adminToast('Falhou: ' + _m + (_rede ? ' — a requisição não saiu do navegador (rede, bloqueador ou extensão). Tente numa aba anônima.' : ''), 'error');
+    _adminToast('Falhou: ' + _m + (_rede ? ' — o navegador não recebeu resposta. Costuma ser erro NOSSO no servidor (um 500 sai sem CORS e chega assim). Confira admin:filhote-inicio no Diagnóstico.' : ''), 'error');
     console.error('[filhote] liberar falhou', {jobId, revogar, erro: _m});
   }
 }
