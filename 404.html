@@ -26,7 +26,7 @@
       <a href="/exemplo.html" class="text-gray-700 hover:text-indigo-600">Exemplo</a>
       <a href="/precos.html" class="text-gray-700 hover:text-indigo-600">Preços</a>
       <a href="/blog/" class="text-gray-700 hover:text-indigo-600">Blog</a>
-      <a href="/login.html" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700">Entrar</a>
+      <a id="nav-conta" href="/login.html" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold hover:bg-indigo-700">Entrar</a>
     </nav>
   </div>
 </header>
@@ -60,5 +60,39 @@
   <a href="/privacidade.html" class="hover:text-gray-900">Privacidade</a>
   <a href="/licencas.html" class="hover:text-gray-900">Licenças</a>
 </footer>
+<script>
+// 23/08/2026 (auditoria): a 404 nascia sem sessão nenhuma — mostrava "Entrar"
+// pra quem já estava logado e oferecia "Meus projetos" pra quem não estava.
+// Carregar o SDK do Supabase só pra isso seria caro numa página de erro; o
+// token já está no localStorage, e ler a validade dele basta pra escolher o
+// texto do botão. Nada aqui autentica nada — quem decide é o backend.
+(function () {
+  var logado = false;
+  try {
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!/^sb-.*-auth-token$/.test(k || '')) continue;
+      var o = JSON.parse(localStorage.getItem(k) || '{}');
+      var exp = Number(o && o.expires_at) || 0;
+      if (exp && exp * 1000 > Date.now()) { logado = true; break; }
+    }
+  } catch (e) {}
+  var btn = document.getElementById('nav-conta');
+  if (logado && btn) {
+    btn.textContent = 'Meus projetos';
+    btn.href = '/dashboard.html';
+  }
+  // O card "Meus projetos" leva pro login quando ninguém está logado — assim
+  // o clique não vira um pulo pro login sem explicação.
+  if (!logado) {
+    var card = document.querySelector('a[href="/dashboard.html"]');
+    if (card) {
+      card.href = '/login.html?redirect=dashboard.html';
+      var sub = card.querySelector('span:last-child');
+      if (sub) sub.textContent = 'Entre pra ver suas planilhas, cronogramas e memoriais.';
+    }
+  }
+})();
+</script>
 </body>
 </html>

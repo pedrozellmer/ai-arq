@@ -2053,7 +2053,12 @@
   // ══════════════════════════════════════════════
   // 23/08 (board): a lista de projetos era pedida 3× ao abrir o painel.
   let __byUserPromise = null;
-  function fetchByUser() {
+  // 23/08 (auditoria): o cache dura 15 s e o auto-refresh roda a cada 15 s —
+  // o refresh caía DENTRO da própria janela e repintava a resposta velha, então
+  // um projeto que acabou de ficar pronto podia levar dois ciclos pra aparecer.
+  // `fetchByUser(true)` fura o cache: é o que o poll usa.
+  function fetchByUser(forcar) {
+    if (forcar) __byUserPromise = null;
     if (!__byUserPromise) {
       // 23/08 (auditoria): guardar a promessa REJEITADA por 15 s fazia as três
       // abas herdarem a mesma falha sem nova tentativa. Erro limpa o cache na hora.
@@ -4364,7 +4369,9 @@
     }
 
     try {
-      const data = await fetchByUser();   // 23/08: uma chamada compartilhada entre as abas
+      // silent = veio do auto-refresh de 15 s: fura o cache (senao o refresh
+      // cai dentro da janela do proprio cache e repinta o que ja estava la).
+      const data = await fetchByUser(silent);
       const projects = data.projects || [];
       __backendProjects = projects;  // espelho compartilhado (isFirstProject)
 

@@ -1382,6 +1382,7 @@ function mostrarProcessando(live, session, pmeta) {
       ['pp-prazo', _m.user_prazo_meses, v => String(parseInt(v, 10))],
     ];
     let _faltam = 0;
+    const _jaTem = [];
     _ja.forEach(([id, val, fmt]) => {
       const el = document.getElementById(id);
       if (!el) return;
@@ -1392,13 +1393,31 @@ function mostrarProcessando(live, session, pmeta) {
         el.classList.add('bg-gray-100', 'text-gray-600');
         const hint = el.parentElement && el.parentElement.querySelector('span:last-child');
         if (hint) { hint.textContent = '✓ informado no envio — já entra nesta leitura'; hint.classList.add('text-emerald-700'); }
+        // 23/08 (auditoria): o campo já respondido ficava na tela, cinza e
+        // travado. Ocupa espaço e sugere que ainda há algo a fazer ali.
+        // Some — o "✓ informado no envio" vai pro topo do card, uma vez só.
+        const _linha = el.closest('label') || el.parentElement;
+        if (_linha) _linha.classList.add('hidden');
+        _jaTem.push(id);
       } else { _faltam++; }
     });
     const _card = document.getElementById('proc-perguntas');
-    if (_card && _faltam === 0) _card.classList.add('hidden');
-    else if (_card && _faltam < 3) {
+    // 🚨 O envio NÃO coleta prazo — user_prazo_meses nasce sempre vazio. Logo
+    // `_faltam === 0` era inalcançável e o card nunca sumia, nem pra quem tinha
+    // informado tudo que dava pra informar. Agora o gatilho é: já respondeu
+    // aqui nesta tela, ou não sobrou nenhuma pergunta visível.
+    let _respondido = false;
+    try { _respondido = localStorage.getItem('pp_respondido_' + jobId) === '1'; } catch (_) {}
+    if (_card && (_faltam === 0 || _respondido)) _card.classList.add('hidden');
+    else if (_card && _jaTem.length) {
       const _t = _card.querySelector('p');
-      if (_t) _t.textContent = 'Enquanto a IA lê, o que falta pra deixar a sua planilha melhor:';
+      if (_t) _t.textContent = _faltam === 1
+        ? 'Falta só isto pra deixar a sua planilha melhor:'
+        : 'Enquanto a IA lê, o que falta pra deixar a sua planilha melhor:';
+      const _ok = document.createElement('p');
+      _ok.className = 'text-xs text-emerald-700 font-medium mb-2';
+      _ok.textContent = '✓ ' + _jaTem.length + ' dado(s) que você informou no envio já estão nesta leitura.';
+      if (_t && _t.parentElement) _t.parentElement.insertBefore(_ok, _t.nextSibling);
     }
   } catch (_) {}
   ['kpi-strip', 'erro-block', 'raiox-card', 'entregas-section', 'chat-quant',
@@ -2055,9 +2074,16 @@ function openClientEdit() {
   document.getElementById('p-phase').value = window.__projPhase || '';
 
   // Popula CLIENTE a partir do endpoint /client
+  // 🚨 23/08 (auditoria): esta cadeia não tinha .catch. Se a leitura falhasse
+  // (timeout, 401, 500), os quatro campos ficavam VAZIOS — igualzinho a um
+  // cliente que nunca foi preenchido. Salvar por cima apagava os dados reais.
+  // Agora: falhou, o formulário se tranca e diz por quê.
+  const _cCampos = ['c-name', 'c-company', 'c-email', 'c-phone', 'c-notes'];
+  _cCampos.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = true; });
   authFetch(`${API_BASE}/api/projects/${jobId}/client`)
-    .then(r => r.json())
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(d => {
+      _cCampos.forEach(id => { const el = document.getElementById(id); if (el) el.disabled = false; });
       if (d) {
         document.getElementById('c-name').value = d.client_name || '';
         document.getElementById('c-company').value = d.client_company || '';
@@ -2069,6 +2095,15 @@ function openClientEdit() {
         }
         document.getElementById('c-notes').value = d.internal_notes || '';
       }
+    })
+    .catch(e => {
+      // Campos ficam travados de propósito: em branco + editável seria um
+      // convite pra sobrescrever com vazio o que está salvo no banco.
+      const msg = 'Não consegui carregar os dados do cliente (' +
+                  ((e && e.message) || e) + '). Os campos ficaram travados pra ' +
+                  'você não salvar em branco por cima — feche e abra de novo.';
+      if (window.toast) window.toast.error(msg); else showEditStatus(msg, 'error');
+      console.error('[projeto] /client falhou', e);
     });
 }
 

@@ -266,10 +266,21 @@ def _supabase_update(table, match_field, match_value, data):
 #  AUTH HELPERS — JWT do Supabase para admin e ownership
 # ═══════════════════════════════════════════════════════════════
 
-def _get_user_from_request(request):
+def _get_user_from_request(request, tolerante: bool = False):
     """Valida header Authorization: Bearer <jwt> contra /auth/v1/user do Supabase.
 
-    Retorna dict com {"id", "email"} se válido, ou None se inválido/ausente."""
+    Retorna dict com {"id", "email"} se válido, ou None se inválido/ausente.
+
+    🚨 23/08/2026 (auditoria): qualquer exceção aqui — timeout, 5xx, DNS —
+    virava `None`, e quem chamou levantava 401 "sessão expirada". O cliente com
+    sessão perfeitamente válida via "sua sessão expirou, entre de novo" num
+    soluço de 2 s do Supabase, e (antes do conserto de hoje) queimava o aviso
+    único do authFetch. "Não consegui confirmar" não é "você não está logado":
+    o primeiro é 503 e pede pra tentar de novo, o segundo é 401 e manda entrar.
+
+    `tolerante=True` volta ao comportamento antigo (devolve None em vez de
+    levantar) — é o que o /api/track quer: identidade é bônus, não requisito.
+    """
     import urllib.request, urllib.error, json as _j
     try:
         auth_header = request.headers.get("Authorization", "") or request.headers.get("authorization", "")
@@ -289,8 +300,23 @@ def _get_user_from_request(request):
         if not uid:
             return None
         return {"id": uid, "email": email}
+    except urllib.error.HTTPError as _he:
+        # 401/403 do Supabase = o token é ruim mesmo. 5xx = problema DELES.
+        _supa_log(f"AUTH validate HTTP {_he.code}")
+        if _he.code >= 500 and not tolerante:
+            raise HTTPException(
+                503, "Não consegui confirmar seu login agora (o serviço de "
+                     "autenticação não respondeu). Tente de novo em instantes — "
+                     "você não precisa entrar outra vez.")
+        return None
     except Exception as _e:
+        # Timeout, DNS, conexão recusada: infraestrutura, não credencial.
         _supa_log(f"AUTH validate fail: {type(_e).__name__}: {_e}")
+        if not tolerante:
+            raise HTTPException(
+                503, "Não consegui confirmar seu login agora (falha de rede até "
+                     "o serviço de autenticação). Tente de novo em instantes — "
+                     "você não precisa entrar outra vez.")
         return None
 
 
@@ -16116,7 +16142,8 @@ async def track_event(payload: TrackPayload, request: Request):
     # Identidade: só entra se o TOKEN provar. Sem token, evento é anônimo.
     _u_track = None
     if (payload.user_id or payload.user_email):
-        _u_track = _get_user_from_request(request)
+        # tolerante: evento é bônus, nunca motivo pra derrubar a chamada
+        _u_track = _get_user_from_request(request, tolerante=True)
     row = {
         "event": ev,  # já validado contra a allowlist
         "user_id": (_u_track["id"] if _u_track else "")[:80],

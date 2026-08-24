@@ -362,7 +362,10 @@ async function loadItems() {
     const [itemsRes, stateRes] = await Promise.all([
       authFetch(`${API_BASE}/api/items/${jobId}`).then(r => {
         // 23/08 (board): 401/404/500 viravam "Nenhum item." — erro não é vazio.
-        if (!r.ok) throw new Error(r.status === 401 ? 'sua sess\u00e3o expirou \u2014 entre de novo' : 'o servidor respondeu ' + r.status + ' \u2014 tente recarregar');
+        // 23/08 (auditoria): o authFetch JÁ mostra o aviso de sessão no 401.
+        // Repetir aqui dava dois toasts idênticos empilhados. Esta mensagem
+        // fica só pro que o authFetch não cobre.
+        if (!r.ok) throw new Error(r.status === 401 ? 'sess\u00e3o n\u00e3o confirmada' : (r.status === 503 ? 'o servidor n\u00e3o confirmou seu login agora \u2014 tente de novo em instantes' : 'o servidor respondeu ' + r.status + ' \u2014 tente recarregar'));
         return r.json();
       }),
       // ?marcar=1 — SÓ esta tela conta como "abriu a revisão". O dashboard e o
@@ -405,6 +408,12 @@ async function loadItems() {
     });
     render();
   } catch (e) {
+    // Sessão: o aviso global do authFetch já saiu; aqui só o estado da tela.
+    if (/sess\u00e3o n\u00e3o confirmada/.test(e.message || '')) {
+      const box = document.getElementById('items-container') || document.body;
+      if (box && box.id) box.innerHTML = '<p class="text-sm text-gray-500 p-4">Recarregue a p\u00e1gina e entre de novo pra ver os itens.</p>';
+      return;
+    }
     const msg = 'N\u00e3o consegui carregar os itens: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
@@ -886,8 +895,15 @@ async function bulkReview(section, action) {
     + (pulados ? ` (${pulados} sem quantidade ficaram pendentes)` : ''));
 
   // Dispara requests em paralelo (limita a 5 simultâneas pra não saturar)
+  // 🚨 23/08 (auditoria): aqui era `.catch(() => {}).finally(() => done++)` —
+  // toda falha (timeout, 401, 500) contava como item processado, e o estado
+  // local já tinha sido virado pra "aprovado". A tela dizia "12 itens
+  // processados", o cliente recarregava e os 12 estavam pendentes de novo.
+  // Agora: sucesso e falha são contados separado, e o que falhou VOLTA ao
+  // estado anterior na tela.
   const limit = 5;
-  let done = 0;
+  let ok = 0;
+  const falhou = [];
   for (let i = 0; i < secItems.length; i += limit) {
     const batch = secItems.slice(i, i + limit);
     await Promise.all(batch.map(it =>
@@ -898,11 +914,23 @@ async function bulkReview(section, action) {
           action,
           reviewed_by: currentUser?.email || '',
         })
-      }).catch(() => {}).finally(() => done++)
+      })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); ok++; })
+      .catch(e => { falhou.push({ it: it, erro: (e && e.message) || String(e) }); })
     ));
   }
-  const doneMsg = `${done} ${done === 1 ? 'item processado' : 'itens processados'}`;
-  window.toast ? window.toast.success(doneMsg) : alert(doneMsg);
+  if (falhou.length) {
+    falhou.forEach(f => { delete reviewState[f.it.id]; });
+    render();
+    const msg = ok
+      ? `${ok} de ${secItems.length} salvos. ${falhou.length} não foram — ficaram pendentes na tela.`
+      : `Nenhum item foi salvo (${falhou[0].erro}). Nada mudou — tente de novo.`;
+    window.toast ? window.toast.error(msg) : alert(msg);
+    console.error('[revisao] falhas na aprovação em massa', falhou);
+  } else {
+    const doneMsg = `${ok} ${ok === 1 ? 'item salvo' : 'itens salvos'}`;
+    window.toast ? window.toast.success(doneMsg) : alert(doneMsg);
+  }
 }
 
 // ═══════════════════════════════════════════════
