@@ -17644,7 +17644,15 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
     ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
     ganho_itens = depois.get("itens", 0) - antes.get("itens", 0)
 
+    ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
+
     linha_ganho = []
+    # 24/08: prancha primeiro. Se 3 das 7 pranchas do cliente nao tinham entrado,
+    # e ISSO que ele quer ler — nao a contagem de itens que veio como efeito.
+    if ganho_pr > 0:
+        linha_ganho.append(
+            f"<b>{ganho_pr} prancha(s) que n&atilde;o tinham entrado agora entraram</b> "
+            f"({antes.get('pranchas',0)} &rarr; {depois.get('pranchas',0)} pranchas lidas)")
     if ganho_itens > 0:
         linha_ganho.append(f"<b>{antes.get('itens',0)} → {depois.get('itens',0)} itens</b>")
     if ganho_med > 0:
@@ -17802,13 +17810,20 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
         # 23/08 (auditoria): com _supa_rows, falha de leitura devolvia [] — o
         # original virava "0 itens", tudo parecia "melhorou" e o e-mail dizia
         # "0 → 46 itens". Erro tem que ser erro.
-        _st, _r = _supa_rest_service("GET", "project_items",
-                                     params={"job_id": f"eq.{jid}", "select": "confidence"})
+        _st, _r = _supa_rest_service(
+            "GET", "project_items",
+            params={"job_id": f"eq.{jid}", "select": "confidence,ref_sheet"})
         if _st != 200:
             return None
         _r = _r or []
+        # 24/08 (caso Alan): o e-mail dizia "147 -> 263 itens" quando o fato era
+        # "3 das suas 7 pranchas nao tinham entrado". Item e consequencia;
+        # prancha e a causa, e e o que ele reclamaria. Conta as duas.
+        _pr = {str((x or {}).get("ref_sheet") or "").strip()
+               for x in _r if str((x or {}).get("ref_sheet") or "").strip()}
         return {"itens": len(_r),
-                "medidos": sum(1 for x in _r if (x or {}).get("confidence") == "confirmado")}
+                "medidos": sum(1 for x in _r if (x or {}).get("confidence") == "confirmado"),
+                "pranchas": len(_pr)}
 
     antes, depois = _conta(pai_id), _conta(eval_job_id)
     if antes is None or depois is None:
