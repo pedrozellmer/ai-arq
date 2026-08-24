@@ -1612,7 +1612,13 @@ function renderFilhotes(L){
 }
 async function liberarFilhote(jobId, revogar){
   const acao = revogar ? 'REVOGAR (esconder do cliente)' : 'LIBERAR pro cliente ver no painel dele';
-  if (!confirm(`${acao}\n\nFilhote ${jobId}.\n\nNenhum e-mail é enviado — quem avisa o cliente é você.`)) return;
+  // 23/08: este texto dizia "nenhum e-mail e enviado" - falso desde 08/08.
+  // O aviso ao cliente e AUTOMATICO (_email_leitura_nova), exceto quando ele
+  // revisou itens a mao ou a versao nova nao ficou melhor.
+  const _txt = revogar
+    ? `${acao}\n\nFilhote ${jobId}.\n\nNenhum e-mail é enviado.`
+    : `${acao}\n\nFilhote ${jobId}.\n\nO cliente RECEBE e-mail automático avisando da nova leitura (não vai se ele já revisou itens à mão).`;
+  if (!confirm(_txt)) return;
   try {
     const res = await authFetch(`${API_BASE}/api/admin/liberar-filhote/${jobId}${revogar?'?revogar=1':''}`, {method:'POST'});
     const d = await res.json().catch(()=>({}));
@@ -1621,7 +1627,12 @@ async function liberarFilhote(jobId, revogar){
     if (d.aviso) alert(d.aviso);
     loadFilhotes();
   } catch(e){
-    _adminToast('Falhou: ' + ((e && e.message) || e), 'error');
+    // 23/08: erro sem status nao da pra investigar. Se a requisicao nem saiu
+    // (TypeError: Failed to fetch), diz isso - e rede/extensao, nao o servidor.
+    const _m = (e && e.message) || String(e);
+    const _rede = /failed to fetch|networkerror|load failed/i.test(_m);
+    _adminToast('Falhou: ' + _m + (_rede ? ' — a requisição não saiu do navegador (rede, bloqueador ou extensão). Tente numa aba anônima.' : ''), 'error');
+    console.error('[filhote] liberar falhou', {jobId, revogar, erro: _m});
   }
 }
 

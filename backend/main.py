@@ -17070,9 +17070,11 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
 
     🔑 Por que basta trocar o `user_id`: `list_user_projects` filtra **só** por
     user_id, não por `is_eval`. Então o filhote aparece pro cliente e continua
-    fora das varreduras de auto-retry/alerta (que filtram is_eval). E
-    `user_email` fica VAZIO, o que mantém todo e-mail automático desligado —
-    quem avisa o cliente é o Pedro.
+    fora das varreduras de auto-retry/alerta (que filtram is_eval); o
+    `user_email` do FILHOTE segue vazio (nada de e-mail de conclusão duplicado).
+    📧 O AVISO AO CLIENTE É AUTOMÁTICO desde 08/08 — `_email_leitura_nova`, com
+    o e-mail do PAI, logo abaixo. (Este parágrafo dizia o contrário até 23/08 e
+    me fez responder errado ao Pedro: comentário velho mente igual código velho.)
 
     🚨 Travas (as três armadilhas de [[project_filhote_reprocesso_20260805]]):
     1. **Edição do cliente.** Se o original tem revisão feita à mão, a versão
