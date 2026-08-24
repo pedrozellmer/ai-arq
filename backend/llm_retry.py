@@ -217,6 +217,57 @@ def _extract_retry_after(exc: Exception) -> float | None:
         return None
 
 
+
+def _registrar_uso(tag: str, resp, cache_system: bool) -> None:
+    """Grava o resultado REAL do prompt caching, por chamada.
+
+    🚨 24/08/2026: o caching foi ligado em 23/07 e conferido com duas chamadas
+    manuais naquele dia. Um mês depois a Anthropic avisou de novo que o hit rate
+    está baixo — e a gente não tinha COMO saber, porque nada aqui olhava
+    `response.usage`. Medir é mais barato que adivinhar.
+
+    A doc define a conta assim:
+        total_input = cache_read + cache_creation + input_tokens
+    e o preço: leitura do cache custa 10% do input, escrita custa 125%. Então
+    `pct_cacheado` abaixo é, na prática, o quanto da conta a gente está pagando
+    barato.
+
+    Best-effort e silencioso: nunca pode derrubar uma extração por causa de
+    telemetria.
+    """
+    if os.environ.get("LLM_CACHE_TELEMETRIA", "1") == "0":
+        return
+    try:
+        u = getattr(resp, "usage", None)
+        if u is None:
+            return
+        _le = int(getattr(u, "cache_read_input_tokens", 0) or 0)
+        _esc = int(getattr(u, "cache_creation_input_tokens", 0) or 0)
+        _novo = int(getattr(u, "input_tokens", 0) or 0)
+        _out = int(getattr(u, "output_tokens", 0) or 0)
+        _tot = _le + _esc + _novo
+        if _tot <= 0:
+            return
+        _pct = round(100.0 * _le / _tot, 1)
+        print(f"[llm_cache:{tag}] total_in={_tot} cache_read={_le} ({_pct}%) "
+              f"cache_write={_esc} novo={_novo} out={_out} "
+              f"marcado={'sim' if cache_system else 'nao'}")
+        # 🪤 O import é local e dentro do try: llm_retry.py é usado por módulos
+        # que NÃO importam o main.py (analyzer, classifier, pdfvec_carimbo), e
+        # importar o main aqui criaria ciclo — e o main conecta em Supabase e
+        # Stripe no import.
+        try:
+            from main import _log_error
+            _log_error("llm:cache",
+                       f"{tag} total_in={_tot} read={_le} ({_pct}%) "
+                       f"write={_esc} novo={_novo} out={_out} "
+                       f"marcado={int(bool(cache_system))}")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
 def call_with_retry(
     client: Any,
     *,
@@ -253,7 +304,9 @@ def call_with_retry(
 
     for attempt in range(max_retries + 1):
         try:
-            return client.messages.create(**kwargs)
+            _resp = client.messages.create(**kwargs)
+            _registrar_uso(tag, _resp, cache_system)
+            return _resp
         except Exception as e:
             last_exc = e
 
@@ -309,7 +362,9 @@ def call_with_retry_stream(
     for attempt in range(max_retries + 1):
         try:
             with client.messages.stream(**kwargs) as stream:
-                return stream.get_final_message()
+                _resp = stream.get_final_message()
+            _registrar_uso(tag, _resp, cache_system)
+            return _resp
         except Exception as e:
             last_exc = e
 

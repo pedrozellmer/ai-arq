@@ -166,6 +166,10 @@ _STAGES_DIAGNOSTICO = frozenset({
     "admin:filhote", "admin:filhote-inicio", "admin:filhote-email",
     "admin:desarquivar-fixture", "admin:reparo-aviso-falso",
     "instagram:token-renovado",
+    # 24/08: telemetria do prompt caching — uma linha POR CHAMADA de IA.
+    # Sem isto aqui, entupiria o painel "Erros do motor" no primeiro job
+    # (foi o achado 45 de ontem: 20 das 40 linhas do painel eram bookkeeping).
+    "llm:cache",
 })
 
 
