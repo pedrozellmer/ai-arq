@@ -135,7 +135,7 @@
       "name": "Como a IA calcula as quantidades?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Quando a legenda informa a quantidade, ela é usada diretamente."
+        "text": "Quando a legenda ou o quadro da prancha informa a quantidade, ela é usada diretamente. Quando não, o motor mede a geometria do CAD: comprimentos de paredes, dutos e tubulações por camada do desenho; áreas de ambientes e de hachuras, quando a camada tem uma hachura só (camada com várias sai como estimado, porque a soma não mede um acabamento sozinho); e contagens de blocos (portas, janelas, luminárias, pilares, louças). Cada linha sai com um selo: medido (veio da geometria) ou estimado (veio de índice ou de um dado informado por você, como o pé-direito — nesse caso a conta aparece na observação do item). A escala da prancha é conferida pelas próprias cotas do desenho. O que não fazemos: dimensionamento normativo por conta própria (lux, sprinklers, tomadas, BTU) nem percentual de perda."
       }
     },
     {
@@ -183,7 +183,7 @@
       "name": "Tem mensalidade ou assinatura?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Não. Você paga apenas por projeto processado, sem assinatura, mensalidade ou taxa oculta. Use somente quando precisar."
+        "text": "Não. Você paga por projeto processado, sem assinatura, mensalidade ou taxa oculta — usa quando precisa. Durante o beta nada é cobrado, e quantos projetos quiser; a tabela por número de pranchas só passa a valer quando a cobrança começar, e a gente avisa antes."
       }
     },
     {
@@ -763,11 +763,12 @@
               <p class="mb-3">Quando a legenda ou o quadro da prancha informa a quantidade, ela &eacute; usada diretamente. Quando n&atilde;o, o motor <strong>mede a geometria do CAD</strong>:</p>
               <ul class="space-y-2 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Comprimentos</strong> de paredes, dutos e tubula&ccedil;&otilde;es, por camada do desenho</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>&Aacute;reas</strong> de ambientes e de hachuras (piso, forro, revestimento)</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>&Aacute;reas</strong> de ambientes e de hachuras &mdash; quando a camada tem <strong>uma hachura s&oacute;</strong>. Camada com v&aacute;rias (o &ldquo;ARQ-PISO&rdquo; que mistura porcelanato e cer&acirc;mica) sai como <strong>estimado</strong>, porque a soma n&atilde;o mede um acabamento sozinho</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Contagens</strong> de blocos: portas, janelas, lumin&aacute;rias, pilares, lou&ccedil;as</li>
               </ul>
               <p class="mt-3">Cada linha sai com um selo: <strong>medido</strong> (veio da geometria) ou <strong>estimado</strong> (veio de &iacute;ndice ou de um dado informado por voc&ecirc;, como o p&eacute;-direito &mdash; nesse caso a conta aparece na observa&ccedil;&atilde;o do item, ex.: &ldquo;per&iacute;metro das paredes &times; p&eacute;-direito informado&rdquo;). A escala da prancha &eacute; conferida pelas pr&oacute;prias cotas do desenho, e o projeto mostra quantas bateram.</p>
               <p class="mt-3">O que a gente <strong>n&atilde;o</strong> faz: aplicar dimensionamento normativo por conta pr&oacute;pria (lux de ilumina&ccedil;&atilde;o, sprinklers por &aacute;rea, tomadas por posto, BTU por m&sup2;) nem acrescentar percentual de perda ou desperd&iacute;cio. Isso &eacute; decis&atilde;o de projeto e do or&ccedil;amentista &mdash; o quantitativo entrega a medida do desenho, com a origem de cada n&uacute;mero rastre&aacute;vel.</p>
+              <p class="mt-3 text-xs text-gray-500">Na pr&aacute;tica isso pesa mais em <strong>piso, forro e revestimento</strong>, que quase sempre chegam como camada com v&aacute;rias hachuras: nesses tr&ecirc;s a maior parte das linhas sai como estimada, pra revisar. Comprimento e contagem de blocos s&atilde;o os que mais viram medido.</p>
               <p class="mt-3 text-xs text-gray-500">Base técnica: catálogo oficial SINAPI (Caixa), com ~10 mil composições carregadas no sistema como vocabulário de referência.</p>
             </div>
           </div>
@@ -898,7 +899,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              N&atilde;o. Voc&ecirc; paga apenas por projeto processado, sem assinatura, mensalidade ou taxa oculta. Use somente quando precisar.
+              N&atilde;o. Voc&ecirc; paga por projeto processado, sem assinatura, mensalidade ou taxa oculta &mdash; usa quando precisa. <strong>Durante o beta nada &eacute; cobrado</strong>, e quantos projetos quiser; a tabela por n&uacute;mero de pranchas s&oacute; passa a valer quando a cobran&ccedil;a come&ccedil;ar, e a gente avisa antes.
             </div>
           </div>
         </div>
