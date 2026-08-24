@@ -4693,7 +4693,8 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
                 except Exception:
                     pass
                 it.observations = (f"{_proc} = {valor} {un_rot} — NÃO é medição "
-                                   f"do CAD. " + obs)[:1000]
+                                   f"do CAD. " + _limpa_aviso_nao_medida(obs))[:1000]
+                it.origem = "deriv_pd"     # conta nossa (ver _apply_area_honesty)
                 tocados += 1
             elif "Conferência por seção×PD" not in obs:
                 # alvo já preenchido (índice da IA): só anota a conferência.
@@ -4776,8 +4777,16 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
         # pergunta sem resposta E criar uma linha irmã do mesmo serviço.
         _alvo_zerado.quantity = area
         _alvo_zerado.unit = getattr(_alvo_zerado, "unit", "") or "m²"
-        _alvo_zerado.observations = _obs + " " + (getattr(_alvo_zerado, "observations", "") or "")
+        # 23/08 (achado 7): o texto herdado trazia "Área NÃO medida … informe a
+        # área no upload". A linha passava a ter número E a instrução que
+        # destrói o número. Sai fora.
+        _alvo_zerado.observations = (
+            _obs + " " + _limpa_aviso_nao_medida(getattr(_alvo_zerado, "observations", "") or "")
+        ).strip()
         _alvo_zerado.confidence = Confidence.ESTIMADO
+        # 23/08 (achado 2/3): marca explícita de que a conta é NOSSA. É isto que
+        # a honestidade lê pra preservar — em vez de reconhecer por regex depois.
+        _alvo_zerado.origem = "deriv_pd"
         return 1
     items.append(BudgetItem(
         item_num="PD.1",
@@ -4788,6 +4797,7 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
         observations=_obs,
         ref_sheet=ref,
         confidence=Confidence.ESTIMADO,
+        origem="deriv_pd",
         discipline="Revestimentos",
     ))
     return 1
@@ -4837,10 +4847,80 @@ import re as _re_honesty   # 🪤 `re` não está importado no topo deste módul
 # Casa tanto o texto da IA ("… × 2,70 m (pé-direito informado)") quanto o que o
 # próprio motor escreve nas derivações ("… × pé-direito 2.70 m informado por
 # você × 2 faces", "ÁREA COM O PÉ-DIREITO QUE VOCÊ INFORMOU: …").
+# 🚨 23/08/2026, 2ª rodada da auditoria: a versão de manhã casava
+# "Pé-direito NÃO informado — não deu pra derivar" — exatamente o texto que o
+# motor escreve quando NADA foi derivado. O item com essa observação era lido
+# como "derivado do pé-direito informado" e tinha o número preservado.
+# Quem achou foi o controle negativo do teste, não a leitura do código.
+# Agora "não" é proibido dentro do trecho entre os dois termos.
 _RX_DERIV_PD = _re_honesty.compile(
-    r"p[ée]-?\s*direito[^|]{0,40}informa|informad[^|]{0,40}p[ée]-?\s*direito|"
-    r"p[ée]-?\s*direito\s+que\s+voc[êe]\s+informou",
+    r"p[ée]-?\s*direito((?!n[ãa]o\s)[^|]){0,40}informad"
+    r"|(?<!n[ãa]o )informad(?:o|a)((?!n[ãa]o\s)[^|]){0,40}p[ée]-?\s*direito"
+    r"|p[ée]-?\s*direito\s+que\s+voc[êe]\s+informou",
     _re_honesty.I)
+
+
+def _tem_comprimento_medido(items) -> bool:
+    """O job realmente MEDIU comprimento na geometria do CAD?
+
+    🚨 23/08/2026 (auditoria, achado 2): a preservação por pé-direito confiava
+    só no texto que a IA escreve na observação — e o nosso próprio prompt manda
+    o modelo escrever exatamente essa frase. Num job só-PDF o modelo inventa o
+    perímetro ("perímetro aprox. 120 m × 2,70 m (pé-direito informado)") e a
+    conta invented passava a sobreviver. Texto não é prova: a prova é existir,
+    no MESMO job, comprimento com origem 'dxf_geom'.
+    """
+    for it in items or []:
+        if str(getattr(it, "origem", "") or "") != "dxf_geom":
+            continue
+        if str(getattr(it, "unit", "") or "").strip().lower() not in ("m", "ml"):
+            continue
+        try:
+            if float(getattr(it, "quantity", 0) or 0) > 0:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
+def _tem_derivacao_deterministica(descricao: str, unidade: str) -> bool:
+    """O item é alvo de uma conta NOSSA, feita depois da honestidade?
+
+    🚨 23/08/2026 (auditoria, achado 3): a ordem honestidade → derivação é
+    deliberada. A honestidade zera o m² que o LLM multiplicou, e aí
+    `_derive_pintura_pe_direito` / `_derive_estrutura_pe_direito` preenchem a
+    MESMA linha com a conta determinística sobre comprimento/seção medidos.
+    Preservar o número do modelo aqui desliga a derivação (ela desiste quando
+    já existe quantidade) e a gente passa a entregar a aritmética do LLM —
+    justo o componente não determinístico do motor.
+
+    Então estes itens NÃO são preservados: deixam de ter número por um
+    instante, de propósito, pra a nossa conta entrar no lugar.
+    """
+    d = (descricao or "").lower()
+    u = (unidade or "").strip().lower()
+    if u not in ("m²", "m2"):
+        return False
+    e_pintura = ("pintura" in d or "látex" in d or "latex" in d)
+    if e_pintura and "teto" not in d and "forro" not in d:
+        return True                      # _derive_pintura_pe_direito
+    if "pilar" in d and ("fôrma" in d or "forma" in d):
+        return True                      # _derive_estrutura_pe_direito
+    return False
+
+
+def _limpa_aviso_nao_medida(obs: str) -> str:
+    """Tira do texto os trechos "Área NÃO medida … informe a área no upload".
+
+    🚨 Achado 7: a linha saía com número E com a instrução que, se obedecida,
+    destrói o número (o card "informe a metragem" cai no caminho que zera).
+    Mensagem contraditória foi o que a auditoria de 05/08 mostrou queimar a
+    confiança do cliente mais rápido que erro de número.
+    """
+    segs = [x.strip() for x in str(obs or "").split("|")]
+    segs = [x for x in segs
+            if x and "não medida" not in x.lower() and "nao medida" not in x.lower()]
+    return " | ".join(segs)
 
 
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "",
@@ -4868,6 +4948,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     from models import Confidence
     informado = (total_area_source == "informado") and (total_area or 0) > 0
     _pd_ok = float(pe_direito or 0) > 0
+    # 🚨 23/08 (auditoria): duas travas na preservação, porque texto não é prova.
+    _mediu_linear = _tem_comprimento_medido(items)
     filled = blanked = preservados = 0
     for it in items:
         if getattr(it, "origem", "") == "dxf_geom":
@@ -4892,17 +4974,27 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                          "projeto. Confira antes de orçar.")
             it.observations = " | ".join(s for s in _segs if s)
             filled += 1
-        elif q > 0 and _pd_ok and _RX_DERIV_PD.search(str(getattr(it, "observations", "") or "")):
-            # Derivado do pé-direito que o CLIENTE informou, sobre comprimento
-            # medido do CAD: preserva como estimado, com o selo de procedência.
+        elif (q > 0 and _pd_ok
+              and (str(getattr(it, "origem", "") or "") == "deriv_pd"
+                   or (_mediu_linear
+                       and not _tem_derivacao_deterministica(
+                           getattr(it, "description", ""), u)
+                       and _RX_DERIV_PD.search(str(getattr(it, "observations", "") or "")))
+                   )):
+            # Preserva quando a procedência se sustenta sem depender do texto:
+            #   (a) a conta é NOSSA (origem 'deriv_pd'), ou
+            #   (b) o job tem comprimento medido de verdade no CAD E não existe
+            #       derivação determinística nossa pra esta linha (se existir,
+            #       deixamos zerar de propósito, pra a nossa conta entrar).
             try:
                 it.confidence = Confidence("estimado")
             except Exception:
                 pass
-            _o = it.observations or ""
+            _o = _limpa_aviso_nao_medida(it.observations or "")
             if "informado por você" not in _o.lower():
-                it.observations = (_o + " | ESTIMADO com o pé-direito informado por você — "
-                                   "não é medição da área; confira antes de orçar.").strip(" |")
+                _o = (_o + " | ESTIMADO com o pé-direito informado por você — "
+                      "não é medição da área; confira antes de orçar.").strip(" |")
+            it.observations = _o
             preservados += 1
         elif q > 0:
             it.quantity = 0
