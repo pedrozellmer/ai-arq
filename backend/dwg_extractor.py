@@ -2143,6 +2143,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
 
     # Try UTF-8 first, then latin-1 (common in Brazilian CAD files)
     doc = None
+    _erro_estrutura = None
     for encoding in ("utf-8", "latin-1", None):
         try:
             kwargs = {}
@@ -2153,17 +2154,54 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         except UnicodeDecodeError:
             continue
         except Exception as exc:
-            # For non-encoding errors, re-raise immediately
+            # 🚨 24/08: erro de ESTRUTURA (não de encoding) subia direto e
+            # matava a prancha. Agora ele é guardado pra o `ezdxf.recover`
+            # abaixo ter a chance de consertar o arquivo. Trocar troca de
+            # encoding não resolve KeyError de layout.
+            _erro_estrutura = f"{type(exc).__name__}: {exc}"
             if encoding is None:
-                raise
-            # On last attempt (None), let ezdxf pick encoding
+                break
             if encoding == "latin-1":
                 try:
                     doc = ezdxf.readfile(filepath)
                     break
                 except Exception:
-                    raise exc
+                    break
             continue
+
+    if doc is None or _erro_estrutura is not None:
+        # 🚨 24/08/2026 (caso Alan, job e1c48ed7): o readfile normal morre em
+        # ezdxf/layouts/layouts.py:219 com KeyError do NOME DO LAYOUT. As três
+        # ocorrências do MESMO job:
+        #     KeyError: 'DO'
+        #     KeyError: '00-Ã\x8dNDICE DO PROJETO'   (o "Í" lido como latin-1)
+        #     KeyError: 'LAYOUT'
+        # 🪤 A minha primeira leitura foi "é nome acentuado" — ERRADA: 'LAYOUT'
+        # e 'DO' não têm acento. O que há em comum é o libredwg escrever
+        # entradas de layout que o ezdxf não resolve de volta na própria tabela;
+        # o acento é UM dos casos, não a causa.
+        # Custou 3 das 7 pranchas do cliente (43%), incluindo as DUAS de
+        # arquitetura, que são as que mais importam.
+        #
+        # `ezdxf.recover` é o remédio documentado pra arquivo de escritor
+        # não-Autodesk: relê tolerando inconsistência estrutural. Roda só depois
+        # que o caminho normal já falhou, então não muda nada de quem funciona.
+        # 🪤 É mais lento e come mais RAM — mas esta função já vive num
+        # subprocesso isolado (`dxf_extract_worker`), então o pior caso é o
+        # filho morrer, que é exatamente o que acontece hoje sem tentar.
+        try:
+            import ezdxf.recover as _rec
+            doc, _auditor = _rec.readfile(filepath)
+            _n_erros = len(getattr(_auditor, "errors", []) or [])
+            _n_fix = len(getattr(_auditor, "fixes", []) or [])
+            print(f"[dxf] readfile falhou ({_erro_estrutura}); ezdxf.recover "
+                  f"ABRIU o arquivo — {_n_fix} conserto(s), {_n_erros} erro(s) "
+                  f"que nem o recover resolveu")
+        except Exception as _erec:
+            if doc is None:
+                raise RuntimeError(
+                    f"Não foi possível abrir o DXF nem com ezdxf.recover: "
+                    f"{filepath} — normal: {_erro_estrutura} | recover: {_erec}")
 
     if doc is None:
         raise RuntimeError(f"Não foi possível abrir o DXF com nenhum encoding: {filepath}")
