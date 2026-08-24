@@ -557,6 +557,9 @@
           <button data-fil="todos" onclick="filtrarFilhotes('todos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Todos</button>
         </div>
         <div id="filhotes"><p class="text-gray-400 text-sm">Carregando...</p></div>
+        <!-- 🧬 24/08: estudo do merge (ideia do Pedro). Só aparece depois de
+             clicar em "Estudar merge" numa linha acima. -->
+        <div id="merge-estudo" class="mt-6"></div>
       </div>
 
       <div id="tab-pagamentos" class="tab-content hidden">
@@ -1711,9 +1714,10 @@ function renderFilhotes(L){
               // e tem um botão para liberar. Nem precisa colocar isso lá."
               // Oferecer uma ação que nunca seria tomada é ruído — e pior, um
               // clique errado manda pro cliente uma versão PIOR que a dele.
-              : (f.melhorou
+              : `${f.melhorou
                 ? `<button onclick="liberarFilhote('${f.job_id}', false)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Liberar pro cliente</button>`
-                : `<span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">não vale liberar</span>`))}
+                : `<span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">não vale liberar</span>`}
+               <button onclick="mergeEstudar('${f.job_id}')" title="Compara as duas leituras prancha por prancha e monta a melhor de cada. Só LÊ — não cria nada." style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-violet-300 text-violet-800 bg-violet-50 hover:bg-violet-100 font-medium">&#129516; Estudar merge</button>`)}
         </div>
       </div>
       <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
@@ -1773,6 +1777,163 @@ function renderFilhotes(L){
     </div>`;
   }).join('');
 }
+// ══════════════════════════════════════════════════════════════════════════
+//  🧬 MERGE DE LEITURAS — estudar as duas planilhas antes de juntar
+// ══════════════════════════════════════════════════════════════════════════
+//
+// Pedro, 24/08/2026: "não podemos fazer um merge entre as planilhas e unificar
+// isso pelo motor tb? tipo um terceiro projeto" e "vamos estudar sempre bem as
+// duas planilhas pra fazer o merge".
+//
+// A segunda frase virou o desenho da tela: a contagem é só a primeira opinião;
+// uma IA LÊ as duas leituras de cada prancha disputada. Quando as duas
+// discordam, a tela mostra em destaque — é aí que mora a decisão.
+//
+// Este botão NÃO cria nada. Só o "Criar projeto combinado", depois, cria.
+let _mergeUltimo = null;
+
+async function mergeEstudar(jobId){
+  const alvo = document.getElementById('merge-estudo');
+  if (!alvo) return;
+  alvo.innerHTML = '<div class="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">'
+    + '🧬 Lendo as duas planilhas prancha por prancha… a IA compara cada prancha disputada, '
+    + 'então isso leva alguns segundos.</div>';
+  alvo.scrollIntoView({behavior:'smooth', block:'start'});
+  let d;
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/merge-preview/${jobId}`);
+    d = await res.json();
+    if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
+  } catch (e) {
+    alvo.innerHTML = '<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">'
+      + 'Não consegui estudar: ' + (e.message || e) + '</div>';
+    return;
+  }
+  _mergeUltimo = d;
+  alvo.innerHTML = mergeHtml(d, jobId);
+  alvo.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function mergeHtml(d, jobId){
+  const nome = (p) => String(p||'').replace(/_libredwg\.dxf$/,'').replace(/\.(dxf|dwg)$/i,'');
+  const ganho = d.merge.medidos - Math.max(d.original.medidos, d.releitura.medidos);
+
+  const cabecalho = `
+    <div class="rounded-xl border border-violet-200 bg-white p-4 mb-4">
+      <h3 class="font-semibold text-gray-900 mb-1">🧬 Merge das duas leituras</h3>
+      <p class="text-xs text-gray-500 mb-3">${d.original.nome || ''} &middot; ${d.original.dono || ''}</p>
+      <div class="grid grid-cols-3 gap-3 text-sm">
+        <div class="rounded-lg bg-gray-50 p-3">
+          <div class="text-xs text-gray-500">leitura original</div>
+          <div class="font-semibold">${d.original.medidos} medidos</div>
+          <div class="text-xs text-gray-400">${d.original.itens} itens</div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-3">
+          <div class="text-xs text-gray-500">releitura</div>
+          <div class="font-semibold">${d.releitura.medidos} medidos</div>
+          <div class="text-xs text-gray-400">${d.releitura.itens} itens</div>
+        </div>
+        <div class="rounded-lg bg-emerald-50 border border-emerald-200 p-3">
+          <div class="text-xs text-emerald-700">merge</div>
+          <div class="font-semibold text-emerald-900">${d.merge.medidos} medidos</div>
+          <div class="text-xs text-emerald-700">${d.merge.itens} itens &middot; ${ganho >= 0 ? '+' : ''}${ganho} vs. a melhor sozinha</div>
+        </div>
+      </div>
+      ${d.juiza_usada ? '' : '<p class="text-xs text-amber-700 mt-2">⚠ A juíza não rodou — a escolha abaixo é só por contagem.</p>'}
+    </div>`;
+
+  const linhas = (d.plano || []).map(p => {
+    const j = p.juiza || {};
+    const cor = p.discordam ? 'border-amber-300 bg-amber-50' : 'border-gray-200 bg-white';
+    const so = !p.pai || !p.filho;
+    return `
+      <div class="rounded-lg border ${cor} p-3 mb-2">
+        <div class="flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <div class="font-medium text-sm text-gray-900">${nome(p.prancha)}</div>
+            <div class="text-xs text-gray-500 mt-0.5">
+              ${so ? 'só existe numa leitura'
+                   : `original ${p.pai.medidos}/${p.pai.itens} &middot; releitura ${p.filho.medidos}/${p.filho.itens}`}
+            </div>
+            ${j.motivo ? `<div class="text-xs text-gray-700 mt-1.5">${j.motivo}</div>` : ''}
+            ${(j.perdas||[]).length ? `<div class="text-xs text-red-700 mt-1">deixaria de fora: ${j.perdas.join(' · ')}</div>` : ''}
+          </div>
+          <span class="shrink-0 text-xs px-2 py-1 rounded-full ${p.lado === 'pai' ? 'bg-slate-100 text-slate-700' : 'bg-indigo-50 text-indigo-700'} border">
+            ${p.lado === 'pai' ? 'original' : 'releitura'}
+          </span>
+        </div>
+        ${p.discordam ? `<div class="text-xs text-amber-800 mt-2 pt-2 border-t border-amber-200">
+            ⚖ a contagem escolheria <b>${p.lado_contagem === 'pai' ? 'a original' : 'a releitura'}</b>; a IA leu as duas e escolheu o contrário.
+          </div>` : ''}
+      </div>`;
+  }).join('');
+
+  const sob = (d.sobreposicoes || []).length ? `
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 mt-4">
+      <h4 class="font-semibold text-amber-900 text-sm">⚠ ${d.sobreposicoes.length} código(s) em mais de uma prancha</h4>
+      <p class="text-xs text-amber-800 mt-1 mb-3">
+        Costuma ser o MESMO equipamento desenhado em duas disciplinas — o sensor aparece na prancha
+        de elétrica e na de segurança. <b>Nada foi somado nem apagado</b>: isto é só um aviso, na
+        planilha e aqui. Estas sobreposições já existem na releitura sozinha; o merge só as torna visíveis.
+      </p>
+      <div class="space-y-1">
+        ${d.sobreposicoes.slice(0,12).map(s => `
+          <div class="text-xs bg-white rounded p-2 border border-amber-200">
+            <span class="font-mono font-semibold">${s.codigo}</span>
+            <span class="text-gray-500">(${s.unidade})</span> &mdash;
+            somando daria <b>${s.soma_se_somar}</b>, maior linha sozinha <b>${s.maior_sozinho}</b>
+            <div class="text-gray-500 mt-0.5">${s.linhas.map(l => `${l.quantidade} em ${nome(l.prancha)}`).join(' &middot; ')}</div>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  const bloqueado = (d.bloqueios || []).length;
+  const acao = bloqueado
+    ? `<div class="rounded-xl border border-red-200 bg-red-50 p-4 mt-4 text-sm text-red-800">
+         <b>Não dá pra criar:</b><ul class="list-disc ml-5 mt-1">${d.bloqueios.map(b => `<li>${b}</li>`).join('')}</ul>
+       </div>`
+    : `<div class="mt-4 flex items-center gap-3">
+         <button onclick="mergeCriar('${jobId}')" style="min-height:44px"
+           class="px-4 py-2.5 text-sm rounded-lg bg-violet-700 hover:bg-violet-800 text-white font-medium">
+           Criar projeto combinado
+         </button>
+         <span class="text-xs text-gray-500">nasce como teste — o cliente só vê depois que você clicar em Liberar</span>
+       </div>`;
+
+  return cabecalho
+    + `<h4 class="text-sm font-semibold text-gray-800 mb-2">Prancha por prancha</h4>`
+    + linhas + sob + acao;
+}
+
+async function mergeCriar(jobId){
+  // 🪤 Diálogo bloqueante SEMPRE antes de qualquer coisa (lição de 24/08: um
+  // confirm depois do window.open some no celular e trava o botão).
+  if (!confirm('Criar o projeto COMBINADO?\n\n'
+      + '• junta a melhor leitura de cada prancha\n'
+      + '• nasce como TESTE — o cliente NÃO vê e NÃO recebe e-mail\n'
+      + '• não gasta o reprocesso grátis dele\n'
+      + '• os dois projetos originais ficam intactos\n\n'
+      + 'Depois você confere e decide se libera.')) return;
+  const alvo = document.getElementById('merge-estudo');
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/merge-criar/${jobId}`, {method:'POST'});
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
+    _adminToast('Projeto combinado criado: ' + d.job_id, 'ok');
+    if (alvo) alvo.innerHTML = `
+      <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+        <b>✓ Criado: <span class="font-mono">${d.job_id}</span></b><br>
+        ${d.itens} itens, <b>${d.medidos} medidos</b> (original ${d.original.medidos}, releitura ${d.releitura.medidos}).<br>
+        <span class="text-xs">Da original: ${d.do_pai.join(', ') || '—'} &middot; Da releitura: ${d.do_filho.join(', ') || '—'}</span><br>
+        <span class="text-xs">${d.sobreposicoes} sobreposição(ões) apontada(s) na planilha, nenhuma somada.</span><br>
+        <span class="text-xs mt-2 block">${d.proximo_passo}</span>
+      </div>`;
+    loadFilhotes();
+  } catch (e) {
+    _adminToast('Não criei: ' + (e.message || e), 'err');
+  }
+}
+
 async function liberarFilhote(jobId, revogar){
   const acao = revogar ? 'REVOGAR (esconder do cliente)' : 'LIBERAR pro cliente ver no painel dele';
   // 23/08: este texto dizia "nenhum e-mail e enviado" - falso desde 08/08.

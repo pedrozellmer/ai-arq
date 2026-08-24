@@ -1282,3 +1282,163 @@ def unidade_provada_por_rotulo(pares, tol: float = _AREA_TOL) -> dict:
         "n_rotulos_area": n_rot,
         "exemplos": batem[:5],
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🧬 MERGE DE LEITURAS — a melhor prancha de cada
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Pedro, 24/08/2026: *"não podemos fazer um merge entre as planilhas e unificar
+# isso pelo motor tb? tipo um terceiro projeto"*.
+#
+# 🔑 POR QUE ISSO É PRECISO. A releitura de um projeto NÃO é superconjunto da
+# leitura antiga. Caso Alan (e1c48ed7 × ev597afa), medido no banco:
+#   • nas 3 pranchas NOVAS (que morriam no KeyError): ganho puro, 0 → 151 itens
+#   • nas 4 pranchas que JÁ iam: PERDA pura, 147 → 112 itens, 92 → 72 medidos
+#   • as 38 portas dele (23 P80E + 9 P80 + 4 P60T + 1 P70 + 1 PD120, 34 MEDIDAS)
+#     viraram uma linha só: "Portas internas", quantidade 0, estimado
+# Escolher a melhor prancha de cada lado dá 307 itens e 179 medidos, contra 92
+# do original e 151 da releitura.
+#
+# 🚨 A INVARIANTE QUE IMPEDE DUPLICAR: cada prancha entra INTEIRA, de UM lado só.
+# Nunca se mistura leitura dentro da mesma prancha. Sem isso, o mesmo item
+# apareceria duas vezes com nomes diferentes (a IA batiza diferente a cada
+# leitura — ver project_nao_determinismo_e_da_ia_20260810).
+
+_MERGE_STOP = frozenset("""
+CAD LED PVC MDF LTS BTU ABNT NBR CPU USB PCD MED CAIXA PORTA PISO PAREDE FORRO
+TOMADA SALA AREA ÁREA TOTAL BANCO VIDRO METAL LOGO TAG NOVO NOVA TIPO UNID
+ALTURA LARGURA REF OBS GERAL EXISTENTE MANTER DEMOLIR
+""".split())
+
+_RX_MERGE_TOKEN = _re.compile(r"(?<![A-Za-zÀ-ú])([A-Z][A-Z0-9]{2,7})(?![a-z])")
+
+
+def merge_tokens(descricao: str) -> set:
+    """Códigos de identidade dentro da descrição: 'IVP', 'CFTV', 'P80E', 'DCAH'.
+
+    São eles que denunciam o MESMO objeto contado em duas pranchas — a prancha
+    de elétrica e a de segurança mostram o mesmo sensor.
+
+    🪤 Palavra portuguesa em caixa alta ('CAIXA', 'PORTA') não é identidade e
+    gera alarme falso; a stoplist existe pra isso e pode crescer.
+    """
+    achados = set()
+    for t in _RX_MERGE_TOKEN.findall(str(descricao or "")):
+        t = t.upper()
+        if t not in _MERGE_STOP:
+            achados.add(t)
+    return achados
+
+
+def merge_sobreposicoes(itens) -> list:
+    """Mesmo código aparecendo em pranchas DIFERENTES — candidatos a dobra.
+
+    🚨 Isto APENAS APONTA. Não soma, não apaga, não escolhe. Regra dura nº3
+    (ratio só alerta) e a lição de 17/08: uma passada que "removia duplicata"
+    achou que Ø8 e Ø16 eram a mesma coisa e derrubou 18.168 kg para 508 kg.
+
+    Devolve, por (código, unidade): quanto daria SE alguém somasse, quanto é a
+    maior linha sozinha, e em que pranchas está — pra decisão humana.
+    """
+    porto = {}
+    for it in itens or []:
+        d = (it or {}).get("description") or ""
+        pr = str((it or {}).get("ref_sheet") or "").strip()
+        un = str((it or {}).get("unit") or "").strip()
+        try:
+            q = float((it or {}).get("quantity") or 0)
+        except Exception:
+            q = 0.0
+        if not pr or q <= 0:
+            continue
+        for t in merge_tokens(d):
+            e = porto.setdefault((t, un), {"codigo": t, "unidade": un,
+                                           "linhas": [], "pranchas": set()})
+            e["linhas"].append({"prancha": pr, "descricao": d[:90], "quantidade": q})
+            e["pranchas"].add(pr)
+
+    saida = []
+    for e in porto.values():
+        if len(e["pranchas"]) < 2:
+            continue          # numa prancha só não é dobra entre pranchas
+        soma = sum(l["quantidade"] for l in e["linhas"])
+        saida.append({
+            "codigo": e["codigo"],
+            "unidade": e["unidade"],
+            "pranchas": sorted(e["pranchas"]),
+            "linhas": sorted(e["linhas"], key=lambda l: -l["quantidade"]),
+            "soma_se_somar": round(soma, 2),
+            "maior_sozinho": round(max(l["quantidade"] for l in e["linhas"]), 2),
+        })
+    saida.sort(key=lambda x: -x["soma_se_somar"])
+    return saida
+
+
+def merge_plano(itens_pai, itens_filho) -> dict:
+    """Qual leitura vence CADA prancha. Não mistura nada por dentro.
+
+    Critério: mais MEDIDO ganha; empate desempata por nº de itens; empate total
+    fica com o ORIGINAL — o cliente já viu aquilo, e trocar sem ganho é churn.
+
+    🪤 "Melhor" aqui é por PRANCHA, não pela planilha inteira. No agregado o
+    filhote do Alan parecia melhor (151 × 92) e ainda assim tinha perdido 20
+    medições nas pranchas que já funcionavam.
+    """
+    def _resumo(itens):
+        d = {}
+        for it in itens or []:
+            k = str((it or {}).get("ref_sheet") or "").strip()
+            if not k:
+                continue
+            e = d.setdefault(k, {"itens": 0, "medidos": 0})
+            e["itens"] += 1
+            if (it or {}).get("confidence") == "confirmado":
+                e["medidos"] += 1
+        return d
+
+    ra, rf = _resumo(itens_pai), _resumo(itens_filho)
+    plano = []
+    for k in sorted(set(ra) | set(rf)):
+        a, f = ra.get(k), rf.get(k)
+        if a and not f:
+            lado, motivo = "pai", "só a leitura original tem esta prancha"
+        elif f and not a:
+            lado, motivo = "filho", "só a releitura tem esta prancha"
+        elif f["medidos"] > a["medidos"]:
+            lado, motivo = "filho", f"mediu mais ({f['medidos']} × {a['medidos']})"
+        elif a["medidos"] > f["medidos"]:
+            lado, motivo = "pai", f"mediu mais ({a['medidos']} × {f['medidos']})"
+        elif f["itens"] > a["itens"]:
+            lado, motivo = "filho", f"mesmo medido, mais itens ({f['itens']} × {a['itens']})"
+        else:
+            lado, motivo = "pai", "empate — fica com o que o cliente já viu"
+        esc = a if lado == "pai" else f
+        plano.append({"prancha": k, "lado": lado, "motivo": motivo,
+                      "pai": a, "filho": f,
+                      "itens": esc["itens"], "medidos": esc["medidos"]})
+
+    return {
+        "pranchas": plano,
+        "total_itens": sum(p["itens"] for p in plano),
+        "total_medidos": sum(p["medidos"] for p in plano),
+        "do_pai": [p["prancha"] for p in plano if p["lado"] == "pai"],
+        "do_filho": [p["prancha"] for p in plano if p["lado"] == "filho"],
+    }
+
+
+def merge_itens(itens_pai, itens_filho, plano: dict) -> list:
+    """Aplica o plano: devolve os itens escolhidos, COPIADOS SEM ALTERAÇÃO.
+
+    🚨 Regra dura nº1: nada é promovido aqui. Um item que chegou 'estimado' sai
+    'estimado'. O merge escolhe DE ONDE vem a linha, nunca o que ela vale.
+    🚨 Regra dura nº4: discipline/section vêm junto — a taxonomia não é refeita.
+    """
+    lado_da = {p["prancha"]: p["lado"] for p in plano.get("pranchas", [])}
+    saida = []
+    for origem, itens in (("pai", itens_pai), ("filho", itens_filho)):
+        for it in itens or []:
+            pr = str((it or {}).get("ref_sheet") or "").strip()
+            if pr and lado_da.get(pr) == origem:
+                saida.append(dict(it))
+    return saida

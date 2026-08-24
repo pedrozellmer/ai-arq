@@ -17662,6 +17662,103 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             pass
 
 
+def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
+                             antes: dict, depois: dict) -> bool:
+    """Avisa o cliente de que existe uma versão COMBINADA do projeto dele.
+
+    Pedro, 24/08/2026: *"e como esse merge aparecia pro cliente? vai um email
+    automático tb pra ele explicando? acho que vale hein"*.
+
+    🚨 POR QUE NÃO REUSAR `_email_leitura_nova`: aquele e-mail diz "melhoramos o
+    motor e REFIZEMOS a leitura do seu projeto". Num merge isso é falso — a
+    gente não releu nada. Juntou, prancha por prancha, o melhor de DUAS leituras
+    que já existiam. Mandar o texto errado ensinaria o cliente a desconfiar do
+    que a gente escreve, que é o ativo mais caro que temos.
+
+    O que este e-mail precisa dizer, e diz:
+      1. o que é (combinação, não releitura) e por que existe
+      2. quanto melhorou, em medição do CAD
+      3. de qual leitura veio cada prancha — está na planilha, linha a linha
+      4. que NADA foi contado duas vezes (a pergunta que um orçamentista faz na
+         hora em que ouve "juntamos duas planilhas")
+      5. o aviso das sobreposições entre pranchas, quando houver
+      6. que a versão dele continua lá
+
+    🚫 Não manda se não melhorou: `admin_liberar_filhote` já barra isso antes.
+    """
+    email = (pai.get("user_email") or "").strip()
+    if not email:
+        return False
+    nome = (pai.get("user_name") or "").strip().split(" ")[0] or "Olá"
+    proj = (pai.get("project_name") or "seu projeto")[:60]
+
+    ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
+    ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
+
+    linhas = []
+    if ganho_pr > 0:
+        linhas.append(f"<b>{ganho_pr} prancha(s) que n&atilde;o tinham entrado agora entraram</b>")
+    if ganho_med > 0:
+        linhas.append(f"<b>{antes.get('medidos',0)} &rarr; {depois.get('medidos',0)} "
+                      f"itens medidos direto do CAD</b>")
+    if depois.get("itens", 0) > antes.get("itens", 0):
+        linhas.append(f"{antes.get('itens',0)} &rarr; {depois.get('itens',0)} itens no total")
+    if len(linhas) > 2:
+        ganho_html = ", ".join(linhas[:-1]) + " e " + linhas[-1]
+    elif linhas:
+        ganho_html = " e ".join(linhas)
+    else:
+        ganho_html = "uma leitura mais completa"
+
+    # A procedência por prancha e o aviso de sobreposição já foram escritos como
+    # avisos do projeto combinado quando ele foi criado. Reaproveita em vez de
+    # recalcular: um cálculo repetido é um lugar a mais pra divergir.
+    _avisos = [str(w).strip() for w in (filho.get("warnings") or []) if str(w).strip()]
+    _proc = next((w for w in _avisos if w.startswith("Esta planilha junta")), "")
+    _sobre = next((w for w in _avisos if "CONFERIR ANTES DE SOMAR" in w), "")
+
+    proc_html = ""
+    if _proc:
+        proc_html = (f'<p style="color:#374151;font-size:14px">'
+                     f'{_hd_escape(_proc)}</p>')
+    sobre_html = ""
+    if _sobre:
+        sobre_html = (
+            f'<p style="background:#FFFBEB;border-left:3px solid #F59E0B;padding:10px 12px;'
+            f'border-radius:6px;font-size:14px">{_hd_escape(_sobre)}</p>')
+
+    html = f"""<div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1F2937;max-width:600px">
+<p>{nome}, tudo bem?</p>
+<p>N&oacute;s lemos o seu projeto &ldquo;{_hd_escape(proj)}&rdquo; <b>duas vezes</b>, e cada
+leitura se saiu melhor em pranchas diferentes. Ent&atilde;o montamos uma
+<b>vers&atilde;o combinada</b>: prancha por prancha, ficou com a leitura mais completa
+de cada uma.</p>
+<p>O que voc&ecirc; ganha com ela: {ganho_html}.</p>
+{proc_html}
+<p><b>Nenhuma prancha entrou duas vezes.</b> Cada prancha veio inteira de uma
+&uacute;nica leitura &mdash; e na planilha, na coluna <i>Observa&ccedil;&otilde;es</i>, cada linha diz de
+qual leitura ela veio.</p>
+{sobre_html}
+<p style="margin:22px 0">
+  <a href="https://ai.arq.br/dashboard.html" style="background:#4F46E5;color:#fff;
+     padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600;
+     display:inline-block">Ver a vers&atilde;o combinada</a></p>
+<p style="color:#6B7280;font-size:13px"><b>A sua vers&atilde;o original continua no painel</b>,
+ao lado desta &mdash; voc&ecirc; compara e usa a que preferir. Isso n&atilde;o consumiu nada seu,
+e continua tudo gr&aacute;tis no beta.</p>
+<p>Abra&ccedil;o,<br>Pedro Zellmer<br>
+<span style="color:#6B7280">AI.arq &mdash; <a href="https://ai.arq.br" style="color:#4F46E5;text-decoration:none">ai.arq.br</a></span></p>
+</div>"""
+    return _send_email_smtp(
+        email, f"Uma vers&atilde;o mais completa do seu projeto — {proj}".replace("&atilde;", "ã"),
+        html, log_kind="leitura_combinada")
+
+
+def _hd_escape(t) -> str:
+    import html as _h
+    return _h.escape(str(t or ""))
+
+
 def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) -> bool:
     """Avisa o cliente de que a leitura do projeto dele foi refeita e ficou melhor.
 
@@ -17857,7 +17954,7 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
 
     filho = _supa_rows("GET", "projects",
              params={"job_id": f"eq.{eval_job_id}",
-                     "select": "job_id,parent_job_id,is_eval,user_id,project_name,status"})
+                     "select": "job_id,parent_job_id,is_eval,user_id,project_name,status,warnings"})
     if not filho:
         raise HTTPException(404, "Filhote não encontrado")
     filho = filho[0]
@@ -17921,13 +18018,19 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
         "GET", "item_reviews", params={"job_id": f"eq.{pai_id}", "select": "id"})
     revisoes = len(_rows_rev or []) if _st_rev == 200 else -1
 
-    novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
-                 + " — nova leitura (motor atualizado)")
+    # 🚨 24/08: um MERGE não é uma releitura. Chamar de "nova leitura (motor
+    # atualizado)" seria mentira — a gente não releu nada, juntou o melhor de
+    # duas leituras que já existiam. O prefixo "mg" nasce em /merge-criar.
+    _e_merge = str(eval_job_id).startswith("mg")
+    _SUFIXO = (" — versão combinada (o melhor das duas leituras)" if _e_merge
+               else " — nova leitura (motor atualizado)")
+    novo_nome = str(pai.get("project_name") or "Projeto")[:60] + _SUFIXO
     # 23/08 (auditoria): ao revogar, gravava de volta o nome JÁ renomeado — o
     # job ficava marcado como "nova leitura" mesmo depois de recolhido.
     _nome_filho = str(filho.get("project_name") or "")
-    if revogar and _nome_filho.endswith(" — nova leitura (motor atualizado)"):
-        _nome_filho = "[TESTE] " + str(pai.get("project_name") or "Projeto")[:60] + " — avaliação"
+    if revogar and _nome_filho.endswith(_SUFIXO):
+        _nome_filho = ("[TESTE] " + str(pai.get("project_name") or "Projeto")[:60]
+                       + (" — combinada" if _e_merge else " — avaliação"))
     patch = ({"user_id": "eval", "project_name": _nome_filho} if revogar
              else {"user_id": pai["user_id"], "project_name": novo_nome})
     _supa_rest_service("PATCH", "projects", body=patch,
@@ -17962,7 +18065,9 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
             # no log (admin:filhote-email), não na cara do Pedro esperando.
             def _enviar_email_filhote():
                 try:
-                    _ok = _email_leitura_nova(pai, eval_job_id, antes, depois)
+                    _ok = (_email_leitura_combinada(pai, filho, eval_job_id, antes, depois)
+                           if _e_merge
+                           else _email_leitura_nova(pai, eval_job_id, antes, depois))
                     _log_error("admin:filhote-email",
                                f"{eval_job_id} para={pai.get('user_email','')} "
                                f"{'enviado' if _ok else 'FALHOU no SMTP'}", eval_job_id)
@@ -17994,6 +18099,416 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
                       f"automático — o que ele mediu à mão vale mais que a nossa releitura. "
                       f"Fale com ele pessoalmente."
                       if revisoes else None)}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🧬 MERGE DE LEITURAS — a melhor prancha de cada, ESTUDADA
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Pedro, 24/08/2026: *"não podemos fazer um merge entre as planilhas e unificar
+# isso pelo motor tb? tipo um terceiro projeto"* e, logo depois:
+# *"vamos estudar sempre bem as duas planilhas pra fazer o merge"*.
+#
+# A segunda frase é a que define o desenho. Contagem sozinha JÁ teria errado
+# neste produto: em 15/08 o filhote BOM do Giovani tinha números PIORES que o
+# original (5 medidos × 7) e era a planilha certa — preencheu pintura (597 m²) e
+# forro (256 m²) que estavam em branco. Por isso aqui a contagem é só a primeira
+# opinião; uma IA LÊ as duas leituras de cada prancha disputada e diz qual é mais
+# fiel, com evidência. Quando as duas discordam, é isso que o Pedro precisa ver.
+#
+# 🚨 Nada é criado sem ele olhar: /merge-preview só LÊ.
+
+
+def _merge_data_curta(iso):
+    """'2026-08-24T19:37:48+00' -> '24/08 16h37' (Brasília). Só pra o cliente
+    saber DE QUAL leitura a linha veio; se não der pra ler, devolve None e o
+    item sai sem o carimbo em vez de sair com data errada."""
+    try:
+        import datetime as _d
+        txt = str(iso or "").replace("Z", "+00:00")
+        # O Postgres devolve "+00" e o fromisoformat do 3.13 quer "+00:00".
+        if len(txt) > 3 and txt[-3] in "+-" and txt[-3:].lstrip("+-").isdigit():
+            txt += ":00"
+        d = _d.datetime.fromisoformat(txt) - _d.timedelta(hours=3)   # UTC -> Brasília
+        return "%02d/%02d %02dh%02d" % (d.day, d.month, d.hour, d.minute)
+    except Exception:
+        return None
+
+
+def _merge_linhas_da_prancha(itens, prancha, teto=90):
+    """Linhas de UMA prancha, no formato que a juíza lê."""
+    out = []
+    for it in itens or []:
+        if str((it or {}).get("ref_sheet") or "").strip() != prancha:
+            continue
+        out.append("%s | %s %s | %s" % (
+            str((it or {}).get("description", ""))[:95],
+            (it or {}).get("quantity"),
+            (it or {}).get("unit", ""),
+            (it or {}).get("confidence", "")))
+        if len(out) >= teto:
+            out.append("[... lista cortada em %d linhas]" % teto)
+            break
+    return out
+
+
+def _merge_juiza_prancha(prancha, itens_pai, itens_filho):
+    """Lê as DUAS leituras da MESMA prancha e diz qual é mais fiel.
+
+    Não é aritmética: a pergunta é de CONTEÚDO. O caso que motivou — a prancha
+    4366-EL-E do Alan tinha, na leitura original, 5 tipos de porta somando 38
+    unidades (34 medidas do CAD); na releitura virou UMA linha "Portas internas",
+    quantidade 0, estimado. A contagem também pegaria esse (77 x 49 medidos), mas
+    o que o Pedro precisa ler é POR QUE.
+    """
+    la = _merge_linhas_da_prancha(itens_pai, prancha)
+    lb = _merge_linhas_da_prancha(itens_filho, prancha)
+    if not la or not lb:
+        return {"lado": None, "motivo": "prancha existe em uma leitura só"}
+    nl = chr(10)
+    prompt = (
+        "Duas leituras automáticas da MESMA prancha de CAD, do MESMO projeto. "
+        "Escolha qual das duas descreve melhor o que está desenhado." + nl + nl
+        + "=== LEITURA A ===" + nl + nl.join(la) + nl + nl
+        + "=== LEITURA B ===" + nl + nl.join(lb) + nl + nl
+        + "Critérios, nesta ordem:" + nl
+        + "1. ESPECIFICIDADE PERDIDA pesa muito. Se uma leitura tem 5 tipos de porta "
+          "somando 38 unidades e a outra tem uma linha 'portas internas' com "
+          "quantidade 0, a primeira é melhor — mesmo que tenha menos linhas." + nl
+        + "2. Linha MEDIDA (confidence=confirmado) com quantidade maior que 0 vale "
+          "mais que linha estimada com quantidade 0." + nl
+        + "3. Quantidade absurda ou incoerente com o resto da prancha pesa CONTRA." + nl
+        + "4. Mais linhas NAO é melhor por si só: repetição e linha genérica não "
+          "contam como ganho." + nl
+        + "5. Se as duas forem equivalentes, responda empate." + nl + nl
+        + "Responda SO com JSON: "
+          '{"melhor": "A" ou "B" ou "empate", '
+          '"motivo": "1-2 frases em pt-br CITANDO as linhas que decidiram", '
+          '"perdas": ["o que a pior deixou de fora, no máximo 3"]}')
+    try:
+        import anthropic as _an
+        from llm_retry import call_with_retry as _cwr
+        _cli = _an.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""), timeout=120.0)
+        _r = _cwr(_cli, tag="merge-juiza", model="claude-sonnet-4-6",
+                  max_tokens=700, temperature=0,
+                  messages=[{"role": "user", "content": prompt}])
+        _txt = _r.content[0].text if _r.content else ""
+        _s, _e = _txt.find("{"), _txt.rfind("}")
+        v = _json.loads(_txt[_s:_e + 1]) if (_s >= 0 and _e > _s) else {}
+    except Exception as _erj:
+        # Juíza indisponível NAO inventa veredito — a contagem decide sozinha e o
+        # preview diz, na cara do Pedro, que ela decidiu sozinha.
+        return {"lado": None, "indisponivel": True,
+                "motivo": "juíza indisponível (%s)" % type(_erj).__name__}
+    melhor = str(v.get("melhor") or "").strip().upper()
+    lado = {"A": "pai", "B": "filho"}.get(melhor)
+    return {"lado": lado,
+            "motivo": str(v.get("motivo") or "")[:400],
+            "perdas": [str(x)[:120] for x in (v.get("perdas") or [])][:3]}
+
+
+def _merge_carregar(jid):
+    """Itens de um job, com TUDO que o merge copia.
+
+    🚨 Falha FECHADA: erro de leitura devolve None, nunca lista vazia. Se
+    devolvesse [], o plano acharia que aquele lado não tem prancha nenhuma e
+    escolheria o outro por engano — foi exatamente esse bug (tupla lida como
+    lista) que fez o e-mail do filhote dizer "0 → 46 itens" em 23/08.
+    """
+    _st, _r = _supa_rest_service(
+        "GET", "project_items",
+        params={"job_id": f"eq.{jid}", "limit": "5000",
+                "select": "item_num,description,unit,quantity,observations,"
+                          "ref_sheet,confidence,discipline,section,sort_order,origem"})
+    if _st != 200:
+        return None
+    return _r or []
+
+
+def _merge_bloqueios(pai, plano, revisoes):
+    """O que IMPEDE criar o merge. Lista explícita, mostrada ANTES no preview."""
+    b = []
+    if revisoes < 0:
+        b.append("não consegui LER as revisões do cliente no original — na dúvida não crio")
+    elif revisoes > 0:
+        b.append("o cliente revisou %d item(ns) à mão no original; o merge não carrega "
+                 "essas correções (regra dura nº7) — fale com ele antes" % revisoes)
+    if not pai.get("user_id"):
+        b.append("o projeto original está sem dono")
+    if not plano.get("pranchas"):
+        b.append("nenhuma prancha com item nos dois lados")
+    return b
+
+
+def _merge_montar(eval_job_id: str, com_juiza: bool = True):
+    """Carrega os dois lados, monta o plano e (se pedido) manda a juíza LER cada
+    prancha disputada. Usado pelo preview E pela criação — assim o que o Pedro
+    aprovou na tela é exatamente o que é criado."""
+    filho = _supa_rows("GET", "projects",
+             params={"job_id": f"eq.{eval_job_id}",
+                     "select": "job_id,parent_job_id,is_eval,status,project_name,"
+                               "total_area,layout_area,warnings,created_at"})
+    if not filho:
+        raise HTTPException(404, "Releitura não encontrada")
+    filho = filho[0]
+    pai_id = filho.get("parent_job_id")
+    if not pai_id:
+        raise HTTPException(400, "Esta releitura não aponta pra um projeto original")
+    if filho.get("status") != "done":
+        raise HTTPException(400, "A releitura ainda não concluiu (status=%s)"
+                                 % filho.get("status"))
+
+    pai = _supa_rows("GET", "projects",
+           params={"job_id": f"eq.{pai_id}",
+                   "select": "job_id,user_id,user_email,user_name,project_name,"
+                             "files_count,file_types,typology,project_type,status,"
+                             "total_area,layout_area,user_total_area,user_pe_direito,"
+                             "warnings,created_at"})
+    if not pai:
+        raise HTTPException(404, "Projeto original não encontrado")
+    pai = pai[0]
+
+    ip, if_ = _merge_carregar(pai_id), _merge_carregar(eval_job_id)
+    if ip is None or if_ is None:
+        raise HTTPException(502, "Não consegui ler os itens dos dois projetos agora — "
+                                 "sem isso eu escolheria prancha no escuro.")
+
+    from engine_rules import merge_plano as _m_plano
+    plano = _m_plano(ip, if_)
+
+    if com_juiza:
+        for p in plano["pranchas"]:
+            if not (p["pai"] and p["filho"]):
+                continue
+            v = _merge_juiza_prancha(p["prancha"], ip, if_)
+            p["juiza"] = v
+            p["discordam"] = bool(v.get("lado")) and v["lado"] != p["lado"]
+            # 🚨 Quando a juíza LEU e discordou da contagem, ela manda. O caso do
+            # Giovani (15/08) prova que contar é insuficiente. Quando ela não
+            # conseguiu ler, a contagem segue — e o preview diz isso.
+            if v.get("lado"):
+                p["lado_contagem"] = p["lado"]
+                p["lado"] = v["lado"]
+                p["motivo"] = v.get("motivo") or p["motivo"]
+        plano["total_itens"] = sum(
+            (p["pai"] if p["lado"] == "pai" else p["filho"])["itens"]
+            for p in plano["pranchas"])
+        plano["total_medidos"] = sum(
+            (p["pai"] if p["lado"] == "pai" else p["filho"])["medidos"]
+            for p in plano["pranchas"])
+
+    _st_rev, _rows_rev = _supa_rest_service(
+        "GET", "item_reviews", params={"job_id": f"eq.{pai_id}", "select": "id"})
+    revisoes = len(_rows_rev or []) if _st_rev == 200 else -1
+
+    return pai, filho, ip, if_, plano, revisoes
+
+
+@app.get("/api/admin/merge-preview/{eval_job_id}")
+async def admin_merge_preview(eval_job_id: str, request: Request):
+    """PRÉVIA do merge — só LÊ. Nada é criado aqui.
+
+    Mostra, prancha por prancha: o que cada leitura achou, quem a CONTAGEM
+    escolhe, quem a JUÍZA escolhe depois de ler as duas, e onde as duas
+    discordam. Mais as sobreposições entre pranchas (mesmo código em duas
+    pranchas), que são APONTADAS e nunca somadas nem apagadas — regra dura nº3,
+    e a lição de 17/08 (a passada que removia "duplicata" derrubou 18.168 kg
+    para 508 kg).
+    """
+    _require_admin(request)
+    com_juiza = str(request.query_params.get("juiza", "1")).strip() not in ("0", "nao", "false")
+    pai, filho, ip, if_, plano, revisoes = _merge_montar(eval_job_id, com_juiza)
+
+    from engine_rules import merge_itens as _m_itens
+    from engine_rules import merge_sobreposicoes as _m_sobrep
+    escolhidos = _m_itens(ip, if_, plano)
+    sobrepostos = _m_sobrep(escolhidos)
+
+    def _tot(itens):
+        return {"itens": len(itens),
+                "medidos": sum(1 for x in itens
+                               if (x or {}).get("confidence") == "confirmado")}
+
+    return {
+        "ok": True,
+        "original": {"job_id": pai["job_id"], "nome": pai.get("project_name"),
+                     "dono": pai.get("user_email"), **_tot(ip)},
+        "releitura": {"job_id": eval_job_id, **_tot(if_)},
+        "merge": {"itens": plano["total_itens"], "medidos": plano["total_medidos"],
+                  "pranchas": len(plano["pranchas"])},
+        "plano": plano["pranchas"],
+        "discordancias": [p for p in plano["pranchas"] if p.get("discordam")],
+        "sobreposicoes": sobrepostos,
+        "revisoes_no_original": revisoes,
+        "juiza_usada": com_juiza,
+        "bloqueios": _merge_bloqueios(pai, plano, revisoes),
+    }
+
+
+@app.post("/api/admin/merge-criar/{eval_job_id}")
+async def admin_merge_criar(eval_job_id: str, request: Request):
+    """CRIA o terceiro projeto: a melhor prancha de cada leitura.
+
+    Nasce como filhote (`is_eval`, `user_id='eval'`, `parent_job_id` = original),
+    então reusa o botão Liberar e o e-mail que já existem — inclusive as travas
+    da regra nº7 e o quadro do que piorou.
+
+    🚨 O que este endpoint NÃO faz:
+      • não promove selo: item que chegou 'estimado' sai 'estimado' (regra nº1)
+      • não refaz taxonomia: discipline/section vêm colados no item (regra nº4)
+      • não soma nem apaga sobreposição entre pranchas — só AVISA (regra nº3)
+      • não mistura leitura dentro da mesma prancha: cada prancha vem inteira de
+        um lado só. É esta invariante que impede duplicar.
+    """
+    _require_admin(request)
+    _log_error("admin:merge-inicio", "%s" % eval_job_id, eval_job_id, severity="info")
+
+    pai, filho, ip, if_, plano, revisoes = _merge_montar(eval_job_id, com_juiza=True)
+    bloqueios = _merge_bloqueios(pai, plano, revisoes)
+    if bloqueios:
+        raise HTTPException(400, "Não criei o merge: " + " | ".join(bloqueios))
+
+    # Já existe um merge deste par? Criar dois confunde mais do que ajuda.
+    _ja = _supa_rows("GET", "projects",
+           params={"parent_job_id": f"eq.{pai['job_id']}", "is_eval": "is.true",
+                   "select": "job_id,project_name,status", "limit": "20"}) or []
+    _ja = [x for x in _ja if str(x.get("job_id", "")).startswith("mg")]
+    if _ja:
+        raise HTTPException(409, "Já existe um merge deste projeto (%s). Revogue ou "
+                                 "apague ele antes de criar outro." % _ja[0]["job_id"])
+
+    from engine_rules import merge_itens as _m_itens
+    from engine_rules import merge_sobreposicoes as _m_sobrep
+    escolhidos = _m_itens(ip, if_, plano)
+    if not escolhidos:
+        raise HTTPException(400, "O plano não escolheu item nenhum")
+
+    # 🚨 Não crio algo PIOR que os dois lados. O ganho é o motivo de existir.
+    med_merge = sum(1 for x in escolhidos if (x or {}).get("confidence") == "confirmado")
+    med_pai = sum(1 for x in ip if (x or {}).get("confidence") == "confirmado")
+    med_filho = sum(1 for x in if_ if (x or {}).get("confidence") == "confirmado")
+    if med_merge < max(med_pai, med_filho):
+        raise HTTPException(400,
+            "Não criei: o merge mediria %d, menos que a melhor leitura sozinha "
+            "(original %d, releitura %d)." % (med_merge, med_pai, med_filho))
+
+    sobrepostos = _m_sobrep(escolhidos)
+
+    novo_id = "mg" + str(uuid.uuid4())[:6]
+    do_pai = [_nome_prancha_bonito(p) for p in plano["do_pai"]]
+    do_filho = [_nome_prancha_bonito(p) for p in plano["do_filho"]]
+
+    avisos = [
+        "Esta planilha junta as DUAS leituras do seu projeto, prancha por prancha "
+        "— ficou com a versão mais completa de cada uma. Nenhuma prancha entrou "
+        "duas vezes. Da leitura original: %s. Da releitura: %s."
+        % (", ".join(do_pai) or "nenhuma", ", ".join(do_filho) or "nenhuma")
+    ]
+    if sobrepostos:
+        _top = sobrepostos[:4]
+        avisos.append(
+            "⚠ CONFERIR ANTES DE SOMAR: %d código(s) aparecem em mais de uma prancha, "
+            "o que costuma ser o MESMO equipamento desenhado em duas disciplinas "
+            "(ex.: o sensor aparece na prancha de elétrica e na de segurança). Não "
+            "somamos nem apagamos nada — a decisão é sua: %s."
+            % (len(sobrepostos),
+               "; ".join("%s (%s em %s)" % (s["codigo"],
+                                            " + ".join(str(l["quantidade"]) for l in s["linhas"]),
+                                            " e ".join(s["pranchas"]))
+                         for s in _top)))
+    # Avisos das duas leituras que AINDA valem. O "não entraram" morre aqui: o
+    # merge tem todas as pranchas que qualquer uma das leituras conseguiu ler.
+    for w in list(pai.get("warnings") or []) + list(filho.get("warnings") or []):
+        ws = str(w).strip()
+        if not ws or "não entraram" in ws or "nao entraram" in ws:
+            continue
+        if ws not in avisos:
+            avisos.append(ws)
+
+    _st_novo, _ = _supa_rest_service("POST", "projects", body={
+        "job_id": novo_id,
+        "user_id": "eval",          # só aparece pro cliente depois do Liberar
+        "user_email": "",           # vazio → nenhum e-mail de conclusão dispara
+        "user_name": "",
+        "project_name": "[TESTE] %s — combinada" % str(pai.get("project_name") or "Projeto")[:60],
+        "typology": pai.get("typology") or "office",
+        "project_type": pai.get("project_type") or "arquitetura",
+        "files_count": pai.get("files_count"),
+        "file_types": pai.get("file_types"),
+        "status": "done",
+        "parent_job_id": pai["job_id"],
+        "is_eval": True,
+        "user_total_area": pai.get("user_total_area"),
+        "user_pe_direito": pai.get("user_pe_direito"),
+        # Área: a releitura leu mais prancha, então a dela tem mais base. Não é
+        # promoção de nada — é copiar um número que já existia.
+        "total_area": filho.get("total_area") or pai.get("total_area"),
+        "layout_area": filho.get("layout_area") or pai.get("layout_area"),
+        "warnings": avisos,
+    }, prefer="return=minimal")
+    if _st_novo not in (200, 201, 204):
+        raise HTTPException(502, "Não consegui criar o projeto combinado (HTTP %s)" % _st_novo)
+
+    # Itens: copiados INTEIROS, só renumerados. Ordena por seção/disciplina pra a
+    # planilha não sair com as pranchas embaralhadas.
+    escolhidos.sort(key=lambda x: (str(x.get("section") or ""),
+                                   str(x.get("discipline") or ""),
+                                   int(x.get("sort_order") or 0)))
+    # 🚨 Pedro, 24/08: "sempre coloca a fonte na planilha, dizendo qual a origem
+    # da medição". Numa planilha COMBINADA a fonte tem uma camada a mais: de
+    # QUAL das duas leituras a linha veio. Sem isso o cliente não tem como
+    # conferir uma divergência contra a prancha certa.
+    _lado_da = {p["prancha"]: p["lado"] for p in plano["pranchas"]}
+    _dt = {"pai": _merge_data_curta(pai.get("created_at")),
+           "filho": _merge_data_curta(filho.get("created_at"))}
+    linhas = []
+    for n, it in enumerate(escolhidos, 1):
+        linha = {k: it.get(k) for k in ("description", "unit", "quantity", "observations",
+                                        "ref_sheet", "confidence", "discipline",
+                                        "section", "origem")}
+        _l = _lado_da.get(str(it.get("ref_sheet") or "").strip())
+        _sel = ("leitura de %s" % _dt[_l]) if _l and _dt.get(_l) else None
+        if _sel:
+            _obs = str(linha.get("observations") or "").strip()
+            linha["observations"] = (_obs + " | " if _obs else "") + "Veio da " + _sel
+        linha["job_id"] = novo_id
+        linha["item_num"] = str(n)
+        linha["sort_order"] = n
+        linhas.append(linha)
+
+    gravadas = 0
+    for i in range(0, len(linhas), 200):
+        _st_i, _ = _supa_rest_service("POST", "project_items", body=linhas[i:i + 200],
+                                      prefer="return=minimal", timeout=30)
+        if _st_i not in (200, 201, 204):
+            _log_error("admin:merge",
+                       "FALHA ao gravar itens (HTTP %s) no lote %d — projeto %s fica "
+                       "incompleto" % (_st_i, i // 200, novo_id), novo_id)
+            raise HTTPException(502, "Criei o projeto %s mas falhei ao gravar os itens "
+                                     "(HTTP %s). Apague ele antes de tentar de novo."
+                                     % (novo_id, _st_i))
+        gravadas += len(linhas[i:i + 200])
+
+    _log_error("admin:merge",
+               "criado %s de %s + %s — %d itens, %d medidos (original %d, releitura %d), "
+               "%d sobreposicao(oes) apontada(s)"
+               % (novo_id, pai["job_id"], eval_job_id, gravadas, med_merge,
+                  med_pai, med_filho, len(sobrepostos)), novo_id)
+
+    return {"ok": True, "job_id": novo_id, "parent_job_id": pai["job_id"],
+            "itens": gravadas, "medidos": med_merge,
+            "original": {"itens": len(ip), "medidos": med_pai},
+            "releitura": {"itens": len(if_), "medidos": med_filho},
+            "do_pai": do_pai, "do_filho": do_filho,
+            "sobreposicoes": len(sobrepostos),
+            "discordancias_da_juiza": [
+                {"prancha": _nome_prancha_bonito(p["prancha"]),
+                 "contagem_queria": p.get("lado_contagem"), "juiza_escolheu": p["lado"],
+                 "motivo": p.get("motivo")}
+                for p in plano["pranchas"] if p.get("discordam")],
+            "proximo_passo": "Confira o projeto %s no admin. Se estiver bom, use "
+                             "Liberar na aba Filhotes — aí o cliente vê e recebe "
+                             "e-mail." % novo_id}
 
 
 @app.get("/api/admin/combine-preview/{job_id}")
