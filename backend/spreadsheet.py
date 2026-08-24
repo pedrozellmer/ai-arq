@@ -141,6 +141,47 @@ def _build_ref_text(item) -> str:
     return ' · '.join(parts) if parts else ''
 
 
+def _origem_da_medicao(item) -> str:
+    """De ONDE veio o numero desta linha — em coluna propria.
+
+    Pedro, 24/08/2026: *"e sempre coloca a fonte na planilha, dizendo qual a
+    origem da medicao"*.
+
+    O motor JA registrava isso, mas enterrado no meio da coluna OBSERVACOES,
+    junto do selo e de outros recados. Medido no acervo: 96% dos itens MEDIDOS
+    (1.370 de 1.432) tem um "Fonte: ..." escrito — 972 por contagem de bloco,
+    109 por comprimento de layer, 68 por area de hachura.
+
+    🚨 Os 4% que NAO tem viram "sem procedencia registrada" em vez de celula
+    vazia. Selo de MEDIDO sem dizer de onde veio e exatamente o que a regra
+    dura nº1 proibe; deixar a celula em branco esconderia isso, e branco em
+    planilha le-se como "nao se aplica", nao como "nao sei".
+    """
+    obs = str(getattr(item, "observations", "") or "")
+    baixo = obs.lower()
+    i = baixo.find("fonte:")
+    if i >= 0:
+        trecho = obs[i + len("fonte:"):].strip()
+        # Onde termina a frase da fonte: no separador " | " que o motor usa, ou
+        # no primeiro ". ". 🪤 O corte e ". " (ponto+espaco) de proposito —
+        # "69.03 m" e "Ø1½"." tem ponto sem espaco e nao podem cortar a frase.
+        fim = len(trecho)
+        for sep in (" | ", ". "):
+            j = trecho.find(sep)
+            if j >= 0:
+                fim = min(fim, j + (1 if sep == ". " else 0))
+        return trecho[:fim].strip().rstrip(".") or "—"
+    # Sem "Fonte:" escrito: o texto vale mais que o silencio.
+    try:
+        from models import Confidence
+        medido = getattr(item, "confidence", None) == Confidence.CONFIRMADO
+    except Exception:
+        medido = str(getattr(item, "confidence", "")).lower().endswith("confirmado")
+    if medido:
+        return "⚠ sem procedência registrada — confira esta linha no CAD"
+    return "não medido — a IA identificou o item; a quantidade é sua"
+
+
 _TYPOLOGY_LABEL = {
     "office":      "ESCRITÓRIO / CORPORATIVO",
     "residential": "RESIDENCIAL",
@@ -316,12 +357,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws = wb.create_sheet('Orçamento')
     ws.sheet_properties.tabColor = '4F46E5'
 
-    widths = [7, 62, 5, 8, 13, 13, 15, 35, 12]
+    widths = [7, 62, 5, 8, 13, 13, 15, 35, 38, 12]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     # Cabeçalho
-    ws.merge_cells('A1:I1')
+    ws.merge_cells('A1:J1')
     ws.cell(row=1, column=1, value='PLANILHA DE QUANTITATIVOS PARA CONCORRÊNCIA — AI.arq').font = F_TITLE
     ws.merge_cells('A2:I2')
     info_parts = []
@@ -333,7 +374,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ws.cell(row=3, column=1, value='Cada item traz na coluna OBSERVAÇÕES um selo de status: "✓ MEDIDO do CAD" (confiável) ou "⚠ ESTIMADO — revisar". A cor é só reforço — fundo BRANCO = medido · LARANJA = estimado · CINZA = metadado · ROXO = custo indireto/gestão. Coluna AMARELA = preencher preço. Itens ⚠ ESTIMADO e os roxos exigem revisão antes de fechar o orçamento.').font = F_NOTE
 
     ro = 5
-    hdrs = ['ITEM', 'DESCRIÇÃO DO SERVIÇO', 'UN', 'QTDE', 'MAT (R$)', 'M.O. (R$)', 'TOTAL (R$)', 'OBSERVAÇÕES', 'REF.']
+    hdrs = ['ITEM', 'DESCRIÇÃO DO SERVIÇO', 'UN', 'QTDE', 'MAT (R$)', 'M.O. (R$)', 'TOTAL (R$)', 'OBSERVAÇÕES', 'ORIGEM DA MEDIÇÃO', 'REF.']
     for c, h in enumerate(hdrs, 1):
         cl = ws.cell(row=ro, column=c, value=h)
         cl.font = F_HDR; cl.fill = P_HDR; cl.alignment = AC; cl.border = BD
@@ -341,7 +382,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     ro = 6
 
     # SEÇÃO 0: PREMISSAS
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
     ws.cell(row=ro, column=1, value='0. PREMISSAS')
     _style_row(ws, ro, F_SEC, P_SEC, AL, 9)
     ro += 1
@@ -407,10 +448,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         ws.cell(row=ro, column=3, value=un).font = F_N
         ws.cell(row=ro, column=4, value=qtd).font = F_N
         ws.cell(row=ro, column=8, value=obs or 'Metadado do projeto — revisar no arquivo original').font = Font(name='Calibri', size=8, italic=True, color='6B7280')
-        ws.cell(row=ro, column=9, value=ref).font = Font(name='Calibri', size=7)
-        for c in range(1, 10):
+        # Metadado do projeto (area, pe-direito): nao e linha de servico.
+        ws.cell(row=ro, column=9, value='—').font = Font(name='Calibri', size=7, color='475569')
+        ws.cell(row=ro, column=10, value=ref).font = Font(name='Calibri', size=7)
+        for c in range(1, 11):
             ws.cell(row=ro, column=c).border = BD
-            ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
+            ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 10] else AL
             ws.cell(row=ro, column=c).fill = P_PREMISSA
         ws.cell(row=ro, column=4).alignment = AR
         ro += 1
@@ -451,7 +494,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             continue
 
         # Cabeçalho da seção
-        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
         ws.cell(row=ro, column=1, value=f'{disc_num}. {disc_name.upper()}')
         _style_row(ws, ro, F_SEC, P_SEC, AL, 9)
         ro += 1
@@ -480,11 +523,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
             ref_text = _build_ref_text(item)
-            ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Calibri', size=7)
+            ws.cell(row=ro, column=9, value=_origem_da_medicao(item)).font = Font(name='Calibri', size=7, color='475569')
+            ws.cell(row=ro, column=10, value=ref_text).font = Font(name='Calibri', size=7)
 
-            for c in range(1, 10):
+            for c in range(1, 11):
                 ws.cell(row=ro, column=c).border = BD
-                ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
+                ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 10] else AL
             for c in [4, 5, 6, 7]:
                 ws.cell(row=ro, column=c).alignment = AR
             for c in [5, 6, 7]:
@@ -512,7 +556,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
 
     # Itens de disciplinas não mapeadas
     for disc_name, disc_items in items_by_discipline.items():
-        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
         ws.cell(row=ro, column=1, value=f'{disc_num}. {disc_name.upper()}')
         _style_row(ws, ro, F_SEC, P_SEC, AL, 9)
         ro += 1
@@ -537,10 +581,11 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             ws.cell(row=ro, column=8, value=_obs).font = F_N
             # Enriquecer REF com código SINAPI (se houver match)
             ref_text = _build_ref_text(item)
-            ws.cell(row=ro, column=9, value=ref_text).font = Font(name='Calibri', size=7)
-            for c in range(1, 10):
+            ws.cell(row=ro, column=9, value=_origem_da_medicao(item)).font = Font(name='Calibri', size=7, color='475569')
+            ws.cell(row=ro, column=10, value=ref_text).font = Font(name='Calibri', size=7)
+            for c in range(1, 11):
                 ws.cell(row=ro, column=c).border = BD
-                ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
+                ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 10] else AL
             for c in [4, 5, 6, 7]: ws.cell(row=ro, column=c).alignment = AR
             for c in [5, 6, 7]: ws.cell(row=ro, column=c).number_format = '#,##0.00'
             if item.confidence in [Confidence.ESTIMADO, Confidence.VERIFICAR]:
@@ -562,12 +607,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # SEÇÃO: SUGESTÕES POR TIPO DE PROJETO
     # ================================================================
     ro += 1
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
     ws.cell(row=ro, column=1, value='SUGESTÕES POR TIPO DE PROJETO (itens que NÃO aparecem nas pranchas)')
     _style_row(ws, ro, Font(name='Calibri', bold=True, size=11, color='FFFFFF'), PatternFill('solid', fgColor='7B2D8E'), AL, 9)
     ro += 1
 
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
     ws.cell(row=ro, column=1, value='Itens que não constam nas pranchas — são custos de gestão e execução típicos de obras.').font = Font(name='Calibri', size=8, italic=True, color='7B2D8E')
     ro += 1
 
@@ -634,10 +679,12 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         else:
             ws.cell(row=ro, column=7, value=f'=D{ro}*(E{ro}+F{ro})').font = F_N
         ws.cell(row=ro, column=8, value=obs).font = F_N
-        ws.cell(row=ro, column=9, value='Experiência').font = Font(name='Calibri', size=7)
-        for c in range(1, 10):
+        # Linha de experiencia/gestao: nao ha medicao de CAD por tras.
+        ws.cell(row=ro, column=9, value='—').font = Font(name='Calibri', size=7, color='475569')
+        ws.cell(row=ro, column=10, value='Experiência').font = Font(name='Calibri', size=7)
+        for c in range(1, 11):
             ws.cell(row=ro, column=c).border = BD
-            ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 9] else AL
+            ws.cell(row=ro, column=c).alignment = AC if c in [1, 3, 4, 10] else AL
             ws.cell(row=ro, column=c).fill = P_PURPLE
         ws.cell(row=ro, column=4).alignment = AR
         for c in [5, 6, 7]:
@@ -657,7 +704,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
 
     # Resumo
     ro += 1
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
     ws.cell(row=ro, column=1, value='RESUMO GERAL')
     _style_row(ws, ro, F_SEC, P_SEC, AL, 9)
     ro += 1
@@ -733,7 +780,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # SEÇÃO: OMISSOS (itens não incluídos que podem ser necessários)
     # ================================================================
     ro += 2
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
     ws.cell(row=ro, column=1, value='OMISSOS — Itens não incluídos que provavelmente serão necessários')
     _style_row(ws, ro, Font(name='Calibri', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='B45309'), AL, 9)
     ro += 1
@@ -778,7 +825,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             'Compatibilização de projetos entre disciplinas',
         ]
     for om in omissos:
-        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
         ws.cell(row=ro, column=1, value=f'  • {om}').font = Font(name='Calibri', size=8, color='92400E')
         ws.cell(row=ro, column=1).fill = PatternFill('solid', fgColor='FEF3C7')
         ro += 1
@@ -787,7 +834,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # SEÇÃO: EXCLUSOS (itens explicitamente fora do escopo)
     # ================================================================
     ro += 1
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
     ws.cell(row=ro, column=1, value='EXCLUSOS — Itens explicitamente fora deste escopo (padrão de mercado)')
     _style_row(ws, ro, Font(name='Calibri', bold=True, size=10, color='FFFFFF'), PatternFill('solid', fgColor='6B7280'), AL, 9)
     ro += 1
@@ -833,14 +880,14 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
             'Equipamentos específicos da operação — cargo do contratante',
         ]
     for ex in exclusos:
-        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
         ws.cell(row=ro, column=1, value=f'  • {ex}').font = Font(name='Calibri', size=8, color='374151')
         ws.cell(row=ro, column=1).fill = PatternFill('solid', fgColor='F3F4F6')
         ro += 1
 
     # Notas profissionais
     ro += 2
-    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+    ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
     ws.cell(row=ro, column=1, value='NOTAS:').font = F_BOLD; ro += 1
     notas = [
         '1. REFORMA: quantitativos consideram apenas o que MUDA. Conferir in loco e em projeto executivo.',
@@ -866,7 +913,7 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         '12. Planilha gerada por AI.arq (ai.arq.br) — validar com engenheiro de custos.',
     ]
     for n in notas:
-        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=9)
+        ws.merge_cells(start_row=ro, start_column=1, end_row=ro, end_column=10)
         ws.cell(row=ro, column=1, value=n).font = F_SM; ro += 1
 
     # Configurações
