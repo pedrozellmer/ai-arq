@@ -726,21 +726,39 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
                 pass
         else:
             # Não casou: acrescenta, pra NUNCA perder o que o cliente corrigiu.
+            #
+            # 🚨 23/08/2026 (auditoria): aqui era `deepcopy(items[0])` com 4
+            # campos reescritos. A linha do cliente herdava do PRIMEIRO item da
+            # leitura: o selo (em 23 de 147 projetos ele é 'confirmado' → a
+            # linha digitada à mão sairia como MEDIDO DO CAD, regra dura nº1),
+            # o item_num (duplicado), a prancha em ref_sheet (apontando pro
+            # desenho errado), a disciplina e o código SINAPI de OUTRO serviço.
+            # Nunca apareceu em produção só porque a fusão nunca chegou a rodar
+            # (o bug da tupla). Agora a linha é CONSTRUÍDA: só o que o cliente
+            # digitou entra, o resto nasce vazio.
             try:
-                import copy as _copy   # local: `copy` não é importado no topo
-                novo = _copy.deepcopy(items[0]) if items else None
-                if novo is None:
-                    continue
-                novo.description = ed.get("description", "")
-                novo.unit = ed.get("unit", "")
-                novo.quantity = ed.get("quantity", 0)
-                novo.observations = ("✏️ REVISADO POR VOCÊ — mantido da sua revisão "
-                                     "anterior; a leitura nova não achou esta linha. "
-                                     + (ed.get("observations") or ""))[:1000]
+                from models import BudgetItem as _BI, Confidence as _Cf
+                _n_novo = resumo["acrescentadas"] + 1
+                novo = _BI(
+                    item_num=f"REV.{_n_novo}",
+                    description=ed.get("description", "") or "",
+                    unit=ed.get("unit", "") or "",
+                    quantity=float(ed.get("quantity", 0) or 0),
+                    observations=("✏️ REVISADO POR VOCÊ — mantido da sua revisão "
+                                  "anterior; a leitura nova não achou esta linha. "
+                                  + (ed.get("observations") or ""))[:1000],
+                    ref_sheet="",             # não é de prancha nenhuma
+                    confidence=_Cf.ESTIMADO,  # número digitado não é medição do CAD
+                    origem="revisao_cliente",
+                    discipline="",            # cai em "Complementares", não na do item[0]
+                    sinapi_matches=[],
+                    tcpo_matches=[],
+                )
                 items.append(novo)
                 resumo["acrescentadas"] += 1
-            except Exception:
-                pass
+            except Exception as _enovo:
+                print(f"[fusao-revisao] NAO consegui acrescentar a linha do cliente: {_enovo}")
+                resumo["falhou_acrescentar"] = resumo.get("falhou_acrescentar", 0) + 1
     print(f"[fusao-revisao] pai={parent_job_id} revisoes={resumo['revisoes']} "
           f"casadas={resumo['casadas']} acrescentadas={resumo['acrescentadas']}")
     return items, resumo
@@ -8273,6 +8291,33 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # cliente e ninguém fica sabendo. Rastro obrigatório.
             _log_error("motor:fusao-revisao",
                        f"NÃO fundi: {type(_ef).__name__}: {_ef}", job_id)
+
+        # 🚨 23/08/2026 (auditoria, achado 22): a planilha nasceu lá em cima,
+        # ANTES da fusão. Na TELA o cliente via as correções dele preservadas;
+        # no ARQUIVO que ele baixa, não — e `_carimbar_planilha` (logo abaixo)
+        # calcula a assinatura sobre os itens JÁ fundidos do banco, então o
+        # detector de coerência jurava que o .xlsx estava em dia.
+        #
+        # 🪤 A fusão NÃO pode subir pra antes do generate_spreadsheet: o bloco
+        # da regra dos 100% (~7990) tem um aviso explícito de que roda ANTES da
+        # fusão de propósito, pra a correção do cliente vencer o carimbo. Então
+        # o conserto é ao contrário: refazer o arquivo aqui, com os itens já
+        # fundidos, antes de persistir, carimbar e subir pro Storage (~8320).
+        if (_fusao.get("casadas") or 0) or (_fusao.get("acrescentadas") or 0):
+            try:
+                generate_spreadsheet(project_data, all_items, output_path, typology=typology)
+                _log_error("motor:fusao-revisao",
+                           f"planilha REFEITA com as {_fusao['revisoes']} correção(ões) do "
+                           f"cliente (casadas={_fusao['casadas']} "
+                           f"acrescentadas={_fusao['acrescentadas']})", job_id)
+            except Exception as _ers:
+                # Não é fatal: o banco e a tela já têm a verdade fundida. Mas o
+                # cliente vai baixar um arquivo defasado, então isso GRITA.
+                print(f"[fusao-revisao] refazer a planilha falhou: {_ers}")
+                _log_error("motor:fusao-revisao",
+                           f"🚨 planilha NÃO foi refeita ({type(_ers).__name__}: {_ers}) — "
+                           f"o .xlsx sai SEM as correções do cliente, mas a tela tem",
+                           job_id, severity="critical")
 
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
