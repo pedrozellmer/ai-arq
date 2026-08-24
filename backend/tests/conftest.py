@@ -18,19 +18,38 @@ no formato pytest é colhido normalmente.
 """
 import io
 import os
+import re
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 
 
 def _e_script(nome: str) -> bool:
-    """True se o arquivo roda no import / termina em sys.exit (formato script)."""
+    """True se o arquivo EXECUTA NO IMPORT (formato script), e só isso.
+
+    🚨 24/08/2026 (2ª validação): a versão anterior devolvia True sempre que
+    `"\ndef test_" not in src` — e num teste escrito em CLASSE o `def test_`
+    está indentado, então nunca casava. Efeito medido com controle positivo:
+    um arquivo com `class TestX: def test_deve_falhar(self): assert 1 == 2`
+    era classificado como "script legado", o pytest não colhia, o subprocesso
+    só importava o módulo (a classe é definida, nada executa), saía 0 — e a
+    suíte contava **143 passed**. Um teste que afirma 1 == 2 passou por
+    aprovado. Era a armadilha de 23/08 de novo: verde não é o mesmo que
+    "rodou".
+    """
     try:
         src = io.open(os.path.join(_AQUI, nome), encoding="utf-8").read()
     except Exception:
         return False
-    if "\nsys.exit(" in src or "\nsys.stdout = " in src:
+    # Tem teste no formato pytest? Função OU CLASSE, em qualquer indentação —
+    # era a classe que escapava antes.
+    tem_pytest = re.search(r"^[ \t]*(def test_|class Test)", src, re.M) is not None
+    # Quebra a coleção do pytest? (`sys.exit` no import aborta a suíte inteira,
+    # e trocar o sys.stdout faz o pytest ler um arquivo já fechado.)
+    _nl = chr(10)
+    quebra_colecao = (_nl + "sys.exit(") in src or (_nl + "sys.stdout = ") in src
+    if quebra_colecao:
         return True
-    return "\ndef test_" not in src
+    return not tem_pytest
 
 
 def scripts_legados():

@@ -287,3 +287,113 @@ def test_o_corte_de_9_palavras_realmente_colide():
     assert n(a) == n(b), "o corte não colide mais — reveja o teste das irmãs"
     assert n(a, cortar=False) != n(b, cortar=False), (
         "a chave cheia também colide — aí o casamento não tem como distinguir")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  2ª VALIDAÇÃO (24/08) — o que a reescrita de uma hora antes quebrou
+# ══════════════════════════════════════════════════════════════════════════
+def _rev_antes(item_id, desc, unit_antes, qtd_antes, unit_ed="", qtd_ed=None):
+    """Revisão COM `_antes` — a foto do item antes da edição (86 das 88 têm)."""
+    return {"item_id": item_id, "reviewed_at": "2026-08-23T10:00:00Z",
+            "edits": {"description": desc, "unit": unit_ed, "quantity": qtd_ed,
+                      "_antes": {"description": desc, "unit": unit_antes,
+                                 "quantity": qtd_antes}}}
+
+
+def test_corrigir_a_UNIDADE_nao_pode_virar_linha_duplicada():
+    """🚨 #1, medido em 6 correções reais de 5 clientes. A unidade estava DENTRO
+    da chave de casamento — e trocar a unidade é justamente uma das coisas que o
+    cliente edita. A correção nunca casava, virava REV.1, e a linha do motor
+    sobrevivia intacta com '✓ MEDIDO do CAD'.
+
+    Caso real (job df4f00ca): o cliente marcou a luminária de emergência como
+    "já existe, não comprar" (un→vb, 15→0). A releitura devolvia as 15 unidades
+    prontas pra comprar."""
+    desc = "[EXISTENTE - manter] Luminária de emergência autônoma 30 LED"
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-lum", desc, "un", 15.0, unit_ed="vb", qtd_ed=0.0)],
+        itens_do_pai=[_linha_pai("id-lum", desc, "vb", 0.0, conf="estimado")])
+    from models import BudgetItem, Confidence
+    motor = BudgetItem(item_num="7.3", description=desc, unit="un", quantity=15.0,
+                       confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    itens, resumo = f([motor], "pai123")
+    assert resumo["casadas"] == 1 and resumo["acrescentadas"] == 0, (
+        "a correção de unidade virou linha nova: %s" % resumo)
+    assert len(itens) == 1, "o mesmo serviço saiu em duas linhas"
+    assert motor.unit == "vb" and motor.quantity == 0.0, (
+        "a decisão do cliente ('já existe, não comprar') foi desfeita")
+    assert _selo(motor) == "estimado"
+
+
+def test_arrumar_so_a_grafia_nao_carimba_QUANTIDADE_CORRIGIDA():
+    """🚨 #2: `_mudou` comparava o pai com a LEITURA NOVA. Como o motor não é
+    determinístico elas quase nunca batem, então a linha saía com selo
+    'confirmado' (herdado do pai, correto) E com "QUANTIDADE CORRIGIDA POR
+    VOCÊ" — a mesma célula do .xlsx dizia '✓ MEDIDO do CAD' e 'não é medida do
+    CAD'. A pergunta certa é se o CLIENTE digitou o número, e quem responde é
+    o `_antes`."""
+    desc = "Forro de gesso acartonado liso (área)"
+    f, _, _ = _carrega(
+        # o cliente só arrumou o TEXTO: a quantidade do _antes é a mesma do pai
+        revs=[_rev_antes("id-forro", desc, "m²", 118.5, unit_ed="m²", qtd_ed=118.5)],
+        itens_do_pai=[_linha_pai("id-forro", desc, "m²", 118.5, conf="confirmado")])
+    from models import BudgetItem, Confidence
+    # a leitura nova mediu OUTRO valor — é isso que enganava o critério antigo
+    novo = BudgetItem(item_num="6.1", description=desc, unit="m²", quantity=300.0,
+                      confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    f([novo], "pai123")
+    assert _selo(novo) == "confirmado", "rebaixou uma medição que o cliente não tocou"
+    obs = novo.observations
+    assert "QUANTIDADE CORRIGIDA" not in obs, (
+        "carimbou 'você corrigiu o número' num item em que ele só arrumou a "
+        "grafia:\n" + obs)
+
+
+def test_quando_o_cliente_digitou_mesmo_o_selo_cai():
+    """Controle do outro lado: `_antes` diferente do pai = ele digitou."""
+    desc = "Piso porcelanato 60x60"
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-p", desc, "m²", 210.0, unit_ed="m²", qtd_ed=130.0)],
+        itens_do_pai=[_linha_pai("id-p", desc, "m²", 130.0, conf="estimado")])
+    from models import BudgetItem, Confidence
+    novo = BudgetItem(item_num="2.1", description=desc, unit="m²", quantity=305.0,
+                      confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    f([novo], "pai123")
+    assert novo.quantity == 130.0 and _selo(novo) == "estimado"
+    assert "QUANTIDADE CORRIGIDA" in novo.observations
+    assert novo.origem == "revisao_cliente"
+
+
+def test_se_a_gravacao_no_pai_falhou_vale_o_numero_da_revisao():
+    """🚨 #6: o PATCH que grava a correção engole exceção num log mudo, e a tela
+    já mostrou 'Salvo'. Se o pai continua IGUAL ao `_antes` mas a revisão
+    registrou outro número, a gravação não pegou — a única cópia do que o
+    cliente digitou está no `edits`. A reescrita devolvia o número do MOTOR
+    chamando de 'sua revisão'."""
+    desc = "Piso porcelanato 60x60"
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-x", desc, "m²", 118.5, unit_ed="m²", qtd_ed=130.0)],
+        itens_do_pai=[_linha_pai("id-x", desc, "m²", 118.5, conf="confirmado")])
+    from models import BudgetItem, Confidence
+    novo = BudgetItem(item_num="2.1", description=desc, unit="m²", quantity=305.0,
+                      confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    f([novo], "pai123")
+    assert novo.quantity == 130.0, (
+        "entregou %s — o número do motor foi devolvido como se fosse a revisão "
+        "do cliente" % novo.quantity)
+    assert _selo(novo) == "estimado"
+
+
+def test_linha_ressuscitada_nao_perde_a_unidade():
+    """🚨 #7, payload REAL do job 2933cc30: unit='' no edits, 'kg' no `_antes`.
+    Sem a cascata, o persist inventa 'vb' e 1.850 kg viram 1.850 verbas."""
+    desc = "Muro de arrimo — armadura CA-50/CA-60 (peso total)"
+    f, _, _ = _carrega(
+        revs=[_rev_antes("id-sumiu", desc, "kg", 100.0, unit_ed="", qtd_ed=1850.0)],
+        itens_do_pai=[])          # o item foi apagado do pai
+    itens, resumo = f(_itens_da_leitura(), "pai123")
+    assert resumo["acrescentadas"] == 1
+    nova = itens[-1]
+    assert nova.unit == "kg", (
+        "unidade %r — 1.850 de nada; quem cota devolve a planilha" % nova.unit)
+    assert nova.quantity == 1850.0

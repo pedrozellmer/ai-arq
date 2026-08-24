@@ -424,6 +424,16 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     for item in items:
         disc = item.discipline or "Complementares"
         # Deduplicar por descrição normalizada
+        # 🚨 24/08/2026: este dedup corta em 50 caracteres, e a fusão das
+        # revisões casa por 9 palavras. São duas réguas diferentes pra "o mesmo
+        # item": um par real de produção ("Escavação ... tipo S1 (160x160x60cm)"
+        # e "... tipo S2 (100x100x40cm)") NÃO casa na fusão — então a linha do
+        # cliente é acrescentada, certo — e DEPOIS colide aqui e é apagada da
+        # planilha, enquanto o log diz "planilha REFEITA com as correções".
+        # Regra dura nº7: o que veio da revisão do cliente nunca é descartado.
+        if str(getattr(item, "origem", "") or "") == "revisao_cliente":
+            items_by_discipline.setdefault(disc, []).append(item)
+            continue
         desc_key = item.description.lower().strip()[:50]
         if desc_key in seen_descriptions:
             continue

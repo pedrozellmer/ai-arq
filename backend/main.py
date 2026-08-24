@@ -746,22 +746,62 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
         if not chave_rev.strip(":") or chave_rev in _vistos:
             continue
         _vistos.add(chave_rev)
+        # `_antes` é a foto do item ANTES da edição (86 das 88 revisões têm).
+        # É ele que responde "o cliente digitou este número?" e "qual era a
+        # unidade do MOTOR?" — duas perguntas que nem o pai nem a leitura nova
+        # respondem sozinhos.
+        _antes = ed.get("_antes") if isinstance(ed.get("_antes"), dict) else {}
+
+        def _f(v):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
         linha = _atuais.get(_iid)
         if linha:
+            _q_pai, _q_antes, _q_ed = _f(linha.get("quantity")), _f(_antes.get("quantity")), _f(ed.get("quantity"))
+            # 🚨 24/08: o PATCH que grava a correção no pai engole exceção num
+            # `_supa_log` mudo — e a tela já mostrou "Salvo". Se o pai continua
+            # IGUAL ao `_antes` mas a revisão registrou outro número, a gravação
+            # não pegou: a única cópia do que o cliente digitou está no `edits`.
+            # Sem isto a fusão devolvia o número do MOTOR chamando de "sua revisão".
+            _patch_falhou = (_q_pai is not None and _q_antes is not None
+                             and _q_ed is not None
+                             and abs(_q_pai - _q_antes) < 1e-9
+                             and abs(_q_ed - _q_antes) > 1e-9)
+            if _patch_falhou:
+                try:
+                    _log_error("motor:fusao-revisao",
+                               f"🚨 a correção do cliente NÃO tinha sido gravada no "
+                               f"projeto original (item {_iid}: pai={_q_pai} == antes, "
+                               f"revisão={_q_ed}). Usando o valor da revisão.",
+                               parent_job_id, severity="critical")
+                except Exception:
+                    pass
             corrigidos.append({
                 "description": str(linha.get("description") or ""),
                 "unit": str(linha.get("unit") or ""),
-                "quantity": linha.get("quantity"),
+                "unit_motor": str(_antes.get("unit") or ""),
+                "quantity": (_q_ed if _patch_falhou else linha.get("quantity")),
+                "quantity_antes": _q_antes,
                 "observations": str(linha.get("observations") or ""),
-                "confidence": str(linha.get("confidence") or "estimado"),
-                "fonte": "project_items",
+                "confidence": ("estimado" if _patch_falhou
+                               else str(linha.get("confidence") or "estimado")),
+                "fonte": "revisao(nao-gravada)" if _patch_falhou else "project_items",
             })
         elif ed.get("description"):
             # A linha sumiu do pai (item apagado): sobra o payload da revisão.
+            # 🚨 24/08: o payload cru tem unidade VAZIA em 8 linhas reais (7 de
+            # armadura em kg) — o dropdown de 18/08 apagava. Sem cascata, o
+            # persist inventa "vb" e 1.850 kg viram "1850 verbas".
+            _un = str(ed.get("unit") or "").strip() or str(_antes.get("unit") or "").strip()
             corrigidos.append({
                 "description": str(ed.get("description") or ""),
-                "unit": str(ed.get("unit") or ""),
+                "unit": _un,
+                "unit_motor": str(_antes.get("unit") or ""),
                 "quantity": ed.get("quantity"),
+                "quantity_antes": _f(_antes.get("quantity")),
                 "observations": str(ed.get("observations") or ""),
                 "confidence": "estimado",
                 "fonte": "item_reviews",
@@ -772,45 +812,62 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
 
     # 3) Casar com a leitura nova. Chave CHEIA primeiro; o corte de 9 palavras
     #    só entra quando não for ambíguo dos dois lados.
-    def _ch(desc, unit, cortar):
-        return (_norm_desc(desc, cortar=cortar), str(unit or "").strip().lower())
+    # 🚨 24/08 (2ª validação): a unidade estava DENTRO da chave — e trocar a
+    # unidade é uma das 5 coisas que o cliente pode editar. Resultado medido em
+    # 6 correções reais (5 dos 8 clientes que revisaram): a correção NUNCA
+    # casava, virava linha duplicada, e a linha do motor sobrevivia intacta com
+    # selo "✓ MEDIDO do CAD". No caso da luminária de emergência o cliente tinha
+    # marcado "já existe, não comprar" (un→vb, 15→0) e a releitura devolvia as
+    # 15 unidades prontas pra comprar. A chave é a DESCRIÇÃO; a unidade só entra
+    # pra desempatar irmãs, e aí é a unidade do MOTOR (`_antes`), não a do cliente.
+    def _ch(desc, cortar):
+        return _norm_desc(desc, cortar=cortar)
 
     _cheia, _curta = {}, {}
     for it in items:
-        _d, _u = getattr(it, "description", ""), getattr(it, "unit", "")
-        _cheia.setdefault(_ch(_d, _u, False), []).append(it)
-        _curta.setdefault(_ch(_d, _u, True), []).append(it)
+        _d = getattr(it, "description", "")
+        _cheia.setdefault(_ch(_d, False), []).append(it)
+        _curta.setdefault(_ch(_d, True), []).append(it)
 
     _usados = set()
 
     def _aplicar(alvo, c):
         from models import Confidence as _CfC
-        _qtd_leitura = 0.0
-        try:
-            _qtd_leitura = float(getattr(alvo, "quantity", 0) or 0)
-        except (TypeError, ValueError):
-            pass
         alvo.description = c["description"] or alvo.description
         if c["unit"]:
             alvo.unit = c["unit"]
         if c["quantity"] is not None:
             alvo.quantity = c["quantity"]
-        # O selo vem do PAI: lá o endpoint já rebaixou pra 'estimado' quando o
-        # cliente mudou a quantidade, e manteve 'confirmado' quando ele só
-        # arrumou o texto de uma linha medida.
+        # 🚨 24/08 (2ª validação): aqui `_mudou` comparava a quantidade do PAI
+        # com a da LEITURA NOVA. Como o motor não é determinístico, elas quase
+        # nunca batem — então a linha saía carimbada "QUANTIDADE CORRIGIDA POR
+        # VOCÊ" mesmo quando o cliente só tinha arrumado a GRAFIA. Junto com o
+        # selo 'confirmado' herdado do pai, a mesma célula do .xlsx dizia
+        # "✓ MEDIDO do CAD" e "não é medida do CAD". Duas frases, uma verdade.
+        # A pergunta certa é "o cliente digitou este número?", e quem responde é
+        # o `_antes` da revisão comparado com o valor do pai.
+        _q_pai, _q_antes = None, c.get("quantity_antes")
         try:
-            alvo.confidence = _CfC(c["confidence"])
-        except Exception:
-            alvo.confidence = _CfC.ESTIMADO
-        try:
-            _mudou = abs(float(alvo.quantity or 0) - _qtd_leitura) > 1e-9
+            _q_pai = float(alvo.quantity or 0)
         except (TypeError, ValueError):
-            _mudou = True
-        if _mudou:
+            pass
+        if _q_antes is not None and _q_pai is not None:
+            _digitou = abs(_q_pai - _q_antes) > 1e-9
+        else:
+            # Sem `_antes` (2 das 88): o endpoint rebaixa pra 'estimado' sempre
+            # que a quantidade muda, então o selo do pai é o melhor sinal.
+            _digitou = str(c["confidence"]) != "confirmado"
+        if _digitou:
+            alvo.confidence = _CfC.ESTIMADO      # regra nº1: número digitado não é medição
             alvo.origem = "revisao_cliente"
+        else:
+            try:
+                alvo.confidence = _CfC(c["confidence"])
+            except Exception:
+                alvo.confidence = _CfC.ESTIMADO
         _obs = (c["observations"] or "").strip()
         _sel = ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
-                if _mudou else "✏️ REVISADO POR VOCÊ — ")
+                if _digitou else "✏️ REVISADO POR VOCÊ — ")
         alvo.observations = (_sel + "Mantido da sua revisão anterior; a leitura "
                              "nova não vale por cima. " + _obs)[:1000]
 
@@ -838,11 +895,18 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
         resumo["acrescentadas"] += 1
 
     for c in corrigidos:
-        alvos = [x for x in _cheia.get(_ch(c["description"], c["unit"], False), [])
+        alvos = [x for x in _cheia.get(_ch(c["description"], False), [])
                  if id(x) not in _usados]
         if not alvos:
-            alvos = [x for x in _curta.get(_ch(c["description"], c["unit"], True), [])
+            alvos = [x for x in _curta.get(_ch(c["description"], True), [])
                      if id(x) not in _usados]
+        if len(alvos) > 1 and c.get("unit_motor"):
+            # Desempate por unidade do MOTOR (o que o item era antes da edição).
+            _um = c["unit_motor"].strip().lower()
+            _f2 = [x for x in alvos
+                   if str(getattr(x, "unit", "") or "").strip().lower() == _um]
+            if len(_f2) == 1:
+                alvos = _f2
         try:
             if len(alvos) == 1:
                 _aplicar(alvos[0], c)
@@ -855,6 +919,7 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
                 # motor ("só AVISA, nunca decide no escuro").
                 _acrescentar(c, "a leitura nova tem mais de uma linha igual a esta, "
                                 "então não sobrescrevi nenhuma —")
+                resumo.setdefault("ambiguas_desc", []).append(c["description"][:60])
                 resumo["ambiguas"] += 1
             else:
                 _acrescentar(c, "a leitura nova não achou esta linha.")
@@ -5148,7 +5213,17 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             q = float(getattr(it, "quantity", 0) or 0)
         except (TypeError, ValueError):
             q = 0.0
-        if informado and u in _FLOOR_M2_UNITS and _is_floor_surface(getattr(it, "description", "")):
+        # 🚨 24/08 (2ª validação): este ramo vem ANTES do `elif apenas_preencher`,
+        # então a flag não o protegia — e ele sobrescrevia com a área total o
+        # número que o cliente tinha digitado à mão. Medido: piso vinílico
+        # corrigido pra 45,30 m² virava 310,00 e era GRAVADO. A linha zerada é a
+        # pergunta do cliente; a linha que ele preencheu é a resposta dele.
+        # Regra dura nº7: o que veio da revisão do cliente não se toca, nunca.
+        if str(getattr(it, "origem", "") or "") == "revisao_cliente":
+            continue
+        if (informado and u in _FLOOR_M2_UNITS
+                and _is_floor_surface(getattr(it, "description", ""))
+                and not (apenas_preencher and q > 0)):
             it.quantity = round(float(total_area), 2)
             try:
                 it.confidence = Confidence("estimado")

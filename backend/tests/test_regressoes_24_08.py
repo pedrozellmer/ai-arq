@@ -221,4 +221,85 @@ def test_a_fusao_le_os_valores_do_project_items_do_pai():
     corpo = src[i:src.index("_CAMPOS_ITEM_VERSAO", i)]
     assert '"select": "id,description,unit,quantity,observations,confidence"' in corpo, (
         "a fusão parou de ler os itens do pai — voltou a confiar no payload cru")
-    assert '"fonte": "project_items"' in corpo
+    assert '_atuais = {str((l or {}).get("id")): l' in corpo, (
+        "a fusão parou de indexar os itens do pai por id")
+    assert '"_antes"' in corpo, (
+        "a fusão parou de olhar o `_antes` — é ele que responde se o CLIENTE "
+        "digitou o número e qual era a unidade do motor")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  2ª VALIDAÇÃO (24/08): "preencher" só pode preencher o que está EM BRANCO
+# ══════════════════════════════════════════════════════════════════════════
+def test_inform_area_nao_sobrescreve_o_numero_que_o_cliente_digitou():
+    """🚨 O `apenas_preencher=True` que eu criei de manhã não protegia o ramo
+    que PREENCHE — ele vem ANTES no encadeamento. Medido: piso vinílico que o
+    cliente tinha corrigido pra 45,30 m² virava 310,00 (a área total informada)
+    e era GRAVADO. A linha zerada é a pergunta do cliente; a linha que ele
+    preencheu é a resposta dele."""
+    f = _fatia_motor()["_apply_area_honesty"]
+    cliente = _Item("Piso vinílico em manta - áreas administrativas", "m²", 45.30,
+                    "corrigido na tela", origem="revisao_cliente")
+    cad = _Item("Piso porcelanato - hall", "m²", 88.0, "", origem="dxf_geom")
+    branco = _Item("Forro de gesso", "m²", 0, "Área NÃO medida")
+    f([cliente, cad, branco], 310.0, "informado", pe_direito=2.7,
+      apenas_preencher=True)
+    assert cliente.quantity == 45.30, (
+        "virou %s — o cliente perdeu o número dele por ter informado a metragem"
+        % cliente.quantity)
+    assert cad.quantity == 88.0, "encostou no que foi medido do CAD"
+    assert branco.quantity == 310.0, "parou de preencher o que estava em branco"
+
+
+def test_revisao_do_cliente_e_intocavel_tambem_no_caminho_normal():
+    """Regra dura nº7 não depende de qual rota chamou."""
+    f = _fatia_motor()["_apply_area_honesty"]
+    cliente = _Item("Piso vinílico", "m²", 45.30, "", origem="revisao_cliente")
+    f([cliente], 310.0, "informado", pe_direito=2.7)      # sem a flag
+    assert cliente.quantity == 45.30
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  2ª VALIDAÇÃO (24/08): o dedup da planilha apagava a linha do cliente
+# ══════════════════════════════════════════════════════════════════════════
+def test_o_dedup_da_planilha_nao_apaga_a_linha_vinda_da_revisao():
+    """🚨 Duas réguas diferentes pra "o mesmo item": a fusão casa por 9 palavras,
+    o dedup da planilha corta em 50 caracteres. Par REAL de produção (job
+    1a2f9f03): "Escavação ... tipo S1 (160×160×60cm)" e "... tipo S2
+    (100×100×40cm)" NÃO casam na fusão — a linha do cliente é acrescentada,
+    certo — e DEPOIS colidem aqui e somem do .xlsx, com o log dizendo
+    "planilha REFEITA com as correções do cliente"."""
+    import os as _os
+    import tempfile
+    import openpyxl
+    from models import BudgetItem, Confidence, ProjectData
+    from spreadsheet import generate_spreadsheet
+
+    S1 = ("Escavação manual/mecânica de cavas para sapatas tipo S1 "
+          "(160×160×60cm) — solo em condições a confirmar por sondagem SPT")
+    S2 = ("Escavação manual/mecânica de cavas para sapatas tipo S2 "
+          "(100×100×40cm) — solo em condições a confirmar por sondagem SPT")
+    assert S1.lower().strip()[:50] == S2.lower().strip()[:50], (
+        "o par de controle parou de colidir em 50 chars — reveja este teste")
+
+    itens = [
+        BudgetItem(item_num="1.1", description=S1, unit="m³", quantity=12.0,
+                   confidence=Confidence.CONFIRMADO, origem="dxf_geom",
+                   discipline="Estrutura"),
+        BudgetItem(item_num="REV.1", description=S2, unit="m³", quantity=4.5,
+                   confidence=Confidence.ESTIMADO, origem="revisao_cliente",
+                   discipline="Estrutura"),
+    ]
+    d = tempfile.mkdtemp(prefix="xlsx_dedup_")
+    saida = _os.path.join(d, "t.xlsx")
+    generate_spreadsheet(ProjectData(project_name="teste"), itens, saida)
+    wb = openpyxl.load_workbook(saida)
+    texto = []
+    for ws in wb.worksheets:
+        for linha in ws.iter_rows(values_only=True):
+            texto.append(" | ".join("" if c is None else str(c) for c in linha))
+    tudo = "\n".join(texto)
+    assert "tipo S1" in tudo, "sumiu a linha do motor"
+    assert "tipo S2" in tudo, (
+        "a linha vinda da revisão do cliente foi DELETADA pelo dedup de 50 "
+        "caracteres — regra dura nº7 quebrada no arquivo que ele baixa")
