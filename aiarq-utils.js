@@ -305,25 +305,35 @@
     if (session && session.access_token) {
       headers['Authorization'] = 'Bearer ' + session.access_token;
     }
+    // 23/08 (auditoria): 45 s corta rotas que demoram DE PROPÓSITO — chat com IA
+    // (backend espera 60 s), memorial "escrever com IA", reprocesso, upload de
+    // planilha revisada. O cliente via erro e o servidor seguia trabalhando (e
+    // cobrando o reprocesso). Essas rotas ganham teto próprio; o resto fica em 45 s.
+    var _lentas = /\/api\/(agent|projeto\/[^/]+\/chat|memorial|cronograma)\b|\/(reprocess|add-file|upload|finalize)\b/i;
+    var _teto = options.timeoutMs || (_lentas.test(String(url)) ? 180000 : 45000);
     var ctrl = null, timer = null;
     var init = Object.assign({}, options, { headers });
+    delete init.timeoutMs;   // não vaza pro fetch
     if (!init.signal && typeof AbortController !== 'undefined') {
       ctrl = new AbortController(); init.signal = ctrl.signal;
-      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, options.timeoutMs || 45000);
+      timer = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, _teto);
     }
     try {
       var resp = await fetch(url, init);
       if (resp.status === 401 && !_avisouSessao) {
+        // 23/08 (auditoria): o toast escapa HTML, então o <a> saía como texto
+        // cru e o cliente ficava sem caminho. Agora é frase simples + reset em
+        // 60 s (se foi falha transitória do login, o aviso volta a poder sair).
         _avisouSessao = true;
+        setTimeout(function () { _avisouSessao = false; }, 60000);
         try {
-          var dest = encodeURIComponent(location.pathname.replace(/^\//, '') + location.search + location.hash);
-          notify.warn('Sua sessão expirou. <a href="login.html?redirect=' + dest + '" class="underline font-semibold">Entrar de novo</a>');
+          notify.warn('Sua sessão expirou ou não deu pra confirmar seu login. Recarregue a página e entre de novo.');
         } catch (e) {}
       }
       return resp;
     } catch (err) {
       if (err && err.name === 'AbortError' && ctrl) {
-        throw new Error('o servidor demorou mais de 45 s pra responder — tente de novo em instantes');
+        throw new Error('o servidor demorou mais de ' + Math.round(_teto / 1000) + ' s pra responder — tente de novo em instantes');
       }
       throw err;
     } finally {

@@ -4763,7 +4763,13 @@ def _derive_admin_prazo(items, prazo_meses: float) -> int:
 
 
 import re as _re_honesty   # 🪤 `re` não está importado no topo deste módulo (só aliases)
-_RX_DERIV_PD = _re_honesty.compile(r"p[ée]-?\s*direito\s+informado|informado por voc[êe][^|]{0,40}p[ée]-?\s*direito", _re_honesty.I)
+# Casa tanto o texto da IA ("… × 2,70 m (pé-direito informado)") quanto o que o
+# próprio motor escreve nas derivações ("… × pé-direito 2.70 m informado por
+# você × 2 faces", "ÁREA COM O PÉ-DIREITO QUE VOCÊ INFORMOU: …").
+_RX_DERIV_PD = _re_honesty.compile(
+    r"p[ée]-?\s*direito[^|]{0,40}informa|informad[^|]{0,40}p[ée]-?\s*direito|"
+    r"p[ée]-?\s*direito\s+que\s+voc[êe]\s+informou",
+    _re_honesty.I)
 
 
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "",
@@ -4847,6 +4853,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     if preservados:
         print(f"[honestidade-m2] preservei {preservados} item(ns) de área derivados do "
               f"pé-direito informado ({pe_direito} m) — estimados com procedência")
+    _apply_area_honesty.ultimo_preservados = preservados   # o caller loga no projeto
     return filled, blanked
 
 
@@ -7720,6 +7727,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         if _blanked:
             print(f"[honestidade-m2] job={job_id}: zerei a quantidade de {_blanked} itens de área "
                   f"não-medidos (Vision) — evita m² inventado (regra nº1)")
+        try:
+            _pres = int(getattr(_apply_area_honesty, "ultimo_preservados", 0) or 0)
+            if _pres or _n_fill or _blanked:
+                _log_error("motor:honestidade-area",
+                           f"preenchidos={_n_fill} zerados={_blanked} "
+                           f"preservados_por_pe_direito={_pres}", job_id)
+        except Exception:
+            pass
         # Pintura derivada do pé-direito informado (01/08/2026) — só quando a
         # planilha tem parede em metro linear e nenhum item de pintura.
         try:
@@ -15495,7 +15510,12 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
 
     # 4) Preenche piso/forro/laje com a área informada (estimado, rotulado) — mesma
     #    regra do motor. Itens em branco não-horizontais seguem em branco.
-    filled, _ = _apply_area_honesty(items, area, "informado")
+    # 23/08 (auditoria): sem o pé-direito aqui, esta rota ZERAVA e gravava no
+    # banco a área que a honestidade tinha preservado no motor — o cliente perdia
+    # dado por ter informado MAIS dado.
+    filled, _ = _apply_area_honesty(
+        items, area, "informado",
+        pe_direito=float((proj or {}).get("user_pe_direito") or 0))
 
     # 5) Enriquecimento (TCPO + heurísticas) igual ao finalize + gerar xlsx in-place
     typology = proj.get("typology") or "office"
@@ -16735,7 +16755,13 @@ async def admin_eval_reprocess(job_id: str, request: Request):
     # Vigia de auto-liberação (Pedro, 15/08): quando o filhote concluir, uma IA
     # juíza compara as duas planilhas e libera sozinha se a nova for claramente
     # melhor. Desligável por env; qualquer dúvida deixa na fila manual.
-    if os.getenv("AUTO_LIBERAR_FILHOTE", "1") != "0":
+    # 23/08/2026 (auditoria do dia): esta automação NUNCA tinha rodado em
+    # produção — morria no bug da tupla (status, dados), corrigido hoje. Ou seja,
+    # ela estrearia à noite, sozinha, escrevendo no projeto do cliente e mandando
+    # e-mail, com a trava da regra nº7 falhando ABERTA (leitura com erro virava
+    # "0 revisões"). Padrão passa a ser DESLIGADA: quem quiser liga com
+    # AUTO_LIBERAR_FILHOTE=1 no Render, de olho.
+    if os.getenv("AUTO_LIBERAR_FILHOTE", "0") == "1":
         threading.Thread(target=_auto_liberar_filhote_quando_pronto,
                          args=(eval_job_id, job_id), daemon=True).start()
 
@@ -16863,8 +16889,19 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             _log_error("filhote:auto", "não liberei: original sem dono", eval_job_id)
             return
         pai = pai[0]
-        revisoes = len(_supa_rows("GET", "item_reviews",
-                       params={"job_id": f"eq.{pai_id}", "select": "id"}))
+        # 🚨 FALHA FECHADA (auditoria 23/08): _supa_rows devolve [] tanto para
+        # "não há revisão" quanto para "a consulta falhou". Tratar os dois igual
+        # significa liberar e avisar o cliente por e-mail em cima de um erro de
+        # rede — justo na trava que protege o trabalho manual dele (regra nº7).
+        _st_rev, _rows_rev = _supa_rest_service(
+            "GET", "item_reviews",
+            params={"job_id": f"eq.{pai_id}", "select": "id"})
+        if _st_rev != 200:
+            _log_error("filhote:auto",
+                       f"não liberei: não consegui LER as revisões do original "
+                       f"(HTTP {_st_rev}) — na dúvida, não mexo", eval_job_id)
+            return
+        revisoes = len(_rows_rev or [])
         if revisoes > 0:
             _log_error("filhote:auto",
                        f"não liberei: original tem {revisoes} revisão(ões) do cliente "
@@ -17154,8 +17191,11 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
                 "medidos": sum(1 for x in r if (x or {}).get("confidence") == "confirmado")}
 
     antes, depois = _conta(pai_id), _conta(eval_job_id)
-    revisoes = len(_supa_rows("GET", "item_reviews",
-                   params={"job_id": f"eq.{pai_id}", "select": "id"}))
+    # Falha FECHADA aqui também: se a leitura das revisões falhar, o e-mail
+    # automático não pode sair achando que o cliente não revisou nada.
+    _st_rev, _rows_rev = _supa_rest_service(
+        "GET", "item_reviews", params={"job_id": f"eq.{pai_id}", "select": "id"})
+    revisoes = len(_rows_rev or []) if _st_rev == 200 else -1
 
     novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
                  + " — nova leitura (motor atualizado)")
@@ -17177,7 +17217,10 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
     #  3. nunca no `revogar`.
     email_enviado, email_motivo = False, None
     if not revogar:
-        if revisoes > 0:
+        if revisoes < 0:
+            email_motivo = ("NÃO enviado: não consegui LER as revisões do original — "
+                            "na dúvida não mando e-mail. Confira e avise à mão.")
+        elif revisoes > 0:
             email_motivo = (f"NÃO enviado: o cliente revisou {revisoes} item(ns) à mão. "
                             f"A versão nova não tem essas correções — fale com ele você, "
                             f"pessoalmente.")

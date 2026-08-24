@@ -1373,10 +1373,13 @@ function mostrarProcessando(live, session, pmeta) {
   // se os três já vieram, o card some.
   try {
     const _m = pmeta || {};
+    // 23/08 (auditoria): o valor formatado com unidade ("2,70 m") era rejeitado
+    // pelo backend se o cliente reenviasse. O campo guarda só o número; a
+    // unidade vai no texto de apoio, que é onde ela informa sem atrapalhar.
     const _ja = [
-      ['pp-pd', _m.user_pe_direito, v => String(v).replace('.', ',') + ' m'],
-      ['pp-area', _m.user_total_area, v => String(v).replace('.', ',') + ' m²'],
-      ['pp-prazo', _m.user_prazo_meses, v => String(v) + ' meses'],
+      ['pp-pd', _m.user_pe_direito, v => String(v).replace('.', ',')],
+      ['pp-area', _m.user_total_area, v => String(v).replace('.', ',')],
+      ['pp-prazo', _m.user_prazo_meses, v => String(parseInt(v, 10))],
     ];
     let _faltam = 0;
     _ja.forEach(([id, val, fmt]) => {

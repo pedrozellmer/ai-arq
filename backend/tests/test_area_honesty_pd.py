@@ -71,3 +71,38 @@ def test_medido_do_cad_nunca_e_tocado():
     it = _Item("Piso", "m²", 186.52, "hachura A-FLOR-PATT", origem="dxf_geom")
     f([it], total_area=0, total_area_source="", pe_direito=2.7)
     assert it.quantity == 186.52
+
+
+# ── 23/08/2026, auditoria do dia: os controles negativos originais cobriam só o
+# fácil. Estes vieram dos textos REAIS que o motor e a IA escrevem. ──────────
+def _rx():
+    import io as _io, os as _os, re as _re
+    src = _io.open(_os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
+                                 "main.py"), encoding="utf-8").read()
+    i = src.index("_RX_DERIV_PD = _re_honesty.compile(")
+    ns = {"_re_honesty": _re}
+    exec(src[i:src.index("\n\n", i)], ns)
+    return ns["_RX_DERIV_PD"]
+
+
+def test_regex_casa_o_texto_do_proprio_motor():
+    rx = _rx()
+    reais = [
+        "Derivado de: A-WALL = 303.96 ml × 2,70 m (pé-direito informado) = 820.69 m²",
+        "⚠ ESTIMADO — 303.9 m de parede × pé-direito 2.70 m informado por você × 2 faces.",
+        "Derivado das seções contadas: 3 seção(ões) × pé-direito 2.7 m (informado por você) × contagem",
+        "ÁREA COM O PÉ-DIREITO QUE VOCÊ INFORMOU: 820,69 m²",
+    ]
+    faltando = [t for t in reais if not rx.search(t)]
+    assert not faltando, f"o regex nao reconhece texto que o motor escreve: {faltando}"
+
+
+def test_regex_nao_casa_texto_sem_pe_direito_informado():
+    rx = _rx()
+    nao = [
+        "Estimativa visual da planta, sem cota",
+        "Pé-direito de projeto: 2,80 m conforme corte AA",
+        "Área informada por você (não medida): assumido = área total do projeto",
+    ]
+    casou = [t for t in nao if rx.search(t)]
+    assert not casou, f"o regex libera preservacao indevida em: {casou}"
