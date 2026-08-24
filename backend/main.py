@@ -17092,6 +17092,15 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
     """
     _require_admin(request)
     revogar = str(request.query_params.get("revogar", "")).strip() in ("1", "true", "sim")
+    # 23/08: o Pedro clicou em vários e a tela deu "Load failed" (Safari) sem
+    # nada chegar ao banco. Sem log de ENTRADA não dá pra saber se a requisição
+    # chegou. Best-effort, nunca falha a rota.
+    try:
+        _log_error("admin:filhote-inicio",
+                   f"{eval_job_id} revogar={revogar} ua={str(request.headers.get('user-agent',''))[:60]}",
+                   eval_job_id)
+    except Exception:
+        pass
 
     filho = (_supa_rest_service("GET", "projects",
              params={"job_id": f"eq.{eval_job_id}",
@@ -17153,13 +17162,23 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
         elif depois["medidos"] <= antes["medidos"] and depois["itens"] <= antes["itens"]:
             email_motivo = "NÃO enviado: a versão nova não ficou melhor que a original."
         else:
-            try:
-                email_enviado = _email_leitura_nova(pai, eval_job_id, antes, depois)
-                email_motivo = ("enviado ✓" if email_enviado
-                                else "falhou no envio (SMTP) — avise à mão")
-            except Exception as _ee:
-                email_motivo = f"falhou: {_ee}"
-                print(f"[filhote] email nao enviado (nao-fatal): {_ee}")
+            # 23/08: o SMTP era síncrono e segurava a resposta — com a borda
+            # cortando em ~100 s, o navegador via erro de rede mesmo quando o
+            # trabalho tinha sido feito. Agora vai em thread e o resultado fica
+            # no log (admin:filhote-email), não na cara do Pedro esperando.
+            def _enviar_email_filhote():
+                try:
+                    _ok = _email_leitura_nova(pai, eval_job_id, antes, depois)
+                    _log_error("admin:filhote-email",
+                               f"{eval_job_id} para={pai.get('user_email','')} "
+                               f"{'enviado' if _ok else 'FALHOU no SMTP'}", eval_job_id)
+                except Exception as _ee:
+                    _log_error("admin:filhote-email",
+                               f"{eval_job_id} FALHOU: {type(_ee).__name__}: {_ee}", eval_job_id)
+            import threading as _th_fil
+            _th_fil.Thread(target=_enviar_email_filhote, daemon=True).start()
+            email_enviado = True
+            email_motivo = "enviando em segundo plano (confira em admin:filhote-email)"
 
     _log_error("admin:filhote",
                f"{'revogado' if revogar else 'liberado'} {eval_job_id} (pai {pai_id}) "
