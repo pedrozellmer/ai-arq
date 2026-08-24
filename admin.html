@@ -1795,9 +1795,17 @@ let _mergeUltimo = null;
 async function mergeEstudar(jobId){
   const alvo = document.getElementById('merge-estudo');
   if (!alvo) return;
+  // 🪤 Sem cronômetro, "está pensando" e "morreu" são a MESMA tela.
+  const _t0 = Date.now();
   alvo.innerHTML = '<div class="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">'
-    + '🧬 Lendo as duas planilhas prancha por prancha… a IA compara cada prancha disputada, '
-    + 'então isso leva alguns segundos.</div>';
+    + '🧬 Lendo as duas planilhas prancha por prancha… a IA compara cada prancha disputada.'
+    + '<br><span id="merge-cron" class="text-xs text-violet-700">0s</span></div>';
+  const _cron = setInterval(() => {
+    const el = document.getElementById('merge-cron');
+    if (!el) { clearInterval(_cron); return; }
+    const s2 = Math.round((Date.now() - _t0) / 1000);
+    el.textContent = s2 + 's' + (s2 > 75 ? ' — está demorando mais que o normal' : '');
+  }, 1000);
   alvo.scrollIntoView({behavior:'smooth', block:'start'});
   let d;
   try {
@@ -1805,12 +1813,33 @@ async function mergeEstudar(jobId){
     d = await res.json();
     if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
   } catch (e) {
+    clearInterval(_cron);
     alvo.innerHTML = '<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">'
       + 'Não consegui estudar: ' + (e.message || e) + '</div>';
     return;
   }
+  clearInterval(_cron);
   _mergeUltimo = d;
-  alvo.innerHTML = mergeHtml(d, jobId);
+  // 🚨 24/08, 1º clique real do Pedro: "não fez nada, ele tá rolando a página
+  // pra baixo e não fazendo nada". O backend TINHA respondido (a juíza rodou,
+  // está no log llm:cache). O que morreu foi ISTO: montar o HTML ficava FORA do
+  // try/catch, então qualquer erro aqui matava a função calada e a caixa
+  // "Lendo..." ficava pra sempre. Falha silenciosa é o defeito que mais me
+  // custou neste projeto — aqui ela vira texto na tela, com o JSON cru junto
+  // pra eu não precisar adivinhar de novo.
+  try {
+    alvo.innerHTML = mergeHtml(d, jobId);
+  } catch (err) {
+    console.error('[merge] falhou ao montar a tela', err, d);
+    alvo.innerHTML = '<div class="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">'
+      + '<b>O estudo chegou, mas eu falhei ao desenhar a tela.</b><br>'
+      + (err && err.message ? String(err.message) : String(err))
+      + '<br><br><b>O resultado veio assim:</b>'
+      + '<pre style="white-space:pre-wrap;font-size:11px;max-height:340px;overflow:auto;'
+      + 'background:#fff;border:1px solid #FCA5A5;border-radius:6px;padding:8px;margin-top:6px">'
+      + JSON.stringify(d, null, 1).replace(/</g, '&lt;').slice(0, 6000)
+      + '</pre></div>';
+  }
   alvo.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
