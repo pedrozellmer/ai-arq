@@ -173,3 +173,81 @@ def test_data_ruim_nao_vira_carimbo_errado():
     corpo = _corpo("_merge_data_curta", tam=1200)
     assert "return None" in corpo
     assert "except Exception" in corpo
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  ⏱️ O 1º uso real: o estudo parecia travado
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 24/08, Pedro clicando pela 1ª vez: *"não fez nada, ele tá rolando a página pra
+# baixo e não fazendo nada"*. O backend TINHA respondido — a juíza rodou, está
+# no log llm:cache. Três defeitos empilhados:
+#
+#   1. as juízas rodavam UMA DEPOIS DA OUTRA: ~21 s só de IA (4 pranchas),
+#      mais carregar 410 itens — na borda dos 45 s que o authFetch corta;
+#   2. a rota não estava na lista de "rotas lentas" do authFetch, então herdava
+#      o teto de 45 s em vez dos 180 s;
+#   3. a caixa de espera não tinha cronômetro, então "está pensando" e "morreu"
+#      eram a MESMA tela — ele esperou, achou que tinha morrido, clicou de novo
+#      (o log mostra os dois cliques, com 30 s de intervalo).
+
+
+def test_as_juizas_rodam_em_paralelo():
+    corpo = _corpo("admin_merge_preview", tam=9000)
+    src = _main()
+    i = src.index("def _merge_montar")
+    j = src.index("@app.get(\"/api/admin/merge-preview", i)
+    montar = src[i:j]
+    assert "ThreadPoolExecutor" in montar, (
+        "as juízas voltaram a rodar em sequência — o tempo vira a SOMA das "
+        "pranchas em vez da mais lenta")
+    assert "_ex.map(" in montar
+
+
+def test_o_paralelo_preserva_a_ordem_das_pranchas():
+    """🪤 `executor.map` devolve na ordem da entrada; um `as_completed` embaralharia
+    e o veredito iria pra a prancha errada — o pior tipo de bug, porque a tela
+    continuaria bonita."""
+    src = _main()
+    i = src.index("def _merge_montar")
+    montar = src[i:i + 4000]
+    assert "zip(_disputadas, _vs)" in montar
+
+
+def test_o_teto_de_tempo_da_tela_e_explicito():
+    import io as _io
+    import os as _os
+    admin = _io.open(_os.path.join(_os.path.dirname(_BACKEND), "admin.html"),
+                     encoding="utf-8").read()
+    i = admin.index("/api/admin/merge-preview/")
+    assert "timeoutMs: 180000" in admin[i:i + 300], (
+        "a rota do estudo voltou a herdar o teto de 45 s do authFetch")
+    j = admin.index("/api/admin/merge-criar/")
+    assert "timeoutMs: 180000" in admin[j:j + 300]
+
+
+def test_a_caixa_de_espera_mostra_o_tempo():
+    """Sem cronômetro, esperar e travar são indistinguíveis pra quem olha."""
+    import io as _io
+    import os as _os
+    admin = _io.open(_os.path.join(_os.path.dirname(_BACKEND), "admin.html"),
+                     encoding="utf-8").read()
+    assert 'id="merge-cron"' in admin
+    assert "clearInterval(_cron)" in admin
+
+
+def test_montar_a_tela_esta_dentro_de_try():
+    """🚨 Era o que matava tudo em silêncio: erro ao desenhar não era pego, a
+    função morria e a caixa 'Lendo...' ficava pra sempre."""
+    import io as _io
+    import os as _os
+    admin = _io.open(_os.path.join(_os.path.dirname(_BACKEND), "admin.html"),
+                     encoding="utf-8").read()
+    i = admin.index("_mergeUltimo = d;")
+    trecho = admin[i:i + 1400]
+    i_try = trecho.index("try {")
+    i_html = trecho.index("mergeHtml(d, jobId)")
+    assert i_try < i_html, "a montagem da tela voltou a ficar fora do try"
+    assert "falhei ao desenhar a tela" in trecho
+    assert "JSON.stringify(d" in trecho, (
+        "sem o resultado cru na tela, o próximo erro me faz adivinhar de novo")

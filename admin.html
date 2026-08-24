@@ -1809,7 +1809,11 @@ async function mergeEstudar(jobId){
   alvo.scrollIntoView({behavior:'smooth', block:'start'});
   let d;
   try {
-    const res = await authFetch(`${API_BASE}/api/admin/merge-preview/${jobId}`);
+    // 🪤 24/08: o authFetch corta em 45 s quem não está na lista de rotas
+    // lentas, e esta rota chama a IA uma vez por prancha disputada. Teto
+    // explícito é melhor que torcer pra a regex da lista casar.
+    const res = await authFetch(`${API_BASE}/api/admin/merge-preview/${jobId}`,
+                                {timeoutMs: 180000});
     d = await res.json();
     if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
   } catch (e) {
@@ -1945,7 +1949,8 @@ async function mergeCriar(jobId){
       + 'Depois você confere e decide se libera.')) return;
   const alvo = document.getElementById('merge-estudo');
   try {
-    const res = await authFetch(`${API_BASE}/api/admin/merge-criar/${jobId}`, {method:'POST'});
+    const res = await authFetch(`${API_BASE}/api/admin/merge-criar/${jobId}`,
+                                {method:'POST', timeoutMs: 180000});
     const d = await res.json();
     if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
     _adminToast('Projeto combinado criado: ' + d.job_id, 'ok');

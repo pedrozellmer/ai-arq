@@ -18277,10 +18277,23 @@ def _merge_montar(eval_job_id: str, com_juiza: bool = True):
     plano = _m_plano(ip, if_)
 
     if com_juiza:
-        for p in plano["pranchas"]:
-            if not (p["pai"] and p["filho"]):
-                continue
-            v = _merge_juiza_prancha(p["prancha"], ip, if_)
+        # 🚨 24/08, 1º uso real: rodando uma juíza DEPOIS da outra, o preview
+        # levava ~21 s só de IA (medido no log llm:cache) + carregar 410 itens.
+        # O authFetch corta em 45 s pra rota que não está na lista de "lentas" —
+        # ou seja, ficava na borda. Em paralelo, o tempo passa a ser o da prancha
+        # mais lenta, não a soma.
+        # 🪤 São chamadas de rede esperando resposta, não CPU: thread serve. Isto
+        # NÃO tem relação com o `--workers 1` da extração de DXF, que existe por
+        # causa de memória (OOM multi-DXF, 22/07) — não confundir os dois.
+        _disputadas = [p for p in plano["pranchas"] if p["pai"] and p["filho"]]
+        if _disputadas:
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=min(4, len(_disputadas))) as _ex:
+                _vs = list(_ex.map(
+                    lambda p: _merge_juiza_prancha(p["prancha"], ip, if_), _disputadas))
+        else:
+            _vs = []
+        for p, v in zip(_disputadas, _vs):
             p["juiza"] = v
             p["discordam"] = bool(v.get("lado")) and v["lado"] != p["lado"]
             # 🚨 Quando a juíza LEU e discordou da contagem, ela manda. O caso do
