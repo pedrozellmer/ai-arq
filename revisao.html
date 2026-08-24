@@ -902,7 +902,7 @@ async function bulkReview(section, action) {
   // Agora: sucesso e falha são contados separado, e o que falhou VOLTA ao
   // estado anterior na tela.
   const limit = 5;
-  let ok = 0;
+  let _salvos = 0;
   const falhou = [];
   for (let i = 0; i < secItems.length; i += limit) {
     const batch = secItems.slice(i, i + limit);
@@ -915,20 +915,20 @@ async function bulkReview(section, action) {
           reviewed_by: currentUser?.email || '',
         })
       })
-      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); ok++; })
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); _salvos++; })
       .catch(e => { falhou.push({ it: it, erro: (e && e.message) || String(e) }); })
     ));
   }
   if (falhou.length) {
     falhou.forEach(f => { delete reviewState[f.it.id]; });
     render();
-    const msg = ok
-      ? `${ok} de ${secItems.length} salvos. ${falhou.length} não foram — ficaram pendentes na tela.`
+    const msg = _salvos
+      ? `${_salvos} de ${secItems.length} salvos. ${falhou.length} não foram — ficaram pendentes na tela.`
       : `Nenhum item foi salvo (${falhou[0].erro}). Nada mudou — tente de novo.`;
     window.toast ? window.toast.error(msg) : alert(msg);
     console.error('[revisao] falhas na aprovação em massa', falhou);
   } else {
-    const doneMsg = `${ok} ${ok === 1 ? 'item salvo' : 'itens salvos'}`;
+    const doneMsg = `${_salvos} ${_salvos === 1 ? 'item salvo' : 'itens salvos'}`;
     window.toast ? window.toast.success(doneMsg) : alert(doneMsg);
   }
 }
