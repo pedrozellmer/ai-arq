@@ -144,7 +144,7 @@
   </footer>
 
 <!-- supabase-js + utils compartilhados (sbClient) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3" integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
 <script src="aiarq-utils.js"></script>
 <!-- toast.js: usar window.toast.error em vez de alert() pra UX consistente. -->
 <script src="toast.js" defer></script>
@@ -162,7 +162,11 @@
   // Guarda no localStorage porque o login com Google sai da página; o dashboard consome.
   try {
     const _r = new URLSearchParams(location.search).get('redirect');
-    if (_r && /^[a-z0-9_-]+\.html(\?[^\s]*)?(#[^\s]*)?$/i.test(_r)) localStorage.setItem('aiarq_redirect', _r);
+    // 23/08 (auditoria): sem validade, o destino ficava preso no navegador e
+    // sequestrava a PRÓXIMA visita ao painel, às vezes dias depois.
+    if (_r && /^[a-z0-9_-]+\.html(\?[^\s]*)?(#[^\s]*)?$/i.test(_r)) {
+      localStorage.setItem('aiarq_redirect', JSON.stringify({ para: _r, em: Date.now() }));
+    }
   } catch (_) {}
   // Check if already logged in
   async function checkSession() {

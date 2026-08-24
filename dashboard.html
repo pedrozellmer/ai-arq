@@ -1314,7 +1314,7 @@
 </div>
 
 <!-- supabase-js + utils compartilhados (sb, sbClient, authFetch, downloadProtected, escapeHtml, API_BASE) -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3" integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
 <script src="aiarq-utils.js"></script>
 <script src="menu-lateral.js"></script>
 <script>
@@ -2075,10 +2075,14 @@
     currentUser = session.user;
     // 23/08 (board): quem veio de login.html?redirect=… (ex.: cronograma) volta pra lá.
     try {
-      const _dest = localStorage.getItem('aiarq_redirect');
-      if (_dest) {
+      const _raw = localStorage.getItem('aiarq_redirect');
+      if (_raw) {
         localStorage.removeItem('aiarq_redirect');
-        if (/^[a-z0-9_-]+\.html(\?[^\s]*)?(#[^\s]*)?$/i.test(_dest) && !/^dashboard\.html/i.test(_dest)) {
+        let _dest = '', _em = 0;
+        try { const o = JSON.parse(_raw); _dest = o.para || ''; _em = o.em || 0; }
+        catch (_) { _dest = _raw; _em = 0; }   // formato antigo: descarta por idade
+        const _fresco = _em && (Date.now() - _em) < 10 * 60 * 1000;   // 10 min
+        if (_fresco && /^[a-z0-9_-]+\.html(\?[^\s]*)?(#[^\s]*)?$/i.test(_dest) && !/^dashboard\.html/i.test(_dest)) {
           window.location.href = _dest; return;
         }
       }
@@ -2623,7 +2627,9 @@
       }
     }
     renderFiles();
-    checkBigFilesAndWarn(newFiles);
+    // 23/08 (auditoria): passava a lista CRUA, então um .zip ignorado ainda
+    // disparava o aviso de 'arquivo grande' — dois toasts se contradizendo.
+    checkBigFilesAndWarn(Array.from(newFiles).filter(f => /\.(pdf|dwg|dxf)$/i.test(f.name || '')));
     if (_ignorados.length) {
       const _z = _ignorados.some(n => /\.zip$/i.test(n));
       try { trackEvent('arquivo_ignorado', { type: _z ? 'zip' : 'outro' }); } catch (_) {}
@@ -5031,6 +5037,9 @@
 </script>
 
 <script src="toast.js" defer></script>
+<!-- 23/08 (auditoria): sem o banner aqui, quem entra direto no painel nunca
+     responde ao consentimento — e os eventos da primeira hora morrem na fila. -->
+<script src="cookie-consent.js" defer></script>
 <script src="contact-modal.js" defer></script>
 <script src="onboarding-tour.js" defer></script>
 <script src="whatsapp-button.js" defer></script>

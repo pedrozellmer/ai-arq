@@ -17220,7 +17220,12 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
 
     novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
                  + " — nova leitura (motor atualizado)")
-    patch = ({"user_id": "eval", "project_name": filho.get("project_name")} if revogar
+    # 23/08 (auditoria): ao revogar, gravava de volta o nome JÁ renomeado — o
+    # job ficava marcado como "nova leitura" mesmo depois de recolhido.
+    _nome_filho = str(filho.get("project_name") or "")
+    if revogar and _nome_filho.endswith(" — nova leitura (motor atualizado)"):
+        _nome_filho = "[TESTE] " + str(pai.get("project_name") or "Projeto")[:60] + " — avaliação"
+    patch = ({"user_id": "eval", "project_name": _nome_filho} if revogar
              else {"user_id": pai["user_id"], "project_name": novo_nome})
     _supa_rest_service("PATCH", "projects", body=patch,
                        params={"job_id": f"eq.{eval_job_id}"})
