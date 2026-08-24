@@ -352,6 +352,28 @@ def _supa_rest_service(method: str, path: str, body=None, params=None,
         return 0, None
 
 
+def _supa_rows(method: str, path: str, **kw) -> list:
+    """As LINHAS de uma consulta Supabase, sem o codigo de status.
+
+    🚨 Por que existe (23/08/2026): `_supa_rest_service` devolve a TUPLA
+    (status, dados) — e 11 pontos do arquivo a usavam como se fosse a lista.
+    O efeito: `rows[0]` virava o inteiro 200 e o `.get(...)` seguinte
+    estourava AttributeError. Sintoma no cliente: o botao "Liberar pro
+    cliente" respondia "Load failed" no Safari (erro 500 sem cabecalho CORS
+    vira "erro de rede" no navegador), e a fusao das revisoes do cliente
+    (regra dura nº7) nunca rodou — silenciosamente, porque estava dentro de
+    try/except.
+
+    Devolve [] em qualquer falha; quem precisa do status usa a funcao original.
+    """
+    try:
+        _st, _rows = _supa_rest_service(method, path, **kw)
+    except Exception as _e:
+        print(f"[supa_rows] {method} {path} falhou: {_e}")
+        return []
+    return _rows or []
+
+
 def _supa_rest_as_user(request, method: str, path: str, body=None, params=None,
                        prefer: str = None, timeout: int = 15):
     """Faz uma chamada Supabase REST repassando o JWT do usuário.
@@ -593,9 +615,9 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     if not parent_job_id:
         return items, resumo
     try:
-        revs = _supa_rest_service("GET", "item_reviews", params={
+        revs = _supa_rows("GET", "item_reviews", params={
             "job_id": f"eq.{parent_job_id}", "action": "eq.edit",
-            "select": "edits,reviewed_at", "order": "reviewed_at.asc"}) or []
+            "select": "edits,reviewed_at", "order": "reviewed_at.asc"})
     except Exception as _e:
         print(f"[fusao-revisao] nao consegui ler as revisoes: {_e}")
         return items, resumo
@@ -7528,10 +7550,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # reprocesso. Best-effort: falhou a leitura, seguimos com os kwargs.
         _uprazo = 0.0
         try:
-            _rrows = _supa_rest_service(
+            _rrows = _supa_rows(
                 "GET", "projects",
                 params={"job_id": f"eq.{job_id}",
-                        "select": "user_total_area,user_pe_direito,user_prazo_meses"}) or []
+                        "select": "user_total_area,user_pe_direito,user_prazo_meses"})
             if _rrows:
                 _r0 = _rrows[0]
                 _upd = float(_r0.get("user_pe_direito") or 0) or _upd
@@ -8039,7 +8061,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # a verdade fundida, e não só o banco.
         _fusao = {"revisoes": 0, "casadas": 0, "acrescentadas": 0}
         try:
-            _pai = (_supa_rest_service("GET", "projects", params={
+            _pai = (_supa_rows("GET", "projects", params={
                 "job_id": f"eq.{job_id}", "select": "parent_job_id"}) or [{}])[0]
             _pai_id = _pai.get("parent_job_id")
             if _pai_id:
@@ -15750,10 +15772,10 @@ def _alerta_detrator(row: dict):
             _jid = (row.get("job_id") or "").strip()
             if _jid:
                 try:
-                    _p = _supa_rest_service(
+                    _p = _supa_rows(
                         "GET", "projects",
                         params={"job_id": f"eq.{_jid}",
-                                "select": "project_name,status,files_count,file_types"}) or []
+                                "select": "project_name,status,files_count,file_types"})
                     if _p:
                         _ctx = (f"<br><b>Projeto:</b> {_p[0].get('project_name') or '?'} "
                                 f"({_p[0].get('status')}, {_p[0].get('files_count')} arquivo(s)) — "
@@ -16817,8 +16839,8 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
     while _t.time() < fim:
         _t.sleep(30)
         try:
-            rows = _supa_rest_service("GET", "projects",
-                   params={"job_id": f"eq.{eval_job_id}", "select": "status,user_id"}) or []
+            rows = _supa_rows("GET", "projects",
+                   params={"job_id": f"eq.{eval_job_id}", "select": "status,user_id"})
         except Exception:
             continue
         if not rows:
@@ -16834,15 +16856,15 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             return
         if (rows[0].get("user_id") or "") != "eval":
             return          # alguém já liberou à mão no meio do caminho
-        pai = (_supa_rest_service("GET", "projects",
+        pai = _supa_rows("GET", "projects",
                params={"job_id": f"eq.{pai_id}",
-                       "select": "job_id,user_id,user_email,user_name,project_name"}) or [])
+                       "select": "job_id,user_id,user_email,user_name,project_name"})
         if not pai or not pai[0].get("user_id"):
             _log_error("filhote:auto", "não liberei: original sem dono", eval_job_id)
             return
         pai = pai[0]
-        revisoes = len(_supa_rest_service("GET", "item_reviews",
-                       params={"job_id": f"eq.{pai_id}", "select": "id"}) or [])
+        revisoes = len(_supa_rows("GET", "item_reviews",
+                       params={"job_id": f"eq.{pai_id}", "select": "id"}))
         if revisoes > 0:
             _log_error("filhote:auto",
                        f"não liberei: original tem {revisoes} revisão(ões) do cliente "
@@ -16850,10 +16872,10 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             return
 
         def _linhas(jid):
-            r = _supa_rest_service("GET", "project_items",
+            r = _supa_rows("GET", "project_items",
                 params={"job_id": f"eq.{jid}",
                         "select": "description,unit,quantity,confidence",
-                        "limit": "120"}) or []
+                        "limit": "120"})
             out = []
             for x in r:
                 out.append(f"{str(x.get('description',''))[:70]} | "
@@ -17102,9 +17124,9 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
     except Exception:
         pass
 
-    filho = (_supa_rest_service("GET", "projects",
+    filho = _supa_rows("GET", "projects",
              params={"job_id": f"eq.{eval_job_id}",
-                     "select": "job_id,parent_job_id,is_eval,user_id,project_name,status"}) or [])
+                     "select": "job_id,parent_job_id,is_eval,user_id,project_name,status"})
     if not filho:
         raise HTTPException(404, "Filhote não encontrado")
     filho = filho[0]
@@ -17116,9 +17138,9 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
     if filho.get("status") != "done":
         raise HTTPException(400, f"Filhote ainda não concluiu (status={filho.get('status')})")
 
-    pai = (_supa_rest_service("GET", "projects",
+    pai = _supa_rows("GET", "projects",
            params={"job_id": f"eq.{pai_id}",
-                   "select": "job_id,user_id,user_email,user_name,project_name"}) or [])
+                   "select": "job_id,user_id,user_email,user_name,project_name"})
     if not pai:
         raise HTTPException(404, "Projeto original não encontrado")
     pai = pai[0]
@@ -17126,14 +17148,14 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
         raise HTTPException(400, "Original sem dono (user_id vazio) — não libero")
 
     def _conta(jid):
-        r = _supa_rest_service("GET", "project_items",
-                               params={"job_id": f"eq.{jid}", "select": "confidence"}) or []
+        r = _supa_rows("GET", "project_items",
+                       params={"job_id": f"eq.{jid}", "select": "confidence"})
         return {"itens": len(r),
                 "medidos": sum(1 for x in r if (x or {}).get("confidence") == "confirmado")}
 
     antes, depois = _conta(pai_id), _conta(eval_job_id)
-    revisoes = len(_supa_rest_service("GET", "item_reviews",
-                   params={"job_id": f"eq.{pai_id}", "select": "id"}) or [])
+    revisoes = len(_supa_rows("GET", "item_reviews",
+                   params={"job_id": f"eq.{pai_id}", "select": "id"}))
 
     novo_nome = (str(pai.get("project_name") or "Projeto")[:60]
                  + " — nova leitura (motor atualizado)")
@@ -18267,10 +18289,10 @@ async def cleanup_old_projects(request: Request):
         # Sem esta trava, o conserto de hoje re-quebra em novembro, quando o
         # próximo projeto de teste envelhecer.
         try:
-            _own = _supa_rest_service(
+            _own = _supa_rows(
                 "GET", "projects",
-                params={"job_id": f"eq.{job_id}", "select": "user_email"}) or []
-            _mail_own = str(((_own[1] if isinstance(_own, tuple) else _own) or [{}])[0].get("user_email") or "")
+                params={"job_id": f"eq.{job_id}", "select": "user_email"})
+            _mail_own = str((_own or [{}])[0].get("user_email") or "")
         except Exception:
             _mail_own = ""
         if "+smoke@" in _mail_own.lower():
