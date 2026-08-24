@@ -4740,7 +4740,12 @@ def _derive_admin_prazo(items, prazo_meses: float) -> int:
     return n
 
 
-def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "") -> tuple[int, int]:
+import re as _re_honesty   # 🪤 `re` não está importado no topo deste módulo (só aliases)
+_RX_DERIV_PD = _re_honesty.compile(r"p[ée]-?\s*direito\s+informado|informado por voc[êe][^|]{0,40}p[ée]-?\s*direito", _re_honesty.I)
+
+
+def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "",
+                        pe_direito: float = 0) -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -4748,6 +4753,14 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
       ESTIMADO (laranja), rotulado 'informado por você — não medido'. É o que o
       cliente pediu ao informar a metragem: completar os itens de área com uma base
       honesta (não é medição nossa, segue como estimativa a conferir).
+    - Se o cliente INFORMOU o PÉ-DIREITO e a observação do item mostra a conta
+      feita com ele (ex.: "A-WALL = 303,96 ml × 2,70 m (pé-direito informado)"),
+      PRESERVA a quantidade. 🚨 Caso Tammyres (23/08/2026): ela informou 2,70 no
+      envio, a leitura mediu 303,96 m de parede no layer A-WALL, a conta foi
+      escrita na observação de 3 itens — e esta função zerou 2 deles (pintura e
+      alvenaria), deixando a massa corrida com 817 m² e a pintura que a originou
+      em 0. O comprimento vem da GEOMETRIA do CAD e o pé-direito veio do cliente:
+      é estimativa honesta com procedência, não m² inventado. Segue 'estimado'.
     - Caso contrário, ZERA a quantidade (Vision não mede geometria → evita m²
       inventado, caso Catarina 20/07) e anota que a área não foi medida.
 
@@ -4755,7 +4768,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     intocados. Devolve (n_preenchidos, n_zerados)."""
     from models import Confidence
     informado = (total_area_source == "informado") and (total_area or 0) > 0
-    filled = blanked = 0
+    _pd_ok = float(pe_direito or 0) > 0
+    filled = blanked = preservados = 0
     for it in items:
         if getattr(it, "origem", "") == "dxf_geom":
             continue
@@ -4779,6 +4793,18 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                          "projeto. Confira antes de orçar.")
             it.observations = " | ".join(s for s in _segs if s)
             filled += 1
+        elif q > 0 and _pd_ok and _RX_DERIV_PD.search(str(getattr(it, "observations", "") or "")):
+            # Derivado do pé-direito que o CLIENTE informou, sobre comprimento
+            # medido do CAD: preserva como estimado, com o selo de procedência.
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            _o = it.observations or ""
+            if "informado por você" not in _o.lower():
+                it.observations = (_o + " | ESTIMADO com o pé-direito informado por você — "
+                                   "não é medição da área; confira antes de orçar.").strip(" |")
+            preservados += 1
         elif q > 0:
             it.quantity = 0
             # 🪤 Zerar sem soltar o selo deixa a linha BRANCA ("medido do CAD")
@@ -4796,6 +4822,9 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                     "preencha a metragem, informe a área no upload ou envie o DXF pra medir."
                 ).strip(" |")
             blanked += 1
+    if preservados:
+        print(f"[honestidade-m2] preservei {preservados} item(ns) de área derivados do "
+              f"pé-direito informado ({pe_direito} m) — estimados com procedência")
     return filled, blanked
 
 
@@ -7661,7 +7690,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # medido de verdade (origem 'dxf_geom') nunca é tocado.
         _n_fill, _blanked = _apply_area_honesty(
             all_items, project_data.total_area,
-            getattr(project_data, "total_area_source", ""))
+            getattr(project_data, "total_area_source", ""),
+            pe_direito=float(getattr(project_data, "user_pe_direito", 0) or 0))
         if _n_fill:
             print(f"[honestidade-m2] job={job_id}: preenchi {_n_fill} itens de piso/forro/laje "
                   f"com a área INFORMADA {project_data.total_area} m² (estimado, a conferir)")
