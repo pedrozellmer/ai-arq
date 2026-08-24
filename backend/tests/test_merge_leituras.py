@@ -222,3 +222,46 @@ def test_unidade_diferente_nao_e_a_mesma_coisa():
     sob = merge_sobreposicoes([_it("A.dxf", "Cabo CFTV", 5, unit="un"),
                                _it("B.dxf", "Cabo CFTV", 30, unit="ml")])
     assert not sob
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🔬 Contra DESCRIÇÃO REAL de produção, não contra o que eu imagino
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 🪤 A lição de 11/08: "teste fora do caminho real mede outra coisa" — me pegou
+# 3 vezes numa noite. Estas strings vieram do banco de produção (jobs e1c48ed7
+# e ev597afa, cliente Alan). O Postgres e o Python têm motores de regex
+# diferentes; a detecção roda no Python e foi conferida contra o SQL: os dois
+# apontam os MESMOS 16 códigos neste projeto.
+_REAIS = [
+    ("Eletroduto de aço carbono galvanizado a fogo (AGF) para sistema de CFTV",
+     {"AGF", "CFTV"}),
+    ("Sensor DTBC — fornecimento, instalação e configuração de sensor", {"DTBC"}),
+    ("Identificação GGC — placa/sinalização de identificação", {"GGC"}),
+    ("Detector de presença/alarme IVP — bloco IVP", {"IVP"}),
+    ("Extintor de incêndio — fornecimento e instalação conforme PPCI", {"PPCI"}),
+    ("Prateleira — conforme especificação do projeto (bloco PRAT)", {"PRAT"}),
+]
+
+
+def test_extrai_os_codigos_reais_do_projeto_do_alan():
+    for desc, esperado in _REAIS:
+        assert merge_tokens(desc) == esperado, desc
+
+
+def test_caixa_mista_nao_vira_codigo():
+    """'Midea' escrito assim não é identidade — só conta quando o nome do BLOCO
+    traz 'MIDEA' em caixa alta, que é outro item."""
+    assert not merge_tokens(
+        "Fornecimento e instalação de split Hi-Wall Midea 12.000 BTU")
+    assert "MIDEA" in merge_tokens("Ar-condicionado — bloco VA-Hi-Wall-MIDEA-12kBtu-VS")
+
+
+def test_nome_de_bloco_composto_vira_pedacos_e_isso_esta_ok():
+    """'EL_QUA.FORCA' sai como {'FORCA','QUA'} — pedaços, não o nome inteiro.
+
+    Documentado de propósito: não é o ideal, mas também não é dano. Pedaço só
+    vira alarme se cruzar prancha, e um quadro de força desenhado em duas
+    pranchas É sobreposição de verdade. Se um dia isso gerar ruído, o conserto
+    é deixar '_', '.' e '-' dentro do token — não mexer na stoplist."""
+    assert merge_tokens("Quadro de força — EL_QUA.FORCA — quadro elétrico") == {"FORCA", "QUA"}
