@@ -17703,13 +17703,39 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
         linha_ganho.append(f"<b>{antes.get('itens',0)} → {depois.get('itens',0)} itens</b>")
     if ganho_med > 0:
         linha_ganho.append(f"<b>{antes.get('medidos',0)} → {depois.get('medidos',0)} medidos do CAD</b>")
-    ganho_html = " e ".join(linha_ganho) if linha_ganho else "uma leitura mais completa"
+    # "A e B e C" fica pobre; com 3 ganhos vira "A, B e C".
+    if len(linha_ganho) > 2:
+        ganho_html = ", ".join(linha_ganho[:-1]) + " e " + linha_ganho[-1]
+    elif linha_ganho:
+        ganho_html = " e ".join(linha_ganho)
+    else:
+        ganho_html = "uma leitura mais completa"
+
+    # 🚨 24/08: honestidade dos dois lados. Se alguma prancha ficou com MENOS
+    # medicoes que na leitura antiga, o cliente precisa saber ANTES de trocar a
+    # planilha dele — senao ele adota a nova e descobre a perda no meio do
+    # orcamento. No caso do Alan: eletrica 77 -> 49 medidos.
+    _pa, _pd = antes.get("por_prancha") or {}, depois.get("por_prancha") or {}
+    _piores = []
+    for _k, _va in _pa.items():
+        _vd = _pd.get(_k)
+        if _vd and _vd.get("medidos", 0) < _va.get("medidos", 0):
+            _piores.append((_nome_prancha_bonito(_k), _va["medidos"], _vd["medidos"]))
+    _piores.sort(key=lambda t: t[1] - t[2], reverse=True)
+    piorou_html = ""
+    if _piores:
+        _lista = "; ".join(f"<b>{n}</b> ({a} &rarr; {d} medidos)" for n, a, d in _piores[:3])
+        piorou_html = (
+            f"<p style=\"background:#FFFBEB;border-left:3px solid #F59E0B;padding:10px 12px;"
+            f"border-radius:6px\">E o que <b>piorou</b>, pra voc&ecirc; saber antes de trocar: "
+            f"{_lista}. Nessas, a leitura antiga est&aacute; mais completa &mdash; por isso as "
+            f"duas vers&otilde;es ficam lado a lado no seu painel.</p>")
 
     html = f"""<div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1F2937;max-width:600px">
 <p>{nome}, tudo bem?</p>
 <p>Melhoramos o motor que lê os desenhos e <b>refizemos a leitura do seu projeto
 &ldquo;{proj}&rdquo;</b> &mdash; sem você precisar reenviar nada.</p>
-<p>O que mudou: {ganho_html}.</p>
+<p>O que mudou: {ganho_html}.</p>{piorou_html}
 <p>A versão nova está no seu painel, ao lado da original. <b>A sua continua lá</b>
 &mdash; você compara e usa a que preferir.</p>
 <p style="margin:22px 0">
@@ -17867,9 +17893,23 @@ async def admin_liberar_filhote(eval_job_id: str, request: Request):
         # prancha e a causa, e e o que ele reclamaria. Conta as duas.
         _pr = {str((x or {}).get("ref_sheet") or "").strip()
                for x in _r if str((x or {}).get("ref_sheet") or "").strip()}
+        # 24/08: por PRANCHA tambem. O saldo do Alan e +59 medidos, mas a
+        # prancha de eletrica dele CAIU de 77 para 49 medidos. Um e-mail que
+        # diz so "melhoramos" e meia verdade — e meia verdade sobre a planilha
+        # do cliente e o tipo de coisa que ele descobre sozinho e nao volta.
+        _det = {}
+        for _x in _r:
+            _k = str((_x or {}).get("ref_sheet") or "").strip()
+            if not _k:
+                continue
+            _d = _det.setdefault(_k, {"itens": 0, "medidos": 0})
+            _d["itens"] += 1
+            if (_x or {}).get("confidence") == "confirmado":
+                _d["medidos"] += 1
         return {"itens": len(_r),
                 "medidos": sum(1 for x in _r if (x or {}).get("confidence") == "confirmado"),
-                "pranchas": len(_pr)}
+                "pranchas": len(_pr),
+                "por_prancha": _det}
 
     antes, depois = _conta(pai_id), _conta(eval_job_id)
     if antes is None or depois is None:

@@ -70,3 +70,52 @@ def test_o_email_continua_dizendo_que_o_original_fica():
     """Regra nº7: nunca dar a entender que a versão nova substitui a dele."""
     corpo = _corpo("_email_leitura_nova")
     assert "A sua continua l" in corpo
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 Honestidade dos DOIS lados
+# ══════════════════════════════════════════════════════════════════════════
+def test_o_email_conta_tambem_o_que_PIOROU():
+    """No caso do Alan o saldo e +59 medidos — e mesmo assim a prancha de
+    ELETRICA caiu de 77 para 49 medidos (103 -> 60 itens). Um e-mail que diz so
+    "melhoramos" faz o cliente trocar a planilha e descobrir a perda no meio do
+    orcamento. Regra da copy publica: nao afirmar o que nao se mede."""
+    corpo = _corpo("_email_leitura_nova")
+    assert "_piores" in corpo, "o e-mail nao sabe o que piorou"
+    assert "piorou_html" in corpo
+    assert 'medidos", 0) < _va.get("medidos", 0)' in corpo, (
+        "a comparacao por prancha sumiu — volta a ser so o saldo global")
+
+
+def test_o_aviso_do_que_piorou_aparece_no_corpo_do_email():
+    """Calcular e nao mostrar seria pior que nao calcular."""
+    corpo = _corpo("_email_leitura_nova")
+    i_calc = corpo.index("piorou_html = (")
+    i_uso = corpo.index("{ganho_html}.</p>{piorou_html}")
+    assert i_calc < i_uso
+
+
+def test_sem_piora_o_email_nao_inventa_alarme():
+    """Controle negativo: projeto em que tudo melhorou nao pode receber um
+    quadro amarelo vazio."""
+    corpo = _corpo("_email_leitura_nova")
+    assert 'piorou_html = ""' in corpo
+    assert "if _piores:" in corpo
+
+
+def test_a_prancha_que_piorou_sai_com_nome_de_gente():
+    corpo = _corpo("_email_leitura_nova")
+    assert "_nome_prancha_bonito(_k)" in corpo, (
+        "o cliente leria '4366-EL-E_libredwg.dxf', que ele nunca enviou")
+
+
+def test_o_email_explica_POR_QUE_as_duas_versoes_ficam():
+    """Se piorou em algo, o motivo de manter as duas deixa de ser cortesia e
+    vira necessidade — e o texto tem que dizer isso."""
+    corpo = _corpo("_email_leitura_nova")
+    assert "lado a lado no seu painel" in corpo
+
+
+def test_a_contagem_por_prancha_existe_no_conta():
+    src = _main()
+    assert '"por_prancha": _det' in src
