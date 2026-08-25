@@ -2041,8 +2041,11 @@ function _contagemBox(html){
 async function rodarSpecBackfill(simulacao){
   _contagemBox('<div class="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-800">Lendo os itens…</div>');
   try {
+    // 🚨 25/08: aqui faltava o method. A rota e POST e o authFetch manda GET
+    // por padrao — o Pedro clicou e levou "Method Not Allowed". Rota e botao
+    // nasceram em commits diferentes e ninguem conferiu que combinavam.
     const res = await authFetch(`${API_BASE}/api/admin/spec-backfill?dry=${simulacao ? 1 : 0}`,
-                                {timeoutMs: 180000});
+                                {method: 'POST', timeoutMs: 180000});
     const d = await res.json();
     if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
     const ex = (d.exemplos || []).map(e =>
