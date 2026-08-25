@@ -69,7 +69,7 @@ def test_sem_ganho_de_prancha_o_email_nao_inventa_uma():
 def test_o_email_continua_dizendo_que_o_original_fica():
     """Regra nº7: nunca dar a entender que a versão nova substitui a dele."""
     corpo = _corpo("_email_leitura_nova")
-    assert "A sua continua l" in corpo
+    assert "continua no painel" in corpo
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -82,7 +82,6 @@ def test_o_email_conta_tambem_o_que_PIOROU():
     orcamento. Regra da copy publica: nao afirmar o que nao se mede."""
     corpo = _corpo("_email_leitura_nova")
     assert "_piores" in corpo, "o e-mail nao sabe o que piorou"
-    assert "piorou_html" in corpo
     assert 'medidos", 0) < _va.get("medidos", 0)' in corpo, (
         "a comparacao por prancha sumiu — volta a ser so o saldo global")
 
@@ -90,17 +89,16 @@ def test_o_email_conta_tambem_o_que_PIOROU():
 def test_o_aviso_do_que_piorou_aparece_no_corpo_do_email():
     """Calcular e nao mostrar seria pior que nao calcular."""
     corpo = _corpo("_email_leitura_nova")
-    i_calc = corpo.index("piorou_html = (")
-    i_uso = corpo.index("{ganho_html}.</p>{piorou_html}")
-    assert i_calc < i_uso
+    # o texto do alarme so pode existir DEPOIS de calcular quem piorou
+    assert corpo.index("_piores.sort(") < corpo.index("E o que <b>piorou</b>")
 
 
 def test_sem_piora_o_email_nao_inventa_alarme():
     """Controle negativo: projeto em que tudo melhorou nao pode receber um
     quadro amarelo vazio."""
     corpo = _corpo("_email_leitura_nova")
-    assert 'piorou_html = ""' in corpo
-    assert "if _piores:" in corpo
+    assert "if _piores:" in corpo, (
+        "o alarme do que piorou saiu de baixo da condicao: passaria a sair sempre, ate onde nada piorou")
 
 
 def test_a_prancha_que_piorou_sai_com_nome_de_gente():

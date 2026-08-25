@@ -386,3 +386,26 @@ def test_o_CTA_aponta_pro_projeto_COMBINADO():
     errado e pior ainda."""
     corpo = _corpo("_email_leitura_combinada")
     assert "job_id=%s" in corpo and "merge_job" in corpo
+
+
+def test_o_email_da_RELEITURA_tambem_usa_a_moldura():
+    """🚨 A auditoria dos 17 e-mails (24/08) achou que eu tinha consertado o do
+    merge e deixado o IRMAO pra tras. `_email_leitura_nova` ainda saia como
+    <div> cru — sem logo, sem CTA e SEM o rodape de privacidade (regra dura
+    nº6). TRES clientes ja tinham recebido assim."""
+    corpo = _corpo("_email_leitura_nova")
+    assert "_email_wrap(" in corpo
+    assert "preheader=" in corpo
+
+
+def test_os_DOIS_emails_de_versao_nova_tem_o_mesmo_padrao():
+    """Guarda de simetria: e facil consertar um e esquecer o outro — foi
+    exatamente o que aconteceu. Se um ganhar moldura/preheader e o outro nao,
+    isto reprova."""
+    for nome in ("_email_leitura_nova", "_email_leitura_combinada"):
+        c = _corpo(nome)
+        assert "_email_wrap(" in c, "%s sem moldura da marca" % nome
+        assert "preheader=" in c, "%s sem preheader" % nome
+        assert "continua no painel" in c, "%s nao diz que a versao dele fica" % nome
+        i = c.index("subject = ")
+        assert "&" not in c[i:c.index(chr(10), i)], "%s: entidade HTML no assunto" % nome

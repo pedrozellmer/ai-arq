@@ -17788,7 +17788,7 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
 
 
 def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) -> bool:
-    """Avisa o cliente de que a leitura do projeto dele foi refeita e ficou melhor.
+    """Avisa o cliente de que a leitura do projeto dele foi refeita e melhorou.
 
     Pedro, 08/08: *"a gente reprocessou o projeto, a gente melhorou o projeto,
     como que o cliente vai ficar sabendo que agora ele pode entrar no site e
@@ -17806,29 +17806,37 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
 
     🚫 Também não manda se a versão nova não mediu MAIS que a original: avisar
     sem ganho é gastar a confiança dele por nada.
+
+    🪤 24/08: este e-mail saía como `<div>` cru — sem logo, sem CTA padrão e
+    SEM O RODAPÉ, que é onde moram o link de privacidade e o "responda pra
+    remover seus dados" (regra dura nº6). **3 clientes receberam assim.** O
+    irmão dele (`_email_leitura_combinada`) foi consertado primeiro; a auditoria
+    dos 17 e-mails achou que este tinha ficado pra trás. Mesmo conserto.
     """
+    import html as _hn
     email = (pai.get("user_email") or "").strip()
     if not email:
         return False
-    nome = (pai.get("user_name") or "").strip().split(" ")[0] or "Olá"
+    nome = (pai.get("user_name") or "").strip().split(" ")[0] or ""
     proj = (pai.get("project_name") or "seu projeto")[:60]
     ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
     ganho_itens = depois.get("itens", 0) - antes.get("itens", 0)
-
     ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
 
     linha_ganho = []
-    # 24/08: prancha primeiro. Se 3 das 7 pranchas do cliente nao tinham entrado,
-    # e ISSO que ele quer ler — nao a contagem de itens que veio como efeito.
+    # 24/08: prancha primeiro. Se 3 das 7 pranchas do cliente não tinham
+    # entrado, é ISSO que ele quer ler — não a contagem de itens, que é efeito.
     if ganho_pr > 0:
         linha_ganho.append(
-            f"<b>{ganho_pr} prancha(s) que n&atilde;o tinham entrado agora entraram</b> "
-            f"({antes.get('pranchas',0)} &rarr; {depois.get('pranchas',0)} pranchas lidas)")
+            "<b>%d prancha(s) que n&atilde;o tinham entrado agora entraram</b> "
+            "(%d &rarr; %d pranchas lidas)"
+            % (ganho_pr, antes.get("pranchas", 0), depois.get("pranchas", 0)))
     if ganho_itens > 0:
-        linha_ganho.append(f"<b>{antes.get('itens',0)} → {depois.get('itens',0)} itens</b>")
+        linha_ganho.append("<b>%d &rarr; %d itens</b>"
+                           % (antes.get("itens", 0), depois.get("itens", 0)))
     if ganho_med > 0:
-        linha_ganho.append(f"<b>{antes.get('medidos',0)} → {depois.get('medidos',0)} medidos do CAD</b>")
-    # "A e B e C" fica pobre; com 3 ganhos vira "A, B e C".
+        linha_ganho.append("<b>%d &rarr; %d medidos do CAD</b>"
+                           % (antes.get("medidos", 0), depois.get("medidos", 0)))
     if len(linha_ganho) > 2:
         ganho_html = ", ".join(linha_ganho[:-1]) + " e " + linha_ganho[-1]
     elif linha_ganho:
@@ -17836,10 +17844,9 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
     else:
         ganho_html = "uma leitura mais completa"
 
-    # 🚨 24/08: honestidade dos dois lados. Se alguma prancha ficou com MENOS
-    # medicoes que na leitura antiga, o cliente precisa saber ANTES de trocar a
-    # planilha dele — senao ele adota a nova e descobre a perda no meio do
-    # orcamento. No caso do Alan: eletrica 77 -> 49 medidos.
+    # 🚨 Honestidade dos dois lados. Se alguma prancha ficou com MENOS medições
+    # que na leitura antiga, o cliente precisa saber ANTES de trocar a planilha
+    # dele — senão adota a nova e descobre a perda no meio do orçamento.
     _pa, _pd = antes.get("por_prancha") or {}, depois.get("por_prancha") or {}
     _piores = []
     for _k, _va in _pa.items():
@@ -17847,35 +17854,39 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
         if _vd and _vd.get("medidos", 0) < _va.get("medidos", 0):
             _piores.append((_nome_prancha_bonito(_k), _va["medidos"], _vd["medidos"]))
     _piores.sort(key=lambda t: t[1] - t[2], reverse=True)
-    piorou_html = ""
+
+    _greet = _greeting_line(_hn.escape(nome))
+    corpo = ("%s<br><br>"
+             "Melhoramos o motor que l&ecirc; os desenhos e <b>refizemos a leitura do seu "
+             "projeto %s</b> &mdash; sem voc&ecirc; precisar reenviar nada.<br><br>"
+             "O que mudou: %s." % (_greet, _hn.escape(proj), ganho_html))
+
     if _piores:
-        _lista = "; ".join(f"<b>{n}</b> ({a} &rarr; {d} medidos)" for n, a, d in _piores[:3])
-        piorou_html = (
-            f"<p style=\"background:#FFFBEB;border-left:3px solid #F59E0B;padding:10px 12px;"
-            f"border-radius:6px\">E o que <b>piorou</b>, pra voc&ecirc; saber antes de trocar: "
-            f"{_lista}. Nessas, a leitura antiga est&aacute; mais completa &mdash; por isso as "
-            f"duas vers&otilde;es ficam lado a lado no seu painel.</p>")
+        _lista = "; ".join("<b>%s</b> (%d &rarr; %d medidos)" % t for t in _piores[:3])
+        corpo += (
+            '<div style="background:#FFFBEB;border-left:3px solid #F59E0B;padding:10px 12px;'
+            'border-radius:6px;margin:14px 0 0;font-size:14px;color:#78350F;">'
+            "E o que <b>piorou</b>, pra voc&ecirc; saber antes de trocar: %s. Nessas, a "
+            "leitura antiga est&aacute; mais completa &mdash; por isso as duas vers&otilde;es "
+            "ficam lado a lado no seu painel.</div>" % _lista)
 
-    html = f"""<div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1F2937;max-width:600px">
-<p>{nome}, tudo bem?</p>
-<p>Melhoramos o motor que lê os desenhos e <b>refizemos a leitura do seu projeto
-&ldquo;{proj}&rdquo;</b> &mdash; sem você precisar reenviar nada.</p>
-<p>O que mudou: {ganho_html}.</p>{piorou_html}
-<p>A versão nova está no seu painel, ao lado da original. <b>A sua continua lá</b>
-&mdash; você compara e usa a que preferir.</p>
-<p style="margin:22px 0">
-  <a href="https://ai.arq.br/dashboard.html" style="background:#4F46E5;color:#fff;
-     padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600;
-     display:inline-block">Ver a leitura nova</a></p>
-<p style="color:#6B7280;font-size:13px">Reprocessar não consumiu nada seu, e continua
-tudo grátis no beta. Se a versão nova não te servir, é só ignorar.</p>
-<p>Abraço,<br>Pedro Zellmer<br>
-<span style="color:#6B7280">AI.arq &mdash; <a href="https://ai.arq.br" style="color:#4F46E5;text-decoration:none">ai.arq.br</a></span></p>
-</div>"""
-    return _send_email_smtp(
-        email, f"Refizemos a leitura do seu projeto — {proj}", html,
-        log_kind="leitura_nova")
+    corpo += (
+        '<div style="font-size:13px;color:#6B7280;line-height:1.6;margin:16px 0 0;">'
+        "<b>A sua vers&atilde;o original continua no painel</b>, ao lado desta &mdash; "
+        "voc&ecirc; compara e usa a que preferir. Reprocessar n&atilde;o consumiu nada "
+        "seu, e continua tudo gr&aacute;tis no beta.</div>")
 
+    subject = "%s — refizemos a leitura, ficou mais completa" % (proj or "Seu projeto")
+    _pre = ("%d → %d itens medidos do CAD. A sua versão original continua no painel."
+            % (antes.get("medidos", 0), depois.get("medidos", 0)))
+    html = _email_wrap(
+        "Refizemos a leitura do seu projeto", corpo,
+        "Ver a leitura nova",
+        "https://ai.arq.br/projeto.html?job_id=%s" % filho_job,
+        badge="&#10003; Atualizado",
+        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.",
+        preheader=_pre)
+    return _send_email_smtp(email, subject, html, log_kind="leitura_nova")
 
 @app.get("/api/admin/onde-o-motor-erra")
 async def admin_onde_o_motor_erra(request: Request):
