@@ -1097,18 +1097,49 @@ def _comparar_com_versao_anterior(job_id: str, n_medidos: int, n_itens: int) -> 
     antes_itens = len(_da_ultima)
     antes_med = sum(1 for l in _da_ultima if (l.get("confidence") or "") == "confirmado")
     perdeu = max(0, antes_med - n_medidos)
+    # 🚨 25/08/2026 — A LINHA QUE SUMIU TAMBÉM CONTA.
+    # Este guarda só olhava MEDIDOS, e por isso ficou mudo no pior caso do dia:
+    # cliente recebeu "0 medido, mande o CAD", mandou os 2 DWG, e a releitura
+    # foi de **208 itens para 15** (93% a menos) — com 0 medido dos dois lados,
+    # `perdeu = max(0, 0-0) = 0` e nenhum aviso saiu. Ele fez o que a gente
+    # pediu e recebeu 193 linhas a menos, em silêncio.
+    # 🪤 A função JÁ carregava `antes_itens` e `n_itens` e até os imprimia no
+    # log — mas só DENTRO do `if perdeu > 0`. O dado estava na mão e não era
+    # usado.
+    # Limiar medido no acervo (4 releituras com histórico): quedas de 93% e
+    # 29% com zero medido dos dois lados passavam batido; a de 12% subiu de 24
+    # pra 25 medidos e não é caso. Daí ≥20% E ≥10 linhas.
+    perdeu_itens = max(0, antes_itens - n_itens)
+    queda_pct = (100.0 * perdeu_itens / antes_itens) if antes_itens else 0.0
     out = {"versao": _ultima, "antes_itens": antes_itens, "antes_medidos": antes_med,
-           "perdeu_medidos": perdeu, "frase": ""}
+           "perdeu_medidos": perdeu, "perdeu_itens": perdeu_itens, "frase": ""}
+    _extra_linhas = ""
+    if perdeu_itens >= 10 and queda_pct >= 20:
+        _l = "linha" if perdeu_itens == 1 else "linhas"
+        _extra_linhas = (f" A planilha também ficou com {perdeu_itens} {_l} a menos "
+                         f"({n_itens} contra {antes_itens}).")
     if perdeu > 0:
         _it = "item" if perdeu == 1 else "itens"
         out["frase"] = (
             f"Esta leitura mediu {perdeu} {_it} A MENOS que a anterior "
             f"({n_medidos} contra {antes_med} medidos do CAD). Os arquivos podem ser "
             f"os mesmos e o resultado mudar — é limitação nossa, não do seu projeto. "
-            f"Compare antes de usar: a versão anterior continua guardada.")
+            f"Compare antes de usar: a versão anterior continua guardada." + _extra_linhas)
         _log_error("motor:leitura-pior",
                    f"v{_ultima}: medidos {antes_med} -> {n_medidos} "
                    f"(itens {antes_itens} -> {n_itens})", job_id)
+    elif _extra_linhas:
+        _l = "linha" if perdeu_itens == 1 else "linhas"
+        out["frase"] = (
+            f"Esta leitura trouxe {perdeu_itens} {_l} A MENOS que a anterior "
+            f"({n_itens} contra {antes_itens}). Nenhuma das duas mediu do CAD, então "
+            f"a diferença é do que o motor conseguiu LER desta vez — é limitação "
+            f"nossa, não do seu projeto. Compare antes de usar: a versão anterior "
+            f"continua guardada.")
+        _log_error("motor:leitura-pior",
+                   f"v{_ultima}: itens {antes_itens} -> {n_itens} "
+                   f"({queda_pct:.0f}% a menos), medidos {antes_med} -> {n_medidos}",
+                   job_id)
     return out
 
 
