@@ -50,7 +50,14 @@ def _carrega(revs, itens_do_pai=None, status_rev=200, status_itens=200):
 
     import re as _re
     ns = {"__name__": "fusao_ns", "_re": _re, "re": _re,
-          "_supa_rest_service": _fake, "_log_error": lambda *a, **k: None}
+          "_supa_rest_service": _fake, "_log_error": lambda *a, **k: None,
+          "_SUPA_TETO_POR_PAGINA": 1000}
+    # 🪤 25/08: a fusão passou a ler o pai pelo paginador (o PostgREST corta em
+    # 1000 e não avisa). Aqui entra o paginador REAL, não um stub — stub de
+    # paginação esconderia justamente o que ele existe pra provar.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from _corpo import corpo_de
+    exec(compile(corpo_de("_supa_rest_tudo"), "paginador", "exec"), ns)
     exec(compile(src[i:j], "main_slice", "exec"), ns)
     return ns["_fundir_revisoes_do_cliente"], chamadas, ns
 

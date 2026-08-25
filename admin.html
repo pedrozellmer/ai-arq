@@ -2054,16 +2054,25 @@ async function rodarSpecBackfill(simulacao){
          <div class="text-violet-800 font-medium mt-0.5">
            ${[e.marca, e.codigo, e.cor].filter(Boolean).join(' &middot; ') || '—'}</div>
        </div>`).join('');
+    // 🚨 25/08: aqui dizia "50 de 1000 itens" e o 1000 era o TETO do Supabase,
+    // não o acervo (7718). Lido como "de 1000 que existem". Agora o backend
+    // pagina e manda `leu_tudo` — se um dia faltar gente, a tela fala.
+    const cobertura = d.leu_tudo
+      ? `<p class="text-xs mt-1 text-violet-700">Li os ${d.itens_lidos} itens que ainda não têm especificação — o acervo inteiro.</p>`
+      : `<p class="text-xs mt-1 font-semibold text-amber-800">⚠ Parei em ${d.itens_lidos} itens: bati no limite da leitura e <b>ficou item de fora</b>.</p>`;
+    const problemas = (d.falhas || 0) > 0
+      ? `<p class="text-xs mt-2 font-semibold text-red-700">⚠ ${d.falhas} item(ns) NÃO gravaram (o banco recusou).</p>` : '';
     _contagemBox(`
       <div class="rounded-lg border border-violet-300 bg-violet-50 p-4 text-sm text-violet-800">
         <b>${d.com_especificacao} de ${d.itens_lidos} itens</b> ganhariam especificação —
         ${d.com_marca} com marca, ${d.com_codigo} com código, ${d.com_cor} com cor.
+        ${cobertura}
         ${d.simulacao
           ? `<p class="text-xs mt-2">Isto foi <b>simulação</b>: nada foi gravado.</p>
              <button onclick="rodarSpecBackfill(false)" style="min-height:40px"
                class="mt-2 px-3 py-2 text-xs rounded-lg bg-violet-600 text-white font-semibold">
                Gravar de verdade nos ${d.com_especificacao} itens</button>`
-          : `<p class="text-xs mt-2"><b>Gravado em ${d.gravados} item(ns).</b></p>`}
+          : `<p class="text-xs mt-2"><b>Gravado em ${d.gravados} item(ns).</b></p>${problemas}`}
         <div class="mt-3">${ex}</div>
       </div>`);
     _adminToast(d.simulacao ? 'Simulação pronta' : ('Gravado em ' + d.gravados), 'ok');

@@ -442,6 +442,49 @@ def _supa_rows(method: str, path: str, **kw) -> list:
     return _rows or []
 
 
+#: o PostgREST do Supabase corta aqui e não avisa. Não é o nosso `limit`.
+_SUPA_TETO_POR_PAGINA = 1000
+
+
+def _supa_rest_tudo(path: str, params=None, pagina: int = _SUPA_TETO_POR_PAGINA,
+                    teto: int = 100000, ordem: str = "id.asc", timeout: int = 15):
+    """Lê TODAS as linhas de uma tabela, de mil em mil. Devolve (status, linhas).
+
+    🚨 25/08/2026, achado no primeiro clique do Pedro no backfill de
+    especificação: o PostgREST devolve no máximo **1000 linhas**, qualquer que
+    seja o `limit` que a gente peça, e **não sinaliza** que cortou. A rota pedia
+    `limit=9000`, recebia 1000 de 7718 itens, e a tela dizia "50 de 1000 itens"
+    — que se lê como "de 1000 que existem". Provado com curl na anon key:
+
+        ?limit=1500 → 1000 linhas
+        ?limit=3000 → 1000 linhas
+        ?limit=9000 → 1000 linhas
+
+    🪤 A ordem importa: sem `order` explícito o Postgres não promete a mesma
+    sequência entre uma página e outra, então paginar sem ordenar pula linha e
+    repete linha. Por isso `ordem` tem padrão e não pode ser vazia.
+
+    🚨 Falha FECHADA: se qualquer página der erro, devolve o status do erro
+    junto com o que já tinha. Quem chama TEM que olhar o status — devolver
+    silenciosamente meia tabela como se fosse a tabela inteira é exatamente o
+    defeito que esta função existe pra matar.
+    """
+    linhas, deslocamento = [], 0
+    while True:
+        p = dict(params or {})
+        p["limit"] = str(min(pagina, _SUPA_TETO_POR_PAGINA))
+        p["offset"] = str(deslocamento)
+        p.setdefault("order", ordem)
+        st, lote = _supa_rest_service("GET", path, params=p, timeout=timeout)
+        if st != 200:
+            return st, linhas
+        lote = lote or []
+        linhas.extend(lote)
+        if len(lote) < int(p["limit"]) or len(linhas) >= teto:
+            return 200, linhas
+        deslocamento += len(lote)
+
+
 def _supa_rest_as_user(request, method: str, path: str, body=None, params=None,
                        prefer: str = None, timeout: int = 15):
     """Faz uma chamada Supabase REST repassando o JWT do usuário.
@@ -719,10 +762,12 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
 
     # 2) OS VALORES: a linha do pai HOJE (já corrigida, já rebaixada).
     try:
-        _st_i, _linhas = _supa_rest_service("GET", "project_items", params={
+        # 🪤 `limit=5000` era mentira: o PostgREST corta em 1000. O maior
+        # projeto do acervo tem 307 itens, entao isto nunca cortou de fato —
+        # mas ler o pai PELA METADE quebraria a regra dura nº7 em silencio.
+        _st_i, _linhas = _supa_rest_tudo("project_items", params={
             "job_id": f"eq.{parent_job_id}",
-            "select": "id,description,unit,quantity,observations,confidence",
-            "limit": "5000"})
+            "select": "id,description,unit,quantity,observations,confidence"})
     except Exception as _ei:
         _st_i, _linhas = 0, None
         print(f"[fusao-revisao] nao consegui ler os itens do pai: {_ei}")
@@ -10558,11 +10603,14 @@ async def emails_auto_tick(request: Request, dry: int = 0):
     ids_com_perfil: set[str] = set()
     emails_com_perfil: set[str] = set()
     try:
-        qp = f"{SUPABASE_URL}/rest/v1/profiles?select=user_id,email&limit=5000"
-        rp = _u.Request(qp, method="GET")
-        rp.add_header("apikey", SUPABASE_KEY)
-        rp.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        for row in _j.loads(_u.urlopen(rp, timeout=15).read().decode("utf-8")):
+        # 🚨 25/08: `limit=5000` nunca valeu — o PostgREST corta em 1000. Sao 85
+        # perfis hoje, entao ainda nao mentiu; passando de mil, gente COM perfil
+        # sumiria desta lista e receberia "termine seu cadastro" sem precisar.
+        _stp, _perfis = _supa_rest_tudo(
+            "profiles", params={"select": "user_id,email"}, timeout=15)
+        if _stp != 200:
+            raise RuntimeError("profiles HTTP %s" % _stp)
+        for row in _perfis:
             if row.get("user_id"):
                 ids_com_perfil.add(str(row["user_id"]))
             if row.get("email"):
@@ -10580,12 +10628,14 @@ async def emails_auto_tick(request: Request, dry: int = 0):
     emails_com_welcome: set[str] = set()
     _welcome_ok = True
     try:
-        qw = (f"{SUPABASE_URL}/rest/v1/email_sent_log?select=email"
-              f"&kind=eq.boas_vindas&limit=5000")
-        rw = _u.Request(qw, method="GET")
-        rw.add_header("apikey", SUPABASE_KEY)
-        rw.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        for row in _j.loads(_u.urlopen(rw, timeout=15).read().decode("utf-8")):
+        # 🚨 25/08: mesma mentira do `limit=5000`. Esta lista e a trava contra
+        # boas-vindas repetido — cortada em mil, o cliente recebe de novo.
+        _stw, _jaforam = _supa_rest_tudo(
+            "email_sent_log",
+            params={"select": "email", "kind": "eq.boas_vindas"}, timeout=15)
+        if _stw != 200:
+            raise RuntimeError("email_sent_log HTTP %s" % _stw)
+        for row in _jaforam:
             if row.get("email"):
                 emails_com_welcome.add(str(row["email"]).lower())
     except Exception as e:
@@ -10595,12 +10645,16 @@ async def emails_auto_tick(request: Request, dry: int = 0):
     # projetos por email (pra saber quem nunca subiu / quem sumiu)
     proj_by_email: dict[str, list] = {}
     try:
-        q = (f"{SUPABASE_URL}/rest/v1/projects?select=user_email,created_at,status,project_name,user_name,job_id"
-             f"&order=created_at.desc&limit=2000")
-        req = _u.Request(q, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        for p in _j.loads(_u.urlopen(req, timeout=15).read().decode("utf-8")):
+        # 🚨 25/08: `limit=2000` era ignorado (teto de 1000). Sao 254 projetos
+        # hoje; cortada, esta lista faria a esteira dizer "voce nunca subiu
+        # nada" pra quem subiu.
+        _stj, _projs = _supa_rest_tudo(
+            "projects",
+            params={"select": "user_email,created_at,status,project_name,user_name,job_id",
+                    "order": "created_at.desc,id.asc"}, timeout=15)
+        if _stj != 200:
+            raise RuntimeError("projects HTTP %s" % _stj)
+        for p in _projs:
             e = (p.get("user_email") or "").lower()
             if e:
                 proj_by_email.setdefault(e, []).append(p)
@@ -13585,20 +13639,24 @@ async def meus_entregaveis(request: Request):
     # todo por fazer.
     # O certo é contar diretamente o que a tela promete: ESTIMATIVA QUE AINDA
     # NÃO FOI CONFERIDA. Então precisamos dos ids dos estimados, não só do total.
+    # 🚨 25/08: as duas leituras abaixo pediam `limit=20000` e o PostgREST
+    # devolvia 1000. São 6107 itens não-confirmados no acervo: o funil da
+    # revisão — o KPI que o Pedro lê — media 16% da base e se apresentava como
+    # o todo. Mesma família do `/api/track` de 22/08. Ver `_supa_rest_tudo`.
     estimados_por_job = {}
-    _, itens_est = _supa_rest_service(
-        "GET", "/project_items",
+    _, itens_est = _supa_rest_tudo(
+        "/project_items",
         params={"job_id": filtro, "confidence": "neq.confirmado",
-                "select": "job_id,id", "limit": "20000"})
+                "select": "job_id,id"})
     for r in (itens_est or []):
         jid = str(r.get("job_id") or "")
         if jid:
             estimados_por_job.setdefault(jid, set()).add(str(r.get("id")))
 
     revisados_por_job = {}
-    _, revs = _supa_rest_service(
-        "GET", "/item_reviews",
-        params={"job_id": filtro, "select": "job_id,item_id", "limit": "20000"})
+    _, revs = _supa_rest_tudo(
+        "/item_reviews",
+        params={"job_id": filtro, "select": "job_id,item_id"})
     for r in (revs or []):
         jid = str(r.get("job_id") or "")
         if jid:
@@ -16919,17 +16977,19 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     since_url = since.replace("+00:00", "Z")
     cutoff_7d = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-    try:
-        url = (f"{SUPABASE_URL}/rest/v1/usage_events"
-               f"?created_at=gte.{since_url}"
-               f"&select=event,user_email,user_id,job_id,path,meta,created_at"
-               f"&order=created_at.desc&limit=5000")
-        req = _urs.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        rows = _json.loads(_urs.urlopen(req, timeout=20).read().decode("utf-8"))
-    except Exception as e:
-        raise HTTPException(500, f"Erro: {e}")
+    # 🚨 25/08: este `limit=5000` era mentira — o PostgREST corta em 1000 e não
+    # avisa. Hoje são 783 eventos em 30 dias, então a tela ainda não mentiu;
+    # com 1001 ela passaria a esconder os mais antigos da janela, calada, e o
+    # painel de Atividade diria "menos gente usou" sem nada mudar no produto.
+    # 🪤 Paginar por `created_at` sozinho pula linha quando há empate — daí o
+    # desempate por `id`. Ver `_supa_rest_tudo`.
+    _st_ue, rows = _supa_rest_tudo(
+        "usage_events",
+        params={"created_at": f"gte.{since_url}",
+                "select": "event,user_email,user_id,job_id,path,meta,created_at",
+                "order": "created_at.desc,id.asc"}, timeout=20)
+    if _st_ue != 200:
+        raise HTTPException(500, "Erro lendo usage_events (HTTP %s)" % _st_ue)
 
     # ── Mistura o USO REAL do produto (tabela projects) ───────────────────
     # usage_events é opt-in (só quem aceitou o cookie de analytics), então
@@ -16937,16 +16997,13 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
     # tabela projects tem TODOS os uploads/processamentos — é a fonte completa
     # e é dado operacional do serviço (não cookie de navegação), então entra
     # sempre. Assim o painel para de mostrar quase só o admin.
-    try:
-        purl = (f"{SUPABASE_URL}/rest/v1/projects"
-                f"?created_at=gte.{since_url}"
-                f"&select=user_email,user_id,job_id,status,created_at,completed_at"
-                f"&order=created_at.desc&limit=5000")
-        preq = _urs.Request(purl, method="GET")
-        preq.add_header("apikey", SUPABASE_KEY)
-        preq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        _projects = _json.loads(_urs.urlopen(preq, timeout=20).read().decode("utf-8"))
-    except Exception:
+    # mesmo teto de 1000 do bloco acima; 254 projetos hoje, mas o número só sobe
+    _st_pr, _projects = _supa_rest_tudo(
+        "projects",
+        params={"created_at": f"gte.{since_url}",
+                "select": "user_email,user_id,job_id,status,created_at,completed_at",
+                "order": "created_at.desc,id.asc"}, timeout=20)
+    if _st_pr != 200:
         _projects = []
     # "Subiu projeto" passa a vir de projects (completo) — descarta o
     # start_project opt-in pra não contar o mesmo upload duas vezes.
@@ -18444,9 +18501,9 @@ def _merge_carregar(jid):
     escolheria o outro por engano — foi exatamente esse bug (tupla lida como
     lista) que fez o e-mail do filhote dizer "0 → 46 itens" em 23/08.
     """
-    _st, _r = _supa_rest_service(
-        "GET", "project_items",
-        params={"job_id": f"eq.{jid}", "limit": "5000",
+    _st, _r = _supa_rest_tudo(
+        "project_items",
+        params={"job_id": f"eq.{jid}",
                 "select": "item_num,description,unit,quantity,observations,"
                           "ref_sheet,confidence,discipline,section,sort_order,origem"})
     if _st != 200:
@@ -18699,11 +18756,14 @@ async def admin_selo_historico(request: Request):
             self.confidence = r.get("confidence") or "estimado"
             self.origem = r.get("origem") or ""
 
-    limite = min(int(request.query_params.get("limite", "9000") or 9000), 20000)
-    _st, rows = _supa_rest_service(
-        "GET", "project_items",
+    limite = min(int(request.query_params.get("limite", "50000") or 50000), 100000)
+    # 🚨 25/08: pedia limit=9000 e o PostgREST devolvia 1000 — de 1611
+    # confirmados no acervo. A contagem de selo indevido saía 38% menor do que
+    # a verdade e nada na tela dizia que faltava gente. Ver `_supa_rest_tudo`.
+    _st, rows = _supa_rest_tudo(
+        "project_items",
         params={"select": "id,job_id,description,observations,unit,confidence,origem",
-                "confidence": "eq.confirmado", "limit": str(limite)})
+                "confidence": "eq.confirmado"}, teto=limite)
     if _st != 200:
         raise HTTPException(502, "Não consegui ler os itens (HTTP %s)" % _st)
     rows = rows or []
@@ -18774,15 +18834,21 @@ async def admin_spec_backfill(request: Request):
     from spec_extract import extrair_spec, spec_origem
 
     dry = str(request.query_params.get("dry", "1")).strip() not in ("0", "nao", "false")
-    limite = min(int(request.query_params.get("limite", "9000") or 9000), 20000)
+    limite = min(int(request.query_params.get("limite", "50000") or 50000), 100000)
 
-    _st, itens = _supa_rest_service(
-        "GET", "project_items",
+    # 🚨 25/08: aqui pedia `limit=9000` e recebia 1000 — o PostgREST corta em mil
+    # e não avisa. O Pedro clicou e leu "50 de 1000 itens" achando que 1000 era o
+    # acervo; eram 7718. Agora lê de mil em mil até acabar. Ver `_supa_rest_tudo`.
+    _st, itens = _supa_rest_tudo(
+        "project_items",
         params={"select": "id,description,marca,spec_origem",
-                "spec_origem": "is.null", "limit": str(limite)})
+                "spec_origem": "is.null"}, teto=limite)
     if _st != 200:
         raise HTTPException(502, "Não consegui ler os itens (HTTP %s)" % _st)
     itens = itens or []
+    # 🪤 O denominador que a tela mostra tem que ser o que eu REALMENTE li. Se
+    # bater no teto, isto vira False e a tela precisa dizer que faltou gente.
+    leu_tudo = len(itens) < limite
 
     achou_marca = achou_codigo = achou_cor = 0
     gravados = 0
@@ -18802,6 +18868,7 @@ async def admin_spec_backfill(request: Request):
                              "cor": sp["cor"]})
         para_gravar.append((it["id"], sp, origem))
 
+    falhas = 0
     if not dry:
         for _id, sp, origem in para_gravar:
             _stp, _ = _supa_rest_service(
@@ -18811,18 +18878,24 @@ async def admin_spec_backfill(request: Request):
                 params={"id": "eq.%s" % _id}, prefer="return=minimal")
             if _stp in (200, 204):
                 gravados += 1
+            else:
+                # 🚨 sem isto, gravação que falha some: o `gravados` só conta
+                # sucesso e ninguém compara com o total que ia gravar
+                falhas += 1
         _log_error("admin:spec-backfill",
                    "gravei especificacao em %d de %d itens lidos "
-                   "(marca=%d codigo=%d cor=%d)"
-                   % (gravados, len(itens), achou_marca, achou_codigo, achou_cor),
-                   severity="info")
+                   "(marca=%d codigo=%d cor=%d falhas=%d)"
+                   % (gravados, len(itens), achou_marca, achou_codigo,
+                      achou_cor, falhas),
+                   severity="critical" if falhas else "info")
 
     return {
         "ok": True, "simulacao": dry,
         "itens_lidos": len(itens),
+        "leu_tudo": leu_tudo,
         "com_especificacao": len(para_gravar),
         "com_marca": achou_marca, "com_codigo": achou_codigo, "com_cor": achou_cor,
-        "gravados": gravados,
+        "gravados": gravados, "falhas": falhas,
         "exemplos": exemplos,
         "aviso": ("Isto foi SIMULAÇÃO — nada gravado. Repita com ?dry=0 pra valer."
                   if dry else "Gravado."),
@@ -19541,8 +19614,8 @@ async def finalize_review(job_id: str, request: Request):
     # "itens tocados=2" desde que nasceu, em toda revisão concluída. Justo o log
     # criado pra responder POR QUE `revision_feedback` não enche.
     try:
-        _st_rl, _rows_rl = _supa_rest_service("GET", "item_reviews", params={
-            "job_id": f"eq.{job_id}", "select": "action", "limit": "5000"})
+        _st_rl, _rows_rl = _supa_rest_tudo("item_reviews", params={
+            "job_id": f"eq.{job_id}", "select": "action"})
         _n_rev_log = len(_rows_rl or []) if _st_rl == 200 else -1
     except Exception:
         _n_rev_log = -1
