@@ -18413,6 +18413,120 @@ def _merge_bloqueios(pai, plano, revisoes):
     return b
 
 
+def _merge_familia_aviso(texto: str) -> str:
+    """Que TIPO de aviso e este. Duas leituras escrevem o MESMO fato com numeros
+    diferentes — dedup por texto exato deixa os dois passarem.
+
+    🚨 25/08 (auditoria): o projeto combinado do Alan saiu com 11 avisos, sendo
+    6 pares que se contradiziam na cara dele:
+        "li 162 itens"  x  "li 112 itens"   (mesma prancha)
+        "94 medidos"    x  "157 medidos"    (e o real do merge e 179)
+        a escala da 4366-IH-E, duas vezes
+    """
+    t = str(texto or "").lower()
+    if "não entraram" in t or "nao entraram" in t:
+        return "pranchas_faltando"
+    if "incompleta" in t and "cortada" in t:
+        # por PRANCHA: duas leituras da mesma prancha sao a mesma familia
+        m = _re.search(r"'([^']+)'|prancha '([^']+)'", texto or "")
+        return "corte:" + _nome_prancha_bonito(m.group(1) or m.group(2)) if m else "corte"
+    if "leitor alternativo" in t or "plano b" in t:
+        return "plano_b"
+    if "área total" in t or "area total" in t:
+        return "sem_area"
+    if t.lstrip().startswith("✅") and "escala" in t:
+        return "escala_ok"
+    if "escala não conferida" in t or "escala nao conferida" in t:
+        return "escala_sem_cota"
+    if "geometria mensurável" in t or "geometria mensuravel" in t:
+        m = _re.match(r"\s*([^:]{3,60}):", texto or "")
+        return "sem_geometria:" + (m.group(1).strip() if m else "?")
+    return "outro:" + t[:60]
+
+
+def _merge_avisos(pai: dict, filho: dict, plano: dict, medidos: int,
+                  tem_area: bool, procedencia: str, sobrepostos: list) -> list:
+    """Avisos do projeto COMBINADO — nem a soma nem a copia dos dois.
+
+    Regras, nesta ordem:
+      1. aviso sobre PRANCHA QUE FALTOU morre: o merge tem todas as pranchas que
+         qualquer uma das leituras conseguiu ler;
+      2. aviso de "nao achei a area total" morre se o merge TEM area — senao a
+         mesma tela diz que nao tem area e mostra a area;
+      3. aviso que fala de UMA prancha vem da leitura que VENCEU aquela prancha;
+      4. aviso com contagem global ("N medidos") e reescrito com o numero do
+         MERGE, nao copiado de nenhum dos dois;
+      5. o resto vira UM por familia, preferindo a versao mais completa (a mais
+         longa costuma ser a que lista mais arquivos).
+
+    🚨 Isto NAO inventa aviso novo: so escolhe entre os que existem e corrige a
+    contagem que passou a estar errada por construcao.
+    """
+    lado_da = {p["prancha"]: p["lado"] for p in plano.get("pranchas", [])}
+    de_quem = {"pai": list(pai.get("warnings") or []),
+               "filho": list(filho.get("warnings") or [])}
+
+    saida = [procedencia]
+    if sobrepostos:
+        _top = sobrepostos[:4]
+        saida.append(
+            "⚠ CONFERIR ANTES DE SOMAR: %d código(s) aparecem em mais de uma "
+            "prancha, o que costuma ser o MESMO equipamento desenhado em duas "
+            "disciplinas (ex.: o sensor aparece na prancha de elétrica e na de "
+            "segurança). Não somamos nem apagamos nada — a decisão é sua: %s."
+            % (len(sobrepostos),
+               "; ".join("%s (%s em %s)"
+                         % (s["codigo"],
+                            " + ".join(str(l["quantidade"]) for l in s["linhas"]),
+                            " e ".join(_nome_prancha_bonito(p) for p in s["pranchas"]))
+                         for s in _top)))
+
+    vistos = {}
+    for lado in ("pai", "filho"):
+        for w in de_quem[lado]:
+            ws = str(w).strip()
+            if not ws:
+                continue
+            fam = _merge_familia_aviso(ws)
+
+            # 1. o merge tem todas as pranchas que alguem leu
+            if fam == "pranchas_faltando":
+                continue
+            # 2. area: a tela nao pode dizer que nao tem e mostrar
+            if fam == "sem_area" and tem_area:
+                continue
+            # 3. aviso de UMA prancha so vale se aquela prancha veio deste lado
+            if fam.startswith("corte:") or fam.startswith("sem_geometria:"):
+                _pr = fam.split(":", 1)[1]
+                _dono = next((lado_da.get(k) for k in lado_da
+                              if _nome_prancha_bonito(k) == _pr), None)
+                if _dono and _dono != lado:
+                    continue
+            # 3b. 🪤 Conselho VELHO viaja junto: os jobs de origem foram gerados
+            # ANTES do conserto de 24/08 e ainda dizem "Reprocessar pode
+            # completar a planilha" pro corte por tamanho. Reprocessar NAO
+            # resolve — na eletrica do Alan cortou 3 de 3 vezes, e a 3a deu
+            # MENOS. Copiar o texto velho seria reintroduzir o conselho que
+            # gasta o unico reprocesso gratis do cliente por nada.
+            if fam.startswith("corte"):
+                ws = ws.replace(
+                    "Reprocessar pode completar a planilha.",
+                    "Reprocessar normalmente NÃO resolve — o corte vem da "
+                    "densidade da prancha, não de uma falha passageira. Para ter "
+                    "a prancha inteira, exporte-a em partes e reenvie, ou fale "
+                    "com a gente.")
+            # 4. contagem global e reescrita com o numero do MERGE
+            if fam == "plano_b":
+                ws = _re.sub(r"\(\s*\d+\s*item\(ns\) medido\(s\) do CAD\s*\)",
+                             "(%d item(ns) medido(s) do CAD)" % medidos, ws)
+
+            ant = vistos.get(fam)
+            if ant is None or len(ws) > len(ant):
+                vistos[fam] = ws
+
+    saida.extend(vistos.values())
+    return saida
+
 def _merge_montar(eval_job_id: str, com_juiza: bool = True):
     """Carrega os dois lados, monta o plano e (se pedido) manda a juíza LER cada
     prancha disputada. Usado pelo preview E pela criação — assim o que o Pedro
@@ -18663,32 +18777,19 @@ async def admin_merge_criar(eval_job_id: str, request: Request):
     do_pai = [_nome_prancha_bonito(p) for p in plano["do_pai"]]
     do_filho = [_nome_prancha_bonito(p) for p in plano["do_filho"]]
 
-    avisos = [
-        "Esta planilha junta as DUAS leituras do seu projeto, prancha por prancha "
-        "— ficou com a versão mais completa de cada uma. Nenhuma prancha entrou "
-        "duas vezes. Da leitura original: %s. Da releitura: %s."
-        % (", ".join(do_pai) or "nenhuma", ", ".join(do_filho) or "nenhuma")
-    ]
-    if sobrepostos:
-        _top = sobrepostos[:4]
-        avisos.append(
-            "⚠ CONFERIR ANTES DE SOMAR: %d código(s) aparecem em mais de uma prancha, "
-            "o que costuma ser o MESMO equipamento desenhado em duas disciplinas "
-            "(ex.: o sensor aparece na prancha de elétrica e na de segurança). Não "
-            "somamos nem apagamos nada — a decisão é sua: %s."
-            % (len(sobrepostos),
-               "; ".join("%s (%s em %s)" % (s["codigo"],
-                                            " + ".join(str(l["quantidade"]) for l in s["linhas"]),
-                                            " e ".join(s["pranchas"]))
-                         for s in _top)))
-    # Avisos das duas leituras que AINDA valem. O "não entraram" morre aqui: o
-    # merge tem todas as pranchas que qualquer uma das leituras conseguiu ler.
-    for w in list(pai.get("warnings") or []) + list(filho.get("warnings") or []):
-        ws = str(w).strip()
-        if not ws or "não entraram" in ws or "nao entraram" in ws:
-            continue
-        if ws not in avisos:
-            avisos.append(ws)
+    _proc = ("Esta planilha junta as DUAS leituras do seu projeto, prancha por "
+             "prancha — ficou com a versão mais completa de cada uma. Nenhuma "
+             "prancha entrou duas vezes. Da leitura original: %s. Da releitura: %s."
+             % (", ".join(do_pai) or "nenhuma", ", ".join(do_filho) or "nenhuma"))
+    # 🚨 25/08 (auditoria): antes isto era a UNIÃO dos avisos dos dois jobs, com
+    # dedup por texto exato. Como cada leitura escreve o mesmo fato com números
+    # diferentes, os dois passavam — e o Alan recebeu 11 avisos, 6 deles em pares
+    # que se contradiziam ("li 162 itens" x "li 112 itens"; "94 medidos" x "157
+    # medidos", sendo 179 o número real). Um deles dizia que não havia área total
+    # numa tela que mostrava a área.
+    avisos = _merge_avisos(pai, filho, plano, med_merge,
+                           bool(filho.get("total_area") or pai.get("total_area")),
+                           _proc, sobrepostos)
 
     _st_novo, _ = _supa_rest_service("POST", "projects", body={
         "job_id": novo_id,

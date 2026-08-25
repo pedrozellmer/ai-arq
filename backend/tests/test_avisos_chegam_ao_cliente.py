@@ -32,6 +32,23 @@ def _main():
     return io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 
 
+def _sem_o_que_e_removido(src: str) -> str:
+    """Tira as strings que o código está REMOVENDO, não enviando.
+
+    🪤 3ª vez hoje que um guarda meu tropeça em contexto: primeiro a docstring
+    que CITA a frase proibida pra explicar por que ela saiu; depois o prompt do
+    chat que a PROÍBE; agora o `.replace("<frase velha>", "<frase nova>")` que a
+    apaga dos avisos herdados de jobs antigos.
+
+    Em todos os três, a frase está no arquivo justamente porque alguém a está
+    combatendo. Um guarda que não distingue isso me empurra a apagar a defesa
+    pra calar o alarme — o oposto do que ele existe pra fazer."""
+    import re as _re
+    # 🪤 `\s` ja casa quebra de linha — nao preciso de escape nenhum aqui,
+    # e foi justamente um escape que quebrou este arquivo na 1a tentativa.
+    return _re.sub(r'\.replace\(\s*"[^"]*"', '.replace(<removida>', src)
+
+
 def _sem_comentarios(src: str) -> str:
     """🪤 O primeiro teste destes reprovou por um motivo bobo e revelador: eu
     CITEI a frase errada dentro do comentário que explica por que ela saiu. Um
@@ -94,8 +111,10 @@ def test_o_aviso_de_corte_nao_manda_mais_reprocessar():
     assert "Reprocessar normalmente NÃO" in trecho, (
         "o aviso de corte voltou a prometer que reprocessar completa a planilha "
         "— na elétrica do Alan cortou 3 de 3 vezes, e a 3ª deu MENOS itens")
-    assert "Reprocessar pode completar a planilha" not in _sem_comentarios(src), (
-        "o texto antigo ainda é enviado ao cliente (fora de comentário)")
+    assert "Reprocessar pode completar a planilha" not in _sem_o_que_e_removido(
+        _sem_comentarios(src)), (
+        "o texto antigo ainda é ENVIADO ao cliente (fora de comentário e fora "
+        "de um .replace que o remove)")
 
 
 def test_o_aviso_de_corte_diz_o_que_o_cliente_PODE_fazer():
