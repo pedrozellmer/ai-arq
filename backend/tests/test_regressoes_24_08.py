@@ -19,6 +19,13 @@ import io
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
+# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
+# certo mora num lugar só.
+from _corpo import corpo_de  # noqa: E402
+import sys
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -106,8 +113,7 @@ def test_o_controle_prova_que_sem_a_flag_o_estrago_acontece():
 def test_a_origem_e_gravada_e_relida():
     """Sem isto, a reidratação volta a decidir no escuro."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("def _persist_items_to_supabase")
-    corpo = src[i:i + 2500]
+    corpo = corpo_de("_persist_items_to_supabase")
     assert '"origem"' in corpo, "_persist_items_to_supabase não grava a origem"
     assert src.count('origem=r.get("origem") or ""') == 2, (
         "os DOIS pontos que reconstroem BudgetItem a partir do banco precisam "

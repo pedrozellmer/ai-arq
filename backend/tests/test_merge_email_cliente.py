@@ -15,6 +15,13 @@ ele perguntar.
 """
 import io
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
+# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
+# certo mora num lugar só.
+from _corpo import corpo_de  # noqa: E402
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -216,8 +223,7 @@ def test_o_paralelo_preserva_a_ordem_das_pranchas():
     e o veredito iria pra a prancha errada — o pior tipo de bug, porque a tela
     continuaria bonita."""
     src = _main()
-    i = src.index("def _merge_montar")
-    montar = src[i:i + 4000]
+    montar = corpo_de("_merge_montar")
     assert "zip(_disputadas, _vs)" in montar
 
 

@@ -21,6 +21,13 @@ entregues a clientes.
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
+# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
+# certo mora num lugar só.
+from _corpo import corpo_de  # noqa: E402
+import sys
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -177,8 +184,7 @@ def test_existe_uma_rota_que_conta_com_a_PROPRIA_rede():
     import io as _io
     src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     assert '@app.get("/api/admin/selo-historico")' in src
-    i = src.index("async def admin_selo_historico")
-    corpo = src[i:i + 3000]
+    corpo = corpo_de("admin_selo_historico")
     assert "selos_sem_geometria as _ssg_h" in corpo, (
         "a rota conta por criterio proprio em vez de usar a rede — e assim que "
         "nasce a quarta versao do numero")
@@ -200,5 +206,72 @@ def test_a_rota_de_contagem_NAO_altera_nada():
 def test_a_rota_e_so_de_admin():
     import io as _io
     src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("async def admin_selo_historico")
-    assert "_require_admin(request)" in src[i:i + 900]
+    assert "_require_admin(request)" in corpo_de("admin_selo_historico")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 Se a rede NAO RODAR, o cliente tem que saber
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Auditoria de 25/08: a rede da REGRA DURA Nº1 vivia dentro de um `except` que
+# so escrevia no log. Se ela quebrasse, o cliente recebia selos de "✓ MEDIDO do
+# CAD" que NUNCA foram conferidos — e nao tinha como saber.
+#
+# Falhar FECHADA (rebaixar tudo) arruinaria um projeto bom por um erro
+# passageiro. Falhar ABERTA e calada e o que estava. O desfecho honesto entre os
+# dois e falhar DECLARADA: os selos ficam, e o cliente e avisado.
+def _bloco_da_rede():
+    """Só o bloco da rede — do começo ao FIM do seu except.
+
+    🪤 3ª vez hoje que erro a janela de recorte de um guarda. A 1ª versao ia ate
+    "motor:escala-aviso", e nesse caminho estava o `project_data.warnings` do
+    bloco SEGUINTE (o da escala). Resultado: apaguei o aviso da rede e o teste
+    passou verde, porque estava lendo o aviso de outra coisa.
+
+    Janela de guarda tem que terminar onde o assunto termina. Aqui: no `try:`
+    do bloco seguinte, no mesmo nivel de indentacao."""
+    import io as _io
+    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index("_sem_geo = _ssg(all_items)")
+    j = src.index(chr(10) + "        try:", src.index("except Exception as _esg", i))
+    return src[i:j]
+
+
+def test_quando_a_rede_QUEBRA_o_cliente_e_avisado():
+    corpo = _bloco_da_rede()
+    i = corpo.index("except Exception as _esg")
+    depois = corpo[i:]
+    assert "project_data.warnings" in depois, (
+        "a rede da regra nº1 voltou a falhar em silêncio pro cliente — ele "
+        "recebe selo de MEDIDO sem conferência e não fica sabendo")
+    assert "sem essa segunda" in depois or "não rodou" in depois
+
+
+def test_o_aviso_de_falha_NAO_promete_o_que_nao_houve():
+    """Ele não pode dizer 'conferimos' — a checagem justamente não rodou."""
+    corpo = _bloco_da_rede()
+    i = corpo.index("except Exception as _esg")
+    assert "Não conseguimos rodar a conferência" in corpo[i:]
+
+
+def test_item_que_NAO_deu_pra_rebaixar_tambem_vira_aviso():
+    """🪤 Era um `except: pass` cru: o item ficava com selo de MEDIDO e nem o
+    log registrava."""
+    corpo = _bloco_da_rede()
+    assert "_falhou_rebaixar" in corpo
+    assert "except Exception:" in corpo
+    assert "_falhou_rebaixar += 1" in corpo
+    i = corpo.index("if _falhou_rebaixar:")
+    assert "project_data.warnings" in corpo[i:i + 700]
+
+
+def test_o_caminho_FELIZ_nao_ganhou_aviso_nenhum():
+    """Controle negativo: projeto em que a rede roda bem não pode receber aviso
+    de falha — alarme que sai sempre ensina a ignorar."""
+    corpo = _bloco_da_rede()
+    i_ok = corpo.index("if _sem_geo:")
+    i_falha = corpo.index("if _falhou_rebaixar:")
+    assert i_ok < i_falha, "a ordem mudou; o teste está medindo outra coisa"
+    trecho_ok = corpo[i_ok:i_falha]
+    assert "project_data.warnings" not in trecho_ok, (
+        "o caminho de sucesso passou a acrescentar aviso de falha")

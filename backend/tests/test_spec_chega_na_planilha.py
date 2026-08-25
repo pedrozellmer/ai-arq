@@ -22,6 +22,13 @@ import io
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
+# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
+# certo mora num lugar só.
+from _corpo import corpo_de  # noqa: E402
+import sys
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -105,8 +112,7 @@ def test_a_planilha_le_esses_campos_do_objeto():
     """Fecha o circuito: o nome do campo no modelo e o mesmo que a planilha
     procura. Um typo aqui deixaria tudo silenciosamente vazio."""
     src = io.open(os.path.join(_BACKEND, "spreadsheet.py"), encoding="utf-8").read()
-    i = src.index("def _especificacao_texto")
-    corpo = src[i:i + 900]
+    corpo = corpo_de("_especificacao_texto", "spreadsheet.py")
     from models import BudgetItem
     for campo in ("marca", "codigo_fabricante", "cor"):
         assert campo in corpo, "a planilha nao le %s" % campo

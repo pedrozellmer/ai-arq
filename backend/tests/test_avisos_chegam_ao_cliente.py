@@ -23,6 +23,13 @@ gerou 7 avisos. Três defeitos, todos confirmados no banco:
 """
 import io
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
+# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
+# certo mora num lugar só.
+from _corpo import corpo_de  # noqa: E402
 import re
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -80,8 +87,7 @@ def test_o_email_ordena_por_gravidade_e_prancha_faltando_vem_primeiro():
         "a ordenação existe mas não é aplicada — os avisos voltam à ordem "
         "em que o motor calhou de gerar")
     assert "_avisos[:2]" not in _sem_comentarios(src), "voltou o corte em 2"
-    i = src.index("def _peso_aviso")
-    corpo = src[i:i + 700]
+    corpo = corpo_de("_peso_aviso")
     # prancha inteira faltando tem que pesar MENOS (vir antes) que o resto
     assert "não entraram" in corpo and "return 0" in corpo
 
@@ -97,8 +103,7 @@ def test_boa_noticia_vai_por_ultimo():
     """'✅ Escala conferida' é ótimo, mas não pode empurrar 'faltou prancha'
     pra fora do e-mail."""
     src = _main()
-    i = src.index("def _peso_aviso")
-    assert "return 9" in src[i:i + 700]
+    assert "return 9" in corpo_de("_peso_aviso")
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -158,8 +163,7 @@ def test_o_helper_de_nome_bonito_tira_mesmo_o_sufixo_interno():
     import sys
     sys.path.insert(0, _BACKEND)
     src = _main()
-    i = src.index("def _nome_prancha_bonito")
-    corpo = src[i:i + 400]
+    corpo = corpo_de("_nome_prancha_bonito")
     for suf in ("_libredwg.dxf", ".slim.dxf"):
         assert suf in corpo, "o helper parou de conhecer o sufixo %s" % suf
 

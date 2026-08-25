@@ -8252,12 +8252,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
             from engine_rules import selos_sem_geometria as _ssg
             from models import Confidence as _CfG
             _sem_geo = _ssg(all_items)
+            _falhou_rebaixar = 0
             for _a in _sem_geo:
                 _it = all_items[_a["indice"]]
                 try:
                     _it.confidence = _CfG.ESTIMADO
                 except Exception:
-                    pass
+                    # 🚨 25/08: isto era `pass`. O item continuava com selo de
+                    # MEDIDO e ninguem — nem o log — ficava sabendo. Agora conta,
+                    # e a contagem vira aviso ao cliente logo abaixo.
+                    _falhou_rebaixar += 1
                 _o = str(getattr(_it, "observations", "") or "")
                 if "não é medição da geometria" not in _o:
                     _it.observations = (
@@ -8269,9 +8273,34 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"com procedência só de texto: " + "; ".join(
                                f"{x['descricao'][:34]}({x['unidade']})" for x in _sem_geo[:4]),
                            job_id)
+            if _falhou_rebaixar:
+                _log_error("motor:selo-sem-geometria",
+                           f"NAO consegui rebaixar {_falhou_rebaixar} item(ns) que a "
+                           f"rede apontou — seguem com selo de MEDIDO", job_id)
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ %d item(ns) desta planilha ficaram com o selo \"✓ MEDIDO do CAD\" "
+                    "sem que a gente conseguisse conferir a procedência deles. Confira "
+                    "esses números contra a prancha antes de usar." % _falhou_rebaixar]
         except Exception as _esg:
+            # 🚨 25/08 (auditoria): a rede da REGRA DURA Nº1 vivia num except que
+            # so escrevia no log. Se ela quebrasse, o cliente recebia selos de
+            # "MEDIDO" que NUNCA foram conferidos, e nao tinha como saber.
+            #
+            # Falhar FECHADA (rebaixar tudo) arruinaria um projeto bom por causa
+            # de um erro passageiro. Entao falha DECLARADA: os selos ficam como o
+            # motor produziu, e o cliente e avisado de que a conferencia nao
+            # rodou. Aviso e o unico desfecho honesto entre os dois extremos.
             print(f"[selo-sem-geometria] checagem falhou: {_esg}")
             _log_error("motor:selo-sem-geometria", f"FALHOU: {_esg}", job_id)
+            try:
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ Não conseguimos rodar a conferência que separa o que foi MEDIDO "
+                    "do desenho do que foi LIDO de um texto da prancha. Os selos desta "
+                    "planilha saíram como o motor os produziu, sem essa segunda "
+                    "checagem — confira as quantidades marcadas como medidas antes de "
+                    "fechar o orçamento."]
+            except Exception:
+                pass
 
         try:
             _n_med_esc = -1

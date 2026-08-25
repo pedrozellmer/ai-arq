@@ -24,6 +24,13 @@ passava direto por ela.
 """
 import io
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
+# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
+# certo mora num lugar só.
+from _corpo import corpo_de  # noqa: E402
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -54,8 +61,7 @@ def test_a_checagem_falha_FECHADA():
     """Se a consulta ao log falhar, NÃO manda. Um e-mail a menos é recuperável;
     um a mais, na caixa de quem acabou de chegar, não."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("def _ja_recebeu_kind")
-    corpo = src[i:i + 1400]
+    corpo = corpo_de("_ja_recebeu_kind")
     assert "return True" in corpo.split("except")[1][:200], (
         "a checagem de duplicata passou a falhar ABERTA — erro de rede vira "
         "e-mail repetido")
