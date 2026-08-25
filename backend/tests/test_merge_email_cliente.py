@@ -415,3 +415,41 @@ def test_os_DOIS_emails_de_versao_nova_tem_o_mesmo_padrao():
         assert "continua no painel" in c, "%s nao diz que a versao dele fica" % nome
         i = c.index("subject = ")
         assert "&" not in c[i:c.index(chr(10), i)], "%s: entidade HTML no assunto" % nome
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 Simetria: consertar um e esquecer o irmao ja aconteceu DUAS vezes
+# ══════════════════════════════════════════════════════════════════════════
+def test_os_DOIS_emails_contam_o_que_PIOROU():
+    """25/08 (auditoria): o e-mail do merge PERDEU o quadro do que piorou quando
+    eu o reescrevi pra entrar na moldura da marca. O irmao tinha; este ficou sem.
+
+    E a SEGUNDA vez no mesmo par: antes fora a moldura em si (consertei o do
+    merge e deixei o da releitura como <div> cru). Par de funcoes que faz quase
+    a mesma coisa precisa de guarda de simetria, nao de disciplina."""
+    for nome in ("_email_leitura_combinada", "_email_leitura_nova"):
+        c = corpo_de(nome)
+        assert "_piores" in c, "%s nao calcula o que piorou" % nome
+        assert "piorou" in c.lower(), "%s nao mostra o que piorou" % nome
+        assert "if _piores:" in c, "%s mostra o alarme sem condicao" % nome
+
+
+def test_o_merge_roda_a_rede_do_selo_e_o_extrator():
+    """🚨 O merge grava project_items POR FORA do motor, entao pulava as duas
+    passadas que todo item normal atravessa: a rede da REGRA DURA Nº1 e o
+    extrator de especificacao. "Os itens ja passaram" nao vale — a rede nasceu
+    em 24/08 e os jobs de origem podem ser anteriores."""
+    c = corpo_de("admin_merge_criar")
+    assert "selos_sem_geometria as _ssg_m" in c, "o merge nao roda a rede do selo"
+    assert "_spec_campos(" in c, "o merge nao extrai marca/codigo/cor"
+    assert '"marca", "codigo_fabricante", "cor"' in c, (
+        "as colunas de especificacao nao entram no insert do merge")
+
+
+def test_o_rebaixamento_do_merge_corrige_o_PLACAR():
+    """Se a rede rebaixa item no merge, o numero de medidos muda — e e esse
+    numero que vai no e-mail. Rebaixar e mandar o placar velho seria mentir."""
+    c = corpo_de("admin_merge_criar")
+    i = c.index("_rebaixados = _ssg_m(")
+    assert "med_merge = sum(" in c[i:i + 1400], (
+        "o placar nao e recalculado depois do rebaixamento")

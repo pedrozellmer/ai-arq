@@ -163,3 +163,43 @@ def test_familia_reconhece_os_tipos_reais():
     assert f("✅ Escala conferida pelo próprio desenho — X") == "escala_ok"
     assert f("Escala não conferida por cota em X") == "escala_sem_cota"
     assert f("A leitura de 'X.dxf' pode estar INCOMPLETA (cortada por tamanho)").startswith("corte")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 A quantidade tem que andar colada na SUA prancha
+# ══════════════════════════════════════════════════════════════════════════
+def test_cada_quantidade_sai_com_a_prancha_certa():
+    """🚨 Auditoria de 25/08. As quantidades saiam de `linhas` (ordenadas por
+    TAMANHO) e as pranchas de `pranchas` (ordem ALFABETICA), e as duas listas
+    eram juntadas por POSICAO. No projeto do Alan saiu:
+
+        "CFTV (17 + 13 + 1 em 3073-AQ-E, 4366-EL-E e 4366-LO-E)"
+
+    quando o 17 e da EL-E e o 13 e da AQ-E. Trocado — e o e-mail dele ja tinha
+    saido assim, mandando conferir o numero errado na prancha errada.
+
+    Duas listas so podem ser emparelhadas por posicao se forem ordenadas pelo
+    MESMO criterio. Aqui nao eram."""
+    sob = [{"codigo": "CFTV", "unidade": "un",
+            "pranchas": ["3073-AQ-E_libredwg.dxf", "4366-EL-E_libredwg.dxf",
+                         "4366-LO-E_libredwg.dxf"],
+            "linhas": [{"prancha": "4366-EL-E_libredwg.dxf", "quantidade": 17},
+                       {"prancha": "3073-AQ-E_libredwg.dxf", "quantidade": 13},
+                       {"prancha": "4366-LO-E_libredwg.dxf", "quantidade": 1}]}]
+    aviso = NS["_merge_avisos"]({"warnings": []}, {"warnings": []},
+                                {"pranchas": []}, 179, True, "P", sob)[1]
+    assert "17 em 4366-EL-E" in aviso, aviso
+    assert "13 em 3073-AQ-E" in aviso, aviso
+    assert "1 em 4366-LO-E" in aviso, aviso
+    # e o formato antigo, que junta tudo e depois lista as pranchas, morreu
+    assert "17 + 13 + 1 em" not in aviso
+
+
+def test_o_aviso_usa_nome_de_prancha_legivel():
+    """O cliente enviou .dwg; '_libredwg.dxf' e artefato NOSSO de conversao."""
+    sob = [{"codigo": "IVP", "unidade": "un",
+            "pranchas": ["4366-EL-E_libredwg.dxf"],
+            "linhas": [{"prancha": "4366-EL-E_libredwg.dxf", "quantidade": 22}]}]
+    aviso = NS["_merge_avisos"]({"warnings": []}, {"warnings": []},
+                                {"pranchas": []}, 179, True, "P", sob)[1]
+    assert "_libredwg" not in aviso

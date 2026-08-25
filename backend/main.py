@@ -17902,6 +17902,20 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
     _proc = next((w for w in _avisos if w.startswith("Esta planilha junta")), "")
     _sobre = next((w for w in _avisos if "CONFERIR ANTES DE SOMAR" in w), "")
 
+    # 🚨 25/08 (auditoria): este e-mail PERDEU o quadro do que piorou quando eu
+    # o reescrevi pra entrar na moldura da marca — o irmao
+    # (_email_leitura_nova) tem, este ficou sem. No merge a perda e rara mas
+    # POSSIVEL: a juiza pode escolher a releitura numa prancha onde a leitura
+    # antiga media mais. Cliente que troca de planilha sem saber disso
+    # descobre no meio do orcamento.
+    _pa, _pd = antes.get("por_prancha") or {}, depois.get("por_prancha") or {}
+    _piores = []
+    for _k, _va in _pa.items():
+        _vd = _pd.get(_k)
+        if _vd and _vd.get("medidos", 0) < _va.get("medidos", 0):
+            _piores.append((_nome_prancha_bonito(_k), _va["medidos"], _vd["medidos"]))
+    _piores.sort(key=lambda t: t[1] - t[2], reverse=True)
+
     _greet = _greeting_line(_hc.escape(nome))
     corpo = (
         "%s<br><br>"
@@ -17931,6 +17945,15 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
         corpo += ('<div style="background:#FFFBEB;border-left:3px solid #F59E0B;'
                   'padding:10px 12px;border-radius:6px;margin:12px 0 0;font-size:14px;'
                   'color:#78350F;">%s</div>' % _hc.escape(_sobre))
+
+    if _piores:
+        _lista = "; ".join("<b>%s</b> (%d &rarr; %d medidos)" % t for t in _piores[:3])
+        corpo += (
+            '<div style="background:#FFFBEB;border-left:3px solid #F59E0B;'
+            'padding:10px 12px;border-radius:6px;margin:12px 0 0;font-size:14px;'
+            'color:#78350F;">'
+            "E o que <b>piorou</b>, pra voc&ecirc; saber antes de trocar: %s. "
+            "Nessas, a leitura antiga est&aacute; mais completa.</div>" % _lista)
 
     corpo += (
         '<div style="font-size:13px;color:#6B7280;line-height:1.6;margin:16px 0 0;">'
@@ -18507,11 +18530,20 @@ def _merge_avisos(pai: dict, filho: dict, plano: dict, medidos: int,
             "prancha, o que costuma ser o MESMO equipamento desenhado em duas "
             "disciplinas (ex.: o sensor aparece na prancha de elétrica e na de "
             "segurança). Não somamos nem apagamos nada — a decisão é sua: %s."
+            # 🚨 25/08 (auditoria): aqui a quantidade era emparelhada com a
+            # prancha ERRADA. As quantidades saiam de `linhas` (ordenadas por
+            # tamanho) e as pranchas de `pranchas` (ordem alfabetica) — duas
+            # listas juntadas por POSICAO. No caso do Alan saiu
+            #     "CFTV (17 + 13 + 1 em 3073-AQ-E, 4366-EL-E e 4366-LO-E)"
+            # quando o 17 e da EL-E e o 13 e da AQ-E. Trocado, e o e-mail dele
+            # ja tinha saido assim.
+            # Agora cada numero anda colado na SUA prancha.
             % (len(sobrepostos),
-               "; ".join("%s (%s em %s)"
+               "; ".join("%s (%s)"
                          % (s["codigo"],
-                            " + ".join(str(l["quantidade"]) for l in s["linhas"]),
-                            " e ".join(_nome_prancha_bonito(p) for p in s["pranchas"]))
+                            " + ".join("%s em %s" % (l["quantidade"],
+                                                     _nome_prancha_bonito(l["prancha"]))
+                                       for l in s["linhas"]))
                          for s in _top)))
 
     vistos = {}
@@ -18947,6 +18979,33 @@ async def admin_merge_criar(eval_job_id: str, request: Request):
     # da medição". Numa planilha COMBINADA a fonte tem uma camada a mais: de
     # QUAL das duas leituras a linha veio. Sem isso o cliente não tem como
     # conferir uma divergência contra a prancha certa.
+    # 🚨 25/08 (auditoria): o merge grava project_items POR FORA do motor, entao
+    # pulava as duas passadas que todo item normal atravessa. Os itens vem de
+    # leituras que ja passaram por elas — mas "ja passou" nao vale pra rede do
+    # selo, porque ela nasceu em 24/08 e os jobs de origem podem ser anteriores.
+    # E o extrator de especificacao nunca rodou em nenhum deles.
+    from engine_rules import selos_sem_geometria as _ssg_m
+    _rebaixados = _ssg_m(escolhidos)
+    for _a in _rebaixados:
+        _row = escolhidos[_a["indice"]]
+        _row["confidence"] = "estimado"
+        _ob = str(_row.get("observations") or "")
+        if "não é medição da geometria" not in _ob:
+            _row["observations"] = (
+                "⚠ ESTIMADO — este número foi LIDO de um texto da prancha, não "
+                "medido da geometria. " + _ob)[:1000]
+    if _rebaixados:
+        _log_error("admin:merge",
+                   "rebaixei %d item(ns) que vinham MEDIDOS com procedência só "
+                   "de texto" % len(_rebaixados), novo_id, severity="info")
+        # o placar do e-mail tem que refletir o rebaixamento
+        med_merge = sum(1 for x in escolhidos
+                        if (x or {}).get("confidence") == "confirmado")
+
+    for _row in escolhidos:
+        if not _row.get("marca") and not _row.get("codigo_fabricante"):
+            _row.update(_spec_campos(_row.get("description")))
+
     _lado_da = {p["prancha"]: p["lado"] for p in plano["pranchas"]}
     _dt = {"pai": _merge_data_curta(pai.get("created_at")),
            "filho": _merge_data_curta(filho.get("created_at"))}
@@ -18954,7 +19013,9 @@ async def admin_merge_criar(eval_job_id: str, request: Request):
     for n, it in enumerate(escolhidos, 1):
         linha = {k: it.get(k) for k in ("description", "unit", "quantity", "observations",
                                         "ref_sheet", "confidence", "discipline",
-                                        "section", "origem")}
+                                        "section", "origem",
+                                        "marca", "codigo_fabricante", "cor",
+                                        "spec_origem")}
         _l = _lado_da.get(str(it.get("ref_sheet") or "").strip())
         _sel = ("leitura de %s" % _dt[_l]) if _l and _dt.get(_l) else None
         if _sel:
