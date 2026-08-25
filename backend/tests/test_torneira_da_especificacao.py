@@ -269,6 +269,37 @@ def test_sai_o_codigo_do_produto_e_nao_o_do_acabamento(descricao, codigo):
     assert extrair_spec(descricao)["codigo"] == codigo
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 Marca de duas palavras — achado pelo Pedro NA TELA, depois de eu dar o
+#  extrator por pronto e mandar ele clicar
+# ══════════════════════════════════════════════════════════════════════════
+#  "…marca Arte em Ladrilhos" saía como **"Arte"**. Meia marca não existe como
+#  empresa: o fornecedor recebe um pedido de "Arte". Eu tinha ACHADO isso de
+#  manhã, contado, e consertado só os 4 defeitos que gravavam errado — este
+#  ficou na gaveta de "dado bom jogado fora" e foi pro ar.
+MARCA_DE_DUAS_PALAVRAS = [
+    ("Revestimento concreto em barras que simulam concreto aparente ripado, "
+     "assentamento com argamassa colante, marca Arte em Ladrilhos",
+     "Arte em Ladrilhos"),
+    # 🪤 O ponto final encerra o nome: 3 itens do acervo escrevem assim
+    ("Suporte de parede para fixação de tubulações — marca Laav. Acabamento "
+     "a confirmar", "Laav"),
+    # 🪤 duas maiúsculas seguidas quase nunca são o nome da empresa
+    ("Sistema SPDA marca Montal NBR-5419 conforme norma", "Montal"),
+    ("Luminária marca Lumini LED 3000K", "Lumini"),
+    ("Piso marca Durafloor Linha Nature", "Durafloor"),
+    ("Exaustor de banheiro marca Ventokit modelo C130", "Ventokit"),
+    ("Joelho PVC-ESG — junta soldada; fabricante Tigre com certificação "
+     "INMETRO", "Tigre"),
+]
+
+
+@pytest.mark.parametrize("descricao,marca", MARCA_DE_DUAS_PALAVRAS)
+def test_marca_sai_inteira_e_so_ela(descricao, marca):
+    from spec_extract import extrair_spec
+    assert extrair_spec(descricao)["marca"] == marca
+
+
 def test_capacidade_nao_e_modelo():
     """🪤 Barrar o nome do bloco de CAD fez o extrator cair na CAPACIDADE:
     "split Hi-Wall Midea 12.000 BTU" saía com código "12.000"."""

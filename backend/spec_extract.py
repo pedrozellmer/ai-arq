@@ -62,8 +62,28 @@ _RX_COR_ANTES = _re.compile(r"\bcor\s+(?:[a-zà-ú]+\s+)?$", _re.IGNORECASE | _r
 
 # "fabricante X" / "marca X": pega quem não está na lista, quando o texto DIZ
 # que é fabricante. Mais confiável que a lista, porque o próprio autor rotulou.
+# 🚨 25/08, achado pelo Pedro na tela do admin depois de eu dar o extrator por
+# pronto: "…marca Arte em Ladrilhos" saía como marca **"Arte"** — meia marca,
+# que não existe como empresa. A versão anterior pegava UM token só. Agora
+# pega até três, aceitando os conectores minúsculos do meio ("em", "de", "e"),
+# que é como se escreve nome de empresa em português.
+#
+# 🪤 O ponto é o PONTO FINAL. No acervo, três itens escrevem "…, marca Laav.
+# Acabamento a confirmar": emendar a próxima palavra maiúscula daria
+# "Laav Acabamento". Por isso o "." saiu da classe de caracteres — o nome
+# termina ali, e de quebra "Laav." e "Laav" param de ser duas marcas.
+#
+# 🪤 E a continuação só vale COM o conector minúsculo. Sem essa trava, medindo
+# em texto real, o nome comia o que vinha depois:
+#     "marca Montal NBR-5419"        -> marca="Montal NBR-5419"  (norma)
+#     "marca Lumini LED 3000K"       -> marca="Lumini LED"       (tecnologia)
+#     "marca Durafloor Linha Nature" -> marca="Durafloor Linha Nature" (linha)
+# Duas maiúsculas seguidas quase nunca são o nome da empresa; "X em Y" é.
 _RX_FABRICANTE_DITO = _re.compile(
-    r"(?:fabricante|marca)\s*:?\s*([A-ZÀ-Ú][\wÀ-ú&.\-]{2,24})", _re.UNICODE)
+    r"(?:fabricante|marca)\s*:?\s*"
+    r"([A-ZÀ-Ú][\wÀ-ú&\-]{2,24}"
+    r"(?:\s+(?:de|do|da|dos|das|em|e)\s+[A-ZÀ-Ú][\wÀ-ú&\-]{2,24}){0,2})",
+    _re.UNICODE)
 
 # Código de produto: precedido de cód./ref./modelo, OU no formato pontuado
 # típico de SKU (2042.C83, P.47.26, TEL-779, 38KCX22, BRH85MK).
