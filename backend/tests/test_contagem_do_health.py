@@ -2,7 +2,7 @@
 """As contagens do /api/health têm que ser lidas do banco, não de um except.
 
 🚨 25/08/2026. Enquanto conferia o deploy, o `/api/health` respondeu
-`"total_users": 0` — com **85 perfis** no banco. A contagem pedia
+`"total_users": 0` — com **77 perfis** no banco. A contagem pedia
 `profiles?select=id` e a tabela **não tem coluna `id`** (a chave é `user_id`).
 Provado com curl na anon key, no dia:
 

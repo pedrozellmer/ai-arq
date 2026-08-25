@@ -10615,7 +10615,7 @@ async def emails_auto_tick(request: Request, dry: int = 0):
     ids_com_perfil: set[str] = set()
     emails_com_perfil: set[str] = set()
     try:
-        # 🚨 25/08: `limit=5000` nunca valeu — o PostgREST corta em 1000. Sao 85
+        # 🚨 25/08: `limit=5000` nunca valeu — o PostgREST corta em 1000. Sao 77
         # perfis hoje, entao ainda nao mentiu; passando de mil, gente COM perfil
         # sumiria desta lista e receberia "termine seu cadastro" sem precisar.
         _stp, _perfis = _supa_rest_tudo(
@@ -11905,7 +11905,7 @@ async def health():
     # FIX 2026-05-14: antes usava locals()[var_name] = ... que é noop em
     # CPython (locals() não tem write-back). Resultava em total_projects=0
     # e total_users=0 sempre, quebrando dashboard de métrica admin.
-    # 🚨 25/08/2026: `total_users` mostrava **0** — com 85 perfis no banco.
+    # 🚨 25/08/2026: `total_users` mostrava **0** — com 77 perfis no banco.
     # A causa: a contagem pedia `profiles?select=id` e a tabela NÃO TEM coluna
     # `id` (a chave é `user_id`). O PostgREST devolve 400 "column profiles.id
     # does not exist" e o `except Exception: pass` engolia. Provado com curl.
