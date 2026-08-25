@@ -1720,7 +1720,7 @@ function renderFilhotes(L){
               : `${f.melhorou
                 ? `<button onclick="liberarFilhote('${f.job_id}', false)" style="min-height:40px" class="px-3 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium">Liberar pro cliente</button>`
                 : `<span class="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500 border">não vale liberar</span>`}
-               <button onclick="mergeEstudar('${f.job_id}')" title="Compara as duas leituras prancha por prancha e monta a melhor de cada. Só LÊ — não cria nada." style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-violet-300 text-violet-800 bg-violet-50 hover:bg-violet-100 font-medium">&#129516; Estudar merge</button>`)}
+               <button onclick="mergeEstudar('${f.job_id}')" title="Compara as duas leituras prancha por prancha e monta a melhor de cada. Só LÊ — não cria nada." style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-violet-300 text-violet-800 bg-violet-50 font-medium">&#129516; Estudar merge</button>`)}
         </div>
       </div>
       <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
@@ -1800,7 +1800,7 @@ async function mergeEstudar(jobId){
   if (!alvo) return;
   // 🪤 Sem cronômetro, "está pensando" e "morreu" são a MESMA tela.
   const _t0 = Date.now();
-  alvo.innerHTML = '<div class="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-900">'
+  alvo.innerHTML = '<div class="rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-800">'
     + '🧬 Lendo as duas planilhas prancha por prancha… a IA compara cada prancha disputada.'
     + '<br><span id="merge-cron" class="text-xs text-violet-700">0s</span></div>';
   const _cron = setInterval(() => {
@@ -1838,7 +1838,7 @@ async function mergeEstudar(jobId){
     alvo.innerHTML = mergeHtml(d, jobId);
   } catch (err) {
     console.error('[merge] falhou ao montar a tela', err, d);
-    alvo.innerHTML = '<div class="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-900">'
+    alvo.innerHTML = '<div class="rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">'
       + '<b>O estudo chegou, mas eu falhei ao desenhar a tela.</b><br>'
       + (err && err.message ? String(err.message) : String(err))
       + '<br><br><b>O resultado veio assim:</b>'
@@ -1932,7 +1932,7 @@ function mergeHtml(d, jobId){
        </div>`
     : `<div class="mt-4 flex items-center gap-3">
          <button onclick="mergeCriar('${jobId}')" style="min-height:44px"
-           class="px-4 py-2.5 text-sm rounded-lg bg-violet-700 hover:bg-violet-800 text-white font-medium">
+           class="px-4 py-2.5 text-sm rounded-lg bg-violet-600 text-white font-semibold shadow-sm">
            Criar projeto combinado
          </button>
          <span class="text-xs text-gray-500">nasce como teste — o cliente só vê depois que você clicar em Liberar</span>
@@ -1960,7 +1960,7 @@ async function mergeCriar(jobId){
     if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
     _adminToast('Projeto combinado criado: ' + d.job_id, 'ok');
     if (alvo) alvo.innerHTML = `
-      <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-900">
+      <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
         <b>✓ Criado: <span class="font-mono">${d.job_id}</span></b><br>
         ${d.itens} itens, <b>${d.medidos} medidos</b> (original ${d.original.medidos}, releitura ${d.releitura.medidos}).<br>
         <span class="text-xs">Da original: ${d.do_pai.join(', ') || '—'} &middot; Da releitura: ${d.do_filho.join(', ') || '—'}</span><br>
@@ -3793,7 +3793,7 @@ async function loadProjects() {
       const _btns = [];
       const _isEval = !!p.is_eval;
       if (p.status === 'done') _btns.push('<button onclick="adminDownloadXlsx(\'' + jid + '\')" class="text-[11px] px-2 py-0.5 rounded border border-indigo-200 text-indigo-700 hover:bg-indigo-50">&#11015; Planilha</button>');
-      if ((p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminReprocess(\'' + jid + '\')" title="AGE NO PROJETO DO CLIENTE: ele passa a ver a versao nova, recebe e-mail e GASTA o unico reprocesso gratis dele. Pra testar o motor sem encostar nele, use Avaliar (isolado)." class="text-[11px] px-2 py-0.5 rounded border border-amber-400 text-amber-900 bg-amber-50 hover:bg-amber-100">&#8635; Reprocessar (do cliente)</button>');
+      if ((p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminReprocess(\'' + jid + '\')" title="AGE NO PROJETO DO CLIENTE: ele passa a ver a versao nova, recebe e-mail e GASTA o unico reprocesso gratis dele. Pra testar o motor sem encostar nele, use Avaliar (isolado)." class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100">&#8635; Reprocessar (do cliente)</button>');
       // "Avaliar" (teste isolado) só em projeto REAL (não numa avaliação) e concluído/erro/travado.
       if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalReprocess(\'' + jid + '\')" title="Re-roda os arquivos num teste isolado, sem tocar no projeto do cliente" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#129514; Avaliar (isolado)</button>');
       if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalCombine(\'' + jid + '\')" title="Junta os arquivos de TODOS os projetos deste cliente com o mesmo nome (DWG+DXF+PDF) num teste combinado — mede pelo CAD e completa pelo PDF" class="text-[11px] px-2 py-0.5 rounded border border-violet-300 text-violet-800 hover:bg-violet-50">&#129513; Combinar</button>');
@@ -3872,7 +3872,7 @@ async function enrichActiveProgress(projects) {
       badge.className = 'px-2 py-1 rounded-full text-xs font-medium text-red-700 bg-red-100 animate-pulse';
       badge.textContent = '⚠ TRAVADO';
       prog.innerHTML = '<span class="text-red-600">sumiu do servidor (reinício) — precisa reprocessar</span> ' +
-        '<button onclick="adminReprocess(\'' + jid + '\')" title="AGE NO PROJETO DO CLIENTE: ele passa a ver a versao nova, recebe e-mail e GASTA o unico reprocesso gratis dele. Pra testar o motor sem encostar nele, use Avaliar (isolado)." class="ml-1 text-[11px] px-2 py-0.5 rounded border border-amber-400 text-amber-900 bg-amber-50 hover:bg-amber-100">↻ Reprocessar (do cliente)</button>';
+        '<button onclick="adminReprocess(\'' + jid + '\')" title="AGE NO PROJETO DO CLIENTE: ele passa a ver a versao nova, recebe e-mail e GASTA o unico reprocesso gratis dele. Pra testar o motor sem encostar nele, use Avaliar (isolado)." class="ml-1 text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-900 bg-amber-50 hover:bg-amber-100">↻ Reprocessar (do cliente)</button>';
       return;
     }
     if (!res.ok) { prog.textContent = 'servidor respondeu ' + res.status; return; }
