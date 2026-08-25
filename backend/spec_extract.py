@@ -91,8 +91,30 @@ _PARA_A_COR = frozenset((
 
 # 🪤 Aceita minúscula: "cor branca" vale tanto quanto "cor Branco Neve", e
 # exigir maiúscula perdia o revestimento Eliane do acervo.
+#
+# 🚨 25/08/2026 — dois defeitos meus na MESMA linha, achados na auditoria antes
+# de qualquer gravação. A versão anterior era `\bcor\s*:?\s*(...)`:
+#
+#  1) fronteira só ANTES da palavra. Então "cor" casava como PREFIXO e o resto
+#     virava o nome da cor:
+#         "Porta de correr"                     -> cor="rer"
+#         "Massa corrida PVA ... Coral Branco"  -> cor="rida PVA"   ← e com
+#            marca junto, isso seria GRAVADO
+#         "Suporte de corrimão"                 -> cor="rimão"
+#         "Rodapé em corte reto"                -> cor="te reto"
+#         "Massa corrida cor Branco Neve Suvinil" -> cor="rida cor Branco"
+#     Esse último é o caso que o comentário logo abaixo jurava tratar: a cor
+#     real é "Branco Neve" e saía destruída, porque o "corrida" vem antes.
+#     Medido no acervo: 380 dos 679 itens com cor preenchida eram lixo assim.
+#
+#  2) sem IGNORECASE. "Cor: Branco Neve", "COR BRANCA" e "Cor Palha" — a forma
+#     mais comum de escrever numa prancha — não casavam com NADA.
+#
+# 🪤 Os dois juntos importam: consertar só a caixa faria "Cortina" virar
+# cor="tina". A fronteira depois de "cor" é o que segura.
 _RX_COR = _re.compile(
-    r"\bcor\s*:?\s*([A-Za-zÀ-ú][\wÀ-ú]+(?:\s+[A-Za-zÀ-ú]+){0,2})", _re.UNICODE)
+    r"\bcor(?![a-zà-ú])\s*:?\s*([A-Za-zÀ-ú][\wÀ-ú]+(?:\s+[A-Za-zÀ-ú]+){0,2})",
+    _re.IGNORECASE | _re.UNICODE)
 
 
 def _tem_ruido_perto(texto: str, pos: int, janela: int = 60) -> bool:
