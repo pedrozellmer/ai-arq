@@ -1916,6 +1916,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
         html = _email_wrap("Não conseguimos concluir seu projeto", body,
                            "Reprocessar no painel", "https://ai.arq.br/dashboard.html",
                            badge="⚠ Precisa reprocessar", badge_color="amber",
+                           preheader="Reprocessar é um clique e é grátis — costuma resolver.",
                            reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
     else:
         # Orientação ESPECÍFICA por tipo de problema de arquivo (mesmo diagnóstico do
@@ -1945,11 +1946,12 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                 + f"{fix}<br><br>"
                 f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
                 f"preparar. 🙂")
-        subject = (f"{_pn_raw} — precisamos de outro arquivo (AI.arq)"
+        subject = (f"{_pn_raw} — precisamos de outro arquivo"
                    if _pn_raw else "Sobre o seu projeto no AI.arq — precisamos de outro arquivo")
         html = _email_wrap("Precisamos de outro arquivo pra continuar", body,
                            "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
                            badge="⚠ Revisar o arquivo", badge_color="amber",
+                           preheader="Reprocessar não resolve este caso: exporte em DXF e reenvie.",
                            reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
     return subject, html
 
@@ -2236,11 +2238,18 @@ def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
              + _email_img("pronta-hero.png", "Planilha de quantitativos pronta, itens rotulados medido ou estimativa")
              + f"{extra_body_html}")
     _pn_subj = (project_name or "").strip()
-    subject = (f"{_pn_subj} — sua planilha do AI.arq está pronta"
+    # 55 -> ~38 caracteres. O celular corta perto de 50, e o que sobrava
+    # cortado era "está pronta" — a parte que diz o que aconteceu.
+    subject = (f"{_pn_subj} — sua planilha está pronta"
                if _pn_subj else "Sua planilha do AI.arq está pronta")
     html = _email_wrap("Sua planilha está pronta", _body,
                        "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
                        badge="&#10003; Concluído",
+                       # O que o cliente quer saber antes de abrir: quanto saiu
+                       # MEDIDO. Item laranja e decisao dele, e ele precisa saber
+                       # que existe antes de abrir a planilha na frente de alguem.
+                       preheader=(f"{n_total} itens no total. Os em branco saíram medidos do CAD; "
+                                  f"os laranja são estimativa pra você conferir."),
                        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
     return subject, html
 
@@ -2316,7 +2325,7 @@ def _build_welcome_email(name: str = ""):
         "Estamos em <b>beta — grátis, quantos projetos você quiser</b>, sem cartão. "
         "Aproveite pra testar com um projeto real."
     )
-    subject = "Bem-vindo ao AI.arq — seu projeto vira planilha medida"
+    subject = "Bem-vindo — seu projeto vira planilha medida"
     html = _email_wrap(
         "Bem-vindo ao AI.arq", body,
         "Enviar meu primeiro projeto", "https://ai.arq.br/dashboard.html",
@@ -2431,25 +2440,27 @@ def _build_nudge_email(name: str, kind: str, magic_link: str):
         title = "Falta pouco pra começar"
         # 02/08: saiu o "primeiro projeto é por nossa conta" (regra velha) —
         # no beta é "grátis, quantos projetos quiser" (feedback do Pedro 17/07).
-        body = (_email_img("nudge-foto.jpg", "Edifício em construção", margem="2px 0 14px")
+        body = (_email_img("nudge-foto.jpg", "Complete o cadastro e suba sua primeira prancha", margem="2px 0 14px")
                 + f"{greet}<br><br>Você começou seu cadastro no AI.arq mas não chegou a terminar — "
                 f"e falta <b>só um passo</b>. Termine pra subir sua primeira prancha: o "
                 f"levantamento de quantitativos sai em minutos, e no beta está <b>grátis — "
                 f"quantos projetos você quiser</b>.<br><br>É só clicar abaixo pra entrar direto, sem precisar de senha:")
         cta = "Terminar meu cadastro"
         subject = "Falta pouco pra terminar seu cadastro no AI.arq"
+        _pre = "Faltam o nome e o telefone. Depois disso é só subir a prancha."
     elif kind == "onboarding":
         title = "Vem subir sua primeira prancha"
-        body = (_email_img("nudge-foto.jpg", "Edifício em construção", margem="2px 0 14px")
+        body = (_email_img("nudge-foto.jpg", "Sua primeira prancha vira planilha medida em minutos", margem="2px 0 14px")
                 + f"{greet}<br><br>Você já tem conta no AI.arq, mas ainda não testou com uma prancha. "
                 f"Que tal agora? Manda um PDF, DWG ou DXF e em minutos você recebe a planilha de "
                 f"quantitativos — e no beta está <b>grátis, quantos projetos você quiser</b>.<br><br>"
                 f"Clica abaixo pra entrar direto e subir:")
         cta = "Subir minha primeira prancha"
         subject = "Sua primeira prancha no AI.arq — grátis no beta"
+        _pre = "DWG, DXF ou PDF. A planilha volta em minutos, com o que é medido separado do que é estimativa."
     else:  # feedback
         title = "Como foi seu projeto no AI.arq?"
-        body = (_email_img("feedback-foto.jpg", "Mesa de trabalho de arquitetura", margem="2px 0 14px")
+        body = (_email_img("feedback-foto.jpg", "Um minuto de resposta afina a leitura do seu próximo projeto", margem="2px 0 14px")
                 + f"{greet}<br><br>Vi que você usou o AI.arq pra levantar quantitativos — e eu "
                 f"queria muito saber a sua opinião. Leva <b>1 minutinho</b>: você dá uma nota "
                 f"pra cada etapa (subir a prancha, processamento, precisão, a planilha) e "
@@ -2457,7 +2468,9 @@ def _build_nudge_email(name: str, kind: str, magic_link: str):
                 f"AI.arq cada vez melhor. 🙂")
         cta = "Avaliar meu projeto"
         subject = "Como foi seu projeto no AI.arq? (1 min)"
+        _pre = "O que você corrigir na planilha ensina o motor a ler melhor o próximo."
     html = _email_wrap(title, body, cta, magic_link,
+                       preheader=_pre,
                        reason="Você está recebendo este e-mail porque criou uma conta no AI.arq.")
     return subject, html
 
@@ -8912,7 +8925,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             else "Planilha atualizada com o CAD",
                             _body_c,
                             "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
-                            badge="&#9888; Mediu menos" if _piorou_c else "&#10003; Medido"))
+                            badge="&#9888; Mediu menos" if _piorou_c else "&#10003; Medido",
+                            preheader=("A leitura anterior estava mais completa — as duas ficam "
+                                       "no painel." if _piorou_c else
+                                       "O arquivo CAD que você mandou depois entrou na conta.")))
                     if _ok_c:
                         _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
                     print(f"[email] complemento-pronto -> enviado={_ok_c}")
@@ -8944,7 +8960,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _email_wrap("Planilha atualizada", _body_r,
                                     "Ver minha planilha",
                                     f"https://ai.arq.br/projeto.html?job_id={job_id}#quantitativo",
-                                    badge="&#10003; Atualizado"))
+                                    badge="&#10003; Atualizado",
+                                    preheader="Rodamos os mesmos arquivos no motor de hoje. "
+                                              "A versão anterior continua no painel."))
                     if _ok_r:
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
                     print(f"[email] reprocesso-pronto -> enviado={_ok_r}")
@@ -9061,6 +9079,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         "Abrir meu projeto",
                         f"https://ai.arq.br/projeto.html?job_id={job_id}",
                         badge="&#9888; Sem medida",
+                        # 🪤 Preheader de ma noticia nao pode soar animado. Diz o
+                        # fato e o caminho, sem promessa que a gente nao cumpre.
+                        preheader="Os itens saíram identificados, mas sem quantidade medida — "
+                                  "veja o motivo e o que resolve.",
                         reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
                     _log_error("motor:sem-medida-nenhuma",
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
@@ -10283,7 +10305,7 @@ def _build_retorno30_email(name: str):
     isca: cronograma grátis. Separado do envio pra reuso no preview."""
     import html as _hn
     greet = _greeting_line(_hn.escape(name or ""))
-    body = (_email_img("retorno-foto.jpg", "Interior de projeto de arquitetura", margem="2px 0 14px")
+    body = (_email_img("retorno-foto.jpg", "Seu próximo quantitativo sai em minutos, com cronograma junto", margem="2px 0 14px")
             + f"{greet}<br><br>Faz um tempinho que você não aparece por aqui — e desde a sua "
             f"última visita o AI.arq melhorou bastante: a leitura das pranchas ficou mais "
             f"precisa e agora todo projeto vira também <b>cronograma de obra</b> e <b>memorial "
@@ -10291,9 +10313,11 @@ def _build_retorno30_email(name: str):
             f"<br><br>Se tiver um projeto na mesa, manda a prancha (PDF, DWG ou DXF) "
             f"que em minutos você recebe a planilha de quantitativos. Nessa fase de beta está "
             f"<b>grátis e ilimitado</b>.")
-    subject = "Seu próximo quantitativo sai em minutos — e o cronograma é grátis"
+    subject = "Seu próximo quantitativo sai em minutos"
     html = _email_wrap("Sentimos sua falta por aqui", body,
                        "Subir um projeto", "https://ai.arq.br/dashboard.html",
+                       preheader="Quantitativo, cronograma e memorial saem do mesmo envio. "
+                                 "Grátis no beta.",
                        reason=("Você está recebendo este e-mail porque tem uma conta no AI.arq. "
                                "Se não quiser mais lembretes, é só responder avisando."))
     return subject, html
@@ -10317,7 +10341,7 @@ def _build_proximo_projeto_email(name: str, project_name: str):
     import html as _hp
     pn = _hp.escape(project_name or "seu primeiro projeto")
     greet = _greeting_line(_hp.escape(name or ""))
-    body = (_email_img("proximo-foto.jpg", "Escritório de arquitetura moderno", margem="2px 0 14px")
+    body = (_email_img("proximo-foto.jpg", "Outro projeto? A planilha sai em minutos, grátis no beta", margem="2px 0 14px")
             + f"{greet}<br><br>"
             f"O quantitativo do <b>{pn}</b> te ajudou? Se tiver outro projeto na mesa — "
             f"mesmo que seja um estudo ou uma reforma pequena — manda a prancha (PDF, DWG "
@@ -10326,9 +10350,10 @@ def _build_proximo_projeto_email(name: str, project_name: str):
             f"E se você chegou a <b>revisar</b> a planilha do primeiro, subir a sua versão "
             f"corrigida na página do projeto afina o motor — os seus próximos quantitativos "
             f"saem medindo melhor exatamente o que você corrigiu.")
-    subject = "Tem outro projeto na mesa? O próximo sai em minutos"
+    subject = "Tem outro projeto na mesa?"
     html = _email_wrap("Bora fazer o próximo?", body,
                        "Subir outro projeto", "https://ai.arq.br/dashboard.html",
+                       preheader="Sobe a prancha e a planilha sai em minutos, como da última vez.",
                        reason=("Você está recebendo este e-mail porque processou um projeto "
                                "no AI.arq. Se não quiser mais lembretes, é só responder avisando."))
     return subject, html
@@ -10360,9 +10385,10 @@ def _build_cronograma_checkin_email(name: str, project_name: str, semana: int, j
             f"Atualizar o % executado leva um minuto e mantém a <b>Curva S</b> e o "
             f"avanço real em dia — bom pra você enxergar atraso cedo, e pronto pra "
             f"mostrar ao cliente (dá pra exportar em PDF direto da tela).")
-    subject = f"Semana {semana} da obra {project_name or 'do seu projeto'} — como está o avanço?"
+    subject = f"{project_name or 'Seu projeto'} — semana {semana} da obra"
     html = _email_wrap(f"Semana {semana} — bora atualizar?", body,
                        "Atualizar o avanço", f"https://ai.arq.br/cronograma.html?job={job_id}",
+                       preheader="Marque o que já foi executado e o cronograma se reajusta sozinho.",
                        reason=("Você está recebendo este e-mail porque tem um cronograma de obra "
                                "em andamento no AI.arq. Se não quiser mais estes lembretes, é só "
                                "responder avisando."))
@@ -17803,7 +17829,7 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
     # 🪤 Assunto vai em TEXTO PURO. A 1ª versão tinha "vers&atilde;o" no subject
     # com um .replace() pra consertar — entidade HTML não é decodificada no
     # cabeçalho do e-mail e o cliente leria o código na caixa de entrada.
-    subject = "%s — uma versão mais completa do seu projeto" % (proj or "Seu projeto")
+    subject = "%s — versão mais completa" % (proj or "Seu projeto")
     html = _email_wrap(
         "Uma versão mais completa do seu projeto", corpo,
         "Ver a versão combinada",
@@ -17905,7 +17931,7 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
         "voc&ecirc; compara e usa a que preferir. Reprocessar n&atilde;o consumiu nada "
         "seu, e continua tudo gr&aacute;tis no beta.</div>")
 
-    subject = "%s — refizemos a leitura, ficou mais completa" % (proj or "Seu projeto")
+    subject = "%s — refizemos a leitura" % (proj or "Seu projeto")
     _pre = ("%d → %d itens medidos do CAD. A sua versão original continua no painel."
             % (antes.get("medidos", 0), depois.get("medidos", 0)))
     html = _email_wrap(
