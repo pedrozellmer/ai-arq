@@ -65,22 +65,38 @@ def test_a_gravacao_no_banco_consulta_a_trava():
         "`_spec_campos` voltou a gravar especificação no banco sem a trava")
 
 
-def test_com_a_trava_fechada_o_carimbo_nao_poe_nada():
-    """Executa `_carimbar_spec` de verdade, com a trava como está hoje."""
+def _carimba(descricao):
+    """Executa `_carimbar_spec` de verdade e devolve (quantos, item)."""
     corpo = so_o_que_roda("_carimbar_spec")
     ns = {"print": lambda *a, **k: None}
     exec("def _carimbar_spec(itens) -> int:\n" + corpo.split("\n", 1)[1], ns)
 
     class _It:
-        description = "Rejunte para porcelanato Oregon Gray Satin Biancogres"
         marca = codigo_fabricante = cor = spec_origem = ""
 
     it = _It()
-    n = ns["_carimbar_spec"]([it])
+    it.description = descricao
+    return ns["_carimbar_spec"]([it]), it
+
+
+def test_a_trava_manda_no_carimbo_nos_dois_estados():
+    """🪤 A 1ª versão deste teste só sabia checar a trava FECHADA: no dia em
+    que ela abrisse, ele daria `return` e viraria um teste que não mede nada,
+    com nome de quem confere. Agora ele mede os dois lados."""
+    n, it = _carimba("Torneira de mesa bica móvel cromado 1167.C.LNK Deca")
     if spec_extract.LIBERADO_PRO_CLIENTE:
-        return                      # liberado: quem manda é o teste de baixo
-    assert n == 0, "a trava está fechada e mesmo assim carimbou %d item(ns)" % n
-    assert it.marca == "", "gravou marca %r com a trava fechada" % it.marca
+        assert n == 1, "a trava está aberta e o carimbo não pôs nada"
+        assert (it.marca, it.codigo_fabricante) == ("Deca", "1167.C.LNK")
+        assert it.spec_origem == "lido"
+    else:
+        assert n == 0, "a trava está fechada e mesmo assim carimbou %d" % n
+        assert it.marca == "", "gravou marca %r com a trava fechada" % it.marca
+
+
+def test_o_carimbo_nunca_afirma_marca_do_vizinho():
+    """Vale com a trava aberta OU fechada: nunca sai marca de outro produto."""
+    _, it = _carimba("Rejunte para porcelanato Oregon Gray Satin Biancogres")
+    assert it.marca == "", "carimbou %r num rejunte" % it.marca
 
 
 # ══════════════════════════════════════════════════════════════════════════

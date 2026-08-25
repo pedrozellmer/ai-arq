@@ -400,7 +400,7 @@ def extrair_spec(descricao: str) -> dict:
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  🚨 TORNEIRA FECHADA — 25/08/2026
+#  🚦 TORNEIRA — fechada 25/08 de manhã, ABERTA 25/08 à tarde
 # ══════════════════════════════════════════════════════════════════════════
 # A auditoria de hoje rodou este extrator sobre as 338 descrições reais do
 # acervo: dos 361 itens que ele marcaria, **127 (35%) levam informação que o
@@ -422,7 +422,16 @@ def extrair_spec(descricao: str) -> dict:
 #
 # 🪤 A trava é só do lado do CLIENTE. A simulação do admin continua rodando o
 # extrator inteiro — é ela que mede se o conserto funcionou.
-LIBERADO_PRO_CLIENTE = False
+#
+# ✅ ABERTA em 25/08/2026, com o Pedro decidindo as duas que eram dele:
+#   • "ou similar" sai como REFERÊNCIA ("Deca · L56.17 (ou similar)"), não some
+#     e não vira decisão — 73 itens;
+#   • a COR passa a valer sem marca junto — medido em 44 itens reais que têm
+#     cor e não têm marca: 28 saem com cor e os 28 estão certos.
+# Critério de aceite cumprido: os 9 casos da auditoria saem limpos, os 3 falsos
+# positivos que o próprio conserto criou viraram teste, e os 122 itens que
+# mudaram no acervo foram conferidos um a um.
+LIBERADO_PRO_CLIENTE = True
 
 
 def spec_origem(spec: dict) -> str:
