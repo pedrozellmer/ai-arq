@@ -17086,6 +17086,11 @@ _TRACK_ALLOWED = {
     "tour_pulado", "tour_concluido",        # onboarding-tour.js
     "arquivo_escolhido", "arquivo_ignorado", # dashboard addFiles (meta.type = extensão)
     "upload_erro",                           # dashboard /api/process falhou (meta.type = HTTP)
+    # 25/08 — a desistência que era INVISÍVEL. Dois clientes escolheram
+    # arquivo e sumiram; botão desabilitado não dispara clique, então não
+    # havia como saber que eles tinham tentado. `meta.motivo` = termos |
+    # sem-arquivo. Ver o envelope `#process-guard` em dashboard.html.
+    "processar_bloqueado",
 }
 _TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
 

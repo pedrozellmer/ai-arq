@@ -28,7 +28,13 @@ def _eventos_do_front():
     arquivos = glob.glob(os.path.join(_RAIZ, "*.html")) + glob.glob(os.path.join(_RAIZ, "*.js"))
     for f in arquivos:
         txt = io.open(f, encoding="utf-8", errors="replace").read()
-        for n in re.findall(r"trackEvent\(\s*['\"]([a-z_]+)['\"]", txt):
+        # 🪤 25/08: a versão anterior era `trackEvent\(` e ficava CEGA pra
+        # `trackEvent?.('nome')` — optional chaining, que é como se escreve
+        # chamada opcional em JS moderno. Escrevi um evento novo nesse estilo,
+        # rodei este teste esperando que ele reprovasse, e ele passou VERDE.
+        # O guarda contra "evento descartado em silêncio" tinha ele próprio um
+        # ponto cego silencioso.
+        for n in re.findall(r"trackEvent\s*\??\.?\(\s*['\"]([a-z_]+)['\"]", txt):
             nomes.add(n)
         for slug in re.findall(r'data-track="([^"]+)"', txt):
             nomes.add("clique:" + slug)

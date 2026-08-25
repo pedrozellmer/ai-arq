@@ -191,7 +191,20 @@
         // problema, não o formulário.
         // 🪤 Quem JÁ tem perfil não fica preso aqui: o cadastro.html confere e
         // manda pro painel sozinho, sem mostrar formulário nenhum.
-        redirectTo: 'https://ai.arq.br/cadastro.html'
+        redirectTo: 'https://ai.arq.br/cadastro.html',
+        // 🚨 25/08/2026 — SEM ISTO O GOOGLE ESCOLHE A CONTA SOZINHO.
+        // O Pedro não conseguiu entrar no admin: ele tinha acabado de logar
+        // no Gmail como pedro@ai.arq.br, e o botão "Entrar com Google"
+        // reaproveitou essa sessão em silêncio — mas o admin é a conta
+        // zarelalopes@gmail.com. Ele não escolheu a conta errada; ele nunca
+        // foi perguntado.
+        // 🔑 E não é caso de admin: QUALQUER cliente com duas contas Google
+        // (a pessoal e a do escritório) entra na conta errada do AI.arq sem
+        // perceber. Do lado dele a leitura é "meus projetos sumiram" — e não
+        // há erro nenhum na tela pra explicar, porque do ponto de vista do
+        // sistema o login deu certo.
+        // `select_account` obriga o Google a mostrar o seletor sempre.
+        queryParams: { prompt: 'select_account' }
       }
     });
     if (error) {

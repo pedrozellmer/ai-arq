@@ -15,6 +15,15 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   body { font-family: 'Inter', sans-serif; }
+  /* 🚨 Sem isto o clique no botão apagado morre no próprio botão: por
+     especificação o navegador não dispara evento em controle desabilitado, e
+     nem o pai fica sabendo. Com `pointer-events:none` o clique atravessa e
+     cai no envelope, que explica o motivo e registra a tentativa. */
+  #btn-process:disabled { pointer-events: none; }
+  #process-guard { cursor: pointer; }
+  /* destaque do checkbox de termos — inline porque o Tailwind daqui é build
+     ESTÁTICO e classe que não está no CSS é inerte, sem erro nenhum */
+  .pisca-termos { outline: 2px solid #d97706; outline-offset: 3px; border-radius: 6px; }
   .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
   .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
   .shadow-gradient { box-shadow: 0 20px 60px -15px rgba(79,70,229,0.15); }
@@ -512,10 +521,24 @@
             </span>
           </label>
 
-          <button id="btn-process" data-track="processar-projeto" disabled class="mt-3 w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
+          <!-- 🚨 25/08/2026 — ENVELOPE CLICÁVEL EM VOLTA DO BOTÃO.
+               Dois clientes escolheram arquivo e sumiram: um com 4 projetos
+               nas costas, outro que tinha acabado de fazer o tour inteiro.
+               Nos dois o rastro é o mesmo — `arquivo_escolhido` e silêncio.
+               A explicação está no próprio rastreador: **o navegador não
+               dispara clique em botão desabilitado**. O cliente escolhe o
+               arquivo, não vê o checkbox dos Termos, clica no botão apagado,
+               e não acontece NADA: nem ação, nem aviso, nem evento.
+               O `pointer-events:none` faz o clique cair aqui, no envelope,
+               que explica o motivo E registra a tentativa. Sem o registro eu
+               continuaria adivinhando: a desistência era invisível. -->
+          <div id="process-guard" class="mt-3">
+          <button id="btn-process" data-track="processar-projeto" disabled class="w-full py-4 rounded-xl gradient-main text-white text-lg font-semibold shadow-btn transition disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none flex items-center justify-center gap-2">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
             Processar Projeto
           </button>
+          <p id="process-motivo" class="mt-2 text-sm font-medium text-amber-700 hidden"></p>
+          </div>
         </div>
 
         <!-- STATE: PROCESSING -->
@@ -3333,6 +3356,38 @@
     if (selectedFiles.length > 0) {
       btnProcess.disabled = !e.target.checked;
     }
+    if (e.target.checked) {
+      document.getElementById('terms-wrapper')?.classList.remove('pisca-termos');
+      document.getElementById('process-motivo')?.classList.add('hidden');
+    }
+  });
+
+  // ── 🚨 O clique que morria: botão apagado não avisa nada ───────────────
+  // Dois clientes escolheram arquivo e sumiram sem deixar rastro nenhum além
+  // do `arquivo_escolhido`. Botão desabilitado não dispara evento — então a
+  // desistência era literalmente INVISÍVEL pra gente.
+  // Aqui o clique cai no envelope (ver o `pointer-events:none` no <style>),
+  // diz o que falta, destaca o checkbox — e REGISTRA. Mesmo que o motivo seja
+  // outro, em poucos dias o número diz qual é, em vez de eu adivinhar.
+  document.getElementById('process-guard')?.addEventListener('click', () => {
+    if (!btnProcess.disabled) return;                 // botão ativo: segue o fluxo normal
+    const wrapper = document.getElementById('terms-wrapper');
+    const check = document.getElementById('terms-checkbox');
+    const aviso = document.getElementById('process-motivo');
+    const semArquivo = !selectedFiles.length;
+    const motivo = semArquivo
+      ? 'Escolha um arquivo do projeto primeiro (DXF, DWG ou PDF).'
+      : 'Falta só marcar que você concorda com os Termos de Uso, logo acima.';
+    if (aviso) { aviso.textContent = motivo; aviso.classList.remove('hidden'); }
+    if (!semArquivo && wrapper) {
+      wrapper.classList.add('pisca-termos');
+      wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try { check?.focus({ preventScroll: true }); } catch (_) {}
+    }
+    try {
+      window.trackEvent?.('processar_bloqueado',
+                          { motivo: semArquivo ? 'sem-arquivo' : 'termos' });
+    } catch (_) {}
   });
 
   // ── BETA: enquanto true, projeto do 2º em diante NÃO cobra — mostra um
