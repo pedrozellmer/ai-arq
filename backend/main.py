@@ -9999,6 +9999,17 @@ async def notify_welcome(request: Request):
     # Cliente antigo (ou perfil sem data confiável): não manda nada.
     if not is_new:
         return {"status": "ok", "sent": False, "reason": "not_new"}
+    # 🚨 24/08/2026 (caso Alan): o ÚNICO portão aqui era "conta criada há menos
+    # de 1h". O guard do frontend é localStorage, ou seja, POR NAVEGADOR — duas
+    # abas, um refresh ou outro browser na primeira hora mandam o boas-vindas de
+    # novo. Ele recebeu às 19:28 e às 19:30, dois minutos de diferença, no
+    # primeiro dia de conta.
+    # 🪤 O alerta interno pro Pedro, 20 linhas abaixo, JÁ tinha dedup. O do
+    # CLIENTE não — justo o de quem acabou de chegar e ainda está formando
+    # opinião. E `_ja_recebeu_kind` existia desde 02/08 pra isto: a docstring
+    # dela diz "evita e-mail duplicado", e só o caminho de RESGATE a chamava.
+    if _ja_recebeu_kind(email, "boas_vindas"):
+        return {"status": "ok", "sent": False, "reason": "ja_recebeu"}
     import html as _hw
     sent = _send_welcome_email(email, name)
     # Alerta interno pro Pedro: novo cliente (em thread)
