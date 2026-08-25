@@ -65,23 +65,61 @@ def test_a_reidratacao_do_banco_le_as_colunas_novas():
             "%s nao aparece nos DOIS caminhos de reidratacao" % campo)
 
 
+def _roda_carimbo():
+    """A funcao REAL, executada.
+
+    🪤 25/08: os dois testes abaixo conferiam TEXTO numa janela de
+    `src[i:i+1800]` e quebraram no dia em que a funcao melhorou — a guarda
+    passou a olhar `spec_origem` (que cobre 222 itens a mais, os que so tem
+    cor) e os comentarios cresceram alem da janela. Os dois quebraram sem que
+    nada tivesse piorado: exatamente o defeito que o `_corpo.py` documenta.
+    Agora medem EFEITO."""
+    from _corpo import so_o_que_roda
+    corpo = so_o_que_roda("_carimbar_spec")
+    ns = {"print": lambda *a, **k: None}
+    exec("def _carimbar_spec(itens) -> int:\n" + corpo.split("\n", 1)[1], ns)
+    return ns["_carimbar_spec"]
+
+
+class _ItFalso:
+    def __init__(self, **kw):
+        self.description = kw.get("description", "")
+        self.marca = kw.get("marca", "")
+        self.codigo_fabricante = kw.get("codigo_fabricante", "")
+        self.cor = kw.get("cor", "")
+        self.spec_origem = kw.get("spec_origem", "")
+
+
 def test_o_carimbo_nao_sobrescreve_o_que_veio_do_banco():
-    """Se o item ja tem marca (veio do banco, ou o cliente preencheu no
-    caderno), o carimbo nao pode passar por cima — regra dura n7."""
-    src = _main()
-    i = src.index("def _carimbar_spec(")
-    corpo = src[i:i + 1800]
-    assert 'if getattr(it, "marca", "") or getattr(it, "codigo_fabricante", ""):' in corpo
-    assert "continue" in corpo
+    """Se o item ja tem especificacao (veio do banco, ou o cliente preencheu
+    no caderno), o carimbo nao pode passar por cima — regra dura nº7."""
+    it = _ItFalso(description="Torneira de mesa 1167.C.LNK Deca",
+                  marca="Docol", spec_origem="cliente")
+    assert _roda_carimbo()([it]) == 0
+    assert it.marca == "Docol"
 
 
 def test_o_carimbo_falha_em_silencio_e_nao_derruba_a_planilha():
-    """Item sem especificacao e o estado normal de 95% do acervo. Uma excecao
-    aqui nao pode impedir a planilha de sair."""
-    src = _main()
-    i = src.index("def _carimbar_spec(")
-    corpo = src[i:i + 1800]
-    assert corpo.count("except Exception") >= 2
+    """Item sem especificacao e o estado normal de 93% do acervo, e uma
+    excecao aqui nao pode impedir a planilha de sair.
+
+    🧪 Aqui a descricao EXPLODE ao ser lida — o jeito de provar que o
+    try/except do laco segura de verdade, em vez de contar `except` no fonte."""
+    class _Explode(_ItFalso):
+        @property
+        def description(self):
+            raise RuntimeError("descricao podre")
+
+        @description.setter
+        def description(self, v):
+            pass
+
+    bom = _ItFalso(description="Torneira de mesa 1167.C.LNK Deca")
+    n = _roda_carimbo()([_Explode(), bom])          # nao pode levantar
+    import spec_extract
+    if spec_extract.LIBERADO_PRO_CLIENTE:
+        assert n == 1, "o item podre derrubou o carimbo do item bom"
+        assert bom.marca == "Deca"
 
 
 def test_o_carimbo_funciona_de_verdade():
@@ -111,7 +149,6 @@ def test_o_carimbo_funciona_de_verdade():
 def test_a_planilha_le_esses_campos_do_objeto():
     """Fecha o circuito: o nome do campo no modelo e o mesmo que a planilha
     procura. Um typo aqui deixaria tudo silenciosamente vazio."""
-    src = io.open(os.path.join(_BACKEND, "spreadsheet.py"), encoding="utf-8").read()
     corpo = corpo_de("_especificacao_texto", "spreadsheet.py")
     from models import BudgetItem
     for campo in ("marca", "codigo_fabricante", "cor"):

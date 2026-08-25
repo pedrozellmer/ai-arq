@@ -1781,15 +1781,32 @@ def _carimbar_spec(itens) -> int:
         return 0
     for it in itens or []:
         try:
-            if getattr(it, "marca", "") or getattr(it, "codigo_fabricante", ""):
+            # 🚨 25/08 (2ª rodada): a guarda olhava marca/codigo e deixava de
+            # fora quem tem SÓ COR — 222 dos 556 itens do acervo. Nesses, o
+            # carimbo passava por cima do que ja estava no banco. `spec_origem`
+            # e o campo que diz "esta linha ja tem especificacao", entao e ele
+            # que tem que mandar aqui. Serve tambem pro dia em que o valor for
+            # `cliente`: o que o cliente digitou nunca pode ser pisado.
+            if getattr(it, "spec_origem", ""):
                 continue                      # ja veio preenchido do banco
             sp = extrair_spec(getattr(it, "description", ""))
-            if not spec_origem(sp):
+            origem = spec_origem(sp)
+            if not origem:
                 continue
             it.marca = sp["marca"] or ""
             it.codigo_fabricante = sp["codigo"] or ""
             it.cor = sp["cor"] or ""
-            it.spec_origem = "lido"
+            # 🚨 REGRA nº1. Aqui estava `"lido"` chapado, jogando fora o
+            # retorno de `spec_origem(sp)`. Efeito medido: os 73 itens que o
+            # projeto marcou "ou similar" sairiam no PRIMEIRO .xlsx entregue
+            # como "Knauf/Placo" — decisao fechada — em vez de
+            # "Knauf/Placo (ou similar)". E o .xlsx reconstruido depois da
+            # revisao sai CERTO, porque reidrata do banco: o mesmo projeto
+            # com duas verdades.
+            # 🪤 Escrevi `spec_origem()` de manha e nao liguei aqui. Terceira
+            # vez neste arquivo que o valor e calculado de um lado e ignorado
+            # do outro (antes: `origem` e `_spec_campos`).
+            it.spec_origem = origem
             n += 1
         except Exception:
             continue
