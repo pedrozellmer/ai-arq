@@ -1129,13 +1129,22 @@ def _comparar_com_versao_anterior(job_id: str, n_medidos: int, n_itens: int) -> 
                    f"v{_ultima}: medidos {antes_med} -> {n_medidos} "
                    f"(itens {antes_itens} -> {n_itens})", job_id)
     elif _extra_linhas:
+        # 🚨 25/08, no MESMO caso que criou este aviso: a 1ª versão da frase
+        # dizia "é limitação nossa, não do seu projeto" — e estava ERRADA.
+        # Medido no job 6e9649a7: as 208 linhas eram 133 linhas ZERADAS mais
+        # 30.247 kg de aço vindos de pré-dimensionamento por índice; as 15
+        # linhas novas trazem 12.447 kg LIDOS do quadro de resumo de aço do
+        # desenho. Diferença de 2,4× — a leitura "menor" é a boa.
+        # 🔑 Menos linha não é sinônimo de pior. Quem sabe qual serve é o
+        # cliente, olhando as duas. O aviso relata o FATO e não diagnostica a
+        # causa; diagnosticar errado aqui empurraria ele pro número inflado.
         _l = "linha" if perdeu_itens == 1 else "linhas"
         out["frase"] = (
             f"Esta leitura trouxe {perdeu_itens} {_l} A MENOS que a anterior "
-            f"({n_itens} contra {antes_itens}). Nenhuma das duas mediu do CAD, então "
-            f"a diferença é do que o motor conseguiu LER desta vez — é limitação "
-            f"nossa, não do seu projeto. Compare antes de usar: a versão anterior "
-            f"continua guardada.")
+            f"({n_itens} contra {antes_itens}). Pode ser melhora — a leitura nova "
+            f"pode ter achado um quadro de quantidades e trocado estimativa por "
+            f"número lido — ou pode ser perda. A versão anterior continua guardada: "
+            f"compare as duas antes de orçar.")
         _log_error("motor:leitura-pior",
                    f"v{_ultima}: itens {antes_itens} -> {n_itens} "
                    f"({queda_pct:.0f}% a menos), medidos {antes_med} -> {n_medidos}",

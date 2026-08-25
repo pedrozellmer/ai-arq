@@ -91,6 +91,25 @@ def test_208_para_15_com_zero_medido_AVISA():
     assert r["perdeu_itens"] == 193
 
 
+def test_o_aviso_de_linha_NAO_diagnostica_a_causa():
+    """🚨 A 1ª versão da frase dizia "é limitação nossa, não do seu projeto".
+
+    Medido no caso real que criou este aviso (job 6e9649a7): as 208 linhas
+    eram 133 linhas ZERADAS mais 30.247 kg de aço por pré-dimensionamento; as
+    15 novas trazem 12.447 kg LIDOS do quadro de resumo de aço. Diferença de
+    2,4× — a leitura "menor" era a BOA.
+
+    🔑 Confessar culpa errada não é humildade: empurra o cliente de volta pro
+    número inflado. O aviso relata o fato e deixa a escolha com ele."""
+    fn = _comparar(_versao(208, 0))
+    frase = fn("6e9649a7", 0, 15)["frase"]
+    assert "limitação nossa" not in frase and "limitacao nossa" not in frase, (
+        "o aviso voltou a diagnosticar a causa — e no caso que o criou o "
+        "diagnóstico estava invertido")
+    assert "compare" in frase.lower()
+    assert "guardada" in frase
+
+
 def test_58_para_41_tambem_avisa():
     """O outro caso do acervo: 29% a menos, zero medido dos dois lados."""
     fn = _comparar(_versao(58, 0))
