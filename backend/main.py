@@ -2560,7 +2560,8 @@ def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
     return subject, html
 
 
-def _build_welcome_email(name: str = ""):
+def _build_welcome_email(name: str = "", falta_cadastro: bool = False,
+                         link_cadastro: str = ""):
     """Monta (subject, html) do email de boas-vindas. Separado do envio pra
     reuso no preview do painel (Central de Emails).
 
@@ -2588,8 +2589,31 @@ def _build_welcome_email(name: str = ""):
                 f'font-family:Arial,sans-serif;">{texto}</td></tr>')
 
     _img = _email_img
+    # 🚨 25/08 — QUEM AINDA NÃO TEM PERFIL RECEBE ISTO NO LUGAR DE DOIS E-MAILS.
+    # A pessoa entra pelo Google, cai no formulário e para. A conta existe e não
+    # funciona. Antes o welcome chegava em 3h e o "termine seu cadastro" só 7
+    # DIAS depois (teto de 1 automático por semana). Medido: 12 pessoas reais
+    # nesse limbo, uma a cada 3 dias.
+    # 🔑 O bloco vem ANTES de tudo: é a única coisa que ela precisa fazer agora.
+    # O resto do e-mail explica o produto e continua valendo depois.
+    _falta = ""
+    if falta_cadastro:
+        _btn = (f'<div style="margin:12px 0 2px;"><a href="{link_cadastro}" '
+                'style="display:inline-block;background:#4F46E5;color:#ffffff;'
+                'text-decoration:none;padding:11px 20px;border-radius:9px;'
+                'font-size:14px;font-weight:700;font-family:Arial,sans-serif;">'
+                'Terminar meu cadastro</a></div>') if link_cadastro else ""
+        _falta = (
+            '<div style="background:#EEF2FF;border:1px solid #c7d2fe;border-radius:10px;'
+            'padding:14px 16px;font-size:14px;line-height:1.55;color:#3730a3;'
+            'font-family:Arial,sans-serif;margin-bottom:16px;">'
+            '<b>Falta um passo pra sua conta funcionar.</b><br>'
+            'Você entrou com o Google, mas o cadastro não foi concluído — são '
+            'dois campos, leva menos de um minuto. Sem isso não dá pra enviar '
+            'projeto.' + _btn + '</div>')
     body = (
-        _img("welcome-foto.jpg", "Arquiteto trabalhando sobre a prancha do projeto", margem="2px 0 14px")
+        _falta
+        + _img("welcome-foto.jpg", "Arquiteto trabalhando sobre a prancha do projeto", margem="2px 0 14px")
         + f"{greet}<br><br>"
         "Que bom ter você aqui! O AI.arq <b>lê o seu projeto e mede</b> — a planilha de "
         "quantitativos que levaria horas no Excel sai em minutos, direto do seu arquivo, "
@@ -2635,21 +2659,40 @@ def _build_welcome_email(name: str = ""):
         "Estamos em <b>beta — grátis, quantos projetos você quiser</b>, sem cartão. "
         "Aproveite pra testar com um projeto real."
     )
-    subject = "Bem-vindo — seu projeto vira planilha medida"
+    if falta_cadastro:
+        # 🪤 O assunto e o preheader são o que ela lê antes de abrir. Se
+        # disserem só "bem-vindo", o e-mail que destrava a conta parece mais
+        # um cartão de visita e vai pro fim da fila.
+        subject = "Falta um passo pra sua conta do AI.arq funcionar"
+        titulo = "Termine seu cadastro"
+        cta_txt, cta_url = ("Terminar meu cadastro",
+                            link_cadastro or "https://ai.arq.br/cadastro.html")
+        pre = "São dois campos, menos de um minuto — sem isso não dá pra enviar projeto."
+    else:
+        subject = "Bem-vindo — seu projeto vira planilha medida"
+        titulo = "Bem-vindo ao AI.arq"
+        cta_txt, cta_url = ("Enviar meu primeiro projeto",
+                            "https://ai.arq.br/dashboard.html")
+        pre = "Envie o CAD, receba a planilha medida — grátis durante o beta, sem cartão."
     html = _email_wrap(
-        "Bem-vindo ao AI.arq", body,
-        "Enviar meu primeiro projeto", "https://ai.arq.br/dashboard.html",
+        titulo, body, cta_txt, cta_url,
         reason="Você está recebendo este e-mail porque criou sua conta no AI.arq.",
-        preheader="Envie o CAD, receba a planilha medida — grátis durante o beta, sem cartão.")
+        preheader=pre)
     return subject, html
 
 
-def _send_welcome_email(email: str, name: str = "") -> bool:
+def _send_welcome_email(email: str, name: str = "", falta_cadastro: bool = False,
+                        link_cadastro: str = "") -> bool:
     """Monta + envia o email de boas-vindas. Usado no 1º acesso ao dashboard
-    (gated por created_at) e no reenvio manual pelo admin. Best-effort."""
+    (gated por created_at) e no reenvio manual pelo admin. Best-effort.
+
+    `falta_cadastro=True` manda a versão COMBINADA — boas-vindas + o passo que
+    falta — pra quem criou conta pelo Google e não completou o perfil."""
     name = _resolve_client_name(email, hint=name)
-    subject, html = _build_welcome_email(name)
-    return _send_email_smtp(email, subject, html, log_kind="boas_vindas")
+    subject, html = _build_welcome_email(name, falta_cadastro, link_cadastro)
+    return _send_email_smtp(
+        email, subject, html,
+        log_kind="boas_vindas_cadastro" if falta_cadastro else "boas_vindas")
 
 
 def _generate_magic_link(email: str, redirect_to: str = "https://ai.arq.br/login.html") -> str:
@@ -10859,18 +10902,24 @@ async def emails_auto_tick(request: Request, dry: int = 0):
     # 🪤 Se a leitura falhar, a lista fica "cheia" (None) e o resgate é PULADO
     # neste tick — melhor não mandar do que mandar boas-vindas repetido.
     emails_com_welcome: set[str] = set()
+    # quem recebeu a versão COMBINADA (boas-vindas + "falta terminar o cadastro")
+    emails_com_welcome_cadastro: set[str] = set()
     _welcome_ok = True
     try:
         # 🚨 25/08: mesma mentira do `limit=5000`. Esta lista e a trava contra
         # boas-vindas repetido — cortada em mil, o cliente recebe de novo.
         _stw, _jaforam = _supa_rest_tudo(
             "email_sent_log",
-            params={"select": "email", "kind": "eq.boas_vindas"}, timeout=15)
+            params={"select": "email,kind",
+                    "kind": "in.(boas_vindas,boas_vindas_cadastro)"}, timeout=15)
         if _stw != 200:
             raise RuntimeError("email_sent_log HTTP %s" % _stw)
         for row in _jaforam:
             if row.get("email"):
-                emails_com_welcome.add(str(row["email"]).lower())
+                _e = str(row["email"]).lower()
+                emails_com_welcome.add(_e)
+                if row.get("kind") == "boas_vindas_cadastro":
+                    emails_com_welcome_cadastro.add(_e)
     except Exception as e:
         print(f"[emails-auto] histórico de boas-vindas falhou: {e} — pulando resgate neste tick")
         _welcome_ok = False
@@ -10929,12 +10978,25 @@ async def emails_auto_tick(request: Request, dry: int = 0):
         #    no filtro lá embaixo): como o encadeamento é elif, um candidato
         #    descartado depois bloquearia o lembrete da mesma pessoa pra sempre.
         if _welcome_ok and 3 <= idade_h and recente and email not in emails_com_welcome:
-            acoes.append({"kind": "boas_vindas", "email": email, "nome": nome})
+            # 🚨 25/08 (decisão do Pedro): quem AINDA NÃO TEM PERFIL recebe UM
+            # e-mail só — boas-vindas + "falta terminar o cadastro", com o link
+            # de 1 clique. Antes eram dois: o welcome em 3h e o lembrete só 7
+            # DIAS depois, porque o teto de 1 automático por semana segurava.
+            # Medido: 12 pessoas reais com conta e sem perfil, cada uma
+            # esperando uma semana pela ÚNICA mensagem que destrava.
+            # 🔑 O teto semanal existe pra marketing. Este lembrete não é
+            # marketing: sem ele a conta não funciona.
+            acoes.append({"kind": "boas_vindas_cadastro" if not tem_perfil else "boas_vindas",
+                          "email": email, "nome": nome})
         # 1) Parou ANTES de completar o cadastro (sem perfil). Vale tanto pra
         #    quem não confirmou o e-mail quanto pra quem confirmou, logou e
         #    abandonou a segunda etapa — que é o caso real que estava passando
         #    batido. 24h de espera pra não cutucar quem ainda está preenchendo.
-        elif not tem_perfil and 24 <= idade_h and recente_cadastro:
+        # 🪤 `email not in emails_com_welcome_cadastro`: quem já recebeu o
+        # combinado JÁ foi avisado do cadastro. Sem isto ele levaria o mesmo
+        # recado duas vezes — e o 2º chegaria 7 dias depois, parecendo cobrança.
+        elif (not tem_perfil and 24 <= idade_h and recente_cadastro
+              and email not in emails_com_welcome_cadastro):
             acoes.append({"kind": "nudge_cadastro", "email": email, "nome": nome})
         # 2) Completou o cadastro, mas nunca subiu prancha.
         elif tem_perfil and confirmado and 48 <= idade_h and recente and email not in proj_by_email:
@@ -11158,6 +11220,11 @@ async def emails_auto_tick(request: Request, dry: int = 0):
         try:
             if a["kind"] == "boas_vindas":
                 ok = _send_welcome_email(a["email"], a["nome"])
+            elif a["kind"] == "boas_vindas_cadastro":
+                # o link de 1 clique é o que destrava; sem ele o e-mail ainda
+                # vale (o CTA cai no cadastro.html), então não aborta
+                ok = _send_welcome_email(a["email"], a["nome"], falta_cadastro=True,
+                                         link_cadastro=_generate_magic_link(a["email"]))
             elif a["kind"] in ("nudge_cadastro", "nudge_onboarding"):
                 link = _generate_magic_link(a["email"])
                 if link:
