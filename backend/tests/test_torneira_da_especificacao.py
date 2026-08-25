@@ -300,6 +300,49 @@ def test_marca_sai_inteira_e_so_ela(descricao, marca):
     assert extrair_spec(descricao)["marca"] == marca
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 Uma grafia só por empresa — achado NO BANCO, depois de gravar os 556
+# ══════════════════════════════════════════════════════════════════════════
+#  O caderno saiu com "Laav" (7 itens) e "LAAV" (1) como se fossem dois
+#  fornecedores, e com "Sherwin" (5) — a Sherwin-Williams cortada, porque o
+#  projeto escreveu com espaço em vez de hífen e a lista casou só o começo.
+#
+#  🔑 O caderno serve pra PEDIR ORÇAMENTO: a mesma empresa em duas grafias faz
+#  o arquiteto pedir duas cotações pro mesmo fornecedor.
+#
+#  🪤 Eu tinha escrito num comentário, horas antes, que "Laav." e "Laav"
+#  paravam de ser duas marcas. Resolvi a parte do ponto final e não a da
+#  caixa — e só o dado gravado mostrou.
+UMA_GRAFIA_SO = [
+    ("Suporte de parede para tubulações — marca Laav. Acabamento a confirmar",
+     "Laav"),
+    ("Sistema de tubulações verticais LAAV — conjunto de tubos, marca LAAV",
+     "Laav"),
+    ("Fogão marca SUGGAR 4 bocas", "Suggar"),
+    ("Pintura epóxi cor branca, fabricante Sherwin Williams", "Sherwin-Williams"),
+    # 🪤 conector minúsculo não pode virar maiúsculo: "Arte Em Ladrilhos" não
+    # é o nome de empresa nenhuma
+    ("Revestimento concreto em barras, marca Arte em Ladrilhos",
+     "Arte em Ladrilhos"),
+]
+
+
+@pytest.mark.parametrize("descricao,marca", UMA_GRAFIA_SO)
+def test_a_mesma_empresa_sai_sempre_igual(descricao, marca):
+    from spec_extract import extrair_spec
+    assert extrair_spec(descricao)["marca"] == marca
+
+
+def test_controle_positivo_sem_normalizar_seriam_duas_marcas():
+    """🧪 Prova que o teste acima mede algo: sem o normalizador, os dois jeitos
+    de escrever LAAV produzem valores diferentes."""
+    import spec_extract as sx
+    cru = [sx._RX_FABRICANTE_DITO.search(d).group(1).strip(" .,-")
+           for d, _ in UMA_GRAFIA_SO[:2]]
+    assert cru[0] != cru[1], "as duas grafias do acervo viraram iguais sozinhas"
+    assert {sx._normaliza_grafia(c) for c in cru} == {"Laav"}
+
+
 def test_capacidade_nao_e_modelo():
     """🪤 Barrar o nome do bloco de CAD fez o extrator cair na CAPACIDADE:
     "split Hi-Wall Midea 12.000 BTU" saía com código "12.000"."""

@@ -248,12 +248,52 @@ def _marcas_no_texto(d: str):
     return [c for i, c in enumerate(brutas) if i not in fora]
 
 
+# 🚨 25/08, achado no banco DEPOIS da gravação dos 556: o caderno saiu com
+# "Laav" (7 itens) e "LAAV" (1) como se fossem dois fornecedores, e com
+# "Sherwin" (5) — que é a Sherwin-Williams cortada, porque o projeto escreveu
+# com espaço em vez de hífen e a lista só casou o primeiro pedaço.
+#
+# 🔑 O caderno serve pra PEDIR ORÇAMENTO: a mesma empresa em duas grafias faz
+# o arquiteto pedir duas cotações pro mesmo fornecedor.
+_APELIDOS = {
+    "sherwin": "Sherwin-Williams",
+    "sherwin williams": "Sherwin-Williams",
+    "termotecnica": "Termotécnica",
+}
+
+# Conectores que ficam minúsculos no meio de nome de empresa. Sem isto,
+# "Arte em Ladrilhos" viraria "Arte Em Ladrilhos".
+_CONECTORES = frozenset(("de", "do", "da", "dos", "das", "em", "e"))
+
+
+def _normaliza_grafia(nome: str) -> str:
+    """Uma grafia só por empresa.
+
+    🪤 Vale só pro nome que veio do TEXTO ("marca X"), onde a caixa é escolha
+    do arquiteto. Quem está na lista `_MARCAS` já sai com a grafia oficial.
+
+    🚫 Não é sobre acertar o logotipo da empresa — a prancha não diz isso. É
+    sobre o mesmo fornecedor não aparecer duas vezes no mesmo caderno.
+    """
+    palavras = []
+    for i, p in enumerate(str(nome or "").split()):
+        baixo = p.lower()
+        if i and baixo in _CONECTORES:
+            palavras.append(baixo)
+        else:
+            palavras.append(p[:1].upper() + p[1:].lower())
+    return " ".join(palavras)
+
+
 def _canonica(achado: str):
     """A grafia da lista, não a do texto — senão TIGRE, Tigre e tigre viram
     três marcas diferentes no caderno."""
+    baixo = str(achado or "").lower()
+    if baixo in _APELIDOS:
+        return _APELIDOS[baixo]
     for oficial in _MARCAS:
-        if oficial.lower() == achado.lower():
-            return oficial
+        if oficial.lower() == baixo:
+            return _APELIDOS.get(oficial.lower(), oficial)
     return None
 
 
@@ -352,7 +392,9 @@ def extrair_spec(descricao: str) -> dict:
     if not marca:
         m2 = _RX_FABRICANTE_DITO.search(d)
         if m2 and (_viz < 0 or m2.start() < _viz):
-            marca = m2.group(1).strip(" .,-")
+            _dito = m2.group(1).strip(" .,-")
+            # a lista tem prioridade; fora dela, uma grafia só por empresa
+            marca = _canonica(_dito) or _normaliza_grafia(_dito)
 
     codigo = None
     # 🪤 Com DUAS marcas oferecidas ("Tarkett Classy cod. 24032160 ou Santa
