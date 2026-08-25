@@ -2369,11 +2369,15 @@ def _build_welcome_email(name: str = ""):
         + _img("welcome-memorial.png", "Memorial descritivo em rascunho com campos a preencher")
         + '<span style="font-size:14px;"><b style="color:#0F172A;">Memorial descritivo (rascunho)</b> — '
         'escrito a partir dos itens do seu CAD, editável na tela, sai em Word ou PDF. '
-        'Você completa, o responsável técnico assina.</span>'
-        + _img("welcome-comparativo.png", "Comparativo de cotações de fornecedores lado a lado")
-        + '<span style="font-size:14px;"><b style="color:#0F172A;">Comparativo de cotações</b> — '
-        'suba as planilhas dos fornecedores e veja lado a lado, com comparação justa '
-        'e quem esqueceu o quê.</span><br><br>'
+        'Você completa, o responsável técnico assina.</span><br><br>'
+        # 🚨 25/08: o COMPARATIVO de cotações saiu daqui. Medido: o boas-vindas
+        # anunciou ele pra 59 pessoas e a tabela project_supplier_quotes tem
+        # ZERO linhas — nunca foi usado uma vez. E e prematuro por tres passos:
+        # exige cotacao de fornecedor pra um projeto que quem le ainda nao subiu.
+        # Ele continua existindo e vive na pagina do projeto, onde faz sentido.
+        # 🪤 Isto NAO e "cortar porque estava longo": e cortar o unico bloco que
+        # a medicao mostrou nao converter. Cronograma (9 usos) e memorial (1)
+        # ficam.
         # A linha de honestidade É a marca — vai no primeiro e-mail de propósito.
         '<div style="background:#FFF7ED;border:1px solid #fed7aa;border-radius:10px;'
         'padding:12px 14px;font-size:13px;line-height:1.55;color:#7c4a12;'

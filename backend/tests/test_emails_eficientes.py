@@ -221,3 +221,59 @@ def test_controle_o_recorte_dos_emails_nao_pegou_o_arquivo_inteiro():
     assert 2000 < len(rec) < len(src) * 0.5
     assert "Bem-vindo" in rec, "o recorte perdeu os e-mails"
     assert "NUNCA diga" not in rec, "o recorte pegou o prompt do chat"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  📏 O que cortar se decide MEDINDO, nao pelo tamanho
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 25/08. A auditoria apontou os 3 e-mails "mais longos" pra encurtar. Medindo
+# cada um antes de cortar, o resultado foi o oposto do palpite:
+#
+#  • planilha_pronta (337 palavras): NAO cortar. As 296 palavras do bloco
+#    "o que fazer agora" sao 4 acoes distintas, cada uma amarrada a uma
+#    condicao real do projeto. Medido em 109 projetos: dispara 2,1 blocos em
+#    media; so 2 projetos dispararam os 4. As 337 sao o PIOR caso, nao o normal.
+#
+#  • boas_vindas (276): cortar UM bloco — o comparativo de cotacoes. Ele foi
+#    anunciado a 59 pessoas e project_supplier_quotes tem ZERO linhas. Nunca
+#    foi usado uma vez. E e prematuro por tres passos: exige cotacao de
+#    fornecedor pra um projeto que quem le ainda nao subiu.
+#    Cronograma (9 usos) e memorial (1) ficam.
+def test_o_boas_vindas_nao_anuncia_o_comparativo():
+    """🚫 Zero usos em 59 anuncios. Cortar isso e cortar o que a medicao mostrou
+    nao converter — nao e cortar porque estava longo."""
+    from _corpo import corpo_de
+    corpo = corpo_de("_build_welcome_email")
+    assert "welcome-comparativo.png" not in corpo
+    assert "Comparativo de cota" not in corpo
+
+
+def test_mas_o_cronograma_e_o_memorial_CONTINUAM():
+    """Controle negativo: a regra e 'cortar o que nao converte', nao 'cortar'.
+    Cronograma tem 9 usos e memorial 1 — ficam."""
+    from _corpo import corpo_de
+    corpo = corpo_de("_build_welcome_email")
+    assert "Cronograma f" in corpo
+    assert "Memorial descritivo" in corpo
+
+
+def test_o_planilha_pronta_NAO_foi_encurtado():
+    """🚨 Guarda ao contrario: este e-mail e o mais longo E deve continuar. As
+    296 palavras do 'o que fazer agora' sao 4 acoes distintas, e a media medida
+    e de 2,1 blocos por projeto. Encurtar aqui tira orientacao de verdade."""
+    src = _main()
+    assert "_next_steps_html" in src
+    from _corpo import corpo_de
+    passos = corpo_de("_next_steps_html")
+    for acao in ("complemente com o CAD", "sem quantidade",
+                 "aviso de unidade", "em laranja"):
+        assert acao in passos, "sumiu um caminho do 'o que fazer agora': %s" % acao
+
+
+def test_a_linha_de_honestidade_continua_no_primeiro_email():
+    """A marca do produto e dizer de onde veio cada numero. Isso vai no PRIMEIRO
+    e-mail de proposito e nao entra em corte nenhum."""
+    from _corpo import corpo_de
+    corpo = corpo_de("_build_welcome_email")
+    assert "cada n" in corpo and "de onde veio" in corpo
