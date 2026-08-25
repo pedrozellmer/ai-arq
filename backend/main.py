@@ -767,7 +767,12 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
         # mas ler o pai PELA METADE quebraria a regra dura nº7 em silencio.
         _st_i, _linhas = _supa_rest_tudo("project_items", params={
             "job_id": f"eq.{parent_job_id}",
-            "select": "id,description,unit,quantity,observations,confidence"})
+            # 🚨 25/08: as 4 do caderno entraram no SELECT. Sem elas a fusão
+            # não tinha como devolver a especificação do pai — e o filhote
+            # nasceria com a marca que o regex acha, por cima da que o cliente
+            # escolheu. Regra dura nº7.
+            "select": "id,description,unit,quantity,observations,confidence,"
+                      "marca,codigo_fabricante,cor,spec_origem"})
     except Exception as _ei:
         _st_i, _linhas = 0, None
         print(f"[fusao-revisao] nao consegui ler os itens do pai: {_ei}")
@@ -914,6 +919,19 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
                 alvo.confidence = _CfC(c["confidence"])
             except Exception:
                 alvo.confidence = _CfC.ESTIMADO
+        # 🚨 REGRA nº7 pro caderno de acabamentos: o que o CLIENTE especificou
+        # volta por cima da leitura nova. Se a procedência do pai for `lido`,
+        # deixa a leitura nova — ela pode ser melhor que a de ontem (e hoje é:
+        # o extrator mudou 5 vezes só neste dia).
+        # 🪤 O teste `_orig.startswith("cliente")` e não `== "cliente"`: quando
+        # existir "cliente:sugerido" ou parecido, continua valendo.
+        _orig = str(c.get("spec_origem") or "")
+        if _orig.startswith("cliente"):
+            alvo.marca = c.get("marca") or ""
+            alvo.codigo_fabricante = c.get("codigo_fabricante") or ""
+            alvo.cor = c.get("cor") or ""
+            alvo.spec_origem = _orig
+
         _obs = (c["observations"] or "").strip()
         _sel = ("✏️ QUANTIDADE CORRIGIDA POR VOCÊ — não é medida do CAD. "
                 if _digitou else "✏️ REVISADO POR VOCÊ — ")
@@ -982,8 +1000,13 @@ def _fundir_revisoes_do_cliente(items: list, parent_job_id: str):
     return items, resumo
 
 
+# 🚨 25/08: as 4 do caderno entraram aqui. `project_items_versoes` é a ÚNICA
+# cópia que sobra depois do DELETE+INSERT do reprocessamento — sem elas, a
+# especificação (inclusive a que o cliente vai digitar) não tinha pra onde
+# voltar. Migração `versoes_guardam_a_especificacao`, colunas anuláveis.
 _CAMPOS_ITEM_VERSAO = ("item_num", "description", "unit", "quantity", "observations",
-                       "ref_sheet", "confidence", "discipline", "section", "sort_order")
+                       "ref_sheet", "confidence", "discipline", "section", "sort_order",
+                       "marca", "codigo_fabricante", "cor", "spec_origem")
 
 
 def _arquivar_versao_anterior(job_id: str) -> dict:
@@ -1133,7 +1156,10 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
             # 🚨 So le o texto do PROPRIO projeto: nada de catalogo (regra n2),
             # nada de preco (regra n5). E codigo so sai quando ha MARCA junto,
             # senao "cod. JA04" (tag do quadro de esquadrias) viraria SKU.
-            **_spec_campos(getattr(it, "description", "")),
+            # 🚨 `_spec_do_item` e nao `_spec_campos`: o que o objeto ja
+            # carrega manda sobre o regex. Sem isso, reprocessar apaga o que o
+            # cliente digitou no caderno — regra dura nº7.
+            **_spec_do_item(it),
             "discipline": disc,
             "section": section,
             "sort_order": idx,
@@ -1160,6 +1186,23 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
     # (0 itens/erro) NÃO destrói a planilha anterior — crítico pro /add-file (troca
     # PDF→CAD sem risco de perder o estimado). Idempotente pro run normal (1º upload
     # não tem itens; job filho de reprocesso usa job_id novo → delete é no-op).
+    # ══════════════════════════════════════════════════════════════════════
+    #  🚨 REGRA nº7 — o que o CLIENTE especificou atravessa o DELETE
+    # ══════════════════════════════════════════════════════════════════════
+    # O `/add-file` reprocessa no MESMO job_id: apaga todas as linhas e insere
+    # de novo. A fusão de revisões só roda no caminho do filhote (que usa
+    # job_id NOVO), então aqui não havia nada segurando a especificação — os
+    # objetos novos nascem sem ela e o `_spec_do_item` não tem o que preservar.
+    #
+    # Efeito no dia em que a tela do caderno existir: o cliente especifica 30
+    # itens, anexa uma prancha, e perde os 30 — calado, com e-mail de "planilha
+    # atualizada". Por isso o resgate é aqui, não na tela.
+    #
+    # 🪤 Casa por DESCRIÇÃO normalizada porque não há chave estável: `item_num`
+    # é sequencial e muda a cada leitura, e o `id` é UUID novo. O que não casar
+    # vai pro log — nunca some calado.
+    _guardados = _spec_do_cliente_antes_do_swap(job_id)
+
     try:
         _del = urllib.request.Request(
             f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}", method='DELETE')
@@ -1168,6 +1211,8 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
         urllib.request.urlopen(_del, timeout=20)
     except Exception as _de:
         _supa_log(f"PERSIST pre-delete job={job_id} WARN (segue pro insert): {_de}")
+
+    _devolver_spec_do_cliente(rows, _guardados, job_id)
 
     # Batch insert — REST do Supabase aceita array
     try:
@@ -1813,6 +1858,94 @@ def _carimbar_spec(itens) -> int:
     if n:
         print(f"[spec] especificacao carimbada em {n} item(ns)")
     return n
+
+
+def _spec_do_cliente_antes_do_swap(job_id: str) -> dict:
+    """O que o CLIENTE especificou, indexado por descrição normalizada.
+
+    Chamado ANTES do DELETE do reprocessamento. Só as linhas com procedência
+    `cliente*`: o que o motor leu não precisa ser resgatado, a leitura nova
+    refaz — e pode refazer melhor.
+
+    🚨 NUNCA levanta: perder o resgate é ruim, não entregar a planilha é pior.
+    """
+    guardados = {}
+    try:
+        _st, antigas = _supa_rest_tudo("project_items", params={
+            "job_id": f"eq.{job_id}", "spec_origem": "like.cliente*",
+            "select": "description,marca,codigo_fabricante,cor,spec_origem"})
+        if _st != 200:
+            print(f"[spec] leitura pre-swap job={job_id} devolveu HTTP {_st}")
+            return {}
+        for a in (antigas or []):
+            k = _norm_desc(a.get("description"))
+            if k:
+                guardados[k] = a
+    except Exception as e:
+        print(f"[spec] nao li a especificacao do cliente antes do swap: {e}")
+    return guardados
+
+
+def _devolver_spec_do_cliente(rows: list, guardados: dict, job_id: str) -> tuple:
+    """Devolve pras linhas NOVAS a especificação que o cliente tinha escrito.
+
+    🪤 Casa por DESCRIÇÃO normalizada porque não existe chave estável entre
+    duas leituras: `item_num` é sequencial e muda, o `id` é UUID novo.
+
+    🚨 O que não casar vai pro `error_log` como CRÍTICO. Resgate que perde
+    linha em silêncio é pior que resgate nenhum: some sem ninguém saber, e o
+    cliente ainda recebe "planilha atualizada".
+    """
+    if not guardados:
+        return (0, 0)
+    casou = 0
+    for r in rows:
+        g = guardados.get(_norm_desc(r.get("description")))
+        if not g:
+            continue
+        r["marca"] = g.get("marca")
+        r["codigo_fabricante"] = g.get("codigo_fabricante")
+        r["cor"] = g.get("cor")
+        r["spec_origem"] = g.get("spec_origem")
+        casou += 1
+    perdidos = len(guardados) - casou
+    try:
+        _log_error(
+            "motor:spec-cliente-atravessou-o-swap",
+            f"devolvi {casou} de {len(guardados)} especificacoes do cliente "
+            f"depois do reprocesso" +
+            (f" — {perdidos} NAO casaram por descricao e se perderam"
+             if perdidos else ""),
+            job_id, severity="critical" if perdidos else "info")
+    except Exception:
+        pass
+    return (casou, perdidos)
+
+
+def _spec_do_item(it) -> dict:
+    """As 4 colunas do caderno pro INSERT, com o OBJETO na frente do regex.
+
+    🚨 REGRA nº7. O insert chamava `_spec_campos(it.description)`, ou seja,
+    re-extraía tudo do texto e **ignorava** o que o objeto já carregava. Hoje
+    isso é invisível porque só o motor escreve spec — mas no dia em que o
+    cliente digitar a marca dele no caderno, qualquer reprocessamento
+    devolveria a marca que o REGEX acha e apagaria a escolha dele, calado.
+
+    A ordem é: se a linha já tem procedência (`spec_origem`), ela manda. Só
+    quando não tem é que a gente lê o texto.
+
+    🪤 A guarda é o `spec_origem`, não o `marca`: 222 dos 556 itens do acervo
+    têm especificação só com COR, e olhar marca deixaria esses de fora.
+    """
+    ja = {
+        "marca": (getattr(it, "marca", "") or "").strip() or None,
+        "codigo_fabricante": (getattr(it, "codigo_fabricante", "") or "").strip() or None,
+        "cor": (getattr(it, "cor", "") or "").strip() or None,
+        "spec_origem": (getattr(it, "spec_origem", "") or "").strip() or None,
+    }
+    if ja["spec_origem"]:
+        return ja
+    return _spec_campos(getattr(it, "description", ""))
 
 
 def _spec_campos(descricao) -> dict:

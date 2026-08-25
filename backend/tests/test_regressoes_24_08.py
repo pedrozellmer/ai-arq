@@ -225,8 +225,22 @@ def test_a_fusao_le_os_valores_do_project_items_do_pai():
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i = src.index("def _fundir_revisoes_do_cliente")
     corpo = src[i:src.index("_CAMPOS_ITEM_VERSAO", i)]
-    assert '"select": "id,description,unit,quantity,observations,confidence"' in corpo, (
-        "a fusão parou de ler os itens do pai — voltou a confiar no payload cru")
+    # 🪤 25/08: aqui a asserção era a STRING EXATA do select. Ela quebrou no dia
+    # em que a fusão passou a ler TAMBÉM marca/codigo/cor/spec_origem — ou
+    # seja, quebrou porque melhorou. O que o guarda quer dizer é "a fusão lê os
+    # VALORES do pai em vez de confiar no payload do navegador"; então é isso
+    # que ele confere, e campo novo no select não derruba mais nada.
+    # 🪤 O primeiro `"select"` da função é o de `item_reviews` — ancorar nele
+    # mediria a leitura errada. O que interessa é a de `project_items`.
+    # 🪤 E a janela de N caracteres me pegou DE NOVO aqui: 400 chars não
+    # alcançavam o fim do select depois que um comentário entrou no meio do
+    # dicionário. A janela certa é a que termina onde a CHAMADA termina.
+    _i_sel = corpo.index('"project_items"')
+    _texto_sel = corpo[_i_sel:corpo.index("})", _i_sel)]
+    for _campo in ("quantity", "unit", "confidence", "observations"):
+        assert _campo in _texto_sel, (
+            "a fusão parou de ler `%s` do pai — voltou a confiar no payload "
+            "cru do navegador" % _campo)
     assert '_atuais = {str((l or {}).get("id")): l' in corpo, (
         "a fusão parou de indexar os itens do pai por id")
     assert '"_antes"' in corpo, (
