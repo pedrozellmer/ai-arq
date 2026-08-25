@@ -120,11 +120,43 @@ def test_a_rede_so_REBAIXA_nunca_promove():
 
 
 def test_a_rede_esta_ligada_no_process_job():
+    """🚨 25/08 (auditoria): a versão anterior deste guarda passava VERDE com a
+    rede NUNCA sendo chamada. Ela conferia que o import existia e que 4 strings
+    apareciam numa janela de 1400 chars — nada disso prova execução.
+
+    É a defesa da REGRA DURA Nº1, a mais importante do produto, e dava pra
+    desligá-la sem nenhum teste reclamar. Sabotagem que provou: trocar
+    `_ssg(all_items)` por `(lambda *a, **k: [])(all_items)` → 8 testes passaram.
+
+    🪤 Mesmo erro do guarda da ordenação de e-mails, no mesmo dia: conferir que
+    a função EXISTE em vez de conferir que ela é CHAMADA e que o resultado é
+    USADO."""
     import io
+    import re
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    assert "selos_sem_geometria as _ssg" in src, "a rede existe mas não roda"
-    i = src.index("selos_sem_geometria as _ssg")
+    assert "selos_sem_geometria as _ssg" in src, "a rede nem é importada"
+
+    # 1. é CHAMADA, com os itens do projeto
+    assert re.search(r"_sem_geo\s*=\s*_ssg\(\s*all_items\s*\)", src), (
+        "a rede não é chamada com all_items — foi assim que a sabotagem passou")
+    # 2. o resultado é PERCORRIDO pelo laço que REBAIXA — e só ele conta.
+    # 🪤 A 1ª versão deste guarda procurava "for X in _sem_geo" em TODO o
+    # arquivo, e casava com `for x in _sem_geo[:4]` de DENTRO da mensagem de
+    # log. Trocar o laço de verdade por `for _a in []` passava verde, porque o
+    # laço do log continuava lá. Guarda tem que olhar o trecho que AGE.
+    i = src.index("_sem_geo = _ssg(")
+    j = src.index("motor:selo-sem-geometria", i)
+    age = src[i:j]                      # só o que roda ANTES do log
+    assert re.search(r"for\s+\w+\s+in\s+_sem_geo\s*:", age), (
+        "o resultado da rede não é percorrido pelo laço que rebaixa — foi assim "
+        "que a sabotagem passou")
+    # 3. o que ela aponta é REBAIXADO, nunca promovido.
+    # 🪤 Aqui eu me enrolei: usei o MESMO trecho (que vai só até o log) pra
+    # depois exigir que o log estivesse dentro dele — impossível por
+    # construção, e o guarda reprovava o código CERTO. Duas perguntas
+    # diferentes pedem duas janelas diferentes.
     trecho = src[i:i + 1400]
     assert "_CfG.ESTIMADO" in trecho, "não rebaixa o selo"
+    assert "_CfG.CONFIRMADO" not in trecho, "🚨 a rede está PROMOVENDO"
     assert "motor:selo-sem-geometria" in trecho, "não deixa rastro no log"
     assert "LIDO de um texto da prancha" in trecho, "não explica ao cliente"

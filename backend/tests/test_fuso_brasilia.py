@@ -70,18 +70,39 @@ def test_a_newsletter_nao_tem_mais_a_conta_de_fuso_copiada():
         "divergem depois")
 
 
-def test_o_offset_e_3h_sem_horario_de_verao():
-    """O Brasil aboliu o horário de verão em 2019; -3 vale o ano inteiro. Se um
-    dia voltar, este teste é o lugar de descobrir."""
+def _agora_br_de_verdade():
+    """Carrega a função de PRODUÇÃO, sem subir o app inteiro."""
     src = _main()
     i = src.index("def _agora_br_fn():")
-    corpo = src[i:i + 1400]
-    assert "timedelta(hours=3)" in corpo.replace("_t(hours=3)", "timedelta(hours=3)")
+    nl = chr(10)
+    j = min(x for x in (src.find(nl + "def ", i + 10), src.find(nl + "@app.", i + 10)) if x > 0)
+    ns = {}
+    exec(compile(src[i:j], "fuso", "exec"), ns)
+    return ns["_agora_br_fn"]
 
 
-def test_controle_a_conta_bate_com_o_esperado():
-    """Controle positivo do sentido: Brasília está ATRÁS de UTC, não à frente.
-    Somar em vez de subtrair daria 6h de erro e passaria despercebido."""
-    utc = datetime(2026, 8, 25, 1, 15, 0)     # 01:15 UTC
-    br = utc - timedelta(hours=3)
-    assert br.day == 24 and br.hour == 22, "a conversão inverteu o sinal"
+def test_o_offset_e_3h_PARA_TRAS_medido_na_funcao_real():
+    """🚨 A 1ª versão deste teste conferia se o TEXTO 'timedelta(hours=3)' estava
+    no corpo — verdade tanto pra menos quanto pra MAIS. Invertendo o sinal em
+    produção (o erro de 6h), os 7 testes deste arquivo passavam verde.
+
+    E o 'controle positivo' que eu tinha escrito era pior: ele fazia a conta
+    DENTRO do teste e conferia a si mesmo, sem tocar na função de produção.
+
+    Agora mede o EFEITO da função real: Brasília está ATRÁS de UTC."""
+    from datetime import datetime as _dt
+    br = _agora_br_de_verdade()()
+    delta = (_dt.utcnow() - br).total_seconds()
+    assert 3 * 3600 - 60 < delta < 3 * 3600 + 60, (
+        "a função devolve %.1f h de diferença de UTC — Brasília é UTC-3, e "
+        "somar em vez de subtrair dá 6h de erro" % (delta / 3600))
+
+
+def test_controle_positivo_a_sabotagem_seria_pega():
+    """Prova que o teste acima reprova: a mesma conta com o sinal trocado tem
+    que sair FORA da janela aceita."""
+    from datetime import datetime as _dt, timedelta as _td
+    errado = _dt.utcnow() + _td(hours=3)
+    delta = (_dt.utcnow() - errado).total_seconds()
+    assert not (3 * 3600 - 60 < delta < 3 * 3600 + 60), (
+        "a janela do teste aceita o sinal invertido — ele não guarda nada")
