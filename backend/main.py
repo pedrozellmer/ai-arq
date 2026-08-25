@@ -1768,9 +1768,16 @@ def _carimbar_spec(itens) -> int:
     """
     n = 0
     try:
-        from spec_extract import extrair_spec, spec_origem
+        from spec_extract import extrair_spec, spec_origem, LIBERADO_PRO_CLIENTE
     except Exception as _e:
         print(f"[spec] carimbo indisponivel (nao-fatal): {type(_e).__name__}: {_e}")
+        return 0
+    # 🚨 25/08: a auditoria mediu 127 dos 361 itens (35%) saindo com marca,
+    # codigo ou cor que o arquiteto NAO escreveu pra aquele item. Ate isso
+    # zerar, a planilha do cliente sai com a coluna ESPECIFICACAO vazia — que e
+    # o estado honesto. Ver `LIBERADO_PRO_CLIENTE` em spec_extract.py.
+    if not LIBERADO_PRO_CLIENTE:
+        print("[spec] carimbo DESLIGADO pro cliente (extrator em conserto)")
         return 0
     for it in itens or []:
         try:
@@ -1796,7 +1803,12 @@ def _spec_campos(descricao) -> dict:
     de proposito: se o extrator quebrar, o item continua sendo gravado sem
     especificacao — nunca ao contrario."""
     try:
-        from spec_extract import extrair_spec, spec_origem
+        from spec_extract import extrair_spec, spec_origem, LIBERADO_PRO_CLIENTE
+        # 🚨 25/08: mesma trava do `_carimbar_spec`. Nao adianta esconder a
+        # coluna da planilha e gravar o erro no banco — a tela de revisao le
+        # dali, e apagar depois e trabalho na mao.
+        if not LIBERADO_PRO_CLIENTE:
+            return {}
         sp = extrair_spec(descricao)
         return {"marca": sp["marca"], "codigo_fabricante": sp["codigo"],
                 "cor": sp["cor"], "spec_origem": spec_origem(sp) or None}

@@ -194,6 +194,32 @@ def extrair_spec(descricao: str) -> dict:
     return {"marca": marca, "codigo": codigo, "cor": cor}
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 TORNEIRA FECHADA — 25/08/2026
+# ══════════════════════════════════════════════════════════════════════════
+# A auditoria de hoje rodou este extrator sobre as 338 descrições reais do
+# acervo: dos 361 itens que ele marcaria, **127 (35%) levam informação que o
+# arquiteto NÃO escreveu pra aquele item**. Os quatro defeitos, medidos:
+#
+#   72 itens — "Knauf/Placo ou similar", "Deca ou equivalente", 4 marcas
+#              oferecidas: sai UMA, como se fosse decisão tomada. O projeto
+#              deixou a concorrência aberta de propósito e o caderno fecha.
+#   30 itens — rejunte/argamassa/massa/perfil herdam a marca do acabamento que
+#              eles só servem: "Rejunte para porcelanato ... Biancogres" vira
+#              rejunte marca Biancogres, e a Biancogres não faz rejunte.
+#   17 itens — norma e bitola viram SKU: "Montal · NBR-5419", "Tigre · DN40".
+#   13 itens — cor cortada: "cor CINZA DE GRIFE" sai "CINZA".
+#
+# 🔑 Enquanto isso não estiver consertado, o carimbo NÃO vai pro cliente. Campo
+# vazio é honesto; campo com cara de especificação e conteúdo errado vira
+# pedido de orçamento errado — o caderno existe pra ser MANDADO pro fornecedor.
+# É a regra dura nº1 aplicada à especificação: na dúvida, não afirmar.
+#
+# 🪤 A trava é só do lado do CLIENTE. A simulação do admin continua rodando o
+# extrator inteiro — é ela que mede se o conserto funcionou.
+LIBERADO_PRO_CLIENTE = False
+
+
 def spec_origem(spec: dict) -> str:
     """De onde veio a especificação. Mesma disciplina do medido/estimado:
     quem lê a planilha precisa saber se aquilo o arquiteto escreveu ou se
