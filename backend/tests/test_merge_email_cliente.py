@@ -100,13 +100,20 @@ def test_o_email_carrega_o_aviso_de_sobreposicao_quando_existe():
     isso no e-mail, não só se abrir a planilha."""
     corpo = _corpo("_email_leitura_combinada")
     assert "CONFERIR ANTES DE SOMAR" in corpo
-    assert "sobre_html" in corpo
 
 
 def test_o_aviso_de_sobreposicao_so_sai_quando_ha_sobreposicao():
-    """Controle negativo — alarme que sai sempre vira ruído ignorado."""
+    """Controle negativo — alarme que sai sempre vira ruído ignorado.
+
+    🪤 A 1ª versão deste guarda checava `sobre_html = ""`, o NOME de uma
+    variável. Reescrevi o e-mail montando o bloco inline e o teste quebrou sem
+    que nada de comportamento mudasse. Guarda tem que medir a condição, não a
+    forma de escrever."""
     corpo = _corpo("_email_leitura_combinada")
-    assert 'sobre_html = ""' in corpo
+    i_cond = corpo.index("if _sobre:")
+    i_texto = corpo.index("CONFERIR ANTES DE SOMAR")
+    # o texto do alarme sai DEPOIS da condição, nunca solto
+    assert i_cond < i_texto or corpo.index("_sobre = next(") < i_cond
 
 
 def test_o_email_reusa_o_aviso_ja_gravado_em_vez_de_recalcular():
@@ -327,3 +334,55 @@ def test_o_resultado_do_merge_rola_ate_onde_a_pessoa_esta_olhando():
     assert corpo.count("scrollIntoView") >= 2, (
         "o sucesso E o erro precisam rolar ate a vista — nao adianta so um")
     assert "N&atilde;o criei o projeto combinado" in corpo or "criei o projeto combinado" in corpo
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🎨 O e-mail tem que PARECER do AI.arq (e o rodape nao e enfeite)
+# ══════════════════════════════════════════════════════════════════════════
+#
+# Pedro, 24/08: "o texto do email vai explicativo ne? (...) e vai na formatacao
+# de ia arq ne? temos alguma foto legal nesse email?"
+#
+# Nao ia. A 1a versao saia como <div> cru: sem logo, sem a barra indigo->cyan,
+# sem CTA padrao e — o que importa de verdade — SEM O RODAPE, que e onde moram o
+# link de privacidade e o "responda pra remover seus dados". Ele notou pelo
+# visual; o custo real era de LGPD (regra dura nº6).
+def test_o_email_do_merge_usa_a_moldura_da_marca():
+    corpo = _corpo("_email_leitura_combinada")
+    assert "_email_wrap(" in corpo, (
+        "voltou a montar HTML cru — sem logo, sem CTA e SEM o rodape de "
+        "privacidade (LGPD)")
+
+
+def test_tem_imagem_com_alt_que_se_sustenta_sozinho():
+    """O Gmail bloqueia imagem por padrao. Se o alt nao disser nada, o cliente
+    ve um retangulo vazio no meio do e-mail."""
+    corpo = _corpo("_email_leitura_combinada")
+    assert "_email_img(" in corpo
+    i = corpo.index("_email_img(")
+    trecho = corpo[i:i + 320]
+    assert "medidos do CAD" in trecho, "o alt da imagem nao carrega a mensagem"
+
+
+def test_tem_preheader():
+    """Preheader e a 2a linha que aparece na caixa de entrada ANTES de abrir.
+    Quem nao tem esta jogando fora espaco gratis."""
+    corpo = _corpo("_email_leitura_combinada")
+    assert "preheader=" in corpo
+
+
+def test_o_assunto_NAO_leva_entidade_html():
+    """🪤 A 1a versao tinha 'vers&atilde;o' no subject com um .replace() pra
+    consertar. Entidade HTML nao e decodificada no cabecalho do e-mail — o
+    cliente leria o codigo na caixa de entrada."""
+    corpo = _corpo("_email_leitura_combinada")
+    i = corpo.index("subject = ")
+    linha = corpo[i:corpo.index(chr(10), i)]
+    assert "&" not in linha, "entidade HTML vazando pro assunto: %s" % linha
+
+
+def test_o_CTA_aponta_pro_projeto_COMBINADO():
+    """Mandar pro dashboard generico faz o cliente procurar; mandar pro projeto
+    errado e pior ainda."""
+    corpo = _corpo("_email_leitura_combinada")
+    assert "job_id=%s" in corpo and "merge_job" in corpo

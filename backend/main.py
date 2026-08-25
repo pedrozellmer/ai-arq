@@ -17667,29 +17667,35 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
     """Avisa o cliente de que existe uma versão COMBINADA do projeto dele.
 
     Pedro, 24/08/2026: *"e como esse merge aparecia pro cliente? vai um email
-    automático tb pra ele explicando? acho que vale hein"*.
+    automático tb pra ele explicando? acho que vale hein"* e, logo depois:
+    *"o texto do email vai explicativo né? (...) e vai na formatação de ia arq
+    ne? temos alguma foto legal nesse email?"*
 
-    🚨 POR QUE NÃO REUSAR `_email_leitura_nova`: aquele e-mail diz "melhoramos o
-    motor e REFIZEMOS a leitura do seu projeto". Num merge isso é falso — a
-    gente não releu nada. Juntou, prancha por prancha, o melhor de DUAS leituras
-    que já existiam. Mandar o texto errado ensinaria o cliente a desconfiar do
-    que a gente escreve, que é o ativo mais caro que temos.
+    🚨 POR QUE NÃO REUSAR `_email_leitura_nova`: aquele diz "melhoramos o motor e
+    REFIZEMOS a leitura do seu projeto". Num merge isso é falso — a gente não
+    releu nada, juntou o melhor de DUAS leituras que já existiam. Texto errado
+    ensina o cliente a desconfiar do que a gente escreve.
 
-    O que este e-mail precisa dizer, e diz:
+    🪤 A 1ª versão deste e-mail saía como `<div>` cru: sem logo, sem a barra
+    indigo→cyan, sem CTA padrão e — o que importa de verdade — SEM O RODAPÉ, que
+    é onde moram o link de privacidade e o "responda pra remover seus dados"
+    (LGPD, regra dura nº6). O Pedro notou pelo visual; o custo real era jurídico.
+    Agora passa por `_email_wrap`, como os outros 12.
+
+    O que ele precisa dizer, e diz:
       1. o que é (combinação, não releitura) e por que existe
-      2. quanto melhorou, em medição do CAD
-      3. de qual leitura veio cada prancha — está na planilha, linha a linha
-      4. que NADA foi contado duas vezes (a pergunta que um orçamentista faz na
-         hora em que ouve "juntamos duas planilhas")
-      5. o aviso das sobreposições entre pranchas, quando houver
-      6. que a versão dele continua lá
-
-    🚫 Não manda se não melhorou: `admin_liberar_filhote` já barra isso antes.
+      2. o ganho, em MEDIÇÃO do CAD, nas duas primeiras linhas
+      3. de qual leitura veio cada prancha
+      4. que NADA foi contado duas vezes — a pergunta que um orçamentista faz no
+         segundo em que ouve "juntamos duas planilhas"
+      5. o aviso de sobreposição entre pranchas, quando houver
+      6. que a versão dele continua lá (regra dura nº7)
     """
+    import html as _hc
     email = (pai.get("user_email") or "").strip()
     if not email:
         return False
-    nome = (pai.get("user_name") or "").strip().split(" ")[0] or "Olá"
+    nome = (pai.get("user_name") or "").strip().split(" ")[0] or ""
     proj = (pai.get("project_name") or "seu projeto")[:60]
 
     ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
@@ -17697,12 +17703,13 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
 
     linhas = []
     if ganho_pr > 0:
-        linhas.append(f"<b>{ganho_pr} prancha(s) que n&atilde;o tinham entrado agora entraram</b>")
+        linhas.append("<b>%d prancha(s) que n&atilde;o tinham entrado agora entraram</b>" % ganho_pr)
     if ganho_med > 0:
-        linhas.append(f"<b>{antes.get('medidos',0)} &rarr; {depois.get('medidos',0)} "
-                      f"itens medidos direto do CAD</b>")
+        linhas.append("<b>%d &rarr; %d itens medidos direto do CAD</b>"
+                      % (antes.get("medidos", 0), depois.get("medidos", 0)))
     if depois.get("itens", 0) > antes.get("itens", 0):
-        linhas.append(f"{antes.get('itens',0)} &rarr; {depois.get('itens',0)} itens no total")
+        linhas.append("%d &rarr; %d itens no total"
+                      % (antes.get("itens", 0), depois.get("itens", 0)))
     if len(linhas) > 2:
         ganho_html = ", ".join(linhas[:-1]) + " e " + linhas[-1]
     elif linhas:
@@ -17711,52 +17718,62 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
         ganho_html = "uma leitura mais completa"
 
     # A procedência por prancha e o aviso de sobreposição já foram escritos como
-    # avisos do projeto combinado quando ele foi criado. Reaproveita em vez de
-    # recalcular: um cálculo repetido é um lugar a mais pra divergir.
+    # avisos do projeto combinado quando ele nasceu. Reaproveita em vez de
+    # recalcular: cálculo repetido é um lugar a mais pra divergir.
     _avisos = [str(w).strip() for w in (filho.get("warnings") or []) if str(w).strip()]
     _proc = next((w for w in _avisos if w.startswith("Esta planilha junta")), "")
     _sobre = next((w for w in _avisos if "CONFERIR ANTES DE SOMAR" in w), "")
 
-    proc_html = ""
+    _greet = _greeting_line(_hc.escape(nome))
+    corpo = (
+        "%s<br><br>"
+        "N&oacute;s lemos o seu projeto <b>%s</b> duas vezes, e cada leitura se saiu "
+        "melhor em pranchas diferentes. Montamos uma <b>vers&atilde;o combinada</b>: "
+        "prancha por prancha, ficou com a leitura mais completa de cada uma.<br><br>"
+        "O que voc&ecirc; ganha: %s."
+        % (_greet, _hc.escape(proj), ganho_html))
+
+    corpo += _email_img(
+        "pronta-hero.png",
+        "Planilha combinada: %d itens medidos do CAD, cada linha dizendo de qual "
+        "leitura veio" % depois.get("medidos", 0))
+
     if _proc:
-        proc_html = (f'<p style="color:#374151;font-size:14px">'
-                     f'{_hd_escape(_proc)}</p>')
-    sobre_html = ""
+        corpo += ('<div style="font-size:14px;color:#374151;line-height:1.6;'
+                  'margin:14px 0 0;">%s</div>' % _hc.escape(_proc))
+
+    corpo += (
+        '<div style="background:#F0FDF4;border-left:3px solid #16A34A;padding:10px 12px;'
+        'border-radius:6px;margin:14px 0 0;font-size:14px;color:#14532D;">'
+        "<b>Nenhuma prancha entrou duas vezes.</b> Cada prancha veio inteira de uma "
+        "&uacute;nica leitura &mdash; e na planilha, na coluna <i>Observa&ccedil;&otilde;es</i>, "
+        "cada linha diz de qual leitura ela veio.</div>")
+
     if _sobre:
-        sobre_html = (
-            f'<p style="background:#FFFBEB;border-left:3px solid #F59E0B;padding:10px 12px;'
-            f'border-radius:6px;font-size:14px">{_hd_escape(_sobre)}</p>')
+        corpo += ('<div style="background:#FFFBEB;border-left:3px solid #F59E0B;'
+                  'padding:10px 12px;border-radius:6px;margin:12px 0 0;font-size:14px;'
+                  'color:#78350F;">%s</div>' % _hc.escape(_sobre))
 
-    html = f"""<div style="font-family:Inter,Arial,sans-serif;font-size:15px;line-height:1.65;color:#1F2937;max-width:600px">
-<p>{nome}, tudo bem?</p>
-<p>N&oacute;s lemos o seu projeto &ldquo;{_hd_escape(proj)}&rdquo; <b>duas vezes</b>, e cada
-leitura se saiu melhor em pranchas diferentes. Ent&atilde;o montamos uma
-<b>vers&atilde;o combinada</b>: prancha por prancha, ficou com a leitura mais completa
-de cada uma.</p>
-<p>O que voc&ecirc; ganha com ela: {ganho_html}.</p>
-{proc_html}
-<p><b>Nenhuma prancha entrou duas vezes.</b> Cada prancha veio inteira de uma
-&uacute;nica leitura &mdash; e na planilha, na coluna <i>Observa&ccedil;&otilde;es</i>, cada linha diz de
-qual leitura ela veio.</p>
-{sobre_html}
-<p style="margin:22px 0">
-  <a href="https://ai.arq.br/dashboard.html" style="background:#4F46E5;color:#fff;
-     padding:12px 20px;border-radius:10px;text-decoration:none;font-weight:600;
-     display:inline-block">Ver a vers&atilde;o combinada</a></p>
-<p style="color:#6B7280;font-size:13px"><b>A sua vers&atilde;o original continua no painel</b>,
-ao lado desta &mdash; voc&ecirc; compara e usa a que preferir. Isso n&atilde;o consumiu nada seu,
-e continua tudo gr&aacute;tis no beta.</p>
-<p>Abra&ccedil;o,<br>Pedro Zellmer<br>
-<span style="color:#6B7280">AI.arq &mdash; <a href="https://ai.arq.br" style="color:#4F46E5;text-decoration:none">ai.arq.br</a></span></p>
-</div>"""
-    return _send_email_smtp(
-        email, f"Uma vers&atilde;o mais completa do seu projeto — {proj}".replace("&atilde;", "ã"),
-        html, log_kind="leitura_combinada")
+    corpo += (
+        '<div style="font-size:13px;color:#6B7280;line-height:1.6;margin:16px 0 0;">'
+        "<b>A sua vers&atilde;o original continua no painel</b>, ao lado desta &mdash; "
+        "voc&ecirc; compara e usa a que preferir. Isso n&atilde;o consumiu nada seu, e "
+        "continua tudo gr&aacute;tis no beta.</div>")
 
-
-def _hd_escape(t) -> str:
-    import html as _h
-    return _h.escape(str(t or ""))
+    # 🪤 Assunto vai em TEXTO PURO. A 1ª versão tinha "vers&atilde;o" no subject
+    # com um .replace() pra consertar — entidade HTML não é decodificada no
+    # cabeçalho do e-mail e o cliente leria o código na caixa de entrada.
+    subject = "%s — uma versão mais completa do seu projeto" % (proj or "Seu projeto")
+    html = _email_wrap(
+        "Uma versão mais completa do seu projeto", corpo,
+        "Ver a versão combinada",
+        "https://ai.arq.br/projeto.html?job_id=%s" % merge_job,
+        badge="&#129516; Combinada",
+        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.",
+        preheader="%d itens medidos do CAD, contra %d na leitura anterior. "
+                  "A sua versão original continua no painel."
+                  % (depois.get("medidos", 0), antes.get("medidos", 0)))
+    return _send_email_smtp(email, subject, html, log_kind="leitura_combinada")
 
 
 def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) -> bool:
