@@ -108,7 +108,14 @@ def _especificacao_texto(item) -> str:
             partes.append(v)
     if not partes:
         return ""
-    return " \u00b7 ".join(partes)
+    texto = " \u00b7 ".join(partes)
+    # \ud83d\udd11 25/08: quando o projeto escreveu "ou similar", a marca e uma
+    # REFERENCIA, nao uma decisao. O arquiteto deixou a concorrencia aberta de
+    # proposito \u2014 some com o "(ou similar)" e o caderno fecha por ele, no
+    # documento que ele assina. Mesma disciplina do MEDIDO x ESTIMADO.
+    if str(getattr(item, "spec_origem", "") or "").endswith(":referencia"):
+        texto += " (ou similar)"
+    return texto
 
 
 def _build_ref_text(item) -> str:

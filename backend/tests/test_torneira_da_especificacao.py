@@ -89,13 +89,27 @@ def test_com_a_trava_fechada_o_carimbo_nao_poe_nada():
 #  Cada linha é um caso REAL do acervo, com o que a auditoria mediu saindo
 #  errado. São o critério de aceite: enquanto qualquer um destes falhar, a
 #  especificação não pode chegar no cliente.
+#
+#  🪤 Os 3 casos de "ou similar" MUDARAM de critério no meio do caminho e vale
+#  registrar por quê. A auditoria sugeriu duas saídas: "não afirmar marca única
+#  (ou gravar como marca de referência)". A 1ª versão daqui exigia campo VAZIO
+#  — e aí o "Cuba Deca Oval L56.17 ou equivalente" perdia um SKU que o
+#  arquiteto escreveu com todas as letras. A 2ª saída é melhor e virou o
+#  critério: a marca SAI, marcada como referência (`lido:referencia`), e a
+#  planilha escreve "(ou similar)". Some com esse rótulo e o caderno fecha uma
+#  concorrência que o projeto deixou aberta — por isso ele tem teste próprio,
+#  logo abaixo.
+EM_ABERTO = [
+    "Perfil de guia (U) e montante (C) em aço galvanizado — Knauf, Placo ou "
+    "similar aprovado pela fiscalização",
+    "Split hi-wall 12000 BTUs — Carrier ou similar",
+    "Rodapé em poliestireno 10cm — Tarkett ou Santa Luzia ou Interfloor ou "
+    "Architech",
+    "Cuba de apoio oval pequena — ref. Deca Oval L56.17 ou equivalente",
+]
+
 CASOS = [
     # (descrição, campo, o que NÃO pode sair)
-    ("Perfil de guia (U) e montante (C) em aço galvanizado — Knauf, Placo ou "
-     "similar aprovado pela fiscalização", "marca", "Knauf"),
-    ("Split hi-wall 12000 BTUs — Carrier ou similar", "marca", "Carrier"),
-    ("Rodapé em poliestireno 10cm — Tarkett ou Santa Luzia ou Interfloor ou "
-     "Architech", "marca", "Tarkett"),
     ("Rejunte para porcelanato Oregon Gray Satin 90x90cm Biancogres — cor a "
      "definir compatível com o revestimento", "marca", "Biancogres"),
     ("Argamassa colante AC-II para assentamento de porcelanato Tivoli — Eliane",
@@ -107,6 +121,58 @@ CASOS = [
     ("Tubo de esgoto Tigre DN40 em PVC branco", "codigo", "DN40"),
     ("Cabo de cobre nu 35mm² marca Termotécnica CA25", "codigo", "CA25"),
 ]
+
+
+@pytest.mark.parametrize("descricao", EM_ABERTO)
+def test_marca_em_aberto_sai_como_REFERENCIA_nunca_como_decisao(descricao):
+    """🚨 O arquiteto escreveu "ou similar" pra manter a concorrência dele
+    aberta. A marca sai — é o que o projeto diz — mas nunca como decisão."""
+    from spec_extract import extrair_spec, spec_origem
+    sp = extrair_spec(descricao)
+    assert sp["marca"], "sumiu a marca que o projeto citou em %r" % descricao[:50]
+    assert sp["aberta"] is True
+    assert spec_origem(sp) == "lido:referencia", (
+        "saiu como %r — isso vira decisão tomada no caderno que o cliente "
+        "assina" % spec_origem(sp))
+
+
+@pytest.mark.parametrize("descricao", EM_ABERTO)
+def test_a_planilha_escreve_ou_similar(descricao):
+    """🪤 O rótulo só serve se chegar na coluna que o cliente lê. Guardar no
+    banco e não mostrar seria o mesmo erro do `origem` e do `_spec_campos`:
+    escrito de um lado, lido do outro."""
+    import spreadsheet
+    from spec_extract import extrair_spec, spec_origem
+    sp = extrair_spec(descricao)
+
+    class _It:
+        marca = sp["marca"] or ""
+        codigo_fabricante = sp["codigo"] or ""
+        cor = sp["cor"] or ""
+        spec_origem = ""
+
+    _It.spec_origem = spec_origem(sp)
+    texto = spreadsheet._especificacao_texto(_It())
+    assert texto.endswith("(ou similar)"), (
+        "a coluna ESPECIFICAÇÃO saiu %r — sem o rótulo o caderno fecha a "
+        "concorrência" % texto)
+
+
+def test_marca_fechada_NAO_ganha_o_rotulo():
+    """🧪 Controle: se tudo levasse "(ou similar)", o rótulo não diria nada."""
+    import spreadsheet
+    from spec_extract import extrair_spec, spec_origem
+    sp = extrair_spec("Torneira de mesa bica móvel cromado 1167.C.LNK Deca")
+
+    class _It:
+        marca = sp["marca"] or ""
+        codigo_fabricante = sp["codigo"] or ""
+        cor = sp["cor"] or ""
+        spec_origem = ""
+
+    _It.spec_origem = spec_origem(sp)
+    assert spec_origem(sp) == "lido"
+    assert spreadsheet._especificacao_texto(_It()) == "Deca · 1167.C.LNK"
 
 
 def _erros_da_regua(extrator):

@@ -92,7 +92,16 @@ _PARA_A_COR = frozenset((
     "e", "ou", "nas", "nos", "aplicada", "aplicado", "acabamento", "ref",
     "cód", "cod", "código", "codigo", "linha", "formato", "dimensão", "dimensao",
     # 🪤 25/08: "Teste de cor in loco das amostras" saía como cor="in loco das"
-    "in", "loco", "teste", "amostra", "amostras", "definir", "escolher"))
+    "in", "loco", "teste", "amostra", "amostras", "definir", "escolher",
+    # 🪤 25/08, medindo os 44 itens que têm cor e NÃO têm marca: sobravam dois
+    # jeitos de o projeto dizer "ainda não sei" que a guarda não conhecia —
+    # "cor NÃO identificados" e "cor POR definir". Eram os 2 únicos erros dos
+    # 30 que saíam com cor.
+    "não", "nao", "por", "sem", "indefinida", "indefinido", "confirmar",
+    "especificar", "identificado", "identificados", "identificada",
+    # acabamento colado no nome da cor: "cor Branco Gelo antiderrapante"
+    "antiderrapante", "retificado", "retificada", "esmaltado", "esmaltada",
+    "polido", "polida", "acetinado", "acetinada"))
 
 # 🪤 Aceita minúscula: "cor branca" vale tanto quanto "cor Branco Neve", e
 # exigir maiúscula perdia o revestimento Eliane do acervo.
@@ -300,22 +309,36 @@ def extrair_spec(descricao: str) -> dict:
         _depois = d[achadas[0].end():achadas[0].end() + 40]
         _em_aberto = bool(_RX_OU_OUTRO_NOME.search(_depois))
 
-    if achadas and not _em_aberto:
+    _viz = _posicao_do_vizinho(d.lower())
+    if achadas:
         m = achadas[0]
         # 🚨 (2) a marca fala de OUTRO produto, que este item só serve
-        _viz = _posicao_do_vizinho(d.lower())
         if _viz < 0 or m.start() < _viz:
-            marca = _canonica(m.group(1))
+            if _em_aberto:
+                # 🔑 marca EM ABERTO não é marca omitida: é o que o projeto
+                # diz. Sai a lista inteira, na ordem do texto, marcada como
+                # REFERÊNCIA — "Knauf/Placo (ou similar)". Apagar seria jogar
+                # fora o que o arquiteto escreveu; sair só a primeira seria
+                # fechar a concorrência que ele deixou aberta.
+                _ordem = []
+                for c in achadas:
+                    nome = _canonica(c.group(1)) or c.group(1)
+                    if nome not in _ordem:
+                        _ordem.append(nome)
+                marca = "/".join(_ordem)
+            else:
+                marca = _canonica(m.group(1))
 
-    if not marca and not _em_aberto:
+    if not marca:
         m2 = _RX_FABRICANTE_DITO.search(d)
-        if m2:
-            _viz = _posicao_do_vizinho(d.lower())
-            if _viz < 0 or m2.start() < _viz:
-                marca = m2.group(1).strip(" .,-")
+        if m2 and (_viz < 0 or m2.start() < _viz):
+            marca = m2.group(1).strip(" .,-")
 
     codigo = None
-    if marca:
+    # 🪤 Com DUAS marcas oferecidas ("Tarkett Classy cod. 24032160 ou Santa
+    # Luzia mod. 466"), não dá pra saber de quem é o código. Só sai quando a
+    # marca é uma só — mesmo em aberto ("Deca Oval L56.17 ou equivalente").
+    if marca and "/" not in marca:
         candidatos = []
         for rx in (_RX_CODIGO_ROTULADO, _RX_CODIGO_SOLTO):
             for mc in rx.finditer(d):
@@ -372,7 +395,8 @@ def extrair_spec(descricao: str) -> dict:
                 _palavras.append(_w)
             cor = " ".join(_palavras)[:40] or None
 
-    return {"marca": marca, "codigo": codigo, "cor": cor}
+    return {"marca": marca, "codigo": codigo, "cor": cor,
+            "aberta": bool(marca) and _em_aberto}
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -404,5 +428,19 @@ LIBERADO_PRO_CLIENTE = False
 def spec_origem(spec: dict) -> str:
     """De onde veio a especificação. Mesma disciplina do medido/estimado:
     quem lê a planilha precisa saber se aquilo o arquiteto escreveu ou se
-    alguém sugeriu. Por ora só existe o caso 'lido'."""
-    return "lido" if (spec.get("marca") or spec.get("codigo")) else ""
+    alguém sugeriu.
+
+    🔑 `lido:referencia` é o caso "ou similar": o projeto CITOU a marca mas
+    deixou a escolha aberta de propósito. Guardar isso separado é o que impede
+    a planilha de transformar referência em decisão — e é o mesmo princípio do
+    medido × estimado, aplicado à especificação.
+
+    🚨 25/08: a COR passou a valer sozinha. Medido em 44 itens reais que têm
+    cor e não têm marca: 28 saem com cor e os 28 estão certos (Branco Gelo,
+    Branco Gatinho, Branco Kemtone, cinza escuro…); os outros 16 dão vazio
+    porque o próprio projeto diz "a definir". "Pintura cor Azul Munsell" não
+    precisa de fabricante pra ser verdade.
+    """
+    if not (spec.get("marca") or spec.get("codigo") or spec.get("cor")):
+        return ""
+    return "lido:referencia" if spec.get("aberta") else "lido"
