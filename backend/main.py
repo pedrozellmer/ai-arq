@@ -1676,6 +1676,31 @@ def _save_jobs(jobs_dict):
 # ─── Email transacional (SMTP — Google Workspace) ───────────────────
 # Configurado por env vars SMTP_* no Render. Se não estiver configurado,
 # vira no-op silencioso (loga e segue) — NUNCA derruba o fluxo que chamou.
+def _agora_br_fn():
+    """Agora no fuso de Brasília (UTC-3, sem horário de verão desde 2019).
+
+    🚨 24/08/2026, o Pedro olhando os horários que eu reportava: *"vc ta no fuso
+    errado"*. O banco grava UTC e eu vinha lendo cru — três horas de diferença
+    em tudo que eu dizia.
+
+    E o produto tinha o mesmo defeito num lugar que importa: o contador de
+    "projetos hoje" do painel filtrava pela data UTC. Entre 21:00 e a
+    meia-noite de Brasília o UTC já virou o dia seguinte, então o painel
+    mostrava só o que entrou depois das 21h e chamava aquilo de "hoje".
+    Medido no momento do conserto: 5 projetos no dia, painel mostrando 1.
+
+    🪤 A conta `now - 3h` já existia copiada inline no lembrete da newsletter.
+    Regra de fuso espalhada é regra que diverge; aqui é um lugar só.
+    """
+    from datetime import datetime as _d, timedelta as _t
+    return _d.utcnow() - _t(hours=3)
+
+
+def _hoje_br():
+    """A data de HOJE em Brasília — o que o Pedro chama de hoje."""
+    return _agora_br_fn().date()
+
+
 def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "", log_kind: str = "email") -> bool:
     host = os.getenv("SMTP_HOST", "")
     user = os.getenv("SMTP_USER", "")
@@ -10672,7 +10697,7 @@ async def emails_auto_tick(request: Request, dry: int = 0):
         from datetime import timedelta as _td_nl
         import calendar as _cal_nl
         import html as _ha_nl
-        _agora_br = now - _td_nl(hours=3)  # Brasília = UTC-3 (sem horário de verão)
+        _agora_br = _agora_br_fn()   # um lugar só sabe o fuso
         _hoje_br = _agora_br.date()
         _ult = _hoje_br.replace(day=_cal_nl.monthrange(_hoje_br.year, _hoje_br.month)[1])
         while _ult.weekday() > 4:  # 5=sábado, 6=domingo
@@ -11672,7 +11697,11 @@ async def health():
     today_count = 0
     try:
         import urllib.request, json
-        url = f"{SUPABASE_URL}/rest/v1/projects?select=id&created_at=gte.{datetime.utcnow().strftime('%Y-%m-%d')}T00:00:00"
+        # 🚨 Data de BRASÍLIA, não UTC: com UTC, entre 21h e meia-noite o
+        # contador zerava e mostrava só as últimas horas como "hoje".
+        # E o corte tem que ser 00:00 de Brasília, que em UTC é 03:00.
+        _ini_br = _hoje_br().strftime("%Y-%m-%d") + "T03:00:00"
+        url = f"{SUPABASE_URL}/rest/v1/projects?select=id&created_at=gte.{_ini_br}"
         req = urllib.request.Request(url)
         req.add_header('apikey', SUPABASE_KEY)
         req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
