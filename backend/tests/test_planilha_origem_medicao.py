@@ -75,7 +75,11 @@ def test_a_coluna_existe_com_o_nome_certo(planilha):
     for r in range(1, 30):
         if ws.cell(row=r, column=1).value == "ITEM":
             assert ws.cell(row=r, column=9).value == "ORIGEM DA MEDIÇÃO"
-            assert ws.cell(row=r, column=10).value == "REF."
+            # 24/08, mesmo dia: entrou a coluna ESPECIFICAÇÃO (marca/código/cor)
+            # e a REF andou de novo. Este guarda pegou o deslocamento — que e
+            # exatamente o que ele existe pra fazer.
+            assert ws.cell(row=r, column=10).value == "ESPECIFICAÇÃO"
+            assert ws.cell(row=r, column=11).value == "REF."
             return
     raise AssertionError("não achei o cabeçalho da planilha")
 
@@ -121,7 +125,7 @@ def test_estimado_sem_fonte_explica_em_vez_de_ficar_vazio(planilha):
 def test_a_coluna_REF_continua_funcionando_no_lugar_novo(planilha):
     ws = planilha
     r = _linha_do(ws, "Porta P80E")
-    assert "PRANCHA-01" in str(ws.cell(row=r, column=10).value or "")
+    assert "PRANCHA-01" in str(ws.cell(row=r, column=11).value or "")
 
 
 def test_o_selo_continua_na_coluna_de_observacoes(planilha):

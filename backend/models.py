@@ -38,6 +38,24 @@ class BudgetItem(BaseModel):
     # (lido pela IA numa imagem de PDF). Só 'dxf_geom' pode receber o selo
     # BRANCO/MEDIDO na planilha — Vision nunca mede geometria de verdade.
     origem: str = ""
+    # ── Caderno de acabamentos (Pedro, 24/08/2026) ────────────────────────
+    # Marca, código do fabricante e cor, tirados de dentro da descrição e
+    # postos em campo próprio. O motor JÁ extraía isso (o prompt do analyzer
+    # manda "fabricante + referência + cor") e a gente colava tudo num texto só.
+    #
+    # 🚨 `codigo_fabricante` só é preenchido quando há MARCA junto. Sem essa
+    # regra, "Janela JA04 (código JA04)" — que é tag do quadro de esquadrias do
+    # próprio projeto — viraria SKU de fabricante. Especificação errada é pior
+    # que campo vazio: o cliente manda pro fornecedor.
+    #
+    # `spec_origem`: 'lido' (o arquiteto escreveu na prancha) | 'sugerido' (nós
+    # propusemos por catálogo — ainda não existe) | 'cliente' (ele preencheu).
+    # Mesma honestidade do selo medido/estimado: sugestão nunca pode se passar
+    # por especificação do projeto.
+    marca: str = ""
+    codigo_fabricante: str = ""
+    cor: str = ""
+    spec_origem: str = ""
     discipline: str = ""
     # Matches da base SINAPI (Caixa). Preenchido pelo sinapi_matcher antes
     # da geração da planilha. Formato: lista de dicts com codigo, descricao,

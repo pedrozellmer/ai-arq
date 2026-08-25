@@ -1081,6 +1081,14 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
             # do que o motor tinha quando mediu. Foi assim que /inform-area voltou a
             # zerar e GRAVAR por cima de área com procedência.
             "origem": (str(getattr(it, "origem", "") or "") or None),
+            # Caderno de acabamentos (Pedro, 24/08): marca/codigo/cor saem de
+            # dentro do texto e vao pra campo proprio. O motor JA extrai isso
+            # (analyzer.py manda "fabricante + referencia + cor" na descricao) —
+            # aqui a gente so para de jogar a estrutura fora.
+            # 🚨 So le o texto do PROPRIO projeto: nada de catalogo (regra n2),
+            # nada de preco (regra n5). E codigo so sai quando ha MARCA junto,
+            # senao "cod. JA04" (tag do quadro de esquadrias) viraria SKU.
+            **_spec_campos(getattr(it, "description", "")),
             "discipline": disc,
             "section": section,
             "sort_order": idx,
@@ -1699,6 +1707,20 @@ def _agora_br_fn():
 def _hoje_br():
     """A data de HOJE em Brasília — o que o Pedro chama de hoje."""
     return _agora_br_fn().date()
+
+
+def _spec_campos(descricao) -> dict:
+    """Campos do caderno de acabamentos, prontos pro insert. Falha em silencio
+    de proposito: se o extrator quebrar, o item continua sendo gravado sem
+    especificacao — nunca ao contrario."""
+    try:
+        from spec_extract import extrair_spec, spec_origem
+        sp = extrair_spec(descricao)
+        return {"marca": sp["marca"], "codigo_fabricante": sp["codigo"],
+                "cor": sp["cor"], "spec_origem": spec_origem(sp) or None}
+    except Exception as _e:
+        print(f"[spec] extracao falhou (nao-fatal): {type(_e).__name__}: {_e}")
+        return {}
 
 
 def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "", log_kind: str = "email") -> bool:
@@ -18409,6 +18431,84 @@ def _merge_montar(eval_job_id: str, com_juiza: bool = True):
     revisoes = len(_rows_rev or []) if _st_rev == 200 else -1
 
     return pai, filho, ip, if_, plano, revisoes
+
+
+@app.post("/api/admin/spec-backfill")
+async def admin_spec_backfill(request: Request):
+    """Preenche marca/código/cor nos itens que JÁ existem, lendo a descrição.
+
+    Pedro, 24/08/2026: *"quando tiver o sku no projeto a gente sugere"*. O
+    primeiro passo é parar de jogar fora o que já foi extraído — o prompt do
+    motor manda a IA trazer "fabricante + referência + cor" e a gente cola tudo
+    num campo de texto só.
+
+    🚨 Roda o MESMO `spec_extract` do fluxo novo. Reimplementar a regra em SQL
+    pro histórico daria duas versões que divergem no primeiro ajuste.
+
+    🚫 O que este endpoint NÃO toca: description, quantity, unit, confidence,
+    observations. Só escreve nas 4 colunas novas, que nasceram vazias. Não há o
+    que sobrescrever, então a regra dura nº7 (nunca por cima do trabalho do
+    cliente) não corre risco.
+
+    `?dry=1` (padrão) só CONTA e mostra exemplos, sem gravar nada.
+    """
+    _require_admin(request)
+    from spec_extract import extrair_spec, spec_origem
+
+    dry = str(request.query_params.get("dry", "1")).strip() not in ("0", "nao", "false")
+    limite = min(int(request.query_params.get("limite", "9000") or 9000), 20000)
+
+    _st, itens = _supa_rest_service(
+        "GET", "project_items",
+        params={"select": "id,description,marca,spec_origem",
+                "spec_origem": "is.null", "limit": str(limite)})
+    if _st != 200:
+        raise HTTPException(502, "Não consegui ler os itens (HTTP %s)" % _st)
+    itens = itens or []
+
+    achou_marca = achou_codigo = achou_cor = 0
+    gravados = 0
+    exemplos = []
+    para_gravar = []
+    for it in itens:
+        sp = extrair_spec(it.get("description"))
+        origem = spec_origem(sp)
+        if not origem:
+            continue
+        achou_marca += 1 if sp["marca"] else 0
+        achou_codigo += 1 if sp["codigo"] else 0
+        achou_cor += 1 if sp["cor"] else 0
+        if len(exemplos) < 12:
+            exemplos.append({"descricao": str(it.get("description", ""))[:90],
+                             "marca": sp["marca"], "codigo": sp["codigo"],
+                             "cor": sp["cor"]})
+        para_gravar.append((it["id"], sp, origem))
+
+    if not dry:
+        for _id, sp, origem in para_gravar:
+            _stp, _ = _supa_rest_service(
+                "PATCH", "project_items",
+                body={"marca": sp["marca"], "codigo_fabricante": sp["codigo"],
+                      "cor": sp["cor"], "spec_origem": origem},
+                params={"id": "eq.%s" % _id}, prefer="return=minimal")
+            if _stp in (200, 204):
+                gravados += 1
+        _log_error("admin:spec-backfill",
+                   "gravei especificacao em %d de %d itens lidos "
+                   "(marca=%d codigo=%d cor=%d)"
+                   % (gravados, len(itens), achou_marca, achou_codigo, achou_cor),
+                   severity="info")
+
+    return {
+        "ok": True, "simulacao": dry,
+        "itens_lidos": len(itens),
+        "com_especificacao": len(para_gravar),
+        "com_marca": achou_marca, "com_codigo": achou_codigo, "com_cor": achou_cor,
+        "gravados": gravados,
+        "exemplos": exemplos,
+        "aviso": ("Isto foi SIMULAÇÃO — nada gravado. Repita com ?dry=0 pra valer."
+                  if dry else "Gravado."),
+    }
 
 
 @app.get("/api/admin/merge-preview/{eval_job_id}")
