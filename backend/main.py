@@ -16994,7 +16994,6 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
     """Painel de Atividade: eventos recentes + agregados (por evento, por usuário,
     ativos 7/30d). Agrega em Python — volume pequeno."""
     _require_admin(request)
-    import urllib.request as _urs
     from datetime import datetime, timedelta, timezone
     days = max(1, min(int(days or 30), 365))
     limit = max(1, min(int(limit or 200), 1000))
@@ -17055,13 +17054,14 @@ async def admin_activity(request: Request, days: int = 30, limit: int = 200):
     # 'signup_created' por conta criada na janela. Best-effort — nunca derruba o
     # painel. (feedback Pedro 21/07: um incompleto de hoje não aparecia.)
     _since_dt = datetime.now(timezone.utc) - timedelta(days=days)
+    # 🚨 25/08: aqui lia `page=1&per_page=200` e parava — só a PRIMEIRA página.
+    # São 87 contas hoje; passando de 200, as mais novas sumiriam do painel em
+    # silêncio, e são justamente elas que interessam numa janela de 30 dias.
+    # 🪤 O paginador certo já existia (`_auth_admin_list_users`, com teto de 5
+    # páginas = 1000 contas) e este ponto simplesmente não o usava — mesma
+    # família do teto de mil linhas do PostgREST, achada na mesma varredura.
     try:
-        aurl = f"{SUPABASE_URL}/auth/v1/admin/users?per_page=200&page=1"
-        areq = _urs.Request(aurl, method="GET")
-        areq.add_header("apikey", SUPABASE_KEY)
-        areq.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        _adata = _json.loads(_urs.urlopen(areq, timeout=20).read().decode("utf-8"))
-        _ausers = _adata.get("users", []) if isinstance(_adata, dict) else (_adata or [])
+        _ausers = _auth_admin_list_users()
     except Exception as _ae:
         print(f"[activity] auth users falhou (não crítico): {_ae}")
         _ausers = []
