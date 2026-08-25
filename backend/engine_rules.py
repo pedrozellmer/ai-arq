@@ -1362,14 +1362,35 @@ def merge_sobreposicoes(itens) -> list:
     for e in porto.values():
         if len(e["pranchas"]) < 2:
             continue          # numa prancha só não é dobra entre pranchas
-        soma = sum(l["quantidade"] for l in e["linhas"])
+        # 🚨 24/08, olhando a tela pela 1ª vez: o CFTV saía como
+        #   "13 em AQ-E · 9 em EL-E · 3 em EL-E · 2 em EL-E · 1 em EL-E · ..."
+        # Seis entradas da MESMA prancha — que são 6 tipos de câmera diferentes
+        # (CFTV3, CFTV8, CFTV16, CFTV4, CFTV12, DOME), não duplicata entre si.
+        # A pergunta é sempre ENTRE pranchas: "a prancha X e a Y estão mostrando
+        # o mesmo equipamento?". Somar por prancha primeiro é o que torna o
+        # número comparável — e o "somando daria" para de exagerar o alarme.
+        por_prancha = {}
+        for l in e["linhas"]:
+            d = por_prancha.setdefault(l["prancha"], {"prancha": l["prancha"],
+                                                      "quantidade": 0.0, "linhas": 0})
+            d["quantidade"] += l["quantidade"]
+            d["linhas"] += 1
+        blocos = sorted(por_prancha.values(), key=lambda d: -d["quantidade"])
+        for b in blocos:
+            b["quantidade"] = round(b["quantidade"], 2)
+        soma = sum(b["quantidade"] for b in blocos)
         saida.append({
             "codigo": e["codigo"],
             "unidade": e["unidade"],
             "pranchas": sorted(e["pranchas"]),
-            "linhas": sorted(e["linhas"], key=lambda l: -l["quantidade"]),
+            # `linhas` agora é UMA entrada por prancha — a granularidade da
+            # pergunta. O detalhe item a item continua na planilha.
+            "linhas": blocos,
             "soma_se_somar": round(soma, 2),
-            "maior_sozinho": round(max(l["quantidade"] for l in e["linhas"]), 2),
+            # 🔑 O contraste que decide: se somar dá muito mais que a maior
+            # prancha sozinha, ou são coisas diferentes ou é dobra — e é ISSO
+            # que o humano precisa olhar.
+            "maior_sozinho": round(max(b["quantidade"] for b in blocos), 2),
         })
     saida.sort(key=lambda x: -x["soma_se_somar"])
     return saida

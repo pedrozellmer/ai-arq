@@ -1917,8 +1917,10 @@ function mergeHtml(d, jobId){
           <div class="text-xs bg-white rounded p-2 border border-amber-200">
             <span class="font-mono font-semibold">${s.codigo}</span>
             <span class="text-gray-500">(${s.unidade})</span> &mdash;
-            somando daria <b>${s.soma_se_somar}</b>, maior linha sozinha <b>${s.maior_sozinho}</b>
-            <div class="text-gray-500 mt-0.5">${s.linhas.map(l => `${l.quantidade} em ${nome(l.prancha)}`).join(' &middot; ')}</div>
+            somando daria <b>${s.soma_se_somar}</b>, maior prancha sozinha <b>${s.maior_sozinho}</b>
+            <div class="text-gray-500 mt-0.5">${s.linhas.map(l =>
+                `${l.quantidade} em ${nome(l.prancha)}` + (l.linhas > 1 ? ` <span class="text-gray-400">(${l.linhas} tipos)</span>` : '')
+              ).join(' &middot; ')}</div>
           </div>`).join('')}
       </div>
     </div>` : '';

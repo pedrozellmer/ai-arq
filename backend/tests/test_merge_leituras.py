@@ -265,3 +265,58 @@ def test_nome_de_bloco_composto_vira_pedacos_e_isso_esta_ok():
     pranchas É sobreposição de verdade. Se um dia isso gerar ruído, o conserto
     é deixar '_', '.' e '-' dentro do token — não mexer na stoplist."""
     assert merge_tokens("Quadro de força — EL_QUA.FORCA — quadro elétrico") == {"FORCA", "QUA"}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🖥️ O que a tela real mostrou, e o que precisou mudar
+# ══════════════════════════════════════════════════════════════════════════
+def test_varias_linhas_da_MESMA_prancha_viram_uma_entrada():
+    """🚨 24/08, 1ª vez que o Pedro viu a tela. O CFTV saía assim:
+
+        13 em AQ-E · 9 em EL-E · 3 em EL-E · 2 em EL-E · 1 em EL-E · 1 em EL-E
+
+    Seis entradas da MESMA prancha — que são 6 tipos de câmera diferentes
+    (CFTV3, CFTV8, CFTV16, CFTV4, CFTV12, DOME), e NÃO duplicata entre si.
+
+    A pergunta da sobreposição é sempre ENTRE pranchas: "a prancha X e a Y
+    estão mostrando o mesmo equipamento?". Sem somar por prancha primeiro, o
+    alarme exagera e a linha vira ruído — e alarme ruidoso ensina a ignorar.
+    """
+    itens = [
+        _it("AQ-E.dxf", "Câmera CFTV tipo 3", 13),
+        _it("EL-E.dxf", "Câmera CFTV tipo 3 — bloco CFTV3", 9),
+        _it("EL-E.dxf", "Câmera CFTV tipo 8 — bloco CFTV8", 3),
+        _it("EL-E.dxf", "Câmera CFTV tipo 16 — bloco CFTV16", 2),
+        _it("EL-E.dxf", "Câmera CFTV tipo 4 — bloco CFTV4", 1),
+        _it("EL-E.dxf", "Câmera dome CFTV — bloco DOME", 1),
+        _it("EL-E.dxf", "Câmera CFTV tipo 12 — bloco CFTV12", 1),
+        _it("LO-E.dxf", "CFTV Sala Online", 1),
+    ]
+    s = [x for x in merge_sobreposicoes(itens) if x["codigo"] == "CFTV"][0]
+    assert len(s["linhas"]) == 3, (
+        "esperava UMA entrada por prancha (AQ-E, EL-E, LO-E), veio %d" % len(s["linhas"]))
+    porp = {l["prancha"]: l["quantidade"] for l in s["linhas"]}
+    assert porp == {"AQ-E.dxf": 13.0, "EL-E.dxf": 17.0, "LO-E.dxf": 1.0}
+
+
+def test_a_entrada_da_prancha_diz_quantas_linhas_resumiu():
+    """Sem isso, '17 em EL-E' esconde que ali são 6 tipos distintos — e o
+    orçamentista precisa saber que não é uma linha só."""
+    itens = [_it("A.dxf", "Câmera CFTV tipo 3", 9),
+             _it("A.dxf", "Câmera CFTV tipo 8", 3),
+             _it("B.dxf", "CFTV Sala", 1)]
+    s = [x for x in merge_sobreposicoes(itens) if x["codigo"] == "CFTV"][0]
+    a = [l for l in s["linhas"] if l["prancha"] == "A.dxf"][0]
+    assert a["linhas"] == 2
+
+
+def test_a_maior_prancha_sozinha_e_por_PRANCHA_nao_por_linha():
+    """🔑 É o contraste que decide: 'somando daria 31, maior prancha sozinha 17'
+    diz que há 14 unidades em risco. Com 'maior LINHA sozinha 13' o número não
+    respondia pergunta nenhuma."""
+    itens = [_it("A.dxf", "Sensor ZZZ tipo 1", 9),
+             _it("A.dxf", "Sensor ZZZ tipo 2", 8),
+             _it("B.dxf", "Sensor ZZZ geral", 15)]
+    s = [x for x in merge_sobreposicoes(itens) if x["codigo"] == "ZZZ"][0]
+    assert s["soma_se_somar"] == 32
+    assert s["maior_sozinho"] == 17, "voltou a medir a maior LINHA em vez da maior PRANCHA"
