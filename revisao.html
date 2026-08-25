@@ -587,6 +587,35 @@ function renderItem(it, localIndex) {
 // ═══════════════════════════════════════════════
 // ACTIONS
 // ═══════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════════════
+//  🚨 25/08/2026 — "Salvo" em verde quando o servidor recusou
+// ══════════════════════════════════════════════════════════════════════
+// O backend passou a devolver **502** quando a escrita não confirma
+// (main.py, `if _tentou_escrever and not _escreveu`) — e o comentário lá diz
+// "O front já está pronto: revisao.html trata !r.ok". NÃO TRATAVA.
+//
+// `authFetch` DEVOLVE a resposta e só lança em timeout: um 502 caía direto
+// no `toast.success('Salvo')`. Os quatro salvamentos de item — confirmar,
+// editar, comentar e marcar como existente — mentiam do mesmo jeito. Só a
+// aprovação em massa conferia.
+//
+// 🕳️ É a escrita que falha calada, do lado do cliente: ele corrige o número,
+// vê verde, fecha o navegador — e a correção não existe. Justo na única tela
+// onde os 10 clientes que de fato editam fazem o trabalho deles.
+//
+// 🪤 O comentário no backend descrevia a INTENÇÃO como se fosse o estado. É a
+// terceira vez hoje que um comentário meu envelhece mentindo.
+async function _salvar(url, opts) {
+  const r = await authFetch(url, opts);
+  if (r.ok) return r;
+  // o 502 do backend traz em `detail` a frase pro cliente — usa ela
+  let detalhe = '';
+  try { detalhe = (await r.clone().json()).detail || ''; } catch (_) {}
+  throw new Error(detalhe || (r.status === 401
+    ? 'sua sessão expirou — entre de novo'
+    : 'o servidor respondeu ' + r.status));
+}
+
 async function review(itemId, action) {
   // Aprovar item com quantidade ZERO não valida nada (01/08/2026: a maioria
   // das aprovações históricas era de item zerado — sinal vazio). Em vez de
@@ -616,10 +645,11 @@ async function review(itemId, action) {
       : confirm(_msg);
     if (!_ok) return;
   }
+  const _antes = reviewState[itemId];
   reviewState[itemId] = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'edited';
   render();
   try {
-    await authFetch(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
+    await _salvar(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -636,6 +666,11 @@ async function review(itemId, action) {
       else window.toast.info('Editado');
     }
   } catch (e) {
+    // 🚨 A tela mostrava o item como salvo mesmo quando o servidor recusou.
+    // Devolve pro estado anterior: melhor o cliente ver que não salvou do que
+    // fechar o navegador achando que salvou.
+    if (_antes === undefined) delete reviewState[itemId]; else reviewState[itemId] = _antes;
+    render();
     const msg = 'Erro ao salvar: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
@@ -722,6 +757,15 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
     quantity: parseFloat(document.getElementById('edit-qty').value || 0),
     observations: document.getElementById('edit-obs').value,
   };
+  // 🚨 Este é o pior caso dos quatro: aqui a tela troca o NÚMERO do item na
+  // hora. Se a gravação falhar e a gente não desfizer, o cliente fica olhando
+  // a correção dele na tela, marcada como editada, e ela não existe no banco.
+  const _alvo = editingItem;
+  const _antesCampos = {
+    description: _alvo.description, unit: _alvo.unit,
+    quantity: _alvo.quantity, observations: _alvo.observations,
+  };
+  const _antesEstado = reviewState[_alvo.id];
   // Update local
   Object.assign(editingItem, edits);
   reviewState[editingItem.id] = 'edited';
@@ -729,7 +773,7 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
   closeEditModal();
   render();
   try {
-    await authFetch(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
+    await _salvar(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -740,7 +784,11 @@ document.getElementById('edit-form').addEventListener('submit', async (e) => {
     });
     window.toast?.success('Salvo');
   } catch (e) {
-    const msg = 'Erro: ' + e.message;
+    Object.assign(_alvo, _antesCampos);
+    if (_antesEstado === undefined) delete reviewState[saved];
+    else reviewState[saved] = _antesEstado;
+    render();
+    const msg = 'Não salvou: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
 });
@@ -761,7 +809,7 @@ async function submitComment() {
   const saved = commentingItem.id;
   closeCommentModal();
   try {
-    await authFetch(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
+    await _salvar(`${API_BASE}/api/items/${jobId}/review/${saved}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -835,11 +883,17 @@ async function markExistente(itemId) {
     quantity: 0,
     observations: (it.observations || '') + ' | Marcado como EXISTENTE pelo orçamentista — sem custo de compra',
   };
+  // mesma disciplina do modal: guarda o antes pra poder desfazer na tela
+  const _antesCampos = {
+    description: it.description, unit: it.unit,
+    quantity: it.quantity, observations: it.observations,
+  };
+  const _antesEstado = reviewState[itemId];
   Object.assign(it, edits);
   reviewState[itemId] = 'edited';
   render();
   try {
-    await authFetch(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
+    await _salvar(`${API_BASE}/api/items/${jobId}/review/${itemId}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -852,7 +906,11 @@ async function markExistente(itemId) {
     // Ação frequente (tecla M) — sem toast.js fica em silêncio, alert travaria o fluxo.
     window.toast?.success('Marcado como existente (sem custo)');
   } catch (e) {
-    const msg = 'Erro: ' + e.message;
+    Object.assign(it, _antesCampos);
+    if (_antesEstado === undefined) delete reviewState[itemId];
+    else reviewState[itemId] = _antesEstado;
+    render();
+    const msg = 'Não salvou: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
 }

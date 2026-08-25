@@ -16130,8 +16130,14 @@ async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, 
     # correção existia só em item_reviews — na releitura a fusão devolvia o
     # número do MOTOR chamando de "sua revisão".
     # Agora a rota falha quando a escrita que o `action` exige não confirmou.
-    # O front já está pronto: revisao.html trata !r.ok e devolve o item pra
-    # pendente na tela.
+    #
+    # 🪤 25/08: aqui havia um comentário afirmando "o front já está pronto:
+    # revisao.html trata !r.ok". Não tratava — os quatro salvamentos de item
+    # chamavam `authFetch` direto, que DEVOLVE a resposta, e o 502 virava
+    # `toast.success('Salvo')` em verde. O comentário descrevia a INTENÇÃO
+    # como se fosse o estado, e ninguém confere o outro arquivo por causa
+    # dele. Quem guarda o lado do front agora é
+    # `tests/test_salvo_em_verde_mentindo.py`, não uma frase.
     if _tentou_escrever and not _escreveu:
         raise HTTPException(
             502, "Não consegui salvar esta alteração agora — ela NÃO foi gravada. "
