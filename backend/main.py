@@ -11893,12 +11893,20 @@ async def health():
     # FIX 2026-05-14: antes usava locals()[var_name] = ... que é noop em
     # CPython (locals() não tem write-back). Resultava em total_projects=0
     # e total_users=0 sempre, quebrando dashboard de métrica admin.
-    total_projects = 0
-    total_users = 0
+    # 🚨 25/08/2026: `total_users` mostrava **0** — com 85 perfis no banco.
+    # A causa: a contagem pedia `profiles?select=id` e a tabela NÃO TEM coluna
+    # `id` (a chave é `user_id`). O PostgREST devolve 400 "column profiles.id
+    # does not exist" e o `except Exception: pass` engolia. Provado com curl.
+    # 🪤 O comentário logo acima registra um conserto de 14/05 pro sintoma
+    # "total_users=0 sempre" — consertaram OUTRA causa e ninguém voltou a olhar
+    # o número. Conserto que não é conferido na saída não é conserto.
+    # 🚨 Falha agora vira `null`, não 0: zero é um número e se lê como medição.
+    total_projects = None
+    total_users = None
     try:
         import urllib.request, json
-        def _count_table(table):
-            url = f"{SUPABASE_URL}/rest/v1/{table}?select=id"
+        def _count_table(table, coluna='id'):
+            url = f"{SUPABASE_URL}/rest/v1/{table}?select={coluna}&limit=1"
             req = urllib.request.Request(url)
             req.add_header('apikey', SUPABASE_KEY)
             req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
@@ -11908,12 +11916,16 @@ async def health():
             if '/' in count_header:
                 return int(count_header.split('/')[1])
             return len(json.loads(resp.read()))
-        try: total_projects = _count_table('projects')
-        except Exception: pass
-        try: total_users = _count_table('profiles')
-        except Exception: pass
-    except Exception:
-        pass
+        try:
+            total_projects = _count_table('projects', 'id')
+        except Exception as _ec:
+            print(f"[health] contagem de projects falhou: {type(_ec).__name__}: {_ec}")
+        try:
+            total_users = _count_table('profiles', 'user_id')
+        except Exception as _ec:
+            print(f"[health] contagem de profiles falhou: {type(_ec).__name__}: {_ec}")
+    except Exception as _eh:
+        print(f"[health] contagens indisponíveis: {type(_eh).__name__}: {_eh}")
 
     return {
         "status": "healthy",
