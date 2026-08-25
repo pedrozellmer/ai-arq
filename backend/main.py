@@ -9242,34 +9242,65 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # anunciar "atualizada" como se fosse melhora quando não foi —
                     # caso Amanda 10/08: 47 medidos viraram 28 e o e-mail comemorou.
                     _cmp_c = _comparar_com_versao_anterior(job_id, _n_med_c, len(all_items))
-                    _piorou_c = bool(_cmp_c.get("perdeu_medidos"))
+                    # 🚨 25/08: aqui era `bool(_cmp_c.get("perdeu_medidos"))` e
+                    # ignorava a queda de LINHAS. No job 6e9649a7 a releitura foi
+                    # de 208 itens pra 15 com 0 medido dos dois lados: `perdeu_
+                    # medidos` deu 0, e o cliente recebeu o e-mail de boa notícia.
+                    # Quem sabe se houve piora é a `frase`, que já olha os dois.
+                    _piorou_c = bool(_cmp_c.get("frase"))
+                    # 🚨 REGRA Nº1 DENTRO DO E-MAIL. O ramo de boa notícia dizia
+                    # "medimos com o CAD" / selo "✓ Medido" SEM CONFERIR se algo
+                    # foi medido. No mesmo job: 0 itens medidos, e o e-mail
+                    # afirmando medição — enquanto o aviso, no corpo do MESMO
+                    # e-mail, dizia "nenhuma quantidade foi medida da geometria".
+                    # Duas frases, uma verdade.
+                    _mediu_c = _n_med_c > 0
                     if _piorou_c:
                         _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> com os arquivos que você "
                                    f"anexou, e preciso ser direto sobre o resultado.<br><br>"
                                    f"<b>&#9888; {_cmp_c['frase']}</b>")
-                    else:
+                    elif _mediu_c:
                         _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> medindo pelo <b>CAD</b> "
                                    f"que você anexou — a planilha foi atualizada, agora com "
-                                   f"<b>{len(all_items)} itens</b>.")
+                                   f"<b>{len(all_items)} itens</b>, "
+                                   f"<b>{_n_med_c}</b> medidos do desenho.")
+                    else:
+                        _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> com o <b>CAD</b> que você "
+                                   f"anexou — a planilha foi atualizada, agora com "
+                                   f"<b>{len(all_items)} itens</b>.<br><br>"
+                                   f"<b>Nenhuma quantidade saiu da geometria desta vez.</b> O que "
+                                   f"está na planilha veio de texto lido das pranchas (quadros, "
+                                   f"legendas, tabelas) — trate como mapa do que existe, não como "
+                                   f"levantamento fechado.")
                     _body_c = f"{_greet_c}<br><br>{_abre_c}{_diag_c}{_proximos_c}"
                     _pn_c_raw = (_rows[0].get("project_name") or "").strip()
                     if _piorou_c:
-                        _subj_c = (f"{_pn_c_raw} — refizemos, mas a leitura saiu pior"
-                                   if _pn_c_raw else "Refizemos seu projeto — mas a leitura saiu pior")
-                    else:
+                        _subj_c = (f"{_pn_c_raw} — refizemos, e a leitura mudou bastante"
+                                   if _pn_c_raw else "Refizemos seu projeto — a leitura mudou bastante")
+                        _titulo_c, _badge_c = "Leitura refeita — compare as duas", "&#9888; Mudou"
+                        _pre_c = "As duas versões ficam no painel — compare antes de orçar."
+                    elif _mediu_c:
                         _subj_c = (f"{_pn_c_raw} — medimos com o CAD, planilha atualizada"
                                    if _pn_c_raw else "Medimos seu projeto com o CAD — planilha atualizada")
+                        _titulo_c, _badge_c = "Planilha atualizada com o CAD", "&#10003; Medido"
+                        _pre_c = "O arquivo CAD que você mandou depois entrou na conta."
+                    else:
+                        # 🚨 nem assunto, nem selo, nem preheader podem afirmar
+                        # medição quando `_n_med_c == 0`
+                        _subj_c = (f"{_pn_c_raw} — planilha atualizada com o CAD"
+                                   if _pn_c_raw else "Planilha atualizada com o CAD")
+                        _titulo_c = "Planilha atualizada com o CAD"
+                        _badge_c = "&#9888; Sem medida do desenho"
+                        _pre_c = ("O CAD entrou na conta, mas nenhuma quantidade saiu da "
+                                  "geometria.")
                     _ok_c = _send_email_smtp(
                         _pe, _subj_c,
                         _email_wrap(
-                            "Leitura refeita — saiu pior" if _piorou_c
-                            else "Planilha atualizada com o CAD",
+                            _titulo_c,
                             _body_c,
                             "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
-                            badge="&#9888; Mediu menos" if _piorou_c else "&#10003; Medido",
-                            preheader=("A leitura anterior estava mais completa — as duas ficam "
-                                       "no painel." if _piorou_c else
-                                       "O arquivo CAD que você mandou depois entrou na conta.")))
+                            badge=_badge_c,
+                            preheader=_pre_c))
                     if _ok_c:
                         _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
                     print(f"[email] complemento-pronto -> enviado={_ok_c}")
