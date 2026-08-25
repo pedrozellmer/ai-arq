@@ -1709,6 +1709,43 @@ def _hoje_br():
     return _agora_br_fn().date()
 
 
+def _carimbar_spec(itens) -> int:
+    """Poe marca/codigo/cor NO OBJETO, que e de onde a planilha le.
+
+    🚨 25/08 (auditoria do dia): `_spec_campos` preenchia a linha do BANCO e a
+    planilha le do OBJETO — a coluna ESPECIFICACAO nasceria vazia em 100% dos
+    casos, pra sempre. Escrito de um lado, lido do outro: exatamente a mesma
+    familia do bug do `origem`, no mesmo arquivo, no mesmo dia. Eu repeti o erro
+    horas depois de documenta-lo.
+
+    Falha em silencio de proposito: item sem especificacao e o estado normal da
+    maioria — 95% do acervo nao tem marca escrita.
+    """
+    n = 0
+    try:
+        from spec_extract import extrair_spec, spec_origem
+    except Exception as _e:
+        print(f"[spec] carimbo indisponivel (nao-fatal): {type(_e).__name__}: {_e}")
+        return 0
+    for it in itens or []:
+        try:
+            if getattr(it, "marca", "") or getattr(it, "codigo_fabricante", ""):
+                continue                      # ja veio preenchido do banco
+            sp = extrair_spec(getattr(it, "description", ""))
+            if not spec_origem(sp):
+                continue
+            it.marca = sp["marca"] or ""
+            it.codigo_fabricante = sp["codigo"] or ""
+            it.cor = sp["cor"] or ""
+            it.spec_origem = "lido"
+            n += 1
+        except Exception:
+            continue
+    if n:
+        print(f"[spec] especificacao carimbada em {n} item(ns)")
+    return n
+
+
 def _spec_campos(descricao) -> dict:
     """Campos do caderno de acabamentos, prontos pro insert. Falha em silencio
     de proposito: se o extrator quebrar, o item continua sendo gravado sem
@@ -8666,6 +8703,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _log_error("motor:selo-sem-medida", f"FALHOU: {_esm}", job_id)
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
+        _carimbar_spec(all_items)
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)
 
         # Preview das pranchas (cosmético): inicia SÓ AGORA, depois do pico de RAM
@@ -8788,6 +8826,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # agora. O arquivo que o cliente baixa tem que ser este, não o de antes.
         if _refazer_planilha:
             try:
+                _carimbar_spec(all_items)
                 generate_spreadsheet(project_data, all_items, output_path, typology=typology)
                 _log_error("motor:planilha-refeita",
                            "planilha REFEITA antes do carimbo: " + " | ".join(_refazer_planilha),
@@ -16119,6 +16158,15 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
                 ref_sheet=r.get("ref_sheet", "") or "",
                 confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
                 origem=r.get("origem") or "",     # NULL = linha anterior a 24/08
+                # 🚨 25/08 (auditoria): sem estas 4, a coluna ESPECIFICAÇÃO da
+                # planilha nascia VAZIA sempre — o extrator preenchia a linha do
+                # BANCO e a planilha lê do OBJETO. Escrito de um lado, lido do
+                # outro; mesma família do bug do `origem`, no mesmo arquivo.
+                # 🪤 E este bloco existe em DOIS caminhos de reconstrução.
+                marca=r.get("marca") or "",
+                codigo_fabricante=r.get("codigo_fabricante") or "",
+                cor=r.get("cor") or "",
+                spec_origem=r.get("spec_origem") or "",
                 discipline=r.get("discipline", "Complementares") or "Complementares",
             ))
         except Exception:
@@ -16249,6 +16297,15 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
                 ref_sheet=r.get("ref_sheet", "") or "",
                 confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
                 origem=r.get("origem") or "",     # NULL = linha anterior a 24/08
+                # 🚨 25/08 (auditoria): sem estas 4, a coluna ESPECIFICAÇÃO da
+                # planilha nascia VAZIA sempre — o extrator preenchia a linha do
+                # BANCO e a planilha lê do OBJETO. Escrito de um lado, lido do
+                # outro; mesma família do bug do `origem`, no mesmo arquivo.
+                # 🪤 E este bloco existe em DOIS caminhos de reconstrução.
+                marca=r.get("marca") or "",
+                codigo_fabricante=r.get("codigo_fabricante") or "",
+                cor=r.get("cor") or "",
+                spec_origem=r.get("spec_origem") or "",
                 discipline=r.get("discipline", "Complementares") or "Complementares",
             ))
         except Exception:
@@ -18601,6 +18658,7 @@ async def admin_merge_criar(eval_job_id: str, request: Request):
 
     sobrepostos = _m_sobrep(escolhidos)
 
+    import datetime as _dt
     novo_id = "mg" + str(uuid.uuid4())[:6]
     do_pai = [_nome_prancha_bonito(p) for p in plano["do_pai"]]
     do_filho = [_nome_prancha_bonito(p) for p in plano["do_filho"]]
@@ -18643,6 +18701,14 @@ async def admin_merge_criar(eval_job_id: str, request: Request):
         "files_count": pai.get("files_count"),
         "file_types": pai.get("file_types"),
         "status": "done",
+        # 🚨 25/08 (auditoria do dia): sem estes DOIS, a tela do cliente mostrava
+        # "— itens" e "Concluído em: --" num projeto com 307 itens — enquanto o
+        # e-mail que a gente mandou dizia 307/179. O Alan recebeu assim.
+        # `items_count` e `completed_at` são o que a tela LÊ; o motor os grava no
+        # fim do processamento, e o merge nasce pronto, sem passar por lá.
+        # 🪤 Mesma família do bug do `origem`: gravado de um lado, lido do outro.
+        "items_count": len(escolhidos),
+        "completed_at": _dt.datetime.utcnow().isoformat(),
         "parent_job_id": pai["job_id"],
         "is_eval": True,
         "user_total_area": pai.get("user_total_area"),
