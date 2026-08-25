@@ -56,8 +56,18 @@ def _linha(ws, texto):
     raise AssertionError("nao achei %r" % texto)
 
 
-def test_a_coluna_existe_no_lugar_certo():
-    pass  # coberto por test_planilha_origem_medicao (cabecalho completo)
+def test_a_coluna_existe_no_lugar_certo(aba):
+    """🪤 25/08 (auditoria): este teste tinha corpo `pass`, com um comentario
+    dizendo que outro arquivo cobria. Teste que nao faz nada mas tem nome de
+    quem confere e PIOR que teste nenhum: infla a contagem e se le como
+    cobertura. Ou ele mede algo, ou sai."""
+    for r in range(1, 30):
+        if aba.cell(row=r, column=1).value == "ITEM":
+            assert aba.cell(row=r, column=10).value == "ESPECIFICAÇÃO"
+            assert aba.cell(row=r, column=9).value == "ORIGEM DA MEDIÇÃO"
+            assert aba.cell(row=r, column=11).value == "REF."
+            return
+    raise AssertionError("não achei o cabeçalho da planilha")
 
 
 def test_marca_codigo_e_cor_saem_juntos_e_legiveis(aba):

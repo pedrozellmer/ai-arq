@@ -117,10 +117,19 @@ def test_o_aviso_de_sobreposicao_so_sai_quando_ha_sobreposicao():
     que nada de comportamento mudasse. Guarda tem que medir a condição, não a
     forma de escrever."""
     corpo = _corpo("_email_leitura_combinada")
+    # 🪤 25/08 (auditoria): a versao anterior era TAUTOLOGICA — `i_cond < i_texto
+    # or corpo.index("_sobre = next(") < i_cond`. A 1a clausula ja era FALSA
+    # (o texto procurado esta na BUSCA, la em cima; a condicao vem depois) e a 2a
+    # e sempre verdadeira, porque em Python a variavel tem que ser definida antes
+    # de usada. O guarda nao garantia nada.
+    #
+    # O que importa e outra coisa: o que VAI PRO E-MAIL (`_hc.escape(_sobre)`)
+    # tem que estar debaixo do `if _sobre:`. Sem alarme, nada e mostrado.
     i_cond = corpo.index("if _sobre:")
-    i_texto = corpo.index("CONFERIR ANTES DE SOMAR")
-    # o texto do alarme sai DEPOIS da condição, nunca solto
-    assert i_cond < i_texto or corpo.index("_sobre = next(") < i_cond
+    i_render = corpo.index("_hc.escape(_sobre)")
+    assert i_cond < i_render, (
+        "o quadro de sobreposicao e montado fora da condicao — sairia sempre, "
+        "inclusive em projeto sem sobreposicao nenhuma")
 
 
 def test_o_email_reusa_o_aviso_ja_gravado_em_vez_de_recalcular():

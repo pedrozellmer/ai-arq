@@ -42,3 +42,26 @@ jobs:
       - name: pytest
         working-directory: backend
         run: python -m pytest tests/ -q
+
+      # 🚨 25/08/2026 (auditoria do dia): o passo acima conferia o VERDE e nao o
+      # NUMERO. Foi exatamente assim que a bancada ficou apagada em 23/08 —
+      # `pytest tests/` colhia 6 de 70 testes e abortava, e o job passava verde
+      # porque os 6 passaram. 17 arquivos nunca rodavam.
+      #
+      # O lado dos scripts legados ja tinha essa checagem; o lado do pytest, nao.
+      # Piso, nao alvo: so acusa QUEDA. Teste novo sobe o numero e nao quebra
+      # nada; teste que some, ou arquivo que para de ser colhido, derruba o CI.
+      - name: a bancada nao pode ENCOLHER
+        working-directory: backend
+        env:
+          PISO: 400
+        run: |
+          N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
+          echo "testes colhidos: $N (piso: $PISO)"
+          if [ "$N" -lt "$PISO" ]; then
+            echo "::error::A bancada colheu $N testes, abaixo do piso de $PISO."
+            echo "Nao e o verde que importa: em 23/08 o pytest colhia 6 de 70 e"
+            echo "passava. Se um arquivo parou de ser colhido, o conftest ou um"
+            echo "erro de import estao engolindo ele."
+            exit 1
+          fi
