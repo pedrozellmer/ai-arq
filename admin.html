@@ -1706,6 +1706,11 @@ function renderFilhotes(L){
           <p class="text-xs text-gray-500">${f.cliente} &middot;
             <span class="font-mono">${f.job_id}</span> &larr; <span class="font-mono">${f.parent_job_id}</span>
             &middot; ${pronto ? 'concluído' : f.status}</p>
+          ${String(f.job_id).startsWith('mg')
+            ? `<p class="mt-1 inline-block text-[11px] px-2 py-0.5 rounded-full bg-violet-50 border border-violet-300 text-violet-800 font-semibold">&#129516; COMBINADA &mdash; a melhor prancha de cada leitura</p>`
+            : (temMergeMelhor(f)
+              ? `<p class="mt-1 text-[11px] text-amber-800 bg-amber-50 border border-amber-300 rounded px-2 py-1">&#9888; Existe uma versão <b>COMBINADA</b> deste projeto, com <b>${temMergeMelhor(f)} medidos</b> contra ${f.depois?.medidos} desta. Libere a combinada, não esta.</p>`
+              : '')}
         </div>
         <div class="flex items-center gap-2">
           ${f.liberado
@@ -1963,6 +1968,13 @@ async function mergeCriar(jobId){
     const d = await res.json();
     if (!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
     _adminToast('Projeto combinado criado: ' + d.job_id, 'ok');
+    // 🚨 24/08, 3ª vez que o Pedro clicou e ficou no escuro: "fiz o passo 2, mas
+    // nada fica na tela, muito ruim toda essa experiencia pra mim como adm".
+    // O merge TINHA sido criado (10s, está no log). O que sumiu foi a mensagem:
+    // o painel do estudo tem ~2000px e o resultado tem ~150px, então a página
+    // encolhe embaixo dos pés de quem estava lá no fim, e o aviso nasce ACIMA
+    // do que ele está vendo. Toda ação precisa terminar com algo visível ONDE a
+    // pessoa está olhando — senão "funcionou" e "quebrou" são a mesma tela.
     if (alvo) alvo.innerHTML = `
       <div class="rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-800">
         <b>✓ Criado: <span class="font-mono">${d.job_id}</span></b><br>
@@ -1971,10 +1983,33 @@ async function mergeCriar(jobId){
         <span class="text-xs">${d.sobreposicoes} sobreposição(ões) apontada(s) na planilha, nenhuma somada.</span><br>
         <span class="text-xs mt-2 block">${d.proximo_passo}</span>
       </div>`;
+    if (alvo) alvo.scrollIntoView({behavior:'smooth', block:'center'});
     loadFilhotes();
   } catch (e) {
     _adminToast('Não criei: ' + (e.message || e), 'err');
+    // Toast some sozinho. Se a pessoa piscar, perdeu o motivo — e fica achando
+    // que o clique não fez nada, que é o pior desfecho possível.
+    if (alvo) {
+      alvo.innerHTML = '<div class="rounded-xl border-2 border-red-300 bg-red-50 p-4 text-sm text-red-800">'
+        + '<b>Não criei o projeto combinado.</b><br>' + (e.message || e) + '</div>';
+      alvo.scrollIntoView({behavior:'smooth', block:'center'});
+    }
   }
+}
+
+// 🚨 24/08: depois que o merge nasceu, o projeto do Alan passou a ter DUAS
+// linhas aqui — a releitura (ev...) e a combinada (mg...), as duas com o mesmo
+// botão azul "Liberar pro cliente" e as duas marcadas "melhorou". Clicar na
+// errada entrega ao cliente a versão que PERDE as 38 portas dele.
+// Botão perigoso e botão certo não podem ser idênticos.
+function temMergeMelhor(f){
+  if (!f || String(f.job_id).startsWith('mg')) return 0;
+  const m = (_filhotes || []).find(x =>
+    String(x.job_id).startsWith('mg') &&
+    x.parent_job_id === f.parent_job_id &&
+    !x.liberado &&
+    Number(x.depois?.medidos || 0) > Number(f.depois?.medidos || 0));
+  return m ? Number(m.depois.medidos) : 0;
 }
 
 async function liberarFilhote(jobId, revogar){
@@ -1984,7 +2019,9 @@ async function liberarFilhote(jobId, revogar){
   // revisou itens a mao ou a versao nova nao ficou melhor.
   const _txt = revogar
     ? `${acao}\n\nFilhote ${jobId}.\n\nNenhum e-mail é enviado.`
-    : `${acao}\n\nFilhote ${jobId}.\n\nO cliente RECEBE e-mail automático avisando da nova leitura (não vai se ele já revisou itens à mão).`;
+    : `${acao}\n\n${String(jobId).startsWith('mg')
+          ? 'Versão COMBINADA (' + jobId + ') — a melhor prancha de cada leitura.'
+          : 'RELEITURA (' + jobId + ') — o motor releu os arquivos.'}\n\nO cliente RECEBE e-mail automático explicando o que mudou (não vai se ele já revisou itens à mão).`;
   if (!confirm(_txt)) return;
   try {
     const res = await authFetch(`${API_BASE}/api/admin/liberar-filhote/${jobId}${revogar?'?revogar=1':''}`, {method:'POST'});

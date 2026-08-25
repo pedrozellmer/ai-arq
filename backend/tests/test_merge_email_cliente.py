@@ -251,3 +251,79 @@ def test_montar_a_tela_esta_dentro_de_try():
     assert "falhei ao desenhar a tela" in trecho
     assert "JSON.stringify(d" in trecho, (
         "sem o resultado cru na tela, o próximo erro me faz adivinhar de novo")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🚨 Duas linhas do MESMO projeto, o mesmo botao azul
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 24/08, depois que o merge do Alan nasceu: a aba Filhotes passou a ter DUAS
+# linhas do projeto dele — a releitura (ev597afa, 92→151) e a combinada
+# (mg634d18, 92→179). As duas "concluído", as duas marcadas "melhorou", as duas
+# com o mesmo botao azul "Liberar pro cliente".
+#
+# Clicar na errada entrega ao cliente a versao que PERDE as 38 portas dele. E o
+# clique errado manda e-mail: nao da pra desfazer o que ele leu.
+def _admin():
+    import io as _io
+    import os as _os
+    return _io.open(_os.path.join(_os.path.dirname(_BACKEND), "admin.html"),
+                    encoding="utf-8").read()
+
+
+def test_a_linha_da_combinada_tem_selo_proprio():
+    src = _admin()
+    assert "COMBINADA &mdash; a melhor prancha de cada leitura" in src
+    assert "String(f.job_id).startsWith('mg')" in src
+
+
+def test_a_releitura_avisa_quando_existe_combinada_melhor():
+    """O aviso vai na linha PERIGOSA, nao na certa — quem esta prestes a errar
+    e quem precisa ler."""
+    src = _admin()
+    assert "function temMergeMelhor" in src
+    assert "Libere a combinada, n" in src
+
+
+def test_o_aviso_so_aparece_se_a_combinada_for_melhor_E_nao_liberada():
+    """Controle negativo: aviso que sai sempre vira ruido ignorado."""
+    src = _admin()
+    i = src.index("function temMergeMelhor")
+    corpo = src[i:i + 700]
+    assert "!x.liberado" in corpo
+    assert "> Number(f.depois?.medidos || 0)" in corpo
+
+
+def test_a_combinada_nunca_avisa_de_si_mesma():
+    src = _admin()
+    i = src.index("function temMergeMelhor")
+    corpo = src[i:i + 400]
+    assert "if (!f || String(f.job_id).startsWith('mg')) return 0;" in corpo
+
+
+def test_o_confirm_do_liberar_diz_QUAL_versao_esta_indo():
+    """Ultima chance antes do e-mail sair."""
+    src = _admin()
+    i = src.index("async function liberarFilhote")
+    corpo = src[i:i + 1600]
+    assert "Vers" in corpo and "COMBINADA (" in corpo
+    assert "RELEITURA (" in corpo
+
+
+def test_o_resultado_do_merge_rola_ate_onde_a_pessoa_esta_olhando():
+    """🚨 3 cliques do Pedro terminaram em tela vazia. Na 3ª o merge FOI criado
+    (10s, no log) e a mensagem nasceu ACIMA do que ele via: o painel do estudo
+    tem ~2000px e o resultado ~150px, entao a pagina encolhe embaixo dos pes de
+    quem estava no fim. Acao que nao termina com algo visivel ONDE a pessoa
+    esta olhando e indistinguivel de acao que nao aconteceu."""
+    src = _admin()
+    i = src.index("async function mergeCriar")
+    # 🪤 Janela FIXA corta função e mede o pedaço errado — me pegou 2x hoje.
+    # O fim é a próxima função no nível zero.
+    j = src.find(chr(10) + "async function ", i + 10)
+    k = src.find(chr(10) + "function ", i + 10)
+    fins = [x for x in (j, k) if x > 0]
+    corpo = src[i:min(fins) if fins else i + 4000]
+    assert corpo.count("scrollIntoView") >= 2, (
+        "o sucesso E o erro precisam rolar ate a vista — nao adianta so um")
+    assert "N&atilde;o criei o projeto combinado" in corpo or "criei o projeto combinado" in corpo
