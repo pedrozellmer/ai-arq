@@ -22,6 +22,13 @@ on:
 jobs:
   smoke:
     runs-on: ubuntu-latest
+    # 🚨 25/08: `contents: write` é o mínimo pra comentar no commit quando o
+    # smoke falha — sem isso o GITHUB_TOKEN vem read-only e o motivo do
+    # vermelho continua morrendo dentro do runner.
+    # 🪤 Declarar `permissions` aqui SUBSTITUI o padrão do repositório: o que
+    # não estiver nesta lista fica sem acesso. Este job só precisa disto.
+    permissions:
+      contents: write
     # 8min: o E2E agora espera até 60s pelo #login-email (o desafio invisível do
     # Cloudflare atrasa a página no browser automatizado) e ainda tem retry 1x.
     timeout-minutes: 8
@@ -94,7 +101,11 @@ jobs:
         env:
           SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
           SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
-        run: python .github/scripts/smoke_test_production.py
+        # 🪤 `set -o pipefail`: sem isso o `tee` devolve 0 e o job fica VERDE
+        # com o smoke reprovado — trocaria um alarme falso por um pior.
+        run: |
+          set -o pipefail
+          python .github/scripts/smoke_test_production.py 2>&1 | tee -a smoke.log
 
       # Instala Playwright + Chromium pro nível 3 (browser real headless).
       # ~1 min de overhead — vale demais quando o cron diário descobre
@@ -109,7 +120,21 @@ jobs:
           SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
           SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
           SMOKE_SITE_BASE: https://ai.arq.br
-        run: python .github/scripts/smoke_test_e2e.py
+        run: |
+          set -o pipefail
+          python .github/scripts/smoke_test_e2e.py 2>&1 | tee -a smoke.log
+
+      # 🚨 25/08/2026: o motivo de um smoke vermelho MORRIA no runner. O log do
+      # Actions exige admin (a API devolve 403 até em repo público) e as
+      # anotações públicas só trazem "Smoke test falhou". Levei uma hora e o
+      # tempo do Pedro pra descobrir que eram três 403 do Cloudflare — com o
+      # site no ar e o nível 2 passando 9 de 9.
+      # Comentário de commit é público e legível pela API sem credencial.
+      - name: Publica o motivo da falha onde dê pra ler
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python .github/scripts/smoke_report_failure.py
 
       - name: Notifica em caso de falha
         if: failure()

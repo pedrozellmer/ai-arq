@@ -58,6 +58,47 @@ BROWSER_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
 
 failures: list[str] = []
 passes: list[str] = []
+# 🚨 25/08/2026: coisa que o smoke NAO CONSEGUIU MEDIR nao pode virar nem
+# "passou" nem "falhou". Ver `_check_site`.
+inconclusivos: list[str] = []
+
+
+def _e_bloqueio_do_cloudflare(status: int, headers: dict, body: bytes) -> bool:
+    """O 403 veio do Cloudflare barrando o IP, ou do site?
+
+    🚨 25/08/2026. O smoke ficou vermelho no commit 2cccde0 com tres 403 em
+    ai.arq.br — e o site estava PERFEITO: do meu IP as tres davam 200 no mesmo
+    minuto. O que mudou foi o IP: o runner do GitHub e datacenter, e o
+    Cloudflare (proxy laranja desde 23/07) barra por reputacao, mesmo com
+    User-Agent de navegador. Medido no dia: UA de robo do meu IP tambem leva
+    403, UA de browser leva 200.
+
+    🪤 Entao esse check estava medindo "o Cloudflare deixa este IP entrar", e
+    nao "o site esta no ar" — e gastou uma hora minha e do Pedro achando que
+    era o deploy. Nao da pra transformar em verde: seria pass silencioso, o
+    pecado que esta casa persegue. Vira INCONCLUSIVO, declarado e contado.
+
+    🚫 Falha FECHADA: so e inconclusivo com marca do Cloudflare no cabecalho.
+    403 sem essas marcas continua sendo falha de verdade.
+    """
+    if status != 403:
+        return False
+    baixo = {str(k).lower(): str(v).lower() for k, v in (headers or {}).items()}
+    if "cf-mitigated" in baixo or "cf-ray" in baixo:
+        return True
+    if "cloudflare" in baixo.get("server", ""):
+        return True
+    return b"cloudflare" in (body or b"").lower()[:4000]
+
+
+def _check_site(name: str, url: str, marcador: bytes) -> bool:
+    """Check de pagina publica, ciente de que o Cloudflare fica na frente."""
+    status, body, headers = _get(url)
+    if _e_bloqueio_do_cloudflare(status, headers, body):
+        print(f"  {YELLOW}?{RESET} {name}  (HTTP 403 do Cloudflare — NAO MEDIDO)")
+        inconclusivos.append(f"{name}: Cloudflare barrou o IP do runner (403)")
+        return False
+    return _check(name, status == 200 and marcador in body.lower(), f"HTTP {status}")
 
 
 def _check(name: str, ok: bool, detail: str = "") -> bool:
@@ -117,29 +158,11 @@ def nivel_1():
         f"HTTP {status}",
     )
 
-    # Site principal
-    status, body, _ = _get(f"{SITE_BASE}/")
-    _check(
-        "GET ai.arq.br/",
-        status == 200 and b"<html" in body.lower(),
-        f"HTTP {status}",
-    )
-
-    # Sitemap
-    status, body, _ = _get(f"{SITE_BASE}/sitemap.xml")
-    _check(
-        "GET sitemap.xml",
-        status == 200 and b"<urlset" in body,
-        f"HTTP {status}",
-    )
-
-    # FAQ (página interna mais visitada)
-    status, body, _ = _get(f"{SITE_BASE}/faq.html")
-    _check(
-        "GET faq.html",
-        status == 200 and b"<title>" in body,
-        f"HTTP {status}",
-    )
+    # Site publico: passa pelo Cloudflare, entao usa o check que sabe
+    # distinguir "site caiu" de "o Cloudflare barrou este IP".
+    _check_site("GET ai.arq.br/", f"{SITE_BASE}/", b"<html")
+    _check_site("GET sitemap.xml", f"{SITE_BASE}/sitemap.xml", b"<urlset")
+    _check_site("GET faq.html", f"{SITE_BASE}/faq.html", b"<title>")
 
     # Instagram: a rota FICOU FECHADA em 28/07/2026 (antes qualquer um lia a
     # fila e as DMs). O teste agora confirma o oposto do que confirmava: sem
@@ -334,7 +357,18 @@ def main() -> int:
     print(f"\n{BLUE}━━━ Resumo ━━━{RESET}")
     print(f"  {GREEN}{len(passes)} passou{RESET}, "
           f"{RED if failures else GREEN}{len(failures)} falhou{RESET}, "
+          f"{YELLOW}{len(inconclusivos)} não medido{RESET}, "
           f"em {elapsed:.1f}s")
+
+    # 🚨 Inconclusivo aparece SEMPRE, mesmo quando o resto passou. Sumir com
+    # ele seria transformar "não consegui olhar" em "está tudo bem" — que é
+    # exatamente o erro que este bloco existe pra impedir.
+    if inconclusivos:
+        print(f"\n{YELLOW}Não medido (o Cloudflare respondeu no lugar do site):{RESET}")
+        for i in inconclusivos:
+            print(f"  ? {i}")
+        print(f"  {YELLOW}O site pode estar de pé ou não — deste IP não dá pra saber.")
+        print(f"  Quem mede o site com navegador de verdade é o nível 3 (E2E).{RESET}")
 
     if failures:
         print(f"\n{RED}Falhas:{RESET}")
