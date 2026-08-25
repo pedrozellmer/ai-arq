@@ -160,3 +160,45 @@ def test_a_rede_esta_ligada_no_process_job():
     assert "_CfG.CONFIRMADO" not in trecho, "🚨 a rede está PROMOVENDO"
     assert "motor:selo-sem-geometria" in trecho, "não deixa rastro no log"
     assert "LIDO de um texto da prancha" in trecho, "não explica ao cliente"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  📏 O numero dos itens ANTIGOS tem que reproduzir
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 🚨 25/08 (auditoria): quantos itens historicos seguem com o selo indevido? O
+# numero ja saiu TRES vezes diferente — 61 (documentado em 24/08), 82 (a
+# auditoria) e 38 (uma query minha de hoje). Nenhum estava "errado": cada um
+# escreveu A MAO o proprio criterio de "procedencia so de texto".
+#
+# A rede E o criterio. Contar com ela e a unica forma de reproduzir; qualquer
+# SQL novo seria a quarta versao.
+def test_existe_uma_rota_que_conta_com_a_PROPRIA_rede():
+    import io as _io
+    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    assert '@app.get("/api/admin/selo-historico")' in src
+    i = src.index("async def admin_selo_historico")
+    corpo = src[i:i + 3000]
+    assert "selos_sem_geometria as _ssg_h" in corpo, (
+        "a rota conta por criterio proprio em vez de usar a rede — e assim que "
+        "nasce a quarta versao do numero")
+
+
+def test_a_rota_de_contagem_NAO_altera_nada():
+    """🚫 A rede vale pra leitura NOVA. Mexer no selo de projeto ja entregue e
+    decisao do Pedro: o cliente pode ter usado aquela planilha."""
+    import io as _io
+    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index("async def admin_selo_historico")
+    j = src.index('@app.post("/api/admin/spec-backfill")', i)
+    corpo = src[i:j]
+    for escrita in ('"PATCH"', '"POST"', '"DELETE"', "update", "insert"):
+        assert escrita not in corpo, (
+            "a rota de CONTAGEM faz %s — ela so pode ler" % escrita)
+
+
+def test_a_rota_e_so_de_admin():
+    import io as _io
+    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index("async def admin_selo_historico")
+    assert "_require_admin(request)" in src[i:i + 900]

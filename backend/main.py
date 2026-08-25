@@ -18604,6 +18604,88 @@ def _merge_montar(eval_job_id: str, com_juiza: bool = True):
     return pai, filho, ip, if_, plano, revisoes
 
 
+@app.get("/api/admin/selo-historico")
+async def admin_selo_historico(request: Request):
+    """Quantos itens ANTIGOS a rede da regra dura nº1 rebaixaria hoje.
+
+    🚨 25/08/2026 (auditoria). Este número já saiu TRÊS vezes diferente: eu
+    documentei 61 em 24/08, a auditoria contou 82, e uma query minha de hoje deu
+    38. Nenhum estava "errado" — cada um escreveu à mão o próprio critério de
+    "procedência só de texto", e critério à mão diverge.
+
+    A rede `selos_sem_geometria` É o critério. Contar com ela é a única forma de
+    o número reproduzir. Reimplementar em SQL criaria a quarta versão.
+
+    🚫 SÓ CONTA. Não rebaixa nada: a rede nova vale pra leitura NOVA, e mexer
+    retroativamente no selo de projeto entregue é decisão do Pedro, não minha —
+    o cliente já pode ter usado aquela planilha.
+    """
+    _require_admin(request)
+    from engine_rules import selos_sem_geometria as _ssg_h
+
+    class _It:
+        """Só o que a rede lê. Evita depender do modelo inteiro."""
+        __slots__ = ("description", "observations", "unit", "confidence", "origem")
+
+        def __init__(self, r):
+            self.description = r.get("description") or ""
+            self.observations = r.get("observations") or ""
+            self.unit = r.get("unit") or ""
+            self.confidence = r.get("confidence") or "estimado"
+            self.origem = r.get("origem") or ""
+
+    limite = min(int(request.query_params.get("limite", "9000") or 9000), 20000)
+    _st, rows = _supa_rest_service(
+        "GET", "project_items",
+        params={"select": "id,job_id,description,observations,unit,confidence,origem",
+                "confidence": "eq.confirmado", "limit": str(limite)})
+    if _st != 200:
+        raise HTTPException(502, "Não consegui ler os itens (HTTP %s)" % _st)
+    rows = rows or []
+
+    itens = [_It(r) for r in rows]
+    achados = _ssg_h(itens)
+
+    jobs, exemplos = set(), []
+    for a in achados:
+        r = rows[a["indice"]]
+        jobs.add(r.get("job_id"))
+        if len(exemplos) < 15:
+            exemplos.append({"job_id": r.get("job_id"),
+                             "descricao": str(r.get("description", ""))[:80],
+                             "unidade": r.get("unit"),
+                             "porque": a.get("motivo") or a.get("porque") or ""})
+
+    donos = set()
+    if jobs:
+        _stj, projs = _supa_rest_service(
+            "GET", "projects",
+            params={"job_id": "in.(%s)" % ",".join(sorted(jobs)),
+                    "select": "job_id,user_email,is_eval", "limit": "500"})
+        for p in (projs or []):
+            if not p.get("is_eval") and p.get("user_email"):
+                donos.add(p["user_email"])
+
+    return {
+        "ok": True,
+        "itens_lidos": len(rows),
+        "rebaixaria": len(achados),
+        "projetos": len(jobs),
+        "clientes": len(donos),
+        "exemplos": exemplos,
+        "aviso": ("Isto SÓ CONTA — nada foi alterado. A rede vale pra leitura "
+                  "nova; mexer no selo de projeto já entregue é decisão sua, "
+                  "porque o cliente pode ter usado aquela planilha."),
+        "historico_dos_numeros": {
+            "documentado_em_24_08": 61,
+            "auditoria_25_08": 82,
+            "query_manual_25_08": 38,
+            "nota": "os três usaram critérios escritos à mão, diferentes entre "
+                    "si. Este endpoint usa a própria rede, então reproduz.",
+        },
+    }
+
+
 @app.post("/api/admin/spec-backfill")
 async def admin_spec_backfill(request: Request):
     """Preenche marca/código/cor nos itens que JÁ existem, lendo a descrição.
