@@ -30,6 +30,8 @@ erro esteja zerada junto.
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _corpo import so_o_que_roda  # noqa: E402
 
@@ -107,6 +109,16 @@ CASOS = [
 ]
 
 
+def _erros_da_regua(extrator):
+    """Quais dos casos medidos ainda saem errados com `extrator`."""
+    fora = []
+    for descricao, campo, proibido in CASOS:
+        saiu = extrator(descricao).get(campo)
+        if saiu and proibido.lower() in str(saiu).lower():
+            fora.append("%s=%r em %r" % (campo, saiu, descricao[:52]))
+    return fora
+
+
 def test_religar_a_trava_exige_os_4_defeitos_consertados():
     """🚨 O critério de aceite, medido em caso real.
 
@@ -115,27 +127,89 @@ def test_religar_a_trava_exige_os_4_defeitos_consertados():
     e é isso que impede a especificação errada de sair pro cliente por um
     commit distraído."""
     from spec_extract import extrair_spec
-    erram = []
-    for descricao, campo, proibido in CASOS:
-        saiu = extrair_spec(descricao).get(campo)
-        if saiu and proibido.lower() in str(saiu).lower():
-            erram.append("%s=%r em %r" % (campo, saiu, descricao[:52]))
-    if not spec_extract.LIBERADO_PRO_CLIENTE:
-        # ainda em conserto: o número é a régua, não a reprovação
-        assert len(erram) <= len(CASOS), "medição impossível"
-        return
-    assert not erram, (
-        "a trava foi aberta com %d de %d casos ainda errados:\n  %s"
-        % (len(erram), len(CASOS), "\n  ".join(erram)))
+    erram = _erros_da_regua(extrair_spec)
+    assert not erram, ("%d de %d casos ainda errados:\n  %s"
+                       % (len(erram), len(CASOS), "\n  ".join(erram)))
 
 
-def test_controle_a_regua_mede_alguma_coisa():
-    """🧪 Um teste que só reprova quando a trava abre precisa provar, com a
-    trava fechada, que ele CONSEGUE ver o defeito. Senão o dia da abertura
-    chega e ele passa verde sem nunca ter medido nada."""
+# ══════════════════════════════════════════════════════════════════════════
+#  🪤 O OUTRO LADO: consertar demais também é defeito
+# ══════════════════════════════════════════════════════════════════════════
+#  Estes casos o extrator TEM que continuar acertando. Cada um é um falso
+#  positivo que eu criei consertando os 4 defeitos, e que só apareceu quando
+#  comparei ANTES × DEPOIS nas 338 descrições reais — nenhum deles aparecia
+#  nos casos que eu já sabia. Guarda contra o remédio virar doença.
+NAO_PODE_SUMIR = [
+    # "assentamento de X" — aqui o item É o X. Quem denuncia vizinho é "PARA
+    # assentamento" (aí o item é a argamassa).
+    ("Fornecimento e assentamento de porcelanato Brooklyn Terrazzo 90×90cm — "
+     "Biancogres, em parede", "Biancogres"),
+    ("Assentamento de porcelanato Brooklyn Terrazzo 90×90 cm — Biancogres em "
+     "parede do refeitório", "Biancogres"),
+    # "sobre massa corrida" é o SUBSTRATO da tinta, não outro produto
+    ("Pintura acrílica premium sobre massa corrida, 3 demãos, cor A Definir — "
+     "Coral Fosco Completo", "Coral"),
+    # "para piso" é USO, não outro produto: a marca é da própria tinta
+    ("Pintura de piso — tinta para piso Suvinil, cor Cinza, sobre concreto "
+     "existente regularizado", "Suvinil"),
+    # marca dita sem "ou similar" em nenhum lugar
+    ("Reservatório de água fria — caixa d'água Tigre com tampa — 750 litros",
+     "Tigre"),
+]
+
+
+@pytest.mark.parametrize("descricao,marca", NAO_PODE_SUMIR)
+def test_o_conserto_nao_pode_matar_a_marca_legitima(descricao, marca):
     from spec_extract import extrair_spec
-    vistos = [c for c in CASOS
-              if (extrair_spec(c[0]).get(c[1]) or "").lower().find(c[2].lower()) >= 0]
-    assert vistos, (
-        "a régua não vê NENHUM dos 8 defeitos medidos pela auditoria — ou eles "
-        "sumiram todos de uma vez, ou o teste parou de medir")
+    assert extrair_spec(descricao)["marca"] == marca, (
+        "sumiu a marca legítima de %r" % descricao[:60])
+
+
+CODIGO_CERTO = [
+    # o SKU de verdade, e não o código do acabamento que vinha antes
+    ("Chuveiro monocomando Deca Vogue 2993_C36_034 — alta e baixa pressão — "
+     "Cromado CR10", "2993_C36_034"),
+    ("Torneira para lavatório Deca Izy 1198_C37 — Mesa Bica Alta — Cromado CR10",
+     "1198_C37"),
+    # a família não serve: 2310 é a barra, _070_ESC é qual barra
+    ("Barra de apoio Deca Conforto — Aço Inox Escovado ESC, 70 cm, "
+     "ref. 2310_C_070_ESC", "2310_C_070_ESC"),
+    # os que já estavam certos e não podem quebrar
+    ("Torneira de mesa bica móvel cromado 1167.C.LNK Deca", "1167.C.LNK"),
+    ("Cabide cromado CÓD. 2060-C-LN DECA (2 unid.)", "2060-C-LN"),
+    ("Misturador Twin cromado - Cod. 2240.C - Deca", "2240.C"),
+]
+
+
+@pytest.mark.parametrize("descricao,codigo", CODIGO_CERTO)
+def test_sai_o_codigo_do_produto_e_nao_o_do_acabamento(descricao, codigo):
+    from spec_extract import extrair_spec
+    assert extrair_spec(descricao)["codigo"] == codigo
+
+
+def test_capacidade_nao_e_modelo():
+    """🪤 Barrar o nome do bloco de CAD fez o extrator cair na CAPACIDADE:
+    "split Hi-Wall Midea 12.000 BTU" saía com código "12.000"."""
+    from spec_extract import extrair_spec
+    r = extrair_spec("Fornecimento e instalação de split Hi-Wall Midea "
+                     "12.000 BTU modelo VA-Hi-Wall-MIDEA-12kBtu-VS")
+    assert r["marca"] == "Midea"
+    assert r["codigo"] is None, "pegou %r — é a capacidade, não o modelo" % r["codigo"]
+
+
+def test_controle_positivo_a_regua_PEGA_o_extrator_de_ontem():
+    """🧪 Régua que só sabe dar verde não prova nada.
+
+    Aqui ela recebe um extrator de mentira que devolve, em cada caso, o que o
+    de ontem devolvia — e tem que reprovar os 9. Sem este controle, o dia em
+    que a régua parar de medir chega em silêncio e eu leio o verde como
+    'consertado'.
+
+    🪤 A 1ª versão deste controle exigia que a régua visse defeito no extrator
+    REAL. Funcionava enquanto o extrator estava quebrado e quebrou no minuto em
+    que eu consertei — controle que morre no sucesso não guarda nada."""
+    ontem = {d: {c: p} for d, c, p in CASOS}
+    erram = _erros_da_regua(lambda d: ontem.get(d, {}))
+    assert len(erram) == len(CASOS), (
+        "a régua só viu %d dos %d defeitos que o extrator de ontem produzia"
+        % (len(erram), len(CASOS)))

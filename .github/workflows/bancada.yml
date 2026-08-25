@@ -54,7 +54,7 @@ jobs:
       - name: a bancada nao pode ENCOLHER
         working-directory: backend
         env:
-          PISO: 400
+          PISO: 500
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
