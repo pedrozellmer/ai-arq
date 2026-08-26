@@ -65,6 +65,7 @@ from engine_rules import (
     selos_sem_medida as _selos_sem_medida,
     unidade_conflita_com_sinapi as _unidade_conflita_sinapi,
     quantidade_da_procedencia as _quantidade_da_procedencia,
+    quantidade_medida_pelo_pdf as _quantidade_medida_pelo_pdf,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -7981,6 +7982,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # procedência escrita. O passo de injeção implementa isso; a regra de
         # honestidade é que não ficava sabendo.
         _pdfvec_area_m2 = 0.0
+        _pdfvec_compr_m = 0.0
+        _n_resgate_pdf = 0
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             # 🛡️ Freio de MEMÓRIA (idem loop DXF): aborta limpo antes do OOM,
             # mantendo o servidor de pé pros outros clientes.
@@ -8059,6 +8062,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _vet_secao = "\n".join(_linhas)
                         try:
                             _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
+                            _pdfvec_compr_m += float(_vm.get("walls_m") or 0)
                         except (TypeError, ValueError):
                             pass
                         print(f"[pdfvec-promo] {_stem}: escala validada por cota — seção injetada")
@@ -8111,6 +8115,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _vet_secao = "\n".join(_l2)
                         try:
                             _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
+                            _pdfvec_compr_m += float(_vm.get("walls_m") or 0)
                         except (TypeError, ValueError):
                             pass
                         print(f"[pdfvec-promo] {_stem}: escala de {_fonte} sem prova — seção ESTIMADA injetada")
@@ -8226,6 +8231,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # qty=0 permitido em "estimado" (usuário preenche); forçar 1 só em confirmado
                     if qty < 0:
                         qty = 0
+                    if qty == 0:
+                        # 🎯 26/08 — A MEDIÇÃO DO PDF ESTAVA NA LINHA E A
+                        # QUANTIDADE VINHA ZERO. Caso Construtora Mr, visto na
+                        # avaliação isolada `eve9afae`:
+                        #   "Piso cerâmico"  qtd 0  obs: "Área total medida
+                        #                                 vetorialmente: 13,6 m²"
+                        #   "Rodapé"         qtd 0  obs: "perímetro total de
+                        #                                 paredes medido (38,8 m)"
+                        # 🔑 A prova é a IGUALDADE com o que NÓS medimos, não a
+                        # frase. E a família da unidade tem que bater — é isso
+                        # que segura a linha de parede do MESMO cliente, onde a
+                        # IA inventou "38,8 m × pé-direito 2,70 m = 104,8 m²":
+                        # o 38,8 é comprimento num item de m², e o 104,8 não bate
+                        # com medição nenhuma. Essa linha continua zerada, que é
+                        # o certo — ninguém mediu altura.
+                        _q_pdf = _quantidade_medida_pelo_pdf(
+                            item_data.get("observations", ""),
+                            item_data.get("unit", ""),
+                            area_pdf=_pdfvec_area_m2,
+                            comprimento_pdf=_pdfvec_compr_m)
+                        if _q_pdf:
+                            qty = _q_pdf
+                            _n_resgate_pdf += 1
                     if qty == 0 and conf == "confirmado":
                         qty = 1
 
@@ -8986,10 +9014,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                   f"não-medidos (Vision) — evita m² inventado (regra nº1)")
         try:
             _pres = int(getattr(_apply_area_honesty, "ultimo_preservados", 0) or 0)
+            try:
+                _n_resgate_pdf_log = int(_n_resgate_pdf)
+            except NameError:
+                _n_resgate_pdf_log = 0      # job sem PDF: o laço nem existiu
             if _pres or _n_fill or _blanked:
+                # 🪤 `preservados_por_pe_direito` virou nome errado quando a
+                # preservação por medição do PDF entrou no mesmo contador
+                # (26/08). Na avaliação `eve9afae` ele imprimiu
+                # "preservados_por_pe_direito=1" para um item preservado pela
+                # GEOMETRIA do PDF, com pé-direito 0. Renomeado.
                 _log_error("motor:honestidade-area",
                            f"preenchidos={_n_fill} zerados={_blanked} "
-                           f"preservados_por_pe_direito={_pres}", job_id)
+                           f"preservados={_pres} "
+                           f"resgate_pdf={_n_resgate_pdf_log}", job_id)
         except Exception:
             pass
         # Pintura derivada do pé-direito informado (01/08/2026) — só quando a

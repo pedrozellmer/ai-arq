@@ -1544,6 +1544,77 @@ _UNI_LINEAR = {"ml", "m"}
 _TOL_PROCEDENCIA = 0.01      # 1% — é pra confirmar a NOSSA medição, não arredondar
 
 
+_RX_NUM_COM_UNIDADE = _re.compile(
+    r"([0-9]{1,3}(?:\.[0-9]{3})*(?:[.,][0-9]+)?)\s*(m²|m2|ml|m)\b", _re.IGNORECASE)
+
+
+def quantidade_medida_pelo_pdf(observacao, unidade, area_pdf=0, comprimento_pdf=0,
+                               tol=0.01):
+    """Igual à `quantidade_da_procedencia`, mas para a medição VETORIAL do PDF.
+
+    🚨 26/08/2026, caso **Construtora Mr** (cliente do dia, baixou às 13:20).
+    Rodado em modo avaliação isolada depois do conserto, o resultado mostrou o
+    padrão de novo — a IA escreve a medição NOSSA na observação e deixa a
+    quantidade em zero:
+
+        "Piso cerâmico/porcelanato"  qtd 0
+            obs: "Área total medida vetorialmente: 13,6 m² (3 ambientes)"
+        "Rodapé em cerâmica"         qtd 0
+            obs: "perímetro total de paredes medido vetorialmente (38,8 m)"
+
+    O motor mediu 13,6 m² de ambiente e 38,8 m de parede no PDF dele — os dois
+    números estão escritos nas linhas, e as duas linhas saem vazias.
+
+    🔑 A PROVA NÃO É O TEXTO, É A IGUALDADE. Só preenche quando o número citado
+    bate (±1%) com um valor que NÓS medimos nesta leitura (`rooms_m2` ou
+    `walls_m` do motor vetorial). Não casa a frase — casa o NÚMERO. Por isso
+    não importa como a IA escreveu.
+
+    🚨 E a família da unidade tem que bater: área com área, comprimento com
+    comprimento. É essa trava que segura o caso perigoso do MESMO cliente:
+
+        "Parede de alvenaria"  obs: "38,8 m de paredes medidas vetorialmente
+                                     × pé-direito 2,70 m = 104,8 m² bruto"
+
+    Aqui a IA **inventou o pé-direito de 2,70 m** — ninguém informou. O 38,8
+    existe na observação e bate com a nossa medição, mas é COMPRIMENTO num item
+    de m²: não entra. E o 104,8 não bate com medição nenhuma: também não entra.
+    A linha continua zerada, que é o certo — não medimos altura.
+
+    🚫 Não promove confiança: quem chama mantém o `confidence` da IA. A escala
+    do PDF veio do carimbo, e carimbo é declaração, não prova.
+    """
+    if not observacao or not unidade:
+        return None
+    u = str(unidade).strip().lower()
+    if u in _UNI_AREA:
+        alvo = float(area_pdf or 0)
+    elif u in _UNI_LINEAR:
+        alvo = float(comprimento_pdf or 0)
+    else:
+        return None
+    if alvo <= 0:
+        return None
+    for m in _RX_NUM_COM_UNIDADE.finditer(str(observacao)):
+        bruto, uni_txt = m.group(1), m.group(2).lower()
+        # a unidade escrita ao lado do número também tem que ser da família certa
+        if u in _UNI_AREA and uni_txt not in ("m²", "m2"):
+            continue
+        if u in _UNI_LINEAR and uni_txt not in ("ml", "m"):
+            continue
+        try:
+            valor = float(bruto.replace(".", "").replace(",", ".")
+                          if bruto.count(",") == 1 and "." in bruto
+                          else bruto.replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if valor <= 0:
+            continue
+        if abs(valor / alvo - 1.0) <= tol:
+            return round(valor, 2)
+    return None
+
+
 def quantidade_da_procedencia(observacao, unidade, areas_por_layer=None,
                               comprimentos_por_layer=None):
     """Devolve a quantidade quando a observação CITA uma medição nossa que
