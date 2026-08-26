@@ -8064,7 +8064,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         print(f"[pdfvec-promo] {_stem}: escala validada por cota — seção injetada")
                         _log_error("pdfvec:promo",
                                    f"{_stem}: escala 1:{_vm.get('scale')} PROVADA por "
-                                   f"{_vm.get('cotas_batem')} cota(s) — pode sair confirmado",
+                                   f"{_vm.get('cotas_batem')} cota(s) — pode sair confirmado "
+                                   f"(ambientes={_vm.get('n_rooms')} m2={_vm.get('rooms_m2')} "
+                                   f"paredes_m={_vm.get('walls_m') or 0} "
+                                   f"n_paredes={_vm.get('n_walls') or 0})",
                                    job_id)
                     elif (_vm.get("n_rooms") or _vm.get("walls_m")) and _vm.get("scale"):
                         # 🎯 ESCALA SEM PROVA (12/08/2026) — entrega como ESTIMADO.
@@ -8111,10 +8114,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         except (TypeError, ValueError):
                             pass
                         print(f"[pdfvec-promo] {_stem}: escala de {_fonte} sem prova — seção ESTIMADA injetada")
+                        # 🔍 26/08: o log gravava só ambientes e m², e a PAREDE
+                        # ficava de fora — que é justamente o que destrava
+                        # pintura e rodapé. No caso Construtora Mr eu não
+                        # consegui responder "mediu parede?" olhando o log, e a
+                        # resposta decide se vale pedir o pé-direito pra ele.
                         _log_error("pdfvec:promo",
                                    f"{_stem}: escala 1:{_vm.get('scale')} de {_fonte} SEM prova de cota "
                                    f"— injetado como estimado (ambientes={_vm.get('n_rooms')} "
-                                   f"m2={_vm.get('rooms_m2')})", job_id)
+                                   f"m2={_vm.get('rooms_m2')} "
+                                   f"paredes_m={_vm.get('walls_m') or 0} "
+                                   f"n_paredes={_vm.get('n_walls') or 0} "
+                                   f"err_paredes={(_vm.get('err_walls') or '-')[:60]})", job_id)
                 except Exception as _ve:
                     print(f"[pdfvec-promo] {_stem}: sem promoção ({_ve})")
                     _log_error("pdfvec:promo", f"{_stem}: FALHOU {type(_ve).__name__}: {_ve}"[:200], job_id)
