@@ -1529,3 +1529,87 @@ def merge_itens(itens_pai, itens_filho, plano: dict) -> list:
             if pr and lado_da.get(pr) == origem:
                 saida.append(dict(it))
     return saida
+
+
+# ── A MEDIÇÃO ESTAVA NA OBSERVAÇÃO E A QUANTIDADE VINHA ZERO (26/08/2026) ──
+_RX_LAYER_MEDIDO = _re.compile(
+    r"(?:área|area)\s+hachurada\s+do\s+layer\s+['\"\u2018\u2019\u201c\u201d]?(?P<ly>[^'\"\u2018\u2019\u201c\u201d=]+?)"
+    r"['\"\u2018\u2019\u201c\u201d]?\s*=\s*(?P<v>[0-9]+(?:[.,][0-9]+)?)\s*m[²2]"
+    r"|comprimento\s+do\s+layer\s+['\"\u2018\u2019\u201c\u201d]?(?P<ly2>[^'\"\u2018\u2019\u201c\u201d=]+?)"
+    r"['\"\u2018\u2019\u201c\u201d]?\s*=\s*(?P<v2>[0-9]+(?:[.,][0-9]+)?)\s*m\b",
+    _re.IGNORECASE)
+
+_UNI_AREA = {"m²", "m2"}
+_UNI_LINEAR = {"ml", "m"}
+_TOL_PROCEDENCIA = 0.01      # 1% — é pra confirmar a NOSSA medição, não arredondar
+
+
+def quantidade_da_procedencia(observacao, unidade, areas_por_layer=None,
+                              comprimentos_por_layer=None):
+    """Devolve a quantidade quando a observação CITA uma medição nossa que
+    CONFERE com a extração — senão devolve None.
+
+    🚨 26/08/2026, caso Alan (job de 24/08 21:39): 31 de 73 linhas de área e
+    comprimento saíram com quantidade ZERO **tendo o número medido escrito na
+    própria observação**:
+
+        "Forro de gesso acartonado"   qtd 0  obs: "área hachurada do layer
+                                                   -TEFOR = 26.54 m² (17 hachuras)"
+        "Revestimento de parede"      qtd 0  obs: "área hachurada do layer
+                                                   '-TEPAR' = 268.39 m²"
+        "Execução de parede nova"     qtd 0  obs: "comprimento do layer
+                                                   '-TEPAR' = 302.14 m"
+
+    O motor mediu, a IA citou o layer e o valor, e a coluna de quantidade veio
+    vazia. Medido no acervo: **126 de 1.579** linhas zeradas de área/comprimento
+    (8,0%) têm um número medido na observação.
+
+    🔑 ISTO NÃO CONFIA NO TEXTO. O texto só diz ONDE olhar; quem decide é a
+    extração. O valor citado tem que bater (±1%) com `get_areas_by_layer()` ou
+    `get_walls_by_layer()` do MESMO layer. Se o layer não existe, ou o número
+    não confere, devolve None e a linha continua zerada.
+    🪤 É a trava que separa isto do experimento REPROVADO de 25/08, onde proibir
+    `quantity=0` no prompt destravou 30 de 31 linhas — com chute redondo (50,
+    80, 40 m²), só 2 a 5 batendo com algo da prancha. Zero honesto é melhor que
+    chute plausível; medição nossa confirmada é melhor que os dois.
+
+    🚫 NÃO promove confiança: quem chama mantém o `confidence` que a IA deu.
+    Preencher a quantidade e carimbar 'medido' são passos diferentes.
+    """
+    if not observacao or not unidade:
+        return None
+    u = str(unidade).strip().lower()
+    obs = str(observacao)
+    for m in _RX_LAYER_MEDIDO.finditer(obs):
+        e_area = m.group("ly") is not None
+        layer = (m.group("ly") if e_area else m.group("ly2")) or ""
+        bruto = (m.group("v") if e_area else m.group("v2")) or ""
+        layer = layer.strip().strip("'\"\u2018\u2019\u201c\u201d ")
+        if not layer:
+            continue
+        if e_area and u not in _UNI_AREA:
+            continue          # citou área e o item é linear: não serve
+        if (not e_area) and u not in _UNI_LINEAR:
+            continue
+        try:
+            valor = float(bruto.replace(",", "."))
+        except (TypeError, ValueError):
+            continue
+        if valor <= 0:
+            continue
+        fonte = (areas_por_layer if e_area else comprimentos_por_layer) or {}
+        real = fonte.get(layer)
+        if real is None:      # tenta sem diferenciar maiúscula (layer do CAD varia)
+            _bx = {str(k).strip().lower(): v for k, v in fonte.items()}
+            real = _bx.get(layer.lower())
+        if real is None:
+            continue
+        try:
+            real = float(real)
+        except (TypeError, ValueError):
+            continue
+        if real <= 0:
+            continue
+        if abs(valor / real - 1.0) <= _TOL_PROCEDENCIA:
+            return round(valor, 2)
+    return None

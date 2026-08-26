@@ -64,6 +64,7 @@ from engine_rules import (
     caveat_atinge_unidade as _caveat_atinge_unidade,
     selos_sem_medida as _selos_sem_medida,
     unidade_conflita_com_sinapi as _unidade_conflita_sinapi,
+    quantidade_da_procedencia as _quantidade_da_procedencia,
 )
 # calibrator.py foi desativado: o modelo de "fator absoluto" (real/ai) não
 # respeita o isolamento entre projetos. A calibração agora é 100% por
@@ -7525,6 +7526,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             if pd.get("new_rooms"): project_data.new_rooms.extend(pd["new_rooms"])
                             if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
 
+                        # 🎯 26/08/2026 — A MEDIÇÃO ESTAVA NA OBSERVAÇÃO E A
+                        # QUANTIDADE VINHA ZERO. Caso Alan (24/08 21:39): 31 de
+                        # 73 linhas de área/comprimento saíram zeradas com o
+                        # número medido escrito na própria linha ("área hachurada
+                        # do layer -TEPAR = 268.39 m²"). O motor mediu, a IA citou
+                        # o layer e o valor, e a coluna veio vazia.
+                        # Estes dois dicionários são a PROVA: o texto só diz onde
+                        # olhar, quem decide é a extração.
+                        try:
+                            _areas_ly = extraction.get_areas_by_layer() or {}
+                            _areas_ly.update(extraction.get_polygon_areas_by_layer() or {})
+                            _compr_ly = extraction.get_walls_by_layer() or {}
+                        except Exception:
+                            _areas_ly, _compr_ly = {}, {}
+                        _n_resgate_proc = 0
                         # Extrair itens
                         _n_item_perdido = 0   # quantos morreram no except do laço
                         for item_data in result.get("items", []):
@@ -7568,6 +7584,23 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # Só forçamos qty=1 em CONFIRMADO (deveria ter número real).
                                 if qty < 0:
                                     qty = 0
+                                if qty == 0:
+                                    # 🎯 A linha cita uma medição NOSSA? Só preenche
+                                    # se o valor CONFERIR (±1%) com a extração do
+                                    # mesmo layer — o texto diz onde olhar, a
+                                    # geometria decide. 🚫 Não mexe no `conf`:
+                                    # preencher a quantidade e carimbar 'medido'
+                                    # são passos diferentes (regra nº1).
+                                    # 🪤 Diferente do experimento REPROVADO de
+                                    # 25/08, onde proibir qty=0 no prompt destravou
+                                    # 30 de 31 linhas com chute redondo.
+                                    _q_proc = _quantidade_da_procedencia(
+                                        item_data.get("observations", ""),
+                                        item_data.get("unit", ""),
+                                        _areas_ly, _compr_ly)
+                                    if _q_proc:
+                                        qty = _q_proc
+                                        _n_resgate_proc += 1
                                 if qty == 0 and conf == "confirmado":
                                     qty = 1  # defensivo: confirmado sem número cai em vb=1
 
@@ -7702,6 +7735,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        f"perdidos={_n_item_perdido} "
                                        f"stop={getattr(response, 'stop_reason', '?')} "
                                        f"truncado={_dxf_truncado} "
+                                       # 26/08: quantas linhas vieram zeradas com a
+                                       # medição NOSSA escrita na própria observação.
+                                       f"resgate_procedencia={_n_resgate_proc} "
                                        f"resp_chars={len(text)}", job_id)
                             if _laco.get("laco"):
                                 _log_error(
