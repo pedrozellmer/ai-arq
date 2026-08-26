@@ -161,7 +161,7 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
     "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
-    "motor:respostas-releitura",
+    "motor:respostas-releitura", "motor:informou-depois",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
     "pdfvec:shadow", "pdfvec:promo", "dxfrooms:shadow",
     "dwg:aec-detectado-no-upload",
@@ -17008,7 +17008,20 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
 
 
 class InformAreaPayload(BaseModel):
-    area: float
+    area: float = 0
+    # 🎯 26/08/2026 — O PÉ-DIREITO É O CAMPO QUE MAIS MUDA A PLANILHA, e esta
+    # rota (que existe desde o caso Catarina) só aceitava a ÁREA — justamente a
+    # que NÃO ajuda. Medido em 45 dias, % de linhas de área/comprimento que saem
+    # em branco:
+    #     não informou nada .......... 93 projetos ... 59,5%
+    #     informou só a ÁREA .......... 7 projetos ... 64,4%   <- não ajuda
+    #     informou só o PÉ-DIREITO .... 5 projetos ... 27,3%
+    #     informou os dois ............ 5 projetos ... 29,2%
+    # E a verdade de campo (96 correções de 6 clientes) diz que 87% do que o
+    # cliente corrige é PREENCHER linha zerada — não consertar número errado.
+    # 🔑 Pedir DEPOIS é melhor que pedir antes: no upload ele ainda não viu o
+    # problema; na tela do projeto ele está olhando a linha em branco.
+    pe_direito: float = 0
 
 
 @app.post("/api/project/{job_id}/inform-area")
@@ -17026,13 +17039,24 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
     from models import BudgetItem, Confidence, ProjectData
     from spreadsheet import generate_spreadsheet
 
-    # 1) Validar área informada
+    # 1) Validar o que veio — área, pé-direito, ou os dois
     try:
         area = round(float(payload.area or 0), 2)
     except (TypeError, ValueError):
         area = 0
-    if area <= 0 or area > 1_000_000:
+    try:
+        pe_dir = round(float(payload.pe_direito or 0), 2)
+    except (TypeError, ValueError):
+        pe_dir = 0
+    if area and (area <= 0 or area > 1_000_000):
         raise HTTPException(400, "Informe uma área válida em m² (maior que 0).")
+    # 🪤 Mesma faixa do campo do upload (1,8 a 8 m): fora disso não é pé-direito
+    # de edificação, é erro de digitação — e um pé-direito errado multiplica a
+    # pintura inteira.
+    if pe_dir and not (1.8 <= pe_dir <= 8):
+        raise HTTPException(400, "Informe um pé-direito entre 1,80 m e 8,00 m.")
+    if area <= 0 and pe_dir <= 0:
+        raise HTTPException(400, "Informe a área total (m²) ou o pé-direito (m).")
 
     # 2) Projeto + itens atuais (mesmo padrão do finalize_review)
     try:
@@ -17061,13 +17085,30 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
 
     # 3) Reconstituir ProjectData (área = informada) + BudgetItems na MESMA ordem
     #    (list_project_items vem ordenado por sort_order → re-persistir preserva ordem)
+    # 🪤 Se veio SÓ o pé-direito, a área que o projeto já tinha (medida ou
+    # informada antes) não pode ser apagada nem virar "informado por você" —
+    # seria trocar medição por rótulo de estimativa sem ninguém pedir.
+    _area_ja_tinha = 0.0
+    try:
+        _area_ja_tinha = float(proj.get("total_area") or 0)
+    except (TypeError, ValueError):
+        _area_ja_tinha = 0.0
     pd = ProjectData(
         name=proj.get("project_name", "") or "Projeto",
-        total_area=area,
+        total_area=(area or _area_ja_tinha),
         layout_area=proj.get("layout_area") or 0,
     )
     try:
-        pd.total_area_source = "informado"
+        if area > 0:
+            pd.total_area_source = "informado"
+        else:
+            pd.total_area_source = (proj.get("total_area_source") or "")
+    except Exception:
+        pass
+    # o pé-direito informado agora vale mais que o que estava salvo
+    _pd_efetivo = pe_dir or float((proj or {}).get("user_pe_direito") or 0)
+    try:
+        pd.user_pe_direito = _pd_efetivo
     except Exception:
         pass
 
@@ -17103,9 +17144,22 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
     # banco a área que a honestidade tinha preservado no motor — o cliente perdia
     # dado por ter informado MAIS dado.
     filled, _ = _apply_area_honesty(
-        items, area, "informado",
-        pe_direito=float((proj or {}).get("user_pe_direito") or 0),
+        items, (area or _area_ja_tinha), ("informado" if area > 0 else ""),
+        pe_direito=_pd_efetivo,
         apenas_preencher=True)
+    # 🎯 26/08 — E A PINTURA DE PAREDE, que a área NUNCA preenche (a docstring
+    # desta rota sempre disse: "itens que não escalam com piso NÃO são
+    # preenchidos"). Σ(comprimento medido) × pé-direito × 2 faces, lido dos
+    # PRÓPRIOS itens salvos — não precisa do CAD nem de reprocessar.
+    # 🚫 Sai ESTIMADO com a conta escrita e o aviso de que vãos não foram
+    # descontados. Nunca 'confirmado' (regra nº1) e nunca sobrescreve pintura
+    # que já tem número (regra nº7).
+    _pintou = 0
+    try:
+        if _pd_efetivo > 0:
+            _pintou = _derive_pintura_pe_direito(items, _pd_efetivo)
+    except Exception as _edp:
+        print(f"[inform-area] derivação por pé-direito não-fatal: {_edp}")
 
     # 5) Enriquecimento (TCPO + heurísticas) igual ao finalize + gerar xlsx in-place
     typology = proj.get("typology") or "office"
@@ -17146,32 +17200,57 @@ async def inform_project_area(job_id: str, payload: InformAreaPayload, request: 
 
     # 7) Atualizar projeto: área informada + warning honesto (troca avisos antigos
     #    de "informe a área" pra não duplicar)
-    _warn = (f"Área total de {area:.0f} m² INFORMADA POR VOCÊ (a planta não trazia cota "
-             f"pra medir). Preenchemos os itens de piso/forro/laje com essa base — "
-             f"confira antes de orçar. Pra medir de verdade, envie o DXF.")
+    _novos_avisos = []
+    if area > 0:
+        _novos_avisos.append(
+            f"Área total de {area:.0f} m² INFORMADA POR VOCÊ (a planta não trazia cota "
+            f"pra medir). Preenchemos os itens de piso/forro/laje com essa base — "
+            f"confira antes de orçar. Pra medir de verdade, envie o DXF.")
+    if pe_dir > 0:
+        _novos_avisos.append(
+            f"Pé-direito de {pe_dir:.2f} m INFORMADO POR VOCÊ. Com ele fechamos a "
+            f"pintura de parede em m² (comprimento medido × altura × 2 faces) — "
+            f"vãos de portas e janelas NÃO foram descontados. É estimativa com a "
+            f"conta escrita, não medição do desenho.")
     _existing = proj.get("warnings") or []
     if not isinstance(_existing, list):
         _existing = []
     _existing = [w for w in _existing
                  if "não trazia" not in str(w) and "informe a área" not in str(w).lower()
-                 and "informe a metragem" not in str(w).lower()]
-    _supabase_update("projects", "job_id", job_id, {
-        "total_area": area,
-        "warnings": _existing + [_warn],
-    })
+                 and "informe a metragem" not in str(w).lower()
+                 and "pé-direito de" not in str(w).lower()]
+    _patch_proj = {"warnings": _existing + _novos_avisos}
+    if area > 0:
+        _patch_proj["total_area"] = area
+    _supabase_update("projects", "job_id", job_id, _patch_proj)
     # 🪤 `user_total_area` NÃO existe na RPC update_project_status — ia junto no
     # dicionário acima e era descartado sem erro (mesmo bug dos carimbos da
     # regra nº7, achado em 03/08). O campo é o que registra que esta área foi
     # INFORMADA e não medida: sem ele, o projeto fica com `total_area` e nada
     # dizendo de onde veio, e o aviso de divergência (informada × medida) nunca
     # dispara. Ninguém tinha usado este fluxo ainda — bug latente, não estrago.
-    _projeto_patch(job_id, {"user_total_area": area})
+    # 🪤 Mesmo motivo do `user_total_area`: `user_pe_direito` também não existe na
+    # RPC update_project_status e seria descartado em silêncio no dicionário
+    # acima. Sem ele gravado, um reprocesso futuro perderia o pé-direito que o
+    # cliente informou aqui — e a pintura sumiria de novo.
+    _patch_user = {}
+    if area > 0:
+        _patch_user["user_total_area"] = area
+    if pe_dir > 0:
+        _patch_user["user_pe_direito"] = pe_dir
+    if _patch_user:
+        _projeto_patch(job_id, _patch_user)
+    _log_error("motor:informou-depois",
+               f"area={area} pe_direito={pe_dir} preenchidos={filled} "
+               f"pintura_derivada={_pintou} itens={len(items)}", job_id)
 
     return {
         "status": "ok",
         "job_id": job_id,
         "area": area,
-        "filled_count": filled,
+        "pe_direito": pe_dir,
+        "filled_count": filled + _pintou,
+        "pintura_derivada": _pintou,
         "items_count": len(items),
         "download_url": f"/api/download/{job_id}",
     }

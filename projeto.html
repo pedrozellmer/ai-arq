@@ -201,7 +201,34 @@
       </div>
     </div>
   </div>
-<div id="cad-upgrade-banner" class="hidden rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
+<!-- 🎯 26/08/2026 — O CONVITE QUE FALTAVA. O de cima (área) só aparece quando a
+     planta não trazia cota, e nunca preenche pintura de parede. Medido em 45
+     dias, % de linhas de área/comprimento que saem EM BRANCO:
+         não informou nada .......... 93 projetos ... 59,5%
+         informou só a ÁREA .......... 7 projetos ... 64,4%   <- não ajuda
+         informou só o PÉ-DIREITO .... 5 projetos ... 27,3%
+     O pé-direito corta pela metade, e só 6,8% informam. E a verdade de campo
+     (96 correções de 6 clientes reais) diz que 87% do que o cliente corrige é
+     PREENCHER linha zerada. Aqui ele está olhando a linha em branco — é a hora
+     certa de pedir, não no upload. -->
+  <div id="pd-prompt" class="hidden rounded-xl border-2 border-indigo-200 bg-indigo-50 p-5">
+    <div class="flex items-start gap-3">
+      <span class="text-2xl shrink-0" aria-hidden="true">📏</span>
+      <div class="flex-1">
+        <h3 class="font-semibold text-indigo-900 mb-1">A pintura de parede ficou em branco</h3>
+        <p class="text-sm text-indigo-800 mb-3">A gente mediu o <b>comprimento</b> das paredes no seu desenho, mas a planta não diz a <b>altura</b> &mdash; e sem ela a pintura não fecha em m². Informe o <b>pé-direito</b> que a gente completa na hora: comprimento medido &times; altura &times; 2 faces. Sai como <b>&#9888; estimado</b>, com a conta escrita na linha e sem descontar vãos de portas e janelas &mdash; confira antes de orçar.</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="pd-input" class="sr-only">Pé-direito em metros</label>
+          <input type="number" id="pd-input" min="1.8" max="8" step="0.01" inputmode="decimal" placeholder="Ex: 2,70" class="w-32 px-3 py-2 rounded-lg border border-indigo-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <span class="text-sm text-indigo-700">m</span>
+          <button type="button" id="pd-submit" onclick="submitInformedPeDireito()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium">Completar a pintura</button>
+          <span id="pd-msg" class="text-sm" aria-live="polite"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="cad-upgrade-banner" class="hidden rounded-xl border-2 border-amber-300 bg-amber-50 p-5">
     <div class="flex items-start gap-3">
       <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
       <div class="flex-1">
@@ -1305,6 +1332,7 @@ async function carregarStatsEntregas() {
   safeRun(() => renderMetrics(proj, items), 'renderMetrics');
   safeRun(() => renderWarnings(proj.warnings || []), 'renderWarnings');
   safeRun(() => maybeShowAreaPrompt(proj, items), 'maybeShowAreaPrompt');
+  safeRun(() => maybeShowPeDireitoPrompt(proj, items), 'maybeShowPeDireitoPrompt');
   safeRun(() => renderDates(proj), 'renderDates');
   safeRun(() => renderFiles(proj, items), 'renderFiles');
 
@@ -1916,6 +1944,7 @@ window.switchUploadTab = switchUploadTab;
       'erro-block',             // 3. estado vivo: erro (condicional)
       'proj-warnings',          // 4. avisos do motor (condicional)
       'area-prompt',            // 4b. informe a metragem (condicional — planta sem cota)
+      'pd-prompt',              // 4c. informe o pé-direito (condicional — pintura de parede em branco)
       'dados-card',             // 5. dados do projeto/cliente (orientacao)
       'metadados-strip',        // 6. faixa compacta (tipologia/area)
       'raiox-card',             // 7. Raio-X (o HEROI da pagina)
@@ -2746,6 +2775,81 @@ function maybeShowAreaPrompt(proj, items) {
     if (!hasBlankArea) return;
     document.getElementById('area-prompt').classList.remove('hidden');
   } catch (e) { console.warn('[area-prompt]', e); }
+}
+
+// 🎯 26/08/2026 — convite do PÉ-DIREITO. Condições, todas necessárias:
+//   1. o cliente ainda NÃO informou o pé-direito;
+//   2. existe pintura de PAREDE (não de teto/forro) com quantidade zero;
+//   3. existe parede MEDIDA em metro linear — sem comprimento não há conta.
+// A 3ª é o que separa "dá pra completar" de "pedir dado que não resolve".
+//
+// 🪤 A condição 1 lê o AVISO, não `proj.user_pe_direito`: a RPC
+// `list_user_projects` NÃO devolve esse campo (conferido no banco em 26/08 —
+// ela devolve job_id, project_name, typology, status, total_area, warnings…).
+// Ler o campo inexistente daria `undefined`, a trava nunca fecharia, e o
+// convite apareceria pra quem já tinha informado. Guarda que sempre passa é
+// pior que guarda nenhum. O `warnings` a RPC devolve, e o backend escreve
+// "Pé-direito de X,XX m INFORMADO POR VOCÊ" lá quando o cliente informa.
+function maybeShowPeDireitoPrompt(proj, items) {
+  try {
+    const avisos = Array.isArray(proj.warnings) ? proj.warnings : [];
+    if (avisos.some(w => String(w || '').toLowerCase().includes('pé-direito de'))) return;
+    const lista = items || [];
+    const ehPinturaParede = (d) =>
+      (d.includes('pintura') || d.includes('látex') || d.includes('latex')) &&
+      !d.includes('teto') && !d.includes('forro');
+    const pinturaVazia = lista.some(it => {
+      const d = String(it.description || '').toLowerCase();
+      return ehPinturaParede(d) && Number(it.quantity || 0) === 0;
+    });
+    if (!pinturaVazia) return;
+    const paredeMedida = lista.some(it => {
+      const u = String(it.unit || '').toLowerCase().trim();
+      const d = String(it.description || '').toLowerCase();
+      return (u === 'm' || u === 'ml') && Number(it.quantity || 0) > 0 &&
+        (d.includes('parede') || d.includes('alvenaria') || d.includes('drywall'));
+    });
+    if (!paredeMedida) return;
+    document.getElementById('pd-prompt').classList.remove('hidden');
+  } catch (e) { console.warn('[pd-prompt]', e); }
+}
+
+async function submitInformedPeDireito() {
+  const inp = document.getElementById('pd-input');
+  const btn = document.getElementById('pd-submit');
+  const msg = document.getElementById('pd-msg');
+  const val = parseFloat(String(inp.value || '').replace(',', '.'));
+  if (!val || val < 1.8 || val > 8) {
+    msg.textContent = '⚠ Informe um pé-direito entre 1,80 m e 8,00 m.';
+    msg.className = 'text-sm text-amber-700';
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = '⏳ Completando...';
+  msg.className = 'text-sm text-indigo-700';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await fetch(`${API_BASE}/api/project/${jobId}/inform-area`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + (session ? session.access_token : '')
+      },
+      body: JSON.stringify({ pe_direito: val })
+    });
+    if (!r.ok) { throw new Error(await r.text() || ('HTTP ' + r.status)); }
+    const data = await r.json();
+    msg.textContent = data.pintura_derivada
+      ? '✓ Pintura de parede calculada. Recarregando...'
+      : '✓ Pé-direito salvo. Recarregando...';
+    msg.className = 'text-sm text-emerald-700';
+    setTimeout(() => location.reload(), 1200);
+  } catch (e) {
+    console.error('[inform-pe-direito]', e);
+    msg.textContent = '✗ Não consegui completar agora. Tenta de novo.';
+    msg.className = 'text-sm text-red-700';
+    btn.disabled = false;
+  }
 }
 
 async function submitInformedArea() {
