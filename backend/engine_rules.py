@@ -115,6 +115,72 @@ def is_likely_wrong_type(quantities, threshold=0.75):
     return zeros / len(qs) >= threshold
 
 
+def detectar_laco_repeticao(texto: str, tokens_saida: int = 0) -> dict:
+    """A IA entrou em laco de repeticao e queimou a resposta inteira?
+
+    🚨 26/08/2026, caso Amanda (job 43a799c0). De 4 pranchas, 1 chegou na
+    planilha. Duas devolveram ZERO item com stop=max_tokens -- e o log dizia
+    `perdidos=0`. O que a IA escrevia:
+
+        RACIOCINIO: Passo 1 - Inventario de layers: ... [15 mil chars corretos]
+        +1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1+1
+        [ate esgotar os 32.000 tokens -- nunca emite o JSON]
+
+    Ela soma bloco por bloco porque o conversor da um nome por INSTANCIA
+    (1.570 nomes pra 1.570 pecas), e `temperature=0` -- decodificacao gulosa --
+    nao deixa escapar do laco.
+
+    🔑 DOIS SINAIS, porque um so engana:
+      1. DENSIDADE. "+1" e UM token de dois caracteres, entao a resposta fica
+         com ~1,05 caractere por token contra 2,5 a 3,0 de texto normal.
+         Medido: laco 1,03/1,05/1,06/1,08 | normal 2,46/2,47/2,53/2,57/2,64.
+         A separacao e limpa e nao depende de saber QUAL padrao se repete.
+      2. REPETICAO LITERAL, no fim do texto (e onde o laco mora).
+
+    🪤 Densidade sozinha nao basta: resposta legitima cheia de numero tambem
+    tokeniza denso. Repeticao sozinha tambem nao: lista JSON tem estrutura
+    repetida por natureza. Exigir OS DOIS e o que separa.
+
+    🪤 Isto NAO conserta o laco -- so o torna visivel. E o laco e NOVO: as 4
+    unicas ocorrencias do acervo sao de 26/08, todas do mesmo cliente. As
+    leituras de 24/08 com `stop=max_tokens` sao OUTRO defeito -- cortaram no
+    teto e mesmo assim entregaram 112, 156 e 162 itens. Mesmo sintoma, causa
+    diferente; por isso o detector olha densidade e repeticao, nao o stop.
+
+    Devolve {"laco": bool, "padrao": str, "repeticoes": int, "densidade": float}.
+    """
+    t = texto or ""
+    fora = {"laco": False, "padrao": "", "repeticoes": 0, "densidade": 0.0}
+    if len(t) < 2000:
+        return fora
+    densidade = len(t) / float(tokens_saida) if tokens_saida else 0.0
+
+    # maior corrida de um padrao curto NO FIM do texto (onde o laco mora)
+    cauda = t[-3000:]
+    melhor_pad, melhor_rep = "", 0
+    for tam in range(1, 9):
+        pad = cauda[-tam:]
+        if not pad.strip():
+            continue
+        n = 0
+        i = len(cauda)
+        while i - tam >= 0 and cauda[i - tam:i] == pad:
+            n += 1
+            i -= tam
+        if n > melhor_rep:
+            melhor_pad, melhor_rep = pad, n
+
+    # 60 repeticoes de um padrao de <=8 chars = ~500 chars da mesma coisa.
+    # Lista JSON legitima nao faz isso: os valores mudam.
+    repetindo = melhor_rep >= 60
+    denso = 0 < densidade <= 1.8     # medido: laco <=1,08 | normal >=2,46
+
+    fora.update({"laco": bool(repetindo and (denso or tokens_saida == 0)),
+                 "padrao": melhor_pad, "repeticoes": melhor_rep,
+                 "densidade": round(densidade, 2)})
+    return fora
+
+
 def response_truncated(stop_reason) -> bool:
     """#7 — resposta da IA cortada no teto de tokens = leitura possivelmente
     INCOMPLETA (disciplinas/itens podem ter ficado de fora). Sinal de 1ª classe

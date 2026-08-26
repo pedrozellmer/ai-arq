@@ -50,6 +50,7 @@ from engine_rules import (
     is_nonsense_item as _is_nonsense_item,
     extract_type_code as _extract_type_code,
     response_truncated as _response_truncated,
+    detectar_laco_repeticao as _detectar_laco,
     is_floor_surface as _is_floor_surface,
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
@@ -7350,7 +7351,34 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             messages=[{"role": "user", "content": dxf_prompt}],
                         )
                         if not any(_t in _dxf_model for _t in ("opus-4-8", "opus-4-7", "fable")):
-                            _dxf_kwargs["temperature"] = 0  # determinismo (Sonnet/Haiku aceitam)
+                            # 🚨 ERA 0, E O ZERO CUSTAVA A PRANCHA INTEIRA (26/08/2026).
+                            # Caso Amanda (job 43a799c0): 2 de 4 pranchas devolveram
+                            # ZERO item. A IA somava bloco a bloco no raciocinio
+                            # ("+1+1+1+1...") e temperature=0 -- decodificacao gulosa --
+                            # nao a deixava escapar do laco: queimava os 32.000 tokens
+                            # sem nunca emitir o JSON. Assinatura: ~1,05 caractere por
+                            # token, contra 2,5-3,0 de texto normal.
+                            #
+                            # 🔑 E o zero NUNCA deu o determinismo que justificava ele:
+                            # em 08/08 o MESMO arquivo deu 458,54 m2 e 177 m2 com
+                            # temperature=0 ligado. "Temperatura zero e decodificacao
+                            # gulosa, nao garantia de determinismo." Pagava-se o custo
+                            # sem receber o beneficio.
+                            #
+                            # Curva medida nas pranchas REAIS da Amanda, com o prompt
+                            # de producao (itens devolvidos):
+                            #     temp     0     0,3    0,5    0,7    1,0
+                            #     pr.03    0      0      56     71     53
+                            #     pr.04    0      0      86    100     84
+                            #     pr.02   30      -      40      ?      ?   <- controle
+                            # 0,7 e o pico nas duas densas, e a prancha que JA funciona
+                            # nao piora. Nao e "quanto maior melhor": 1,0 rende menos.
+                            #
+                            # 🪤 O laco APARECE em todas as temperaturas -- o que muda e
+                            # conseguir sair dele. Por isso o detector (motor:laco-repeticao)
+                            # continua valendo depois deste conserto.
+                            _dxf_kwargs["temperature"] = float(
+                                os.environ.get("DXF_EXTRACT_TEMP", "0.7"))
                         response = _llm_retry(dxf_client, **_dxf_kwargs)
 
                         text = response.content[0].text
@@ -7599,6 +7627,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # a próxima rodada se diagnostica sozinha: itens=0 com
                         # stop=end_turn e resposta curta é o modelo DECIDINDO não
                         # emitir; resp_chars alto com itens=0 é parse perdendo.
+                        # 🚨 LACO DE REPETICAO (26/08/2026, caso Amanda).
+                        # Duas pranchas devolveram ZERO item com stop=max_tokens
+                        # porque a IA somou bloco a bloco no raciocinio
+                        # ("+1+1+1+1...") e nao escapou. O log dizia perdidos=0
+                        # e a prancha sumia da planilha em silencio -- foi assim
+                        # que o defeito viveu desde 24/08. Isto NAO conserta;
+                        # torna visivel.
+                        try:
+                            _out_tok = int(getattr(getattr(response, "usage", None),
+                                                   "output_tokens", 0) or 0)
+                            _laco = _detectar_laco(text, _out_tok)
+                        except Exception:
+                            _laco = {"laco": False}
                         try:
                             _log_error("motor:prancha-itens",
                                        f"arq={os.path.basename(dxf_path)} "
@@ -7607,6 +7648,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                        f"stop={getattr(response, 'stop_reason', '?')} "
                                        f"truncado={_dxf_truncado} "
                                        f"resp_chars={len(text)}", job_id)
+                            if _laco.get("laco"):
+                                _log_error(
+                                    "motor:laco-repeticao",
+                                    f"arq={os.path.basename(dxf_path)} — a IA entrou "
+                                    f"em LACO repetindo {_laco.get('padrao')!r} "
+                                    f"{_laco.get('repeticoes')}x e queimou "
+                                    f"{_out_tok} tokens sem fechar o JSON "
+                                    f"(densidade {_laco.get('densidade')} char/token; "
+                                    f"texto normal fica em 2,5-3,0). "
+                                    f"Itens desta prancha: "
+                                    f"{len(result.get('items', []))}",
+                                    job_id, severity="warning")
                         except Exception:
                             pass
 
