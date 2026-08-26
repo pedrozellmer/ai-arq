@@ -478,6 +478,21 @@ def _supa_rest_tudo(path: str, params=None, pagina: int = _SUPA_TETO_POR_PAGINA,
         p.setdefault("order", ordem)
         st, lote = _supa_rest_service("GET", path, params=p, timeout=timeout)
         if st != 200:
+            # 🚨 26/08/2026 — a coluna de ORDENAÇÃO derrubou a esteira de e-mail
+            # inteira por 42h. O padrão é `id.asc` e `profiles` não tem `id`:
+            # PostgREST devolve 400 "column profiles.id does not exist", quem
+            # chama levanta, e o tick aborta em TODOS os 8 tipos de e-mail.
+            # 🪤 O cron marcava `succeeded` e o HTTP do `net.http_post` era 200 —
+            # o erro estava no CORPO. Não havia uma linha sequer dizendo o nome
+            # da coluna. Esta é ela.
+            # 🪤 `main.py` não tem `logger` — usa print. Escrever `logger.error`
+            # aqui daria NameError DENTRO do tratamento de erro, trocando um
+            # defeito silencioso por um pior. Pyflakes pegou antes do push.
+            if st == 400:
+                print(f"[supa-paginador] {path} devolveu 400 ordenando por "
+                      f"{ordem!r} — se a tabela não tem essa coluna, passe "
+                      f"`ordem=` com uma que exista (profiles usa user_id, "
+                      f"não id)")
             return st, linhas
         lote = lote or []
         linhas.extend(lote)
@@ -11046,8 +11061,16 @@ async def emails_auto_tick(request: Request, dry: int = 0):
         # 🚨 25/08: `limit=5000` nunca valeu — o PostgREST corta em 1000. Sao 77
         # perfis hoje, entao ainda nao mentiu; passando de mil, gente COM perfil
         # sumiria desta lista e receberia "termine seu cadastro" sem precisar.
+        # 🚨 `ordem` É OBRIGATÓRIO AQUI. O padrão do paginador é `id.asc` e
+        # `profiles` NÃO tem `id` — a chave é `user_id`. Sem isto o PostgREST
+        # devolve 400, o `raise` abaixo dispara e o tick aborta INTEIRO: os 8
+        # tipos de e-mail automático ficaram 42h sem sair (24/08 20:00 → 26/08).
+        # 🪤 `boas_vindas_cadastro` nasceu dentro do tick já morto e tem ZERO
+        # envios na vida. Deploy validado por leitura de código passaria: o
+        # código da esteira está certo, o CHAMADOR é que estava.
         _stp, _perfis = _supa_rest_tudo(
-            "profiles", params={"select": "user_id,email"}, timeout=15)
+            "profiles", params={"select": "user_id,email"},
+            ordem="user_id.asc", timeout=15)
         if _stp != 200:
             raise RuntimeError("profiles HTTP %s" % _stp)
         for row in _perfis:
