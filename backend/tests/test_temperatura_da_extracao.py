@@ -84,6 +84,27 @@ def test_temperatura_so_vai_pros_modelos_que_aceitam():
         "Opus e Fable vão devolver 400")
 
 
+def test_o_health_publica_a_temperatura_DE_VERDADE():
+    """🚨 O campo `dxf_temperature_zero` virou mentira no mesmo commit.
+
+    Ele dizia `true` enquanto o motor rodava a 0,7. Instrumento que afirma o
+    contrário do que acontece é pior que instrumento nenhum — foi o `perdidos=0`
+    que escondeu o laço por um dia inteiro. Agora o health publica o VALOR, lido
+    da mesma variável de ambiente que o motor lê.
+    """
+    assert "dxf_temperature_zero" not in _CORPO, (
+        "o campo booleano voltou; ele mente assim que a temperatura sai de 0")
+    assert '"dxf_temperature"' in _CORPO, (
+        "o health parou de publicar a temperatura da extração")
+    i_env = _CORPO.find('DXF_EXTRACT_TEMP')
+    i_health = _CORPO.find('"dxf_temperature"')
+    assert i_env > 0 and i_health > 0, "não achei os dois lados"
+    # o health tem que ler a MESMA variável — senão volta a poder divergir
+    assert 'DXF_EXTRACT_TEMP' in _CORPO[i_health:i_health + 400], (
+        "o health publica um número que não vem de DXF_EXTRACT_TEMP — pode "
+        "divergir do que o motor usa, que é exatamente o defeito de origem")
+
+
 def test_o_detector_de_laco_continua_ligado():
     """🪤 O laço APARECE em todas as temperaturas — o que muda é escapar dele.
 

@@ -1315,7 +1315,7 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                                     fator provado → usar fator_corrigido
       {"status": "ambigua"|None}    sem prova exclusiva → comportamento antigo
     """
-    out: dict = {"status": None, "cotas_utilizaveis": 0}
+    out: dict = {"status": None, "cotas_utilizaveis": 0, "motivo": "nao-avaliada"}
     try:
         msp = doc.modelspace()
         evidence: list[tuple[float, float, Optional[float]]] = []
@@ -1370,7 +1370,17 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                 support[f].append(real_len)
 
         out["cotas_utilizaveis"] = usable
+        out["cotas_digitadas"] = n_digitadas
         if usable < _DIM_MIN_COTAS:
+            # 🔍 26/08/2026 — o log gravava só `cotas=-`, e esse traço juntava
+            # CINCO desfechos diferentes: desenho sem cota, cota de menos, cota
+            # que não fecha, empate entre fatores e correção recusada por
+            # absurdo. Medido no acervo: 27 pranchas de 21 projetos têm 8.370
+            # cotas que o motor leu e não usou — e não dava pra saber por quê.
+            out["motivo"] = ("nenhuma cota linear utilizável no desenho"
+                             if not evidence else
+                             "%d cota(s) lida(s), %d utilizável(is) — mínimo %d"
+                             % (len(evidence), usable, _DIM_MIN_COTAS))
             return out
 
         def _median_of(xs: list) -> float:
@@ -1400,10 +1410,61 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                     "n_cotas": len(support[detected]),
                     "unidade_nome": _UNIT_FACTOR_NAMES[detected],
                 })
-            else:
-                # Compatível com o detectado, mas OUTRO fator também qualificou
-                # (ex.: cotas cm×mm com razão 1:1) — prova não é exclusiva.
-                out["status"] = "ambigua"
+                return out
+            # ⚠ MAIS DE UM FATOR QUALIFICOU. Antes isto encerrava em "ambigua" e
+            # a prancha inteira saía "sem prova de escala" pro cliente.
+            #
+            # 🔍 26/08/2026: medido que o empate costuma ser FALSO. A faixa de
+            # plausibilidade da MEDIANA vai até 100 m — larga o bastante pra um
+            # desenho em centímetro também "qualificar" como METRO:
+            #   0326.CGR.14.600.PISO (376 cotas, $INSUNITS=cm)
+            #      fator 1,0  → mediana 100,00 m | 218 de 311 cotas > 30 m (70,1%)
+            #      fator 0,01 → mediana   1,48 m |   4 de 369 cotas > 30 m ( 1,1%)
+            #   0326.CGR.14.700.FORRO (16 cotas)
+            #      fator 1,0  → mediana  82,24 m | 75,0% das cotas > 30 m
+            #      fator 0,01 → mediana   0,82 m |  0,0%
+            # Prancha cuja cota MEDIANA tem 100 m não existe em edificação.
+            #
+            # O desempate usa `correcao_e_absurda` — o MESMO guarda que já
+            # governa o ramo "corrigida" desde 05/08. Não é critério novo: é o
+            # critério existente aplicado de forma consistente.
+            #
+            # 🚨 DUAS TRAVAS pra isto nunca ser promoção por suposição (regra nº1):
+            #   1. só roda no EMPATE (len(proven) > 1). Prancha com candidato
+            #      único não é tocada — nada que valida hoje passa a falhar.
+            #   2. só CONFIRMA o fator já DETECTADO. Nunca corrige, nunca troca
+            #      unidade, nunca muda uma quantidade.
+            # 🪤 Controle positivo medido: AFP-AQ-LO-229 (metro de verdade, 3
+            # cotas, mediana 1,18 m) tem 0,0% de cotas acima de 30 m — o guarda
+            # NÃO mata o metro legítimo.
+            # 🪤 E o nível de prova não baixou: "validada" JÁ sai hoje com cota
+            # de texto automático (o AFP tem 0 cotas digitadas e valida). O que
+            # esta trecho corrige é a prancha com 376 cotas ser tratada PIOR que
+            # a de 3, só porque um fator fisicamente impossível também passou.
+            fisicos = [f for f in proven if not correcao_e_absurda(support[f])]
+            if len(fisicos) == 1 and fisicos[0] == detected:
+                caidos = ", ".join("%g" % f for f in proven if f not in fisicos)
+                out.update({
+                    "status": "validada",
+                    "fator": detected,
+                    "n_cotas": len(support[detected]),
+                    "unidade_nome": _UNIT_FACTOR_NAMES[detected],
+                    "desempatada_por_fisica": (
+                        "%d fatores qualificaram; %s caiu(ram) por cota implausível "
+                        "(acima de %g m em mais de %.0f%% das cotas)"
+                        % (len(proven), caidos, _DIM_ABSURDO_M,
+                           _DIM_ABSURDO_FRACAO * 100)),
+                })
+                logger.info("[unit-cotas] empate desfeito por física: %s",
+                            out["desempatada_por_fisica"])
+                return out
+            # Empate REAL — nenhum sobrou, sobrou mais de um, ou o que sobrou não
+            # é o detectado. A prova não é exclusiva: fica calada, mas DIZENDO.
+            out["status"] = "ambigua"
+            out["motivo"] = ("empate entre os fatores %s (%d cotas utilizáveis, "
+                             "%d com número digitado)"
+                             % (", ".join("%g" % f for f in proven), usable,
+                                n_digitadas))
             return out
 
         # Contradição consistente: o detectado não se provou E existe UM ÚNICO
@@ -2327,7 +2388,15 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         # os avisos antigos foram computados com o fator ERRADO — refaz a
         # heurística de extensão com o fator provado pelas cotas
         _, unit_warnings = _validate_unit_factor(doc, unit_factor)
-    elif dim_check.get("status") is None:
+    elif dim_check.get("status") in (None, "ambigua"):
+        # 🚨 26/08/2026 — "ambigua" ESTAVA FORA desta cascata, e isso fazia a
+        # prancha com MAIS evidência receber MENOS tentativa: prancha sem cota
+        # nenhuma cai aqui e ganha duas réguas de reserva (DIMLFAC e
+        # plausibilidade); prancha com 376 cotas virava "ambigua" e não ganhava
+        # nenhuma. Provado por execução em 0326.CGR.14.600.PISO.
+        # 🪤 Nos arquivos locais as duas reservas devolveram "nada" — então o
+        # ganho medido aqui é ZERO. Está consertado porque é inconsistência
+        # real, não porque rendeu número.
         # Cotas não decidiram (sem número digitado, sem consenso). Última régua:
         # o DIMLFAC, que converte UNIDADE e não depende de escala de plotagem.
         # Caso Isabelle (05/08): 28 cotas com DIMLFAC=100 provam metro num
@@ -2447,6 +2516,18 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # Correção NÃO entra em unidade_suspeita (não é suspeita, é fator provado).
     try:
         _dim_status = dim_check.get("status")
+        # 🔍 PROCEDÊNCIA DA RÉGUA (26/08/2026): antes, o log só dizia `cotas=-`,
+        # e esse traço juntava cinco desfechos opostos. Sem isto, "o desenho não
+        # tem cota" e "a régua desistiu com 1.163 cotas na mão" são a MESMA
+        # linha — e o segundo é conserto possível, o primeiro não.
+        # 🪤 Só REGISTRA. Não muda fator, selo nem quantidade.
+        metadata["regua_cotas_status"] = _dim_status or "nao-decidiu"
+        if dim_check.get("motivo"):
+            metadata["regua_cotas_motivo"] = str(dim_check["motivo"])[:200]
+        if dim_check.get("cotas_utilizaveis") is not None:
+            metadata["regua_cotas_utilizaveis"] = dim_check["cotas_utilizaveis"]
+        if dim_check.get("desempatada_por_fisica"):
+            metadata["regua_cotas_desempate"] = dim_check["desempatada_por_fisica"]
         if _dim_status == "validada":
             metadata["unidade_validada_por_cotas"] = dim_check["n_cotas"]
             metadata["unidade_nome_provada"] = dim_check["unidade_nome"]

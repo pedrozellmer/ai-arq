@@ -6886,6 +6886,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"declarada={_md_u.get('unidade_desenho', '?')} "
                             f"fator={_md_u.get('fator_para_metros', '?')} "
                             f"cotas={_md_u.get('unidade_validada_por_cotas', '-')} "
+                            # 26/08: `cotas=-` juntava 5 desfechos num traço só.
+                            f"regua={_md_u.get('regua_cotas_status', '-')} "
+                            f"utilizaveis={_md_u.get('regua_cotas_utilizaveis', '-')} "
+                            f"porque={(_md_u.get('regua_cotas_motivo') or '-')[:90]} "
                             f"corrigida={_md_u.get('unidade_corrigida_por_cotas', '-')} "
                             f"alerta={(_md_u.get('alerta_unidade') or '-')[:120]} "
                             f"ressalva={_dxf_sem_procedencia} "
@@ -12526,8 +12530,15 @@ async def health():
             # área 458,54 e 177 m² (08/08). Sem esta linha não dá pra ligar a
             # variação ao modelo.
             "dxf_extract_model": _DXF_MODEL_ATUAL,
-            "dxf_temperature_zero": not any(
-                _t in _DXF_MODEL_ATUAL for _t in ("opus-4-8", "opus-4-7", "fable")),
+            # 🚨 26/08/2026: este campo passou a MENTIR no momento em que a
+            # temperatura saiu de 0 pra 0,7 (o laço de repetição da Amanda). Ele
+            # dizia `true` enquanto o motor rodava a 0,7 — instrumento que
+            # afirma o contrário do que acontece é pior que instrumento nenhum.
+            # Agora publica o VALOR, lido da mesma variável que o motor usa.
+            "dxf_temperature": (
+                None if any(_t in _DXF_MODEL_ATUAL
+                            for _t in ("opus-4-8", "opus-4-7", "fable"))
+                else float(os.environ.get("DXF_EXTRACT_TEMP", "0.7"))),
         }
     }
 
