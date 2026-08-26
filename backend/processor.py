@@ -214,9 +214,15 @@ def extract_text(pdf_path: str, page_index: int = 0, char_budget: int = 6000) ->
         return f"[Erro ao extrair texto: {e}]"
 
 
+# Teto de tamanho do recorte. Acima disso o analyzer PULA a imagem -- e o
+# modelo recebe a prancha sem desenho nenhum, sem erro e sem aviso.
+# Mora aqui, em quem GERA o arquivo, pra render_crops poder garantir que cabe.
+MAX_CROP_BYTES = 500_000
+
+
 def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 120,
                  page_index: int = 0, out_stem: str | None = None,
-                 max_side: int = 1000) -> list[str]:
+                 max_side: int = 1600) -> list[str]:
     """Renderiza UMA página do PDF e corta regiões de interesse. Baixo consumo de memória.
 
     page_index permite tratar PDF multi-página (executivo com várias pranchas
@@ -261,6 +267,21 @@ def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int
 
             crop_path = os.path.join(output_dir, f"{stem}_{name}.jpg")
             crop.save(crop_path, "JPEG", quality=80)
+            # 🚨 GARANTE QUE CABE (26/08/2026). Antes, recorte acima de
+            # 500 KB era DESCARTADO la no analyzer, em silencio: a IA recebia a
+            # prancha sem imagem e ninguem ficava sabendo. Com max_side em 1000
+            # isso quase nao acontecia; subindo pra 1600 passa a acontecer em
+            # prancha muito densa (num teste sintetico dei 650 KB).
+            # Encolher ate caber e SEMPRE melhor que sumir.
+            _q = 80
+            while (os.path.getsize(crop_path) > MAX_CROP_BYTES
+                   and (_q > 45 or max(crop.size) > 700)):
+                if _q > 45:
+                    _q -= 15
+                else:
+                    crop = crop.resize((int(crop.width * 0.85),
+                                        int(crop.height * 0.85)), Image.LANCZOS)
+                crop.save(crop_path, "JPEG", quality=_q)
             crop_paths.append(crop_path)
             del crop
 

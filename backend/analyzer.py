@@ -931,6 +931,9 @@ def _ambiente_context(ambiente: str) -> str:
     return f"\nAMBIENTE: {ambiente}. Extraia itens relevantes visíveis na prancha.\n"
 
 
+from processor import MAX_CROP_BYTES  # noqa: E402  (fonte unica do teto)
+
+
 def encode_image(image_path: str) -> str:
     with open(image_path, "rb") as f:
         return base64.standard_b64encode(f.read()).decode("utf-8")
@@ -1077,7 +1080,7 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         if os.path.exists(crop_path):
             # Pular imagens maiores que 500KB pra não estourar memória
             file_size = os.path.getsize(crop_path)
-            if file_size > 500_000:
+            if file_size > MAX_CROP_BYTES:
                 print(f"Pulando {crop_path} ({file_size//1024}KB > 500KB)")
                 continue
             b64 = encode_image(crop_path)
@@ -1259,12 +1262,23 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                 # Política:
                 #  - qty < 0 sempre vira 0
                 #  - qty == 0 é permitido pra items "estimado" (usuário preenche)
-                #  - qty == 0 em "confirmado" é inconsistência → força 1 e
-                #    rebaixa pra "estimado"
+                #  - qty == 0 em "confirmado" é inconsistência → REBAIXA o selo,
+                #    e a quantidade FICA ZERO.
+                #
+                # 🚨 26/08/2026: aqui tinha `qty = 1` junto com o rebaixamento, e
+                # isso INVENTAVA um número. A IA marca confirmado+0 justamente pros
+                # itens que o projeto manda NÃO orçar ("[EXISTENTE — sem
+                # intervenção] Porta PE1", "Alvenaria existente a manter"): ela tem
+                # certeza de que existe e certeza de que não há obra. O `qty = 1`
+                # transformava "não orçar" em "orçar 1" na planilha do cliente.
+                # Medido no acervo: 77 itens em 41 projetos com essa cara.
+                # 🪤 Zero NÃO é um estado quebrado — é o estado honesto que a
+                # própria política acima já permite pra "estimado", e a tela de
+                # revisão existe pro cliente preencher. Inventar 1 infla o
+                # quantitativo em silêncio, que é o oposto da regra nº1.
                 if qty < 0:
                     qty = 0
                 if qty == 0 and conf == "confirmado":
-                    qty = 1
                     conf = "estimado"
 
                 item = BudgetItem(
