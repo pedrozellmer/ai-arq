@@ -12150,6 +12150,33 @@ async def admin_email_catalog(request: Request):
     return {"items": items}
 
 
+_BOOT_EM = datetime.utcnow()
+
+
+def _versao_no_ar() -> dict:
+    """Qual commit esta rodando, e desde quando.
+
+    🚨 Nasceu de uma pergunta do Pedro (25/08/2026). Depois de um push, a
+    unica forma de saber se o codigo novo tinha subido era abrir a tela e
+    olhar o conteudo. "Subiu" era deducao, nao medicao -- e esta casa ja tem a
+    regra de que "nao rodou" nao e a mesma coisa que "nao funcionou".
+
+    O Render exporta RENDER_GIT_COMMIT no ambiente do servico. O repo e
+    PUBLICO, entao o SHA nao revela nada que ja nao esteja no GitHub.
+
+    🩤 O boot importa tanto quanto o commit: redeploy do MESMO commit nao
+    muda o SHA, e sem o horario de boot nao daria pra distinguir "subiu de
+    novo" de "nem tentou".
+    """
+    sha = (os.getenv("RENDER_GIT_COMMIT") or "").strip()
+    return {
+        "commit": sha[:7] or None,
+        "branch": (os.getenv("RENDER_GIT_BRANCH") or "").strip() or None,
+        "no_ar_desde": _BOOT_EM.isoformat(),
+        "de_pe_ha_min": round((datetime.utcnow() - _BOOT_EM).total_seconds() / 60),
+    }
+
+
 @app.get("/api/health")
 async def health():
     """Health check com métricas do sistema."""
@@ -12230,6 +12257,7 @@ async def health():
 
     return {
         "status": "healthy",
+        "versao": _versao_no_ar(),
         "api_key_configured": bool(api_key and api_key.startswith("sk-")),
         "stripe_configured": bool(stripe_key),
         "timestamp": datetime.utcnow().isoformat(),
