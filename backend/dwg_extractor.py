@@ -1739,7 +1739,37 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
 # extract_dxf; virou de módulo em 18/08/2026 porque o resgate por --minimal
 # precisa saber se o arquivo enxuto ficou abaixo dele. Duas cópias do mesmo
 # número em arquivos diferentes é como um limite vira mentira com o tempo.
-_MAX_DXF_BYTES = 150 * 1024 * 1024  # 150 MB — prancha normal é <20 MB
+# 🚨 250 MB, medido em 26/08/2026 — era 150 MB, calibrado quando o Render tinha
+# 2 GB. O plano subiu pra 4 GB em 21/07 e o teto nunca foi revisitado.
+#
+# O que a extracao gasta de RAM, medido nas 4 pranchas reais do caso Amanda:
+#     DXF  27,1 MB ->   215 MB de pico   (7,9x)
+#     DXF  45,7 MB ->   374 MB           (8,2x)
+#     DXF  53,8 MB ->   461 MB           (8,6x)
+#     DXF 176,5 MB -> 1.476 MB           (8,4x)
+# Fator estavel de ~8,6x no pior caso. A 250 MB o pico fica em ~2,15 GB, 52% do
+# container de 4 GB.
+#
+# A prancha 01 da Amanda (176,5 MB) era DESCARTADA por este teto e roda
+# completa em 82s, sobrando 64% do container.
+#
+# 🪤 O teto de DXF sozinho nao protege: quem explode primeiro e a CONVERSAO,
+# que gasta 45 a 53x o tamanho do DWG e nao tinha trava nenhuma. Ver
+# _MAX_DWG_BYTES logo abaixo — os dois andam juntos.
+_MAX_DXF_BYTES = 250 * 1024 * 1024  # 250 MB — prancha normal é <20 MB
+
+# 🚨 TETO DE DWG (novo, 26/08/2026). NAO EXISTIA — e e o lado que derruba o
+# servidor. O upload aceita 450 MB no total; um unico DWG de 100 MB pediria
+# ~5 GB so pra converter e mataria o container de 4 GB antes de qualquer
+# medicao. Medido, pico do dwg2dxf:
+#     DWG  3,1 MB ->   165 MB   (53x)
+#     DWG  5,4 MB ->   249 MB   (46x)
+#     DWG  6,4 MB ->   337 MB   (53x)
+#     DWG 24,6 MB -> 1.056 MB   (43x)
+# A 40 MB o pico da conversao fica em ~2,1 GB, 51% do container — mesma folga
+# que o teto de DXF deixa pra extracao, e as duas fases sao sequenciais.
+_MAX_DWG_BYTES = 40 * 1024 * 1024  # 40 MB de DWG ≈ 2,1 GB na conversão
+
 
 # Fator em metros por $INSUNITS, lido direto do TEXTO do cabeçalho (sem ezdxf).
 _RX_INSUNITS = re.compile(r"\$INSUNITS\s*\n\s*70\s*\n\s*(\d+)")

@@ -6250,7 +6250,46 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         jobs.update_field(job_id, progress=base)
                         jobs.update_field(job_id, current_step=f"Convertendo DWG→DXF ({ci+1}/{n_cad}): {os.path.basename(cad_path)}")
                         _descartou_por_tamanho = False
-                        dxf_path = convert_dwg_to_dxf(cad_path)
+                        # ── TRAVA ANTES DE CONVERTER (26/08/2026) ───────────
+                        # 🚨 A conversao gasta 45 a 53x o tamanho do DWG —
+                        # medido em 4 arquivos reais (24,6 MB -> 1.056 MB de
+                        # pico). O upload aceita 450 MB no total, entao um DWG
+                        # de 100 MB pediria ~5 GB e mataria o container de 4 GB
+                        # ANTES de qualquer medicao. Nao havia trava nenhuma
+                        # deste lado: o teto de 150 MB so olhava o DXF, que so
+                        # existe DEPOIS da conversao — tarde demais.
+                        # Aqui a prancha grande sai com aviso honesto e as
+                        # outras do mesmo envio seguem sendo medidas.
+                        try:
+                            from dwg_extractor import _MAX_DWG_BYTES as _TETO_DWG
+                        except Exception:
+                            _TETO_DWG = 40 * 1024 * 1024
+                        try:
+                            _tam_dwg = os.path.getsize(cad_path)
+                        except OSError:
+                            _tam_dwg = 0
+                        if _tam_dwg > _TETO_DWG:
+                            _bn_dwg = os.path.basename(cad_path)
+                            _log_error(
+                                "motor:prancha-grande-demais",
+                                f"{_bn_dwg}: DWG de {_tam_dwg // 1048576} MB passa "
+                                f"do teto de {_TETO_DWG // 1048576} MB — converter "
+                                f"pediria ~{int(_tam_dwg * 50 / 1048576)} MB de RAM e "
+                                f"derrubaria o servidor; nem tentei", job_id)
+                            _dxf_grandes_msgs.append(
+                                f"{_bn_dwg}: essa prancha é grande demais pro nosso "
+                                f"limite de memória de hoje ({_tam_dwg // 1048576} MB) "
+                                f"— o arquivo não tem defeito. Sobe ela em DXF, ou só "
+                                f"a área que você precisa medir, que a gente lê")
+                            jobs.update_field(
+                                job_id,
+                                current_step=f"{_bn_dwg}: prancha grande demais "
+                                             f"({_tam_dwg // 1048576} MB) — seguindo "
+                                             f"com as outras")
+                            _descartou_por_tamanho = True
+                            dxf_path = None
+                        else:
+                            dxf_path = convert_dwg_to_dxf(cad_path)
                         # ── DESCARTA NA CONVERSÃO ───────────────────────────
                         # 🚨 O JOB CONVERTIA TODAS AS PRANCHAS ANTES DE EXTRAIR
                         # UMA. Caso Patrick, 18/08/2026: 9 DWG de ~50 MB viram
