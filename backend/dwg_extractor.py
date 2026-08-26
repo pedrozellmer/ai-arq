@@ -347,15 +347,53 @@ class DXFExtraction:
             # MESMO layer (porcelanato + cerâmica em "ARQ-PISO"). A soma não mede
             # nenhum acabamento sozinho, então a IA deve tratar como ESTIMADO, não
             # confirmado (regra nº1 — revisão adversarial 15/07, Finding 1).
-            _hatch_n: dict[str, int] = defaultdict(int)
+            # 🎯 26/08/2026 — O PADRÃO DA HACHURA É QUE SEPARA ACABAMENTO.
+            # Até aqui, TODO layer com mais de uma hachura levava a mesma frase
+            # "pode ser acabamento MISTO; trate como ESTIMADO" — e no CAD quem
+            # distingue porcelanato de cerâmica é o PATTERN, que o extrator já
+            # guardava (`HatchArea.pattern`) e o prompt jogava fora.
+            #
+            # 🔍 Medido: 80 de 88 layers (91%) têm UM padrão só. O alarme
+            # disparava nos 91% que NÃO são mistos — alarme sem controle.
+            # E o custo era grande: no acervo, área sai medida em 3,8% dos itens
+            # (71 de 1.864) contra 36,3% da contagem, e em 10 semanas a área
+            # nunca passou de 2,3% enquanto a contagem foi de 15% a 60%.
+            #
+            # 🪤 O prompt ainda se CONTRADIZIA: a regra global autoriza
+            # "Área calculada em ÁREAS HACHURADAS POR LAYER" como 'confirmado',
+            # e a anotação por linha mandava tratar como estimado. A instrução
+            # específica ganhava da geral.
+            #
+            # EXPERIMENTO na prancha real (0326.CGR.14.600.PISO, prompt de
+            # produção, Sonnet 4.6, temp 0,7, 3 rodadas de cada):
+            #       m² MEDIDOS por rodada       confirmados (média)
+            #   antes:  0,00 | 225,81 |   0,00        8,3
+            #   depois: 225,81 | 225,81 | 229,04     13,3
+            # Antes, 2 de 3 rodadas entregavam ZERO m² medido. Depois, mediu nas
+            # três e no MESMO valor. E os 225,81 m² são a soma exata dos layers
+            # de piso com padrão único — a IA descartou sozinha os dois mistos,
+            # que somavam 4.931 m² de ruído. O total de itens não mudou (34,7 →
+            # 34,3): não inflou nada, converteu estimativa em medição.
+            _hatch_pat: dict[str, dict] = defaultdict(lambda: defaultdict(int))
             for _h in self.hatches:
-                _hatch_n[_h.layer] += 1
+                _hatch_pat[_h.layer][(getattr(_h, "pattern", "") or "SOLID")] += 1
             lines.append("ÁREAS HACHURADAS POR LAYER:")
+            lines.append("  (o PADRÃO da hachura é o que separa acabamento no CAD: porcelanato e"
+                         " cerâmica desenhados no MESMO layer têm padrões diferentes. Layer com UM"
+                         " padrão só mede UM acabamento; layer com vários mistura acabamentos.)")
             for layer, area in sorted(areas_by_layer.items()):
-                if _hatch_n.get(layer, 1) > 1:
-                    lines.append(f"  {layer}: {area:.2f} m² (soma de {_hatch_n[layer]} hachuras — "
-                                 f"pode ser acabamento MISTO no mesmo layer; trate como ESTIMADO, "
-                                 f"confira o valor por ambiente)")
+                _pats = _hatch_pat.get(layer, {})
+                _n = sum(_pats.values())
+                if len(_pats) > 1:
+                    _top = ", ".join(f"{k} x{v}" for k, v in
+                                     sorted(_pats.items(), key=lambda x: -x[1])[:4])
+                    lines.append(f"  {layer}: {area:.2f} m² — {_n} hachuras em {len(_pats)} "
+                                 f"padrões DIFERENTES ({_top}) — acabamento MISTO no mesmo "
+                                 f"layer; trate como ESTIMADO, confira por ambiente")
+                elif len(_pats) == 1:
+                    _nome = next(iter(_pats))
+                    lines.append(f"  {layer}: {area:.2f} m² — {_n} hachura(s), TODAS no padrão "
+                                 f"'{_nome}' (acabamento ÚNICO: a soma mede um acabamento só)")
                 else:
                     lines.append(f"  {layer}: {area:.2f} m²")
             lines.append("")

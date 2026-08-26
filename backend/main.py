@@ -5677,7 +5677,8 @@ def _limpa_aviso_nao_medida(obs: str) -> str:
 
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "",
                         pe_direito: float = 0,
-                        apenas_preencher: bool = False) -> tuple[int, int]:
+                        apenas_preencher: bool = False,
+                        pdfvec_m2: float = 0) -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -5745,6 +5746,35 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             filled += 1
         elif apenas_preencher:
             continue          # não zera, não rebaixa: a decisão já foi tomada
+        # 🎯 26/08/2026 — ÁREA MEDIDA DO PDF VETORIAL (caso Construtora Mr).
+        # O motor mediu a geometria do PDF, o prompt mandou a IA usar, a IA usou,
+        # e este ramo apagava — porque só olhava `origem='dxf_geom'`. Ele baixou
+        # a planilha com piso, forro, parede e pintura em ZERO.
+        # 🚨 TRÊS TRAVAS pra isto não virar porta de m² inventado (regra nº1):
+        #   1. só quando o motor vetorial MEDIU nesta leitura (pdfvec_m2 > 0);
+        #   2. só SUPERFÍCIE HORIZONTAL (piso/forro/laje) — a mesma peneira do
+        #      ramo da área informada. Parede e pintura dependem do pé-direito e
+        #      continuam zerando, porque não medimos altura;
+        #   3. só quando o número CABE no que foi medido (≤ 1,3× a área dos
+        #      ambientes). Sem isso, um chute da IA sobreviveria de carona.
+        # 🚫 NUNCA vira 'confirmado': a escala do PDF veio de carimbo, e carimbo
+        # é declaração, não prova. Segue laranja, com a procedência escrita.
+        elif (q > 0 and float(pdfvec_m2 or 0) > 0
+              and u in _FLOOR_M2_UNITS
+              and _is_floor_surface(getattr(it, "description", ""))
+              and q <= 1.3 * float(pdfvec_m2)):
+            try:
+                it.confidence = Confidence("estimado")
+            except Exception:
+                pass
+            _o = _limpa_aviso_nao_medida(it.observations or "")
+            if "geometria do pdf" not in _o.lower():
+                _o = (_o + " | Medido da GEOMETRIA do PDF (%.2f m² de ambientes), "
+                      "com escala lida do carimbo e NÃO confirmada por cota — "
+                      "confira a escala do seu PDF antes de orçar."
+                      % float(pdfvec_m2)).strip(" |")
+            it.observations = _o
+            preservados += 1
         elif (q > 0 and _pd_ok
               and (str(getattr(it, "origem", "") or "") == "deriv_pd"
                    or (_mediu_linear
@@ -5787,8 +5817,14 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 ).strip(" |")
             blanked += 1
     if preservados:
-        print(f"[honestidade-m2] preservei {preservados} item(ns) de área derivados do "
-              f"pé-direito informado ({pe_direito} m) — estimados com procedência")
+        # 🪤 Esta linha dizia SEMPRE "derivados do pé-direito informado" — e com
+        # a preservação do PDF vetorial (26/08) ela passou a imprimir
+        # "pé-direito informado (0 m)", que é a mesma família de instrumento
+        # mentiroso que custou o dia de hoje. Agora diz qual das duas foi.
+        _fonte_pres = (f"pé-direito informado ({pe_direito} m)" if float(pe_direito or 0) > 0
+                       else f"geometria do PDF ({float(pdfvec_m2 or 0):.2f} m² de ambientes)")
+        print(f"[honestidade-m2] preservei {preservados} item(ns) de área com "
+              f"procedência de {_fonte_pres} — seguem estimados")
     _apply_area_honesty.ultimo_preservados = preservados   # o caller loga no projeto
     return filled, blanked
 
@@ -7896,10 +7932,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         _sufixo_total = (f" de {len(pdf_infos)} PDF" + ("s" if len(pdf_infos) != 1 else "")
                          if total != len(pdf_infos) else "")
 
-        # CHECKPOINT: o cache (_ckpt_cache) já foi carregado UMA vez lá em cima,
-        # antes do bloco DXF — serve os dois loops (DXF e PDF). Em RETOMADA
-        # automática, prancha já analisada pula extração+IA; reprocesso MANUAL
-        # ignora de propósito (roda o motor novo na prancha inteira).
+        # 🎯 26/08/2026 — ÁREA MEDIDA DO PDF, SOMADA POR PÁGINA.
+        # Caso Construtora Mr (job de hoje 12:50): o motor vetorial mediu 3
+        # ambientes / 13,6 m², injetou no prompt mandando a IA usar, a IA usou —
+        # e `_apply_area_honesty` APAGOU os 9 itens de área e comprimento, porque
+        # só reconhece `origem='dxf_geom'`. A observação que sobrou pro cliente
+        # dizia "Área NÃO medida (lida de PDF por IA, não da geometria)", que é
+        # FALSO: foi medida da geometria vetorial. Ele baixou a planilha às 13:20
+        # com piso, forro, parede, pintura e rodapé todos em ZERO.
+        # 🔑 Não é decisão nova: a de 12/08 (caso Hospital 2 de julho) já definiu
+        # que medição de PDF sem prova de cota VALE como estimativa com
+        # procedência escrita. O passo de injeção implementa isso; a regra de
+        # honestidade é que não ficava sabendo.
+        _pdfvec_area_m2 = 0.0
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             # 🛡️ Freio de MEMÓRIA (idem loop DXF): aborta limpo antes do OOM,
             # mantendo o servidor de pé pros outros clientes.
@@ -7976,6 +8021,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             "baseados EXATAMENTE nestes valores podem sair com confidence 'confirmado' "
                             "(medição geométrica validada). Qualquer outro valor segue 'estimado'.")
                         _vet_secao = "\n".join(_linhas)
+                        try:
+                            _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
+                        except (TypeError, ValueError):
+                            pass
                         print(f"[pdfvec-promo] {_stem}: escala validada por cota — seção injetada")
                         _log_error("pdfvec:promo",
                                    f"{_stem}: escala 1:{_vm.get('scale')} PROVADA por "
@@ -8021,6 +8070,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             f"procedência: 'medido do desenho com escala 1:{_vm.get('scale')} lida "
                             f"do {_fonte} — confira a escala do seu PDF'.")
                         _vet_secao = "\n".join(_l2)
+                        try:
+                            _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
+                        except (TypeError, ValueError):
+                            pass
                         print(f"[pdfvec-promo] {_stem}: escala de {_fonte} sem prova — seção ESTIMADA injetada")
                         _log_error("pdfvec:promo",
                                    f"{_stem}: escala 1:{_vm.get('scale')} de {_fonte} SEM prova de cota "
@@ -8869,10 +8922,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # piso/forro/laje recebem essa área como ESTIMADO rotulado "informado por
         # você" — completar os itens com base honesta, sem fingir medição. O m²
         # medido de verdade (origem 'dxf_geom') nunca é tocado.
+        try:
+            _pv_m2 = float(_pdfvec_area_m2)
+        except NameError:
+            _pv_m2 = 0.0          # job sem PDF: o loop nem existiu
         _n_fill, _blanked = _apply_area_honesty(
             all_items, project_data.total_area,
             getattr(project_data, "total_area_source", ""),
-            pe_direito=float(getattr(project_data, "user_pe_direito", 0) or 0))
+            pe_direito=float(getattr(project_data, "user_pe_direito", 0) or 0),
+            pdfvec_m2=_pv_m2)
         if _n_fill:
             print(f"[honestidade-m2] job={job_id}: preenchi {_n_fill} itens de piso/forro/laje "
                   f"com a área INFORMADA {project_data.total_area} m² (estimado, a conferir)")
