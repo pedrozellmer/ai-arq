@@ -16895,8 +16895,17 @@ def _agendar_aprendizado_revisao(job_id: str, atraso_s: int = 90) -> None:
                 try:
                     import revision_feedback as _rfi
                     _gerou = _rfi.processar_revisao_inline(job_id)
+                    # 🪤 26/08: `gerou_linha=True` é SUCESSO e estava gravado como
+                    # ERRO. O job da Cassia (a cliente que mais revisou no
+                    # produto: 28 itens, 3 planilhas devolvidas) aparecia no
+                    # painel com "3 erros" tendo tido ZERO. Pior: as 11 falhas
+                    # reais deste stage ficavam misturadas com 12 sucessos, todas
+                    # com o mesmo rótulo. Agora a severidade segue o DESFECHO —
+                    # não dá pra pôr o stage inteiro em `_STAGES_DIAGNOSTICO`,
+                    # isso esconderia as falhas junto.
                     _log_error("motor:revisao-aprendizado",
-                               f"automatico (sem clique) gerou_linha={bool(_gerou)}", job_id)
+                               f"automatico (sem clique) gerou_linha={bool(_gerou)}",
+                               job_id, severity=("info" if _gerou else "error"))
                 except Exception as _e:
                     _log_error("motor:revisao-aprendizado",
                                f"AUTOMATICO FALHOU: {type(_e).__name__}: {_e}", job_id)
@@ -16924,7 +16933,8 @@ async def admin_revision_learn(job_id: str, request: Request):
         import revision_feedback as _rfi
         gerou = _rfi.processar_revisao_inline(job_id)
         _log_error("motor:revisao-aprendizado",
-                   f"manual (admin) gerou_linha={bool(gerou)}", job_id)
+                   f"manual (admin) gerou_linha={bool(gerou)}", job_id,
+                   severity=("info" if gerou else "error"))
         return {"status": "ok", "job_id": job_id, "gerou_linha": bool(gerou)}
     except Exception as e:
         _log_error("motor:revisao-aprendizado", f"MANUAL FALHOU: {e}", job_id)
@@ -20461,7 +20471,8 @@ async def finalize_review(job_id: str, request: Request):
             try:
                 _gerou = _rfi.processar_revisao_inline(job_id)
                 _log_error("motor:revisao-aprendizado",
-                           f"gerou_linha={bool(_gerou)}", job_id)
+                           f"gerou_linha={bool(_gerou)}", job_id,
+                           severity=("info" if _gerou else "error"))
             except Exception as _e:
                 _log_error("motor:revisao-aprendizado",
                            f"ESTEIRA FALHOU: {type(_e).__name__}: {_e}", job_id)
