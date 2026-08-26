@@ -87,6 +87,10 @@ class BlockCount:
     # regra TCPO de vãos (≤2m² não descontam da pintura).
     width_m: float = 0.0
     height_m: float = 0.0
+    # Assinatura da DEFINICAO do bloco: tipos de entidade e quantos de cada.
+    # Serve pra saber se dois nomes diferentes sao a MESMA peca renomeada.
+    # Vazia = nao deu pra calcular; nesse caso NAO se agrupa nada (falha fechada).
+    assinatura: str = ""
 
 
 @dataclass
@@ -266,9 +270,65 @@ class DXFExtraction:
             other = {name: count for name, count in block_summary.items()
                      if not any(b.name == name and b.width_m > 0 for b in self.blocks)}
             if other:
-                lines.append(f"CONTAGEM DE BLOCOS ({len(other)} tipos):")
-                for name, count in sorted(other.items(), key=lambda x: -x[1]):
-                    lines.append(f"  {name}: {count} un")
+                # 🚨 JUNTA O QUE O CONVERSOR FRAGMENTOU (26/08/2026).
+                # O libredwg (88% das conversoes) renomeia bloco POR INSTANCIA:
+                # num DXF real, 1.202 nomes distintos pra 1.349 pecas. A secao
+                # virava 44% do prompt, e na prancha da Amanda a entrada chegou a
+                # 74.875 tokens com ZERO item de volta. Pior: o cliente via
+                # "Viga_1_1: 1 un" 209 vezes em vez de "Viga: 209 un".
+                #
+                # 🪤 Agrupar so pelo NOME estaria ERRADO — e eu quase shipei
+                # assim. `Parede_1_1` e `Parede_2_1` tinham SEIS definicoes
+                # geometricas diferentes na amostra: sao trechos distintos, e
+                # soma-los repetiria o bug da bitola (Ø8 + Ø16 num numero so,
+                # 18.168 kg viraram 508 kg).
+                # So junta quando a ASSINATURA da definicao e identica — ai sao
+                # comprovadamente a mesma peca, e somar RESTAURA a contagem certa.
+                # 🪤 Sem assinatura (nao deu pra ler a definicao) nao agrupa nada:
+                # falha fechada, mantem o comportamento antigo.
+                _assin = {b.name: getattr(b, "assinatura", "") for b in self.blocks}
+                _grupos: dict = {}
+                for name, count in other.items():
+                    a = _assin.get(name, "")
+                    # 🚨 DOIS formatos de fragmentacao, medidos em arquivo real:
+                    #  a) Revit/ArchiCAD: "CHUVEIRO - CHUVEIRO-1320392-PORTARIA"
+                    #     (FAMILIA - TIPO-<id>-<vista>). Nas pranchas da Amanda
+                    #     os nomes tinham 55 a 61 caracteres e eram 1.570 -- so
+                    #     essa secao dava 99.901 chars. Agrupar pela FAMILIA
+                    #     derruba pra 17.464 (-83%).
+                    #  b) sufixo do conversor: "Viga_12_1" -> "Viga".
+                    if " - " in name:
+                        raiz = name.split(" - ", 1)[0].strip() or name
+                    else:
+                        raiz = re.sub(r"(_\d+)+$", "", name) or name
+                    chave = (raiz, a) if a else (name, "")
+                    if chave in _grupos:
+                        _grupos[chave][0] += count
+                        _grupos[chave][1] += 1
+                    else:
+                        _grupos[chave] = [count, 1, raiz if a else name]
+                # 🪤 A MESMA raiz pode sobrar em VARIOS grupos — e isso e
+                # correto: "Viga" com 3 assinaturas sao 3 pecas diferentes. Mas
+                # tres linhas chamadas "Viga" na planilha do cliente sao
+                # indistinguiveis. Numera os homonimos pra ele conseguir separar.
+                _quantos_por_raiz: dict = {}
+                for (_r, _a) in _grupos:
+                    _quantos_por_raiz[_r] = _quantos_por_raiz.get(_r, 0) + 1
+                _seq: dict = {}
+                _juntados = sum(1 for v in _grupos.values() if v[1] > 1)
+                lines.append(f"CONTAGEM DE BLOCOS ({len(_grupos)} tipos):")
+                for (_r, _a), (count, n_nomes, rotulo) in sorted(
+                        _grupos.items(), key=lambda x: -x[1][0]):
+                    if _quantos_por_raiz.get(_r, 1) > 1 and _a:
+                        _seq[_r] = _seq.get(_r, 0) + 1
+                        rotulo = f"{rotulo} (tipo {_seq[_r]})"
+                    _nota = f"  [{n_nomes} nomes do conversor, mesma peca]" if n_nomes > 1 else ""
+                    lines.append(f"  {rotulo}: {count} un{_nota}")
+                if _juntados:
+                    lines.append(f"  ({_juntados} grupo(s) tinham nomes duplicados pelo "
+                                 f"conversor e foram somados — so quando a definicao "
+                                 f"geometrica e IDENTICA. 'tipo 1/2/3' sao pecas "
+                                 f"DIFERENTES com o mesmo nome de origem.)")
                 lines.append("")
 
         # Wall lengths
@@ -2455,6 +2515,40 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         _block_def_bbox_cache[bname] = bbox
         return bbox
 
+    # Assinatura da definicao do bloco (tipos de entidade + quantos de cada).
+    # 🚨 26/08/2026: o libredwg — que faz 88% das conversoes — renomeia bloco POR
+    # INSTANCIA. Num DXF real: 1.202 nomes distintos pra 1.349 pecas, e a secao
+    # CONTAGEM DE BLOCOS virou 44% do prompt. Na prancha da Amanda isso levou a
+    # entrada a 74.875 tokens e a leitura devolveu ZERO item.
+    # 🪤 Agrupar so pelo NOME estava errado e eu quase shipei: `Parede_1_1` e
+    # `Parede_2_1` tinham 6 definicoes geometricas diferentes na amostra. Somar
+    # aquilo seria o bug da bitola (Ø8 + Ø16 virando um numero so). A assinatura
+    # e o que separa "mesma peca renomeada" de "pecas diferentes".
+    _assin_cache: dict[str, str] = {}
+
+    def _assinatura_do_bloco(bname: str) -> str:
+        if bname in _assin_cache:
+            return _assin_cache[bname]
+        a = ""
+        try:
+            b = doc.blocks.get(bname)
+            if b is not None:
+                cont: Counter = Counter(e.dxftype() for e in b)
+                if cont:
+                    a = "|".join("%s:%d" % (k, v) for k, v in sorted(cont.items()))
+                    # 🪤 So contar TIPO de entidade colide: dois chuveiros
+                    # diferentes com "LINE:4" cada teriam a mesma assinatura e
+                    # seriam somados. O tamanho da definicao separa. Medido nas
+                    # pranchas da Amanda: custa 2 pontos de reducao e separa
+                    # 32 e 59 grupos que estavam sendo juntados errado.
+                    _bb = _bbox_for_block_def(bname)
+                    if _bb:
+                        a += "|bb:%.1fx%.1f" % (round(_bb[0], 1), round(_bb[1], 1))
+        except Exception:
+            a = ""
+        _assin_cache[bname] = a
+        return a
+
     # ── ATRIBUTOS DE BLOCO (ATTRIB) — dado ESTRUTURADO pelo projetista ───────
     # 🔑 Quando o arquiteto usa bloco com atributo (quadro de áreas, etiqueta de
     # ambiente, carimbo), o valor vem com NOME DE CAMPO — não é texto solto pra
@@ -2549,6 +2643,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             positions=info["positions"],
             width_m=round(_median(info.get("widths", [])), 2),
             height_m=round(_median(info.get("heights", [])), 2),
+            assinatura=_assinatura_do_bloco(name),
         )
         for name, info in block_counter.items()
     ]

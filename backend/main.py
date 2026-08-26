@@ -2964,11 +2964,79 @@ class JobsStore:
             return _UPLOADS_EM_CURSO["n"]
 
     def em_curso(self) -> int:
-        """Quantos jobs estão na fila ou processando AGORA.
+        """Quantos jobs estão REALMENTE em curso agora.
 
         Existe pra trava de deploy (Pedro, 03/08/2026): subir código no meio de
         um processamento mata o job do cliente — foi o caso Walter (29/07).
-        O hook de pre-push lê isto pelo /api/health e recusa o push."""
+        O hook de pre-push lê isto pelo /api/health e recusa o push.
+
+        🚨 26/08/2026 — ERRAVA NOS DOIS SENTIDOS, e os dois no MESMO DIA, com
+        cliente no ar:
+
+        - **Liberou com cliente rodando (o perigoso).** Lia o `_jobs.json`, que
+          mora no disco EFÊMERO do Render. Todo reinício nasce sem o arquivo, e
+          `_load_jobs()` devolve `{}` SEM levantar exceção — a contagem virava 0
+          e o deploy passava. Às 08:26 o banco dizia `processing` há 130s no job
+          da Amanda e a trava dizia 0: um push ali teria matado o processamento
+          dela. O `return -1` protegia só o caso de EXCEÇÃO; arquivo ausente é
+          caminho feliz, e caminho feliz que devolve 0 é uma trava desarmada.
+        - **Bloqueou sem ninguém rodando (o chato).** Depois do OOM das 10:19
+          sobrou um job fantasma no arquivo local. Banco: 0 ativos. Trava: 1.
+
+        Agora a fonte de verdade é o BANCO, que sobrevive a reinício. Duas
+        réguas, medidas em 136 jobs reais:
+
+        - **120 min de janela.** Duração real: média 12,7 min, p90 36,5, p99
+          97,9, maior 118,7. Nenhum job de verdade passou de 2h.
+        - **15 min de silêncio = fantasma.** Job vivo escreve no error_log o
+          tempo todo; o maior intervalo entre dois eventos de um job real foi
+          ~6 min. Silêncio de 15 min é thread morta.
+          🪤 Job recém-criado ainda não logou nada — por isso quem nasceu há
+          menos de 15 min conta como vivo mesmo sem evento.
+
+        🪤 O arquivo local vira PLANO B, e só quando o banco não responde —
+        nunca fonte primária. Qualquer falha devolve -1, que o hook lê como
+        "não sei" e bloqueia. Errar pra menos custa o job de um cliente; errar
+        pra mais custa a minha paciência.
+        """
+        try:
+            _corte_janela = (datetime.utcnow() - timedelta(minutes=120)).isoformat() + "Z"
+            _st, _rows = _supa_rest_service(
+                "GET",
+                "projects?select=job_id,created_at&status=in.(queued,processing)"
+                f"&created_at=gte.{_corte_janela}")
+            if _st and 200 <= _st < 300 and isinstance(_rows, list):
+                if not _rows:
+                    return 0
+                _ids = ",".join(str(r.get("job_id")) for r in _rows if r.get("job_id"))
+                if not _ids:
+                    return 0
+                _corte_silencio = datetime.utcnow() - timedelta(minutes=15)
+                _st2, _ev = _supa_rest_service(
+                    "GET",
+                    f"error_log?select=job_id&job_id=in.({_ids})"
+                    f"&created_at=gte.{_corte_silencio.isoformat()}Z")
+                if not (_st2 and 200 <= _st2 < 300 and isinstance(_ev, list)):
+                    return len(_rows)      # não deu pra checar atividade: conta todos
+                _vivos = {str(e.get("job_id")) for e in _ev if e.get("job_id")}
+                _n = 0
+                for _r in _rows:
+                    if str(_r.get("job_id")) in _vivos:
+                        _n += 1
+                        continue
+                    try:
+                        _nasceu = datetime.fromisoformat(
+                            str(_r.get("created_at", "")).replace("Z", "+00:00"))
+                        _recente = _nasceu.replace(tzinfo=None) >= _corte_silencio
+                    except Exception:
+                        _recente = True    # não sei ler a data → conta (fail closed)
+                    if _recente:
+                        _n += 1
+                return _n
+            print(f"[jobs] em_curso: banco devolveu status {_st}; caindo pro arquivo local")
+        except Exception as e:
+            print(f"[jobs] em_curso pelo banco falhou: {type(e).__name__}: {e}")
+        # PLANO B — só quando o banco não respondeu.
         try:
             return sum(1 for _j in _load_jobs().values()
                        if isinstance(_j, dict)
