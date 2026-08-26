@@ -12245,6 +12245,61 @@ def _versao_no_ar() -> dict:
     }
 
 
+def _memoria_do_container() -> dict:
+    """Memoria do CONTAINER (cgroup), nao a do host.
+
+    🚨 26/08/2026. O Render matou o servico por estouro de memoria as 10:19,
+    no segundo em que uma cliente subiu um arquivo — e eu passei a manha
+    olhando "RAM 86%" sem entender. O 86% era do HOST: o /api/health lia
+    `psutil.virtual_memory()`, que num container enxerga a maquina inteira.
+    Reportava **61,4 GB de total** enquanto o container do plano Pro tem **4 GB**.
+
+    Ou seja: o unico numero que a gente tinha sobre memoria nao tinha relacao
+    nenhuma com o limite que causa o OOM. Cego com o instrumento na mao.
+
+    Le o cgroup, que e o limite de verdade:
+      v2 -> /sys/fs/cgroup/memory.max        + memory.current
+      v1 -> .../memory/memory.limit_in_bytes + memory.usage_in_bytes
+
+    🪤 Nao substitui o numero do host: devolve os DOIS, com nome diferente.
+    Trocar em silencio faria a serie historica mentir sem ninguem perceber.
+    Fora de container (a maquina do Pedro, Windows) devolve `dentro_de_container:
+    False` e so o host — e isso e informacao, nao falha.
+    """
+    import io as _io
+
+    def _num(caminho):
+        try:
+            with _io.open(caminho, "r") as f:
+                bruto = f.read().strip()
+            if bruto in ("max", "-1", ""):
+                return None
+            v = int(bruto)
+            # cgroup v1 usa um numero gigante pra "sem limite"
+            return None if v <= 0 or v > (1 << 62) else v
+        except Exception:
+            return None
+
+    limite = _num("/sys/fs/cgroup/memory.max")
+    uso = _num("/sys/fs/cgroup/memory.current")
+    versao = "v2"
+    if limite is None:
+        limite = _num("/sys/fs/cgroup/memory/memory.limit_in_bytes")
+        uso = _num("/sys/fs/cgroup/memory/memory.usage_in_bytes")
+        versao = "v1"
+    if limite is None or uso is None:
+        return {"dentro_de_container": False}
+    mb = 1024 * 1024
+    return {
+        "dentro_de_container": True,
+        "cgroup": versao,
+        "limite_mb": round(limite / mb),
+        "usado_mb": round(uso / mb),
+        "usado_pct": round(100.0 * uso / limite, 1),
+        "livre_mb": round((limite - uso) / mb),
+    }
+
+
 @app.get("/api/health")
 async def health():
     """Health check com métricas do sistema."""
@@ -12329,6 +12384,11 @@ async def health():
         "api_key_configured": bool(api_key and api_key.startswith("sk-")),
         "stripe_configured": bool(stripe_key),
         "timestamp": datetime.utcnow().isoformat(),
+        # 🚨 `system` e a memoria do HOST — num container ela enxerga a maquina
+        # inteira (61,4 GB no Render) e NAO tem relacao com o limite que causa
+        # OOM (4 GB no Pro). Quem manda no OOM e `memoria_container`, abaixo.
+        # Os dois ficam: trocar em silencio faria a serie historica mentir.
+        "memoria_container": _memoria_do_container(),
         "system": {
             "ram_used_pct": round(mem.percent, 1) if mem else 0,
             "ram_used_mb": round(mem.used / 1024 / 1024) if mem else 0,
