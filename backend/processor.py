@@ -215,7 +215,8 @@ def extract_text(pdf_path: str, page_index: int = 0, char_budget: int = 6000) ->
 
 
 def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int = 120,
-                 page_index: int = 0, out_stem: str | None = None) -> list[str]:
+                 page_index: int = 0, out_stem: str | None = None,
+                 max_side: int = 1000) -> list[str]:
     """Renderiza UMA página do PDF e corta regiões de interesse. Baixo consumo de memória.
 
     page_index permite tratar PDF multi-página (executivo com várias pranchas
@@ -244,10 +245,18 @@ def render_crops(pdf_path: str, sheet_type: SheetType, output_dir: str, dpi: int
 
         for name, (x1, y1, x2, y2) in crops_config.items():
             crop = img.crop((int(w * x1), int(h * y1), int(w * x2), int(h * y2)))
-            # Max 1000px no lado maior (suficiente pra ler legendas, baixo consumo)
-            max_side = max(crop.size)
-            if max_side > 1000:
-                ratio = 1000 / max_side
+            # 🚨 O comentario antigo dizia "1000px e suficiente pra ler legendas".
+            # MEDIDO em 25/08 e e FALSO: numa A1 real, a 1000px a IA acerta
+            # 4 de 22 ambientes (nome+area); a 1600px acerta 13 de 22. E o
+            # pico de RAM sobe so de 161 pra 171 MB, porque o gasto grande e
+            # rasterizar a pagina a 120dpi, que acontece ANTES deste corte.
+            # 🪤 Acima de ~1600 nao adianta: os tokens travam no teto do
+            # modelo e o JPEG passa dos 500 KB que o analyzer DESCARTA.
+            # max_side vira parametro (25/08) pra dar pra MEDIR o efeito da
+            # resolucao. O padrao 1000 mantem o comportamento de hoje intacto.
+            lado = max(crop.size)
+            if lado > max_side:
+                ratio = max_side / lado
                 crop = crop.resize((int(crop.width * ratio), int(crop.height * ratio)), Image.LANCZOS)
 
             crop_path = os.path.join(output_dir, f"{stem}_{name}.jpg")

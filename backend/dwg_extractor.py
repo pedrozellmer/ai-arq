@@ -1467,13 +1467,21 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
 
     oda_exe = _find_oda_converter()
     if oda_exe is None:
+        # 🚨 Aqui saia `return None` - e o plano B NUNCA rodava. O
+        # fallback dependia do principal EXISTIR, que e o oposto de um
+        # fallback: no dia em que o ODA saisse do container (o risco de
+        # licenca esta aberto), o DWG morreria inteiro com o dwg2dxf
+        # instalado do lado, sem nunca ser chamado.
+        # Medido em 25/08: dos 26 DWGs de cliente que abriram nos ultimos
+        # 22 dias, 23 vieram do libredwg e 3 do ODA. Quem carrega o
+        # caminho hoje e o plano B.
         logger.warning(
-            "ODA File Converter não encontrado. "
-            "Para converter arquivos .dwg, instale o ODA File Converter gratuito em: "
-            "https://www.opendesign.com/guestfiles/oda_file_converter  "
-            "Instale em C:\\Program Files\\ODA\\ODAFileConverter"
+            "ODA File Converter nao encontrado - indo direto pro libredwg "
+            "(dwg2dxf). Pra reinstalar: "
+            "https://www.opendesign.com/guestfiles/oda_file_converter"
         )
-        return None
+        return _try_libredwg_convert(dwg_path,
+                                     tempfile.mkdtemp(prefix="arq_dxf_"))
 
     input_dir = os.path.dirname(dwg_path)
     output_dir = tempfile.mkdtemp(prefix="arq_dxf_")
@@ -1531,8 +1539,14 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
                 (result.stderr or result.stdout or "")[:300],
             )
     except FileNotFoundError:
-        logger.error("Executável ODA não acessível: %s", oda_exe)
-        return None
+        # Mesma causa do bloco la de cima: sem ODA utilizavel, o certo e
+        # tentar o plano B, nao desistir.
+        # 🩤 O TimeoutExpired logo abaixo NAO cai aqui de proposito:
+        # la o ODA ja segurou a vez por 300s, e emendar outra conversao
+        # estouraria o orcamento de tempo do job.
+        logger.error("Executavel ODA nao acessivel (%s) - tentando libredwg",
+                     oda_exe)
+        return _try_libredwg_convert(dwg_path, output_dir)
     except subprocess.TimeoutExpired:
         logger.error("Conversão DWG excedeu o tempo limite de 300s — arquivo grande demais ou complexo.")
         return None
