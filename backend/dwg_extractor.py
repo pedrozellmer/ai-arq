@@ -153,6 +153,11 @@ class DXFExtraction:
     # com nome de campo — quadro de áreas, etiqueta de ambiente, carimbo.
     # [{bloco, layer, campos:{tag: valor}}]
     block_attributes: list = field(default_factory=list)
+    # 🔬 26/08: por que `blocos` deu o número que deu. Sem isto não dá pra
+    # distinguir "o desenho não tem bloco" de "a gente descartou todos"
+    # (caso André, prancha elétrica: blocos=0 com 76.824 linhas).
+    # {anonimo, utilitario, anotacao, ilegivel, amostra_anonimo}
+    blocos_descartados: dict = field(default_factory=dict)
 
     # -- convenience helpers ------------------------------------------------
 
@@ -2733,6 +2738,19 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     except Exception as _eat:
         logger.warning("[attrib] leitura falhou: %s", _eat)
 
+    # 🔬 26/08/2026 — CONTADOR DE DESCARTE. Caso André (prancha ELÉTRICA de
+    # 78 MB, job d5dbe1ed): `blocos=0` com `paredes=76824`. Prancha elétrica é
+    # FEITA de bloco — luminária, tomada, ponto — e contar bloco é a única coisa
+    # que o motor faz muito bem. Mas o log dizia só o total FINAL, então não
+    # dava pra distinguir "o desenho não tem bloco" de "a gente jogou todos
+    # fora". Metade de todas as pranchas (70 de 134) sai com blocos=0: se for
+    # filtro nosso, é o defeito mais caro do motor; se for arquivo, é limite
+    # honesto. Sem contar o descarte, a pergunta não tem resposta.
+    # 🚨 Isto NÃO muda comportamento — só passa a contar. Trocar o filtro no
+    # palpite é como eu perdi 5 de 5 ideias em 10/08.
+    _desc = {"anonimo": 0, "utilitario": 0, "anotacao": 0, "ilegivel": 0}
+    _amostra_anonimo = []
+
     for insert in msp.query("INSERT"):
         try:
             bname = insert.dxf.name
@@ -2740,17 +2758,25 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             x = insert.dxf.insert.x
             y = insert.dxf.insert.y
         except Exception:
+            _desc["ilegivel"] += 1
             continue
 
         # Skip anonymous / internal blocks (names starting with * or contendo $)
         # Blocos dinâmicos do AutoCAD têm sufixos tipo "A$C6BFD6B53" — filtrar.
         if bname.startswith("*") or "$" in bname:
+            _desc["anonimo"] += 1
+            # guarda alguns nomes: é o que diz se são lixo do AutoCAD ou item
+            # de verdade renomeado na conversão (o caso que a gente suspeita)
+            if len(_amostra_anonimo) < 5 and bname not in _amostra_anonimo:
+                _amostra_anonimo.append(bname)
             continue
         # Skip utility / system layers that don't represent real items
         if layer and layer.upper() in _UTILITY_LAYERS_UPPER:
+            _desc["utilitario"] += 1
             continue
         # Skip annotation / callout blocks (legendas, TAGs, cortes, elevações)
         if _is_annotation_block(bname):
+            _desc["anotacao"] += 1
             continue
 
         if bname not in block_counter:
@@ -2798,7 +2824,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     ]
 
     if not blocks:
-        logger.warning("Nenhum bloco (INSERT) encontrado no DXF: %s", filepath)
+        logger.warning(
+            "Nenhum bloco (INSERT) usado no DXF: %s — descartados: %s%s",
+            filepath, _desc,
+            (" amostra=" + ", ".join(_amostra_anonimo)) if _amostra_anonimo else "")
 
     # ---- Lines / polylines (wall segments) --------------------------------
     walls: list[WallSegment] = []
@@ -3440,6 +3469,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         polygon_areas=polygon_areas,
         struct_rects=struct_rects,
         block_attributes=block_attributes,
+        blocos_descartados=dict(_desc, amostra_anonimo=list(_amostra_anonimo)),
     )
 
 

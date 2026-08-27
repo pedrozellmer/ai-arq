@@ -176,6 +176,27 @@ _STAGES_DIAGNOSTICO = frozenset({
 })
 
 
+def _descarte_de_blocos(extraction) -> str:
+    """Sufixo do log de geometria: quantos INSERT cada filtro descartou.
+
+    🔬 26/08/2026, caso André. Vazio quando não houve descarte, pra não poluir
+    o log das pranchas em que o contador não tem nada a dizer.
+    """
+    try:
+        d = dict(getattr(extraction, "blocos_descartados", None) or {})
+    except Exception:
+        return ""
+    amostra = d.pop("amostra_anonimo", None) or []
+    total = sum(v for v in d.values() if isinstance(v, int))
+    if not total:
+        return ""
+    partes = " ".join(f"{k}={v}" for k, v in sorted(d.items()) if v)
+    txt = f" blocos_descartados=[{partes}]"
+    if amostra:
+        txt += " amostra=" + "|".join(str(a)[:28] for a in amostra[:3])
+    return txt
+
+
 def _log_error(stage, message, job_id=None, severity="error"):
     """Grava um erro técnico do motor na tabela error_log do Supabase, pra ser
     lido via MCP/admin SEM precisar abrir o log do Render. Best-effort, NUNCA
@@ -7001,7 +7022,15 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"cotas={len(extraction.dimensions or [])} "
                                 f"layers={len(extraction.layers or [])} "
                                 f"attribs={len(extraction.block_attributes or [])} "
-                                f"pilares={len(extraction.struct_rects or [])}",
+                                f"pilares={len(extraction.struct_rects or [])}"
+                                # 🔬 26/08: POR QUE `blocos` deu esse número.
+                                # Caso André (prancha elétrica, blocos=0 com
+                                # 76.824 linhas): sem isto não dá pra separar
+                                # "o desenho não tem bloco" de "a gente jogou
+                                # todos fora". 70 de 134 pranchas saem com
+                                # blocos=0 — se for filtro nosso, é o defeito
+                                # mais caro do motor.
+                                f"{_descarte_de_blocos(extraction)}",
                                 job_id)
                         except Exception as _eg:
                             print(f"[geometria] log falhou (nao-fatal): {_eg}")
