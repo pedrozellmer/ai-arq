@@ -54,7 +54,14 @@ jobs:
       - name: a bancada nao pode ENCOLHER
         working-directory: backend
         env:
-          PISO: 700
+          # 🪤 27/08/2026 — O PISO ENVELHECEU ENQUANTO A BANCADA CRESCIA.
+          # Ele nasceu em 23/08 pra pegar "pytest colheu 6 de 70 e passou
+          # verde". Mas a bancada foi de 620 pra 837 em dois dias, e o piso
+          # ficou em 700: perder DOIS arquivos inteiros ainda passaria.
+          # Guarda com folga de 137 protege cada vez menos.
+          # 📌 Ao acrescentar teste, subir isto junto — a margem é de ~30, o
+          # bastante pra não quebrar num commit que remove um caso obsoleto.
+          PISO: 800
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
