@@ -18031,18 +18031,65 @@ async def track_event(payload: TrackPayload, request: Request):
     ev = (payload.event or "").strip()
     if not _track_evento_aceito(ev):
         return {"status": "ignored"}
-    # meta capado: só cid (id anônimo), type e src (origem first-touch), curtos.
+    # meta capado: só chave conhecida, curta e saneada — segurança: nada de
+    # HTML/JS arbitrário chega ao painel admin.
+    #
+    # 🚨 27/08/2026 — ESTA LISTA MATOU UM INSTRUMENTO NO MESMO DIA EM QUE ELE
+    # NASCEU. O `signup_saiu_da_tela` manda `{campo: "whatsapp"}` pra dizer ONDE
+    # a pessoa parou no cadastro. O evento chegava, gravava... e o `campo` era
+    # descartado CALADO. Os dois primeiros registros no banco vieram assim:
+    #     {"cid": "cmrmo1hoqp3q7xegu", "src": "direto"}
+    # Sem `campo`, o instrumento não responde a única pergunta pra qual foi
+    # feito. Só a auditoria pegou.
+    #
+    # 🪤 Existe guarda pro NOME do evento (`test_track_allowlist`) — e foi ele
+    # que me salvou hoje de manhã. NÃO existia guarda pras CHAVES de meta.
+    # Agora existe: `test_track_meta_allowlist`.
+    #
+    # 🔒 `campo` é id de campo do NOSSO formulário: sanitizado a `[a-z0-9_-]`,
+    # nunca o valor digitado (tem WhatsApp e nome naquela tela).
     _meta = {}
     if isinstance(payload.meta, dict):
         _cid = str(payload.meta.get("cid") or "")[:40]
         _type = str(payload.meta.get("type") or "")[:40]
         _src = str(payload.meta.get("src") or "")[:40]
+        # 🪤 `re` NÃO está importado no topo deste módulo (só aliases pontuais)
+        # — e usar `re.sub` direto aqui deu `undefined name 're'` no pyflakes.
+        # É o mesmo erro que derrubou o deploy em 21/08 e criou a regra de rodar
+        # pyflakes antes do push. A regra pegou de novo, no mesmo arquivo.
+        import re as _re_track
+        _campo = _re_track.sub(r"[^a-z0-9_-]", "",
+                               str(payload.meta.get("campo") or "").lower())[:40]
         if _cid:
             _meta["cid"] = _cid
         if _type:
             _meta["type"] = _type
         if _src:
             _meta["src"] = _src
+        if _campo:
+            _meta["campo"] = _campo
+        # 🚨 27/08/2026 — SETE MÉTRICAS DA TELA DE REVISÃO ERAM DESCARTADAS
+        # AQUI, e o guarda novo (`test_track_meta_allowlist`) achou junto com o
+        # `campo`. O `revisao.html` manda desde sempre:
+        #     view_revisao      { n_itens, n_estimados, ja_revisados }
+        #     revisao_pausada   { n_itens, pendentes }
+        #     revisao_concluida { n_itens, confirmados, excluidos, editados }
+        # O comentário no próprio front diz "sem isso, quem abre e desiste some
+        # do mapa" — e some mesmo: os números nunca chegaram ao banco. É o mesmo
+        # funil de revisão que a gente investigou em 26/08 às cegas.
+        # 🔒 Só NÚMERO, com teto: não é texto do cliente, não vira porta de
+        # HTML/JS no painel. Valor absurdo ou não-numérico é ignorado.
+        for _k in ("n_itens", "n_estimados", "ja_revisados", "pendentes",
+                   "confirmados", "excluidos", "editados"):
+            try:
+                _v = payload.meta.get(_k)
+                if _v is None or isinstance(_v, bool):
+                    continue
+                _n = int(_v)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= _n <= 100000:
+                _meta[_k] = _n
     # Identidade: só entra se o TOKEN provar. Sem token, evento é anônimo.
     _u_track = None
     if (payload.user_id or payload.user_email):
