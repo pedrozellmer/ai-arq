@@ -1563,10 +1563,31 @@ def _validate_unit_by_dimensions(doc, unit_factor: float) -> dict:
                     f"(texto exibido × medida geométrica, ±2%)"
                 ),
             })
+        # 🔍 27/08/2026 — A SEXTA SAÍDA, QUE O CONSERTO DE ONTEM DEIXOU PASSAR.
+        # Ontem o `cotas=-` juntava cinco desfechos e ganhou motivo em cada um.
+        # Sobrou ESTA: cair fora do `if` acima devolve `out` com o motivo
+        # INICIAL, "nao-avaliada" — e aí o log afirma que a régua não rodou,
+        # quando ela rodou e não achou prova.
+        # 🪤 Visto no job `evaa4391` (avaliação do Evandro, prancha estrutural):
+        #     regua=nao-decidiu utilizaveis=1104 porque=nao-avaliada
+        # Mil e cento e quatro cotas lidas, e o log dizendo "não avaliada".
+        # É a mesma família do instrumento que mente — só que agora era o MEU.
+        if out.get("motivo") == "nao-avaliada":
+            out["motivo"] = (
+                "avaliada e sem prova exclusiva: %d cota(s) utilizável(is), "
+                "%d com número digitado, %d fator(es) qualificaram%s"
+                % (usable, n_digitadas, len(proven),
+                   (" (" + ", ".join("%g" % f for f in proven) + ")")
+                   if proven else " — nenhum"))
         return out
     except Exception as exc:  # defensivo: a régua NUNCA derruba a extração
         logger.warning("[unit-cotas] validação por cotas falhou (ignorada): %s", exc)
-        return {"status": None, "cotas_utilizaveis": 0}
+        # 🪤 Sem `motivo`, o log cai no traço e a falha vira indistinguível de
+        # "não tinha cota". A régua não pode derrubar a extração — mas também
+        # não pode sumir sem dizer que quebrou.
+        return {"status": None, "cotas_utilizaveis": 0,
+                "motivo": "a régua falhou e foi ignorada: %s: %s"
+                          % (type(exc).__name__, str(exc)[:80])}
 
 
 # ---------------------------------------------------------------------------
