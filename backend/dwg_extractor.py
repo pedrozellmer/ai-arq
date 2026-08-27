@@ -158,6 +158,9 @@ class DXFExtraction:
     # (caso André, prancha elétrica: blocos=0 com 76.824 linhas).
     # {anonimo, utilitario, anotacao, ilegivel, amostra_anonimo}
     blocos_descartados: dict = field(default_factory=dict)
+    # 🔬 27/08: por que `pilares` deu o número que deu. {nome_do_layer,
+    # nao_e_4_lados, nao_e_retangulo, fora_de_escala, ilegivel, amostra_layers}
+    pilares_descartados: dict = field(default_factory=dict)
 
     # -- convenience helpers ------------------------------------------------
 
@@ -3181,30 +3184,63 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # (ou círculo), com lado 8cm–2,5m e área ≤ 3 m². Nada disso roda em prancha
     # de arquitetura sem layer de pilar.
     struct_rects: list = []
+    # 🔬 27/08/2026 — CONTADOR DE DESCARTE DO PILAR. Caso do arquivo
+    # `005-1515-1PV-FOR-R03 levantamento volume.dxf` ("FOR" = FÔRMA, a prancha
+    # que é literalmente feita de retângulo de pilar e viga):
+    #     hachuras=51 paredes=2545 cotas=198 textos=390  ->  pilares=0
+    # São CINCO filtros em série aqui, e o log contava só o resultado final:
+    # não dava pra separar "a prancha não tem pilar" de "o nome do layer não
+    # bateu" ou "o tamanho caiu fora da faixa". Mesma cegueira do `blocos=0`
+    # de 26/08, que só foi resolvida quando passou a contar o descarte.
+    # 🔑 A amostra de NOMES é o que decide: `_PILAR_TOKENS` conhece só "PILAR"
+    # e "COLUMN", casando por prefixo de token — `PILARES` passa, mas `PIL`,
+    # `P` ou `EST-P` não. Sem ver os nomes reais, mexer no filtro é palpite.
+    # 🚨 Isto NÃO muda comportamento — só conta.
+    _desc_pil = {"nome_do_layer": 0, "nao_e_4_lados": 0, "nao_e_retangulo": 0,
+                 "fora_de_escala": 0, "ilegivel": 0}
+    _amostra_layers = {}          # {layer: quantos} dos recusados POR NOME
     if StructRect is not None:
         def _consider_pilar_poly(layer_name, pts):
             try:
                 if not layer_is_pilar(layer_name):
+                    # só conta o que TEM cara de pilar (contorno fechado de 4
+                    # lados) — senão todo traço solto entraria e a amostra
+                    # viraria ruído
+                    _pp = pts[:-1] if (len(pts) >= 2
+                                       and abs(pts[0][0] - pts[-1][0]) < 1e-9
+                                       and abs(pts[0][1] - pts[-1][1]) < 1e-9) else pts
+                    if len(_pp) == 4:
+                        _desc_pil["nome_do_layer"] += 1
+                        _k = str(layer_name)[:40]
+                        _amostra_layers[_k] = _amostra_layers.get(_k, 0) + 1
                     return
                 # remove ponto final repetido (polilinha fechada com 1º=último)
                 if len(pts) >= 2 and abs(pts[0][0] - pts[-1][0]) < 1e-9 \
                         and abs(pts[0][1] - pts[-1][1]) < 1e-9:
                     pts = pts[:-1]
                 if len(pts) != 4:
+                    _desc_pil["nao_e_4_lados"] += 1
                     return
                 d = [_line_length(pts[i], pts[(i + 1) % 4]) for i in range(4)]
                 if min(d) <= 0:
+                    _desc_pil["nao_e_retangulo"] += 1
                     return
                 # lados opostos ~iguais (retângulo/paralelogramo, tolerância 15%)
                 if abs(d[0] - d[2]) > 0.15 * max(d[0], d[2]):
+                    _desc_pil["nao_e_retangulo"] += 1
                     return
                 if abs(d[1] - d[3]) > 0.15 * max(d[1], d[3]):
+                    _desc_pil["nao_e_retangulo"] += 1
                     return
                 w_raw = (d[0] + d[2]) / 2.0
                 h_raw = (d[1] + d[3]) / 2.0
                 w_m, h_m = w_raw * unit_factor, h_raw * unit_factor
                 if not (0.08 <= min(w_m, h_m) and max(w_m, h_m) <= 2.5
                         and w_m * h_m <= 3.0):
+                    # 🪤 É AQUI que pilar some quando a UNIDADE está errada: com
+                    # fator de polegada, 36 pilares viram 0,34 mm e caem todos
+                    # neste filtro (ver nota na linha ~1133).
+                    _desc_pil["fora_de_escala"] += 1
                     return
                 cx = sum(p[0] for p in pts) / 4.0
                 cy = sum(p[1] for p in pts) / 4.0
@@ -3470,6 +3506,10 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         struct_rects=struct_rects,
         block_attributes=block_attributes,
         blocos_descartados=dict(_desc, amostra_anonimo=list(_amostra_anonimo)),
+        pilares_descartados=dict(
+            _desc_pil,
+            amostra_layers=sorted(_amostra_layers.items(),
+                                  key=lambda kv: -kv[1])[:5]),
     )
 
 

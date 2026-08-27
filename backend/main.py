@@ -258,6 +258,35 @@ def _descarte_de_blocos(extraction) -> str:
     return txt
 
 
+def _descarte_de_pilares(extraction) -> str:
+    """Sufixo do log de geometria: por que cada pilar candidato foi recusado.
+
+    🔬 27/08/2026. O detector tem CINCO filtros em série (nome do layer, 4
+    lados, retângulo, escala, ilegível) e o log mostrava só o total. Numa
+    prancha de FÔRMA — que é feita de retângulo de pilar — `pilares=0` não
+    dizia nada.
+
+    🔑 A amostra de NOMES é o que decide entre "não tem pilar" e "o layer se
+    chama `PIL` e o nosso filtro só conhece `PILAR`".
+
+    Vazio quando não houve descarte, pra não poluir o log das pranchas em que
+    o contador não tem o que dizer.
+    """
+    try:
+        d = dict(getattr(extraction, "pilares_descartados", None) or {})
+    except Exception:
+        return ""
+    amostra = d.pop("amostra_layers", None) or []
+    total = sum(v for v in d.values() if isinstance(v, int))
+    if not total:
+        return ""
+    partes = " ".join(f"{k}={v}" for k, v in sorted(d.items()) if v)
+    txt = f" pilares_descartados=[{partes}]"
+    if amostra:
+        txt += " layers=" + "|".join(f"{str(k)[:24]}({v})" for k, v in amostra[:3])
+    return txt
+
+
 def _log_error(stage, message, job_id=None, severity="error"):
     """Grava um erro técnico do motor na tabela error_log do Supabase, pra ser
     lido via MCP/admin SEM precisar abrir o log do Render. Best-effort, NUNCA
@@ -7091,7 +7120,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 # todos fora". 70 de 134 pranchas saem com
                                 # blocos=0 — se for filtro nosso, é o defeito
                                 # mais caro do motor.
-                                f"{_descarte_de_blocos(extraction)}",
+                                f"{_descarte_de_blocos(extraction)}"
+                                # 🔬 27/08: POR QUE `pilares` deu esse número.
+                                # Prancha de FÔRMA com 2.545 linhas e 198 cotas
+                                # devolvia `pilares=0` sem dizer se o desenho
+                                # não tem pilar ou se o NOME do layer não bateu.
+                                f"{_descarte_de_pilares(extraction)}",
                                 job_id)
                         except Exception as _eg:
                             print(f"[geometria] log falhou (nao-fatal): {_eg}")
