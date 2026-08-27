@@ -454,6 +454,7 @@
           <button type="button" data-filter="com_erro" data-label="Com erro" onclick="setUsersFilter('com_erro')" class="user-chip"></button>
           <button type="button" data-filter="google" data-label="Google" onclick="setUsersFilter('google')" class="user-chip"></button>
           <button type="button" data-filter="instagram" data-label="Instagram" onclick="setUsersFilter('instagram')" class="user-chip"></button>
+          <button type="button" data-filter="ia" data-label="IA" onclick="setUsersFilter('ia')" class="user-chip"></button>
         </div>
 
         <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
@@ -4451,10 +4452,19 @@ function _statusBadge(u) {
 function _referralLabel(u) {
   const src = u.referral_source;
   if (!src) return '<span class="text-gray-400 text-xs">--</span>';
+  // 🪤 26/08/2026: 'ia' foi criado no cadastro em 12/08 e NUNCA entrou aqui —
+  // caía no fallback e aparecia como "✏️ ia", em minúsculo e com ícone de texto
+  // livre, como se o cliente tivesse digitado. Foi assim que o Pedro viu no
+  // celular. Toda opção nova do cadastro precisa de linha aqui.
   const map = {
     google: '🔍 Google', instagram: '📷 Instagram', facebook: '📘 Facebook',
     linkedin: '💼 LinkedIn', indicacao: '🤝 Indicação', evento: '🎤 Evento',
-    blog: '📝 Blog', anuncio: '📢 Anúncio', youtube: '▶️ YouTube', outro: '✏️ Outro'
+    blog: '📝 Blog', anuncio: '📢 Anúncio', youtube: '▶️ YouTube', outro: '✏️ Outro',
+    // Canal de IA — desdobrado em uma por linha em 26/08.
+    ia: '🤖 IA (não especificada)',      // legado: 3 perfis de 12/08 a 26/08
+    ia_chatgpt: '🤖 ChatGPT', ia_gemini: '🤖 Gemini', ia_claude: '🤖 Claude',
+    ia_copilot: '🤖 Copilot', ia_perplexity: '🤖 Perplexity',
+    ia_outra: '🤖 Outra IA'
   };
   const label = map[src] || ('✏️ ' + esc(String(src)));
   const detail = u.referral_detail
@@ -5098,6 +5108,9 @@ function _userMatchesFilter(u, filter) {
     case 'com_erro':    return Number(u.error_count) > 0;
     case 'google':      return u.referral_source === 'google';
     case 'instagram':   return u.referral_source === 'instagram';
+    // 🪤 Tem que pegar o legado 'ia' TAMBÉM, senão o filtro esconde os 3 perfis
+    // que chegaram por IA antes do desdobramento de 26/08.
+    case 'ia':          return String(u.referral_source || '').startsWith('ia');
     case 'todos':
     default:            return true;
   }

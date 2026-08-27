@@ -189,8 +189,24 @@
                  "indicação do ChatGPT", "Indicado por outra I.A. Gemini" — o
                  último ficou até em "indicacao", então o canal estava partido
                  entre duas categorias e invisível nas duas.
-                 3 de 69 cadastros. Se cresce, a gente quer saber ANTES. -->
-            <option value="ia">Uma IA me indicou (ChatGPT, Gemini, Copilot&hellip;)</option>
+
+                 🔢 26/08/2026 — DESDOBRADO EM UMA IA POR LINHA (pedido do Pedro:
+                 "deixa as IAs listadas, as principais pelo menos, só pra gente
+                 ficar sabendo"). Motivo medido: o detalhe era OPCIONAL pra 'ia'
+                 e o cadastro de 26/08 veio com ele em BRANCO — perdemos qual IA
+                 mandou o cliente. Dos 5 que a gente conseguiu identificar,
+                 3 vieram do Gemini (4 contando o NotebookLM, que é Google) e
+                 1 do ChatGPT. Escolha em lista não dá pra pular.
+                 🪤 O valor legado 'ia' continua no banco em 3 perfis — o admin
+                 tem que seguir sabendo traduzir ele. -->
+            <optgroup label="Uma IA me indicou">
+              <option value="ia_chatgpt">ChatGPT</option>
+              <option value="ia_gemini">Gemini</option>
+              <option value="ia_claude">Claude</option>
+              <option value="ia_copilot">Copilot (Microsoft)</option>
+              <option value="ia_perplexity">Perplexity</option>
+              <option value="ia_outra">Outra IA</option>
+            </optgroup>
             <option value="evento">Evento / palestra</option>
             <option value="outro">Outro</option>
           </select>
@@ -314,14 +330,16 @@
   // sabemos qual outro, nem quem indicou). A validação no submit cobra.
   referralSourceSelect.addEventListener('change', function () {
     const v = this.value;
-    if (v === 'indicacao' || v === 'outro' || v === 'ia') {
+    // 🔢 26/08/2026: as IAs viraram uma opção cada (`ia_chatgpt`, `ia_gemini`…),
+    // então o detalhe deixou de ser necessário pras NOMEADAS — a escolha já diz
+    // qual. Continua pra 'ia_outra', que é onde mora a IA que a gente não
+    // listou. 🪤 Antes o detalhe era opcional pra 'ia' e o cadastro de 26/08
+    // veio em branco: a gente sabia que veio de IA e não sabia de qual.
+    if (v === 'indicacao' || v === 'outro' || v === 'ia_outra') {
       referralDetailInput.classList.remove('hidden');
-      // 🪤 Pra 'ia' o campo é OPCIONAL na prática (a categoria já é o dado que
-      // faltava), mas perguntar QUAL IA vale muito: saber se vem do ChatGPT ou
-      // do Gemini muda onde a gente trabalharia esse canal.
       referralDetailInput.placeholder =
         (v === 'indicacao') ? 'Quem indicou? (nome ou @ no Instagram) *'
-      : (v === 'ia')        ? 'Qual? (ChatGPT, Gemini, Copilot, Perplexity…)'
+      : (v === 'ia_outra')  ? 'Qual IA? *'
       :                       'Conta mais — onde nos viu? *';
     } else {
       referralDetailInput.classList.add('hidden');
@@ -600,9 +618,16 @@
     // "Outro" e "Indicação" EXIGEM o detalhe — senão a resposta não diz nada
     // (não sabemos qual "outro", nem quem indicou).
     const _refSrc = referralSourceSelect.value;
-    if ((_refSrc === 'outro' || _refSrc === 'indicacao') && !referralDetailInput.value.trim()) {
+    // 🪤 26/08: 'ia_outra' entrou aqui. Sem isto ela repetiria o buraco que
+    // motivou o desdobramento — o campo aparece, o cliente pula, e a gente
+    // fica sabendo que veio de IA sem saber de qual. Foi exatamente o que
+    // aconteceu no cadastro de 26/08 com o valor antigo 'ia'.
+    if ((_refSrc === 'outro' || _refSrc === 'indicacao' || _refSrc === 'ia_outra')
+        && !referralDetailInput.value.trim()) {
       showError(_refSrc === 'indicacao'
         ? 'Conta pra gente quem indicou (nome ou @ no Instagram).'
+        : _refSrc === 'ia_outra'
+        ? 'Qual IA te indicou a gente?'
         : 'Conta pra gente onde nos conheceu.');
       referralDetailInput.classList.remove('hidden');
       referralDetailInput.focus();
