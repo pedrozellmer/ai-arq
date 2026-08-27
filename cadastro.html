@@ -306,6 +306,50 @@
     }, { once: true });
   })();
 
+  // 🎯 ONDE a pessoa PAROU (27/08/2026). O `signup_form_start` acima diz QUE
+  // ela tocou no formulário; não diz ONDE desistiu — e é isso que decide o que
+  // encurtar.
+  //
+  // 📊 O que motivou: 11 de 50 cadastros pelo GOOGLE em 30 dias não completaram
+  // o perfil. Pelo e-mail/senha, ZERO de 7. Não é o cliente que desiste — é o
+  // caminho do Google que perde gente nesta tela. Quem entra pelo Google já se
+  // sente "dentro" e recebe um formulário com SEIS campos obrigatórios (nome,
+  // WhatsApp, área, como conheceu, termos, idade).
+  //
+  // 🪤 Por que eu não sei responder isso hoje: até 26/08 o `/api/track`
+  // descartava a maior parte dos eventos — 68 pessoas COMPLETARAM o cadastro e
+  // só 13 registraram ter tocado num campo, o que é impossível. Qualquer
+  // conclusão sobre o funil antes dessa data é ruído.
+  //
+  // 🔒 Grava o NOME do campo, NUNCA o valor digitado.
+  // 🪤 `pagehide` + `keepalive` (o trackEvent já usa) é o par que sobrevive ao
+  // fechamento da aba; `unload` não é confiável em celular.
+  // 🪤 Quem NÃO aceita o banner de cookies não gera evento nenhum (LGPD) —
+  // então este instrumento também é cego pra esse grupo. Ver o caso da Cassia,
+  // 28 revisões com zero evento.
+  (function () {
+    var f = document.getElementById('form-cadastro');
+    if (!f) return;
+    var ultimoCampo = null;
+    var jaAvisou = false;
+    f.addEventListener('focusin', function (ev) {
+      var el = ev && ev.target;
+      if (el && el.id) ultimoCampo = String(el.id).slice(0, 40);
+    });
+    window.addEventListener('pagehide', function () {
+      if (jaAvisou) return;
+      jaAvisou = true;
+      // 🔑 NÃO decide aqui se foi abandono: quem conclui navega pro dashboard e
+      // também dispara `pagehide`. Quem conclui tem `signup_done`; a análise
+      // cruza os dois. Decidir na tela erraria com quem volta e termina depois.
+      try {
+        if (window.trackEvent) {
+          trackEvent('signup_saiu_da_tela', { campo: ultimoCampo || '(nenhum)' });
+        }
+      } catch (e) {}
+    });
+  })();
+
   // ══════════════════════════════════════════════
   //  DOM REFS
   // ══════════════════════════════════════════════

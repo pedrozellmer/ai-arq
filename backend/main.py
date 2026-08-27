@@ -17977,6 +17977,15 @@ _TRACK_ALLOWED = {
     # é palpite dos dois lados:
     "view_login",          # chegou na PORTA (login/criar conta)
     "signup_form_start",   # TOCOU no primeiro campo do formulário
+    # 🎯 27/08/2026 — ONDE parou. O `signup_form_start` diz QUE tocou; este
+    # diz em que campo a pessoa estava quando saiu da tela. Motivo: 11 de 50
+    # cadastros pelo GOOGLE em 30 dias não completam o perfil (e ZERO de 7
+    # pelo e-mail/senha). Sem isto não dá pra saber o que encurtar.
+    # 🪤 Esta linha só existe porque o `test_track_allowlist` reprovou o meu
+    # commit: sem ela o `/api/track` descartaria o evento CALADO, e o
+    # instrumento nasceria morto — exatamente o que aconteceu com 9 eventos
+    # em 23/08.
+    "signup_saiu_da_tela",
     # 23/08/2026 — board do site achou 9 eventos que o front dispara há semanas
     # e esta lista descartava CALADA (200 {"status":"ignored"}). "Memorial 0
     # aberturas na vida" era, em parte, isto. Cliques marcados com data-track
