@@ -7276,7 +7276,45 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         _pd_cli = float(user_pe_direito or 0)
                     except (TypeError, ValueError):
                         _pd_cli = 0.0
-                    if _pd_cli > 0 and not is_structural:
+                    if _pd_cli > 0 and is_structural:
+                        # 🏗️ 27/08/2026 — O PÉ-DIREITO ERA JOGADO FORA NO
+                        # ESTRUTURAL. O `and not is_structural` original
+                        # descartava o DADO inteiro, e não só a diretiva de
+                        # pintura (que de fato não serve aqui).
+                        #
+                        # 🎯 O que revelou: em projeto estrutural o motor JÁ
+                        # acerta a parte difícil. No job da Cassia (62c49fe6) ele
+                        # detectou 219 pilares e entregou:
+                        #     ✓ MEDIDO   Pilar 14×30 cm  171 un
+                        #     ✓ MEDIDO   Pilar 14×50 cm   37 un
+                        #     ⚠ estimado Concreto pilares 30,73 m³
+                        #                "soma(área_seção × qtd × h_ESTIMADA)"
+                        # Seção e contagem vêm da geometria. A ALTURA é a única
+                        # peça que falta — e é justamente a que o cliente pode
+                        # informar e a gente descartava.
+                        #
+                        # 📊 m³ e m² NUNCA foram medidos no estrutural: 0 de 55
+                        # e 0 de 53. Não é falta de geometria, é falta de altura.
+                        #
+                        # 🚨 Regra nº1 preservada: altura INFORMADA não é altura
+                        # MEDIDA. O item segue 'estimado' — o que muda é o número
+                        # deixar de ser arbitrado e passar a ser o do cliente,
+                        # com a conta escrita na observação.
+                        _pd_directive = (
+                            f"\n=== PÉ-DIREITO (altura de piso a piso) INFORMADO PELO CLIENTE NO UPLOAD: {_pd_cli:.2f} m ===\n"
+                            f"Use este valor como ALTURA nos elementos verticais de estrutura, "
+                            f"no lugar de qualquer altura arbitrada:\n"
+                            f"  - volume de pilar = área da seção × {_pd_cli:.2f} × quantidade\n"
+                            f"  - fôrma de pilar  = perímetro da seção × {_pd_cli:.2f} × quantidade\n"
+                            f"REGRAS: (a) o item continua 'estimado', NUNCA 'confirmado' — a seção "
+                            f"e a contagem vieram do desenho, mas a altura foi INFORMADA; (b) "
+                            f"escreva a conta na observação e diga 'pé-direito informado por você', "
+                            f"não 'altura estimada'; (c) se a prancha trouxer altura de pilar em "
+                            f"corte, quadro ou legenda, PREFIRA a da prancha e anote a divergência; "
+                            f"(d) NÃO deixe volume de concreto nem área de fôrma com quantidade 0 "
+                            f"por falta de altura — ela está aqui.\n"
+                        )
+                    elif _pd_cli > 0:
                         _pd_directive = (
                             f"\n=== PÉ-DIREITO INFORMADO PELO CLIENTE NO UPLOAD: {_pd_cli:.2f} m ===\n"
                             f"Use este valor para derivar áreas verticais (pintura, revestimento de "
