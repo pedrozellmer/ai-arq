@@ -12682,6 +12682,27 @@ def _memoria_do_container() -> dict:
     }
 
 
+@app.get("/health")
+async def liveness():
+    """Sonda de vida pro Render. NÃO toca em banco, rede nem disco.
+
+    🔎 26/08/2026, lendo o Render pela primeira vez: o serviço está com
+    `healthCheckPath` VAZIO — a plataforma não tem como saber se o processo
+    travou, e o deploy troca a instância sem esperar o app subir. E o log já
+    tinha `GET /health → 404 Not Found` repetido: alguma coisa sonda esse
+    caminho e leva 404 desde sempre.
+
+    🚨 Por que NÃO usar o `/api/health` aqui: ele consulta o Supabase pra contar
+    projetos do dia. Como sonda do Render isso é perigoso — uma oscilação do
+    Supabase derrubaria a checagem e a plataforma entraria em laço de restart,
+    transformando um problema de terceiro em queda nossa. Sonda de vida
+    responde uma pergunta só: "o processo está de pé?".
+
+    Quem quiser diagnóstico (memória, chaves, contagem) usa `/api/health`.
+    """
+    return {"ok": True}
+
+
 @app.get("/api/health")
 async def health():
     """Health check com métricas do sistema."""
