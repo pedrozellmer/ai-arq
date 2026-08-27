@@ -10,6 +10,8 @@ import shutil
 import asyncio
 import tempfile
 import threading
+import asyncio as _asyncio
+from starlette.concurrency import run_in_threadpool
 from pathlib import Path
 from typing import Optional
 from datetime import datetime, timedelta
@@ -230,6 +232,10 @@ def _registrar_envio(assinatura: str, job_id: str) -> None:
     with _ENVIOS_LOCK:
         _ENVIOS_RECENTES[assinatura] = (job_id, time.time())
 
+
+# ⏱️ Teto de espera do precheck de estimativa (27/08/2026). Medido: ~17 s por
+# PDF. Sem teto, o cliente com muitos PDFs fica minutos olhando a tela parada.
+_PRECHECK_ORCAMENTO_S = 20
 
 def _descarte_de_blocos(extraction) -> str:
     """Sufixo do log de geometria: quantos INSERT cada filtro descartou.
@@ -14824,12 +14830,44 @@ async def estimate_price(request: Request, files: list[UploadFile] = File(...)):
                 raise HTTPException(413, f"Arquivo '{f.filename}' grande demais (máx. ~150 MB por prancha).")
             saved_paths.append(p)
         from pricing import estimate_for_files, precheck_warnings
-        result = estimate_for_files(saved_paths)
-        # QW5 (20/07): precheck barato ANTES de pagar, reaproveitando os arquivos
-        # que já estão em disco aqui (antes do finally apagar). Best-effort —
-        # se o precheck falhar, o preço sai igual (warnings=[]).
+        # 🚨 27/08/2026 — ISTO RODAVA DENTRO DO LAÇO DE EVENTOS E TRAVAVA O
+        # SERVIDOR INTEIRO. Rota `async def` executa no laço; trabalho pesado
+        # síncrono ali não é "lento", é BLOQUEANTE: nenhuma outra requisição é
+        # atendida enquanto roda.
+        #
+        # Medido nesta máquina, com arquivo real:
+        #     estimate_for_files   6 DWG  ->  0,00 s
+        #     precheck_warnings    6 DWG  ->  3,81 s
+        #     precheck_warnings    4 PDF  -> 68,25 s   (~17 s POR PDF)
+        #
+        # O comentário original chamava o precheck de "barato". Não é.
+        #
+        # 🎯 O caso que revelou: Maria Victoria (orçamentista, chegou pelo
+        # ChatGPT, cadastrou 02:02 de 27/08) selecionou 17 arquivos. A CPU foi a
+        # 100% de um núcleo, o site parou de responder na mão dela, ela tentou
+        # de novo, e foi embora sem enviar nada. A sonda de vida do Render deu
+        # timeout na mesma janela e a instância reiniciou DUAS vezes.
+        # 🪤 A sonda não causou isso — ela REVELOU. O uvicorn registra a
+        # requisição quando ela TERMINA, então uma resposta de 8 s aparece como
+        # "200 OK" no log enquanto o Render já desistiu nos 5 s. Sem a sonda,
+        # seguia acontecendo em silêncio.
+        result = await run_in_threadpool(estimate_for_files, saved_paths)
+        # QW5 (20/07): precheck ANTES de pagar, reaproveitando os arquivos que
+        # já estão em disco aqui (antes do finally apagar). Best-effort — se
+        # falhar ou estourar o tempo, o preço sai igual (warnings=[]).
         try:
-            warnings = precheck_warnings(saved_paths)
+            # 🪤 Thread livra o SERVIDOR, mas não livra o CLIENTE: 17 s por PDF
+            # viraria minutos de espera na tela dele. O orçamento corta e a
+            # estimativa sai sem os avisos, que são acessórios.
+            warnings = await _asyncio.wait_for(
+                run_in_threadpool(precheck_warnings, saved_paths),
+                timeout=_PRECHECK_ORCAMENTO_S)
+        except _asyncio.TimeoutError:
+            _log_error("motor:precheck-estourou",
+                       f"precheck passou de {_PRECHECK_ORCAMENTO_S}s com "
+                       f"{len(saved_paths)} arquivo(s) — estimativa saiu sem avisos",
+                       None, severity="info")
+            warnings = []
         except Exception as _pe:
             print(f"[estimate] precheck falhou (não crítico): {_pe}")
             warnings = []
