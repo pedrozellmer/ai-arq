@@ -176,6 +176,61 @@ _STAGES_DIAGNOSTICO = frozenset({
 })
 
 
+# ── Trava de envio em dobro (26/08/2026, caso Amanda) ────────────────────
+# A janela é curta de propósito: barra o clique/retry duplicado, e NÃO barra
+# quem reenvia o mesmo projeto meia hora depois (isso é intenção real do
+# cliente — ex.: corrigiu o arquivo e mandou de novo).
+_ENVIO_JANELA_S = 90
+_ENVIOS_RECENTES: dict[str, tuple[str, float]] = {}
+_ENVIOS_LOCK = threading.Lock()
+
+
+def _assinatura_do_envio(user_id, project_name, valid_pairs) -> str:
+    """Identidade do envio: quem + que projeto + quais arquivos.
+
+    🔑 Usa NOME e TAMANHO dos arquivos, não o conteúdo. Hash de conteúdo
+    exigiria ler tudo — justamente o que a gente evita desde o streaming pra
+    disco de 21/07. Nome+tamanho separa "clicou duas vezes" de "mandou outro
+    projeto" com folga.
+    🪤 Ordena os arquivos: o navegador não garante ordem entre dois envios, e
+    sem ordenar a mesma seleção geraria assinaturas diferentes — a trava não
+    pegaria nada e eu só descobriria em produção.
+    """
+    import hashlib as _hl
+    partes = []
+    for item in valid_pairs:
+        f = item[0] if isinstance(item, (tuple, list)) else item
+        nome = getattr(f, "filename", "") or ""
+        tam = getattr(getattr(f, "file", None), "tell", lambda: 0)()
+        try:
+            tam = int(getattr(f, "size", None) or tam or 0)
+        except (TypeError, ValueError):
+            tam = 0
+        partes.append(f"{nome}:{tam}")
+    partes.sort()
+    bruto = f"{user_id}|{(project_name or '').strip().lower()}|" + "|".join(partes)
+    return _hl.sha256(bruto.encode("utf-8", "replace")).hexdigest()[:32]
+
+
+def _envio_recente_igual(assinatura: str):
+    """Devolve o job_id de um envio idêntico dentro da janela, ou None."""
+    agora = time.time()
+    with _ENVIOS_LOCK:
+        # limpeza oportunista: o dicionário não pode crescer pra sempre
+        for k in [k for k, (_, t) in _ENVIOS_RECENTES.items()
+                  if agora - t > _ENVIO_JANELA_S]:
+            _ENVIOS_RECENTES.pop(k, None)
+        achado = _ENVIOS_RECENTES.get(assinatura)
+        if achado and (agora - achado[1]) <= _ENVIO_JANELA_S:
+            return achado[0]
+    return None
+
+
+def _registrar_envio(assinatura: str, job_id: str) -> None:
+    with _ENVIOS_LOCK:
+        _ENVIOS_RECENTES[assinatura] = (job_id, time.time())
+
+
 def _descarte_de_blocos(extraction) -> str:
     """Sufixo do log de geometria: quantos INSERT cada filtro descartou.
 
@@ -10067,8 +10122,44 @@ async def process_files(
     if len(valid_pairs) > 50:
         raise HTTPException(400, "Máximo de 50 arquivos por projeto")
 
+    # ── TRAVA DE ENVIO EM DOBRO ──────────────────────────────────────────
+    # 🚨 26/08/2026, caso AMANDA. O site mandou o MESMO arquivo DUAS VEZES,
+    # com 1 segundo de diferença:
+    #     13:18:47  POST /api/process -> b249f3e4
+    #     13:18:48  POST /api/process -> 58bc66c7   (mesmo DWG, mesmo projeto)
+    # Os dois jobs entraram em processamento e a memória do Render foi de
+    # 287 MB (10:17) a 3,81 GB (10:19), contra um teto de 4,29 GB. A instância
+    # reiniciou e ela levou DOIS erros seguidos na cara — no primeiro projeto
+    # que mandou depois de se cadastrar. Ela nunca mais enviou nada.
+    #
+    # 🪤 A trava de 3 s do `dashboard.html` (`_ultimoEnvioMs`) EXISTE e tem um
+    # listener só — e mesmo assim os dois passaram. Ela é POR ABA: não cobre
+    # duas abas, nem retry do XHR, nem chamada direta na API. Trava de tela
+    # nunca vai cobrir; a do servidor cobre a origem toda de uma vez.
+    #
+    # 🔑 Não é rate-limit: o `_rate_limit_ok` acima deixa 12 projetos em 10 min
+    # de propósito (um humano manda vários projetos DIFERENTES numa sessão).
+    # O que esta trava barra é o MESMO projeto duas vezes em segundos — e ela
+    # devolve o job que já existe, então pro cliente parece que funcionou (que é
+    # o que ele queria: UM projeto processando).
+    _assinatura_envio = _assinatura_do_envio(user_id, project_name, valid_pairs)
+    _ja_existe = _envio_recente_igual(_assinatura_envio)
+    if _ja_existe:
+        _log_error("motor:envio-em-dobro",
+                   f"user={str(user_id)[:8]} projeto={str(project_name)[:40]!r} "
+                   f"n_arquivos={len(valid_pairs)} -> devolvendo {_ja_existe}",
+                   _ja_existe, severity="info")
+        # 🪤 Espelha o formato da resposta normal. O site lê `data.job_id` e
+        # também `data.aviso_aec` / `data.aviso_estrutural` — devolver um dicionário
+        # curto demais faria o cliente cair num caminho sem os campos que ele lê.
+        return {"job_id": _ja_existe, "files_received": len(valid_pairs),
+                "file_types": {"pdf": 0, "dwg": 0, "dxf": 0}, "status": "queued",
+                "typology": typology, "project_type": project_type,
+                "duplicado": True}
+
     # Criar job
     job_id = str(uuid.uuid4())[:8]
+    _registrar_envio(_assinatura_envio, job_id)
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
 
