@@ -110,7 +110,32 @@
       // src = origem first-touch (de onde o visitante chegou) — pra atribuir o funil
       let _src = '';
       try { var _s0 = JSON.parse(localStorage.getItem('aiarq_src') || 'null'); _src = (_s0 && _s0.label) ? String(_s0.label).slice(0, 40) : ''; } catch (e) {}
-      _sbClient.auth.getSession().then(({ data: { session } }) => {
+      // 🚨 28/08/2026 — ESTA LINHA MATAVA A TELEMETRIA NO BLOG, EM SILÊNCIO.
+      // Era `_sbClient.auth.getSession()` direto. Em página estática (o blog)
+      // o `_sbClient` NÃO existe — o guarda lá em cima retorna antes de criar
+      // — e a chamada estourava. Morria calada porque o corpo inteiro desta
+      // função está num `try/catch` com o comentário "telemetria nunca quebra
+      // nada": ela nunca quebrou a página, e nunca mandou nada também.
+      //
+      // 🪤 O QUE ME ENGANOU: mover o bloco pra antes do guarda fez o
+      // `trackEvent` EXISTIR no blog. Conferi no DOM vivo — função presente,
+      // zero erro no console, consentimento concedido. Parecia pronto. Só que
+      // o evento não chegava ao banco. "Existe" não é "funciona".
+      //
+      // 🔑 Sessão é OPCIONAL: serve pra atribuir o evento a quem está logado.
+      // Leitor de blog não está logado. Sem cliente, manda anônimo — que é o
+      // certo pra essa página.
+      // 🪤 USA `window.sbClient`, NÃO `_sbClient`. O `_sbClient` é `const`
+      // declarado DEPOIS deste bloco: em página onde o guarda retorna, ele
+      // nunca é inicializado e fica na zona morta temporal — e `typeof` NÃO
+      // protege contra TDZ em `let`/`const`, estoura `ReferenceError` igual.
+      // Morreria calado do mesmo jeito. `window.sbClient` é propriedade comum:
+      // simplesmente `undefined` quando não existe.
+      var _sb = (typeof window !== 'undefined') ? window.sbClient : null;
+      var _sessao = (_sb && _sb.auth)
+        ? _sb.auth.getSession()
+        : Promise.resolve({ data: { session: null } });
+      _sessao.then(({ data: { session } }) => {
         const u = (session && session.user) ? session.user : null;
         const body = JSON.stringify({
           event: String(event).slice(0, 60),
