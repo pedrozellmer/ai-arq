@@ -227,7 +227,7 @@ def parse_steel_table(texts) -> dict | None:
 
     avisos: list[str] = []
     entries: list[dict] = []   # linhas lidas {bitola_mm, kg, comp_m, aco}
-    totals: list[float] = []
+    totals: list[tuple] = []   # (kg, indice_do_quadro | None)
     n_quadros = 0
     consumed_cells: set = set()  # ids de células já usadas pelo modo-tabela
 
@@ -325,7 +325,7 @@ def parse_steel_table(texts) -> dict | None:
 
             if is_total:
                 if kg is not None and kg > 0:
-                    totals.append(kg)
+                    totals.append((kg, hi_pos))
                 continue
             if kg is None or not (0 < kg <= 200000):
                 continue
@@ -339,7 +339,8 @@ def parse_steel_table(texts) -> dict | None:
                         f"Ø {bitola} mm: peso lido ({kg:.2f} kg) não bate com "
                         f"comprimento × massa linear ({esperado:.2f} kg) — linha descartada")
                     continue
-            entries.append({"bitola_mm": bitola, "kg": kg, "comp_m": comp, "aco": aco})
+            entries.append({"bitola_mm": bitola, "kg": kg, "comp_m": comp,
+                            "aco": aco, "quadro": hi_pos})
             for c in row_cells:
                 consumed_cells.add(id(c))
 
@@ -353,7 +354,7 @@ def parse_steel_table(texts) -> dict | None:
         if mt:
             v = _num(mt.group(1).replace(" ", ""))
             if v and v > 0:
-                totals.append(v)
+                totals.append((v, None))
             continue
         md = _DIA_RE.search(txt)
         if not md:
@@ -369,14 +370,103 @@ def parse_steel_table(texts) -> dict | None:
             continue
         mrow = _CA_RE.search(txt)
         aco = f"CA-{mrow.group(1)}" if mrow else default_class
-        entries.append({"bitola_mm": bitola, "kg": kg, "comp_m": None, "aco": aco})
+        entries.append({"bitola_mm": bitola, "kg": kg, "comp_m": None,
+                        "aco": aco, "quadro": None})
 
     if not entries and not totals:
         return None
 
     # ---- consolidação + consistência --------------------------------------
-    by_bitola: dict[float, dict] = {}
+    #
+    # 🚨 28/08/2026 — O RESUMO GERAL ERA SOMADO COMO SE FOSSE MAIS UM QUADRO.
+    #
+    # Prancha estrutural costuma trazer um quadro por elemento (vigas, lajes,
+    # pilares) E um RESUMO GERAL que repete tudo junto. O código antigo somava
+    # os três, então lia o DOBRO do aço da obra. Daí saíam dois estragos:
+    #
+    #   (a) se os quadros individuais NÃO tinham linha TOTAL, a soma dobrava e
+    #       o total não: a checagem de 5% reprovava e TUDO virava 'estimado'.
+    #       Medido no banco: 127 itens, 105 TONELADAS de aço rebaixadas assim —
+    #       o motor tinha lido o número certo da prancha e desconfiou de si.
+    #   (b) se os quadros TINHAM linha TOTAL, os dois lados dobravam junto,
+    #       batiam entre si, e o item saía CONFIRMADO com o dobro do peso.
+    #       Isso é pior: é a regra dura nº1 quebrada, com número inventado
+    #       carimbado de MEDIDO. Provado em experimento controlado; ainda não
+    #       observado em cliente (só 5 itens de aço confirmados no banco, todos
+    #       de prancha com quadro único).
+    #
+    # 🔑 O SINAL QUE SEPARA OS DOIS CASOS: um resumo geral é, por definição, a
+    # SOMA dos outros quadros — e por isso é ESTRITAMENTE MAIOR que cada um
+    # deles. Dois quadros legítimos de mesmo peso (250 + 250) não têm ninguém
+    # estritamente maior, então não são confundidos com resumo.
+    #
+    # 🪤 Quando não dá pra decidir (exatamente dois valores iguais: pode ser
+    # "vigas 250 + lajes 250" ou "quadro 250 + resumo 250"), a saída é dizer
+    # que NÃO SABE e marcar estimado. Chutar aqui é escolher entre entregar
+    # metade ou o dobro do aço — os dois erram feio, e um deles erra carimbado
+    # de medido.
+
+    def _indice_do_resumo(valores, tol=0.02):
+        """Índice do valor que é a soma dos demais (o resumo geral), ou None."""
+        if len(valores) < 2:
+            return None
+        for i, v in enumerate(valores):
+            resto = [x for j, x in enumerate(valores) if j != i]
+            s = sum(resto)
+            if s <= 0 or abs(v - s) / s > tol:
+                continue
+            # estritamente maior que CADA um dos outros — é o que descarta o
+            # falso positivo do 250+250
+            if all(v > x * (1 + tol) for x in resto):
+                return i
+            return None
+        return None
+
+    ambiguo = False
+
+    # ── 1. o TOTAL declarado ────────────────────────────────────────────────
+    total_kg = None
+    if totals:
+        vals = [kg for kg, _q in totals]
+        i_res = _indice_do_resumo(vals)
+        if i_res is not None:
+            total_kg = round(vals[i_res], 2)
+            avisos.append(
+                f"a prancha traz {len(vals)} totais e um deles ({total_kg:.2f} kg) é a "
+                f"soma dos outros — tratei como RESUMO GERAL, não somei em cima")
+        elif len(vals) == 2 and abs(vals[0] - vals[1]) <= 0.02 * max(vals):
+            ambiguo = True
+            total_kg = round(sum(vals), 2)
+            avisos.append(
+                f"dois totais iguais ({vals[0]:.2f} kg) — pode ser dois quadros de mesmo "
+                f"peso OU um quadro e seu resumo; não dá pra decidir pela prancha")
+        else:
+            total_kg = round(sum(vals), 2)
+
+    # ── 2. as linhas por bitola ─────────────────────────────────────────────
+    # Se um QUADRO inteiro é o resumo dos outros, ele sozinho já é a leitura
+    # completa: usar só ele evita a soma em dobro e mantém o detalhe por bitola.
+    quadros = {}
     for e in entries:
+        quadros.setdefault(e.get("quadro"), []).append(e)
+    usadas = entries
+    if len(quadros) > 1:
+        chaves = sorted(quadros, key=lambda k: (k is None, k))
+        somas = [sum(x["kg"] for x in quadros[k]) for k in chaves]
+        i_res = _indice_do_resumo(somas)
+        if i_res is not None:
+            usadas = quadros[chaves[i_res]]
+            avisos.append(
+                f"{len(chaves)} quadros de aço na prancha e um deles ({somas[i_res]:.2f} kg) "
+                f"é a soma dos demais — usei só o RESUMO GERAL, sem somar em dobro")
+        elif len(chaves) == 2 and abs(somas[0] - somas[1]) <= 0.02 * max(somas):
+            ambiguo = True
+            avisos.append(
+                f"dois quadros de peso igual ({somas[0]:.2f} kg cada) — pode ser dois "
+                f"elementos OU um quadro e seu resumo; não dá pra decidir pela prancha")
+
+    by_bitola: dict[float, dict] = {}
+    for e in usadas:
         b = e["bitola_mm"]
         if b in by_bitola:
             by_bitola[b]["kg"] += e["kg"]
@@ -389,7 +479,6 @@ def parse_steel_table(texts) -> dict | None:
             by_bitola[b] = dict(e)
     por_bitola = [by_bitola[b] for b in sorted(by_bitola)]
 
-    total_kg = round(sum(totals), 2) if totals else None
     confiavel = True
     soma = sum(e["kg"] for e in por_bitola)
     if total_kg is not None and por_bitola:
@@ -398,6 +487,8 @@ def parse_steel_table(texts) -> dict | None:
             avisos.append(
                 f"soma das bitolas ({soma:.2f} kg) difere do TOTAL declarado na prancha "
                 f"({total_kg:.2f} kg) — leitura possivelmente incompleta; tratar como ESTIMADO")
+    if ambiguo:
+        confiavel = False
     if any("descartada" in a for a in avisos):
         confiavel = False
 
