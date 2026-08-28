@@ -18120,6 +18120,40 @@ async def track_event(payload: TrackPayload, request: Request):
                 continue
             if 0 <= _n <= 100000:
                 _meta[_k] = _n
+        # 🚨 28/08/2026 — MAIS TRÊS CHAVES MORRENDO CALADAS, achadas um dia
+        # depois de eu criar o guarda que deveria ter pegado isto. O guarda
+        # tinha três pontos cegos de sintaxe e nenhum deles era o que eu
+        # imaginei ao escrevê-lo:
+        #
+        #   rotulo   aiarq-utils.js:195   passa `meta` como VARIÁVEL, não literal
+        #   motivo   dashboard.html:3400  chamado com `trackEvent?.(` (optional chaining)
+        #   formato  memorial.html:382    atalho ES6 `{ job_id, formato }`, sem dois-pontos
+        #
+        # 🩸 O `motivo` é o mais caro: ele é o instrumento do "processar
+        # bloqueado" (25/08), feito pra responder POR QUE a pessoa não conclui.
+        # Nasceu sem a única informação pra qual foi feito — de novo.
+        # 🪤 O conserto do `?.(` JÁ EXISTIA no guarda irmão (test_track_allowlist,
+        # 25/08) e não foi copiado pra cá. Regressão dentro de casa.
+        #
+        # 🔒 SANEAMENTO, e ele é diferente por chave:
+        #  - `motivo` e `formato` são slugs NOSSOS ('sem-arquivo', 'termos',
+        #    'pdf', 'docx'): lista branca dura, igual ao `campo`.
+        #  - `rotulo` é o texto VISÍVEL do botão ('Copiar link', 'Baixar XLSX').
+        #    Precisa de espaço e acento pra servir pra alguma coisa, então a
+        #    lista branca é mais larga — mas continua sendo lista BRANCA, com
+        #    `<`, `>`, `&`, aspas e barra fora. A rota é aberta: qualquer um
+        #    pode postar aqui, e isso não pode virar porta pro painel.
+        for _k, _limpa, _teto in (
+                ("motivo", r"[^a-z0-9_-]", 40),
+                ("formato", r"[^a-z0-9_-]", 20)):
+            _s = _re_track.sub(_limpa, str(payload.meta.get(_k) or "").lower())[:_teto]
+            if _s:
+                _meta[_k] = _s
+        _rot = _re_track.sub(r"[^0-9A-Za-zÀ-ÿ ._-]", "",
+                             str(payload.meta.get("rotulo") or ""))
+        _rot = _re_track.sub(r"\s+", " ", _rot).strip()[:60]
+        if _rot:
+            _meta["rotulo"] = _rot
     # Identidade: só entra se o TOKEN provar. Sem token, evento é anônimo.
     _u_track = None
     if (payload.user_id or payload.user_email):
