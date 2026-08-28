@@ -739,6 +739,42 @@ async def scheduler_tick(request: Request, force_slot: Optional[str] = None):
                 })
                 results.append({"slot": slot, "status": "published", "media_id": str(media_id)})
                 store.log_activity("scheduled_post_published", {"slot": slot, "media_id": str(media_id)})
+                # 📣 27/08/2026 — AVISA QUANDO É O 2º (OU MAIS) DO DIA.
+                # O Pedro estranhou dois posts num dia e foi descobrir olhando o
+                # Instagram. Puxando o fio: eram SETE DIAS seguidos com dois por
+                # dia (21 a 27/08), incluindo DOIS AIrnaldo na mesma quarta.
+                #
+                # 🔑 A causa: duas levas de conteúdo agendadas para as MESMAS
+                # datas — uma criada em 15/07 (slots w29–w33) e outra em 03/08
+                # (w33–w36). A leva velha tinha `slot_key` com número de semana
+                # que não batia com a data (w33 marcado pra 21–27/08, que é
+                # semana 35). Nada reclamou porque a checagem era por `slot_key`,
+                # e os dois nomes são diferentes. **Ninguém conferia por DATA.**
+                #
+                # 🚫 NÃO BLOQUEIA de propósito. O Pedro decidiu: "não vejo
+                # problema em 2 por dia". O problema nunca foi publicar dois —
+                # foi ele descobrir depois, pelo feed. Então isto AVISA e deixa
+                # publicar; a decisão continua sendo dele.
+                try:
+                    _hoje = datetime.now(timezone.utc).date().isoformat()
+                    _no_dia = _supa_select(
+                        "instagram_scheduled_posts",
+                        "status=eq.published"
+                        f"&published_at=gte.{_hoje}T00:00:00Z"
+                        f"&published_at=lte.{_hoje}T23:59:59Z"
+                        "&select=slot_key") or []
+                    if len(_no_dia) > 1:
+                        _slots = ", ".join(sorted(
+                            str(x.get("slot_key") or "?") for x in _no_dia))
+                        logger.warning(
+                            "[ig] %dº post do dia %s — slots: %s. Não é erro; "
+                            "é aviso pra não ser surpresa no feed.",
+                            len(_no_dia), _hoje, _slots)
+                        store.log_activity("scheduled_post_repetido_no_dia", {
+                            "dia": _hoje, "quantos": len(_no_dia), "slots": _slots,
+                        })
+                except Exception as _e_dup:
+                    logger.warning("[ig] checagem de post repetido falhou: %s", _e_dup)
             else:
                 _supa_update("instagram_scheduled_posts", "id", post["id"], {
                     "status": "failed",
