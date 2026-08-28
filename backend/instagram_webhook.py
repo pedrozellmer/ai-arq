@@ -608,7 +608,7 @@ def _supa_update(table: str, match_field: str, match_value: str, data: dict) -> 
 
 
 @router.post("/scheduler/tick")
-async def scheduler_tick(request: Request, force_slot: Optional[str] = None):
+def scheduler_tick(request: Request, force_slot: Optional[str] = None):
     """Roda 1 ciclo do agendador.
 
     - Busca posts em 'pending' onde publish_at <= now() (ou força um slot específico via ?force_slot=dia1)

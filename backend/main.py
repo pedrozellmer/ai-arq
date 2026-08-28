@@ -11368,8 +11368,28 @@ def _require_tick_secret(request):
         raise HTTPException(401, "Tick não autorizado")
 
 
+# 🚨 28/08/2026 — ESTA ROTA CONGELAVA O SERVIDOR INTEIRO, DE HORA EM HORA.
+# Medido no log do Render de hoje (o `/health` bate de 5 em 5 segundos):
+#     14:59:56  /health 200
+#               <<< 10 s sem responder a NINGUEM >>>
+#     15:00:06  POST /api/emails/auto/tick 200
+#     15:59:57  /health 200
+#               <<< 33 s sem responder a NINGUEM >>>
+#     16:00:30  POST /api/emails/auto/tick 200
+# O buraco comeca quando o pg_cron acorda e acaba no instante em que o tick
+# termina. Nos 33 s de hoje o smoke test tomou 502 e o Render disparou alarme
+# de saude — e qualquer cliente no site levou o mesmo silencio.
+#
+# 🔑 A CAUSA: `async def` com corpo 100%% BLOQUEANTE. Sao 416 linhas de urllib e
+# PostgREST sincronos e ZERO `await`. Rota async roda NO laco de eventos, entao
+# enquanto ela pensa o servidor nao atende mais nada — nem o `/health`.
+#
+# 🔧 O CONSERTO E TIRAR O `async`. Rota `def` comum o FastAPI joga sozinho num
+# thread separado, e o laco continua livre. Nao muda uma linha da logica.
+# 🪤 So vale porque o corpo NAO tem `await` nenhum: `async def` sem `await` e
+# sempre o pior dos dois mundos. Ver test_rota_async_nao_bloqueia.py.
 @app.post("/api/emails/auto/tick")
-async def emails_auto_tick(request: Request, dry: int = 0):
+def emails_auto_tick(request: Request, dry: int = 0):
     """Varredura horária (pg_cron): decide e envia os lembretes automáticos.
     dry=1 → só lista o que ENVIARIA, sem mandar nada (ensaio)."""
     _require_tick_secret(request)
@@ -12473,7 +12493,7 @@ async def admin_instagram_post_update(request: Request):
 
 
 @app.post("/api/newsletter/tick")
-async def newsletter_tick(request: Request):
+def newsletter_tick(request: Request):
     """Chamado pelo pg_cron. Dispara 1 newsletter agendada vencida por vez, com
     claim atômico anti-duplicação. Gate por X-Tick-Secret desde 01/08."""
     _require_tick_secret(request)
