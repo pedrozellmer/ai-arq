@@ -161,6 +161,32 @@
     <h2>O experimento involuntário: 51 projetos, dois formatos</h2><p>Atualizado em 1º de agosto de 2026: 67 projetos processados na plataforma chegaram ao fim com planilha concluída. Separamos por formato de origem: 32 vieram com pelo menos um arquivo CAD (DWG ou DXF) e 35 vieram só em PDF.</p><p>O resultado, medido pela nossa própria marcação de confiança item a item:</p><ul><li>Projetos com CAD (DWG/DXF): em média 25,0% dos itens saíram como ✓ medido — quantidade calculada direto da geometria.</li><li>Projetos só com PDF: em média 4,7% dos itens medidos.</li></ul><p>É uma diferença de aproximadamente 5,3 vezes. Mesma plataforma, mesmo tipo de projeto, mesma leitura — o que mudou foi o arquivo que entrou. (Dados internos AI.arq, apuração de 01/08/2026, 67 projetos concluídos; médias por projeto. Amostra de beta.)</p><p>Pra deixar o histórico à vista, já que prometemos atualizar: na primeira publicação deste post, em julho, a base tinha 51 projetos e os números eram 31,5% no CAD contra 7,3% no PDF — uma diferença de 4,3 vezes. As duas médias caíram e a distância entre elas aumentou. A queda vem de projetos maiores e mais variados entrando na base; a distância aumentar reforça o ponto central do texto.</p><h2>DWG ou DXF? O dado nos surpreendeu</h2><p>Até aqui tratamos DWG e DXF juntos como "CAD". Quando separamos os dois, apareceu uma coisa que a gente não esperava — e que muda a recomendação.</p><p>Entre os projetos que **concluíram**, o DWG mede MAIS que o DXF: 28,9% dos itens medidos contra 20,1%. Faz sentido, porque o DWG costuma vir direto do arquivo de trabalho, com toda a estrutura de blocos e layers preservada.</p><p>Só que essa conta esconde metade da história: os projetos que **falharam** não entram nela. E aí a diferença é brutal.</p><ul><li>DWG: 47 envios, 29 falharam — **61,7% não chegaram ao fim**</li><li>DXF: 17 envios, 3 falharam — 17,6%</li><li>PDF: 43 envios, 7 falharam — 16,3%</li></ul><p>Seis em cada dez DWG não passam da conversão. O motivo mais comum são os "objetos inteligentes" do AutoCAD Architecture/MEP, que nenhum conversor abre direto; o segundo são arquivos que o nosso conversor não consegue ler inteiros, mesmo abrindo normalmente no CAD de quem enviou.</p><p>Juntando as duas pontas — a chance de funcionar vezes o quanto mede quando funciona — é isto que você pode esperar ao subir um arquivo:</p><ul><li>**DXF: 16,6%** de itens medidos</li><li>DWG: 11,1%</li><li>PDF: 3,9%</li></ul><p>Por isso a recomendação é DXF, e não "CAD" genérico. Não é que o DXF seja um formato melhor: é que ele **chega inteiro**. Um DWG que abre mede lindamente — o problema é que, na nossa base, ele só abre 4 vezes em cada 10.</p><p>(Base de 01/08/2026, projetos não arquivados, contando envios que terminaram em planilha ou em erro. Amostra de beta, e a de DXF ainda é pequena — 17 envios. Estamos de olho e atualizamos conforme cresce.)</p><h2>Por que o formato muda tanto: pixel não tem medida</h2><p>Um PDF exportado da prancha é, na prática, uma imagem do desenho — mesmo quando é vetorial, o caminho comum de exportação transforma cotas e textos em traços. Dá pra ler, mas não dá pra medir: uma parede vira um risco sem comprimento conhecido.</p><p>Já o DWG/DXF carrega o desenho de verdade: polilinhas com coordenadas, blocos, layers, hachuras. Nesses arquivos a plataforma calcula área, comprimento e contagem geometricamente — por isso o item pode ser marcado como medido, e não estimado.</p><p>Quando só existe o PDF, a leitura visual continua funcionando e entrega uma planilha completa — mas a maior parte dos itens nasce como estimativa a revisar, porque é isso que ela é. A gente prefere te entregar uma linha laranja honesta do que um número bonito sem lastro.</p><h2>O que isso significa na sua planilha</h2><p>Mais itens medidos significa, na prática:</p><ul><li>Menos linhas ⚠ pra você conferir manualmente antes de mandar pro orçamentista;</li><li>Quantidades de piso, forro, alvenaria e esquadrias vindas da geometria, não de inferência;</li><li>Revisão mais rápida — você confere o que é estimativa, e confia no que foi medido.</li></ul><p>Vale repetir a regra que não quebramos nunca: item estimado jamais aparece como medido. O ✓ é reservado pro que veio do desenho.</p><h2>Como exportar pra aproveitar isso</h2><p>Se você trabalha em AutoCAD ou similar, o caminho é curto:</p><ol><li>Mande DXF. É a recomendação nº 1, e agora com número em cima: na nossa base o DWG falha em 61,7% dos envios contra 17,6% do DXF. O DWG mede bem quando abre — o problema é abrir. Salvar em DXF leva 10 segundos e é o que mais muda o seu resultado.</li><li>Envie o CAD direto — sem imprimir pra PDF antes.</li><li>Se o projeto tem objetos especiais (elétrica, forro modular, mobiliário paramétrico), rode EXPORTTOAUTOCAD antes de salvar em DXF: isso converte os objetos em geometria comum, que dá pra medir.</li><li>Só tem PDF? Envie mesmo assim — prefira o PDF exportado do CAD (vetorial) ao escaneado, e saiba que a planilha virá com mais estimativas pra revisar.</li></ol><p>O passo a passo completo, com prints, está no nosso guia de exportação no FAQ.</p><h2>Os limites do número (transparência em primeiro lugar)</h2><p>Esses 25,0% × 4,7% são médias de uma base em beta — 67 projetos, tipos de prancha variados, complexidades diferentes. Projeto com prancha rica em cotas mede mais; prancha só de layout mede menos, em qualquer formato. O número vai mudar conforme a base cresce, e vamos atualizando.</p><p>O que o dado já sustenta com folga é a direção: se você pode escolher o formato do arquivo, escolha o CAD. É a diferença entre a plataforma ler o seu desenho — e medir o seu desenho.</p>
   </div>
 
+  <!-- Compartilhar (28/08/2026) -->
+  <!-- Por que WhatsApp e copiar link, e NAO comentario nem curtida: o Pedro
+       perguntou os tres. Comentario num blog com poucos leitores por dia deixa
+       secao vazia, que grita "site morto" - mesma razao pela qual a comunidade
+       ficou pra depois. Curtida com contador em 0 ou 1 e pior que contador
+       nenhum. Ja compartilhar nao tem estado: nao precisa de backend, nao tem
+       o que moderar, nao guarda dado de ninguem - e no Brasil e por WhatsApp
+       que conteudo profissional circula.
+       Os dois botoes tem data-track, entao o clique vira evento sozinho pelo
+       ouvinte delegado do aiarq-utils.js (que passou a carregar no blog hoje).
+       Sem isso a gente poria o botao no escuro, como quase aconteceu. -->
+  <div class="mt-12 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-6">
+    <span class="text-sm text-gray-500 font-medium">Achou útil? Compartilhe:</span>
+    <a id="btn-zap" data-track="compartilhar-whatsapp" target="_blank" rel="noopener"
+       href="#"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 no-underline hover:bg-gray-50 transition">
+      <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4-.1-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.5-.3z"/><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2z"/></svg>
+      WhatsApp
+    </a>
+    <button type="button" id="btn-copiar" data-track="copiar-link-do-post"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <span id="txt-copiar">Copiar link</span>
+    </button>
+  </div>
+
   <!-- CTA -->
   <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
     <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
@@ -287,6 +313,46 @@
       var p = location.pathname;
       var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
       if (window.trackEvent) window.trackEvent('view_blog_post', { campo: slug });
+    } catch (e) { }
+  })();
+
+  // Compartilhar (28/08/2026). Sem backend, sem estado, sem dado guardado.
+  (function () {
+    try {
+      // 'url' e montada AQUI e nao no HTML: o link precisa ser o CANONICO, sem
+      // o ?semcache=... ou ?utm=... que a pessoa tenha na barra - senao o
+      // compartilhamento propaga parametro de teste.
+      var url = (document.querySelector('link[rel=canonical]') || {}).href
+                || (location.origin + location.pathname);
+      var titulo = (document.title || '').split('|')[0].trim();
+      var zap = document.getElementById('btn-zap');
+      if (zap) zap.href = 'https://wa.me/?text=' + encodeURIComponent(titulo + ' ' + url);
+
+      var btn = document.getElementById('btn-copiar');
+      var txt = document.getElementById('txt-copiar');
+      if (btn && txt) {
+        btn.addEventListener('click', function () {
+          function ok() {
+            var antes = txt.textContent;
+            txt.textContent = 'Link copiado!';
+            setTimeout(function () { txt.textContent = antes; }, 2000);
+          }
+          // navigator.clipboard so existe em HTTPS e pode ser negado; o
+          // fallback cobre navegador velho e permissao recusada.
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(ok).catch(function () { copiaAntiga(); });
+          } else { copiaAntiga(); }
+          function copiaAntiga() {
+            try {
+              var c = document.createElement('textarea');
+              c.value = url; c.setAttribute('readonly', '');
+              c.style.position = 'fixed'; c.style.opacity = '0';
+              document.body.appendChild(c); c.select();
+              document.execCommand('copy'); document.body.removeChild(c); ok();
+            } catch (e) { txt.textContent = 'Copie da barra do navegador'; }
+          }
+        });
+      }
     } catch (e) { }
   })();
 </script>

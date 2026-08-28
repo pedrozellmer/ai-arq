@@ -604,6 +604,32 @@ def render_post_html(post):
     {sections_html}
   </div>
 
+  <!-- Compartilhar (28/08/2026) -->
+  <!-- Por que WhatsApp e copiar link, e NAO comentario nem curtida: o Pedro
+       perguntou os tres. Comentario num blog com poucos leitores por dia deixa
+       secao vazia, que grita "site morto" - mesma razao pela qual a comunidade
+       ficou pra depois. Curtida com contador em 0 ou 1 e pior que contador
+       nenhum. Ja compartilhar nao tem estado: nao precisa de backend, nao tem
+       o que moderar, nao guarda dado de ninguem - e no Brasil e por WhatsApp
+       que conteudo profissional circula.
+       Os dois botoes tem data-track, entao o clique vira evento sozinho pelo
+       ouvinte delegado do aiarq-utils.js (que passou a carregar no blog hoje).
+       Sem isso a gente poria o botao no escuro, como quase aconteceu. -->
+  <div class="mt-12 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-6">
+    <span class="text-sm text-gray-500 font-medium">Achou útil? Compartilhe:</span>
+    <a id="btn-zap" data-track="compartilhar-whatsapp" target="_blank" rel="noopener"
+       href="#"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 no-underline hover:bg-gray-50 transition">
+      <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4-.1-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.5-.3z"/><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2z"/></svg>
+      WhatsApp
+    </a>
+    <button type="button" id="btn-copiar" data-track="copiar-link-do-post"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <span id="txt-copiar">Copiar link</span>
+    </button>
+  </div>
+
   <!-- CTA -->
   <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
     <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
@@ -655,6 +681,46 @@ def render_post_html(post):
       var p = location.pathname;
       var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
       if (window.trackEvent) window.trackEvent('view_blog_post', {{ campo: slug }});
+    }} catch (e) {{ }}
+  }})();
+
+  // Compartilhar (28/08/2026). Sem backend, sem estado, sem dado guardado.
+  (function () {{
+    try {{
+      // 'url' e montada AQUI e nao no HTML: o link precisa ser o CANONICO, sem
+      // o ?semcache=... ou ?utm=... que a pessoa tenha na barra - senao o
+      // compartilhamento propaga parametro de teste.
+      var url = (document.querySelector('link[rel=canonical]') || {{}}).href
+                || (location.origin + location.pathname);
+      var titulo = (document.title || '').split('|')[0].trim();
+      var zap = document.getElementById('btn-zap');
+      if (zap) zap.href = 'https://wa.me/?text=' + encodeURIComponent(titulo + ' ' + url);
+
+      var btn = document.getElementById('btn-copiar');
+      var txt = document.getElementById('txt-copiar');
+      if (btn && txt) {{
+        btn.addEventListener('click', function () {{
+          function ok() {{
+            var antes = txt.textContent;
+            txt.textContent = 'Link copiado!';
+            setTimeout(function () {{ txt.textContent = antes; }}, 2000);
+          }}
+          // navigator.clipboard so existe em HTTPS e pode ser negado; o
+          // fallback cobre navegador velho e permissao recusada.
+          if (navigator.clipboard && navigator.clipboard.writeText) {{
+            navigator.clipboard.writeText(url).then(ok).catch(function () {{ copiaAntiga(); }});
+          }} else {{ copiaAntiga(); }}
+          function copiaAntiga() {{
+            try {{
+              var c = document.createElement('textarea');
+              c.value = url; c.setAttribute('readonly', '');
+              c.style.position = 'fixed'; c.style.opacity = '0';
+              document.body.appendChild(c); c.select();
+              document.execCommand('copy'); document.body.removeChild(c); ok();
+            }} catch (e) {{ txt.textContent = 'Copie da barra do navegador'; }}
+          }}
+        }});
+      }}
     }} catch (e) {{ }}
   }})();
 </script>

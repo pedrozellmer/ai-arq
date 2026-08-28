@@ -162,6 +162,32 @@
     <h2>Armadilha 1 — O duto é desenhado com duas linhas, e somar as duas dobra o comprimento</h2><p>Em planta, duto retangular costuma ser representado pelas duas faces: duas linhas paralelas, muitas vezes em cores diferentes para separar insuflamento de retorno. Uma projetista descreveu assim o padrão da equipe dela: duas linhas em paralelo, insuflamento em azul escuro e retorno em azul claro.</p><p>A consequência é direta e cara: quem soma o comprimento de tudo que está na camada do duto conta cada trecho duas vezes. Um trecho de 10 metros aparece como 20 metros de linha.</p><p>Medimos isso num arquivo real de climatização hospitalar. Separando os segmentos por camada e procurando pares paralelos com afastamento constante, o fator ficou assim: insuflamento 1,88×, exaustão 1,98×, ar exterior 1,94×, retorno 2,00×. Quatro grupos independentes, todos perto de dobrar. (Medição nossa, um arquivo, agosto de 2026 — é ordem de grandeza, não estatística de mercado.)</p><p>O que fazer: se o projeto tiver camada de eixo, meça por ela. O padrão de camadas do National CAD Standard prevê exatamente isso, com o sufixo CNTR de centerline para insuflamento, retorno e exaustão. Não havendo eixo, é preciso parear as faces antes de somar — ou aceitar que o número está inflado.</p><h2>Armadilha 2 — O desenho pode não declarar em que unidade foi feito</h2><p>Todo arquivo DWG ou DXF tem um campo de cabeçalho que informa a unidade do desenho. Quando esse campo vem zerado, o arquivo não diz se está em milímetro, centímetro ou metro — e quem lê precisa deduzir.</p><p>A suposição mais comum é milímetro, porque é o padrão de muito projeto de arquitetura. Se o desenho estiver em metros, tudo o que é comprimento sai mil vezes menor, sem erro nenhum na tela.</p><p>Vimos isso num projeto hospitalar real: o arquivo não declarava unidade, o desenho estava em metros e tinha 526 metros de largura. Lido como milímetro, o hospital inteiro virava um desenho de 53 centímetros, e um trecho de duto de 178 metros aparecia como 18 centímetros — pequeno o bastante para ser descartado como marcação de legenda.</p><p>Como se proteger: compare a extensão total do desenho com o que a obra tem de verdade. Se o maior elemento da planta inteira mede poucos centímetros, a escala está errada. Um número isolado pode parecer plausível; o tamanho do desenho inteiro denuncia.</p><h2>Armadilha 3 — Metro linear não é a unidade que o orçamento usa</h2><p>Você mediu o comprimento certo. Ainda assim, a planilha pode não servir para comprar.</p><p>O critério de medição do SINAPI para duto de chapa é área, não comprimento. O texto é explícito: a área considerada corresponde à medição do comprimento do trecho reto do duto multiplicado pelo perímetro da seção.</p><p>Na prática: um duto de 60 × 40 cm tem perímetro de 2,00 m. Cada metro linear vale 2,00 m² de chapa. Sem a seção, o comprimento sozinho não vira quantidade de compra.</p><p>E a seção não está na geometria — está escrita em texto ao lado do trecho, no formato largura × altura para duto retangular, ou o diâmetro para o circular. Quem levanta precisa casar cada texto com o trecho correspondente.</p><p>De m² para quilo, o peso vem da bitola da chapa, que o SINAPI declara no próprio insumo: bitola 26, espessura 0,50 mm, 4,00 kg/m². A bitola, por sua vez, não está desenhada: sai da classe de pressão e da dimensão do duto, definidas no memorial. É mais um dado que a planta não entrega.</p><h2>Armadilha 4 — O SINAPI cobre split e duto, mas não cobre água gelada nem VRF</h2><p>Essa é a que mais surpreende quem assume que a base oficial resolve tudo.</p><p>Conferimos a base SINAPI que usamos como referência (consulta feita em agosto de 2026, na base carregada no AI.arq): duto tem 57 composições, ar-condicionado e climatização 131, split 44, grelha 32.</p><p>Agora o outro lado da mesma consulta: fan coil, VRF, chiller e água gelada retornam zero composições.</p><p>O que isso significa na prática: obra de split e dutado, a base resolve. Obra de água gelada com chiller e fancoil — que é o caso típico de hospital, shopping e torre corporativa — tem o miolo do orçamento fora da base, e vai depender de tabela de fabricante ou composição própria.</p><p>E sistema de água gelada tem itens que nenhum outro tem: bombas primária e secundária, o fechamento hidráulico de cada fancoil com filtro e válvula de balanceamento, vaso de expansão, flushing e tratamento químico. Quem copia uma planilha de split para uma obra de água gelada esquece tudo isso.</p><h2>O que a norma obriga e costuma ficar fora da planilha</h2><p>Alguns itens não nascem do desenho, nascem da lei — e são justamente os esquecidos.</p><p>A Lei nº 13.589/2018 tornou o PMOC obrigatório para edificações de uso público e coletivo que possuam ambientes climatizados, sem estabelecer capacidade mínima. Isso vira dois itens: a elaboração do plano e, principalmente, o acesso para manutenção — portas de inspeção no duto e painel removível no forro. É aí que mais se esquece de orçar.</p><p>Outra que muita planilha antiga ainda erra: a Resolução RE nº 09/2003 da Anvisa, referência clássica de qualidade do ar interior, foi revogada pela RDC nº 886/2024, e a referência técnica passou a ser a ABNT NBR 17037:2023. Orçamento que ainda cita a RE 09 está desatualizado.</p><p>Para projeto e conforto, a referência é a NBR 16401, que define vazão de ar exterior e filtragem — e puxa para a planilha tomada de ar externo, veneziana, filtro e damper.</p><h2>Onde o AI.arq está hoje nisso</h2><p>Sendo exato sobre o que fazemos e o que ainda não fazemos, porque essa é a informação útil.</p><p>O que já funciona: lemos DWG, DXF e PDF; identificamos as camadas de duto de insuflamento, retorno, exaustão, ar exterior, água gelada e frigorígena; medimos o comprimento por camada direto da geometria; e contamos equipamentos, difusores e grelhas pelos blocos inseridos no desenho. Cada item sai marcado como medido do desenho ou como estimativa que pede a sua conferência.</p><p>O que ainda não fazemos: não convertemos metro linear em m² de chapa — a conversão exige casar cada trecho com a seção escrita ao lado, e isso está em desenvolvimento. Também não separamos curva, redução e transição, que o SINAPI trata como itens próprios.</p><p>E a armadilha 1 vale para nós também: onde o duto é desenhado com as duas faces, o comprimento que entregamos hoje está superestimado. Preferimos dizer isso a deixar você descobrir orçando.</p>
   </div>
 
+  <!-- Compartilhar (28/08/2026) -->
+  <!-- Por que WhatsApp e copiar link, e NAO comentario nem curtida: o Pedro
+       perguntou os tres. Comentario num blog com poucos leitores por dia deixa
+       secao vazia, que grita "site morto" - mesma razao pela qual a comunidade
+       ficou pra depois. Curtida com contador em 0 ou 1 e pior que contador
+       nenhum. Ja compartilhar nao tem estado: nao precisa de backend, nao tem
+       o que moderar, nao guarda dado de ninguem - e no Brasil e por WhatsApp
+       que conteudo profissional circula.
+       Os dois botoes tem data-track, entao o clique vira evento sozinho pelo
+       ouvinte delegado do aiarq-utils.js (que passou a carregar no blog hoje).
+       Sem isso a gente poria o botao no escuro, como quase aconteceu. -->
+  <div class="mt-12 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-6">
+    <span class="text-sm text-gray-500 font-medium">Achou útil? Compartilhe:</span>
+    <a id="btn-zap" data-track="compartilhar-whatsapp" target="_blank" rel="noopener"
+       href="#"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 no-underline hover:bg-gray-50 transition">
+      <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4-.1-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.5-.3z"/><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2z"/></svg>
+      WhatsApp
+    </a>
+    <button type="button" id="btn-copiar" data-track="copiar-link-do-post"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <span id="txt-copiar">Copiar link</span>
+    </button>
+  </div>
+
   <!-- CTA -->
   <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
     <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
@@ -288,6 +314,46 @@
       var p = location.pathname;
       var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
       if (window.trackEvent) window.trackEvent('view_blog_post', { campo: slug });
+    } catch (e) { }
+  })();
+
+  // Compartilhar (28/08/2026). Sem backend, sem estado, sem dado guardado.
+  (function () {
+    try {
+      // 'url' e montada AQUI e nao no HTML: o link precisa ser o CANONICO, sem
+      // o ?semcache=... ou ?utm=... que a pessoa tenha na barra - senao o
+      // compartilhamento propaga parametro de teste.
+      var url = (document.querySelector('link[rel=canonical]') || {}).href
+                || (location.origin + location.pathname);
+      var titulo = (document.title || '').split('|')[0].trim();
+      var zap = document.getElementById('btn-zap');
+      if (zap) zap.href = 'https://wa.me/?text=' + encodeURIComponent(titulo + ' ' + url);
+
+      var btn = document.getElementById('btn-copiar');
+      var txt = document.getElementById('txt-copiar');
+      if (btn && txt) {
+        btn.addEventListener('click', function () {
+          function ok() {
+            var antes = txt.textContent;
+            txt.textContent = 'Link copiado!';
+            setTimeout(function () { txt.textContent = antes; }, 2000);
+          }
+          // navigator.clipboard so existe em HTTPS e pode ser negado; o
+          // fallback cobre navegador velho e permissao recusada.
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(ok).catch(function () { copiaAntiga(); });
+          } else { copiaAntiga(); }
+          function copiaAntiga() {
+            try {
+              var c = document.createElement('textarea');
+              c.value = url; c.setAttribute('readonly', '');
+              c.style.position = 'fixed'; c.style.opacity = '0';
+              document.body.appendChild(c); c.select();
+              document.execCommand('copy'); document.body.removeChild(c); ok();
+            } catch (e) { txt.textContent = 'Copie da barra do navegador'; }
+          }
+        });
+      }
     } catch (e) { }
   })();
 </script>
