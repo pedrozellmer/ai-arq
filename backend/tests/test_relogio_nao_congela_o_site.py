@@ -179,7 +179,16 @@ def _rotas_async_que_bloqueiam(src, nome_arquivo):
 # 🧪 O número saiu ERRADO na primeira tentativa (escrevi 61) e o próprio teste
 # de catraca abaixo me corrigiu: eu já tinha convertido duas do relógio, então
 # o certo era 59. Um guarda que se prova na estreia vale mais que um comentário.
-_TETO_DE_DIVIDA = {"main.py": 59, "instagram_webhook.py": 1}
+#
+# 📉 A catraca em ação, no mesmo dia:
+#     64  →  antes de tudo (28/08, ao investigar o smoke vermelho)
+#     59  →  depois das 3 do relógio (o buraco de 33 s)
+#     31  →  depois das 28 que o CLIENTE usa
+# O lote de 28 foi escolhido por quem sente: revisão de item, meus entregáveis,
+# itens do projeto, cronograma, cashback, `by-user` (a que o smoke chama).
+# Sobram 31, quase todas de `/api/admin/` e `/api/debug/` — quando elas travam,
+# quem espera é o Pedro sozinho, não um cliente no meio de um orçamento.
+_TETO_DE_DIVIDA = {"main.py": 31, "instagram_webhook.py": 1}
 
 
 def test_a_divida_de_rotas_bloqueantes_nao_cresce():

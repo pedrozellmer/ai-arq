@@ -31,7 +31,24 @@ import sys
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
+import asyncio
+import inspect
 import main   # noqa: E402
+
+
+def _chamar_rota(fn, *a, **kw):
+    """Chama a rota sem assumir se ela e `def` ou `async def`.
+
+    🪤 28/08/2026: `health` deixou de ser `async def` (rota async com corpo
+    bloqueante congelava o servidor inteiro — foram 33 s mudos na virada das
+    16h UTC). Estes testes quebraram com "a coroutine was expected", e a rota
+    estava CERTA: quem estava errado era a forma de chamar.
+    🔑 Por isso o ajudante aceita as duas: o teste passa a medir o RESULTADO da
+    rota, nao o jeito como ela foi declarada. Se amanha ela voltar a ser async
+    (porque ganhou um `await` de verdade), nada aqui precisa mudar.
+    """
+    r = fn(*a, **kw)
+    return asyncio.run(r) if inspect.isawaitable(r) else r
 
 _MB = 1024 * 1024
 
@@ -118,8 +135,7 @@ def test_fora_de_container_diz_isso_em_vez_de_estourar():
 def test_a_ROTA_health_devolve_o_campo(monkeypatch):
     """🪤 Guarda que só testa a função não vê o CALL SITE — e o call site é o
     que o hook e o Pedro olham."""
-    import asyncio
-    r = asyncio.run(main.health())
+    r = _chamar_rota(main.health)
     assert "memoria_container" in r, "a rota parou de reportar a memória do container"
     assert "system" in r, "o número do host sumiu — os dois têm que ficar"
 

@@ -80,7 +80,7 @@ def test_pe_direito_fora_da_faixa_e_recusado():
 def test_a_derivacao_da_pintura_e_CHAMADA_na_rota():
     """🪤 Guarda de CALL SITE. A derivação já existia e essa rota nunca a
     chamava — era exatamente o buraco."""
-    i_rota = _MAIN.find("async def inform_project_area")
+    i_rota = _MAIN.find("def inform_project_area")
     assert i_rota > 0, "a rota sumiu"
     trecho = _MAIN[i_rota:i_rota + 9000]
     assert "_derive_pintura_pe_direito(items" in trecho, (
@@ -94,7 +94,7 @@ def test_informar_SO_o_pe_direito_nao_apaga_a_area_medida():
     Se `area` vem 0, a área que o projeto já tinha não pode virar 0 nem ser
     marcada como 'informado por você'.
     """
-    i = _MAIN.find("async def inform_project_area")
+    i = _MAIN.find("def inform_project_area")
     t = _MAIN[i:i + 9000]
     assert "_area_ja_tinha" in t, (
         "a área anterior não é preservada quando vem só o pé-direito")
@@ -107,7 +107,7 @@ def test_o_pe_direito_e_PERSISTIDO_no_projeto():
     """🪤 Mesma armadilha do `user_total_area`: campo que não existe na RPC
     `update_project_status` é descartado em SILÊNCIO. Sem gravar, um reprocesso
     futuro perde o pé-direito e a pintura some de novo."""
-    i = _MAIN.find("async def inform_project_area")
+    i = _MAIN.find("def inform_project_area")
     t = _MAIN[i:i + 9000]
     assert '"user_pe_direito"' in t and "_projeto_patch" in t, (
         "o pé-direito informado não é gravado por `_projeto_patch` — some no "
@@ -159,7 +159,7 @@ def test_o_backend_escreve_o_aviso_que_a_tela_le():
     """As duas pontas: se o backend parar de escrever a frase, a trava da tela
     deixa de funcionar em silêncio."""
     assert "INFORMADO POR VOCÊ" in _MAIN
-    i = _MAIN.find("async def inform_project_area")
+    i = _MAIN.find("def inform_project_area")
     t = _MAIN[i:i + 9000]
     assert "Pé-direito de" in t, (
         "o backend parou de escrever o aviso do pé-direito nos warnings — a "
@@ -168,7 +168,7 @@ def test_o_backend_escreve_o_aviso_que_a_tela_le():
 
 def test_o_caminho_da_AREA_continua_igual():
     """Regressão: o caso Catarina não pode quebrar."""
-    i = _MAIN.find("async def inform_project_area")
+    i = _MAIN.find("def inform_project_area")
     t = _MAIN[i:i + 9000]
     assert "_apply_area_honesty(" in t and "apenas_preencher=True" in t, (
         "o preenchimento por área informada mudou de forma")

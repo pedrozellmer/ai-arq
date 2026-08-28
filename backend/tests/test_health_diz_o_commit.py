@@ -23,7 +23,23 @@ import pytest
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
+import inspect
 import main   # noqa: E402
+
+
+def _chamar_rota(fn, *a, **kw):
+    """Chama a rota sem assumir se ela e `def` ou `async def`.
+
+    🪤 28/08/2026: `health` deixou de ser `async def` (rota async com corpo
+    bloqueante congelava o servidor inteiro — foram 33 s mudos na virada das
+    16h UTC). Estes testes quebraram com "a coroutine was expected", e a rota
+    estava CERTA: quem estava errado era a forma de chamar.
+    🔑 Por isso o ajudante aceita as duas: o teste passa a medir o RESULTADO da
+    rota, nao o jeito como ela foi declarada. Se amanha ela voltar a ser async
+    (porque ganhou um `await` de verdade), nada aqui precisa mudar.
+    """
+    r = fn(*a, **kw)
+    return asyncio.run(r) if inspect.isawaitable(r) else r
 
 
 def test_versao_traz_commit_curto_e_boot(monkeypatch):
@@ -53,7 +69,7 @@ def test_a_ROTA_health_devolve_a_versao(monkeypatch):
     chamador: sabotei o call site e o teste nem piscou.
     """
     monkeypatch.setenv("RENDER_GIT_COMMIT", "abcdef1234567890")
-    r = asyncio.run(main.health())
+    r = _chamar_rota(main.health)
     assert "versao" in r, "a rota /api/health parou de devolver a versao"
     assert r["versao"]["commit"] == "abcdef1", r["versao"]
     assert r["status"] == "healthy"
@@ -66,7 +82,7 @@ def test_controle_positivo_a_versao_ANTIGA_reprova(monkeypatch):
     acima passassem com ela, elas nao valeriam nada.
     """
     monkeypatch.setenv("RENDER_GIT_COMMIT", "abcdef1234567890")
-    r = asyncio.run(main.health())
+    r = _chamar_rota(main.health)
     antiga = {k: v for k, v in r.items() if k != "versao"}
     assert "versao" not in antiga
     with pytest.raises(KeyError):

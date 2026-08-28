@@ -10945,7 +10945,7 @@ async def download_file(job_id: str, request: Request):
 
 
 @app.post("/api/notify/welcome")
-async def notify_welcome(request: Request):
+def notify_welcome(request: Request):
     """Boas-vindas no cadastro. Manda o email SÓ pro email do próprio JWT
     (não dá pra spammar terceiros) e avisa o Pedro de novo cliente.
     Chamado pelo frontend logo após o signUp."""
@@ -12802,7 +12802,7 @@ async def liveness():
 
 
 @app.get("/api/health")
-async def health():
+def health():
     """Health check com métricas do sistema."""
     try:
         import psutil
@@ -13824,7 +13824,7 @@ async def upload_supplier_quote(
 
 
 @app.get("/api/projects/{job_id}/quotes")
-async def list_supplier_quotes(job_id: str, request: Request):
+def list_supplier_quotes(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     """Lista cotações de fornecedores de um projeto."""
     try:
@@ -13843,7 +13843,7 @@ async def list_supplier_quotes(job_id: str, request: Request):
 
 
 @app.delete("/api/projects/{job_id}/quotes/{quote_id}")
-async def delete_supplier_quote(job_id: str, quote_id: str, request: Request):
+def delete_supplier_quote(job_id: str, quote_id: str, request: Request):
     _require_project_owner(request, job_id)
     """Remove uma cotação."""
     try:
@@ -13860,7 +13860,7 @@ async def delete_supplier_quote(job_id: str, quote_id: str, request: Request):
 
 
 @app.get("/api/projects/{job_id}/quotes/compare")
-async def compare_supplier_quotes(job_id: str, request: Request, include_reference: int = 1):
+def compare_supplier_quotes(job_id: str, request: Request, include_reference: int = 1):
     _require_project_owner(request, job_id)
     """Compara todas as cotações de um projeto, gera XLSX+PPT, retorna URLs."""
     try:
@@ -14415,7 +14415,7 @@ async def admin_revision_feedback(request: Request):
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/user/{user_id}/cashback-all")
-async def get_user_cashback_all(request: Request, user_id: str):
+def get_user_cashback_all(request: Request, user_id: str):
     """Retorna cashback agregado de TODOS os projetos do usuário.
 
     Usa pra mostrar o resumo na tela de cashback (total geral + por projeto).
@@ -14489,7 +14489,7 @@ async def get_user_cashback_all(request: Request, user_id: str):
 
 
 @app.get("/api/projects-confidence")
-async def projects_confidence_summary(request: Request):
+def projects_confidence_summary(request: Request):
     """Selo de confiança em 'Meus Projetos': medido/total por projeto do usuário,
     numa query só (RPC user_project_confidence). Evita N fetches pesados de itens."""
     user = _get_user_from_request(request)
@@ -14519,7 +14519,7 @@ async def projects_confidence_summary(request: Request):
 
 
 @app.get("/api/meus-entregaveis")
-async def meus_entregaveis(request: Request):
+def meus_entregaveis(request: Request):
     """Tudo que já foi gerado pro usuário, de TODOS os projetos, numa chamada só.
 
     Alimenta as telas Downloads / Planilhas / Cronogramas / Memoriais /
@@ -14729,7 +14729,7 @@ async def meus_entregaveis(request: Request):
 
 
 @app.get("/api/projects/{job_id}/cashback")
-async def get_project_cashback(job_id: str, request: Request):
+def get_project_cashback(job_id: str, request: Request):
     """Retorna eventos de cashback + total acumulado desse projeto.
 
     Ownership check adicionado em 2026-05-27: antes o endpoint ficava
@@ -14763,7 +14763,7 @@ async def get_project_cashback(job_id: str, request: Request):
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/projects/{job_id}/client")
-async def get_project_client(job_id: str, request: Request):
+def get_project_client(job_id: str, request: Request):
     """Retorna dados do cliente final de um projeto.
 
     LGPD: project_clients contém PII (nome, email, telefone, endereço).
@@ -14827,7 +14827,7 @@ async def update_project_meta(job_id: str, payload: ProjectMetaPayload, request:
 
 
 @app.post("/api/projects/{job_id}/client")
-async def upsert_project_client(
+def upsert_project_client(
     job_id: str,
     request: Request,
     client_name: str = Form(""),
@@ -15479,7 +15479,7 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
 
 
 @app.get("/api/agent/conversations")
-async def agent_conversations(request: Request, job_id: Optional[str] = None, limit: int = 50):
+def agent_conversations(request: Request, job_id: Optional[str] = None, limit: int = 50):
     # Se passou job_id, valida ownership; senão, exige admin (lista global de conversas)
     if job_id:
         _require_project_owner(request, job_id)
@@ -15527,7 +15527,7 @@ async def agent_conversations(request: Request, job_id: Optional[str] = None, li
 
 
 @app.get("/api/agent/stats")
-async def agent_stats(request: Request):
+def agent_stats(request: Request):
     """Estatísticas agregadas do uso do agente — pra dashboard admin."""
     _require_admin(request)
     try:
@@ -15625,7 +15625,7 @@ async def calibration_benchmarks(request: Request, typology: Optional[str] = Non
 # ═══════════════════════════════════════════════════════════════
 
 @app.get("/api/items/{job_id}")
-async def get_project_items(job_id: str, request: Request):
+def get_project_items(job_id: str, request: Request):
     """Retorna lista de itens individuais de um job pra revisão inline.
     Usa RPC `list_project_items` pra bypassar RLS."""
     _require_project_owner(request, job_id)
@@ -15931,7 +15931,7 @@ async def memorial_estrutura(job_id: str, request: Request):
 
 
 @app.post("/api/memorial/{job_id}/redigir")
-async def memorial_redigir_ia(job_id: str, request: Request):
+def memorial_redigir_ia(job_id: str, request: Request):
     """Reescreve com IA os parágrafos de abertura das seções do memorial.
 
     Coleira (02/08): a IA vê só as DESCRIÇÕES dos itens (nunca as quantidades)
@@ -16144,7 +16144,7 @@ def _coerencia_do_projeto(job_id: str) -> dict:
 
 
 @app.get("/api/projetos/desatualizados")
-async def projetos_desatualizados(request: Request):
+def projetos_desatualizados(request: Request):
     """Lista, de uma vez, os projetos do usuário logado com entregável velho —
     pro chip de aviso em Meus Projetos. Uma consulta pra todos: recalcular a
     assinatura projeto por projeto significaria reler os itens de cada um."""
@@ -16202,7 +16202,7 @@ class CronogramaSavePayload(BaseModel):
 
 
 @app.get("/api/cronograma/{job_id}/sugestao")
-async def cronograma_sugestao(job_id: str, request: Request):
+def cronograma_sugestao(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     """Sugere duração de obra baseada em tipologia + área + n disciplinas
     detectadas. Chamado pelo frontend ANTES do "Gerar cronograma" pra
@@ -16313,7 +16313,7 @@ async def cronograma_sugestao(job_id: str, request: Request):
 
 
 @app.post("/api/cronograma/{job_id}/generate")
-async def generate_cronograma(job_id: str, payload: CronogramaPayload, request: Request):
+def generate_cronograma(job_id: str, payload: CronogramaPayload, request: Request):
     _require_project_owner(request, job_id)
     """Gera cronograma FÍSICO (prazo e avanço, sem valores) a partir do quantitativo.
 
@@ -16895,7 +16895,7 @@ class ReviewPayload(BaseModel):
 
 
 @app.post("/api/items/{job_id}/review/{item_id}")
-async def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, request: Request):
+def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, request: Request):
     _require_project_owner(request, job_id)
     """Registra uma revisão pra um item específico.
     Se action='edit', também aplica os edits à row em project_items.
@@ -17355,7 +17355,7 @@ class InformAreaPayload(BaseModel):
 
 
 @app.post("/api/project/{job_id}/inform-area")
-async def inform_project_area(job_id: str, payload: InformAreaPayload, request: Request):
+def inform_project_area(job_id: str, payload: InformAreaPayload, request: Request):
     """Cliente informa a metragem DEPOIS do processamento, pra completar itens de
     área que ficaram em branco porque a planta não tinha cota de área (caso layout,
     ex. Catarina). NÃO reprocessa do zero (sem custo de IA, sem re-erro): reaproveita
@@ -17595,7 +17595,7 @@ class StatusPayload(BaseModel):
 
 
 @app.post("/api/project/{job_id}/status")
-async def update_project_user_status(job_id: str, payload: StatusPayload, request: Request):
+def update_project_user_status(job_id: str, payload: StatusPayload, request: Request):
     """Atualiza o status editável do projeto (em_analise, enviado_cliente,
     aprovado, fechado, arquivado)."""
     _require_project_owner(request, job_id)
@@ -17625,7 +17625,7 @@ class NotePayload(BaseModel):
 
 
 @app.post("/api/items/{job_id}/note/{item_id}")
-async def save_item_note(job_id: str, item_id: str, payload: NotePayload, request: Request):
+def save_item_note(job_id: str, item_id: str, payload: NotePayload, request: Request):
     """Salva (upsert) nota de um item. Vazio deleta a nota."""
     _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
@@ -17666,7 +17666,7 @@ async def save_item_note(job_id: str, item_id: str, payload: NotePayload, reques
 
 
 @app.get("/api/items/{job_id}/notes")
-async def list_job_notes(job_id: str, request: Request):
+def list_job_notes(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     """Lista todas as notas de itens de um job — restaura estado na revisão."""
     import urllib.request, urllib.error, json
@@ -17691,7 +17691,7 @@ async def list_job_notes(job_id: str, request: Request):
 
 
 @app.get("/api/projects/by-user/{user_id}")
-async def list_my_projects(user_id: str, request: Request):
+def list_my_projects(user_id: str, request: Request):
     """Lista projetos de um usuário (pra tela 'Meus projetos').
     Usa RPC list_user_projects (SECURITY DEFINER).
 
@@ -17854,7 +17854,7 @@ async def submit_nps_detailed(payload: NPSDetailedPayload, request: Request):
 
 
 @app.get("/api/nps/check/{user_id}")
-async def should_show_nps(user_id: str, request: Request):
+def should_show_nps(user_id: str, request: Request):
     """Verifica se o usuário já respondeu NPS recentemente (últimos 60 dias).
     Frontend usa isso pra não mostrar o widget repetidamente.
 
@@ -20866,7 +20866,7 @@ def _marcar_revisao_aberta(job_id: str) -> None:
 
 
 @app.get("/api/items/{job_id}/review-state")
-async def get_review_state(job_id: str, request: Request, marcar: int = 0):
+def get_review_state(job_id: str, request: Request, marcar: int = 0):
     """Retorna as revisões já feitas nesse job pra restaurar o estado no
     browser quando o user volta pra terminar depois.
 
@@ -20934,7 +20934,7 @@ def _base_normalizada(nome: str) -> str:
 
 
 @app.get("/api/projetos/candidatos-anexo")
-async def projetos_candidatos_anexo(request: Request, horas: int = 72):
+def projetos_candidatos_anexo(request: Request, horas: int = 72):
     """Projetos recentes do usuário logado, com os nomes dos arquivos que já
     estão neles — pro site poder perguntar "isso não é do projeto X?" ANTES de
     criar um projeto novo.
@@ -21008,7 +21008,7 @@ class AssinaturaPayload(BaseModel):
 
 
 @app.post("/api/projetos/comparar-desenho")
-async def comparar_desenho(payload: AssinaturaPayload, request: Request, horas: int = 72):
+def comparar_desenho(payload: AssinaturaPayload, request: Request, horas: int = 72):
     """Recebe a assinatura do DXF que o cliente ACABOU de escolher (lida no
     navegador, sem subir o arquivo) e diz se ela bate com algum projeto recente
     dele.
