@@ -184,11 +184,17 @@ def _rotas_async_que_bloqueiam(src, nome_arquivo):
 #     64  →  antes de tudo (28/08, ao investigar o smoke vermelho)
 #     59  →  depois das 3 do relógio (o buraco de 33 s)
 #     31  →  depois das 28 que o CLIENTE usa
-# O lote de 28 foi escolhido por quem sente: revisão de item, meus entregáveis,
-# itens do projeto, cronograma, cashback, `by-user` (a que o smoke chama).
-# Sobram 31, quase todas de `/api/admin/` e `/api/debug/` — quando elas travam,
-# quem espera é o Pedro sozinho, não um cliente no meio de um orçamento.
-_TETO_DE_DIVIDA = {"main.py": 31, "instagram_webhook.py": 1}
+#      1  →  depois das 30 de `/api/admin/` e `/api/debug/`
+#
+# 🪤 A ÚLTIMA NÃO PODE SER CONVERTIDA, e o motivo importa:
+# `rebuild_planilha_from_review` é chamada com `await` por outra rota. Virar
+# `def` quebraria quem chama. Ela fica `async` e o trabalho bloqueante dela é
+# que precisaria ir pra `run_in_threadpool` — conserto diferente, commit
+# diferente. Teto 1 é o piso honesto, não "quase zero".
+#
+# 🪤 `instagram_webhook.py` fica em 1 pelo mesmo tipo de motivo: `create_post`
+# não é do relógio, é chamada por gente.
+_TETO_DE_DIVIDA = {"main.py": 1, "instagram_webhook.py": 1}
 
 
 def test_a_divida_de_rotas_bloqueantes_nao_cresce():

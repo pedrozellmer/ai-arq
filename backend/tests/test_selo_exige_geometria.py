@@ -195,7 +195,10 @@ def test_a_rota_de_contagem_NAO_altera_nada():
     decisao do Pedro: o cliente pode ter usado aquela planilha."""
     import io as _io
     src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index("async def admin_selo_historico")
+    # 🪤 28/08: procurava "async def" literal e quebrou quando a rota virou
+    # `def` (rota async com corpo bloqueante congelava o servidor). "def X"
+    # casa com as duas formas — e essa e a busca certa em qualquer caso.
+    i = src.index("def admin_selo_historico")
     j = src.index('@app.post("/api/admin/spec-backfill")', i)
     corpo = src[i:j]
     for escrita in ('"PATCH"', '"POST"', '"DELETE"', "update", "insert"):

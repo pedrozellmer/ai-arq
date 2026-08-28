@@ -10513,7 +10513,7 @@ def _medir_dxf_geometria(dxf_path: str) -> dict:
 
 
 @app.get("/api/debug/libredwg-batch")
-async def debug_libredwg_batch(request: Request, limite: int = 5,
+def debug_libredwg_batch(request: Request, limite: int = 5,
                                iniciar: int = 0, modo: str = "recusados"):
     """Mede o fallback libredwg contra os DWG que o ODA recusou. Admin-only.
 
@@ -12001,7 +12001,7 @@ async def admin_newsletter_schedule(request: Request):
 
 
 @app.get("/api/admin/blog/agenda")
-async def admin_blog_agenda(request: Request):
+def admin_blog_agenda(request: Request):
     """Agenda do blog (slug + título + data) pro Calendário de Conteúdo.
 
     🪤 POR QUE ESTE ENDPOINT EXISTE (31/07/2026): o calendário lia
@@ -12056,7 +12056,7 @@ async def admin_blog_agenda(request: Request):
 
 
 @app.get("/api/admin/newsletter/scheduled")
-async def admin_newsletter_scheduled(request: Request):
+def admin_newsletter_scheduled(request: Request):
     """Lista os agendamentos (admin)."""
     _require_admin(request)
     import urllib.request as _ur
@@ -12075,7 +12075,7 @@ async def admin_newsletter_scheduled(request: Request):
 
 
 @app.get("/api/admin/qualidade-semanal")
-async def admin_qualidade_semanal(request: Request):
+def admin_qualidade_semanal(request: Request):
     """QUALIDADE DA ENTREGA por semana FIXA do calendário (admin).
 
     Por que existe (Pedro, 07/08/2026 — "evolução semanal de acertos"): a
@@ -12111,7 +12111,7 @@ async def admin_qualidade_semanal(request: Request):
 
 
 @app.get("/api/admin/motor-health")
-async def admin_motor_health(request: Request):
+def admin_motor_health(request: Request):
     """Painel de SAÚDE DO MOTOR (admin): % medido por fonte (CAD vs PDF), distribuição
     de % medido por projeto, itens medidos x total e top motivos de falha. Agrega via
     RPC admin_motor_health (SECURITY DEFINER, só service_role) pra o Pedro parar de
@@ -12179,7 +12179,7 @@ _COST_UUID_RE = __import__("re").compile(r"^[0-9a-fA-F-]{32,40}$")
 
 
 @app.get("/api/admin/costs")
-async def admin_costs_list(request: Request):
+def admin_costs_list(request: Request):
     """Lista as linhas de custo (admin). Tabela financial_costs = só service_role."""
     _require_admin(request)
     import urllib.request as _ur
@@ -12285,7 +12285,7 @@ async def admin_costs_delete(request: Request):
 
 
 @app.get("/api/admin/ops")
-async def admin_ops_panel(request: Request):
+def admin_ops_panel(request: Request):
     """Painel de OPERAÇÃO (admin): erros do motor (error_log), falhas recentes com
     contato do dono (recuperar 1-a-1) e projetos só-PDF que mediram pouco (puxar pro
     CAD). Tudo via RPC admin_ops (SECURITY DEFINER, só service_role)."""
@@ -12356,7 +12356,7 @@ def _ig_has_media(post: dict) -> bool:
 
 
 @app.get("/api/admin/instagram/posts")
-async def admin_instagram_posts(request: Request, limit: int = 150):
+def admin_instagram_posts(request: Request, limit: int = 150):
     """Lista a fila do Instagram (admin): rascunhos, agendados e publicados."""
     _require_admin(request)
     from datetime import datetime as _dt, timezone as _tz
@@ -12544,7 +12544,7 @@ def newsletter_tick(request: Request):
 
 
 @app.get("/api/debug/service-role")
-async def debug_service_role(request: Request):
+def debug_service_role(request: Request):
     _require_admin(request)
     """Diagnóstico (sem PII): confirma se a service_role consegue ler dados
     protegidos por RLS (profiles). Se 'service_role_reads_profiles' for false,
@@ -12676,7 +12676,7 @@ async def admin_email_render(request: Request, type: str = ""):
 
 
 @app.get("/api/admin/email-catalog")
-async def admin_email_catalog(request: Request):
+def admin_email_catalog(request: Request):
     """Lista os tipos de email da Central de Emails com {key, nome, grupo,
     gatilho, volume}. `volume` = quantos já saíram (email_sent_log por kind).
     Admin-only."""
@@ -13201,7 +13201,7 @@ async def save_chat_lead(request: Request):
 
 
 @app.get("/api/admin/chat/leads")
-async def admin_list_chat_leads(request: Request, limit: int = 200):
+def admin_list_chat_leads(request: Request, limit: int = 200):
     """Lista leads do chat pra painel admin. Requer auth admin."""
     _require_admin(request)
     try:
@@ -13376,7 +13376,7 @@ async def submit_contact(request: Request):
 
 
 @app.get("/api/admin/contact-messages")
-async def admin_list_contact_messages(request: Request, limit: int = 200, status: str = ""):
+def admin_list_contact_messages(request: Request, limit: int = 200, status: str = ""):
     """Lista mensagens de contato pro admin. Requer auth admin."""
     _require_admin(request)
     try:
@@ -14354,7 +14354,7 @@ async def upload_revised_sheet(
 
 
 @app.get("/api/admin/revision-feedback")
-async def admin_revision_feedback(request: Request):
+def admin_revision_feedback(request: Request):
     """Onde a IA mais erra — agregado das planilhas revisadas pelos clientes.
 
     Lê a tabela revision_feedback (service_role; RLS sem policy) e devolve o
@@ -17891,7 +17891,7 @@ def should_show_nps(user_id: str, request: Request):
 
 
 @app.get("/api/admin/nps/summary")
-async def admin_nps_summary(request: Request, days: int = 30):
+def admin_nps_summary(request: Request, days: int = 30):
     """Dashboard admin: resumo agregado de NPS."""
     _require_admin(request)
     import urllib.request, urllib.error, json
@@ -17910,7 +17910,7 @@ async def admin_nps_summary(request: Request, days: int = 30):
 
 
 @app.get("/api/admin/nps/responses")
-async def admin_nps_responses(request: Request, limit: int = 50):
+def admin_nps_responses(request: Request, limit: int = 50):
     """Dashboard admin: respostas recentes com comentários (insights qualitativos)."""
     _require_admin(request)
     import urllib.request, urllib.error, json
@@ -17928,7 +17928,7 @@ async def admin_nps_responses(request: Request, limit: int = 50):
 
 
 @app.get("/api/admin/nps/stages")
-async def admin_nps_stages(request: Request):
+def admin_nps_stages(request: Request):
     """Médias por etapa do feedback detalhado (upload, tempo, precisão, planilha).
     Lê as respostas e agrega em Python (volume pequeno)."""
     _require_admin(request)
@@ -18175,7 +18175,7 @@ async def track_event(payload: TrackPayload, request: Request):
 
 
 @app.get("/api/admin/activity")
-async def admin_activity(request: Request, days: int = 30, limit: int = 200):
+def admin_activity(request: Request, days: int = 30, limit: int = 200):
     """Painel de Atividade: eventos recentes + agregados (por evento, por usuário,
     ativos 7/30d). Agrega em Python — volume pequeno."""
     _require_admin(request)
@@ -18738,7 +18738,7 @@ async def reprocess_project(job_id: str, request: Request):
 
 
 @app.post("/api/admin/eval-reprocess/{job_id}")
-async def admin_eval_reprocess(job_id: str, request: Request):
+def admin_eval_reprocess(job_id: str, request: Request):
     """ADMIN — "modo avaliação": re-roda os arquivos de um projeto num job
     ISOLADO, sem tocar no projeto do cliente. Serve pra comparar leituras sem
     risco (ex.: DWG vs PDF, ou motor novo vs antigo).
@@ -19345,7 +19345,7 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
     return _send_email_smtp(email, subject, html, log_kind="leitura_nova")
 
 @app.get("/api/admin/onde-o-motor-erra")
-async def admin_onde_o_motor_erra(request: Request):
+def admin_onde_o_motor_erra(request: Request):
     """O que o CLIENTE corrigiu — a única verdade de campo que existe.
 
     Pedro, 08/08: *"com esses itens revisados que ele fez a gente tem que treinar
@@ -19371,7 +19371,7 @@ async def admin_onde_o_motor_erra(request: Request):
 
 
 @app.get("/api/admin/filhotes")
-async def admin_listar_filhotes(request: Request):
+def admin_listar_filhotes(request: Request):
     """ADMIN — lista os jobs "filhote" (eval-reprocess) com a comparação contra o
     original, pra decidir quais valem liberar pro cliente.
 
@@ -19403,7 +19403,7 @@ async def admin_listar_filhotes(request: Request):
 
 
 @app.post("/api/admin/liberar-filhote/{eval_job_id}")
-async def admin_liberar_filhote(eval_job_id: str, request: Request):
+def admin_liberar_filhote(eval_job_id: str, request: Request):
     """ADMIN — libera um job "filhote" (eval-reprocess) pro cliente VER no painel.
 
     Ideia do Pedro (05/08): quando a gente conserta o motor, o conserto só vale
@@ -19936,7 +19936,7 @@ def _merge_montar(eval_job_id: str, com_juiza: bool = True):
 
 
 @app.get("/api/admin/selo-historico")
-async def admin_selo_historico(request: Request):
+def admin_selo_historico(request: Request):
     """Quantos itens ANTIGOS a rede da regra dura nº1 rebaixaria hoje.
 
     🚨 25/08/2026 (auditoria). Este número já saiu TRÊS vezes diferente: eu
@@ -20021,7 +20021,7 @@ async def admin_selo_historico(request: Request):
 
 
 @app.post("/api/admin/spec-backfill")
-async def admin_spec_backfill(request: Request):
+def admin_spec_backfill(request: Request):
     """Preenche marca/código/cor nos itens que JÁ existem, lendo a descrição.
 
     Pedro, 24/08/2026: *"quando tiver o sku no projeto a gente sugere"*. O
@@ -20153,7 +20153,7 @@ async def admin_merge_preview(eval_job_id: str, request: Request):
 
 
 @app.post("/api/admin/merge-criar/{eval_job_id}")
-async def admin_merge_criar(eval_job_id: str, request: Request):
+def admin_merge_criar(eval_job_id: str, request: Request):
     """CRIA o terceiro projeto: a melhor prancha de cada leitura.
 
     Nasce como filhote (`is_eval`, `user_id='eval'`, `parent_job_id` = original),
@@ -20344,7 +20344,7 @@ async def admin_merge_criar(eval_job_id: str, request: Request):
 
 
 @app.get("/api/admin/combine-preview/{job_id}")
-async def admin_combine_preview(job_id: str, request: Request):
+def admin_combine_preview(job_id: str, request: Request):
     """PRÉVIA do Combinar: lista os arquivos do MESMO cliente (nome/tipo/tamanho/
     disciplina) e pede pra IA sugerir quais juntar (mesma obra). O admin confere
     e ajusta antes de rodar. Não processa nada — só lê. Só ADMIN_EMAIL."""
@@ -21091,7 +21091,7 @@ def comparar_desenho(payload: AssinaturaPayload, request: Request, horas: int = 
 
 
 @app.get("/api/admin/funil-revisao")
-async def admin_funil_revisao(request: Request):
+def admin_funil_revisao(request: Request):
     """Onde o cliente para entre "planilha pronta" e "planilha revisada".
 
     Endpoint próprio (não pendurado no review-insights) por dois motivos: o
@@ -21121,7 +21121,7 @@ async def admin_funil_revisao(request: Request):
 
 
 @app.get("/api/admin/voz-do-cliente")
-async def admin_voz_do_cliente(request: Request, limit: int = 12):
+def admin_voz_do_cliente(request: Request, limit: int = 12):
     """O que o cliente PERGUNTOU no chat e o que ele CORRIGIU na revisão.
 
     Pedido do Pedro em 03/08/2026: "sempre ver o que o cliente revisou e sempre
@@ -21194,7 +21194,7 @@ async def admin_voz_do_cliente(request: Request, limit: int = 12):
 
 
 @app.get("/api/admin/review-insights")
-async def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
+def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
     """Agrega revisões recentes pra identificar padrões de erro do motor:
     - Quais tipos de item são mais rejeitados (alucinação)?
     - Quais edits são mais comuns (qty errada, unidade errada)?
@@ -21357,7 +21357,7 @@ async def cleanup_secret_check(request: Request):
 
 
 @app.post("/api/admin/cleanup-old-projects")
-async def cleanup_old_projects(request: Request):
+def cleanup_old_projects(request: Request):
     """Deleta arquivos originais + planilha de projetos com 90+ dias.
     Marca projeto como archived=true pra preservar histórico no DB.
 
@@ -21481,7 +21481,7 @@ async def cleanup_old_projects(request: Request):
 
 
 @app.get("/api/admin/cleanup-log")
-async def admin_cleanup_log(request: Request, limit: int = 30):
+def admin_cleanup_log(request: Request, limit: int = 30):
     """Retorna últimas execuções do cleanup pra dashboard admin."""
     _require_admin(request)
     import urllib.request, json as _j
