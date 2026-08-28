@@ -158,6 +158,46 @@ def ler(chave: str) -> dict | None:
         return None
 
 
+_SENTINELA = "__sentinela-do-boot__"
+
+
+def checar_no_boot(versao: str = "") -> tuple[bool, str]:
+    """Prova a IDA E A VOLTA: grava uma linha sentinela e lê ela de volta.
+
+    🪤 A 1ª versão deste sinal só fazia `ler()` — e leitura passando não prova
+    nada sobre a gravação. Descobri isso tentando gravar da minha máquina: o
+    RLS recusou (`42501`, chave anônima), o que está CERTO pra segurança e me
+    deixou sem prova nenhuma do caminho que importa.
+
+    E em modo sombra nada grava até um cliente processar um projeto. Ou seja:
+    sem esta sentinela, um cache que não consegue escrever ficaria semanas
+    parecendo um cache que só não acertou ainda.
+
+    Usa `merge-duplicates` (upsert) de propósito: a MESMA linha é reescrita a
+    cada boot, então a tabela não engorda e a gravação é exercitada de verdade
+    toda vez — `ignore-duplicates` só provaria no primeiro boot da vida.
+    """
+    carimbo_boot = "boot|%s" % (versao or "?")
+    try:
+        st, _ = _rest()(
+            "POST", _TABELA,
+            body={"cache_key": _SENTINELA, "tag": "sentinela",
+                  "model": "-", "response_text": carimbo_boot,
+                  "stop_reason": "end_turn", "engine_ver": versao[:12]},
+            prefer="resolution=merge-duplicates")
+        if not (200 <= st < 300):
+            return False, "gravação recusada (HTTP %s)" % st
+        volta = ler(_SENTINELA)
+        if not volta:
+            return False, "gravou e a leitura não achou"
+        if (volta.get("response_text") or "") != carimbo_boot:
+            return False, ("leu valor VELHO (%r) — a gravação não sobrescreveu"
+                           % (volta.get("response_text") or "")[:40])
+        return True, "ida e volta OK, modo=%s" % _modo()
+    except Exception as e:
+        return False, "%s: %s" % (type(e).__name__, e)
+
+
 def gravar(chave: str, resp: Any, meta: dict) -> bool:
     """Guarda a resposta CRUA. Devolve se conseguiu. Nunca levanta."""
     if _modo() == "off":

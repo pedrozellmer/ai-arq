@@ -3696,19 +3696,24 @@ async def _on_startup_recover_jobs():
     # que chegou ao banco e perdeu a única informação pra qual foi feito, e só a
     # auditoria pegou. Uma linha no boot resolve: ela diz se o módulo importa e
     # se a tabela responde, ANTES de qualquer cliente chegar.
+    # 🪤 A 1ª versão disto só LIA, e leitura passando não prova nada sobre a
+    # gravação — que é o caminho que importa. Descobri tentando gravar da minha
+    # máquina: o RLS recusou (`42501`, chave anônima), o que está certo pra
+    # segurança e me deixou sem prova do lado que conta. `checar_no_boot` faz a
+    # ida E a volta.
     try:
         import llm_cache as _lc_boot
-        _chave_teste = _lc_boot.carimbo({"model": "x", "messages": []})
-        _lc_boot.ler(_chave_teste)   # só prova que a tabela responde
+        _ok_lc, _diag_lc = _lc_boot.checar_no_boot(_versao_build())
         _log_error("boot:llm-cache",
-                   "cache de conteúdo VIVO — modo=%s chave_exemplo=%s"
-                   % (_lc_boot._modo(), _chave_teste[:12]), severity="info")
+                   ("cache de conteúdo VIVO — %s" % _diag_lc) if _ok_lc else
+                   ("cache de conteúdo MORTO — %s. Vai se comportar como 'nunca "
+                    "acerta' e a medição de sombra daria ZERO pelo motivo errado"
+                    % _diag_lc),
+                   severity=("info" if _ok_lc else "error"))
     except Exception as _e_lc:
         _log_error("boot:llm-cache",
-                   "cache de conteúdo MORTO no boot (%s: %s) — vai se comportar "
-                   "como 'nunca acerta' e a medição de sombra seria ZERO por "
-                   "motivo errado" % (type(_e_lc).__name__, _e_lc),
-                   severity="error")
+                   "cache de conteúdo MORTO no boot (%s: %s)"
+                   % (type(_e_lc).__name__, _e_lc), severity="error")
     try:
         _recover_stuck_jobs_on_startup(crash_loop=crash_loop,
                                        deploy_restart=deploy_restart)

@@ -244,8 +244,35 @@ def test_o_cache_DA_SINAL_DE_VIDA_no_boot():
     assert "boot:llm-cache" in bloco, (
         "o cache não deixa mais sinal de vida no boot — se ele morrer, a "
         "medição de sombra dá ZERO por motivo errado e ninguém saberia")
+    # 🪤 E o sinal tem que provar a GRAVAÇÃO, não só a leitura. A 1ª versão só
+    # lia; descobri o furo tentando gravar da minha máquina e levando 42501 do
+    # RLS. Em modo sombra nada grava até um cliente processar um projeto, então
+    # sem isto um cache que não escreve passaria semanas parecendo um cache que
+    # só não acertou ainda.
+    assert "checar_no_boot" in bloco, (
+        "o sinal de boot voltou a testar só a leitura — gravação continuaria "
+        "sem prova nenhuma")
     # e o sinal tem que distinguir vivo de morto, não só 'passei por aqui'
     assert "MORTO" in bloco and "VIVO" in bloco, (
         "o sinal de boot não separa vivo de morto")
     assert 'severity="error"' in bloco, (
         "a falha do cache no boot entra como info — ela some no meio do log")
+
+
+def test_a_sentinela_do_boot_prova_a_IDA_E_A_VOLTA():
+    """🚨 O que faltava. Gravar e não conseguir ler de volta, ou ler valor
+    VELHO, tem que reprovar — não basta a chamada não estourar."""
+    import io
+    src = io.open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "llm_cache.py"), encoding="utf-8").read()
+    i = src.find("def checar_no_boot")
+    j = src.find("\ndef ", i + 10)
+    corpo = "\n".join(l for l in src[i:j].split("\n")
+                      if not l.strip().startswith("#"))
+    assert "merge-duplicates" in corpo, (
+        "voltou a usar ignore-duplicates: aí a gravação só seria exercitada no "
+        "PRIMEIRO boot da vida e nunca mais")
+    assert "ler(" in corpo, "grava e não confere se conseguiu ler de volta"
+    assert "VELHO" in corpo or "!=" in corpo, (
+        "não compara o que leu com o que escreveu — leria a linha do boot "
+        "anterior e daria tudo certo com a gravação quebrada")
