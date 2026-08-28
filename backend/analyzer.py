@@ -1109,6 +1109,10 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
             cache_system=True,
             system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
             messages=[{"role": "user", "content": content}],
+            # 🔑 Cache por CONTEÚDO (llm_cache.py). Aqui `temperature=0` já pede
+            # determinismo, então servir a leitura anterior do MESMO payload é
+            # exatamente o que a chamada promete. Default do ambiente é SOMBRA.
+            cache=True,
         )
 
         text = response.content[0].text

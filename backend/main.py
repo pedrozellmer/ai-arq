@@ -6703,6 +6703,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # caminho PDF salvava/lia; o DXF não guardava nada, então um job de 43
         # DXF que caía refazia TUDO na retomada (caso perplan/Rafael 21/07).
         _ckpt_cache = {}
+        # 🪤 Default 0 e NÃO "desconhecido": se esta consulta falhar, o cache por
+        # conteúdo fica LIGADO. É a escolha certa porque o pior caso do cache
+        # ligado é servir a mesma leitura de novo, e o pior caso do reprocesso
+        # sem cache é gastar uma chamada de IA à toa. Errar pro lado barato.
+        _reproc_atual = 0
         try:
             import urllib.request as _ur_ck
             _qck = (f"{SUPABASE_URL}/rest/v1/projects?job_id=eq.{job_id}"
@@ -6711,6 +6716,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
             _rck.add_header("apikey", SUPABASE_KEY)
             _rck.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
             _rows_ck = _json.loads(_ur_ck.urlopen(_rck, timeout=8).read().decode("utf-8"))
+            if _rows_ck:
+                _reproc_atual = int(_rows_ck[0].get("reprocess_count") or 0)
             if _rows_ck and int(_rows_ck[0].get("auto_resume_count") or 0) > 0 \
                     and int(_rows_ck[0].get("reprocess_count") or 0) == 0:
                 _ckpt_cache = _ckpt_load_all(job_id)
@@ -7568,6 +7575,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             cache_system=True,
                             system=(SYSTEM_PROMPT_ESTRUTURA if is_structural else SYSTEM_PROMPT),
                             messages=[{"role": "user", "content": dxf_prompt}],
+                            # 🔑 Cache por CONTEÚDO (llm_cache.py). Default do
+                            # ambiente é SOMBRA: calcula a chave e loga acerto/erro
+                            # sem servir nada, pra medir a taxa real antes de mudar
+                            # a leitura de um cliente sequer.
+                            # 🪤 NÃO serve cache pra quem clicou "reprocessar": com
+                            # temperatura 0,7 uma rodada nova é justamente a chance
+                            # de consertar a prancha, e servir a leitura anterior
+                            # mataria a saída de emergência do cliente.
+                            cache=(_reproc_atual == 0),
                         )
                         if not any(_t in _dxf_model for _t in ("opus-4-8", "opus-4-7", "fable")):
                             # 🚨 ERA 0, E O ZERO CUSTAVA A PRANCHA INTEIRA (26/08/2026).

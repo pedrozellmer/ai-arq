@@ -268,6 +268,75 @@ def _registrar_uso(tag: str, resp, cache_system: bool) -> None:
         pass
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Cache por conteúdo (llm_cache.py). Opt-in por call site: `cache=True`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class _RespostaDoCache:
+    """Imita o Message da Anthropic no que quem chama realmente usa.
+
+    🪤 Quem consome faz `resp.content[0].text` e `resp.stop_reason`. Devolver um
+    dict quebraria os dois. Isto NÃO é um mock de teste — é o formato de
+    resposta do caminho de cache em produção.
+    """
+    class _Bloco:
+        def __init__(self, texto):
+            self.text = texto
+            self.type = "text"
+
+    def __init__(self, texto, stop_reason="end_turn"):
+        self.content = [self._Bloco(texto)]
+        self.stop_reason = stop_reason
+        self.usage = None          # 🔑 tokens REAIS gastos: nenhum
+        self.do_cache = True
+
+
+def _cache_antes(kwargs: dict, *, tag: str, cache: bool):
+    """(chave, resposta_do_cache_ou_None).
+
+    🪤 No modo SOMBRA (default) calcula a chave, registra acerto/erro no log e
+    devolve None — ou seja, NÃO serve do cache. Isso mede a taxa real de acerto
+    sem mudar o resultado de um cliente sequer. Ligar de verdade é trocar a env
+    LLM_CACHE pra "on", sem deploy.
+    """
+    if not cache:
+        return None, None
+    try:
+        import llm_cache as _lc
+        chave = _lc.carimbo(kwargs)
+        guardado = _lc.ler(chave)
+        modo = _lc._modo()
+        if guardado:
+            print("[llm_cache:acerto] tag=%s modo=%s chave=%s" % (tag, modo, chave[:12]))
+            if modo == "on":
+                return chave, _RespostaDoCache(guardado.get("response_text") or "",
+                                               guardado.get("stop_reason") or "end_turn")
+        else:
+            print("[llm_cache:erro] tag=%s modo=%s chave=%s" % (tag, modo, chave[:12]))
+        return chave, None
+    except Exception as e:
+        # cache que derruba extração é pior que cache nenhum
+        print("[llm_cache] falhou na leitura, seguindo sem cache: %s" % e)
+        return None, None
+
+
+def _cache_depois(chave, resp, kwargs: dict, *, tag: str) -> None:
+    """Grava a resposta CRUA. Nunca levanta."""
+    if not chave:
+        return
+    try:
+        import llm_cache as _lc
+        _lc.gravar(chave, resp, {
+            "tag": tag,
+            "model": kwargs.get("model"),
+            "temperature": kwargs.get("temperature"),
+            "max_tokens": kwargs.get("max_tokens"),
+        })
+    except Exception:
+        pass
+
+
 def call_with_retry(
     client: Any,
     *,
@@ -276,6 +345,7 @@ def call_with_retry(
     max_delay: float = 90.0,
     tag: str = "anthropic",
     cache_system: bool = False,
+    cache: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Wrapper em torno de `client.messages.create(**kwargs)` com retry.
@@ -297,6 +367,9 @@ def call_with_retry(
         A última exceção, se todas as tentativas falharem.
     """
     kwargs = _scrub_payload(kwargs)  # limpa surrogates antes do 1º envio
+    _chave, _do_cache = _cache_antes(kwargs, tag=tag, cache=cache)
+    if _do_cache is not None:
+        return _do_cache
     if cache_system:
         kwargs = _apply_system_cache(kwargs)
     last_exc: Exception | None = None
@@ -306,6 +379,7 @@ def call_with_retry(
         try:
             _resp = client.messages.create(**kwargs)
             _registrar_uso(tag, _resp, cache_system)
+            _cache_depois(_chave, _resp, kwargs, tag=tag)
             return _resp
         except Exception as e:
             last_exc = e
@@ -341,6 +415,7 @@ def call_with_retry_stream(
     max_delay: float = 90.0,
     tag: str = "anthropic-stream",
     cache_system: bool = False,
+    cache: bool = False,
     **kwargs: Any,
 ) -> Any:
     """Igual a call_with_retry, mas via STREAMING (client.messages.stream).
@@ -354,6 +429,12 @@ def call_with_retry_stream(
     Retorna o Message FINAL (mesmo formato de messages.create — .content[0].text).
     """
     kwargs = _scrub_payload(kwargs)  # limpa surrogates antes do 1º envio
+    # 🔑 O carimbo sai DEPOIS do scrub (determinístico) e ANTES do
+    # _apply_system_cache: `cache_control` e `extra_headers` são decisão de
+    # CUSTO da Anthropic e não podem invalidar o cache de conteúdo.
+    _chave, _do_cache = _cache_antes(kwargs, tag=tag, cache=cache)
+    if _do_cache is not None:
+        return _do_cache
     if cache_system:
         kwargs = _apply_system_cache(kwargs)
     last_exc: Exception | None = None
@@ -364,6 +445,7 @@ def call_with_retry_stream(
             with client.messages.stream(**kwargs) as stream:
                 _resp = stream.get_final_message()
             _registrar_uso(tag, _resp, cache_system)
+            _cache_depois(_chave, _resp, kwargs, tag=tag)
             return _resp
         except Exception as e:
             last_exc = e
