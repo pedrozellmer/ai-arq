@@ -223,3 +223,29 @@ def test_o_reprocesso_do_cliente_NAO_le_do_cache():
               and not l.strip().startswith("#")]
     assert any("_reproc_atual == 0" in l for l in linhas), (
         "o caminho DXF deixou de desligar o cache no reprocesso: %s" % linhas[:5])
+
+
+def test_o_cache_DA_SINAL_DE_VIDA_no_boot():
+    """🩺 Sem isto o cache pode estar MORTO e o log fica idêntico ao de um cache
+    que só não acertou ainda — porque tudo aqui é best-effort e silencioso.
+
+    Foi assim que o `signup_saiu_da_tela` viveu um dia inteiro sem gravar o
+    `campo` em 27/08: o instrumento existia, chegava ao banco, e perdia a única
+    informação pra qual foi feito. Uma linha no boot responde antes de qualquer
+    cliente chegar.
+    """
+    import io
+    src = io.open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "main.py"), encoding="utf-8").read()
+    i = src.find('@app.on_event("startup")')
+    assert i > 0, "sumiu o hook de startup"
+    j = src.find("\n@app.", i + 10)
+    bloco = src[i:j if j > 0 else i + 20000]
+    assert "boot:llm-cache" in bloco, (
+        "o cache não deixa mais sinal de vida no boot — se ele morrer, a "
+        "medição de sombra dá ZERO por motivo errado e ninguém saberia")
+    # e o sinal tem que distinguir vivo de morto, não só 'passei por aqui'
+    assert "MORTO" in bloco and "VIVO" in bloco, (
+        "o sinal de boot não separa vivo de morto")
+    assert 'severity="error"' in bloco, (
+        "a falha do cache no boot entra como info — ela some no meio do log")

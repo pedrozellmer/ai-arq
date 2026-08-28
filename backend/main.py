@@ -3684,6 +3684,31 @@ async def _on_startup_recover_jobs():
                   f"retomadas não descontam do orçamento")
     except Exception:
         pass
+    # 🩺 SINAL DE VIDA DO CACHE POR CONTEÚDO (28/08/2026).
+    #
+    # 🪤 Ele nasce em modo SOMBRA e é best-effort de propósito: erro de import,
+    # tabela faltando ou Supabase fora viram "miss" silencioso. Ou seja, se ele
+    # estiver MORTO, o log fica igualzinho ao de um cache que só não acertou
+    # ainda — e eu descobriria daqui a uma semana, ao ir ler uma taxa de acerto
+    # que nunca existiu.
+    #
+    # É EXATAMENTE o que aconteceu ontem com o `signup_saiu_da_tela`: instrumento
+    # que chegou ao banco e perdeu a única informação pra qual foi feito, e só a
+    # auditoria pegou. Uma linha no boot resolve: ela diz se o módulo importa e
+    # se a tabela responde, ANTES de qualquer cliente chegar.
+    try:
+        import llm_cache as _lc_boot
+        _chave_teste = _lc_boot.carimbo({"model": "x", "messages": []})
+        _lc_boot.ler(_chave_teste)   # só prova que a tabela responde
+        _log_error("boot:llm-cache",
+                   "cache de conteúdo VIVO — modo=%s chave_exemplo=%s"
+                   % (_lc_boot._modo(), _chave_teste[:12]), severity="info")
+    except Exception as _e_lc:
+        _log_error("boot:llm-cache",
+                   "cache de conteúdo MORTO no boot (%s: %s) — vai se comportar "
+                   "como 'nunca acerta' e a medição de sombra seria ZERO por "
+                   "motivo errado" % (type(_e_lc).__name__, _e_lc),
+                   severity="error")
     try:
         _recover_stuck_jobs_on_startup(crash_loop=crash_loop,
                                        deploy_restart=deploy_restart)
