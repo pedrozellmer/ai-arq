@@ -49,12 +49,147 @@
   window.API_BASE          = API_BASE;
   window.API_UPLOAD_BASE   = API_UPLOAD_BASE;
 
+
+  // ═══════════════════════════════════════════════════════════════
+  //  TELEMETRIA — FICA ANTES DO GUARDA DO SUPABASE, DE PROPÓSITO
+  // ═══════════════════════════════════════════════════════════════
+  // 🚨 28/08/2026. O blog é a MAIOR porta de entrada do produto — no dia
+  // 28/08, das páginas que gente de verdade abriu, TODAS eram post de blog
+  // (zero na home, zero no cadastro). E os 26 posts não tinham telemetria
+  // nenhuma: todo número de funil que a gente olhava ignorava a principal
+  // fonte de visita.
+  //
+  // 🪤 Não bastava incluir este arquivo no blog. O guarda do supabase-js
+  // logo abaixo faz `return` quando o SDK não está carregado — e o blog é
+  // página estática, sem SDK. O arquivo entrava e saía antes de definir o
+  // `trackEvent`. A alternativa seria carregar o SDK inteiro do Supabase em
+  // 26 páginas estáticas só pra registrar uma visita: troca ruim.
+  //
+  // 🔑 Telemetria não depende de banco: ela só faz POST /api/track. Então
+  // sobe pra cá e passa a existir com ou sem SDK. Tudo daqui pra baixo
+  // continua exigindo o Supabase, como antes.
+  // 🔒 LGPD intacta: o `trackEvent` continua checando consentimento, e o
+  // blog já carrega o `cookie-consent.js`.
+
+
+  // ─── trackEvent ──────────────────────────────────────────────
+  // Telemetria leve de uso (Painel de Atividade no admin). Fire-and-forget:
+  // nunca bloqueia a UI, nunca lança. POST /api/track → grava em usage_events
+  // (RLS on, só o backend lê). Sem ferramenta de 3rd-party (LGPD tranquilo).
+  //   trackEvent('open_project', { job_id: '...' })
+  // 23/08/2026 (board): na PRIMEIRA visita o consentimento ainda é nulo, então
+  // view_landing/view_login/view_cadastro eram descartados — e depois do "aceitar"
+  // ninguém reenviava. Agora: sem resposta → fila (máx. 20); aceitou → a fila
+  // sai; recusou → a fila morre. Nada grava sem o "sim" (LGPD intacta).
+  var _trackFila = [];
+  window.addEventListener('aiarq:consent-changed', function (ev) {
+    try {
+      var d = ev && ev.detail;
+      var fila = _trackFila; _trackFila = [];
+      if (d && d.analytics === true) fila.forEach(function (q) { window.trackEvent(q.event, q.meta); });
+    } catch (e) {}
+  });
+  window.trackEvent = function (event, meta) {
+    try {
+      if (!event) return;
+      // LGPD (opt-in do banner de cookies): SÓ rastreia se o usuário consentiu
+      // com analytics. Sem consentimento — declinado OU ainda não respondido —
+      // não grava nada. Honra a promessa "telemetria só com seu sim".
+      try {
+        var _consent = JSON.parse(localStorage.getItem('aiarq_cookie_consent') || 'null');
+        if (!_consent) { if (_trackFila.length < 20) _trackFila.push({ event: event, meta: meta }); return; }
+        if (_consent.analytics !== true) return;
+      } catch (e) { return; }
+      // cid = id anônimo do navegador (localStorage) → dá pra contar VISITANTE
+      // único e seguir o funil (visita → cadastro) mesmo sem login.
+      let _cid = '';
+      try {
+        _cid = localStorage.getItem('aiarq_cid') || '';
+        if (!_cid) { _cid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem('aiarq_cid', _cid); }
+      } catch (e) { /* localStorage indisponível */ }
+      // src = origem first-touch (de onde o visitante chegou) — pra atribuir o funil
+      let _src = '';
+      try { var _s0 = JSON.parse(localStorage.getItem('aiarq_src') || 'null'); _src = (_s0 && _s0.label) ? String(_s0.label).slice(0, 40) : ''; } catch (e) {}
+      _sbClient.auth.getSession().then(({ data: { session } }) => {
+        const u = (session && session.user) ? session.user : null;
+        const body = JSON.stringify({
+          event: String(event).slice(0, 60),
+          user_id: u ? u.id : '',
+          user_email: u ? (u.email || '') : '',
+          job_id: (meta && meta.job_id) ? String(meta.job_id) : '',
+          path: (location.pathname || '').slice(0, 200),
+          meta: Object.assign({ cid: _cid, src: _src }, meta || {}),
+        });
+        // 🚨 Manda o token quando há sessão (09/08). O backend passou a IGNORAR
+        // user_id/user_email do corpo e só aceitar identidade que o token prove
+        // — sem este header, todo evento de quem está logado viraria anônimo e
+        // o painel de Atividade esvaziaria. Deslogado segue sem header, que é o
+        // caso normal aqui: a rota é aberta de propósito.
+        const _h = { 'Content-Type': 'application/json' };
+        if (session && session.access_token) {
+          _h['Authorization'] = 'Bearer ' + session.access_token;
+        }
+        // keepalive: o evento sobrevive mesmo se a página for fechada logo
+        // após (ex.: clicou em baixar e saiu). Erro engolido de propósito.
+        fetch(API_BASE + '/api/track', {
+          method: 'POST',
+          headers: _h,
+          body: body,
+          keepalive: true,
+        }).catch(() => {});
+      }).catch(() => {});
+    } catch (e) { /* telemetria nunca quebra nada */ }
+  };
+
+  // ─── clique marcado: data-track ──────────────────────────────
+  // Um ouvinte SÓ, delegado no documento. Elemento com `data-track="nome"`
+  // (ou dentro de um) vira evento `clique:nome`.
+  //
+  // 🚨 POR QUE MARCADO E NÃO "TUDO" (11/08/2026): capturar todo clique gera
+  // milhares de eventos de <div> sem nome — muito dado e nenhuma resposta — e
+  // aumenta a superfície de dado pessoal sem necessidade. Marcamos só os pontos
+  // que respondem uma dúvida MEDIDA. Hoje são duas:
+  //   1) a janela de 2 minutos: 39 de 39 clientes que subiram projeto em 60
+  //      dias fizeram isso em menos de 30 min, mediana 2 min. Ninguém voltou
+  //      depois. Queremos saber onde os 17% que nunca sobem param.
+  //   2) o funil da revisão: `revision_feedback` tem 0 linhas desde sempre.
+  //
+  // 🪤 O DENOMINADOR É 37%. `trackEvent` só dispara pra quem aceitou cookie de
+  // análise — medido em 11/08: 19 de 51 clientes. Serve pra COMPARAR (o botão A
+  // é mais clicado que o B), NÃO pra número absoluto ("42% dos clientes
+  // clicam"). Ver o aviso no painel de Atividade.
+  document.addEventListener('click', function (ev) {
+    try {
+      var alvo = ev.target && ev.target.closest ? ev.target.closest('[data-track]') : null;
+      if (!alvo) return;
+      var nome = (alvo.getAttribute('data-track') || '').trim();
+      if (!nome) return;
+      var meta = {};
+      // rótulo visível ajuda a ler o painel sem abrir o HTML
+      var _t = (alvo.getAttribute('aria-label') || alvo.textContent || '').replace(/\s+/g, ' ').trim();
+      if (_t) meta.rotulo = _t.slice(0, 60);
+      // 🪤 NÃO dá pra registrar clique em botão desabilitado: por especificação
+      // o navegador não dispara evento nenhum em `<button disabled>`. Cheguei a
+      // escrever `if (alvo.disabled) meta.desabilitado = true` e o teste no DOM
+      // provou que era código morto. Se um dia quisermos medir "tentou clicar
+      // sem poder", tem que ser um envelope clicável em volta do botão.
+      var _job = new URLSearchParams(location.search).get('job_id');
+      if (_job) meta.job_id = _job;
+      window.trackEvent('clique:' + nome.slice(0, 40), meta);
+    } catch (e) { /* nunca quebra o clique do cliente */ }
+  }, true);   // captura: pega mesmo se o handler do elemento parar a propagação
   // ─── Cliente Supabase ─────────────────────────────────────────
   // Defensivo: se o <script> do supabase-js não carregou (rede ruim,
   // CDN fora do ar), avisa no console em vez de quebrar tudo silenciosamente.
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
-    console.error('[aiarq-utils] supabase-js não foi carregado antes deste script. ' +
-                  'Inclua <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script> ANTES de aiarq-utils.js.');
+    // 🪤 28/08/2026: era `console.error` e a mensagem dizia que tudo quebrava.
+    // Desde que a telemetria subiu pra ANTES deste guarda, isso deixou de ser
+    // verdade: numa página estática (o blog) o `trackEvent` funciona e só o
+    // que depende de banco fica de fora. Erro vermelho pra situação esperada
+    // treina todo mundo a ignorar o console — e aí o erro real passa batido.
+    console.info('[aiarq-utils] sem supabase-js nesta página: telemetria ATIVA, ' +
+                  'recursos de banco (login, projetos) indisponíveis. Se esta ' +
+                  'página PRECISA de banco, inclua o supabase-js ANTES deste arquivo.');
     return;
   }
 
@@ -452,111 +587,4 @@
   window.aiArqSource = function () {
     try { return JSON.parse(localStorage.getItem('aiarq_src') || 'null'); } catch (e) { return null; }
   };
-
-  // ─── trackEvent ──────────────────────────────────────────────
-  // Telemetria leve de uso (Painel de Atividade no admin). Fire-and-forget:
-  // nunca bloqueia a UI, nunca lança. POST /api/track → grava em usage_events
-  // (RLS on, só o backend lê). Sem ferramenta de 3rd-party (LGPD tranquilo).
-  //   trackEvent('open_project', { job_id: '...' })
-  // 23/08/2026 (board): na PRIMEIRA visita o consentimento ainda é nulo, então
-  // view_landing/view_login/view_cadastro eram descartados — e depois do "aceitar"
-  // ninguém reenviava. Agora: sem resposta → fila (máx. 20); aceitou → a fila
-  // sai; recusou → a fila morre. Nada grava sem o "sim" (LGPD intacta).
-  var _trackFila = [];
-  window.addEventListener('aiarq:consent-changed', function (ev) {
-    try {
-      var d = ev && ev.detail;
-      var fila = _trackFila; _trackFila = [];
-      if (d && d.analytics === true) fila.forEach(function (q) { window.trackEvent(q.event, q.meta); });
-    } catch (e) {}
-  });
-  window.trackEvent = function (event, meta) {
-    try {
-      if (!event) return;
-      // LGPD (opt-in do banner de cookies): SÓ rastreia se o usuário consentiu
-      // com analytics. Sem consentimento — declinado OU ainda não respondido —
-      // não grava nada. Honra a promessa "telemetria só com seu sim".
-      try {
-        var _consent = JSON.parse(localStorage.getItem('aiarq_cookie_consent') || 'null');
-        if (!_consent) { if (_trackFila.length < 20) _trackFila.push({ event: event, meta: meta }); return; }
-        if (_consent.analytics !== true) return;
-      } catch (e) { return; }
-      // cid = id anônimo do navegador (localStorage) → dá pra contar VISITANTE
-      // único e seguir o funil (visita → cadastro) mesmo sem login.
-      let _cid = '';
-      try {
-        _cid = localStorage.getItem('aiarq_cid') || '';
-        if (!_cid) { _cid = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem('aiarq_cid', _cid); }
-      } catch (e) { /* localStorage indisponível */ }
-      // src = origem first-touch (de onde o visitante chegou) — pra atribuir o funil
-      let _src = '';
-      try { var _s0 = JSON.parse(localStorage.getItem('aiarq_src') || 'null'); _src = (_s0 && _s0.label) ? String(_s0.label).slice(0, 40) : ''; } catch (e) {}
-      _sbClient.auth.getSession().then(({ data: { session } }) => {
-        const u = (session && session.user) ? session.user : null;
-        const body = JSON.stringify({
-          event: String(event).slice(0, 60),
-          user_id: u ? u.id : '',
-          user_email: u ? (u.email || '') : '',
-          job_id: (meta && meta.job_id) ? String(meta.job_id) : '',
-          path: (location.pathname || '').slice(0, 200),
-          meta: Object.assign({ cid: _cid, src: _src }, meta || {}),
-        });
-        // 🚨 Manda o token quando há sessão (09/08). O backend passou a IGNORAR
-        // user_id/user_email do corpo e só aceitar identidade que o token prove
-        // — sem este header, todo evento de quem está logado viraria anônimo e
-        // o painel de Atividade esvaziaria. Deslogado segue sem header, que é o
-        // caso normal aqui: a rota é aberta de propósito.
-        const _h = { 'Content-Type': 'application/json' };
-        if (session && session.access_token) {
-          _h['Authorization'] = 'Bearer ' + session.access_token;
-        }
-        // keepalive: o evento sobrevive mesmo se a página for fechada logo
-        // após (ex.: clicou em baixar e saiu). Erro engolido de propósito.
-        fetch(API_BASE + '/api/track', {
-          method: 'POST',
-          headers: _h,
-          body: body,
-          keepalive: true,
-        }).catch(() => {});
-      }).catch(() => {});
-    } catch (e) { /* telemetria nunca quebra nada */ }
-  };
-
-  // ─── clique marcado: data-track ──────────────────────────────
-  // Um ouvinte SÓ, delegado no documento. Elemento com `data-track="nome"`
-  // (ou dentro de um) vira evento `clique:nome`.
-  //
-  // 🚨 POR QUE MARCADO E NÃO "TUDO" (11/08/2026): capturar todo clique gera
-  // milhares de eventos de <div> sem nome — muito dado e nenhuma resposta — e
-  // aumenta a superfície de dado pessoal sem necessidade. Marcamos só os pontos
-  // que respondem uma dúvida MEDIDA. Hoje são duas:
-  //   1) a janela de 2 minutos: 39 de 39 clientes que subiram projeto em 60
-  //      dias fizeram isso em menos de 30 min, mediana 2 min. Ninguém voltou
-  //      depois. Queremos saber onde os 17% que nunca sobem param.
-  //   2) o funil da revisão: `revision_feedback` tem 0 linhas desde sempre.
-  //
-  // 🪤 O DENOMINADOR É 37%. `trackEvent` só dispara pra quem aceitou cookie de
-  // análise — medido em 11/08: 19 de 51 clientes. Serve pra COMPARAR (o botão A
-  // é mais clicado que o B), NÃO pra número absoluto ("42% dos clientes
-  // clicam"). Ver o aviso no painel de Atividade.
-  document.addEventListener('click', function (ev) {
-    try {
-      var alvo = ev.target && ev.target.closest ? ev.target.closest('[data-track]') : null;
-      if (!alvo) return;
-      var nome = (alvo.getAttribute('data-track') || '').trim();
-      if (!nome) return;
-      var meta = {};
-      // rótulo visível ajuda a ler o painel sem abrir o HTML
-      var _t = (alvo.getAttribute('aria-label') || alvo.textContent || '').replace(/\s+/g, ' ').trim();
-      if (_t) meta.rotulo = _t.slice(0, 60);
-      // 🪤 NÃO dá pra registrar clique em botão desabilitado: por especificação
-      // o navegador não dispara evento nenhum em `<button disabled>`. Cheguei a
-      // escrever `if (alvo.disabled) meta.desabilitado = true` e o teste no DOM
-      // provou que era código morto. Se um dia quisermos medir "tentou clicar
-      // sem poder", tem que ser um envelope clicável em volta do botão.
-      var _job = new URLSearchParams(location.search).get('job_id');
-      if (_job) meta.job_id = _job;
-      window.trackEvent('clique:' + nome.slice(0, 40), meta);
-    } catch (e) { /* nunca quebra o clique do cliente */ }
-  }, true);   // captura: pega mesmo se o handler do elemento parar a propagação
 })();

@@ -17986,6 +17986,16 @@ _TRACK_ALLOWED = {
     # instrumento nasceria morto — exatamente o que aconteceu com 9 eventos
     # em 23/08.
     "signup_saiu_da_tela",
+    # 📊 28/08/2026 — O BLOG PASSOU A MEDIR. Ele é a MAIOR porta de entrada:
+    # no dia 28/08, TODAS as páginas que gente de verdade abriu eram post de
+    # blog (zero na home, zero no cadastro) — e os 26 posts não mediam nada.
+    # O slug do post vai no `campo`, então dá pra saber QUAL assunto atrai,
+    # não só que "alguém leu o blog".
+    # 🪤 Esta linha só existe porque o `test_track_allowlist` reprovou —
+    # DEPOIS que eu consertei o ponto cego dele: ele varria só a raiz e nem
+    # olhava `blog/posts/`. Na primeira rodada passou VERDE com o evento
+    # órfão. Guarda que olha metade do território não é guarda.
+    "view_blog_post",
     # 23/08/2026 — board do site achou 9 eventos que o front dispara há semanas
     # e esta lista descartava CALADA (200 {"status":"ignored"}). "Memorial 0
     # aberturas na vida" era, em parte, isto. Cliques marcados com data-track

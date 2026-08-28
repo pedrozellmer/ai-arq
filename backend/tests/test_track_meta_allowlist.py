@@ -61,11 +61,16 @@ def _chaves_enviadas_pelo_front():
     chama, espalhado pelos .html.
     """
     chaves = {"cid", "src"}
-    for nome in os.listdir(_RAIZ):
-        if not nome.endswith((".html", ".js")):
-            continue
+    # 🪤 28/08: varria só a RAIZ e ficava cego pro blog — 26 posts que agora
+    # mandam `campo`. Mesmo ponto cego do `test_track_allowlist`.
+    import glob as _glob
+    caminhos = (_glob.glob(os.path.join(_RAIZ, "*.html"))
+                + _glob.glob(os.path.join(_RAIZ, "*.js"))
+                + _glob.glob(os.path.join(_RAIZ, "blog", "*.html"))
+                + _glob.glob(os.path.join(_RAIZ, "blog", "posts", "*.html")))
+    for caminho in caminhos:
         try:
-            txt = io.open(os.path.join(_RAIZ, nome), encoding="utf-8").read()
+            txt = io.open(caminho, encoding="utf-8").read()
         except (OSError, UnicodeDecodeError):
             continue
         # trackEvent('x', { chave: ... })  /  trackEvent("x", {chave: ...})

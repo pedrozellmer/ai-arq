@@ -274,5 +274,24 @@ Este guia organiza as 18 disciplinas típicas de uma obra de retrofit comercial 
 <script src="/chat-widget.js"></script>
 <script src="/contact-modal.js"></script>
 <script src="/cookie-consent.js" defer></script>
+<!-- 28/08/2026 - TELEMETRIA NO BLOG. O blog e a MAIOR porta de entrada do
+     produto: no dia 28/08, TODAS as paginas que gente de verdade abriu eram
+     post de blog (zero na home, zero no cadastro). E os 26 posts nao mediam
+     nada - todo numero de funil ignorava a principal fonte de visita.
+     Nao bastou incluir o arquivo: o guarda do supabase-js dentro dele fazia
+     `return` em pagina estatica, antes de definir o `trackEvent`. A telemetria
+     foi movida pra ANTES desse guarda no mesmo commit.
+     O `cookie-consent.js` acima ja roda aqui; o `trackEvent` so grava com o
+     "sim" do visitante. -->
+<script src="/aiarq-utils.js"></script>
+<script>
+  (function () {
+    try {
+      var p = location.pathname;
+      var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
+      if (window.trackEvent) window.trackEvent('view_blog_post', { campo: slug });
+    } catch (e) { }
+  })();
+</script>
 </body>
 </html>

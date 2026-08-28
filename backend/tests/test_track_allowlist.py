@@ -25,7 +25,15 @@ def _allowlist():
 
 def _eventos_do_front():
     nomes = set()
-    arquivos = glob.glob(os.path.join(_RAIZ, "*.html")) + glob.glob(os.path.join(_RAIZ, "*.js"))
+    # 🪤 28/08/2026 — ESTE GUARDA TINHA PONTO CEGO. Varria só a RAIZ, e o blog
+    # (26 posts em `blog/posts/`) ficava de fora. Ao ligar telemetria no blog
+    # escrevi um `view_blog_post` que NÃO estava na allowlist — e este teste
+    # passou VERDE, porque nem olhou o arquivo. É a terceira vez no mesmo dia
+    # que um guarda meu falha por olhar só metade do território.
+    arquivos = (glob.glob(os.path.join(_RAIZ, "*.html"))
+                + glob.glob(os.path.join(_RAIZ, "*.js"))
+                + glob.glob(os.path.join(_RAIZ, "blog", "*.html"))
+                + glob.glob(os.path.join(_RAIZ, "blog", "posts", "*.html")))
     for f in arquivos:
         txt = io.open(f, encoding="utf-8", errors="replace").read()
         # 🪤 25/08: a versão anterior era `trackEvent\(` e ficava CEGA pra
