@@ -111,20 +111,71 @@ def _check(name: str, ok: bool, detail: str = "") -> bool:
     return ok
 
 
-def _get(url: str, headers: dict | None = None, timeout: int = 60) -> tuple[int, bytes, dict]:
-    """GET retorna (status, body_bytes, headers_dict)."""
+def _get(url: str, headers: dict | None = None, timeout: int = 60,
+         tentativas: int = 3) -> tuple[int, bytes, dict]:
+    """GET retorna (status, body_bytes, headers_dict).
+
+    🚨 28/08/2026 — O SMOKE MENTIU A CAUSA E MANDOU O PEDRO PRO LUGAR ERRADO.
+    O e-mail que ele recebeu dizia duas coisas, e as duas eram sintoma:
+
+        GET /api/instagram/scheduler/list exige admin  (HTTP 502, esperado 401)
+        GET /api/projects/by-user — lista  (0 projetos)
+
+    A segunda era MENTIRA: não eram 0 projetos, era o mesmo 502. A causa real
+    (achada indo no log do Render) é que o servidor congelava por 33 s na
+    virada da hora — as rotinas do relógio eram `async` com corpo bloqueante.
+
+    🔑 Erro de TRANSPORTE não pode virar afirmação sobre o NEGÓCIO. 5xx é "o
+    servidor não respondeu", nunca "o cliente não tem projeto". É a mesma
+    família do achado de 05/08: 53 de 74 falhas que a gente culpava o cliente
+    eram nossas.
+
+    🪤 O retry é curto de propósito. Retry generoso vira o erro oposto — um
+    smoke que fica verde escondendo instabilidade real é pior que um que grita
+    errado, porque ninguém vai olhar.
+    """
     h = {"User-Agent": BROWSER_UA}
     if headers:
         h.update(headers)
     req = urllib.request.Request(url, method="GET", headers=h)
-    try:
-        resp = urllib.request.urlopen(req, timeout=timeout)
-        return resp.status, resp.read(), dict(resp.headers)
-    except urllib.error.HTTPError as e:
+    ultimo = (0, b"", {})
+    for i in range(max(1, tentativas)):
         try:
-            return e.code, e.read(), dict(e.headers or {})
-        except Exception:
-            return e.code, b"", {}
+            resp = urllib.request.urlopen(req, timeout=timeout)
+            return resp.status, resp.read(), dict(resp.headers)
+        except urllib.error.HTTPError as e:
+            try:
+                ultimo = (e.code, e.read(), dict(e.headers or {}))
+            except Exception:
+                ultimo = (e.code, b"", {})
+            # 5xx = servidor engasgado; 4xx é resposta legítima, não insiste
+            if not (500 <= e.code < 600) or i == tentativas - 1:
+                return ultimo
+        except Exception as e:                       # timeout, DNS, conexão
+            ultimo = (0, str(e).encode("utf-8", "replace"), {})
+            if i == tentativas - 1:
+                return ultimo
+        print(f"  {YELLOW}!{RESET} {url.split('/api/')[-1][:40]}: HTTP "
+              f"{ultimo[0] or 'sem resposta'} — tentando de novo "
+              f"({i + 2}/{tentativas})")
+        time.sleep(4 * (i + 1))
+    return ultimo
+
+
+def _transporte_falhou(status: int) -> str | None:
+    """Devolve a explicação quando o problema é de TRANSPORTE, não de negócio.
+
+    🚨 Existe pra impedir que 502 vire "0 projetos" de novo. Toda checagem que
+    depende de uma resposta do servidor tem que passar por aqui ANTES de
+    afirmar qualquer coisa sobre o conteúdo.
+    """
+    if status == 0:
+        return "o servidor não respondeu (timeout ou conexão)"
+    if 500 <= status < 600:
+        return (f"o servidor devolveu HTTP {status} — ISTO NÃO É UM PROBLEMA "
+                f"DE DADO, é o backend fora do ar ou travado. Olhe o log do "
+                f"Render antes de procurar no banco.")
+    return None
 
 
 def _post_json(url: str, payload: dict, headers: dict | None = None, timeout: int = 60) -> tuple[int, bytes]:
@@ -200,17 +251,25 @@ def _supabase_login(email: str, password: str) -> Optional[str]:
         return None
 
 
-def _list_user_projects(user_id: str, jwt: str) -> list:
-    """Lista projetos do user pra pegar um job_id válido pra testar."""
+def _list_user_projects(user_id: str, jwt: str) -> tuple[list, str | None]:
+    """Lista projetos do user. Devolve (projetos, motivo_da_falha).
+
+    🚨 Antes devolvia só a lista e fazia `if status != 200: return []`. Um 502
+    virava "0 projetos" e o e-mail de falha mandava procurar no lugar errado.
+    Agora o motivo volta junto e quem chama decide o que dizer.
+    """
     url = f"{API_BASE}/api/projects/by-user/{user_id}"
     status, body, _ = _get(url, headers={"Authorization": f"Bearer {jwt}"})
+    ruim = _transporte_falhou(status)
+    if ruim:
+        return [], ruim
     if status != 200:
-        return []
+        return [], f"HTTP {status} (esperado 200)"
     try:
         data = json.loads(body)
-        return data.get("projects", []) if isinstance(data, dict) else []
-    except Exception:
-        return []
+        return (data.get("projects", []) if isinstance(data, dict) else []), None
+    except Exception as e:
+        return [], f"resposta não é JSON válido: {e}"
 
 
 def nivel_2():
@@ -242,11 +301,13 @@ def nivel_2():
     _check("Decodificar JWT", bool(user_id), f"user_id={user_id[:8]}...")
 
     # Lista projetos
-    projects = _list_user_projects(user_id, jwt)
+    projects, motivo = _list_user_projects(user_id, jwt)
     _check(
         "GET /api/projects/by-user — lista",
         len(projects) > 0,
-        f"{len(projects)} projetos",
+        # 🔑 o motivo REAL na frente. "0 projetos" só aparece quando foi
+        # mesmo 0 projetos, com o servidor tendo respondido 200.
+        motivo or f"{len(projects)} projetos",
     )
 
     if not projects:
