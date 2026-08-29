@@ -21737,10 +21737,40 @@ def admin_metricas(request: Request, dias: int = 30):
         "GET", "metricas_diarias",
         params={"select": "*", "dia": "gte.%s" % desde, "order": "dia.asc"})
     serie = linhas or []
+
+    # 🔑 Quais páginas trouxeram gente nos últimos 7 dias, somadas.
+    # Medido em 29/08 e ninguém esperava: a FAQ é a SEGUNDA página do site, em
+    # 5 dos 6 dias medidos — o dobro do melhor post do blog. Sem juntar aqui,
+    # esse fato ficaria enterrado num campo jsonb que ninguém abre.
+    # 🪤 Soma de "endereços por dia" NÃO é gente única na semana: quem volta
+    # três dias conta três vezes. É comparação entre páginas, não headcount —
+    # e o rótulo na tela precisa dizer isso.
+    _tp = {}
+    for _l in serie[-7:]:
+        for _p in (_l.get("top_paginas") or []):
+            _cam = str(_p.get("pagina") or "")
+            if _cam.startswith("/admin"):
+                continue          # nós, não público
+            _tp[_cam] = _tp.get(_cam, 0) + int(_p.get("enderecos") or 0)
+    _topo = sorted(({"pagina": k, "enderecos": v} for k, v in _tp.items()),
+                   key=lambda x: -x["enderecos"])[:8]
+
+    # o funil, calculado de uma vez em vez de eu montar na mão toda semana
+    _ult7 = serie[-7:]
+    _home = sum(p.get("enderecos", 0) for l in _ult7
+                for p in (l.get("top_paginas") or []) if p.get("pagina") in ("/", "/index.html"))
+    _cad = sum(p.get("enderecos", 0) for l in _ult7
+               for p in (l.get("top_paginas") or []) if p.get("pagina") == "/cadastro.html")
     return {
         "ok": st == 200,
         "serie": serie,
         "veredito": _ms.veredito(serie),
+        "top_paginas_7d": _topo,
+        "funil_7d": {
+            "home": _home, "cadastro": _cad,
+            "contas": sum(int(l.get("cadastros") or 0) for l in _ult7),
+            "projetos": sum(int(l.get("projetos") or 0) for l in _ult7),
+        },
         # 🚨 O painel PRECISA saber se a coleta está viva. Sem isto, série
         # parada e site sem movimento têm exatamente a mesma cara.
         "coleta": {

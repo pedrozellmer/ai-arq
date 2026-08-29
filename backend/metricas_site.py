@@ -89,7 +89,9 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
       httpRequestsAdaptiveGroups(limit: 400,
         filter: {datetime_geq: "%sT00:00:00Z", datetime_leq: "%sT23:59:59Z",
                  clientRequestHTTPHost: "ai.arq.br"}, orderBy: [count_DESC]) {
-        count dimensions { clientIP userAgentBrowser } } } } }""" % (_ZONA, d, d))
+        count dimensions { clientIP userAgentBrowser clientRequestPath
+                           edgeResponseStatus edgeResponseContentTypeName }
+      } } } }""" % (_ZONA, d, d))
     dados = _graphql(q)
     if dados.get("errors"):
         raise RuntimeError("Cloudflare recusou: %s" % dados["errors"][:1])
@@ -99,17 +101,28 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     # 🔒 A lista do banco MANDA; a de emergência só entra se ela vier vazia.
     nossos = set(ips_da_casa or ()) | _IPS_DE_EMERGENCIA
     ips_gente, gente, robo, nosso = set(), 0, 0, 0
+    # 🔑 Quais páginas trouxeram gente. Medido em 29/08: a FAQ é a SEGUNDA
+    # página mais vista do site (76 endereços em 5 dias, contra 38 do melhor
+    # post do blog) — e ninguém sabia, porque esse número nunca era calculado.
+    por_pagina = {}
     for g in grupos:
-        ip = (g.get("dimensions") or {}).get("clientIP") or ""
-        nav = (g.get("dimensions") or {}).get("userAgentBrowser") or ""
+        dim = g.get("dimensions") or {}
+        ip = dim.get("clientIP") or ""
+        nav = dim.get("userAgentBrowser") or ""
         n = int(g.get("count") or 0)
         if ip in nossos:
             nosso += n
-        elif _e_robo(nav):
+            continue
+        if _e_robo(nav):
             robo += n
-        else:
-            gente += n
-            ips_gente.add(ip)
+            continue
+        gente += n
+        ips_gente.add(ip)
+        # 🪤 Só página HTML com resposta 200: asset (css/js/imagem) inflaria e
+        # esconderia a página; 404 de scanner viraria "página popular".
+        if dim.get("edgeResponseContentTypeName") == "html"                 and str(dim.get("edgeResponseStatus")) == "200":
+            cam = dim.get("clientRequestPath") or "/"
+            por_pagina.setdefault(cam, set()).add(ip)
 
     # o número CRU do painel, guardado só pra lembrar o quanto ele infla
     unicos = paginas = None
@@ -124,9 +137,12 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     except Exception:
         pass
 
+    topo = sorted(({"pagina": k, "enderecos": len(v)} for k, v in por_pagina.items()),
+                  key=lambda x: -x["enderecos"])[:12]
     return {"dia": d, "req_total": gente + robo + nosso, "req_robo": robo,
             "req_nosso": nosso, "req_gente": gente, "ips_gente": len(ips_gente),
-            "unicos_cloudflare": unicos, "paginas": paginas, "fonte": "tick"}
+            "unicos_cloudflare": unicos, "paginas": paginas,
+            "top_paginas": topo, "fonte": "tick"}
 
 
 # ── a pergunta que o Pedro faz de verdade ───────────────────────────────────

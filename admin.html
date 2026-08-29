@@ -223,53 +223,6 @@
           <p class="text-sm text-gray-500 mt-1">Vis&#227;o geral do AI.arq</p>
         </div>
 
-        <!-- ═══ ESTÁ TUDO NORMAL? (29/08/2026) ══════════════════════════════
-             O Pedro perguntou TRÊS vezes na mesma semana se o site tinha caído
-             do Google. Cada resposta custava meia hora de consulta na mão — e
-             nas duas primeiras a resposta saiu ERRADA, porque o contador de
-             "únicos" do Cloudflare conta robô.
-             Fica no TOPO do dashboard de propósito: é a primeira pergunta que
-             ele faz ao abrir o admin, então tem que ser a primeira coisa que
-             ele lê. -->
-        <section class="mb-8 rounded-2xl border bg-white p-6 shadow-sm">
-          <div class="flex items-start justify-between gap-4 flex-wrap">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2">
-                <span id="mov-farol" class="inline-block h-3 w-3 rounded-full bg-gray-300 shrink-0"></span>
-                <h2 class="text-base font-semibold text-gray-900">Movimento do site</h2>
-              </div>
-              <p id="mov-frase" class="text-sm text-gray-600 mt-1">carregando&hellip;</p>
-            </div>
-            <div class="flex items-center gap-6 shrink-0">
-              <div class="text-right">
-                <p class="text-xs text-gray-500">site no ar</p>
-                <p id="mov-saude" class="text-lg font-bold text-gray-400">--</p>
-              </div>
-              <div class="text-right">
-                <p class="text-xs text-gray-500">cadastros (7d)</p>
-                <p id="mov-cadastros" class="text-lg font-bold text-gray-900">--</p>
-              </div>
-              <div class="text-right">
-                <p class="text-xs text-gray-500">projetos (7d)</p>
-                <p id="mov-projetos" class="text-lg font-bold text-gray-900">--</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- aviso de coleta desligada: aparece SÓ quando está desligada.
-               🚨 Sem isto, série parada e site sem movimento têm a mesma cara. -->
-          <div id="mov-alerta" class="hidden mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
-
-          <!-- barras: uma por dia. Altura = endereços distintos que NÃO são
-               nós nem robô óbvio. 🪤 É TETO, não contagem de pessoas. -->
-          <div id="mov-barras" class="mt-5 flex items-end gap-1 h-24"></div>
-          <p class="mt-2 text-[11px] text-gray-400 leading-snug">
-            Cada barra &#233; um dia: endere&#231;os distintos que <b>n&#227;o</b> s&#227;o rob&#244; conhecido
-            nem a nossa m&#225;quina. &#201; um <b>teto</b>, n&#227;o uma contagem de pessoas &mdash; rob&#244;
-            que se disfar&#231;a de navegador entra aqui. O contador de &#8220;&#250;nicos&#8221; do
-            Cloudflare conta rob&#244; e chegou a inflar um dia em 76%.
-          </p>
-        </section>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <!-- Card: Total de Usuarios — clicavel, leva pra aba Usuarios -->
@@ -328,6 +281,68 @@
             <p id="stat-items-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
           </button>
         </div>
+
+        <!-- ═══ ESTÁ TUDO NORMAL? (29/08/2026) ══════════════════════════════
+             O Pedro perguntou TRÊS vezes na mesma semana se o site tinha caído
+             do Google. Cada resposta custava meia hora de consulta na mão — e
+             nas duas primeiras a resposta saiu ERRADA, porque o contador de
+             "únicos" do Cloudflare conta robô.
+             Fica no TOPO do dashboard de propósito: é a primeira pergunta que
+             ele faz ao abrir o admin, então tem que ser a primeira coisa que
+             ele lê. -->
+        <section class="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span id="mov-farol" class="inline-block h-3 w-3 rounded-full bg-gray-300 shrink-0"></span>
+                <h2 class="text-base font-semibold text-gray-900">Movimento do site</h2>
+              </div>
+              <p id="mov-frase" class="text-sm text-gray-600 mt-1">carregando&hellip;</p>
+            </div>
+            <div class="flex items-center gap-6 shrink-0">
+              <div class="text-right">
+                <p class="text-xs text-gray-500">site no ar</p>
+                <p id="mov-saude" class="text-lg font-bold text-gray-400">--</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xs text-gray-500">cadastros (7d)</p>
+                <p id="mov-cadastros" class="text-lg font-bold text-gray-900">--</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xs text-gray-500">projetos (7d)</p>
+                <p id="mov-projetos" class="text-lg font-bold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- aviso de coleta desligada: aparece SÓ quando está desligada.
+               🚨 Sem isto, série parada e site sem movimento têm a mesma cara. -->
+          <div id="mov-alerta" class="hidden mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
+
+          <!-- barras: uma por dia. Altura = endereços distintos que NÃO são
+               nós nem robô óbvio. 🪤 É TETO, não contagem de pessoas. -->
+          <div id="mov-barras" class="mt-5 flex items-end gap-1 h-24"></div>
+          <!-- funil da semana + páginas que trouxeram gente.
+               🔑 A FAQ é a 2ª página do site em 5 dos 6 dias medidos (29/08) e
+               ninguém sabia — o número existia e nunca era calculado. -->
+          <div class="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">Caminho at&#233; o projeto (7 dias)</p>
+              <div id="mov-funil" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+            </div>
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">P&#225;ginas que trouxeram gente (7 dias)</p>
+              <div id="mov-paginas" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+            </div>
+          </div>
+
+          <p class="mt-2 text-[11px] text-gray-400 leading-snug">
+            Cada barra &#233; um dia: endere&#231;os distintos que <b>n&#227;o</b> s&#227;o rob&#244; conhecido
+            nem a nossa m&#225;quina. &#201; um <b>teto</b>, n&#227;o uma contagem de pessoas &mdash; rob&#244;
+            que se disfar&#231;a de navegador entra aqui. O contador de &#8220;&#250;nicos&#8221; do
+            Cloudflare conta rob&#244; e chegou a inflar um dia em 76%.
+          </p>
+        </section>
 
         <!-- ═══ Operação agora ═══ -->
         <div class="mt-6 rounded-2xl border bg-white p-6 shadow-sm">
@@ -4375,6 +4390,40 @@ async function carregarMovimentoDoSite() {
     const caiu = serie.filter(x => x.site_ok === false).length > 0;
     saude.textContent = caiu ? 'caiu' : 'sim';
     saude.className = 'text-lg font-bold ' + (caiu ? 'text-red-600' : 'text-emerald-600');
+  }
+
+  // ── caminho até o projeto ──────────────────────────────────────────────
+  // 🪤 "endereços" somados por dia NÃO é gente única na semana: quem volta três
+  // dias conta três vezes. Serve pra comparar etapas, não como headcount — e o
+  // rótulo diz isso, senão vira o erro do "21 downloads".
+  const fun = document.getElementById('mov-funil');
+  if (fun) {
+    const f = d.funil_7d || {};
+    const linha = (rot, n, obs) =>
+      '<div class="flex items-baseline justify-between gap-3">' +
+      '<span class="text-gray-600">' + rot + '</span>' +
+      '<span class="font-semibold tabular-nums">' + (n || 0) +
+      (obs ? ' <span class="text-xs font-normal text-gray-400">' + obs + '</span>' : '') +
+      '</span></div>';
+    const pct = (a, b) => (b > 0 ? Math.round((a / b) * 100) + '%' : '--');
+    fun.innerHTML =
+      linha('abriram a home', f.home) +
+      linha('abriram o cadastro', f.cadastro, pct(f.cadastro, f.home) + ' da home') +
+      linha('criaram conta', f.contas, pct(f.contas, f.cadastro) + ' de quem abriu') +
+      linha('subiram projeto', f.projetos);
+  }
+
+  // ── páginas que trouxeram gente ────────────────────────────────────────
+  const pgs = document.getElementById('mov-paginas');
+  if (pgs) {
+    const lista = d.top_paginas_7d || [];
+    const nome = p => p === '/' ? 'home'
+      : p.replace('/blog/posts/', 'blog: ').replace('.html', '').replace(/^\//, '');
+    pgs.innerHTML = lista.length ? lista.map(x =>
+      '<div class="flex items-baseline justify-between gap-3">' +
+      '<span class="text-gray-600 truncate" title="' + x.pagina + '">' + nome(x.pagina) + '</span>' +
+      '<span class="font-semibold tabular-nums">' + x.enderecos + '</span></div>').join('')
+      : '<span class="text-gray-400">sem dados ainda</span>';
   }
 
   if (barras) {

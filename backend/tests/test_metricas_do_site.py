@@ -157,7 +157,11 @@ def test_sem_token_o_tick_GRITA_em_vez_de_gravar_zero():
 def test_o_painel_avisa_quando_a_coleta_esta_desligada():
     i = _MAIN.find('@app.get("/api/admin/metricas")')
     assert i > 0, "sumiu a rota do painel"
-    bloco = _MAIN[i:i + 1800]
+    # 🪤 Janela de tamanho fixo reprovou o código CERTO quando a rota cresceu —
+    # quarta vez no mesmo dia. Recorta até a PRÓXIMA rota, que é a fronteira de
+    # verdade.
+    _fim = _MAIN.find(chr(10) + "@app.", i + 10)
+    bloco = _MAIN[i:_fim if _fim > 0 else len(_MAIN)]
     assert "token_configurado" in bloco and "aviso" in bloco, (
         "o painel não diz se a coleta está viva — série parada passaria por "
         "site sem movimento")
@@ -267,6 +271,74 @@ def test_a_tela_diz_que_o_numero_e_TETO_e_nao_pessoas():
     O rodapé da tela tem que desarmar isso pra quem olha."""
     raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     html = io.open(os.path.join(raiz, "admin.html"), encoding="utf-8").read()
+    # 🪤 Mesmo motivo: o bloco cresceu (entraram o funil e as páginas) e a
+    # janela de 900 deixou de alcançar o rodapé. Recorta até o fim da seção.
     i = html.find('id="mov-barras"')
-    assert "teto" in html[i:i + 900].lower(), (
+    _fim = html.find("</section>", i)
+    assert "teto" in html[i:_fim if _fim > 0 else i + 4000].lower(), (
         "sumiu o aviso de que a barra é teto e não contagem de pessoas")
+
+
+# ─────────────────── a FAQ era a 2ª página do site, e era cega ──────────────
+
+def _faq():
+    raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    return io.open(os.path.join(raiz, "faq.html"), encoding="utf-8").read()
+
+
+def test_toda_pergunta_da_FAQ_e_instrumentada():
+    """🎯 29/08/2026. A FAQ é a SEGUNDA página mais vista do site — 76 endereços
+    em 5 dias, contra 38 do melhor post do blog, e ela aparece em 2º lugar em 5
+    dos 6 dias medidos. E era uma CAIXA PRETA: não sabíamos qual pergunta abrem.
+
+    Com o ouvinte delegado que já existe no `aiarq-utils.js`, um atributo por
+    botão transforma a página de maior dúvida do site no melhor instrumento de
+    pesquisa que a gente tem.
+    """
+    import re
+    html = _faq()
+    perguntas = len(re.findall(r'class="faq-toggle', html))
+    marcadas = len(re.findall(r'data-track="faq-[^"]+"[^>]*class="faq-toggle', html))
+    assert perguntas >= 30, "a FAQ encolheu pra %d perguntas?" % perguntas
+    assert marcadas >= perguntas, (
+        "%d de %d perguntas sem data-track — voltamos a não saber o que as "
+        "pessoas procuram" % (perguntas - marcadas, perguntas))
+
+
+def test_os_nomes_dos_eventos_da_FAQ_passam_na_regra_do_backend():
+    """🪤 O `/api/track` só aceita `clique:` + slug `[a-z0-9][a-z0-9-]{0,39}`.
+    Nome fora da regra é descartado com 200 e sem aviso — o instrumento
+    nasceria morto, que é o erro mais repetido desta semana."""
+    import re
+    nomes = re.findall(r'data-track="(faq-[^"]+)"', _faq())
+    assert nomes, "nenhum evento da FAQ"
+    ruins = [n for n in nomes if not re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", n)]
+    assert not ruins, "o backend descartaria calado: %s" % ruins[:5]
+    assert len(set(nomes)) == len(nomes), (
+        "há nomes repetidos — duas perguntas diferentes viram a mesma linha")
+
+
+def test_a_FAQ_tem_UMA_porta_pra_experimentar_no_fim():
+    """🚨 Medido em 29/08: a FAQ não tinha NENHUM link pro cadastro. Só
+    `login.html?novo=1` escondido na navbar e 8 links de e-mail. Quem lê 39
+    perguntas até o fim é o visitante mais qualificado do site, e a página
+    acabava no vazio."""
+    html = _faq()
+    assert "faq-fim-criar-conta" in html, (
+        "sumiu a chamada pra ação do fim da FAQ")
+    i = html.find("faq-fim-criar-conta")
+    assert "login.html?novo=1" in html[i - 400:i + 400], (
+        "o botão do fim não leva pro cadastro")
+
+
+def test_a_promessa_do_CTA_e_a_REAL_e_nao_o_primeiro_gratis():
+    """🔒 REGRA DURA: a promessa pública é grátis ILIMITADO no beta. "1º projeto
+    grátis" já apareceu antes e teve que ser corrigido — não pode voltar por uma
+    caixa de texto nova."""
+    html = _faq()
+    i = html.find("faq-fim-criar-conta")
+    bloco = html[max(0, i - 1500):i + 500].lower()
+    for proibido in ("1º projeto grátis", "primeiro projeto grátis",
+                     "1o projeto gratis", "teste grátis por"):
+        assert proibido not in bloco, "promessa errada no CTA: %r" % proibido
+    assert "beta" in bloco, "o CTA não diz que é grátis no beta"
