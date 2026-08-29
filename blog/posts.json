@@ -203,6 +203,70 @@
       "cta": "Pra montar o quadro sem medir ambiente por ambiente na mão: sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos com as áreas que a prancha permite medir, separadas entre medido e estimado. Grátis durante o beta, quantos projetos quiser, sem cartão."
     },
     {
+      "slug": "financiamento-caixa-construcao-documentos-pci",
+      "title": "Financiamento Caixa pra Construção: Documentos e PCI (2026)",
+      "description": "O que a Caixa pede pra financiar construção: PCI, projeto aprovado, ART/RRT, memorial e cronograma. Da cartilha oficial (dez/2025), com checklist grátis.",
+      "keywords": "financiamento caixa construção, documentos financiamento caixa, PCI caixa, proposta de construção individual, construção em terreno próprio caixa, cronograma caixa, memorial descritivo caixa, PLS caixa",
+      "category": "Documentação",
+      "publish_date": "2026-09-27",
+      "intro": "Quem financia a construção pela Caixa descobre rápido que o banco não pede um documento — pede um conjunto que precisa fechar entre si: formulário próprio, projeto aprovado, responsabilidade técnica, memorial, orçamento e cronograma. Este guia lista o que a cartilha oficial da Caixa (Versão 12, dezembro/2025) exige, com a página de onde cada regra saiu — e um checklist de uma folha pra você conferir antes de protocolar.",
+      "downloads": [
+        {
+          "file": "checklist-financiamento-construcao-caixa.pdf",
+          "kind": "PDF",
+          "label": "Checklist do financiamento (imprimível)",
+          "hint": "1 página A4, com a fonte de cada exigência · 4 KB"
+        }
+      ],
+      "sections": [
+        {
+          "h2": "Baixe o checklist",
+          "body": "Uma folha A4 com tudo que este post detalha, em caixas de marcação — e cada exigência conferida na cartilha oficial antes de entrar na lista. Sem cadastro, sem captura de email.\n\n<DOWNLOAD_BUTTONS>\n\nOs formulários oficiais (PCI e companhia) são da Caixa e ficam no site dela — o lugar certo pra baixar é a página <a href=\"https://www.caixa.gov.br/voce/habitacao/construcao/Paginas/default.aspx\" rel=\"noopener\" target=\"_blank\">Financiamento para Construção</a>, seção Formulários e Documentos. A <a href=\"https://www.caixa.gov.br/Downloads/habitacao-documentos-gerais/cartilha-habitacao-PF-construcao-conclusao-reforma-ampliacao-de-unidades-habitacionais.pdf\" rel=\"noopener\" target=\"_blank\">cartilha completa (PDF, 67 páginas)</a> também é pública e vale a leitura do seu responsável técnico."
+        },
+        {
+          "h2": "As três regras de ouro da proposta",
+          "body": "Antes de qualquer lista, a cartilha abre com três condições que valem pra tudo:\n\n1. Proposta completa: todos os documentos exigidos entregues juntos.\n2. Coerência: as informações de cada documento precisam bater entre si — projeto, memorial, orçamento e cronograma contando a mesma história.\n3. Assinaturas: cliente e responsável técnico pela execução assinam nos locais indicados.\n\nA segunda é onde as propostas tropeçam. Área que diverge entre planta e memorial, orçamento que não bate com o cronograma — qualquer inconsistência trava a análise."
+        },
+        {
+          "h2": "Os formulários: PCI, PLS e as abas irmãs",
+          "body": "O formulário central é a PCI — Proposta de Construção Individual, preenchida por completo e assinada pelo cliente E pelo responsável técnico da execução. Pra reforma, o equivalente é a PRM (Proposta de Reforma e Melhoria).\n\nNo mesmo arquivo da PCI vêm, em abas próprias:\n\n- PLS — Planilha de Levantamento de Serviços, onde o responsável técnico informa os percentuais de evolução da obra por etapa;\n- Proposta de Repactuação de Prazo de Construção;\n- Proposta de Alteração de Projetos/Especificações.\n\nA PLS é, na prática, um levantamento de serviços e quantidades da obra — o mesmo exercício de um <a href=\"/blog/posts/como-fazer-planilha-de-quantitativos-de-obra.html\">quantitativo bem feito</a>: saber o que vai ser executado, etapa por etapa, antes de assinar."
+        },
+        {
+          "h2": "Projeto aprovado, responsabilidade técnica e alvará",
+          "body": "- Projeto Legal aprovado pela Prefeitura (ou órgão competente), apresentado em formato digital, como PDF. Se o seu município usa aprovação simplificada, a cartilha manda juntar desenhos técnicos suficientes pra compreensão da proposta: plantas baixas, cortes e fachadas.\n- Responsável técnico com inscrição no CREA, CAU ou CFT/CRT, e os documentos de responsabilidade — ART (engenheiro), RRT (arquiteto) ou TRT (técnico) — tanto da elaboração dos projetos quanto da execução da obra.\n- Alvará ou Licença de construção: recomendável já na análise da proposta e obrigatório pra liberação das parcelas de obra.\n\nUm detalhe que a cartilha faz questão de registrar: o profissional é escolhido e contratado por você, sem interferência da Caixa — e é ele quem responde legal e tecnicamente pela obra."
+        },
+        {
+          "h2": "O trio que o responsável técnico assina",
+          "body": "A frase mais importante da cartilha pra quem projeta está na página 13: o profissional contratado responde pelo <strong>projeto — desenhos técnicos, memorial descritivo, orçamento e cronograma</strong> —, pela gestão e execução da obra.\n\nÉ exatamente o pacote de documentos derivados do projeto:\n\n- O <a href=\"/blog/posts/memorial-descritivo-de-obra-modelo-pdf-docx.html\">memorial descritivo</a> descreve materiais e sistemas construtivos — temos modelo gratuito em PDF e Word.\n- O <a href=\"/blog/posts/cronograma-fisico-financeiro-obra-modelo.html\">cronograma físico-financeiro</a> distribui a obra no tempo — modelo em Excel com curva S e medição.\n- O orçamento nasce do levantamento de quantidades — o <a href=\"/blog/posts/como-fazer-planilha-de-quantitativos-de-obra.html\">quantitativo</a> é a base que os outros dois consomem.\n\nOs três precisam contar a mesma história (regra de ouro nº 2): se o memorial diz porcelanato e o orçamento cota cerâmica, a inconsistência aparece na análise."
+        },
+        {
+          "h2": "As regras do cronograma que reprovam proposta",
+          "body": "O cronograma tem regras duras na cartilha:\n\n- Prazo contratual de até 24 meses, contando a partir de 30 dias após a contratação.\n- A última etapa precisa ter no mínimo 5% da evolução da obra — é a parcela que a Caixa segura até o fim.\n- Obra já iniciada? O percentual pré-executado entra como Etapa 0, com descrição dos serviços existentes.\n- O próprio formulário emite alertas se o prazo proposto fugir do usual pra obras semelhantes — e aí exige justificativa técnica.\n\nE um conselho da própria cartilha que assinamos embaixo: cronograma com prazo curto demais resulta em atraso, repactuação e transtorno. Realista ganha de otimista."
+        },
+        {
+          "h2": "Depois de contratado: o que ainda pode travar",
+          "body": "- Alterou projeto, orçamento ou especificações? A Caixa precisa ser comunicada ANTES da execução, pela Proposta de Alteração de Projetos/Especificações. A cartilha recomenda apresentar antes de a obra atingir 30% — depois disso, custa mais caro e pode travar parcela.\n- A liberação de cada parcela depende de comprovação dos serviços executados, e o alvará vigente é obrigatório nessa fase.\n- Trocou o responsável técnico no meio da obra? Comunicação à Caixa com os documentos comprobatórios."
+        },
+        {
+          "h2": "Baixe de novo e boa obra",
+          "body": "O checklist de novo, pra não rolar a página:\n\n<DOWNLOAD_BUTTONS>\n\nEste guia foi escrito com a cartilha Versão 12 (dezembro/2025) aberta do lado — mas cartilha muda: antes de protocolar, confira a versão vigente no site da Caixa e a lista da sua agência. Quem responde pela proposta é você e o seu responsável técnico."
+        }
+      ],
+      "sources": [
+        {
+          "type": "ref",
+          "title": "CAIXA — Cartilha Habitação PF: Construção, Conclusão, Reforma e Ampliação de Unidades Habitacionais Isoladas (Versão 12, dez/2025)",
+          "description": "Documento oficial da Caixa Econômica Federal para clientes e responsáveis técnicos. Todas as exigências citadas neste post têm página de origem na cartilha. https://www.caixa.gov.br/Downloads/habitacao-documentos-gerais/cartilha-habitacao-PF-construcao-conclusao-reforma-ampliacao-de-unidades-habitacionais.pdf"
+        },
+        {
+          "type": "ref",
+          "title": "CAIXA — Financiamento para Construção (página oficial)",
+          "description": "Página com os formulários PCI/PRM/PLS pra download e a documentação necessária. https://www.caixa.gov.br/voce/habitacao/construcao/Paginas/default.aspx"
+        }
+      ],
+      "cta": "A PLS pede o que todo financiamento pede: saber as quantidades da obra antes de assinar. Sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, separando o que foi medido do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
+    },
+    {
       "slug": "como-fazer-planilha-de-quantitativos-de-obra",
       "title": "Como Fazer Planilha de Quantitativos de Obra: Passo a Passo Completo (2026)",
       "description": "Tutorial completo de como fazer planilha de quantitativos de obra usando SINAPI 2026: estrutura, disciplinas, unidades, memória de cálculo e exemplos práticos.",
@@ -2061,7 +2125,7 @@
       "description": "A faculdade ensina escrever o memorial e depois extrair a planilha. Na prática o inverso funciona melhor: levante o quantitativo e escreva em cima dele.",
       "keywords": "memorial descritivo quantitativo, como escrever memorial descritivo, memorial descritivo arquitetura, memorial descritivo obra residencial, NBR 13531, NBR 13532, NBR 15575",
       "category": "Documentação",
-      "publish_date": "2026-09-27",
+      "publish_date": "2026-10-25",
       "intro": "Na faculdade, o roteiro é claro: primeiro o arquiteto escreve o memorial descritivo, depois o orçamentista extrai a planilha de quantitativos a partir dele. Faz sentido na cabeça do professor, porque o texto vem antes do número. Só que, no canteiro real, esse fluxo cria um problema crônico: memorial e planilha sempre brigam. O memorial fala em piso porcelanato sem citar metragem, a planilha lista a metragem sem citar marca, e o analista do banco devolve o projeto pedindo coerência. Esse texto defende o caminho inverso, que muitos arquitetos experientes já fazem na prática: levantar o quantitativo da planta primeiro, e só depois redigir o memorial em cima da planilha. A norma ABNT NBR 16636-1:2017 não fixa essa ordem — é convenção de ensino, não regra técnica.",
       "sections": [
         {
