@@ -18192,7 +18192,13 @@ async def track_event(payload: TrackPayload, request: Request):
         for _k, _limpa, _teto in (
                 ("motivo", r"[^a-z0-9_-]", 40),
                 ("formato", r"[^a-z0-9_-]", 20)):
-            _s = _re_track.sub(_limpa, str(payload.meta.get(_k) or "").lower())[:_teto]
+            # 🩸 29/08: esta linha ficou 29 HORAS derrubando a rota inteira.
+            # `re.sub` pede TRÊS argumentos (padrão, substituição, texto) e eu
+            # passei dois — TypeError em TODO POST, 500 pra todo evento de todo
+            # visitante. pyflakes não pega argumento faltando, e os guardas
+            # deste arquivo liam o FONTE em vez de CHAMAR a rota. O teste que
+            # faltava (test_track_event_roda_de_verdade) agora chama.
+            _s = _re_track.sub(_limpa, "", str(payload.meta.get(_k) or "").lower())[:_teto]
             if _s:
                 _meta[_k] = _s
         _rot = _re_track.sub(r"[^0-9A-Za-zÀ-ÿ ._-]", "",
