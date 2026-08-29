@@ -1007,7 +1007,36 @@ _PROVA_GEOMETRIA = (
     "hachura", "insert", "contagem de blocos", "polilinha", "polyline",
     "comprimento do layer", "comprimento total do layer", "somatória de linhas",
     "somatoria de linhas", "área hachurada", "area hachurada",
+    # 🚨 29/08/2026 — FALTAVAM TRÊS, e o guarda acusava medição de verdade.
+    #
+    # Achado ao conferir os 81 que a rota `/api/admin/selo-historico` aponta:
+    # "Condutos no teto — Fonte: layer 'EL-Condutos (Teto)' = 9,92 m" estava na
+    # lista de acusados. Isso é comprimento de layer, é geometria pura.
+    #
+    # 🔑 Os nomes abaixo são os TÍTULOS DAS SEÇÕES que o próprio extrator
+    # escreve no prompt (dwg_extractor.py:327, :345, :419) — é literalmente o
+    # texto que a IA copia quando cita a fonte. Guarda que não conhece o
+    # vocabulário do próprio motor acusa o motor de inventar.
+    #
+    # 🪤 Guarda que acusa errado é ignorado, e aí para de proteger. O custo do
+    # falso positivo aqui não é teórico: 81 itens de 21 clientes dependem deste
+    # número pra virar (ou não) uma decisão de rebaixamento retroativo.
+    "comprimentos por layer", "atributo de bloco", "atributos do bloco",
+    "atributos de bloco",
 )
+
+# 🪤 "layer" sozinho NÃO serve como prova: "Fonte: texto layer 'ARQ-TEXTO 1'"
+# é justamente o caso de 24/08 que criou este guarda. O que prova é a forma
+# de MEDIÇÃO — layer seguido de um valor com unidade:
+#     "layer 'EL-Condutos (Teto)' = 9.92 m"     → mediu
+#     "texto layer 'ARQ-TEXTO 1': 'AREA = ...'"  → leu texto
+# 🪤 `re` NÃO existe com esse nome aqui — o módulo usa `import re as _re`.
+# Escrevi `re.compile` e o pyflakes barrou. Mesma família do `re.sub` sem import
+# que derrubou o deploy em 21/08 e criou a regra de rodar pyflakes antes do
+# push. Terceira aparição do mesmo erro; a regra pegou nas três.
+_PROVA_LAYER_MEDIDO = _re.compile(
+    r"(?<!texto\s)layer\s*['\"‘’][^'\"‘’]{1,60}['\"‘’]\s*=\s*[\d.,]+\s*(m²|m2|m³|m3|ml|m\b|un\b)",
+    _re.IGNORECASE)
 
 # Procedências que são LEITURA DE TEXTO — legítimas como estimativa, nunca como
 # medição. O projetista escreveu um número na prancha; a gente não mediu nada.
@@ -1090,6 +1119,8 @@ def selos_sem_geometria(items):
             continue                     # sem procedência escrita: não acusa
         if any(p in obs for p in _PROVA_GEOMETRIA):
             continue                     # mediu de verdade
+        if _PROVA_LAYER_MEDIDO.search(obs):
+            continue                     # "layer 'X' = 9,92 m" é medição
         # ⚖️ Quadro de aço: tabela com colunas rotuladas, conferida contra a NBR
         # e contra o total da prancha. Ver o comentário longo em _QUADRO_DE_ACO.
         if any(p in obs for p in _QUADRO_DE_ACO):

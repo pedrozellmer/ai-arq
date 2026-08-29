@@ -325,3 +325,52 @@ def test_o_caminho_FELIZ_nao_ganhou_aviso_nenhum():
     trecho_ok = corpo[i_ok:i_falha]
     assert "project_data.warnings" not in trecho_ok, (
         "o caminho de sucesso passou a acrescentar aviso de falha")
+
+
+# ── o guarda precisa conhecer o vocabulário do próprio motor ─────────────────
+
+def test_COMPRIMENTO_de_layer_com_valor_e_MEDICAO_nao_texto():
+    """🚨 29/08/2026 — falso positivo achado ao conferir os 81 acusados.
+
+    "Condutos no teto — Fonte: layer 'EL-Condutos (Teto)' = 9,92 m" estava na
+    lista de rebaixamento. Isso é comprimento de layer: geometria pura.
+
+    🪤 Guarda que acusa errado é ignorado, e aí para de proteger. O custo aqui
+    não é teórico: 81 itens de 21 clientes dependem desse número pra virar (ou
+    não) uma decisão de rebaixamento retroativo.
+    """
+    assert not selos_sem_geometria(
+        [_it("Fonte: layer 'EL-Condutos (Teto)' = 9.92 m (único significativo)")])
+    assert not selos_sem_geometria(
+        [_it("Fonte: layer 'F-FURO-PAREDE' = 10,43 m (COMPRIMENTOS POR LAYER)")])
+
+
+def test_TEXTO_layer_continua_sendo_acusado():
+    """🔒 O contraste que decide, e é uma palavra de diferença:
+        "layer 'X' = 9,92 m"          → mediu    (absolve)
+        "texto layer 'X': 'AREA=...'" → leu      (acusa)
+    O segundo é literalmente o caso que criou este guarda em 24/08."""
+    assert selos_sem_geometria([_it(
+        "Fonte: texto layer 'ARQ-TEXTO 1': 'AREA TOTAL CLINICA = 264,54 m²'")]), (
+        "o caso original de 24/08 deixou de ser acusado — a exceção do "
+        "comprimento de layer vazou pra leitura de texto")
+
+
+def test_ATRIBUTO_de_bloco_e_dado_estruturado_do_projetista():
+    """Atributo é campo que o projetista preencheu DENTRO do bloco — o arquivo
+    diz o que o valor é, como no quadro de aço. Não é frase solta."""
+    assert not selos_sem_geometria(
+        [_it("Fonte: atributo de bloco EL_IND_QUADRO com TAG=QFAC-OL")])
+
+
+def test_CONTROLE_POSITIVO_o_guarda_ainda_acusa_o_que_deve():
+    """🧪 Depois de alargar a lista de provas três vezes, o risco é ter virado
+    peneira. Os quatro casos que TÊM que continuar reprovando."""
+    for obs in (
+        "Fonte: texto layer 'ARQ-TEXTO 1': 'AREA TOTAL CLINICA = 264,54 m²'",
+        "Conforme legenda código 06 — área APROXIMADA explícita",
+        "Fonte: texto G-ANNO-TEXT: 'REGULARIZAÇÃO DE LAJE - Á= 1.177,70m²'",
+        "Fonte: tabela de ambientes da prancha — área 264,54 m²",
+    ):
+        assert selos_sem_geometria([_it(obs)]), (
+            "deixou de acusar, o guarda virou peneira: %r" % obs[:60])
