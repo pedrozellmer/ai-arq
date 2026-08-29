@@ -89,6 +89,14 @@ def _num(s) -> float | None:
     if s is None:
         return None
     s = str(s).strip().replace(" ", " ").replace(" ", "")
+    # 🚨 29/08/2026 — "685 kgf" virava None e o TOTAL do quadro sumia.
+    # No quadro da Eduarda o valor vem com a unidade colada ("131 kgf",
+    # "685 kgf"). Aceitar sufixo de UNIDADE é diferente de aceitar texto livre:
+    # continua exigindo número puro, só tolera a unidade no fim.
+    # 🪤 A lista é fechada de propósito. `_num_in_text` (que pega o 1º número de
+    # qualquer texto) existe pro caso solto — usá-lo aqui faria "Viga 3" virar 3
+    # e encher a tabela de lixo.
+    s = re.sub(r"\s*(kgf|kg|mm|cm|m|un)\.?$", "", s, flags=re.IGNORECASE).strip()
     if not s or not re.fullmatch(r"-?[\d.,]+", s):
         return None
     last_dot = s.rfind(".")
@@ -149,7 +157,16 @@ def layer_is_pilar(layer_name: str) -> bool:
 _DIA_RE = re.compile(r"(?:ø|Ø|φ|Φ|%%[cC]|\bfi\b)\s*(\d{1,2}(?:[.,]\d{1,2})?)", re.IGNORECASE)
 _PESO_HDR_RE = re.compile(r"\bpeso\b", re.IGNORECASE)
 _COMP_HDR_RE = re.compile(r"\bcomp|c\.?\s*total|comprimento", re.IGNORECASE)
-_BITOLA_HDR_RE = re.compile(r"bitola|di[âa]m|\bø\b|\bfi\b|gauge", re.IGNORECASE)
+# 🚨 29/08/2026 — "BIT" NÃO CASAVA, E ISSO SOZINHO ZERAVA A PLANILHA.
+# Caso Eduarda (job 42c354a1): a coluna do quadro dela se chama "BIT",
+# abreviada. Sem casar, `bitola_x` fica None, TODA linha de dados é pulada, o
+# quadro sai vazio e `parse_steel_table` devolve None — o quadro nunca chega ao
+# prompt e a planilha inteira sai laranja. Seis linhas perfeitas (conferidas
+# uma a uma contra a NBR 7480) perdidas por três letras.
+# 🪤 `\bbit\b` com borda de palavra: sem a borda, "arbitrário" e "bitmap"
+# passariam a casar e qualquer texto viraria cabeçalho de bitola.
+_BITOLA_HDR_RE = re.compile(r"bitola|\bbit\b|di[âa]m\.?|\bø\b|\bfi\b|gauge",
+                            re.IGNORECASE)
 _TOTAL_ROW_RE = re.compile(r"^\s*(?:peso\s+)?tota[l]\b", re.IGNORECASE)
 _CA_RE = re.compile(r"\bCA[-\s]?\.?\s?(25|50|60)\b", re.IGNORECASE)
 _KG_PER_M_RE = re.compile(r"kg\s*/\s*m", re.IGNORECASE)
@@ -235,7 +252,25 @@ def parse_steel_table(texts) -> dict | None:
     header_idxs = []
     for i, r in enumerate(rows):
         for c in r["cells"]:
-            if _PESO_HDR_RE.search(c[0]) and not _KG_PER_M_RE.search(c[0]):
+            # 🚨 29/08/2026 — "PESO TOTAL" É LINHA DE TOTAL, NÃO CABEÇALHO.
+            #
+            # Caso Eduarda (job 42c354a1). O rodapé do quadro dela é
+            # "Peso Total 50 = 685 kgf" — e como contém a palavra *peso*, virava
+            # um CABEÇALHO de quadro novo. Dois estragos de uma vez:
+            #
+            #  1. o TOTAL declarado nunca era lido (tinha virado cabeçalho), e a
+            #     conferência soma-vs-total ficava sem termo de comparação;
+            #  2. pior: esse "quadro" fantasma era o ÚLTIMO da prancha, e o
+            #     último não tem limite embaixo — então suas "linhas de dados"
+            #     varriam o desenho INTEIRO. Medido no arquivo dela: 1.728
+            #     textos abaixo, 118 deles marcações de ferro (`%%c 5`,
+            #     `2 %%c 12.5`) espalhadas pela planta. Cada uma virava linha da
+            #     tabela, reprovava na massa linear, era descartada — e uma
+            #     descartada marca o quadro inteiro como não-confiável.
+            #
+            # 🩸 Seis linhas perfeitas dela viraram laranja por causa disto.
+            if (_PESO_HDR_RE.search(c[0]) and not _KG_PER_M_RE.search(c[0])
+                    and not _TOTAL_ROW_RE.match(c[0])):
                 header_idxs.append(i)
                 break
 
@@ -269,12 +304,69 @@ def parse_steel_table(texts) -> dict | None:
             anchors.append(("bitola", bitola_x))
         anchors.extend(outros)
 
+        # 🚨 29/08/2026 — O QUADRO NÃO TINHA BORDA E ENGOLIA A PRANCHA INTEIRA.
+        #
+        # Caso Eduarda (job 42c354a1, prancha 0653-KZ-EST-PE-1052). O quadro dela
+        # é PERFEITO — conferi as 6 linhas contra a NBR 7480, uma por uma:
+        #     Ø5,0   852 m × 0,154 = 131,2   quadro diz 131   ✓
+        #     Ø6,3   206 m × 0,245 =  50,5   quadro diz  50   ✓
+        #     Ø8,0   157 m × 0,395 =  62,0   quadro diz  62   ✓
+        #     Ø10    123 m × 0,617 =  75,9   quadro diz  76   ✓
+        #     Ø12,5  409 m × 0,963 = 393,9   quadro diz 394   ✓
+        #     Ø16     65 m × 1,578 = 102,6   quadro diz 103   ✓
+        # E mesmo assim a planilha dela saiu com ZERO medido.
+        #
+        # 🔑 A CAUSA: o último cabeçalho da prancha usava `y_min = -infinito`, ou
+        # seja, as "linhas de dados" do quadro iam até o fim do desenho. Medido
+        # nessa prancha: o desenho vai de y=82 a y=-227, o quadro fica em y≈60, e
+        # abaixo dele havia **1.728 textos**, com **118 marcações de ferro**
+        # (`%%c 5`, `2 %%c 12.5`) espalhadas pela planta — a até 94 unidades de
+        # distância horizontal do quadro.
+        #
+        # Cada marcação dessas virava candidata a linha da tabela. E a escolha de
+        # coluna era `min(anchors, key=distância)` SEM TETO: um ferro desenhado no
+        # meio da planta sempre "pertencia" a alguma coluna, por mais longe que
+        # estivesse. Os números dele entravam como peso e comprimento, a
+        # conferência de massa linear reprovava, a linha era descartada — e uma
+        # linha descartada marca o QUADRO INTEIRO como não-confiável.
+        #
+        # 🩸 Seis linhas certas indo pro laranja por causa de um ferro desenhado
+        # a 94 unidades de distância.
+        #
+        # 🔧 A BORDA: a tabela tem a largura das colunas dela. `passo` é o vão
+        # típico entre colunas; sobra um passo de folga de cada lado pra caber
+        # célula desalinhada do próprio quadro, e só. Fora disso não é linha
+        # desta tabela — é desenho.
+        _axs = sorted(ax for _n, ax in anchors)
+        if len(_axs) >= 2:
+            _vaos = [b - a for a, b in zip(_axs, _axs[1:]) if b > a]
+            _passo = median(_vaos) if _vaos else (_axs[-1] - _axs[0])
+        else:
+            _passo = 0.0
+        _passo = max(_passo, 1e-9)
+        _x_ini, _x_fim = _axs[0] - _passo, _axs[-1] + _passo
+
+        def _dentro_do_quadro(cells):
+            """A linha pertence a ESTA tabela? Julga pela célula mais próxima."""
+            return any(_x_ini <= c[1] <= _x_fim for c in cells)
+
         # linhas de dados deste quadro: abaixo do cabeçalho, até o próximo
         y_min = rows[header_idxs[hi_pos + 1]]["y"] if hi_pos + 1 < len(header_idxs) else -math.inf
+        # 🪤 Parada vertical: depois do quadro vem o desenho. Sem isto, o último
+        # cabeçalho da prancha continuaria varrendo até o fim do papel — só que
+        # agora filtrando por x, o que ainda deixaria passar o que estivesse
+        # alinhado com as colunas por coincidência.
+        _fora_seguidas = 0
         for r in rows[hi + 1:]:
             if r["y"] <= y_min:
                 break
-            row_cells = r["cells"]
+            if not _dentro_do_quadro(r["cells"]):
+                _fora_seguidas += 1
+                if _fora_seguidas >= 3:
+                    break
+                continue
+            _fora_seguidas = 0
+            row_cells = [c for c in r["cells"] if _x_ini <= c[1] <= _x_fim]
             row_text = " ".join(c[0] for c in row_cells)
             # bitola da linha: prefixo ø explícito, ou número puro na coluna BITOLA
             bitola = None

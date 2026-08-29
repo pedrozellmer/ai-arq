@@ -207,3 +207,141 @@ def test_CONTROLE_o_aviso_explica_o_que_foi_feito():
              _quadro("RESUMO GERAL", 20, RESUMO))
     assert any("RESUMO GERAL" in a for a in r["avisos"]), (
         "não avisou que descartou os quadros individuais: %s" % r["avisos"])
+
+
+# ───────── o quadro tem BORDA: o desenho em volta não é linha da tabela ──────
+
+# 🚨 29/08/2026 — CASO EDUARDA, e é o mais caro dos dois.
+#
+# O quadro dela é PERFEITO. Conferi as 6 linhas contra a NBR 7480 uma por uma
+# (852 m × 0,154 = 131,2 e o quadro diz 131; e assim as seis). A planilha saiu
+# com ZERO medido mesmo assim.
+#
+# 🔑 O último cabeçalho da prancha usava `y_min = -infinito`: as "linhas de
+# dados" do quadro iam até o fim do desenho. Medido no arquivo real
+# (0653-KZ-EST-PE-1052): o desenho vai de y=82 a y=-227, o quadro fica em y≈60,
+# e abaixo dele há 1.728 textos — 118 deles marcações de ferro (`%%c 5`,
+# `2 %%c 12.5`) espalhadas pela planta, a até 94 unidades do quadro.
+#
+# A escolha de coluna era `min(anchors, key=distância)` SEM TETO. Um ferro
+# desenhado no meio da planta sempre "pertencia" a alguma coluna. Os números
+# dele viravam peso e comprimento, a massa linear reprovava, a linha era
+# descartada — e uma descartada marca o quadro INTEIRO como não-confiável.
+#
+# 🩸 Seis linhas certas viraram laranja por causa de um ferro a 94 unidades.
+
+# O quadro real da Eduarda, com as posições do DXF dela.
+_QUADRO_EDUARDA = [
+    ("AÇO", 102.12, 60.08), ("BIT", 104.23, 60.08),
+    ("COMPR", 106.21, 60.08), ("PESO", 109.84, 60.08),
+    ("mm", 104.55, 59.60), ("m", 106.92, 59.65), ("kgf", 110.30, 59.65),
+    ("60", 101.56, 59.27), ("5", 103.73, 59.28), ("852", 105.97, 59.27), ("131", 109.82, 59.27),
+    ("50", 101.56, 58.92), ("6.3", 103.73, 58.93), ("206", 105.97, 58.92), ("50", 109.82, 58.92),
+    ("50", 101.56, 58.57), ("8", 103.73, 58.58), ("157", 105.97, 58.57), ("62", 109.82, 58.57),
+    ("50", 101.56, 58.22), ("10", 103.73, 58.23), ("123", 105.97, 58.22), ("76", 109.82, 58.22),
+    ("50", 101.56, 57.87), ("12.5", 103.73, 57.88), ("409", 105.97, 57.87), ("394", 109.82, 57.87),
+    ("50", 101.56, 57.52), ("16", 103.73, 57.53), ("65", 105.97, 57.52), ("103", 109.82, 57.52),
+    # 🪤 A prancha dela declara DOIS totais, um por classe de aço — e o valor vem
+    # com a unidade colada. Era o `_num("685 kgf") -> None` que fazia o total
+    # sumir. A 1ª versão deste fixture esqueceu estas duas linhas e eu quase
+    # tomei o `total_kg=None` resultante como bug do motor: era buraco do teste.
+    ("Peso Total         60 =", 101.19, 57.10), ("131 kgf", 108.56, 57.10),
+    ("Peso Total         50 =", 101.19, 56.66), ("685 kgf", 108.56, 56.66),
+]
+# As marcações de ferro DESENHADAS na planta, longe do quadro — como no arquivo.
+_FERROS_NA_PLANTA = [
+    ("%%c 5", 32.0, 51.0), ("13", 29.9, 52.8), ("74", 29.7, 51.0), ("1", 30.6, 51.2),
+    ("%%c 5", 38.0, 54.0), ("24", 36.5, 53.6), ("13", 36.7, 54.4),
+    ("2 %%c 12.5", 43.0, 46.0), ("114", 45.5, 51.7), ("6", 46.3, 52.0),
+    ("%%c 10", 55.0, -30.0), ("308", 57.0, -30.0),
+    ("%%c 16", 20.0, -150.0), ("1250", 22.0, -150.0),
+]
+
+
+def _texto(tuplas):
+    return [_T(t, x, y, 0.20) for t, x, y in tuplas]
+
+
+def test_o_quadro_da_EDUARDA_sozinho_e_lido_e_confiavel():
+    """📌 Controle: sem a planta em volta, o quadro dela sempre funcionou.
+    É isso que prova que o problema é o CONTEXTO, não a tabela."""
+    r = parse_steel_table(_texto(_QUADRO_EDUARDA))
+    assert r is not None, "não reconheceu o quadro dela"
+    assert r["confiavel"] is True, r["avisos"]
+    assert _soma(r) == 816.0, (
+        "leu %.2f kg; o quadro dela soma 131+50+62+76+394+103 = 816" % _soma(r))
+
+
+def test_FERRO_DESENHADO_NA_PLANTA_nao_derruba_o_quadro():
+    """🚨 O caso Eduarda. Mesmo quadro, agora com a planta em volta — que é
+    como o arquivo dela realmente é. Antes deste conserto: tudo [REFERÊNCIA]."""
+    r = parse_steel_table(_texto(_QUADRO_EDUARDA + _FERROS_NA_PLANTA))
+    assert r is not None, "não reconheceu o quadro"
+    assert r["confiavel"] is True, (
+        "o desenho em volta derrubou o quadro de novo — a planilha dela volta a "
+        "sair 100%% laranja. Avisos: %s" % r["avisos"])
+    assert _soma(r) == 816.0, (
+        "leu %.2f kg em vez de 816 — número de ferro da planta entrou na tabela"
+        % _soma(r))
+
+
+def test_a_borda_nao_e_tao_apertada_que_corte_o_proprio_quadro():
+    """🧪 O erro simétrico: borda estreita demais jogaria fora célula
+    desalinhada do próprio quadro, e aí o quadro sairia INCOMPLETO — que é pior
+    que sair laranja, porque sai com número menor parecendo certo."""
+    torto = [(t, x + (0.9 if t in ("131", "394") else 0.0), y)
+             for t, x, y in _QUADRO_EDUARDA]
+    r = parse_steel_table(_texto(torto))
+    assert _soma(r) == 816.0, (
+        "célula levemente desalinhada foi cortada: leu %.2f de 816" % _soma(r))
+
+
+def test_CONTROLE_POSITIVO_a_sabotagem_da_borda_reprova():
+    """🧪 Sem isto eu não saberia se o teste acima passa pelo motivo certo.
+    Empurra um ferro da planta PARA DENTRO da faixa de colunas: aí ele é
+    indistinguível de linha do quadro e TEM que estragar."""
+    # 🪤 A 1ª versão punha o intruso em y=57,2, que fica a 0,10 da linha
+    # "Peso Total" (y=57,10). O agrupamento por linha usa tolerância de 0,15 —
+    # os dois viravam a MESMA linha, e o intruso era lido como total, não como
+    # dado. O teste falhava por colisão de fixture, não por defeito do código.
+    # y=58,75 fica a 0,18 e 0,17 dos vizinhos: linha própria.
+    intruso = _QUADRO_EDUARDA + [("%%c 5", 104.2, 58.75), ("9999", 109.8, 58.75)]
+    r = parse_steel_table(_texto(intruso))
+    assert not (r["confiavel"] and _soma(r) == 816.0), (
+        "um intruso DENTRO das colunas passou despercebido — a borda virou "
+        "peneira e o teste de cima estava passando por sorte. Leu %.0f kg"
+        % _soma(r))
+
+
+def test_PESO_TOTAL_e_linha_de_total_e_NAO_cabecalho_de_quadro_novo():
+    """🚨 O conserto que a sabotagem revelou estar DESCOBERTO.
+
+    O rodapé do quadro da Eduarda é "Peso Total 50 = 685 kgf". Como contém a
+    palavra *peso*, o detector de cabeçalho o tratava como início de um QUADRO
+    NOVO. Dois estragos de uma vez:
+
+      1. o total declarado nunca era lido (virou cabeçalho);
+      2. esse quadro fantasma era o ÚLTIMO da prancha — e o último não tem
+         limite embaixo, então varria o desenho inteiro atrás de "linhas".
+
+    🪤 Escrevi quatro testes achando que cobriam isto e a sabotagem provou que
+    NÃO cobriam: com o filtro de borda em pé, os ferros da planta já ficavam de
+    fora, então desfazer este conserto não mudava nada nos outros testes. O que
+    denuncia é o TOTAL — e nenhum teste olhava pra ele.
+    """
+    r = parse_steel_table(_texto(_QUADRO_EDUARDA))
+    assert r["total_kg"] == 816.0, (
+        "o TOTAL declarado veio %s. As duas linhas 'Peso Total' voltaram a ser "
+        "lidas como cabeçalho de quadro novo — e aí o último 'quadro' varre a "
+        "prancha inteira." % r["total_kg"])
+    assert r["n_quadros"] == 1, (
+        "achou %s quadros numa prancha que tem UM. Cada 'Peso Total' virou um "
+        "quadro fantasma." % r["n_quadros"])
+
+
+def test_e_a_soma_das_bitolas_BATE_com_o_total_declarado():
+    """📌 O fecho: 131+50+62+76+394+103 = 816, e a prancha declara 131+685=816.
+    Quando os dois batem, o quadro é confiável e o aço sai MEDIDO."""
+    r = parse_steel_table(_texto(_QUADRO_EDUARDA))
+    assert _soma(r) == r["total_kg"] == 816.0
+    assert r["confiavel"] is True, r["avisos"]
