@@ -9194,9 +9194,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     "arquitetura, reprocesse escolhendo 'Ler como Arquitetura' pra "
                     "aproveitar o que ele tem." + _dica_pd
                 ]
+                # 🪤 29/08: sem severity caía no default "error" — mas isto é o
+                # sistema FUNCIONANDO (aviso emitido, condição esperada de planta
+                # sem quadro de ferros). Erro de verdade no painel é outra coisa.
                 _log_error("motor:estrutura-sem-medida",
                            f"itens={len(all_items)} por_indice={_n_indice} "
-                           f"confirmados=0 — aviso de pré-dimensionamento emitido", job_id)
+                           f"confirmados=0 — aviso de pré-dimensionamento emitido", job_id,
+                           severity="info")
 
         # ── HONESTIDADE DE ÁREA (regra dura nº1) — helper _apply_area_honesty ──
         # Vision (PDF) às vezes CHUTA metragem numa planta sem cota ("Forro Sala 52 m²")
@@ -9681,9 +9685,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
             try:
                 _carimbar_spec(all_items)
                 generate_spreadsheet(project_data, all_items, output_path, typology=typology)
+                # 🪤 29/08: default era "error" pro caminho de SUCESSO — o de
+                # falha logo abaixo é que merece grito (e já grita: critical).
                 _log_error("motor:planilha-refeita",
                            "planilha REFEITA antes do carimbo: " + " | ".join(_refazer_planilha),
-                           job_id)
+                           job_id, severity="info")
             except Exception as _ers:
                 # Não é fatal: banco e tela já têm a verdade. Mas o cliente vai
                 # baixar um arquivo defasado, então isso GRITA.
