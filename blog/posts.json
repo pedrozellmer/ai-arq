@@ -138,6 +138,71 @@
       ]
     },
     {
+      "slug": "quadro-de-areas-modelo-excel-nbr-12721",
+      "title": "Quadro de Áreas: Modelo em Excel + Como Montar (NBR 12721)",
+      "description": "Planilha modelo de quadro de áreas grátis em Excel: áreas por pavimento, privativa × comum e área equivalente (NBR 12721), com conferência automática das somas.",
+      "keywords": "quadro de áreas, modelo quadro de áreas, planilha quadro de áreas excel, área construída, área privativa, área equivalente, NBR 12721, área real",
+      "category": "Documentação",
+      "publish_date": "2026-09-20",
+      "intro": "Todo projeto que vai pra prefeitura, cartório ou banco carrega um quadro de áreas — e é um dos documentos que mais voltam por inconsistência: a planta diz uma coisa, o memorial outra, o quadro uma terceira. Este post entrega uma planilha modelo estrutural em Excel, explica os conceitos de área que a ABNT NBR 12721:2006 define e mostra a conferência que evita a recusa.",
+      "downloads": [
+        {
+          "file": "quadro-de-areas-modelo.xlsx",
+          "kind": "XLSX",
+          "label": "Planilha modelo (Excel)",
+          "hint": "Por pavimento · privativa × comum · equivalente · 11 KB"
+        }
+      ],
+      "sections": [
+        {
+          "h2": "Baixe a planilha modelo",
+          "body": "Antes do texto, o arquivo. São quatro abas: LEIA-ME, áreas por pavimento, privativa × comum por unidade, e área equivalente pra incorporação. Todas com linha de TOTAL somando sozinha e uma célula de conferência contra o total declarado do projeto. Sem cadastro, sem captura de email.\n\n<DOWNLOAD_BUTTONS>\n\nUma escolha deliberada: a aba de área equivalente vem com a coluna de coeficientes VAZIA. Os coeficientes de equivalência são definidos pela ABNT NBR 12721:2006 e a leitura da norma é responsabilidade técnica de quem assina — planilha de internet que já vem com coeficiente preenchido está decidindo por você. A estrutura é nossa; o coeficiente, você preenche lendo a norma ou a orientação do Sinduscon do seu estado."
+        },
+        {
+          "h2": "O que é o quadro de áreas e quem exige",
+          "body": "O quadro de áreas é a tabela que consolida, número a número, as áreas do projeto: por pavimento, por unidade e por natureza (coberta, descoberta, privativa, comum). Ele acompanha o projeto na aprovação em prefeitura e, em incorporação imobiliária, segue o que a ABNT NBR 12721:2006 estabelece sobre cálculo de áreas e os quadros correspondentes.\n\nÉ também um dos documentos mais baratos de errar e mais caros de corrigir: quando o memorial, a planta e o quadro divergem nos números, qualquer prefeitura recusa — e o protocolo volta pra fila do zero."
+        },
+        {
+          "h2": "Os conceitos de área que a prancha precisa distinguir",
+          "body": "Boa parte das divergências nasce de misturar conceitos com nomes parecidos e números diferentes:\n\n- Área de laje (área construída bruta): medida eixo a eixo das paredes estruturais. É a que importa pra estrutura, fundação, cobertura e avaliação imobiliária.\n- Área de piso acabada: medida entre as faces internas das paredes acabadas, ambiente por ambiente. É a que serve pra piso, forro e revestimento.\n- Área real privativa e área de uso comum: os conceitos oficiais são os da NBR 12721:2006 — use as definições da norma, não as de anúncio de corretagem.\n- Área equivalente de construção: o instrumento que a NBR 12721 usa pra ponderar partes da edificação cujo custo difere do padrão. O método e os coeficientes estão na norma — é exatamente por isso que a planilha não traz nenhum valor embutido.\n\nA mesma parede, medida pelos dois primeiros critérios, dá números diferentes — e os dois estão certos, cada um no seu uso. O erro é somar um com o outro."
+        },
+        {
+          "h2": "Como preencher, aba por aba",
+          "body": "1. POR PAVIMENTO: uma linha por ambiente ou uso, separando área coberta e descoberta. A coluna de total soma sozinha.\n2. PRIVATIVA × COMUM: uma linha por unidade autônoma (apartamento, sala, loja). Coberta e descoberta separadas aqui também — descoberta somada como coberta é retrabalho garantido.\n3. ÁREA EQUIVALENTE: só pra incorporação. Preencha a área real, leia a NBR 12721 (ou o CUB do seu Sinduscon, calculado com a metodologia dela) e complete os coeficientes nas células amarelas.\n4. Em TODAS as abas: digite no fim o total declarado no projeto. A célula de diferença tem que dar zero."
+        },
+        {
+          "h2": "A conferência que evita a recusa",
+          "body": "A planilha cobra uma disciplina simples: a soma das partes tem que bater com o total declarado — por pavimento, por unidade e no geral.\n\nParece óbvio, e é o que mais falha. No nosso trabalho lendo pranchas todos os dias, total que não fecha com as parcelas é um padrão tão recorrente que o motor de leitura do AI.arq trata qualquer total divergente como número a revisar, nunca como número confirmado. Vale a mesma regra pro seu quadro: se a soma dos pavimentos não bate com o total da capa, um dos dois está errado — e é melhor você achar qual antes do analista da prefeitura."
+        },
+        {
+          "h2": "Erros que mais aparecem",
+          "body": "- Quadro, planta e memorial com números diferentes. É o motivo clássico de recusa. A planilha força a conferência, mas a regra de ouro é: mudou área na planta, atualiza quadro E memorial no mesmo dia.\n- Misturar área de laje com área de piso acabada. A diferença é real e aparece na conferência.\n- Esquecer a área descoberta. Terraço, sacada e vaga descoberta entram em coluna própria, não somem do quadro.\n- Coeficiente de equivalência copiado de outra planilha. O coeficiente depende do caso e a responsabilidade é de quem assina — leia a norma, não o template alheio."
+        },
+        {
+          "h2": "Baixe de novo e boa aprovação",
+          "body": "O modelo de novo, pra não ter que rolar a página:\n\n<DOWNLOAD_BUTTONS>\n\nRevise com profissional habilitado (CAU/CREA) antes de protocolar — a planilha organiza e confere, mas quem responde pelo número é quem assina."
+        }
+      ],
+      "sources": [
+        {
+          "type": "norm",
+          "title": "ABNT NBR 12721:2006",
+          "description": "Avaliação de custos unitários de construção para incorporação imobiliária e outras disposições para condomínios edilícios — Procedimento. É a norma que define os conceitos de área e os quadros correspondentes."
+        },
+        {
+          "type": "ref",
+          "title": "CUB/m² — Sinduscons estaduais",
+          "description": "O Custo Unitário Básico é calculado mensalmente pelos Sindicatos da Indústria da Construção Civil com a metodologia da NBR 12721:2006 — referência prática pra quem precisa dos coeficientes e valores regionais."
+        },
+        {
+          "type": "internal",
+          "title": "Dados internos AI.arq",
+          "description": "A observação sobre totais que não fecham com as parcelas vem da leitura diária de pranchas pelo motor do AI.arq, que rebaixa total divergente pra 'estimado' por regra."
+        }
+      ],
+      "cta": "Pra montar o quadro sem medir ambiente por ambiente na mão: sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos com as áreas que a prancha permite medir, separadas entre medido e estimado. Grátis durante o beta, quantos projetos quiser, sem cartão."
+    },
+    {
       "slug": "como-fazer-planilha-de-quantitativos-de-obra",
       "title": "Como Fazer Planilha de Quantitativos de Obra: Passo a Passo Completo (2026)",
       "description": "Tutorial completo de como fazer planilha de quantitativos de obra usando SINAPI 2026: estrutura, disciplinas, unidades, memória de cálculo e exemplos práticos.",
@@ -1680,7 +1745,7 @@
         },
         {
           "h2": "Tabela-resumo das medidas-chave (imprimível)",
-          "body": "Cole essa tabela na vistoria pra checagem rápida em obra ou em revisão de prancha. Todas as medidas são da NBR 9050:2020 e da NBR 16537:2024.\n\nPORTAS E CIRCULAÇÕES\n- Vão livre da porta: ≥ 0,80m\n- Corredor uso comum: ≥ 1,20m\n- Corredor uso público: ≥ 1,50m\n- Maçaneta tipo alavanca: entre 0,80m e 1,10m\n- Pé-direito mínimo em circulação: 2,40m\n\nBANHEIRO ACESSÍVEL\n- Área de manobra: Ø 1,50m\n- Altura da bacia: 0,43m a 0,45m SEM assento (com assento, máx. 0,46m)\n- Barra lateral da bacia: 0,80m de comprimento, a 0,75m do piso\n- Lavatório (face superior): 0,78m a 0,80m\n- Altura livre sob lavatório: ≥ 0,73m\n- Espelho inclinado: base a 0,90m\n- Mínimo de sanitários acessíveis: 5% por pavimento (≥ 1)\n\nCOZINHA ADAPTÁVEL\n- Altura da bancada: 0,75m a 0,85m\n- Altura livre inferior da bancada: ≥ 0,73m\n- Alcance manual frontal útil: 0,40m a 1,20m\n\nALTURAS DE COMANDO\n- Interruptor: 0,60m a 1,10m\n- Tomada: 0,40m a 1,00m\n- Botão de campainha/interfone: ≤ 1,00m\n\nSINALIZAÇÃO\n- Sinalização tátil direcional: faixa 0,25m a 0,40m\n- Placa Braille em porta de sala: 1,50m do piso, 0,10m do batente\n- Contraste de luminância entre sinalização e piso conforme NBR 16537\n\nESTACIONAMENTO\n- Vagas acessíveis: 2% (mínimo 1)\n- Largura da vaga: 2,50m + 1,20m de faixa lateral\n- Inclinação máxima do piso: 2%\n- Sinalização vertical a 2,10m do piso\n\nRAMPA (desnível máximo POR SEGMENTO, conforme a inclinação)\n- Inclinação ≤ 5,00%: segmento até 1,50m\n- 5,00% a 6,25%: segmento até 1,00m\n- 6,25% a 8,33%: segmento até 0,80m, máx. 15 segmentos\n- Reforma, excepcional: até 10% (0,20m/segmento, máx. 4) ou até 12,5% (0,075m, 1 segmento)\n- Largura mínima: 1,20m (uso comum) ou 1,50m (uso público)\n- Patamar intermediário: ≥ 1,20m no sentido da rampa\n- Corrimão duplo: alturas 0,70m e 0,92m\n- Prolongamento horizontal do corrimão: 0,30m"
+          "body": "<DOWNLOAD_BUTTONS>\n\nCole essa tabela na vistoria pra checagem rápida em obra ou em revisão de prancha. Todas as medidas são da NBR 9050:2020 e da NBR 16537:2024.\n\nPORTAS E CIRCULAÇÕES\n- Vão livre da porta: ≥ 0,80m\n- Corredor uso comum: ≥ 1,20m\n- Corredor uso público: ≥ 1,50m\n- Maçaneta tipo alavanca: entre 0,80m e 1,10m\n- Pé-direito mínimo em circulação: 2,40m\n\nBANHEIRO ACESSÍVEL\n- Área de manobra: Ø 1,50m\n- Altura da bacia: 0,43m a 0,45m SEM assento (com assento, máx. 0,46m)\n- Barra lateral da bacia: 0,80m de comprimento, a 0,75m do piso\n- Lavatório (face superior): 0,78m a 0,80m\n- Altura livre sob lavatório: ≥ 0,73m\n- Espelho inclinado: base a 0,90m\n- Mínimo de sanitários acessíveis: 5% por pavimento (≥ 1)\n\nCOZINHA ADAPTÁVEL\n- Altura da bancada: 0,75m a 0,85m\n- Altura livre inferior da bancada: ≥ 0,73m\n- Alcance manual frontal útil: 0,40m a 1,20m\n\nALTURAS DE COMANDO\n- Interruptor: 0,60m a 1,10m\n- Tomada: 0,40m a 1,00m\n- Botão de campainha/interfone: ≤ 1,00m\n\nSINALIZAÇÃO\n- Sinalização tátil direcional: faixa 0,25m a 0,40m\n- Placa Braille em porta de sala: 1,50m do piso, 0,10m do batente\n- Contraste de luminância entre sinalização e piso conforme NBR 16537\n\nESTACIONAMENTO\n- Vagas acessíveis: 2% (mínimo 1)\n- Largura da vaga: 2,50m + 1,20m de faixa lateral\n- Inclinação máxima do piso: 2%\n- Sinalização vertical a 2,10m do piso\n\nRAMPA (desnível máximo POR SEGMENTO, conforme a inclinação)\n- Inclinação ≤ 5,00%: segmento até 1,50m\n- 5,00% a 6,25%: segmento até 1,00m\n- 6,25% a 8,33%: segmento até 0,80m, máx. 15 segmentos\n- Reforma, excepcional: até 10% (0,20m/segmento, máx. 4) ou até 12,5% (0,075m, 1 segmento)\n- Largura mínima: 1,20m (uso comum) ou 1,50m (uso público)\n- Patamar intermediário: ≥ 1,20m no sentido da rampa\n- Corrimão duplo: alturas 0,70m e 0,92m\n- Prolongamento horizontal do corrimão: 0,30m\n\nSem cadastro, sem captura de email: o PDF acima é exatamente esta tabela, formatada pra caber numa folha A4 com caixas de marcação."
         },
         {
           "h2": "Os 10 erros que mais reprovam projeto na prefeitura",
@@ -1756,6 +1821,14 @@
           "title": "Cartilha de Acessibilidade ABNT NBR 9050",
           "url": "https://www.gov.br/mdh/pt-br/navegue-por-temas/pessoa-com-deficiencia",
           "publisher": "Ministério dos Direitos Humanos"
+        }
+      ],
+      "downloads": [
+        {
+          "file": "checklist-nbr-9050-vistoria.pdf",
+          "kind": "PDF",
+          "label": "Checklist imprimível de vistoria",
+          "hint": "1 página A4, direto da tabela abaixo · 4 KB"
         }
       ]
     },
@@ -1881,7 +1954,7 @@
       "description": "Quantitativo é a lista do o quê e quanto — função de quem projeta. Orçamento é quanto custa, função do orçamentista. A distinção técnica e jurídica.",
       "keywords": "quantitativo vs orçamento, diferença quantitativo orçamento, arquiteto orçamentista, função orçamentista obra, planilha quantitativos arquitetura, orçamento de obra, BDI, Aldo Mattos",
       "category": "BDI/Orçamento",
-      "publish_date": "2026-09-20",
+      "publish_date": "2026-10-18",
       "intro": "Existe uma confusão recorrente nos escritórios de arquitetura: muitos profissionais acreditam que entregar um orçamento detalhado faz parte do escopo do projeto. Não faz. Quantitativo e orçamento são produtos técnicos distintos, com responsáveis distintos, metodologia distinta e responsabilidade jurídica distinta. O autor do projeto entrega o quantitativo — a lista do que precisa ser construído e em qual magnitude. O orçamentista, profissional habilitado em engenharia de custos, pega esse quantitativo e transforma em orçamento, com cotação de mercado, encargos sociais, leis sociais, BDI e cronograma físico-financeiro. Quando arquiteto tenta fazer as duas coisas, normalmente uma das duas sai mal feita. Esse post explica a distinção segundo a literatura técnica brasileira (Aldo Mattos, Maçahico Tisaka), a normativa vigente (NBR 12721, Lei 14.133/2021) e a tabela de honorários do CAU/BR — e mostra por que delegar a precificação é mais profissional do que tentar abraçar tudo.",
       "sections": [
         {

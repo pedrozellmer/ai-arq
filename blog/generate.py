@@ -407,6 +407,13 @@ def render_sources(sources, data_ref=""):
     '''
 
 
+
+def _kw(post):
+    """As palavras-chave de um post como conjunto — aceitando string OU lista."""
+    bruto = post.get("keywords", "")
+    partes = bruto.split(",") if isinstance(bruto, str) else bruto
+    return set(k.strip().lower() for k in partes if k and k.strip())
+
 def pick_related_posts(post, n=3, _contador={}):
     """Escolhe até n posts relacionados pra linkar no fim de um post.
 
@@ -433,15 +440,18 @@ def pick_related_posts(post, n=3, _contador={}):
     build inteiro em vez de chamar a função isolada.
     """
     today = date.today().isoformat()
-    minhas_kw = set(k.strip().lower() for k in post.get("keywords", []) if k)
+    # 🪤 `keywords` no posts.json é STRING separada por vírgula, não lista. A
+    # 1ª versão iterava a string — ou seja, CARACTERES — e a "afinidade" era
+    # ruído de letras em comum. A distribuição até espalhou (o desconto por
+    # link recebido dominou), mas o pareamento por assunto não existia.
+    minhas_kw = _kw(post)
     candidates = [
         p for p in POSTS
         if p["slug"] != post["slug"] and p["publish_date"] <= today
     ]
 
     def _pontos(p):
-        kw = set(k.strip().lower() for k in p.get("keywords", []) if k)
-        afinidade = 2 * len(minhas_kw & kw)
+        afinidade = 2 * len(minhas_kw & _kw(p))
         if p["category"] == post["category"]:
             afinidade += 3
         # 🔑 Cada link JÁ recebido desconta um ponto — não é só desempate.
