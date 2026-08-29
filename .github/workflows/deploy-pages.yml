@@ -64,7 +64,11 @@ jobs:
         # sitemap, links relacionados) é DERIVADO e depende da data de hoje.
         # Regerar aqui garante que o que vai pro ar corresponde ao calendário
         # de hoje, e não ao dia em que alguém rodou o script pela última vez.
-        # Sem dependências externas: generate.py só usa a biblioteca padrão.
+        # generate.py usa só a biblioteca padrão PRA GERAR OS HTML. Os cards
+        # de og:image usam PIL, que NÃO está neste runner — o gerador avisa e
+        # segue, e os cards valem os COMMITADOS em blog/og/ (determinísticos:
+        # mesmo título = mesmos bytes). A bancada tem guarda cobrando que todo
+        # post commitado tenha seu card commitado.
         run: python blog/generate.py
 
       - name: Prepare static site directory
