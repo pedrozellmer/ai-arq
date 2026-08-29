@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 import sys, io
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
 """
 Gera index.html do blog + posts individuais a partir de posts.json.
 Cada post fica em /blog/posts/{slug}.html, otimizado pra SEO.
@@ -160,6 +159,19 @@ _DL_SETA = ('<svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="cur
             'stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>')
 
 
+def _slug_download(arquivo):
+    """'memorial-descritivo-obra-modelo.docx' → 'baixar-memorial-descritivo-obra-mode'.
+
+    🪤 Teto de 40 e alfabeto [a-z0-9-]: é a regra do /api/track. Nome fora dela
+    é descartado com 200 e sem aviso — o instrumento nasceria morto, que é o
+    erro mais repetido da semana.
+    """
+    import re as _re
+    base = arquivo.rsplit(".", 1)[0].lower()
+    base = _re.sub(r"[^a-z0-9-]+", "-", base).strip("-")
+    return ("baixar-" + base)[:40].rstrip("-")
+
+
 def download_buttons_html(downloads):
     """Monta os botões de download DO POST.
 
@@ -177,7 +189,12 @@ def download_buttons_html(downloads):
         kind = d.get("kind", "PDF").upper()
         bg, fg = _DL_CORES.get(kind, ("gray-50", "gray-600"))
         cards.append(
+            # 🔑 29/08: data-track no download. A pauta do blog aposta que
+            # "arquivo pra baixar" é o formato que converte, e isso NUNCA foi
+            # medido — o clique não disparava evento. O ouvinte delegado do
+            # aiarq-utils.js transforma o atributo em evento `clique:baixar-*`.
             '\n    <a href="/blog/downloads/' + d["file"] + '" download\n'
+            '       data-track="' + _slug_download(d["file"]) + '"\n'
             '       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white '
             'border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">\n'
             '      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-'
@@ -390,30 +407,54 @@ def render_sources(sources, data_ref=""):
     '''
 
 
-def pick_related_posts(post, n=3):
+def pick_related_posts(post, n=3, _contador={}):
     """Escolhe até n posts relacionados pra linkar no fim de um post.
 
-    Regra:
-    1. Só posts JÁ publicados (publish_date <= hoje) — links pra posts futuros
-       seriam redirecionados pelo guard JS, viram link morto pro SEO.
+    🚨 29/08/2026 — A VERSÃO ANTERIOR CONCENTRAVA TUDO NOS 3 MAIS RECENTES.
+    Ela ordenava por data e completava com "os mais recentes de qualquer
+    categoria". Medido no HTML gerado: dos 78 links do "Leia também",
+    **57 iam pra só 3 posts** (23+20+14), e **8 posts publicados não recebiam
+    UM ÚNICO link interno** — entre eles o único post com ranking orgânico
+    provado (ia-arquitetura, 04/08) e o campeão de visitas (memorial, que
+    recebia 2). Link interno é o jeito mais barato de dizer ao Google que uma
+    página importa, e a gente dizia isso só pros 3 últimos publicados.
+
+    Regra agora:
+    1. Só posts JÁ publicados (links pra futuros viram redirect = link morto).
     2. Nunca o próprio post.
-    3. Prioriza a MESMA categoria, do mais recente pro mais antigo.
-    4. Se a categoria não tem n posts, completa com os mais recentes de
-       qualquer categoria.
+    3. Pontua por AFINIDADE: palavras-chave em comum (2 pontos cada) e mesma
+       categoria (3 pontos) — não por data. Há 17 categorias pra 26 posts
+       (12 com um post só), então categoria sozinha nunca foi critério.
+    4. Desempata pelo post que RECEBEU MENOS links até agora nesta geração —
+       é o que garante que ninguém fica órfão e ninguém vira buraco negro.
+
+    🪤 `_contador` compartilhado entre chamadas é de propósito (o build gera os
+    26 posts numa passada só) — e é por isso que o teste da distribuição roda o
+    build inteiro em vez de chamar a função isolada.
     """
     today = date.today().isoformat()
+    minhas_kw = set(k.strip().lower() for k in post.get("keywords", []) if k)
     candidates = [
         p for p in POSTS
         if p["slug"] != post["slug"] and p["publish_date"] <= today
     ]
-    # Mais recente primeiro
-    candidates.sort(key=lambda p: p["publish_date"], reverse=True)
 
-    same_cat = [p for p in candidates if p["category"] == post["category"]]
-    others = [p for p in candidates if p["category"] != post["category"]]
+    def _pontos(p):
+        kw = set(k.strip().lower() for k in p.get("keywords", []) if k)
+        afinidade = 2 * len(minhas_kw & kw)
+        if p["category"] == post["category"]:
+            afinidade += 3
+        # 🔑 Cada link JÁ recebido desconta um ponto — não é só desempate.
+        # Com desempate puro, a afinidade dominava e sobravam 2 órfãos e um
+        # post com 14 links (medido na 1ª versão). O desconto faz o post
+        # "popular" ficar caro e o esquecido ficar atraente, e a distribuição
+        # se espalha sozinha.
+        return (-(afinidade - _contador.get(p["slug"], 0)), p["slug"])
 
-    ordered = same_cat + others
-    return ordered[:n]
+    escolhidos = sorted(candidates, key=_pontos)[:n]
+    for p in escolhidos:
+        _contador[p["slug"]] = _contador.get(p["slug"], 0) + 1
+    return escolhidos
 
 
 def render_related_posts(post):
@@ -989,4 +1030,10 @@ def main():
 
 
 if __name__ == "__main__":
+    # 🪤 29/08: este wrapper de UTF-8 vivia no TOPO do arquivo e rodava na
+    # IMPORTAÇÃO — qualquer teste que importasse o módulo herdava um stdout
+    # trocado e o pytest morria com "I/O operation on closed file". Módulo
+    # importado não pode mexer em estado global do processo; script executado
+    # pode. Por isso ele mora aqui agora.
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     main()
