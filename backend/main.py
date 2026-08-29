@@ -19123,7 +19123,18 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
                            body={"user_id": pai["user_id"], "project_name": novo_nome},
                            params={"job_id": f"eq.{eval_job_id}"})
         try:
-            _email_ok = _email_leitura_nova(pai, eval_job_id, antes, depois)
+            # 🚨 29/08: o mesmo teto de 1 e-mail por semana que o botão manual
+            # passou a respeitar. Este caminho é AUTOMÁTICO — sem ninguém pra
+            # ver o aviso e decidir —, então aqui ele só segura e registra.
+            if _email_auto_recente(pai.get("user_email", ""), dias=7):
+                _email_ok = False
+                _log_error("filhote:auto",
+                           "e-mail SEGURADO: a pessoa já recebeu automático nos "
+                           "últimos 7 dias (máx. 1 por semana). A leitura nova "
+                           "está no painel dela mesmo assim.", eval_job_id,
+                           severity="info")
+            else:
+                _email_ok = _email_leitura_nova(pai, eval_job_id, antes, depois)
         except Exception as _ee:
             _email_ok = False
             print(f"[filhote:auto] email nao saiu (nao-fatal): {_ee}")
@@ -19599,6 +19610,32 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
                             f"pessoalmente.")
         elif depois["medidos"] <= antes["medidos"] and depois["itens"] <= antes["itens"]:
             email_motivo = "NÃO enviado: a versão nova não ficou melhor que a original."
+        elif _email_auto_recente(pai.get("user_email", ""), dias=7):
+            # 🚨 29/08/2026 — A EDUARDA RECEBEU TRÊS E-MAILS NUM DIA.
+            #
+            #   08:00  "Que tal ajudar a afinar seu quantitativo?"  (esteira)
+            #   13:59  "refizemos a leitura"    ← disparado por ESTA liberação
+            #   14:23  o do Pedro, escrito à mão
+            #
+            # Os dois últimos dizem a mesma coisa, com 24 minutos de diferença.
+            #
+            # 🔑 A CAUSA: o cooldown de 7 dias (`_email_auto_recente`) mora
+            # DENTRO do `emails_auto_tick` — ele filtra a esteira. A liberação
+            # chama `_email_leitura_nova` por fora, então nunca passava por ele.
+            # A regra do Pedro é "no máximo 1 automático por pessoa por semana";
+            # esta porta ficava de fora da regra.
+            #
+            # 🪤 NÃO bloqueia por bloquear. Segurar o aviso e não dizer nada
+            # seria pior: o cliente deixa de saber que a leitura melhorou, que é
+            # justamente o ponto do mecanismo ("aviso só na tela não resolve —
+            # 1 de 44 clientes voltou numa semana diferente", Pedro 08/08).
+            # Por isso o motivo VOLTA na resposta do endpoint: quem libera vê
+            # que o aviso foi segurado e decide se fala à mão. Mesma saída da
+            # trava de cliente-que-revisou.
+            email_motivo = ("NÃO enviado: essa pessoa já recebeu um e-mail "
+                            "automático nos últimos 7 dias (regra: máx. 1 por "
+                            "semana). A leitura nova já está no painel dela — "
+                            "se valer a pena avisar agora, mande à mão.")
         else:
             # 23/08: o SMTP era síncrono e segurava a resposta — com a borda
             # cortando em ~100 s, o navegador via erro de rede mesmo quando o
