@@ -31,6 +31,30 @@
     body { font-family: 'Inter', sans-serif; }
     .gradient-main { background: linear-gradient(135deg, #4F46E5 0%, #0e7490 100%); }
   </style>
+<!-- 🔑 29/08/2026 (estudo de SEO): esta era a ÚNICA página do site com ZERO
+     dado estruturado — e é a que mostra o produto sem cadastro, o destino do
+     botão "Ver uma planilha pronta" da FAQ. WebPage + isPartOf da aplicação. -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebPage",
+  "name": "Exemplo de quantitativo, do jeito que sai — AI.arq",
+  "description": "Um quantitativo do AI.arq por dentro: itens quantificados por disciplina, com referência SINAPI e cada item marcado como medido ou estimado. Exemplo fictício.",
+  "url": "https://ai.arq.br/exemplo.html",
+  "inLanguage": "pt-BR",
+  "isPartOf": {
+    "@type": "WebSite",
+    "name": "AI.arq",
+    "url": "https://ai.arq.br"
+  },
+  "about": {
+    "@type": "SoftwareApplication",
+    "name": "AI.arq",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web"
+  }
+}
+</script>
 </head>
 <body class="bg-gray-50 text-gray-900">
 

@@ -553,11 +553,27 @@ def render_post_html(post):
             "name": "AI.arq",
             "logo": {"@type": "ImageObject", "url": f"{SITE_URL}/favicon.png"}
         },
-        "image": f"{SITE_URL}/og-image.png",
+        "image": f"{SITE_URL}/blog/og/{post['slug']}.png",
         "url": canonical_url,
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical_url},
         "keywords": post["keywords"],
         "articleSection": post["category"],
+    }
+
+    # 🔑 29/08 (estudo de SEO): BreadcrumbList era 0 em 31 páginas. É o dado
+    # estruturado que faz o Google mostrar "ai.arq.br › Blog › Post" em vez da
+    # URL crua no resultado.
+    trilha = {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+            {"@type": "ListItem", "position": 1, "name": "AI.arq",
+             "item": SITE_URL + "/"},
+            {"@type": "ListItem", "position": 2, "name": "Blog",
+             "item": SITE_URL + "/blog/"},
+            {"@type": "ListItem", "position": 3, "name": post["title"],
+             "item": canonical_url},
+        ],
     }
 
     return f'''<!DOCTYPE html>
@@ -582,7 +598,9 @@ def render_post_html(post):
 <meta property="og:url" content="{canonical_url}">
 <meta property="og:title" content="{post["title"]}">
 <meta property="og:description" content="{post["description"]}">
-<meta property="og:image" content="{SITE_URL}/og-image.png">
+<meta property="og:image" content="{SITE_URL}/blog/og/{post["slug"]}.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:locale" content="pt_BR">
 <meta property="og:site_name" content="AI.arq">
 <meta property="article:published_time" content="{publish_date_iso}">
@@ -604,6 +622,9 @@ def render_post_html(post):
 
 <script type="application/ld+json">
 {json.dumps(schema, ensure_ascii=False, indent=2)}
+</script>
+<script type="application/ld+json">
+{json.dumps(trilha, ensure_ascii=False, indent=2)}
 </script>
 </head>
 <body class="bg-white text-gray-900 antialiased">
@@ -813,6 +834,26 @@ def render_index_html():
         </article>
         '''
 
+        # 🔑 29/08 (estudo de SEO): o índice do blog não tinha NENHUM dado
+    # estruturado. Blog + ItemList dizem ao Google que isto é uma listagem
+    # de artigos, com a ordem e as URLs.
+    hoje_idx = date.today().isoformat()
+    schema_indice = {
+        "@context": "https://schema.org",
+        "@type": "Blog",
+        "name": "Blog do AI.arq",
+        "url": SITE_URL + "/blog/",
+        "publisher": {"@type": "Organization", "name": "AI.arq",
+                      "logo": {"@type": "ImageObject",
+                               "url": SITE_URL + "/favicon.png"}},
+        "blogPost": [
+            {"@type": "BlogPosting", "headline": p["title"],
+             "url": SITE_URL + "/blog/posts/" + p["slug"] + ".html",
+             "datePublished": p["publish_date"]}
+            for p in POSTS if p["publish_date"] <= hoje_idx
+        ],
+    }
+
     return f'''<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -833,7 +874,10 @@ def render_index_html():
 <meta property="og:url" content="{SITE_URL}/blog/">
 <meta property="og:title" content="Blog AI.arq — Quantitativos, SINAPI, IA na arquitetura">
 <meta property="og:description" content="Conteúdo prático sobre quantitativos de obra, SINAPI, TCPO, BDI e IA aplicada à arquitetura.">
-<meta property="og:image" content="{SITE_URL}/og-image.png">
+<meta property="og:image" content="{SITE_URL}/blog/og/index.png">
+<script type="application/ld+json">
+{json.dumps(schema_indice, ensure_ascii=False, indent=2)}
+</script>
 
 <link rel="stylesheet" href="/tailwind.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
@@ -1039,6 +1083,26 @@ def main():
     print(f"\n✅ Total: {len(POSTS)} posts gerados")
 
 
+def _gerar_cards_og():
+    """Regenera os cards de compartilhamento junto com o build.
+
+    🪤 Import tardio e caminho explícito: o gerador mora em downloads/ (junto
+    dos outros geradores de arquivo). Se o PIL faltar, o build NÃO cai — card
+    velho é melhor que blog sem build — mas AVISA em vez de silenciar.
+    """
+    import importlib.util
+    caminho = os.path.join(THIS_DIR, "downloads", "gen_og_images.py")
+    try:
+        spec = importlib.util.spec_from_file_location("gen_og_images", caminho)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        feitos = mod.gerar_todos()
+        print(f"✓ {len(feitos)} cards og")
+    except Exception as e:
+        print(f"⚠ cards og NÃO gerados ({e}) — os posts vão apontar pra card "
+              f"que pode não existir; rode blog/downloads/gen_og_images.py")
+
+
 if __name__ == "__main__":
     # 🪤 29/08: este wrapper de UTF-8 vivia no TOPO do arquivo e rodava na
     # IMPORTAÇÃO — qualquer teste que importasse o módulo herdava um stdout
@@ -1046,4 +1110,5 @@ if __name__ == "__main__":
     # importado não pode mexer em estado global do processo; script executado
     # pode. Por isso ele mora aqui agora.
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+    _gerar_cards_og()
     main()

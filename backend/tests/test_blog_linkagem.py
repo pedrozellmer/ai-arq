@@ -106,3 +106,63 @@ def test_CONTROLE_slug_de_arquivo_esquisito_ainda_passa_na_regra():
                     "a" * 80 + ".docx"):
         s = G._slug_download(arquivo)
         assert re.fullmatch(r"[a-z0-9][a-z0-9-]{0,39}", s), (arquivo, s)
+
+
+# ─────────── os cards de compartilhamento e os schemas que faltavam ──────────
+
+def test_cada_post_tem_o_SEU_card_de_compartilhamento():
+    """🔑 29/08 (estudo de SEO): as 31 páginas dividiam UMA og:image — no
+    WhatsApp (o botão que acabamos de pôr) todo post aparecia com o mesmo
+    cartão genérico. Agora cada post aponta pro card com o próprio título, e o
+    arquivo tem que EXISTIR: og:image quebrada é pior que genérica."""
+    import glob
+    import re
+    pasta = os.path.join(_RAIZ, "blog")
+    vistos = set()
+    for arq in glob.glob(os.path.join(pasta, "posts", "*.html")):
+        h = io.open(arq, encoding="utf-8").read()
+        m = re.search(r'og:image" content="https://ai\.arq\.br(/blog/og/[^"]+)"', h)
+        assert m, "%s ainda usa a og:image genérica" % os.path.basename(arq)
+        caminho = os.path.join(pasta, m.group(1).replace("/blog/", ""))
+        assert os.path.exists(caminho), (
+            "%s aponta pra card que não existe: %s — link de WhatsApp sem "
+            "imagem nenhuma" % (os.path.basename(arq), m.group(1)))
+        vistos.add(m.group(1))
+    assert len(vistos) >= 25, "os cards viraram um só de novo? %d distintos" % len(vistos)
+
+
+def test_todo_post_tem_trilha_de_navegacao():
+    """BreadcrumbList era 0 em 31 páginas — é o que troca a URL crua por
+    'ai.arq.br › Blog › Post' no resultado do Google."""
+    import glob
+    for arq in glob.glob(os.path.join(_RAIZ, "blog", "posts", "*.html")):
+        assert "BreadcrumbList" in io.open(arq, encoding="utf-8").read(), (
+            os.path.basename(arq))
+
+
+def test_o_indice_do_blog_e_o_exemplo_tem_dado_estruturado():
+    """Os dois zeros que o estudo apontou: blog/index.html e exemplo.html."""
+    idx = io.open(os.path.join(_RAIZ, "blog", "index.html"), encoding="utf-8").read()
+    assert '"@type": "Blog"' in idx, "o índice perdeu o schema de Blog"
+    assert "blogPost" in idx
+    ex = io.open(os.path.join(_RAIZ, "exemplo.html"), encoding="utf-8").read()
+    assert "application/ld+json" in ex, (
+        "exemplo.html voltou a ser a única página sem dado estruturado — e é o "
+        "destino do botão da FAQ")
+
+
+def test_o_schema_do_indice_so_lista_post_PUBLICADO():
+    """🪤 Post futuro no schema entregaria ao Google uma URL que redireciona —
+    o mesmo motivo de eles ficarem fora do sitemap."""
+    import json as _json
+    import re
+    idx = io.open(os.path.join(_RAIZ, "blog", "index.html"), encoding="utf-8").read()
+    m = re.search(r'<script type="application/ld\+json">\s*(\{.*?"@type": "Blog".*?\})\s*</script>',
+                  idx, re.S)
+    assert m, "não achei o schema do Blog no índice"
+    dados = _json.loads(m.group(1))
+    from datetime import date
+    hoje = date.today().isoformat()
+    futuros = [p["url"] for p in dados.get("blogPost", [])
+               if p.get("datePublished", "") > hoje]
+    assert not futuros, "o schema lista post futuro: %s" % futuros[:3]
