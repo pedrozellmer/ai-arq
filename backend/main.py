@@ -14935,12 +14935,22 @@ def upsert_project_client(
 
 # ── STRIPE CHECKOUT ──
 @app.post("/api/estimate-price")
-async def estimate_price(request: Request, files: list[UploadFile] = File(...)):
+async def estimate_price(request: Request,
+                         files: list[UploadFile] = File(None),
+                         known_pranchas: int = Form(0)):
     """Conta pranchas REAIS (páginas dentro de PDFs + layouts dentro de DWG/DXF)
     e devolve preço calculado. Usado antes do checkout pra mostrar preview
     transparente pro cliente.
-    """
-    if not files:
+
+    `known_pranchas` (29/08/2026): o front guarda a contagem POR ARQUIVO e, quando
+    o cliente adiciona um arquivo, manda só o novo + o total já contado. Antes,
+    cada mudança re-enviava a SELEÇÃO INTEIRA (17 arquivos = 17, depois 18, 19…
+    — upload quadrático), e por um caminho que corta em 100 MB. Chamada sem
+    arquivo nenhum + known>0 = só reprecificar (cliente REMOVEU arquivo).
+    O número é só preview — o /api/process reconta tudo do zero no checkout."""
+    files = [f for f in (files or []) if f and f.filename]
+    known_pranchas = max(0, min(int(known_pranchas or 0), 5000))
+    if not files and known_pranchas <= 0:
         raise HTTPException(400, "Nenhum arquivo enviado")
     # Anti-DoS: endpoint PÚBLICO — limita rajadas por IP (fix segurança 2026-07-22).
     if not _rate_limit_ok("estimate", request, limit=15, window_s=600):
@@ -14989,7 +14999,7 @@ async def estimate_price(request: Request, files: list[UploadFile] = File(...)):
         # requisição quando ela TERMINA, então uma resposta de 8 s aparece como
         # "200 OK" no log enquanto o Render já desistiu nos 5 s. Sem a sonda,
         # seguia acontecendo em silêncio.
-        result = await run_in_threadpool(estimate_for_files, saved_paths)
+        result = await run_in_threadpool(estimate_for_files, saved_paths, known_pranchas)
         # QW5 (20/07): precheck ANTES de pagar, reaproveitando os arquivos que
         # já estão em disco aqui (antes do finally apagar). Best-effort — se
         # falhar ou estourar o tempo, o preço sai igual (warnings=[]).
@@ -17273,114 +17283,123 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
     from models import BudgetItem, Confidence, ProjectData
     from spreadsheet import generate_spreadsheet
 
-    # 1) Buscar project metadata
-    try:
-        _, projects = _supa_rest_as_user(
-            request, "GET",
-            f"/projects?job_id=eq.{job_id}&select=*",
-            timeout=15,
-        )
-        projects = projects or []
-        if not projects:
-            raise HTTPException(404, "Projeto não encontrado")
-        proj = projects[0]
-    except HTTPException:
-        raise
-    except urllib.error.HTTPError as e:
-        raise HTTPException(500, f"Erro Supabase: {e}")
+    # 🧊 29/08/2026 — a ÚLTIMA rota da catraca do relógio: corpo bloqueante
+    # (urllib + gerar xlsx + subir Storage) rodava DENTRO do laço de eventos.
+    # Ela é `async def` porque o /api/download chama `await` nela — virar `def`
+    # quebraria o chamador. O conserto certo é este: miolo síncrono no
+    # threadpool, laço livre (mesma doença das outras 61, remédio adaptado).
+    def _trabalho():
 
-    # 2) Buscar items atuais (já revisados) — RPC SECURITY DEFINER, anon ok
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
-        body = json.dumps({"p_job_id": job_id}).encode('utf-8')
-        req = urllib.request.Request(url, data=body, method='POST')
-        req.add_header('apikey', SUPABASE_KEY)
-        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
-        req.add_header('Content-Type', 'application/json')
-        resp = urllib.request.urlopen(req, timeout=15)
-        rows = json.loads(resp.read().decode('utf-8'))
-    except Exception as e:
-        raise HTTPException(500, f"Erro ao buscar itens: {e}")
-
-    # 3) Reconstituir ProjectData + BudgetItems
-    pd = ProjectData(
-        name=proj.get("project_name", "") or "Projeto",
-        total_area=proj.get("total_area") or 0,
-        layout_area=proj.get("layout_area") or 0,
-    )
-    items = []
-    for r in rows:
+        # 1) Buscar project metadata
         try:
-            items.append(BudgetItem(
-                item_num=r.get("item_num", "") or "",
-                description=r.get("description", "") or "",
-                unit=r.get("unit", "vb") or "vb",
-                quantity=float(r.get("quantity") or 0),
-                observations=r.get("observations", "") or "",
-                ref_sheet=r.get("ref_sheet", "") or "",
-                confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
-                origem=r.get("origem") or "",     # NULL = linha anterior a 24/08
-                # 🚨 25/08 (auditoria): sem estas 4, a coluna ESPECIFICAÇÃO da
-                # planilha nascia VAZIA sempre — o extrator preenchia a linha do
-                # BANCO e a planilha lê do OBJETO. Escrito de um lado, lido do
-                # outro; mesma família do bug do `origem`, no mesmo arquivo.
-                # 🪤 E este bloco existe em DOIS caminhos de reconstrução.
-                marca=r.get("marca") or "",
-                codigo_fabricante=r.get("codigo_fabricante") or "",
-                cor=r.get("cor") or "",
-                spec_origem=r.get("spec_origem") or "",
-                discipline=r.get("discipline", "Complementares") or "Complementares",
-            ))
-        except Exception:
-            continue
+            _, projects = _supa_rest_as_user(
+                request, "GET",
+                f"/projects?job_id=eq.{job_id}&select=*",
+                timeout=15,
+            )
+            projects = projects or []
+            if not projects:
+                raise HTTPException(404, "Projeto não encontrado")
+            proj = projects[0]
+        except HTTPException:
+            raise
+        except urllib.error.HTTPError as e:
+            raise HTTPException(500, f"Erro Supabase: {e}")
 
-    # 4) Gerar xlsx revisado — também enriquece com matches TCPO + heurísticas
-    try:
-        from tcpo_matcher import match_item, get_insumos
-        for it in items:
+        # 2) Buscar items atuais (já revisados) — RPC SECURITY DEFINER, anon ok
+        try:
+            url = f"{SUPABASE_URL}/rest/v1/rpc/list_project_items"
+            body = json.dumps({"p_job_id": job_id}).encode('utf-8')
+            req = urllib.request.Request(url, data=body, method='POST')
+            req.add_header('apikey', SUPABASE_KEY)
+            req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+            req.add_header('Content-Type', 'application/json')
+            resp = urllib.request.urlopen(req, timeout=15)
+            rows = json.loads(resp.read().decode('utf-8'))
+        except Exception as e:
+            raise HTTPException(500, f"Erro ao buscar itens: {e}")
+
+        # 3) Reconstituir ProjectData + BudgetItems
+        pd = ProjectData(
+            name=proj.get("project_name", "") or "Projeto",
+            total_area=proj.get("total_area") or 0,
+            layout_area=proj.get("layout_area") or 0,
+        )
+        items = []
+        for r in rows:
             try:
-                ms = match_item(it.description, limit=3)
-                if ms:
-                    ms[0]['insumos'] = get_insumos(ms[0]['id'])
-                    it.tcpo_matches = ms
+                items.append(BudgetItem(
+                    item_num=r.get("item_num", "") or "",
+                    description=r.get("description", "") or "",
+                    unit=r.get("unit", "vb") or "vb",
+                    quantity=float(r.get("quantity") or 0),
+                    observations=r.get("observations", "") or "",
+                    ref_sheet=r.get("ref_sheet", "") or "",
+                    confidence=Confidence(r.get("confidence", "estimado") or "estimado"),
+                    origem=r.get("origem") or "",     # NULL = linha anterior a 24/08
+                    # 🚨 25/08 (auditoria): sem estas 4, a coluna ESPECIFICAÇÃO da
+                    # planilha nascia VAZIA sempre — o extrator preenchia a linha do
+                    # BANCO e a planilha lê do OBJETO. Escrito de um lado, lido do
+                    # outro; mesma família do bug do `origem`, no mesmo arquivo.
+                    # 🪤 E este bloco existe em DOIS caminhos de reconstrução.
+                    marca=r.get("marca") or "",
+                    codigo_fabricante=r.get("codigo_fabricante") or "",
+                    cor=r.get("cor") or "",
+                    spec_origem=r.get("spec_origem") or "",
+                    discipline=r.get("discipline", "Complementares") or "Complementares",
+                ))
             except Exception:
-                pass
-    except ImportError:
-        pass
+                continue
 
-    typology = proj.get("typology") or "office"
+        # 4) Gerar xlsx revisado — também enriquece com matches TCPO + heurísticas
+        try:
+            from tcpo_matcher import match_item, get_insumos
+            for it in items:
+                try:
+                    ms = match_item(it.description, limit=3)
+                    if ms:
+                        ms[0]['insumos'] = get_insumos(ms[0]['id'])
+                        it.tcpo_matches = ms
+                except Exception:
+                    pass
+        except ImportError:
+            pass
 
-    # Heurísticas de mercado (alertas agregados anônimos)
-    try:
-        from market_heuristics import check_item_anomaly
-        for it in items:
-            try:
-                alertas = check_item_anomaly(it, typology=typology)
-                if alertas:
-                    sep = " | " if it.observations else ""
-                    it.observations = (it.observations or "") + sep + " ".join(alertas)
-            except Exception:
-                pass
-    except ImportError:
-        pass
+        typology = proj.get("typology") or "office"
 
-    work_dir = os.path.join(WORK_DIR, job_id)
-    os.makedirs(work_dir, exist_ok=True)
-    output_path = os.path.join(work_dir, f"orcamento_{job_id}_revisado.xlsx")
-    generate_spreadsheet(pd, items, output_path, typology=typology)
+        # Heurísticas de mercado (alertas agregados anônimos)
+        try:
+            from market_heuristics import check_item_anomaly
+            for it in items:
+                try:
+                    alertas = check_item_anomaly(it, typology=typology)
+                    if alertas:
+                        sep = " | " if it.observations else ""
+                        it.observations = (it.observations or "") + sep + " ".join(alertas)
+                except Exception:
+                    pass
+        except ImportError:
+            pass
 
-    # 5) Subir pra Storage sobrescrevendo o antigo
-    _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
-    # A planilha agora bate com os itens revisados — tira o aviso de velha.
-    _carimbar_planilha(job_id)
+        work_dir = os.path.join(WORK_DIR, job_id)
+        os.makedirs(work_dir, exist_ok=True)
+        output_path = os.path.join(work_dir, f"orcamento_{job_id}_revisado.xlsx")
+        generate_spreadsheet(pd, items, output_path, typology=typology)
 
-    return {
-        "status": "ok",
-        "job_id": job_id,
-        "items_count": len(items),
-        "download_url": f"/api/download/{job_id}",
-        "storage_uploaded": _storage_ok,
-    }
+        # 5) Subir pra Storage sobrescrevendo o antigo
+        _storage_ok = _supabase_storage_upload(output_path, f"{job_id}.xlsx")
+        # A planilha agora bate com os itens revisados — tira o aviso de velha.
+        _carimbar_planilha(job_id)
+
+        return {
+            "status": "ok",
+            "job_id": job_id,
+            "items_count": len(items),
+            "download_url": f"/api/download/{job_id}",
+            "storage_uploaded": _storage_ok,
+        }
+
+    return await run_in_threadpool(_trabalho)
 
 
 class InformAreaPayload(BaseModel):

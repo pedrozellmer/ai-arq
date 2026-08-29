@@ -185,16 +185,13 @@ def _rotas_async_que_bloqueiam(src, nome_arquivo):
 #     59  →  depois das 3 do relógio (o buraco de 33 s)
 #     31  →  depois das 28 que o CLIENTE usa
 #      1  →  depois das 30 de `/api/admin/` e `/api/debug/`
+#      0  →  29/08: `rebuild_planilha_from_review` — a que NÃO podia virar
+#            `def` (outra rota chama com `await`) — ganhou o conserto adaptado:
+#            miolo síncrono em `run_in_threadpool`, assinatura intacta.
 #
-# 🪤 A ÚLTIMA NÃO PODE SER CONVERTIDA, e o motivo importa:
-# `rebuild_planilha_from_review` é chamada com `await` por outra rota. Virar
-# `def` quebraria quem chama. Ela fica `async` e o trabalho bloqueante dela é
-# que precisaria ir pra `run_in_threadpool` — conserto diferente, commit
-# diferente. Teto 1 é o piso honesto, não "quase zero".
-#
-# 🪤 `instagram_webhook.py` fica em 1 pelo mesmo tipo de motivo: `create_post`
-# não é do relógio, é chamada por gente.
-_TETO_DE_DIVIDA = {"main.py": 1, "instagram_webhook.py": 1}
+# 🪤 `instagram_webhook.py` fica em 1: `create_post` não é do relógio, é
+# chamada por gente — mesmo caso da rebuild antes do conserto dela.
+_TETO_DE_DIVIDA = {"main.py": 0, "instagram_webhook.py": 1}
 
 
 def test_a_divida_de_rotas_bloqueantes_nao_cresce():

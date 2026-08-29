@@ -146,10 +146,23 @@ def count_real_sheets(file_paths: list[str]) -> dict:
     }
 
 
-def estimate_for_files(file_paths: list[str]) -> dict:
-    """Conveniência: conta pranchas + calcula preço de uma vez."""
-    sheets = count_real_sheets(file_paths)
-    n = sheets["total_pranchas"]
+def estimate_for_files(file_paths: list[str], extra_pranchas: int = 0) -> dict:
+    """Conveniência: conta pranchas + calcula preço de uma vez.
+
+    `extra_pranchas` (29/08/2026): pranchas que o cliente JÁ teve contadas em
+    chamada anterior — o front manda só os arquivos NOVOS e informa o total
+    conhecido, em vez de re-enviar tudo a cada mudança na seleção. O preço é
+    calculado sobre a SOMA; a contagem em si continua 100% do servidor (o
+    número informado nasceu de contagem nossa — e preço de estimativa é
+    preview: o checkout reconta tudo do zero no /api/process).
+    """
+    if file_paths:
+        sheets = count_real_sheets(file_paths)
+    else:
+        # só reprecificação (cliente removeu arquivo): nada a contar
+        sheets = {"total_pranchas": 0, "breakdown": [], "files_count": 0}
+    n = max(1, sheets["total_pranchas"] + max(0, int(extra_pranchas or 0)))
+    sheets["total_pranchas"] = n
     price_cents = calculate_price(n)
     tier = get_tier_for(n)
     return {

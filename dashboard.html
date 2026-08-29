@@ -2322,8 +2322,24 @@
   let estimateAbortCtrl = null;
   let lastEstimateKey = '';
   let lastEstimate = null;  // {total_pranchas, price_brl, price_cents}
+  // 29/08/2026 — cache POR ARQUIVO. Antes, CADA mudança na seleção re-enviava
+  // a seleção INTEIRA (17 arquivos = upload quadrático; foi o padrão do caso
+  // Maria Victoria), e pelo caminho do Cloudflare, que corta em 100 MB e
+  // deixava a estimativa errada CALADA. Agora: só o arquivo NOVO sobe, os já
+  // contados viram `known_pranchas`, e a rota é a direta do Render (450 MB).
+  const estimateFileCache = new Map();  // "nome:tamanho:mtime" -> {pranchas, warnings}
+  const _efKey = f => `${f.name}:${f.size}:${f.lastModified}`;
+  let estimateDebounce = null;
 
-  async function estimatePriceForFiles(files) {
+  function estimatePriceForFiles(files) {
+    // adia 500ms: multi-add dispara em rajada e a rota tem teto de taxa (15/10min)
+    return new Promise(resolve => {
+      clearTimeout(estimateDebounce);
+      estimateDebounce = setTimeout(() => resolve(_estimatePriceNow(files)), 500);
+    });
+  }
+
+  async function _estimatePriceNow(files) {
     if (!files || !files.length) {
       lastEstimate = null;
       return;
@@ -2336,18 +2352,42 @@
     lastEstimateKey = key;
     if (estimateAbortCtrl) { try { estimateAbortCtrl.abort(); } catch(_) {} }
     estimateAbortCtrl = new AbortController();
+    const novos = files.filter(f => !estimateFileCache.has(_efKey(f)));
+    const conhecidas = files.filter(f => estimateFileCache.has(_efKey(f)))
+      .reduce((s, f) => s + (estimateFileCache.get(_efKey(f)).pranchas || 1), 0);
     try {
       const fd = new FormData();
-      files.forEach(f => fd.append('files', f));
-      const res = await fetch(`${API_BASE}/api/estimate-price`, {
+      novos.forEach(f => fd.append('files', f));
+      fd.append('known_pranchas', String(conhecidas));
+      const res = await fetch(`${window.API_UPLOAD_BASE}/api/estimate-price`, {
         method: 'POST',
         body: fd,
         signal: estimateAbortCtrl.signal,
       });
       if (!res.ok) throw new Error('estimate falhou');
       const data = await res.json();
-      lastEstimate = data;
-      renderEstimate(data);
+      // guarda a contagem de cada arquivo novo. O servidor sanitiza o nome, então
+      // o casamento certo é por POSIÇÃO (breakdown sai na ordem do envio); por
+      // nome fica de reserva. Arquivo que não casar só perde o cache (re-conta
+      // na próxima) — nunca inventa contagem.
+      const bd = data.breakdown || [];
+      novos.forEach((f, i) => {
+        const b = (bd.length === novos.length) ? bd[i] : bd.find(x => x.filename === f.name);
+        if (b) estimateFileCache.set(_efKey(f), {
+          pranchas: b.pranchas || 1,
+          warnings: (data.warnings || []).filter(w => w.includes(b.filename)),
+        });
+      });
+      // avisos: os da resposta (arquivos novos) + os guardados dos já contados
+      const avisos = [];
+      const _addAviso = w => { if (w && !avisos.includes(w)) avisos.push(w); };
+      (data.warnings || []).forEach(_addAviso);
+      files.forEach(f => {
+        const c = estimateFileCache.get(_efKey(f));
+        if (c && c.warnings) c.warnings.forEach(_addAviso);
+      });
+      lastEstimate = { ...data, warnings: avisos };
+      renderEstimate(lastEstimate);
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.warn('estimate err', err);

@@ -41,7 +41,8 @@
   // 🪤 UPLOAD DE CAD vai DIRETO pro Render, FORA do Cloudflare: o backend aceita
   // até 450 MB (main.py:5970, projetos grandes), mas o Cloudflare Free CORTA em
   // 100 MB — passar upload grande pelo proxy daria 413 antes de chegar no backend.
-  // Use API_UPLOAD_BASE em /api/process e /api/project/{id}/add-file. Só esses.
+  // Use API_UPLOAD_BASE em /api/process, /api/project/{id}/add-file e
+  // /api/estimate-price (29/08 — estimativa acima de 100 MB morria no CF). Só esses.
   const API_UPLOAD_BASE   = 'https://ai-arq.onrender.com';
 
   window.SUPABASE_URL      = SUPABASE_URL;

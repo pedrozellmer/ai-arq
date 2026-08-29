@@ -115,7 +115,10 @@ def test_a_estimativa_usa_thread():
     src = _fonte()
     i = src.find("async def estimate_price")
     assert i > 0, "a rota de estimativa sumiu"
-    trecho = src[i:i + 4000]
+    # 🪤 29/08: era src[i:i+4000] — mais uma janela fixa a reprovar código
+    # certo (docstring maior empurrou o precheck pra fora). Corte estrutural.
+    fim = src.find("@app.", i)
+    trecho = src[i:fim if fim > i else len(src)]
     assert "run_in_threadpool(estimate_for_files" in trecho
     assert "run_in_threadpool(precheck_warnings" in trecho
 
@@ -131,7 +134,8 @@ def test_o_precheck_tem_TETO_de_espera():
         "teto de %ss fora do razoável: curto demais mata o aviso sempre, "
         "longo demais devolve o problema" % valor)
     j = src.find("async def estimate_price")
-    assert "wait_for" in src[j:j + 4000], (
+    fim = src.find("@app.", j)
+    assert "wait_for" in src[j:fim if fim > j else len(src)], (
         "o teto existe mas não é aplicado na estimativa")
 
 
