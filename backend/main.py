@@ -21586,3 +21586,109 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
 # Trigger autodeploy Mon Apr 13 10:58:57     2026
+
+
+# ═══════════════════ PAINEL DO MOVIMENTO DO SITE (29/08/2026) ═══════════════
+# Pedido do Pedro depois de me perguntar TRÊS vezes na mesma semana se o site
+# tinha caído do Google. Toda resposta custava meia hora de consulta na mão — e
+# nas duas primeiras eu respondi ERRADO, porque reinventava o critério a cada
+# vez e o número de "únicos" do Cloudflare conta robô.
+
+@app.post("/api/metricas/tick")
+def metricas_tick(request: Request):
+    """Grava a foto de ONTEM (o dia fechado). Chamado pelo pg_cron.
+
+    🪤 Ontem, não hoje: dia pela metade compara mal com dia inteiro, e foi assim
+    que eu quase disse "caiu pela metade" olhando um sábado ao meio-dia.
+    🪤 O Cloudflare só guarda o detalhe por ~7 dias — se este tick ficar parado
+    uma semana, aquele pedaço da série some PRA SEMPRE. Por isso ele reescreve
+    os últimos 3 dias a cada rodada: uma falha de 1 ou 2 dias se cura sozinha.
+    """
+    _require_tick_secret(request)
+    import metricas_site as _ms
+    from datetime import date as _d, timedelta as _td
+
+    if not _ms.token():
+        # 🚨 Instrumento que não consegue medir tem que DIZER. Silêncio aqui
+        # viraria uma série vazia que parece "site sem movimento".
+        _log_error("metricas:tick",
+                   "CLOUDFLARE_API_TOKEN não está setada no Render — a série do "
+                   "movimento do site não é coletada. O painel vai mostrar só o "
+                   "que já foi gravado à mão.", severity="error")
+        return {"status": "sem_token", "gravados": 0}
+
+    gravados, falhas = [], []
+    for atras in (1, 2, 3):
+        dia = _d.today() - _td(days=atras)
+        try:
+            linha = _ms.coletar(dia)
+        except Exception as e:
+            falhas.append("%s: %s" % (dia, e))
+            continue
+        # 🪤 Só grava o que soube contar. `None` deixa a coluna nula, e nulo no
+        # gráfico é buraco visível; zero seria uma mentira silenciosa.
+        _proj = _contar_do_dia("projects", dia)
+        if _proj is not None:
+            linha["projetos"] = _proj
+        try:
+            _supa_rest_service("POST", "metricas_diarias", body=linha,
+                               prefer="resolution=merge-duplicates")
+            gravados.append(str(dia))
+        except Exception as e:
+            falhas.append("%s gravação: %s" % (dia, e))
+    if falhas:
+        _log_error("metricas:tick", "falhas: %s" % falhas[:3], severity="error")
+    return {"status": "ok", "gravados": gravados, "falhas": len(falhas)}
+
+
+def _contar_do_dia(o_que: str, dia) -> int:
+    """Quantos projetos de CLIENTE naquele dia. None se não der pra saber.
+
+    🪤 A 1ª versão tinha DUAS chaves `created_at` no mesmo dicionário — em
+    Python a segunda apaga a primeira, então o filtro virava só "depois de
+    meia-noite" e contava o histórico inteiro. Faixa de data no PostgREST se
+    escreve com `and=(...)`, não com duas chaves.
+
+    🪤 Devolve None (e não 0) quando falha: zero é uma AFIRMAÇÃO ("não teve
+    projeto") e falha de rede não pode virar afirmação. É o mesmo erro do smoke
+    que dizia "0 projetos" quando o servidor tinha respondido 502.
+    """
+    from datetime import timedelta as _td1
+    if o_que != "projects":
+        return None
+    try:
+        st, linhas = _supa_rest_service(
+            "GET", "projects",
+            params={"select": "job_id", "is_eval": "not.is.true",
+                    "and": "(created_at.gte.%sT00:00:00Z,created_at.lt.%sT00:00:00Z)"
+                           % (dia, dia + _td1(days=1))})
+        return len(linhas or []) if st == 200 else None
+    except Exception:
+        return None
+
+
+@app.get("/api/admin/metricas")
+def admin_metricas(request: Request, dias: int = 30):
+    """A série + a frase que responde "está normal?". Só admin."""
+    _require_admin(request)
+    import metricas_site as _ms
+    from datetime import date as _d, timedelta as _td
+    desde = (_d.today() - _td(days=max(1, min(dias, 120)))).isoformat()
+    st, linhas = _supa_rest_service(
+        "GET", "metricas_diarias",
+        params={"select": "*", "dia": "gte.%s" % desde, "order": "dia.asc"})
+    serie = linhas or []
+    return {
+        "ok": st == 200,
+        "serie": serie,
+        "veredito": _ms.veredito(serie),
+        # 🚨 O painel PRECISA saber se a coleta está viva. Sem isto, série
+        # parada e site sem movimento têm exatamente a mesma cara.
+        "coleta": {
+            "token_configurado": bool(_ms.token()),
+            "aviso": (None if _ms.token() else
+                      "A coleta automática está DESLIGADA: falta a variável "
+                      "CLOUDFLARE_API_TOKEN no Render. Os dias abaixo foram "
+                      "gravados à mão e a série vai parar de crescer."),
+        },
+    }
