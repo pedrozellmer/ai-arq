@@ -345,3 +345,80 @@ def test_e_a_soma_das_bitolas_BATE_com_o_total_declarado():
     r = parse_steel_table(_texto(_QUADRO_EDUARDA))
     assert _soma(r) == r["total_kg"] == 816.0
     assert r["confiavel"] is True, r["avisos"]
+
+
+# ── o buraco que a régua do próprio motor não enxergava ──────────────────────
+
+def _quadro_da_eduarda(duplicado=False, com_total=True):
+    """Monta o quadro real dela, opcionalmente com as linhas REPETIDAS logo
+    abaixo — que é como fica quando a prancha traz o resumo geral colado embaixo
+    do mesmo cabeçalho, sem cabeçalho novo."""
+    cab = [t for t in _QUADRO_EDUARDA if t[2] >= 59.6]
+    dados = [t for t in _QUADRO_EDUARDA if 57.4 < t[2] < 59.6]
+    tots = [t for t in _QUADRO_EDUARDA if t[2] < 57.4]
+    fora = list(dados)
+    if duplicado:
+        fora += [(t, x, y - 2.5) for t, x, y in dados]
+    return _texto(cab + fora + (tots if com_total else []))
+
+
+def test_bitola_REPETIDA_sem_total_pra_conferir_NAO_pode_ser_medido():
+    """🚨 REGRA DURA Nº1, e este é o caso que eu quase deixei passar.
+
+    Eu tinha "conferido" os 38 itens da Eduarda recalculando comprimento ×
+    massa linear e comparando com o peso. Passaram 37 de 38 dentro de 1,3%, e
+    eu chamei isso de prova.
+
+    🩸 Era TAUTOLOGIA. Quando a mesma bitola cai em mais de um quadro, a
+    consolidação soma o `kg` E o `comp_m` juntos — a razão continua sendo
+    exatamente a massa linear da norma. Medido com o quadro dela duplicado:
+
+        soma lida 1632 kg (a verdade é 816), confiavel=True
+        Ø5,0   262 kg / 1704 m → NBR 262,8  desvio -0,32%
+        Ø12,5  788 kg /  818 m → NBR 788,6  desvio -0,08%
+
+    Seis de seis passando com folga, e a obra recebendo o DOBRO com selo de
+    MEDIDO. Conferi o motor com a régua do próprio motor.
+    """
+    r = parse_steel_table(_quadro_da_eduarda(duplicado=True, com_total=False))
+    assert r["confiavel"] is False, (
+        "leu %.0f kg num quadro de 816 e carimbou de MEDIDO. Sem TOTAL "
+        "declarado, soma repetida é indistinguível de leitura em dobro."
+        % _soma(r))
+    assert any("dobro" in a for a in r["avisos"]), (
+        "rebaixou sem dizer por quê: %s" % r["avisos"])
+
+
+def test_CONTROLE_com_TOTAL_declarado_a_conferencia_e_INDEPENDENTE():
+    """🧪 O outro lado: quando a prancha declara o peso total, existe âncora de
+    verdade. Foi ela que salvou 5 das 6 pranchas da Eduarda — leitura em dobro
+    não bate com o total impresso, e aí o rebaixamento vem pelo motivo certo."""
+    r = parse_steel_table(_quadro_da_eduarda(duplicado=True, com_total=True))
+    assert r["confiavel"] is False
+    assert any("difere do TOTAL declarado" in a for a in r["avisos"]), (
+        "com total declarado, o motivo do rebaixamento tem que ser a "
+        "divergência contra ele: %s" % r["avisos"])
+
+
+def test_CONTROLE_quadro_NORMAL_dela_nao_foi_afetado():
+    """🧪 O risco do conserto é rebaixar quadro honesto. O dela tem uma linha
+    por bitola — nenhuma repetição — e continua MEDIDO, com os 816 kg."""
+    r = parse_steel_table(_quadro_da_eduarda(duplicado=False, com_total=True))
+    assert r["confiavel"] is True, r["avisos"]
+    assert _soma(r) == 816.0 and r["total_kg"] == 816.0
+
+
+def test_CONTROLE_dois_quadros_legitimos_SEM_total_continuam_medidos():
+    """🧪 O erro simétrico: vigas Ø10+Ø12,5 e lajes Ø8+Ø10 sem total nenhum.
+    A Ø10 repete entre eles, mas são elementos DIFERENTES — somar está certo.
+
+    🪤 Este caso É rebaixado agora, e de propósito: sem total declarado o código
+    não tem como distinguir 'vigas + lajes' de 'quadro + seu resumo'. Prefiro
+    entregar laranja a entregar o dobro carimbado de medido. O teste existe pra
+    fotografar essa escolha — se um dia alguém achar um sinal melhor, este
+    número muda e a decisão é consciente."""
+    r = _ler(_quadro("VIGAS", 100, VIGAS, com_total=False),
+             _quadro("LAJES", 60, LAJES, com_total=False))
+    assert _soma(r) == 500.0, "a soma em si continua certa: %.0f" % _soma(r)
+    assert r["confiavel"] is False, (
+        "sem total pra conferir, bitola repetida não pode virar MEDIDO")

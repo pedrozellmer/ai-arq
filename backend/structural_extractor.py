@@ -558,9 +558,14 @@ def parse_steel_table(texts) -> dict | None:
                 f"elementos OU um quadro e seu resumo; não dá pra decidir pela prancha")
 
     by_bitola: dict[float, dict] = {}
+    # 🔑 Marca se ALGUMA bitola veio de mais de um quadro. É o sinal de que a
+    # soma pode ser leitura em dobro — e a conferência por massa linear é cega
+    # pra isso, porque kg e comprimento dobram juntos.
+    _repetiu_bitola = False
     for e in usadas:
         b = e["bitola_mm"]
         if b in by_bitola:
+            _repetiu_bitola = True
             by_bitola[b]["kg"] += e["kg"]
             if e["comp_m"]:
                 by_bitola[b]["comp_m"] = (by_bitola[b]["comp_m"] or 0) + e["comp_m"]
@@ -579,6 +584,42 @@ def parse_steel_table(texts) -> dict | None:
             avisos.append(
                 f"soma das bitolas ({soma:.2f} kg) difere do TOTAL declarado na prancha "
                 f"({total_kg:.2f} kg) — leitura possivelmente incompleta; tratar como ESTIMADO")
+
+    # 🚨 29/08/2026 — O BURACO QUE DEIXAVA AÇO EM DOBRO SAIR COMO "MEDIDO".
+    #
+    # Achado por cético adversarial, depois de eu declarar o conserto bom. Eu
+    # tinha "conferido" os 38 itens da Eduarda recalculando comprimento × massa
+    # linear e comparando com o peso. Passaram 37 de 38 dentro de 1,3%.
+    #
+    # 🩸 A conferência era uma TAUTOLOGIA. Quando a mesma bitola cai em mais de
+    # um quadro, a consolidação acima soma o `kg` E o `comp_m` JUNTOS — então a
+    # razão kg/comp continua exatamente a massa linear da norma. Reproduzido com
+    # o quadro real da Eduarda duplicado sob o mesmo cabeçalho:
+    #
+    #     soma lida 1632 kg   (a verdade é 816)   confiavel=True
+    #     Ø5,0   262 kg / 1704 m  → NBR 262,8   desvio -0,32%
+    #     Ø12,5  788 kg /  818 m  → NBR 788,6   desvio -0,08%
+    #
+    # Seis de seis passando com folga, e a obra recebendo o DOBRO do aço com
+    # selo de MEDIDO. Eu conferi o motor com a régua do próprio motor.
+    #
+    # 🔑 POR QUE O CONSERTO DE 28/08 NÃO PEGA ESTE CASO: `_indice_do_resumo` só
+    # enxerga resumo geral quando os quadros têm CABEÇALHOS SEPARADOS. Resumo
+    # colado embaixo do mesmo cabeçalho vira um quadro só, e a duplicação
+    # emitia apenas um AVISO — que não rebaixava nada.
+    #
+    # 🔒 A REGRA AGORA: bitola repetida entre quadros só pode virar MEDIDO se
+    # houver um TOTAL declarado pra conferir contra. Sem essa âncora, a soma é
+    # indistinguível do dobro, e a resposta honesta é "não sei" → estimado.
+    # 🪤 Não rebaixa quando HÁ total: aí a soma tem verificação independente, e
+    # foi o que salvou 5 das 6 pranchas da Eduarda.
+    if _repetiu_bitola and total_kg is None:
+        confiavel = False
+        avisos.append(
+            "a mesma bitola aparece em mais de um quadro e a prancha NÃO declara "
+            "um peso total pra conferir — a soma fica indistinguível de uma "
+            "leitura em dobro. Tratando como ESTIMADO: confira o quadro impresso")
+
     if ambiguo:
         confiavel = False
     if any("descartada" in a for a in avisos):
