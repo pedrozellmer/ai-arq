@@ -21617,11 +21617,12 @@ def metricas_tick(request: Request):
                    "que já foi gravado à mão.", severity="error")
         return {"status": "sem_token", "gravados": 0}
 
+    _casa = _ips_da_casa()
     gravados, falhas = [], []
     for atras in (1, 2, 3):
         dia = _d.today() - _td(days=atras)
         try:
-            linha = _ms.coletar(dia)
+            linha = _ms.coletar(dia, ips_da_casa=_casa)
         except Exception as e:
             falhas.append("%s: %s" % (dia, e))
             continue
@@ -21666,6 +21667,64 @@ def _contar_do_dia(o_que: str, dia) -> int:
     except Exception:
         return None
 
+
+
+def _ips_da_casa() -> set:
+    """Os IPs que somos NÓS, lidos do banco (`ips_da_casa`).
+
+    🚨 Pedido do Pedro (29/08): "tira sempre o meu acesso e o seu da contagem
+    pra não estragar a estatística."
+
+    🪤 Só os vistos nos últimos 90 dias. IP residencial rotaciona: um endereço
+    que era nosso em maio pode ser de um cliente hoje, e excluí-lo pra sempre
+    apagaria a visita dele — o erro oposto, e igualmente calado.
+    """
+    from datetime import datetime as _dt2, timedelta as _td2, timezone as _tz2
+    try:
+        corte = (_dt2.now(_tz2.utc) - _td2(days=90)).isoformat()
+        st, linhas = _supa_rest_service(
+            "GET", "ips_da_casa",
+            params={"select": "ip", "visto_em": "gte.%s" % corte, "limit": "500"})
+        if st != 200:
+            return set()
+        return {str(l.get("ip") or "").strip() for l in (linhas or []) if l.get("ip")}
+    except Exception:
+        return set()
+
+
+@app.post("/api/admin/marcar-meu-ip")
+def admin_marcar_meu_ip(request: Request):
+    """Registra o IP de quem está com o painel aberto como "da casa".
+
+    🔑 É assim que a lista se mantém em dia sozinha, sem ninguém lembrar de
+    editar nada. Chamado pelo admin.html quando o painel carrega.
+
+    🔒 Exige admin — então só entra aqui quem é da casa. E guarda só o IP e um
+    rótulo, nunca o que a pessoa fez.
+    """
+    _require_admin(request)
+    # 🪤 Atrás do Cloudflare, `request.client.host` é o IP da BORDA, não o de
+    # quem chamou. O endereço real vem no cabeçalho que o Cloudflare põe.
+    ip = (request.headers.get("cf-connecting-ip")
+          or (request.headers.get("x-forwarded-for") or "").split(",")[0]
+          or (request.client.host if request.client else "")).strip()
+    if not ip:
+        return {"ok": False, "motivo": "não consegui descobrir o IP"}
+    quem = ""
+    try:
+        u = _get_user_from_request(request, tolerante=True)
+        quem = (u or {}).get("email", "")[:120]
+    except Exception:
+        pass
+    try:
+        from datetime import datetime as _dt3, timezone as _tz3
+        _supa_rest_service("POST", "ips_da_casa",
+                           body={"ip": ip, "quem": quem,
+                                 "visto_em": _dt3.now(_tz3.utc).isoformat()},
+                           prefer="resolution=merge-duplicates")
+        return {"ok": True, "ip": ip}
+    except Exception as e:
+        return {"ok": False, "motivo": str(e)[:120]}
 
 @app.get("/api/admin/metricas")
 def admin_metricas(request: Request, dias: int = 30):

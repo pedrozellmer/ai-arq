@@ -30,13 +30,28 @@ from datetime import date
 # A zona do ai.arq.br no Cloudflare.
 _ZONA = "e2375067fceb7c34bb92136d7b5d23d7"
 
-# 🪤 IPs que somos NÓS. Sem isto, um dia de trabalho pesado no site vira
-# "movimento" e a série mente pro lado otimista.
-# 📌 Medido em 29/08: nós fomos 11 de 302 requisições no dia — pouco, mas o
-# ponto é não descobrir isso de novo do zero daqui a um mês.
-_NOSSOS_IPS = {ip.strip() for ip in
-               (os.environ.get("METRICAS_IPS_NOSSOS") or "189.62.150.142").split(",")
-               if ip.strip()}
+# 🚨 PEDIDO EXPLÍCITO DO PEDRO (29/08): "tira sempre o meu acesso e o seu da
+# contagem pra não estragar a estatística."
+#
+# 🪤 A 1ª versão era uma lista FIXA no código, com um IP só. Isso envelhece
+# calado: IP residencial rotaciona, e o celular dele é outro endereço. Daqui a
+# um mês a lista estaria errada e ninguém saberia — a estatística voltaria a
+# contar a gente como público.
+#
+# 🔑 Por isso a lista de verdade mora no BANCO (`ips_da_casa`) e se enche
+# sozinha: toda vez que o painel de admin carrega, ele registra o IP de quem
+# está olhando. Só admin chama, então só entra quem é da casa.
+#
+# O que fica aqui embaixo é só a rede de segurança pra quando o banco não
+# responder — e a env permite acrescentar sem deploy.
+_IPS_DE_EMERGENCIA = {ip.strip() for ip in
+                      (os.environ.get("METRICAS_IPS_NOSSOS") or "189.62.150.142").split(",")
+                      if ip.strip()}
+
+# 🪤 IP que não aparece há muito tempo provavelmente voltou pro pool da
+# operadora e hoje é de outra pessoa. Excluir pra sempre apagaria visita de
+# cliente — o erro oposto, e igualmente calado.
+_DIAS_PRA_ESQUECER_IP = 90
 
 # Navegador que o Cloudflare não reconhece, ou que se declara robô.
 _MARCA_DE_ROBO = ("unknown", "bot", "crawler", "spider", "curl", "python", "wget")
@@ -62,7 +77,7 @@ def _graphql(query: str, timeout: int = 25) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
-def coletar(dia: date) -> dict:
+def coletar(dia: date, ips_da_casa=None) -> dict:
     """Números de UM dia, já separados. Levanta se não der — quem chama decide.
 
     🪤 O `httpRequestsAdaptiveGroups` (o que traz IP e navegador) só aceita
@@ -81,12 +96,14 @@ def coletar(dia: date) -> dict:
     grupos = (((dados.get("data") or {}).get("viewer") or {})
               .get("zones") or [{}])[0].get("httpRequestsAdaptiveGroups") or []
 
+    # 🔒 A lista do banco MANDA; a de emergência só entra se ela vier vazia.
+    nossos = set(ips_da_casa or ()) | _IPS_DE_EMERGENCIA
     ips_gente, gente, robo, nosso = set(), 0, 0, 0
     for g in grupos:
         ip = (g.get("dimensions") or {}).get("clientIP") or ""
         nav = (g.get("dimensions") or {}).get("userAgentBrowser") or ""
         n = int(g.get("count") or 0)
-        if ip in _NOSSOS_IPS:
+        if ip in nossos:
             nosso += n
         elif _e_robo(nav):
             robo += n

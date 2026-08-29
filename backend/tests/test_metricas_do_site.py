@@ -95,10 +95,26 @@ def test_as_frases_saem_em_portugues_correto():
 def test_o_IP_da_nossa_maquina_nao_conta_como_movimento():
     """🚨 Pergunta literal do Pedro: "verifica se essas visitas não são de fato
     a gente entrando". Sem isto, um dia de trabalho pesado no site vira
-    'movimento' e a série mente pro lado otimista."""
-    assert "189.62.150.142" in ms._NOSSOS_IPS, (
-        "o IP da máquina de trabalho saiu da lista — nossas visitas voltam a "
-        "contar como público")
+    'movimento' e a série mente pro lado otimista.
+
+    📌 A lista de VERDADE mora no banco (`ips_da_casa`) e se enche sozinha. O
+    que se testa aqui é a rede de segurança: se o banco não responder, o
+    coletor não pode voltar a contar a gente como público.
+    """
+    assert "189.62.150.142" in ms._IPS_DE_EMERGENCIA, (
+        "a rede de segurança ficou vazia — se o banco falhar, nossas visitas "
+        "voltam a contar como público")
+
+
+def test_a_lista_do_BANCO_manda_e_a_de_emergencia_so_complementa():
+    """🔑 O desenho: banco primeiro, código como rede. Se alguém inverter, um
+    IP novo do Pedro (celular, ou o residencial depois de rotacionar) deixaria
+    de ser excluído — que é exatamente o que ele pediu pra não acontecer."""
+    fonte = io.open(os.path.join(_BACKEND, "metricas_site.py"), encoding="utf-8").read()
+    i = fonte.find("def coletar")
+    corpo = fonte[i:i + 1600]
+    assert "ips_da_casa or ()" in corpo and "_IPS_DE_EMERGENCIA" in corpo, (
+        "o coletor parou de juntar a lista do banco com a de emergência")
 
 
 def test_navegador_desconhecido_e_robo():
@@ -167,3 +183,90 @@ def test_falha_ao_contar_projetos_vira_NULO_e_nao_zero():
     assert "and=" in bloco, (
         "o filtro de faixa de data saiu do formato do PostgREST — com duas "
         "chaves `created_at` a segunda apaga a primeira e conta o histórico todo")
+
+
+# ────────── "tira sempre o meu acesso e o seu" (Pedro, 29/08) ────────────────
+
+def test_a_lista_de_IPS_da_casa_vem_do_BANCO_e_nao_do_codigo():
+    """🚨 Pedido literal do Pedro. A 1ª versão era uma lista FIXA com um IP só —
+    e isso envelhece calado: IP residencial rotaciona e o celular dele é outro
+    endereço. Em um mês a lista estaria errada e a estatística voltaria a contar
+    a gente como público, sem ninguém perceber."""
+    assert "_ips_da_casa" in _MAIN, "sumiu a leitura da lista do banco"
+    i = _MAIN.find("def _ips_da_casa")
+    corpo = _MAIN[i:i + 1400]
+    assert "ips_da_casa" in corpo, "não consulta a tabela"
+    assert "days=90" in corpo, (
+        "sumiu o esquecimento por tempo — IP devolvido pro pool da operadora "
+        "ficaria excluído pra sempre e apagaria visita de cliente")
+
+
+def test_o_tick_USA_a_lista_ao_coletar():
+    """🪤 Guarda do CALL SITE: a função existir não adianta se o tick não passar
+    a lista adiante. Já passei verde duas vezes testando função e não chamador."""
+    i = _MAIN.find('@app.post("/api/metricas/tick")')
+    bloco = _MAIN[i:i + 2400]
+    assert "_ips_da_casa()" in bloco, "o tick não lê a lista"
+    assert "ips_da_casa=" in bloco, "lê a lista mas não repassa pro coletor"
+
+
+def test_o_IP_real_vem_do_cabecalho_do_cloudflare():
+    """🪤 Atrás do Cloudflare, `request.client.host` é o IP da BORDA, igual pra
+    todo mundo. Registrar ele excluiria o Cloudflare inteiro da estatística —
+    ou seja, zeraria a contagem."""
+    i = _MAIN.find("def admin_marcar_meu_ip")
+    corpo = _MAIN[i:i + 1400]
+    assert "cf-connecting-ip" in corpo, (
+        "não lê o cabeçalho do Cloudflare — registraria o IP da borda")
+
+
+def test_a_rota_de_marcar_IP_exige_admin():
+    """🔒 Sem isso, qualquer visitante poderia se auto-excluir da contagem."""
+    i = _MAIN.find("def admin_marcar_meu_ip")
+    assert "_require_admin(request)" in _MAIN[i:i + 700]
+
+
+def test_o_coletor_aceita_a_lista_e_nao_so_a_constante():
+    """🧪 Controle: a assinatura tem que receber a lista, senão o parâmetro do
+    tick cai no vazio e a exclusão volta a ser o IP fixo."""
+    import inspect
+    assert "ips_da_casa" in str(inspect.signature(ms.coletar)), (
+        "coletar() não recebe mais a lista — o tick passa e ela é ignorada")
+
+
+# ──────────────────── a tela existe e está ligada de verdade ─────────────────
+
+def test_a_tela_do_painel_tem_TODOS_os_campos_que_o_JS_procura():
+    """🪤 A memória do projeto guarda um caso de aba que existia no HTML e não
+    tinha botão no menu — código vivo, tela morta. Aqui o risco é o irmão dele:
+    o JS escrever num id que o HTML não tem, e o painel ficar em branco sem
+    erro nenhum no console."""
+    raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    html = io.open(os.path.join(raiz, "admin.html"), encoding="utf-8").read()
+    assert "carregarMovimentoDoSite" in html, "a função do painel sumiu"
+    assert html.count("carregarMovimentoDoSite") >= 2, (
+        "a função existe mas ninguém CHAMA ela — painel morto")
+    for campo in ("mov-frase", "mov-farol", "mov-barras", "mov-alerta",
+                  "mov-saude", "mov-cadastros", "mov-projetos"):
+        assert ('id="%s"' % campo) in html, "o JS escreve em #%s e o HTML não tem" % campo
+        assert ("'%s'" % campo) in html, "#%s existe no HTML e ninguém preenche" % campo
+
+
+def test_a_tela_avisa_quando_a_coleta_esta_desligada():
+    raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    html = io.open(os.path.join(raiz, "admin.html"), encoding="utf-8").read()
+    i = html.find("carregarMovimentoDoSite")
+    bloco = html[i:i + 3000]
+    assert "coleta" in bloco and "aviso" in bloco, (
+        "a tela não mostra o aviso de coleta desligada — série parada ficaria "
+        "igual a site sem movimento")
+
+
+def test_a_tela_diz_que_o_numero_e_TETO_e_nao_pessoas():
+    """🪤 Foi lendo um número desses como 'pessoas' que eu errei duas vezes hoje.
+    O rodapé da tela tem que desarmar isso pra quem olha."""
+    raiz = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    html = io.open(os.path.join(raiz, "admin.html"), encoding="utf-8").read()
+    i = html.find('id="mov-barras"')
+    assert "teto" in html[i:i + 900].lower(), (
+        "sumiu o aviso de que a barra é teto e não contagem de pessoas")

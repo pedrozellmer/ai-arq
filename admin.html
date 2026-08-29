@@ -223,6 +223,54 @@
           <p class="text-sm text-gray-500 mt-1">Vis&#227;o geral do AI.arq</p>
         </div>
 
+        <!-- ═══ ESTÁ TUDO NORMAL? (29/08/2026) ══════════════════════════════
+             O Pedro perguntou TRÊS vezes na mesma semana se o site tinha caído
+             do Google. Cada resposta custava meia hora de consulta na mão — e
+             nas duas primeiras a resposta saiu ERRADA, porque o contador de
+             "únicos" do Cloudflare conta robô.
+             Fica no TOPO do dashboard de propósito: é a primeira pergunta que
+             ele faz ao abrir o admin, então tem que ser a primeira coisa que
+             ele lê. -->
+        <section class="mb-8 rounded-2xl border bg-white p-6 shadow-sm">
+          <div class="flex items-start justify-between gap-4 flex-wrap">
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span id="mov-farol" class="inline-block h-3 w-3 rounded-full bg-gray-300 shrink-0"></span>
+                <h2 class="text-base font-semibold text-gray-900">Movimento do site</h2>
+              </div>
+              <p id="mov-frase" class="text-sm text-gray-600 mt-1">carregando&hellip;</p>
+            </div>
+            <div class="flex items-center gap-6 shrink-0">
+              <div class="text-right">
+                <p class="text-xs text-gray-500">site no ar</p>
+                <p id="mov-saude" class="text-lg font-bold text-gray-400">--</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xs text-gray-500">cadastros (7d)</p>
+                <p id="mov-cadastros" class="text-lg font-bold text-gray-900">--</p>
+              </div>
+              <div class="text-right">
+                <p class="text-xs text-gray-500">projetos (7d)</p>
+                <p id="mov-projetos" class="text-lg font-bold text-gray-900">--</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- aviso de coleta desligada: aparece SÓ quando está desligada.
+               🚨 Sem isto, série parada e site sem movimento têm a mesma cara. -->
+          <div id="mov-alerta" class="hidden mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
+
+          <!-- barras: uma por dia. Altura = endereços distintos que NÃO são
+               nós nem robô óbvio. 🪤 É TETO, não contagem de pessoas. -->
+          <div id="mov-barras" class="mt-5 flex items-end gap-1 h-24"></div>
+          <p class="mt-2 text-[11px] text-gray-400 leading-snug">
+            Cada barra &#233; um dia: endere&#231;os distintos que <b>n&#227;o</b> s&#227;o rob&#244; conhecido
+            nem a nossa m&#225;quina. &#201; um <b>teto</b>, n&#227;o uma contagem de pessoas &mdash; rob&#244;
+            que se disfar&#231;a de navegador entra aqui. O contador de &#8220;&#250;nicos&#8221; do
+            Cloudflare conta rob&#244; e chegou a inflar um dia em 76%.
+          </p>
+        </section>
+
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <!-- Card: Total de Usuarios — clicavel, leva pra aba Usuarios -->
           <button type="button" onclick="switchTab('usuarios')" aria-label="Ver todos os usu&#225;rios"
@@ -4272,6 +4320,77 @@ async function adminDownloadXlsx(jobId) {
 // ══════════════════════════════════════════════
 // DASHBOARD STATS
 // ══════════════════════════════════════════════
+
+// ═══ MOVIMENTO DO SITE — "está tudo normal?" ══════════════════════════════
+// 29/08/2026. O Pedro perguntou TRÊS vezes na mesma semana se o site tinha
+// caído do Google. Cada resposta custava meia hora de consulta na mão, e nas
+// duas primeiras saiu ERRADA: o contador de "únicos" do Cloudflare conta robô
+// e chegou a inflar um dia em 76%.
+async function carregarMovimentoDoSite() {
+  const frase = document.getElementById('mov-frase');
+  const farol = document.getElementById('mov-farol');
+  const barras = document.getElementById('mov-barras');
+  const alerta = document.getElementById('mov-alerta');
+  if (!frase) return;
+
+  // 🚨 Pedido do Pedro: "tira sempre o meu acesso e o seu da contagem".
+  // Registrar aqui é o que mantém a lista em dia sozinha — IP residencial
+  // rotaciona, e lista fixa no código envelheceria calada.
+  try { await authFetch(`${API_BASE}/api/admin/marcar-meu-ip`, { method: 'POST' }); }
+  catch (e) { /* não impede o painel de carregar */ }
+
+  let d;
+  try {
+    const r = await authFetch(`${API_BASE}/api/admin/metricas?dias=45`);
+    d = await r.json();
+  } catch (e) {
+    frase.textContent = 'não consegui ler o movimento agora.';
+    return;
+  }
+
+  const v = d.veredito || {};
+  frase.textContent = v.frase || '--';
+  const cor = { normal: 'bg-emerald-500', abaixo: 'bg-amber-500',
+                acima: 'bg-indigo-400', nao_sei: 'bg-gray-300',
+                sem_dados: 'bg-gray-300' }[v.status] || 'bg-gray-300';
+  if (farol) farol.className = 'inline-block h-3 w-3 rounded-full shrink-0 ' + cor;
+
+  // 🚨 Coleta desligada e site sem movimento têm a MESMA cara numa série
+  // parada. Por isso o aviso é explícito em vez de um gráfico vazio.
+  if (alerta) {
+    const av = (d.coleta || {}).aviso;
+    alerta.classList.toggle('hidden', !av);
+    if (av) alerta.textContent = '⚠ ' + av;
+  }
+
+  const serie = d.serie || [];
+  const ult7 = serie.slice(-7);
+  const soma = (k) => ult7.reduce((a, x) => a + (Number(x[k]) || 0), 0);
+  const p = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  p('mov-cadastros', soma('cadastros'));
+  p('mov-projetos', soma('projetos'));
+
+  const saude = document.getElementById('mov-saude');
+  if (saude) {
+    const caiu = serie.filter(x => x.site_ok === false).length > 0;
+    saude.textContent = caiu ? 'caiu' : 'sim';
+    saude.className = 'text-lg font-bold ' + (caiu ? 'text-red-600' : 'text-emerald-600');
+  }
+
+  if (barras) {
+    const vals = serie.map(x => Number(x.ips_gente) || 0);
+    const teto = Math.max(1, ...vals);
+    barras.innerHTML = serie.map((x, i) => {
+      const h = Math.max(3, Math.round((vals[i] / teto) * 96));
+      const dia = String(x.dia || '').slice(5).split('-').reverse().join('/');
+      const dow = new Date(x.dia + 'T12:00:00').getDay();
+      const fds = (dow === 0 || dow === 6);
+      return '<div class="flex-1 rounded-t ' + (fds ? 'bg-indigo-100' : 'bg-indigo-500') +
+             '" style="height:' + h + 'px" title="' + dia + ': ' + vals[i] + ' endereços"></div>';
+    }).join('');
+  }
+}
+
 async function loadDashboardStats() {
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   const _mins = (typeof minutesSince === 'function') ? minutesSince : (d => (Date.now() - Date.parse(d)) / 60000);
@@ -4289,6 +4408,7 @@ async function loadDashboardStats() {
       const { count } = await sbClient.from('profiles').select('*', { count: 'exact', head: true });
       total = count || 0;
     }
+    carregarMovimentoDoSite();
     set('stat-users', total);
     const detailEl = document.getElementById('stat-users-detail');
     if (detailEl) {
