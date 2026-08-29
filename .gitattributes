@@ -1,0 +1,22 @@
+# 🚨 29/08/2026 — o git avisou "LF will be replaced by CRLF" pra um PDF.
+#
+# Sem este arquivo, o git decide sozinho o que é texto — e um PDF pequeno sem
+# byte nulo passa por texto. Aí a normalização de fim de linha REESCREVE bytes
+# do binário no checkout: o arquivo baixa corrompido pra quem clona no Windows,
+# e offsets internos do PDF apontam pro lugar errado. O checklist da NBR 9050
+# escapou por não conter a sequência exata; o próximo binário pode não escapar.
+#
+# Regra: binário é binário, declarado — nunca adivinhado.
+*.pdf   binary
+*.xlsx  binary
+*.docx  binary
+*.dwg   binary
+*.dxf   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.webp  binary
+*.ico   binary
+*.woff  binary
+*.woff2 binary
+*.zip   binary
