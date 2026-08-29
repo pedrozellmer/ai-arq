@@ -1015,6 +1015,36 @@ _PROCEDENCIA_TEXTO = (
     "texto", "carimbo", "legenda", "rótulo", "rotulo", "tabela", "quadro",
 )
 
+# 🚨 29/08/2026 — A EXCEÇÃO DO QUADRO DE AÇO, e por que ela NÃO é um furo.
+#
+# O caso que criou este guarda em 24/08 foi de MÁ ATRIBUIÇÃO, não de leitura:
+# "AREA TOTAL CLINICA = 264,54 m²" colado na linha "Piso — revestimento". O
+# número era real; a gente é que ADIVINHOU a que item ele pertencia.
+#
+# 🔑 A linha que separa os dois casos:
+#   • TABELA COM COLUNAS ROTULADAS — o desenho diz o que cada número é. A
+#     coluna BITOLA diz a bitola, a COMPR diz o comprimento, a PESO diz o peso.
+#     Não há adivinhação de atribuição.
+#   • TEXTO SOLTO — nós chutamos a que item a frase se refere. É o caso de 24/08.
+#
+# E o quadro de aço tem duas conferências que texto solto nunca tem:
+#   (a) cada linha contra a massa linear da NBR 7480 (comp × kg/m ≈ peso);
+#   (b) a soma das bitolas contra o TOTAL declarado na própria prancha.
+#
+# ⚖️ E o argumento decisivo: geometria NÃO CONSEGUE pesar armadura — a prancha
+# não desenha barra por barra. Exigir geometria aqui significaria que aço NUNCA
+# poderia ser medido, em nenhum projeto, nunca. O selo que a planilha promete é
+# "✓ MEDIDO do CAD", e este peso veio do CAD. Chamá-lo de "⚠ ESTIMADO" seria
+# MENOS honesto: não é estimativa nossa, é o número que o engenheiro calculou.
+#
+# 🔒 A exceção é ESTREITA de propósito: só o quadro/resumo de aço, nomeado.
+# Qualquer outra procedência de texto continua sendo acusada.
+_QUADRO_DE_ACO = (
+    "quadro/resumo de aço", "quadro de aço", "resumo de aço",
+    "quadro/resumo de aco", "quadro de aco", "resumo de aco",
+    "quadro de ferragens", "quadro de ferro",
+)
+
 
 def selos_sem_geometria(items):
     """Índices das linhas seladas como MEDIDAS cuja procedência é só TEXTO.
@@ -1039,14 +1069,31 @@ def selos_sem_geometria(items):
         selo = str(getattr(selo, "value", selo) or "").strip().lower()
         if selo != "confirmado":
             continue
-        # Origem explícita de geometria fecha a questão sem olhar texto nenhum.
-        if str(_campo_do_item(it, "origem", "") or "").strip().lower() == "dxf_geom":
-            continue
         obs = str(_campo_do_item(it, "observations", "") or "").lower()
+        # 🚨 29/08/2026 — ESTE ATALHO DESLIGAVA O GUARDA PRA TODO O CAMINHO DXF.
+        #
+        # `main.py` carimbava `origem="dxf_geom"` em TODO item vindo de DXF, sem
+        # olhar de onde a quantidade saiu. Como a primeira linha deste laço era
+        # "origem dxf_geom fecha a questão", o guarda pulava o caminho inteiro —
+        # ele só funcionava de fato para itens de PDF.
+        #
+        # 📊 Medido no acervo: 492 itens confirmados com esse rótulo, e 46 deles
+        # com procedência SÓ de texto (38 do aço, 8 outros em 5 projetos de
+        # cliente). Esses 8 eram vazamento silencioso desde 24/08.
+        #
+        # 🔑 Agora a origem só ABSOLVE quando o próprio texto confirma geometria.
+        # Rótulo não é prova; a frase que o motor escreveu quando mediu é.
+        if (str(_campo_do_item(it, "origem", "") or "").strip().lower() == "dxf_geom"
+                and any(p in obs for p in _PROVA_GEOMETRIA)):
+            continue
         if not obs:
             continue                     # sem procedência escrita: não acusa
         if any(p in obs for p in _PROVA_GEOMETRIA):
             continue                     # mediu de verdade
+        # ⚖️ Quadro de aço: tabela com colunas rotuladas, conferida contra a NBR
+        # e contra o total da prancha. Ver o comentário longo em _QUADRO_DE_ACO.
+        if any(p in obs for p in _QUADRO_DE_ACO):
+            continue
         if not any(p in obs for p in _PROCEDENCIA_TEXTO):
             continue                     # não sabemos o que é: não acusa
         achados.append({

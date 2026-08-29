@@ -98,10 +98,57 @@ def test_medicao_de_verdade_nao_e_tocada():
             REAIS_QUE_DEVEM_FICAR[a["indice"]][:100] for a in ach))
 
 
-def test_origem_dxf_geom_fecha_a_questao():
-    """Quem tem origem explícita de geometria não é julgado por texto nenhum."""
+def test_o_rotulo_dxf_geom_sozinho_NAO_absolve_mais():
+    """🚨 29/08/2026 — ESTE TESTE GUARDAVA O BUG.
+
+    Ele dizia: "quem tem origem dxf_geom não é julgado por texto nenhum". E o
+    `main.py` carimba `origem="dxf_geom"` em TODO item vindo de DXF, sem olhar
+    de onde a quantidade saiu. Somando as duas coisas, este guarda pulava o
+    caminho DXF inteiro — ele só funcionava de fato para itens de PDF.
+
+    📊 Medido no acervo em 29/08: 492 itens confirmados com esse rótulo, 46
+    deles com procedência só de texto — 38 do aço (caso legítimo, tratado à
+    parte) e 8 outros em 5 projetos de cliente, que eram vazamento silencioso
+    desde que o guarda nasceu.
+
+    🔑 A regra agora: rótulo não é prova. A origem só absolve quando o TEXTO da
+    procedência confirma a geometria. A frase que o motor escreve quando mede
+    vale mais que um campo preenchido no atacado.
+    """
+    assert selos_sem_geometria(
+        [_it("Conforme legenda código 01 — quantidade explícita", origem="dxf_geom")]), (
+        "rótulo 'dxf_geom' voltou a absolver sozinho — o guarda fica cego pro "
+        "caminho DXF inteiro de novo")
+
+
+def test_origem_dxf_geom_COM_prova_no_texto_continua_absolvendo():
+    """🧪 O outro lado: quando o rótulo e o texto concordam, não acusa."""
     assert not selos_sem_geometria(
-        [_it("Conforme legenda código 01 — quantidade explícita", origem="dxf_geom")])
+        [_it("Área hachurada do layer PISO-CER: 128,40 m²", origem="dxf_geom")])
+
+
+def test_o_QUADRO_DE_ACO_e_a_unica_excecao_de_texto():
+    """⚖️ Decisão de 29/08, e a razão está escrita em `_QUADRO_DE_ACO`.
+
+    Tabela com COLUNAS ROTULADAS é diferente de texto solto: o desenho diz o
+    que cada número é (bitola, comprimento, peso), então não há adivinhação de
+    atribuição — que foi exatamente o erro de 24/08 (a área da clínica colada
+    na linha do piso). Some-se a isso que o quadro é conferido contra a massa
+    linear da NBR e contra o total impresso na prancha.
+
+    E o argumento que fecha: geometria NÃO pesa armadura — a prancha não
+    desenha barra por barra. Exigir geometria aqui seria dizer que aço nunca
+    pode ser medido, em projeto nenhum.
+    """
+    assert not selos_sem_geometria([_it(
+        "Fonte: Quadro/Resumo de Aço lido da prancha [MEDIDO]. Comprimento 409 m.",
+        origem="dxf_geom")])
+    # 🔒 e a exceção é ESTREITA: outra tabela qualquer continua sendo acusada
+    assert selos_sem_geometria([_it(
+        "Fonte: tabela de ambientes da prancha — área 264,54 m²",
+        origem="dxf_geom")]), (
+        "a exceção vazou pra qualquer tabela — só o quadro de aço, nomeado, "
+        "tem as duas conferências que justificam o selo")
 
 
 def test_nao_acusa_quem_nao_declarou_procedencia():
