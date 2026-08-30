@@ -350,13 +350,29 @@ def render_sources(sources, data_ref=""):
     legal = [s for s in norms if s not in abnt]
     books = [s for s in sources if s.get("type") == "book"]
     links = [s for s in sources if s.get("type", "link") in ("link", "official")]
+    internos = [s for s in sources if s.get("type") == "internal"]
+
+    # 🪤 29/08/2026: fonte com type fora dos baldes era DESCARTADA CALADA —
+    # 11 fontes em 5 posts sumiram do rodapé assim ("ref", "law", "internal",
+    # inventados em dias diferentes e engolidos sem um aviso). Geração que
+    # falha calada é pior que quebrar o build: agora quebra o build.
+    _conhecidos = {"norm", "book", "link", "official", "internal"}
+    _estranhos = [s for s in sources if s.get("type", "link") not in _conhecidos]
+    if _estranhos:
+        raise SystemExit(
+            "fonte com type desconhecido (seria descartada CALADA do rodapé): %r"
+            % [(s.get("type"), s.get("title", "")[:60]) for s in _estranhos])
 
     items_html = ""
 
     def _render_norm_group(group, header):
         out = f'<div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{header}</div><ul class="space-y-1.5 text-sm text-gray-700">'
         for src in group:
-            cite = f'<strong>{src["title"]}</strong>'
+            if src.get("url"):
+                cite = (f'<a href="{src["url"]}" target="_blank" rel="noopener nofollow" '
+                        f'class="text-indigo-600 hover:text-indigo-800 font-semibold">{src["title"]}</a>')
+            else:
+                cite = f'<strong>{src["title"]}</strong>'
             if src.get("description"):
                 cite += f' &mdash; <span class="text-gray-600">{src["description"]}</span>'
             out += f'<li>{cite}</li>'
@@ -390,7 +406,18 @@ def render_sources(sources, data_ref=""):
             link = f'<a href="{src["url"]}" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">{src["title"]}</a>'
             if src.get("publisher"):
                 link += f' <span class="text-gray-500">&middot; {src["publisher"]}</span>'
+            if src.get("description"):
+                link += f' &mdash; <span class="text-gray-600">{src["description"]}</span>'
             items_html += f'<li>{link}</li>'
+        items_html += '</ul></div>'
+
+    if internos:
+        items_html += '<div class="mt-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do AI.arq</div><ul class="space-y-1.5 text-sm text-gray-700">'
+        for src in internos:
+            cite = f'<strong>{src["title"]}</strong>'
+            if src.get("description"):
+                cite += f' &mdash; <span class="text-gray-600">{src["description"]}</span>'
+            items_html += f'<li>{cite}</li>'
         items_html += '</ul></div>'
 
     return f'''
@@ -401,7 +428,7 @@ def render_sources(sources, data_ref=""):
       </h3>
       {items_html}
       <p class="mt-4 text-xs text-gray-400 italic">
-        Última atualização: {data_ref}. Normas ABNT podem ter sido revisadas após esta data — sempre consulte a versão vigente.
+        Última atualização: {data_ref}. Normas e documentos citados podem ter sido revisados após esta data — sempre consulte a versão vigente.
       </p>
     </aside>
     '''

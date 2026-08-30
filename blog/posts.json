@@ -190,8 +190,8 @@
           "description": "Avaliação de custos unitários de construção para incorporação imobiliária e outras disposições para condomínios edilícios — Procedimento. É a norma que define os conceitos de área e os quadros correspondentes."
         },
         {
-          "type": "ref",
-          "title": "CUB/m² — Sinduscons estaduais",
+          "type": "norm",
+          "title": "CUB/m² (metodologia da NBR 12721) — Sinduscons estaduais",
           "description": "O Custo Unitário Básico é calculado mensalmente pelos Sindicatos da Indústria da Construção Civil com a metodologia da NBR 12721:2006 — referência prática pra quem precisa dos coeficientes e valores regionais."
         },
         {
@@ -201,6 +201,83 @@
         }
       ],
       "cta": "Pra montar o quadro sem medir ambiente por ambiente na mão: sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos com as áreas que a prancha permite medir, separadas entre medido e estimado. Grátis durante o beta, quantos projetos quiser, sem cartão."
+    },
+    {
+      "slug": "boletim-de-medicao-de-obra-modelo-excel",
+      "title": "Boletim de Medição de Obra: Modelo Excel e Como Preencher",
+      "description": "Modelo gratuito de boletim de medição em Excel — previsto, executado e acumulado, com memória de cálculo — e o passo a passo pra defender cada número medido.",
+      "keywords": "boletim de medição, boletim de medição excel, modelo boletim de medição, planilha de medição de obra, medição de obra, como preencher boletim de medição, bm de obra, medição mensal de obra, memória de cálculo medição, boletim de medição acumulado",
+      "category": "Cronograma",
+      "publish_date": "2026-11-01",
+      "intro": "A obra anda, mas o pagamento só anda se a medição andar junto: o boletim de medição (BM) é o documento que registra, período a período, quanto de cada serviço foi executado — e é sobre ele que contratante e executora concordam (ou brigam). Quem procura um modelo na internet acha planilha atrás de formulário de cadastro ou formulário cru de órgão público sem uma linha de instrução. Aqui é o contrário: modelo em Excel pra baixar direto, sem cadastro, e o passo a passo de preenchimento — incluindo o que quase ninguém explica: a memória de cálculo que sustenta o número quando alguém discorda dele.",
+      "downloads": [
+        {
+          "file": "boletim-de-medicao-modelo.xlsx",
+          "kind": "XLSX",
+          "label": "Modelo de boletim de medição (Excel)",
+          "hint": "Previsto × executado × acumulado + memória de cálculo · 10 KB"
+        }
+      ],
+      "sections": [
+        {
+          "h2": "Baixe o modelo",
+          "body": "Três abas: o BOLETIM (com fórmulas prontas de acumulado, saldo e percentual), a MEMÓRIA DE CÁLCULO e o COMO USAR. Células amarelas são as que você preenche; o resto é fórmula.\n\n<DOWNLOAD_BUTTONS>\n\nUma escolha de projeto, explicada mais abaixo: este modelo mede QUANTIDADES e não traz coluna de preço. Medição é atestar o que foi executado; valor a pagar é quantidade medida × preço unitário do contrato — uma conta que pertence ao contrato, não à planilha de medição."
+        },
+        {
+          "h2": "O que o boletim registra (em uma frase)",
+          "body": "O BM é a fotografia periódica da obra em números: para cada item contratado, quanto estava previsto, quanto foi executado no período e quanto já acumulou desde o início. Ele nasce do mesmo lugar que o orçamento: o <a href=\"/blog/posts/como-fazer-planilha-de-quantitativos-de-obra.html\">levantamento de quantitativos</a> — a coluna \"previsto\" do boletim é, na prática, o quantitativo contratado da obra."
+        },
+        {
+          "h2": "As colunas que resolvem (com exemplo preenchido)",
+          "body": "Todo boletim que funciona tem as mesmas quatro colunas de quantidade — mais o percentual que nasce delas. Três das cinco ninguém deveria digitar, porque são aritmética:\n\n- Prevista (contratada): fixa, vem do quantitativo. Só muda com aditivo.\n- Executada no período: o que este boletim está medindo.\n- Acumulada: anterior + período. Fórmula.\n- Saldo: prevista − acumulada. Fórmula.\n- % de avanço: acumulada ÷ prevista — nasce sozinho das outras. Fórmula.\n\nUm exemplo linha a linha, BM nº 3 de uma obra fictícia, item alvenaria de vedação (m²): prevista 480, acumulada anterior 210, executada no período 96. O boletim calcula: acumulada atual 306, saldo 174, avanço 63,8%. No BM nº 4, os 306 viram a \"acumulada anterior\" — e é só isso que você copia de um boletim pro outro.\n\nModelos públicos usam exatamente essa espinha: a <a href=\"https://proad.ifc.edu.br/wp-content/uploads/sites/64/2023/01/Planilha-de-Medicoes-%E2%80%93-Modelo.pdf\" rel=\"noopener nofollow\" target=\"_blank\">planilha de medição publicada no site da Pró-Reitoria de Administração do Instituto Federal Catarinense</a>, por exemplo, organiza cada item em ORÇADO × EXECUTADO NO PERÍODO × EXECUTADO ACUMULADO, em 18 seções de serviço — de serviços preliminares a equipamentos."
+        },
+        {
+          "h2": "Memória de cálculo: o que sustenta o número",
+          "body": "É a parte que os modelos prontos ignoram — e a primeira coisa cobrada quando alguém discorda de uma quantidade. Cada linha medida precisa responder: de onde saiu esse número? Trena no local? Contagem? Área do projeto multiplicada pelo executado?\n\nNo modelo, a memória é uma aba própria: referência, como o número foi obtido e a conta feita (ex.: 2 panos × 3,20 × 2,70). Quando o fiscal não reconhece uma quantidade lançada, ele a corta do boletim — o nome disso é glosa — e a discussão volta exatamente pra memória de cálculo: quem tem a conta documentada defende o número; quem não tem, aceita o corte. E quando a conta existe e o corte vem mesmo assim, registre a divergência como ressalva no próprio boletim — assinado com ressalva, o documento anda e a discussão fica registrada em vez de virar memória de reunião.\n\nE o número certo depende do critério de medição de cada serviço — que muda por referência de custo e já rendeu um capítulo próprio nos <a href=\"/blog/posts/7-erros-comuns-levantamento-quantitativos.html\">erros comuns de levantamento</a>."
+        },
+        {
+          "h2": "Quando o acumulado estoura o previsto",
+          "body": "Acumulado maior que o contratado não é proibido — é um alarme. Ou a obra executou além do escopo (caso de aditivo), ou tem quantidade medida errada em algum boletim anterior. O caminho prático: erro em boletim já assinado se corrige com lançamento retificador no boletim seguinte, anotado na memória de cálculo — nunca editando o documento que já tem assinatura. E serviço executado além do escopo não se espreme numa linha existente: entra como item novo, depois de o aditivo ser formalizado. O modelo tem uma linha de CONFERÊNCIA que grita sozinha quando qualquer item passa do previsto, porque esse é o erro mais caro da medição: na Lei 14.133/2021, \"medição de quantidades superiores às efetivamente executadas ou fornecidas\" é literalmente a primeira hipótese de superfaturamento listada (art. 6º, LVII, \"a\").\n\nNa obra financiada, o mesmo princípio: a cartilha da CAIXA limita o percentual mensurado de cada etapa ao previsto no <a href=\"/blog/posts/cronograma-fisico-financeiro-obra-modelo.html\">cronograma físico-financeiro</a> aprovado — pra registrar evolução acima do previsto, é preciso solicitar a reprogramação do cronograma (Cartilha Habitação PF, v.12, dez/2025, p. 44)."
+        },
+        {
+          "h2": "Quem assina — e o que a assinatura significa",
+          "body": "Boletim sem assinatura é rascunho. Assinam os dois lados: quem executou (a contratada, pelo seu responsável técnico) e quem atesta (a fiscalização do contratante). No modelo publicado pelo IFC, o bloco de assinaturas traz o responsável técnico com registro no CREA de um lado e três fiscais identificados por CPF do outro, sob o carimbo \"vistoriada e fiscalizada por\".\n\nEm contrato público, a lei trata disso expressamente: todo contrato precisa de cláusula com os critérios e a periodicidade da medição e o prazo pra liquidar e pagar (art. 92, VI) — e o pagamento fica amarrado à execução: só há adimplemento com a obra realizada, ou parcela dela (art. 92, § 7º)."
+        },
+        {
+          "h2": "De onde vem a exigência: pública, financiada e privada",
+          "body": "Obra pública (Lei 14.133/2021):\n\n- o termo de referência deve conter os critérios de medição e de pagamento (art. 6º, XXIII, \"g\");\n- em obras e serviços de engenharia, a medição é mensal sempre que compatível com o regime de execução (art. 92, § 5º);\n- nos regimes de preço global, medição e pagamento andam por etapas do cronograma, vedado pagar por quantidade de item unitário (art. 46, § 9º);\n- pagamento antecipado sem contraprestação é vedado (art. 145).\n\nEm convênios federais de até R$ 1,5 milhão, a lei cita os \"boletins de medição\" pelo nome, acompanhados de fotos georreferenciadas (art. 184-A, § 1º).\n\nObra financiada pela CAIXA: quem constrói com <a href=\"/blog/posts/financiamento-caixa-construcao-documentos-pci.html\">financiamento habitacional</a> já faz medição sem usar esse nome. A cada etapa, o responsável técnico faz uma vistoria \"para medir e registrar na PLS a sua evolução\" (Cartilha, p. 42), com registro fotográfico dos serviços (p. 41-42) — e só contam serviços \"efetivamente executados/concluídos\" e materiais aplicados na obra — estimativa não entra no percentual (p. 43). Informação que não corresponde à obra pode travar o desembolso das parcelas (p. 41).\n\nObra privada: quem manda é o contrato — e é praxe espelhar a mesma mecânica: medição periódica, ateste, pagamento. Se o seu contrato de empreitada ou subempreitada não diz como e quando se mede, essa é a cláusula a acrescentar antes de começar."
+        },
+        {
+          "h2": "Por que este modelo não tem coluna de valor",
+          "body": "Os modelos de mercado (e os públicos também) costumam trazer valor financeiro, porque na ponta deles a medição liquida um pagamento. O nosso separa os papéis de propósito: a medição atesta QUANTIDADE; o valor é essa quantidade multiplicada pelo preço unitário que já está no contrato — uma multiplicação que o contratante faz na planilha dele, com as retenções e condições que o contrato dele prevê.\n\nÉ a mesma separação que defendemos entre <a href=\"/blog/posts/quantitativo-vs-orcamento-arquiteto-nao-precisa-virar-orcamentista.html\">quantitativo e orçamento</a>: número medido é técnica, preço é negócio. Uma planilha que mistura os dois convida a discussão errada — briga-se sobre dinheiro quando a divergência real é sobre metro quadrado."
+        },
+        {
+          "h2": "Baixe e leve pra obra",
+          "body": "O modelo de novo, pra não rolar a página:\n\n<DOWNLOAD_BUTTONS>\n\nPreencha o cabeçalho uma vez, a coluna \"prevista\" uma vez, e a partir daí cada boletim são duas colunas digitadas e uma vistoria bem documentada. A linha de conferência e a memória de cálculo fazem o resto."
+        }
+      ],
+      "sources": [
+        {
+          "type": "norm",
+          "title": "Lei nº 14.133/2021 (Lei de Licitações e Contratos Administrativos)",
+          "url": "https://www.planalto.gov.br/ccivil_03/_ato2019-2022/2021/lei/l14133.htm",
+          "description": "Dispositivos citados: arts. 6º XXIII \"g\" e LVII \"a\", 46 § 9º, 92 VI, § 5º e § 7º, 145 e 184-A § 1º."
+        },
+        {
+          "type": "official",
+          "title": "Cartilha Habitação PF: Construção, Conclusão, Reforma e Ampliação (Versão 12, dez/2025)",
+          "url": "https://www.caixa.gov.br/Downloads/habitacao-documentos-gerais/cartilha-habitacao-PF-construcao-conclusao-reforma-ampliacao-de-unidades-habitacionais.pdf",
+          "publisher": "Caixa Econômica Federal",
+          "description": "PLS e liberação de parcelas por evolução de obra; páginas citadas: 41-44."
+        },
+        {
+          "type": "official",
+          "title": "Planilha de Medição — modelo público",
+          "url": "https://proad.ifc.edu.br/wp-content/uploads/sites/64/2023/01/Planilha-de-Medicoes-%E2%80%93-Modelo.pdf",
+          "publisher": "PROAD — Instituto Federal Catarinense"
+        }
+      ],
+      "cta": "A coluna \"prevista\" do boletim é o quantitativo da obra — e essa parte você não precisa montar na mão. Sobe seu projeto (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, com memória de origem em cada item medido: o que veio do CAD chega separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
     },
     {
       "slug": "financiamento-caixa-construcao-documentos-pci",
@@ -254,14 +331,18 @@
       ],
       "sources": [
         {
-          "type": "ref",
-          "title": "CAIXA — Cartilha Habitação PF: Construção, Conclusão, Reforma e Ampliação de Unidades Habitacionais Isoladas (Versão 12, dez/2025)",
-          "description": "Documento oficial da Caixa Econômica Federal para clientes e responsáveis técnicos. Todas as exigências citadas neste post têm página de origem na cartilha. https://www.caixa.gov.br/Downloads/habitacao-documentos-gerais/cartilha-habitacao-PF-construcao-conclusao-reforma-ampliacao-de-unidades-habitacionais.pdf"
+          "type": "official",
+          "title": "Cartilha Habitação PF: Construção, Conclusão, Reforma e Ampliação de Unidades Habitacionais Isoladas (Versão 12, dez/2025)",
+          "url": "https://www.caixa.gov.br/Downloads/habitacao-documentos-gerais/cartilha-habitacao-PF-construcao-conclusao-reforma-ampliacao-de-unidades-habitacionais.pdf",
+          "publisher": "Caixa Econômica Federal",
+          "description": "Todas as exigências citadas neste post têm página de origem na cartilha."
         },
         {
-          "type": "ref",
-          "title": "CAIXA — Financiamento para Construção (página oficial)",
-          "description": "Página com os formulários PCI/PRM/PLS pra download e a documentação necessária. https://www.caixa.gov.br/voce/habitacao/construcao/Paginas/default.aspx"
+          "type": "official",
+          "title": "Financiamento para Construção (página oficial)",
+          "url": "https://www.caixa.gov.br/voce/habitacao/construcao/Paginas/default.aspx",
+          "publisher": "Caixa Econômica Federal",
+          "description": "Formulários PCI/PRM/PLS pra download e a documentação necessária."
         }
       ],
       "cta": "A PLS pede o que todo financiamento pede: saber as quantidades da obra antes de assinar. Sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, separando o que foi medido do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
@@ -1852,17 +1933,17 @@
           "description": "Elevadores de passageiros — Elevadores para transporte de pessoa portadora de deficiência. Norma cancelada; acessibilidade em elevadores passou para a série ABNT NBR 16858 (Parte 3)."
         },
         {
-          "type": "law",
+          "type": "norm",
           "title": "Lei Federal 13.146/2015",
           "description": "Lei Brasileira de Inclusão da Pessoa com Deficiência (Estatuto da Pessoa com Deficiência)"
         },
         {
-          "type": "law",
+          "type": "norm",
           "title": "Decreto Federal 5.296/2004",
           "description": "Regulamenta as Leis 10.048/2000 e 10.098/2000 — prioridade de atendimento e acessibilidade"
         },
         {
-          "type": "law",
+          "type": "norm",
           "title": "Lei Federal 10.098/2000",
           "description": "Estabelece normas gerais e critérios básicos para a promoção da acessibilidade"
         },
@@ -2542,7 +2623,7 @@
           "url": "https://www.caixa.gov.br/Downloads/sinapi-cadernos-tecnicos/SINAPI-CT-DUTOS-PARA-AR-CONDICIONADO.pdf"
         },
         {
-          "type": "law",
+          "type": "norm",
           "title": "Lei nº 13.589, de 4 de janeiro de 2018 — manutenção de instalações de climatização",
           "description": "Obriga edificações de uso público e coletivo que possuam ambientes climatizados a manter Plano de Manutenção, Operação e Controle (PMOC), sem exigir capacidade mínima. Fundamenta os itens de PMOC e de acesso para manutenção.",
           "url": "https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13589.htm"
