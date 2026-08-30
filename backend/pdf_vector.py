@@ -24,7 +24,11 @@ import os
 import threading
 import time
 
-MAX_PAGES = 3          # páginas medidas por job (as primeiras)
+# 🚨 Conserto 3 de 15/08 (feito 30/08): era 3 FIXO e cortava CALADO —
+# dois jobs de 43 páginas viraram 3 e o relatório dizia só "medi 3".
+# Teto agora é env e o resumo diz "n de m" (o BUDGET_S continua sendo
+# o freio de custo real: estourou o tempo, para e REGISTRA).
+MAX_PAGES = int(os.environ.get("PDFVEC_MAX_PAGES", "8"))
 BUDGET_S = 180.0       # teto de tempo total do shadow por job
 MAX_FILE_MB = 12       # PDF maior que isso não é medido (memória)
 
@@ -351,10 +355,15 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
         # com CAD do MESMO projeto pra comparar, estavam todos cortados em 2000.
         # Agora grava só o que decide se o leitor vetorial sai da sombra.
         def _resumo(r: dict) -> dict:
+            # 🚨 Conserto 2 de 15/08 (feito 30/08): `cotas_derivacao` era
+            # CALCULADO e jogado fora aqui — a 3ª fonte falhou 40 vezes e
+            # ninguém soube por quê. Keep-list que descarta evidência é o
+            # mesmo vício da keep-list de `meta` da auditoria de 27/08.
             keep = ("file", "page", "scale", "scale_src", "n_rooms",
                     "rooms_m2", "n_grupos", "grupo_maior_m2", "grupo_maior_comodos",
                     "envelope_m2", "envelope_m2_150", "envelope_top",
-                    "skip", "err")
+                    "cotas_derivacao", "err_cotas_derive", "err_cotas",
+                    "scale_derivada_por_cota", "skip", "err")
             d = {k: r[k] for k in keep if r.get(k) is not None}
             if isinstance(d.get("file"), str):
                 d["file"] = d["file"][:34]
@@ -366,12 +375,13 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
                 _tot += float(r.get("rooms_m2") or 0)
             except (TypeError, ValueError):
                 pass
-        payload = json.dumps({"v": 2, "n": len(results),
+        _unicas = len({(x[0], x[3]) for x in page_units if len(x) > 3})
+        payload = json.dumps({"v": 2, "n": len(results), "de": _unicas,
                               "rooms_m2_total": round(_tot, 1),
                               "pages": [_resumo(r) for r in results]},
                              ensure_ascii=False)
         log_fn("pdfvec:shadow", payload[:2000], job_id, severity="info")
-        print(f"[pdfvec] shadow {job_id}: {len(results)} página(s) medida(s)")
+        print(f"[pdfvec] shadow {job_id}: {len(results)} de {_unicas} página(s) medida(s)")
     except Exception as e:
         print(f"[pdfvec] shadow log falhou: {e}")
 

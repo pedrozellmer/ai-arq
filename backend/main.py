@@ -6120,6 +6120,26 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1) -> list:
     return out
 
 
+def _regua_da_sombra(user_total_area, total_area_ia):
+    """Escolhe a régua do veredito da sombra do DXF e DIZ de onde ela veio.
+
+    Ordem: área informada pelo CLIENTE > leitura da IA no quadro de áreas.
+    (Radar 15/08 e 29/08: comparar maior-grupo contra a leitura da própria IA
+    é motor conferindo motor — 0 de 4 razões na faixa, e o denominador mudou
+    +5% entre rodadas do mesmo arquivo. Verdade de cliente primeiro.)"""
+    try:
+        if user_total_area and float(user_total_area) > 0:
+            return float(user_total_area), "cliente"
+    except (TypeError, ValueError):
+        pass
+    try:
+        if total_area_ia and float(total_area_ia) > 0:
+            return float(total_area_ia), "ia_quadro"
+    except (TypeError, ValueError):
+        pass
+    return None, None
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -9776,8 +9796,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # Passa a área declarada pra sombra já gravar o veredito
                 # (maior grupo ÷ declarada) em vez de exigir conferência
                 # manual job a job — é assim que a regra se prova sozinha.
+                # 🚨 Conserto 1 de 15/08 (feito 30/08): a régua era SEMPRE a
+                # leitura da própria IA no quadro (total_area) — motor
+                # conferindo motor, e o denominador balançava ±5% entre rodadas
+                # do MESMO arquivo. Verdade primeiro: área que o CLIENTE
+                # informou; a leitura da IA vira reserva. E a fonte fica
+                # gravada no veredito — razão sem régua identificada não
+                # promove regra nenhuma.
+                _regua, _regua_fonte = _regua_da_sombra(
+                    user_total_area, project_data.total_area)
                 shadow_rooms_async(_dxfrooms_units, job_id, _log_error,
-                                   area_declarada=(project_data.total_area or None))
+                                   area_declarada=_regua,
+                                   regua_fonte=_regua_fonte)
         except Exception as _sre:
             print(f"[dxfrooms] shadow não iniciado: {_sre}")
 

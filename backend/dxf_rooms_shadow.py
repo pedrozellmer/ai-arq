@@ -178,7 +178,8 @@ def medir_um(dxf_path: str, fator: float) -> dict:
 
 
 def _run(dxf_units: list, job_id: str, log_fn,
-         area_declarada: float | None = None) -> None:
+         area_declarada: float | None = None,
+         regua_fonte: str | None = None) -> None:
     time.sleep(10)  # deixa o pós-done (e-mail/DB) respirar antes do trabalho pesado
     deadline = time.time() + BUDGET_S
     results = []
@@ -211,6 +212,10 @@ def _run(dxf_units: list, job_id: str, log_fn,
         _cmp = {}
         if area_declarada and area_declarada > 0:
             _cmp["area_declarada"] = round(float(area_declarada), 1)
+            if regua_fonte:
+                # 30/08: sem isto, "razao 0,05" nao diz se a regua era a area
+                # do CLIENTE ou a leitura da IA — e as duas erram diferente.
+                _cmp["regua_fonte"] = str(regua_fonte)[:16]
             _cmp["maior_grupo_vs_declarada"] = (
                 round(_melhor / float(area_declarada), 3) if _melhor else None)
             _cmp["soma_tudo_vs_declarada"] = (
@@ -227,7 +232,8 @@ def _run(dxf_units: list, job_id: str, log_fn,
 
 
 def shadow_rooms_async(dxf_units: list, job_id: str, log_fn,
-                       area_declarada: float | None = None) -> None:
+                       area_declarada: float | None = None,
+                       regua_fonte: str | None = None) -> None:
     """Dispara a sombra em thread daemon. dxf_units = [(caminho_dxf, fator_unidade)].
 
     Nunca levanta e nunca bloqueia — se qualquer coisa der errado, o cliente
@@ -239,7 +245,8 @@ def shadow_rooms_async(dxf_units: list, job_id: str, log_fn,
         return
     try:
         threading.Thread(target=_run,
-                         args=(dxf_units, job_id, log_fn, area_declarada),
+                         args=(dxf_units, job_id, log_fn, area_declarada,
+                               regua_fonte),
                          daemon=True).start()
     except Exception as e:
         print(f"[dxfrooms] shadow não iniciado: {e}")
