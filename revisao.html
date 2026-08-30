@@ -395,8 +395,8 @@ async function loadItems() {
       (alreadyReviewed ? ` · ${alreadyReviewed} já revisados` : '');
 
     // Termômetro da revisão (03/08/2026). Até aqui esta tela era a ÚNICA sem
-    // medição nenhuma — e é justamente a que trava o produto (91 projetos
-    // concluídos, 5 com alguma revisão, 1 com correção de verdade). Sem isto
+    // medição nenhuma — e é justamente a que trava o produto (a maioria dos
+    // projetos conclui, pouquíssimos revisam, quase nenhum corrige). Sem isto
     // não dá pra separar "ninguém abre" de "abre e desiste", nem saber se a
     // mexida de 02/08 na tela funcionou. Guarda o tamanho da tarefa junto:
     // 200 estimativas pra confirmar é uma explicação plausível pra desistência.
@@ -601,7 +601,7 @@ function renderItem(it, localIndex) {
 //
 // 🕳️ É a escrita que falha calada, do lado do cliente: ele corrige o número,
 // vê verde, fecha o navegador — e a correção não existe. Justo na única tela
-// onde os 10 clientes que de fato editam fazem o trabalho deles.
+// onde os poucos clientes que de fato editam fazem o trabalho deles.
 //
 // 🪤 O comentário no backend descrevia a INTENÇÃO como se fosse o estado. É a
 // terceira vez hoje que um comentário meu envelhece mentindo.

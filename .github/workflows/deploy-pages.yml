@@ -113,6 +113,11 @@ jobs:
           for f in sitemap.xml robots.txt; do
             if [ -f "$f" ]; then cp "$f" _site/; fi
           done
+          # 🔒 30/08/2026 (auditoria): remove comentários HTML do site SERVIDO —
+          # eram NOTAS DE DEV com métricas internas (funil, nº de clientes) lidas
+          # por qualquer um com F12. O git mantém as notas; o público não as vê.
+          # Só comentário HTML fora de <script>/<style> — não toca em JS.
+          python scripts/strip_html_comments.py _site
           echo "=== Conteúdo de _site ==="
           ls -la _site/ | head -40
           echo "=== Total de arquivos: $(find _site -type f | wc -l) ==="
