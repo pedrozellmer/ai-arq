@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<title>Como Medir Área e Contar Blocos no AutoCAD (Sem Susto)</title>
+<meta name="description" content="Passo a passo pra medir área e contar blocos no AutoCAD — Propriedades, AREA, LIMITE e CONTAGEM — com as pegadinhas que a própria documentação registra.">
+<meta name="keywords" content="medir área no autocad, como medir área no autocad, contar blocos no autocad, comando area autocad, medir área irregular autocad, contagem de blocos autocad, count autocad, calcular área de parede no autocad, quantitativo no autocad, measuregeom autocad">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/medir-area-e-contar-blocos-no-autocad.html">
+<meta name="robots" content="noindex, follow">
+<link rel="icon" type="image/x-icon" href="/favicon-v2.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/medir-area-e-contar-blocos-no-autocad.html">
+<meta property="og:title" content="Como Medir Área e Contar Blocos no AutoCAD (Sem Susto)">
+<meta property="og:description" content="Passo a passo pra medir área e contar blocos no AutoCAD — Propriedades, AREA, LIMITE e CONTAGEM — com as pegadinhas que a própria documentação registra.">
+<meta property="og:image" content="https://ai.arq.br/blog/og/medir-area-e-contar-blocos-no-autocad.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-11-08T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Como Ler Projetos">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Como Medir Área e Contar Blocos no AutoCAD (Sem Susto)">
+<meta name="twitter:description" content="Passo a passo pra medir área e contar blocos no AutoCAD — Propriedades, AREA, LIMITE e CONTAGEM — com as pegadinhas que a própria documentação registra.">
+<meta name="twitter:image" content="https://ai.arq.br/blog/og/medir-area-e-contar-blocos-no-autocad.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-11-08">
+
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "Como Medir Área e Contar Blocos no AutoCAD (Sem Susto)",
+  "description": "Passo a passo pra medir área e contar blocos no AutoCAD — Propriedades, AREA, LIMITE e CONTAGEM — com as pegadinhas que a própria documentação registra.",
+  "datePublished": "2026-11-08T10:00:00-03:00",
+  "dateModified": "2026-11-08T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/blog/og/medir-area-e-contar-blocos-no-autocad.png",
+  "url": "https://ai.arq.br/blog/posts/medir-area-e-contar-blocos-no-autocad.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/medir-area-e-contar-blocos-no-autocad.html"
+  },
+  "keywords": "medir área no autocad, como medir área no autocad, contar blocos no autocad, comando area autocad, medir área irregular autocad, contagem de blocos autocad, count autocad, calcular área de parede no autocad, quantitativo no autocad, measuregeom autocad",
+  "articleSection": "Como Ler Projetos"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "AI.arq",
+      "item": "https://ai.arq.br/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://ai.arq.br/blog/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "Como Medir Área e Contar Blocos no AutoCAD (Sem Susto)",
+      "item": "https://ai.arq.br/blog/posts/medir-area-e-contar-blocos-no-autocad.html"
+    }
+  ]
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html?novo=1" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Como Ler Projetos</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Como Ler Projetos</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">Como Medir Área e Contar Blocos no AutoCAD (Sem Susto)</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 08/11/2026</span>
+    <span>·</span>
+    <span>⏱️ 6 min de leitura</span>
+  </div>
+
+  
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">Medir uma área no AutoCAD é rápido — quando se sabe qual dos três caminhos usar e onde cada um esconde uma pegadinha. E as pegadinhas não são lenda de fórum: estão escritas na documentação oficial da Autodesk — que registra, por exemplo, que uma polilinha aberta devolve área com um fechamento imaginário, descrito na página do comando sem uma linha de alerta. Este guia mostra os comandos de medir e contar com o nome em português de cada um, o fluxo que a própria Autodesk recomenda pra área composta — e, no fim, o limite honesto de fazer tudo isso na mão, prancha inteira, ambiente por ambiente.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>Baixe a cola</h2><p>Os seis comandos deste guia numa folha só, com as pegadinhas marcadas — pra deixar do lado do teclado. Sem cadastro, sem captura de e-mail.</p><div class="aiarq-downloads my-8 p-6 rounded-2xl border border-gray-200 bg-gray-50">
+  <div class="grid gap-3 sm:grid-cols-2">
+    <a href="/blog/downloads/cola-medir-contar-autocad.pdf" download
+       data-track="baixar-cola-medir-contar-autocad"
+       class="aiarq-dl-btn flex items-center gap-4 p-4 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+      <div class="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-600 font-bold text-xs">PDF</div>
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-gray-900 leading-tight">Cola de comandos (imprimível)</div>
+        <div class="text-xs text-gray-500 mt-0.5">1 página A4 — os 6 comandos com as pegadinhas documentadas · 4 KB</div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+    </a>
+  </div>
+</div>
+<h2>Medir área: os três caminhos</h2><ul><li>Paleta Propriedades — o caminho sem comando: selecione o objeto e a área e o perímetro aparecem na paleta. É recomendação da própria Autodesk: dá pra achar a área "sem usar nenhum comando".</li><li>AREA — o clássico: "calcula a área e o perímetro de objetos ou de áreas definidas", nas palavras da documentação. Aceita círculo, elipse, spline, polilinha, polígono e região, entre outros — ou uma sequência de pontos clicados na tela. Um detalhe que derruba iniciante: o prompt padrão do comando "especifica o primeiro ponto do canto", ou seja, ele espera CLIQUES. Pra medir um objeto pronto, escolha antes a opção Objeto — "calcula a área e o perímetro do objeto selecionado", nas palavras da própria página.</li><li>MEDIRGEOM (MEASUREGEOM) — o canivete: mede distância, raio, ângulo, área e volume — de objetos, por pontos ou dinamicamente (entre as opções documentadas está a Rápido).</li></ul><p>Qualquer um dos três resolve o caso simples. As diferenças aparecem nos casos que não são simples — que é o assunto do resto deste guia.</p><h2>Área irregular ou composta: LIMITE e pronto</h2><p>Pra área delimitada por várias linhas, arcos e paredes — o "como medir área irregular" que lota as buscas — o fluxo oficial da Autodesk é mais esperto que clicar vértice por vértice: o comando LIMITE (BOUNDARY) "cria regiões ou polilinhas a partir de áreas delimitadas". Você indica um ponto DENTRO da área — "o ponto interno especificado usa os objetos internos ou ao redor para criar polilinhas e regiões fechadas", nas palavras da doc — com detecção de ilhas: furos internos podem ser considerados ou ignorados. Aí é selecionar o objeto novo e ler a área na paleta Propriedades ou no comando LISTA, que despeja os dados do objeto — área incluída — na janela de texto.</p><p>Esse caminho tem um bônus de segurança: o objeto que você mede nasceu FECHADO por construção — o que resolve exatamente a pegadinha da próxima seção.</p><h2>A pegadinha silenciosa da polilinha aberta</h2><p>É o erro mais traiçoeiro da medição no AutoCAD, e está documentado preto no branco: "se você selecionar uma polilinha aberta, a área será calculada como se uma linha fosse desenhada do último ponto inserido até ao primeiro". Ou seja: contorno que não fecha ainda devolve número — o programa fecha sozinho com uma linha reta imaginária. E a página descreve esse comportamento sem mencionar erro nem alerta: só o número que sai.</p><p>E a armadilha é dupla, porque logo em seguida a documentação completa: "quando o perímetro é calculado, o comprimento da linha é ignorado". A área considera o fechamento virtual, o perímetro finge que ele não existe — os dois números do mesmo comando descrevem contornos diferentes.</p><p>Mais duas miudezas documentadas: polilinha com espessura é medida pela linha de CENTRO, e pontos clicados precisam estar num plano paralelo ao XY do UCS atual. Nosso conselho prático: desconfie de toda área medida em cima de linha "solta" — rode LIMITE por cima e meça o objeto fechado que ele criar.</p><h2>O número sai na unidade do desenho</h2><p>O AutoCAD não sabe se o desenho está em metros, centímetros ou milímetros — a área sai na unidade em que se desenhou, elevada ao quadrado. Planta desenhada em centímetros devolve centímetros quadrados: 52 m² viram "520000" na tela, e quem não confere a unidade leva o susto (ou pior: não leva, e o número errado segue pro orçamento).</p><p>Antes de medir, vale conferir em que unidade a planta realmente está — medindo uma porta cotada, por exemplo. E não confie cegamente no cabeçalho do arquivo: o campo de unidade do DWG/DXF <a href="/blog/posts/quantitativo-de-duto-climatizacao-armadilhas.html">pode mentir</a>, e planta real vem com ele zerado com frequência.</p><h2>Contar blocos: CONTAGEM (AutoCAD 2022+)</h2><p>Desde o AutoCAD 2022 existe comando pra isso: CONTAGEM (COUNT) "conta e realça as instâncias do objeto selecionado no desenho". A paleta Contagem lista todos os blocos com suas quantidades, e o COUNTTABLE insere no próprio desenho uma tabela com nomes e contagens — o embrião de um quantitativo de esquadrias, luminárias ou louças.</p><p>As exclusões, direto da página de limitações da Autodesk: a contagem só enxerga o que está VISÍVEL no model space, e ficam de fora referências externas (xref), texto, hachuras, sólidos 3D e imagens. A página oficial do recurso ainda avisa que blocos dentro de blocos não saem na Seleção rápida. Traduzindo pra obra: bloco de luminária dentro do xref de elétrica não entra na conta — e, como a paleta só mostra o que está visível no model space, camada desligada ou congelada fica de fora também.</p><p>E antes do AutoCAD 2022? O caminho clássico é a Seleção rápida (QSELECT) filtrando por nome de bloco — a barra de status diz quantos objetos entraram na seleção. Funciona, um nome de bloco por vez.</p><h2>Hachura: o m² que os comandos não alcançam</h2><p>Aqui está o detalhe que quase nenhum tutorial conta. Na planta real, o m² de piso, forro e revestimento mora em HACHURA — e os COMANDOS de levantamento passam ao largo dela, por documentação: o MEDIRGEOM lista hachuras e cotas entre os objetos que NÃO mede; a CONTAGEM exclui hachuras da conta; e a página do AREA nem cita hachura entre os selecionáveis.</p><p>Na prática, a paleta Propriedades costuma mostrar a área de uma hachura selecionada — quando ela tem contorno computável. Mas é isso: hachura por hachura, no olho, sem tabela e sem exportação. E quando a hachura veio explodida ou órfã de contorno, sobra o LIMITE: recriar a borda, medir o objeto novo — e isso funciona desde que a geometria em volta ainda exista. Contorno por contorno, ambiente por ambiente: numa prancha com trinta ambientes, é uma tarde.</p><h2>Fazer na mão ou deixar o robô fazer</h2><p>Pra conferir UMA parede ou UM ambiente, os comandos acima resolvem em segundos — e recomendamos: quem sabe medir na mão confere qualquer número, inclusive os nossos.</p><p>O problema é a escala: prancha inteira são dezenas de ambientes vezes piso, forro, parede e rodapé, mais os blocos de esquadria, luminária e louça — cada um pedindo seu LIMITE, sua leitura de paleta, sua linha na planilha. É exatamente o passo a passo que o AI.arq automatiza: o motor lê as <a href="/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html">três estruturas que carregam o quantitativo</a> no seu DXF — layers, blocos e contornos de hachura — e monta a <a href="/blog/posts/como-fazer-planilha-de-quantitativos-de-obra.html">planilha de quantitativos</a> por disciplina, marcando o que foi MEDIDO da geometria separado do que é estimativa pra você revisar. Vale aqui o mesmo princípio do parágrafo anterior: o que não dá pra medir, a gente não carimba de medido.</p>
+  </div>
+
+  <!-- Compartilhar (28/08/2026) -->
+  <!-- Por que WhatsApp e copiar link, e NAO comentario nem curtida: o Pedro
+       perguntou os tres. Comentario num blog com poucos leitores por dia deixa
+       secao vazia, que grita "site morto" - mesma razao pela qual a comunidade
+       ficou pra depois. Curtida com contador em 0 ou 1 e pior que contador
+       nenhum. Ja compartilhar nao tem estado: nao precisa de backend, nao tem
+       o que moderar, nao guarda dado de ninguem - e no Brasil e por WhatsApp
+       que conteudo profissional circula.
+       Os dois botoes tem data-track, entao o clique vira evento sozinho pelo
+       ouvinte delegado do aiarq-utils.js (que passou a carregar no blog hoje).
+       Sem isso a gente poria o botao no escuro, como quase aconteceu. -->
+  <div class="mt-12 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-6">
+    <span class="text-sm text-gray-500 font-medium">Achou útil? Compartilhe:</span>
+    <a id="btn-zap" data-track="compartilhar-whatsapp" target="_blank" rel="noopener"
+       href="#"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 no-underline hover:bg-gray-50 transition">
+      <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4-.1-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.5-.3z"/><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2z"/></svg>
+      WhatsApp
+    </a>
+    <button type="button" id="btn-copiar" data-track="copiar-link-do-post"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <span id="txt-copiar">Copiar link</span>
+    </button>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Sabe medir na mão — agora deixa a prancha inteira com a gente. Sobe seu projeto (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+        Começar grátis
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+      </a>
+      <!-- Caminho de baixo atrito: leitor orgânico que não quer se cadastrar
+           ainda vê a prova (25 itens reais, sem login) em vez de bater no muro -->
+      <a href="/exemplo.html" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
+        Ver um quantitativo real →
+      </a>
+    </div>
+    <p class="mt-3 text-xs text-gray-500">Grátis no beta, quantos projetos quiser. Sem cartão. O exemplo abre sem cadastro.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://help.autodesk.com/cloudhelp/2024/PTB/AutoCAD-LT/files/GUID-0591351F-8750-425C-9F1C-98B1C73D9D55.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">AREA (comando) — AutoCAD LT 2024, ajuda em português</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">Objetos aceitos, polilinha aberta (fechamento virtual) e polilinha com espessura.</span></li><li><a href="https://help.autodesk.com/cloudhelp/2022/PTB/AutoCAD-Core/files/GUID-5D5B0EE1-DD90-47AE-8A55-642FBFF5E4E4.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">MEASUREGEOM / MEDIRGEOM (comando) — AutoCAD 2022</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">Opções de medição e a lista do que o comando não mede (hachuras e cotas).</span></li><li><a href="https://help.autodesk.com/cloudhelp/2024/PTB/AutoCAD-Core/files/GUID-5072D0D0-5DB7-4649-8B2F-1FD5A3FA3643.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">BOUNDARY / LIMITE (comando) — AutoCAD 2024</a> <span class="text-gray-500">&middot; Autodesk</span></li><li><a href="https://help.autodesk.com/cloudhelp/2017/PTB/AutoCAD-Core/files/GUID-0BCD5F58-D932-4503-9F0E-C8FDCDE6A3E3.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Sobre localizar área e informações de propriedades de massa — AutoCAD 2017</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">O fluxo LIMITE → Propriedades/LISTA pra área composta.</span></li><li><a href="https://help.autodesk.com/cloudhelp/2025/PTB/AutoCAD-DidYouKnow/files/GUID-94C065AB-FF9E-4752-B778-23D2FBB87E18.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Paleta Propriedades (Você já experimentou) — AutoCAD 2025</a> <span class="text-gray-500">&middot; Autodesk</span></li><li><a href="https://help.autodesk.com/cloudhelp/2023/PTB/AutoCAD-Core/files/GUID-3A0C3460-6ABC-4D13-BF1F-D2BFCD399851.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">COUNT / CONTAGEM (comando) — AutoCAD 2023</a> <span class="text-gray-500">&middot; Autodesk</span></li><li><a href="https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-LT/files/GUID-1A7CD80A-BE11-4618-8DA7-751DFDEEE430.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Count Feature Limitations — AutoCAD LT 2023</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">O que fica fora da contagem: xref, texto, hachura, 3D, imagem; só o visível no model space.</span></li><li><a href="https://help.autodesk.com/cloudhelp/2023/PTB/AutoCAD-DidYouKnow/files/GUID-D5D02903-27D4-4AF0-AAE6-82CF97C7E411.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Contagem (Você já experimentou) — AutoCAD 2023</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">A página que ensina a Seleção rápida — e avisa que bloco dentro de bloco fica fora dela.</span></li><li><a href="https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DidYouKnow/files/GUID-D5D02903-27D4-4AF0-AAE6-82CF97C7E411.htm" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">Have You Tried: Count — AutoCAD 2024 (em inglês)</a> <span class="text-gray-500">&middot; Autodesk</span> &mdash; <span class="text-gray-600">Recurso introduzido no AutoCAD 2022; paleta Contagem e COUNTTABLE.</span></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 08/11/2026. Normas e documentos citados podem ter sido revisados após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Leia também (posts relacionados) -->
+  
+    <section class="aiarq-related mt-16 pt-8 border-t border-gray-200">
+      <h2 class="flex items-center gap-2 text-lg font-bold text-gray-900 mb-5">
+        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Leia também
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        
+        <a href="/blog/posts/como-ler-pdf-planta-arquitetonica.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Como Ler Projetos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como Ler um PDF de Planta Arquitetônica (Guia Visual Completo)</div>
+        </a>
+        <a href="/blog/posts/como-ler-quadro-de-esquadrias-p1-p2.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Como Ler Projetos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como Ler o Quadro de Esquadrias num Projeto (P1, J1 + NBR 10821 explicada)</div>
+        </a>
+        <a href="/blog/posts/bdi-em-obra-o-que-e-como-calcular.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Custos</span>
+          <div class="font-semibold text-gray-900 leading-snug">BDI em Obra: O Que É, Como Calcular e Exemplo Prático (Acórdão TCU 2622/2013)</div>
+        </a>
+      </div>
+    </section>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Produto</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h4 class="text-sm font-semibold text-gray-900 mb-3">Legal</h4>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+        <li><a href="/licencas.html" class="hover:text-indigo-600">Licenças</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 ai.arq.br · Todos os direitos reservados
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
+<script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
+<!-- 28/08/2026 - TELEMETRIA NO BLOG. O blog e a MAIOR porta de entrada do
+     produto: no dia 28/08, TODAS as paginas que gente de verdade abriu eram
+     post de blog (zero na home, zero no cadastro). E os 26 posts nao mediam
+     nada - todo numero de funil ignorava a principal fonte de visita.
+     Nao bastou incluir o arquivo: o guarda do supabase-js dentro dele fazia
+     `return` em pagina estatica, antes de definir o `trackEvent`. A telemetria
+     foi movida pra ANTES desse guarda no mesmo commit.
+     O `cookie-consent.js` acima ja roda aqui; o `trackEvent` so grava com o
+     "sim" do visitante. -->
+<script src="/aiarq-utils.js"></script>
+<script>
+  (function () {
+    try {
+      var p = location.pathname;
+      var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
+      if (window.trackEvent) window.trackEvent('view_blog_post', { campo: slug });
+    } catch (e) { }
+  })();
+
+  // Compartilhar (28/08/2026). Sem backend, sem estado, sem dado guardado.
+  (function () {
+    try {
+      // 'url' e montada AQUI e nao no HTML: o link precisa ser o CANONICO, sem
+      // o ?semcache=... ou ?utm=... que a pessoa tenha na barra - senao o
+      // compartilhamento propaga parametro de teste.
+      var url = (document.querySelector('link[rel=canonical]') || {}).href
+                || (location.origin + location.pathname);
+      var titulo = (document.title || '').split('|')[0].trim();
+      var zap = document.getElementById('btn-zap');
+      if (zap) zap.href = 'https://wa.me/?text=' + encodeURIComponent(titulo + ' ' + url);
+
+      var btn = document.getElementById('btn-copiar');
+      var txt = document.getElementById('txt-copiar');
+      if (btn && txt) {
+        btn.addEventListener('click', function () {
+          function ok() {
+            var antes = txt.textContent;
+            txt.textContent = 'Link copiado!';
+            setTimeout(function () { txt.textContent = antes; }, 2000);
+          }
+          // navigator.clipboard so existe em HTTPS e pode ser negado; o
+          // fallback cobre navegador velho e permissao recusada.
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(ok).catch(function () { copiaAntiga(); });
+          } else { copiaAntiga(); }
+          function copiaAntiga() {
+            try {
+              var c = document.createElement('textarea');
+              c.value = url; c.setAttribute('readonly', '');
+              c.style.position = 'fixed'; c.style.opacity = '0';
+              document.body.appendChild(c); c.select();
+              document.execCommand('copy'); document.body.removeChild(c); ok();
+            } catch (e) { txt.textContent = 'Copie da barra do navegador'; }
+          }
+        });
+      }
+    } catch (e) { }
+  })();
+</script>
+</body>
+</html>

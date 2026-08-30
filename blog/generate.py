@@ -654,7 +654,7 @@ def render_post_html(post):
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{post["title"]}">
 <meta name="twitter:description" content="{post["description"]}">
-<meta name="twitter:image" content="{SITE_URL}/og-image.png">
+<meta name="twitter:image" content="{SITE_URL}/blog/og/{post["slug"]}.png">
 
 <!-- Data agendada (lida por JS pra esconder antes da hora) -->
 <meta name="publish-date" content="{post["publish_date"]}">

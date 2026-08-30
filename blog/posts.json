@@ -203,6 +203,120 @@
       "cta": "Pra montar o quadro sem medir ambiente por ambiente na mão: sobe seu CAD (DXF de preferência) no AI.arq e receba a planilha de quantitativos com as áreas que a prancha permite medir, separadas entre medido e estimado. Grátis durante o beta, quantos projetos quiser, sem cartão."
     },
     {
+      "slug": "medir-area-e-contar-blocos-no-autocad",
+      "title": "Como Medir Área e Contar Blocos no AutoCAD (Sem Susto)",
+      "description": "Passo a passo pra medir área e contar blocos no AutoCAD — Propriedades, AREA, LIMITE e CONTAGEM — com as pegadinhas que a própria documentação registra.",
+      "keywords": "medir área no autocad, como medir área no autocad, contar blocos no autocad, comando area autocad, medir área irregular autocad, contagem de blocos autocad, count autocad, calcular área de parede no autocad, quantitativo no autocad, measuregeom autocad",
+      "category": "Como Ler Projetos",
+      "publish_date": "2026-11-08",
+      "intro": "Medir uma área no AutoCAD é rápido — quando se sabe qual dos três caminhos usar e onde cada um esconde uma pegadinha. E as pegadinhas não são lenda de fórum: estão escritas na documentação oficial da Autodesk — que registra, por exemplo, que uma polilinha aberta devolve área com um fechamento imaginário, descrito na página do comando sem uma linha de alerta. Este guia mostra os comandos de medir e contar com o nome em português de cada um, o fluxo que a própria Autodesk recomenda pra área composta — e, no fim, o limite honesto de fazer tudo isso na mão, prancha inteira, ambiente por ambiente.",
+      "downloads": [
+        {
+          "file": "cola-medir-contar-autocad.pdf",
+          "kind": "PDF",
+          "label": "Cola de comandos (imprimível)",
+          "hint": "1 página A4 — os 6 comandos com as pegadinhas documentadas · 4 KB"
+        }
+      ],
+      "sections": [
+        {
+          "h2": "Baixe a cola",
+          "body": "Os seis comandos deste guia numa folha só, com as pegadinhas marcadas — pra deixar do lado do teclado. Sem cadastro, sem captura de e-mail.\n\n<DOWNLOAD_BUTTONS>"
+        },
+        {
+          "h2": "Medir área: os três caminhos",
+          "body": "- Paleta Propriedades — o caminho sem comando: selecione o objeto e a área e o perímetro aparecem na paleta. É recomendação da própria Autodesk: dá pra achar a área \"sem usar nenhum comando\".\n- AREA — o clássico: \"calcula a área e o perímetro de objetos ou de áreas definidas\", nas palavras da documentação. Aceita círculo, elipse, spline, polilinha, polígono e região, entre outros — ou uma sequência de pontos clicados na tela. Um detalhe que derruba iniciante: o prompt padrão do comando \"especifica o primeiro ponto do canto\", ou seja, ele espera CLIQUES. Pra medir um objeto pronto, escolha antes a opção Objeto — \"calcula a área e o perímetro do objeto selecionado\", nas palavras da própria página.\n- MEDIRGEOM (MEASUREGEOM) — o canivete: mede distância, raio, ângulo, área e volume — de objetos, por pontos ou dinamicamente (entre as opções documentadas está a Rápido).\n\nQualquer um dos três resolve o caso simples. As diferenças aparecem nos casos que não são simples — que é o assunto do resto deste guia."
+        },
+        {
+          "h2": "Área irregular ou composta: LIMITE e pronto",
+          "body": "Pra área delimitada por várias linhas, arcos e paredes — o \"como medir área irregular\" que lota as buscas — o fluxo oficial da Autodesk é mais esperto que clicar vértice por vértice: o comando LIMITE (BOUNDARY) \"cria regiões ou polilinhas a partir de áreas delimitadas\". Você indica um ponto DENTRO da área — \"o ponto interno especificado usa os objetos internos ou ao redor para criar polilinhas e regiões fechadas\", nas palavras da doc — com detecção de ilhas: furos internos podem ser considerados ou ignorados. Aí é selecionar o objeto novo e ler a área na paleta Propriedades ou no comando LISTA, que despeja os dados do objeto — área incluída — na janela de texto.\n\nEsse caminho tem um bônus de segurança: o objeto que você mede nasceu FECHADO por construção — o que resolve exatamente a pegadinha da próxima seção."
+        },
+        {
+          "h2": "A pegadinha silenciosa da polilinha aberta",
+          "body": "É o erro mais traiçoeiro da medição no AutoCAD, e está documentado preto no branco: \"se você selecionar uma polilinha aberta, a área será calculada como se uma linha fosse desenhada do último ponto inserido até ao primeiro\". Ou seja: contorno que não fecha ainda devolve número — o programa fecha sozinho com uma linha reta imaginária. E a página descreve esse comportamento sem mencionar erro nem alerta: só o número que sai.\n\nE a armadilha é dupla, porque logo em seguida a documentação completa: \"quando o perímetro é calculado, o comprimento da linha é ignorado\". A área considera o fechamento virtual, o perímetro finge que ele não existe — os dois números do mesmo comando descrevem contornos diferentes.\n\nMais duas miudezas documentadas: polilinha com espessura é medida pela linha de CENTRO, e pontos clicados precisam estar num plano paralelo ao XY do UCS atual. Nosso conselho prático: desconfie de toda área medida em cima de linha \"solta\" — rode LIMITE por cima e meça o objeto fechado que ele criar."
+        },
+        {
+          "h2": "O número sai na unidade do desenho",
+          "body": "O AutoCAD não sabe se o desenho está em metros, centímetros ou milímetros — a área sai na unidade em que se desenhou, elevada ao quadrado. Planta desenhada em centímetros devolve centímetros quadrados: 52 m² viram \"520000\" na tela, e quem não confere a unidade leva o susto (ou pior: não leva, e o número errado segue pro orçamento).\n\nAntes de medir, vale conferir em que unidade a planta realmente está — medindo uma porta cotada, por exemplo. E não confie cegamente no cabeçalho do arquivo: o campo de unidade do DWG/DXF <a href=\"/blog/posts/quantitativo-de-duto-climatizacao-armadilhas.html\">pode mentir</a>, e planta real vem com ele zerado com frequência."
+        },
+        {
+          "h2": "Contar blocos: CONTAGEM (AutoCAD 2022+)",
+          "body": "Desde o AutoCAD 2022 existe comando pra isso: CONTAGEM (COUNT) \"conta e realça as instâncias do objeto selecionado no desenho\". A paleta Contagem lista todos os blocos com suas quantidades, e o COUNTTABLE insere no próprio desenho uma tabela com nomes e contagens — o embrião de um quantitativo de esquadrias, luminárias ou louças.\n\nAs exclusões, direto da página de limitações da Autodesk: a contagem só enxerga o que está VISÍVEL no model space, e ficam de fora referências externas (xref), texto, hachuras, sólidos 3D e imagens. A página oficial do recurso ainda avisa que blocos dentro de blocos não saem na Seleção rápida. Traduzindo pra obra: bloco de luminária dentro do xref de elétrica não entra na conta — e, como a paleta só mostra o que está visível no model space, camada desligada ou congelada fica de fora também.\n\nE antes do AutoCAD 2022? O caminho clássico é a Seleção rápida (QSELECT) filtrando por nome de bloco — a barra de status diz quantos objetos entraram na seleção. Funciona, um nome de bloco por vez."
+        },
+        {
+          "h2": "Hachura: o m² que os comandos não alcançam",
+          "body": "Aqui está o detalhe que quase nenhum tutorial conta. Na planta real, o m² de piso, forro e revestimento mora em HACHURA — e os COMANDOS de levantamento passam ao largo dela, por documentação: o MEDIRGEOM lista hachuras e cotas entre os objetos que NÃO mede; a CONTAGEM exclui hachuras da conta; e a página do AREA nem cita hachura entre os selecionáveis.\n\nNa prática, a paleta Propriedades costuma mostrar a área de uma hachura selecionada — quando ela tem contorno computável. Mas é isso: hachura por hachura, no olho, sem tabela e sem exportação. E quando a hachura veio explodida ou órfã de contorno, sobra o LIMITE: recriar a borda, medir o objeto novo — e isso funciona desde que a geometria em volta ainda exista. Contorno por contorno, ambiente por ambiente: numa prancha com trinta ambientes, é uma tarde."
+        },
+        {
+          "h2": "Fazer na mão ou deixar o robô fazer",
+          "body": "Pra conferir UMA parede ou UM ambiente, os comandos acima resolvem em segundos — e recomendamos: quem sabe medir na mão confere qualquer número, inclusive os nossos.\n\nO problema é a escala: prancha inteira são dezenas de ambientes vezes piso, forro, parede e rodapé, mais os blocos de esquadria, luminária e louça — cada um pedindo seu LIMITE, sua leitura de paleta, sua linha na planilha. É exatamente o passo a passo que o AI.arq automatiza: o motor lê as <a href=\"/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html\">três estruturas que carregam o quantitativo</a> no seu DXF — layers, blocos e contornos de hachura — e monta a <a href=\"/blog/posts/como-fazer-planilha-de-quantitativos-de-obra.html\">planilha de quantitativos</a> por disciplina, marcando o que foi MEDIDO da geometria separado do que é estimativa pra você revisar. Vale aqui o mesmo princípio do parágrafo anterior: o que não dá pra medir, a gente não carimba de medido."
+        }
+      ],
+      "sources": [
+        {
+          "type": "official",
+          "title": "AREA (comando) — AutoCAD LT 2024, ajuda em português",
+          "url": "https://help.autodesk.com/cloudhelp/2024/PTB/AutoCAD-LT/files/GUID-0591351F-8750-425C-9F1C-98B1C73D9D55.htm",
+          "publisher": "Autodesk",
+          "description": "Objetos aceitos, polilinha aberta (fechamento virtual) e polilinha com espessura."
+        },
+        {
+          "type": "official",
+          "title": "MEASUREGEOM / MEDIRGEOM (comando) — AutoCAD 2022",
+          "url": "https://help.autodesk.com/cloudhelp/2022/PTB/AutoCAD-Core/files/GUID-5D5B0EE1-DD90-47AE-8A55-642FBFF5E4E4.htm",
+          "publisher": "Autodesk",
+          "description": "Opções de medição e a lista do que o comando não mede (hachuras e cotas)."
+        },
+        {
+          "type": "official",
+          "title": "BOUNDARY / LIMITE (comando) — AutoCAD 2024",
+          "url": "https://help.autodesk.com/cloudhelp/2024/PTB/AutoCAD-Core/files/GUID-5072D0D0-5DB7-4649-8B2F-1FD5A3FA3643.htm",
+          "publisher": "Autodesk"
+        },
+        {
+          "type": "official",
+          "title": "Sobre localizar área e informações de propriedades de massa — AutoCAD 2017",
+          "url": "https://help.autodesk.com/cloudhelp/2017/PTB/AutoCAD-Core/files/GUID-0BCD5F58-D932-4503-9F0E-C8FDCDE6A3E3.htm",
+          "publisher": "Autodesk",
+          "description": "O fluxo LIMITE → Propriedades/LISTA pra área composta."
+        },
+        {
+          "type": "official",
+          "title": "Paleta Propriedades (Você já experimentou) — AutoCAD 2025",
+          "url": "https://help.autodesk.com/cloudhelp/2025/PTB/AutoCAD-DidYouKnow/files/GUID-94C065AB-FF9E-4752-B778-23D2FBB87E18.htm",
+          "publisher": "Autodesk"
+        },
+        {
+          "type": "official",
+          "title": "COUNT / CONTAGEM (comando) — AutoCAD 2023",
+          "url": "https://help.autodesk.com/cloudhelp/2023/PTB/AutoCAD-Core/files/GUID-3A0C3460-6ABC-4D13-BF1F-D2BFCD399851.htm",
+          "publisher": "Autodesk"
+        },
+        {
+          "type": "official",
+          "title": "Count Feature Limitations — AutoCAD LT 2023",
+          "url": "https://help.autodesk.com/cloudhelp/2023/ENU/AutoCAD-LT/files/GUID-1A7CD80A-BE11-4618-8DA7-751DFDEEE430.htm",
+          "publisher": "Autodesk",
+          "description": "O que fica fora da contagem: xref, texto, hachura, 3D, imagem; só o visível no model space."
+        },
+        {
+          "type": "official",
+          "title": "Contagem (Você já experimentou) — AutoCAD 2023",
+          "url": "https://help.autodesk.com/cloudhelp/2023/PTB/AutoCAD-DidYouKnow/files/GUID-D5D02903-27D4-4AF0-AAE6-82CF97C7E411.htm",
+          "publisher": "Autodesk",
+          "description": "A página que ensina a Seleção rápida — e avisa que bloco dentro de bloco fica fora dela."
+        },
+        {
+          "type": "official",
+          "title": "Have You Tried: Count — AutoCAD 2024 (em inglês)",
+          "url": "https://help.autodesk.com/cloudhelp/2024/ENU/AutoCAD-DidYouKnow/files/GUID-D5D02903-27D4-4AF0-AAE6-82CF97C7E411.htm",
+          "publisher": "Autodesk",
+          "description": "Recurso introduzido no AutoCAD 2022; paleta Contagem e COUNTTABLE."
+        }
+      ],
+      "cta": "Sabe medir na mão — agora deixa a prancha inteira com a gente. Sobe seu projeto (DXF de preferência) no AI.arq e receba a planilha de quantitativos por disciplina, com o que veio MEDIDO da geometria separado do que é estimativa. Grátis durante o beta, quantos projetos quiser, sem cartão."
+    },
+    {
       "slug": "boletim-de-medicao-de-obra-modelo-excel",
       "title": "Boletim de Medição de Obra: Modelo Excel e Como Preencher",
       "description": "Modelo gratuito de boletim de medição em Excel — previsto, executado e acumulado, com memória de cálculo — e o passo a passo pra defender cada número medido.",
