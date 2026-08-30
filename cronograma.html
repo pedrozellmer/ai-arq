@@ -387,6 +387,8 @@ if (!jobId) {
 // Link de volta pro projeto
 document.getElementById('back-projeto').href = `projeto.html?job_id=${jobId}`;
 document.getElementById('link-projeto').href = `projeto.html?job_id=${jobId}`;
+// 30/08 (auditoria): a página ficou 27 dias sem telemetria nenhuma.
+if (window.trackEvent) trackEvent('view_cronograma', { job_id: jobId });
 
 // ─── Setup inicial: data default = hoje + 30 dias ──
 function defaultDate() {

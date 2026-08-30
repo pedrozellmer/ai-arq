@@ -155,6 +155,18 @@ def _titulo_html(post):
     return t if len(t) + len(MARCA_SUFIXO) > LIMITE_TITULO else t + MARCA_SUFIXO
 
 
+def _inline_md(txt):
+    """Converte **negrito** e *itálico* pra <strong>/<em>. 🩸 30/08/2026: a
+    auditoria achou 16 blocos de ** LITERAIS vazando pro leitor em 9 posts — o
+    parser montava <p>/<li> mas nunca tocava o inline, e intro/cta nem passavam
+    pelo parser. Os <a>/<strong> que já vêm prontos no posts.json ficam intactos
+    (só casa ** e * PAREADOS). Backref nomeado: imune ao escape octal."""
+    import re as _re
+    txt = _re.sub(r"\*\*(?=\S)(.+?)(?<=\S)\*\*", r"<strong>\g<1></strong>", txt)
+    txt = _re.sub(r"(?<![\*\w])\*(?=\S)([^*]+?)(?<=\S)\*(?![\*\w])", r"<em>\g<1></em>", txt)
+    return txt
+
+
 def _classify_line(line):
     """Retorna ('numbered'|'bullet'|'text', texto_limpo)."""
     s = line.strip()
@@ -323,14 +335,14 @@ def render_section(s, downloads=None):
         if kind == "download":
             body_html += download_buttons_html(downloads)
         elif kind == "numbered":
-            body_html += "<ol>" + "".join(f"<li>{t}</li>" for t in items) + "</ol>"
+            body_html += "<ol>" + "".join(f"<li>{_inline_md(t)}</li>" for t in items) + "</ol>"
         elif kind == "bullet":
-            body_html += "<ul>" + "".join(f"<li>{t}</li>" for t in items) + "</ul>"
+            body_html += "<ul>" + "".join(f"<li>{_inline_md(t)}</li>" for t in items) + "</ul>"
         else:
             # Cada bloco de texto vira um <p> próprio
-            body_html += "<p>" + " ".join(items) + "</p>"
+            body_html += "<p>" + _inline_md(" ".join(items)) + "</p>"
 
-    return f"<h2>{s['h2']}</h2>{body_html}"
+    return f"<h2>{_inline_md(s['h2'])}</h2>{body_html}"
 
 
 def calc_read_time(post):
@@ -712,7 +724,7 @@ def render_post_html(post):
 
   {update_note_html}
   <!-- Intro destacada -->
-  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">{post["intro"]}</p>
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">{_inline_md(post["intro"])}</p>
 
   <!-- Corpo -->
   <div class="prose-aiarq">
@@ -748,7 +760,7 @@ def render_post_html(post):
   <!-- CTA -->
   <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
     <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
-    <p class="text-gray-700 mb-5">{post["cta"]}</p>
+    <p class="text-gray-700 mb-5">{_inline_md(post["cta"])}</p>
     <div class="flex flex-wrap items-center gap-3">
       <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
         Começar grátis

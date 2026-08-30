@@ -18153,7 +18153,11 @@ class TrackPayload(BaseModel):
 _TRACK_ALLOWED = {
     "view_landing", "view_cadastro", "signup_done", "view_dashboard",
     "start_project", "open_project", "download_xlsx",
-    "use_cronograma", "use_comparativo", "review_item", "review_finish",
+    "use_cronograma", "use_comparativo",
+    # 30/08 (auditoria): review_item/review_finish removidos — 0 chamador no
+    # front e 0 linha all-time. Entrada morta em whitelist não custa, mas
+    # confunde: "existe na lista" lê-se como "medido". A revisão é medida por
+    # view_revisao/revisao_pausada/revisao_concluida (03/08).
     # 05/08/2026 — os dois marcos que faltavam pra saber se cadastro longo
     # espanta. Sem eles a discussão "formulário antes ou depois do Google"
     # é palpite dos dois lados:
@@ -18196,6 +18200,12 @@ _TRACK_ALLOWED = {
     # havia como saber que eles tinham tentado. `meta.motivo` = termos |
     # sem-arquivo. Ver o envelope `#process-guard` em dashboard.html.
     "processar_bloqueado",
+    # 30/08/2026 — a AUDITORIA achou páginas inteiras sem NENHUM `view`, então
+    # os cliques marcados nelas não tinham denominador (quantos viram × quantos
+    # clicaram). O cronograma era o pior: 27 dias INVISÍVEL — página de 122 KB
+    # com zero telemetria, e o único gatilho `use_cronograma` (projeto.html)
+    # parou em 03/08. Estes fecham o buraco; o slug do post/página vai no campo.
+    "view_cronograma", "view_exemplo", "view_precos", "view_faq", "view_memorial",
 }
 _TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
 

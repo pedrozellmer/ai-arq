@@ -124,6 +124,7 @@ let salvando = false;
   const { data: { session } } = await sb.auth.getSession();
   if (!session) { window.location.href = 'login.html'; return; }
   document.getElementById('link-voltar').href = `projeto.html?job_id=${jobId}`;
+if (window.trackEvent) trackEvent('view_memorial', { job_id: jobId });
   try {
     const r = await authFetch(`${API_BASE}/api/memorial/${jobId}/estrutura`);
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || `HTTP ${r.status}`);
