@@ -98,16 +98,9 @@
           "year": 2015
         },
         {
-          "type": "link",
-          "title": "O que é PCI da Caixa (Proposta de Construção Individual)",
-          "url": "https://sienge.com.br/blog/proposta-de-construcao-individual/",
-          "publisher": "Sienge"
-        },
-        {
-          "type": "link",
-          "title": "Importância do memorial descritivo segundo a NBR 15575",
-          "url": "https://sienge.com.br/blog/memorial-descritivo-nrb-15575/",
-          "publisher": "Sienge"
+          "type": "book",
+          "title": "Cartilha Habitação PF — Construção, Conclusão, Reforma e Ampliação (Versão 12, dez/2025)",
+          "author": "Caixa Econômica Federal"
         },
         {
           "type": "link",
@@ -533,16 +526,10 @@
           "publisher": "Caixa Econômica Federal"
         },
         {
-          "type": "link",
-          "title": "Levantamento de quantitativos em obras: como fazer",
-          "url": "https://sienge.com.br/blog/levantamento-de-quantitativos-obra/",
-          "publisher": "Sienge"
-        },
-        {
-          "type": "link",
-          "title": "O que é a tabela SINAPI e como funciona",
-          "url": "https://www.orcafascio.com/papodeengenheiro/o-que-e-e-como-funciona-a-tabela-sinapi",
-          "publisher": "OrçaFascio"
+          "type": "book",
+          "title": "SINAPI: Metodologias e Conceitos (11ª edição)",
+          "author": "Caixa Econômica Federal",
+          "year": 2026
         }
       ]
     },
@@ -625,9 +612,9 @@
         },
         {
           "type": "link",
-          "title": "Tabela SINAPI da Caixa: como aumentar a assertividade do orçamento",
-          "url": "https://sienge.com.br/blog/tabela-sinapi-no-orcamento-da-obra/",
-          "publisher": "Sienge"
+          "title": "Orientações para Elaboração de Planilhas Orçamentárias de Obras Públicas",
+          "url": "https://portal.tcu.gov.br/orientacoes-para-elaboracao-de-planilhas-orcamentarias-de-obras-publicas.htm",
+          "publisher": "Tribunal de Contas da União"
         },
         {
           "type": "link",
@@ -706,10 +693,10 @@
           "publisher": "Brickup"
         },
         {
-          "type": "link",
-          "title": "Os 5 erros mais comuns na hora de fazer um orçamento de obras",
-          "url": "https://www.orcafascio.com/papodeengenheiro/os-5-erros-mais-comuns-na-hora-de-fazer-um-orcamento-de-obras",
-          "publisher": "OrçaFascio"
+          "type": "book",
+          "title": "SINAPI: Metodologias e Conceitos (11ª edição)",
+          "author": "Caixa Econômica Federal",
+          "year": 2026
         },
         {
           "type": "link",
@@ -950,16 +937,9 @@
           "year": 2008
         },
         {
-          "type": "link",
-          "title": "5 dicas para realizar uma cotação de fornecedores na construção civil",
-          "url": "https://www.orcafascio.com/papodeengenheiro/cotacao-de-fornecedores-na-construcao-civil",
-          "publisher": "OrçaFascio"
-        },
-        {
-          "type": "link",
-          "title": "Fluxograma do processo de compras",
-          "url": "https://sienge.com.br/blog/fluxograma-do-processo-de-compras/",
-          "publisher": "Sienge"
+          "type": "norm",
+          "title": "Instrução Normativa SEGES/ME nº 65/2021 — pesquisa de preços (mín. 3 fornecedores)",
+          "url": "https://www.gov.br/compras/pt-br/acesso-a-informacao/legislacao/instrucoes-normativas/instrucao-normativa-seges-me-no-65-de-7-de-julho-de-2021"
         },
         {
           "type": "link",
@@ -1045,9 +1025,9 @@
         },
         {
           "type": "link",
-          "title": "Entenda o Acórdão 2622/2013 do TCU sobre BDI",
-          "url": "https://sienge.com.br/blog/acordao-26222013/",
-          "publisher": "Sienge"
+          "title": "Acórdão TCU 2622/2013-Plenário — BDI por tipo de obra",
+          "url": "https://pesquisa.apps.tcu.gov.br/doc/acordao-completo/2622/2013/Plen%C3%A1rio",
+          "publisher": "Tribunal de Contas da União"
         },
         {
           "type": "norm",
@@ -1127,12 +1107,6 @@
           "title": "Orçamento e orçamentação: diferença dos termos",
           "url": "https://blog.ofitexto.com.br/engenharia-civil/orcamento-e-orcamentacao-diferenca/",
           "publisher": "Blog Oficina de Textos"
-        },
-        {
-          "type": "link",
-          "title": "O tripé da engenharia eficiente, por Aldo Mattos",
-          "url": "https://sienge.com.br/blog/tripe-da-engenharia-eficiente/",
-          "publisher": "Sienge"
         },
         {
           "type": "link",
@@ -1786,12 +1760,6 @@
         },
         {
           "type": "link",
-          "title": "Curva S da obra: soluções para monitorar e controlar",
-          "url": "https://sienge.com.br/blog/curva-s-da-obra/",
-          "publisher": "Sienge"
-        },
-        {
-          "type": "link",
           "title": "Como elaborar EAP (Estrutura Analítica do Projeto) em obras",
           "url": "https://blog.aecweb.com.br/eap-estrutura-analitica-de-projeto/",
           "publisher": "AECweb"
@@ -2186,10 +2154,9 @@
           "publisher": "Caixa Econômica Federal"
         },
         {
-          "type": "link",
-          "title": "Desoneração e não-desoneração da folha de pagamento na construção civil",
-          "url": "https://sienge.com.br/blog/desoneracao-da-folha-de-pagamento/",
-          "publisher": "Sienge"
+          "type": "norm",
+          "title": "Lei nº 12.546/2011, art. 7º — desoneração da folha (CPRB) na construção civil",
+          "url": "https://www.planalto.gov.br/ccivil_03/_ato2011-2014/2011/lei/l12546.htm"
         },
         {
           "type": "link",
