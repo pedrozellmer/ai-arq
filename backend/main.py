@@ -12945,30 +12945,59 @@ async def liveness():
 
 
 @app.get("/api/health")
-def health():
-    """Health check com métricas do sistema."""
+def health(request: Request):
+    """Health check. PÚBLICO devolve só o mínimo (sonda de vida + trava de
+    deploy); métricas de sistema, totais e config do motor só pra ADMIN.
+
+    🔒 30/08/2026 (auditoria): esta rota expunha a ANÔNIMOS o nº de usuários e
+    projetos, RAM/disco/CPU do container, o modelo de IA em uso, a temperatura,
+    e se as chaves estão configuradas — inteligência de negócio e de infra de
+    graça. Agora o payload sensível exige o mesmo login de admin do /api/admin/*.
+    🪤 `jobs_em_curso`/`uploads_em_curso` CONTINUAM públicos de propósito: o
+    scripts/guard_deploy.py (pre-push) os lê sem credencial pra saber se há
+    cliente ativo. Não vazam nada do cliente, só a contagem."""
+    # ── público: barato, nada sensível ──────────────────────────────────────
+    saida = {
+        "status": "healthy",
+        "versao": _versao_no_ar(),
+        "timestamp": datetime.utcnow().isoformat(),
+        # trava de deploy (Pedro 03/08): guard_deploy.py lê estes dois sem auth.
+        "jobs_em_curso": jobs.em_curso(),
+        "uploads_em_curso": jobs.uploads_em_curso(),
+        # formatos aceitos: capacidade do serviço, não é segredo (o site já diz).
+        "features": {
+            "pdf": True,
+            "dxf": True,
+            "dwg": shutil.which("ODAFileConverter") is not None,
+        },
+    }
+
+    # admin? (checagem SOFT — não levanta; anônimo só não vê o extra)
+    _is_admin = False
+    try:
+        _u = _get_user_from_request(request, tolerante=True)
+        _is_admin = bool(_u and _u.get("email", "").lower() == ADMIN_EMAIL)
+    except Exception:
+        _is_admin = False
+    if not _is_admin:
+        return saida
+
+    # ── daqui pra baixo: só ADMIN. Cálculo caro (psutil + Supabase) só agora ──
     try:
         import psutil
     except ImportError:
         psutil = None
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     stripe_key = os.getenv("STRIPE_SECRET_KEY", "")
+    mem = psutil.virtual_memory() if psutil else None
+    disk = psutil.disk_usage('/') if psutil else None
 
-    # Métricas de sistema
-    if psutil:
-        mem = psutil.virtual_memory()
-        disk = psutil.disk_usage('/')
-    else:
-        mem = None
-        disk = None
-
-    # Contar projetos hoje
+    # Contar projetos hoje — data de BRASÍLIA (meia-noite BR = 03:00 UTC), não
+    # UTC: senão entre 21h e meia-noite o contador zerava e mostrava só as
+    # últimas horas como "hoje".
     today_count = 0
     try:
         import urllib.request, json
-        # 🚨 Data de BRASÍLIA, não UTC: com UTC, entre 21h e meia-noite o
-        # contador zerava e mostrava só as últimas horas como "hoje".
-        # E o corte tem que ser 00:00 de Brasília, que em UTC é 03:00.
         _ini_br = _hoje_br().strftime("%Y-%m-%d") + "T03:00:00"
         url = f"{SUPABASE_URL}/rest/v1/projects?select=id&created_at=gte.{_ini_br}"
         req = urllib.request.Request(url)
@@ -12977,25 +13006,10 @@ def health():
         req.add_header('Prefer', 'count=exact')
         resp = urllib.request.urlopen(req, timeout=3)
         count_header = resp.headers.get('content-range', '')
-        if '/' in count_header:
-            today_count = int(count_header.split('/')[1])
-        else:
-            today_count = len(json.loads(resp.read()))
-    except:
+        today_count = int(count_header.split('/')[1]) if '/' in count_header else len(json.loads(resp.read()))
+    except Exception:
         pass
 
-    # Contar totais via Supabase count=exact.
-    # FIX 2026-05-14: antes usava locals()[var_name] = ... que é noop em
-    # CPython (locals() não tem write-back). Resultava em total_projects=0
-    # e total_users=0 sempre, quebrando dashboard de métrica admin.
-    # 🚨 25/08/2026: `total_users` mostrava **0** — com 77 perfis no banco.
-    # A causa: a contagem pedia `profiles?select=id` e a tabela NÃO TEM coluna
-    # `id` (a chave é `user_id`). O PostgREST devolve 400 "column profiles.id
-    # does not exist" e o `except Exception: pass` engolia. Provado com curl.
-    # 🪤 O comentário logo acima registra um conserto de 14/05 pro sintoma
-    # "total_users=0 sempre" — consertaram OUTRA causa e ninguém voltou a olhar
-    # o número. Conserto que não é conferido na saída não é conserto.
-    # 🚨 Falha agora vira `null`, não 0: zero é um número e se lê como medição.
     total_projects = None
     total_users = None
     try:
@@ -13022,73 +13036,33 @@ def health():
     except Exception as _eh:
         print(f"[health] contagens indisponíveis: {type(_eh).__name__}: {_eh}")
 
-    return {
-        "status": "healthy",
-        "versao": _versao_no_ar(),
-        "api_key_configured": bool(api_key and api_key.startswith("sk-")),
-        "stripe_configured": bool(stripe_key),
-        "timestamp": datetime.utcnow().isoformat(),
-        # 🚨 `system` e a memoria do HOST — num container ela enxerga a maquina
-        # inteira (61,4 GB no Render) e NAO tem relacao com o limite que causa
-        # OOM (4 GB no Pro). Quem manda no OOM e `memoria_container`, abaixo.
-        # Os dois ficam: trocar em silencio faria a serie historica mentir.
-        "memoria_container": _memoria_do_container(),
-        "system": {
-            "ram_used_pct": round(mem.percent, 1) if mem else 0,
-            "ram_used_mb": round(mem.used / 1024 / 1024) if mem else 0,
-            "ram_total_mb": round(mem.total / 1024 / 1024) if mem else 0,
-            "disk_used_pct": round(disk.percent, 1) if disk else 0,
-            "cpu_pct": psutil.cpu_percent(interval=0.5) if psutil else 0,
-        },
-        "stats": {
-            "projects_today": today_count,
-            "total_projects": total_projects,
-            "total_users": total_users,
-        },
-        # 🚦 TRAVA DE DEPLOY (Pedro, 03/08/2026): deploy no meio de um job MATA o
-        # processamento do cliente — é o caso Walter (29/07), e em 03/08 escapou
-        # por 4 minutos da Eloídes. Este contador é PÚBLICO de propósito: o hook
-        # de pre-push precisa consultar sem credencial nenhuma. Não expõe nada
-        # do cliente, só quantos jobs estão rodando.
-        # A trava de deploy soma os dois: cliente "ativo" começa no primeiro
-        # byte subindo, não no primeiro item extraído.
-        "jobs_em_curso": jobs.em_curso(),
-        "uploads_em_curso": jobs.uploads_em_curso(),
-        "features": {
-            "pdf": True,
-            "dxf": True,
-            "dwg": shutil.which("ODAFileConverter") is not None,
-            "calibrator": bool(globals().get("HAS_CALIBRATOR", False)),
-            # Fallback pros DWG que o ODA recusa. Duas coisas separadas: o
-            # binário existir e a chave estar ligada no Render. Ficam à vista
-            # porque "liguei lá" e "o backend está usando" já se desencontraram
-            # antes — e sem isso só dá pra conferir com token de admin.
-            "libredwg_instalado": shutil.which("dwg2dxf") is not None,
-            "libredwg_ligado": os.getenv("LIBREDWG_FALLBACK", "0").strip().lower()
-                               in ("1", "true", "on", "sim"),
-            # 🚨 08/08 — ponto cego fechado. O motor roda o modelo de
-            # `DXF_EXTRACT_MODEL`, que é trocável por env SEM deploy (A/B). Eu
-            # não conseguia responder "qual modelo está medindo a planta dos
-            # clientes agora?" olhando o health — só lendo o painel do Render.
-            #
-            # Importa porque `temperature=0` NÃO é aplicada a Opus 4.7/4.8 nem
-            # Fable (esses modelos recusam o parâmetro com 400). Ou seja: o
-            # modelo em uso decide se a leitura é determinística ou não. Medido
-            # em 08/08: o MESMO arquivo rodado 2× deu 36 e 74 itens (20/07) e
-            # área 458,54 e 177 m² (08/08). Sem esta linha não dá pra ligar a
-            # variação ao modelo.
-            "dxf_extract_model": _DXF_MODEL_ATUAL,
-            # 🚨 26/08/2026: este campo passou a MENTIR no momento em que a
-            # temperatura saiu de 0 pra 0,7 (o laço de repetição da Amanda). Ele
-            # dizia `true` enquanto o motor rodava a 0,7 — instrumento que
-            # afirma o contrário do que acontece é pior que instrumento nenhum.
-            # Agora publica o VALOR, lido da mesma variável que o motor usa.
-            "dxf_temperature": (
-                None if any(_t in _DXF_MODEL_ATUAL
-                            for _t in ("opus-4-8", "opus-4-7", "fable"))
-                else float(os.environ.get("DXF_EXTRACT_TEMP", "0.7"))),
-        }
+    saida["api_key_configured"] = bool(api_key and api_key.startswith("sk-"))
+    saida["stripe_configured"] = bool(stripe_key)
+    saida["memoria_container"] = _memoria_do_container()
+    saida["system"] = {
+        "ram_used_pct": round(mem.percent, 1) if mem else 0,
+        "ram_used_mb": round(mem.used / 1024 / 1024) if mem else 0,
+        "ram_total_mb": round(mem.total / 1024 / 1024) if mem else 0,
+        "disk_used_pct": round(disk.percent, 1) if disk else 0,
+        "cpu_pct": psutil.cpu_percent(interval=0.5) if psutil else 0,
     }
+    saida["stats"] = {
+        "projects_today": today_count,
+        "total_projects": total_projects,
+        "total_users": total_users,
+    }
+    saida["features"].update({
+        "calibrator": bool(globals().get("HAS_CALIBRATOR", False)),
+        "libredwg_instalado": shutil.which("dwg2dxf") is not None,
+        "libredwg_ligado": os.getenv("LIBREDWG_FALLBACK", "0").strip().lower()
+                           in ("1", "true", "on", "sim"),
+        "dxf_extract_model": _DXF_MODEL_ATUAL,
+        "dxf_temperature": (
+            None if any(_t in _DXF_MODEL_ATUAL
+                        for _t in ("opus-4-8", "opus-4-7", "fable"))
+            else float(os.environ.get("DXF_EXTRACT_TEMP", "0.7"))),
+    })
+    return saida
 
 
 # ── TCPO BIM: busca técnica de composições ──
@@ -13200,8 +13174,19 @@ _RATE_BUCKETS: dict = {}  # (bucket, ip) → [timestamps]
 
 
 def _client_ip(request) -> str:
+    # 🔒 30/08/2026 (auditoria): o rate-limit era INEFETIVO. `x-forwarded-for[-1]`
+    # atrás de Cloudflare→Render é o IP de EGRESS do proxy — ROTATIVO — então
+    # cada requisição do mesmo atacante parecia vir de um "IP" diferente e o
+    # teto (bucket contact 8/600s) nunca fechava: 20 POSTs anônimos passaram no
+    # teste da auditoria, cada um criando lead + disparando e-mail ao Pedro.
+    # CF-Connecting-IP é setado pela Cloudflare com o IP REAL do cliente — o
+    # mesmo header que o /api/admin/marcar-meu-ip já usa (provado no ar). XFF[0]
+    # é a reserva (1º da cadeia = cliente), e só então o peer.
+    _cf = (request.headers.get("cf-connecting-ip") or "").strip()
+    if _cf:
+        return _cf
     _xff = [p.strip() for p in (request.headers.get("x-forwarded-for") or "").split(",") if p.strip()]
-    return (_xff[-1] if _xff else "") or (request.client.host if request.client else "unknown")
+    return (_xff[0] if _xff else "") or (request.client.host if request.client else "unknown")
 
 
 def _rate_limit_ok(bucket: str, request, limit: int, window_s: int) -> bool:

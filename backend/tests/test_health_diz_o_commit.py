@@ -42,6 +42,25 @@ def _chamar_rota(fn, *a, **kw):
     return asyncio.run(r) if inspect.isawaitable(r) else r
 
 
+class _FakeReq:
+    """Request mínimo pro health: só precisa de .headers e .client."""
+    def __init__(self, headers=None):
+        self.headers = headers or {}
+        self.client = None
+
+
+def _req_admin(monkeypatch):
+    """Faz o health enxergar um admin logado (sem tocar no Supabase)."""
+    monkeypatch.setattr(main, "_get_user_from_request",
+                        lambda *a, **k: {"id": "x", "email": main.ADMIN_EMAIL})
+    return _FakeReq()
+
+
+def _req_anon(monkeypatch):
+    monkeypatch.setattr(main, "_get_user_from_request", lambda *a, **k: None)
+    return _FakeReq()
+
+
 def test_versao_traz_commit_curto_e_boot(monkeypatch):
     monkeypatch.setenv("RENDER_GIT_COMMIT", "0123456789abcdef0123")
     monkeypatch.setenv("RENDER_GIT_BRANCH", "main")
@@ -69,7 +88,7 @@ def test_a_ROTA_health_devolve_a_versao(monkeypatch):
     chamador: sabotei o call site e o teste nem piscou.
     """
     monkeypatch.setenv("RENDER_GIT_COMMIT", "abcdef1234567890")
-    r = _chamar_rota(main.health)
+    r = _chamar_rota(main.health, _req_anon(monkeypatch))
     assert "versao" in r, "a rota /api/health parou de devolver a versao"
     assert r["versao"]["commit"] == "abcdef1", r["versao"]
     assert r["status"] == "healthy"
@@ -82,7 +101,7 @@ def test_controle_positivo_a_versao_ANTIGA_reprova(monkeypatch):
     acima passassem com ela, elas nao valeriam nada.
     """
     monkeypatch.setenv("RENDER_GIT_COMMIT", "abcdef1234567890")
-    r = _chamar_rota(main.health)
+    r = _chamar_rota(main.health, _req_anon(monkeypatch))
     antiga = {k: v for k, v in r.items() if k != "versao"}
     assert "versao" not in antiga
     with pytest.raises(KeyError):

@@ -50,6 +50,25 @@ def _chamar_rota(fn, *a, **kw):
     r = fn(*a, **kw)
     return asyncio.run(r) if inspect.isawaitable(r) else r
 
+
+class _FakeReq:
+    """Request mínimo pro health: só precisa de .headers e .client."""
+    def __init__(self, headers=None):
+        self.headers = headers or {}
+        self.client = None
+
+
+def _req_admin(monkeypatch):
+    """Faz o health enxergar um admin logado (sem tocar no Supabase)."""
+    monkeypatch.setattr(main, "_get_user_from_request",
+                        lambda *a, **k: {"id": "x", "email": main.ADMIN_EMAIL})
+    return _FakeReq()
+
+
+def _req_anon(monkeypatch):
+    monkeypatch.setattr(main, "_get_user_from_request", lambda *a, **k: None)
+    return _FakeReq()
+
 _MB = 1024 * 1024
 
 
@@ -135,7 +154,7 @@ def test_fora_de_container_diz_isso_em_vez_de_estourar():
 def test_a_ROTA_health_devolve_o_campo(monkeypatch):
     """🪤 Guarda que só testa a função não vê o CALL SITE — e o call site é o
     que o hook e o Pedro olham."""
-    r = _chamar_rota(main.health)
+    r = _chamar_rota(main.health, _req_admin(monkeypatch))
     assert "memoria_container" in r, "a rota parou de reportar a memória do container"
     assert "system" in r, "o número do host sumiu — os dois têm que ficar"
 
