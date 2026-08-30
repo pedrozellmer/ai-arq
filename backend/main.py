@@ -4103,6 +4103,29 @@ def _consolidate_by_type_code(items: list) -> list:
     return merged
 
 
+def _origem_do_grupo(grupo, regra="todos"):
+    """Origem do item CONSOLIDADO — o selo tem que sobreviver à fusão.
+
+    🩸 30/08/2026 (eval ev502981, caso Amanda): o consolidador criava
+    BudgetItem novo SEM origem em 6 lugares. Item medido por hachura no DXF
+    (origem 'dxf_geom') era fundido, perdia o selo, e _apply_area_honesty —
+    que só poupa 'dxf_geom' — zerava m² MEDIDO como se fosse chute de Vision:
+    2.528,97 m² de piso (141 hachuras) viravam 0 com o carimbo "lida de PDF
+    por IA". Fogo amigo puro.
+
+    Regras (regra dura nº1 — nunca promover):
+    - "todos": quantidade SOMADA só é geometria se TODAS as parcelas são
+      'dxf_geom' (soma mista = parcialmente medida = sem selo).
+    - "qualquer": pra fusão de entradas com a MESMA quantidade (passada 2):
+      se QUALQUER uma tem 'dxf_geom', aquele número existe na geometria —
+      o valor mantido é exatamente o medido.
+    """
+    origens = [(getattr(_i, "origem", "") or "") for _i in grupo]
+    if regra == "qualquer":
+        return "dxf_geom" if "dxf_geom" in origens else ""
+    return "dxf_geom" if origens and all(o == "dxf_geom" for o in origens) else ""
+
+
 def _consolidate_items(items: list) -> list:
     """Consolida itens redundantes em múltiplas passadas:
 
@@ -4181,10 +4204,24 @@ def _consolidate_items(items: list) -> list:
                 ref_sheet=best.ref_sheet,
                 confidence=Confidence("estimado"),
                 discipline=best.discipline,
+                origem=_origem_do_grupo(group, "todos"),
+                marca=getattr(best, "marca", "") or "",
+                codigo_fabricante=getattr(best, "codigo_fabricante", "") or "",
+                cor=getattr(best, "cor", "") or "",
+                spec_origem=getattr(best, "spec_origem", "") or "",
             )
             pass1.append(consolidated)
         elif len(unique_qtys) == 1:
-            best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
+            # 🩸 30/08: a escolha era só por tamanho de descrição — e podia
+            # ficar com a cópia SEM selo (origem vazia) da mesma medição,
+            # que o zerador de honestidade depois matava. Mesma qty em
+            # todas: o representante certo é o que carrega a origem medida
+            # e as specs preenchidas.
+            best = max(group, key=lambda x: (
+                (getattr(x, "origem", "") or "") == "dxf_geom",
+                sum(1 for _f in ("marca", "codigo_fabricante", "cor", "spec_origem")
+                    if getattr(x, _f, "")),
+                len(x.description or ""), _desempate_estavel(x)))
             pass1.append(best)
         else:
             pass1.extend(group)
@@ -4274,6 +4311,12 @@ def _consolidate_items(items: list) -> list:
                 ref_sheet=best.ref_sheet,
                 confidence=Confidence("estimado"),
                 discipline=best.discipline,
+                # mesma qty em todas: se UMA é medida, o número mantido É o medido
+                origem=_origem_do_grupo(fam, "qualquer"),
+                marca=getattr(best, "marca", "") or "",
+                codigo_fabricante=getattr(best, "codigo_fabricante", "") or "",
+                cor=getattr(best, "cor", "") or "",
+                spec_origem=getattr(best, "spec_origem", "") or "",
             )
             pass2.append(merged_item)
 
@@ -4402,6 +4445,11 @@ def _consolidate_items(items: list) -> list:
             ref_sheet=best.ref_sheet,
             confidence=Confidence("estimado"),
             discipline=disc,
+            origem=_origem_do_grupo(group, "todos"),
+            marca=getattr(best, "marca", "") or "",
+            codigo_fabricante=getattr(best, "codigo_fabricante", "") or "",
+            cor=getattr(best, "cor", "") or "",
+            spec_origem=getattr(best, "spec_origem", "") or "",
         )
         pass3.append(consolidated)
 
@@ -4448,6 +4496,11 @@ def _consolidate_items(items: list) -> list:
             ref_sheet=best.ref_sheet,
             confidence=best.confidence,  # preserva confirmado se todos eram
             discipline=best.discipline,
+            origem=_origem_do_grupo(group, "todos"),
+            marca=getattr(best, "marca", "") or "",
+            codigo_fabricante=getattr(best, "codigo_fabricante", "") or "",
+            cor=getattr(best, "cor", "") or "",
+            spec_origem=getattr(best, "spec_origem", "") or "",
         )
         pass4.append(consolidated)
 
@@ -4500,6 +4553,8 @@ def _consolidate_items(items: list) -> list:
             ref_sheet=best.ref_sheet,
             confidence=Confidence("estimado"),
             discipline=disc,
+            # linha SINTÉTICA ("a especificar"): sem origem de propósito —
+            # não há medição a preservar aqui.
         )
         pass5.append(consolidated)
 
@@ -4625,6 +4680,12 @@ def _consolidate_items(items: list) -> list:
             ref_sheet=winner.ref_sheet,
             confidence=winner.confidence,
             discipline=winner.discipline,
+            # a quantidade É a do vencedor: herda a origem e as specs dele
+            origem=getattr(winner, "origem", "") or "",
+            marca=getattr(winner, "marca", "") or "",
+            codigo_fabricante=getattr(winner, "codigo_fabricante", "") or "",
+            cor=getattr(winner, "cor", "") or "",
+            spec_origem=getattr(winner, "spec_origem", "") or "",
         )
         pass6.append(merged_item)
 
