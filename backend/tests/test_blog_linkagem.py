@@ -36,8 +36,7 @@ def _grafo_simulado():
     (posts futuros cruzam a data de publicação sem regeneração) e um teste
     sobre ele quebraria com o passar do calendário, não com regressão de código.
     """
-    from datetime import date
-    hoje = date.today().isoformat()
+    hoje = G.hoje_editorial().isoformat()  # 🪤 relogio de BRASILIA, nunca o do runner (UTC)
     pub = [p for p in G.POSTS if p["publish_date"] <= hoje]
     contador = {}
     recebidos = {p["slug"]: 0 for p in pub}
@@ -76,8 +75,7 @@ def test_nenhum_post_vira_BURACO_NEGRO():
 def test_relacionado_nunca_aponta_pra_post_FUTURO():
     """🔒 Regra antiga que não pode regredir: post futuro tem redirect no guard
     JS — link pra ele é link morto pro SEO."""
-    from datetime import date
-    hoje = date.today().isoformat()
+    hoje = G.hoje_editorial().isoformat()  # 🪤 relogio de BRASILIA, nunca o do runner (UTC)
     pub = [p for p in G.POSTS if p["publish_date"] <= hoje]
     contador = {}
     for p in pub:
@@ -161,8 +159,7 @@ def test_o_schema_do_indice_so_lista_post_PUBLICADO():
                   idx, re.S)
     assert m, "não achei o schema do Blog no índice"
     dados = _json.loads(m.group(1))
-    from datetime import date
-    hoje = date.today().isoformat()
+    hoje = G.hoje_editorial().isoformat()  # 🪤 relogio de BRASILIA, nunca o do runner (UTC)
     futuros = [p["url"] for p in dados.get("blogPost", [])
                if p.get("datePublished", "") > hoje]
     assert not futuros, "o schema lista post futuro: %s" % futuros[:3]

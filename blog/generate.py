@@ -6,7 +6,23 @@ Cada post fica em /blog/posts/{slug}.html, otimizado pra SEO.
 """
 import json
 import os
-from datetime import datetime, date
+from datetime import datetime
+
+def hoje_editorial():
+    """O 'hoje' do calendário do blog — SEMPRE Brasília.
+
+    🩸 30/08/2026 (00:01 UTC): a bancada do CI ficou vermelha porque o runner
+    do GitHub vive em UTC — das 21:00 às 23:59 de Brasília ele já está no dia
+    SEGUINTE, gerou o site 'de domingo' e comparou com os HTMLs commitados 'de
+    sábado' (26 testes de artefato explodiram). Post sai DOMINGO DE BRASÍLIA;
+    o relógio editorial é um só, em qualquer máquina.
+    Brasília é UTC-3 fixo desde 2019 (sem horário de verão) — a conta na mão
+    evita depender de tzdata no Windows.
+    """
+    from datetime import datetime, timedelta, timezone
+    return (datetime.now(timezone.utc) - timedelta(hours=3)).date()
+
+
 
 THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 SITE_URL = "https://ai.arq.br"
@@ -466,7 +482,7 @@ def pick_related_posts(post, n=3, _contador={}):
     26 posts numa passada só) — e é por isso que o teste da distribuição roda o
     build inteiro em vez de chamar a função isolada.
     """
-    today = date.today().isoformat()
+    today = hoje_editorial().isoformat()
     # 🪤 `keywords` no posts.json é STRING separada por vírgula, não lista. A
     # 1ª versão iterava a string — ou seja, CARACTERES — e a "afinidade" era
     # ruído de letras em comum. A distribuição até espalhou (o desconto por
@@ -558,7 +574,7 @@ def render_post_html(post):
     # o texto antes do lançamento, com data futura no JSON-LD.
     # Agora o post futuro nasce com noindex; ao regenerar depois da data de
     # publicação, a marca cai sozinha e ele passa a ser indexável.
-    _eh_futuro = post["publish_date"] > date.today().isoformat()
+    _eh_futuro = post["publish_date"] > hoje_editorial().isoformat()
     robots_meta = '\n<meta name="robots" content="noindex, follow">' if _eh_futuro else ""
 
     # Schema.org Article (JSON-LD) — boost SEO
@@ -829,7 +845,7 @@ def render_post_html(post):
 
 def render_index_html():
     """Gera o index.html do blog que lista todos os posts visíveis."""
-    today = date.today().isoformat()
+    today = hoje_editorial().isoformat()
 
     # Recalcula tempo de leitura de todos
     for post in POSTS:
@@ -864,7 +880,7 @@ def render_index_html():
         # 🔑 29/08 (estudo de SEO): o índice do blog não tinha NENHUM dado
     # estruturado. Blog + ItemList dizem ao Google que isto é uma listagem
     # de artigos, com a ordem e as URLs.
-    hoje_idx = date.today().isoformat()
+    hoje_idx = hoje_editorial().isoformat()
     schema_indice = {
         "@context": "https://schema.org",
         "@type": "Blog",
@@ -997,7 +1013,7 @@ def render_sitemap():
     deploy-pages.yml`, gatilho `schedule`). Mesmo motivo vale pros links de
     "posts relacionados", que também congelam na geração.
     """
-    today = date.today().isoformat()
+    today = hoje_editorial().isoformat()
     urls = [
         (f"{SITE_URL}/", "1.0", "weekly"),
         (f"{SITE_URL}/precos.html", "0.9", "weekly"),
