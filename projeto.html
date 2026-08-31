@@ -403,6 +403,30 @@
     </div>
     <p id="rx-pct" class="text-xs text-gray-500 mt-2"></p>
   </div>
+
+  <!-- 31/08/2026 - ESTE CARTAO MOROU NA VISTA ERRADA A VIDA TODA.
+       Ele ficava dentro de <div class="vista" data-vista="quantitativo" hidden>,
+       e a pagina ABRE na vista "visao". maybeShowFeedback tirava o `hidden` do
+       proprio cartao, mas o ancestral seguia fechado: o pedido de avaliacao de
+       MAIOR alcance do produto (vale pra todo projeto com itens) so aparecia
+       pra quem clicasse em "Quantitativo" no menu lateral.
+       Medido: 5 avaliacoes em toda a historia do produto, 3 de fora de casa.
+       Se mover de novo: o cartao TEM que ficar na vista em que a pagina abre.
+       Guarda de regressao: backend/tests/test_pedido_de_avaliacao_aparece.py -->
+<div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
+    <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
+    <p class="text-xs text-indigo-600 mb-3">Seu retorno ajuda a gente a melhorar — leva 5 segundos.</p>
+    <div id="fb-buttons" class="flex flex-wrap gap-2">
+      <button type="button" onclick="sendFeedback(9)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👍 Ajudou bastante</button>
+      <button type="button" onclick="sendFeedback(7)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">😐 Mais ou menos</button>
+      <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
+    </div>
+    <div id="fb-comment-wrap" class="hidden mt-3">
+      <textarea id="fb-comment" rows="2" aria-label="Comentário sobre o resultado (opcional)" oninput="_fbArm(20000)" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
+      <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
+    </div>
+    <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
+  </div>
   </div>
 
   <!-- ══ VISTA: quantitativo ══ -->
@@ -508,20 +532,6 @@
     </div>
     <p class="px-5 pb-3 text-[11px] text-gray-500"><span aria-hidden="true">⚠</span> O AI.arq é uma IA e <b>pode cometer erros</b> — confira as informações importantes. Respostas geradas a partir dos dados do seu projeto. O AI.arq entrega quantitativo, não preço.</p>
   </section>
-<div id="feedback-card" class="hidden rounded-xl border border-indigo-100 bg-indigo-50 p-5">
-    <p class="text-sm font-semibold text-indigo-900 mb-1">Essa planilha te ajudou?</p>
-    <p class="text-xs text-indigo-600 mb-3">Seu retorno ajuda a gente a melhorar — leva 5 segundos.</p>
-    <div id="fb-buttons" class="flex flex-wrap gap-2">
-      <button type="button" onclick="sendFeedback(9)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👍 Ajudou bastante</button>
-      <button type="button" onclick="sendFeedback(7)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">😐 Mais ou menos</button>
-      <button type="button" onclick="sendFeedback(2)" class="px-4 py-2 rounded-lg bg-white border border-indigo-200 text-sm font-medium text-gray-700 hover:bg-indigo-100 transition">👎 Não muito</button>
-    </div>
-    <div id="fb-comment-wrap" class="hidden mt-3">
-      <textarea id="fb-comment" rows="2" aria-label="Comentário sobre o resultado (opcional)" oninput="_fbArm(20000)" placeholder="O que faltou ou o que mais ajudaria? (opcional)" class="w-full rounded-lg border border-indigo-200 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none"></textarea>
-      <button type="button" onclick="sendFeedbackComment()" class="mt-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium transition">Enviar comentário</button>
-    </div>
-    <p id="fb-thanks" class="hidden text-sm text-emerald-700 font-medium">✓ Valeu pelo retorno! Isso ajuda demais a melhorar o AI.arq.</p>
-  </div>
 <div id="arquivos-box" class="rounded-xl border bg-white overflow-hidden">
     <div class="px-5 py-4 border-b bg-gray-50">
       <h2 class="font-semibold text-gray-800">Arquivos que alimentaram o projeto</h2>
@@ -2698,36 +2708,97 @@ function maybeShowFeedback() {
   } catch (e) { /* localStorage indisponível: sem feedback, sem erro */ }
 }
 
-let _fbScore = null, _fbTimer = null, _fbPosted = false;
+let _fbScore = null, _fbTimer = null, _fbPosted = false, _fbToken = null;
 // O timer SEMPRE manda o que já está escrito na caixa (não só a nota) e se re-arma
 // a cada tecla. Antes ele disparava 6s cravados e marcava _fbPosted=true — quem
 // levava mais de 6s escrevendo tinha o comentário jogado fora em silêncio (a tela
 // ainda agradecia). /api/nps faz INSERT puro, então 2º POST viraria linha duplicada:
 // por isso o caminho continua sendo um envio só, com o texto do momento do disparo.
-function _fbFlush() {
-  if (_fbPosted) return;
+async function _fbFlush() {
+  if (_fbPosted || _fbScore === null) return false;
   _fbPosted = true;
-  postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim());
+  const ok = await postNps(_fbScore, (document.getElementById('fb-comment').value || '').trim());
+  // 🩸 31/08/2026: falhou = NAO gravou. Destravar pra poder tentar de novo —
+  // antes, `_fbPosted = true` era definitivo e a nota morria ali.
+  if (!ok) _fbPosted = false;
+  return ok;
 }
 function _fbArm(ms) { clearTimeout(_fbTimer); _fbTimer = setTimeout(_fbFlush, ms); }
 function sendFeedback(score) {
   _fbScore = score;
   document.getElementById('fb-buttons').classList.add('hidden');
   document.getElementById('fb-comment-wrap').classList.remove('hidden');
+  // 🪤 Guarda o token AGORA, sincronamente utilizavel depois: no `pagehide` nao
+  // da tempo de esperar um `await getSession()`, e sem token a nota vira 401.
+  try {
+    sbClient.auth.getSession().then(function (r) {
+      _fbToken = (r && r.data && r.data.session && r.data.session.access_token) || null;
+    });
+  } catch (e) { /* sem sessao: o post normal ainda tenta */ }
   // NÃO posta na hora (evita NPS duplicado quando o usuário comenta): espera o
   // comentário opcional; se em 6s não vier, posta só a nota. Uma linha por feedback.
   _fbArm(6000);
 }
-function sendFeedbackComment() {
-  clearTimeout(_fbTimer);
-  _fbFlush();
-  document.getElementById('fb-comment-wrap').classList.add('hidden');
-  document.getElementById('fb-thanks').classList.remove('hidden');
+
+// 🩸 31/08/2026 — QUEM CLICAVA NA NOTA E FECHAVA A ABA PERDIA A NOTA.
+// `sendFeedback` armava um timer de 6 s e nao havia nenhum `pagehide` na
+// pagina (grep dava ZERO). Fechar a aba, trocar de pagina ou minimizar no
+// celular dentro desses 6 s jogava a avaliacao fora — e a pessoa achava que
+// tinha avaliado. Com 5 avaliacoes em toda a historia do produto, isso e
+// exatamente o tipo de perda que a gente nao pode ter.
+// `keepalive` e o unico jeito de a requisicao sobreviver ao fechamento da aba
+// levando o header Authorization (sendBeacon nao manda header).
+function _fbSalvaAntesDeSair() {
+  if (_fbPosted || _fbScore === null) return;
+  _fbPosted = true;
+  var txt = '';
+  try { txt = (document.getElementById('fb-comment').value || '').trim(); } catch (e) {}
+  var h = { 'Content-Type': 'application/json' };
+  if (_fbToken) h['Authorization'] = 'Bearer ' + _fbToken;
+  try {
+    fetch(API_BASE + '/api/nps', {
+      method: 'POST', headers: h, keepalive: true,
+      body: JSON.stringify({
+        user_id: '', user_email: '', score: _fbScore, comment: txt,
+        context: 'after_project', job_id: jobId,
+      }),
+    });
+  } catch (e) { /* best-effort: e a ultima chance mesmo */ }
 }
+window.addEventListener('pagehide', _fbSalvaAntesDeSair);
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'hidden') _fbSalvaAntesDeSair();
+});
+async function sendFeedbackComment() {
+  clearTimeout(_fbTimer);
+  // 🩸 A tela agradecia ANTES de saber se gravou. Agora so agradece se gravou —
+  // agradecer por nota perdida e a pior combinacao: a gente perde o dado E a
+  // pessoa acha que colaborou.
+  const ok = await _fbFlush();
+  document.getElementById('fb-comment-wrap').classList.add('hidden');
+  if (ok) {
+    document.getElementById('fb-thanks').classList.remove('hidden');
+  } else {
+    const c = document.getElementById('feedback-card');
+    if (c) {
+      c.insertAdjacentHTML('beforeend',
+        '<p class="text-sm text-red-700 mt-2" role="alert">Não consegui salvar sua ' +
+        'avaliação agora. Recarregue a página e tente de novo — o dado não foi perdido de propósito.</p>');
+    }
+    document.getElementById('fb-comment-wrap').classList.remove('hidden');
+  }
+}
+// Devolve TRUE so quando a nota virou linha no banco.
+// 🩸 31/08/2026 — antes esta funcao engolia tudo: nao olhava `res.ok`, nao
+// olhava o corpo, e gravava `aiarq_fb_<job>` no localStorage de qualquer jeito.
+// Efeito: sessao expirada (authFetch NAO lanca em 401, so avisa — aiarq-utils.js)
+// marcava aquele projeto como "ja avaliou" PARA SEMPRE naquele navegador, sem
+// nenhuma linha no banco. E o backend responde HTTP 200 com {"status":"error"}
+// quando o insert falha, entao nem `res.ok` sozinho basta: tem que ler o corpo.
 async function postNps(score, comment) {
   try {
     const { data: { session } } = await sbClient.auth.getSession();
-    await authFetch(`${API_BASE}/api/nps`, {
+    const res = await authFetch(`${API_BASE}/api/nps`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -2739,8 +2810,19 @@ async function postNps(score, comment) {
         job_id: jobId,
       }),
     });
-    localStorage.setItem('aiarq_fb_' + jobId, '1');  // não pergunta de novo
-  } catch (e) { /* best-effort: feedback nunca quebra a página */ }
+    let corpo = {};
+    try { corpo = await res.json(); } catch (e) { /* corpo ilegivel = nao gravou */ }
+    const gravou = !!(res && res.ok && corpo && corpo.status === 'ok');
+    if (gravou) {
+      localStorage.setItem('aiarq_fb_' + jobId, '1');  // só então: não pergunta de novo
+    } else {
+      console.warn('[nps] nao gravou:', res && res.status, corpo);
+    }
+    return gravou;
+  } catch (e) {
+    console.warn('[nps] falhou:', e);
+    return false;
+  }
 }
 
 function renderWarnings(warnings) {

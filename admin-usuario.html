@@ -55,12 +55,31 @@
     <p class="text-gray-400 text-sm">Carregando...</p>
   </div>
 
+  <!-- Aviso de leitura que falhou (secao vazia por erro != cliente nao fez) -->
+  <div id="ficha-falhas" class="hidden rounded-xl border border-amber-300 bg-amber-50 p-4 mb-5 text-sm"></div>
+
+  <!-- O que essa pessoa fez, de relance -->
+  <div id="ficha-chips" class="mb-6"></div>
+
+  <!-- O que ela RESPONDEU -->
+  <section id="sec-nps" class="mb-6"></section>
+  <section id="sec-mensagens" class="mb-6"></section>
+  <section id="sec-pesquisa" class="mb-6"></section>
+
   <!-- Projects -->
   <div class="flex items-center justify-between mb-3">
     <h2 class="text-lg font-bold text-gray-900">Projetos</h2>
     <span id="proj-count" class="text-sm text-gray-400"></span>
   </div>
   <div id="projects-box"><p class="text-gray-400 text-sm">Carregando projetos...</p></div>
+
+  <!-- O que ela FEZ dentro do produto -->
+  <section id="sec-revisao" class="mt-6 mb-6"></section>
+  <section id="sec-entregaveis" class="mb-6"></section>
+  <section id="sec-chat" class="mb-6"></section>
+  <section id="sec-cashback" class="mb-6"></section>
+  <section id="sec-emails" class="mb-6"></section>
+  <section id="sec-timeline" class="mb-10"></section>
 </div>
 
 <script>
@@ -230,9 +249,228 @@ async function loadUserPage(){
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// FICHA COMPLETA — "tudo que o cara respondeu, tudo que ele fez" (Pedro,
+// 31/08/2026). Uma chamada so: /api/admin/usuario/{id ou email}.
+//
+// 🪤 A regra desta tela: secao vazia porque a LEITURA FALHOU nao pode parecer
+// "o cliente nao fez isso". O backend manda `_falhas` e aqui isso vira uma
+// tarja amarela no topo — sem ela, a ficha vira conclusao errada sobre gente
+// de verdade.
+// ═══════════════════════════════════════════════════════════════════════
+function _card(titulo, contador, corpoHtml, vazioTxt){
+  const cnt = (contador === null || contador === undefined) ? '' :
+    `<span class="text-sm text-gray-400">${contador}</span>`;
+  return `<div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-bold text-gray-900">${titulo}</h2>${cnt}</div>
+    ${corpoHtml || `<p class="text-gray-500 text-sm border rounded-xl p-4 bg-white">${vazioTxt}</p>`}`;
+}
+
+function _linhas(itens, fn){
+  if(!itens || !itens.length) return '';
+  return '<div class="rounded-xl border bg-white divide-y">' +
+    itens.map(fn).join('') + '</div>';
+}
+
+function _notaCor(n){
+  n = Number(n);
+  if(n >= 9) return 'bg-emerald-100 text-emerald-800';
+  if(n >= 7) return 'bg-amber-100 text-amber-800';
+  return 'bg-red-100 text-red-800';
+}
+
+function renderChips(r){
+  // O painel de "usou / nao usou" que o Pedro pediu: o produto inteiro numa
+  // faixa. Verde = usou; cinza = nunca.
+  const itens = [
+    ['Subiu projeto',        r.projetos > 0,                 r.projetos + ''],
+    ['Concluiu',             r.projetos_concluidos > 0,      r.projetos_concluidos + ''],
+    ['Baixou / revisou item', r.revisou,                     Object.values(r.revisoes_por_acao||{}).reduce((a,b)=>a+b,0)+''],
+    ['Mandou planilha revisada', r.planilhas_revisadas_enviadas > 0, r.planilhas_revisadas_enviadas+''],
+    ['Usou o chat',          r.usou_chat,                    ''],
+    ['Gerou memorial',       r.gerou_memorial,               ''],
+    ['Gerou cronograma',     r.gerou_cronograma,             ''],
+    ['Comparativo fornecedor', r.gerou_comparativo,          ''],
+    ['Cadastrou cliente final', r.cadastrou_cliente_final,   ''],
+    ['Avaliou (NPS)',        r.respondeu_nps > 0,            r.melhor_nps != null ? ('nota '+r.melhor_nps) : ''],
+    ['Falou com a gente',    r.mandou_mensagem > 0,          r.mandou_mensagem+''],
+  ];
+  const chips = itens.map(([rot, usou, extra]) => {
+    const cls = usou ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                     : 'bg-gray-50 border-gray-200 text-gray-400';
+    const marca = usou ? '&#10003;' : '&#8212;';
+    const ex = (usou && extra) ? ` <span class="opacity-70">(${esc(extra)})</span>` : '';
+    return `<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium ${cls}">
+      <span aria-hidden="true">${marca}</span> ${esc(rot)}${ex}</span>`;
+  }).join('');
+  document.getElementById('ficha-chips').innerHTML =
+    `<p class="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-2">O que essa pessoa usou do produto</p>
+     <div class="flex flex-wrap gap-2">${chips}</div>`;
+}
+
+function renderFicha(d){
+  const r = d.resumo || {};
+  renderChips(r);
+
+  // Tarja de leitura que falhou
+  if(d._falhas && d._falhas.length){
+    const box = document.getElementById('ficha-falhas');
+    box.innerHTML = '<b>&#9888; Parte da ficha nao pode ser lida</b>' +
+      '<p class="text-xs text-amber-800/80 mt-1">Estas secoes aparecem vazias por FALHA, nao porque a pessoa nao usou:</p>' +
+      '<ul class="list-disc ml-5 mt-1 text-xs">' +
+      d._falhas.map(f => `<li>${esc(f)}</li>`).join('') + '</ul>';
+    box.classList.remove('hidden');
+  }
+
+  // ── Avaliacoes (NPS) ──
+  document.getElementById('sec-nps').innerHTML = _card(
+    'Avalia&ccedil;&otilde;es', (d.nps||[]).length || null,
+    _linhas(d.nps, n => {
+      const et = n.stage_ratings ? Object.entries(n.stage_ratings)
+        .map(([k,v]) => `${esc(k)} ${esc(v)}/5`).join(' &middot; ') : '';
+      return `<div class="p-4">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="inline-flex items-center justify-center w-9 h-9 rounded-lg font-bold ${_notaCor(n.score)}">${esc(n.score)}</span>
+          <span class="text-xs text-gray-500">${_fmtDateTime(n.created_at)}</span>
+          ${n.context ? `<span class="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">${esc(n.context)}</span>` : ''}
+        </div>
+        ${n.comment ? `<p class="text-sm text-gray-800 mt-2 italic">&ldquo;${esc(n.comment)}&rdquo;</p>` : '<p class="text-xs text-gray-400 mt-2">(sem coment&aacute;rio)</p>'}
+        ${et ? `<p class="text-xs text-gray-500 mt-1">${et}</p>` : ''}
+      </div>`;
+    }),
+    'Nunca avaliou. Vale pedir &mdash; s&oacute; 5 pessoas avaliaram em toda a hist&oacute;ria do produto.');
+
+  // ── Mensagens ──
+  document.getElementById('sec-mensagens').innerHTML = _card(
+    'Mensagens que mandou', (d.mensagens||[]).length || null,
+    _linhas(d.mensagens, m => `<div class="p-4">
+      <div class="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+        <span class="px-2 py-0.5 rounded bg-gray-100">${esc(m.message_type||'contato')}</span>
+        <span>${_fmtDateTime(m.created_at)}</span>
+        ${m.replied_at ? '<span class="text-emerald-700">respondida</span>' : '<span class="text-amber-700">sem resposta</span>'}
+      </div>
+      ${m.subject ? `<p class="text-sm font-medium text-gray-900 mt-1">${esc(m.subject)}</p>` : ''}
+      <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">${esc(m.message||'')}</p>
+    </div>`),
+    'Nunca escreveu pra gente.');
+
+  // ── Pesquisa pos-processamento ──
+  document.getElementById('sec-pesquisa').innerHTML = _card(
+    'Pesquisa p&oacute;s-processamento', (d.pesquisa||[]).length || null,
+    _linhas(d.pesquisa, p => `<div class="p-4 text-sm">
+      <span class="text-gray-500">${esc(p.question_key||'')}:</span>
+      <span class="text-gray-900 font-medium">${esc(p.answer||'')}</span>
+      <span class="text-xs text-gray-400 ml-2">${_fmtDate(p.created_at)}</span></div>`),
+    'Nao respondeu. (Esta pesquisa esta com ZERO resposta no produto inteiro.)');
+
+  // ── Revisao ──
+  const ac = r.revisoes_por_acao || {};
+  const acTxt = Object.keys(ac).length
+    ? Object.entries(ac).map(([k,v]) => `${v} ${k === 'edit' ? 'corre&ccedil;&otilde;es' : k === 'reject' ? 'exclus&otilde;es' : 'aprova&ccedil;&otilde;es'}`).join(' &middot; ')
+    : '';
+  document.getElementById('sec-revisao').innerHTML = _card(
+    'Revis&atilde;o dos itens', acTxt || null,
+    _linhas((d.revisoes||[]).slice(0, 40), v => {
+      const e = v.edits || {};
+      const antes = e._antes || {};
+      const rot = v.action === 'edit' ? 'corrigiu' : v.action === 'reject' ? 'EXCLUIU' : 'aprovou';
+      const cor = v.action === 'reject' ? 'bg-red-100 text-red-800'
+                : v.action === 'edit' ? 'bg-indigo-100 text-indigo-800'
+                : 'bg-gray-100 text-gray-600';
+      let det = '';
+      if(antes.description){
+        det = `<p class="text-sm text-gray-800 mt-1">${esc(antes.description)}</p>`;
+        if(antes.quantity != null) det += `<p class="text-xs text-gray-500">motor: ${esc(antes.quantity)} ${esc(antes.unit||'')}` +
+          (e.quantity != null ? ` &rarr; cliente: <b>${esc(e.quantity)}</b>` : '') + '</p>';
+      }
+      return `<div class="p-4">
+        <div class="flex items-center gap-2 text-xs">
+          <span class="px-2 py-0.5 rounded font-semibold ${cor}">${rot}</span>
+          <span class="text-gray-400">${_fmtDateTime(v.reviewed_at)}</span>
+        </div>${det}
+        ${v.comment ? `<p class="text-sm italic text-gray-600 mt-1">&ldquo;${esc(v.comment)}&rdquo;</p>` : ''}
+      </div>`;
+    }),
+    'Nunca abriu a revis&atilde;o. (54% dos projetos nunca sao revisados.)');
+
+  // ── Entregaveis ──
+  const ent = [];
+  (d.memoriais||[]).forEach(m => ent.push(['Memorial descritivo', m.job_id, m.updated_at]));
+  (d.cronogramas||[]).forEach(c => ent.push(['Cronograma', c.job_id, c.created_at]));
+  (d.cotacoes||[]).forEach(c => ent.push(['Comparativo de fornecedor', c.job_id, c.created_at]));
+  (d.planilhas_revisadas||[]).forEach(p => ent.push(
+    ['Planilha revisada enviada (' + (p.n_alterados||0) + ' alterados)', p.job_id, p.created_at]));
+  (d.clientes_finais||[]).forEach(c => ent.push(
+    ['Cliente final: ' + (c.client_name || c.client_company || '?'), c.job_id, c.created_at]));
+  document.getElementById('sec-entregaveis').innerHTML = _card(
+    'Entreg&aacute;veis que gerou', ent.length || null,
+    _linhas(ent, ([rot, job, quando]) => `<div class="p-3 text-sm flex items-center justify-between gap-3">
+      <span class="text-gray-900">${esc(rot)}</span>
+      <span class="text-xs text-gray-400 shrink-0">${job ? esc(String(job).slice(0,8)) + ' &middot; ' : ''}${_fmtDate(quando)}</span>
+    </div>`),
+    'S&oacute; a planilha. Nunca gerou memorial, cronograma nem comparativo.');
+
+  // ── Chat ──
+  document.getElementById('sec-chat').innerHTML = _card(
+    'Chat do quantitativo', (d.chat||[]).length || null,
+    _linhas((d.chat||[]).slice(0, 20), c => `<div class="p-4">
+      <p class="text-sm font-medium text-gray-900">${esc(c.question||'')}</p>
+      <p class="text-sm text-gray-600 mt-1 whitespace-pre-wrap">${esc(String(c.answer||'').slice(0,600))}</p>
+      <p class="text-xs text-gray-400 mt-1">${_fmtDateTime(c.created_at)}${c.error ? ' &middot; <span class="text-red-600">erro</span>' : ''}</p>
+    </div>`),
+    'Nunca usou o chat.');
+
+  // ── Cashback ──
+  document.getElementById('sec-cashback').innerHTML = _card(
+    'Cashback', (d.cashback||[]).length || null,
+    _linhas(d.cashback, c => `<div class="p-3 text-sm flex items-center justify-between">
+      <span>${esc(c.description || c.source || '')}</span>
+      <span class="font-semibold">R$ ${((Number(c.amount_cents)||0)/100).toFixed(2).replace('.', ',')}</span>
+    </div>`),
+    'Nenhum cr&eacute;dito.');
+
+  // ── E-mails ──
+  document.getElementById('sec-emails').innerHTML = _card(
+    'E-mails que recebeu', (d.emails||[]).length || null,
+    _linhas((d.emails||[]).slice(0, 30), e => `<div class="p-3 text-sm flex items-center justify-between gap-3">
+      <span class="text-gray-800 truncate">${esc(e.subject || e.kind || '')}</span>
+      <span class="text-xs text-gray-400 shrink-0">${_fmtDate(e.sent_at)}</span>
+    </div>`),
+    'Nenhum e-mail registrado.');
+
+  // ── Linha do tempo ──
+  document.getElementById('sec-timeline').innerHTML = _card(
+    'Linha do tempo', (d.eventos||[]).length ? ((d.eventos||[]).length + ' eventos') : null,
+    _linhas((d.eventos||[]).slice(0, 60), ev => `<div class="p-2.5 text-xs flex items-center justify-between gap-3">
+      <span class="text-gray-700 font-medium">${esc(ev.event||'')}</span>
+      <span class="text-gray-400 shrink-0">${_fmtDateTime(ev.created_at)}</span>
+    </div>`),
+    'Sem eventos. &#9888; a telemetria s&oacute; registra quem aceitou cookie &mdash; aus&ecirc;ncia aqui n&atilde;o prova aus&ecirc;ncia de uso.');
+}
+
+async function carregarFicha(chave){
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/usuario/${encodeURIComponent(chave)}`);
+    const d = await res.json();
+    if(!res.ok) throw new Error(d.detail || ('HTTP ' + res.status));
+    renderFicha(d);
+  } catch(e){
+    // 🪤 Falhar aqui nao pode virar tela em branco silenciosa: sem aviso, o
+    // Pedro leria "esse cliente nao fez nada".
+    const box = document.getElementById('ficha-falhas');
+    box.innerHTML = `<b>&#9888; Nao consegui carregar a ficha:</b> ${esc(String(e.message||e))}
+      <p class="text-xs mt-1">As se&ccedil;&otilde;es abaixo est&atilde;o vazias por ERRO, n&atilde;o porque a pessoa n&atilde;o usou.</p>`;
+    box.classList.remove('hidden');
+  }
+}
+
 (async function init(){
   const ok = await checkAdminAccess();
-  if(ok) loadUserPage();
+  if(ok){
+    loadUserPage();
+    const id = getParam('id') || getParam('email');
+    if(id) carregarFicha(id);
+  }
 })();
 </script>
 </body>

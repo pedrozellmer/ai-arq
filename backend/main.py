@@ -21983,6 +21983,210 @@ def admin_marcar_meu_ip(request: Request):
     except Exception as e:
         return {"ok": False, "motivo": str(e)[:120]}
 
+@app.get("/api/admin/usuario/{chave}")
+def admin_ficha_usuario(chave: str, request: Request):
+    """Dossie COMPLETO de um usuario: tudo que ele respondeu e tudo que fez.
+
+    Pedro, 31/08/2026: *"A gente consegue fazer uma pagina de usuarios, com
+    todas as funcoes, tudo que o cara respondeu, tudo que ele fez, ter isso uma
+    visao geral dentro do dashboard na aba usuarios"* e *"Tudo de produto,
+    deixar isso claro na aba usuario pra poder ver tudo que foi feito"*.
+
+    Por que nasceu: em 24/08 o Marcelo deu NPS 9 com elogio e isso ficou 7 dias
+    invisivel. O painel tinha o dado — faltava um lugar onde a pessoa inteira
+    aparecesse junta.
+
+    VAZIO != FALHOU. `_supa_rows` devolve [] em qualquer erro, entao uma secao
+    que quebrou fica identica a uma secao sem dado — e a tela diria "nunca usou
+    o chat" quando na verdade a consulta caiu. Aqui cada secao registra o que
+    nao deu certo em `_falhas`, e a tela e obrigada a mostrar. Mesma licao do
+    /api/track e do cron que dizia `succeeded` com o erro no corpo.
+
+    Nao devolve CPF/CNPJ: a ficha existe pra entender USO do produto, e
+    documento nao ajuda nisso. Telefone/e-mail do cliente final do usuario
+    tambem ficam fora (dado de terceiro). Rota atras de `_require_admin`.
+    """
+    _require_admin(request)
+    import urllib.parse as _up
+
+    _falhas = []
+    _MAX = 500          # teto por secao; PostgREST corta em 1000 sem avisar
+
+    def _busca(tabela, query, rotulo):
+        """Le uma secao sabendo distinguir 'vazio' de 'quebrou'."""
+        try:
+            st, rows = _supa_rest_service("GET", tabela + "?" + query)
+            if not isinstance(rows, list):
+                _falhas.append(rotulo + ": resposta inesperada (status " + str(st) + ")")
+                return []
+            if len(rows) >= _MAX:
+                _falhas.append(rotulo + ": mostrando os " + str(_MAX) +
+                               " mais recentes (ha mais)")
+            return rows
+        except Exception as _e:
+            _falhas.append(rotulo + ": " + type(_e).__name__ + " - " + str(_e))
+            return []
+
+    # A tela do admin (admin-usuario.html) navega por `?id=<user_id>`; o Pedro
+    # busca por e-mail. Aceita os dois pra nao existirem duas rotas.
+    _SEL_PERFIL = ("select=user_id,full_name,email,whatsapp,company,role,area,"
+                   "referral_source,referral_detail,created_at,accept_marketing")
+    _k = (chave or "").strip()
+    if not _k:
+        raise HTTPException(400, "informe o e-mail ou o id do usuario")
+    if "@" in _k:
+        perfil_rows = _busca("profiles", "email=eq." + _up.quote(_k.lower()) + "&" +
+                             _SEL_PERFIL, "perfil")
+    else:
+        perfil_rows = _busca("profiles", "user_id=eq." + _up.quote(_k) + "&" +
+                             _SEL_PERFIL, "perfil")
+    perfil = perfil_rows[0] if perfil_rows else {}
+    uid = perfil.get("user_id") or ("" if "@" in _k else _k)
+    em = (perfil.get("email") or (_k.lower() if "@" in _k else "")).strip().lower()
+    if not em:
+        # 🪤 Cadastro incompleto (conta no auth, sem linha em profiles) e caso
+        # REAL e frequente: 12 contas assim em 26/08. Sem e-mail nao da pra
+        # ligar as tabelas que so tem user_email — a tela precisa saber disso
+        # em vez de mostrar tudo vazio como se a pessoa nao tivesse feito nada.
+        _falhas.append("sem perfil em `profiles` — as secoes ligadas por e-mail "
+                       "nao podem ser lidas (cadastro incompleto?)")
+    q_em = _up.quote(em) if em else ""
+
+    def _por_email(tabela, query, rotulo):
+        return _busca(tabela, query, rotulo) if em else []
+
+    # -- o que fez: projetos ----------------------------------------------
+    projetos = _por_email("projects",
+                      "user_email=eq." + q_em + "&select=job_id,project_name,status,"
+                      "files_count,file_types,items_count,total_area,user_total_area,"
+                      "user_pe_direito,typology,project_type,created_at,completed_at,"
+                      "error_message,revisao_aberturas,revisao_aberta_em,archived,"
+                      "is_eval,planilha_gerada_em&order=created_at.desc&limit=" + str(_MAX),
+                      "projetos")
+    jobs = [p.get("job_id") for p in projetos if p.get("job_id")]
+    _in = "(" + ",".join(_up.quote(str(j)) for j in jobs) + ")" if jobs else ""
+
+    def _por_job(tabela, select, rotulo, ordem=""):
+        if not jobs:
+            return []
+        return _busca(tabela, "job_id=in." + _in + "&select=" + select + ordem +
+                      "&limit=" + str(_MAX), rotulo)
+
+    # -- o que respondeu ---------------------------------------------------
+    nps = _por_email("nps_responses",
+                 "user_email=eq." + q_em + "&select=score,category,comment,context,job_id,"
+                 "stage_ratings,created_at&order=created_at.desc&limit=" + str(_MAX), "NPS")
+    pesquisa = _por_email("processing_survey",
+                      "user_email=eq." + q_em + "&select=job_id,question_key,answer,"
+                      "created_at&order=created_at.desc&limit=" + str(_MAX),
+                      "pesquisa pos-processamento")
+    mensagens = _por_email("contact_messages",
+                       "email=eq." + q_em + "&select=message_type,subject,message,status,"
+                       "source_page,replied_at,created_at&order=created_at.desc"
+                       "&limit=" + str(_MAX), "mensagens de contato")
+    lead_chat = _por_email("chat_leads",
+                       "email=eq." + q_em + "&select=name,first_question,n_messages,"
+                       "source_page,converted_at,created_at&order=created_at.desc"
+                       "&limit=" + str(_MAX), "chat do site (lead)")
+
+    # -- o que fez dentro do produto ---------------------------------------
+    revisoes = _por_job("item_reviews", "job_id,action,comment,edits,reviewed_at",
+                        "revisoes de item", "&order=reviewed_at.desc")
+    notas = _por_job("item_notes", "job_id,note,author,created_at",
+                     "notas em item", "&order=created_at.desc")
+    planilhas_rev = _por_job("revision_feedback",
+                             "job_id,arquivo,n_originais,n_revisados,n_alterados,"
+                             "n_removidos,n_adicionados,created_at",
+                             "planilha revisada enviada", "&order=created_at.desc")
+    memoriais = _por_job("project_memorial", "job_id,updated_at", "memorial")
+    cronogramas = _por_job("cronogramas",
+                           "job_id,data_inicio,duracao_meses,created_at,updated_at",
+                           "cronograma", "&order=created_at.desc")
+    cotacoes = _por_job("project_supplier_quotes", "job_id,fornecedor,created_at",
+                        "comparativo de fornecedores")
+    # Do cliente final do usuario so nome/empresa — telefone e e-mail dele sao
+    # dado de terceiro e nao ajudam a entender o uso do produto.
+    clientes = _por_job("project_clients", "job_id,client_name,client_company,created_at",
+                        "clientes finais cadastrados")
+
+    # chat do quantitativo: liga por user_id (e cai pro job se faltar perfil)
+    if uid:
+        chat = _busca("agent_conversations",
+                      "user_id=eq." + _up.quote(uid) + "&select=job_id,question,answer,"
+                      "iterations,duration_ms,error,created_at&order=created_at.desc"
+                      "&limit=" + str(_MAX), "chat do quantitativo")
+    else:
+        chat = _por_job("agent_conversations",
+                        "job_id,question,answer,iterations,error,created_at",
+                        "chat do quantitativo", "&order=created_at.desc")
+
+    cashback = (_busca("user_credits",
+                       "user_id=eq." + _up.quote(uid) + "&select=amount_cents,source,"
+                       "description,created_at,used_at,used_on_job_id"
+                       "&order=created_at.desc&limit=" + str(_MAX), "cashback")
+                if uid else [])
+
+    eventos = _por_email("usage_events",
+                     "user_email=eq." + q_em + "&select=event,path,job_id,meta,created_at"
+                     "&order=created_at.desc&limit=" + str(_MAX), "eventos de uso")
+    emails = _por_email("email_sent_log",
+                    "email=eq." + q_em + "&select=kind,subject,sent_at&order=sent_at.desc"
+                    "&limit=" + str(_MAX), "e-mails enviados")
+
+    # -- resumo (o que a tela mostra em cima) ------------------------------
+    _reais = [p for p in projetos if not p.get("is_eval")]
+    _acoes = {}
+    for r in revisoes:
+        _a = r.get("action") or "?"
+        _acoes[_a] = _acoes.get(_a, 0) + 1
+    resumo = {
+        "projetos": len(_reais),
+        "projetos_concluidos": sum(1 for p in _reais if p.get("status") == "done"),
+        "projetos_com_erro": sum(1 for p in _reais
+                                 if (p.get("status") or "") in ("error", "failed")),
+        "itens_gerados": sum(int(p.get("items_count") or 0) for p in _reais),
+        "revisou": bool(revisoes),
+        "revisoes_por_acao": _acoes,
+        "planilhas_revisadas_enviadas": len(planilhas_rev),
+        "usou_chat": bool(chat),
+        "gerou_memorial": bool(memoriais),
+        "gerou_cronograma": bool(cronogramas),
+        "gerou_comparativo": bool(cotacoes),
+        "cadastrou_cliente_final": bool(clientes),
+        "respondeu_nps": len(nps),
+        "melhor_nps": max((int(n.get("score") or 0) for n in nps), default=None),
+        "mandou_mensagem": len(mensagens),
+        "emails_recebidos": len(emails),
+    }
+
+    return {
+        "email": em,
+        "user_id": uid,
+        "perfil": perfil,
+        "resumo": resumo,
+        "projetos": projetos,
+        "nps": nps,
+        "pesquisa": pesquisa,
+        "mensagens": mensagens,
+        "lead_chat": lead_chat,
+        "revisoes": revisoes,
+        "notas": notas,
+        "planilhas_revisadas": planilhas_rev,
+        "memoriais": memoriais,
+        "cronogramas": cronogramas,
+        "cotacoes": cotacoes,
+        "clientes_finais": clientes,
+        "chat": chat,
+        "cashback": cashback,
+        "eventos": eventos,
+        "emails": emails,
+        # A tela TEM que mostrar isto. Secao vazia por falha de leitura e
+        # indistinguivel de secao sem dado, e vira conclusao errada sobre o
+        # cliente ("nunca usou o chat" quando a consulta caiu).
+        "_falhas": _falhas,
+    }
+
+
 @app.get("/api/admin/metricas")
 def admin_metricas(request: Request, dias: int = 30):
     """A série + a frase que responde "está normal?". Só admin."""

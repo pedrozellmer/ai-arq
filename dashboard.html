@@ -5035,9 +5035,20 @@
       // authFetch: ata user.id por path; sem Bearer um atacante consegue
       // checar/enviar NPS no nome de outro usuário (auditoria 2026-05-23).
       const res = await authFetch(`${API_BASE}/api/nps/check/${user.id}`);
-      const data = await res.json();
-      if (!data.should_show) return;
-    } catch (e) { /* fail-safe: mostra se API falhar */ }
+      // 🩸 31/08/2026 — o `catch` abaixo diz "fail-safe: mostra se API falhar",
+      // mas authFetch NAO lanca em status de erro: em 401/403 ele so avisa e
+      // devolve a resposta (aiarq-utils.js). O corpo vira {"detail": "..."},
+      // `data.should_show` fica `undefined`, e o widget sumia CALADO — a rede
+      // de seguranca nunca chegou a existir por essa porta.
+      // Regra: so deixa de perguntar quando o servidor DISSE explicitamente
+      // que nao e pra perguntar. Duvida = pergunta (temos 5 avaliacoes ao todo).
+      if (!res || !res.ok) {
+        console.warn('[nps] check falhou (HTTP', res && res.status, ') — perguntando mesmo assim');
+      } else {
+        const data = await res.json();
+        if (data && data.should_show === false) return;
+      }
+    } catch (e) { /* fail-safe de verdade: erro de rede tambem pergunta */ }
 
     npsContext = context || 'manual';
     showNPSWidget();
@@ -5107,7 +5118,7 @@
     try {
       // authFetch: sem Bearer, atacante poderia submeter NPS arbitrário em
       // nome de outro user_id, poluindo o painel admin (auditoria 2026-05-23).
-      await authFetch(`${API_BASE}/api/nps`, {
+      const res = await authFetch(`${API_BASE}/api/nps`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -5120,8 +5131,17 @@
           job_id: (typeof currentJobId !== 'undefined' && currentJobId) ? currentJobId : '',
         })
       });
+      // 🩸 31/08/2026 — ANTES daqui a tela agradecia SEM OLHAR NADA. Dois jeitos
+      // de a nota sumir com o cliente achando que colaborou:
+      //   1) sessao expirada: authFetch NAO lanca em 401, so avisa (aiarq-utils.js);
+      //   2) insert que falha: o backend responde HTTP 200 com {"status":"error"}.
+      // Com 5 avaliacoes em toda a historia do produto, agradecer por nota
+      // perdida e o pior resultado possivel.
+      let corpo = {};
+      try { corpo = await res.json(); } catch (e) { /* ilegivel = nao gravou */ }
+      const gravou = !!(res && res.ok && corpo && corpo.status === 'ok');
       const w = document.getElementById('nps-widget');
-      if (w) {
+      if (w && gravou) {
         w.innerHTML = `
           <div class="text-center py-2">
             <p class="text-2xl mb-2">🙏</p>
@@ -5130,9 +5150,23 @@
           </div>
         `;
         setTimeout(() => w.remove(), 2800);
+      } else if (w) {
+        console.warn('[nps] nao gravou:', res && res.status, corpo);
+        const alvo = document.getElementById('nps-comment-area') || w;
+        if (!document.getElementById('nps-erro')) {
+          alvo.insertAdjacentHTML('beforeend',
+            '<p id="nps-erro" class="text-xs text-red-700 mt-2" role="alert">' +
+            'Não consegui salvar agora. Recarregue a página e tente de novo.</p>');
+        }
       }
     } catch (e) {
       console.error('NPS submit error:', e);
+      const w = document.getElementById('nps-widget');
+      if (w && !document.getElementById('nps-erro')) {
+        w.insertAdjacentHTML('beforeend',
+          '<p id="nps-erro" class="text-xs text-red-700 mt-2" role="alert">' +
+          'Não consegui salvar agora. Recarregue a página e tente de novo.</p>');
+      }
     }
   }
 })();

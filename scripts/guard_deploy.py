@@ -118,20 +118,24 @@ def main() -> int:
     # uma chave pra trás matou o LOGIN em produção por 12 min, com sintaxe
     # válida e zero erro no console. Nenhum teste de fonte pega isso; só
     # carregar num browser de verdade pega. Roda só se o JS vigiado mudou.
-    try:
-        import subprocess as _sp
-        _r = _sp.run([sys.executable,
-                      os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                   "guard_front_contrato.py")],
-                     timeout=180)
-        if _r.returncode != 0:
+    # 🔒 31/08/2026 — 3ª trava: as PÁGINAS carregam? O contrato do front cobre o
+    # JS compartilhado, mas os HTMLs têm milhares de linhas de JS inline que
+    # nenhum guarda olhava (pyflakes não vê JS; a bancada lê o FONTE). Roda só
+    # se uma página vigiada mudou.
+    _sub = os.path.dirname(os.path.abspath(__file__))
+    for _script, _oque in (("guard_front_contrato.py", "o contrato do front"),
+                           ("guard_paginas_carregam.py", "o carregamento das páginas")):
+        try:
+            import subprocess as _sp
+            _r = _sp.run([sys.executable, os.path.join(_sub, _script)], timeout=420)
+            if _r.returncode != 0:
+                sys.exit(1)
+        except SystemExit:
+            raise
+        except Exception as _e:
+            print(f"\n🚦 PUSH BLOQUEADO — não consegui verificar {_oque} "
+                  f"({type(_e).__name__}). Falha FECHA a porta.")
             sys.exit(1)
-    except SystemExit:
-        raise
-    except Exception as _e:
-        print("\n🚦 PUSH BLOQUEADO — não consegui verificar o contrato do "
-              f"front ({type(_e).__name__}). Falha FECHA a porta.")
-        sys.exit(1)
     return 0
 
 
