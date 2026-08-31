@@ -109,8 +109,11 @@ jobs:
           # passava batido. Agora varre o _site inteiro — nenhum código-fonte
           # Python vai pro ar, hoje nem no futuro.
           find _site -type f -name "*.py" -print -delete
-          # Copia sitemap.xml e robots.txt (na raiz)
-          for f in sitemap.xml robots.txt; do
+          # Copia sitemap.xml, robots.txt e llms.txt (na raiz)
+          # 🪤 31/08/2026: o `find` acima NÃO pega *.txt, então arquivo de texto
+          # na raiz só vai pro ar se estiver NESTA lista. O llms.txt foi criado
+          # e daria 404 pra sempre, calado — mesma armadilha da pasta nova.
+          for f in sitemap.xml robots.txt llms.txt; do
             if [ -f "$f" ]; then cp "$f" _site/; fi
           done
           # 🔒 30/08/2026 (auditoria): remove comentários HTML do site SERVIDO —

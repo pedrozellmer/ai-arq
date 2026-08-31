@@ -90,7 +90,7 @@
       "name": "Quantas pranchas posso enviar por projeto?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Sem limite de arquivos. O que conta é a quantidade de pranchas reais dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: Pequeno (1-5 pranchas) R$ 97, Médio (6-10) R$ 157, Grande (11-20) R$ 247. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. Dúvidas ou casos especiais: contato@ai.arq.br."
+        "text": "Sem limite de arquivos. Durante o beta é grátis e ilimitado, sem cartão — o que está abaixo é a tabela que passará a valer depois. O que conta é a quantidade de pranchas reais dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: Pequeno (1-5 pranchas) R$ 97, Médio (6-10) R$ 157, Grande (11-20) R$ 247. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. Dúvidas ou casos especiais: contato@ai.arq.br."
       }
     },
     {
@@ -339,6 +339,118 @@
       "acceptedAnswer": {
         "@type": "Answer",
         "text": "Envie um e-mail para contato@ai.arq.br solicitando a exclusão da conta. Seus dados pessoais serão removidos em até 15 dias. Para limpar os dados armazenados localmente no navegador (localStorage), acesse as configurações do seu navegador e limpe os dados do site ai.arq.br."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Preciso de BIM ou de Revit pra usar o AI.arq?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não. O AI.arq lê o desenho 2D que você já tem — DWG, DXF ou PDF exportado do CAD. A gente não modela nada e não pede Revit: o caso que resolvemos é justamente o projeto que existe só como prancha, muitas vezes recebido de outra pessoa. Se você já tem um modelo BIM completo e bem parametrizado, ele já extrai as tabelas de quantidade sozinho — nesse caso você não precisa da gente."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Qual a diferença entre o AI.arq e os programas em que eu importo a planta e vou clicando pra medir?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Nesses programas o cálculo é automático depois que você marcou: você importa o DWG ou o PDF, calibra a escala e traça em cima de cada parede, cada ambiente, cada ponto. No AI.arq você não traça nada — o motor lê a geometria do próprio arquivo e devolve a planilha por disciplina. A contrapartida honesta é esta: onde o desenho não informa, quem marca a linha como estimativa é o sistema, e a conferência dessas linhas continua sendo sua."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Funciona com planta escaneada, fotografada ou impressa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não. Planta escaneada, fotografada ou plotada como imagem vira pixel: as cotas deixam de ser texto e não há de onde medir — e isso não melhora com resolução maior. O AI.arq lê DWG, DXF e PDF exportado direto do CAD. Se só existe o papel, o caminho é pedir o arquivo original a quem projetou ou redesenhar a planta antes."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "E se a prancha não tiver cota?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Ela é processada, mas mede menos. A escala do desenho é conferida pelas próprias cotas da prancha; sem cota a gente não confirma o fator, e comprimento e área saem como estimativa, em laranja, pra você revisar. O que continua saindo medido é a contagem — portas, janelas, luminárias, louças — porque contar bloco não depende de escala."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq dá o preço da minha obra?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não, e isso é escolha. A gente entrega quantidade — item, unidade e quantidade, com o código SINAPI de referência ao lado — e deixa a coluna de preço em branco pra você ou pro seu orçamentista preencher. Preço de material e de mão de obra muda por praça, por fornecedor e por semana; quem tem essa informação é quem compra. O que a gente faz é te dar o quantitativo rastreável em cima do qual esse preço vai ser posto."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Preciso de cartão de crédito pra testar o AI.arq?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não. Durante o beta o uso é grátis e ilimitado — quantos projetos você quiser, sem cartão e sem CPF. Não há limite de um por conta: vale para todos os projetos, enquanto durar o beta. Cartão e CPF só entram quando a cobrança for ativada, e a gente avisa antes de qualquer cobrança começar."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Quanto do meu projeto volta como MEDIDO e quanto volta como ESTIMADO?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Depende muito do formato do arquivo, e a diferença é grande. Medido na nossa base em 31/08/2026: projetos enviados em DWG ou DXF voltam com 25,5% dos itens medidos do desenho (72 projetos, 4.104 itens); projetos só com PDF voltam com 2,0% (41 projetos, 1.506 itens). O resto sai como estimativa, em laranja, pra você revisar — a planilha diz linha a linha o que é cada coisa, e nunca apresenta estimativa como medição."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Meu desenho não informa o pé-direito. Muda alguma coisa?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Muda bastante. Área de parede, pintura e revestimento vertical dependem da altura, e planta baixa não traz essa informação — então a gente não inventa. Quando você informa o pé-direito no upload, essas linhas saem calculadas com a conta à vista na observação do item e marcadas como estimadas, porque o número veio de você e não do desenho; quando não informa, elas voltam zeradas pra você preencher."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Serve pra projeto estrutural (concreto armado, fundação)?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Hoje, não como entrega principal. As disciplinas da planilha são de arquitetura e instalações — estrutura não é uma delas. O motor consegue contar elementos que aparecem no desenho, como pilares, mas volume de concreto a planta baixa não permite fechar: ela não traz a altura, e a gente não estima altura por conta própria. Se o seu levantamento é estrutural, o AI.arq ainda não é a ferramenta certa."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "A planilha do AI.arq serve pra licitação ou obra pública?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Serve como ponto de partida, não como planilha de licitação pronta. A gente entrega o quantitativo com o código SINAPI de referência ao lado de cada item, que é o que ajuda a justificar tecnicamente a quantidade — mas sem preço, sem pesquisa de mercado e sem assinatura de responsável técnico. Fechar a planilha orçamentária, escolher as composições definitivas e assinar continua sendo trabalho do profissional habilitado, e os itens marcados como estimativa precisam ser conferidos antes de qualquer uso oficial."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq lê arquivo .rvt (Revit) ou .ifc?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Não. Exporte antes: no Revit, Arquivo → Exportar → Formatos CAD → DWG ou DXF; aí a gente lê. E tem um motivo pra não ser só falta: nesses formatos a quantidade que aparece é a que o autor do modelo digitou nos parâmetros, e a gente só marca como MEDIDO o que mediu na geometria. Repassar número de terceiro com selo de medido quebraria a regra que sustenta a planilha inteira."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq erra? E quando erra, o que eu faço?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Erra, sim — por isso cada linha volta carimbada como MEDIDO ou ESTIMADO, e não como \"correto\". Na revisão dentro do site você aprova, edita ou comenta item a item, e o que você corrige fica registrado no projeto. Suas correções calibram os alertas dos SEUS próximos projetos — a sua quantidade não é copiada pra projeto de mais ninguém. A revisão por arquiteto ou engenheiro habilitado continua sendo obrigatória antes de qualquer contratação."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "Por que o AI.arq mede a geometria em vez de a IA só olhar a imagem da planta?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Porque olhar não mede. Modelos que enxergam leem bem o TEXTO de uma planta, mas erram muito ao CONTAR símbolos — portas, janelas, pontos — a partir da imagem; foi o que mostrou o AECV-Bench, benchmark publicado em 2026 sobre leitura de plantas de arquitetura e engenharia. Por isso a quantidade aqui sai da geometria do arquivo, não do que um modelo achou que viu. A IA entra para identificar e classificar o que foi medido. Escrevemos sobre isso em ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html"
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "O AI.arq funciona com projeto de fora do Brasil?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "O motor lê o CAD de qualquer lugar — DWG, DXF e PDF não têm nacionalidade. A referência é que é brasileira: os códigos vêm da SINAPI e as convenções de prancha que a IA aplica são as daqui. Num projeto de fora você teria o quantitativo, mas a coluna de referência não faria sentido local. Hoje a gente é feito pra projeto brasileiro."
       }
     }
   ]
@@ -637,7 +749,8 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              Sem limite de arquivos. O que conta é a quantidade de <strong>pranchas reais</strong> dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: <strong>Pequeno (1-5 pranchas) R$ 97</strong>, <strong>Médio (6-10) R$ 157</strong>, <strong>Grande (11-20) R$ 247</strong>. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. D&uacute;vidas ou casos especiais: <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.
+              Sem limite de arquivos. <strong>Durante o beta é grátis e ilimitado, sem cartão</strong> — a tabela abaixo é a que passará a valer depois.
+              O que conta é a quantidade de <strong>pranchas reais</strong> dentro deles — você pode enviar 1 PDF com 12 pranchas, ou 12 DWGs com 1 prancha cada, o preço é o mesmo. As 3 faixas: <strong>Pequeno (1-5 pranchas) R$ 97</strong>, <strong>Médio (6-10) R$ 157</strong>, <strong>Grande (11-20) R$ 247</strong>. Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra, sem teto. D&uacute;vidas ou casos especiais: <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a>.
             </div>
           </div>
         </div>
@@ -1274,6 +1387,188 @@
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               Envie um e-mail para <a href="mailto:contato@ai.arq.br" class="text-indigo-500 underline">contato@ai.arq.br</a> solicitando a exclus&atilde;o da conta. Seus dados pessoais ser&atilde;o removidos em at&eacute; <strong>15 dias</strong>. Para limpar os dados armazenados localmente no navegador (localStorage), acesse as configura&ccedil;&otilde;es do seu navegador e limpe os dados do site ai.arq.br.
+            </div>
+          </div>
+        </div>
+
+        <!-- N1 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="preciso bim revit pra usar arq">
+          <button data-track="faq-preciso-de-bim-ou-de-revit-pra-usar" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Preciso de BIM ou de Revit pra usar o AI.arq?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Não. O AI.arq lê o desenho 2D que você já tem — DWG, DXF ou PDF exportado do CAD. A gente não modela nada e não pede Revit: o caso que resolvemos é justamente o projeto que existe só como prancha, muitas vezes recebido de outra pessoa. Se você já tem um modelo BIM completo e bem parametrizado, ele já extrai as tabelas de quantidade sozinho — nesse caso você não precisa da gente.
+            </div>
+          </div>
+        </div>
+
+        <!-- N2 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="qual diferenca entre arq programas que importo planta vou clicando pra medir">
+          <button data-track="faq-qual-a-diferenca-entre-o-ai-arq-e-os" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Qual a diferença entre o AI.arq e os programas em que eu importo a planta e vou clicando pra medir?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Nesses programas o cálculo é automático depois que você marcou: você importa o DWG ou o PDF, calibra a escala e traça em cima de cada parede, cada ambiente, cada ponto. No AI.arq você não traça nada — o motor lê a geometria do próprio arquivo e devolve a planilha por disciplina. A contrapartida honesta é esta: onde o desenho não informa, quem marca a linha como estimativa é o sistema, e a conferência dessas linhas continua sendo sua.
+            </div>
+          </div>
+        </div>
+
+        <!-- N3 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="funciona com planta escaneada fotografada impressa">
+          <button data-track="faq-funciona-com-planta-escaneada-fotogr" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Funciona com planta escaneada, fotografada ou impressa?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Não. Planta escaneada, fotografada ou plotada como imagem vira pixel: as cotas deixam de ser texto e não há de onde medir — e isso não melhora com resolução maior. O AI.arq lê DWG, DXF e PDF exportado direto do CAD. Se só existe o papel, o caminho é pedir o arquivo original a quem projetou ou redesenhar a planta antes.
+            </div>
+          </div>
+        </div>
+
+        <!-- N4 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="prancha nao tiver cota">
+          <button data-track="faq-e-se-a-prancha-nao-tiver-cota" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">E se a prancha não tiver cota?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Ela é processada, mas mede menos. A escala do desenho é conferida pelas próprias cotas da prancha; sem cota a gente não confirma o fator, e comprimento e área saem como estimativa, em laranja, pra você revisar. O que continua saindo medido é a contagem — portas, janelas, luminárias, louças — porque contar bloco não depende de escala.
+            </div>
+          </div>
+        </div>
+
+        <!-- N5 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq preco minha obra">
+          <button data-track="faq-o-ai-arq-da-o-preco-da-minha-obra" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq dá o preço da minha obra?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Não, e isso é escolha. A gente entrega quantidade — item, unidade e quantidade, com o código SINAPI de referência ao lado — e deixa a coluna de preço em branco pra você ou pro seu orçamentista preencher. Preço de material e de mão de obra muda por praça, por fornecedor e por semana; quem tem essa informação é quem compra. O que a gente faz é te dar o quantitativo rastreável em cima do qual esse preço vai ser posto.
+            </div>
+          </div>
+        </div>
+
+        <!-- N6 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="preciso cartao credito pra testar arq">
+          <button data-track="faq-preciso-de-cartao-de-credito-pra-tes" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Preciso de cartão de crédito pra testar o AI.arq?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Não. Durante o beta o uso é grátis e ilimitado — quantos projetos você quiser, sem cartão e sem CPF. Não há limite de um por conta: vale para todos os projetos, enquanto durar o beta. Cartão e CPF só entram quando a cobrança for ativada, e a gente avisa antes de qualquer cobrança começar.
+            </div>
+          </div>
+        </div>
+
+        <!-- N7 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="quanto meu projeto volta como medido estimado">
+          <button data-track="faq-quanto-do-meu-projeto-volta-como-med" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Quanto do meu projeto volta como MEDIDO e quanto volta como ESTIMADO?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Depende muito do formato do arquivo, e a diferença é grande. Medido na nossa base em 31/08/2026: projetos enviados em DWG ou DXF voltam com 25,5% dos itens medidos do desenho (72 projetos, 4.104 itens); projetos só com PDF voltam com 2,0% (41 projetos, 1.506 itens). O resto sai como estimativa, em laranja, pra você revisar — a planilha diz linha a linha o que é cada coisa, e nunca apresenta estimativa como medição.
+            </div>
+          </div>
+        </div>
+
+        <!-- N8 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="meu desenho nao informa direito muda alguma coisa">
+          <button data-track="faq-meu-desenho-nao-informa-o-pe-direito" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Meu desenho não informa o pé-direito. Muda alguma coisa?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Muda bastante. Área de parede, pintura e revestimento vertical dependem da altura, e planta baixa não traz essa informação — então a gente não inventa. Quando você informa o pé-direito no upload, essas linhas saem calculadas com a conta à vista na observação do item e marcadas como estimadas, porque o número veio de você e não do desenho; quando não informa, elas voltam zeradas pra você preencher.
+            </div>
+          </div>
+        </div>
+
+        <!-- N9 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="serve pra projeto estrutural concreto armado fundacao">
+          <button data-track="faq-serve-pra-projeto-estrutural-concret" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Serve pra projeto estrutural (concreto armado, fundação)?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Hoje, não como entrega principal. As disciplinas da planilha são de arquitetura e instalações — estrutura não é uma delas. O motor consegue contar elementos que aparecem no desenho, como pilares, mas volume de concreto a planta baixa não permite fechar: ela não traz a altura, e a gente não estima altura por conta própria. Se o seu levantamento é estrutural, o AI.arq ainda não é a ferramenta certa.
+            </div>
+          </div>
+        </div>
+
+        <!-- N10 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="planilha arq serve pra licitacao obra publica">
+          <button data-track="faq-a-planilha-do-ai-arq-serve-pra-licit" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">A planilha do AI.arq serve pra licitação ou obra pública?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Serve como ponto de partida, não como planilha de licitação pronta. A gente entrega o quantitativo com o código SINAPI de referência ao lado de cada item, que é o que ajuda a justificar tecnicamente a quantidade — mas sem preço, sem pesquisa de mercado e sem assinatura de responsável técnico. Fechar a planilha orçamentária, escolher as composições definitivas e assinar continua sendo trabalho do profissional habilitado, e os itens marcados como estimativa precisam ser conferidos antes de qualquer uso oficial.
+            </div>
+          </div>
+        </div>
+
+        <!-- N11 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq arquivo rvt revit ifc">
+          <button data-track="faq-o-ai-arq-le-arquivo-rvt-revit-ou-ifc" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq lê arquivo .rvt (Revit) ou .ifc?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Não. Exporte antes: no Revit, Arquivo → Exportar → Formatos CAD → DWG ou DXF; aí a gente lê. E tem um motivo pra não ser só falta: nesses formatos a quantidade que aparece é a que o autor do modelo digitou nos parâmetros, e a gente só marca como MEDIDO o que mediu na geometria. Repassar número de terceiro com selo de medido quebraria a regra que sustenta a planilha inteira.
+            </div>
+          </div>
+        </div>
+
+        <!-- N12 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq erra quando que faco">
+          <button data-track="faq-o-ai-arq-erra-e-quando-erra-o-que-eu" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq erra? E quando erra, o que eu faço?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Erra, sim — por isso cada linha volta carimbada como MEDIDO ou ESTIMADO, e não como "correto". Na revisão dentro do site você aprova, edita ou comenta item a item, e o que você corrige fica registrado no projeto. Suas correções calibram os alertas dos SEUS próximos projetos — a sua quantidade não é copiada pra projeto de mais ninguém. A revisão por arquiteto ou engenheiro habilitado continua sendo obrigatória antes de qualquer contratação.
+            </div>
+          </div>
+        </div>
+
+        <!-- N13 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="por que arq mede geometria vez olhar imagem planta">
+          <button data-track="faq-por-que-o-ai-arq-mede-a-geometria-em" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">Por que o AI.arq mede a geometria em vez de a IA só olhar a imagem da planta?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              Porque olhar não mede. Modelos que enxergam leem bem o TEXTO de uma planta, mas erram muito ao CONTAR símbolos — portas, janelas, pontos — a partir da imagem; foi o que mostrou o AECV-Bench, benchmark publicado em 2026 sobre leitura de plantas de arquitetura e engenharia. Por isso a quantidade aqui sai da geometria do arquivo, não do que um modelo achou que viu. A IA entra para identificar e classificar o que foi medido. Escrevemos sobre isso em ai.arq.br/blog/posts/quantitativo-de-obra-com-ia.html
+            </div>
+          </div>
+        </div>
+
+        <!-- N14 (31/08/2026 — perguntas que o cliente faz a uma IA) -->
+        <div class="faq-item rounded-xl border bg-white shadow-sm overflow-hidden" data-keywords="arq funciona com projeto fora brasil">
+          <button data-track="faq-o-ai-arq-funciona-com-projeto-de-for" class="faq-toggle w-full flex items-center justify-between px-5 py-4 text-left" onclick="toggleFaq(this)">
+            <span class="text-sm font-semibold text-gray-800 pr-4">O AI.arq funciona com projeto de fora do Brasil?</span>
+            <svg class="faq-chevron w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div class="faq-answer px-5">
+            <div class="pb-5 text-sm text-gray-600 leading-relaxed">
+              O motor lê o CAD de qualquer lugar — DWG, DXF e PDF não têm nacionalidade. A referência é que é brasileira: os códigos vêm da SINAPI e as convenções de prancha que a IA aplica são as daqui. Num projeto de fora você teria o quantitativo, mas a coluna de referência não faria sentido local. Hoje a gente é feito pra projeto brasileiro.
             </div>
           </div>
         </div>
