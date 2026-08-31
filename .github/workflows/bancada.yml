@@ -61,7 +61,7 @@ jobs:
           # Guarda com folga de 137 protege cada vez menos.
           # 📌 Ao acrescentar teste, subir isto junto — a margem é de ~30, o
           # bastante pra não quebrar num commit que remove um caso obsoleto.
-          PISO: 800
+          PISO: 1044
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"

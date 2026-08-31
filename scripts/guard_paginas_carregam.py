@@ -52,6 +52,10 @@ VIGIADAS = {
                      ["postNps", "sendFeedback", "sendFeedbackComment",
                       "maybeShowFeedback", "_fbSalvaAntesDeSair"]),
     "dashboard.html": ("", ["__maybeShowNPS"]),
+    # Página que recebe o clique do e-mail. Não tem função global (o script é
+    # uma IIFE): o contrato aqui é só "carrega sem erro" — que já é o que teria
+    # pegado o apagão do login. A query imita um link real de e-mail.
+    "obrigado.html": ("?tipo=projeto&k=teste&e=a%40b.com&n=4&t=xxx", []),
 }
 
 CHROMES = (
@@ -132,7 +136,13 @@ def _mudou():
                            cwd=RAIZ, capture_output=True, text=True, timeout=30)
         b = subprocess.run(["git", "diff", "--name-only", "HEAD"],
                            cwd=RAIZ, capture_output=True, text=True, timeout=30)
-        muda = (a.stdout or "") + (b.stdout or "")
+        # 🪤 PAGINA NOVA NAO APARECE EM `git diff`: arquivo nao-rastreado nao
+        # e "modificado". Sem esta terceira consulta, uma pagina recem-criada
+        # — justamente a que tem mais chance de nascer quebrada — passaria
+        # direto pelo guarda. Peguei isso com a obrigado.html, em 31/08.
+        c = subprocess.run(["git", "ls-files", "--others", "--exclude-standard"],
+                           cwd=RAIZ, capture_output=True, text=True, timeout=30)
+        muda = (a.stdout or "") + (b.stdout or "") + (c.stdout or "")
         return [p for p in VIGIADAS if p in muda]
     except Exception:
         return list(VIGIADAS)
@@ -196,9 +206,14 @@ def main():
                 # troca o supabase-js do CDN pelo duble (ver comentario em _SUPA_STUB)
                 html, _n = _RE_SUPA_CDN.subn(_SUPA_STUB, html, count=1)
                 if not _n:
-                    _barra(pagina, "nao achei a tag do supabase-js pra dublar.",
-                           "sem duble a pagina redireciona pro login e o guarda "
-                           "vira teatro — falha FECHA a porta.")
+                    # Pagina publica (obrigado.html) nao carrega supabase-js e
+                    # nem precisa. So barra se a pagina TEM area logada — que e
+                    # onde o duble e obrigatorio pra sonda chegar a rodar.
+                    if VIGIADAS[pagina][1]:
+                        _barra(pagina, "nao achei a tag do supabase-js pra dublar.",
+                               "sem duble a pagina logada redireciona pro login e "
+                               "o guarda vira teatro — falha FECHA a porta.")
+                    html = html.replace("<head>", "<head>" + _SUPA_STUB, 1)
                 # o portao de admin so pode ser neutralizado DEPOIS que
                 # aiarq-utils.js definiu `aiarqEmailMatches` (scripts sao
                 # sincronos no <head>, sem defer) — senao o override e

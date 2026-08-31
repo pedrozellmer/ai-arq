@@ -287,6 +287,10 @@ def fotos():
         ("workspace.jpg", "feedback-foto.jpg", 0.30),
         ("interior.jpg", "retorno-foto.jpg", 0.35),
         ("office_modern.jpg", "proximo-foto.jpg", 0.30),
+        # 31/08: pesquisa de NPS (relacional, a cada 6 meses). blueprint era a
+        # unica foto do acervo ainda sem uso — e prancha combina com a pergunta
+        # "voce indicaria a AI.arq?".
+        ("blueprint.jpg", "nps-foto.jpg", 0.28),
     ]
     for origem, destino, frac_topo in cortes:
         ph = Image.open(f"backend/assets/photos/{origem}")

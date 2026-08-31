@@ -397,7 +397,8 @@ function renderFicha(d){
   const ent = [];
   (d.memoriais||[]).forEach(m => ent.push(['Memorial descritivo', m.job_id, m.updated_at]));
   (d.cronogramas||[]).forEach(c => ent.push(['Cronograma', c.job_id, c.created_at]));
-  (d.cotacoes||[]).forEach(c => ent.push(['Comparativo de fornecedor', c.job_id, c.created_at]));
+  (d.cotacoes||[]).forEach(c => ent.push(
+    ['Comparativo: ' + (c.supplier_name || 'fornecedor'), c.job_id, c.uploaded_at]));
   (d.planilhas_revisadas||[]).forEach(p => ent.push(
     ['Planilha revisada enviada (' + (p.n_alterados||0) + ' alterados)', p.job_id, p.created_at]));
   (d.clientes_finais||[]).forEach(c => ent.push(

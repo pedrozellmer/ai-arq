@@ -2659,7 +2659,8 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
 
 
 def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
-                                 n_total: int, extra_body_html: str = ""):
+                                 n_total: int, extra_body_html: str = "",
+                                 email: str = ""):
     """Monta (subject, html) do email 'planilha pronta'. Separado do envio pra
     reuso no preview do painel. `extra_body_html` traz o diagnóstico de leitura +
     próximos passos + avisos (montados com dados reais no envio; exemplo no
@@ -2671,7 +2672,11 @@ def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
              f"O quantitativo do projeto <b>{_pn}</b> terminou de processar "
              f"({n_total} itens). Abra seu projeto pra revisar e baixar a planilha."
              + _email_img("pronta-hero.png", "Planilha de quantitativos pronta, itens rotulados medido ou estimativa")
-             + f"{extra_body_html}")
+             + f"{extra_body_html}"
+             # 31/08 (Pedro): a avaliacao da ENTREGA pega carona aqui. Nao gasta
+             # e-mail novo — este ja sai sempre — e e o e-mail com maior chance
+             # de ser aberto que a gente manda (65 enviados, 43 pessoas).
+             + _bloco_avaliar_projeto(job_id, email))
     _pn_subj = (project_name or "").strip()
     # 55 -> ~38 caracteres. O celular corta perto de 50, e o que sobrava
     # cortado era "está pronta" — a parte que diz o que aconteceu.
@@ -10115,7 +10120,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         f"projeto. A gente refaz medindo de verdade, de graça. Se só "
                         f"existe o desenho à mão, me diga a área total no upload que eu "
                         f"uso como base — rotulada como informada por você, não medida."
-                        f"{_aviso_html}{_diag}")
+                        f"{_aviso_html}{_diag}"
+                        # Aqui a pergunta vale MAIS: e o caso em que a entrega
+                        # falhou, e a nota vem junto com o motivo. So muda a
+                        # copy (sem_medida=True) — perguntar "ficou boa?" depois
+                        # de nao medir nada seria surdo.
+                        + _bloco_avaliar_projeto(job_id, _pe, sem_medida=True))
                     _html_pp = _email_wrap(
                         "Não consegui medir esse arquivo", _corpo_nm,
                         "Abrir meu projeto",
@@ -10133,7 +10143,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _subj_pp, _html_pp = _build_planilha_pronta_email(
                         _nm,
                         _rows[0].get("project_name") or "seu projeto",
-                        job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}")
+                        job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}",
+                        email=_pe)
                 _send_email_smtp(_pe, _subj_pp, _html_pp,
                                  log_kind="sem_medida" if _nada_medido else "planilha_pronta")
         except Exception as _ee:
@@ -11401,6 +11412,12 @@ def _build_retorno30_email(name: str):
     return subject, html
 
 
+def _send_email_nps_relacional(email: str, nome: str = "", n_projetos: int = 0) -> bool:
+    """Manda a pesquisa de NPS (0-10 clicável). Devolve True se saiu."""
+    subj, html = _build_nps_relacional_email(nome, email, n_projetos)
+    return _send_email_smtp(email, subj, html, log_kind="nps_relacional")
+
+
 def _send_email_retorno30(email: str, name: str) -> bool:
     """Retorno após 30 dias sem projeto — isca: cronograma grátis."""
     name = _resolve_client_name(email, hint=name)
@@ -11729,6 +11746,62 @@ def emails_auto_tick(request: Request, dry: int = 0):
                                   "job_id": _dj["job_id"],
                                   "ref": _dj["job_id"]})
 
+    # ── pesquisa de NPS: relacional, não por projeto ──────────────────────
+    # Pedro, 31/08/2026: *"o NPS vira algo que a gente faz de tempos em tempos,
+    # a cada seis meses"*.
+    #
+    # 🪤 POR QUE 90 DIAS NA PRIMEIRA E NÃO 180: medido em 31/08 — **nenhum**
+    # cliente da base tem 6 meses de casa (o mais antigo é de 13/04/2026, e a
+    # idade média é 41 dias). Um ciclo de 180 dias contado de hoje só dispararia
+    # em outubro, e a gente tem 5 avaliações em TODA a história do produto.
+    # A primeira onda sai aos 90 dias; as seguintes, de 180 em 180.
+    #
+    # 🪤 Só quem TEM projeto concluído: perguntar "você indicaria a AI.arq?" pra
+    # quem nunca viu uma planilha mede opinião sobre nada.
+    #
+    # 🪤 E pula quem respondeu nos últimos 60 dias — o MESMO intervalo que o
+    # widget do site usa (`should_show_nps`). Se os dois canais discordassem, a
+    # pessoa levaria a pergunta duas vezes.
+    try:
+        _ja_deu_nps = set()
+        try:
+            _corte_nps = (now - timedelta(days=60)).isoformat()
+            for _r in _supa_rows("GET", "nps_responses",
+                                 params={"select": "user_email",
+                                         "created_at": f"gte.{_corte_nps}"}):
+                _e3 = (_r.get("user_email") or "").strip().lower()
+                if _e3:
+                    _ja_deu_nps.add(_e3)
+        except Exception as _en:
+            # 🪤 Falha aqui NÃO pode virar "manda pra todo mundo": na dúvida,
+            # ninguém recebe a pesquisa neste tick.
+            print(f"[emails-auto] nao consegui ler NPS recente, pulando pesquisa: {_en}")
+            _ja_deu_nps = None
+        if _ja_deu_nps is not None:
+            _idade_por_email = {}
+            for _u3 in users:
+                _e4 = (_u3.get("email") or "").lower()
+                _c4 = _parse(_u3.get("created_at"))
+                if _e4 and _c4:
+                    _idade_por_email[_e4] = (now - _c4).total_seconds() / (24 * H)
+            for email, plist in proj_by_email.items():
+                if _email_eh_interno(email) or email in _ja_deu_nps:
+                    continue
+                _dones = [p for p in plist if p.get("status") == "done"]
+                if not _dones:
+                    continue
+                _idade = _idade_por_email.get(email)
+                if _idade is None or _idade < 90:
+                    continue
+                # onda 0 = 90-269 dias · onda 1 = 270-449 · onda 2 = 450+ …
+                _onda = 0 if _idade < 270 else int((_idade - 90) // 180)
+                acoes.append({"kind": "nps_relacional", "email": email,
+                              "nome": (_dones[0].get("user_name") or ""),
+                              "n_projetos": len(_dones),
+                              "ref": f"onda{_onda}"})
+    except Exception as e:
+        print(f"[emails-auto] pesquisa de NPS falhou (pulando): {e}")
+
     # check-in de cronograma: obra EM ANDAMENTO (hoje entre início e fim previsto),
     # que ninguém mexeu nos últimos 7 dias (quem atualizou está engajado — não
     # precisa de cutucada). O ref carrega a SEMANA da obra, então o dedup
@@ -11936,8 +12009,21 @@ def emails_auto_tick(request: Request, dry: int = 0):
                                                     a.get("projeto") or "",
                                                     a.get("semana") or 0,
                                                     a.get("job_id") or "")
-            else:
+            elif a["kind"] == "nps_relacional":
+                ok = _send_email_nps_relacional(a["email"], a["nome"],
+                                                int(a.get("n_projetos") or 0))
+            elif a["kind"] == "retorno_30d":
                 ok = _send_email_retorno30(a["email"], a["nome"])
+            else:
+                # 🪤 31/08: aqui era `else: retorno30`. Qualquer tipo NOVO caía
+                # nesse ramo e o cliente recebia o e-mail ERRADO — silenciosamente,
+                # com o log dizendo o kind certo. Descobri ao criar o
+                # `nps_relacional`: ele teria saído como "sentimos sua falta".
+                # Agora tipo desconhecido não manda nada e grita no log.
+                ok = False
+                _log_error("emails-auto:kind-desconhecido",
+                           f"{a['kind']} -> {a['email']} (nenhum e-mail enviado)",
+                           severity="warning")
         except Exception as e:
             print(f"[emails-auto] envio {a['kind']} -> {a['email']} falhou: {e}")
         if ok:
@@ -12739,6 +12825,302 @@ async def email_preview(request: Request):
 # helper _build_* que devolve (subject, html) — a Central de Emails renderiza o
 # preview e mostra o volume por tipo (email_sent_log.kind).
 
+# ══════════════════════════════════════════════════════════════════════
+# AVALIAÇÃO EM 1 CLIQUE (31/08/2026)
+# ══════════════════════════════════════════════════════════════════════
+# Pedro: *"a gente pode mandar um email de avaliação de projeto, logo depois
+# que o projeto é concluído... pode até ser no email de aviso"* e *"o NPS vira
+# algo que a gente faz de tempos em tempos, a cada seis meses"*.
+#
+# 🔑 SÃO DUAS PERGUNTAS DIFERENTES, e não misturar é decisão técnica:
+#   • nota do PROJETO (1-5) = a entrega ficou boa? → `processing_survey`
+#   • NPS (0-10) = você recomendaria a AI.arq? → `nps_responses`
+# Se a nota por projeto caísse em `nps_responses` com escala 0-10, o NPS
+# deixaria de medir relação e viraria média de qualidade de planilha, puxada
+# por quem sobe muitos projetos (medido: 1 pessoa com 11 projetos em 49 dias).
+#
+# 📊 Por que o clique nasce no e-mail: são 5 avaliações em toda a história do
+# produto. Pedir pra clicar, entrar no site e preencher formulário perde quase
+# todo mundo.
+#
+# 🪤 POR QUE O LINK NÃO GRAVA SOZINHO (isto é o mais importante daqui):
+# Gmail, Outlook e antivírus corporativo PRÉ-CARREGAM os links do e-mail pra
+# checar se são maliciosos. Se a nota fosse gravada no GET do link, um scanner
+# varrendo os 5 botões registraria uma nota sozinho — e seria sempre a mesma
+# (a primeira), envenenando o dado que a gente está justamente tentando criar.
+# Por isso o link do e-mail aponta pra uma PÁGINA (obrigado.html), que grava
+# via POST em JavaScript. Scanner não executa JS; pra pessoa continua 1 clique.
+#
+# 🔒 O clique chega SEM sessão (veio do e-mail), então vale por HMAC — mesmo
+# padrão do descadastro da newsletter (`_newsletter_token`).
+
+# Links de e-mail vão pro Render DIRETO, fora do Cloudflare: link de e-mail é
+# aberto por cliente/webview esquisito e um desafio do CF viraria página de
+# erro. Mesma escolha do unsub da newsletter.
+SITE_PUBLICO = "https://ai.arq.br"
+
+
+def _nota_token(escopo: str, chave: str) -> str:
+    """Assina (escopo, chave) pra o link do e-mail valer sem sessão.
+
+    🪤 A verificação usa `compare_digest`, não `==`: comparação de string vaza
+    tempo. (O `_newsletter_token` usa `!=` — dívida antiga, não replicar.)"""
+    import hmac as _h, hashlib as _hl
+    key = (SUPABASE_SERVICE_ROLE_KEY or "fallback").encode()
+    msg = f"{escopo}:{(chave or '').strip().lower()}".encode()
+    return _h.new(key, msg, _hl.sha256).hexdigest()[:24]
+
+
+def _nota_token_ok(escopo: str, chave: str, t: str) -> bool:
+    import hmac as _h
+    return bool(t) and _h.compare_digest(str(t), _nota_token(escopo, chave))
+
+
+def _link_avaliacao(tipo: str, email: str, nota, job_id: str = "") -> str:
+    import urllib.parse as _up
+    if tipo == "projeto":
+        t = _nota_token("proj", f"{job_id}|{(email or '').lower()}")
+        k = f"&k={_up.quote(job_id)}"
+    else:
+        t = _nota_token("nps", email)
+        k = ""
+    return (f"{SITE_PUBLICO}/obrigado.html?tipo={tipo}{k}"
+            f"&e={_up.quote((email or '').lower())}&n={nota}&t={t}")
+
+
+def _bloco_avaliar_projeto(job_id: str, email: str, sem_medida: bool = False) -> str:
+    """Os 5 botões de nota, clicáveis direto do e-mail.
+
+    Escala 1-5 DE PROPÓSITO diferente do 0-10 do NPS: quem lê o painel precisa
+    saber, batendo o olho, qual das duas perguntas gerou aquele número."""
+    if not job_id or not email:
+        return ""
+    botoes = "".join(
+        f'<a href="{_link_avaliacao("projeto", email, n, job_id)}" '
+        'style="display:inline-block;width:46px;height:46px;line-height:46px;'
+        'text-align:center;margin:0 6px 6px 0;border-radius:10px;'
+        'border:2px solid #e2e8f0;background:#ffffff;color:#0F172A;'
+        'text-decoration:none;font-family:Arial,sans-serif;font-size:18px;'
+        f'font-weight:700;">{n}</a>' for n in range(1, 6))
+    if sem_medida:
+        pergunta = "Me conta o que faltou?"
+        ajuda = ("De 1 (não me serviu de nada) a 5 (mesmo assim ajudou). "
+                 "Um clique — e a próxima tela tem espaço pra você escrever.")
+    else:
+        pergunta = "A planilha ficou boa?"
+        ajuda = "De 1 (não me serviu) a 5 (ficou ótima). É um clique só."
+    return (
+        '<div style="margin:24px 0 4px;padding:20px;border-radius:12px;'
+        'background:#f8fafc;border:1px solid #e2e8f0;">'
+        f'<p style="margin:0 0 4px;font-family:Arial,sans-serif;font-size:16px;'
+        f'font-weight:700;color:#0F172A;">{pergunta}</p>'
+        f'<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:14px;'
+        f'line-height:1.5;color:#475569;">{ajuda}</p>'
+        f'{botoes}'
+        '<p style="margin:10px 0 0;font-family:Arial,sans-serif;font-size:12px;'
+        'color:#94a3b8;">1 = não serviu &nbsp;·&nbsp; 5 = ficou ótima</p>'
+        '</div>')
+
+
+def _bloco_avaliar_nps(email: str) -> str:
+    """0 a 10 clicável — a pergunta relacional, mandada de tempos em tempos."""
+    if not email:
+        return ""
+    botoes = "".join(
+        f'<a href="{_link_avaliacao("nps", email, n)}" '
+        'style="display:inline-block;width:38px;height:38px;line-height:38px;'
+        'text-align:center;margin:0 4px 6px 0;border-radius:9px;'
+        'border:2px solid #e2e8f0;background:#ffffff;color:#0F172A;'
+        'text-decoration:none;font-family:Arial,sans-serif;font-size:15px;'
+        f'font-weight:700;">{n}</a>' for n in range(0, 11))
+    return (
+        '<div style="margin:24px 0 4px;padding:20px;border-radius:12px;'
+        'background:#f8fafc;border:1px solid #e2e8f0;">'
+        '<p style="margin:0 0 4px;font-family:Arial,sans-serif;font-size:16px;'
+        'font-weight:700;color:#0F172A;">De 0 a 10, o quanto você indicaria o '
+        'AI.arq pra outro profissional?</p>'
+        '<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:14px;'
+        'line-height:1.5;color:#475569;">Um clique responde.</p>'
+        f'{botoes}'
+        '<p style="margin:10px 0 0;font-family:Arial,sans-serif;font-size:12px;'
+        'color:#94a3b8;">0 = de jeito nenhum &nbsp;·&nbsp; 10 = com certeza</p>'
+        '</div>')
+
+
+class NotaAvaliacao(BaseModel):
+    tipo: str                     # 'projeto' | 'nps'
+    k: Optional[str] = ""         # job_id, no caso do projeto
+    e: str
+    t: str
+    n: int
+
+
+@app.post("/api/avaliar")
+def registrar_avaliacao(payload: NotaAvaliacao):
+    """Grava a nota. Chamada por JS da página obrigado.html — NUNCA por GET
+    direto do e-mail (ver o comentário do topo: scanner pré-carrega link)."""
+    email = (payload.e or "").strip().lower()
+    n = int(payload.n)
+    if payload.tipo == "projeto":
+        if not _nota_token_ok("proj", f"{payload.k}|{email}", payload.t):
+            raise HTTPException(403, "link inválido ou expirado")
+        if not (1 <= n <= 5):
+            raise HTTPException(400, "nota fora da escala (1 a 5)")
+        ok = _supabase_insert("processing_survey", {
+            "job_id": payload.k or "", "user_email": email,
+            "question_key": "nota_entrega_1a5", "answer": str(n)})
+        if not ok:
+            _log_error("avaliacao:nao-gravou", f"proj job={payload.k} n={n}", payload.k)
+            raise HTTPException(502, "não consegui salvar sua nota")
+        _alerta_avaliacao_projeto(payload.k or "", email, n)
+        return {"status": "ok", "escala": "1a5"}
+
+    if payload.tipo == "nps":
+        if not _nota_token_ok("nps", email, payload.t):
+            raise HTTPException(403, "link inválido ou expirado")
+        if not (0 <= n <= 10):
+            raise HTTPException(400, "nota fora da escala (0 a 10)")
+        _uid, _nome = "", ""
+        try:
+            _pr = _supa_rows("GET", "profiles",
+                             params={"email": f"eq.{email}",
+                                     "select": "user_id,full_name"})
+            if _pr:
+                _uid = _pr[0].get("user_id") or ""
+                _nome = _pr[0].get("full_name") or ""
+        except Exception:
+            pass
+        row = {"user_id": _uid, "user_email": email, "user_name": _nome,
+               "score": n, "comment": "", "context": "email_relacional",
+               "job_id": ""}
+        if not _supabase_insert("nps_responses", row):
+            _log_error("avaliacao:nao-gravou", f"nps e={email} n={n}")
+            raise HTTPException(502, "não consegui salvar sua nota")
+        _alerta_nps(row, "promoter" if n >= 9 else "passive" if n >= 7 else "detractor")
+        return {"status": "ok", "escala": "0a10"}
+
+    raise HTTPException(400, "tipo inválido")
+
+
+class ComentarioAvaliacao(BaseModel):
+    tipo: str
+    k: Optional[str] = ""
+    e: str
+    t: str
+    texto: str
+
+
+@app.post("/api/avaliar/comentario")
+def avaliar_comentario(payload: ComentarioAvaliacao):
+    """Comentário opcional, gravado da página de obrigado com o MESMO token."""
+    email = (payload.e or "").strip().lower()
+    txt = (payload.texto or "").strip()[:2000]
+    if not txt:
+        raise HTTPException(400, "sem texto")
+    ok = False
+    if payload.tipo == "projeto":
+        if not _nota_token_ok("proj", f"{payload.k}|{email}", payload.t):
+            raise HTTPException(403, "link inválido")
+        ok = _supabase_insert("processing_survey", {
+            "job_id": payload.k or "", "user_email": email,
+            "question_key": "comentario_entrega", "answer": txt})
+    elif payload.tipo == "nps":
+        if not _nota_token_ok("nps", email, payload.t):
+            raise HTTPException(403, "link inválido")
+        try:
+            import urllib.parse as _up
+            _rs = _supa_rows("GET", "nps_responses",
+                             params={"user_email": f"eq.{email}", "select": "id",
+                                     "order": "created_at.desc", "limit": "1"})
+            if _rs:
+                _st, _ = _supa_rest_service(
+                    "PATCH", f"nps_responses?id=eq.{_up.quote(str(_rs[0]['id']))}",
+                    {"comment": txt})
+                ok = 200 <= int(_st or 0) < 300
+        except Exception as _e:
+            _log_error("avaliacao:comentario-falhou", f"nps {email}: {_e}")
+    else:
+        raise HTTPException(400, "tipo inválido")
+    if not ok:
+        # 🪤 Nunca agradecer por comentário que não gravou — mesma família do
+        # "obrigado pelo feedback" que a gente consertou hoje no site.
+        raise HTTPException(502, "não consegui salvar seu comentário")
+    return {"status": "ok"}
+
+
+def _alerta_avaliacao_projeto(job_id: str, email: str, nota: int):
+    """Nota baixa de ENTREGA avisa na hora; nota alta espera o painel.
+
+    Por que só a baixa é imediata: 1 ou 2 quer dizer que a planilha não serviu
+    — é erro de motor com nome e arquivo, o achado mais acionável que existe."""
+    if nota > 2:
+        return
+    import threading as _t
+
+    def _envia():
+        try:
+            _ctx = ""
+            if job_id:
+                _p = _supa_rows("GET", "projects",
+                                params={"job_id": f"eq.{job_id}",
+                                        "select": "project_name,items_count,file_types"})
+                if _p:
+                    _ctx = (f"<br><b>Projeto:</b> {_p[0].get('project_name') or '?'} "
+                            f"({_p[0].get('items_count')} itens, "
+                            f"{_p[0].get('file_types')}) — "
+                            f"https://ai.arq.br/projeto.html?job_id={job_id}")
+            _notify_admin(
+                f"🔴 Nota {nota}/5 na entrega — {email}",
+                f"<b>Nota da planilha:</b> {nota}/5<br>"
+                f"<b>Cliente:</b> {email}{_ctx}<br><br>"
+                "Nota 1-2 é o cliente dizendo que a planilha NÃO serviu. Vale "
+                "abrir o projeto e ver o que o motor entregou — é achado de "
+                "motor com nome e arquivo.")
+            _log_error("avaliacao:nota-baixa", f"{nota}/5 {email}", job_id,
+                       severity="warning")
+        except Exception as _e:
+            print(f"[avaliacao] alerta falhou (nao-fatal): {_e}")
+
+    _t.Thread(target=_envia, daemon=True).start()
+
+
+def _build_nps_relacional_email(name: str = "", email: str = "",
+                                n_projetos: int = 0):
+    """(subject, html) da pesquisa de NPS — a pergunta RELACIONAL.
+
+    Pedro, 31/08/2026: *"o NPS vira algo que a gente faz de tempos em tempos,
+    a cada seis meses"*. Vai separada da nota da entrega de propósito: uma
+    pergunta é sobre o arquivo que acabou de sair, a outra é sobre a AI.arq.
+
+    🪤 Nada de "sua opinião é muito importante pra nós". A pessoa dá a nota em
+    um clique DENTRO do e-mail — o texto só precisa dizer por que perguntamos e
+    quanto custa responder."""
+    import html as _hp
+    _greet = _greeting_line(_hp.escape(name or ""))
+    _quantos = ""
+    if n_projetos == 1:
+        _quantos = "Você processou um projeto com a gente. "
+    elif n_projetos > 1:
+        _quantos = f"Você já processou {n_projetos} projetos com a gente. "
+    _body = (
+        f"{_greet}<br><br>"
+        f"{_quantos}Passa de vez em quando pra fazer uma pergunta só — e ela "
+        f"cabe num clique."
+        + _email_img("nps-foto.jpg",
+                     "Profissional desenhando sobre a prancha, com escalímetro")
+        + _bloco_avaliar_nps(email)
+        + '<p style="margin:16px 0 0;font-family:Arial,sans-serif;font-size:15px;'
+          'line-height:1.6;color:#475569;">Se der vontade de escrever o porquê, '
+          'a tela seguinte tem espaço. É o que mais ajuda a decidir o que '
+          'construir — e o que consertar.</p>')
+    html = _email_wrap(
+        "Uma pergunta só", _body,
+        reason="Você está recebendo este e-mail porque tem uma conta no AI.arq. "
+               "Mandamos esta pergunta no máximo a cada 6 meses.",
+        preheader="De 0 a 10, você indicaria o AI.arq? Responde no clique.")
+    return "Posso te fazer uma pergunta?", html
+
+
 # Catálogo: fonte única da verdade dos tipos que a Central de Emails mostra.
 # grupo "auto" = disparado sozinho pelo sistema; "manual" = você dispara em
 # Usuários. Tipos que são auto E manual ficam em "auto" com o gatilho anotando
@@ -12766,6 +13148,9 @@ _EMAIL_CATALOG = [
      "gatilho": "auto: projeto concluído há 12-30 dias sem planilha revisada (1x por projeto)"},
     {"key": "feedback", "nome": "Como foi? (feedback)", "grupo": "manual",
      "gatilho": "manual: botão em Usuários (usuário com projeto)"},
+    {"key": "nps_relacional", "nome": "Pesquisa de NPS (0-10)", "grupo": "auto",
+     "gatilho": "auto: 90 dias de casa e depois a cada 6 meses · pula quem "
+                "respondeu nos últimos 60 dias"},
 ]
 
 
@@ -12783,7 +13168,8 @@ def _render_email_by_type(key: str):
         # Exemplo dos "próximos passos" (bloco real, dados fictícios) pro preview
         # ficar representativo — sem tocar em all_items reais.
         _extra = _next_steps_html(fake_job, 30, 42, False)
-        return _build_planilha_pronta_email(nome, projeto, fake_job, 42, _extra)
+        return _build_planilha_pronta_email(nome, projeto, fake_job, 42, _extra,
+                                            email="cliente@exemplo.com")
     if key == "erro_reprocessar":
         return _build_falha_email(nome, projeto, True)
     if key == "erro_trocar":
@@ -12796,6 +13182,8 @@ def _render_email_by_type(key: str):
         return _build_nudge_email(nome, "feedback", fake_link)
     if key == "retorno_30d":
         return _build_retorno30_email(nome)
+    if key == "nps_relacional":
+        return _build_nps_relacional_email(nome, "cliente@exemplo.com", 2)
     if key == "proximo_projeto":
         return _build_proximo_projeto_email(nome, projeto)
     if key == "cronograma_checkin":
@@ -22102,8 +22490,14 @@ def admin_ficha_usuario(chave: str, request: Request):
     cronogramas = _por_job("cronogramas",
                            "job_id,data_inicio,duracao_meses,created_at,updated_at",
                            "cronograma", "&order=created_at.desc")
-    cotacoes = _por_job("project_supplier_quotes", "job_id,fornecedor,created_at",
-                        "comparativo de fornecedores")
+    # 🪤 31/08: aqui eu escrevi `fornecedor,created_at` — as colunas reais são
+    # `supplier_name,uploaded_at`. Deu 400 e a seção aparecia vazia. Quem pegou
+    # foi a TARJA de `_falhas` na tela, no primeiro cliente aberto: é exatamente
+    # pra isso que ela existe (sem ela, "comparativo: nenhum" seria lido como
+    # "o cliente não usou"). Guarda: test_ficha_colunas_existem.py.
+    cotacoes = _por_job("project_supplier_quotes",
+                        "job_id,supplier_name,uploaded_at,status",
+                        "comparativo de fornecedores", "&order=uploaded_at.desc")
     # Do cliente final do usuario so nome/empresa — telefone e e-mail dele sao
     # dado de terceiro e nao ajudam a entender o uso do produto.
     clientes = _por_job("project_clients", "job_id,client_name,client_company,created_at",

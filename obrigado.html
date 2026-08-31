@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="icon" type="image/x-icon" href="favicon-v2.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Obrigado — AI.arq</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Sua avaliação foi registrada no AI.arq.">
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>body{font-family:Inter,system-ui,sans-serif}</style>
+</head>
+<body class="bg-slate-50 min-h-screen flex items-center justify-center px-4 py-10">
+
+<!-- 🪤 31/08/2026 — POR QUE ESTA PÁGINA EXISTE, e não um link que grava direto:
+     Gmail, Outlook e antivírus corporativo PRÉ-CARREGAM os links do e-mail pra
+     checar se são maliciosos. Se a nota fosse gravada no GET do link, um
+     scanner varrendo os 5 botões registraria uma nota sozinho — sempre a mesma
+     — envenenando justamente o dado que a gente está tentando criar (temos 5
+     avaliações em toda a história do produto).
+     Scanner não executa JavaScript. Então o link abre esta página e ELA grava,
+     por POST. Pra pessoa continua um clique só. -->
+
+<main class="w-full max-w-lg">
+  <div class="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+    <div class="h-1.5 bg-gradient-to-r from-indigo-600 to-cyan-400"></div>
+    <div class="p-7">
+      <a href="https://ai.arq.br" class="inline-flex items-center gap-2 mb-6 no-underline">
+        <img src="email-logo.png" width="36" height="36" alt="AI.arq" class="rounded-lg">
+        <span class="font-bold text-slate-900 text-lg">AI.arq</span>
+      </a>
+
+      <div id="estado" class="text-slate-600">Registrando sua resposta&hellip;</div>
+
+      <!-- comentário opcional (só aparece depois de gravar) -->
+      <div id="caixa-comentario" class="hidden mt-5">
+        <label for="txt" class="block text-sm font-semibold text-slate-900 mb-1">
+          Quer contar o porquê?
+        </label>
+        <p id="dica" class="text-sm text-slate-500 mb-2">É opcional — e é o que mais ajuda.</p>
+        <textarea id="txt" rows="4"
+          class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Escreva à vontade"></textarea>
+        <div class="flex items-center gap-3 mt-3">
+          <button id="enviar" type="button"
+            class="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition">
+            Enviar
+          </button>
+          <a href="https://ai.arq.br/dashboard.html" class="text-sm text-slate-500 hover:text-slate-800">
+            Ir pro meu painel
+          </a>
+        </div>
+        <p id="msg-com" class="text-sm mt-2"></p>
+      </div>
+
+      <div id="rodape" class="hidden mt-6 pt-5 border-t border-slate-100">
+        <a href="https://ai.arq.br/dashboard.html"
+           class="inline-flex items-center px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold no-underline transition">
+          Ir pro meu painel
+        </a>
+      </div>
+    </div>
+  </div>
+  <p class="text-center text-xs text-slate-400 mt-4">ai.arq.br</p>
+</main>
+
+<script src="aiarq-utils.js"></script>
+<script>
+(function () {
+  var API = (window.API_BASE || 'https://api.ai.arq.br');
+  var p = new URLSearchParams(location.search);
+  var tipo = p.get('tipo') || '';
+  var k = p.get('k') || '';
+  var e = p.get('e') || '';
+  var t = p.get('t') || '';
+  var n = p.get('n');
+  var est = document.getElementById('estado');
+  var esc = window.escapeHtml || function (s) { return String(s == null ? '' : s); };
+
+  function erro(txt) {
+    est.innerHTML = '<p class="text-base font-semibold text-slate-900 mb-1">' +
+      'Não consegui registrar sua nota</p>' +
+      '<p class="text-sm text-slate-600">' + esc(txt) + '</p>';
+    document.getElementById('rodape').classList.remove('hidden');
+  }
+
+  if (!tipo || !e || !t || n === null) {
+    erro('O link veio incompleto. Se veio de um e-mail nosso, me avisa que eu conserto.');
+    return;
+  }
+
+  var nota = parseInt(n, 10);
+  var escala = (tipo === 'nps') ? '0 a 10' : '1 a 5';
+
+  fetch(API + '/api/avaliar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tipo: tipo, k: k, e: e, t: t, n: nota })
+  }).then(function (r) {
+    return r.json().catch(function () { return {}; }).then(function (d) {
+      return { ok: r.ok, status: r.status, d: d };
+    });
+  }).then(function (res) {
+    // 🪤 Nunca agradecer sem ter gravado — é o erro que a gente passou o dia
+    // consertando no resto do site.
+    if (!res.ok || !res.d || res.d.status !== 'ok') {
+      erro((res.d && res.d.detail) ||
+           ('O servidor respondeu ' + res.status + '. Tente abrir o link de novo.'));
+      return;
+    }
+    est.innerHTML =
+      '<p class="text-2xl mb-1">Obrigado!</p>' +
+      '<p class="text-base text-slate-700">Anotei sua nota <b>' + nota + '</b> ' +
+      '<span class="text-slate-500">(de ' + escala + ')</span>.</p>';
+    var cx = document.getElementById('caixa-comentario');
+    if (tipo === 'projeto' && nota <= 2) {
+      document.getElementById('dica').textContent =
+        'O que faltou nessa planilha? Isso vira conserto de motor — é o retorno mais útil que existe pra gente.';
+    } else if (tipo === 'nps' && nota >= 9) {
+      document.getElementById('dica').textContent =
+        'O que mais te ajudou? Se puder escrever, a gente adoraria usar como depoimento (só com sua autorização).';
+    }
+    cx.classList.remove('hidden');
+  }).catch(function (err) {
+    erro('Falha de rede: ' + (err && err.message ? err.message : err));
+  });
+
+  document.getElementById('enviar').addEventListener('click', function () {
+    var btn = this;
+    var txt = (document.getElementById('txt').value || '').trim();
+    var msg = document.getElementById('msg-com');
+    if (!txt) { msg.className = 'text-sm mt-2 text-slate-500'; msg.textContent = 'Escreva algo antes de enviar.'; return; }
+    btn.disabled = true; btn.textContent = 'Enviando…';
+    fetch(API + '/api/avaliar/comentario', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tipo: tipo, k: k, e: e, t: t, texto: txt })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (d) {
+        return { ok: r.ok, d: d };
+      });
+    }).then(function (res) {
+      if (res.ok && res.d && res.d.status === 'ok') {
+        msg.className = 'text-sm mt-2 text-emerald-700';
+        msg.textContent = 'Recebido. Obrigado de verdade.';
+        btn.textContent = 'Enviado';
+        document.getElementById('txt').setAttribute('disabled', 'disabled');
+      } else {
+        msg.className = 'text-sm mt-2 text-red-700';
+        msg.textContent = (res.d && res.d.detail) || 'Não consegui salvar. Tente de novo.';
+        btn.disabled = false; btn.textContent = 'Enviar';
+      }
+    }).catch(function (err) {
+      msg.className = 'text-sm mt-2 text-red-700';
+      msg.textContent = 'Falha de rede: ' + (err && err.message ? err.message : err);
+      btn.disabled = false; btn.textContent = 'Enviar';
+    });
+  });
+})();
+</script>
+</body>
+</html>
