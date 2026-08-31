@@ -154,8 +154,15 @@ def test_o_call_site_do_PDF_usa_isso():
     # não encosta no selo" — e ela TEM que continuar sendo só pra frente:
     # alargar pra trás faz ela pegar o `conf = "estimado"` do código anterior e
     # reprovar código certo (aconteceu comigo em 31/08).
-    antes = corpo[max(0, i - 700):i]
-    janela = corpo[i:i + 420]
+    antes = corpo[max(0, i - 900):i]
+    # 🪤 31/08 (2ª vez no mesmo dia): a janela era de 420 caracteres FIXOS. Ao
+    # encurtar a chamada (tirando a soma da lista de alvos), a janela passou a
+    # alcançar o `if qty == 0 and conf == "confirmado":` que vem DEPOIS do
+    # resgate — código legítimo, sem relação — e o guarda reprovou código certo.
+    # É a "janela de tamanho fixo mede o vizinho" que este repo já documenta em
+    # outros arquivos. Agora ela termina no FIM REAL do bloco do resgate.
+    _fim = corpo.find("_n_resgate_pdf += 1", i)
+    janela = corpo[i:(_fim + 20) if _fim > i else i + 420]
     assert "area_pdf=" in janela and "comprimento_pdf=" in janela, (
         "chamada sem as medições do vetorial — sem elas não há o que conferir "
         "e a função viraria confiança no texto")
@@ -168,8 +175,21 @@ def test_o_call_site_do_PDF_usa_isso():
     assert "_pdfvec_por_prancha" in antes or "_pdfvec_por_prancha" in janela, (
         "a régua voltou a comparar só contra a SOMA do job — em multi-página "
         "ela nunca casa, e o resgate morre em silêncio")
-    assert "_pdfvec_area_m2" in janela and "_pdfvec_compr_m" in janela, (
-        "sumiu a soma da lista de alvos — ela ainda vale pro job de 1 página")
+    # 🔁 31/08, AUDITORIA DO MESMO DIA: este assert cobrava o CONTRÁRIO — que a
+    # soma do job continuasse na lista de alvos, "porque ela ainda vale pro job
+    # de 1 página". Não vale: em job de uma página a soma É a medição daquela
+    # página, então ela não acrescenta nada; e em multi-página ela abre a régua
+    # à toa. Pior: este laço roda DENTRO do laço de páginas, logo `_stem` já é a
+    # prancha do item. Passar 7 alvos em vez de 1 fazia a régua perguntar "esse
+    # número parece alguma medição de alguma prancha?" (cobertura de 0,38% ->
+    # 2,64% do espaço de números plausíveis) e preencher com a prancha errada —
+    # atropelando o passo 7, que usaria a certa.
+    assert "_pdfvec_area_m2" not in janela and "_pdfvec_compr_m" not in janela, (
+        "a SOMA do job voltou pra lista de alvos — a régua tem que comparar "
+        "contra a medição da prancha DESTE item, que é `_pdfvec_por_prancha"
+        "[_stem]`")
+    assert "_stem" in antes or "_stem" in janela, (
+        "os alvos não são mais amarrados à prancha do item")
     assert "conf" not in janela.replace("comprimento_pdf", ""), (
         "o resgate está encostando no selo — preencher quantidade e carimbar "
         "'medido' são passos diferentes (regra dura nº1)")

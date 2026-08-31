@@ -8837,22 +8837,34 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # o 38,8 é comprimento num item de m², e o 104,8 não bate
                         # com medição nenhuma. Essa linha continua zerada, que é
                         # o certo — ninguém mediu altura.
-                        # 🩸 31/08 (passo 6): os alvos são as medições POR
-                        # PRANCHA, não a soma do job. A observação do item cita
-                        # o número da prancha dele (80,5 m²); a soma acumulada
+                        # 🩸 31/08 (passo 6): o alvo é a medição da PRANCHA
+                        # DESTE item, não a soma do job. A observação cita o
+                        # número da prancha dele (80,5 m²); a soma acumulada
                         # (741,8) nunca bate ±1% com isso, e o resgate morria
-                        # com `resgate_pdf=0` — que se lia como "não havia o
-                        # que resgatar". A soma segue na lista por
-                        # compatibilidade com job de uma página só.
-                        _alvos_a = [r.get("rooms_m2") or 0
-                                    for r in _pdfvec_por_prancha.values()]
-                        _alvos_c = [r.get("walls_m") or 0
-                                    for r in _pdfvec_por_prancha.values()]
+                        # com `resgate_pdf=0` — que se lia como "não havia o que
+                        # resgatar".
+                        # 🚨 31/08, AUDITORIA DO MESMO DIA: a 1ª versão deste
+                        # conserto passava as medições de TODAS as pranchas mais
+                        # a soma. Só que este laço roda DENTRO do laço de
+                        # páginas: aqui `_stem` É a prancha de onde o item veio.
+                        # Com 7 alvos em vez de 1, a régua deixava de perguntar
+                        # "esse número é a medição DESTA prancha?" e passava a
+                        # perguntar "esse número parece alguma medição de alguma
+                        # prancha?" — a cobertura do espaço de números plausíveis
+                        # ia de 0,38% para 2,64% (5,70% com as 16 pranchas do
+                        # caso Flavio). Pior: preenchia com o número da prancha
+                        # errada e, com a linha já preenchida, atropelava o passo
+                        # 7, que usaria a prancha CERTA.
+                        # 🪤 Tirar a soma não perde nada: em job de uma página
+                        # só, a soma É a medição daquela página.
+                        _r_desta = _pdfvec_por_prancha.get(_stem) or {}
+                        _alvos_a = [_r_desta.get("rooms_m2") or 0]
+                        _alvos_c = [_r_desta.get("walls_m") or 0]
                         _q_pdf = _quantidade_medida_pelo_pdf(
                             item_data.get("observations", ""),
                             item_data.get("unit", ""),
-                            area_pdf=(_alvos_a + [_pdfvec_area_m2]),
-                            comprimento_pdf=(_alvos_c + [_pdfvec_compr_m]))
+                            area_pdf=_alvos_a,
+                            comprimento_pdf=_alvos_c)
                         if _q_pdf:
                             qty = _q_pdf
                             _n_resgate_pdf += 1
