@@ -52,6 +52,9 @@ VIGIADAS = {
                      ["postNps", "sendFeedback", "sendFeedbackComment",
                       "maybeShowFeedback", "_fbSalvaAntesDeSair"]),
     "dashboard.html": ("", ["__maybeShowNPS"]),
+    "admin.html": ("", ["switchTab", "loadUsers", "renderUsers",
+                        "loadEmailCatalog", "enviarEmailTeste",
+                        "openEmailPreview"]),
     # Página que recebe o clique do e-mail. Não tem função global (o script é
     # uma IIFE): o contrato aqui é só "carrega sem erro" — que já é o que teria
     # pegado o apagão do login. A query imita um link real de e-mail.
@@ -120,6 +123,20 @@ _RE_SUPA_CDN = re.compile(
 _ABRE_PORTAO = """<script>
 window.aiarqEmailMatches = function () { return Promise.resolve(true); };
 </script>"""
+
+
+def injeta_sonda(html: str, sonda: str) -> str:
+    """Poe a sonda antes do ULTIMO `</body>`.
+
+    🪤 O PRIMEIRO `</body>` do arquivo pode estar DENTRO DE UMA STRING JS. Em
+    admin.html existe um `document.write('…</body>')`: injetar ali metia um
+    <script> no meio de uma string e QUEBRAVA a sintaxe da pagina. O guarda
+    acusava "Uncaught SyntaxError" num arquivo perfeitamente bom e teria
+    bloqueado todo push que tocasse o admin. Falso positivo em guarda e pior
+    que guarda nenhum: ensina a usar o AIARQ_DEPLOY_FORCE.
+    """
+    i = html.rfind("</body>")
+    return (html[:i] + sonda + html[i:]) if i >= 0 else html + sonda
 
 
 def _chrome():
@@ -225,8 +242,15 @@ def main():
                 sonda = ("<script>document.title = JSON.stringify({erros: window.__erros, "
                          "faltando: " + json.dumps(funcs) +
                          ".filter(function(f){return typeof window[f] !== 'function';})});</script>")
-                html = html.replace("</body>", sonda + "</body>") \
-                    if "</body>" in html else html + sonda
+                # 🪤 O PRIMEIRO `</body>` DO ARQUIVO PODE ESTAR DENTRO DE UMA
+                # STRING JS. Em admin.html existe um `document.write('…</body>')`
+                # na linha 4239: injetar a sonda ali metia um <script> no meio de
+                # uma string e QUEBRAVA a sintaxe da pagina — o guarda acusava
+                # "Uncaught SyntaxError" num arquivo perfeitamente bom e teria
+                # bloqueado todo push que tocasse o admin. Falso positivo em
+                # guarda e pior que guarda nenhum: ensina a usar o
+                # AIARQ_DEPLOY_FORCE. Usa o ULTIMO `</body>`, que e o de verdade.
+                html = injeta_sonda(html, sonda)
                 alvo = os.path.join(tmp, "_t_" + pagina)
                 open(alvo, "w", encoding="utf-8").write(html)
 

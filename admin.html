@@ -3307,10 +3307,17 @@ function _emailCard(item) {
       <p class="text-xs text-gray-500 leading-relaxed">${esc(item.gatilho || '')}</p>
       <div class="flex items-center justify-between mt-auto pt-1">
         <span class="inline-flex items-center gap-1 text-xs text-gray-600" title="Total enviado pra usuários reais (email_sent_log)">&#128231; ${volTxt}</span>
-        <button onclick="openEmailPreview('${esc(item.key)}', '${esc(item.nome)}')"
-                class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition">
-          &#128065; Ver preview
-        </button>
+        <div class="flex items-center gap-1.5">
+          <button onclick="enviarEmailTeste('${esc(item.key)}', this)"
+                  title="Manda este email pra VOCÊ, com dados de exemplo. Gmail e Outlook reescrevem CSS — só na caixa de verdade dá pra ver como fica."
+                  class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition">
+            &#128231; Teste pra mim
+          </button>
+          <button onclick="openEmailPreview('${esc(item.key)}', '${esc(item.nome)}')"
+                  class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition">
+            &#128065; Ver preview
+          </button>
+        </div>
       </div>
     </div>`;
 }
@@ -3341,6 +3348,31 @@ async function loadEmailCatalog() {
     loading.classList.add('hidden');
     errBox.textContent = '⚠ Não consegui carregar a lista de emails. Tente recarregar a página.';
     errBox.classList.remove('hidden');
+  }
+}
+
+// Manda UM email do catálogo pro próprio admin. O preview roda no Chrome, mas
+// Gmail e Outlook reescrevem CSS — a caixa de verdade é o único teste que vale.
+// 🪤 Só avisa "enviado" se o backend confirmou: a rota devolve 502 quando o
+// servidor de email recusa, e dizer "enviado" nesse caso seria mentira.
+async function enviarEmailTeste(key, btn) {
+  const txt = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = 'Enviando…';
+  try {
+    const res = await authFetch(`${API_BASE}/api/admin/email-teste`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: key })
+    });
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok || d.status !== 'ok') throw new Error(d.detail || ('HTTP ' + res.status));
+    btn.innerHTML = '✓ Enviado';
+    setTimeout(() => { btn.innerHTML = txt; btn.disabled = false; }, 3000);
+  } catch (e) {
+    console.error('[email-teste]', e);
+    btn.innerHTML = '⚠ Falhou';
+    alert('Não consegui enviar: ' + (e.message || e));
+    setTimeout(() => { btn.innerHTML = txt; btn.disabled = false; }, 3000);
   }
 }
 

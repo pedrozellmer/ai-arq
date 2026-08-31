@@ -13256,6 +13256,38 @@ async def admin_email_render(request: Request, type: str = ""):
     return {"type": key, "subject": subject, "html": html}
 
 
+class TesteEmailPayload(BaseModel):
+    type: str
+
+
+@app.post("/api/admin/email-teste")
+def admin_email_teste(payload: TesteEmailPayload, request: Request):
+    """Manda UM e-mail do catálogo, com dados de exemplo, PRA O PRÓPRIO ADMIN.
+
+    Pedro, 31/08/2026: *"manda pra mim então"* — depois de eu dizer que só
+    conferi os e-mails no Chrome, e que Gmail e Outlook reescrevem CSS. Ver na
+    caixa de verdade é o único teste que vale.
+
+    🔒 O destinatário é SEMPRE `ADMIN_EMAIL`, nunca o que vier no corpo: uma
+    rota que manda e-mail com HTML nosso pra endereço arbitrário viraria
+    trampolim de spam com a nossa reputação de domínio. A Central de E-mails
+    tinha só preview; a newsletter já tinha "enviar teste só pra mim" e este é
+    o mesmo padrão, agora pra qualquer tipo do catálogo.
+    """
+    _require_admin(request)
+    key = (payload.type or "").strip()
+    try:
+        subject, html = _render_email_by_type(key)
+    except KeyError:
+        raise HTTPException(400, f"tipo de email desconhecido: {key}")
+    ok = _send_email_smtp(ADMIN_EMAIL, f"[TESTE] {subject}", html)
+    if not ok:
+        # 🪤 Nunca responder "enviado" sem ter enviado — o painel diria que
+        # está tudo certo e o e-mail nunca chegaria.
+        raise HTTPException(502, "o servidor de e-mail não aceitou a mensagem")
+    return {"status": "ok", "type": key, "para": ADMIN_EMAIL, "subject": subject}
+
+
 @app.get("/api/admin/email-catalog")
 def admin_email_catalog(request: Request):
     """Lista os tipos de email da Central de Emails com {key, nome, grupo,
