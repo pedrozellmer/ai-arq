@@ -31,11 +31,24 @@ import instagram_image  # noqa: E402
 RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # variações da oferta ANTIGA (valeu até 22/07/2026)
-PROIBIDO = ("1º projeto grátis", "1o projeto grátis", "primeiro projeto grátis")
+# 🚨 31/08, 2ª auditoria: faltava a forma SEM ACENTO. Meio repositório escreve
+# sem acento (o próprio instagram_agent.py tem "gratis" em várias linhas), então
+# o guarda tinha um furo do tamanho da própria regra.
+PROIBIDO = ("1º projeto grátis", "1o projeto grátis", "primeiro projeto grátis",
+            "1º projeto gratis", "1o projeto gratis", "primeiro projeto gratis",
+            "primeiro projeto é grátis", "primeiro projeto e gratis",
+            "primeiro projeto é gratis", "primeiro projeto e grátis")
 
 # a frase aparece legitimamente quando o texto ENSINA a não usá-la
 NEGACAO = ("nunca", "não escrever", "nao escrever", "proibid", "jamais",
-           "oferta antiga", "regra dura de copy", "não pode", "nao pode")
+           "oferta antiga", "regra dura de copy", "não pode", "nao pode",
+           # 🪤 "pós-beta" é o qualificador que TORNA a frase verdadeira. O
+           # termos.html diz "No modelo pós-beta, o primeiro projeto de cada
+           # usuário será gratuito" — e isso está CERTO (decisão de 22/07
+           # manteve a tabela como preço pós-beta). Uma auditoria marcou essa
+           # linha como violação por ler só a substring; sem esta exceção o
+           # guarda repetiria o mesmo alarme falso.
+           "pós-beta", "pos-beta", "após o beta", "apos o beta", "depois do beta")
 
 
 def _tem_promessa_antiga(texto: str) -> list:
@@ -54,6 +67,35 @@ def test_o_subtitulo_padrao_do_post_promo_nao_promete_o_1o_gratis():
         instagram_image.generate_promo_post).parameters["subtitle"].default
     assert not _tem_promessa_antiga(padrao), (
         "o subtítulo padrão do post promo promete o 1º projeto grátis: %r" % padrao)
+
+
+def test_NENHUMA_fonte_do_backend_ensina_a_promessa_antiga():
+    """🚨 31/08, 2ª auditoria: a 1ª versão deste guarda olhava UM arquivo
+    (`instagram_image.py`) e a pasta `.claude/`. Passou verde enquanto
+    `backend/instagram_agent.py:46` — o prompt do agente que responde DM de
+    Instagram — mandava dizer "PRIMEIRO PROJETO É GRÁTIS (até 5 pranchas)".
+    Guarda que olha um arquivo não guarda uma regra: varre o backend inteiro."""
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    problemas = []
+    vistos = 0
+    for raiz, dirs, arqs in os.walk(base):
+        dirs[:] = [d for d in dirs
+                   if d not in ("__pycache__", "tests", "sinapi", "tcpo", "assets",
+                                "node_modules", ".git")]
+        for a in arqs:
+            if not a.endswith(".py"):
+                continue
+            cam = os.path.join(raiz, a)
+            try:
+                txt = io.open(cam, encoding="utf-8").read()
+            except (OSError, UnicodeDecodeError):
+                continue
+            vistos += 1
+            for n, linha in _tem_promessa_antiga(txt):
+                problemas.append("%s:%d %s" % (a, n, linha))
+    assert vistos > 5, "varri só %d arquivo(s) — guarda inerte" % vistos
+    assert not problemas, (
+        "fonte do backend ainda ensina a oferta antiga: " + " | ".join(problemas))
 
 
 def test_o_gerador_de_ARTE_nao_desenha_a_promessa_antiga():

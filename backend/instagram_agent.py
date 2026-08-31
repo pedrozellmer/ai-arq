@@ -38,12 +38,19 @@ Nosso slogan: "Planilha de quantitativos para seu orçamento em minutos, não em
 - Marca itens duvidosos em laranja para revisão humana
 - Colunas de preço prontas para preenchimento
 
-## Preços (com economia de escala — quanto mais pranchas, mais barato por prancha):
+## Preços — ATENÇÃO: esta tabela é o modelo PÓS-BETA. HOJE estamos em beta e é
+## tudo grátis e ILIMITADO, sem cartão. Só cite preço se perguntarem quanto vai
+## custar depois; nunca apresente a tabela como o que a pessoa paga agora.
+## (com economia de escala — quanto mais pranchas, mais barato por prancha):
 - Projeto Pequeno (até 5 pranchas): R$ 97
 - Projeto Médio (6-10 pranchas): R$ 157 (mais popular, R$ 15,70/prancha)
 - Projeto Grande (11-20 pranchas): R$ 247 (R$ 12,35/prancha)
 - Acima de 20 pranchas: R$ 247 + R$ 10 por prancha extra
-- PRIMEIRO PROJETO É GRÁTIS (até 5 pranchas). Sem cartão de crédito.
+- HOJE (beta): GRÁTIS E ILIMITADO, quantos projetos a pessoa quiser, sem cartão.
+  🚨 NUNCA escreva "1º projeto grátis" / "primeiro projeto grátis" como se fosse
+  a oferta de agora — essa oferta valeu até 22/07/2026 e foi substituída. No
+  modelo pós-beta o primeiro projeto (até 5 pranchas) volta a ser gratuito, mas
+  isso só se menciona explicando que é DEPOIS do beta.
 - Sem mensalidade — pague por projeto.
 - Planilha revisada: quem corrige e devolve afina a IA — os próximos projetos da pessoa saem medindo melhor. (NUNCA prometa cashback em dinheiro: no beta está tudo grátis.)
 

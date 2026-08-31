@@ -176,7 +176,8 @@ def estimate_for_files(file_paths: list[str], extra_pranchas: int = 0) -> dict:
 
 # ── Precheck de quantificabilidade (QW5, 20/07) ──────────────────────────────
 # Roda no /api/estimate-price reaproveitando o arquivo JÁ em disco (alcança
-# inclusive o 1º projeto grátis — a "1ª impressão" do cliente novo). Avisa ANTES
+# inclusive quem não vai pagar nada — a "1ª impressão" do cliente novo, que no
+# beta é todo mundo, já que é grátis e ilimitado). Avisa ANTES
 # de pagar quando o arquivo claramente não vai medir bem. BARATO e conservador:
 # só lê amostra/header (sem ezdxf.readfile no arquivo inteiro, que arriscaria
 # OOM no worker), e só avisa quando é MUITO claramente imagem/proxy — na dúvida,
