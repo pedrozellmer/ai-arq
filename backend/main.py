@@ -8661,11 +8661,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # o 38,8 é comprimento num item de m², e o 104,8 não bate
                         # com medição nenhuma. Essa linha continua zerada, que é
                         # o certo — ninguém mediu altura.
+                        # 🩸 31/08 (passo 6): os alvos são as medições POR
+                        # PRANCHA, não a soma do job. A observação do item cita
+                        # o número da prancha dele (80,5 m²); a soma acumulada
+                        # (741,8) nunca bate ±1% com isso, e o resgate morria
+                        # com `resgate_pdf=0` — que se lia como "não havia o
+                        # que resgatar". A soma segue na lista por
+                        # compatibilidade com job de uma página só.
+                        _alvos_a = [r.get("rooms_m2") or 0
+                                    for r in _pdfvec_por_prancha.values()]
+                        _alvos_c = [r.get("walls_m") or 0
+                                    for r in _pdfvec_por_prancha.values()]
                         _q_pdf = _quantidade_medida_pelo_pdf(
                             item_data.get("observations", ""),
                             item_data.get("unit", ""),
-                            area_pdf=_pdfvec_area_m2,
-                            comprimento_pdf=_pdfvec_compr_m)
+                            area_pdf=(_alvos_a + [_pdfvec_area_m2]),
+                            comprimento_pdf=(_alvos_c + [_pdfvec_compr_m]))
                         if _q_pdf:
                             qty = _q_pdf
                             _n_resgate_pdf += 1

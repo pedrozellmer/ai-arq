@@ -1658,6 +1658,11 @@ def quantidade_medida_pelo_pdf(observacao, unidade, area_pdf=0, comprimento_pdf=
     `walls_m` do motor vetorial). Não casa a frase — casa o NÚMERO. Por isso
     não importa como a IA escreveu.
 
+    📐 `area_pdf` e `comprimento_pdf` aceitam um NÚMERO ou uma LISTA de números.
+    Passe a lista com a medição de cada PRANCHA: em job multi-página a soma não
+    corresponde a nada físico, e comparar contra ela faz a régua nunca casar
+    (caso Flavio, 31/08 — 16 pranchas, `resgate_pdf=0` com medição existindo).
+
     🚨 E a família da unidade tem que bater: área com área, comprimento com
     comprimento. É essa trava que segura o caso perigoso do MESMO cliente:
 
@@ -1675,13 +1680,37 @@ def quantidade_medida_pelo_pdf(observacao, unidade, area_pdf=0, comprimento_pdf=
     if not observacao or not unidade:
         return None
     u = str(unidade).strip().lower()
+
+    # 🩸 31/08/2026 (caso Flavio) — A RÉGUA COMPARAVA CONTRA A SOMA DO JOB.
+    # `area_pdf` chegava como `_pdfvec_area_m2`, que acumula página a página.
+    # Num projeto de 16 pranchas do mesmo imóvel isso é a mesma casa contada
+    # várias vezes (741,8 m² num imóvel de 400). A observação do item cita o
+    # número da PRANCHA dele — 80,5 m² — e 80,5 nunca bate ±1% com 741,8.
+    # Resultado no log: `resgate_pdf=0`, que se lê como "não havia o que
+    # resgatar" quando a verdade é "a régua estava medindo a coisa errada".
+    # Agora aceita uma LISTA de alvos (as medições por prancha) além do número
+    # único — retrocompatível com quem passa float.
+    # 🪤 O que NÃO se afrouxa junto: a tolerância continua ±1% e a família de
+    # unidade continua obrigatória. Mais alvos já aumenta a chance de casar por
+    # coincidência; relaxar os dois freios ao mesmo tempo seria trocar linha
+    # zerada por número inventado.
+    def _alvos(v):
+        if v is None:
+            return []
+        if isinstance(v, (int, float)):
+            return [float(v)] if float(v) > 0 else []
+        try:
+            return sorted({round(float(x), 4) for x in v if float(x or 0) > 0})
+        except (TypeError, ValueError):
+            return []
+
     if u in _UNI_AREA:
-        alvo = float(area_pdf or 0)
+        alvos = _alvos(area_pdf)
     elif u in _UNI_LINEAR:
-        alvo = float(comprimento_pdf or 0)
+        alvos = _alvos(comprimento_pdf)
     else:
         return None
-    if alvo <= 0:
+    if not alvos:
         return None
     for m in _RX_NUM_COM_UNIDADE.finditer(str(observacao)):
         bruto, uni_txt = m.group(1), m.group(2).lower()
@@ -1698,7 +1727,7 @@ def quantidade_medida_pelo_pdf(observacao, unidade, area_pdf=0, comprimento_pdf=
             continue
         if valor <= 0:
             continue
-        if abs(valor / alvo - 1.0) <= tol:
+        if any(abs(valor / alvo - 1.0) <= tol for alvo in alvos):
             return round(valor, 2)
     return None
 

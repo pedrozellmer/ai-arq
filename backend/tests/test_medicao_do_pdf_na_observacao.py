@@ -146,10 +146,30 @@ def test_o_call_site_do_PDF_usa_isso():
     assert "_quantidade_medida_pelo_pdf(" in corpo, (
         "a função existe e nunca é chamada no caminho do PDF")
     i = corpo.find("_quantidade_medida_pelo_pdf(")
-    janela = corpo[i:i + 320]
-    assert "area_pdf=_pdfvec_area_m2" in janela and "comprimento_pdf=_pdfvec_compr_m" in janela, (
+    # 🪤 A janela olha ANTES e DEPOIS da chamada: os alvos por prancha são
+    # montados nas linhas acima dela. Uma janela só pra frente não os vê e o
+    # guarda reprova código certo (aconteceu comigo em 31/08).
+    # 🪤 DUAS janelas, de propósito. A de trás vê os alvos por prancha, que são
+    # montados nas linhas acima da chamada. A da frente é a que checa "o resgate
+    # não encosta no selo" — e ela TEM que continuar sendo só pra frente:
+    # alargar pra trás faz ela pegar o `conf = "estimado"` do código anterior e
+    # reprovar código certo (aconteceu comigo em 31/08).
+    antes = corpo[max(0, i - 700):i]
+    janela = corpo[i:i + 420]
+    assert "area_pdf=" in janela and "comprimento_pdf=" in janela, (
         "chamada sem as medições do vetorial — sem elas não há o que conferir "
         "e a função viraria confiança no texto")
+    # 🩸 31/08 (passo 6): os alvos passaram a ser as medições POR PRANCHA. A
+    # soma do job não corresponde a nada físico em projeto multi-página (mesma
+    # casa contada em cada disciplina), e comparar contra ela fazia a régua
+    # NUNCA casar — o caso Flavio fechou com `resgate_pdf=0` tendo medição.
+    # O assert antigo cobrava a string `area_pdf=_pdfvec_area_m2`; agora cobra
+    # o que importa: que os valores por prancha cheguem à régua.
+    assert "_pdfvec_por_prancha" in antes or "_pdfvec_por_prancha" in janela, (
+        "a régua voltou a comparar só contra a SOMA do job — em multi-página "
+        "ela nunca casa, e o resgate morre em silêncio")
+    assert "_pdfvec_area_m2" in janela and "_pdfvec_compr_m" in janela, (
+        "sumiu a soma da lista de alvos — ela ainda vale pro job de 1 página")
     assert "conf" not in janela.replace("comprimento_pdf", ""), (
         "o resgate está encostando no selo — preencher quantidade e carimbar "
         "'medido' são passos diferentes (regra dura nº1)")
@@ -179,3 +199,64 @@ def test_o_log_conta_o_resgate_e_nao_mente_mais_no_nome():
     assert "preservados_por_pe_direito={" not in corpo, (
         "o rótulo mentiroso voltou: ele diz 'pé-direito' para preservação que "
         "veio da geometria do PDF")
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# 31/08/2026 — A RÉGUA COMPARAVA CONTRA A SOMA DO JOB (caso Flavio)
+# ═══════════════════════════════════════════════════════════════════════
+# `area_pdf` recebia `_pdfvec_area_m2`, que acumula página a página. Num
+# projeto de 16 pranchas do MESMO imóvel (alvenaria, layout, forro e
+# climatização do mesmo pavimento) isso é a mesma casa contada várias vezes:
+# 741,8 m² num imóvel de 400, com a prancha de alvenaria medindo 80,5.
+# A observação do item cita o número DA PRANCHA dele. 80,5 nunca bate ±1% com
+# 741,8 — e o log fechou `resgate_pdf=0`, que se lê como "não havia o que
+# resgatar" quando a verdade era "a régua media a coisa errada".
+
+_OBS_FLAVIO = "Área medida da geometria do PDF: 80,5 m² (13 ambientes)"
+_POR_PRANCHA = [107.7, 80.5, 166.1, 77.1, 112.0, 198.4]   # as 6 pranchas reais
+
+
+def _q(**kw):
+    from engine_rules import quantidade_medida_pelo_pdf
+    return quantidade_medida_pelo_pdf(**kw)
+
+
+def test_a_SOMA_do_job_nao_casa_com_a_prancha():
+    """Reproduz o bug: é o comportamento de antes, e tem que continuar sendo
+    None — o conserto não é fazer a soma casar, é oferecer o alvo certo."""
+    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=741.8) is None
+
+
+def test_a_medicao_POR_PRANCHA_casa():
+    """O conserto: com os valores por prancha na lista, o 80,5 é resgatado."""
+    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=_POR_PRANCHA) == 80.5
+
+
+def test_numero_que_NAO_medimos_continua_recusado():
+    """🧪 O controle que impede o conserto de virar 'aceita qualquer número'.
+    Mais alvos já aumenta a chance de casar por coincidência — a tolerância de
+    ±1% e a família de unidade NÃO podem ser afrouxadas junto."""
+    assert _q(observacao="Área estimada: 55 m²", unidade="m²",
+              area_pdf=_POR_PRANCHA) is None
+
+
+def test_comprimento_num_item_de_area_continua_recusado():
+    """O caso perigoso do Construtora Mr: a IA escreve '38,8 m de paredes' num
+    item de m². O número existe e foi medido — mas é de outra família."""
+    assert _q(observacao="38,8 m de paredes medidas vetorialmente", unidade="m²",
+              area_pdf=_POR_PRANCHA, comprimento_pdf=[38.8]) is None
+
+
+def test_fora_da_tolerancia_de_1_por_cento_continua_recusado():
+    assert _q(observacao="Área: 82,0 m²", unidade="m²", area_pdf=[80.5]) is None
+
+
+def test_numero_solto_continua_funcionando():
+    """CONTROLE de compatibilidade: quem passa float (job de 1 página) segue
+    valendo — a mudança é aditiva."""
+    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=80.5) == 80.5
+
+
+def test_sem_alvo_nenhum_nao_inventa():
+    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=[]) is None
+    assert _q(observacao=_OBS_FLAVIO, unidade="m²", area_pdf=None) is None
