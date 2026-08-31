@@ -18200,6 +18200,67 @@ def _track_evento_aceito(ev: str) -> bool:
     return ev in _TRACK_ALLOWED or bool(_TRACK_CLIQUE_RX.match(ev))
 
 
+@app.post("/api/csp-report")
+async def csp_report(request: Request):
+    """Coleta violações de CSP em modo Report-Only (30/08/2026).
+
+    🔒 Por que existe: o CSP foi testado em 19 páginas no Chrome (0 violações),
+    mas teste de LOAD não exercita fluxo logado — e os dois defeitos que os
+    céticos acharam eram exatamente assim (iframe blob: do visualizador e foto
+    de perfil do Google). Antes de LIGAR o CSP de verdade, o Cloudflare manda
+    `Content-Security-Policy-Report-Only` apontando pra cá e a gente MEDE em
+    cliente real por uns dias. Medir antes de decidir, como sempre.
+
+    🪤 Ruído esperado e descartado: extensão do navegador
+    (chrome-extension://, moz-extension://, safari-*) e about:/inline de
+    tradutor. Isso responde por quase todo relatório de CSP no mundo real e
+    encheria o error_log de lixo — o painel do Pedro ficaria ilegível.
+    🪤 Aberto por design (o browser posta sem credencial) e com teto por IP:
+    é endpoint público, então vale a mesma trava do /api/contact — que só
+    passou a funcionar de verdade hoje, com o CF-Connecting-IP.
+    Nunca levanta: relatório perdido não pode virar erro pro visitante."""
+    try:
+        if not _rate_limit_ok("csp", request, limit=30, window_s=600):
+            return {"status": "rate-limited"}
+        import json as _j
+        try:
+            # 🪤 `async def` de propósito: ler o corpo exige await. O corpo desta
+            # rota é leve; o único trecho pesado (_log_error, que faz HTTP pro
+            # Supabase) vai pro threadpool logo abaixo — a lição das 3 rotas do
+            # relógio que congelaram o site por 33 s em 28/08.
+            _cru = await request.body()
+            corpo = _j.loads((_cru or b"{}").decode("utf-8", "replace"))
+        except Exception:
+            return {"status": "ignorado"}
+        # dois formatos: {"csp-report": {...}} (clássico) e [{"body": {...}}] (Reporting API)
+        rels = []
+        if isinstance(corpo, dict) and "csp-report" in corpo:
+            rels = [corpo["csp-report"]]
+        elif isinstance(corpo, list):
+            rels = [x.get("body", x) for x in corpo if isinstance(x, dict)]
+        elif isinstance(corpo, dict):
+            rels = [corpo]
+        for r in rels[:5]:
+            if not isinstance(r, dict):
+                continue
+            bloqueado = str(r.get("blocked-uri") or r.get("blockedURL") or "")[:180]
+            diretiva = str(r.get("effective-directive") or r.get("effectiveDirective")
+                           or r.get("violated-directive") or "")[:60]
+            pagina = str(r.get("document-uri") or r.get("documentURL") or "")[:180]
+            if bloqueado.startswith(("chrome-extension:", "moz-extension:",
+                                     "safari-extension:", "safari-web-extension:",
+                                     "webkit-masked-url:")):
+                continue
+            await run_in_threadpool(
+                _log_error, "csp:violacao",
+                f"diretiva={diretiva} bloqueado={bloqueado} pagina={pagina}",
+                None, "info")
+        return {"status": "ok"}
+    except Exception as _e:
+        print(f"[csp-report] falhou (nao-fatal): {_e}")
+        return {"status": "erro"}
+
+
 @app.post("/api/track")
 async def track_event(payload: TrackPayload, request: Request):
     """Registra um evento de uso (best-effort, nunca falha pro cliente).
