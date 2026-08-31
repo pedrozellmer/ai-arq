@@ -17955,19 +17955,31 @@ async def submit_nps(payload: NPSPayload, request: Request):
     }
     ok = _supabase_insert("nps_responses", row)
     category = "promoter" if payload.score >= 9 else "passive" if payload.score >= 7 else "detractor"
-    if category == "detractor":
-        _alerta_detrator(row)
+    # 🩸 31/08/2026 — ANTES daqui só o detrator avisava. O Marcelo deu 9 em
+    # 24/08 com o comentário "Gostei muito do resultado" e o Pedro descobriu
+    # em 31/08, sete dias depois, olhando o painel por acaso. Com 5 respostas
+    # em toda a história, perder UMA é perder 20% do sinal.
+    _alerta_nps(row, category)
     return {"status": "ok" if ok else "error", "category": category}
 
 
-def _alerta_detrator(row: dict):
-    """Detrator (NPS ≤ 6) vira e-mail interno NA HORA — em thread, best-effort.
+def _alerta_nps(row: dict, category: str = "detractor"):
+    """TODA nota vira e-mail interno na hora — em thread, best-effort.
 
-    Por que (16/08/2026): a Eduarda deu nota 2 às 19:18 e o Pedro só viu
-    olhando o painel por acaso. Detrator engajado é a janela de recuperação
-    mais curta que existe — ela mesma voltou 1h30 depois com as pranchas de
-    armação; um alerta imediato teria posto o Pedro na conversa ANTES.
-    Junta o contexto do projeto (se houver job_id) pra ligação ser 1 clique."""
+    Por que o detrator (16/08/2026): a Eduarda deu nota 2 às 19:18 e o Pedro só
+    viu olhando o painel por acaso. Detrator engajado é a janela de recuperação
+    mais curta que existe — ela voltou 1h30 depois com as pranchas de armação;
+    um alerta imediato teria posto o Pedro na conversa ANTES.
+
+    🩸 Por que TODAS (31/08/2026): a regra era `if category == "detractor"`, e
+    promotor não avisava ninguém. O Marcelo deu **9 com comentário** em 24/08 e
+    o Pedro viu em 31/08 — 7 dias depois. Com 5 respostas em toda a história do
+    produto, cada uma perdida é 20% do sinal. E promotor com comentário é a
+    matéria-prima da página de cases, que está parada esperando depoimento.
+
+    🪤 Isto é alerta INTERNO (`NOTIFY_EMAIL`), não e-mail de cliente: a regra de
+    no máximo 1 e-mail por semana por pessoa não se aplica aqui.
+    """
     import threading as _tal
 
     def _envia():
@@ -17986,18 +17998,33 @@ def _alerta_detrator(row: dict):
                                 f"https://ai.arq.br/projeto.html?job_id={_jid}")
                 except Exception:
                     pass
+            _nota = row.get("score")
+            _com = (row.get("comment") or "").strip()
+            if category == "detractor":
+                _assunto = f"🔴 NPS {_nota} — detrator: {row.get('user_email') or 'sem e-mail'}"
+                _fecho = ("Detrator engajado responde melhor a contato pessoal RÁPIDO — "
+                          "a janela é de horas, não dias (caso Eduarda, 16/08).")
+            elif category == "promoter":
+                _assunto = f"🟢 NPS {_nota} — promotor: {row.get('user_email') or 'sem e-mail'}"
+                _fecho = ("Promotor é a hora de pedir DEPOIMENTO — a página de cases está "
+                          "parada esperando um. Se veio comentário, ele já é meio depoimento."
+                          if _com else
+                          "Promotor sem comentário: vale uma pergunta curta pra saber o que "
+                          "funcionou. É barato e vira copy.")
+            else:
+                _assunto = f"🟡 NPS {_nota} — neutro: {row.get('user_email') or 'sem e-mail'}"
+                _fecho = ("Neutro é quem quase gostou: o que faltou costuma ser a próxima "
+                          "melhoria óbvia do produto.")
             _notify_admin(
-                f"🔴 NPS {row.get('score')} — detrator: {row.get('user_email') or 'sem e-mail'}",
-                f"<b>Nota:</b> {row.get('score')}/10<br>"
+                _assunto,
+                f"<b>Nota:</b> {_nota}/10<br>"
                 f"<b>Cliente:</b> {row.get('user_name') or '?'} ({row.get('user_email') or '?'})<br>"
-                f"<b>Comentário:</b> {row.get('comment') or '(sem comentário)'}"
-                f"{_ctx}<br><br>"
-                f"Detrator engajado responde melhor a contato pessoal RÁPIDO — "
-                f"a janela é de horas, não dias (caso Eduarda, 16/08).")
-            _log_error("nps:detrator-alerta",
-                       f"score={row.get('score')} {row.get('user_email')}", _jid)
+                f"<b>Comentário:</b> {_com or '(sem comentário)'}"
+                f"{_ctx}<br><br>{_fecho}")
+            _log_error(f"nps:{category}-alerta",
+                       f"score={_nota} {row.get('user_email')}", _jid)
         except Exception as _e:
-            print(f"[nps] alerta de detrator falhou (não-fatal): {_e}")
+            print(f"[nps] alerta de NPS falhou (não-fatal): {_e}")
 
     _tal.Thread(target=_envia, daemon=True).start()
 
@@ -18033,8 +18060,10 @@ async def submit_nps_detailed(payload: NPSDetailedPayload, request: Request):
         "stage_ratings": stages,
     }
     ok = _supabase_insert("nps_responses", row)
-    if cat == "detractor":
-        _alerta_detrator(row)
+    # 31/08: aqui também era só detrator. Feedback detalhado é o mais rico que
+    # existe (nota por etapa + comentário) — perder um promotor deste é pior
+    # ainda que perder um NPS simples.
+    _alerta_nps(row, cat)
     return {"status": "ok" if ok else "error", "category": cat}
 
 
@@ -18064,15 +18093,27 @@ def should_show_nps(user_id: str, request: Request):
             return {"should_show": True, "last_answered": None}
         last = rows[0].get("created_at")
         # 60 dias de cooldown
-        from datetime import timedelta
         try:
             dt = datetime.fromisoformat(last.replace("Z", "+00:00"))
             days_since = (datetime.utcnow().replace(tzinfo=dt.tzinfo) - dt).days
             return {"should_show": days_since >= 60, "last_answered": last, "days_since": days_since}
-        except Exception:
-            return {"should_show": False, "last_answered": last}
+        except Exception as _ed:
+            # 🩸 Data ilegível não é "já respondeu". Ver o bloco abaixo.
+            _log_error("nps:check-data-ilegivel", f"user={user_id} valor={last!r} {_ed}",
+                       severity="warning")
+            return {"should_show": True, "last_answered": last, "indeterminado": True}
     except Exception as e:
-        return {"should_show": False, "error": str(e)}
+        # 🩸 31/08/2026 — ISTO FALHAVA FECHADO, e calado. O dashboard tem o
+        # comentário "fail-safe: mostra se API falhar" (dashboard.html), só que
+        # a API NUNCA falhava: ela respondia HTTP 200 dizendo `should_show:
+        # false`. Do lado do navegador isso é indistinguível de "essa pessoa já
+        # respondeu" — a rede de segurança do front estava morta, e nada era
+        # gravado pra gente perceber.
+        # Com 5 respostas de NPS em toda a história, o erro caro é deixar de
+        # perguntar, não perguntar de novo (o cooldown de 60 dias segue valendo
+        # em todo caminho que CONSEGUE ler a data).
+        _log_error("nps:check-falhou", f"user={user_id} {e}", severity="warning")
+        return {"should_show": True, "error": str(e), "indeterminado": True}
 
 
 @app.get("/api/admin/nps/summary")
