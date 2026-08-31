@@ -5908,7 +5908,8 @@ def _limpa_aviso_nao_medida(obs: str) -> str:
 def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "",
                         pe_direito: float = 0,
                         apenas_preencher: bool = False,
-                        pdfvec_m2: float = 0) -> tuple[int, int]:
+                        pdfvec_m2: float = 0,
+                        pdfvec_por_prancha: dict = None) -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -5940,6 +5941,69 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # horizontais não pode passar do total declarado — 6 itens com 400 m²
     # num imóvel de 400 m² são 2.400 m² de piso e forro.
     _usou_area_informada = {}
+    # 🎯 31/08/2026 — PASSO 7: a medição da PRÓPRIA prancha do item.
+    # O caso Flavio mostrou 6 pranchas medidas (80,5 · 107,7 · 166,1 · 77,1 ·
+    # 112,0 · 198,4 m²) e 32 linhas de área saindo ZERADAS. A medição existia,
+    # por prancha, e não chegava a nenhum item.
+    #
+    # 🚨 ESTE É O ÚNICO PASSO QUE CRIA NÚMERO. As quatro travas, todas pra
+    # errar PRA MENOS:
+    #   1. selo continua ESTIMADO. Sempre. Nunca 'confirmado' — a escala do
+    #      PDF vem do carimbo, e carimbo é declaração, não prova (regra nº1);
+    #   2. só linha ZERADA. Número que já existe não se toca;
+    #   3. no máximo UM piso e UM forro por prancha. Atribuir a área do
+    #      pavimento a vários itens é o erro do "somado em dobro" (28/08);
+    #   4. na DÚVIDA, não preenche NADA. Se dois itens da mesma família
+    #      apontam pra mesma prancha, os dois ficam zerados e o projeto
+    #      ganha um aviso — a linha vazia é honesta, o palpite não.
+    #
+    # 🪤 O casamento é por PREFIXO do nome do arquivo: `ref_sheet` pode vir
+    # como "planta.pdf (hint da IA)" — comparar string inteira nunca casa.
+    _pp = dict(pdfvec_por_prancha or {})
+    _medida_da_prancha = {}
+    _ambiguos = []
+    if _pp:
+        _por_arquivo = {}
+        for _r in _pp.values():
+            _arq = str(_r.get("arquivo") or "").strip().lower()
+            if _arq and float(_r.get("rooms_m2") or 0) > 0:
+                # mesma prancha em várias páginas: fica a maior medição
+                if float(_r.get("rooms_m2") or 0) > float(
+                        (_por_arquivo.get(_arq) or {}).get("rooms_m2") or 0):
+                    _por_arquivo[_arq] = _r
+        # quem são os candidatos de cada prancha, por família
+        _cand = {}
+        for _it in items:
+            if getattr(_it, "origem", "") == "dxf_geom":
+                continue
+            _u = (getattr(_it, "unit", "") or "").strip().lower()
+            if _u not in _FLOOR_M2_UNITS:
+                continue
+            try:
+                if float(getattr(_it, "quantity", 0) or 0) != 0:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            _d = (getattr(_it, "description", "") or "")
+            if not _is_floor_surface(_d):
+                continue
+            _rs = (getattr(_it, "ref_sheet", "") or "").strip().lower()
+            _achou = None
+            for _arq, _r in _por_arquivo.items():
+                _base = _arq.rsplit(".", 1)[0]
+                if _base and (_rs.startswith(_base) or _base in _rs):
+                    _achou = (_arq, _r)
+                    break
+            if not _achou:
+                continue
+            _fam2 = ("forro" if any(k in _d.lower() for k in ("forro", "teto"))
+                     else "piso")
+            _cand.setdefault((_achou[0], _fam2), []).append((_it, _achou[1]))
+        for (_arq, _fam2), _lista in _cand.items():
+            if len(_lista) == 1:
+                _medida_da_prancha[id(_lista[0][0])] = _lista[0][1]
+            else:
+                _ambiguos.append((_arq, _fam2, len(_lista)))
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -6043,6 +6107,24 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                       "carimbo e NÃO confirmada por cota — confira a escala do "
                       "seu PDF antes de orçar.").strip(" |")
             it.observations = _o
+            preservados += 1
+        elif id(it) in _medida_da_prancha and q == 0:
+            # PASSO 7: a prancha DESTE item foi medida e a linha está vazia.
+            _m = _medida_da_prancha[id(it)]
+            it.quantity = round(float(_m.get("rooms_m2") or 0), 2)
+            try:
+                it.confidence = Confidence("estimado")   # trava 1: NUNCA muda
+            except Exception:
+                pass
+            _o2 = _limpa_aviso_nao_medida(it.observations or "")
+            _fonte2 = ("cota da própria prancha" if _m.get("escala_validada")
+                       else "carimbo (não confirmada por cota)")
+            it.observations = (
+                _o2 + " | Área dos ambientes MEDIDOS nesta prancha (%s): %.2f m², "
+                "escala 1:%s lida de %s. Segue como estimativa: medimos a planta, "
+                "não conferimos item a item — confira antes de orçar."
+                % (_m.get("arquivo"), float(_m.get("rooms_m2") or 0),
+                   _m.get("scale"), _fonte2)).strip(" |")
             preservados += 1
         elif (q > 0 and _pd_ok
               and (str(getattr(it, "origem", "") or "") == "deriv_pd"
@@ -9474,11 +9556,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            % (len(_por_tempo), _nomes), job_id, severity="warning")
         except NameError:
             pass              # job sem PDF
+        try:
+            _pp_map = dict(_pdfvec_por_prancha)
+        except NameError:
+            _pp_map = {}          # job sem PDF: o loop nem existiu
         _n_fill, _blanked = _apply_area_honesty(
             all_items, project_data.total_area,
             getattr(project_data, "total_area_source", ""),
             pe_direito=float(getattr(project_data, "user_pe_direito", 0) or 0),
-            pdfvec_m2=_pv_m2)
+            pdfvec_m2=_pv_m2,
+            pdfvec_por_prancha=_pp_map)
         if _n_fill:
             print(f"[honestidade-m2] job={job_id}: preenchi {_n_fill} itens de piso/forro/laje "
                   f"com a área INFORMADA {project_data.total_area} m² (estimado, a conferir)")
