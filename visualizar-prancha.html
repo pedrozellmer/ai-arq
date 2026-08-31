@@ -25,11 +25,16 @@
       border-image: linear-gradient(90deg, #4F46E5, #22D3EE) 1;
     }
     .viewer-frame { flex: 1; border: none; background: #4b5563; }
+      .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
   </style>
 </head>
 <body>
 
 <div class="viewer-container">
+  <!-- 31/08 (auditoria): a página não tinha heading nenhum — leitor de tela
+       ficava sem marco de navegação. O h1 fica só pra tecnologia assistiva
+       (a barra já mostra o nome do arquivo pra quem enxerga). -->
+  <h1 class="sr-only">Visualizador de prancha</h1>
   <div class="viewer-toolbar">
     <div class="flex h-7 w-7 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs" aria-hidden="true">AI</div>
     <button onclick="window.close()" class="text-gray-300 hover:text-indigo-300 flex items-center gap-1">

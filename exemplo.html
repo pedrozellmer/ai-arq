@@ -238,5 +238,9 @@
 <script src="aiarq-utils.js"></script>
 <script>if (window.trackEvent) trackEvent('view_exemplo');</script>
 <script src="cookie-consent.js" defer></script>
+<!-- 31/08 (auditoria): o link "Contato" do rodapé chamava
+     aiArqContactOpen() sem a página carregar o modal — caía no
+     fallback de mailto. Agora abre o modal, igual às outras. -->
+<script src="contact-modal.js" defer></script>
 </body>
 </html>

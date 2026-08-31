@@ -1459,7 +1459,10 @@ async function gerarCronograma() {
     // Garante que, ao voltar pra página, o cronograma já aparece sem clicar
     // em "Gerar" de novo. Falha silenciosa — não interrompe o fluxo do user.
     autoSaveCronograma(cronog).catch(err => {
-      console.warn('Auto-save falhou (não crítico):', err);
+      console.warn('Auto-save falhou:', err);
+      // Não interrompe o fluxo, mas o cliente precisa saber que o botão
+      // "Salvar" virou obrigatório — senão ele fecha a aba e perde tudo.
+      if (window.toast && window.toast.warn) window.toast.warn('Não consegui salvar sozinho — clique em "Salvar" pra garantir.');
     });
   } catch (e) {
     const err = document.getElementById('error-banner');
@@ -1502,7 +1505,11 @@ async function autoSaveCronograma(cron) {
     origem_detalhe: f.origem_detalhe || null,
   }));
 
-  await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
+  // 🩸 31/08/2026 (auditoria): este fetch NÃO checava `r.ok`. `fetch` só
+  // rejeita em erro de REDE — um HTTP 500/401 resolve normal, então o
+  // `.catch` de quem chama nunca disparava e nem o console.warn saía. O
+  // cliente saía da página achando que estava salvo e perdia o trabalho.
+  const _r = await fetch(`${API_BASE}/api/cronograma/${jobId}/save`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -1513,6 +1520,7 @@ async function autoSaveCronograma(cron) {
       notas: '',
     }),
   });
+  if (!_r.ok) throw new Error('auto-save HTTP ' + _r.status);
 }
 document.getElementById('btn-gerar').addEventListener('click', gerarCronograma);
 
@@ -2235,5 +2243,9 @@ document.addEventListener('keydown', function (e) {
     </div>
   </footer>
 <script src="whatsapp-button.js" defer></script>
+<!-- 31/08 (auditoria): o link "Contato" do rodapé chamava
+     aiArqContactOpen() sem a página carregar o modal — caía no
+     fallback de mailto. Agora abre o modal, igual às outras. -->
+<script src="contact-modal.js" defer></script>
 </body>
 </html>
