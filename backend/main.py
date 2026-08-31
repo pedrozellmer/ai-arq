@@ -8508,6 +8508,31 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 result = _ckpt_cache[_ck_key]
                 jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: {_disp} — análise já concluída, retomando ✓")
                 print(f"[ckpt] {_stem}: análise reaproveitada do checkpoint")
+                # 🚨 31/08 (auditoria do mesmo dia): TODO o bloco de medição
+                # vetorial mora no `else` deste if. Num job retomado (crash com
+                # auto_resume), cada prancha com análise salva pulava a medição —
+                # e com ela sumiam, calados, o índice por prancha (passos 6 e 7
+                # não preenchem nada), o log `pdfvec:por-prancha` e o aviso
+                # "N prancha(s) não foram medidas". Ou seja: o job pesado, que é
+                # justamente o que trava e retoma, era o que MENOS avisava.
+                # 🔑 A medição agora viaja DENTRO do checkpoint e volta aqui.
+                _vm_ckpt = (result or {}).get("_pdfvec_medicao")
+                if _vm_ckpt:
+                    try:
+                        _pdfvec_por_prancha[_stem] = dict(_vm_ckpt)
+                        _pdfvec_area_m2 += float(_vm_ckpt.get("rooms_m2") or 0)
+                        _pdfvec_compr_m += float(_vm_ckpt.get("walls_m") or 0)
+                        print(f"[ckpt] {_stem}: medição vetorial restaurada "
+                              f"({_vm_ckpt.get('rooms_m2')} m²)")
+                    except (TypeError, ValueError) as _erv:
+                        _log_error("pdfvec:ckpt-restore",
+                                   f"{_stem}: medição do checkpoint veio corrompida "
+                                   f"({_erv}) — esta prancha fica sem medição",
+                                   job_id, severity="warning")
+                elif (result or {}).get("_pdfvec_falhou"):
+                    # a prancha falhou na 1ª tentativa; o aviso do cliente não
+                    # pode sumir só porque o job foi retomado
+                    _pdfvec_falhas.append(dict(result["_pdfvec_falhou"]))
             else:
                 # 1. Extrair texto (só da página desta unidade — leve, bounded)
                 text = extract_text(pdf_path, page_index)
@@ -8531,6 +8556,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         f"print(json.dumps(_measure_page(r'{pdf_path}', {page_index}, '')))"
                     )]
                     _pr = _sp.run(_cmd, capture_output=True, text=True, timeout=75)
+                    # 🚨 31/08 (auditoria do mesmo dia): o commit se chama "parar de
+                    # perder prancha em silêncio" e ESTE caminho continuava mudo.
+                    # `_pdfvec_falhas` só era alimentado pelo `except` lá embaixo, que
+                    # pega exceção levantada no PAI (timeout, JSON quebrado). Quando o
+                    # FILHO morre — OOM-kill, ImportError do MuPDF, exceção dentro de
+                    # `_measure_page` — o returncode vem != 0, `_vm` vira {}, nenhum
+                    # ramo roda e nenhuma exceção sobe: zero log, zero aviso, zero
+                    # rastro. E o traceback ESTAVA ali, em `_pr.stderr`, capturado e
+                    # jogado fora (`capture_output=True` desde sempre).
+                    if _pr.returncode != 0:
+                        _err = (_pr.stderr or "").strip()[-400:] or "(sem stderr)"
+                        _pdfvec_falhas.append({
+                            "prancha": _stem, "arquivo": filename,
+                            "motivo": "processo", "rc": _pr.returncode,
+                        })
+                        _log_error("pdfvec:filho-morreu",
+                                   f"{_stem} ({filename}): medição geométrica morreu "
+                                   f"com rc={_pr.returncode} — {_err}",
+                                   job_id, severity="error")
+                        print(f"[pdfvec] {_stem}: filho rc={_pr.returncode} — {_err[:200]}")
                     _vm = _jv.loads(_pr.stdout.strip().splitlines()[-1]) if _pr.returncode == 0 and _pr.stdout.strip() else {}
                     if _vm.get("escala_validada") and (_vm.get("n_rooms") or _vm.get("walls_m")):
                         _linhas = [
@@ -8693,6 +8738,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # Salva o checkpoint da prancha (só análise SEM erro — erro
                 # deve re-tentar na retomada, não ser reaproveitado)
                 if not result.get("error"):
+                    # passo 4 viaja junto: sem isto a retomada perde a medição
+                    try:
+                        if _stem in _pdfvec_por_prancha:
+                            result["_pdfvec_medicao"] = dict(_pdfvec_por_prancha[_stem])
+                        else:
+                            _f_desta = [f for f in _pdfvec_falhas
+                                        if f.get("prancha") == _stem]
+                            if _f_desta:
+                                result["_pdfvec_falhou"] = dict(_f_desta[-1])
+                    except Exception as _ecp:
+                        print(f"[ckpt] {_stem}: nao consegui anexar a medicao ({_ecp})")
                     _ckpt_save(job_id, _stem, result)
 
             # 3b. Capturar falha de IA nesta prancha (não interrompe o loop —
@@ -9580,18 +9636,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # — e na planilha isso é indistinguível de "essa prancha não tinha o
         # que medir". O cliente merece saber em qual arquivo olhar.
         try:
-            _por_tempo = [f for f in _pdfvec_falhas if f.get("motivo") == "tempo"]
-            if _por_tempo:
-                _nomes = ", ".join(sorted({f["arquivo"] for f in _por_tempo})[:3])
-                _mais = "" if len({f["arquivo"] for f in _por_tempo}) <= 3 else " e outras"
+            # 🚨 31/08 (auditoria): aqui filtrava SÓ motivo == "tempo", e a prancha
+            # cujo processo de medição MORREU (OOM, ImportError, exceção no filho)
+            # ficava fora do aviso — invisível pro cliente exatamente como antes.
+            # Pro cliente o efeito é o mesmo: a prancha não foi medida. O motivo
+            # muda o texto, não o direito dele de saber.
+            _falhou = [f for f in _pdfvec_falhas
+                       if f.get("motivo") in ("tempo", "processo")]
+            if _falhou:
+                _arqs = sorted({f["arquivo"] for f in _falhou})
+                _nomes = ", ".join(_arqs[:3])
+                _mais = "" if len(_arqs) <= 3 else " e outras"
+                _so_tempo = all(f.get("motivo") == "tempo" for f in _falhou)
+                _porque = ("não deram tempo de ser medidas geometricamente"
+                           if _so_tempo else "não puderam ser medidas geometricamente")
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
-                    "⚠ %d prancha(s) não deram tempo de ser medidas geometricamente "
-                    "(%s%s). Elas foram lidas assim mesmo, mas os itens delas saem como "
-                    "estimativa — confira essas contra o projeto antes de fechar orçamento."
-                    % (len(_por_tempo), _nomes, _mais)]
-                _log_error("pdfvec:sem-tempo",
-                           "%d prancha(s) sem medição por tempo: %s"
-                           % (len(_por_tempo), _nomes), job_id, severity="warning")
+                    "⚠ %d prancha(s) %s (%s%s). Elas foram lidas assim mesmo, mas os "
+                    "itens delas saem como estimativa — confira essas contra o projeto "
+                    "antes de fechar orçamento."
+                    % (len(_arqs), _porque, _nomes, _mais)]
+                _log_error("pdfvec:sem-medicao",
+                           "%d prancha(s) sem medição (%s): %s"
+                           % (len(_arqs),
+                              ",".join(sorted({str(f.get("motivo")) for f in _falhou})),
+                              _nomes), job_id, severity="warning")
         except NameError:
             pass              # job sem PDF
         try:

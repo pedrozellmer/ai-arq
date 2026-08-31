@@ -85,14 +85,59 @@ def test_approve_sem_antes_nao_inventa_chave():
     assert linha["item_id"] == ITEM and linha["edits"] is None
 
 
-def test_o_antes_e_lido_TAMBEM_no_reject():
-    """O 'antes' vem de uma leitura no banco la na rota; aqui so garanto que a
-    rota continua pedindo essa leitura pro reject. Este SIM le o fonte - de
-    proposito, porque e uma chamada de I/O que o unit test nao executa."""
-    import inspect
-    src = inspect.getsource(main.submit_item_review)
-    assert 'if action in ("edit", "reject"):' in src, (
-        "o 'antes' voltou a ser lido so no edit - a exclusao fica sem conteudo")
+def test_o_antes_e_lido_TAMBEM_no_reject(monkeypatch):
+    """🚨 31/08, AUDITORIA: esta era a versao FRACA deste teste. Ela fazia
+    `assert 'if action in ("edit", "reject"):' in inspect.getsource(...)` — e
+    essa substring aparece DUAS vezes na rota: uma e o conserto, a outra e
+    codigo sem relacao nenhuma (invalidacao de assinatura). Desfazendo o
+    conserto, a segunda ocorrencia ficava de pe e os 8 testes seguiam VERDES.
+
+    O arquivo foi escrito HOJE como penitencia de "os 4 testes liam o FONTE", e
+    metade dele ainda lia. Agora CHAMA a rota com action="reject" e olha a linha
+    que foi parar em `item_reviews`.
+
+    🔑 Por que o `_antes` importa tanto no reject: o item e APAGADO logo depois,
+    e `item_reviews.item_id` tem FK ON DELETE CASCADE — o vinculo vai nulo de
+    proposito. Entao `edits["_antes"]` e a UNICA copia do que o cliente excluiu."""
+    gravadas = []
+    monkeypatch.setattr(main, "_require_project_owner", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_supabase_insert",
+                        lambda tabela, linha: gravadas.append((tabela, linha)) or True)
+
+    _ITEM = {"id": "it-1", "description": "Parede de alvenaria (sobreposicao)",
+             "quantity": 49.9, "unit": "m", "confidence": "estimado",
+             "observations": "possivel sobreposicao com a prancha vizinha"}
+
+    def _fake_rest(metodo, caminho, **kw):
+        if metodo == "GET" and caminho.startswith("project_items"):
+            return 200, [_ITEM]
+        if metodo == "GET" and caminho.startswith("item_reviews"):
+            return 200, []          # sem revisao anterior: vai INSERIR
+        return 200, []
+    monkeypatch.setattr(main, "_supa_rest_service", _fake_rest)
+
+    class _P:
+        action = "reject"
+        edits = {}
+        comment = "esse item nao existe na minha obra"
+        reviewed_by = ""
+    _erro = None
+    try:
+        main.submit_item_review("job-1", "it-1", _P(), None)
+    except Exception as _e:
+        _erro = _e    # o resto da rota (apagar o item, e-mail) nao e o objeto aqui
+    # 🪤 sem isto, um AttributeError meu no dublê passava por "a rota nao gravou"
+    # e eu ficaria consertando o codigo certo. Se nada foi gravado, mostre o erro.
+
+    linhas = [l for (t, l) in gravadas if t == "item_reviews"]
+    assert linhas, ("o reject nao gravou linha nenhuma em item_reviews "
+                    "(excecao na rota: %r)" % (_erro,))
+    edits = linhas[0].get("edits") or {}
+    assert "_antes" in edits, (
+        "o reject gravou SEM o _antes — como o item e apagado em seguida e a FK "
+        "e CASCATA, isso apaga a unica copia do que o cliente excluiu")
+    assert edits["_antes"].get("description") == _ITEM["description"]
+    assert float(edits["_antes"].get("quantity") or 0) == 49.9
 
 
 def test_CONTROLE_a_explicacao_da_cascata_continua_no_codigo():
