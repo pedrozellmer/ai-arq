@@ -296,14 +296,30 @@ FLOOR_AREA_BLOCK_KW = (
     # piso de raspão — pego no teste real do LAAV (bancada, bebedouro). "m do piso"
     # (não "h=") pra não bloquear contrapiso com espessura tipo "H=5cm".
     "m do piso", "bancada", "balcão", "balcao", "bebedouro", "purificador",
-    # 🩸 31/08/2026 (caso Flavio, job f271473f): "Rasgo em laje de concreto
-    # armado para implantação de nova escada" herdou a ÁREA TOTAL informada
-    # pelo cliente e saiu com 400 m² — um vão de escada caracol. São palavras
-    # do ATO de intervenção parcial: o item MENCIONA laje/piso, mas cobre um
-    # recorte, não a superfície.
-    # 🪤 NÃO acrescentar "escada" nem "corte": `is_floor_surface("Piso da
-    # escada em granito")` é True hoje e ISSO ESTÁ CERTO — piso de escada é
-    # superfície. Bloquear o objeto derrubaria o caso legítimo; bloqueie o ATO.
+)
+
+# 🩸 31/08/2026 (caso Flavio, job f271473f): "Rasgo em laje de concreto armado
+# para implantação de nova escada" herdou a ÁREA TOTAL informada pelo cliente e
+# saiu com 400 m² — um vão de escada caracol. São palavras do ATO de intervenção
+# parcial: o item MENCIONA laje/piso, mas cobre um recorte, não a superfície.
+# 🪤 NÃO acrescentar "escada" nem "corte": `is_floor_surface("Piso da escada em
+# granito")` é True e ISSO ESTÁ CERTO — piso de escada é superfície. Bloquear o
+# OBJETO derrubaria o caso legítimo; bloqueia-se o ATO.
+#
+# 🚨 31/08, AUDITORIA DO MESMO DIA: estas palavras nasceram DENTRO de
+# FLOOR_AREA_BLOCK_KW, e essa lista é compartilhada por três ramos da
+# honestidade — dois que CRIAM número e um que PRESERVA medição nossa. O
+# resultado foi apagar dado medido: o item real do job eva97d1d (Construtora
+# Mr, 26/08) "Remoção de revestimento cerâmico existente em piso", 13,60 m²
+# MEDIDOS da geometria do PDF, passou a sair ZERADO — e com a linha dizendo as
+# duas coisas ao mesmo tempo ("Medido da GEOMETRIA do PDF" + "Área NÃO
+# medida"), que é exatamente a frase falsa que o conserto de 26/08 nasceu pra
+# matar. 1 dos 16 itens que aquele ramo já salvou na história.
+# 🔑 A REGRA: bloquear o ato de intervenção só vale onde a gente vai INVENTAR
+# um número a partir de uma declaração (área informada pelo cliente, medição da
+# prancha). Onde já existe medição NOSSA, um "rasgo" de 13,6 m² medidos é
+# 13,6 m² — a palavra na descrição não desmente a régua.
+FLOOR_ATO_PARCIAL_KW = (
     "rasgo", "abertura", "vão", "vao", "furo", "recorte", "demoli", "remoç",
     "remoc", "shaft",
 )
@@ -317,6 +333,21 @@ def is_floor_surface(desc):
     d = (desc or "").lower()
     return (any(k in d for k in FLOOR_AREA_KW)
             and not any(b in d for b in FLOOR_AREA_BLOCK_KW))
+
+
+def is_floor_surface_para_criar(desc):
+    """Como `is_floor_surface`, MAIS a peneira do ato de intervenção parcial.
+
+    Use esta onde o motor vai ESCREVER um número que não existia — a área que o
+    cliente declarou, ou a medição da prancha atribuída a um item zerado. Um
+    "rasgo em laje" não recebe a área do pavimento.
+
+    🚫 NÃO use onde o número JÁ EXISTE e só está sendo preservado: ali a palavra
+    na descrição não desmente uma medição nossa, e bloquear APAGA dado (ver o
+    comentário de FLOOR_ATO_PARCIAL_KW acima).
+    """
+    d = (desc or "").lower()
+    return is_floor_surface(d) and not any(b in d for b in FLOOR_ATO_PARCIAL_KW)
 
 
 # ── Coerência de unidade: item CONTÁVEL não sai em metro/m² ──────────────────

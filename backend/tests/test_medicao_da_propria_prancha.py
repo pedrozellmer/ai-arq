@@ -151,3 +151,77 @@ def test_a_procedencia_diz_de_qual_prancha_veio():
     assert "CC_AP_Alvenaria Terreo_R00.pdf" in obs
     assert "1:50" in obs
     assert "cota da própria prancha" in obs
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 🚨 31/08, AUDITORIA DO MESMO DIA. Os 11 testes acima usam um `PP` com UMA
+# prancha só — e por isso não viram dois furos graves, os dois provados rodando:
+#   1. PDF com várias páginas: o item levava a MAIOR página do arquivo (erro de
+#      2,46× no caso testado) e a observação jurava ser "esta prancha";
+#   2. nome de arquivo que é prefixo de outro: o item recebia o número da
+#      prancha ERRADA, e quem decidia era a ordem de processamento.
+# Os dois erravam pra MAIS — contra as quatro travas que o cabeçalho promete.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _pp2(*pares):
+    return {("p%d" % i): _prancha(a, m) for i, (a, m) in enumerate(pares)}
+
+
+def test_PDF_MULTIPAGINA_nao_preenche_nenhum_item():
+    """🩸 O item do térreo recebia a área da COBERTURA. `ref_sheet` guarda só o
+    nome do arquivo, nunca a página — então não há como saber de qual pavimento
+    o item veio. Arquivo com 2+ páginas medidas é ambíguo: não preenche."""
+    pp = {"proj_p0": _prancha("PROJETO.pdf", 80.5),
+          "proj_p1": _prancha("PROJETO.pdf", 107.7),
+          "proj_p2": _prancha("PROJETO.pdf", 198.4)}
+    it = _Item("Piso cerâmico do térreo", "m²", 0, ref_sheet="PROJETO.pdf")
+    main._apply_area_honesty([it], pdfvec_por_prancha=pp)
+    assert it.quantity == 0, (
+        "levou a maior página do arquivo (%.2f) como se fosse a prancha dele"
+        % it.quantity)
+
+
+def test_PDF_MULTIPAGINA_avisa_o_cliente():
+    """Recusar em silêncio faz parecer que o motor não mediu nada."""
+    pp = {"a_p0": _prancha("PROJETO.pdf", 80.5), "a_p1": _prancha("PROJETO.pdf", 198.4)}
+    it = _Item("Piso cerâmico", "m²", 0, ref_sheet="PROJETO.pdf")
+    main._apply_area_honesty([it], pdfvec_por_prancha=pp)
+    amb = getattr(main._apply_area_honesty, "ultimo_ambiguos", [])
+    assert any(a[1] == "multipagina" for a in amb), (
+        "não registrou a ambiguidade — o cliente não fica sabendo")
+
+
+def test_NOME_PREFIXO_o_casamento_EXATO_ganha_do_prefixo():
+    """🩸 "PLANTA BAIXA.pdf" (80,5) e "PLANTA BAIXA 2 PAVIMENTO.pdf" (198,4):
+    o item do 2º pavimento recebia 80,5 e a observação nomeava a prancha errada."""
+    pp = _pp2(("PLANTA BAIXA.pdf", 80.5), ("PLANTA BAIXA 2 PAVIMENTO.pdf", 198.4))
+    it = _Item("Piso cerâmico", "m²", 0, ref_sheet="PLANTA BAIXA 2 PAVIMENTO.pdf")
+    main._apply_area_honesty([it], pdfvec_por_prancha=pp)
+    assert it.quantity == 198.4, "casou com o prefixo em vez do nome exato"
+    assert "PLANTA BAIXA 2 PAVIMENTO.pdf" in (it.observations or "")
+
+
+def test_NOME_PREFIXO_nao_depende_da_ORDEM_das_pranchas():
+    """🪤 Quem decidia o vencedor era a ordem de processamento: invertendo o
+    dict, o MESMO item saía com outro número."""
+    for pares in (((("PLANTA BAIXA.pdf", 80.5)), (("PLANTA BAIXA 2 PAV.pdf", 198.4))),
+                  ((("PLANTA BAIXA 2 PAV.pdf", 198.4)), (("PLANTA BAIXA.pdf", 80.5)))):
+        it = _Item("Piso cerâmico", "m²", 0, ref_sheet="PLANTA BAIXA 2 PAV.pdf")
+        main._apply_area_honesty([it], pdfvec_por_prancha=_pp2(*pares))
+        assert it.quantity == 198.4, "a ordem das pranchas mudou o resultado"
+
+
+def test_NOME_CURTO_nao_captura_prancha_alheia():
+    """🪤 "01.pdf" capturava qualquer ref_sheet que contivesse "01"."""
+    pp = _pp2(("01.pdf", 12.0), ("ARQ-R01.pdf", 240.0))
+    it = _Item("Piso cerâmico", "m²", 0, ref_sheet="ARQ-R01.pdf")
+    main._apply_area_honesty([it], pdfvec_por_prancha=pp)
+    assert it.quantity == 240.0, "o nome curto sequestrou o item da outra prancha"
+
+
+def test_o_hint_da_IA_no_ref_sheet_CONTINUA_casando():
+    """O casamento por prefixo existe pra isto — não pode ter morrido no conserto."""
+    it = _Item("Piso cerâmico", "m²", 0,
+               ref_sheet="CC_AP_Alvenaria Terreo_R00.pdf (planta baixa, hint da IA)")
+    main._apply_area_honesty([it], pdfvec_por_prancha=PP)
+    assert it.quantity == 80.5

@@ -54,6 +54,7 @@ from engine_rules import (
     response_truncated as _response_truncated,
     detectar_laco_repeticao as _detectar_laco,
     is_floor_surface as _is_floor_surface,
+    is_floor_surface_para_criar as _is_floor_surface_criar,
     is_unit_mismatch_countable as _is_unit_mismatch_countable,
     corrigir_comprimento_medido as _corrigir_comprimento_medido,
     layer_is_carimbo as _layer_is_carimbo,
@@ -5963,14 +5964,28 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _medida_da_prancha = {}
     _ambiguos = []
     if _pp:
-        _por_arquivo = {}
+        # 🚨 31/08, AUDITORIA DO MESMO DIA — AQUI EU TINHA ESCRITO "fica a maior
+        # medição", e isso erra pra MAIS, contra as quatro travas que o próprio
+        # comentário promete. Um PDF único com 3 pavimentos vira 3 páginas
+        # medidas com o MESMO nome de arquivo; `ref_sheet` guarda só o nome
+        # (analyzer.py), nunca a página — então não há como saber de qual
+        # pavimento o item veio. Provado rodando: "Piso cerâmico do térreo"
+        # (página 0, 80,5 m²) saía com 198,40 m² — a cobertura, 2,46× a mais —
+        # e a observação afirmava "Área dos ambientes MEDIDOS nesta prancha",
+        # falsa sobre ele.
+        # 🔑 Arquivo com mais de uma página medida é AMBÍGUO, igual à trava 4:
+        # não preenche nenhum item dele. Linha vazia é honesta; a maior é chute.
+        _paginas_do_arquivo = {}
         for _r in _pp.values():
             _arq = str(_r.get("arquivo") or "").strip().lower()
             if _arq and float(_r.get("rooms_m2") or 0) > 0:
-                # mesma prancha em várias páginas: fica a maior medição
-                if float(_r.get("rooms_m2") or 0) > float(
-                        (_por_arquivo.get(_arq) or {}).get("rooms_m2") or 0):
-                    _por_arquivo[_arq] = _r
+                _paginas_do_arquivo.setdefault(_arq, []).append(_r)
+        _por_arquivo = {}
+        for _arq, _rs_list in _paginas_do_arquivo.items():
+            if len(_rs_list) == 1:
+                _por_arquivo[_arq] = _rs_list[0]
+            else:
+                _ambiguos.append((_arq, "multipagina", len(_rs_list)))
         # quem são os candidatos de cada prancha, por família
         _cand = {}
         for _it in items:
@@ -5985,15 +6000,32 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             except (TypeError, ValueError):
                 continue
             _d = (getattr(_it, "description", "") or "")
-            if not _is_floor_surface(_d):
+            if not _is_floor_surface_criar(_d):   # passo 7 CRIA número
                 continue
             _rs = (getattr(_it, "ref_sheet", "") or "").strip().lower()
-            _achou = None
+            # 🚨 31/08, auditoria: aqui havia um `break` no PRIMEIRO prefixo que
+            # casasse, e isso pega a prancha ERRADA quando um nome de arquivo é
+            # prefixo de outro. Provado rodando: com "PLANTA BAIXA.pdf" (80,5) e
+            # "PLANTA BAIXA 2 PAVIMENTO.pdf" (198,4), o item do 2º pavimento
+            # recebia 80,5 e a observação NOMEAVA a prancha errada — quem decidia
+            # o vencedor era a ordem de processamento. Com nome curto era pior:
+            # "01.pdf" capturava qualquer ref_sheet contendo "01".
+            # 🔑 Vence o casamento MAIS LONGO: o nome exato sempre ganha do
+            # prefixo. (O casamento por prefixo continua existindo só pra tolerar
+            # o sufixo do hint da IA: "planta.pdf (planta baixa)".)
+            _casaram = []
             for _arq, _r in _por_arquivo.items():
                 _base = _arq.rsplit(".", 1)[0]
                 if _base and (_rs.startswith(_base) or _base in _rs):
-                    _achou = (_arq, _r)
-                    break
+                    _casaram.append((_arq, _r, len(_base)))
+            _achou = None
+            if _casaram:
+                _casaram.sort(key=lambda c: c[2], reverse=True)
+                # empate no comprimento = dois arquivos igualmente plausíveis
+                if len(_casaram) == 1 or _casaram[0][2] > _casaram[1][2]:
+                    _achou = (_casaram[0][0], _casaram[0][1])
+                else:
+                    _ambiguos.append((_rs, "nome-ambiguo", len(_casaram)))
             if not _achou:
                 continue
             _fam2 = ("forro" if any(k in _d.lower() for k in ("forro", "teto"))
@@ -6049,7 +6081,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                                for k in ("forro", "teto"))
                 else "piso")
         if (informado and u in _FLOOR_M2_UNITS
-                and _is_floor_surface(getattr(it, "description", ""))
+                and _is_floor_surface_criar(getattr(it, "description", ""))
                 and q == 0
                 and float(pdfvec_m2 or 0) <= 0
                 and _usou_area_informada.get(_fam, 0) < 1
@@ -6177,6 +6209,12 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         print(f"[honestidade-m2] preservei {preservados} item(ns) de área com "
               f"procedência de {_fonte_pres} — seguem estimados")
     _apply_area_honesty.ultimo_preservados = preservados   # o caller loga no projeto
+    # 🚨 31/08, auditoria: `_ambiguos` era preenchido e NUNCA lido — o comentário
+    # da trava 4 prometia que "o projeto ganha um aviso" e o aviso não existia.
+    # Instrumento que nasce morto é achado recorrente aqui. Mesmo canal do
+    # `ultimo_preservados`: atributo na própria função (não cria global novo, o
+    # que quebraria os 3 testes que dão exec neste trecho).
+    _apply_area_honesty.ultimo_ambiguos = list(_ambiguos)
     return filled, blanked
 
 
@@ -9572,6 +9610,44 @@ bloco — só cite os que estão no inventário deste arquivo."""
         if _blanked:
             print(f"[honestidade-m2] job={job_id}: zerei a quantidade de {_blanked} itens de área "
                   f"não-medidos (Vision) — evita m² inventado (regra nº1)")
+        # A trava 4 do passo 7 recusa preencher quando não dá pra saber de qual
+        # prancha (ou de qual página) o item veio. O cliente TEM que saber por
+        # que a linha ficou vazia havendo medição — senão parece que o motor
+        # não mediu nada.
+        try:
+            _amb = list(getattr(_apply_area_honesty, "ultimo_ambiguos", []) or [])
+        except Exception:
+            _amb = []
+        if _amb:
+            _multi = sorted({a[0] for a in _amb if a[1] == "multipagina"})
+            _nome = sorted({a[0] for a in _amb if a[1] == "nome-ambiguo"})
+            _fam = [a for a in _amb if a[1] not in ("multipagina", "nome-ambiguo")]
+            _avs = []
+            if _multi:
+                _avs.append(
+                    "⚠ %d arquivo(s) PDF têm VÁRIAS páginas medidas (%s). Como a "
+                    "planilha guarda o nome do arquivo e não a página, não dá pra "
+                    "saber de qual pavimento cada item veio — então não atribuímos "
+                    "a área a nenhum deles. Envie uma prancha por arquivo que a "
+                    "gente preenche."
+                    % (len(_multi), ", ".join(_multi[:3])))
+            if _nome:
+                _avs.append(
+                    "⚠ %d item(ns) apontam pra pranchas de nomes parecidos demais "
+                    "pra distinguir (%s). Deixamos a área em branco em vez de "
+                    "arriscar o número da prancha errada."
+                    % (len(_nome), ", ".join(_nome[:3])))
+            if _fam:
+                _avs.append(
+                    "⚠ %d prancha(s) têm mais de um item da mesma família (dois "
+                    "pisos, por exemplo) e não dá pra saber qual recebe a área "
+                    "medida — as duas linhas ficaram em branco de propósito."
+                    % len(_fam))
+            project_data.warnings = (
+                getattr(project_data, "warnings", None) or []) + _avs
+            _log_error("motor:passo7-ambiguo",
+                       "não preenchi por ambiguidade: %s" % (_amb[:8],),
+                       job_id, severity="warning")
         try:
             _pres = int(getattr(_apply_area_honesty, "ultimo_preservados", 0) or 0)
             try:

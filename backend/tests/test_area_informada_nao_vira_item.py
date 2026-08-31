@@ -133,9 +133,18 @@ def test_CONTROLE_piso_de_escada_ainda_e_superficie():
     """🪤 A tentação era bloquear a palavra 'escada' pra pegar o rasgo. Piso de
     escada É superfície e tem que continuar sendo — bloqueie o ATO (rasgo,
     abertura, demolição), nunca o objeto."""
-    from engine_rules import is_floor_surface
+    # 🔁 31/08, mesma tarde: a peneira do ATO saiu de `is_floor_surface` e virou
+    # `is_floor_surface_para_criar`. Estava apagando medição NOSSA — ver
+    # test_peneira_do_ato_nao_apaga_medicao.py. A intenção deste teste não muda:
+    # o rasgo não pode receber número inventado. Quem responde isso agora é a
+    # peneira de CRIAR.
+    from engine_rules import is_floor_surface, is_floor_surface_para_criar
     assert is_floor_surface("Piso da escada em granito") is True
-    assert is_floor_surface("Rasgo em laje para nova escada") is False
+    assert is_floor_surface_para_criar("Piso da escada em granito") is True
+    assert is_floor_surface_para_criar("Rasgo em laje para nova escada") is False
+    # e a peneira de PRESERVAR NÃO bloqueia: 13,6 m² medidos de um rasgo são
+    # 13,6 m² medidos (caso Construtora Mr, job eva97d1d)
+    assert is_floor_surface("Remoção de piso cerâmico") is True
 
 
 def test_CONTROLE_revisao_do_cliente_continua_intocada():

@@ -35,11 +35,12 @@ def _fatia_motor():
     i = src.rindex("\n", 0, src.index("_RX_SECAO_PILAR")) + 1
     j = src.index("\ndef _dedupe_revisoes", i)
     from engine_rules import (AREA_UNITS_HONESTY as _A, FLOOR_M2_UNITS as _F,
-                              is_floor_surface as _isf)
+                              is_floor_surface as _isf,
+                              is_floor_surface_para_criar as _isfc)
     from models import Confidence
     import re as _re
     ns = {"__name__": "motor_ns", "_AREA_UNITS_HONESTY": _A, "_FLOOR_M2_UNITS": _F,
-          "_is_floor_surface": _isf, "Confidence": Confidence,
+          "_is_floor_surface": _isf, "_is_floor_surface_criar": _isfc, "Confidence": Confidence,
           "_re_honesty": _re, "_re": _re, "re": _re}
     exec(compile(src[i:j], "main_slice", "exec"), ns)
     return ns
