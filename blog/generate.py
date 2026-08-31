@@ -1072,33 +1072,28 @@ def render_sitemap():
 
 
 def render_robots():
-    # Auditoria SEO 2026-05-23: páginas auth não devem indexar (canibalizam
-    # home com thin content). Páginas pós-login expostas no robots não
-    # acrescentam nada porque exigem JWT.
+    """robots.txt do site.
+
+    🔍 31/08/2026 (auditoria): as 12 páginas pós-login/auth estavam Disallow
+    AQUI **e** com `<meta name="robots" content="noindex">` no HTML — sinal
+    contraditório. Crawler que obedece o Disallow nunca baixa a página, logo
+    NUNCA lê o noindex; e URL bloqueada que recebe link de fora pode acabar
+    listada mesmo assim (sem descrição). Como o objetivo é DESINDEXAR de
+    verdade, o certo é o contrário: deixar rastrear e confiar no noindex, que
+    é a instrução forte. Conferido antes de mexer: as 12 têm meta noindex.
+    🪤 Continuam bloqueados os caminhos que NÃO são HTML nosso (não têm como
+    carregar meta tag): /_* e /backend/.
+    🪤 Regra que fica: página pós-login nova nasce com meta noindex — não
+    precisa mais entrar em lista nenhuma aqui.
+    """
     return f'''User-agent: *
 Allow: /
 
-# Páginas pós-login: não indexar (thin content, exigem auth)
-Disallow: /admin.html
-Disallow: /admin/
-Disallow: /dashboard.html
-Disallow: /projeto.html
-Disallow: /revisao.html
-Disallow: /cronograma.html
-Disallow: /meus-projetos.html
-Disallow: /visualizar-prancha.html
-# 🪤 03/08/2026: estas três nasceram depois da auditoria de 23/05 e ninguém
-# lembrou de acrescentar aqui. Página pós-login/auth nova entra NESTA lista no
-# mesmo commit em que nasce — igual à regra do sitemap logo acima.
-Disallow: /memorial.html
-Disallow: /admin-usuario.html
+# Páginas pós-login e de autenticação NÃO entram aqui de propósito: elas já
+# servem <meta name="robots" content="noindex">, e bloquear o rastreamento
+# impediria o Google de LER essa instrução (auditoria 31/08/2026).
 
-# Páginas de autenticação: não indexar (canibalizam home)
-Disallow: /login.html
-Disallow: /cadastro.html
-Disallow: /redefinir-senha.html
-
-# Diretórios técnicos
+# Diretórios técnicos (não são HTML nosso, não têm meta tag)
 Disallow: /_*
 Disallow: /backend/
 

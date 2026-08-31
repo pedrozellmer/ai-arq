@@ -10,7 +10,12 @@
   <link rel="stylesheet" href="/tailwind.min.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3" integrity="sha384-l8ah+VgaWtk1mvOe9VC+OirC6qHFF4yH7l7mKRidV9MSti3E9F463bMp6ZVN4kuC" crossorigin="anonymous" defer></script>
+  <!-- 31/08 (auditoria): era a ÚNICA das 16 páginas a pedir o SDK pela URL
+     SEM caminho de arquivo — o jsdelivr resolve por redirect, e o dia em
+     que ele mudar o arquivo padrão o integrity não bate mais e o script
+     não carrega (falha CALADA: a página abre sem login). Agora usa a URL
+     canônica e o mesmo hash das outras páginas. -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous" defer></script>
   <script src="toast.js"></script>
 <script src="aiarq-utils.js" defer></script>
   <style>

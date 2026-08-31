@@ -644,7 +644,7 @@
         <span class="text-xl" aria-hidden="true">🔄</span>
         <div class="flex-1 min-w-0">
           <p class="text-xs font-semibold text-gray-800">Reprocessar com motor atualizado</p>
-          <p id="reprocess-desc" class="text-xs text-gray-500">Gere a planilha de novo com a versão mais nova do motor. <strong>1× grátis por projeto.</strong></p>
+          <p id="reprocess-desc" class="text-xs text-gray-500">Gere a planilha de novo com a versão mais nova do motor. <strong>1× por projeto</strong> — se precisar de mais, é só criar um projeto novo (no beta são ilimitados e grátis).</p>
         </div>
         <!-- 🆕 18/08/2026: dá pra reprocessar MUDANDO A PERGUNTA, sem subir
              arquivo de novo. Caso Elizeu (orçamentista): pediu Estrutura e
@@ -2528,8 +2528,8 @@ function renderHeader(p) {
         const _aviso = _novoTipo
           ? `Reprocessar lendo este projeto como ${_novoTipo === 'estrutura' ? 'ESTRUTURA' : 'ARQUITETURA'}? ` +
             `São os mesmos arquivos — muda o que o motor procura neles. ` +
-            `A planilha atual será substituída. Você tem 1 reprocessamento grátis por projeto.`
-          : 'Reprocessar este projeto com a última versão do motor? A planilha atual será substituída. Itens já revisados ficam junto ao projeto original. Você tem 1 reprocessamento grátis por projeto.';
+            `A planilha atual será substituída. É 1 reprocessamento por projeto — precisando de mais, crie um projeto novo (grátis e ilimitado no beta).`
+          : 'Reprocessar este projeto com a última versão do motor? A planilha atual será substituída. Itens já revisados ficam junto ao projeto original. É 1 reprocessamento por projeto — precisando de mais, crie um projeto novo (grátis e ilimitado no beta).';
         const ok = window.toast
           ? await window.toast.confirm(_aviso, { ok: 'Reprocessar', cancel: 'Cancelar' })
           : confirm(_aviso);
