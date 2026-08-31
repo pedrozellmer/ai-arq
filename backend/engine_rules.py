@@ -296,6 +296,16 @@ FLOOR_AREA_BLOCK_KW = (
     # piso de raspão — pego no teste real do LAAV (bancada, bebedouro). "m do piso"
     # (não "h=") pra não bloquear contrapiso com espessura tipo "H=5cm".
     "m do piso", "bancada", "balcão", "balcao", "bebedouro", "purificador",
+    # 🩸 31/08/2026 (caso Flavio, job f271473f): "Rasgo em laje de concreto
+    # armado para implantação de nova escada" herdou a ÁREA TOTAL informada
+    # pelo cliente e saiu com 400 m² — um vão de escada caracol. São palavras
+    # do ATO de intervenção parcial: o item MENCIONA laje/piso, mas cobre um
+    # recorte, não a superfície.
+    # 🪤 NÃO acrescentar "escada" nem "corte": `is_floor_surface("Piso da
+    # escada em granito")` é True hoje e ISSO ESTÁ CERTO — piso de escada é
+    # superfície. Bloquear o objeto derrubaria o caso legítimo; bloqueie o ATO.
+    "rasgo", "abertura", "vão", "vao", "furo", "recorte", "demoli", "remoç",
+    "remoc", "shaft",
 )
 
 

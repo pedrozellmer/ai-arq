@@ -4844,12 +4844,29 @@ def _apply_post_consolidation_rules(items: list) -> tuple[list, int]:
             n_changed += 1
 
     # ── 🅑 Dedup por layer m² ──
+    # 🩸 31/08/2026 — LAYER DE ANOTAÇÃO NÃO É SOBREPOSIÇÃO (caso Prof. Moab,
+    # job 2de6625f). A regra abaixo assume que dois itens no mesmo layer podem
+    # ser a mesma geometria contada duas vezes — verdade em layer de PAREDE,
+    # falso em layer de TEXTO, onde todo rótulo mora junto por definição.
+    # No projeto dele, forro (55 m²), laje impermeabilizada (15), piso tátil
+    # direcional (2) e piso tátil de alerta (0,5) foram acusados de duplicata
+    # porque os RÓTULOS deles estão todos em 'G-ANNO-TEXT'. São quatro coisas
+    # diferentes, em lugares diferentes.
+    # 📊 Medido no banco no mesmo dia: 553 avisos de sobreposição, **138 (26%)
+    # em layer de anotação** — 1 em cada 4 é falso, em 22 projetos.
+    # 🩸 Por que isso é caro: em 31/08 um cliente APAGOU um item por causa
+    # deste aviso. Aviso falso manda o cliente apagar linha certa — e exclusão
+    # é justamente o sinal que a gente acabou de destravar pra aprender.
+    _LAYER_ANOTACAO = ("anno", "text", "texto", "cota", "dim", "detl",
+                       "legend", "title", "carimbo", "anota", "hach")
     by_layer: dict[str, list] = {}
     for it in items:
         if (it.unit or "").lower() not in ("m²", "m2", "m³", "m3"):
             continue
         layer = _extract_layer_from_obs(it.observations or "")
         if not layer:
+            continue
+        if any(k in layer.lower() for k in _LAYER_ANOTACAO):
             continue
         by_layer.setdefault(layer, []).append(it)
 
@@ -5918,6 +5935,11 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # 🚨 23/08 (auditoria): duas travas na preservação, porque texto não é prova.
     _mediu_linear = _tem_comprimento_medido(items)
     filled = blanked = preservados = 0
+    # 🩸 31/08 (caso Flavio): quantas vezes a área informada já foi
+    # atribuída, por família de superfície. A soma das superfícies
+    # horizontais não pode passar do total declarado — 6 itens com 400 m²
+    # num imóvel de 400 m² são 2.400 m² de piso e forro.
+    _usou_area_informada = {}
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -5942,9 +5964,33 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # Regra dura nº7: o que veio da revisão do cliente não se toca, nunca.
         if str(getattr(it, "origem", "") or "") == "revisao_cliente":
             continue
+        # 🩸 31/08/2026 — CASO FLAVIO (job f271473f). Este ramo não olhava
+        # NENHUM valor: bastava ser superfície e o cliente ter informado a área.
+        # Resultado em 16 PDFs: 6 itens saíram com 400 m² — a área que ELE
+        # digitou —, incluindo "Rasgo em laje para nova escada" e uma "Área
+        # Gourmet" cuja própria observação dizia 18,05 m². 0% medido.
+        # TRÊS TRAVAS, todas do mesmo princípio: declaração do cliente é BASE
+        # pra linha vazia, nunca substituto de número que já existe.
+        #   (a) `q == 0`  — só preenche linha ZERADA. Linha com número é
+        #       resposta de alguém (a IA leu, ou o cliente digitou); a mesma
+        #       regra que a linha 5943 já aplica pra origem='revisao_cliente'.
+        #       Isto sozinho salva a Área Gourmet.
+        #   (b) sem medição vetorial no job — tendo medido, a declaração NÃO
+        #       vira valor (regra nº3: declaração/ratio ALERTA, não vira
+        #       número). De quebra, faz o ramo do pdfvec logo abaixo deixar de
+        #       ser código morto quando o cliente informa a área.
+        #   (c) teto por FAMÍLIA: no máximo uma superfície de piso e uma de
+        #       forro herdam a área total. Da 2ª em diante, não preenche.
+        _fam = ("forro" if any(k in (getattr(it, "description", "") or "").lower()
+                               for k in ("forro", "teto"))
+                else "piso")
         if (informado and u in _FLOOR_M2_UNITS
                 and _is_floor_surface(getattr(it, "description", ""))
+                and q == 0
+                and float(pdfvec_m2 or 0) <= 0
+                and _usou_area_informada.get(_fam, 0) < 1
                 and not (apenas_preencher and q > 0)):
+            _usou_area_informada[_fam] = _usou_area_informada.get(_fam, 0) + 1
             it.quantity = round(float(total_area), 2)
             try:
                 it.confidence = Confidence("estimado")
@@ -5982,10 +6028,20 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 pass
             _o = _limpa_aviso_nao_medida(it.observations or "")
             if "geometria do pdf" not in _o.lower():
-                _o = (_o + " | Medido da GEOMETRIA do PDF (%.2f m² de ambientes), "
-                      "com escala lida do carimbo e NÃO confirmada por cota — "
-                      "confira a escala do seu PDF antes de orçar."
-                      % float(pdfvec_m2)).strip(" |")
+                # 🩸 31/08: aqui ia `%.2f m² de ambientes` com `pdfvec_m2`, que é
+                # a SOMA de TODAS as páginas do job — num projeto de 16 pranchas
+                # do mesmo imóvel, a mesma casa contada várias vezes (741,8 m²
+                # num imóvel de 400). O item de 18 m² recebia a observação
+                # "Medido da GEOMETRIA do PDF (741.80 m² de ambientes)", que é
+                # falso sobre ele. Enquanto a medição não for guardada POR
+                # PRANCHA, a frase vai sem número — dizer menos é melhor que
+                # dizer errado.
+                # 🪤 A procedência ("geometria do PDF") CONTINUA na frase: ela é
+                # verdadeira e é o que o produto promete entregar quando não dá
+                # pra provar a escala. O que saiu foi só o NÚMERO.
+                _o = (_o + " | Medido da GEOMETRIA do PDF, com escala lida do "
+                      "carimbo e NÃO confirmada por cota — confira a escala do "
+                      "seu PDF antes de orçar.").strip(" |")
             it.observations = _o
             preservados += 1
         elif (q > 0 and _pd_ok
