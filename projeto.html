@@ -2748,6 +2748,18 @@ function sendFeedback(score) {
 // exatamente o tipo de perda que a gente nao pode ter.
 // `keepalive` e o unico jeito de a requisicao sobreviver ao fechamento da aba
 // levando o header Authorization (sendBeacon nao manda header).
+// 🚨 31/08, AUDITORIA DO MESMO DIA — a 1a versao disto marcava `_fbPosted =
+// true` ANTES de saber o resultado, nunca lia a resposta e nunca gravava o
+// localStorage. Trocar de aba no desktop, ou trocar de app no celular, e o
+// evento mais comum que existe — e o estrago era o ESPELHO do bug que este
+// mesmo dia veio consertar: antes a tela agradecia sem gravar; depois passou a
+// ACUSAR FALHA tendo gravado. A pessoa voltava, clicava "Enviar comentario",
+// `_fbFlush` devolvia false na hora (porque `_fbPosted` ja era true) e a tela
+// escrevia "Nao consegui salvar sua avaliacao". Como o localStorage nao tinha
+// sido marcado, ela recarregava, o cartao reaparecia, ela avaliava de novo — e
+// /api/nps e INSERT puro, entao virava LINHA DUPLICADA.
+// 🔑 So marca como enviado quem CONFIRMOU a gravacao. Falhou, `_fbPosted` volta
+// a false pra proxima tentativa valer.
 function _fbSalvaAntesDeSair() {
   if (_fbPosted || _fbScore === null) return;
   _fbPosted = true;
@@ -2762,8 +2774,17 @@ function _fbSalvaAntesDeSair() {
         user_id: '', user_email: '', score: _fbScore, comment: txt,
         context: 'after_project', job_id: jobId,
       }),
-    });
-  } catch (e) { /* best-effort: e a ultima chance mesmo */ }
+    }).then(function (r) {
+      return r && r.ok ? r.json().catch(function () { return null; }) : null;
+    }).then(function (d) {
+      if (d && d.status === 'ok') {
+        // gravou mesmo: nao pergunta de novo e nao acusa falha depois
+        try { localStorage.setItem('aiarq_fb_' + jobId, '1'); } catch (e) {}
+      } else {
+        _fbPosted = false;   // deixa a proxima tentativa acontecer
+      }
+    }).catch(function () { _fbPosted = false; });
+  } catch (e) { _fbPosted = false; }
 }
 window.addEventListener('pagehide', _fbSalvaAntesDeSair);
 document.addEventListener('visibilitychange', function () {

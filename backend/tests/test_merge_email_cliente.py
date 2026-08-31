@@ -60,14 +60,25 @@ def _so_o_que_o_cliente_le(nome):
     2. o guarda procurava uma frase inteira que, no código, está QUEBRADA em
        duas linhas — e acusava falta do que estava lá.
 
-    Aqui sai a docstring e o espaço em branco vira espaço simples."""
+    3. (31/08) o guarda lia o COMENTÁRIO. Eu documentei um bug do teto semanal
+       citando a frase "refizemos a leitura" pra explicar o estrago, e o teste
+       acusou o e-mail do merge de dizer o que ele não diz. É o engano nº1 de
+       novo, em outra roupa — e é o erro assinatura desta casa: ler comentário
+       como código.
+
+    🪤 NÃO dá pra cortar todo "#": o HTML do e-mail é cheio de cor (#FFFBEB).
+    Só sai a linha cujo primeiro caractere não-branco é "#" — que é como os
+    comentários deste arquivo são escritos.
+
+    Aqui saem a docstring e os comentários; o espaço em branco vira simples."""
     corpo = _corpo(nome)
     aspas = corpo.find('"""')
     if aspas > 0:
         fim = corpo.find('"""', aspas + 3)
         if fim > 0:
             corpo = corpo[:aspas] + corpo[fim + 3:]
-    return " ".join(corpo.split())
+    linhas = [ln for ln in corpo.splitlines() if not ln.lstrip().startswith("#")]
+    return " ".join(" ".join(linhas).split())
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -462,3 +473,22 @@ def test_o_rebaixamento_do_merge_corrige_o_PLACAR():
     i = c.index("_rebaixados = _ssg_m(")
     assert "med_merge = sum(" in c[i:i + 1400], (
         "o placar nao e recalculado depois do rebaixamento")
+
+
+def test_CONTROLE_o_filtro_de_comentario_nao_cegou_o_guarda():
+    """🧪 31/08 — depois de ensinar o helper a ignorar comentário, ele podia ter
+    virado cego. Prova nos dois sentidos, sem tocar em arquivo nenhum."""
+    def _limpa(txt):
+        linhas = [ln for ln in txt.splitlines() if not ln.lstrip().startswith("#")]
+        return " ".join(" ".join(linhas).split())
+
+    # a frase num COMENTÁRIO não é achado (era o alarme falso)
+    assert "refizemos a leitura" not in _limpa(
+        '    # o filhote diz "refizemos a leitura"\n'
+        '    corpo = "Combinamos as duas leituras"').lower()
+    # a frase no TEXTO DO CLIENTE continua sendo achado
+    assert "refizemos a leitura" in _limpa(
+        '    # comentário inocente\n'
+        '    corpo = "Refizemos a leitura do seu projeto"').lower()
+    # e a cor do HTML não pode ser comida pelo filtro
+    assert "#FFFBEB" in _limpa('    corpo = "background:#FFFBEB;padding:10px"')

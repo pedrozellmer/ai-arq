@@ -12104,9 +12104,21 @@ def emails_auto_tick(request: Request, dry: int = 0):
         _ja_deu_nps = set()
         try:
             _corte_nps = (now - timedelta(days=60)).isoformat()
-            for _r in _supa_rows("GET", "nps_responses",
-                                 params={"select": "user_email",
-                                         "created_at": f"gte.{_corte_nps}"}):
+            # 🚨 31/08 (auditoria): aqui era `_supa_rows`, e ele tem try/except
+            # PRÓPRIO — devolve `[]` em qualquer falha (HTTP 400/500, timeout,
+            # rede fora). O `except` abaixo, que promete "na dúvida ninguém
+            # recebe", era INALCANÇÁVEL para exatamente a falha que ele foi
+            # escrito pra pegar: a leitura quebrava, `_ja_deu_nps` ficava um set
+            # VAZIO, e a pesquisa saía pra todo mundo elegível — inclusive quem
+            # respondeu ontem pelo widget. Com 5 avaliações em toda a história
+            # do produto, perguntar de novo a quem acabou de responder queima o
+            # canal. É o mesmo buraco de sempre: vazio ≠ falhou.
+            _st_nps, _rows_nps = _supa_rest_service(
+                "GET", "nps_responses",
+                params={"select": "user_email", "created_at": f"gte.{_corte_nps}"})
+            if _st_nps != 200:
+                raise RuntimeError("HTTP %s ao ler nps_responses" % _st_nps)
+            for _r in (_rows_nps or []):
                 _e3 = (_r.get("user_email") or "").strip().lower()
                 if _e3:
                     _ja_deu_nps.add(_e3)
@@ -12114,6 +12126,9 @@ def emails_auto_tick(request: Request, dry: int = 0):
             # 🪤 Falha aqui NÃO pode virar "manda pra todo mundo": na dúvida,
             # ninguém recebe a pesquisa neste tick.
             print(f"[emails-auto] nao consegui ler NPS recente, pulando pesquisa: {_en}")
+            _log_error("emails:nps-relacional",
+                       f"não consegui ler quem já respondeu NPS ({_en}) — "
+                       f"pesquisa PULADA neste tick de propósito", severity="warning")
             _ja_deu_nps = None
         if _ja_deu_nps is not None:
             _idade_por_email = {}
@@ -20367,7 +20382,18 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
         preheader="%d itens medidos do CAD, contra %d na leitura anterior. "
                   "A sua versão original continua no painel."
                   % (depois.get("medidos", 0), antes.get("medidos", 0)))
-    return _send_email_smtp(email, subject, html, log_kind="leitura_combinada")
+    # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
+    # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
+    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
+    # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
+    # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
+    # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
+    # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
+    # os transacionais também, e isso calaria a esteira inteira.
+    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_combinada")
+    if _ok:
+        _email_auto_registrar(email, "leitura_combinada", ref=merge_job or "")
+    return _ok
 
 
 def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) -> bool:
@@ -20469,7 +20495,18 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
         badge="&#10003; Atualizado",
         reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.",
         preheader=_pre)
-    return _send_email_smtp(email, subject, html, log_kind="leitura_nova")
+    # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
+    # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
+    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
+    # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
+    # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
+    # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
+    # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
+    # os transacionais também, e isso calaria a esteira inteira.
+    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_nova")
+    if _ok:
+        _email_auto_registrar(email, "leitura_nova", ref=filho_job or "")
+    return _ok
 
 @app.get("/api/admin/onde-o-motor-erra")
 def admin_onde_o_motor_erra(request: Request):
