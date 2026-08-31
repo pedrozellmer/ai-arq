@@ -239,7 +239,11 @@ def generate_how_it_works() -> str:
 
     # CTA
     f_cta = _f(22, "Medium")
-    cta = "Primeiro projeto grátis  ·  ai.arq.br"
+    # 🚨 REGRA DURA DE COPY: a promessa é grátis e ILIMITADO no beta, sem
+    # cartão — NUNCA "1º/primeiro projeto grátis" (oferta antiga, valeu até
+    # 22/07/2026). Aqui a frase é DESENHADA dentro do PNG: legenda limpa com
+    # arte mentindo já aconteceu em 10/08. Guarda: test_promessa_do_beta.py
+    cta = "Grátis e ilimitado no beta  ·  ai.arq.br"
     draw.text((_cx(cta, f_cta, w), h - 115), cta, font=f_cta, fill=CYAN_SOFT)
 
     _logo(draw, w, h)
@@ -313,7 +317,7 @@ def generate_features_post(
 
 def generate_promo_post(
     headline: str = "Planilha de quantitativos em minutos, não em dias",
-    subtitle: str = "Envie as pranchas do projeto e receba os quantitativos SINAPI prontos. Você só precifica. Primeiro projeto grátis!",
+    subtitle: str = "Envie as pranchas do projeto e receba os quantitativos SINAPI prontos. Você só precifica. Grátis e ilimitado no beta!",
     cta: str = "Teste Grátis",
 ) -> str:
     """Post 3: Promo/institucional sobre foto de prédio."""
@@ -532,7 +536,8 @@ def generate_pricing_post(photo: str = "building.jpg") -> str:
     # Destaque grátis
     fy = y + 20
     f_free = _f(26, "SemiBold")
-    draw.text((_cx("Primeiro projeto grátis!", f_free, w), fy), "Primeiro projeto grátis!", font=f_free, fill=CYAN)
+    _free = "Grátis e ilimitado no beta!"
+    draw.text((_cx(_free, f_free, w), fy), _free, font=f_free, fill=CYAN)
 
     f_nc = _f(20, "Light")
     draw.text((_cx("Sem cartão de crédito", f_nc, w), fy + 38), "Sem cartão de crédito", font=f_nc, fill=WHITE_50)
