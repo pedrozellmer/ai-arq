@@ -17061,7 +17061,17 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
     # aberta há uma hora com valor velho em memória. A verdade é o que está
     # gravado no instante da edição.
     _antes = None
-    if action == "edit":
+    # 🩸 31/08/2026 — TAMBÉM NO REJECT, e por um motivo que custou 4 meses de
+    # sinal: a exclusão do cliente se AUTODESTRUÍA. `item_reviews.item_id` tem
+    # FK pra `project_items` com ON DELETE CASCADE; o reject gravava a linha e
+    # logo abaixo apagava o item — o banco levava o registro junto. Medido em
+    # 31/08: 184 aprovações e 108 edições desde abril, e **ZERO exclusões** em
+    # toda a história, com o botão da lixeira existindo (e ganhando confirmação
+    # dupla em 09/08, ou seja: gente usa).
+    # 🔑 Exclusão é o sinal MAIS direto de erro do motor — o cliente dizendo
+    # "isto não existe na minha obra". Sem o "antes", o registro que sobrevive
+    # não diz O QUE sumiu, e não serve pra nada.
+    if action in ("edit", "reject"):
         try:
             _st_a, _rows_a = _supa_rest_service(
                 "GET", f"project_items?id=eq.{item_id}&job_id=eq.{job_id}"
@@ -17074,12 +17084,21 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
 
     review_row = {
         "job_id": job_id,
-        "item_id": item_id,
+        # 🪤 No REJECT o vínculo fica NULO de propósito: a FK é ON DELETE
+        # CASCADE e o item é apagado 20 linhas abaixo — com o vínculo, o banco
+        # apagaria este registro junto (foi assim que perdemos TODAS as
+        # exclusões desde abril). O id real vai preservado dentro de `edits`,
+        # que é jsonb e não tem FK nenhuma. Assim o rastro sobrevive sem
+        # precisar mexer no schema em produção.
+        "item_id": (None if action == "reject" else item_id),
         "action": action,
         "edits": payload.edits or None,
         "comment": payload.comment or "",
         "reviewed_by": payload.reviewed_by or "",
     }
+    if action == "reject":
+        review_row["edits"] = dict(payload.edits or {})
+        review_row["edits"]["_item_id"] = str(item_id)
     if _antes:
         # Vai dentro de `edits` sob a chave `_antes` pra não exigir migração de
         # coluna (edits é jsonb). Quem lê o par usa edits['_antes'].
