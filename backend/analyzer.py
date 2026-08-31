@@ -931,6 +931,12 @@ def _ambiente_context(ambiente: str) -> str:
     return f"\nAMBIENTE: {ambiente}. Extraia itens relevantes visíveis na prancha.\n"
 
 
+# 🔑 A MARCA DA SEÇÃO DE MEDIÇÃO, num lugar só. `main.py` escreve, este
+# arquivo procura — se as duas strings divergirem, a medição volta a ser
+# cortada em silêncio, que é o bug de 31/08.
+# Guarda: backend/tests/test_medicao_chega_na_ia.py
+MARCA_MEDICAO_VETORIAL = "=== MEDIÇÕES VETORIAIS DA PRANCHA"
+
 from processor import MAX_CROP_BYTES  # noqa: E402  (fonte unica do teto)
 
 
@@ -1071,9 +1077,26 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
     content = []
 
     if sheet.text_content.strip():
+        # 🩸 31/08/2026 — O CORTE JOGAVA FORA A MEDIÇÃO GEOMÉTRICA INTEIRA.
+        # `main.py` monta o texto da prancha como `text[:5000] + _vet_secao`, ou
+        # seja: a seção "=== MEDIÇÕES VETORIAIS DA PRANCHA ===" — o bloco que diz
+        # à IA quantos m² NÓS medimos naquela página — é colada no FIM. Aqui o
+        # corte era `[:3000]`. Numa prancha com 3000+ caracteres de texto
+        # extraível, a seção sumia por completo antes de chegar ao modelo, e a
+        # medição que o motor tinha acabado de fazer não influenciava nada.
+        # 🪤 A correlação é ADVERSA: a seção só existe quando o PDF é VETORIAL —
+        # e PDF vetorial é justamente o que tem muito texto extraível. O corte
+        # tendia a apagar a medição exatamente onde ela existia.
+        # Agora o corte vale só pro texto da prancha; a medição vai INTEIRA.
+        _txt = sheet.text_content
+        _i_med = _txt.find(MARCA_MEDICAO_VETORIAL)
+        if _i_med >= 0:
+            _corpo, _medicao = _txt[:_i_med], _txt[_i_med:]
+        else:
+            _corpo, _medicao = _txt, ""
         content.append({
             "type": "text",
-            "text": f"Texto extraído do PDF:\n{sheet.text_content[:3000]}"
+            "text": f"Texto extraído do PDF:\n{_corpo[:3000]}{_medicao}"
         })
 
     for crop_path in sheet.crops[:4]:  # Max 4 imagens por prancha (economia de memória)

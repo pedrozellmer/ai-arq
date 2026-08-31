@@ -8587,6 +8587,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             _linhas.append(f"Ambientes MEDIDOS geometricamente: {_vm['n_rooms']} somando {_vm.get('rooms_m2', 0)} m² (maiores: {_vm.get('top_rooms')} m²).")
                         if _vm.get("walls_m"):
                             _linhas.append(f"Paredes/divisórias MEDIDAS: {_vm['walls_m']} m ({_vm.get('n_walls')} segmentos).")
+                        # 🪤 31/08 — NÃO "CONSERTE" O 'confirmado' DAQUI. Ele parece
+                        # violar a regra dura nº1 (item de PDF nunca sai confirmado) e
+                        # não viola: `_pdf_downgrade` rebaixa TODO 'confirmado' de PDF
+                        # pra 'estimado' logo adiante. O selo aqui é um CANAL: é assim
+                        # que o código descobre quais itens a IA baseou nesta medição,
+                        # pra escrever a procedência ("lido de PDF, não medido em
+                        # geometria"). Tirar a palavra apagaria esse sinal.
+                        # Eu já troquei a frase equivalente no LOG hoje (passo 3iii)
+                        # porque lá ela era só promessa falsa — aqui ela trabalha.
                         _linhas.append(
                             "REGRA: itens de ÁREA (piso/forro/pintura de área) e COMPRIMENTO de parede "
                             "baseados EXATAMENTE nestes valores podem sair com confidence 'confirmado' "
