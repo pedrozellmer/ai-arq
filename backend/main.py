@@ -5936,7 +5936,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _pd_ok = float(pe_direito or 0) > 0
     # 🚨 23/08 (auditoria): duas travas na preservação, porque texto não é prova.
     _mediu_linear = _tem_comprimento_medido(items)
-    filled = blanked = preservados = 0
+    filled = blanked = preservados = criados_prancha = 0
     # 🩸 31/08 (caso Flavio): quantas vezes a área informada já foi
     # atribuída, por família de superfície. A soma das superfícies
     # horizontais não pode passar do total declarado — 6 itens com 400 m²
@@ -5960,6 +5960,18 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     #
     # 🪤 O casamento é por PREFIXO do nome do arquivo: `ref_sheet` pode vir
     # como "planta.pdf (hint da IA)" — comparar string inteira nunca casa.
+    # 🩸 31/08 (auditoria): a família era decidida por SUBSTRING —
+    # `"teto" in "arquiteto"` é True, então "Piso de porcelanato do arquiteto"
+    # (ou qualquer descrição com 'arquiteto', 'teto de vidro temperado'...) era
+    # classificado como FORRO. Efeito: o item de piso gastava a cota do forro,
+    # e aí DOIS pisos podiam receber a área total do pavimento — que é
+    # exatamente o erro do "resumo geral somado em dobro" (28/08).
+    # 🪤 Fronteira de PALAVRA, não substring. E "forro" fica sem fronteira à
+    # direita de propósito: "forros" e "forro(s)" contam.
+    def _familia_da_superficie(desc):
+        _d0 = (desc or "").lower()
+        return "forro" if _re_honesty.search(r"\bforro|\btetos?\b", _d0) else "piso"
+
     _pp = dict(pdfvec_por_prancha or {})
     _medida_da_prancha = {}
     _ambiguos = []
@@ -6028,8 +6040,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                     _ambiguos.append((_rs, "nome-ambiguo", len(_casaram)))
             if not _achou:
                 continue
-            _fam2 = ("forro" if any(k in _d.lower() for k in ("forro", "teto"))
-                     else "piso")
+            _fam2 = _familia_da_superficie(_d)
             _cand.setdefault((_achou[0], _fam2), []).append((_it, _achou[1]))
         for (_arq, _fam2), _lista in _cand.items():
             if len(_lista) == 1:
@@ -6077,9 +6088,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         #       ser código morto quando o cliente informa a área.
         #   (c) teto por FAMÍLIA: no máximo uma superfície de piso e uma de
         #       forro herdam a área total. Da 2ª em diante, não preenche.
-        _fam = ("forro" if any(k in (getattr(it, "description", "") or "").lower()
-                               for k in ("forro", "teto"))
-                else "piso")
+        _fam = _familia_da_superficie(getattr(it, "description", ""))
         if (informado and u in _FLOOR_M2_UNITS
                 and _is_floor_surface_criar(getattr(it, "description", ""))
                 and q == 0
@@ -6157,7 +6166,29 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 "não conferimos item a item — confira antes de orçar."
                 % (_m.get("arquivo"), float(_m.get("rooms_m2") or 0),
                    _m.get("scale"), _fonte2)).strip(" |")
-            preservados += 1
+            # 🚨 31/08 (auditoria): o passo 7 é o ÚNICO ramo que CRIA número, e
+            # era o único sem teto. O teto que a casa já tem
+            # (`_check_plausibility`, "área > 1,5× a área da laje") roda ANTES
+            # deste ponto, com a linha ainda zerada — nunca alcança este número.
+            # Provado rodando: 2.000 m² gravados num imóvel que o cliente
+            # declarou ter 400. O cabeçalho deste passo promete "quatro travas,
+            # todas pra errar PRA MENOS"; esta errava pra mais.
+            # 🪤 ALERTA, não zera (regra nº3: ratio ALERTA, nunca decide).
+            # Zerar puniria o cliente que informou só a área de intervenção.
+            if informado and it.quantity > 1.5 * float(total_area or 0):
+                it.observations = (
+                    it.observations + " | ⚠ REVISAR: %.1f m² é mais que 1,5× a área "
+                    "que você informou (%.0f m²). A prancha pode ser de outro "
+                    "pavimento, ou a escala do carimbo pode estar errada."
+                    % (it.quantity, float(total_area))).strip(" |")
+            # 🚨 31/08 (auditoria): isto aqui somava em `preservados`, e o passo
+            # 7 é o ÚNICO ramo que CRIA número — o cabeçalho da função diz isso
+            # em maiúsculas. O log saía "preservei N item(ns) com procedência de
+            # geometria do PDF (0.00 m² de ambientes)": verbo errado, e uma
+            # procedência que não participou da conta. É a MESMA família do
+            # `preservados_por_pe_direito` que já custou um conserto em 26/08 —
+            # instrumento mentindo sobre o que o motor fez.
+            criados_prancha += 1
         elif (q > 0 and _pd_ok
               and (str(getattr(it, "origem", "") or "") == "deriv_pd"
                    or (_mediu_linear
@@ -6208,7 +6239,13 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                        else f"geometria do PDF ({float(pdfvec_m2 or 0):.2f} m² de ambientes)")
         print(f"[honestidade-m2] preservei {preservados} item(ns) de área com "
               f"procedência de {_fonte_pres} — seguem estimados")
+    if criados_prancha:
+        # verbo certo (CRIEI) e procedência certa (a prancha do item, não a soma)
+        print(f"[honestidade-m2] passo 7: CRIEI {criados_prancha} número(s) em "
+              f"linha zerada, com a medição da PRÓPRIA prancha de cada item — "
+              f"seguem estimados")
     _apply_area_honesty.ultimo_preservados = preservados   # o caller loga no projeto
+    _apply_area_honesty.ultimo_criados_prancha = criados_prancha
     # 🚨 31/08, auditoria: `_ambiguos` era preenchido e NUNCA lido — o comentário
     # da trava 4 prometia que "o projeto ganha um aviso" e o aviso não existia.
     # Instrumento que nasce morto é achado recorrente aqui. Mesmo canal do
@@ -9752,6 +9789,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _log_error("motor:honestidade-area",
                            f"preenchidos={_n_fill} zerados={_blanked} "
                            f"preservados={_pres} "
+                           f"criados_prancha={getattr(_apply_area_honesty, 'ultimo_criados_prancha', 0)} "
                            f"resgate_pdf={_n_resgate_pdf_log}", job_id)
         except Exception:
             pass
@@ -13454,14 +13492,44 @@ def registrar_avaliacao(payload: NotaAvaliacao):
             raise HTTPException(403, "link inválido ou expirado")
         if not (1 <= n <= 5):
             raise HTTPException(400, "nota fora da escala (1 a 5)")
-        ok = _supabase_insert("processing_survey", {
-            "job_id": payload.k or "", "user_email": email,
-            "question_key": "nota_entrega_1a5", "answer": str(n)})
+        # 🩸 31/08 (auditoria): aqui era INSERT cego. Dar F5 na página de
+        # obrigado, ou clicar uma segunda estrela, criava LINHA NOVA — e
+        # disparava o alerta pro admin de novo. Numa base com 5 avaliações em
+        # toda a história, duplicata não é ruído: é metade do dado.
+        # 🔑 Uma nota por (projeto, pessoa). Clicou de novo, TROCA a nota — que
+        # é o que a pessoa quis dizer ao clicar de novo.
+        _ja, _id_ant, _nota_ant = None, "", None
+        try:
+            _ja = _supa_rows("GET", "processing_survey",
+                             params={"job_id": f"eq.{payload.k or ''}",
+                                     "user_email": f"eq.{email}",
+                                     "question_key": "eq.nota_entrega_1a5",
+                                     "select": "id,answer",
+                                     "order": "created_at.desc", "limit": "1"})
+            if _ja:
+                _id_ant = str(_ja[0].get("id") or "")
+                _nota_ant = str(_ja[0].get("answer") or "")
+        except Exception as _eja:
+            _log_error("avaliacao:dedup", f"não consegui checar nota anterior: {_eja}",
+                       payload.k)
+        if _id_ant:
+            import urllib.parse as _up2
+            _st_up, _ = _supa_rest_service(
+                "PATCH", f"processing_survey?id=eq.{_up2.quote(_id_ant)}",
+                {"answer": str(n)})
+            ok = 200 <= int(_st_up or 0) < 300
+        else:
+            ok = _supabase_insert("processing_survey", {
+                "job_id": payload.k or "", "user_email": email,
+                "question_key": "nota_entrega_1a5", "answer": str(n)})
         if not ok:
             _log_error("avaliacao:nao-gravou", f"proj job={payload.k} n={n}", payload.k)
             raise HTTPException(502, "não consegui salvar sua nota")
-        _alerta_avaliacao_projeto(payload.k or "", email, n)
-        return {"status": "ok", "escala": "1a5"}
+        # 🪤 O alerta só sai quando a nota MUDA. Sem isto, F5 vira e-mail
+        # repetido pro Pedro sobre a mesma avaliação.
+        if str(n) != (_nota_ant or ""):
+            _alerta_avaliacao_projeto(payload.k or "", email, n)
+        return {"status": "ok", "escala": "1a5", "atualizou": bool(_id_ant)}
 
     if payload.tipo == "nps":
         if not _nota_token_ok("nps", email, payload.t):
@@ -13481,11 +13549,32 @@ def registrar_avaliacao(payload: NotaAvaliacao):
         row = {"user_id": _uid, "user_email": email, "user_name": _nome,
                "score": n, "comment": "", "context": "email_relacional",
                "job_id": ""}
-        if not _supabase_insert("nps_responses", row):
+        # mesma regra do ramo de projeto: uma nota por onda, não uma por clique
+        _id_ant2, _nota_ant2 = "", None
+        try:
+            _ja2 = _supa_rows("GET", "nps_responses",
+                              params={"user_email": f"eq.{email}",
+                                      "context": "eq.email_relacional",
+                                      "select": "id,score",
+                                      "order": "created_at.desc", "limit": "1"})
+            if _ja2:
+                _id_ant2 = str(_ja2[0].get("id") or "")
+                _nota_ant2 = _ja2[0].get("score")
+        except Exception as _eja2:
+            _log_error("avaliacao:dedup", f"não consegui checar NPS anterior: {_eja2}")
+        if _id_ant2:
+            import urllib.parse as _up3
+            _st_up2, _ = _supa_rest_service(
+                "PATCH", f"nps_responses?id=eq.{_up3.quote(_id_ant2)}", {"score": n})
+            _gravou = 200 <= int(_st_up2 or 0) < 300
+        else:
+            _gravou = bool(_supabase_insert("nps_responses", row))
+        if not _gravou:
             _log_error("avaliacao:nao-gravou", f"nps e={email} n={n}")
             raise HTTPException(502, "não consegui salvar sua nota")
-        _alerta_nps(row, "promoter" if n >= 9 else "passive" if n >= 7 else "detractor")
-        return {"status": "ok", "escala": "0a10"}
+        if _nota_ant2 is None or int(_nota_ant2) != n:
+            _alerta_nps(row, "promoter" if n >= 9 else "passive" if n >= 7 else "detractor")
+        return {"status": "ok", "escala": "0a10", "atualizou": bool(_id_ant2)}
 
     raise HTTPException(400, "tipo inválido")
 
@@ -13642,10 +13731,38 @@ _EMAIL_CATALOG = [
 ]
 
 
+def _neutraliza_links_de_avaliacao(html: str) -> str:
+    """Mata os links de nota de um e-mail de EXEMPLO.
+
+    🩸 31/08 (auditoria): o preview e o "Enviar teste pra mim" montam o e-mail
+    pelos MESMOS builders do envio real — então as estrelinhas saíam com token
+    HMAC VÁLIDO pro par (job "exemplo-1234", "cliente@exemplo.com"). Clicar numa
+    delas gravava nota de verdade em `processing_survey`, em produção, e ainda
+    disparava o alerta pro admin. Numa base com 5 avaliações na história inteira,
+    poluir com nota de teste é estragar o pouco que existe.
+    🔑 Neutraliza por VARREDURA, não por parâmetro em cada builder: assim vale
+    pros tipos de e-mail que ainda vão nascer, sem ninguém precisar lembrar.
+    """
+    import re as _re_prev
+    return _re_prev.sub(
+        r'href="[^"]*obrigado\.html\?[^"]*"',
+        'href="#" title="exemplo: link desativado no teste"', html or "")
+
+
 def _render_email_by_type(key: str):
+    """Wrapper: monta o exemplo e MATA os links de nota antes de devolver.
+
+    🚨 O corpo real é `_render_email_by_type_raw`, que tem uma dezena de
+    `return` — envolver por fora garante que NENHUM deles escape da
+    neutralização, inclusive os tipos de e-mail que ainda vão nascer."""
+    subject, html = _render_email_by_type_raw(key)
+    return subject, _neutraliza_links_de_avaliacao(html)
+
+
+def _render_email_by_type_raw(key: str):
     """Devolve (subject, html) de um tipo de email com dados de EXEMPLO. NÃO
-    envia nada. Usado só pelo preview do painel. Levanta KeyError se o tipo não
-    existe."""
+    envia nada. 🚫 Não chame direto: use `_render_email_by_type`, que neutraliza
+    os links de avaliação. Levanta KeyError se o tipo não existe."""
     nome = "Pedro"
     projeto = "Residencial Vila Nova"
     fake_link = "https://ai.arq.br/login.html"

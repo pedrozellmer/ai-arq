@@ -177,18 +177,39 @@ def test_comentario_com_token_errado_e_recusado(monkeypatch):
 
 
 # ── os e-mails ───────────────────────────────────────────────────────────
+# 🪤 31/08, 2ª auditoria: estes dois conferiam o e-mail REAL passando pelo
+# `_render_email_by_type`, que é o caminho do PREVIEW. Quando o preview passou a
+# NEUTRALIZAR os links de nota (o e-mail de teste gravava avaliação de verdade em
+# produção), os dois quebraram — e estavam certos em quebrar: eles guardam uma
+# coisa que o preview não representa mais. Agora chamam os builders do envio
+# REAL, que é onde o link TEM que estar vivo.
 def test_email_de_planilha_pronta_LEVA_os_botoes():
-    _subj, html = main._render_email_by_type("planilha_pronta")
-    assert "/obrigado.html?tipo=projeto" in html
+    _subj, html = main._build_planilha_pronta_email(
+        "Pedro", "Residencial Vila Nova", "job-1234", 42, "",
+        email="cliente@exemplo.com")
+    assert "/obrigado.html?tipo=projeto" in html, (
+        "o e-mail REAL perdeu o link de avaliação")
     assert "A planilha ficou boa?" in html
 
 
 def test_email_de_nps_LEVA_os_botoes_e_a_foto():
-    _subj, html = main._render_email_by_type("nps_relacional")
-    assert "/obrigado.html?tipo=nps" in html
+    _subj, html = main._build_nps_relacional_email("Pedro", "cliente@exemplo.com")
+    assert "/obrigado.html?tipo=nps" in html, (
+        "o e-mail REAL de NPS perdeu o link de avaliação")
     assert "nps-foto.jpg" in html, "e-mail sem a foto do padrao da casa"
     for n in range(0, 11):
         assert f'>{n}</a>' in html, f"faltou o botao {n} na escala 0-10"
+
+
+def test_o_PREVIEW_neutraliza_o_que_o_e_mail_real_leva_vivo():
+    """🧪 O par dos dois de cima: a mesma coisa TEM que estar viva no envio real
+    e MORTA no exemplo. Sem este teste, neutralizar o preview poderia ter
+    escondido uma regressão no e-mail de verdade — foi o que quase aconteceu."""
+    _s1, real = main._build_planilha_pronta_email(
+        "Pedro", "Projeto", "job-1234", 42, "", email="cliente@exemplo.com")
+    _s2, exemplo = main._render_email_by_type("planilha_pronta")
+    assert "/obrigado.html?tipo=projeto" in real
+    assert "/obrigado.html?tipo=projeto" not in exemplo
 
 
 def test_os_dois_aparecem_no_catalogo_do_admin():
