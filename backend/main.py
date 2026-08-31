@@ -17032,6 +17032,44 @@ class ReviewPayload(BaseModel):
     reviewed_by: Optional[str] = ""
 
 
+def monta_linha_de_revisao(job_id, item_id, action, edits, antes,
+                           comment="", reviewed_by=""):
+    """Monta a linha que vai pra `item_reviews`. Separada da rota DE PROPOSITO:
+    assim o guarda EXECUTA isto, em vez de ler o fonte da rota.
+
+    31/08/2026 - por que a separacao existe. O conserto da exclusao nasceu com
+    dois `if` seguidos, cada um refazendo `dict(edits or {})` do zero: o segundo
+    apagava o primeiro e o `_item_id` nunca chegava ao banco. Os 4 testes do
+    conserto passaram porque LIAM O FONTE - a string `_item_id` estava la,
+    escrita e inutil. Quem pegou foi o cliente: os 2 primeiros rejects reais
+    gravaram `_antes` sem `_item_id`.
+
+    Regras que este codigo sustenta:
+      - reject grava `item_id` NULO: a FK e ON DELETE CASCADE e o item e apagado
+        logo depois; com vinculo, o banco apaga o registro junto (foi assim que
+        perdemos TODAS as exclusoes de abril a agosto);
+      - o id real vai em `edits['_item_id']` (jsonb, sem FK nenhuma);
+      - `edits['_antes']` e a foto do item - no reject, a UNICA copia que sobra.
+    """
+    linha = {
+        "job_id": job_id,
+        "item_id": (None if action == "reject" else item_id),
+        "action": action,
+        "edits": edits or None,
+        "comment": comment,
+        "reviewed_by": reviewed_by,
+    }
+    # UMA atribuicao so; enriquece depois. Nunca reatribuir `linha["edits"]`
+    # dentro dos ifs abaixo - foi exatamente esse o bug de 31/08.
+    if action == "reject" or antes:
+        linha["edits"] = dict(edits or {})
+        if action == "reject":
+            linha["edits"]["_item_id"] = str(item_id)
+        if antes:
+            linha["edits"]["_antes"] = antes
+    return linha
+
+
 @app.post("/api/items/{job_id}/review/{item_id}")
 def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, request: Request):
     _require_project_owner(request, job_id)
@@ -17082,28 +17120,9 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
         except Exception as _ea:
             print(f"[revisao] nao consegui ler o 'antes' (nao-fatal): {_ea}")
 
-    review_row = {
-        "job_id": job_id,
-        # 🪤 No REJECT o vínculo fica NULO de propósito: a FK é ON DELETE
-        # CASCADE e o item é apagado 20 linhas abaixo — com o vínculo, o banco
-        # apagaria este registro junto (foi assim que perdemos TODAS as
-        # exclusões desde abril). O id real vai preservado dentro de `edits`,
-        # que é jsonb e não tem FK nenhuma. Assim o rastro sobrevive sem
-        # precisar mexer no schema em produção.
-        "item_id": (None if action == "reject" else item_id),
-        "action": action,
-        "edits": payload.edits or None,
-        "comment": payload.comment or "",
-        "reviewed_by": payload.reviewed_by or "",
-    }
-    if action == "reject":
-        review_row["edits"] = dict(payload.edits or {})
-        review_row["edits"]["_item_id"] = str(item_id)
-    if _antes:
-        # Vai dentro de `edits` sob a chave `_antes` pra não exigir migração de
-        # coluna (edits é jsonb). Quem lê o par usa edits['_antes'].
-        review_row["edits"] = dict(payload.edits or {})
-        review_row["edits"]["_antes"] = _antes
+    review_row = monta_linha_de_revisao(
+        job_id, item_id, action, payload.edits, _antes,
+        payload.comment or "", payload.reviewed_by or "")
     # 24/08: flags de "a escrita PEGOU?" — ver o bloco do return, no fim.
     _escreveu = False
     _tentou_escrever = False      # só 502 quando TENTOU e falhou
