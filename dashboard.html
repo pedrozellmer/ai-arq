@@ -3870,8 +3870,11 @@
       // Download protegido: window.open NÃO enviaria o Authorization header
       // → backend retornaria 401 (bug Daniela 2026-05-18).
       downloadProtected(`${API_BASE}/api/download/${currentJobId}`, `quantitativos_aiarq_${currentJobId}.xlsx`);
-      // Dispara NPS widget 10s depois do download (momento de valor entregue)
-      setTimeout(() => window.__maybeShowNPS && window.__maybeShowNPS('after_download'), 10000);
+      // Dispara o pedido de avaliacao depois do download (valor entregue).
+      // 🪤 31/08: eram 10 s. Quem baixa costuma sair da aba pra abrir o arquivo
+      // — 10 s e tempo de sobra pra ninguem estar mais olhando. 4 s ja deixa o
+      // download comecar sem atropelar a pessoa.
+      setTimeout(() => window.__maybeShowNPS && window.__maybeShowNPS('after_download'), 4000);
     }
   });
   if (btnReview) {
@@ -4648,7 +4651,7 @@
            class="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold no-underline transition shrink-0">Abrir</a>
         ${done ? `<a href="revisao.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
            class="hidden sm:inline text-xs font-semibold text-amber-600 hover:text-amber-800 no-underline shrink-0">Revisar</a>
-        <a href="javascript:void(0)" onclick="event.stopPropagation();window.aiArqDownloadProtected('${API_BASE}/api/download/${escProj(p.job_id)}','quantitativos_aiarq_${escProj(p.job_id)}.xlsx')"
+        <a href="javascript:void(0)" onclick="event.stopPropagation();window.aiArqDownloadProtected('${API_BASE}/api/download/${escProj(p.job_id)}','quantitativos_aiarq_${escProj(p.job_id)}.xlsx');setTimeout(function(){window.__maybeShowNPS&&window.__maybeShowNPS('after_download');},4000)"
            class="hidden sm:inline text-xs font-semibold text-emerald-600 hover:text-emerald-800 no-underline shrink-0">XLSX</a>` : ''}
     ` : '';
 
