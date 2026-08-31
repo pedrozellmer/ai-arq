@@ -3365,14 +3365,20 @@ async function enviarEmailTeste(key, btn) {
       body: JSON.stringify({ type: key })
     });
     const d = await res.json().catch(() => ({}));
-    if (!res.ok || d.status !== 'ok') throw new Error(d.detail || ('HTTP ' + res.status));
+    if (!res.ok || d.status !== 'ok') {
+      console.error('[email-teste] resposta:', res.status, d);
+      throw new Error(d.detail || ('HTTP ' + res.status));
+    }
     btn.innerHTML = '✓ Enviado';
     setTimeout(() => { btn.innerHTML = txt; btn.disabled = false; }, 3000);
   } catch (e) {
     console.error('[email-teste]', e);
     btn.innerHTML = '⚠ Falhou';
-    alert('Não consegui enviar: ' + (e.message || e));
-    setTimeout(() => { btn.innerHTML = txt; btn.disabled = false; }, 3000);
+    // 🪤 Era `alert()`. Alert nativo CONGELA a página inteira: o admin ficou
+    // travado, sem nem dar pra ler o console pra descobrir o que falhou. O
+    // painel já tem toast que não bloqueia — usar ele.
+    _adminToast('Não consegui enviar o teste: ' + (e.message || e), 'error');
+    setTimeout(() => { btn.innerHTML = txt; btn.disabled = false; }, 4000);
   }
 }
 
