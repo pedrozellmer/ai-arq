@@ -13284,7 +13284,16 @@ def admin_email_teste(payload: TesteEmailPayload, request: Request):
     if not ok:
         # 🪤 Nunca responder "enviado" sem ter enviado — o painel diria que
         # está tudo certo e o e-mail nunca chegaria.
-        raise HTTPException(502, "o servidor de e-mail não aceitou a mensagem")
+        # E DEIXAR RASTRO: na 1ª tentativa isto falhou e não havia NADA no
+        # error_log pra dizer por quê — `_send_email_smtp` só faz `print`, que
+        # morre no log do Render. Sem env de SMTP a resposta é a mesma de um
+        # servidor que recusou; o painel precisa saber a diferença.
+        _falta = [k for k in ("SMTP_HOST", "SMTP_USER", "SMTP_PASSWORD")
+                  if not os.getenv(k)]
+        _motivo = ("faltam variáveis de ambiente: " + ", ".join(_falta)) if _falta             else "o servidor de e-mail recusou a mensagem"
+        _log_error("email-teste:falhou", f"tipo={key} para={ADMIN_EMAIL} — {_motivo}",
+                   severity="warning")
+        raise HTTPException(502, f"não enviei: {_motivo}")
     return {"status": "ok", "type": key, "para": ADMIN_EMAIL, "subject": subject}
 
 
