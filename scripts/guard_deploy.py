@@ -113,6 +113,25 @@ def main() -> int:
         return 1
 
     print("✓ nenhum cliente ativo (0 processando, 0 subindo) — pode subir")
+
+    # 🔒 31/08/2026 — 2ª trava: contrato do front. Um recorte que deixou
+    # uma chave pra trás matou o LOGIN em produção por 12 min, com sintaxe
+    # válida e zero erro no console. Nenhum teste de fonte pega isso; só
+    # carregar num browser de verdade pega. Roda só se o JS vigiado mudou.
+    try:
+        import subprocess as _sp
+        _r = _sp.run([sys.executable,
+                      os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                   "guard_front_contrato.py")],
+                     timeout=180)
+        if _r.returncode != 0:
+            sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as _e:
+        print("\n🚦 PUSH BLOQUEADO — não consegui verificar o contrato do "
+              f"front ({type(_e).__name__}). Falha FECHA a porta.")
+        sys.exit(1)
     return 0
 
 

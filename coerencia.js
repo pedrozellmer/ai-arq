@@ -119,9 +119,19 @@
         ? (so.artigo === 'a' ? 'Sua ' : 'Seu ') + so.nome + ' ficou desatualizad' +
           (so.artigo === 'a' ? 'a' : 'o')
         : 'Estes arquivos ficaram desatualizados: ' + alvo,
-      corpo: 'Você ajustou o quantitativo depois (' + motivo(so.info) + '), então ' +
-             alvo + ' ainda ' + plural(velhos.length, 'usa', 'usam') + ' os números ' +
-             'antigos. Vale atualizar antes de mandar pra obra, pro cliente ou pro banco.',
+      // 🩸 31/08: a frase saía redundante e ninguém entendia — nem o Pedro.
+      // Quando o backend não sabe dizer O QUE mudou, `motivo()` devolve
+      // "o quantitativo mudou" e o texto virava "Você ajustou o quantitativo
+      // depois (o quantitativo mudou)". Agora a frase específica ENTRA no
+      // lugar do genérico, e sem frase o texto é direto.
+      corpo: (so.info && so.info.frase
+                ? 'Depois que ' + alvo + ' ' + plural(velhos.length, 'foi gerada', 'foram gerados') +
+                  ', você ' + so.info.frase + '. '
+                : 'O quantitativo mudou depois que ' + alvo + ' ' +
+                  plural(velhos.length, 'foi gerada', 'foram gerados') + '. ') +
+             (velhos.length === 1 ? 'Ela ainda usa' : 'Eles ainda usam') +
+             ' os números antigos — vale atualizar antes de mandar pra obra, ' +
+             'pro cliente ou pro banco.',
       acoes: acoes
     };
   }
