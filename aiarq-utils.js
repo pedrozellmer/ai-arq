@@ -204,6 +204,56 @@
       window.trackEvent('clique:' + nome.slice(0, 40), meta);
     } catch (e) { /* nunca quebra o clique do cliente */ }
   }, true);   // captura: pega mesmo se o handler do elemento parar a propagação
+  // 🩸 31/08/2026 — ESTE BLOCO ESTAVA DEPOIS DO `return` DO GUARDA ABAIXO.
+  // No BLOG (página estática, sem supabase-js) o arquivo saía no return e a
+  // captura de origem NUNCA rodava: visitante novo registrava view_blog_post
+  // SEM `src` e, se depois se cadastrasse, o first-touch já estava perdido —
+  // o referrer vira ai.arq.br e ele é carimbado como "direto".
+  // 🪤 Na 1ª tentativa deste conserto eu recortei o bloco por índice de string
+  // e deixei o `};` final pra trás: a função ficou ABERTA e engoliu o resto do
+  // arquivo, incluindo `window.sbClient = _sbClient`. Sintaxe VÁLIDA, login
+  // MORTO em produção por 12 min. Recorte de código se faz por LINHA e se
+  // confere pelo comportamento (sbClient existe?), não pela ausência de erro.
+  // ─── Origem (first-touch attribution) ────────────────────────
+  // Guarda UMA VEZ de onde o visitante chegou (referrer + UTM/?origem=).
+  // First-party (só localStorage, zero 3rd-party). Usado no cadastro pra
+  // atribuir a conta e, com consentimento, no funil. NÃO sobrescreve — o
+  // PRIMEIRO toque é o que conta (a pessoa pode navegar antes de cadastrar).
+  function _classifyRef(host) {
+    if (!host) return '';
+    host = host.toLowerCase();
+    if (/instagram|l\.instagram|ig\./.test(host)) return 'instagram';
+    if (/wa\.me|whatsapp/.test(host)) return 'whatsapp';
+    if (/t\.me|telegram/.test(host)) return 'telegram';
+    if (/google\./.test(host)) return 'google';
+    if (/bing\.|duckduckgo|search\.yahoo/.test(host)) return 'busca';
+    if (/facebook|fb\.me|\bfb\./.test(host)) return 'facebook';
+    if (/linkedin|lnkd\.in/.test(host)) return 'linkedin';
+    if (/youtube|youtu\.be/.test(host)) return 'youtube';
+    if (/ai\.arq\.br/.test(host)) return 'direto';   // navegação interna → 'direto' (antes voltava '' e o fallback gravava 'ai.arq.br' como origem)
+    return host.replace(/^www\./, '');
+  }
+  (function _captureSource() {
+    try {
+      if (localStorage.getItem('aiarq_src')) return;   // first-touch: não sobrescreve
+      var params = new URLSearchParams(location.search || '');
+      var utm_source = (params.get('utm_source') || params.get('origem') || '').slice(0, 40);
+      var utm_medium = (params.get('utm_medium') || '').slice(0, 40);
+      var utm_campaign = (params.get('utm_campaign') || params.get('campanha') || '').slice(0, 60);
+      var refHost = '';
+      try { if (document.referrer) refHost = new URL(document.referrer).hostname; } catch (e) {}
+      var label = utm_source || _classifyRef(refHost) || (refHost ? refHost.replace(/^www\./, '') : 'direto');
+      localStorage.setItem('aiarq_src', JSON.stringify({
+        label: String(label).slice(0, 40),
+        utm_source: utm_source, utm_medium: utm_medium, utm_campaign: utm_campaign,
+        ref: refHost.slice(0, 80), landing: (location.pathname || '').slice(0, 80),
+      }));
+    } catch (e) { /* nunca quebra nada */ }
+  })();
+  window.aiArqSource = function () {
+    try { return JSON.parse(localStorage.getItem('aiarq_src') || 'null'); } catch (e) { return null; }
+  };
+
   // ─── Cliente Supabase ─────────────────────────────────────────
   // Defensivo: se o <script> do supabase-js não carregou (rede ruim,
   // CDN fora do ar), avisa no console em vez de quebrar tudo silenciosamente.
@@ -574,43 +624,4 @@
     }
   };
 
-  // ─── Origem (first-touch attribution) ────────────────────────
-  // Guarda UMA VEZ de onde o visitante chegou (referrer + UTM/?origem=).
-  // First-party (só localStorage, zero 3rd-party). Usado no cadastro pra
-  // atribuir a conta e, com consentimento, no funil. NÃO sobrescreve — o
-  // PRIMEIRO toque é o que conta (a pessoa pode navegar antes de cadastrar).
-  function _classifyRef(host) {
-    if (!host) return '';
-    host = host.toLowerCase();
-    if (/instagram|l\.instagram|ig\./.test(host)) return 'instagram';
-    if (/wa\.me|whatsapp/.test(host)) return 'whatsapp';
-    if (/t\.me|telegram/.test(host)) return 'telegram';
-    if (/google\./.test(host)) return 'google';
-    if (/bing\.|duckduckgo|search\.yahoo/.test(host)) return 'busca';
-    if (/facebook|fb\.me|\bfb\./.test(host)) return 'facebook';
-    if (/linkedin|lnkd\.in/.test(host)) return 'linkedin';
-    if (/youtube|youtu\.be/.test(host)) return 'youtube';
-    if (/ai\.arq\.br/.test(host)) return 'direto';   // navegação interna → 'direto' (antes voltava '' e o fallback gravava 'ai.arq.br' como origem)
-    return host.replace(/^www\./, '');
-  }
-  (function _captureSource() {
-    try {
-      if (localStorage.getItem('aiarq_src')) return;   // first-touch: não sobrescreve
-      var params = new URLSearchParams(location.search || '');
-      var utm_source = (params.get('utm_source') || params.get('origem') || '').slice(0, 40);
-      var utm_medium = (params.get('utm_medium') || '').slice(0, 40);
-      var utm_campaign = (params.get('utm_campaign') || params.get('campanha') || '').slice(0, 60);
-      var refHost = '';
-      try { if (document.referrer) refHost = new URL(document.referrer).hostname; } catch (e) {}
-      var label = utm_source || _classifyRef(refHost) || (refHost ? refHost.replace(/^www\./, '') : 'direto');
-      localStorage.setItem('aiarq_src', JSON.stringify({
-        label: String(label).slice(0, 40),
-        utm_source: utm_source, utm_medium: utm_medium, utm_campaign: utm_campaign,
-        ref: refHost.slice(0, 80), landing: (location.pathname || '').slice(0, 80),
-      }));
-    } catch (e) { /* nunca quebra nada */ }
-  })();
-  window.aiArqSource = function () {
-    try { return JSON.parse(localStorage.getItem('aiarq_src') || 'null'); } catch (e) { return null; }
-  };
 })();
