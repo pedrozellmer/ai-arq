@@ -8338,6 +8338,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
         _pdfvec_area_m2 = 0.0
         _pdfvec_compr_m = 0.0
         _n_resgate_pdf = 0
+        # 🩸 31/08/2026 (caso Flavio) — A SOMA NÃO REPRESENTA NADA FÍSICO.
+        # `_pdfvec_area_m2` acumula página a página, e num projeto de 16
+        # pranchas do MESMO imóvel (alvenaria, layout, forro, climatização do
+        # mesmo pavimento) é a mesma casa contada várias vezes: deu 741,8 m²
+        # num imóvel de 400, com a prancha de alvenaria medindo 80,5 m².
+        # Esse número vira régua (teto de 1,3×), vira texto de observação e
+        # vira alvo do resgate de linha zerada — nos três casos, errado.
+        # Aqui a medição passa a ser guardada POR PRANCHA. Não muda NENHUM
+        # número hoje: é instrumento, e é pré-requisito pra ligar a medição
+        # ao item que veio daquela página.
+        # 🪤 Só os campos numéricos — nunca a geometria, que estoura memória.
+        _pdfvec_por_prancha = {}
+        _pdfvec_falhas = []
         for i, (pdf_path, filename, sheet_type, page_index, page_count) in enumerate(page_units):
             # 🛡️ Freio de MEMÓRIA (idem loop DXF): aborta limpo antes do OOM,
             # mantendo o servidor de pé pros outros clientes.
@@ -8417,12 +8430,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         try:
                             _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
                             _pdfvec_compr_m += float(_vm.get("walls_m") or 0)
+                            # passo 4: a medição DESTA prancha, isolada da soma
+                            _pdfvec_por_prancha[_stem] = {
+                                "arquivo": filename,
+                                "pagina": page_index,
+                                "rooms_m2": float(_vm.get("rooms_m2") or 0),
+                                "n_rooms": int(_vm.get("n_rooms") or 0),
+                                "walls_m": float(_vm.get("walls_m") or 0),
+                                "n_walls": int(_vm.get("n_walls") or 0),
+                                "grupo_maior_m2": float(_vm.get("grupo_maior_m2") or 0),
+                                "scale": _vm.get("scale"),
+                                "scale_src": _vm.get("scale_src"),
+                                "escala_validada": bool(_vm.get("escala_validada")),
+                                "cotas_batem": int(_vm.get("cotas_batem") or 0),
+                            }
                         except (TypeError, ValueError):
                             pass
                         print(f"[pdfvec-promo] {_stem}: escala validada por cota — seção injetada")
                         _log_error("pdfvec:promo",
                                    f"{_stem}: escala 1:{_vm.get('scale')} PROVADA por "
-                                   f"{_vm.get('cotas_batem')} cota(s) — pode sair confirmado "
+                                   f"{_vm.get('cotas_batem')} cota(s) — entra como ESTIMADO "
+                                   f"com procedência (item de PDF nunca sai confirmado) "
                                    f"(ambientes={_vm.get('n_rooms')} m2={_vm.get('rooms_m2')} "
                                    f"paredes_m={_vm.get('walls_m') or 0} "
                                    f"n_paredes={_vm.get('n_walls') or 0})",
@@ -8470,6 +8498,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         try:
                             _pdfvec_area_m2 += float(_vm.get("rooms_m2") or 0)
                             _pdfvec_compr_m += float(_vm.get("walls_m") or 0)
+                            # passo 4: a medição DESTA prancha, isolada da soma
+                            _pdfvec_por_prancha[_stem] = {
+                                "arquivo": filename,
+                                "pagina": page_index,
+                                "rooms_m2": float(_vm.get("rooms_m2") or 0),
+                                "n_rooms": int(_vm.get("n_rooms") or 0),
+                                "walls_m": float(_vm.get("walls_m") or 0),
+                                "n_walls": int(_vm.get("n_walls") or 0),
+                                "grupo_maior_m2": float(_vm.get("grupo_maior_m2") or 0),
+                                "scale": _vm.get("scale"),
+                                "scale_src": _vm.get("scale_src"),
+                                "escala_validada": bool(_vm.get("escala_validada")),
+                                "cotas_batem": int(_vm.get("cotas_batem") or 0),
+                            }
                         except (TypeError, ValueError):
                             pass
                         print(f"[pdfvec-promo] {_stem}: escala de {_fonte} sem prova — seção ESTIMADA injetada")
@@ -8486,8 +8528,27 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                    f"n_paredes={_vm.get('n_walls') or 0} "
                                    f"err_paredes={(_vm.get('err_walls') or '-')[:60]})", job_id)
                 except Exception as _ve:
+                    # 🩸 31/08/2026 (caso Flavio) — A PERDA ERA SILENCIOSA.
+                    # Duas pranchas de "Forro e Climatização" estouraram o
+                    # timeout de 75 s do subprocesso. A prancha seguiu pra IA
+                    # SEM geometria nenhuma, a medição parcial foi jogada fora,
+                    # e o cliente nunca ficou sabendo que aquelas duas não
+                    # foram medidas — a planilha dele não distingue "não tinha
+                    # o que medir" de "não deu tempo de medir".
+                    # 🪤 NÃO subir o timeout aqui: 16 páginas × mais tempo é o
+                    # caminho do OOM que já derrubou o servidor. Primeiro medir
+                    # quanto cada página leva (o `secs` que o passo 4 registra),
+                    # depois decidir o número — nunca no chute (18/08).
+                    _eh_tempo = isinstance(_ve, _sp.TimeoutExpired) if "_sp" in dir() else False
+                    _pdfvec_falhas.append({
+                        "prancha": _stem, "arquivo": filename,
+                        "motivo": "tempo" if _eh_tempo else type(_ve).__name__,
+                    })
                     print(f"[pdfvec-promo] {_stem}: sem promoção ({_ve})")
-                    _log_error("pdfvec:promo", f"{_stem}: FALHOU {type(_ve).__name__}: {_ve}"[:200], job_id)
+                    _log_error("pdfvec:promo",
+                               f"{_stem}: FALHOU {type(_ve).__name__}: {_ve}"[:200],
+                               job_id,
+                               severity="warning" if _eh_tempo else "error")
 
                 # 3. Analisar com IA
                 jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: Nossa IA está analisando {_disp}...")
@@ -9359,6 +9420,49 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pv_m2 = float(_pdfvec_area_m2)
         except NameError:
             _pv_m2 = 0.0          # job sem PDF: o loop nem existiu
+
+        # 📐 O que a medição por prancha viu, gravado pra ser LIDO depois. Sem
+        # isto o passo 4 é invisível: "guardei por prancha" não se prova sozinho,
+        # e a soma (que é a mesma casa contada N vezes) continuaria sendo o único
+        # número disponível pra quem for decidir o próximo passo.
+        try:
+            if _pdfvec_por_prancha:
+                _res = sorted(_pdfvec_por_prancha.values(),
+                              key=lambda x: -(x.get("rooms_m2") or 0))
+                _log_error(
+                    "pdfvec:por-prancha",
+                    "%d prancha(s) medidas · soma=%.1f m² (NÃO é a área do imóvel: "
+                    "é a mesma planta contada em cada disciplina) · maior prancha=%.1f m² · %s"
+                    % (len(_res), _pdfvec_area_m2,
+                       (_res[0].get("rooms_m2") or 0) if _res else 0,
+                       "; ".join("%s=%.1f m²/%.1f m" % (r["arquivo"][:26],
+                                                        r.get("rooms_m2") or 0,
+                                                        r.get("walls_m") or 0)
+                                 for r in _res[:6])),
+                    job_id, severity="info")
+        except NameError:
+            pass              # job sem PDF
+
+        # 🩸 31/08/2026 — A PRANCHA QUE NÃO DEU TEMPO DE MEDIR TEM QUE APARECER.
+        # No caso Flavio, 2 das 16 pranchas estouraram o tempo da medição
+        # geométrica. Elas foram lidas mesmo assim (pela IA), mas SEM geometria
+        # — e na planilha isso é indistinguível de "essa prancha não tinha o
+        # que medir". O cliente merece saber em qual arquivo olhar.
+        try:
+            _por_tempo = [f for f in _pdfvec_falhas if f.get("motivo") == "tempo"]
+            if _por_tempo:
+                _nomes = ", ".join(sorted({f["arquivo"] for f in _por_tempo})[:3])
+                _mais = "" if len({f["arquivo"] for f in _por_tempo}) <= 3 else " e outras"
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ %d prancha(s) não deram tempo de ser medidas geometricamente "
+                    "(%s%s). Elas foram lidas assim mesmo, mas os itens delas saem como "
+                    "estimativa — confira essas contra o projeto antes de fechar orçamento."
+                    % (len(_por_tempo), _nomes, _mais)]
+                _log_error("pdfvec:sem-tempo",
+                           "%d prancha(s) sem medição por tempo: %s"
+                           % (len(_por_tempo), _nomes), job_id, severity="warning")
+        except NameError:
+            pass              # job sem PDF
         _n_fill, _blanked = _apply_area_honesty(
             all_items, project_data.total_area,
             getattr(project_data, "total_area_source", ""),
