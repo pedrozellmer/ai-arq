@@ -7,13 +7,17 @@ PRANCHA ===" com quantos m² foram medidos, cola no fim do texto da prancha
 tudo em `[:3000]`. Numa prancha com 3000+ caracteres de texto extraível, a
 medição sumia INTEIRA antes de chegar ao modelo.
 
-🪤 A CORRELAÇÃO É ADVERSA, e é o que torna isso pior do que parece: a seção só
-existe quando o PDF é VETORIAL — e PDF vetorial é justamente o que tem muito
-texto extraível. O corte tendia a apagar a medição exatamente onde ela existia.
-(Nas 13 pranchas de teste locais o texto não passa de 1.190 caracteres, mas elas
-são raster: 0 a 44 caracteres na maioria, e prancha raster não tem medição
-vetorial pra perder. Não consegui medir a frequência real — o conserto vale
-porque o modo de falha é real e não custa nada quando o texto é curto.)
+🚫 A HIPÓTESE QUE EU TINHA ERA ERRADA, e a medição derrubou. Eu escrevi que "a
+correlação é adversa: PDF vetorial é o que tem muito texto extraível, então o
+corte apagava a medição justo onde ela existia". Medi as 8 pranchas vetoriais que
+o motor consegue medir aqui: ARQUITETURA 0 caracteres (426 m² medidos), FORRO 0
+(463 m²), PISO 44 (553 m²), PONTOS 1.190 (130 m²). NENHUMA chega perto de 3.000 —
+em export de CAD o texto vai como TRAÇO vetorial, não como objeto de texto.
+
+🔑 O conserto fica de pé porque o modo de falha é real e o custo é zero quando o
+texto é curto. Mas NÃO se sabe que ele resolve caso de cliente nenhum, e não
+deve ser vendido como ganho de medição. Onde ele morde é a prancha com quadro de
+áreas exportado como texto de verdade — que existe e não estava na amostra.
 
 🔑 O corte agora vale só pro TEXTO da prancha; a medição vai inteira, sempre.
 """

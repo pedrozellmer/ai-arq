@@ -1084,9 +1084,20 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
         # corte era `[:3000]`. Numa prancha com 3000+ caracteres de texto
         # extraível, a seção sumia por completo antes de chegar ao modelo, e a
         # medição que o motor tinha acabado de fazer não influenciava nada.
-        # 🪤 A correlação é ADVERSA: a seção só existe quando o PDF é VETORIAL —
-        # e PDF vetorial é justamente o que tem muito texto extraível. O corte
-        # tendia a apagar a medição exatamente onde ela existia.
+        # 🚫 EU ESCREVI AQUI, E MEDI DEPOIS QUE ESTAVA ERRADO: a 1ª versão deste
+        # comentário dizia que "a correlação é adversa — PDF vetorial é o que tem
+        # muito texto extraível, então o corte apagava a medição justo onde ela
+        # existia". MEDIDO em 31/08, nas 8 pranchas vetoriais que o motor
+        # consegue medir aqui: ARQUITETURA 0 caracteres (426 m² medidos), FORRO 0
+        # (463 m²), PISO 44 (553 m²), PONTOS 1.190 (130 m²) — NENHUMA chega perto
+        # de 3.000. Em export de CAD o texto vai como TRAÇO vetorial, não como
+        # objeto de texto: PDF vetorial costuma ter POUCO texto extraível.
+        # 🔑 Então o conserto continua certo e continua barato — o modo de falha
+        # é real e o custo é zero quando o texto é curto —, mas NÃO se sabe que
+        # ele resolve caso de cliente nenhum. Não vender como ganho de medição.
+        # Onde ele morde é a prancha com quadro de áreas em texto de verdade
+        # (planilha de ambientes exportada como texto), que existe e não estava
+        # na minha amostra.
         # Agora o corte vale só pro texto da prancha; a medição vai INTEIRA.
         _txt = sheet.text_content
         _i_med = _txt.find(MARCA_MEDICAO_VETORIAL)
