@@ -2644,7 +2644,11 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
     for _passo in passos:
         emoji, titulo, desc = _passo[0], _passo[1], _passo[2]
         _link = _passo[3] if len(_passo) > 3 else None
-        _link_html = (f'<a href="{_link}" style="display:inline-block;margin-top:6px;'
+        # 🪤 Era `inline-block`: quando a descricao terminava com espaco na
+        # linha, o link colava no texto e saia "revisar as quantidades
+        # antes.Abrir →". O `margin-top:6px` ja dizia que a intencao era linha
+        # propria. Visto no navegador, nao no fonte.
+        _link_html = (f'<a href="{_link}" style="display:block;margin-top:6px;'
                       f'font-size:13px;font-weight:600;color:#4F46E5;'
                       f'text-decoration:none;">Abrir &#8594;</a>' if _link else "")
         cards += (f'<div style="margin:10px 0;padding:12px 14px;border:1px solid #e5e7eb;border-radius:10px;background:#ffffff;">'
@@ -12888,6 +12892,40 @@ def _link_avaliacao(tipo: str, email: str, nota, job_id: str = "") -> str:
             f"&e={_up.quote((email or '').lower())}&n={nota}&t={t}")
 
 
+def _escala_email(valores, link_de, cor_de) -> str:
+    """Escala clicável como TABELA de células iguais.
+
+    🪤 Duas coisas medidas no navegador que a versão anterior errava:
+    1) com `inline-block`, 11 botões somavam 462px num espaço útil de 418 e o
+       "10" caía sozinho numa segunda linha — a escala parecia quebrada.
+       Tabela com `width:100%` divide o espaço e SEMPRE cabe, inclusive quando
+       o cliente de e-mail estreita o card no celular.
+    2) caixa branca com borda cinza-clara não parece clicável: lia como tabela
+       de números. Agora cada célula tem cor de fundo e borda da própria faixa,
+       e o número vai em negrito escuro — afinal a única coisa que este e-mail
+       precisa que aconteça é a pessoa CLICAR.
+
+    Outlook ignora border-radius e boa parte de CSS moderno; tabela com
+    bgcolor + padding é o que sobrevive em todo cliente.
+    """
+    celulas = ""
+    for v in valores:
+        bg, borda, fg = cor_de(v)
+        celulas += (
+            f'<td align="center" bgcolor="{bg}" '
+            f'style="border:2px solid {borda};border-radius:9px;padding:0;">'
+            f'<a href="{link_de(v)}" '
+            f'style="display:block;padding:11px 0;text-decoration:none;'
+            f'font-family:Arial,sans-serif;font-size:16px;font-weight:700;'
+            f'color:{fg};">{v}</a></td>'
+            '<td style="width:5px;font-size:0;line-height:0;">&nbsp;</td>')
+    if celulas.endswith('<td style="width:5px;font-size:0;line-height:0;">&nbsp;</td>'):
+        celulas = celulas[:-len('<td style="width:5px;font-size:0;line-height:0;">&nbsp;</td>')]
+    return ('<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
+            'style="width:100%;table-layout:fixed;">'
+            f'<tr>{celulas}</tr></table>')
+
+
 def _bloco_avaliar_projeto(job_id: str, email: str, sem_medida: bool = False) -> str:
     """Os 5 botões de nota, clicáveis direto do e-mail.
 
@@ -12895,13 +12933,17 @@ def _bloco_avaliar_projeto(job_id: str, email: str, sem_medida: bool = False) ->
     saber, batendo o olho, qual das duas perguntas gerou aquele número."""
     if not job_id or not email:
         return ""
-    botoes = "".join(
-        f'<a href="{_link_avaliacao("projeto", email, n, job_id)}" '
-        'style="display:inline-block;width:46px;height:46px;line-height:46px;'
-        'text-align:center;margin:0 6px 6px 0;border-radius:10px;'
-        'border:2px solid #e2e8f0;background:#ffffff;color:#0F172A;'
-        'text-decoration:none;font-family:Arial,sans-serif;font-size:18px;'
-        f'font-weight:700;">{n}</a>' for n in range(1, 6))
+    # ruim → bom: vermelho suave, âmbar, verde. A cor diz o que o número
+    # significa antes de a pessoa ler a legenda.
+    _CORES5 = {1: ("#fef2f2", "#fca5a5", "#b91c1c"),
+               2: ("#fff7ed", "#fdba74", "#c2410c"),
+               3: ("#fffbeb", "#fcd34d", "#b45309"),
+               4: ("#f0fdf4", "#86efac", "#15803d"),
+               5: ("#ecfdf5", "#34d399", "#047857")}
+    botoes = _escala_email(
+        range(1, 6),
+        lambda n: _link_avaliacao("projeto", email, n, job_id),
+        lambda n: _CORES5[n])
     if sem_medida:
         pergunta = "Me conta o que faltou?"
         ajuda = ("De 1 (não me serviu de nada) a 5 (mesmo assim ajudou). "
@@ -12909,11 +12951,14 @@ def _bloco_avaliar_projeto(job_id: str, email: str, sem_medida: bool = False) ->
     else:
         pergunta = "A planilha ficou boa?"
         ajuda = "De 1 (não me serviu) a 5 (ficou ótima). É um clique só."
+    # 🪤 Este bloco vinha com o MESMO cinza dos cards de "próximos passos" logo
+    # acima e sumia no meio deles. Fundo índigo claro + borda índigo separa a
+    # PERGUNTA das informações.
     return (
         '<div style="margin:24px 0 4px;padding:20px;border-radius:12px;'
-        'background:#f8fafc;border:1px solid #e2e8f0;">'
+        'background:#eef2ff;border:1px solid #c7d2fe;">'
         f'<p style="margin:0 0 4px;font-family:Arial,sans-serif;font-size:16px;'
-        f'font-weight:700;color:#0F172A;">{pergunta}</p>'
+        f'font-weight:700;color:#312e81;">{pergunta}</p>'
         f'<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:14px;'
         f'line-height:1.5;color:#475569;">{ajuda}</p>'
         f'{botoes}'
@@ -12926,18 +12971,23 @@ def _bloco_avaliar_nps(email: str) -> str:
     """0 a 10 clicável — a pergunta relacional, mandada de tempos em tempos."""
     if not email:
         return ""
-    botoes = "".join(
-        f'<a href="{_link_avaliacao("nps", email, n)}" '
-        'style="display:inline-block;width:38px;height:38px;line-height:38px;'
-        'text-align:center;margin:0 4px 6px 0;border-radius:9px;'
-        'border:2px solid #e2e8f0;background:#ffffff;color:#0F172A;'
-        'text-decoration:none;font-family:Arial,sans-serif;font-size:15px;'
-        f'font-weight:700;">{n}</a>' for n in range(0, 11))
+    # Faixas do NPS na própria cor: detrator (0-6), neutro (7-8), promotor
+    # (9-10). Quem responde enxerga a régua; quem lê o painel depois vê a mesma
+    # divisão.
+    def _cor_nps(n):
+        if n >= 9:
+            return ("#ecfdf5", "#34d399", "#047857")
+        if n >= 7:
+            return ("#fffbeb", "#fcd34d", "#b45309")
+        return ("#fef2f2", "#fca5a5", "#b91c1c")
+    botoes = _escala_email(range(0, 11),
+                           lambda n: _link_avaliacao("nps", email, n),
+                           _cor_nps)
     return (
         '<div style="margin:24px 0 4px;padding:20px;border-radius:12px;'
-        'background:#f8fafc;border:1px solid #e2e8f0;">'
+        'background:#eef2ff;border:1px solid #c7d2fe;">'
         '<p style="margin:0 0 4px;font-family:Arial,sans-serif;font-size:16px;'
-        'font-weight:700;color:#0F172A;">De 0 a 10, o quanto você indicaria o '
+        'font-weight:700;color:#312e81;">De 0 a 10, o quanto você indicaria o '
         'AI.arq pra outro profissional?</p>'
         '<p style="margin:0 0 14px;font-family:Arial,sans-serif;font-size:14px;'
         'line-height:1.5;color:#475569;">Um clique responde.</p>'
