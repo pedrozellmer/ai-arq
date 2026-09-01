@@ -9,14 +9,14 @@
 <link rel="icon" type="image/x-icon" href="favicon-v2.ico">
 <link rel="apple-touch-icon" href="apple-touch-icon-v2.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI.arq — Levantamento de quantitativos do CAD em minutos</title>
-<meta name="description" content="A IA lê seu DXF, DWG ou PDF e devolve a planilha de quantitativos por disciplina, em minutos. Sem preços. Grátis durante o beta, quantos projetos quiser.">
+<title>AI.arq — Quantidade medida do CAD, pra arquiteto e projetista</title>
+<meta name="description" content="A IA lê seu DXF, DWG ou PDF e devolve a QUANTIDADE de cada item — medida da geometria do desenho —, em planilha por disciplina e em minutos, com a coluna de preço em branco pro seu orçamentista. Pra arquiteto e projetista. Grátis e ilimitado durante o beta, sem cartão.">
 <link rel="canonical" href="https://ai.arq.br/">
 
 <!-- Open Graph / WhatsApp / Facebook / LinkedIn -->
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://ai.arq.br/">
-<meta property="og:title" content="AI.arq — Levantamento de quantitativos do CAD em minutos">
+<meta property="og:title" content="AI.arq — Quantidade medida do CAD, pra arquiteto e projetista">
 <meta property="og:description" content="A IA lê DXF, DWG ou PDF e devolve a planilha por disciplina com cada item rastreável. Sem preços, sem inventar — quem precifica é seu orçamentista.">
 <meta property="og:image" content="https://ai.arq.br/og-image.png">
 <!-- Dimensoes declaradas: sem elas o buscador precisa baixar a imagem pra saber
@@ -136,7 +136,7 @@
       A IA <span class="gradient-text">mede</span> sua prancha de verdade — e te mostra no que confiar
     </h1>
     <p class="mx-auto mt-6 max-w-2xl text-lg text-gray-600 md:text-xl leading-relaxed">
-      Sobe <strong>DXF</strong>, DWG ou PDF e em <strong>minutos</strong> volta o <strong>quantitativo</strong> por disciplina — cada item marcado como <strong>medido</strong> (✓) ou <strong>estimativa pra revisar</strong> (⚠). O preço fica nas mãos do seu orçamentista.
+      Sobe <strong>DXF</strong>, DWG ou PDF e em <strong>minutos</strong> volta a <strong>quantidade de cada item</strong> — medida (✓) da geometria do desenho ou <strong>estimativa pra revisar</strong> (⚠) —, organizada por disciplina. <strong>Quantidade, não preço</strong>: a coluna de preço vai em branco pro seu orçamentista.
     </p>
     <div class="mt-10 flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
       <a href="login.html?novo=1" class="gradient-main text-white text-lg font-semibold px-8 py-4 rounded-xl shadow-btn transition flex items-center gap-2 no-underline">
@@ -174,7 +174,7 @@
 
           <!-- Prova compacta do wedge já na primeira dobra (dado real do beta) -->
           <p class="mt-6 text-center text-sm text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-2.5 inline-block w-full">
-            <span aria-hidden="true">📊</span> No beta, projetos em <strong>DWG/DXF</strong> saem com <strong>~4,6&times; mais itens medidos</strong> que em PDF
+            <span aria-hidden="true">📊</span> Em <strong>DWG/DXF</strong>, <strong>23,9%</strong> das linhas saem carimbadas como <strong>medidas</strong>; em PDF, nenhuma &mdash; tudo dele &eacute; estimativa
             <span class="text-indigo-400 text-xs">· amostra de 92 projetos (57 em CAD, 35 só PDF), ago/2026</span>
           </p>
 
@@ -239,9 +239,9 @@
     <!-- Prova do beta: DWG/DXF medem muito mais que PDF (dado real do painel, rotulado como amostra) -->
     <div class="mt-8 max-w-2xl mx-auto rounded-2xl border border-indigo-100 bg-indigo-50 p-6 text-center">
       <p class="text-sm font-semibold text-indigo-900"><span aria-hidden="true">📊</span> No nosso beta (92 projetos: 57 em CAD, 35 só PDF)</p>
-      <p class="mt-2 text-3xl font-bold text-indigo-700">DWG/DXF medem <span class="whitespace-nowrap">~4,6&times;</span> mais que PDF</p>
-      <p class="mt-2 text-sm text-indigo-800">Em média, <strong>21,6%</strong> dos itens saem <strong>medidos</strong> num projeto em CAD, contra <strong>4,7%</strong> num PDF. Quanto mais medido, menos você confere na mão.</p>
-      <p class="mt-3 text-xs text-indigo-500"><span aria-hidden="true">👉</span> Mande <strong>DXF</strong> sempre que puder (ou DWG) &mdash; o DXF &eacute; o que mede melhor e nunca trava na convers&atilde;o. <span class="text-indigo-400">Fonte: dados agregados do beta AI.arq (amostra de 92 projetos: 57 em CAD, 35 só PDF — ago/2026).</span></p>
+      <p class="mt-2 text-3xl font-bold text-indigo-700">Em CAD, <span class="whitespace-nowrap">1 em cada 4</span> linhas j&aacute; vem conferida</p>
+      <p class="mt-2 text-sm text-indigo-800">A planilha volta com n&uacute;mero na maioria das linhas nos dois formatos &mdash; <strong>73,8%</strong> em CAD e <strong>70,0%</strong> s&oacute; com PDF. A diferen&ccedil;a est&aacute; no que voc&ecirc; pode usar <em>sem conferir</em>: em CAD, <strong>23,9%</strong> das linhas saem carimbadas como <strong>medidas</strong> da geometria; em PDF, <strong>nenhuma</strong> &mdash; o motor mede o desenho, mas a escala vem do carimbo da prancha, e carimbo &eacute; declara&ccedil;&atilde;o, n&atilde;o prova. Ent&atilde;o tudo do PDF sai como estimativa, com a proced&ecirc;ncia escrita na linha.</p>
+      <p class="mt-3 text-xs text-indigo-500"><span aria-hidden="true">👉</span> Mande <strong>DXF</strong> sempre que puder (ou DWG) &mdash; o DXF &eacute; o que mede melhor e nunca trava na convers&atilde;o. <span class="text-indigo-400">Fonte: base do AI.arq, projetos conclu&iacute;dos em ago/2026 &mdash; 79 em CAD (4.447 itens) e 11 s&oacute; PDF (387 itens).</span></p>
       <div class="mt-4 text-center">
         <a href="/exemplo.html" class="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-700 hover:text-indigo-900">Ver um quantitativo de exemplo, do jeito que sai — sem cadastro <span aria-hidden="true">&rarr;</span></a>
       </div>
