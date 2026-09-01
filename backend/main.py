@@ -6095,7 +6095,21 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 and float(pdfvec_m2 or 0) <= 0
                 and _usou_area_informada.get(_fam, 0) < 1
                 and not (apenas_preencher and q > 0)):
+            # 🪤 31/08 (auditoria): quem fica com a área total é decidido pela
+            # ORDEM DA LISTA, e a lista vem da IA — então o MESMO projeto,
+            # reprocessado, pode dar o número pro contrapiso numa vez e pro piso
+            # cerâmico na outra. Planilha diferente pro mesmo desenho é o que
+            # esta casa mais persegue (o motor já não é determinístico por
+            # causa da IA; não precisa a gente somar mais uma fonte).
+            # 🚫 NÃO inventei preferência entre contrapiso e acabamento: os dois
+            # cobrem a área toda de verdade, e escolher um seria heurística que
+            # eu não sei medir. O que dá pra consertar sem chutar é o RASTRO —
+            # a linha diz qual item ficou com a cota, então quando o número
+            # aparecer no item "errado" dá pra ver por quê em vez de deduzir.
             _usou_area_informada[_fam] = _usou_area_informada.get(_fam, 0) + 1
+            print(f"[honestidade-m2] área informada ({total_area} m²) foi pro item "
+                  f"'{(getattr(it, 'description', '') or '')[:60]}' "
+                  f"(família {_fam}) — 1º da lista nessa família")
             it.quantity = round(float(total_area), 2)
             try:
                 it.confidence = Confidence("estimado")
@@ -13906,19 +13920,42 @@ def admin_email_catalog(request: Request):
     _require_admin(request)
     # Agrega volume por kind num único fetch (baixo volume no beta).
     volumes = {}
+    _leu_volume = False
     try:
         _st, _rows = _supa_rest_service("GET", "/rest/v1/email_sent_log?select=kind")
-        if _rows:
-            for _r in _rows:
-                _k = (_r or {}).get("kind") or ""
-                if _k:
-                    volumes[_k] = volumes.get(_k, 0) + 1
+        # 🪤 31/08 (auditoria): o `except` daqui era INALCANÇÁVEL pro caso que
+        # importa — falha de HTTP não levanta, devolve status != 200 com corpo
+        # vazio. Aí `volumes` ficava {} e a tela mostrava "0" pra TODO tipo de
+        # e-mail, indistinguível de "nunca saiu nenhum". Vazio ≠ falhou, de novo.
+        _leu_volume = int(_st or 0) == 200
+        if not _leu_volume:
+            _log_error("admin:email-catalog",
+                       f"não consegui ler o volume (HTTP {_st}) — a coluna vai "
+                       f"marcada como desconhecida, não como zero", severity="warning")
+        for _r in (_rows or []):
+            _k = (_r or {}).get("kind") or ""
+            if _k:
+                volumes[_k] = volumes.get(_k, 0) + 1
     except Exception as _e:
         print(f"[email-catalog] volume falhou (nao critico): {_e}")
+        _log_error("admin:email-catalog", f"exceção lendo volume: {_e}",
+                   severity="warning")
     items = []
     for c in _EMAIL_CATALOG:
-        items.append({**c, "volume": int(volumes.get(c["key"], 0))})
-    return {"items": items}
+        items.append({**c, "volume": (int(volumes.get(c["key"], 0))
+                                      if _leu_volume else None)})
+    # 🚨 31/08 (auditoria): a Central listava só o que está no _EMAIL_CATALOG, e
+    # o motor manda tipos que não estão nele — inclusive a variante que é a
+    # MAIORIA das entregas. Um catálogo que esconde o que mais sai não é
+    # catálogo. Os órfãos entram no fim, marcados, pra ninguém confundir com
+    # tipo curado.
+    _conhecidos = {c["key"] for c in _EMAIL_CATALOG}
+    for _k, _v in sorted(volumes.items()):
+        if _k and _k not in _conhecidos:
+            items.append({"key": _k, "nome": _k, "grupo": "Fora do catálogo",
+                          "gatilho": "sai pelo motor, sem ficha no catálogo",
+                          "volume": _v, "orfao": True})
+    return {"items": items, "volume_lido": _leu_volume}
 
 
 _BOOT_EM = datetime.utcnow()

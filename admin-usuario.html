@@ -77,6 +77,12 @@
   <section id="sec-revisao" class="mt-6 mb-6"></section>
   <section id="sec-entregaveis" class="mb-6"></section>
   <section id="sec-chat" class="mb-6"></section>
+  <!-- 31/08 (auditoria): o backend JA manda `lead_chat` e `notas`, e a
+       tela nunca mostrava nenhum dos dois — dado buscado, trafegado e
+       jogado fora. Pior: a tarja de falha cita secoes que nao existiam
+       na tela, entao um erro nelas apontava pro nada. -->
+  <section id="sec-lead-chat" class="mb-6"></section>
+  <section id="sec-notas" class="mb-6"></section>
   <section id="sec-cashback" class="mb-6"></section>
   <section id="sec-emails" class="mb-6"></section>
   <section id="sec-timeline" class="mb-10"></section>
@@ -339,6 +345,30 @@ function renderFicha(d){
       </div>`;
     }),
     'Nunca avaliou. Vale pedir &mdash; s&oacute; 5 pessoas avaliaram em toda a hist&oacute;ria do produto.');
+
+  // ── Lead do chat publico (31/08: buscado e nunca mostrado) ──
+  document.getElementById('sec-lead-chat').innerHTML = _card(
+    'Deixou contato no chat do site', (d.lead_chat||[]).length || null,
+    _linhas(d.lead_chat, l => `<div class="p-4">
+      <div class="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+        <span>${_fmtDateTime(l.created_at)}</span>
+        ${l.nome ? `<span class="px-2 py-0.5 rounded bg-gray-100">${esc(l.nome)}</span>` : ''}
+      </div>
+      <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">${esc(l.mensagem||l.message||'')}</p>
+    </div>`),
+    'Nunca deixou contato pelo chat p&uacute;blico.');
+
+  // ── Notas que escreveu nos itens (31/08: buscado e nunca mostrado) ──
+  document.getElementById('sec-notas').innerHTML = _card(
+    'Notas que escreveu em itens', (d.notas||[]).length || null,
+    _linhas(d.notas, n => `<div class="p-4">
+      <div class="flex items-center gap-2 flex-wrap text-xs text-gray-500">
+        <span>${_fmtDateTime(n.created_at)}</span>
+        ${n.job_id ? `<a class="text-indigo-600 hover:underline" href="projeto.html?job_id=${esc(n.job_id)}">${esc(String(n.job_id).slice(0,8))}</a>` : ''}
+      </div>
+      <p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap">${esc(n.note||'')}</p>
+    </div>`),
+    'Nunca escreveu nota em item nenhum.');
 
   // ── Mensagens ──
   document.getElementById('sec-mensagens').innerHTML = _card(

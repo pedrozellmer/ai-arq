@@ -3296,13 +3296,19 @@ function _emailBadge(grupo) {
 }
 
 function _emailCard(item) {
-  const vol = Number(item.volume || 0);
-  const volTxt = vol === 1 ? '1 email enviado' : `${vol} emails enviados`;
+  // 🪤 31/08 (auditoria): aqui era `Number(item.volume || 0)`, entao volume
+  // null (a leitura FALHOU) virava 0 — indistinguivel de "nunca saiu nenhum".
+  // O backend agora manda null quando nao conseguiu contar; a tela tem que
+  // dizer isso, nao inventar zero. Vazio nao e igual a falhou.
+  const semLeitura = (item.volume === null || item.volume === undefined);
+  const vol = semLeitura ? null : Number(item.volume);
+  const volTxt = semLeitura ? 'volume desconhecido (a contagem falhou)'
+                            : (vol === 1 ? '1 email enviado' : `${vol} emails enviados`);
   return `
     <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
       <div class="flex items-start justify-between gap-2">
         <h4 class="font-semibold text-gray-900 text-sm leading-snug">${esc(item.nome)}</h4>
-        ${_emailBadge(item.grupo)}
+        ${item.orfao ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold" title="Este tipo SAI pelo motor mas nao tem ficha no catalogo — sem nome amigavel, sem preview e sem botao de teste">&#9888; fora do cat&aacute;logo</span>' : _emailBadge(item.grupo)}
       </div>
       <p class="text-xs text-gray-500 leading-relaxed">${esc(item.gatilho || '')}</p>
       <div class="flex items-center justify-between mt-auto pt-1">
