@@ -28,6 +28,10 @@ def test_o_arquivo_existe():
 def test_o_deploy_COPIA_o_arquivo():
     """Sem isto o arquivo existe no git e nao existe no site."""
     y = io.open(YML, encoding="utf-8").read()
+    # 🪤 31/08 (auditoria): sem a ancora de inicio de linha, o guarda passava
+    # com a copia COMENTADA no YAML ("# for f in ... llms.txt"). Guarda que
+    # aceita a propria linha desligada nao guarda nada.
+    y = chr(10).join(l for l in y.splitlines() if not l.lstrip().startswith("#"))
     assert re.search(r"for f in [^;]*llms\.txt", y), (
         "llms.txt saiu da lista de copia do deploy — ele daria 404 no site, "
         "calado, porque o `find` da raiz nao pega *.txt")
@@ -62,3 +66,12 @@ def test_nao_cita_post_que_ainda_nao_publicou():
     furados = [p["slug"] for p in posts
                if p.get("publish_date", "") > hoje and p["slug"] in t]
     assert not furados, "llms.txt cita post ainda nao publicado: " + str(furados)
+
+
+def test_CONTROLE_o_guarda_do_deploy_REPROVA_a_linha_COMENTADA():
+    """🧪 31/08: era exatamente por aqui que ele passava verde de mentira."""
+    linhas = ["jobs:", "  build:", "    steps:",
+              "      # for f in index.html llms.txt; do"]
+    limpo = chr(10).join(l for l in linhas if not l.lstrip().startswith("#"))
+    assert not re.search(r"for f in [^;]*llms" + chr(92) + r".txt", limpo), (
+        "o guarda aceita a copia comentada — llms.txt daria 404 calado")

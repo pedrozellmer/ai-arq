@@ -109,7 +109,12 @@
     // 🪤 Nunca agradecer sem ter gravado — é o erro que a gente passou o dia
     // consertando no resto do site.
     if (!res.ok || !res.d || res.d.status !== 'ok') {
-      erro((res.d && res.d.detail) ||
+      // 🪤 31/08 (auditoria): `detail` do FastAPI vira LISTA de objetos quando
+      // a validacao do payload falha (422) — concatenar isso num texto mostra
+      // "[object Object]" pro cliente, que e pior que nao dizer nada. So usa o
+      // detail quando ele e string de verdade.
+      var _det = res.d && res.d.detail;
+      erro((typeof _det === 'string' && _det) ||
            ('O servidor respondeu ' + res.status + '. Tente abrir o link de novo.'));
       return;
     }

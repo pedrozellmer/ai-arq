@@ -8654,6 +8654,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 "scale_src": _vm.get("scale_src"),
                                 "escala_validada": bool(_vm.get("escala_validada")),
                                 "cotas_batem": int(_vm.get("cotas_batem") or 0),
+                                # 🪤 31/08 (auditoria): o comentário e a
+                                # mensagem do commit diziam que o passo 4
+                                # registra o TEMPO de cada prancha, e o
+                                # filho DEVOLVE esse número — mas ninguém
+                                # o gravava. Sem ele não dá pra responder
+                                # "qual prancha está me custando o
+                                # timeout", que é a pergunta que o
+                                # MAX_PAGES existe pra resolver.
+                                "secs": float(_vm.get("secs") or 0),
                             }
                         except (TypeError, ValueError):
                             pass
@@ -8722,6 +8731,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 "scale_src": _vm.get("scale_src"),
                                 "escala_validada": bool(_vm.get("escala_validada")),
                                 "cotas_batem": int(_vm.get("cotas_batem") or 0),
+                                # 🪤 31/08 (auditoria): o comentário e a
+                                # mensagem do commit diziam que o passo 4
+                                # registra o TEMPO de cada prancha, e o
+                                # filho DEVOLVE esse número — mas ninguém
+                                # o gravava. Sem ele não dá pra responder
+                                # "qual prancha está me custando o
+                                # timeout", que é a pergunta que o
+                                # MAX_PAGES existe pra resolver.
+                                "secs": float(_vm.get("secs") or 0),
                             }
                         except (TypeError, ValueError):
                             pass
@@ -8756,7 +8774,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         "motivo": "tempo" if _eh_tempo else type(_ve).__name__,
                     })
                     print(f"[pdfvec-promo] {_stem}: sem promoção ({_ve})")
-                    _log_error("pdfvec:promo",
+                    # 🚨 31/08 (auditoria): a severidade nascia INVERTIDA. O
+                    # stage "pdfvec:promo" está em _STAGES_DIAGNOSTICO, e
+                    # `_log_error` rebaixa "error" pra "info" quando o stage é
+                    # de diagnóstico — mas NÃO mexe em "warning". Resultado: o
+                    # timeout ficava "warning" e a falha que NÃO é timeout
+                    # (JSONDecodeError, exceção no bloco de promoção — a pior
+                    # das duas) nascia "info", abaixo do timeout e fora do
+                    # filtro `severity in (error, critical)` que a causa-raiz do
+                    # job usa. A falha ficava invisível justamente por ser grave.
+                    # 🔑 Stage PRÓPRIO pra falha: sai do balde de diagnóstico e
+                    # a severidade volta a significar o que diz.
+                    _log_error("pdfvec:promo-falhou",
                                f"{_stem}: FALHOU {type(_ve).__name__}: {_ve}"[:200],
                                job_id,
                                severity="warning" if _eh_tempo else "error")
@@ -13352,8 +13381,20 @@ def _nota_token(escopo: str, chave: str) -> str:
 
 
 def _nota_token_ok(escopo: str, chave: str, t: str) -> bool:
+    """🪤 31/08 (auditoria): `compare_digest` com DUAS str exige que as duas
+    sejam ASCII — um `t` com acento (link colado torto, e-mail que reescreveu a
+    URL) levantava TypeError e a rota devolvia HTTP 500 em vez de 403. Erro de
+    servidor onde o certo era "link inválido". Comparar em BYTES aceita
+    qualquer entrada e continua sendo comparação de tempo constante."""
     import hmac as _h
-    return bool(t) and _h.compare_digest(str(t), _nota_token(escopo, chave))
+    if not t:
+        return False
+    try:
+        _a = str(t).encode("utf-8", "surrogatepass")
+        _b = _nota_token(escopo, chave).encode("utf-8", "surrogatepass")
+    except Exception:
+        return False
+    return _h.compare_digest(_a, _b)
 
 
 def _link_avaliacao(tipo: str, email: str, nota, job_id: str = "") -> str:
@@ -13646,15 +13687,20 @@ def _alerta_avaliacao_projeto(job_id: str, email: str, nota: int):
                             f"({_p[0].get('items_count')} itens, "
                             f"{_p[0].get('file_types')}) — "
                             f"https://ai.arq.br/projeto.html?job_id={job_id}")
-            _notify_admin(
+            # 🪤 31/08 (auditoria): o retorno ia pro lixo e o log gravava
+            # sucesso mesmo quando o e-mail não saiu — instrumento dizendo que
+            # avisou sem ter avisado. Com 5 avaliações na história, perder o
+            # aviso de uma nota 1 é perder o achado inteiro.
+            _avisou = _notify_admin(
                 f"🔴 Nota {nota}/5 na entrega — {email}",
                 f"<b>Nota da planilha:</b> {nota}/5<br>"
                 f"<b>Cliente:</b> {email}{_ctx}<br><br>"
                 "Nota 1-2 é o cliente dizendo que a planilha NÃO serviu. Vale "
                 "abrir o projeto e ver o que o motor entregou — é achado de "
                 "motor com nome e arquivo.")
-            _log_error("avaliacao:nota-baixa", f"{nota}/5 {email}", job_id,
-                       severity="warning")
+            _log_error("avaliacao:nota-baixa",
+                       f"{nota}/5 {email} avisei_admin={_avisou}", job_id,
+                       severity="warning" if _avisou else "error")
         except Exception as _e:
             print(f"[avaliacao] alerta falhou (nao-fatal): {_e}")
 
@@ -19049,14 +19095,15 @@ def _alerta_nps(row: dict, category: str = "detractor"):
                 _assunto = f"🟡 NPS {_nota} — neutro: {row.get('user_email') or 'sem e-mail'}"
                 _fecho = ("Neutro é quem quase gostou: o que faltou costuma ser a próxima "
                           "melhoria óbvia do produto.")
-            _notify_admin(
+            _avisou_nps = _notify_admin(
                 _assunto,
                 f"<b>Nota:</b> {_nota}/10<br>"
                 f"<b>Cliente:</b> {row.get('user_name') or '?'} ({row.get('user_email') or '?'})<br>"
                 f"<b>Comentário:</b> {_com or '(sem comentário)'}"
                 f"{_ctx}<br><br>{_fecho}")
             _log_error(f"nps:{category}-alerta",
-                       f"score={_nota} {row.get('user_email')}", _jid)
+                       f"score={_nota} {row.get('user_email')} "
+                       f"avisei_admin={_avisou_nps}", _jid)
         except Exception as _e:
             print(f"[nps] alerta de NPS falhou (não-fatal): {_e}")
 

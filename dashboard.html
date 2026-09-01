@@ -1692,7 +1692,12 @@
       const [url, nome] = cfg.arquivo(l.p.job_id);
       const acao = l.p.arquivado
         ? '<span class="text-xs text-gray-400">arquivado</span>'
-        : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\')"'
+        // 🪤 31/08 (auditoria): este Baixar era o ÚNICO caminho de download que
+        // não pedia avaliação depois. O commit de hoje ligou o convite em 2 dos
+        // 3 botões e contou os 3 na mensagem — esta aba ficou de fora. Com 5
+        // avaliações em toda a história do produto, cada caminho conta.
+        : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\');'
+          + 'setTimeout(function(){window.__maybeShowNPS&&window.__maybeShowNPS(\'after_download\');},4000)"'
           + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>';
       const velho = l.p.entregaveis[l.tipo].desatualizado
         ? '<span class="pill-mini" style="background:#FEF3C7;color:#92400E" title="O quantitativo mudou depois que este arquivo foi gerado">desatualizado</span>' : '';

@@ -121,15 +121,26 @@ def test_a_ficha_pede_de_tabelas_conhecidas():
         "arquivo no mesmo commit." % desconhecidas)
 
 
-def test_TODA_coluna_pedida_pela_ficha_existe():
-    """O teste que teria evitado o 400 do comparativo."""
+def _colunas_que_faltam(pedidos):
+    """A checagem, num lugar só — pro controle positivo poder CHAMAR ela.
+
+    🪤 31/08 (auditoria): o controle abaixo REFAZIA esta subtração em vez de
+    chamar a checagem. Ou seja, ele provava que `set - set` funciona em Python,
+    não que o guarda morde. Controle tautológico é o pior tipo: dá a sensação de
+    estar protegido."""
     erros = []
-    for tabela, cols in _pedidos():
+    for tabela, cols in pedidos:
         if tabela not in SCHEMA:
             continue
         faltando = sorted(cols - SCHEMA[tabela])
         if faltando:
             erros.append(f"{tabela}: {faltando}")
+    return erros
+
+
+def test_TODA_coluna_pedida_pela_ficha_existe():
+    """O teste que teria evitado o 400 do comparativo."""
+    erros = _colunas_que_faltam(_pedidos())
     assert not erros, (
         "a ficha pede coluna que NÃO existe — o PostgREST devolve 400 e a seção "
         "fica vazia, o que na tela vira 'o cliente não usou isso': " + " | ".join(erros))
@@ -147,7 +158,15 @@ def test_CONTROLE_o_extrator_acha_as_secoes():
 
 
 def test_CONTROLE_o_teste_REPROVA_coluna_inventada():
-    """Prova que a checagem morde: uma coluna que não existe tem que aparecer."""
-    falso = {"project_supplier_quotes": {"job_id", "fornecedor", "created_at"}}
-    faltando = sorted(falso["project_supplier_quotes"] - SCHEMA["project_supplier_quotes"])
-    assert faltando == ["created_at", "fornecedor"], faltando
+    """🧪 Prova que a checagem morde — CHAMANDO a checagem, não refazendo a conta.
+
+    Alimenta o mesmo `_colunas_que_faltam` que o teste de verdade usa, com uma
+    coluna que não existe no retrato do banco."""
+    erros = _colunas_que_faltam(
+        [("project_supplier_quotes", {"job_id", "coluna_que_nao_existe"})])
+    assert erros, "a checagem passou batido por uma coluna inventada"
+    assert "coluna_que_nao_existe" in erros[0]
+    # e o controle NEGATIVO: coluna que existe não pode virar alarme
+    assert not _colunas_que_faltam(
+        [("project_supplier_quotes", {"job_id"})]), (
+        "a checagem acusa coluna que existe — viraria alarme permanente")

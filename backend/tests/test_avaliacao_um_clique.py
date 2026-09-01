@@ -66,13 +66,23 @@ def test_LINK_DO_EMAIL_aponta_pra_pagina_e_nao_grava_no_GET():
 
 def test_nao_existe_rota_GET_que_grave_avaliacao():
     """Guarda de arquitetura: gravar avaliacao e POST, sempre."""
+    # 🪤 31/08 (auditoria): o laco nao tinha CONTADOR. Se alguem renomear a
+    # rota (/api/nota, /api/feedback...), o `if` nunca casa, o laco nao roda e
+    # o teste passa VERDE guardando coisa nenhuma — o modo de falha classico do
+    # guarda que varre. Agora ele exige ter visto as rotas que conhece.
+    vistas = 0
     for rota in main.app.routes:
         caminho = getattr(rota, "path", "")
         if caminho.startswith("/api/avaliar"):
+            vistas += 1
             metodos = set(getattr(rota, "methods", []) or [])
             assert metodos <= {"POST"}, (
                 f"{caminho} aceita {metodos} — GET aqui deixa o scanner de "
                 "e-mail gravar nota sozinho")
+    assert vistas >= 2, (
+        "esperava ao menos /api/avaliar e /api/avaliar/comentario, achei %d — "
+        "a rota foi renomeada e este guarda parou de vigiar qualquer coisa"
+        % vistas)
 
 
 # ── nota do PROJETO (1-5) ────────────────────────────────────────────────
