@@ -126,7 +126,23 @@ def _num_in_text(s) -> float | None:
 
 _SPLIT_RE = re.compile(r"[-_\s./\\|:]+")
 
-_PILAR_TOKENS = ("PILAR", "COLUMN")
+# 🏗️ 01/09/2026 — "COLS" é o padrão AIA/CAD para pilar estrutural (`S-COLS` =
+# Structural Columns), e não casava: `_has_token` quebra "S-COLS" em ["S","COLS"]
+# e "COLS" não começa com "COLUMN". Apareceu no arquivo do Edvaldo (RACIONAL),
+# onde os 54 pilares vivem no layer `S-COLS`.
+# 🪤 "COLUNA" foi TESTADO e RECUSADO: o Tiago (METAL-AR) tem o layer
+# `AC-Indicação coluna Frigorígenas` — coluna frigorígena de ar-condicionado, e
+# não pilar. Casaria como falso positivo em toda prancha de climatização.
+# ⚠️ HONESTIDADE SOBRE O ALCANCE: isto sozinho NÃO destrava o caso do Edvaldo.
+# O detector de pilar só olha polilinha FECHADA, e o arquivo dele não tem
+# nenhuma (2.158 LINE, 448 HATCH, 0 LWPOLYLINE) — os pilares são hachura.
+# Medido em 01/09: 210 de 213 pranchas da base saem com `pilares=0`, e o
+# comentário de 09/08 em dwg_extractor.py já registrava que "polilinha fechada
+# quase não existe nos projetos reais". Contar pilar por HACHURA é o conserto
+# que vale, e o protótipo erra 24% sem separar as vistas do desenho (67 contra
+# 54 reais, porque os CORTES também desenham pilar). Fica pra quando houver
+# mais de um arquivo pra validar.
+_PILAR_TOKENS = ("PILAR", "COLUMN", "COLS")
 _VIGA_TOKENS = ("VIGA", "BEAM")
 _LAJE_TOKENS = ("LAJE", "SLAB")
 _EIXO_TOKENS = ("EIXO", "AXIS")

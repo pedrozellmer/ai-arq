@@ -151,10 +151,29 @@ def test_CONTROLE_POSITIVO_com_DXF_de_verdade():
             pass
 
 
-def test_o_filtro_NAO_foi_alterado_neste_commit():
+def test_o_filtro_so_muda_DEPOIS_de_medir():
     """🚨 Instrumento e conserto são commits separados. Alterar o filtro junto
-    contamina a medição — não dá pra saber o que era antes."""
+    contamina a medição — não dá pra saber o que era antes.
+
+    ✅ 01/09/2026 — A MEDIÇÃO FOI FEITA e o filtro foi alargado UMA vez, de
+    ("PILAR","COLUMN") para incluir "COLS". O que o log de produção disse:
+      · 213 pranchas com o log do descarte; **210 saem com `pilares=0`** (98,6%)
+        e só 3 detectam pilar;
+      · dos nomes recusados por NOME, a amostra real é DT-INS-AC, EQ-02,
+        K-LEGEN, BORDAS ESPESSAS, Defpoints, "Nível 1", DI-Tabelas, Markups e
+        "0" — **nenhum é layer de pilar**, ou seja, o filtro de nome estava
+        ACERTANDO;
+      · o gargalo é outro: o detector só olha polilinha FECHADA, e o arquivo do
+        Edvaldo (RACIONAL) não tem nenhuma — 2.158 LINE, 448 HATCH, 0
+        LWPOLYLINE. Os 54 pilares dele são HACHURA, no layer `S-COLS`.
+    "COLS" entrou porque é o padrão AIA (Structural Columns) e apareceu num
+    arquivo real. 🪤 "COLUNA" foi testado e RECUSADO: o Tiago (METAL-AR) tem o
+    layer `AC-Indicação coluna Frigorígenas`, que é coluna de ar-condicionado.
+
+    A regra continua valendo pro PRÓXIMO que quiser alargar: meça primeiro.
+    """
     import structural_extractor as se
-    assert se._PILAR_TOKENS == ("PILAR", "COLUMN"), (
-        "os tokens de pilar mudaram no commit do INSTRUMENTO: %r. Meça com o "
-        "log em produção antes de alargar." % (se._PILAR_TOKENS,))
+    assert se._PILAR_TOKENS == ("PILAR", "COLUMN", "COLS"), (
+        "os tokens de pilar mudaram: %r. Meça com o log em produção "
+        "(stage motor:geometria, campo pilares_descartados) e traga a amostra "
+        "de NOMES antes de alargar de novo." % (se._PILAR_TOKENS,))
