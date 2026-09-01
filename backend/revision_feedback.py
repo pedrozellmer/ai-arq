@@ -528,29 +528,51 @@ def _buscar_itens_com_id(job_id: str) -> list[dict]:
         return []
 
 
-def _buscar_antes_das_edicoes(job_id: str) -> dict:
-    """{item_id: estado ANTES da edição} a partir de item_reviews.edits._antes.
+def _buscar_antes_das_edicoes(job_id: str):
+    """Devolve (editados, excluidos) a partir de `item_reviews.edits._antes`.
+
+    `editados`  = {item_id: estado ANTES da edição}
+    `excluidos` = [estado ANTES da exclusão, ...]  — lista, porque o item já
+                  não existe mais em project_items e não há id vivo pra casar.
 
     O `_antes` é gravado desde 08/08 (main.py, submit_item_review) justamente
     pra existir o PAR — sem ele a correção do cliente diz o que ficou, mas não
-    o que a IA tinha errado, que é a informação que ensina."""
+    o que a IA tinha errado, que é a informação que ensina.
+
+    🩸 01/09/2026 — A EXCLUSÃO ERA JOGADA FORA AQUI. Esta consulta filtrava
+    `action=eq.edit`, e o comentário da função de baixo dizia: *"Item EXCLUÍDO
+    não entra... em 09/08 não havia nenhum reject, então não muda nada hoje."*
+    Era verdade em 09/08 e deixou de ser: em 31/08 consertamos o bug que
+    destruía o registro da exclusão (a FK `item_reviews.item_id` era ON DELETE
+    CASCADE, então apagar o item apagava a prova junto). Assim que o registro
+    passou a sobreviver, as exclusões começaram a chegar — 20 em 2 projetos,
+    16 com o `_antes` completo — e continuavam sendo descartadas aqui.
+    🔑 É o padrão da casa: consertar um bug LIGA código que estava morto, e o
+    passo seguinte não aceita o que passou a chegar.
+    🎯 E é o sinal mais forte que existe: editar é "o número está errado";
+    EXCLUIR é "este item o motor inventou, não existe na minha obra".
+    """
     try:
         jid = urllib.parse.quote(str(job_id), safe="")
         url = (f"{SUPABASE_URL}/rest/v1/item_reviews?job_id=eq.{jid}"
-               f"&action=eq.edit&select=item_id,edits&limit=5000")
+               f"&action=in.(edit,reject)&select=item_id,action,edits&limit=5000")
         req = urllib.request.Request(url, method="GET")
         for k, v in _service_headers().items():
             req.add_header(k, v)
         rows = json.loads(urllib.request.urlopen(req, timeout=10).read().decode("utf-8"))
-        out = {}
+        editados, excluidos = {}, []
         for r in (rows or []):
             _a = ((r.get("edits") or {}).get("_antes")) or {}
-            if r.get("item_id") and _a:
-                out[str(r["item_id"])] = _a
-        return out
+            if not _a:
+                continue
+            if str(r.get("action") or "") == "reject":
+                excluidos.append(_a)
+            elif r.get("item_id"):
+                editados[str(r["item_id"])] = _a
+        return editados, excluidos
     except Exception as e:
         print(f"[revision_feedback] antes job={job_id}: {type(e).__name__}: {e}")
-        return {}
+        return {}, []
 
 
 def processar_revisao_inline(job_id: str) -> bool:
@@ -567,20 +589,25 @@ def processar_revisao_inline(job_id: str) -> bool:
       revisados = project_items HOJE (já com as edições aplicadas)
       originais = o mesmo, com o `_antes` no lugar de quem foi editado
 
-    🪤 Item EXCLUÍDO não entra: o `_antes` só é gravado em action='edit', e a
-    linha some de project_items no reject. Isso SUBESTIMA os removidos — honesto
-    registrar. Em 09/08 não havia nenhum reject, então não muda nada hoje.
-    🪤 Sem nenhuma edição, não grava: aprovar sem corrigir não ensina.
-    Nunca levanta exceção.
+    🎯 01/09/2026 — ITEM EXCLUÍDO AGORA ENTRA. Este texto dizia o contrário
+    ("o `_antes` só é gravado em action='edit'... em 09/08 não havia nenhum
+    reject, então não muda nada hoje"), e as duas metades venceram: em 08/08 o
+    reject passou a gravar `_antes` também, e em 31/08 consertamos a FK em
+    CASCATA que apagava o registro da exclusão junto com o item. Aí as exclusões
+    começaram a chegar — e continuavam sendo descartadas aqui, calado.
+    O excluído entra só do lado ORIGINAL (estava antes, não está depois), e o
+    `comparar()` o classifica como "removido", coisa que ele sempre soube fazer.
+    🪤 Sem nenhuma edição E sem nenhuma exclusão, não grava: aprovar sem
+    corrigir não ensina. Nunca levanta exceção.
     """
     try:
         atuais = _buscar_itens_com_id(job_id)
         if not atuais:
             return False
-        antes = _buscar_antes_das_edicoes(job_id)
-        if not antes:
-            print(f"[revision_feedback] job={job_id} inline: nenhuma edição com "
-                  f"'antes' — nada a aprender")
+        antes, excluidos = _buscar_antes_das_edicoes(job_id)
+        if not antes and not excluidos:
+            print(f"[revision_feedback] job={job_id} inline: nenhuma edição nem "
+                  f"exclusão com 'antes' — nada a aprender")
             return False
 
         _campos = ("item_num", "description", "unit", "quantity", "confidence", "discipline")
@@ -592,11 +619,26 @@ def processar_revisao_inline(job_id: str) -> bool:
             # quem não foi editado é idêntico dos dois lados
             originais.append({**_rev, **{k: _a[k] for k in _campos if _a and k in _a}} if _a else dict(_rev))
 
+        # 🎯 01/09/2026 — A EXCLUSÃO ENTRA AQUI, e o jeito é o mais simples que
+        # existe: o item excluído estava na planilha ANTES e não está DEPOIS.
+        # Basta pô-lo só do lado `originais` — `comparar()` já sabe classificar
+        # isso como "removido" (está na docstring dele desde sempre) e
+        # `salvar_feedback` já grava `n_removidos`. Nada disso precisou nascer:
+        # já existia e nunca tinha sido alimentado.
+        # 🪤 NÃO acrescentar nada do lado `revisados`: um item de cada lado
+        # viraria "alterado", que é outra coisa — e o par fuzzy do comparador
+        # poderia casá-lo com um item parecido que o cliente MANTEVE, criando
+        # uma alteração que ninguém fez.
+        for _ex in excluidos:
+            originais.append({k: _ex.get(k) for k in _campos})
+
         resultado = comparar(originais, revisados)
         ok = salvar_feedback(job_id, resultado, arquivo="(revisão na tela)")
         t = resultado["totais"]
         print(f"[revision_feedback] job={job_id} INLINE salvo={ok} "
-              f"alterados={t['n_alterados']}/{t['n_itens']} pares={len(antes)}")
+              f"alterados={t['n_alterados']}/{t['n_itens']} "
+              f"removidos={t.get('n_removidos', 0)} "
+              f"pares={len(antes)} exclusoes={len(excluidos)}")
         return ok
     except Exception as e:
         print(f"[revision_feedback] inline job={job_id}: {type(e).__name__}: {e}")
