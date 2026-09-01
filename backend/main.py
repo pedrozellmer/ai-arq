@@ -18693,6 +18693,23 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
             _tentou_escrever = True
             urllib.request.urlopen(req, timeout=15)
             _escreveu = True
+            # 🔑 01/09/2026: `items_count` NUNCA era decrementado aqui. O item
+            # sumia da tabela e o número do projeto continuava o da gravação —
+            # a tela dizia "50 itens" com 33 na lista, e o cliente que apagou 17
+            # linhas de propósito virava, no nosso painel, um caso de "o motor
+            # perdeu item".
+            # 📏 Medido em 01/09: 3 dos 24 jobs com divergência (37 itens) eram
+            # exatamente isto — exclusão legítima do cliente contada como perda.
+            # 🪤 Reconta no banco em vez de fazer `items_count - 1`: subtrair
+            # supõe que o número de partida estava certo, e é justamente ele que
+            # a gente não pode assumir (ver motor:persist-perdeu-item).
+            try:
+                _n_apos = _contar_itens_no_banco(job_id)
+                if isinstance(_n_apos, int):
+                    _supabase_update("projects", "job_id", job_id,
+                                     {"items_count": _n_apos})
+            except Exception as _eic:
+                print(f"[review] nao atualizei items_count apos reject: {_eic}")
         except Exception as e:
             _supa_log(f"REVIEW reject item={item_id} ERR {e}")
             _erro_escrita = str(e)[:200]
