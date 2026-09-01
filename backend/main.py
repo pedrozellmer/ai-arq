@@ -18818,6 +18818,50 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
                 continue
 
         # 4) Gerar xlsx revisado — também enriquece com matches TCPO + heurísticas
+        # 🚨 01/09/2026 — A REFERÊNCIA SINAPI SUMIA NA REMONTAGEM.
+        # `project_items` não guarda `sinapi_matches` (confira as colunas: não
+        # existe campo pra isso). Quem remonta a planilha do banco perde a
+        # referência — e a coluna REF sai vazia, sem a aba "Referências SINAPI".
+        # 🪤 O TCPO logo abaixo JÁ era refeito aqui desde sempre; o SINAPI não.
+        # A assimetria passou batida porque a planilha continua saindo bonita,
+        # só que sem a referência oficial — que é metade do que a gente promete
+        # ("XLSX com referência SINAPI/TCPO").
+        # 📏 Medido em 01/09: 21 jobs de 17 clientes já foram revisados, e todos
+        # receberam a planilha remontada. Revisão é justo o momento em que o
+        # cliente mais precisa confiar no arquivo.
+        # Best-effort, igual ao fluxo principal (main.py ~10267): se falhar, a
+        # planilha sai mesmo assim — nunca bloqueia.
+        try:
+            from sinapi_matcher import candidates_for, apply_llm_pick
+            from concurrent.futures import ThreadPoolExecutor as _TPE
+
+            def _cands_rb(it):
+                try:
+                    return {"description": it.description,
+                            "unit": getattr(it, "unit", "") or "",
+                            "candidates": candidates_for(it.description, limit=60),
+                            "_item": it}
+                except Exception:
+                    return None
+
+            with _TPE(max_workers=5) as _exr:   # mesmo teto do fluxo principal
+                _lote_rb = [r for r in _exr.map(_cands_rb, items) if r]
+            _nc_rb = apply_llm_pick(_lote_rb)
+            for _e in _lote_rb:
+                if _e["candidates"]:
+                    _e["_item"].sinapi_matches = _e["candidates"][:3]
+            print(f"[sinapi-rebuild] job={job_id} {_nc_rb}/{len(_lote_rb)} "
+                  f"itens com código conferido pela IA")
+        except Exception as _esr:
+            print(f"[sinapi-rebuild] nao-fatal job={job_id}: {_esr}")
+            try:
+                _log_error("motor:sinapi-rebuild-falhou",
+                           f"{type(_esr).__name__}: {str(_esr)[:200]} — a planilha "
+                           f"revisada sai SEM referência SINAPI", job_id,
+                           severity="warning")
+            except Exception:
+                pass
+
         try:
             from tcpo_matcher import match_item, get_insumos
             for it in items:
