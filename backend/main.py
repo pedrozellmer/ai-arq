@@ -1282,6 +1282,32 @@ def _comparar_com_versao_anterior(job_id: str, n_medidos: int, n_itens: int) -> 
     return out
 
 
+def _contar_itens_no_banco(job_id: str):
+    """Quantas linhas project_items este job tem, AGORA, segundo o banco.
+
+    Devolve int, ou None quando não deu pra saber — e `None` é diferente de 0.
+    🪤 Usa HEAD + `Prefer: count=exact` e lê o Content-Range, em vez de baixar
+    as linhas e contar: o PostgREST corta a listagem em 1000 e devolve HTTP 200
+    sem avisar (25/08), então contar o que voltou mentiria em job grande.
+    """
+    import urllib.request, urllib.error
+    try:
+        url = (f"{SUPABASE_URL}/rest/v1/project_items"
+               f"?job_id=eq.{job_id}&select=job_id&limit=1")
+        req = urllib.request.Request(url, method='HEAD')
+        req.add_header('apikey', SUPABASE_KEY)
+        req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
+        req.add_header('Prefer', 'count=exact')
+        resp = urllib.request.urlopen(req, timeout=15)
+        # Content-Range vem como "0-0/57" (ou "*/0" quando não há nada)
+        cr = resp.headers.get('Content-Range') or ''
+        total = cr.rsplit('/', 1)[-1].strip()
+        return int(total) if total.isdigit() else None
+    except Exception as _ec:
+        print(f"[persist_items] nao consegui contar no banco: {_ec}")
+        return None
+
+
 def _persist_items_to_supabase(job_id: str, items: list) -> int:
     """Insere cada BudgetItem como row em project_items.
     Permite revisão inline no navegador via endpoint /api/items/{job_id}.
@@ -1394,7 +1420,49 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
         req.add_header('Content-Type', 'application/json')
         req.add_header('Prefer', 'return=minimal')
         urllib.request.urlopen(req, timeout=30)
-        _supa_log(f"PERSIST items job={job_id} OK n={len(rows)}")
+        # ══════════════════════════════════════════════════════════════════
+        #  🚨 CONFERE O QUE ENTROU — não acredita no próprio insert
+        # ══════════════════════════════════════════════════════════════════
+        # 🩸 01/09/2026: esta função devolvia `len(rows)` sem NUNCA perguntar ao
+        # banco quantas linhas entraram, e `items_count` do projeto era escrito
+        # com esse número. Medido no acervo: **24 de 144 jobs concluídos (16,7%)
+        # gravaram MENOS linhas do que contaram — 647 itens perdidos**, desde o
+        # primeiro job da base (19/04). Nenhum deles deixou uma linha de erro:
+        # o HTTP voltou 2xx e o resto foi suposição.
+        # Assinatura do estrago: nos 120 jobs sãos o `sort_order` é contíguo
+        # 0..N-1; nos 24 afetados ele SEMPRE tem buraco (job d5e073cf, Flavio:
+        # 50 montadas, 33 no banco, faltando 14,15,18-21,23,30-33,35,40,42,47-49).
+        # O cliente vê os itens na planilha que baixa e NÃO na tela de revisão.
+        # 🔑 Este guarda não depende de saber a CAUSA: ele compara o que a gente
+        # mandou com o que o banco tem, e grita a diferença. Família do
+        # "gravação que falha calada" — a mesma que já mordeu em 14/07 (NaN
+        # derrubando o batch) e em 25/08 (teto de 1000 linhas do PostgREST).
+        _gravadas = _contar_itens_no_banco(job_id)
+        if _gravadas is None:
+            # Não deu pra conferir. Não afirma sucesso — declara a dúvida.
+            _supa_log(f"PERSIST items job={job_id} OK n={len(rows)} "
+                      f"(NAO consegui conferir a contagem no banco)")
+            try:
+                _log_error("motor:persist-nao-conferido",
+                           f"gravei {len(rows)} item(ns) e nao consegui contar "
+                           f"quantos entraram — items_count pode estar errado",
+                           job_id, severity="warning")
+            except Exception:
+                pass
+            return len(rows)
+        if _gravadas != len(rows):
+            _supa_log(f"PERSIST items job={job_id} PERDA mandei={len(rows)} "
+                      f"entraram={_gravadas}")
+            try:
+                _log_error("motor:persist-perdeu-item",
+                           f"mandei {len(rows)} item(ns) e o banco ficou com "
+                           f"{_gravadas} — {len(rows) - _gravadas} PERDIDO(S). "
+                           f"A planilha tem os itens e a tela de revisão não.",
+                           job_id, severity="critical")
+            except Exception:
+                pass
+            return _gravadas
+        _supa_log(f"PERSIST items job={job_id} OK n={len(rows)} (conferido)")
         return len(rows)
     except urllib.error.HTTPError as e:
         try:
@@ -10480,7 +10548,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Persistir itens individuais no Supabase pra permitir revisão inline
         # no navegador (endpoint /api/items/{job_id}). Sem isso, os itens só
         # existem no xlsx — a revisão só poderia ser feita no Excel offline.
-        _persist_items_to_supabase(job_id, all_items)
+        # 🚨 01/09: o retorno era DESCARTADO. `items_count` saía como
+        # len(all_items) — o que a gente MANDOU — e não o que o banco ficou.
+        # Em 24 de 144 jobs os dois números divergiam e ninguém via.
+        _n_gravados = _persist_items_to_supabase(job_id, all_items)
 
         # 🚨 A releitura mediu MENOS que a versão anterior? O cliente tem que
         # saber. Roda AQUI de propósito: `_persist_items_to_supabase` acabou de
@@ -10546,9 +10617,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
         # Atualizar projeto no Supabase (log explícito do resultado pra rastrear
         # falhas que antes passavam silenciosas)
+        # 🔑 `items_count` passa a ser o que o BANCO tem, não o que a gente
+        # mandou. Se a gravação perdeu linha, o número do projeto conta a
+        # verdade — e o cliente é avisado logo abaixo, em vez de ver "50 itens"
+        # numa tela de revisão com 33.
+        _itens_no_banco = _n_gravados if isinstance(_n_gravados, int) and _n_gravados > 0 \
+            else len(all_items)
+        if _itens_no_banco != len(all_items):
+            project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                "⚠ %d item(ns) desta leitura não chegaram na tela de revisão do site "
+                "(gravamos %d de %d). Eles ESTÃO na planilha em anexo — o arquivo "
+                "está completo. Se você for revisar pelo site, confira contra a "
+                "planilha, e nos avise que a gente reprocessa."
+                % (len(all_items) - _itens_no_banco, _itens_no_banco, len(all_items))]
         _supa_ok = _supabase_update("projects", "job_id", job_id, {
             "status": "done",
-            "items_count": len(all_items),
+            "items_count": _itens_no_banco,
             "total_area": project_data.total_area if project_data.total_area else None,
             "layout_area": project_data.layout_area if project_data.layout_area else None,
             "completed_at": datetime.utcnow().isoformat(),
