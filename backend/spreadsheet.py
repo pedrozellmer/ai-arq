@@ -493,6 +493,9 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
     # Agrupar itens por disciplina (deduplicar descrições similares)
     items_by_discipline = {}
     seen_descriptions = set()
+    # O que esta última rede descartar fica registrado — até 01/09 ela apagava
+    # em silêncio e o buraco só aparecia comparando a planilha com o banco.
+    _descartados: list = []
     for item in items:
         disc = item.discipline or "Complementares"
         # Deduplicar por descrição normalizada
@@ -506,14 +509,43 @@ def generate_spreadsheet(project: ProjectData, items: list[BudgetItem],
         if str(getattr(item, "origem", "") or "") == "revisao_cliente":
             items_by_discipline.setdefault(disc, []).append(item)
             continue
-        desc_key = item.description.lower().strip()[:50]
+        # 🚨 01/09/2026 — O CORTE EM 50 CARACTERES APAGAVA ITEM DIFERENTE.
+        # O comentário acima já descrevia o par S1/S2 e o conserto de 24/08
+        # tapou SÓ o caminho da revisão do cliente. O caso geral continuou, e
+        # medido no acervo em 01/09 ele é grande: 106 grupos colidem pelo
+        # prefixo, e em apenas 5 deles a descrição INTEIRA é igual. Nos outros
+        # 101 são itens distintos — 144 linhas perdidas em 37 de 130 jobs (28%).
+        # Amostra real do que sumia da planilha que o cliente baixa:
+        #   Sapata S1 (160x160x60) 14,75 m³  vs  S2 (100x100x40) 4,40 m³
+        #   Contrapiso área interna 593 m²   vs  varanda externa 276,91 m²
+        #   Rodapé pav. superior 42 ml       vs  pav. inferior 45 ml
+        #   Divisória gesso Standard 15 m²   vs  umidade 8 m²  vs  fogo 6 m²
+        # 🩸 Pior que perder: o item CONTINUA na tela de revisão e no banco, e
+        # some só do arquivo que vira orçamento. Ninguém vê o buraco.
+        # 🔑 Agora só cai fora o que é EXATAMENTE igual (descrição+unidade+
+        # quantidade). A dedup de verdade é a de montante (_consolidate_items,
+        # _dedupe_by_block); esta aqui é a última rede, e rede que apaga o que
+        # não devia é pior que rede nenhuma.
+        # 🪤 E NUNCA mais em silêncio: o que for descartado vai pra lista.
+        desc_key = (item.description.lower().strip(),
+                    str(getattr(item, "unit", "") or "").strip().lower(),
+                    round(float(getattr(item, "quantity", 0) or 0), 4))
         if desc_key in seen_descriptions:
+            _descartados.append(item)
             continue
         seen_descriptions.add(desc_key)
 
         if disc not in items_by_discipline:
             items_by_discipline[disc] = []
         items_by_discipline[disc].append(item)
+
+    if _descartados:
+        print("[planilha] dedup final descartou %d linha(s) EXATAMENTE iguais: %s"
+              % (len(_descartados),
+                 "; ".join("%s (%s %s)" % (d.description[:40],
+                                           getattr(d, "quantity", "?"),
+                                           getattr(d, "unit", "?"))
+                           for d in _descartados[:5])))
 
     # Numerar disciplinas na ordem correta
     disc_num = 1
