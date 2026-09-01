@@ -9673,28 +9673,82 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     and str(getattr(_it, "unit", "") or "").strip().lower() == "un"
                     for _it in all_items)
                 _sem_pd = not float(getattr(project_data, "user_pe_direito", 0) or 0)
+                # 🚨 01/09/2026 — CASO EDVALDO (Racional, job b5ce23ff). Este
+                # aviso AFIRMAVA "o arquivo enviado não traz planta de fôrma" —
+                # e o arquivo era TOP-EST-PE-116-FRM-TIP-R00: planta de FÔRMA do
+                # pavimento TIPO, com 175 cotas validando a escala em cm, layers
+                # LAJE / VIGA / S-COLS-IDEN / S-BEAM-IDEN lidos, 50+ seções de
+                # pilar extraídas ("150×19", "14/63") e 90,86 m² de laje medidos
+                # da hachura. Dizer a um coordenador de estrutura que ele mandou
+                # o arquivo errado, quando ele mandou exatamente o certo, encerra
+                # a avaliação — e é a família do "erro que mentia" (53 de 74
+                # falhas eram NOSSAS). A frase era uma AFIRMAÇÃO sobre o arquivo
+                # dele feita sem nunca olhar o arquivo.
+                # 🔑 Numa planta de fôrma 2D o que falta NÃO é a prancha: é a
+                # ALTURA (pé-direito do pavimento e altura de viga), que desenho
+                # em planta não carrega. São dois diagnósticos opostos e a gente
+                # dava só o primeiro.
+                # 🪤 Continua ADITIVO: nenhuma quantidade nem selo muda.
+                _ELEM_ESTRUT = ("laje", "viga", "pilar", "escada", "fôrma", "forma")
+                _UNID_GRANDEZA = ("m", "m²", "m2", "m³", "m3", "ml")
+                _leu_estrutura = any(
+                    (getattr(_it, "quantity", 0) or 0) > 0
+                    and str(getattr(_it, "unit", "") or "").strip().lower() in _UNID_GRANDEZA
+                    and any(_e in str(getattr(_it, "description", "") or "").lower()
+                            for _e in _ELEM_ESTRUT)
+                    for _it in all_items)
+                # 🪤 Substring em texto minúsculo, NÃO regex: `[aa]rea` não pega
+                # "Área" e guarda que falha calada parece guarda que funciona
+                # (queimadura de 10/08). Estas frases são escritas pelo próprio
+                # motor nas observações.
+                _obs_todas = " || ".join(
+                    str(getattr(_it, "observations", "") or "") for _it in all_items).lower()
+                _MARCAS_ALTURA = ("altura de pavimento", "pé-direito", "pe-direito",
+                                  "altura de viga", "altura da viga", "altura de laje",
+                                  "espessura de laje", "altura não", "altura nao")
+                _falta_altura = any(_m in _obs_todas for _m in _MARCAS_ALTURA)
+                # A dica do pé-direito existia só pro pilar CONTADO em 'un'. No
+                # caso Edvaldo a IA dobrou os 50+ pilares dentro da linha de
+                # fôrma em m², então a dica não disparou — justo pra quem ela foi
+                # escrita. Agora basta o motor ter dito que falta a altura.
                 _dica_pd = (
-                    " Dica: esta prancha tem pilares contados com as seções lidas — "
-                    "se você reprocessar informando o PÉ-DIREITO (campo do envio), "
-                    "dá pra calcular o volume e a fôrma dos pilares a partir do que "
-                    "já foi contado." if (_tem_pilar_contado and _sem_pd) else "")
+                    " Dica: as seções já foram lidas do desenho — se você "
+                    "reprocessar informando o PÉ-DIREITO (campo do envio), dá pra "
+                    "calcular o volume e a fôrma a partir do que já foi lido."
+                    if ((_tem_pilar_contado or _falta_altura) and _sem_pd) else "")
+                if _leu_estrutura and _falta_altura:
+                    _aviso_estrut = (
+                        "⚠ ESTRUTURA: o desenho foi lido — os elementos estruturais "
+                        "saíram com quantidade —, mas nenhum número foi MEDIDO do "
+                        "desenho no sentido estrito. O que falta aqui não é a prancha: "
+                        "é a ALTURA. Planta de fôrma é 2D e não carrega pé-direito do "
+                        "pavimento nem altura de viga, e sem altura não fecham m³ de "
+                        "concreto nem m² de fôrma. O peso de aço depende do quadro de "
+                        "ferros, que é outra prancha (ARM).")
+                else:
+                    _aviso_estrut = (
+                        "⚠ ESTRUTURA: nenhum número desta planilha foi MEDIDO do desenho. "
+                        "O arquivo enviado não traz o que a medição de estrutura precisa "
+                        "(planta de fôrma, detalhamento de armação ou quadro de ferros). "
+                        "Os valores de aço/concreto/fôrma que aparecem são pré-dimensionamento "
+                        "por índice (área × índice típico) ou ficaram zerados — servem de ordem "
+                        "de grandeza, não de levantamento. Pra medir de verdade: envie a prancha "
+                        "de fôrma/armação ou o quadro de ferros. Se o desenho enviado for de "
+                        "arquitetura, reprocesse escolhendo 'Ler como Arquitetura' pra "
+                        "aproveitar o que ele tem.")
                 project_data.warnings = (project_data.warnings or []) + [
-                    "⚠ ESTRUTURA: nenhum número desta planilha foi MEDIDO do desenho. "
-                    "O arquivo enviado não traz o que a medição de estrutura precisa "
-                    "(planta de fôrma, detalhamento de armação ou quadro de ferros). "
-                    "Os valores de aço/concreto/fôrma que aparecem são pré-dimensionamento "
-                    "por índice (área × índice típico) ou ficaram zerados — servem de ordem "
-                    "de grandeza, não de levantamento. Pra medir de verdade: envie a prancha "
-                    "de fôrma/armação ou o quadro de ferros. Se o desenho enviado for de "
-                    "arquitetura, reprocesse escolhendo 'Ler como Arquitetura' pra "
-                    "aproveitar o que ele tem." + _dica_pd
+                    _aviso_estrut + _dica_pd
                 ]
                 # 🪤 29/08: sem severity caía no default "error" — mas isto é o
                 # sistema FUNCIONANDO (aviso emitido, condição esperada de planta
                 # sem quadro de ferros). Erro de verdade no painel é outra coisa.
                 _log_error("motor:estrutura-sem-medida",
                            f"itens={len(all_items)} por_indice={_n_indice} "
-                           f"confirmados=0 — aviso de pré-dimensionamento emitido", job_id,
+                           f"confirmados=0 leu_estrutura={_leu_estrutura} "
+                           f"falta_altura={_falta_altura} sem_pd={_sem_pd} "
+                           f"dica_pd={bool(_dica_pd)} "
+                           f"ramo={'falta-altura' if (_leu_estrutura and _falta_altura) else 'falta-prancha'}"
+                           " — aviso de pré-dimensionamento emitido", job_id,
                            severity="info")
 
         # ── HONESTIDADE DE ÁREA (regra dura nº1) — helper _apply_area_honesty ──
