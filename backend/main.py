@@ -9378,6 +9378,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # medição saiu: 12 itens, 11 com quantidade zero, zero medidos do CAD.
         # O aviso mandava conferir medidas que não existiam. Afirmar resultado
         # antes de olhar o resultado é a regra nº1 pelo avesso.
+        # Posição do aviso do plano B, pra recontar os medidos depois do
+        # rebaixamento (caso Tiago, 01/09 — ver o bloco logo abaixo).
+        _aviso_lw_idx, _aviso_lw_cab = None, ""
         if dwg_via_libredwg:
             try:
                 # 🪤 MESMO bug de enum do aviso de estrutura (19/08): str(enum)
@@ -9407,6 +9410,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _fim = ("Confira as medidas-chave contra o projeto antes de fechar "
                         "orçamento.")
             project_data.warnings = (project_data.warnings or []) + [_cab + _fim]
+            # 🚨 01/09/2026 — CASO TIAGO (METAL-AR, job 2a42f7ec). Este bloco roda
+            # ~180 linhas ANTES do guarda `selos_sem_geometria`, que é quem rebaixa
+            # o selo de quem não tem procedência de geometria. Resultado: o texto
+            # conta os medidos de ANTES do rebaixamento e nunca recalcula.
+            # Ele recebeu, literalmente, "As medições saíram (2 item(ns) medido(s)
+            # do CAD), mas vale conferir 2-3 medidas-chave" — numa planilha com
+            # ZERO de 132 medidos. Os 2 eram gás refrigerante, rebaixados logo
+            # depois por procedência só de texto. O guarda de LINHA funcionou; o
+            # que mentiu foi o aviso do PROJETO, no parágrafo que ele lê antes de
+            # fechar orçamento. É a regra dura nº1 no nível do projeto.
+            # 🔑 Guarda a posição pra reescrever com a contagem VERDADEIRA depois
+            # que todo mundo que rebaixa já rodou. Índice, não busca por texto:
+            # casar string de aviso é a família do guarda que falha calado.
+            _aviso_lw_idx = len(project_data.warnings) - 1
+            _aviso_lw_cab = _cab
         _dwg_com_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) in _pdf_stems]
         _dwg_sem_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) not in _pdf_stems]
         if _dwg_com_irmao:
@@ -9729,6 +9747,39 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[escala-divergente] nao-fatal: {_eed}")
             _log_error("motor:escala-divergente", f"FALHOU: {_eed}", job_id,
                        severity="warning")
+
+        # ── RECONTA O AVISO DO PLANO B COM A VERDADE (caso Tiago, 01/09) ─────
+        # Tudo que rebaixa selo já rodou: selos_sem_geometria e escala-divergente.
+        # Só AGORA o número de medidos é o que o cliente vai ver na planilha.
+        # 🪤 Reescreve por ÍNDICE. Procurar a frase antiga por texto seria a
+        # família do guarda que falha calado: muda uma palavra e ele para de
+        # achar, sem quebrar nada e sem avisar ninguém.
+        if _aviso_lw_idx is not None:
+            try:
+                _av = project_data.warnings or []
+                if 0 <= _aviso_lw_idx < len(_av):
+                    _med_fim = sum(
+                        1 for _it in (all_items or [])
+                        if getattr(_it, "confidence", None) == "confirmado")
+                    if _med_fim == 0:
+                        _fim2 = ("Ele abriu os desenhos, mas **nenhuma quantidade foi "
+                                 "medida da geometria** — o que saiu na planilha veio de "
+                                 "texto lido das pranchas. Trate a planilha como um mapa "
+                                 "do que existe, não como quantitativo fechado.")
+                    else:
+                        _fim2 = ("As medições saíram (%d item(ns) medido(s) do CAD), mas "
+                                 "vale conferir 2-3 medidas-chave contra o projeto antes "
+                                 "de fechar orçamento." % _med_fim)
+                    _novo = _aviso_lw_cab + _fim2
+                    if _av[_aviso_lw_idx] != _novo:
+                        _log_error("motor:aviso-planob-recontado",
+                                   "o aviso afirmava outra contagem antes dos guardas; "
+                                   "medidos finais=%d" % _med_fim, job_id,
+                                   severity="warning")
+                    _av[_aviso_lw_idx] = _novo
+                    project_data.warnings = _av
+            except Exception as _ealw:
+                print(f"[aviso-planob] recontagem nao-fatal: {_ealw}")
 
         try:
             _n_med_esc = -1
