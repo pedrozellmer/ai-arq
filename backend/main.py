@@ -6361,7 +6361,20 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
         if md.get("unidade_por_consenso_projeto"):
             return {"nome": nome, "status": "consenso", "n": 0, "unidade": uni}
         if md.get("alerta_unidade") or md.get("unidade_corrigida_por_plausibilidade"):
-            return {"nome": nome, "status": "alerta"}   # já vira ressalva por outro caminho
+            # 🚨 01/09/2026 — CASO GABRIELLE (sabrar, job ffac8a79, NOTA 1/5).
+            # Este ramo devolvia só {"nome", "status": "alerta"} com o comentário
+            # "já vira ressalva por outro caminho". O outro caminho REBAIXA O
+            # SELO EM SILÊNCIO — não fala com o cliente. Resultado: a prancha com
+            # a escala SUSPEITA era a única que não gerava linha nenhuma, enquanto
+            # a prancha meramente "sem prova" gerava. O caso grave era o mudo.
+            # Ela recebeu "22.332,37 ml" de duto (o desenho foi lido como
+            # POLEGADAS; ÷25,4 dá 879 m, que é o plausível) sem uma palavra sobre
+            # escala, e avaliou a entrega com NOTA 1. É orçamentista — bateu o
+            # olho no número impossível e a planilha morreu ali.
+            # 🪤 Só LÊ o metadata. Não muda fator, selo nem quantidade.
+            return {"nome": nome, "status": "alerta",
+                    "declarada": md.get("unidade_desenho") or "?",
+                    "alerta": str(md.get("alerta_unidade") or "")[:240]}
     except Exception:
         pass
     return {"nome": nome, "status": "sem_prova",
@@ -6386,7 +6399,29 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1) -> list:
     """
     provadas = [a for a in arqs if a.get("status") in ("cotas", "rotulo", "consenso")]
     sem = [a for a in arqs if a.get("status") == "sem_prova"]
+    # 🚨 01/09 (caso Gabrielle): 'alerta' não gerava linha NENHUMA — o desfecho
+    # mais grave era o único mudo. Vai PRIMEIRO, porque "a escala está suspeita"
+    # é pior que "não consegui provar a escala".
+    alerta = [a for a in arqs if a.get("status") == "alerta"]
     out = []
+    if alerta:
+        _n = ", ".join(
+            "%s (o arquivo declara: %s)" % (a["nome"], a.get("declarada") or "?")
+            for a in alerta[:4])
+        if len(alerta) > 4:
+            _n += " e mais %d" % (len(alerta) - 4)
+        # O motivo que o motor já calculou vale mais que qualquer frase genérica:
+        # "maior elemento mede 5127m (>500m)" explica sozinho por que desconfiar.
+        _motivos = [a.get("alerta") for a in alerta if a.get("alerta")]
+        _porque = (" Motivo: " + _motivos[0].split("|")[0].strip()) if _motivos else ""
+        out.append(
+            "⚠ ESCALA SUSPEITA em %s.%s Por isso NENHUMA quantidade em metro, m² "
+            "ou m³ dessas pranchas saiu com o selo \"✓ MEDIDO do CAD\" — as "
+            "contagens de peças (un) não são afetadas, porque contar não depende "
+            "de escala. Se algum comprimento ou área estiver com ordem de grandeza "
+            "estranha, é isto. Pra resolver: reenvie informando a área total do "
+            "projeto no campo do envio, ou nos diga a unidade real do desenho."
+            % (_n, _porque))
     if provadas:
         partes = []
         for a in provadas:
