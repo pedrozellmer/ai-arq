@@ -213,6 +213,68 @@ def extraction_has_quality_caveat(metadata) -> bool:
     )
 
 
+# ── ESCALA DIVERGENTE ENTRE PRANCHAS DO MESMO JOB (regra nº1) ──────────────
+# Um prédio tem UMA unidade. Se as pranchas do mesmo job resolvem pra fatores
+# que diferem 100× ou 1000×, pelo menos uma está errada e não se sabe qual.
+# Réguas que PROVAM a escala (cota do próprio desenho, ou rótulo de área que
+# bate com a geometria). Plausibilidade e DIMLFAC são inferência, não prova.
+REGUAS_QUE_PROVAM = ("validada", "corrigida", "corrigida_lfac", "provada_por_rotulo")
+
+# Abaixo disto é ruído de arredondamento; 10× já é erro de unidade inteira.
+DIVERGENCIA_MINIMA = 10.0
+
+# Unidades cujo número depende da ESCALA do desenho. Contagem ('un', 'pç') NÃO
+# entra: contar bloco não depende de escala — decisão deliberada de 17/08.
+UNIDADES_DE_ESCALA = ("m", "m²", "m2", "m³", "m3", "ml", "cm", "mm", "km", "m.l")
+
+
+def escala_divergente(escalas):
+    """As pranchas do mesmo job discordam da unidade entre si?
+
+    `escalas`: lista de dicts {prancha, fator, regua, unidade}.
+    Devolve (divergiu, pranchas_suspeitas:set, resumo:str).
+
+    🪤 Só APONTA. Quem rebaixa selo é o chamador — e só rebaixa, nunca promove.
+
+    Regra: se alguma prancha PROVOU a escala por cota, esse fator é a verdade e
+    quem discorda dele é suspeito. Se nenhuma provou, ninguém é confiável e
+    todas entram — porque aí não há árbitro.
+    """
+    val = [e for e in (escalas or [])
+           if isinstance(e, dict) and (e.get("fator") or 0) > 0]
+    if len(val) < 2:
+        return (False, set(), "")
+    fatores = sorted({round(float(e["fator"]), 9) for e in val})
+    if len(fatores) < 2 or fatores[-1] / fatores[0] < DIVERGENCIA_MINIMA:
+        return (False, set(), "")
+
+    provadas = [e for e in val if str(e.get("regua") or "") in REGUAS_QUE_PROVAM]
+    fat_provados = {round(float(e["fator"]), 9) for e in provadas}
+    if len(fat_provados) == 1:
+        verdade = fat_provados.pop()
+        suspeitas = {e["prancha"] for e in val
+                     if round(float(e["fator"]), 9) != verdade}
+        motivo = ("%d prancha(s) provaram a escala por cota (fator %s) e %d "
+                  "discordam" % (len(provadas), verdade, len(suspeitas)))
+    else:
+        # nenhuma provou, ou as provadas discordam entre si: sem árbitro
+        suspeitas = {e["prancha"] for e in val}
+        motivo = ("nenhuma prancha provou a escala por cota — não há como saber "
+                  "qual das %d leituras está certa" % len(fatores))
+
+    resumo = ("As pranchas deste projeto foram lidas em escalas diferentes "
+              "(fatores %s — diferença de %.0f×). %s."
+              % (", ".join(str(f) for f in fatores),
+                 fatores[-1] / fatores[0], motivo))
+    return (True, suspeitas, resumo)
+
+
+def item_e_de_escala(unidade) -> bool:
+    """A quantidade deste item depende da escala do desenho?"""
+    u = str(unidade or "").strip().lower().replace(" ", "")
+    return u in UNIDADES_DE_ESCALA
+
+
 _BLOCK_NAME_RE = _re.compile(
     r"bloco(?:\s+cad)?\s*['\"‘’“”]\s*([^'\"‘’“”]+?)\s*['\"‘’“”]",
     _re.IGNORECASE,

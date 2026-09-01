@@ -6741,6 +6741,21 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # (caminho, fator_para_metros) das pranchas DXF que a extração leu com
         # sucesso — alimenta a SOMBRA de montagem de cômodos no fim do job.
         _dxfrooms_units: list = []
+        # 🚨 01/09/2026 — ESCALA DIVERGENTE ENTRE PRANCHAS DO MESMO JOB.
+        # Um prédio tem UMA unidade. Se as pranchas do mesmo job resolvem pra
+        # fatores que diferem 100× ou 1000×, pelo menos uma está errada e a
+        # gente NÃO SABE qual. Medido no acervo em 01/09: 6 de 73 jobs de CAD
+        # têm isso, e os 6 divergem 100× ou mais.
+        # 🩸 Caso Amanda (job 349e75a5, 10/08): o MESMO projeto foi lido em três
+        # escalas — 0.001 (mm) em 2 pranchas, 0.0254 (POLEGADAS) em 6, e 1.0
+        # (metros) em 4. Uma das pranchas em polegadas entregou
+        # "Condutos no teto = 9,92 ml ✓ MEDIDO do CAD". Se o desenho é mm o
+        # certo seria 0,39 m; se é metro, 390 m. Nas duas hipóteses 9,92 está
+        # errado, e saiu carimbado.
+        # 🔑 A decisão de unidade é POR ARQUIVO e nada compara as pranchas entre
+        # si: `fator_para_metros` só era lido pela linha de log e pela sombra de
+        # cômodos. Esta lista existe pra fechar esse buraco.
+        _escala_por_prancha: list = []
         dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
         dwg_via_libredwg = []  # convertidos pelo plano B — aviso pro cliente conferir (escopo garantido)
         # Pranchas cujo DXF nasceu acima da trava dura e foram APAGADAS na hora.
@@ -7332,6 +7347,17 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     try:
                         _dxfrooms_units.append(
                             (dxf_path, float(extraction.metadata.get("fator_para_metros") or 1.0)))
+                    except (TypeError, ValueError):
+                        pass
+                    # Guarda (prancha, fator, régua) pra comparar as pranchas do
+                    # mesmo job entre si depois do laço — ver _escala_por_prancha.
+                    try:
+                        _escala_por_prancha.append({
+                            "prancha": os.path.basename(dxf_path),
+                            "fator": float(extraction.metadata.get("fator_para_metros") or 1.0),
+                            "regua": str(extraction.metadata.get("regua_cotas_status") or "nao-decidiu"),
+                            "unidade": str(extraction.metadata.get("unidade_desenho") or "?"),
+                        })
                     except (TypeError, ValueError):
                         pass
                     # 🪤 GRAVAR SEMPRE a decisão de unidade — inclusive quando não
@@ -9605,6 +9631,69 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     "fechar o orçamento."]
             except Exception:
                 pass
+
+        # ── REGRA DURA Nº1: ESCALAS QUE DISCORDAM DENTRO DO MESMO JOB ────────
+        # 🩸 Caso Amanda (349e75a5, 10/08): o mesmo projeto lido em 0.001 (mm),
+        # 0.0254 (POLEGADAS) e 1.0 (metros). Uma prancha em polegadas entregou
+        # "Condutos no teto = 9,92 ml ✓ MEDIDO do CAD" — se o desenho é mm o
+        # certo seria 0,39 m, se é metro seria 390 m. Nas duas hipóteses o número
+        # está errado, e saiu carimbado de medido.
+        # 🔑 Um prédio tem UMA unidade. Quando as pranchas discordam 10× ou mais,
+        # pelo menos uma está errada e não dá pra saber qual — então nenhum
+        # número de GRANDEZA das pranchas suspeitas pode sair com selo. Contagem
+        # ('un', 'pç') não entra: contar bloco não depende de escala.
+        # 🪤 Só REBAIXA. Nunca promove. E avisa o cliente, porque até hoje o
+        # resumo de escala nem enxergava o fator.
+        try:
+            from engine_rules import (escala_divergente as _esc_div,
+                                      item_e_de_escala as _e_escala)
+            from models import Confidence as _CfE
+            _div, _suspeitas, _resumo_div = _esc_div(_escala_por_prancha)
+            if _div:
+                def _da_suspeita(_it):
+                    _rs = str(getattr(_it, "ref_sheet", "") or "")
+                    if not _rs:
+                        return True   # sem procedência de prancha: não dá pra inocentar
+                    return any(_s in _rs or _rs in _s for _s in _suspeitas)
+                _reb = 0
+                for _it in (all_items or []):
+                    if not _e_escala(getattr(_it, "unit", "")):
+                        continue
+                    if str(getattr(getattr(_it, "confidence", None), "value",
+                                   getattr(_it, "confidence", ""))) != "confirmado":
+                        continue
+                    if not _da_suspeita(_it):
+                        continue
+                    try:
+                        _it.confidence = _CfE.ESTIMADO
+                        _reb += 1
+                    except Exception:
+                        continue
+                    _o = str(getattr(_it, "observations", "") or "")
+                    if "escalas diferentes" not in _o:
+                        _it.observations = (
+                            "⚠ ESTIMADO — as pranchas deste projeto foram lidas em "
+                            "escalas diferentes e esta é uma das divergentes; o número "
+                            "pode estar 1000× fora. Confira contra a prancha. " + _o)[:1000]
+                _log_error("motor:escala-divergente",
+                           "pranchas=%d fatores_distintos=%s suspeitas=%d "
+                           "rebaixei=%d | %s" % (
+                               len(_escala_por_prancha),
+                               sorted({e["fator"] for e in _escala_por_prancha}),
+                               len(_suspeitas), _reb, _resumo_div[:200]),
+                           job_id, severity="warning")
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ ESCALA: " + _resumo_div + " Um projeto tem uma unidade só, "
+                    "então alguma dessas leituras está errada e não temos como saber "
+                    "qual. Por isso nenhuma quantidade em metro, m² ou m³ dessas "
+                    "pranchas saiu com o selo \"✓ MEDIDO do CAD\"" +
+                    (" (%d item(ns) rebaixados)" % _reb if _reb else "") +
+                    ". Se você souber a unidade real do desenho, reenvie informando a "
+                    "área total — ela serve de conferência."]
+        except Exception as _eed:
+            print(f"[escala-divergente] nao-fatal: {_eed}")
+            _log_error("motor:escala-divergente", f"FALHOU: {_eed}", job_id,
+                       severity="warning")
 
         try:
             _n_med_esc = -1
