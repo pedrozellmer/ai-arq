@@ -4294,7 +4294,11 @@
     list.innerHTML = payments.map(p => {
       // Campos do backend (created_at/project_name/files_count) com fallback
       // pros nomes do histórico local (date/name/fileCount).
-      const date = window.fmtDataBR(p.created_at || p.date || p.timestamp);
+      // 🕐 01/09/2026 (Pedro): "so tem data, hora nunca". Sem hora nao da pra
+      // saber quando o cliente subiu. fmtBR = data + hora em Brasilia.
+      const date = window.fmtBR(p.created_at || p.date || p.timestamp,
+                               {day:'2-digit', month:'2-digit',
+                                hour:'2-digit', minute:'2-digit'});
       const name = p.project_name || p.name || p.projectName || 'Projeto sem nome';
       const files = p.files_count || p.fileCount || p.files || '—';
       const isFree = p.paid !== true;   // "Pago" SÓ com pagamento REAL; no beta tudo é grátis de propósito (não inventa cobrança)
@@ -4605,7 +4609,9 @@
   }
 
   function renderProjectCard(p) {
-    const created = p.created_at ? window.fmtDataBR(p.created_at, { day:'2-digit', month:'2-digit', year:'numeric' }) : '--';
+    const created = p.created_at ? window.fmtBR(p.created_at,
+      { day:'2-digit', month:'2-digit', year:'numeric',
+        hour:'2-digit', minute:'2-digit' }) : '--';
 
     // Status: cor + ícone + texto (Pedro é daltônico, cor sozinha não basta).
     const STATUS_LABEL = {
@@ -4978,8 +4984,14 @@
       return;
     }
     doneProjects.forEach((p, idx) => {
-      const date = window.fmtDataBR(p.date || p.timestamp);
-      const name = p.name || p.projectName || ('Projeto ' + date);
+      // 🪤 a data aqui servia pra DUAS coisas: mostrar na linha e virar nome
+      // de projeto quando nao ha nome. Sao usos diferentes — o nome fica so
+      // com a data (nome com hora fica estranho), a linha ganha a hora.
+      const dataCurta = window.fmtDataBR(p.date || p.timestamp);
+      const date = window.fmtBR(p.date || p.timestamp,
+                               {day:'2-digit', month:'2-digit',
+                                hour:'2-digit', minute:'2-digit'});
+      const name = p.name || p.projectName || ('Projeto ' + dataCurta);
       const files = p.fileCount || 0;
       const opt = document.createElement('option');
       opt.value = idx;

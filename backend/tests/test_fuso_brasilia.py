@@ -24,6 +24,7 @@ Regra de fuso espalhada é regra que diverge — agora é um lugar só.
 """
 import io
 import os
+import re as _re
 from datetime import datetime, timedelta
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -106,3 +107,83 @@ def test_controle_positivo_a_sabotagem_seria_pega():
     delta = (_dt.utcnow() - errado).total_seconds()
     assert not (3 * 3600 - 60 < delta < 3 * 3600 + 60), (
         "a janela do teste aceita o sinal invertido — ele não guarda nada")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+#  01/09/2026 — O MESMO ERRO, TERCEIRA VEZ, E AGORA COM GUARDA
+# ═══════════════════════════════════════════════════════════════════════════
+# 24/08 o Pedro me corrigiu ("vc ta no fuso errado"). 31/08 ele me corrigiu de
+# novo. 01/09 eu li 18:15 UTC e disse que um cliente tinha rodado "de
+# madrugada" — era 15:15, ontem à tarde. Ele: *"O último foi ontem de tarde,
+# não teve mais nada essa noite."*
+#
+# Convenção desta casa desde 16/07: TODO horário exibido é America/Sao_Paulo,
+# e o jeito certo é `window.fmtBR` / `window.fmtDataBR`, que fixam o fuso por
+# último (o caller escolhe os campos, nunca o fuso).
+#
+# 🩸 Mesmo assim escaparam DOIS pontos no admin que formatavam data/hora sem
+# fuso nenhum — `toLocaleDateString`/`toLocaleTimeString` seguem o relógio do
+# NAVEGADOR. Pro Pedro, que está em Brasília, ficava certo por acaso; pra
+# qualquer um fora do fuso, errado. Guarda que não existia até hoje.
+#
+# 🪤 `Number.toLocaleString` (dinheiro, milhar) NÃO é fuso e não pode ser
+# acusado — é a distinção que faz este guarda ser usável em vez de ruído.
+
+_RX_DATA_SEM_FUSO = _re.compile(
+    r"new Date\([^)]*\)\s*\.\s*toLocale(?:Date|Time)?String\s*\([^;]{0,220}",
+    _re.S)
+
+
+def _htmls_do_site():
+    base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    for nome in sorted(os.listdir(base)):
+        if nome.endswith((".html", ".js")) and not nome.startswith("_"):
+            yield nome, io.open(os.path.join(base, nome), encoding="utf-8").read()
+
+
+def test_nenhuma_data_e_formatada_SEM_fuso():
+    """🚨 Data formatada sem `timeZone` segue o relógio do navegador. No Brasil
+    parece certa; fora dele mente — e o painel passa a discordar de si mesmo."""
+    problemas = []
+    vistos = 0
+    for nome, txt in _htmls_do_site():
+        vistos += 1
+        for m in _RX_DATA_SEM_FUSO.finditer(txt):
+            trecho = m.group(0)
+            if "timeZone" in trecho or "fmtBR" in trecho or "fmtDataBR" in trecho:
+                continue
+            linha = txt[:m.start()].count(chr(10)) + 1
+            problemas.append("%s:%d %s" % (nome, linha, " ".join(trecho.split())[:100]))
+    assert vistos > 5, "varri só %d arquivo(s) — guarda inerte" % vistos
+    assert not problemas, (
+        "data/hora formatada sem fuso (segue o relógio do navegador): " +
+        " | ".join(problemas))
+
+
+def test_CONTROLE_dinheiro_nao_e_acusado():
+    """🧪 `Number.toLocaleString('pt-BR')` formata dinheiro, não data. Se o
+    guarda acusar isso, vira ruído e alguém desliga ele."""
+    assert not _RX_DATA_SEM_FUSO.search(
+        "total.toLocaleString('pt-BR', {minimumFractionDigits: 2})")
+    assert not _RX_DATA_SEM_FUSO.search("(cents/100).toLocaleString('pt-BR')")
+
+
+def test_CONTROLE_o_guarda_REPROVA_data_sem_fuso():
+    """🧪 E pega o padrão que escapou de verdade no admin."""
+    ruim = "return new Date(iso).toLocaleDateString('pt-BR',{day:'2-digit'});"
+    m = _RX_DATA_SEM_FUSO.search(ruim)
+    assert m and "timeZone" not in m.group(0), (
+        "o guarda não pega data formatada sem fuso — não guarda nada")
+
+
+def test_a_lista_de_projetos_mostra_HORA_e_nao_so_data():
+    """🕐 01/09 (Pedro): *"quando vejo os projetos no site só tem data, hora
+    nunca"*. Sem a hora ele não consegue saber quando o cliente subiu — e foi
+    exatamente por isso que ele teve que me perguntar, e eu respondi em UTC."""
+    base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    dash = io.open(os.path.join(base, "dashboard.html"), encoding="utf-8").read()
+    i = dash.find("function renderProjectCard")
+    assert i > 0, "não achei renderProjectCard — o guarda perdeu o alvo"
+    trecho = dash[i:i + 700]
+    assert "fmtBR(" in trecho and "hour:" in trecho, (
+        "o card do projeto voltou a mostrar só data, sem hora")

@@ -1742,9 +1742,11 @@ function pintarFilhotes(){
 function _dataCurta(iso){
   if (!iso) return '';
   try {
-    const d = new Date(iso);
-    return d.toLocaleDateString('pt-BR', {day:'2-digit', month:'2-digit'}) + ' ' +
-           d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+    // 🪤 01/09/2026: aqui formatava SEM fuso, entao dependia do relogio do
+    // navegador — quem abrisse fora do Brasil via hora errada, e a tela
+    // discordava do resto do painel. window.fmtBR forca America/Sao_Paulo.
+    return window.fmtBR(iso, {day:'2-digit', month:'2-digit',
+                              hour:'2-digit', minute:'2-digit'});
   } catch(e){ return ''; }
 }
 // 23/08 (auditoria, achado 47): quando o cliente revisou itens à mão, o e-mail
@@ -2591,7 +2593,8 @@ async function loadVozCliente(){
   const el = document.getElementById('voz-cliente');
   if (!el) return;
   const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-  const dt = s => { try { return new Date(s).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}); } catch(_) { return ''; } };
+  // 01/09: sem fuso explicito isto seguia o relogio do navegador.
+  const dt = s => { try { return window.fmtBR(s, {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}); } catch(_) { return ''; } };
   try {
     const res = await authFetch(`${API_BASE}/api/admin/voz-do-cliente`);
     const d = await res.json();
@@ -4691,6 +4694,18 @@ function _fmtDate(iso) {
   try { return window.fmtDataBR(iso); } catch (e) { return '--'; }
 }
 
+// 🕐 01/09/2026 (Pedro): "quando vejo os projetos no site so tem data, hora
+// nunca". Sem a hora nao da pra saber se o cliente subiu de manha ou de
+// madrugada — e foi por isso que ele teve que me perguntar, e eu respondi
+// em UTC. Data e hora, sempre em Brasilia.
+function _fmtDataHora(iso) {
+  if (!iso) return '--';
+  try {
+    return window.fmtBR(iso, {day:'2-digit', month:'2-digit',
+                              hour:'2-digit', minute:'2-digit'});
+  } catch (e) { return '--'; }
+}
+
 function _fmtDateTime(iso) {
   if (!iso) return '--';
   try {
@@ -4845,8 +4860,8 @@ function renderUsers(users) {
         <td class="px-4 py-3 align-top">${_referralLabel(u)}</td>
         <td class="px-4 py-3 align-top text-center">${projCell}</td>
         <td class="px-4 py-3 align-top text-gray-500 text-xs">
-          ${_fmtDate(u.auth_created_at || u.profile_created_at)}
-          ${u.last_sign_in_at ? `<div class="text-gray-400">entrou ${_fmtDate(u.last_sign_in_at)}</div>` : ''}
+          ${_fmtDataHora(u.auth_created_at || u.profile_created_at)}
+          ${u.last_sign_in_at ? `<div class="text-gray-400">entrou ${_fmtDataHora(u.last_sign_in_at)}</div>` : ''}
           ${signalHtml}
         </td>
         <td class="px-4 py-3 align-top" onclick="event.stopPropagation()">${actions}</td>
