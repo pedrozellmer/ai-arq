@@ -6004,7 +6004,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _pd_ok = float(pe_direito or 0) > 0
     # 🚨 23/08 (auditoria): duas travas na preservação, porque texto não é prova.
     _mediu_linear = _tem_comprimento_medido(items)
-    filled = blanked = preservados = criados_prancha = 0
+    filled = blanked = preservados = criados_prancha = apertou_teto = 0
+    lineares_zerados = 0
     # 🩸 31/08 (caso Flavio): quantas vezes a área informada já foi
     # atribuída, por família de superfície. A soma das superfícies
     # horizontais não pode passar do total declarado — 6 itens com 400 m²
@@ -6041,6 +6042,38 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         return "forro" if _re_honesty.search(r"\bforro|\btetos?\b", _d0) else "piso"
 
     _pp = dict(pdfvec_por_prancha or {})
+    # 🩸 01/09/2026 — O TETO USAVA A SOMA, E A SOMA É A MESMA CASA N VEZES.
+    # O ramo do pdfvec (abaixo) preserva o número da IA quando ele "cabe no que
+    # foi medido": `q <= 1.3 * pdfvec_m2`. Só que `pdfvec_m2` acumula prancha a
+    # prancha, e num caderno do MESMO imóvel (parede, forro, iluminação, piso,
+    # rodapé...) é a mesma planta contada em cada disciplina. O comentário de
+    # 31/08 já nomeava os três usos errados dessa soma; dois foram consertados
+    # naquele dia (o número saiu da observação; o passo 7 passou a usar a
+    # prancha do próprio item) e ESTE ficou.
+    # 🔑 O efeito não é inflar o número do cliente: é DESLIGAR a trava 3, que
+    # existe pra impedir que um chute de m² da IA sobreviva de carona (regra
+    # dura nº1). Quanto mais pranchas, mais frouxo — o teto cresce com o
+    # tamanho do caderno em vez de com o tamanho do imóvel.
+    # 📏 MEDIDO no job 144c1f04 (20 PDFs): nas 5 primeiras pranchas a soma já
+    # dava 585,3 m² (teto 761 m²) num apartamento cuja maior prancha mede
+    # 270,6 m² — teto ~2,8× frouxo, e faltavam 15 pranchas.
+    # 🪤 O teto vira a MAIOR prancha, nunca a soma. Pra job de uma prancha só
+    # (o caso comum) maior == soma e NADA muda — é o controle que o teste
+    # `test_uma_prancha_so_NAO_muda_nada` guarda.
+    # 🪤 Não dá pra usar a prancha DO ITEM aqui: `_medida_da_prancha` só é
+    # preenchido pra linha ZERADA (o filtro de quantidade lá embaixo), e este
+    # ramo trata justamente `q > 0`. A maior prancha é o melhor limite superior
+    # honesto que existe sem inventar atribuição.
+    _teto_m2 = 0.0
+    if _pp:
+        try:
+            _teto_m2 = max(float(_r.get("rooms_m2") or 0) for _r in _pp.values())
+        except (TypeError, ValueError):
+            _teto_m2 = 0.0
+    if _teto_m2 <= 0:
+        # sem medição por prancha (caller antigo, ou nenhuma prancha mediu):
+        # cai no comportamento de antes em vez de virar teto 0, que zeraria tudo
+        _teto_m2 = float(pdfvec_m2 or 0)
     _medida_da_prancha = {}
     _ambiguos = []
     if _pp:
@@ -6208,7 +6241,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         elif (q > 0 and float(pdfvec_m2 or 0) > 0
               and u in _FLOOR_M2_UNITS
               and _is_floor_surface(getattr(it, "description", ""))
-              and q <= 1.3 * float(pdfvec_m2)):
+              and q <= 1.3 * _teto_m2):
             try:
                 it.confidence = Confidence("estimado")
             except Exception:
@@ -6296,6 +6329,15 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             it.observations = _o
             preservados += 1
         elif q > 0:
+            # 📏 Esta linha só chegou aqui por causa do teto novo? Conta.
+            # Sem este número o conserto é invisível: "apertei o teto" não se
+            # prova sozinho, e a casa já foi mordida várias vezes por
+            # instrumento que nasce morto. É a diferença entre as duas réguas,
+            # medida no item real, não estimada.
+            if (float(pdfvec_m2 or 0) > 0 and u in _FLOOR_M2_UNITS
+                    and _is_floor_surface(getattr(it, "description", ""))
+                    and q <= 1.3 * float(pdfvec_m2)):
+                apertou_teto += 1
             it.quantity = 0
             # 🪤 Zerar sem soltar o selo deixa a linha BRANCA ("medido do CAD")
             # com quantidade 0 — o ramo de cima rebaixa e este não rebaixava.
@@ -6306,11 +6348,52 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             except Exception:
                 pass
             _obs = it.observations or ""
+            # 🩸 01/09/2026 (job 144c1f04, flavio anderson, 20 PDFs) — A FRASE
+            # MENTIA SOBRE O QUE A LINHA É. Os 25 itens LINEARES do job (rodapé,
+            # soleira, tubulação frigorígena, dreno, perfil de LED) saíram
+            # zerados com "Área NÃO medida ... informe a área no upload":
+            #   · substantivo errado — rodapé não é área, é COMPRIMENTO;
+            #   · conselho inútil — informar a área no upload não preenche
+            #     metro linear (o campo alimenta piso/forro/laje, `_FLOOR_M2_UNITS`);
+            #   · e o pior: dá a entender que não conseguimos ler a prancha,
+            #     quando a gente MEDIU a geometria dela (17 pranchas medidas
+            #     nesse mesmo job).
+            # 🪤 ZERAR CONTINUA CERTO. A tentação aqui é preencher o linear com
+            # o `walls_m` que a gente mediu — e isso é proibido por medição
+            # nossa: em 31/08 o `walls_m` do PDF errou até 4,6×, e o
+            # comprimento de parede não é o perímetro de rodapé nem o percurso
+            # de uma tubulação. Preencher seria inventar (regra dura nº1). O
+            # que muda é a HONESTIDADE do texto, não o número.
+            # 🔑 Quem resgata linear medido de verdade é
+            # `_quantidade_medida_pelo_pdf` (passo 6), que exige o número da
+            # observação bater com a nossa medição. Neste job deu resgate_pdf=0:
+            # a IA escreveu estimativa visual ("~4 barras × 3 m"), não a nossa
+            # medição. Este ramo é o que sobra depois disso.
+            # 🪤 LOCAL DE PROPÓSITO, NÃO "ARRUME" ISTO PRA UM GLOBAL. Três
+            # arquivos de teste dão `exec` numa FATIA desta função com um
+            # namespace montado à mão; global novo aqui vira NameError neles —
+            # o comentário do fim da função já avisava e eu tropecei assim
+            # mesmo hoje (9 testes vermelhos). A fonte canônica é
+            # `engine_rules.UNIDADES_SO_COMPRIMENTO`, e
+            # `test_o_conjunto_local_NAO_pode_divergir_do_engine_rules` guarda
+            # que os dois não se separem.
+            _u_compr = {"ml", "m"}
+            _e_linear = u in _u_compr
+            if _e_linear:
+                lineares_zerados += 1
             if "não medida" not in _obs.lower():
-                it.observations = (
-                    _obs + " | Área NÃO medida (lida de PDF por IA, não da geometria) — "
-                    "preencha a metragem, informe a área no upload ou envie o DXF pra medir."
-                ).strip(" |")
+                if _e_linear:
+                    _frase = (
+                        "Comprimento NÃO medido (estimado de PDF pela IA, não da "
+                        "geometria) — medimos a planta, mas comprimento de PDF não "
+                        "é confiável o bastante pra publicar. Preencha o metro ou "
+                        "envie o DXF pra medirmos.")
+                else:
+                    _frase = (
+                        "Área NÃO medida (lida de PDF por IA, não da geometria) — "
+                        "preencha a metragem, informe a área no upload ou envie o "
+                        "DXF pra medir.")
+                it.observations = (_obs + " | " + _frase).strip(" |")
             blanked += 1
     if preservados:
         # 🪤 Esta linha dizia SEMPRE "derivados do pé-direito informado" — e com
@@ -6333,6 +6416,13 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # Instrumento que nasce morto é achado recorrente aqui. Mesmo canal do
     # `ultimo_preservados`: atributo na própria função (não cria global novo, o
     # que quebraria os 3 testes que dão exec neste trecho).
+    if apertou_teto:
+        print(f"[honestidade-m2] teto por PRANCHA (maior={_teto_m2:.2f} m²) zerou "
+              f"{apertou_teto} item(ns) que a SOMA das pranchas "
+              f"({float(pdfvec_m2 or 0):.2f} m²) teria deixado passar")
+    _apply_area_honesty.ultimo_apertou_teto = apertou_teto
+    _apply_area_honesty.ultimo_teto_m2 = float(_teto_m2)
+    _apply_area_honesty.ultimo_lineares_zerados = lineares_zerados
     _apply_area_honesty.ultimo_ambiguos = list(_ambiguos)
     return filled, blanked
 
@@ -10114,6 +10204,54 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _log_error("motor:passo7-ambiguo",
                        "não preenchi por ambiguidade: %s" % (_amb[:8],),
                        job_id, severity="warning")
+        # 🩸 01/09 — O TETO APERTOU: o cliente TEM que saber por que a linha
+        # ficou vazia. Zerar é o certo (m² sem prova não vira número, regra dura
+        # nº1), mas zerar CALADO é a família do "descarte silencioso" que já nos
+        # custou 144 linhas engolidas em 37 jobs. A linha vazia sem explicação
+        # parece motor que não mediu; com explicação, é uma pergunta que ele
+        # sabe responder.
+        try:
+            _apt = int(getattr(_apply_area_honesty, "ultimo_apertou_teto", 0) or 0)
+            if _apt:
+                _teto_log = float(getattr(_apply_area_honesty, "ultimo_teto_m2", 0) or 0)
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ %d item(ns) de área vieram com metragem maior do que cabe na "
+                    "maior prancha medida (%.0f m²) — deixamos em branco em vez de "
+                    "publicar número que a gente não consegue sustentar. Preencha a "
+                    "metragem ou envie o DXF pra medirmos." % (_apt, _teto_log)]
+                _log_error("motor:teto-por-prancha",
+                           "zerei %d item(ns) de área: passavam no teto da SOMA "
+                           "(%.2f m², a mesma planta contada em cada disciplina) e "
+                           "não passam no da MAIOR prancha (%.2f m²)"
+                           % (_apt, float(_pv_m2 or 0), _teto_log),
+                           job_id, severity="warning")
+        except Exception:
+            pass
+        # 🩸 01/09 — 25 LINHAS EM BRANCO SEM EXPLICAÇÃO PARECEM MOTOR QUEBRADO.
+        # No job 144c1f04 os 25 itens lineares (100% deles) voltaram zerados. A
+        # observação de cada linha já diz o porquê, mas quem abre a planilha vê
+        # a coluna inteira vazia antes de ler observação nenhuma — e a leitura
+        # natural é "não conseguiram ler meu arquivo", quando medimos 17
+        # pranchas. O aviso do projeto é onde essa leitura se corrige.
+        # 🪤 Só avisa quando é MUITA linha: um ou dois itens lineares zerados é
+        # rotina e o aviso viraria ruído (o [[feedback_o_aviso_tem_que_chegar]]
+        # vale nos dois sentidos — aviso demais some junto com o que importa).
+        try:
+            _lz = int(getattr(_apply_area_honesty, "ultimo_lineares_zerados", 0) or 0)
+            if _lz >= 5:
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ %d item(ns) em METRO ficaram sem quantidade. Nós medimos a "
+                    "geometria das suas pranchas, mas comprimento tirado de PDF não "
+                    "é confiável o bastante pra virar número na sua planilha — "
+                    "rodapé, soleira e tubulação dependem do percurso real, não do "
+                    "total de parede. Preencha esses metros ou mande o DXF que a "
+                    "gente mede." % _lz]
+                _log_error("motor:linear-zerado",
+                           "%d item(ns) linear(es) zerados — resgate por medição não "
+                           "casou (a IA escreveu estimativa visual, não a nossa "
+                           "medição)" % _lz, job_id, severity="warning")
+        except Exception:
+            pass
         try:
             _pres = int(getattr(_apply_area_honesty, "ultimo_preservados", 0) or 0)
             try:

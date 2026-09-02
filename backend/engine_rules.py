@@ -339,6 +339,20 @@ def extract_type_code(description):
 AREA_UNITS_HONESTY = {"m²", "m2", "m", "ml", "m³", "m3", "mts", "m2.", "m²."}
 # Subconjunto: m² de superfície — candidato a receber a área INFORMADA.
 FLOOR_M2_UNITS = {"m²", "m2", "m2.", "m²."}
+# Subconjunto: COMPRIMENTO. Está dentro de AREA_UNITS_HONESTY (a peneira de
+# honestidade vale igual pra metro linear chutado), mas NÃO é área — e a
+# mensagem que o cliente recebe quando a linha é zerada precisa saber a
+# diferença. 🩸 01/09/2026: 25 itens lineares do job 144c1f04 (rodapé, soleira,
+# tubulação frigorígena, perfil de LED) saíram com "Área NÃO medida ... informe
+# a área no upload" — substantivo errado e conselho que não resolve nada pra
+# quem precisa de METRO.
+# 🪤 NÃO chamar isto de LINEAR_UNITS: esse nome JÁ EXISTE mais abaixo (linha
+# ~439) e é uma coisa diferente — uma tupla que inclui m², m2, m³ e m3, usada
+# pela normalização de unidade. Eu tropecei nisso hoje: defini LINEAR_UNITS
+# aqui, o de baixo sobrescreveu calado (mesmo módulo, quem vem depois vence), e
+# item de m² passou a receber a frase de comprimento. Quem pegou foi o CONTROLE
+# do teste — o que testa o caminho que estava CERTO.
+UNIDADES_SO_COMPRIMENTO = {"ml", "m"}
 # Superfícies HORIZONTAIS que escalam com a área de piso (o item É a superfície).
 # "impermeabiliz" saiu daqui de propósito: impermeabilização é sempre localizada
 # (área molhada/banheiro/laje técnica) — se for de laje, o "laje" abaixo já pega.
@@ -1721,7 +1735,8 @@ _RX_LAYER_MEDIDO = _re.compile(
     _re.IGNORECASE)
 
 _UNI_AREA = {"m²", "m2"}
-_UNI_LINEAR = {"ml", "m"}
+_UNI_LINEAR = UNIDADES_SO_COMPRIMENTO   # fonte única: o público lá de cima
+
 _TOL_PROCEDENCIA = 0.01      # 1% — é pra confirmar a NOSSA medição, não arredondar
 
 
