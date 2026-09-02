@@ -4049,16 +4049,28 @@ async function loadNPSData() {
         const when = r.created_at ? window.fmtBR(r.created_at, { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
         const ctx = {
           'after_download': 'Após download',
+          'after_project':  'Na página do projeto',
           'after_review':   'Após revisão',
           'first_project':  'Primeiro projeto',
           'manual':         'Manual',
         }[r.context] || r.context;
+        // 🩸 02/09/2026 — O PAINEL MOSTRAVA "7" PRA QUEM CLICOU "MAIS OU MENOS".
+        // São DUAS telas gravando na MESMA coluna `score`: o widget do dashboard
+        // (11 botões, 0 a 10) e a página do projeto (TRÊS botões, que a gente
+        // traduz pra 9/7/2 — projeto.html:441-443). Das 6 avaliações da história
+        // do produto, 2 vieram da escala de três, e o painel mostrava as seis do
+        // mesmo jeito. O Alan clicou "😐 Mais ou menos" e virou "7".
+        // 🪤 Fora dos três valores conhecidos cai no número cru: se a página
+        // mudar, é melhor mostrar o que foi guardado do que inventar carinha.
+        const _btn3 = { 9: '👍 Ajudou bastante', 7: '😐 Mais ou menos', 2: '👎 Não muito' };
+        const _escolha = (r.context === 'after_project' && _btn3[r.score])
+          ? _btn3[r.score] : null;
         return `
           <div class="p-4 hover:bg-gray-50">
             <div class="flex items-start gap-3">
               <div class="flex-shrink-0 flex flex-col items-center gap-1">
-                <div class="w-12 h-12 rounded-full bg-${color}-100 text-${color}-700 flex items-center justify-center font-bold text-lg">
-                  ${r.score}
+                <div class="w-12 h-12 rounded-full bg-${color}-100 text-${color}-700 flex items-center justify-center font-bold ${_escolha ? 'text-2xl' : 'text-lg'}" title="${_escolha ? (esc(_escolha) + ' — guardado como ' + r.score) : ('Nota ' + r.score + ' de 10')}">
+                  ${_escolha ? _escolha.slice(0, 2) : r.score}
                 </div>
                 <span class="text-[10px] font-semibold text-${color}-700 whitespace-nowrap">${catLabel}</span>
               </div>

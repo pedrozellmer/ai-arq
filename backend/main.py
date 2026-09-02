@@ -20026,6 +20026,43 @@ async def submit_nps(payload: NPSPayload, request: Request):
     return {"status": "ok" if ok else "error", "category": category}
 
 
+#: O que a página do PROJETO realmente pergunta. Ela NÃO mostra uma régua de
+#: 0 a 10: mostra três botões, e o número é tradução NOSSA (projeto.html:441-443).
+_NPS_BOTOES_DO_PROJETO = {9: "👍 Ajudou bastante", 7: "😐 Mais ou menos",
+                          2: "👎 Não muito"}
+
+
+def _nps_rotulo(score, context: str) -> str:
+    """O que a pessoa CLICOU — não o número que a gente guardou.
+
+    🩸 02/09/2026, caso Alan Vitor. Ele clicou "😐 Mais ou menos" na página do
+    projeto e o alerta chegou pro Pedro dizendo **"Nota: 7/10"**. O Pedro lê
+    isso como "ele deu sete", quando o cliente disse "mais ou menos" — que é
+    informação diferente e mais pobre.
+
+    🪤 São DUAS telas gravando na MESMA coluna `score`:
+      · `after_download` → o widget do dashboard, com os 11 botões de 0 a 10.
+        Nota de verdade.
+      · `after_project`  → três botões (9/7/2). Escala de 3 pontos.
+    Das 6 avaliações da história do produto, 2 vieram da escala de três — e o
+    painel mostrava as seis do mesmo jeito.
+
+    🔑 Não mexo na coleta nem no número guardado (isso é decisão de produto do
+    Pedro): mexo em como ele é APRESENTADO, que é onde nasce o engano.
+
+    🪤 Fora dos três valores conhecidos, cai no rótulo numérico: se um dia a
+    página do projeto passar a mandar outra coisa, é melhor mostrar o número
+    cru do que inventar uma carinha que ninguém clicou.
+    """
+    try:
+        n = int(score)
+    except (TypeError, ValueError):
+        return "?"
+    if (context or "") == "after_project" and n in _NPS_BOTOES_DO_PROJETO:
+        return "%s — escolha de 3 opções na página do projeto" % _NPS_BOTOES_DO_PROJETO[n]
+    return "%d de 10" % n
+
+
 def _alerta_nps(row: dict, category: str = "detractor"):
     """TODA nota vira e-mail interno na hora — em thread, best-effort.
 
@@ -20062,30 +20099,34 @@ def _alerta_nps(row: dict, category: str = "detractor"):
                 except Exception:
                     pass
             _nota = row.get("score")
+            # 🩸 02/09: o e-mail dizia "{n}/10" mesmo quando a pessoa tinha
+            # clicado numa das TRÊS carinhas da página do projeto. Ver
+            # `_nps_rotulo`.
+            _rotulo = _nps_rotulo(_nota, row.get("context") or "")
             _com = (row.get("comment") or "").strip()
             if category == "detractor":
-                _assunto = f"🔴 NPS {_nota} — detrator: {row.get('user_email') or 'sem e-mail'}"
+                _assunto = f"🔴 {_rotulo} — detrator: {row.get('user_email') or 'sem e-mail'}"
                 _fecho = ("Detrator engajado responde melhor a contato pessoal RÁPIDO — "
                           "a janela é de horas, não dias (caso Eduarda, 16/08).")
             elif category == "promoter":
-                _assunto = f"🟢 NPS {_nota} — promotor: {row.get('user_email') or 'sem e-mail'}"
+                _assunto = f"🟢 {_rotulo} — promotor: {row.get('user_email') or 'sem e-mail'}"
                 _fecho = ("Promotor é a hora de pedir DEPOIMENTO — a página de cases está "
                           "parada esperando um. Se veio comentário, ele já é meio depoimento."
                           if _com else
                           "Promotor sem comentário: vale uma pergunta curta pra saber o que "
                           "funcionou. É barato e vira copy.")
             else:
-                _assunto = f"🟡 NPS {_nota} — neutro: {row.get('user_email') or 'sem e-mail'}"
+                _assunto = f"🟡 {_rotulo} — neutro: {row.get('user_email') or 'sem e-mail'}"
                 _fecho = ("Neutro é quem quase gostou: o que faltou costuma ser a próxima "
                           "melhoria óbvia do produto.")
             _avisou_nps = _notify_admin(
                 _assunto,
-                f"<b>Nota:</b> {_nota}/10<br>"
+                f"<b>Resposta:</b> {_rotulo}<br>"
                 f"<b>Cliente:</b> {row.get('user_name') or '?'} ({row.get('user_email') or '?'})<br>"
                 f"<b>Comentário:</b> {_com or '(sem comentário)'}"
                 f"{_ctx}<br><br>{_fecho}")
             _log_error(f"nps:{category}-alerta",
-                       f"score={_nota} {row.get('user_email')} "
+                       f"resposta={_rotulo!r} score_guardado={_nota} {row.get('user_email')} "
                        f"avisei_admin={_avisou_nps}", _jid)
         except Exception as _e:
             print(f"[nps] alerta de NPS falhou (não-fatal): {_e}")
