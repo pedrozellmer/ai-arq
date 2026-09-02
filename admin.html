@@ -1585,7 +1585,13 @@ function renderOps(d){
   }
   html += `</details>`;
 
-  return inlineHtml + html;
+  // 🩸 02/09/2026 — ESTE BLOCO INTEIRO NÃO RENDERIZAVA. Devolvia
+  // `inlineHtml + html`, e `inlineHtml` só existe dentro de
+  // renderRevisionFeedback: ReferenceError, e a aba Motor mostrava "Não
+  // consegui carregar: inlineHtml is not defined" no lugar de falhas, avisos e
+  // PDFs. Nenhuma auditoria viu porque nenhuma EXECUTAVA a função — só liam o
+  // fonte. Achado por um cético do plano de "falhas recentes".
+  return html;
 }
 
 // ══════════════════════════════════════════════

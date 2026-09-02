@@ -99,18 +99,28 @@ def test_a_saude_da_coleta_NAO_alarma_as_22h_de_brasilia(monkeypatch):
     "hoje" já era amanhã, e a caixa "A coleta PAROU" acendia TODA noite sem a
     coleta ter parado. Relógio falsificado, não a env (no Windows TZ não move
     date.today())."""
-    monkeypatch.setattr(_m, "_hoje_br", lambda: date(2026, 9, 1))
+    from datetime import datetime as _dt
+    monkeypatch.setattr(_m, "_agora_br_fn", lambda: _dt(2026, 9, 1, 22, 0))
     r = _m._saude_da_coleta([{"dia": "2026-08-31"}], True)
     assert r["aviso"] is None and r["atraso_dias"] == 1, (
         "alarme falso: série de ontem (estado saudável) com aviso %r" % r["aviso"])
+    # 🪤 01:00 da madrugada: o cron das 06:00 ainda não rodou, então a série
+    # terminar ANTEONTEM é normal. Sem olhar a hora, alarme falso toda noite.
+    monkeypatch.setattr(_m, "_agora_br_fn", lambda: _dt(2026, 9, 3, 1, 0))
+    r = _m._saude_da_coleta([{"dia": "2026-09-01"}], True)
+    assert r["aviso"] is None, "alarme falso na madrugada, antes do cron: %r" % r["aviso"]
 
 
 def test_CONTROLE_a_saude_da_coleta_AINDA_alarma_quando_parou_de_verdade(monkeypatch):
     """🧪 O outro lado: com o relógio em 03/09 e a série parada em 31/08, tem
     que gritar. Sem isto, um `return None` sempre passaria no teste de cima."""
-    monkeypatch.setattr(_m, "_hoje_br", lambda: date(2026, 9, 3))
+    from datetime import datetime as _dt
+    monkeypatch.setattr(_m, "_agora_br_fn", lambda: _dt(2026, 9, 3, 8, 0))
     r = _m._saude_da_coleta([{"dia": "2026-08-31"}], True)
     assert r["aviso"] and "PAROU" in r["aviso"], "coleta parada há 3 dias e nenhum aviso"
+    # e às 08:00 com a série em 01/09: o tick das 06:00 de hoje faltou → grita
+    r = _m._saude_da_coleta([{"dia": "2026-09-01"}], True)
+    assert r["aviso"] and "PAROU" in r["aviso"], "o tick de hoje faltou e nenhum aviso"
 
 
 def test_o_quando_da_revisao_inline_chega_INTEIRO_e_nao_cortado_em_UTC():
@@ -359,3 +369,38 @@ def test_a_bolinha_de_mensagens_e_contada_no_boot_sem_abrir_a_aba():
     assert ".eq('status', 'new')" in corpo, "conta tudo em vez de só as sem resposta"
     assert len(re.findall(r"carregarBadgeMensagens\(\)", js)) >= 2, (
         "carregarBadgeMensagens existe e ninguém chama no boot")
+
+
+# ═══════════════════ O BUG QUE NENHUMA AUDITORIA VIU ════════════════════════
+
+def test_renderOps_NAO_usa_variavel_de_outra_funcao():
+    """🩸 `return inlineHtml + html` dentro de renderOps — `inlineHtml` só existe
+    em renderRevisionFeedback. ReferenceError: o bloco inteiro de falhas/avisos/
+    PDFs da aba Motor não renderizava, e ninguém viu porque ninguém EXECUTAVA a
+    função. Recorte da função inteira, não janela fixa (renderOps cresce)."""
+    js = _js_do_admin()
+    i = js.find("function renderOps(d){")
+    assert i > 0, "sumiu renderOps"
+    fim = js.find(chr(10) + "}", i)
+    # 🪤 A 1ª versão deste guarda reprovou o CÓDIGO CERTO: o comentário que
+    # explica o bug cita `inlineHtml`, e o guarda leu o comentário. Quarta vez
+    # hoje. Comentário fora; só o que executa conta.
+    corpo = chr(10).join(l for l in js[i:fim].split(chr(10)) if not l.strip().startswith("//"))
+    assert "inlineHtml" not in corpo, (
+        "renderOps voltou a usar `inlineHtml`, que é de outra função — "
+        "ReferenceError e a aba Motor mostra 'Não consegui carregar'")
+    assert "return html;" in corpo
+
+
+def test_o_divisor_do_custo_tira_FILHOTE_do_lado_do_cliente(monkeypatch):
+    """🪤 Filhote (reprocesso liberado) é o MESMO projeto contado de novo: 3 dos
+    57 (medido). Só do lado do cliente — avaliação é 100% filhote por natureza."""
+    pedidos = []
+    monkeypatch.setattr(_m, "_supa_rest_service",
+                        lambda m, t, params=None, **k: (pedidos.append(dict(params or {})), (200, []))[1])
+    _m._projetos_para_custo_30d()
+    cli = [p for p in pedidos if p.get("is_eval") == "not.is.true"]
+    ava = [p for p in pedidos if p.get("is_eval") == "is.true"]
+    assert cli and ava, pedidos
+    assert cli[0].get("parent_job_id") == "is.null", "filhote voltou a contar no divisor"
+    assert "parent_job_id" not in ava[0], "a contagem de avaliacoes perdeu os filhotes (que sao todas)"

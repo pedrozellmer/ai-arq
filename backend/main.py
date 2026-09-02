@@ -13667,6 +13667,12 @@ def _projetos_para_custo_30d() -> dict:
     def _conta(filtro_eval):
         _p = {"select": "job_id", "status": "eq.done",
               "created_at": "gte." + _since, "is_eval": filtro_eval}
+        # 🪤 Filhote (reprocesso liberado pro cliente) não é projeto novo: é o
+        # MESMO projeto contado duas vezes no divisor. Medido 02/09: 3 dos 57
+        # eram filhotes (57 → 54, ~5%). Só no lado do cliente — as avaliações
+        # são 100% filhotes por natureza e a contagem delas é justamente essa.
+        if filtro_eval == "not.is.true":
+            _p["parent_job_id"] = "is.null"
         try:
             st, linhas = _supa_rest_service("GET", "projects", params=_p)
         except Exception as _pe:
@@ -24068,7 +24074,15 @@ def _saude_da_coleta(serie: list, tem_token: bool) -> dict:
     # de Brasília "hoje" já era amanhã, o último dia gravado ficava 2 dias
     # atrás e a caixa âmbar "A coleta PAROU" acendia TODA noite sem a coleta
     # ter parado. Data de Brasília, como o resto do painel.
-    _atraso = None if _ultimo is None else (_hoje_br() - _ultimo).days
+    # 🪤 E a HORA importa, não só a data: o cron grava às 06:00 de Brasília. Às
+    # 01:00 de 03/09 a série terminar em 01/09 é o estado NORMAL (o tick de
+    # hoje ainda não rodou); às 08:00 com a mesma série, o tick faltou. Sem
+    # isto, a caixa "PAROU" acendia toda madrugada entre 00:00 e 06:00.
+    from datetime import timedelta as _td3
+    _agora = _agora_br_fn()
+    _hoje = _agora.date()
+    _esperado = _hoje - _td3(days=1 if _agora.hour >= 7 else 2)
+    _atraso = None if _ultimo is None else (_hoje - _ultimo).days
     if not tem_token:
         return {"token_configurado": False, "ultimo_dia": str(_ultimo or ""),
                 "atraso_dias": _atraso,
@@ -24078,7 +24092,7 @@ def _saude_da_coleta(serie: list, tem_token: bool) -> dict:
     if _ultimo is None:
         return {"token_configurado": True, "ultimo_dia": "", "atraso_dias": None,
                 "aviso": "A coleta está ligada mas não há NENHUM dia gravado ainda."}
-    if _atraso is not None and _atraso >= 2:
+    if _ultimo is not None and _ultimo < _esperado:
         return {"token_configurado": True, "ultimo_dia": str(_ultimo),
                 "atraso_dias": _atraso,
                 "aviso": ("A coleta PAROU: o dia mais novo é %s, %d dias atrás. "
