@@ -13446,6 +13446,62 @@ def admin_newsletter_scheduled(request: Request):
     return {"scheduled": rows}
 
 
+def frase_por_formato(f):
+    """Uma linha por formato pro cartao Entrega (02/09/2026).
+
+    Devolve None quando nao ha projeto finalizado atras do numero ou quando a
+    RPC nao mandou o campo - a tela escreve 'sem medicao', nunca 0%. Funcao
+    pura e separada da rota DE PROPOSITO: o guarda CHAMA isto."""
+    if not isinstance(f, dict):
+        return None
+    fmt = str(f.get("formato") or "").strip()
+    fin, mediu = f.get("total"), f.get("mediu")
+    if not fmt or fin is None or mediu is None:
+        return None
+    try:
+        fin, mediu = int(fin), int(mediu)
+    except (TypeError, ValueError):
+        return None
+    if fin <= 0:
+        return None
+    return {"formato": fmt, "mediu": mediu, "finalizados": fin,
+            "pct": int(round(100.0 * mediu / fin))}
+
+
+def faixas_de_retorno(R):
+    """As perguntas de retencao SEPARADAS por nome (02/09/2026).
+
+    Medido: 74 clientes; 2+ projetos = 40 (54%) e isso e USO, nao retorno;
+    voltou OUTRO DIA = 8 (10,8%); outra semana = 5 (6,8%). Chave que a RPC nao
+    mandou vira None, nunca zero - zero e a afirmacao 'ninguem voltou'."""
+    if not isinstance(R, dict):
+        return None
+    try:
+        tot = int(R.get("clientes") or 0)
+    except (TypeError, ValueError):
+        return None
+    if tot <= 0:
+        return None
+
+    def _p(chave):
+        v = R.get(chave)
+        if v is None:
+            return None
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return None
+        return {"n": n, "pct": int(round(100.0 * n / tot))}
+
+    return {
+        "clientes": tot,
+        "voltou_outro_dia": _p("voltaram_outro_dia"),
+        "voltou_outra_semana": _p("voltaram_outra_sem"),
+        "dois_ou_mais_projetos": _p("dois_ou_mais_projetos"),
+        "so_um_projeto": _p("so_um_projeto"),
+    }
+
+
 @app.get("/api/admin/qualidade-semanal")
 def admin_qualidade_semanal(request: Request):
     """QUALIDADE DA ENTREGA por semana FIXA do calendário (admin).
@@ -13476,7 +13532,20 @@ def admin_qualidade_semanal(request: Request):
         req.add_header("apikey", SUPABASE_KEY)
         req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
-        return _json.loads(_ur.urlopen(req, timeout=20).read().decode("utf-8"))
+        d = _json.loads(_ur.urlopen(req, timeout=20).read().decode("utf-8"))
+        # 02/09/2026: o Dashboard passa a usar a MESMA chamada pra formato (90d)
+        # e retorno. Se a RPC ainda nao tiver o campo, `resumo` vem None e a
+        # tela escreve 'sem medicao' - nunca um zero inventado.
+        if isinstance(d, dict):
+            _lista = d.get("por_formato_90d")
+            _fmt = ([x for x in (frase_por_formato(f) for f in _lista) if x]
+                    if isinstance(_lista, list) else None)
+            d["resumo"] = {
+                "por_formato_90d": _fmt if _fmt else None,
+                "janela_formato_90d": d.get("janela_formato_90d"),
+                "retorno": faixas_de_retorno(d.get("retencao")),
+            }
+        return d
     except Exception as _e:
         print(f"[qualidade-semanal] erro: {_e}")
         raise HTTPException(502, "Não consegui carregar a qualidade semanal")
@@ -13566,18 +13635,49 @@ def admin_costs_list(request: Request):
     except Exception as _e:
         print(f"[costs] list erro: {_e}")
         rows = []
-    # projetos concluídos nos últimos 30d → base pro "custo por projeto" no painel
-    _proj30 = 0
-    try:
-        _since = (datetime.utcnow() - timedelta(days=30)).isoformat()
-        _pq = (f"{SUPABASE_URL}/rest/v1/projects?status=eq.done&created_at=gte.{_since}&select=job_id")
-        _pr = _ur.Request(_pq, method="GET")
-        _pr.add_header("apikey", SUPABASE_KEY)
-        _pr.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        _proj30 = len(_json.loads(_ur.urlopen(_pr, timeout=15).read().decode("utf-8")))
-    except Exception as _pe:
-        print(f"[costs] contagem projetos 30d erro: {_pe}")
-    return {"costs": rows, "projetos_30d": _proj30}
+    # projetos concluídos nos últimos 30d → base pro "custo por projeto" no painel.
+    # 🩸 02/09/2026 — MEDIDO: 98 concluídos em 30 dias, 41 eram avaliação NOSSA
+    # (is_eval). O divisor contava os 98 e o custo por projeto saía 42% mais
+    # barato do que é. Agora: cliente e avaliação contados SEPARADOS, e falha
+    # de contagem devolve None (a tela mostra "sem medição"), nunca zero.
+    _p30 = _projetos_para_custo_30d()
+    return {"costs": rows,
+            # nome antigo mantido pra tela velha não quebrar — mas agora é SÓ cliente
+            "projetos_30d": _p30["cliente"],
+            "projetos_30d_cliente": _p30["cliente"],
+            "projetos_30d_avaliacoes": _p30["avaliacoes"],
+            "janela_dias": 30}
+
+
+def _projetos_para_custo_30d() -> dict:
+    """Divisor do "custo fixo / projeto" do painel Financeiro.
+
+    Devolve {"cliente": int|None, "avaliacoes": int|None}: projetos `done`
+    criados nos últimos 30 dias, separando cliente (is_eval não-true) de
+    avaliação nossa (is_eval=true). As avaliações ficam FORA do divisor — são
+    reprocesso de teste, não uso de cliente — mas aparecem na tela porque
+    também gastam IA.
+
+    🪤 None (não 0) quando a contagem falha: zero é AFIRMAÇÃO ("nenhum
+    projeto"); falha de rede ou HTTP 400/500 não pode virar afirmação.
+    🪤 `not.is.true` cobre NULL também (hoje 0 NULL, mas coluna é nullable).
+    """
+    _since = (datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def _conta(filtro_eval):
+        _p = {"select": "job_id", "status": "eq.done",
+              "created_at": "gte." + _since, "is_eval": filtro_eval}
+        try:
+            st, linhas = _supa_rest_service("GET", "projects", params=_p)
+        except Exception as _pe:
+            print(f"[costs] contagem projetos 30d ({filtro_eval}) erro: {_pe}")
+            return None
+        if st != 200:
+            print(f"[costs] contagem projetos 30d ({filtro_eval}) HTTP {st}")
+            return None
+        return len(linhas or [])
+
+    return {"cliente": _conta("not.is.true"), "avaliacoes": _conta("is.true")}
 
 
 def _cost_to_float(v):
@@ -13656,6 +13756,68 @@ async def admin_costs_delete(request: Request):
     return {"status": "ok"}
 
 
+def _ops_normalizar(data, agora=None):
+    """Deixa o JSON da RPC admin_ops pronto pra tela SEM deixar a tela mentir.
+
+    🚨 02/09/2026 — o bloco "Falhas recentes" mostrava 25 com 39 no banco, sem
+    dizer que a janela era de 60 dias, e o botão "Avisar" mandava e-mail sobre
+    uma falha de 06/07 (58 dias) com a mesma cara de uma de hoje. Mesma doença
+    do "200 de 200 total" da aba Projetos: o número na tela era o LIMITE da
+    consulta.
+
+    O que esta função garante, e o guarda confere CHAMANDO ela:
+      · cada falha ganha `idade_dias` (inteiro) a partir de `created_at`;
+        se a data não veio, fica None — nunca zero (zero é "hoje").
+      · `contagens` sempre existe; cada campo é inteiro ou None. Se a RPC do
+        banco for a versão velha (sem contagens), NENHUM campo vira o
+        tamanho da lista: vira None e `contagens_faltando` = True, e a tela
+        escreve que o total não veio.
+      · `janela` declara os dias e os tetos, pra tela não ter número fixo.
+    """
+    from datetime import datetime as _dt, timezone as _tz
+    d = dict(data or {})
+    agora = agora or _dt.now(_tz.utc)
+    falhas = []
+    for f in (d.get("recent_failures") or []):
+        f = dict(f)
+        idade = None
+        cr = f.get("created_at")
+        if cr:
+            try:
+                t = _dt.fromisoformat(str(cr).replace("Z", "+00:00"))
+                if t.tzinfo is None:
+                    t = t.replace(tzinfo=_tz.utc)
+                idade = max(0, int((agora - t).total_seconds() // 86400))
+            except Exception:
+                idade = None
+        f["idade_dias"] = idade
+        f["is_eval"] = bool(f.get("is_eval"))
+        falhas.append(f)
+    d["recent_failures"] = falhas
+
+    cont = d.get("contagens")
+    if not isinstance(cont, dict):
+        cont = {}
+        d["contagens_faltando"] = True
+    for k in ("recent_failures_total", "recent_failures_7d",
+              "motor_errors_total", "motor_errors_7d",
+              "motor_diag_total", "motor_diag_7d", "pdf_only_total"):
+        v = cont.get(k)
+        cont[k] = int(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    d["contagens"] = cont
+
+    jan = d.get("janela")
+    if not isinstance(jan, dict):
+        jan = {}
+    jan.setdefault("recent_failures_dias", 60)
+    jan.setdefault("recent_failures_limite", 25)
+    jan.setdefault("motor_errors_limite", 40)
+    jan.setdefault("motor_diag_limite", 40)
+    jan.setdefault("pdf_only_limite", 30)
+    d["janela"] = jan
+    return d
+
+
 @app.get("/api/admin/ops")
 def admin_ops_panel(request: Request):
     """Painel de OPERAÇÃO (admin): erros do motor (error_log), falhas recentes com
@@ -13673,7 +13835,9 @@ def admin_ops_panel(request: Request):
     except Exception as _e:
         print(f"[ops] erro: {_e}")
         raise HTTPException(502, "Não consegui carregar a operação")
-    return data
+    # 🔑 02/09: a tela só recebe o JSON depois de passar pela normalização —
+    # idade de cada falha, contagens reais (ou None declarado) e a janela.
+    return _ops_normalizar(data)
 
 
 @app.post("/api/admin/newsletter/cancel")
@@ -16263,7 +16427,11 @@ def admin_revision_feedback(request: Request):
                 "projetos": len({r.get("job_id") for r in rows2 if r.get("job_id")}),
                 "ultimos_edits": [
                     {"job_id": r.get("job_id"),
-                     "quando": (r.get("reviewed_at") or "")[:10],
+                     # 🪤 02/09/2026: `[:10]` cortava a DATA EM UTC antes da tela
+                     # poder aplicar o fuso — edição às 21h30 de Brasília
+                     # apareceria como "amanhã". Vai o timestamp inteiro; quem
+                     # formata é window.fmtBR na tela.
+                     "quando": r.get("reviewed_at"),
                      "edits": r.get("edits"),
                      "comment": r.get("comment")}
                     for r in edits[:10]
@@ -19934,11 +20102,48 @@ def admin_nps_summary(request: Request, days: int = 30):
         raise HTTPException(500, f"Erro: {e}")
 
 
+def _nps_janela_dias(days) -> int:
+    """Mesmo clamp pras três rotas do NPS: 1..3650 dias, padrão 30."""
+    try:
+        return max(1, min(int(days or 30), 3650))
+    except (TypeError, ValueError):
+        return 30
+
+
+def _nps_dentro_da_janela(rows, days: int):
+    """Só as respostas com `created_at` nos últimos `days` dias.
+
+    🚨 02/09/2026: o seletor da aba NPS só chegava no resumo; a lista e as
+    etapas eram a história inteira. Linha sem data (ou com data ilegível)
+    NÃO entra e é contada em `sem_data` — não vira "dentro" nem "fora" calada.
+    Devolve (dentro, sem_data)."""
+    from datetime import datetime, timedelta, timezone
+    corte = datetime.now(timezone.utc) - timedelta(days=days)
+    dentro, sem_data = [], 0
+    for r in rows or []:
+        ts = r.get("created_at") if isinstance(r, dict) else None
+        try:
+            dt = datetime.fromisoformat(str(ts or "").replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        except (TypeError, ValueError):
+            sem_data += 1
+            continue
+        if dt >= corte:
+            dentro.append(r)
+    return dentro, sem_data
+
+
 @app.get("/api/admin/nps/responses")
-def admin_nps_responses(request: Request, limit: int = 50):
-    """Dashboard admin: respostas recentes com comentários (insights qualitativos)."""
+def admin_nps_responses(request: Request, limit: int = 50, days: int = 30):
+    """Dashboard admin: respostas recentes com comentários (insights qualitativos).
+    `days` = janela do seletor da aba. A RPC devolve as `limit` mais recentes
+    (sem janela) e o corte é feito aqui — com 5 respostas na história (02/09)
+    o teto nunca morde; se um dia morder, a lista mostra as mais recentes
+    DENTRO da janela, e `limit` vai no JSON pra tela poder dizer isso."""
     _require_admin(request)
     import urllib.request, urllib.error, json
+    days = _nps_janela_dias(days)
     try:
         url = f"{SUPABASE_URL}/rest/v1/rpc/list_nps_responses"
         body = json.dumps({"p_limit": limit}).encode('utf-8')
@@ -19947,17 +20152,22 @@ def admin_nps_responses(request: Request, limit: int = 50):
         req.add_header('Authorization', f'Bearer {SUPABASE_SERVICE_ROLE_KEY}')
         req.add_header('Content-Type', 'application/json')
         resp = urllib.request.urlopen(req, timeout=10)
-        return {"responses": json.loads(resp.read().decode('utf-8'))}
+        rows = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
         raise HTTPException(500, f"Erro: {e}")
+    dentro, sem_data = _nps_dentro_da_janela(rows, days)
+    return {"responses": dentro, "window_days": days, "limit": limit, "sem_data": sem_data}
 
 
 @app.get("/api/admin/nps/stages")
-def admin_nps_stages(request: Request):
+def admin_nps_stages(request: Request, days: int = 30):
     """Médias por etapa do feedback detalhado (upload, tempo, precisão, planilha).
-    Lê as respostas e agrega em Python (volume pequeno)."""
+    Lê as respostas e agrega em Python (volume pequeno). `days` = janela do
+    seletor da aba (02/09/2026: antes era a história inteira, encostada num
+    resumo de 30 dias)."""
     _require_admin(request)
     import urllib.request as _urs
+    days = _nps_janela_dias(days)
     try:
         url = (f"{SUPABASE_URL}/rest/v1/nps_responses"
                f"?context=eq.feedback_detailed&select=stage_ratings,score,comment,user_name,created_at"
@@ -19968,6 +20178,7 @@ def admin_nps_stages(request: Request):
         rows = _json.loads(_urs.urlopen(req, timeout=15).read().decode("utf-8"))
     except Exception as e:
         raise HTTPException(500, f"Erro: {e}")
+    rows, _sem_data = _nps_dentro_da_janela(rows, days)
     stages = ("upload", "tempo", "precisao", "planilha")
     sums = {k: 0.0 for k in stages}
     counts = {k: 0 for k in stages}
@@ -19989,6 +20200,8 @@ def admin_nps_stages(request: Request):
         "stages": avgs,
         "counts": counts,
         "recommend_avg": round(rec_sum / rec_n, 2) if rec_n else None,
+        "window_days": days,
+        "sem_data": _sem_data,
     }
 
 
@@ -20378,7 +20591,11 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
     rows = [r for r in rows if not _email_eh_interno(r.get("user_email") or "")]
 
     by_event, by_user = {}, {}
-    seen_7d, seen_30d = set(), set()
+    # 🚨 02/09/2026: isto se chamava `seen_30d` e a tela dizia "Ativos 30 dias",
+    # mas `rows` já vem cortado pela janela do seletor (`days`) — com 90 dias
+    # escolhidos o cartão dizia "30 dias" e contava 90; com 7, repetia o de 7.
+    # O nome agora diz o que é: os ativos da JANELA. A tela escreve `window_days`.
+    seen_7d, seen_janela = set(), set()
     # Funil do topo por VISITANTE único (cid anônimo no meta): landing → cadastro
     # → completou. Responde "quanta gente visita e não converte".
     _FUNNEL = ("view_landing", "view_cadastro", "signup_done")
@@ -20402,7 +20619,7 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
         if u["first_seen"] is None or ts < u["first_seen"]:
             u["first_seen"] = ts
         if email and email != "anonymous":
-            seen_30d.add(email)
+            seen_janela.add(email)
             if ts >= cutoff_7d:
                 seen_7d.add(email)
     users = sorted(by_user.values(), key=lambda x: x.get("last_seen") or "", reverse=True)
@@ -20410,7 +20627,9 @@ def admin_activity(request: Request, days: int = 30, limit: int = 200):
         "total_events": len(rows),
         "window_days": days,
         "active_7d": len(seen_7d),
-        "active_30d": len(seen_30d),
+        # `active_30d` morreu: só existia um consumidor (o cartão da Atividade)
+        # e o nome mentia a janela. Ver contrato em test_painel_admin_nao_mente.
+        "active_window": len(seen_janela),
         "by_event": by_event,
         "funnel": {k: len(funnel_cids[k]) for k in _FUNNEL},
         "users": users,
@@ -20643,7 +20862,22 @@ async def reprocess_project(job_id: str, request: Request):
 
     Política: 1 reprocessamento grátis por projeto. Tentativas adicionais
     retornam 402 (Payment Required) com mensagem orientando o user."""
-    _require_project_owner(request, job_id)
+    _dono_rp = _require_project_owner(request, job_id)
+    # 🩸 02/09/2026 — quando é o ADMIN que reprocessa o projeto de um cliente,
+    # fica registrado. Até hoje não havia como saber se algum dos 23 projetos
+    # com reprocess_count>0 gastou o grátis pela mão do Pedro "de visita"
+    # (projeto.html?adm=1): esta rota só confere dono-ou-admin. A tela pede
+    # confirmação dupla nesse caso; isto aqui é o rastro no banco (error_log).
+    # Best-effort: nunca barra o reprocesso — falha na sessão vira None.
+    try:
+        _quem_rp = _get_user_from_request(request, tolerante=True)
+        if _quem_rp and (_quem_rp.get("email") or "").lower() == ADMIN_EMAIL \
+                and _dono_rp and _dono_rp != _quem_rp.get("id"):
+            _log_error("admin:reprocessou-projeto-de-cliente",
+                       f"admin gastou o reprocesso grátis do projeto {job_id} "
+                       f"(dono {_dono_rp})", job_id, severity="warning")
+    except Exception:
+        pass
     # Freio anti-abuso de custo (auditoria 27/07): reprocessar dispara o motor de
     # IA de novo. Teto por-projeto — humano reprocessa 1-2×; loop é barrado.
     if not _rate_limit_ok(f"reprocess:{job_id}", request, limit=6, window_s=600):
@@ -23266,12 +23500,13 @@ def admin_funil_revisao(request: Request):
     projetos concluídos e por 2 dos 5 revisados, o que maquiava o número."""
     _require_admin(request)
     try:
-        _st, _f = _supa_rest_service("POST", "rpc/funil_revisao", {
-            "p_excluir_emails": sorted({e for e in [
-                ADMIN_EMAIL, "zarelalopes@gmail.com",
-                "pedro.zellmer@gmail.com", "pedro@email.com",
-            ] if e}),
-        })
+        # 🔑 02/09/2026 — a lista de contas da casa saiu daqui. A RPC aplica a
+        # regra única do banco (view projetos_de_cliente + emails_da_casa()):
+        # sem avaliação, com e-mail, fora as contas da casa. Medido antes do
+        # conserto: o funil dizia 152 concluídos e 48 eram AVALIAÇÃO — job de
+        # avaliação tem user_id 'eval' sem perfil, e a lista de e-mails nunca o
+        # pegava. Dois dos quatro e-mails da lista nem existiam no banco.
+        _st, _f = _supa_rest_service("POST", "rpc/funil_revisao", {})
         if _st != 200 or not isinstance(_f, list):
             _log_error("funil-revisao", f"RPC {_st}: {str(_f)[:300]}")
             return {"funil": [], "erro": True}
@@ -23279,6 +23514,32 @@ def admin_funil_revisao(request: Request):
     except Exception as e:
         _log_error("funil-revisao", str(e))
         return {"funil": [], "erro": True}
+
+
+def era_linha_zerada(revisao, item_atual):
+    """A edicao do cliente caiu em linha que o motor deixou ZERADA?
+
+    🩸 02/09/2026 - MEDIDO: a versao antiga lia `project_items.quantity`, que a
+    rota de revisao ja tinha SOBRESCRITO com o valor novo. Nas 50 ultimas
+    edicoes: pelo `_antes` 42 eram zeradas; pela quantidade atual so 12. A
+    tela subestimava 3,5x o achado que mais importa (97 de 107 edicoes com
+    'antes' registrado sao PREENCHER linha zerada).
+    Ordem: `edits._antes.quantity` (foto de antes, gravada desde 03/08); so
+    sem ela cai na quantidade atual do item; sem nada, None (nao sei)."""
+    edits = (revisao or {}).get("edits") if isinstance(revisao, dict) else None
+    antes = edits.get("_antes") if isinstance(edits, dict) else None
+    if isinstance(antes, dict) and "quantity" in antes:
+        try:
+            return float(antes.get("quantity") or 0) == 0
+        except (TypeError, ValueError):
+            return True
+    q = (item_atual or {}).get("quantity") if isinstance(item_atual, dict) else None
+    if q is None:
+        return None
+    try:
+        return float(q or 0) == 0
+    except (TypeError, ValueError):
+        return None
 
 
 @app.get("/api/admin/voz-do-cliente")
@@ -23336,13 +23597,16 @@ def admin_voz_do_cliente(request: Request, limit: int = 12):
                     _desc = {i["id"]: i for i in _itens if i.get("id")}
             for r in _revs:
                 _it = _desc.get(r.get("item_id")) or {}
-                _antes = _it.get("quantity")
                 r["descricao"] = _it.get("description") or "(item removido)"
                 r["unidade"] = _it.get("unit")
                 # 🎯 O achado de 03/08: 8 das 9 edições do 1º cliente que revisou
                 # de verdade caíram em linha que o motor deixou ZERADA. Marcar
                 # isso aqui é o que transforma o painel em pauta de motor.
-                r["era_zerada"] = (_antes is not None and float(_antes or 0) == 0)
+                # 🩸 02/09: lia a quantidade DEPOIS da edição (o item já tinha
+                # sido sobrescrito) — 12 zeradas onde o `_antes` dizia 42.
+                _ed = r.get("edits") if isinstance(r.get("edits"), dict) else {}
+                r["antes_conhecido"] = isinstance(_ed.get("_antes"), dict)
+                r["era_zerada"] = era_linha_zerada(r, _it)
             out["edicoes"] = _revs
         else:
             out["erro_edicoes"] = True
@@ -23448,6 +23712,9 @@ def admin_review_insights(request: Request, days: int = 30, limit: int = 30):
             for k, v in edit_patterns.most_common(limit)
         ],
         "comments_recent": comments[:limit],
+        # o painel mostra "comentários no período": a lista acima é cortada em
+        # `limit`, então o total vai à parte — tamanho de lista cortada é teto.
+        "comments_total": len(comments),
     }
 
 
@@ -23697,8 +23964,11 @@ def metricas_tick(request: Request):
 
     _casa = _ips_da_casa()
     gravados, falhas = [], []
+    # 🪤 02/09/2026: `date.today()` aqui é o relógio do Render (UTC). Disparado à
+    # mão às 22h de Brasília, "ontem" virava o dia que ainda estava em curso.
+    # O dia de referência é o de Brasília, como no resto da casa.
     for atras in (1, 2, 3):
-        dia = _d.today() - _td(days=atras)
+        dia = _hoje_br() - _td(days=atras)
         try:
             linha = _ms.coletar(dia, ips_da_casa=_casa)
         except Exception as e:
@@ -23737,6 +24007,47 @@ def metricas_tick(request: Request):
     return {"status": "ok", "gravados": gravados, "falhas": len(falhas)}
 
 
+# 🔑 Páginas da ÁREA LOGADA: quem chega nelas JÁ é cliente. Na lista "páginas
+# que trouxeram gente" elas empurravam pra fora a página de ENTRADA de verdade.
+# Medido 02/09 (7 dias): /dashboard.html 13, /login.html 13, /projeto.html 7 e
+# /revisao.html 4 ocupavam 3 vagas do top 8; /cadastro.html (7) é porta de
+# entrada e FICA.
+_PAGINAS_DA_AREA_LOGADA = ("/dashboard", "/login", "/projeto", "/revisao",
+                           "/cronograma", "/memorial", "/comparativo", "/admin")
+
+
+def _e_pagina_de_area_logada(caminho: str) -> bool:
+    """🪤 Casa por SEGMENTO (`/memorial.html`, `/admin/x`), não por prefixo cru:
+    prefixo cru tiraria `/memorial-descritivo.html` se um dia existir."""
+    _c = str(caminho or "")
+    return any(_c == p or _c.startswith(p + ".") or _c.startswith(p + "/")
+               for p in _PAGINAS_DA_AREA_LOGADA)
+
+
+def _origem_das_visitas(dias: int = 30):
+    """De onde veio quem ACEITOU o cookie nos últimos `dias`. None se não der.
+
+    🔑 A origem já era gravada em TODO evento (aiarq-utils.js: `src`, first-touch
+    em localStorage) e não aparecia em lugar nenhum do painel. A caixa "Origem
+    dos clientes" é OUTRA pergunta: o que a pessoa DECLAROU no cadastro.
+
+    🪤 Pessoa = user_id quando logado, senão o `cid` do navegador. E `user_id`
+    de anônimo chega como '' (vazio, não NULL) — `coalesce(user_id, cid)` puro
+    junta todo anônimo numa pessoa só. Medido 02/09: 36 "pessoas" com a chave
+    errada, 83 com a certa. A conta mora na RPC `admin_origem_visitas`.
+
+    🪤 None, nunca zeros: a RPC falhar não é "ninguém veio".
+    """
+    try:
+        _st, _dados = _supa_rest_service("POST", "rpc/admin_origem_visitas",
+                                         body={"p_dias": int(dias)}, timeout=20)
+    except Exception:
+        return None
+    if _st != 200 or not isinstance(_dados, dict):
+        return None
+    return _dados
+
+
 def _saude_da_coleta(serie: list, tem_token: bool) -> dict:
     """A coleta está viva? Responde pela DATA do último dia medido.
 
@@ -23753,7 +24064,11 @@ def _saude_da_coleta(serie: list, tem_token: bool) -> dict:
             continue
         if _ultimo is None or _c > _ultimo:
             _ultimo = _c
-    _atraso = None if _ultimo is None else (_d2.today() - _ultimo).days
+    # 🚨 02/09/2026: com `date.today()` (UTC no Render), entre 21h e meia-noite
+    # de Brasília "hoje" já era amanhã, o último dia gravado ficava 2 dias
+    # atrás e a caixa âmbar "A coleta PAROU" acendia TODA noite sem a coleta
+    # ter parado. Data de Brasília, como o resto do painel.
+    _atraso = None if _ultimo is None else (_hoje_br() - _ultimo).days
     if not tem_token:
         return {"token_configurado": False, "ultimo_dia": str(_ultimo or ""),
                 "atraso_dias": _atraso,
@@ -23801,8 +24116,12 @@ def _contar_do_dia(o_que: str, dia) -> int:
     # 🔑 Só apareceu porque rodei o tick em produção e OLHEI O BANCO depois.
     # A bancada passou verde nos dois lados: ela lê o fonte, e o fonte não sabe
     # que coluna existe.
+    # 🚨 02/09/2026: a faixa era `T00:00:00Z`, o dia de GREENWICH (21h→21h em
+    # Brasília). Medido: cadastros de 24/08 davam 2 em UTC e 3 em Brasília;
+    # projetos de 01/09, 6 contra 7. Meia-noite de Brasília é 03:00Z — a mesma
+    # borda do contador "projetos hoje" (conserto de 24/08).
     _p = {"select": "user_id" if o_que == "profiles" else "job_id",
-          "and": "(created_at.gte.%sT00:00:00Z,created_at.lt.%sT00:00:00Z)"
+          "and": "(created_at.gte.%sT03:00:00Z,created_at.lt.%sT03:00:00Z)"
                  % (dia, dia + _td1(days=1))}
     if o_que == "projects":
         _p["is_eval"] = "not.is.true"
@@ -24104,8 +24423,8 @@ def admin_metricas(request: Request, dias: int = 30):
     for _l in serie[-7:]:
         for _p in (_l.get("top_paginas") or []):
             _cam = str(_p.get("pagina") or "")
-            if _cam.startswith("/admin"):
-                continue          # nós, não público
+            if _e_pagina_de_area_logada(_cam):
+                continue          # área logada: quem chega aqui JÁ é cliente
             _tp[_cam] = _tp.get(_cam, 0) + int(_p.get("enderecos") or 0)
     _topo = sorted(({"pagina": k, "enderecos": v} for k, v in _tp.items()),
                    key=lambda x: -x["enderecos"])[:8]
@@ -24116,11 +24435,31 @@ def admin_metricas(request: Request, dias: int = 30):
                 for p in (l.get("top_paginas") or []) if p.get("pagina") in ("/", "/index.html"))
     _cad = sum(p.get("enderecos", 0) for l in _ult7
                for p in (l.get("top_paginas") or []) if p.get("pagina") == "/cadastro.html")
+
+    # 🔑 A INFLAÇÃO do Cloudflare, dita em número — foi esse número que fez o
+    # Pedro perder a manhã duas vezes. Medido 02/09: 1.327 "únicos" contra 403
+    # endereços de gente em 7 dias (3,3×); por dia vai de 1,9× a 6,4×.
+    # 🪤 Só entra dia em que os DOIS lados foram medidos. Dia sem
+    # `unicos_cloudflare` fica fora da conta e é dito em `dias_sem_medida` —
+    # não vira zero, porque zero mudaria o fator calado.
+    _com_medida = [l for l in _ult7
+                   if l.get("unicos_cloudflare") is not None
+                   and l.get("ips_gente") is not None]
+    _u = sum(int(l["unicos_cloudflare"]) for l in _com_medida)
+    _g = sum(int(l["ips_gente"]) for l in _com_medida)
+    _infl = {"dias_medidos": len(_com_medida),
+             "dias_sem_medida": len(_ult7) - len(_com_medida),
+             "unicos_cloudflare": _u if _com_medida else None,
+             "ips_gente": _g if _com_medida else None,
+             "fator": (round(_u / _g, 1) if (_com_medida and _g > 0) else None)}
     return {
         "ok": st == 200,
         "serie": serie,
         "veredito": _ms.veredito(serie),
         "top_paginas_7d": _topo,
+        # 🔑 De onde veio quem aceitou o cookie (30 dias) — None se a RPC falhar.
+        "origem_30d": _origem_das_visitas(30),
+        "inflacao_7d": _infl,
         "funil_7d": {
             "home": _home, "cadastro": _cad,
             "contas": sum(int(l.get("cadastros") or 0) for l in _ult7),

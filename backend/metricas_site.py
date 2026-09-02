@@ -25,7 +25,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.request
-from datetime import date
+from datetime import date, timedelta
 
 # A zona do ai.arq.br no Cloudflare.
 _ZONA = "e2375067fceb7c34bb92136d7b5d23d7"
@@ -77,21 +77,42 @@ def _graphql(query: str, timeout: int = 25) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
+# 🚨 02/09/2026 — O "DIA" DESTA SÉRIE ERA O DE GREENWICH. As consultas ao
+# Cloudflare filtravam `T00:00:00Z`..`T23:59:59Z`, e em Brasília isso vai das
+# 21h de ONTEM às 21h de HOJE. O mesmo painel contava "projetos hoje" em
+# Brasília (conserto de 24/08) e a série de 7 dias em Greenwich — dois relógios
+# na mesma tela. Medido em usage_events: 14% dos eventos caem entre 21h e 24h,
+# e em 5 de 12 dias a contagem UTC×BRT diverge mais de 15%.
+#
+# 🔑 Meia-noite de Brasília é 03:00Z (UTC-3, sem horário de verão desde 2019).
+# A regra de fuso da casa mora em main._agora_br_fn; este módulo não pode
+# importar main (main importa ele), então a borda fica explícita aqui.
+_INICIO_DIA_BR = "T03:00:00Z"
+_FIM_DIA_BR = "T02:59:59Z"
+
+
+def bordas_do_dia_br(dia: date) -> tuple:
+    """(início, fim) em UTC do dia `dia` contado no relógio de Brasília."""
+    return (dia.isoformat() + _INICIO_DIA_BR,
+            (dia + timedelta(days=1)).isoformat() + _FIM_DIA_BR)
+
+
 def coletar(dia: date, ips_da_casa=None) -> dict:
-    """Números de UM dia, já separados. Levanta se não der — quem chama decide.
+    """Números de UM dia (de Brasília), já separados. Levanta se não der — quem chama decide.
 
     🪤 O `httpRequestsAdaptiveGroups` (o que traz IP e navegador) só aceita
     janela de 1 dia por consulta, e o Cloudflare só guarda ~7 dias dele. Por
     isso a coleta é diária e não "pega o mês quando precisar".
     """
     d = dia.isoformat()
+    ini, fim = bordas_do_dia_br(dia)
     q = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
       httpRequestsAdaptiveGroups(limit: 400,
-        filter: {datetime_geq: "%sT00:00:00Z", datetime_leq: "%sT23:59:59Z",
+        filter: {datetime_geq: "%s", datetime_leq: "%s",
                  clientRequestHTTPHost: "ai.arq.br"}, orderBy: [count_DESC]) {
         count dimensions { clientIP userAgentBrowser clientRequestPath
                            edgeResponseStatus edgeResponseContentTypeName }
-      } } } }""" % (_ZONA, d, d))
+      } } } }""" % (_ZONA, ini, fim))
     dados = _graphql(q)
     if dados.get("errors"):
         raise RuntimeError("Cloudflare recusou: %s" % dados["errors"][:1])
@@ -155,9 +176,9 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     try:
         q3 = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
           httpRequestsAdaptiveGroups(limit: 1,
-            filter: {datetime_geq: "%sT00:00:00Z", datetime_leq: "%sT23:59:59Z",
+            filter: {datetime_geq: "%s", datetime_leq: "%s",
                      clientRequestHTTPHost: "ai.arq.br", edgeResponseStatus_geq: 500}) {
-            count } } } }""" % (_ZONA, d, d))
+            count } } } }""" % (_ZONA, ini, fim))
         _g5 = ((((_graphql(q3).get("data") or {}).get("viewer") or {})
                 .get("zones") or [{}])[0].get("httpRequestsAdaptiveGroups") or [])
         erros_5xx = sum(int(x.get("count") or 0) for x in _g5)
@@ -167,7 +188,11 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
 
     topo = sorted(({"pagina": k, "enderecos": len(v)} for k, v in por_pagina.items()),
                   key=lambda x: -x["enderecos"])[:12]
-    return {"dia": d, "req_total": gente + robo + nosso, "req_robo": robo,
+    # 🔑 A linha DIZ em que relógio foi contada. As 11 linhas antigas ficam com
+    # o default 'UTC' da coluna e a tela as marca; misturar sem marcar seria
+    # comparar dia de 21h-21h com dia de 0h-24h e chamar de "mesma série".
+    return {"dia": d, "fuso": "America/Sao_Paulo",
+            "req_total": gente + robo + nosso, "req_robo": robo,
             "req_nosso": nosso, "req_gente": gente, "ips_gente": len(ips_gente),
             "unicos_cloudflare": unicos, "paginas": paginas, "site_ok": site_ok,
             "top_paginas": topo, "fonte": "tick"}

@@ -203,7 +203,7 @@ def test_operacao_agora_NAO_encosta_hoje_em_24h():
     bloco = h[i:i + 2000]
     assert "Erros (24h)" not in bloco, (
         "o cartao voltou a encostar erro de 24h em concluido de hoje")
-    assert "Erros hoje" in bloco and "Conclu&#237;dos hoje" in bloco, (
+    assert "Projetos com erro hoje" in bloco and "Conclu&#237;dos hoje" in bloco, (
         "os dois contadores de movimento sairam da mesma janela")
     assert "errHoje" in h, "sumiu a contagem de erro do dia"
 
@@ -394,3 +394,173 @@ def test_a_contagem_pede_uma_coluna_que_EXISTE_em_cada_tabela():
             "parou de tirar as avaliacoes da contagem de projetos de cliente")
     finally:
         _m._supa_rest_service = _orig
+
+
+# ─────────── 9) o bloco "Falhas recentes" para de mostrar o LIMITE da RPC ──
+
+def test_a_idade_da_falha_e_CALCULADA_da_data_e_nao_chutada():
+    """🚨 MEDIDO 02/09: a falha mais antiga em tela era de 20/07 (43 dias) e o
+    botão Avisar não sabia. A RPC não mandava created_at. Este guarda CHAMA a
+    normalização com relógio fixo e confere o número."""
+    from datetime import datetime, timezone
+    agora = datetime(2026, 9, 2, 9, 29, tzinfo=timezone.utc)
+    d = _m._ops_normalizar({"recent_failures": [
+        {"created_at": "2026-07-06T04:40:24.328101+00:00"},
+        {"created_at": "2026-09-02T08:00:00+00:00"},
+        {"created_at": None},
+    ]}, agora=agora)
+    f = d["recent_failures"]
+    assert f[0]["idade_dias"] == 58, "falha de 06/07 tem que dar 58 dias em 02/09"
+    assert f[1]["idade_dias"] == 0
+    # 🪤 sem data NÃO é zero: zero é "hoje", e isso liberaria o Avisar sem aviso.
+    assert f[2]["idade_dias"] is None
+
+
+def test_contagem_que_NAO_veio_vira_NULO_e_nunca_o_tamanho_da_lista():
+    """🚨 O bug era exatamente `.length` no lugar do total. Se a RPC do banco
+    ainda for a versão velha, o campo tem que vir None e a tela diz que não
+    veio — nunca 25."""
+    d = _m._ops_normalizar({"recent_failures": [{}] * 25, "motor_errors": [{}] * 40})
+    assert d["contagens_faltando"] is True
+    assert d["contagens"]["recent_failures_total"] is None
+    assert d["contagens"]["motor_errors_total"] is None
+    # e quando VEM, passa inteiro
+    d2 = _m._ops_normalizar({"contagens": {"recent_failures_total": 39, "motor_errors_total": "x"}})
+    assert d2["contagens"]["recent_failures_total"] == 39
+    assert d2["contagens"]["motor_errors_total"] is None
+    assert d2["janela"]["recent_failures_dias"] == 60
+
+
+def test_o_endpoint_de_operacao_PASSA_pela_normalizacao(monkeypatch):
+    """🧪 Intercepta a chamada à RPC e confere que o que sai do endpoint tem
+    `contagens`, `janela` e `idade_dias` — prova que a função é USADA, não só
+    existe."""
+    import io as _io
+    import json as _j
+    import urllib.request as _ur
+
+    class _Resp(_io.BytesIO):
+        pass
+
+    def _falso(req, timeout=0):
+        return _Resp(_j.dumps({"recent_failures": [{"created_at": "2026-07-06T04:40:24+00:00", "user_email": "a@b.c"}],
+                               "motor_errors": [], "motor_diag": [], "pdf_only": []}).encode("utf-8"))
+    monkeypatch.setattr(_ur, "urlopen", _falso)
+    monkeypatch.setattr(_m, "_require_admin", lambda r: None)
+    out = _m.admin_ops_panel(request=None)
+    assert "contagens" in out and "janela" in out
+    assert isinstance(out["recent_failures"][0]["idade_dias"], int)
+    assert out["recent_failures"][0]["idade_dias"] >= 58
+
+
+def test_a_tela_de_falhas_diz_JANELA_e_MOSTRANDO_de_TOTAL():
+    """🚨 `(${falhas.length}) — recuperar 1-a-1` mostrava 25 com 39 no banco e
+    chamava 60 dias de 'recentes'. Guarda de fonte (não há node aqui): casa a
+    CHAMADA inteira, não palavra solta — comentário não passa."""
+    h = _admin_html()
+    i = h.find("function renderOps")
+    assert i > 0
+    corpo = h[i:i + 9000]
+    assert "(${falhas.length}) — recuperar 1-a-1" not in corpo, (
+        "o contador de falhas voltou a ser o tamanho da lista cortada")
+    assert "opsDeTotal(falhas.length, cont.recent_failures_total, 'últimos ' + _diasFalhas + ' dias')" in corpo
+    assert "opsDeTotal(erros.length, cont.motor_errors_total" in corpo
+    assert "opsDeTotal(diag.length, cont.motor_diag_total" in corpo
+    assert "opsDeTotal(pdfOnly.length, cont.pdf_only_total" in corpo
+    assert "o total não veio do banco" in corpo, (
+        "contagem ausente voltou a ter cara de número")
+
+
+def test_o_botao_avisar_passa_pela_CONFIRMACAO_com_a_idade():
+    """🚨 Dava pra avisar hoje um cliente sobre falha de julho. O botão tem que
+    chamar opsAvisar, e opsAvisar tem que confirmar dizendo a idade."""
+    h = _admin_html()
+    i = h.find("function opsAvisar(i){")
+    assert i > 0, "sumiu a confirmacao do Avisar"
+    corpo = h[i:h.find(chr(10) + "}", i) + 2]
+    assert "idade >= OPS_AVISAR_DIAS_CONFIRMA" in corpo
+    assert "return confirm(`Essa falha é de ${f.quando || '?'} — há ${idade} dia(s)." in corpo
+    assert 'onclick="return opsAvisar(${falhas.indexOf(f)})"' in h, (
+        "o link de Avisar deixou de passar pela confirmacao")
+    assert "${f.is_eval" in h, "falha de avaliacao interna voltou a ter botao de e-mail"
+
+
+# ─────────── 9) custo por projeto divide pelos projetos de CLIENTE ──────────
+
+def test_o_custo_por_projeto_divide_por_projeto_de_CLIENTE_e_nao_por_avaliacao():
+    """🩸 02/09/2026 — MEDIDO: 98 concluídos em 30 dias, 41 eram avaliação
+    NOSSA (is_eval). O divisor contava os 98 e o custo por projeto saía 42%
+    mais barato do que é.
+
+    🧪 Este guarda INTERCEPTA a chamada ao Supabase e olha o filtro que foi
+    pedido de verdade — não procura palavra no fonte (passaria cego com a
+    palavra num comentário, como aconteceu 2x hoje)."""
+    chamadas = []
+
+    def _espiao(metodo, tabela, params=None, **k):
+        p = dict(params or {})
+        chamadas.append((tabela, p))
+        if p.get("is_eval") == "not.is.true":
+            return 200, [{"job_id": "c1"}, {"job_id": "c2"}, {"job_id": "c3"}]
+        if p.get("is_eval") == "is.true":
+            return 200, [{"job_id": "e1"}, {"job_id": "e2"}]
+        return 200, [{"job_id": "x"}] * 5   # sem filtro: os 5 misturados
+
+    _orig = _m._supa_rest_service
+    try:
+        _m._supa_rest_service = _espiao
+        r = _m._projetos_para_custo_30d()
+    finally:
+        _m._supa_rest_service = _orig
+    assert chamadas and all(t == "projects" for t, _ in chamadas), chamadas
+    filtros = {p.get("is_eval") for _, p in chamadas}
+    assert "not.is.true" in filtros, (
+        "a contagem de cliente voltou a NAO filtrar is_eval - avaliacao nossa "
+        "entra no divisor e o custo por projeto sai mais barato do que e")
+    assert all(p.get("status") == "eq.done" and str(p.get("created_at", "")).startswith("gte.")
+               for _, p in chamadas), chamadas
+    assert r["cliente"] == 3, r
+    assert r["avaliacoes"] == 2, r
+
+
+def test_CONTROLE_custo_por_projeto_falha_de_contagem_vira_NULO_e_nao_zero():
+    """🧪 Zero é afirmação ("nenhum projeto de cliente"); falha de rede ou HTTP
+    500 não pode virar afirmação — a tela mostraria '—' com cara de '0'."""
+    def _explode(*a, **k):
+        raise RuntimeError("rede caiu")
+
+    def _http500(*a, **k):
+        return 500, None
+
+    _orig = _m._supa_rest_service
+    try:
+        _m._supa_rest_service = _explode
+        r = _m._projetos_para_custo_30d()
+        assert r["cliente"] is None and r["avaliacoes"] is None, r
+        _m._supa_rest_service = _http500
+        r = _m._projetos_para_custo_30d()
+        assert r["cliente"] is None and r["avaliacoes"] is None, r
+    finally:
+        _m._supa_rest_service = _orig
+
+
+def test_a_tela_do_custo_le_o_campo_de_CLIENTE_e_nao_engole_nulo_como_zero():
+    """A tela lê `projetos_30d_cliente` (não o nome antigo, que misturava) e
+    nulo fica nulo. Guarda de fonte, mas com os comentários `//` ARRANCADOS
+    antes de procurar, pra não passar cego com a palavra num comentário."""
+    import re as _re
+    h = _admin_html()
+    i = h.find("async function loadCosts(){")
+    assert i > 0, "sumiu loadCosts"
+    fim = h.find("\nfunction ", i + 10)
+    corpo = _re.sub(r"//[^\n]*", "", h[i:fim])
+    assert "d.projetos_30d_cliente" in corpo, (
+        "a tela voltou a ler o numero que mistura avaliacao com cliente")
+    assert "d.projetos_30d ||" not in corpo and "projetos_30d_cliente || 0" not in corpo, (
+        "voltou a fazer `|| 0`: falha de contagem vira 'zero projetos'")
+    j = h.find("function renderCostTotals(){")
+    assert j > 0, "sumiu renderCostTotals"
+    fj = h.find("\nfunction ", j + 10)
+    tela = _re.sub(r"//[^\n]*", "", h[j:fj])
+    assert "projeto de <b>cliente</b>" in tela and "30 dias" in tela, (
+        "o rotulo parou de dizer que o divisor e projeto de CLIENTE nos ultimos 30 dias")

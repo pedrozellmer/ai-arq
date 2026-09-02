@@ -153,6 +153,15 @@
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
       <span>Agente Q&amp;A</span>
     </button>
+    <!-- 02/09/2026: esta aba saiu do menu em b7c9d41 (jun/26) por ter 0
+         revisões em 30 dias. Hoje são 375 em 30 dias (37 exclusões, 108
+         edições) e é a ÚNICA tela que mostra o que o cliente APAGOU — a aba
+         Motor só olha as edições. A aba nunca deixou de existir: quem
+         digitasse #insights na barra caía nela sem nenhum item aceso. -->
+    <button onclick="switchTab('insights')" data-tab="insights" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+      <span>Revis&#245;es do cliente</span>
+    </button>
     <p class="px-4 pt-4 pb-1 text-[10px] font-semibold uppercase tracking-wider text-white/40">Atendimento</p>
     <button onclick="switchTab('mensagens')" data-tab="mensagens" class="nav-item w-full flex items-center gap-3 px-4 py-3 rounded-lg text-white/90 text-sm font-medium">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
@@ -294,6 +303,10 @@
             <p id="stat-success" class="text-3xl font-bold text-gray-900">--</p>
             <p id="stat-success-detail" class="text-xs text-gray-500 mt-1">&nbsp;</p>
             <div id="stat-success-evo" class="mt-3"></div>
+            <!-- 02/09/2026: por formato nos ultimos 90 dias. A MESMA chamada da
+                 evolucao ja trazia isso e era jogado fora; a aba Motor mostra
+                 a historia inteira, aqui e a janela recente. -->
+            <div id="stat-success-formato" class="mt-2"></div>
           </button>
 
           <!-- Card: Itens gerados — clicavel, leva pro Motor (qualidade do que foi gerado) -->
@@ -349,8 +362,22 @@
           <div id="mov-alerta" class="hidden mt-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"></div>
 
           <!-- barras: uma por dia. Altura = endereços distintos que NÃO são
-               nós nem robô óbvio. 🪤 É TETO, não contagem de pessoas. -->
-          <div id="mov-barras" class="mt-5 flex items-end gap-1 h-24"></div>
+               nós nem robô óbvio. 🪤 É TETO, não contagem de pessoas.
+               Embaixo de cada barra, uma faixa fina separa as REQUISIÇÕES do
+               dia em gente / robô / nós. Medido 02/09: 27/08 foi 67% robô,
+               30/08 foi 79% NÓS, 01/09 61% gente — e nada disso aparecia.
+               Dia sem essa separação gravada fica cinza, não zero.
+               🪤 Cores e tamanhos da faixa em style= de propósito: o Tailwind
+               daqui é build ESTÁTICO e classe nova pode ser inerte. -->
+          <div id="mov-barras" class="mt-5 flex items-end gap-1" style="height:112px"></div>
+          <p class="text-[11px] text-gray-400 mt-1">um dia = de meia-noite a meia-noite em Bras&#237;lia &middot; barras apagadas: dias antigos, contados no rel&#243;gio de Greenwich (o dia virava &#224;s 21h)</p>
+          <div class="mt-1 flex flex-wrap items-center text-[11px] text-gray-500" style="gap:4px 16px">
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#6366f1"></span> altura: endere&#231;os de gente</span>
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#34d399"></span> gente</span>
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#f59e0b"></span> rob&#244;</span>
+            <span><span style="display:inline-block;vertical-align:middle;width:10px;height:10px;border-radius:2px;background:#94a3b8"></span> n&#243;s</span>
+            <span id="mov-inflacao" class="text-gray-600" style="margin-left:auto">&mdash;</span>
+          </div>
           <!-- funil da semana + páginas que trouxeram gente.
                🔑 A FAQ é a 2ª página do site em 5 dos 6 dias medidos (29/08) e
                ninguém sabia — o número existia e nunca era calculado. -->
@@ -363,6 +390,17 @@
               <p class="text-xs font-semibold text-gray-500 mb-2">P&#225;ginas que trouxeram gente (7 dias)</p>
               <div id="mov-paginas" class="text-sm text-gray-700 space-y-1">&mdash;</div>
             </div>
+            <!-- 🔑 A origem (google, direto, chatgpt...) já era gravada em todo
+                 evento e não aparecia em lugar nenhum. Medido 02/09, 30 dias:
+                 google 62, direto 12, sem origem 6, busca 4, chatgpt.com 2.
+                 🪤 Só quem ACEITOU o cookie — recorte, não o site inteiro.
+                 🪤 É diferente da caixa "Origem dos clientes" (declarado no
+                 cadastro). -->
+            <div>
+              <p class="text-xs font-semibold text-gray-500 mb-2">De onde veio quem aceitou o cookie (30 dias)</p>
+              <div id="mov-origem" class="text-sm text-gray-700 space-y-1">&mdash;</div>
+              <p id="mov-origem-nota" class="mt-1 text-[11px] text-gray-400 leading-snug"></p>
+            </div>
           </div>
 
           <p class="mt-2 text-[11px] text-gray-400 leading-snug">
@@ -370,6 +408,9 @@
             nem a nossa m&#225;quina. &#201; um <b>teto</b>, n&#227;o uma contagem de pessoas &mdash; rob&#244;
             que se disfar&#231;a de navegador entra aqui. O contador de &#8220;&#250;nicos&#8221; do
             Cloudflare conta rob&#244; e chegou a inflar um dia em 76%.
+            A lista &#8220;de onde veio&#8221; conta s&#243; quem <b>aceitou o cookie</b> (30 dias) &mdash;
+            &#233; outra r&#233;gua, n&#227;o some com os endere&#231;os. E &#233; diferente da caixa
+            &#8220;Origem dos clientes&#8221; l&#225; embaixo, que mostra o que a pessoa <b>declarou</b> no cadastro.
           </p>
         </section>
 
@@ -397,7 +438,7 @@
               <p id="stat-op-stuck" class="text-2xl font-bold text-amber-900 mt-1">--</p>
             </div>
             <div class="rounded-xl bg-rose-50 p-4">
-              <p class="text-xs text-rose-800">&#10007; Erros hoje</p>
+              <p class="text-xs text-rose-800">&#10007; Projetos com erro hoje</p>
               <p id="stat-op-errors" class="text-2xl font-bold text-rose-900 mt-1">--</p>
               <p id="stat-op-errors-detail" class="text-xs text-rose-700 mt-1">&nbsp;</p>
             </div>
@@ -469,7 +510,7 @@
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📈 Evolução semanal <span class="font-normal text-gray-400">— o motor está melhorando?</span></h3>
         <div id="qualidade-semanal"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
-        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor</span></h3>
+        <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📊 Números <span class="font-normal text-gray-400">— saúde do motor, história inteira (a janela de cada bloco está escrita lá dentro)</span></h3>
         <div id="motor-health"><p class="text-gray-400 text-sm">Carregando…</p></div>
         <div class="my-8 border-t border-gray-200"></div>
         <h3 class="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">📦 Limite de upload do Storage <span class="font-normal text-gray-400">— o CAD grande consegue ser guardado?</span></h3>
@@ -685,20 +726,10 @@
         <div id="filhotes"><p class="text-gray-400 text-sm">Carregando...</p></div>
       </div>
 
-      <div id="tab-pagamentos" class="tab-content hidden">
-        <div class="mb-6">
-          <h1 class="text-2xl font-bold text-gray-900">Pagamentos</h1>
-          <p class="text-sm text-gray-500 mt-1">Dados financeiros e integra&#231;&#227;o Stripe</p>
-        </div>
-
-        <div class="rounded-2xl border bg-white p-12 text-center shadow-gradient">
-          <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-500 mb-6">
-            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
-          </div>
-          <h2 class="text-lg font-semibold text-gray-700 mb-2">Em breve</h2>
-          <p class="text-sm text-gray-500">Dados de pagamentos do Stripe aparecer&#227;o aqui.</p>
-        </div>
-      </div>
+      <!-- 02/09/2026: a aba "Pagamentos" (placeholder "Em breve" do Stripe,
+           sem botão no menu desde b7c9d41 em jun/26) foi removida: o beta é
+           grátis e não há dado nenhum pra mostrar. Quem abrisse #pagamentos
+           na barra caía numa tela "Em breve" sem item de menu aceso. -->
 
       <!-- ════════════════════════════════════════ -->
       <!-- TAB: CALIBRACAO                          -->
@@ -834,6 +865,7 @@
           <div>
             <h1 class="text-2xl font-bold text-gray-900">NPS (Net Promoter Score)</h1>
             <p class="text-sm text-gray-500 mt-1">Satisfação dos usuários e feedback qualitativo</p>
+            <p id="nps-janela" class="text-xs text-indigo-700 mt-1">Janela: carregando…</p>
           </div>
           <div class="flex items-center gap-2">
             <select id="nps-period" class="px-3 py-2 rounded-lg border border-gray-300 text-sm">
@@ -876,7 +908,7 @@
         <!-- Métricas secundárias -->
         <div class="grid gap-4 sm:grid-cols-2 mb-6">
           <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <p class="text-sm font-medium text-gray-500 mb-1">Respostas totais</p>
+            <p id="nps-total-label" class="text-sm font-medium text-gray-500 mb-1">Respostas (janela: carregando…)</p>
             <p id="nps-total" class="text-2xl font-bold text-gray-900">--</p>
           </div>
           <div class="rounded-2xl border bg-white p-5 shadow-sm">
@@ -903,7 +935,7 @@
         <!-- Lista de respostas recentes -->
         <div class="rounded-2xl border bg-white shadow-sm overflow-hidden">
           <div class="px-6 py-4 border-b bg-gray-50">
-            <h3 class="font-semibold text-gray-800">Respostas recentes</h3>
+            <h3 id="nps-resp-title" class="font-semibold text-gray-800">Respostas (janela: carregando…)</h3>
             <p class="text-xs text-gray-500 mt-0.5">Comentários qualitativos pra entender o "por quê"</p>
           </div>
           <div id="nps-responses" class="divide-y max-h-[700px] overflow-y-auto">
@@ -918,8 +950,8 @@
       <div id="tab-insights" class="tab-content hidden">
         <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 class="text-2xl font-bold text-gray-900">Insights de revisão</h1>
-            <p class="text-sm text-gray-500 mt-1">Onde o motor está errando mais — base pra ajustar prompts</p>
+            <h1 class="text-2xl font-bold text-gray-900">Revis&#245;es do cliente</h1>
+            <p class="text-sm text-gray-500 mt-1">O que o cliente aprovou, corrigiu e apagou na planilha &mdash; janela escolhida ao lado</p>
           </div>
           <div class="flex items-center gap-2">
             <select id="ins-period" class="px-3 py-2 rounded-lg border border-gray-300 text-sm">
@@ -940,7 +972,7 @@
             <p id="ins-total" class="text-2xl font-bold text-gray-900">--</p>
           </div>
           <div class="rounded-2xl border bg-white p-5 shadow-sm">
-            <p class="text-sm font-medium text-gray-500 mb-1">Comentários recebidos</p>
+            <p class="text-sm font-medium text-gray-500 mb-1">Coment&#225;rios no per&#237;odo</p>
             <p id="ins-comments-count" class="text-2xl font-bold text-gray-900">--</p>
           </div>
         </div>
@@ -1394,7 +1426,7 @@ function switchTab(tabName, interno) {
   if (tabName === 'usuarios') loadUsers();
   if (tabName === 'projetos') loadProjects();
   if (tabName === 'filhotes') loadFilhotes();
-  if (tabName === 'dashboard') { loadDashboardStats(); loadOrigem(); loadFilhotes(); }
+  if (tabName === 'dashboard') { loadDashboardStats(); loadOrigem(); loadFilhotes(); carregarBadgeMensagens(); }
   if (tabName === 'calibracao') loadCalibrationFactors();
   if (tabName === 'agente') loadAgentData();
   if (tabName === 'nps') loadNPSData();
@@ -1416,6 +1448,23 @@ function opsEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/<
 function opsMailto(email, subject, body){
   return `mailto:${encodeURIComponent(email||'')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
+// 🚨 02/09/2026 — dava pra "Avisar" hoje um cliente sobre falha de 06/07 sem
+// nenhum aviso de idade. Falha com 7 dias ou mais pede confirmação DIZENDO a
+// data e a idade. `quando` já vem do banco em horário de Brasília.
+const OPS_AVISAR_DIAS_CONFIRMA = 7;
+function opsAvisar(i){
+  const f = (window._opsFalhas || [])[i];
+  if (!f) return true;
+  if (!f.user_email) { alert('Essa falha não tem e-mail de cliente.'); return false; }
+  const idade = f.idade_dias;
+  if (typeof idade !== 'number') {
+    return confirm(`Não sei a idade dessa falha (a data não veio do banco). Avisar mesmo assim?`);
+  }
+  if (idade >= OPS_AVISAR_DIAS_CONFIRMA) {
+    return confirm(`Essa falha é de ${f.quando || '?'} — há ${idade} dia(s).\n\nO cliente pode nem lembrar desse envio. Avisar mesmo assim?`);
+  }
+  return true;
+}
 async function loadOps(){
   const box = document.getElementById('ops-box');
   box.innerHTML = '<p class="text-gray-400 text-sm">Carregando…</p>';
@@ -1431,6 +1480,20 @@ async function loadOps(){
 function renderOps(d){
   const falhas = d.recent_failures || [];
   const pdfOnly = d.pdf_only || [];
+  // 🚨 02/09/2026 — os contadores deste bloco eram `.length` das listas, e as
+  // listas vêm CORTADAS pela RPC (25/40/40/30). Mostrava "25" com 39 falhas no
+  // banco e chamava de "recentes" uma janela de 60 dias. Agora o total vem
+  // contado no banco (`contagens`) e a janela vem declarada (`janela`).
+  // 🪤 Contagem que não veio é NULL e a tela diz isso — nunca cai no `.length`.
+  const cont = d.contagens || {};
+  const jan = d.janela || {};
+  const opsN = (n) => (typeof n === 'number') ? n.toLocaleString('pt-BR') : null;
+  // "mostrando 25 de 39 (últimos 60 dias)" — ou, sem contagem, diz que não veio.
+  const opsDeTotal = (mostrando, total, janelaTxt) =>
+    (opsN(total) !== null)
+      ? `mostrando ${mostrando} de ${opsN(total)} (${janelaTxt})`
+      : `mostrando ${mostrando} — o total não veio do banco (${janelaTxt})`;
+  window._opsFalhas = falhas;
   const erros = d.motor_errors || [];
   // 23/08 (auditoria): metade do painel "Erros do motor" era migalha de
   // diagnostico gravada com severity padrao. Agora vem separado do erro real.
@@ -1439,8 +1502,10 @@ function renderOps(d){
   let html = '';
 
   // 1) FALHAS RECENTES — recuperar 1-a-1
-  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">⚠️ Falhas recentes <span class="text-xs font-normal text-gray-400">(${falhas.length}) — recuperar 1-a-1</span></h3>`;
-  if (!falhas.length) html += `<p class="text-xs text-gray-400 mb-6">Nenhuma falha recente. 🎉</p>`;
+  const _diasFalhas = jan.recent_failures_dias || 60;
+  const _falhas7 = opsN(cont.recent_failures_7d);
+  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">⚠️ Falhas nos últimos ${_diasFalhas} dias <span class="text-xs font-normal text-gray-400">${opsDeTotal(falhas.length, cont.recent_failures_total, 'últimos ' + _diasFalhas + ' dias')}${_falhas7 !== null ? ' · ' + _falhas7 + ' nos últimos 7 dias' : ''} — recuperar 1-a-1</span></h3>`;
+  if (!falhas.length) html += `<p class="text-xs text-gray-400 mb-6">Nenhuma falha nos últimos ${_diasFalhas} dias. 🎉</p>`;
   else {
     html += `<div class="overflow-x-auto mb-6"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Projeto</th><th class="pr-2">Dono</th><th class="pr-2">Erro</th><th></th></tr></thead><tbody>`;
     falhas.forEach(f => {
@@ -1450,14 +1515,16 @@ function renderOps(d){
         <td class="pr-2"><a href="projeto.html?adm=1&job_id=${opsEsc(f.job_id)}" class="text-indigo-600 hover:underline">${opsEsc(f.project_name||'—')}</a></td>
         <td class="pr-2 text-gray-600">${opsEsc(f.user_name||'')}<br><span class="text-gray-400">${opsEsc(f.user_email||'')}</span></td>
         <td class="pr-2 text-gray-500">${opsEsc(f.erro||'')}</td>
-        <td class="pr-1 whitespace-nowrap"><a href="${opsMailto(f.user_email,'Seu projeto no AI.arq', body)}" class="px-2 py-1 rounded bg-indigo-100 text-indigo-700">✉ Avisar</a></td>
+        <td class="pr-1 whitespace-nowrap">${f.is_eval
+          ? `<span class="text-gray-400">teste interno</span>`
+          : `<a href="${opsMailto(f.user_email,'Seu projeto no AI.arq', body)}" onclick="return opsAvisar(${falhas.indexOf(f)})" class="px-2 py-1 rounded ${(f.idade_dias !== null && f.idade_dias !== undefined && f.idade_dias >= 7) ? 'bg-gray-100 text-gray-500' : 'bg-indigo-100 text-indigo-700'}">✉ Avisar${(typeof f.idade_dias === 'number' && f.idade_dias >= 7) ? ' (há ' + f.idade_dias + ' d)' : ''}</a>`}</td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
   }
 
   // 2) SÓ-PDF que mediu pouco — puxar pro CAD
-  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">📄→📐 Só-PDF que mediu pouco <span class="text-xs font-normal text-gray-400">(${pdfOnly.length}) — puxar pro CAD</span></h3>`;
+  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">📄→📐 Só-PDF que mediu pouco <span class="text-xs font-normal text-gray-400">${opsDeTotal(pdfOnly.length, cont.pdf_only_total, 'desde o início, sem janela')} — puxar pro CAD</span></h3>`;
   if (!pdfOnly.length) html += `<p class="text-xs text-gray-400 mb-6">Nenhum. 👍</p>`;
   else {
     html += `<div class="overflow-x-auto mb-6"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Projeto</th><th class="pr-2">Dono</th><th class="pr-2">% medido</th><th></th></tr></thead><tbody>`;
@@ -1474,9 +1541,16 @@ function renderOps(d){
     html += `</tbody></table></div>`;
   }
 
-  // 3) ERROS DO MOTOR (read-only)
-  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">🔧 Erros do motor <span class="text-xs font-normal ${erros24 ? 'text-red-600 font-semibold' : 'text-gray-400'}">${erros24 ? erros24 + ' nas últimas 24 h' : 'nenhum nas últimas 24 h'} &middot; ${erros.length} recentes</span></h3>`;
-  if (!erros.length) html += `<p class="text-xs text-gray-400">Nenhum erro recente.</p>`;
+  // 3) AVISOS DO MOTOR NO REGISTRO (read-only)
+  // 🚨 02/09/2026: este título dizia "Erros do motor · 6 nas últimas 24 h" no
+  // mesmo instante em que o Dashboard dizia "Erros hoje: 0". Os dois estavam
+  // certos e contavam coisas diferentes: lá é PROJETO com status de erro; aqui
+  // é LINHA que o motor gravou no registro (error_log) — das 6 daquele dia, 4
+  // eram a mesma nota baixa de uma cliente e nenhuma tinha projeto com erro.
+  // Nome diferente pra coisa diferente.
+  const _erros7 = opsN(cont.motor_errors_7d);
+  html += `<h3 class="font-semibold text-gray-800 mb-2 flex items-center gap-2">🔧 Avisos do motor no registro <span class="text-xs font-normal ${erros24 ? 'text-red-600 font-semibold' : 'text-gray-400'}">${erros24 ? erros24 + ' linha' + (erros24 > 1 ? 's' : '') + ' nas últimas 24 h' : 'nenhuma linha nas últimas 24 h'}${_erros7 !== null ? ' &middot; ' + _erros7 + ' nos últimos 7 dias' : ''} &middot; ${opsDeTotal(erros.length, cont.motor_errors_total, 'os mais recentes, desde o início')}</span> <span class="text-xs font-normal text-gray-400">&middot; n&#227;o &#233; projeto com erro (isso fica em &ldquo;Projetos com erro hoje&rdquo;, no Dashboard)</span></h3>`;
+  if (!erros.length) html += `<p class="text-xs text-gray-400">Nenhum erro registrado.</p>`;
   else {
     html += `<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Etapa</th><th class="pr-2">Mensagem</th><th class="pr-2">Job</th></tr></thead><tbody>`;
     erros.forEach(e => {
@@ -1495,7 +1569,7 @@ function renderOps(d){
   //    motor:preview-prancha, 135 motor:consenso-area — todas empurrando erro
   //    de verdade pra fora das 40 linhas do painel.
   html += `<details class="mt-6">
-    <summary class="cursor-pointer text-sm font-semibold text-gray-500 hover:text-gray-700">🔬 Diagnóstico do motor <span class="font-normal text-gray-400">(${diag.length}) — não é erro, é migalha proposital</span></summary>`;
+    <summary class="cursor-pointer text-sm font-semibold text-gray-500 hover:text-gray-700">🔬 Diagnóstico do motor <span class="font-normal text-gray-400">${opsDeTotal(diag.length, cont.motor_diag_total, 'os mais recentes, desde o início')}${opsN(cont.motor_diag_7d) !== null ? ' · ' + opsN(cont.motor_diag_7d) + ' nos últimos 7 dias' : ''} — não é erro, é migalha proposital</span></summary>`;
   if (!diag.length) html += `<p class="text-xs text-gray-400 mt-2">Nada registrado.</p>`;
   else {
     html += `<div class="overflow-x-auto mt-2"><table class="w-full text-xs"><thead><tr class="text-left text-gray-400 border-b"><th class="py-2 pr-2">Quando</th><th class="pr-2">Etapa</th><th class="pr-2">Mensagem</th><th class="pr-2">Job</th></tr></thead><tbody>`;
@@ -1518,7 +1592,8 @@ function renderOps(d){
 // FINANCEIRO — registro editável de custos
 // ══════════════════════════════════════════════
 let COSTS = [];
-let COSTS_PROJ30 = 0;   // projetos concluídos nos últimos 30d (pro custo/projeto)
+let COSTS_PROJ30 = null;  // projetos de CLIENTE concluídos nos últimos 30d (divisor do custo/projeto); null = sem medição
+let COSTS_EVAL30 = null;  // avaliações NOSSAS concluídas nos últimos 30d (ficam fora do divisor); null = sem medição
 const COST_CATS = ['infra','ia','email','dominio','pagamento','outro'];
 const COST_MOEDAS = ['BRL','USD'];
 const COST_PERIODOS = ['mensal','anual','uso'];
@@ -1544,7 +1619,10 @@ async function loadCosts(){
     const d = await res.json();
     if (!res.ok) throw new Error(d.detail || 'erro');
     COSTS = d.costs || [];
-    COSTS_PROJ30 = d.projetos_30d || 0;
+    // 🪤 null = o backend não conseguiu contar. NÃO vira zero: zero é afirmação
+    // ("nenhum projeto de cliente"), falha de contagem é outra coisa.
+    COSTS_PROJ30 = (typeof d.projetos_30d_cliente === 'number') ? d.projetos_30d_cliente : null;
+    COSTS_EVAL30 = (typeof d.projetos_30d_avaliacoes === 'number') ? d.projetos_30d_avaliacoes : null;
     renderCosts();
   } catch(e){
     box.innerHTML = `<p class="text-red-600 text-sm">Não consegui carregar: ${(e&&e.message)||e}</p>`;
@@ -1578,12 +1656,20 @@ function renderCostTotals(){
   const fixoMensal = COSTS.reduce((s,c)=> s + costMonthlyBRL(c), 0);
   const nUso = COSTS.filter(c=>c.periodo==='uso').length;
   const nConfirmar = COSTS.filter(c=>!c.confirmado).length;
-  const custoProj = (COSTS_PROJ30 > 0) ? (fixoMensal / COSTS_PROJ30) : null;
+  // 🩸 02/09: o divisor contava avaliação NOSSA como projeto de cliente (98 no
+  // lugar de 57) e o custo por projeto saía 42% mais barato. Agora só cliente.
+  const custoProj = (COSTS_PROJ30 != null && COSTS_PROJ30 > 0) ? (fixoMensal / COSTS_PROJ30) : null;
+  const projTxt = (COSTS_PROJ30 == null)
+    ? 'sem medição (não consegui contar)'
+    : (COSTS_PROJ30 === 0 ? 'nenhum projeto de cliente concluído nos últimos 30 dias'
+                          : `${COSTS_PROJ30} concluído${COSTS_PROJ30===1?'':'s'}, criados nos últimos 30 dias`);
+  const evalTxt = (COSTS_EVAL30 == null) ? '—' : String(COSTS_EVAL30);
   el.innerHTML = `
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(fixoMensal)}</div><div class="text-xs text-gray-500">custo fixo / mês</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(fixoMensal*12)}</div><div class="text-xs text-gray-500">custo fixo / ano</div></div>
-    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${custoProj!=null?costFmt(custoProj):'—'}</div><div class="text-xs text-gray-500">custo fixo / projeto ${COSTS_PROJ30?`(${COSTS_PROJ30} em 30d)`:''}</div></div>
-    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${nUso}</div><div class="text-xs text-gray-500">itens "por uso" (variável)</div></div>`;
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${custoProj!=null?costFmt(custoProj):'—'}</div><div class="text-xs text-gray-500">custo fixo / projeto de <b>cliente</b><br>${projTxt}</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${nUso}</div><div class="text-xs text-gray-500">itens "por uso" (variável)</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${evalTxt}</div><div class="text-xs text-gray-500">avaliações nossas concluídas (últimos 30 dias)<br>ficam FORA da conta ao lado; também gastam IA, e esse gasto não está registrado aqui</div></div>`;
   if (nConfirmar>0) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">⚠ ${nConfirmar} valor(es) <b>a confirmar</b> (linhas em amarelo). Preenche o real e marca ✓ — o total ainda não é definitivo.</div>`;
 }
 function costEdit(i, field, val){ if (!COSTS[i]) return; COSTS[i][field] = val; if (['valor','moeda','periodo','confirmado'].indexOf(field)>=0) renderCostTotals(); }
@@ -2422,6 +2508,9 @@ function renderQualidadeSemanal(d){
   const R = d.retencao || {};
   const totCli = R.clientes||0;
   const pctVolta = totCli ? Math.round(100*(R.voltaram_outra_sem||0)/totCli) : 0;
+  // 02/09: chave que a RPC nao mandou aparece como '–', nao como 0.
+  const _n = v => (v == null ? '–' : v);
+  const pctOutroDia = (totCli && R.voltaram_outro_dia != null) ? Math.round(100*R.voltaram_outro_dia/totCli) : null;
 
   return `
   <div class="grid sm:grid-cols-3 gap-3 mb-5">
@@ -2479,7 +2568,7 @@ function renderQualidadeSemanal(d){
 
     ${fmt ? `<div class="rounded-2xl border bg-white p-5">
       <h4 class="font-semibold text-gray-900 mb-0.5">Por formato de arquivo</h4>
-      <p class="text-xs text-gray-400 mb-3">Quantos projetos <b>mediram</b>, do total enviado</p>
+      <p class="text-xs text-gray-400 mb-3">Quantos projetos <b>mediram</b>, do total enviado &mdash; <b>desde o início</b> (os últimos 90 dias estão no cartão Entrega do painel)</p>
       ${fmt}
     </div>` : ''}
   </div>
@@ -2493,17 +2582,17 @@ function renderQualidadeSemanal(d){
          projetos. Dos 25, 24 fizeram tudo na MESMA semana — é uma sessão só,
          não alguém voltando. As três faixas abaixo somam o total e deixam a
          diferença explícita, pra ninguém (inclusive eu) confundir de novo. -->
-    <p class="text-xs text-gray-400 mb-3">Mandar vários arquivos de uma vez é <b>uso</b>, não retorno. Voltar é aparecer em <b>outra semana</b>.</p>
+    <p class="text-xs text-gray-400 mb-3">Mandar vários arquivos de uma vez é <b>uso</b>, não retorno. Voltar é aparecer em <b>outro dia</b>; outra semana é a leitura mais dura. Tudo <b>desde o início</b>.</p>
     <div class="grid sm:grid-cols-3 gap-3">
       <div class="rounded-xl border p-3">
-        <p class="text-2xl font-bold ${pctVolta>=20?'text-emerald-700':'text-red-700'}">${R.voltaram_outra_sem||0}</p>
-        <p class="text-xs font-medium text-gray-700">voltaram outra semana</p>
-        <p class="text-xs text-gray-400">${pctVolta}% &mdash; a retenção de verdade</p>
+        <p class="text-2xl font-bold ${(pctOutroDia!=null&&pctOutroDia>=20)?'text-emerald-700':'text-red-700'}">${_n(R.voltaram_outro_dia)}</p>
+        <p class="text-xs font-medium text-gray-700">voltaram outro dia</p>
+        <p class="text-xs text-gray-400">${pctOutroDia==null?'sem medição':pctOutroDia+'%'} &mdash; em outra semana: ${_n(R.voltaram_outra_sem)} (${pctVolta}%)</p>
       </div>
       <div class="rounded-xl border p-3">
-        <p class="text-2xl font-bold text-gray-900">${R.varios_no_mesmo_dia||0}</p>
+        <p class="text-2xl font-bold text-gray-900">${_n(R.varios_so_no_mesmo_dia)}</p>
         <p class="text-xs font-medium text-gray-700">vários de uma vez só</p>
-        <p class="text-xs text-gray-400">mandaram 2+ na mesma semana e não voltaram</p>
+        <p class="text-xs text-gray-400">mandaram 2+ no mesmo dia e não voltaram</p>
       </div>
       <div class="rounded-xl border p-3">
         <p class="text-2xl font-bold text-gray-900">${R.so_um_projeto||0}</p>
@@ -2546,7 +2635,17 @@ function renderMotorHealth(d){
   const falhas = d.falhas || [];
   const maxFalha = Math.max(1, ...falhas.map(f=>f.n||0));
   const totais = d.totais || {};
+  // 🚨 02/09/2026: dos sete blocos desta seção só "Por que uploads falham" tem
+  // janela (30 dias); os outros seis são a HISTÓRIA INTEIRA (120 concluídos
+  // desde 20/04 contra 57 nos 30 dias; 42 com erro contra 4) e ficavam
+  // encostados nele sem dizer. A RPC agora devolve `desde` (1º projeto de
+  // cliente) e `falhas_janela_dias`. Campo que não veio vira "não informada",
+  // nunca um 30 inventado.
+  const desde = d.desde ? window.fmtDataBR(d.desde, { day: '2-digit', month: '2-digit', year: '2-digit' }) : '';
+  const janelaTudo = desde ? ('desde o início (' + desde + ')') : 'desde o início';
+  const janelaFalhas = d.falhas_janela_dias ? ('últimos ' + d.falhas_janela_dias + ' dias') : 'janela não informada';
   let html = `
+  <p class="text-xs text-gray-600 mb-3">📅 Janela: tudo abaixo é <b>${janelaTudo}</b>, exceto “Por que uploads falham”, que é dos <b>${janelaFalhas}</b>.</p>
   <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
     ${['DXF','DWG','PDF'].map(k => { const f = funil.find(x=>x.formato===k) || {};
       const c = _CORES[k][0];
@@ -2566,16 +2665,16 @@ function renderMotorHealth(d){
     ⚠️ <b>PDF é o pior disfarçado de melhor:</b> conclui mais que todos e mede só ${esc((funil.find(x=>x.formato==='PDF')||{}).pct_itens_medidos ?? '–')}% dos itens &mdash; ele infla a taxa de sucesso entregando quase nada.
   </div>
   <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-6">
-    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(totais.projetos_done||0)}</div><div class="text-xs text-gray-500">projetos concluídos</div></div>
-    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(itens.medidos)}<span class="text-sm text-gray-400">/${esc(itens.total)}</span></div><div class="text-xs text-gray-500">itens medidos (${pctGeral}%)</div></div>
-    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(totais.projetos_erro||0)}</div><div class="text-xs text-gray-500">projetos com erro</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(totais.projetos_done||0)}</div><div class="text-xs text-gray-500">projetos concluídos · ${janelaTudo}</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(itens.medidos)}<span class="text-sm text-gray-400">/${esc(itens.total)}</span></div><div class="text-xs text-gray-500">itens medidos (${pctGeral}%) · ${janelaTudo}</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${esc(totais.projetos_erro||0)}</div><div class="text-xs text-gray-500">projetos com erro · ${janelaTudo}</div></div>
   </div>
   <h3 class="font-semibold text-gray-800 mb-2">Distribuição — quanto cada projeto mediu</h3><div class="space-y-1.5 mb-6">`;
   faixas.forEach(f => {
     const w = Math.round(100*(f.projetos||0)/maxFaixa);
     html += `<div class="flex items-center gap-2 text-xs"><span class="w-28 shrink-0 text-gray-600">${esc(f.faixa)} medido</span><div class="flex-1 bg-gray-100 rounded h-5 overflow-hidden"><div class="h-5 bg-indigo-400 rounded" style="width:${w}%"></div></div><span class="w-8 text-right font-medium text-gray-700">${esc(f.projetos)}</span></div>`;
   });
-  html += `</div><h3 class="font-semibold text-gray-800 mb-2">Por que uploads falham (últimos 30 dias)</h3><div class="space-y-1.5">`;
+  html += `</div><h3 class="font-semibold text-gray-800 mb-2">Por que uploads falham (${janelaFalhas})</h3><div class="space-y-1.5">`;
   falhas.forEach(f => {
     const w = Math.round(100*(f.n||0)/maxFalha);
     html += `<div class="flex items-center gap-2 text-xs"><span class="w-56 shrink-0 text-gray-600 truncate">${esc(f.motivo)}</span><div class="flex-1 bg-gray-100 rounded h-5 overflow-hidden"><div class="h-5 bg-rose-300 rounded" style="width:${w}%"></div></div><span class="w-8 text-right font-medium text-gray-700">${esc(f.n)}</span></div>`;
@@ -2758,7 +2857,7 @@ function renderRevisionFeedback(d){
         · ${ri.projetos || 0} projetos</p>
       ${(ri.ultimos_edits || []).map(e => `
         <div class="text-xs text-gray-600 border-t border-gray-100 pt-2 mt-2">
-          <span class="font-mono">${esc(e.job_id)}</span> · ${esc(e.quando)}
+          <span class="font-mono">${esc(e.job_id)}</span> · ${esc(window.fmtBR(e.quando))}
           ${e.comment ? ` · "${esc(e.comment)}"` : ''}
           <div class="text-gray-500 break-all">${esc(JSON.stringify(e.edits || {}).slice(0, 220))}</div>
         </div>`).join('')}
@@ -3192,10 +3291,12 @@ async function loadActivity() {
       <div class="rounded-2xl border-2 border-emerald-100 bg-emerald-50 p-4">
         <p class="text-xs font-medium text-emerald-700 mb-1">Ativos 7 dias</p>
         <p class="text-3xl font-bold text-emerald-900">${d.active_7d}</p>
+        <p class="text-[11px] text-emerald-700">pessoas com pelo menos 1 evento nos últimos 7 dias</p>
       </div>
       <div class="rounded-2xl border-2 border-gray-100 bg-gray-50 p-4">
-        <p class="text-xs font-medium text-gray-600 mb-1">Ativos 30 dias</p>
-        <p class="text-3xl font-bold text-gray-900">${d.active_30d}</p>
+        <p class="text-xs font-medium text-gray-600 mb-1">Ativos ${d.window_days} dias</p>
+        <p class="text-3xl font-bold text-gray-900">${d.active_window}</p>
+        <p class="text-[11px] text-gray-500">pessoas com pelo menos 1 evento na janela do seletor (${d.window_days} dias)</p>
       </div>`;
 
     // Funil do topo (visitantes únicos): landing → cadastro → completou
@@ -3529,6 +3630,48 @@ document.addEventListener('keydown', (e) => {
 let _allMessages = [];
 let _msgFilter = 'all';
 
+// Pinta a bolinha vermelha do menu "Mensagens". `n` = mensagens com status
+// 'new' (sem resposta), de QUALQUER data — é fila, não janela. `null` = não
+// consegui contar: mostra "?" em vez de esconder, porque bolinha sumida se lê
+// como "zero mensagem" (regra: NULL não vira zero).
+function _pintaBadgeMensagens(n) {
+  const badge = document.getElementById('mensagens-badge');
+  if (!badge) return;
+  if (n == null) {
+    badge.textContent = '?';
+    badge.title = 'Não consegui contar as mensagens sem resposta';
+    badge.classList.remove('hidden');
+  } else if (n > 0) {
+    badge.textContent = String(n);
+    badge.title = n + ' mensagem(ns) sem resposta — todas as datas';
+    badge.classList.remove('hidden');
+  } else {
+    badge.textContent = '';
+    badge.title = '';
+    badge.classList.add('hidden');
+  }
+}
+
+// 🩸 02/09/2026 — a bolinha só era contada DENTRO de loadMessages(), que só
+// roda quando a aba Mensagens abre. No dashboard ela nunca aparecia: 18
+// mensagens sem resposta no banco (a mais velha de 30/08) e o menu em branco.
+// Conta no boot e toda vez que o dashboard abre; só o número, sem trazer as
+// linhas (head + count exato). Mesma leitura direta que loadMessages já faz
+// (a regra de acesso da tabela deixa o admin ler).
+async function carregarBadgeMensagens() {
+  try {
+    const { count, error } = await sbClient
+      .from('contact_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'new');
+    if (error) throw error;
+    _pintaBadgeMensagens(typeof count === 'number' ? count : null);
+  } catch (e) {
+    console.error('[badge mensagens]', e);
+    _pintaBadgeMensagens(null);
+  }
+}
+
 async function loadMessages() {
   const list = document.getElementById('msg-list');
   if (!list) return;
@@ -3548,16 +3691,8 @@ async function loadMessages() {
     document.getElementById('msg-replied').textContent = replied;
     document.getElementById('msg-complaints').textContent = complaints;
 
-    // Badge no menu lateral
-    const badge = document.getElementById('mensagens-badge');
-    if (badge) {
-      if (newCount > 0) {
-        badge.textContent = newCount;
-        badge.classList.remove('hidden');
-      } else {
-        badge.classList.add('hidden');
-      }
-    }
+    // Badge no menu lateral — mesma pintura do boot (carregarBadgeMensagens)
+    _pintaBadgeMensagens(newCount);
 
     renderMessages();
   } catch (e) {
@@ -3738,7 +3873,10 @@ async function loadInsights() {
     const d = await res.json();
 
     document.getElementById('ins-total').textContent = d.total_reviews || 0;
-    document.getElementById('ins-comments-count').textContent = (d.comments_recent || []).length;
+    // 🪤 a lista vem cortada em `limit` (50): o tamanho dela é um TETO, não o
+    // total. O total vem à parte do servidor (`comments_total`).
+    document.getElementById('ins-comments-count').textContent =
+      (typeof d.comments_total === 'number') ? d.comments_total : '?';
 
     // Rejeitados
     const rejected = d.rejected_top || [];
@@ -3820,7 +3958,15 @@ async function loadInsights() {
       }).join('');
     }
   } catch (e) {
+    // 🪤 Antes o erro só ia pro console e as caixas ficavam em "Carregando..."
+    // pra sempre — e um "0" de total se lia como "motor perfeito" (foi por
+    // isso que a aba saiu do menu em b7c9d41). Erro tem cara de erro.
     console.error('Insights load error:', e);
+    ['ins-total', 'ins-comments-count'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = '?'; });
+    ['ins-rejected', 'ins-edits', 'ins-comments'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '<div class="text-center text-sm text-red-600 py-8">Não consegui carregar as revisões agora.</div>';
+    });
   }
 }
 
@@ -3839,11 +3985,23 @@ async function loadNPSData() {
   const periodSel = document.getElementById('nps-period');
   const days = parseInt((periodSel && periodSel.value) || '30');
   try {
+    // 🚨 02/09/2026: o seletor de período só chegava no resumo. A lista e as
+    // etapas eram a história inteira — com "30 dias" escolhido a tela somava 2
+    // respostas no score, listava 5 e mostrava 1 formulário. Três janelas numa
+    // tela só, e só uma escrita. Agora as três chamadas levam `days` e cada
+    // bloco escreve a janela que o SERVIDOR confirmou (`window_days`); se o
+    // servidor não confirmar, a tela diz "janela não informada" em vez de
+    // repetir o seletor como se fosse verdade.
     const [sumRes, respRes, stagesRes] = await Promise.all([
       authFetch(`${API_BASE}/api/admin/nps/summary?days=${days}`).then(r => r.json()),
-      authFetch(`${API_BASE}/api/admin/nps/responses?limit=100`).then(r => r.json()),
-      authFetch(`${API_BASE}/api/admin/nps/stages`).then(r => r.json()).catch(() => ({})),
+      authFetch(`${API_BASE}/api/admin/nps/responses?limit=100&days=${days}`).then(r => r.json()),
+      authFetch(`${API_BASE}/api/admin/nps/stages?days=${days}`).then(r => r.json()).catch(() => ({})),
     ]);
+    const _setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+    const _janela = (w) => (w ? ('últimos ' + w + ' dias') : 'janela não informada pelo servidor');
+    _setTxt('nps-janela', 'Janela desta aba: últimos ' + days + ' dias (muda no seletor)');
+    _setTxt('nps-total-label', 'Respostas (últimos ' + days + ' dias)');
+    _setTxt('nps-resp-title', 'Respostas — ' + _janela(respRes && respRes.window_days) + ' (as 100 mais recentes)');
 
     // Summary
     const s = sumRes || {};
@@ -3932,9 +4090,10 @@ function renderNpsStages(data) {
   const counts = data.counts || {};
   const total = data.total || 0;
   const cntEl = document.getElementById('stages-count');
-  if (cntEl) cntEl.textContent = total
+  const janEtapas = data.window_days ? ` · últimos ${data.window_days} dias` : ' · janela não informada pelo servidor';
+  if (cntEl) cntEl.textContent = (total
     ? `${total} resposta(s)` + (data.recommend_avg != null ? ` · recomenda ${data.recommend_avg}/10` : '')
-    : 'sem respostas';
+    : 'sem respostas') + janEtapas;
   const el = document.getElementById('nps-stages');
   if (!el) return;
   if (!total) {
@@ -3980,17 +4139,25 @@ const STUCK_MINUTES = 15;  // queued há mais de 15min = travado
 // preso: sem o 'tudo' abaixo, quem clicasse em "Taxa de Sucesso" (que filtra
 // por erro) e depois em "Projetos" cairia vendo só os 28 com erro, achando que
 // era o total. Pego no teste de clique em 09/08.
+// 🩸 02/09/2026 — MEDIDO NUM CHROME DE VERDADE: cada clique no cartão
+// disparava loadProjects() DUAS vezes (2 consultas com count exato ao banco).
+// `switchTab` escreve o hash e o hashchange chama loadProjects; logo depois
+// `setProjectsFilter` chamava de novo. Agora o filtro só MARCA (2º argumento)
+// e deixa a troca de aba fazer a única carga — que já sai com o filtro certo.
 function irParaProjetos() {
+  setProjectsFilter('tudo', true);
   switchTab('projetos');
-  setProjectsFilter('tudo');
 }
 
 function irParaProjetosComErro() {
+  setProjectsFilter('erros', true);
   switchTab('projetos');
-  setProjectsFilter('erros');
 }
 
-function setProjectsFilter(filter) {
+// `soMarcar`: pinta o botão e guarda o filtro sem consultar o banco — quem
+// carrega é a troca de aba. Os botões de filtro da própria aba não passam o
+// argumento e continuam carregando na hora.
+function setProjectsFilter(filter, soMarcar) {
   _projectsFilter = filter;
   document.querySelectorAll('.proj-filter-btn').forEach(btn => {
     const isActive = btn.getAttribute('data-pf') === filter;
@@ -4000,7 +4167,7 @@ function setProjectsFilter(filter) {
     btn.classList.toggle('border-gray-300', !isActive);
     btn.classList.toggle('text-gray-700', !isActive);
   });
-  loadProjects();
+  if (!soMarcar) loadProjects();
 }
 
 function humanElapsed(isoStart, isoEnd) {
@@ -4040,8 +4207,18 @@ async function loadProjects() {
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
     const last24h = now - 24 * 3600 * 1000;
 
-    // Stats sobre projetos REAIS (avaliações/teste não entram nas métricas).
-    const realProjects = allProjects.filter(p => !p.is_eval);
+    // 🔑 02/09/2026 — a LISTA continua vindo de `projects` de propósito: a aba
+    // mostra as avaliações com etiqueta e botão "Abrir teste". Os CARTÕES, não:
+    // eles contam projeto de cliente, e a regra disso mora na view
+    // projetos_de_cliente (sem avaliação, com e-mail, fora as contas da casa).
+    // Antes era `!p.is_eval` e deixava dentro 28 projetos do Pedro e da Daniela.
+    const _rCli = await sbClient
+      .from('projetos_de_cliente')
+      .select('job_id,status,created_at,completed_at,reprocess_count')
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (_rCli.error) throw _rCli.error;
+    const realProjects = _rCli.data || [];
     const running = realProjects.filter(p => (p.status === 'queued' || p.status === 'processing')).length;
     const stuck = realProjects.filter(p => (p.status === 'queued' || p.status === 'processing')
                                         && minutesSince(p.created_at) > STUCK_MINUTES
@@ -4552,6 +4729,55 @@ async function carregarMovimentoDoSite() {
   pSoma('mov-cadastros', 'cadastros');
   pSoma('mov-projetos', 'projetos');
 
+  // ── de onde veio quem aceitou o cookie (30 dias) ────────────────────────
+  // 🔑 A origem já era gravada em TODO evento (aiarq-utils.js, `src`
+  // first-touch) e não aparecia em lugar nenhum. Medido 02/09: google 62,
+  // direto 12, sem origem 6, busca 4, chatgpt.com 2 — 83 pessoas em 30 dias.
+  // 🪤 Só conta quem ACEITOU o cookie: é um recorte, não o site inteiro. A
+  // nota diz isso pra ninguém somar com os endereços do Cloudflare.
+  // 🪤 `origem_30d` null = a leitura falhou; tem cara de "sem medição", não
+  // de lista vazia.
+  // 🔒 `src` vem de utm_source (qualquer um escreve na URL): passa por esc().
+  const org = document.getElementById('mov-origem');
+  const orgNota = document.getElementById('mov-origem-nota');
+  if (org) {
+    const o = d.origem_30d;
+    if (!o || !Array.isArray(o.origens)) {
+      org.innerHTML = '<span class="text-gray-400">sem medição — não consegui ler a origem agora</span>';
+      if (orgNota) orgNota.textContent = '';
+    } else if (!o.origens.length) {
+      org.innerHTML = '<span class="text-gray-400">ninguém com cookie aceito nos últimos ' + (o.janela_dias || 30) + ' dias</span>';
+      if (orgNota) orgNota.textContent = '';
+    } else {
+      const rotulo = s => s === '(sem origem)' ? 'sem origem gravada'
+        : s === 'direto' ? 'direto / sem referência' : s;
+      org.innerHTML = o.origens.map(x =>
+        '<div class="flex items-baseline justify-between gap-3">' +
+        '<span class="text-gray-600 truncate" title="' + esc(x.origem) + '">' + esc(rotulo(x.origem)) + '</span>' +
+        '<span class="font-semibold tabular-nums">' + (Number(x.pessoas) || 0) + '</span></div>').join('');
+      if (orgNota) orgNota.textContent =
+        o.pessoas + ' pessoas aceitaram o cookie em ' + (o.janela_dias || 30) + ' dias (' +
+        o.pessoas_com_origem + ' com origem gravada; ' + o.pessoas_na_home + ' passaram pela home). ' +
+        'É só quem aceitou — o Cloudflare vê mais gente do que isso.';
+    }
+  }
+
+  // ── a inflação do Cloudflare, dita em número ────────────────────────────
+  // 🔑 Medido 02/09: 1.327 "únicos" contra 403 endereços de gente em 7 dias
+  // (3,3×); por dia vai de 1,9× a 6,4×. Foi esse número que custou duas manhãs.
+  const infl = document.getElementById('mov-inflacao');
+  if (infl) {
+    const f = d.inflacao_7d || {};
+    if (!f.dias_medidos) {
+      infl.textContent = 'inflação do Cloudflare: sem medição nos últimos dias';
+    } else {
+      infl.textContent = 'o painel do Cloudflare diria ' + f.unicos_cloudflare + ' "únicos" em ' +
+        f.dias_medidos + ' dias; endereços de gente: ' + f.ips_gente +
+        (f.fator ? ' (' + String(f.fator).replace('.', ',') + '× inflado)' : '') +
+        (f.dias_sem_medida ? ' — ' + f.dias_sem_medida + ' dia(s) sem essa medida' : '');
+    }
+  }
+
   const saude = document.getElementById('mov-saude');
   if (saude) {
     // 🚨 02/09/2026 — ESTE FAROL DIZIA "sim" EM VERDE SEM NUNCA TER MEDIDO NADA.
@@ -4613,15 +4839,43 @@ async function carregarMovimentoDoSite() {
   }
 
   if (barras) {
-    const vals = serie.map(x => Number(x.ips_gente) || 0);
+    const semIps = x => (x.ips_gente === null || x.ips_gente === undefined);
+    const vals = serie.map(x => semIps(x) ? 0 : (Number(x.ips_gente) || 0));
     const teto = Math.max(1, ...vals);
     barras.innerHTML = serie.map((x, i) => {
       const h = Math.max(3, Math.round((vals[i] / teto) * 96));
       const dia = String(x.dia || '').slice(5).split('-').reverse().join('/');
       const dow = new Date(x.dia + 'T12:00:00').getDay();
       const fds = (dow === 0 || dow === 6);
-      return '<div class="flex-1 rounded-t ' + (fds ? 'bg-indigo-100' : 'bg-indigo-500') +
-             '" style="height:' + h + 'px" title="' + dia + ': ' + vals[i] + ' endereços"></div>';
+      // 🔑 A separação gente/robô/nós do dia, em % das REQUISIÇÕES. Estava
+      // gravada em 11 de 11 dias e nunca aparecia. Medido 02/09: 27/08 foi 67%
+      // robô; 30/08 foi 79% NÓS; 01/09, 61% gente.
+      // 🪤 NULL fica NULL: dia sem separação vira faixa cinza e "sem separação"
+      // no hover, nunca 0%. E dia sem `ips_gente` tem barra cinza e diz
+      // "sem medição" — não é um dia de zero visita.
+      const tot = Number(x.req_total), rb = Number(x.req_robo), ns = Number(x.req_nosso), ge = Number(x.req_gente);
+      const temPartes = [x.req_total, x.req_robo, x.req_nosso, x.req_gente]
+        .every(v => v !== null && v !== undefined) && tot > 0;
+      const pct = n => Math.round((n / tot) * 100);
+      const partes = temPartes
+        ? ' · requisições: ' + pct(ge) + '% gente, ' + pct(rb) + '% robô, ' + pct(ns) + '% nós'
+        : ' · sem separação gente/robô/nós gravada';
+      const seg = (n, cor) => '<div style="flex:' + Math.max(0, n) + ' 0 0;background:' + cor + '"></div>';
+      const faixa = temPartes
+        ? '<div style="display:flex;height:6px;margin-top:1px">' + seg(ge, '#34d399') + seg(rb, '#f59e0b') + seg(ns, '#94a3b8') + '</div>'
+        : '<div style="height:6px;margin-top:1px;background:#e5e7eb"></div>';
+      const corBarra = semIps(x) ? 'bg-gray-200' : (fds ? 'bg-indigo-100' : 'bg-indigo-500');
+      // 🪤 02/09/2026: as linhas antigas foram contadas no relógio de Greenwich
+      // (o dia virava às 21h de Brasília). Ficam na série, mas com cara de
+      // "outro relógio" — misturar calado seria comparar dias de tamanhos
+      // diferentes. Opacidade INLINE: `.opacity-40` não existe no Tailwind
+      // estático deste site (conferido no build), a classe seria inerte.
+      const velho = (x.fuso !== 'America/Sao_Paulo');
+      const rotulo = dia + ': ' + (semIps(x) ? 'sem medição de endereços' : vals[i] + ' endereços') + partes +
+                     (velho ? ' · dia contado no relógio de Greenwich (virava às 21h) — série antiga' : '');
+      return '<div class="flex-1" title="' + rotulo + '">' +
+             '<div class="rounded-t ' + corBarra + '" style="height:' + h + 'px' + (velho ? ';opacity:.4' : '') + '"></div>' +
+             faixa + '</div>';
     }).join('');
   }
 }
@@ -4684,12 +4938,18 @@ async function loadDashboardStats() {
     //       justamente o que precisa de ação;
     //   (3) os concluídos HOJE de qualquer data — reprocesso de projeto velho
     //       termina hoje e conta como movimento de hoje.
+    // 🔑 02/09/2026 — "projeto de cliente" tem UMA regra e ela mora no banco:
+    // a view projetos_de_cliente (sem avaliação, com e-mail, fora as contas da
+    // casa — lista em emails_da_casa()). Medido antes: o painel tinha 5 regras
+    // diferentes e o funil contava 48 avaliações como projeto de cliente.
+    // A view herda a RLS de `projects` (security_invoker), então o JWT do
+    // Pedro lê o mesmo que lia antes — só que já filtrado.
     const [_r30, _rAtivos, _rHoje] = await Promise.all([
-      sbClient.from('projects').select(_colunas)
+      sbClient.from('projetos_de_cliente').select(_colunas)
         .gte('created_at', _desde30).order('created_at', { ascending: false }).limit(1000),
-      sbClient.from('projects').select(_colunas)
+      sbClient.from('projetos_de_cliente').select(_colunas)
         .in('status', ['queued', 'processing']).order('created_at', { ascending: false }).limit(200),
-      sbClient.from('projects').select(_colunas)
+      sbClient.from('projetos_de_cliente').select(_colunas)
         .gte('completed_at', _inicioDeHoje.toISOString()).order('completed_at', { ascending: false }).limit(200),
     ]);
     // 🪤 O mesmo projeto pode vir em mais de uma consulta (um job ativo criado
@@ -4702,7 +4962,9 @@ async function loadDashboardStats() {
       if (_k) _vistos.add(_k);
       _all.push(_p);
     }
-    const proj = _all.filter(p => !p.is_eval);
+    // 🪤 Sem filtro aqui de propósito: quem decide o que é cliente é a view.
+    // Refiltrar por is_eval no JS seria a segunda regra voltando pela porta dos fundos.
+    const proj = _all;
     const now = Date.now(), d30 = now - 30 * 864e5, d1 = now - 864e5;
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
 
@@ -4742,7 +5004,7 @@ async function loadDashboardStats() {
     set('stat-op-stuck', stuck.length);
     set('stat-op-errors', errHoje.length);
     set('stat-op-errors-detail',
-        (err24.length > errHoje.length) ? (err24.length + ' nas últimas 24h') : ' ');
+        (err24.length > errHoje.length) ? (err24.length + ' projetos nas últimas 24h') : ' ');
     set('stat-op-donetoday', doneTodayNovos.length);
     set('stat-op-donetoday-detail',
         doneTodayReproc ? ('+ ' + doneTodayReproc + ' reprocessado' + (doneTodayReproc > 1 ? 's' : '')) : ' ');
@@ -4775,7 +5037,11 @@ async function loadDashboardStats() {
       // acumulado desde que o site existe, e o mais antigo é de junho. Agora a
       // janela está no rótulo e a idade do mais velho vem junto.
       row('Cadastros incompletos (desde o início' + (maisVelhoIncompleto ? ', o mais antigo de ' + maisVelhoIncompleto : '') + ')', incomplete) +
-      row('⚠ Com erro (hoje)', comErroHoje);
+      row('⚠ Com erro (hoje)', comErroHoje) +
+      // 02/09: retorno vem da mesma leitura da evolucao (qualidade-semanal);
+      // o placeholder e repintado quando ela chega, ou agora se ja chegou.
+      '<div id="panel-clients-volta" class="space-y-1 pt-1 border-t"></div>';
+    pintarRetornoNoQuadroDeClientes();
 
   } catch (err) {
     console.error('Error loading stats:', err);
@@ -4794,7 +5060,14 @@ async function desenharEvolucaoDaEntrega() {
   try {
     const r = await authFetch(`${API_BASE}/api/admin/qualidade-semanal`);
     if (!r.ok) throw new Error('http ' + r.status);
-    const sem = ((await r.json()).semanas || []).filter(w => (w.finalizados || 0) > 0).slice(-12);
+    const d = await r.json();
+    // 02/09: a mesma resposta alimenta o formato (90d) do cartao Entrega e o
+    // retorno do quadro Clientes. Guardo em cache porque o quadro Clientes e
+    // reescrito por loadStats e precisa poder repintar sozinho.
+    _qualidadeSemanalCache = d;
+    pintarFormato90d(d);
+    pintarRetornoNoQuadroDeClientes();
+    const sem = (d.semanas || []).filter(w => (w.finalizados || 0) > 0).slice(-12);
     if (!sem.length) { box.innerHTML = ''; return; }
 
     // 🪤 Semana com 1 projeto vira 0% ou 100% e parece degrau gigante. O hover
@@ -4829,6 +5102,48 @@ async function desenharEvolucaoDaEntrega() {
     console.debug('evolucao da entrega indisponivel', e);
     box.innerHTML = '';
   }
+}
+
+let _qualidadeSemanalCache = null;
+
+// Cartao Entrega: uma linha por formato, ULTIMOS 90 DIAS. Chave ausente
+// (RPC velha, leitura falhou) vira "sem medicao" - nunca 0%.
+function pintarFormato90d(d) {
+  const el = document.getElementById('stat-success-formato');
+  if (!el) return;
+  const lista = (d && d.resumo && d.resumo.por_formato_90d) || null;
+  if (!lista || !lista.length) {
+    el.innerHTML = '<p class="text-[11px] text-gray-400">por formato (90 dias): sem medicao</p>';
+    return;
+  }
+  const ordem = { DXF: 0, DWG: 1, PDF: 2 };
+  const pos = f => (ordem[f.formato] == null ? 9 : ordem[f.formato]);
+  const partes = lista.slice().sort((a, b) => pos(a) - pos(b)).map(f => {
+    const cor = f.pct >= 50 ? 'text-emerald-700' : (f.pct >= 25 ? 'text-amber-700' : 'text-red-700');
+    return '<span title="' + f.formato + ': ' + f.mediu + ' de ' + f.finalizados +
+           ' finalizados com medicao tirada do CAD"><b class="' + cor + '">' + f.formato + ' ' + f.pct +
+           '%</b> <span class="text-gray-400">(' + f.mediu + ' de ' + f.finalizados + ')</span></span>';
+  });
+  el.innerHTML = '<p class="text-[11px] text-gray-500">ultimos 90 dias, por formato: ' + partes.join(' &middot; ') + '</p>';
+}
+
+// Quadro Clientes: "o cliente volta?" com a pergunta escrita no rotulo.
+// 🔑 Medido em 02/09: 74 clientes; 2+ projetos = 40 (uso, nao retorno);
+// voltou OUTRO DIA = 8; outra semana = 5. O numero grande e o de outro dia.
+function pintarRetornoNoQuadroDeClientes() {
+  const el = document.getElementById('panel-clients-volta');
+  if (!el) return;
+  const d = _qualidadeSemanalCache;
+  const rt = d && d.resumo && d.resumo.retorno;
+  const linha = (label, val) => '<div class="flex justify-between items-baseline"><span>' + label +
+                                '</span><b class="text-gray-900">' + val + '</b></div>';
+  if (!rt) { el.innerHTML = linha('Voltaram outro dia (desde o inicio)', 'sem medicao'); return; }
+  const f = x => (x ? (x.n + ' <span class="font-normal text-gray-400">(' + x.pct + '%)</span>') : 'sem medicao');
+  el.innerHTML =
+    linha('Voltaram outro dia (desde o inicio, de ' + rt.clientes + ' clientes)', f(rt.voltou_outro_dia)) +
+    '<p class="text-[11px] text-gray-400 -mt-1">em outra semana: ' + (rt.voltou_outra_semana ? rt.voltou_outra_semana.n : 'sem medicao') +
+    ' &middot; mandaram 2+ projetos: ' + (rt.dois_ou_mais_projetos ? rt.dois_ou_mais_projetos.n : 'sem medicao') +
+    ' (varios de uma vez e uso, nao retorno)</p>';
 }
 
 // ══════════════════════════════════════════════
@@ -5315,8 +5630,12 @@ async function loadOrigem(){
   // que é, que é o mesmo vício dos "57%" que na real eram 2%.
   // 🪤 O painel MOSTRA que foram tiradas. Excluir calado é como número honesto
   // vira mentira daqui a um mês.
-  const _CONTAS_TESTE = ['zarelalopes@gmail.com', 'danielatp@gmail.com'];
-  const _ehTeste = u => _CONTAS_TESTE.includes(String(u.email || '').toLowerCase());
+  // 🔑 02/09/2026 — a lista NÃO mora mais aqui. Ela vive numa função SQL só
+  // (emails_da_casa) e a RPC admin_list_all_signups já devolve `conta_da_casa`
+  // calculado por ela. Se a RPC cair e o painel usar o atalho por `profiles`,
+  // o campo vem vazio e ninguém é tirado — por isso o rótulo abaixo diz quantas
+  // contas saíram: zero ali é sinal de atalho, não de que a casa sumiu.
+  const _ehTeste = u => u.conta_da_casa === true;
   const _nTeste = users.filter(u => _ehTeste(u) && Number(u.num_projects) > 0).length;
   const _comProj = users.filter(u => Number(u.num_projects) > 0 && !_ehTeste(u));
   const _voltou = _comProj.filter(u => Number(u.dias_com_projeto) > 1);
@@ -5881,6 +6200,9 @@ window.addEventListener('hashchange', () => switchTab(_abaDoHash(), true));
   const hasAccess = await checkAdminAccess();
   if (!hasAccess) return;
   const aba = _abaDoHash();
+  // A bolinha de mensagens sem resposta vale pra QUALQUER aba de entrada —
+  // o menu é o mesmo. Uma contagem só, sem trazer as linhas.
+  carregarBadgeMensagens();
   if (aba === 'dashboard') {
     loadDashboardStats();
     loadOrigem();   // Origem vive dentro do Dashboard — precisa carregar no boot

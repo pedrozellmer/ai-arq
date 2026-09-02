@@ -961,19 +961,27 @@ if (!jobId) { window.location.href = 'meus-projetos.html'; }
 // no fonte de lá. Duplicar aqui é feio; o certo seria um só lugar, mas mover
 // aquele mexe no portão do admin e não vale o risco pra uma barra. Se um dia
 // mudar o e-mail de admin, os DOIS têm que mudar.
-(async function mostrarBarraDoAdmin() {
-  if (urlParams.get('adm') !== '1') return;
+// 🩸 02/09/2026 — A MESMA checagem alimenta o botão Reprocessar. Quando esta
+// Promise resolve `true`, o clique em Reprocessar pede uma confirmação a mais:
+// reprocessar daqui gasta o único reprocesso grátis DO CLIENTE (o backend não
+// distingue quem clicou — /reprocess só confere que é dono OU admin).
+// 🪤 É Promise, não boolean: o clique pode chegar antes de a sessão responder.
+// Sem `adm=1`, sem sessão ou com erro → `false` (nada muda pro cliente).
+window.__adminDeVisita = (async function mostrarBarraDoAdmin() {
+  if (urlParams.get('adm') !== '1') return false;
   try {
     const { data: { session } } = await window.sbClient.auth.getSession();
     const email = session && session.user && session.user.email;
-    if (!email) return;
+    if (!email) return false;
     const ok = await window.aiarqEmailMatches(
       email, '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2');
     if (ok) document.getElementById('barra-admin')?.classList.remove('hidden');
+    return ok === true;
   } catch (e) {
     // Falhou a checagem? Não mostra a barra. Ela é conveniência, não controle
     // de acesso — errar pro lado de não mostrar não tira nada de ninguém.
     console.debug('barra de admin não pôde ser avaliada', e);
+    return false;
   }
 })();
 
@@ -2586,6 +2594,33 @@ function renderHeader(p) {
           ? await window.toast.confirm(_aviso, { ok: 'Reprocessar', cancel: 'Cancelar' })
           : confirm(_aviso);
         if (!ok) return;
+        // 🩸 02/09/2026 — O ADMIN, DE VISITA, GASTAVA O REPROCESSO DO CLIENTE.
+        // Esta é a tela do CLIENTE; o Pedro entra nela pelos links do painel
+        // (`adm=1`, barra "voltar ao painel"). O aviso de cima diz "1 por
+        // projeto" como se o reprocesso fosse de quem clica — mas é do dono do
+        // projeto, e o backend não distingue quem apertou. Pra testar o motor
+        // sem encostar em ninguém existe "Avaliar (isolado)" no painel.
+        // Aqui: segunda confirmação, SÓ quando é o admin de visita.
+        // 🪤 `window.__adminDeVisita` é a Promise da barra (mostrarBarraDoAdmin);
+        // qualquer coisa que não seja `true` — inclusive erro — é "não é admin".
+        const _deVisita = await Promise.resolve(window.__adminDeVisita).catch(() => false);
+        if (_deVisita === true) {
+          const _avisoAdmin = 'Você está vendo este projeto como o CLIENTE. ' +
+            'Reprocessar daqui gasta o único reprocesso grátis DESTE CLIENTE (1 por projeto) ' +
+            'e cria um projeto novo na conta dele. ' +
+            'Pra testar o motor sem encostar nele, use "Avaliar (isolado)" na aba Projetos do painel. ' +
+            'Gastar o reprocesso do cliente mesmo assim?';
+          const okAdmin = window.toast
+            ? await window.toast.confirm(_avisoAdmin, { ok: 'Sim, gastar o do cliente', cancel: 'Não, deixar como está' })
+            : confirm(_avisoAdmin);
+          if (!okAdmin) {
+            // Caminho de volta: nada foi gasto; aponta o teste isolado e põe o
+            // foco no "voltar ao painel" da barra.
+            notify.info('Nada foi gasto. Pra testar sem encostar no cliente: painel → Projetos → Avaliar (isolado).');
+            document.querySelector('#barra-admin a')?.focus();
+            return;
+          }
+        }
         btnReprocess.disabled = true;
         btnReprocess.innerHTML = '<svg class="animate-spin w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg> Reprocessando...';
         try {
