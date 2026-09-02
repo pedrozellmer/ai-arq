@@ -6079,7 +6079,8 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                         pe_direito: float = 0,
                         apenas_preencher: bool = False,
                         pdfvec_m2: float = 0,
-                        pdfvec_por_prancha: dict = None) -> tuple[int, int]:
+                        pdfvec_por_prancha: dict = None,
+                        medicao_incompleta: bool = False) -> tuple[int, int]:
     """Aplica a regra dura nº1 aos itens de ÁREA que NÃO vieram da geometria do CAD:
 
     - Se o cliente INFORMOU a área (total_area_source='informado') e o item é uma
@@ -6165,8 +6166,21 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # preenchido pra linha ZERADA (o filtro de quantidade lá embaixo), e este
     # ramo trata justamente `q > 0`. A maior prancha é o melhor limite superior
     # honesto que existe sem inventar atribuição.
+    # 🩸 02/09/2026 — O TETO NOVO MORDEU UM CLIENTE NO PRIMEIRO DIA.
+    # Job 5f28b6ab (karina savitski, projeto TEKOA, 1º projeto dela). O PDF tem
+    # 3 páginas; UMA ESTOUROU O TEMPO da medição geométrica. Sobraram 2 pranchas
+    # medidas — 129,1 e 116,4 m² — e o teto virou 1,3 × 129,1 = 168 m².
+    # Aí ele zerou a linha "Mezanino — área total 255,66 m²", e esse número
+    # estava ESCRITO NA PRANCHA ("MEZANINO — ÁREA TOTAL 255,66 m²"), não era
+    # chute da IA. O prédio tem 592,08 m² no quadro de dados: 255 m² de mezanino
+    # é perfeitamente plausível, e a maior prancha medida é só um pavimento.
+    # 🔑 A falha foi de PREMISSA: apertar o teto supõe que a gente mediu o
+    # bastante pra saber o tamanho do imóvel. Quando uma prancha não foi medida,
+    # a gente SABE que não sabe — e apertar ali é punir o cliente por uma falha
+    # nossa. Medição incompleta volta pro teto antigo, de propósito.
+    # 🪤 Não é o mesmo que `_pp` vazio: aqui há medição, ela só não cobre tudo.
     _teto_m2 = 0.0
-    if _pp:
+    if _pp and not medicao_incompleta:
         try:
             _teto_m2 = max(float(_r.get("rooms_m2") or 0) for _r in _pp.values())
         except (TypeError, ValueError):
@@ -10255,12 +10269,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _pp_map = dict(_pdfvec_por_prancha)
         except NameError:
             _pp_map = {}          # job sem PDF: o loop nem existiu
+        try:
+            # 🪤 Qualquer motivo conta: tempo, processo morto, exceção. Pro teto
+            # o que importa não é POR QUE não mediu — é que não mediu.
+            _pdfvec_falhas_flag = bool(_pdfvec_falhas)
+        except NameError:
+            _pdfvec_falhas_flag = False
         _n_fill, _blanked = _apply_area_honesty(
             all_items, project_data.total_area,
             getattr(project_data, "total_area_source", ""),
             pe_direito=float(getattr(project_data, "user_pe_direito", 0) or 0),
             pdfvec_m2=_pv_m2,
-            pdfvec_por_prancha=_pp_map)
+            pdfvec_por_prancha=_pp_map,
+            # 🩸 02/09 — prancha que não deu pra medir (tempo, OOM, filho morto)
+            # significa que a nossa medição NÃO cobre o imóvel. Nesse caso o teto
+            # por prancha aperta em cima do que a gente não viu, e foi assim que
+            # o mezanino de 255,66 m² da karina — número escrito na prancha —
+            # virou linha vazia. Ver o comentário em `_apply_area_honesty`.
+            medicao_incompleta=bool(_pdfvec_falhas_flag))
         if _n_fill:
             print(f"[honestidade-m2] job={job_id}: preenchi {_n_fill} itens de piso/forro/laje "
                   f"com a área INFORMADA {project_data.total_area} m² (estimado, a conferir)")
@@ -11304,6 +11330,40 @@ async def _stream_upload_to_disk(upload_file, file_path, *, head_bytes=16, chunk
     return total, head
 
 
+
+_RX_ESTRUT_NOME = None
+_RX_NEGACAO_ANTES = None
+
+
+def _nome_parece_estrutural(nome: str) -> bool:
+    """O nome do arquivo tem cara de projeto ESTRUTURAL — e NÃO está negado.
+
+    🩸 02/09/2026, primeira cliente do dia (Karina, TEKOA): mandou
+    "..._EXE_REV01_SEM ESTRUTURAL.pdf" e recebeu no envio o aviso "esses
+    arquivos parecem de projeto ESTRUTURAL". O regex achava `estrut` e não lia
+    o "SEM" na frente. Medido: foi a ÚNICA vez que esse aviso disparou desde
+    que existe (01/08) — e disparou errado. Aviso falso na primeira tela que
+    a pessoa vê é o pior lugar pra errar.
+
+    🔑 A regra continua a mesma (palavra estrutural no nome); só não dispara
+    quando a palavra vem logo depois de uma NEGAÇÃO: "sem", "s/", "não/nao",
+    "exceto", "menos". Fronteira de palavra no "sem" pra "SEMANA.pdf" não
+    virar negação.
+    """
+    global _RX_ESTRUT_NOME, _RX_NEGACAO_ANTES
+    import re as _re
+    if _RX_ESTRUT_NOME is None:
+        _RX_ESTRUT_NOME = _re.compile(
+            r"estrut|(?<![a-zà-ü])f[oô]rmas?(?![a-zà-ü])|funda[cç]|arma[cç]"
+            r"|pilar|viga|laje|baldrame|sapata", _re.IGNORECASE)
+        _RX_NEGACAO_ANTES = _re.compile(
+            r"(?<![a-zà-ü])(?:sem|s/|n[aã]o|exceto|menos)[ _./-]*$", _re.IGNORECASE)
+    m = _RX_ESTRUT_NOME.search(nome or "")
+    if not m:
+        return False
+    antes = (nome or "")[max(0, m.start() - 12):m.start()]
+    return not _RX_NEGACAO_ANTES.search(antes)
+
 @app.post("/api/process")
 async def process_files(
     request: Request,
@@ -11538,7 +11598,7 @@ async def process_files(
                 except Exception as _e_aec:
                     print(f"[upload] detecção AEC falhou em {safe_name}: {_e_aec}")
 
-        if project_type != "estrutura" and _RX_ESTRUT.search(upload_file.filename or ""):
+        if project_type != "estrutura" and _nome_parece_estrutural(upload_file.filename or ""):
             avisos_estrutural.append(upload_file.filename)
         file_paths.append(file_path)
         if user_st:

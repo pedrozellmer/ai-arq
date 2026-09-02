@@ -184,3 +184,71 @@ def test_CONTROLE_a_checagem_de_chamada_sabe_REPROVAR():
                       if not l.lstrip().startswith("#"))
     assert "ultimo_apertou_teto" not in limpo, (
         "a checagem aceita a linha COMENTADA — não guarda nada")
+
+
+# ── 🩸 02/09 — QUANDO A MEDIÇÃO ESTÁ INCOMPLETA, O TETO NÃO APERTA ─────────
+# Job 5f28b6ab (karina savitski, TEKOA — PRIMEIRO projeto dela). O PDF tinha 3
+# páginas e UMA ESTOUROU O TEMPO. Sobraram 2 pranchas medidas (129,1 e 116,4) e
+# o teto virou 168 m². Ele zerou "Mezanino — área total 255,66 m²" — número que
+# estava ESCRITO NA PRANCHA, não chute da IA. O prédio tem 592,08 m² no quadro
+# de dados; 255 m² de mezanino é plausível, e a maior prancha medida é só um
+# pavimento.
+#
+# 🔑 A falha foi de PREMISSA: apertar o teto supõe que medimos o bastante pra
+# saber o tamanho do imóvel. Quando uma prancha não foi medida, a gente SABE que
+# não sabe — e apertar ali é cobrar do cliente uma falha nossa.
+TEKOA = {
+    "p1": _prancha("TEKOA RESERVA_EXE_REV01.pdf", 116.4),
+    "p2": _prancha("TEKOA RESERVA_EXE_REV01.pdf", 129.1),
+}
+SOMA_TEKOA = 245.5          # teto antigo: 319,2
+MAIOR_TEKOA = 129.1         # teto novo:   167,8
+
+
+def test_MEDICAO_INCOMPLETA_nao_aperta_o_teto():
+    """🩸 O mezanino da karina. 255,66 não cabe em 1,3 × 129,1, mas a gente só
+    mediu 2 das 3 páginas — não temos base pra dizer que é demais."""
+    it = _Item("Laje do mezanino", "m²", 255.66)
+    main._apply_area_honesty([it], pdfvec_m2=SOMA_TEKOA,
+                             pdfvec_por_prancha=TEKOA,
+                             medicao_incompleta=True)
+    assert it.quantity == 255.66, (
+        "zerou uma área que estava escrita na prancha, apertando o teto em cima "
+        "de uma medição que a gente sabia estar incompleta")
+
+
+def test_CONTROLE_com_a_medicao_COMPLETA_o_teto_continua_apertando():
+    """🧪 O conserto não pode desligar a trava: medição completa, teto aperta.
+    Se este teste cair junto com o de cima, a exceção virou regra."""
+    it = _Item("Laje do mezanino", "m²", 255.66)
+    main._apply_area_honesty([it], pdfvec_m2=SOMA_TEKOA,
+                             pdfvec_por_prancha=TEKOA,
+                             medicao_incompleta=False)
+    assert it.quantity == 0, (
+        "com todas as pranchas medidas o teto tem que valer — senão a trava 3 "
+        "voltou a ser decorativa")
+
+
+def test_CONTROLE_medicao_incompleta_NAO_libera_o_absurdo():
+    """🪤 Voltar pro teto antigo não é abrir a porteira: o teto da soma continua
+    valendo, e número que não cabe nem nele segue zerado."""
+    it = _Item("Laje do mezanino", "m²", 5000.0)
+    main._apply_area_honesty([it], pdfvec_m2=SOMA_TEKOA,
+                             pdfvec_por_prancha=TEKOA,
+                             medicao_incompleta=True)
+    assert it.quantity == 0, "medição incompleta virou porta aberta"
+
+
+def test_o_caller_avisa_o_teto_de_que_faltou_prancha():
+    """Guarda de ponto de chamada — o controle abaixo prova que sabe reprovar."""
+    limpo = "\n".join(l for l in _fonte().splitlines()
+                      if not l.lstrip().startswith("#"))
+    assert "medicao_incompleta=bool(_pdfvec_falhas_flag)" in limpo, (
+        "o motor sabe que uma prancha falhou e não conta isso pro teto")
+
+
+def test_CONTROLE_a_checagem_de_chamada_sabe_REPROVAR():
+    falso = "            # medicao_incompleta=bool(_pdfvec_falhas_flag)"
+    limpo = "\n".join(l for l in falso.splitlines()
+                      if not l.lstrip().startswith("#"))
+    assert "medicao_incompleta=bool(_pdfvec_falhas_flag)" not in limpo
