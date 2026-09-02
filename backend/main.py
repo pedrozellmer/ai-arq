@@ -11526,13 +11526,13 @@ async def process_files(
     # enquanto FORMA.pdf/fundacao.pdf passavam como arquitetura — onde laje e
     # aço nunca são medidos). Detecção por nome do arquivo, aviso não-bloqueante.
     avisos_estrutural: list[str] = []
-    import re as _re_estrut
-    # 🪤 "forma" precisa de fronteira: sem ela, "inFORMAtivo" e "plataFORMA"
-    # disparavam o aviso (pego no teste antes do deploy).
-    _RX_ESTRUT = _re_estrut.compile(
-        r"estrut|(?<![a-zà-ü])f[oô]rmas?(?![a-zà-ü])|funda[cç]|arma[cç]"
-        r"|pilar|viga|laje|baldrame|sapata",
-        _re_estrut.IGNORECASE)
+    # 🪤 O regex vivia AQUI, solto, e ficou pra trás quando a detecção virou a
+    # função `_nome_parece_estrutural` (que sabe ler a negação do "SEM
+    # ESTRUTURAL"). Ele continuava sendo compilado a cada upload e não era lido
+    # por ninguém — o pyflakes acusava "assigned to but never used". Cópia velha
+    # de regra ao lado da regra nova é a próxima pessoa consertando a errada.
+    # A fronteira do "forma" (pra "inFORMAtivo" e "plataFORMA" não dispararem)
+    # continua viva, dentro da função.
     # 🪤 Importar AQUI e reclamar alto se falhar. A detecção só valia a pena se
     # rodasse mesmo; escondida atrás de um try/except mudo, um ImportError
     # deixaria o aviso desligado pra sempre sem ninguém perceber.
