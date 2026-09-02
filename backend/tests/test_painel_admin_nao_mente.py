@@ -288,3 +288,68 @@ def test_a_soma_de_7_dias_NAO_trata_dia_sem_medicao_como_zero():
         "a soma voltou a engolir dia sem medicao como zero - o numero na tela "
         "fica MENOR que a verdade e nada avisa")
     assert "x[k] !== null" in corpo, "voltou a somar NULL como zero"
+
+
+# ─────────── 7) o numero na tela para de ser o LIMITE da consulta ───────────
+
+def test_a_aba_projetos_diz_o_total_do_BANCO_e_nao_o_limite_da_consulta():
+    """🚨 MEDIDO em 02/09: 288 projetos no banco e a tela dizia "200 de 200
+    total". O rótulo dizia "total" e mostrava o teto da consulta. Mesma doença
+    do teto de mil linhas do PostgREST — o corte chega como resposta normal."""
+    h = _admin_html()
+    i = h.find("async function loadProjects")
+    assert i > 0, "sumiu loadProjects"
+    corpo = h[i:i + 3000]
+    # 🪤 A 1ª versão deste guarda procurava só `count: 'exact'` — e passou VERDE
+    # com a consulta sabotada, porque essa expressão também aparece no
+    # COMENTÁRIO logo acima dela. Guarda que casa palavra solta lê comentário
+    # como código; o que prova é a CHAMADA inteira.
+    assert ".select('*', { count: 'exact' })" in corpo, (
+        "a consulta parou de pedir o total real ao banco - o rotulo 'total' "
+        "volta a mostrar o limite da consulta")
+    assert "totalNoBanco" in h, "sumiu o total de verdade"
+    assert "allProjects.length} total" not in h, (
+        "o rotulo voltou a chamar o tamanho da pagina de 'total'")
+
+
+def test_a_tela_AVISA_quando_a_lista_nao_alcanca_tudo():
+    """🪤 Saber o total não basta: se a lista mostra 200 de 288, quem olha
+    precisa saber que está vendo um pedaço. Silêncio aqui é o mesmo erro com
+    outra roupa."""
+    h = _admin_html()
+    assert "_naoCoube" in h, "sumiu a conta do que nao coube"
+    assert "mais recentes" in h, (
+        "a tela voltou a mostrar um pedaco da lista sem dizer que e um pedaco")
+
+
+def test_os_KPIs_de_30_dias_pedem_pela_JANELA_e_nao_por_um_teto():
+    """🚨 Era `.limit(300)` com 288 no banco — 12 projetos pra estourar calado.
+    Aumentar o teto só adia; o conserto é pedir pela janela que os cartões
+    usam."""
+    h = _admin_html()
+    i = h.find("const _colunas =")
+    assert i > 0, "sumiu a busca dos projetos do dashboard"
+    corpo = h[i:i + 2500]
+    assert ".gte('created_at', _desde30)" in corpo, (
+        "os KPIs voltaram a depender de um teto de linhas em vez da janela de "
+        "30 dias - quando passar do teto o numero encolhe calado")
+    assert ".in('status', ['queued', 'processing'])" in corpo, (
+        "sumiu a busca dos ativos de qualquer data - job travado ha 40 dias "
+        "sumiria de 'Em curso', que e justo o que precisa de acao")
+    assert ".gte('completed_at'" in corpo, (
+        "sumiu a busca dos concluidos hoje de qualquer data - reprocesso de "
+        "projeto velho some do movimento do dia")
+
+
+def test_CONTROLE_o_mesmo_projeto_nao_conta_DUAS_vezes():
+    """🧪 O outro lado do conserto acima: três consultas que se sobrepõem. Um
+    job ativo criado esta semana vem em duas delas. Sem deduplicar, o conserto
+    de um número errado criaria outro número errado."""
+    h = _admin_html()
+    i = h.find("const _vistos = new Set();")
+    assert i > 0, (
+        "sumiu a deduplicacao - o mesmo projeto passa a contar em dobro em "
+        "'Em curso'")
+    corpo = h[i:i + 500]
+    assert "_vistos.has(_k)" in corpo and "continue" in corpo, (
+        "a deduplicacao parou de descartar repetido")

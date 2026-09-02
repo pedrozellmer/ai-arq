@@ -4023,13 +4023,19 @@ function minutesSince(iso) {
 async function loadProjects() {
   const tbody = document.getElementById('projects-table-body');
   try {
-    const { data, error } = await sbClient
+    // 🚨 02/09/2026 — "200 de 200 total" COM 288 NO BANCO. O rótulo dizia
+    // "total" e mostrava o LIMITE da consulta. É a mesma doença do teto de mil
+    // linhas do PostgREST: o corte chega como resposta normal e nada avisa.
+    // 🔑 `count: 'exact'` faz o banco devolver quantos existem DE VERDADE, sem
+    // trazer as linhas — então o rótulo para de mentir sem custar tráfego.
+    const { data, error, count } = await sbClient
       .from('projects')
-      .select('*')
+      .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
       .limit(200);
     if (error) throw error;
     const allProjects = data || [];
+    const totalNoBanco = (typeof count === 'number') ? count : allProjects.length;
     const now = Date.now();
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
     const last24h = now - 24 * 3600 * 1000;
@@ -4068,7 +4074,13 @@ async function loadProjects() {
       projects = projects.filter(p => p.status === 'error');
     }
 
-    document.getElementById('projects-count').textContent = `${projects.length} projeto(s) / ${allProjects.length} total`;
+    // 🪤 Três números diferentes, e confundi-los é o bug: o que o filtro
+    // mostra, o que a consulta trouxe, e o que existe no banco. Quando a
+    // consulta não alcança tudo, a tela DIZ.
+    const _naoCoube = totalNoBanco - allProjects.length;
+    document.getElementById('projects-count').textContent =
+      `${projects.length} projeto(s) / ${totalNoBanco} no total` +
+      (_naoCoube > 0 ? ` — a lista mostra os ${allProjects.length} mais recentes` : '');
 
     if (!projects.length) {
       tbody.innerHTML = '<tr><td colspan="8" class="px-4 py-12 text-center text-gray-500">Nenhum projeto neste filtro.</td></tr>';
@@ -4653,10 +4665,44 @@ async function loadDashboardStats() {
     }
 
     // Projetos — busca ampla e EXCLUI avaliações/teste (is_eval)
-    const { data: _all } = await sbClient.from('projects')
-      .select('status,items_count,total_area,created_at,completed_at,user_email,file_types,reprocess_count,is_eval')
-      .order('created_at', { ascending: false }).limit(300);
-    const proj = (_all || []).filter(p => !p.is_eval);
+    // 🚨 02/09/2026 — ESTE TETO ESTAVA A 12 PROJETOS DE ESTOURAR CALADO. Eram
+    // `.limit(300)` e 288 no banco. Quando passasse, os KPIs de 30 dias
+    // passariam a ser calculados sobre um pedaço, com a mesma cara de sempre.
+    // 🔑 O conserto não é aumentar o teto (o próximo estoura igual): é pedir
+    // pela JANELA que os cartões usam. Duas consultas porque "Operação agora"
+    // precisa dos ativos de QUALQUER data — um job travado há 40 dias tem que
+    // continuar aparecendo em "Em curso".
+    const _colunas = 'job_id,status,items_count,total_area,created_at,completed_at,user_email,file_types,reprocess_count,is_eval';
+    const _desde30 = new Date(Date.now() - 30 * 864e5).toISOString();
+    const _inicioDeHoje = new Date(); _inicioDeHoje.setHours(0, 0, 0, 0);
+    // 🪤 Três consultas porque os cartões fazem TRÊS perguntas com recortes
+    // diferentes, e cobrir as três com um teto único foi o que criou o
+    // problema. Cada uma pede exatamente o que a sua pergunta precisa:
+    //   (1) os 30 dias — é a janela de todos os KPIs do topo;
+    //   (2) os ativos de QUALQUER data — um job travado há 40 dias tem que
+    //       continuar aparecendo em "Em curso", senão o painel esconde
+    //       justamente o que precisa de ação;
+    //   (3) os concluídos HOJE de qualquer data — reprocesso de projeto velho
+    //       termina hoje e conta como movimento de hoje.
+    const [_r30, _rAtivos, _rHoje] = await Promise.all([
+      sbClient.from('projects').select(_colunas)
+        .gte('created_at', _desde30).order('created_at', { ascending: false }).limit(1000),
+      sbClient.from('projects').select(_colunas)
+        .in('status', ['queued', 'processing']).order('created_at', { ascending: false }).limit(200),
+      sbClient.from('projects').select(_colunas)
+        .gte('completed_at', _inicioDeHoje.toISOString()).order('completed_at', { ascending: false }).limit(200),
+    ]);
+    // 🪤 O mesmo projeto pode vir em mais de uma consulta (um job ativo criado
+    // esta semana está em (1) e (2)). Sem deduplicar, ele contaria dobrado.
+    const _vistos = new Set();
+    const _all = [];
+    for (const _p of [].concat(_r30.data || [], _rAtivos.data || [], _rHoje.data || [])) {
+      const _k = _p.job_id;
+      if (_k && _vistos.has(_k)) continue;
+      if (_k) _vistos.add(_k);
+      _all.push(_p);
+    }
+    const proj = _all.filter(p => !p.is_eval);
     const now = Date.now(), d30 = now - 30 * 864e5, d1 = now - 864e5;
     const today0 = new Date(); today0.setHours(0, 0, 0, 0);
 
