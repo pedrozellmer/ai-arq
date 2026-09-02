@@ -188,6 +188,107 @@ _ENVIOS_RECENTES: dict[str, tuple[str, float]] = {}
 _ENVIOS_LOCK = threading.Lock()
 
 
+def _nome_limpo_da_prancha(ref_sheet: str) -> str:
+    """O NOME DO ARQUIVO dentro de um `ref_sheet`.
+
+    `ref_sheet` é gravado como "arquivo.pdf (hint da IA)" quando o hint difere
+    do nome (main.py, montagem do item). Pra comparar dois envios só interessa
+    o arquivo.
+    """
+    s = (ref_sheet or "").strip()
+    if not s:
+        return ""
+    i = s.find(" (")
+    if i > 0:
+        s = s[:i]
+    return s.strip().lower()
+
+
+#: quantos arquivos, no mínimo, precisam bater pra eu chamar de "mesmo projeto".
+#: 🪤 Dois é pouco: "planta baixa.pdf" e "corte.pdf" se repetem entre projetos
+#: DIFERENTES do mesmo escritório, e acusar repetição ali seria ofender quem
+#: está mandando trabalho novo.
+_REPETIDO_MIN_ARQUIVOS = 3
+#: e que fatia do envio NOVO precisa já ter passado por aqui.
+_REPETIDO_MIN_FRACAO = 0.7
+
+
+def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
+    """Este envio é o MESMO caderno que o cliente já processou antes?
+
+    🩸 01/09/2026 (flavio anderson, cliente novo): mandou 20 PDFs às 20:40,
+    recebeu a planilha às 21:08 com 25 de 25 linhas de METRO em branco e 42 de
+    50 de área em branco, e **onze minutos depois remandou o mesmo caderno**
+    com 5 arquivos a menos. Ele achou que o problema era o arquivo dele. Não
+    era: PDF não dá comprimento confiável, e ele não tinha informado nem área
+    nem pé-direito — os dois campos que realmente destravam a medição.
+
+    🚫 O QUE ESTA FUNÇÃO **NÃO** FAZ: bloquear. A trava de envio em dobro
+    (90 s, acima) existe pra clique repetido; esta aqui é sobre dias depois, e
+    reenviar é direito do cliente. Ela só devolve o material pra um AVISO.
+
+    🪤 E não diz "vai dar o mesmo resultado", porque isso seria mentira: o
+    motor NÃO é determinístico (medido em 08/08 — o mesmo arquivo já deu 458 e
+    177 m², variação de até 26%). O que se repete é a CAUSA, não o número.
+
+    Devolve None (sem aviso) ou o dicionário do projeto anterior mais parecido.
+    """
+    nomes_novos = {n for n in (nomes_novos or []) if n}
+    if len(nomes_novos) < _REPETIDO_MIN_ARQUIVOS or not user_id:
+        return None
+
+    # 🪤 Só projetos CONCLUÍDOS. Se o anterior deu erro, reenviar é exatamente
+    # a coisa certa a fazer — avisar ali seria desencorajar o cliente a
+    # insistir num job que falhou por nossa causa.
+    # 🪤 E só os 3 mais recentes: o teto de 1000 linhas do PostgREST é silencioso,
+    # e varrer o acervo inteiro de um cliente antigo cairia nele sem avisar.
+    _ants = _supa_rows(
+        "GET", "/projects?user_id=eq.%s&status=eq.done&archived=not.eq.true"
+               "&select=job_id,project_name,created_at,user_pe_direito,user_total_area"
+               "&order=created_at.desc&limit=3" % user_id)
+    if not _ants:
+        return None
+
+    melhor = None
+    for _p in _ants:
+        _jid = _p.get("job_id")
+        if not _jid:
+            continue
+        # 🪤 A amostragem aqui só pode causar aviso A MENOS (se eu perdesse um
+        # nome, sobram menos coincidências e o aviso não sai) — nunca um aviso
+        # falso. Errar pro lado de calar é o lado certo neste caso.
+        _rows = _supa_rows("GET", "/project_items?job_id=eq.%s&select=ref_sheet&limit=400" % _jid)
+        _antigos = {_nome_limpo_da_prancha(r.get("ref_sheet")) for r in _rows}
+        _antigos.discard("")
+        if not _antigos:
+            continue
+        _iguais = nomes_novos & _antigos
+        _frac = len(_iguais) / float(len(nomes_novos))
+        if len(_iguais) >= _REPETIDO_MIN_ARQUIVOS and _frac >= _REPETIDO_MIN_FRACAO:
+            if melhor is None or _frac > melhor["fracao"]:
+                melhor = {
+                    "job_id": _jid,
+                    "project_name": _p.get("project_name") or "(sem nome)",
+                    "created_at": _p.get("created_at"),
+                    "n_iguais": len(_iguais),
+                    "n_novos": len(nomes_novos),
+                    "fracao": _frac,
+                    "tinha_pe_direito": bool(_p.get("user_pe_direito")),
+                    "tinha_area": bool(_p.get("user_total_area")),
+                }
+    if not melhor:
+        return None
+
+    # 🔑 A EXCEÇÃO QUE FAZ O AVISO SER HONESTO: se desta vez ele informou o que
+    # faltava, o resultado VAI mudar — e insinuar "você está repetindo" seria
+    # castigar justamente quem fez o que a gente pediu.
+    _informou_agora = ((pe_direito_agora and not melhor["tinha_pe_direito"])
+                       or (area_agora and not melhor["tinha_area"]))
+    if _informou_agora:
+        return None
+    return melhor
+
+
 def _assinatura_do_envio(user_id, project_name, valid_pairs) -> str:
     """Identidade do envio: quem + que projeto + quais arquivos.
 
@@ -11517,6 +11618,74 @@ async def process_files(
     resp = {"job_id": job_id, "files_received": len(file_paths),
             "file_types": file_types, "status": "queued", "typology": typology,
             "project_type": project_type}
+    # 🩸 01/09 — "MANDEI DE NOVO E DEU A MESMA COISA". O cliente que recebe uma
+    # planilha cheia de linha vazia acha que o problema é o ARQUIVO dele e
+    # remanda o mesmo caderno. O flavio fez isso 11 minutos depois de receber a
+    # primeira. Ele não estava errado em tentar — estava sem a informação de
+    # que o que trava não é o arquivo.
+    # 🪤 Aviso, nunca bloqueio: reenviar é direito dele, e a mesma tela já tem
+    # dois avisos não-bloqueantes (AEC, estrutural) — este é o terceiro da
+    # família e usa o mesmo caminho no site.
+    # 🚫 O texto NÃO promete "mesmo resultado": o motor não é determinístico
+    # (medido 08/08 — 458 e 177 m² do mesmo arquivo). Promete o que é verdade:
+    # a CAUSA do vazio não mudou, e diz quais são as duas alavancas que mudam.
+    try:
+        _repet = _projeto_ja_enviado(
+            user_id,
+            {(getattr(f, "filename", "") or "").strip().lower()
+             for f, _st, _amb in valid_pairs},
+            user_pe_direito, user_total_area)
+    except Exception as _e_rep:
+        _repet = None
+        print(f"[upload] checagem de projeto repetido falhou: {_e_rep}")
+    if _repet:
+        _so_pdf = file_types.get("pdf", 0) > 0 and (
+            file_types.get("dwg", 0) + file_types.get("dxf", 0)) == 0
+        _saidas = []
+        if not user_pe_direito:
+            # 📏 MEDIDO (26/08): informar o pé-direito derruba a fatia de linha
+            # em branco de 59,5% pra 27,3%. É a maior alavanca que existe, e é
+            # um campo de dez segundos.
+            _saidas.append(
+                "informe o PÉ-DIREITO no envio — é o campo que mais preenche "
+                "linha vazia aqui (parede, pintura e rodapé dependem dele)")
+        if not user_total_area:
+            _saidas.append(
+                "informe a ÁREA TOTAL — ela vira base honesta pros itens de "
+                "piso, forro e laje, rotulada como informada por você")
+        if _so_pdf:
+            _saidas.append(
+                "se você tiver o DXF ou o DWG das mesmas pranchas, mande ele: "
+                "de PDF a gente lê a planta, mas comprimento de PDF não é "
+                "confiável o bastante pra virar número")
+        resp["aviso_repetido"] = {
+            "job_anterior": _repet["job_id"],
+            "projeto_anterior": _repet["project_name"],
+            "arquivos_iguais": _repet["n_iguais"],
+            "arquivos_enviados": _repet["n_novos"],
+            "titulo": "Estas pranchas já passaram por aqui",
+            "texto": (
+                "%d dos %d arquivos deste envio são os mesmos do seu projeto "
+                "\"%s\". Seu projeto vai processar normalmente — mas se o que "
+                "te incomodou foi linha em branco, mandar as mesmas pranchas "
+                "de novo não muda o motivo delas estarem em branco.\n\n"
+                "O que muda:\n%s"
+                % (_repet["n_iguais"], _repet["n_novos"],
+                   _repet["project_name"],
+                   "\n".join("• " + s for s in _saidas) if _saidas else
+                   "• abra a revisão do projeto e preencha as linhas que "
+                   "faltam — o que você corrigir lá a gente usa")),
+        }
+        try:
+            _log_error("upload:projeto-repetido",
+                       "user=%s remandou %d de %d arquivos do job %s (%.0f%%) "
+                       "— avisado no envio (pe_direito=%s area=%s)"
+                       % (str(user_id)[:8], _repet["n_iguais"], _repet["n_novos"],
+                          _repet["job_id"], 100 * _repet["fracao"],
+                          user_pe_direito or "-", user_total_area or "-"),
+                       job_id, severity="info")
+        except Exception:
+            pass
     if avisos_estrutural and project_type != "estrutura":
         resp["aviso_estrutural"] = {
             "arquivos": avisos_estrutural,

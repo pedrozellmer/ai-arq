@@ -3368,6 +3368,11 @@
       // Arquivos com cara de estrutural em modo arquitetura (01/08): só 3 de
       // 107 projetos acharam o modo Estrutura no dropdown — o aviso ensina.
       if (data.aviso_estrutural) mostrarAvisoAec(data.aviso_estrutural, 'indigo');
+      // Mesmo caderno reenviado (01/09, caso flavio anderson): ele recebeu uma
+      // planilha com 25 de 25 linhas de metro em branco e remandou as mesmas
+      // pranchas 11 minutos depois, achando que o problema era o arquivo dele.
+      // O aviso não bloqueia — diz o que realmente muda o resultado.
+      if (data.aviso_repetido) mostrarAvisoAec(data.aviso_repetido, 'reenvio');
 
       processingStep.textContent = 'Analisando pranchas...';
       // Não setar barra manualmente aqui — startPolling() cuida da progressão
@@ -3390,13 +3395,34 @@
     // cor: 'indigo' pro aviso estrutural (informativo), default âmbar (AEC).
     const tema = cor === 'indigo'
       ? { borda: 'border-indigo-300', fundo: 'bg-indigo-50', texto: 'text-indigo-900', icone: 'ℹ' }
+      // 🪤 Tailwind aqui é BUILD ESTÁTICO: classe que não está no
+      // tailwind.min.css nasce INERTE (sem erro, sem cor). Tentei a paleta
+      // celeste e o guarda `test_nenhuma_classe_de_cor_inerte` reprovou: a
+      // borda e o texto dela não existem no build (só o fundo). Reaproveita o
+      // indigo, que existe inteiro, e separa do aviso estrutural pelo ÍCONE e
+      // pelo título.
+      // 🪤 E não escreva o nome da classe morta AQUI: o guarda varre o arquivo
+      // inteiro, comentário incluído, e eu fiz o teste reprovar de novo por
+      // causa do próprio comentário que explicava o problema.
+      : cor === 'reenvio'
+      ? { borda: 'border-indigo-300', fundo: 'bg-indigo-50', texto: 'text-indigo-900', icone: '↻' }
       : { borda: 'border-amber-300', fundo: 'bg-amber-50', texto: 'text-amber-900', icone: '⚠' };
+    // 🚨 01/09/2026: `texto` entra como HTML e passou a carregar DADO DO
+    // CLIENTE (o nome do projeto anterior, no aviso de reenvio). Sem escapar,
+    // um projeto chamado "<img onerror=...>" viraria script na tela de quem
+    // enviou. Os avisos antigos eram texto fixo e por isso ninguém tinha
+    // esbarrado nisso — a porta abriu junto com o aviso novo.
+    const esc = (s) => String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
     const arquivos = (av.arquivos || []).map(f =>
-      `<li class="font-mono text-xs break-all">${f.replace(/[<>&]/g, '')}</li>`).join('');
+      `<li class="font-mono text-xs break-all">${esc(f)}</li>`).join('');
     const corpo = (av.texto || '').split('\n').map(l => {
       const t = l.trim();
       if (!t) return '';
-      return /^\d\./.test(t) ? `<li>${t.replace(/^\d\.\s*/, '')}</li>` : `<p class="mb-2">${t}</p>`;
+      if (/^\d\./.test(t)) return `<li>${esc(t.replace(/^\d\.\s*/, ''))}</li>`;
+      if (/^•/.test(t)) return `<p class="mb-1 ml-2">${esc(t)}</p>`;
+      return `<p class="mb-2">${esc(t)}</p>`;
     }).join('');
     // += : AEC e estrutural podem aparecer juntos no mesmo envio
     box.innerHTML += `
