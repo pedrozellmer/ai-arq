@@ -23709,6 +23709,23 @@ def metricas_tick(request: Request):
         _proj = _contar_do_dia("projects", dia)
         if _proj is not None:
             linha["projetos"] = _proj
+        # 🚨 02/09/2026 — A COLUNA `cadastros` NUNCA ERA GRAVADA. O painel
+        # somava os 7 dias e mostrava "5" quando tinham entrado 14 pessoas: os
+        # 3 dias automáticos estavam NULL e a tela fazia `Number(null)||0`. O
+        # backfill de 29/08 preencheu 8 dias à mão, o tick assumiu depois e
+        # ninguém notou que essa coluna tinha ficado pra trás. Mesmo erro do
+        # `projetos`, uma linha ao lado — e a diferença é que essa NINGUÉM
+        # escrevia.
+        #
+        # 🪤 Conta `profiles`, não `auth.users`: (a) auth.users não é alcançável
+        # pelo PostgREST, e (b) `profiles` é "cadastro COMPLETO", que é o par
+        # certo do cartão "cadastros incompletos" que já existe no painel — os
+        # dois juntos fecham o total. O backfill contou auth.users em UTC; nos
+        # três dias em aberto os dois números coincidem (1, 4, 4), então a
+        # emenda não cria degrau na série.
+        _cad = _contar_do_dia("profiles", dia)
+        if _cad is not None:
+            linha["cadastros"] = _cad
         try:
             _supa_rest_service("POST", "metricas_diarias", body=linha,
                                prefer="resolution=merge-duplicates")
@@ -23718,6 +23735,43 @@ def metricas_tick(request: Request):
     if falhas:
         _log_error("metricas:tick", "falhas: %s" % falhas[:3], severity="error")
     return {"status": "ok", "gravados": gravados, "falhas": len(falhas)}
+
+
+def _saude_da_coleta(serie: list, tem_token: bool) -> dict:
+    """A coleta está viva? Responde pela DATA do último dia medido.
+
+    🔑 Três estados, não dois: "desligada" (falta o token), "atrasada" (o token
+    está lá e mesmo assim parou) e "ok". O segundo é o que existia e ninguém
+    conseguia ver.
+    """
+    from datetime import date as _d2
+    _ultimo = None
+    for _l in (serie or []):
+        try:
+            _c = _d2.fromisoformat(str(_l.get("dia")))
+        except Exception:
+            continue
+        if _ultimo is None or _c > _ultimo:
+            _ultimo = _c
+    _atraso = None if _ultimo is None else (_d2.today() - _ultimo).days
+    if not tem_token:
+        return {"token_configurado": False, "ultimo_dia": str(_ultimo or ""),
+                "atraso_dias": _atraso,
+                "aviso": ("A coleta automática está DESLIGADA: falta a variável "
+                          "CLOUDFLARE_API_TOKEN no Render. Os dias abaixo foram "
+                          "gravados à mão e a série vai parar de crescer.")}
+    if _ultimo is None:
+        return {"token_configurado": True, "ultimo_dia": "", "atraso_dias": None,
+                "aviso": "A coleta está ligada mas não há NENHUM dia gravado ainda."}
+    if _atraso is not None and _atraso >= 2:
+        return {"token_configurado": True, "ultimo_dia": str(_ultimo),
+                "atraso_dias": _atraso,
+                "aviso": ("A coleta PAROU: o dia mais novo é %s, %d dias atrás. "
+                          "O token está configurado, então o problema é a "
+                          "chamada — confira o agendamento aiarq_metricas_tick."
+                          % (_ultimo.strftime("%d/%m"), _atraso))}
+    return {"token_configurado": True, "ultimo_dia": str(_ultimo),
+            "atraso_dias": _atraso, "aviso": None}
 
 
 def _contar_do_dia(o_que: str, dia) -> int:
@@ -23733,14 +23787,18 @@ def _contar_do_dia(o_que: str, dia) -> int:
     que dizia "0 projetos" quando o servidor tinha respondido 502.
     """
     from datetime import timedelta as _td1
-    if o_que != "projects":
+    if o_que not in ("projects", "profiles"):
         return None
+    # 🪤 `profiles` não tem `is_eval` — filtrar por ela devolveria 400 e a
+    # contagem viraria None todo dia, ou seja, a coluna continuaria vazia com
+    # outra desculpa.
+    _p = {"select": "id" if o_que == "profiles" else "job_id",
+          "and": "(created_at.gte.%sT00:00:00Z,created_at.lt.%sT00:00:00Z)"
+                 % (dia, dia + _td1(days=1))}
+    if o_que == "projects":
+        _p["is_eval"] = "not.is.true"
     try:
-        st, linhas = _supa_rest_service(
-            "GET", "projects",
-            params={"select": "job_id", "is_eval": "not.is.true",
-                    "and": "(created_at.gte.%sT00:00:00Z,created_at.lt.%sT00:00:00Z)"
-                           % (dia, dia + _td1(days=1))})
+        st, linhas = _supa_rest_service("GET", o_que, params=_p)
         return len(linhas or []) if st == 200 else None
     except Exception:
         return None
@@ -24061,11 +24119,17 @@ def admin_metricas(request: Request, dias: int = 30):
         },
         # 🚨 O painel PRECISA saber se a coleta está viva. Sem isto, série
         # parada e site sem movimento têm exatamente a mesma cara.
-        "coleta": {
-            "token_configurado": bool(_ms.token()),
-            "aviso": (None if _ms.token() else
-                      "A coleta automática está DESLIGADA: falta a variável "
-                      "CLOUDFLARE_API_TOKEN no Render. Os dias abaixo foram "
-                      "gravados à mão e a série vai parar de crescer."),
-        },
+        # 🚨 O painel PRECISA saber se a coleta está viva. Sem isto, série
+        # parada e site sem movimento têm exatamente a mesma cara.
+        #
+        # 🚨 02/09/2026 — O AVISO CONFERIA O TOKEN, NÃO A MEDIÇÃO. Enquanto a
+        # variável existisse no Render o aviso era None e a caixa âmbar ficava
+        # escondida — mesmo com a série parada há dias. A coleta ficou 3 dias e
+        # 7 horas sem gravar nada (29/08 → 02/09) com o painel de cara normal.
+        # Guarda que confere a configuração e não o RESULTADO não é guarda: é a
+        # mesma família da gravação que falha calada.
+        #
+        # 🪤 O tick grava sempre `today - 1`, então a série estar 1 dia atrás é
+        # o estado SAUDÁVEL. Só a partir de 2 dias é atraso de verdade.
+        "coleta": _saude_da_coleta(serie, bool(_ms.token())),
     }

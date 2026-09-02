@@ -137,15 +137,55 @@ def coletar(dia: date, ips_da_casa=None) -> dict:
     except Exception:
         pass
 
+    # 🚨 02/09/2026 — O FAROL "SITE NO AR" NUNCA MEDIU NADA. A coluna `site_ok`
+    # era LIDA pelo painel (admin.html) e NUNCA escrita por ninguém: 11 de 11
+    # dias com NULL. E o teste na tela era `=== false`, então NULL não era false
+    # e o farol dizia "sim" em verde, todo dia, desde que nasceu. Afirmação
+    # verde com zero medição atrás é pior que farol nenhum — é a primeira coisa
+    # que o Pedro olha.
+    #
+    # 🔑 Agora mede: erro 5xx do dia, perguntado ao Cloudflare numa consulta
+    # própria (a de cima tem `limit: 400` por contagem, então um 5xx raro
+    # ficaria de fora do topo e passaria por "site ok" — teto não serve de
+    # prova de ausência).
+    #
+    # 🪤 Se a consulta falhar, fica None de propósito: "não consegui medir" é
+    # uma resposta, "está tudo bem" não é.
+    site_ok = None
+    try:
+        q3 = ("""query { viewer { zones(filter: {zoneTag: "%s"}) {
+          httpRequestsAdaptiveGroups(limit: 1,
+            filter: {datetime_geq: "%sT00:00:00Z", datetime_leq: "%sT23:59:59Z",
+                     clientRequestHTTPHost: "ai.arq.br", edgeResponseStatus_geq: 500}) {
+            count } } } }""" % (_ZONA, d, d))
+        _g5 = ((((_graphql(q3).get("data") or {}).get("viewer") or {})
+                .get("zones") or [{}])[0].get("httpRequestsAdaptiveGroups") or [])
+        erros_5xx = sum(int(x.get("count") or 0) for x in _g5)
+        site_ok = (erros_5xx == 0)
+    except Exception:
+        pass
+
     topo = sorted(({"pagina": k, "enderecos": len(v)} for k, v in por_pagina.items()),
                   key=lambda x: -x["enderecos"])[:12]
     return {"dia": d, "req_total": gente + robo + nosso, "req_robo": robo,
             "req_nosso": nosso, "req_gente": gente, "ips_gente": len(ips_gente),
-            "unicos_cloudflare": unicos, "paginas": paginas,
+            "unicos_cloudflare": unicos, "paginas": paginas, "site_ok": site_ok,
             "top_paginas": topo, "fonte": "tick"}
 
 
 # ── a pergunta que o Pedro faz de verdade ───────────────────────────────────
+
+def _dia_por_extenso(iso: str) -> str:
+    """"01/09 (terça)" — a data que a frase está falando, sem ambiguidade.
+
+    🪤 Nunca "hoje": o dia mais novo da série é sempre pelo menos ontem.
+    """
+    try:
+        _dt = date.fromisoformat(str(iso))
+    except Exception:
+        return str(iso)
+    return "%02d/%02d (%s)" % (_dt.day, _dt.month, _COMO_FALAR[_dt.weekday()][0].split("-")[0])
+
 
 def veredito(serie: list) -> dict:
     """"Está dentro do normal?" — comparando com a faixa dos dias iguais.
@@ -162,6 +202,12 @@ def veredito(serie: list) -> dict:
     if not serie:
         return {"status": "sem_dados", "frase": "ainda não há série pra comparar."}
     hoje = serie[-1]
+    # 🚨 02/09/2026 — A FRASE DIZIA "HOJE" E MOSTRAVA ONTEM. O tick grava sempre
+    # `today - 1/2/3` (o Cloudflare fecha o dia depois), então o dia mais novo
+    # da série NUNCA é o de hoje. Em 21 das 24 horas do dia a frase estava
+    # falando de ontem chamando de hoje — e durante um buraco de coleta ela
+    # chamaria de "hoje" um número de três dias atrás. Agora diz a DATA.
+    _qual = _dia_por_extenso(str(hoje["dia"]))
     dow = date.fromisoformat(str(hoje["dia"])).weekday()
     iguais = [d for d in serie[:-1]
               if date.fromisoformat(str(d["dia"])).weekday() == dow
@@ -188,15 +234,15 @@ def veredito(serie: list) -> dict:
     atual = hoje.get("ips_gente") or 0
     if atual < piso:
         return {"status": "abaixo", "faixa": [piso, teto], "hoje": atual,
-                "frase": ("hoje tem %d endereços, e %s que já vi teve %d. Vale olhar."
-                          % (atual, fraco, piso))}
+                "frase": ("%s teve %d endereços, e %s que já vi teve %d. Vale olhar."
+                          % (_qual, atual, fraco, piso))}
     if atual > teto:
         return {"status": "acima", "faixa": [piso, teto], "hoje": atual,
-                "frase": ("hoje tem %d endereços, acima %s que já vi (%d)."
-                          % (atual, cheio, teto))}
+                "frase": ("%s teve %d endereços, acima %s que já vi (%d)."
+                          % (_qual, atual, cheio, teto))}
     return {"status": "normal", "faixa": [piso, teto], "hoje": atual,
-            "frase": ("dentro do normal: %d endereços, e %s ficaram entre %d e %d."
-                      % (atual, outros, piso, teto))}
+            "frase": ("%s: dentro do normal, %d endereços — %s ficaram entre %d e %d."
+                      % (_qual, atual, outros, piso, teto))}
 
 
 #   (nome, plural, é_masculino)

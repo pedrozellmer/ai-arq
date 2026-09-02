@@ -155,16 +155,21 @@ def test_sem_token_o_tick_GRITA_em_vez_de_gravar_zero():
 
 
 def test_o_painel_avisa_quando_a_coleta_esta_desligada():
-    i = _MAIN.find('@app.get("/api/admin/metricas")')
-    assert i > 0, "sumiu a rota do painel"
-    # 🪤 Janela de tamanho fixo reprovou o código CERTO quando a rota cresceu —
-    # quarta vez no mesmo dia. Recorta até a PRÓXIMA rota, que é a fronteira de
-    # verdade.
-    _fim = _MAIN.find(chr(10) + "@app.", i + 10)
-    bloco = _MAIN[i:_fim if _fim > 0 else len(_MAIN)]
-    assert "token_configurado" in bloco and "aviso" in bloco, (
-        "o painel não diz se a coleta está viva — série parada passaria por "
-        "site sem movimento")
+    """🪤 02/09/2026 — ESTE GUARDA REPROVOU O CÓDIGO CERTO. Ele procurava a
+    palavra `token_configurado` DENTRO do bloco da rota; quando o cálculo saiu
+    pra uma função própria (`_saude_da_coleta`), o comportamento ficou igual e o
+    teste ficou vermelho. É o "guarda que lê o FONTE erra de dois jeitos" na
+    prática: reprova refatoração e aprova bug que não muda o texto.
+
+    Agora CHAMA a função e confere a resposta, que é o que importa.
+    """
+    import main as _m
+    from datetime import date as _d
+    r = _m._saude_da_coleta([{"dia": str(_d.today())}], False)
+    assert r.get("token_configurado") is False
+    assert "CLOUDFLARE_API_TOKEN" in (r.get("aviso") or ""), (
+        "o painel não diz que a coleta está desligada — série parada passaria "
+        "por site sem movimento")
 
 
 def test_o_tick_reescreve_os_ultimos_dias_e_nao_so_ontem():
