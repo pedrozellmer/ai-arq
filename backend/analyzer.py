@@ -945,6 +945,52 @@ from processor import MAX_CROP_BYTES  # noqa: E402  (fonte unica do teto)
 MAX_IMGS_POR_PRANCHA = 4
 
 
+#: separador entre a página e o hint da IA dentro dos parênteses do ref_sheet.
+_REF_SEP = " · "
+
+
+def _monta_ref_sheet(sheet, hint_da_ia: str) -> str:
+    """`arquivo.pdf`, `arquivo.pdf (p3)`, `arquivo.pdf (p3 · hint)`.
+
+    🔑 O que decide a atribuição da medição é a PÁGINA, e ela só existe quando o
+    arquivo tem mais de uma. Ver o comentário no ponto de chamada.
+
+    🪤 O nome do arquivo tem que continuar sendo o PREFIXO até o primeiro " (":
+    é assim que `projeto.html` (`raw.split('(')[0]`), `_nome_limpo_da_prancha` e
+    o casamento por prefixo do `_apply_area_honesty` acham o arquivo. Quebrar
+    isso quebraria o botão "Ver prancha" — que é justamente por que o hint da IA
+    já vivia entre parênteses desde sempre.
+    """
+    nome = sheet.filename
+    dentro = []
+    try:
+        if int(getattr(sheet, "page_count", 1) or 1) > 1:
+            dentro.append("p%d" % (int(getattr(sheet, "page_index", 0) or 0) + 1))
+    except (TypeError, ValueError):
+        pass
+    _h = (hint_da_ia or "").strip()
+    if _h and _h.lower() not in nome.lower():
+        dentro.append(_h[:60])
+    return nome + (" (%s)" % _REF_SEP.join(dentro) if dentro else "")
+
+
+def _pagina_do_ref_sheet(ref_sheet: str):
+    """A página 0-based dentro do `ref_sheet`, ou None se não houver.
+
+    🪤 Só aceita o `pN` no COMEÇO dos parênteses, que é onde `_monta_ref_sheet`
+    põe. Procurar `p<numero>` solto casaria com hint da IA ("planta p2 do bloco")
+    e inventaria atribuição — que é pior que não atribuir.
+    """
+    import re as _re
+    m = _re.search(r"\(p(\d+)(?:\s|·|\)|$)", ref_sheet or "")
+    if not m:
+        return None
+    try:
+        return int(m.group(1)) - 1
+    except (TypeError, ValueError):
+        return None
+
+
 def _crops_por_importancia(crops: list) -> list:
     """Põe os recortes de DESENHO na frente dos de legenda.
 
@@ -1390,11 +1436,21 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                     # Antes, a IA podia retornar descrições ("Pontos Elétricos")
                     # que não batem com o filename e quebram o link "Ver prancha".
                     # Guardamos o filename + (opcional) hint da IA entre parênteses.
-                    ref_sheet=(f"{sheet.filename}"
-                               + (f" ({item_data.get('ref_sheet','')[:60]})"
-                                  if item_data.get('ref_sheet') and
-                                  item_data.get('ref_sheet').lower() not in sheet.filename.lower()
-                                  else "")),
+                    # 🩸 02/09/2026 — A PÁGINA ENTRA AQUI, e só quando existe.
+                    # Um PDF de N pranchas gerava N itens com `ref_sheet`
+                    # idêntico, e a atribuição da medição desistia por
+                    # ambiguidade (caso Luana: 10 pranchas, 583,6 m² medidos,
+                    # zero itens preenchidos).
+                    # 🪤 Vai DENTRO dos parênteses de propósito: o site faz
+                    # `raw.split('(')[0]` pra achar o nome do arquivo
+                    # (projeto.html), e `_nome_limpo_da_prancha` corta no
+                    # " (" — então o que está entre parênteses já é descartado
+                    # por todo mundo que precisa do filename. O botão "Ver
+                    # prancha" continua funcionando.
+                    # 🪤 Só quando `page_count > 1`: pôr "(p1)" em arquivo de
+                    # uma página só seria ruído em 90% dos casos, e mudaria o
+                    # `ref_sheet` de quem não tem o problema.
+                    ref_sheet=_monta_ref_sheet(sheet, item_data.get('ref_sheet', '')),
                     confidence=Confidence(conf),
                     discipline=discipline,
                 )

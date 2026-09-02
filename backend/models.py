@@ -107,3 +107,16 @@ class SheetInfo(BaseModel):
     sheet_type: SheetType
     text_content: str = ""
     crops: list[str] = []  # paths to cropped images
+    # 🩸 02/09/2026 — A PÁGINA SE PERDIA AQUI, E TRANCAVA A MEDIÇÃO INTEIRA.
+    # Um PDF com N pranchas vira N SheetInfo com o MESMO `filename`. Como o
+    # item só guardava o nome do arquivo, `_apply_area_honesty` não sabia de
+    # qual página cada item veio e, pela trava 4, se recusava a atribuir
+    # medição a QUALQUER um deles ("multipagina").
+    # Caso Luana Oliveira (job bf72d192): 10 pranchas num PDF só, 583,6 m²
+    # medidos, `preenchidos=0 criados_prancha=0`. A medição existia e não
+    # chegava em item nenhum.
+    # 🪤 `page_count` também: sem ele não dá pra distinguir "página 0 de um
+    # arquivo de 1" (onde a página é ruído) de "página 0 de 10" (onde ela é a
+    # informação que falta).
+    page_index: int = 0
+    page_count: int = 1

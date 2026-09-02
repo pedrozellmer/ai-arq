@@ -6143,6 +6143,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         _d0 = (desc or "").lower()
         return "forro" if _re_honesty.search(r"\bforro|\btetos?\b", _d0) else "piso"
 
+    from analyzer import _pagina_do_ref_sheet
     _pp = dict(pdfvec_por_prancha or {})
     # 🩸 01/09/2026 — O TETO USAVA A SOMA, E A SOMA É A MESMA CASA N VEZES.
     # O ramo do pdfvec (abaixo) preserva o número da IA quando ele "cabe no que
@@ -6203,17 +6204,34 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # falsa sobre ele.
         # 🔑 Arquivo com mais de uma página medida é AMBÍGUO, igual à trava 4:
         # não preenche nenhum item dele. Linha vazia é honesta; a maior é chute.
+        # 🩸 02/09/2026 — A AMBIGUIDADE DEIXOU DE SER FATAL: AGORA TEM A PÁGINA.
+        # Caso Luana Oliveira (job bf72d192): 10 pranchas num PDF só, 583,6 m²
+        # medidos, e `preenchidos=0 criados_prancha=0`. A medição existia e não
+        # chegava em item nenhum, porque o item guardava só o nome do arquivo.
+        # Agora `ref_sheet` carrega `(pN)` quando o arquivo tem mais de uma
+        # página (`analyzer._monta_ref_sheet`), e o item diz de qual prancha veio.
+        # 🪤 A trava 4 CONTINUA de pé pra quem não tem a página: item antigo, ou
+        # item cujo `ref_sheet` a IA reescreveu, cai no caminho de sempre e o
+        # arquivo multipágina segue ambíguo. Ganhar a página é bônus, não
+        # requisito — e a falta dela nunca vira chute.
         _paginas_do_arquivo = {}
         for _r in _pp.values():
             _arq = str(_r.get("arquivo") or "").strip().lower()
             if _arq and float(_r.get("rooms_m2") or 0) > 0:
                 _paginas_do_arquivo.setdefault(_arq, []).append(_r)
         _por_arquivo = {}
+        #: (arquivo, pagina) -> medição daquela prancha. Só pra multipágina.
+        _por_arquivo_pagina = {}
         for _arq, _rs_list in _paginas_do_arquivo.items():
             if len(_rs_list) == 1:
                 _por_arquivo[_arq] = _rs_list[0]
             else:
-                _ambiguos.append((_arq, "multipagina", len(_rs_list)))
+                for _r in _rs_list:
+                    _pg = _r.get("pagina")
+                    if _pg is not None:
+                        _por_arquivo_pagina[(_arq, int(_pg))] = _r
+                if not _por_arquivo_pagina:
+                    _ambiguos.append((_arq, "multipagina", len(_rs_list)))
         # quem são os candidatos de cada prancha, por família
         _cand = {}
         for _it in items:
@@ -6247,7 +6265,25 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
                 if _base and (_rs.startswith(_base) or _base in _rs):
                     _casaram.append((_arq, _r, len(_base)))
             _achou = None
-            if _casaram:
+            # 🩸 02/09 — MULTIPÁGINA COM PÁGINA NO `ref_sheet` PASSA A CASAR.
+            # Antes o arquivo com N páginas ficava fora do `_por_arquivo` e o
+            # item não achava dono. Agora, se o item diz de qual prancha veio,
+            # a medição daquela prancha é atribuída a ele.
+            # 🪤 Casa por (arquivo, página): sem os DOIS não atribui nada. Página
+            # sozinha não basta — dois PDFs multipágina no mesmo job têm p1 cada.
+            if _por_arquivo_pagina:
+                _pg_do_item = _pagina_do_ref_sheet(_rs)
+                if _pg_do_item is not None:
+                    _cands_pg = [(_a, _r) for (_a, _p), _r in _por_arquivo_pagina.items()
+                                 if _p == _pg_do_item
+                                 and (_rs.startswith(_a.rsplit(".", 1)[0])
+                                      or _a.rsplit(".", 1)[0] in _rs)]
+                    if len(_cands_pg) == 1:
+                        _achou = _cands_pg[0]
+                    elif len(_cands_pg) > 1:
+                        # dois arquivos multipágina cujo nome casa: não chuta
+                        _ambiguos.append((_rs, "pagina-em-2-arquivos", len(_cands_pg)))
+            if _achou is None and _casaram:
                 _casaram.sort(key=lambda c: c[2], reverse=True)
                 # empate no comprimento = dois arquivos igualmente plausíveis
                 if len(_casaram) == 1 or _casaram[0][2] > _casaram[1][2]:
@@ -6257,12 +6293,23 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             if not _achou:
                 continue
             _fam2 = _familia_da_superficie(_d)
-            _cand.setdefault((_achou[0], _fam2), []).append((_it, _achou[1]))
-        for (_arq, _fam2), _lista in _cand.items():
+            # 🩸 02/09 — A TRAVA 3 CONTAVA POR ARQUIVO, E "PRANCHA" VIROU
+            # (arquivo, página). Sem isto, num PDF de 10 pranchas um piso da
+            # página 1 e outro da página 6 disputavam a MESMA vaga e os DOIS
+            # ficavam zerados por "ambiguidade" — a trava punia justamente o
+            # caso que a página acabou de desambiguar. O teste
+            # `test_cada_pagina_recebe_a_SUA_medicao` pegou isso.
+            # 🔑 A regra não mudou: continua no máximo UM piso e UM forro por
+            # PRANCHA. Só que agora prancha é prancha, não arquivo.
+            _pg_chave = (_achou[1] or {}).get("pagina")
+            _cand.setdefault((_achou[0], _pg_chave, _fam2), []).append((_it, _achou[1]))
+        for (_arq, _pg_chave, _fam2), _lista in _cand.items():
             if len(_lista) == 1:
                 _medida_da_prancha[id(_lista[0][0])] = _lista[0][1]
             else:
-                _ambiguos.append((_arq, _fam2, len(_lista)))
+                _ambiguos.append(
+                    ("%s%s" % (_arq, "" if _pg_chave is None else " p%d" % (int(_pg_chave) + 1)),
+                     _fam2, len(_lista)))
     # 🚨 24/08: `apenas_preencher` é pra quem REIDRATA itens do banco (/inform-area).
     # Ali o motor já decidiu, lá atrás, com a geometria em mãos; reavaliar depois,
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
@@ -9145,6 +9192,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     sheet_type=sheet_type,
                     text_content=text[:5000] + _vet_secao,
                     crops=crop_paths,
+                    # 🩸 02/09: sem a página, um PDF de 10 pranchas virava 10
+                    # itens com o mesmo `ref_sheet` e a medição não achava dono.
+                    page_index=page_index,
+                    page_count=page_count,
                 )
                 # Ambiente: user escolheu manualmente > auto-detect por keyword
                 from processor import identify_ambiente as _id_amb
