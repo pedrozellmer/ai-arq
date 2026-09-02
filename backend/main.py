@@ -5806,7 +5806,8 @@ def _derive_estrutura_pe_direito(items, pe_direito: float) -> int:
     return tocados
 
 
-def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
+def _derive_pintura_pe_direito(items, pe_direito: float,
+                               area_conhecida: float = 0.0) -> int:
     """Deriva PINTURA de parede quando só temos o COMPRIMENTO das paredes.
 
     Motivação (medido em 01/08/2026): em 22 dos 69 projetos com parede, a
@@ -5828,8 +5829,34 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
       uma segunda linha do mesmo serviço.
     - Sai como ESTIMADO com rótulo "pé-direito informado por você" (regra nº1).
     - Não desconta vãos (não os conhecemos aqui) — e diz isso na observação.
-    Devolve 1 se criou/preencheu o item, 0 caso contrário."""
+    Devolve 1 se criou/preencheu o item, 0 caso contrário.
+
+    🚨 02/09/2026 — A TRAVA. A soma era CEGA: tudo que tinha unidade de metro e
+    a palavra parede/alvenaria/drywall entrava. Medido no job `43b26b58`
+    (imóvel de 1.324 m²), a conta daria **77.153 m² de pintura — 58× o imóvel**.
+    Três defeitos empilhados, todos visíveis no próprio item:
+
+      1. ACESSÓRIO não é parede. Entravam "Batente/marco para parede drywall"
+         (30 ml) e "Perfis de drywall — montantes/guias" (22,4 ml). Têm a
+         palavra, não têm o comprimento.
+      2. O ITEM CONTRADIZ A PRÓPRIA FONTE. O item gravou `12.496,67 ml` e a
+         observação dele, na MESMA linha, diz "Fonte: comprimento total do
+         layer A-WALL = 975,53 m" — 12,8× o que ele mesmo declara. É o bug de
+         soma entre pranchas, que ainda está na fila do motor.
+      3. DUAS FACES EM DOBRO. A observação avisa que o layer "pode incluir ambas
+         as faces das paredes (duplicidade)" e a conta multiplicava por 2 de novo.
+
+    🔑 A trava RECUSA, não corrige. Comprimento que mente sobre si mesmo não
+    vira número melhor sendo ajustado — vira chute com cara de conta. Quando
+    recusa, deixa a linha zerada (que é a pergunta honesta) e diz o motivo em
+    `ultimo_motivo`, que o chamador registra no log.
+
+    🪤 Nunca produziu um item em produção (0 em toda a base, medido em 02/09):
+    a trava de "já existe pintura com número" olha pintura de TETO também, e
+    quase todo projeto tem uma. A bomba estava armada, não detonada."""
+    _derive_pintura_pe_direito.ultimo_motivo = ""
     if not pe_direito or pe_direito <= 0:
+        _derive_pintura_pe_direito.ultimo_motivo = "sem pé-direito informado"
         return 0
     from models import BudgetItem, Confidence
 
@@ -5844,6 +5871,11 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
             return 0.0
 
     if any(_e_pintura(i) and _qtd(i) > 0 for i in items):
+        # 🪤 Isto inclui pintura de TETO — e é por isso que a derivação nunca
+        # rodou em produção (0 itens em toda a base, medido em 02/09). Fica
+        # como está: alargar aqui é ampliar a exposição à conta, e a conta é
+        # que precisava de trava primeiro.
+        _derive_pintura_pe_direito.ultimo_motivo = "já existe pintura com número"
         return 0        # já existe pintura com número — não sobrescreve
     # Pintura de PAREDE zerada, se houver, é a linha que vamos preencher.
     # Teto/forro fica de fora: a conta comprimento × pé-direito é de parede.
@@ -5853,24 +5885,128 @@ def _derive_pintura_pe_direito(items, pe_direito: float) -> int:
          and "teto" not in (getattr(i, "description", "") or "").lower()
          and "forro" not in (getattr(i, "description", "") or "").lower()),
         None)
+    # 🚨 A TRAVA (ver docstring). Tudo LOCAL de propósito: esta função não cria
+    # global novo — três arquivos de teste executam uma FATIA deste arquivo e
+    # quebram com nome de módulo que a fatia não contém (aprendido em 01/09).
+    # 🪤 "junta" ficou DE FORA de propósito: "alvenaria com junta seca" é
+    # parede, não acessório. Cada palavra aqui tem que nomear o item, nunca
+    # descrever uma propriedade dele.
+    _NAO_E_PAREDE = ("batente", "marco", "montante", "guia", "trilho",
+                     "perfil", "perfis", "cantoneira", "fita", "parafuso",
+                     "moldura", "requadro", "tabica", "rodapé", "rodape",
+                     "soleira")
+    _FACES_JA_INCLUSAS = ("ambas as faces", "duas faces", "duplicidade")
+
+    def _num_br(s):
+        """'975,53' → 975.53 · '12.496,67' → 12496.67 · '22.40' → 22.4"""
+        s = (s or "").strip()
+        if "," in s and "." in s:
+            s = (s.replace(".", "").replace(",", ".")
+                 if s.rfind(",") > s.rfind(".") else s.replace(",", ""))
+        elif "," in s:
+            s = s.replace(",", ".")
+        elif s.count(".") == 1 and len(s.split(".")[1]) == 3:
+            s = s.replace(".", "")          # 1.215 é mil duzentos e quinze
+        try:
+            return float(s)
+        except ValueError:
+            return 0.0
+
+    def _fonte_declarada_m(obs):
+        """O comprimento que a PRÓPRIA observação diz ser a sua fonte.
+
+        🪤 `m²`/`m³` não contam: "= 765,18 m²" é a área já derivada, não a
+        fonte — aceitar isso faria a conferência comparar coisas diferentes.
+
+        🚨 `import re` LOCAL: o topo deste módulo não importa `re`, só apelidos
+        (`_re`, `_re_honesty`, `_re_escala`). Usar `re.` direto aqui passa no
+        editor e morre na partida — foi o que matou o deploy `8d597a6`."""
+        import re as _re_pd
+        maior = 0.0
+        for n in _re_pd.finditer(r"=\s*([\d.,]+)\s*(?:ml|m)(?![²³\w])",
+                                 obs or "", _re_pd.IGNORECASE):
+            maior = max(maior, _num_br(n.group(1)))
+        return maior
+
+    def _layer_citado(obs):
+        """O layer que a observação diz ter medido: "layer A-WALL", "layer 'I-WALL'"."""
+        import re as _re_lay
+        m = _re_lay.search(r"layer\s+'?([A-Za-z0-9_\-]{2,})'?", obs or "",
+                           _re_lay.IGNORECASE)
+        return (m.group(1).upper() if m else "")
+
     total_m = 0.0
     ref = ""
+    _dobra_faces = 2.0
+    _layers_vistos = {}
     for i in items:
         d = (getattr(i, "description", "") or "").lower()
         u = (getattr(i, "unit", "") or "").strip().lower()
         if u in ("m", "ml") and ("parede" in d or "alvenaria" in d or "drywall" in d):
+            # 🪤 O acessório se reconhece pelo NOME do item, não pelo texto
+            # inteiro: "Parede drywall tipo DRY 01 — espessura 82,5 mm,
+            # **montante** 70 mm" é parede de verdade e a palavra está na
+            # ESPECIFICAÇÃO. Procurar no texto todo descartava 12.496 m de
+            # parede real em silêncio — medido em 02/09 no job 43b26b58.
+            _nome = d.split("—")[0][:60]
+            if any(a in _nome for a in _NAO_E_PAREDE):
+                continue        # 1) tem a palavra "parede", não tem o comprimento
             try:
                 q = float(getattr(i, "quantity", 0) or 0)
             except (TypeError, ValueError):
                 continue
-            if q > 0:
-                total_m += q
-                ref = ref or (getattr(i, "ref_sheet", "") or "")
+            if q <= 0:
+                continue
+            _obs_i = (getattr(i, "observations", "") or "")
+            # 4) O MESMO LAYER medido por dois itens é a mesma parede contada
+            # duas vezes. No job b82a72ed dois itens citam o layer A-WALL com
+            # 8.626 m e 2.275 m — cada um coerente consigo, juntos absurdos
+            # (155× a área do imóvel). Não dá pra saber qual vale: recusa.
+            _lay = _layer_citado(_obs_i)
+            if _lay and _lay in _layers_vistos:
+                _derive_pintura_pe_direito.ultimo_motivo = (
+                    "recusado: layer %s medido por dois itens (%.1f m e %.1f m)"
+                    % (_lay, _layers_vistos[_lay], q))
+                return 0
+            if _lay:
+                _layers_vistos[_lay] = q
+            _fonte = _fonte_declarada_m(_obs_i)
+            if _fonte > 0 and q > 1.5 * _fonte:
+                # 2) o item mente sobre si mesmo. Se UM mente, o conjunto não é
+                # confiável — recusa tudo. Ajustar seria trocar um número
+                # inventado por outro.
+                _derive_pintura_pe_direito.ultimo_motivo = (
+                    "recusado: item declara fonte de %.1f m e gravou %.1f m "
+                    "(%.1fx) — soma entre pranchas" % (_fonte, q, q / _fonte))
+                return 0
+            if any(f in _obs_i.lower() for f in _FACES_JA_INCLUSAS):
+                _dobra_faces = 1.0      # 3) o layer já traz as duas faces
+            total_m += q
+            ref = ref or (getattr(i, "ref_sheet", "") or "")
     if total_m <= 0:
+        _derive_pintura_pe_direito.ultimo_motivo = "sem comprimento de parede"
         return 0
-    area = round(total_m * float(pe_direito) * 2.0, 1)   # 2 faces
+    area = round(total_m * float(pe_direito) * _dobra_faces, 1)
+    # Teto de sanidade, MEDIDO (02/09/2026) e não chutado: nos 19 projetos de
+    # cliente com área conhecida e parede em metro, a razão pintura/área vai de
+    # 0,6× a 7,6× — e os dois casos absurdos saltam para 58× e 155×. Entre 7,6
+    # e 58 não existe NADA. O teto fica em 12×, dentro desse vão vazio: mata o
+    # impossível com folga e não encosta no mais compartimentado que já vimos.
+    # 🪤 Teto é rede de segurança, não a trava principal — quem pega o caso
+    # real com precisão são as conferências de fonte e de layer, acima.
+    try:
+        _area_ref = float(area_conhecida or 0)
+    except (TypeError, ValueError):
+        _area_ref = 0.0
+    if _area_ref > 0 and area > 12.0 * _area_ref:
+        _derive_pintura_pe_direito.ultimo_motivo = (
+            "recusado: %.0f m2 de pintura para imovel de %.0f m2 (%.1fx)"
+            % (area, _area_ref, area / _area_ref))
+        return 0
+    _derive_pintura_pe_direito.ultimo_motivo = ""
+    _faces = "× 2 faces" if _dobra_faces == 2.0 else "(o layer já traz as 2 faces)"
     _obs = (f"⚠ ESTIMADO — {total_m:.1f} m de parede × pé-direito "
-            f"{pe_direito:.2f} m informado por você × 2 faces. Vãos de "
+            f"{pe_direito:.2f} m informado por você {_faces}. Vãos de "
             f"portas/janelas NÃO descontados — confira antes de orçar.")
     if _alvo_zerado is not None:
         # Preenche a linha zerada que o modelo criou, em vez de deixar a
@@ -10485,7 +10621,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             _pd_inf = float(getattr(project_data, "user_pe_direito", 0) or 0)
             if _pd_inf:
-                _n_pd = _derive_pintura_pe_direito(all_items, _pd_inf)
+                _n_pd = _derive_pintura_pe_direito(all_items, _pd_inf,
+                                                   float(getattr(project_data, "total_area", 0) or 0))
                 try:
                     _n_est = _derive_estrutura_pe_direito(all_items, _pd_inf)
                     if _n_est:
@@ -10503,8 +10640,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # 🪤 Registrar mesmo com 0 derivados. Em 03/08 a feature tinha
                 # ZERO itens derivados em produção e não havia como saber se era
                 # falta de uso ou defeito — o pé-direito nem chegava ao banco.
+                # 🚨 O MOTIVO da recusa vai junto. Trava que recusa em silêncio
+                # é indistinguível de trava que não existe — e foi assim que a
+                # feature passou 33 dias com 0 derivados sem ninguém saber se
+                # era falta de uso ou defeito.
                 _log_error("motor:pe-direito",
-                           f"informado={_pd_inf} derivados={_n_pd} areas_anotadas={_n_ap}", job_id)
+                           f"informado={_pd_inf} derivados={_n_pd} areas_anotadas={_n_ap} "
+                           f"motivo={getattr(_derive_pintura_pe_direito, 'ultimo_motivo', '')!r}",
+                           job_id)
         except Exception as _epd:
             print(f"[pe-direito] job={job_id}: derivação falhou: {_epd}")
             _log_error("motor:pe-direito", f"FALHOU: {_epd}", job_id)
@@ -19786,7 +19929,8 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     _pintou = 0
     try:
         if _pd_efetivo > 0:
-            _pintou = _derive_pintura_pe_direito(items, _pd_efetivo)
+            _pintou = _derive_pintura_pe_direito(items, _pd_efetivo,
+                                                 area or _area_ja_tinha)
     except Exception as _edp:
         print(f"[inform-area] derivação por pé-direito não-fatal: {_edp}")
 
