@@ -210,8 +210,8 @@
     <div class="flex items-start gap-3">
       <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
       <div class="flex-1">
-        <h3 class="font-semibold text-indigo-900 mb-1">Sua planta não tinha cota de área</h3>
-        <p class="text-sm text-indigo-800 mb-3">Por isso os itens de <b>piso, forro e laje</b> ficaram em branco &mdash; a gente não inventa metragem. Se você souber a <b>área total do projeto</b>, informe abaixo pra completar esses itens. Eles ficam marcados como <b>&#9888; estimado (informado por você)</b>, pra conferir antes de orçar. Pra medir de verdade, envie o <b>DXF</b>.</p>
+        <h3 id="area-prompt-titulo" class="font-semibold text-indigo-900 mb-1">Sua planta não tinha cota de área</h3>
+        <p id="area-prompt-texto" class="text-sm text-indigo-800 mb-3">Por isso os itens de <b>piso, forro e laje</b> ficaram em branco &mdash; a gente não inventa metragem. Se você souber a <b>área total do projeto</b>, informe abaixo pra completar esses itens. Eles ficam marcados como <b>&#9888; estimado (informado por você)</b>, pra conferir antes de orçar. Pra medir de verdade, envie o <b>DXF</b>.</p>
         <div class="flex flex-wrap items-center gap-2">
           <label for="area-input" class="sr-only">Área total em metros quadrados</label>
           <input type="number" id="area-input" min="0" step="0.01" inputmode="decimal" placeholder="Ex: 120" class="w-32 px-3 py-2 rounded-lg border border-indigo-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
@@ -2936,23 +2936,71 @@ function renderWarnings(warnings) {
   }).join('');
 }
 
-// Área inteligente — mostra o prompt SÓ quando: (a) o projeto não tem área medida
-// e (b) há item de área (m²) em branco marcado como "não medida". Aí o cliente
-// informa a metragem pra completar piso/forro/laje (estimado, informado por ele).
+// Área inteligente — o cliente informa a metragem pra completar piso/forro/laje
+// (estimado, informado por ele). A mini-revisão refaz a planilha na hora, sem IA
+// e sem custo.
+//
+// 🩸 02/09/2026 — AS DUAS PORTAS FECHADAS. Medido no acervo: de 76 projetos que
+// precisam da mini-revisão, só 30 eram convidados. Duas condições calavam o
+// convite justamente para quem mais precisa:
+//
+//   PORTA 1 — "o projeto tem área na capa" era VETO ABSOLUTO. 33 projetos com
+//     358 linhas de m² em branco (mediana 7, máximo 43) nunca viram o convite,
+//     porque a capa trazia um número. E a área da capa já foi medida como MÉDIA
+//     DE CÔMODOS: é um número que às vezes não é a área do imóvel — e era ele
+//     que calava o pedido.
+//   PORTA 2 — o gatilho era uma PENEIRA DE TEXTO: só aparecia se a IA tivesse
+//     escrito uma de 4 frases exatas na observação. Em 22 projetos (127 linhas)
+//     ela escreveu a mesma coisa com outras palavras ("Área total não extraída
+//     do DXF") e o convite não saiu. Gatilho de produto pendurado no vocabulário
+//     livre do modelo.
+//
+// 🔑 O gatilho agora é o FATO — existe linha de m² com quantidade zero — e ter
+// área na capa muda o TEXTO do convite, não a decisão de mostrá-lo.
+// 🪤 O convite diz quantas linhas estão em branco, NUNCA quantas serão
+// preenchidas: quem decide item a item é a honestidade de área no backend, e
+// prometer número que não depende da tela é a mentira que a gente vive
+// consertando.
 const _AREA_M2_UI = ['m²', 'm2', 'm2.', 'm².'];
 function maybeShowAreaPrompt(proj, items) {
   try {
-    const noArea = !proj.total_area || Number(proj.total_area) === 0;
-    if (!noArea) return;
-    const hasBlankArea = (items || []).some(it => {
+    const vazias = (items || []).filter(it => {
       const u = String(it.unit || '').toLowerCase().trim();
-      const q = Number(it.quantity || 0);
-      const o = String(it.observations || '').toLowerCase();
-      return _AREA_M2_UI.includes(u) && q === 0 &&
-        (o.includes('não medida') || o.includes('nao medida') ||
-         o.includes('informe a metragem') || o.includes('preencha a metragem'));
-    });
-    if (!hasBlankArea) return;
+      return _AREA_M2_UI.includes(u) && Number(it.quantity || 0) === 0;
+    }).length;
+    if (!vazias) return;
+
+    const areaCapa = Number(proj.total_area || 0);
+    const plural = vazias === 1 ? 'linha' : 'linhas';
+    if (areaCapa > 0) {
+      const nf = areaCapa.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+      document.getElementById('area-prompt-titulo').textContent =
+        vazias + ' ' + plural + ' de área ainda ' + (vazias === 1 ? 'está' : 'estão') + ' em branco';
+      document.getElementById('area-prompt-texto').innerHTML =
+        'A capa deste projeto traz <b>' + esc(nf) + ' m²</b>, mas a medição da planta não ' +
+        'alcançou ' + (vazias === 1 ? 'essa linha' : 'essas linhas') + '. Se essa metragem estiver certa, confirme abaixo pra ' +
+        'completar <b>piso, forro e laje</b>. Eles ficam marcados como ' +
+        '<b>&#9888; estimado (informado por você)</b>, pra conferir antes de orçar &mdash; ' +
+        'e nada que já tem número medido é sobrescrito.';
+      const inp = document.getElementById('area-input');
+      if (inp && !inp.value) inp.value = areaCapa;
+    } else {
+      // 🪤 O TEXTO tem que ser reescrito aqui também, não só o título. Pego no
+      // DOM em 02/09: rodando o ramo de cima e depois este, o parágrafo
+      // continuava dizendo "A capa deste projeto traz 1.324,5 m²" para um
+      // projeto SEM área nenhuma. Hoje a função roda uma vez por carga e isso
+      // não apareceria — mas afirmação falsa que depende de ninguém chamar
+      // duas vezes é bomba, não conserto. Os dois ramos escrevem os dois
+      // campos: a função é idempotente e não herda estado da chamada anterior.
+      document.getElementById('area-prompt-titulo').textContent =
+        'Sua planta não tinha cota de área';
+      document.getElementById('area-prompt-texto').innerHTML =
+        'Por isso os itens de <b>piso, forro e laje</b> ficaram em branco &mdash; a gente ' +
+        'não inventa metragem. Se você souber a <b>área total do projeto</b>, informe ' +
+        'abaixo pra completar esses itens. Eles ficam marcados como ' +
+        '<b>&#9888; estimado (informado por você)</b>, pra conferir antes de orçar. ' +
+        'Pra medir de verdade, envie o <b>DXF</b>.';
+    }
     document.getElementById('area-prompt').classList.remove('hidden');
   } catch (e) { console.warn('[area-prompt]', e); }
 }

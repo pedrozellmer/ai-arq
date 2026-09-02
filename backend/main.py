@@ -19870,9 +19870,21 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         total_area=(area or _area_ja_tinha),
         layout_area=proj.get("layout_area") or 0,
     )
+    # 🪤 02/09/2026 — CONFIRMAR NÃO É INFORMAR. Com a porta 1 aberta, o convite
+    # passa a aparecer também para projeto que JÁ tem área na capa, e o campo
+    # chega pré-preenchido com ela: o gesto mais provável do cliente é
+    # confirmar o número que já estava lá. Carimbar "informado por você" em
+    # cima de área que a PLANTA mediu é escrever procedência falsa na capa da
+    # planilha — a mesma família de erro que a gente vive consertando.
+    _confirma_o_que_ja_tinha = bool(
+        area > 0 and _area_ja_tinha > 0
+        and abs(area - _area_ja_tinha) <= 0.01 * _area_ja_tinha)
     try:
         if area > 0:
-            pd.total_area_source = "informado"
+            if _confirma_o_que_ja_tinha:
+                pd.total_area_source = (proj.get("total_area_source") or "")
+            else:
+                pd.total_area_source = "informado"
         else:
             pd.total_area_source = (proj.get("total_area_source") or "")
     except Exception:
@@ -19974,7 +19986,17 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     # 7) Atualizar projeto: área informada + warning honesto (troca avisos antigos
     #    de "informe a área" pra não duplicar)
     _novos_avisos = []
-    if area > 0:
+    if area > 0 and _confirma_o_que_ja_tinha:
+        # 🪤 "a planta não trazia cota pra medir" é uma AFIRMAÇÃO, e ela é falsa
+        # quando a planta trazia e o cliente só confirmou o número da capa.
+        # A frase "Preenchemos os itens de piso/forro/laje" continua nos dois
+        # caminhos de propósito: é a assinatura única desta rota no `warnings`,
+        # e é por ela que dá pra saber se a mini-revisão foi usada.
+        _novos_avisos.append(
+            f"Área total de {area:.0f} m² CONFIRMADA POR VOCÊ (é a que a planta "
+            f"já trazia). Preenchemos os itens de piso/forro/laje que estavam em "
+            f"branco com essa base — confira antes de orçar.")
+    elif area > 0:
         _novos_avisos.append(
             f"Área total de {area:.0f} m² INFORMADA POR VOCÊ (a planta não trazia cota "
             f"pra medir). Preenchemos os itens de piso/forro/laje com essa base — "
