@@ -353,3 +353,44 @@ def test_CONTROLE_o_mesmo_projeto_nao_conta_DUAS_vezes():
     corpo = h[i:i + 500]
     assert "_vistos.has(_k)" in corpo and "continue" in corpo, (
         "a deduplicacao parou de descartar repetido")
+
+
+# ─────────── 8) o guarda que teria pego o erro que a bancada deixou passar ──
+
+def test_a_contagem_pede_uma_coluna_que_EXISTE_em_cada_tabela():
+    """🩸 02/09/2026 — O CONSERTO DO `cadastros` NASCEU MORTO E A BANCADA PASSOU
+    VERDE. Escrevi `select=id` pra `profiles`, e essa tabela não tem coluna
+    `id`: a chave é `user_id`. O PostgREST devolve 400, o `st == 200` falha, a
+    contagem vira None — e a coluna continuaria vazia, com outra desculpa.
+
+    🔑 Por que os outros testes não pegaram: eles leem o FONTE, e o fonte não
+    sabe que coluna existe no banco. Só apareceu porque rodei o tick em
+    produção e OLHEI O BANCO depois.
+
+    🧪 Este aqui não lê texto: ele INTERCEPTA a chamada e confere o que foi
+    pedido de verdade. Colunas conferidas no information_schema em 02/09.
+    """
+    reais = {"profiles": {"user_id", "full_name", "email", "created_at"},
+             "projects": {"job_id", "status", "created_at", "is_eval"}}
+    pedidos = {}
+
+    def _espiao(metodo, tabela, params=None, **k):
+        pedidos[tabela] = params or {}
+        return 200, []
+
+    _orig = _m._supa_rest_service
+    try:
+        _m._supa_rest_service = _espiao
+        for tabela in ("profiles", "projects"):
+            _m._contar_do_dia(tabela, date(2026, 9, 1))
+            col = (pedidos[tabela].get("select") or "").split(",")[0].strip()
+            assert col in reais[tabela], (
+                "a contagem pede a coluna %r em `%s`, que NAO existe la - o "
+                "PostgREST devolve 400 e a contagem vira None calada" % (col, tabela))
+        # 🪤 `profiles` não tem `is_eval`; mandar o filtro é 400 na certa.
+        assert "is_eval" not in pedidos["profiles"], (
+            "voltou a mandar is_eval pra `profiles`, que nao tem essa coluna")
+        assert "is_eval" in pedidos["projects"], (
+            "parou de tirar as avaliacoes da contagem de projetos de cliente")
+    finally:
+        _m._supa_rest_service = _orig

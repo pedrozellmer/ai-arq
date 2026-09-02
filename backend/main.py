@@ -23792,7 +23792,16 @@ def _contar_do_dia(o_que: str, dia) -> int:
     # 🪤 `profiles` não tem `is_eval` — filtrar por ela devolveria 400 e a
     # contagem viraria None todo dia, ou seja, a coluna continuaria vazia com
     # outra desculpa.
-    _p = {"select": "id" if o_que == "profiles" else "job_id",
+    # 🩸 02/09/2026 — ERREI ESTA LINHA E O CONSERTO NASCEU MORTO. Escrevi
+    # `select=id` para `profiles`, e essa tabela NÃO TEM coluna `id`: a chave é
+    # `user_id`. O PostgREST devolve 400, o `st == 200` falha e a contagem vira
+    # None — ou seja, a coluna `cadastros` continuaria vazia, com outra
+    # desculpa. Eu tinha escrito o comentário avisando exatamente disso duas
+    # linhas abaixo e caí nele mesmo assim.
+    # 🔑 Só apareceu porque rodei o tick em produção e OLHEI O BANCO depois.
+    # A bancada passou verde nos dois lados: ela lê o fonte, e o fonte não sabe
+    # que coluna existe.
+    _p = {"select": "user_id" if o_que == "profiles" else "job_id",
           "and": "(created_at.gte.%sT00:00:00Z,created_at.lt.%sT00:00:00Z)"
                  % (dia, dia + _td1(days=1))}
     if o_que == "projects":
