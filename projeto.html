@@ -68,6 +68,27 @@
 <body class="bg-gray-50 min-h-screen">
 <a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
 
+<!-- 🩸 01/09/2026 — O ADMIN CAÍA AQUI E NÃO TINHA VOLTA.
+     Todos os links de projeto do painel apontam pra esta página, que é a tela
+     do CLIENTE. O Pedro clicava, via o projeto como o cliente vê (que é útil) e
+     ficava preso: sem saber que estava "de visita" e sem botão pra voltar.
+     🪤 A barra só aparece com `?adm=1` NA URL **E** com a sessão sendo a do
+     admin. O parâmetro sozinho não basta: qualquer cliente poderia digitá-lo e
+     ver uma barra de admin, o que seria vexatório mesmo sem dar acesso a nada. -->
+<!-- 🪤 Cor no `style`, não em classe: o Tailwind daqui é BUILD ESTÁTICO e
+     `bg-slate-900` NÃO está nele — sairia sem fundo, com texto branco em cima
+     do branco, invisível. O guarda `test_nenhuma_classe_de_cor_inerte` pegou
+     isso antes do deploy. #0F172A é o Dark Slate da identidade. -->
+<div id="barra-admin" class="hidden sticky top-0 z-40 text-white text-sm" style="background:#0F172A">
+  <div class="max-w-6xl mx-auto px-4 py-2 flex items-center justify-between gap-3">
+    <span class="flex items-center gap-2">
+      <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+      <span>Você está vendo <b>como o cliente vê</b>.</span>
+    </span>
+    <a href="admin.html#projetos" class="shrink-0 px-3 py-1 rounded bg-white/15 hover:bg-white/25 font-medium">← Voltar ao painel</a>
+  </div>
+</div>
+
 <div id="gate" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
   <div class="text-center">
     <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto"></div>
@@ -934,6 +955,27 @@ const urlParams = new URLSearchParams(window.location.search);
 // descompasso custou uma tela dizendo "falta job_id" com o id na barra.
 const jobId = urlParams.get('job_id') || urlParams.get('job');
 if (!jobId) { window.location.href = 'meus-projetos.html'; }
+
+// 🩸 Barra de "voltar ao painel" (01/09/2026). Ver o comentário no topo do body.
+// 🪤 O hash é o MESMO de admin.html:1249 — é hash, não e-mail, e já é público
+// no fonte de lá. Duplicar aqui é feio; o certo seria um só lugar, mas mover
+// aquele mexe no portão do admin e não vale o risco pra uma barra. Se um dia
+// mudar o e-mail de admin, os DOIS têm que mudar.
+(async function mostrarBarraDoAdmin() {
+  if (urlParams.get('adm') !== '1') return;
+  try {
+    const { data: { session } } = await window.sbClient.auth.getSession();
+    const email = session && session.user && session.user.email;
+    if (!email) return;
+    const ok = await window.aiarqEmailMatches(
+      email, '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2');
+    if (ok) document.getElementById('barra-admin')?.classList.remove('hidden');
+  } catch (e) {
+    // Falhou a checagem? Não mostra a barra. Ela é conveniência, não controle
+    // de acesso — errar pro lado de não mostrar não tira nada de ninguém.
+    console.debug('barra de admin não pôde ser avaliada', e);
+  }
+})();
 
 // Helper: fetch com timeout (aborta após X ms pra não travar a UI)
 function fetchWithTimeout(url, options = {}, timeoutMs = 15000) {

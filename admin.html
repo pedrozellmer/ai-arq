@@ -80,6 +80,21 @@
     <h2 class="text-lg font-bold text-gray-900 mb-1">Acesso negado</h2>
     <p class="text-sm text-gray-500">Redirecionando...</p>
   </div>
+  <!-- 🩸 01/09/2026 — VOLTAR NO NAVEGADOR DESLOGAVA O PEDRO.
+       O `catch` da checagem mandava pra login.html em QUALQUER exceção: uma
+       falha de rede de um segundo (comum ao voltar de admin-usuario.html) era
+       lida como "você não é admin". É a mesma família do "gravação que falha
+       calada" — não distinguir NÃO CONSEGUI CONFERIR de REPROVADO.
+       Agora a falha de rede tem tela própria, com botão, e não expulsa. -->
+  <div id="gate-erro" class="text-center hidden max-w-sm px-6">
+    <div class="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100 text-amber-600 mb-4">
+      <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"/></svg>
+    </div>
+    <h2 class="text-lg font-bold text-gray-900 mb-1">Não consegui conferir seu acesso</h2>
+    <p class="text-sm text-gray-500 mb-4">Isso costuma ser a conexão, não a sua conta. Sua sessão continua válida.</p>
+    <button onclick="location.reload()" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700">Tentar de novo</button>
+    <p class="text-xs text-gray-400 mt-3">Se insistir, <a href="login.html" class="underline">entre de novo</a>.</p>
+  </div>
 </div>
 
 <!-- MOBILE OVERLAY -->
@@ -1241,10 +1256,37 @@ async function checkAdminAccess() {
   const gateLoading = document.getElementById('gate-loading');
   const gateDenied = document.getElementById('gate-denied');
 
+  // 🪤 TRÊS TENTATIVAS ANTES DE DESISTIR. `getSession()` lê do storage e pode
+  // devolver null no primeiro instante depois de um "voltar" do navegador,
+  // antes de o cliente do Supabase reidratar. Uma tentativa só transformava
+  // essa corrida em logout — e o Pedro reclamava de "sair sozinho".
+  async function _sessaoComPaciencia() {
+    let ultimoErro = null;
+    for (let i = 0; i < 3; i++) {
+      try {
+        const { data: { session } } = await sbClient.auth.getSession();
+        if (session) return { session };
+      } catch (e) {
+        ultimoErro = e;
+      }
+      if (i < 2) await new Promise(r => setTimeout(r, 350));
+    }
+    return { session: null, erro: ultimoErro };
+  }
+
   try {
-    const { data: { session } } = await sbClient.auth.getSession();
+    const { session, erro } = await _sessaoComPaciencia();
 
     if (!session) {
+      // 🔑 A DIFERENÇA QUE FALTAVA: sem sessão E sem erro = realmente deslogado
+      // (manda pro login, certo). Sem sessão MAS com erro = não deu pra saber
+      // — e expulsar aqui é punir o Pedro por uma falha nossa.
+      if (erro) {
+        console.error('Admin: falha ao conferir a sessão', erro);
+        gateLoading.classList.add('hidden');
+        document.getElementById('gate-erro').classList.remove('hidden');
+        return false;
+      }
       window.location.href = 'login.html';
       return false;
     }
@@ -1266,8 +1308,12 @@ async function checkAdminAccess() {
     return true;
 
   } catch (err) {
+    // 🩸 Aqui estava o logout indevido. Qualquer exceção — inclusive a da
+    // checagem de e-mail, que faz hash e pode falhar por rede — mandava pro
+    // login. Agora mostra a tela de "não consegui conferir", que não expulsa.
     console.error('Admin access check failed:', err);
-    window.location.href = 'login.html';
+    gateLoading.classList.add('hidden');
+    document.getElementById('gate-erro').classList.remove('hidden');
     return false;
   }
 }
@@ -1294,7 +1340,22 @@ function closeSidebar() {
 // ══════════════════════════════════════════════
 // TAB SWITCHING
 // ══════════════════════════════════════════════
-function switchTab(tabName) {
+// 🩸 01/09/2026 — A ABA NÃO EXISTIA NA URL, E ERA A RAIZ DE TRÊS QUEIXAS.
+// O painel trocava de aba só no DOM: nada ia pra barra de endereço, nenhum
+// registro entrava no histórico. Consequências que o Pedro sentiu como coisas
+// separadas e eram a mesma:
+//   · "volto pelo navegador e SAI" — não havia aba anterior pra onde voltar,
+//     então o Voltar saía do admin inteiro (e caía no portão, que deslogava);
+//   · não dava pra mandar link de uma aba, nem recarregar caindo onde estava;
+//   · quem vinha de fora (a barra "voltar ao painel" da tela do projeto)
+//     aterrissava sempre no dashboard.
+// 🪤 `interno` existe pra não empilhar histórico quando a própria navegação
+// veio DO histórico — sem isso, um Voltar dispararia outro Voltar.
+function switchTab(tabName, interno) {
+  if (!interno && ('#' + tabName) !== location.hash) {
+    location.hash = tabName;      // dispara hashchange, que chama de volta
+    return;
+  }
   document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
 
@@ -1363,7 +1424,7 @@ function renderOps(d){
       const body = `Olá${f.user_name ? ' '+f.user_name.split(' ')[0] : ''}, tudo bem?\n\nVi que o processamento do seu projeto "${f.project_name||''}" no AI.arq não concluiu. Posso te ajudar a resolver — se puder, reenvie o arquivo (de preferência DWG/DXF) que a gente refaz.\n\nAbraço,\nPedro — AI.arq`;
       html += `<tr class="border-b align-top">
         <td class="py-2 pr-2 whitespace-nowrap text-gray-500">${opsEsc(f.quando)}</td>
-        <td class="pr-2"><a href="projeto.html?job_id=${opsEsc(f.job_id)}" class="text-indigo-600 hover:underline">${opsEsc(f.project_name||'—')}</a></td>
+        <td class="pr-2"><a href="projeto.html?adm=1&job_id=${opsEsc(f.job_id)}" class="text-indigo-600 hover:underline">${opsEsc(f.project_name||'—')}</a></td>
         <td class="pr-2 text-gray-600">${opsEsc(f.user_name||'')}<br><span class="text-gray-400">${opsEsc(f.user_email||'')}</span></td>
         <td class="pr-2 text-gray-500">${opsEsc(f.erro||'')}</td>
         <td class="pr-1 whitespace-nowrap"><a href="${opsMailto(f.user_email,'Seu projeto no AI.arq', body)}" class="px-2 py-1 rounded bg-indigo-100 text-indigo-700">✉ Avisar</a></td>
@@ -1381,7 +1442,7 @@ function renderOps(d){
       const body = `Olá, tudo bem?\n\nSeu projeto "${x.project_name||''}" no AI.arq saiu com boa parte em estimativa porque veio de PDF. Se você tiver o DWG ou DXF da mesma prancha, dá pra a gente MEDIR de verdade (no nosso beta, CAD mede bem mais que PDF) — é grátis, anexa no mesmo projeto.\n\nAbraço,\nPedro — AI.arq`;
       html += `<tr class="border-b align-top">
         <td class="py-2 pr-2 whitespace-nowrap text-gray-500">${opsEsc(x.quando)}</td>
-        <td class="pr-2"><a href="projeto.html?job_id=${opsEsc(x.job_id)}" class="text-indigo-600 hover:underline">${opsEsc(x.project_name||'—')}</a></td>
+        <td class="pr-2"><a href="projeto.html?adm=1&job_id=${opsEsc(x.job_id)}" class="text-indigo-600 hover:underline">${opsEsc(x.project_name||'—')}</a></td>
         <td class="pr-2 text-gray-600">${opsEsc(x.user_email||'')}</td>
         <td class="pr-2"><span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-semibold">⚠ ${opsEsc(x.pct_medido)}%</span></td>
         <td class="pr-1 whitespace-nowrap"><a href="${opsMailto(x.user_email,'Meça seu projeto de verdade — mande o DWG/DXF', body)}" class="px-2 py-1 rounded bg-emerald-100 text-emerald-700">✉ Sugerir DWG</a></td>
@@ -1400,7 +1461,7 @@ function renderOps(d){
         <td class="py-2 pr-2 whitespace-nowrap text-gray-500">${opsEsc(e.quando)}</td>
         <td class="pr-2 text-gray-600 whitespace-nowrap">${opsEsc(e.stage||'')}</td>
         <td class="pr-2 text-gray-500">${opsEsc(e.msg||'')}</td>
-        <td class="pr-2 text-gray-400 whitespace-nowrap">${e.job_id?`<a href="projeto.html?job_id=${opsEsc(e.job_id)}" class="text-indigo-500 hover:underline">${opsEsc(String(e.job_id).slice(0,8))}</a>`:'—'}</td>
+        <td class="pr-2 text-gray-400 whitespace-nowrap">${e.job_id?`<a href="projeto.html?adm=1&job_id=${opsEsc(e.job_id)}" class="text-indigo-500 hover:underline">${opsEsc(String(e.job_id).slice(0,8))}</a>`:'—'}</td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -1420,7 +1481,7 @@ function renderOps(d){
         <td class="py-2 pr-2 whitespace-nowrap">${opsEsc(e.quando)}</td>
         <td class="pr-2 whitespace-nowrap">${opsEsc(e.stage||'')}</td>
         <td class="pr-2">${opsEsc(e.msg||'')}</td>
-        <td class="pr-2 whitespace-nowrap">${e.job_id?`<a href="projeto.html?job_id=${opsEsc(e.job_id)}" class="text-indigo-400 hover:underline">${opsEsc(String(e.job_id).slice(0,8))}</a>`:'—'}</td>
+        <td class="pr-2 whitespace-nowrap">${e.job_id?`<a href="projeto.html?adm=1&job_id=${opsEsc(e.job_id)}" class="text-indigo-400 hover:underline">${opsEsc(String(e.job_id).slice(0,8))}</a>`:'—'}</td>
       </tr>`;
     });
     html += `</tbody></table></div>`;
@@ -2525,7 +2586,7 @@ function renderMotorHealth(d){
     if (am.length){
       html += `<div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-left text-gray-500 border-b"><th class="py-1 pr-2">Job</th><th class="pr-2">Escala</th><th class="pr-2">Cômodos</th><th class="pr-2">m²</th><th class="pr-2">Parede (m)</th></tr></thead><tbody>`;
       am.forEach(a => {
-        html += `<tr class="border-b"><td class="py-1 pr-2 text-gray-400">${a.job_id?`<a href="projeto.html?job_id=${esc(a.job_id)}" class="text-indigo-500 hover:underline">${esc(String(a.job_id).slice(0,8))}</a>`:'—'}</td><td class="pr-2 text-gray-600">1:${esc(a.escala)}</td><td class="pr-2">${esc(a.n_rooms)}</td><td class="pr-2 text-emerald-700 font-medium">${esc(a.rooms_m2)}</td><td class="pr-2 text-emerald-700 font-medium">${esc(a.walls_m)}</td></tr>`;
+        html += `<tr class="border-b"><td class="py-1 pr-2 text-gray-400">${a.job_id?`<a href="projeto.html?adm=1&job_id=${esc(a.job_id)}" class="text-indigo-500 hover:underline">${esc(String(a.job_id).slice(0,8))}</a>`:'—'}</td><td class="pr-2 text-gray-600">1:${esc(a.escala)}</td><td class="pr-2">${esc(a.n_rooms)}</td><td class="pr-2 text-emerald-700 font-medium">${esc(a.rooms_m2)}</td><td class="pr-2 text-emerald-700 font-medium">${esc(a.walls_m)}</td></tr>`;
       });
       html += `</tbody></table></div>`;
     }
@@ -2763,7 +2824,7 @@ function renderRevisionFeedback(d){
     ult.forEach(u => {
       html += `<tr class="border-b">
         <td class="py-1.5 pr-3 text-gray-600">${esc(fmtDT(u.created_at))}</td>
-        <td class="pr-3">${u.job_id?`<a href="projeto.html?job_id=${esc(u.job_id)}" class="text-indigo-500 hover:underline">${esc(String(u.job_id).slice(0,8))}</a>`:'—'}</td>
+        <td class="pr-3">${u.job_id?`<a href="projeto.html?adm=1&job_id=${esc(u.job_id)}" class="text-indigo-500 hover:underline">${esc(String(u.job_id).slice(0,8))}</a>`:'—'}</td>
         <td class="pr-3 text-gray-600 truncate" style="max-width:180px">${esc(u.arquivo||'—')}</td>
         <td class="pr-3 text-gray-700">${esc(u.n_originais||0)}</td>
         <td class="pr-3 text-amber-700 font-medium">⚠ ${esc(u.n_alterados||0)}</td>
@@ -4047,7 +4108,7 @@ async function loadProjects() {
       if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalReprocess(\'' + jid + '\')" title="Re-roda os arquivos num teste isolado, sem tocar no projeto do cliente" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#129514; Avaliar (isolado)</button>');
       if (!_isEval && (p.status === 'error' || p.status === 'done' || isStuck) && jid) _btns.push('<button onclick="adminEvalCombine(\'' + jid + '\')" title="Junta os arquivos de TODOS os projetos deste cliente com o mesmo nome (DWG+DXF+PDF) num teste combinado — mede pelo CAD e completa pelo PDF" class="text-[11px] px-2 py-0.5 rounded border border-violet-300 text-violet-800 hover:bg-violet-50">&#129513; Combinar</button>');
       // Numa avaliação: link pra abrir e comparar.
-      if (_isEval && jid) _btns.push('<a href="projeto.html?job_id=' + jid + '" target="_blank" rel="noopener" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#128269; Abrir teste</a>');
+      if (_isEval && jid) _btns.push('<a href="projeto.html?adm=1&job_id=' + jid + '" target="_blank" rel="noopener" class="text-[11px] px-2 py-0.5 rounded border border-amber-300 text-amber-800 hover:bg-amber-50">&#128269; Abrir teste</a>');
       const actInline = _btns.length ? '<div class="flex flex-wrap gap-1 mt-1.5">' + _btns.join('') + '</div>' : '';
       // ATIVOS (queued/processing): NÃO crava "TRAVADO" só por tempo — o admin não
       // enxergava o progresso real e marcava travado a partir de 15min, então um PDF
@@ -5621,11 +5682,28 @@ function esc(str) {
 // ══════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════
+// A aba mora no hash (ver o comentário em `switchTab`). Só vale hash que
+// corresponde a uma aba REAL — hash inventado na barra de endereço cairia num
+// painel em branco, que se lê como painel quebrado.
+function _abaDoHash() {
+  const h = (location.hash || '').replace('#', '').trim();
+  return (h && document.getElementById('tab-' + h)) ? h : 'dashboard';
+}
+
+window.addEventListener('hashchange', () => switchTab(_abaDoHash(), true));
+
 (async function init() {
   const hasAccess = await checkAdminAccess();
-  if (hasAccess) {
+  if (!hasAccess) return;
+  const aba = _abaDoHash();
+  if (aba === 'dashboard') {
     loadDashboardStats();
     loadOrigem();   // Origem vive dentro do Dashboard — precisa carregar no boot
+  } else {
+    // 🪤 `true`: já viemos de uma URL com hash. Sem isso, o boot reescreveria
+    // o hash e criaria uma entrada de histórico logo na abertura — o primeiro
+    // Voltar do Pedro não faria nada.
+    switchTab(aba, true);
   }
 })();
 </script>
