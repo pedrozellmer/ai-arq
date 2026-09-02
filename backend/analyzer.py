@@ -939,6 +939,60 @@ MARCA_MEDICAO_VETORIAL = "=== MEDIÇÕES VETORIAIS DA PRANCHA"
 
 from processor import MAX_CROP_BYTES  # noqa: E402  (fonte unica do teto)
 
+#: quantas imagens de recorte vão pra IA por prancha. Era um `[:4]` literal
+#: dentro do laço. O teto existe por MEMÓRIA — o que ele NÃO deveria decidir é
+#: *quais* recortes sobrevivem, e é isso que ele vinha fazendo em arquitetura.
+MAX_IMGS_POR_PRANCHA = 4
+
+
+def _crops_por_importancia(crops: list) -> list:
+    """Põe os recortes de DESENHO na frente dos de legenda.
+
+    🩸 02/09/2026 — O TETO DE IMAGENS DECIDIA O QUE A IA VÊ, POR ACIDENTE.
+    Em ARQUITETURA os CROP_REGIONS têm 6 recortes e os 4 primeiros são as
+    quatro legendas: `planta_esquerda` e `planta_centro` ficavam de fora do
+    `[:4]`. Ninguém escolheu isso — é a ordem em que o dicionário foi escrito.
+    E o fallback de tipo não detectado é justamente ARQUITETURA, então todo PDF
+    de nome não reconhecido caía no único tipo que descarta o desenho.
+
+    📏 MEDIDO na prancha 0326.CGR.14.400.ARQUITETURA (A1 real, mesma prancha,
+    mesmo prompt, uma rodada por configuração):
+
+        4 legendas (como era)        31 itens ·  0 com quantidade ·  0 ambientes
+        planta + 2 legendas          47 itens · 46 com quantidade · 10 ambientes
+        tudo (2 plantas + 4 legendas) 43 itens · 42 com quantidade · 10 ambientes
+
+    Zero itens com quantidade virou 46. E mandar TUDO foi pior que trocar duas
+    legendas pela planta — não faltava imagem, faltava *a* imagem certa.
+
+    🔑 O critério da ordem: **o que o texto não recupera vem primeiro.** Uma
+    legenda é uma tabela — quando o PDF tem camada de texto, boa parte dela
+    chega pelo `text_content`. O desenho não chega por texto de jeito nenhum.
+    Por isso a planta ganha a vaga.
+
+    🪤 O nome do RECORTE é que decide, não o caminho: um PDF chamado
+    "Planta 1 - Galpão.pdf" gera "Planta 1 - Galpão_legenda_portas.jpg", e
+    procurar "planta" no caminho inteiro classificaria a legenda como desenho.
+    Por isso a comparação é com o sufixo `_<nome>.jpg`, e a lista de nomes de
+    desenho sai do PRÓPRIO `CROP_REGIONS` — recorte novo com "planta"/"layout"
+    no nome entra na regra sozinho, sem ninguém lembrar de atualizar lista.
+    """
+    from processor import CROP_REGIONS
+    nomes_de_desenho = {
+        nome for regioes in CROP_REGIONS.values() for nome in regioes
+        if "planta" in nome or "layout" in nome
+    }
+
+    def _e_desenho(caminho):
+        base = os.path.basename(caminho)
+        return any(base.endswith("_%s.jpg" % n) or base.endswith("_%s.png" % n)
+                   for n in nomes_de_desenho)
+
+    # 🪤 `sorted` com chave booleana é ESTÁVEL: dentro de cada grupo a ordem
+    # original do CROP_REGIONS é preservada. Sem isso a ordem das legendas
+    # viraria loteria e a comparação entre rodadas perderia sentido.
+    return sorted(crops, key=lambda c: not _e_desenho(c))
+
 
 def encode_image(image_path: str) -> str:
     with open(image_path, "rb") as f:
@@ -1110,7 +1164,14 @@ def analyze_sheet(client: anthropic.Anthropic, sheet: SheetInfo,
             "text": f"Texto extraído do PDF:\n{_corpo[:3000]}{_medicao}"
         })
 
-    for crop_path in sheet.crops[:4]:  # Max 4 imagens por prancha (economia de memória)
+    # 🪤 02/09/2026 — ESTE NÚMERO DECIDE O QUE A IA VÊ, E ERA UM LITERAL SOLTO.
+    # Em ARQUITETURA os CROP_REGIONS têm 6 recortes e os 4 PRIMEIROS são as
+    # quatro legendas: `planta_esquerda` e `planta_centro` ficavam de fora. Não
+    # foi escolha — é a ordem em que alguém escreveu o dicionário. Medido: 57 de
+    # 98 nomes reais do acervo (58%) caem em arquitetura, incluindo TODO PDF de
+    # nome não reconhecido (o fallback de tipo desconhecido é arquitetura).
+    # Virou constante com nome pra dar pra MEDIR o efeito antes de mexer.
+    for crop_path in _crops_por_importancia(sheet.crops)[:MAX_IMGS_POR_PRANCHA]:
         if os.path.exists(crop_path):
             # Pular imagens maiores que 500KB pra não estourar memória
             file_size = os.path.getsize(crop_path)
