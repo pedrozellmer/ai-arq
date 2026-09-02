@@ -277,11 +277,32 @@ def main() -> int:
             href = f"{SITE}{href}"
         job_id = href.split("job_id=")[-1].split("&")[0]
         print(f"[e2e] abrindo projeto {job_id}", flush=True)
+        # 🩸 02/09/2026 — ESTE PASSO PINTOU O CI DE VERMELHO SEM DEFEITO NENHUM.
+        # Ele esperava `networkidle` e falhava DURO no timeout. Só que um push que
+        # toca `backend/main.py` reinicia o Render, e o smoke roda logo em
+        # seguida: os fetches da página ficam pendurados, a rede nunca fica
+        # quieta, e 30 s depois o build ficava vermelho com a mensagem
+        # "projeto.html não carregou em 30s" — enquanto a página, medida na mão
+        # no mesmo minuto, respondia em 0,45 s.
+        # 📏 Medido: 1 falha em 40 runs do smoke, e foi exatamente essa.
+        # 🪤 A incoerência estava escrita duas telas acima: o passo do dashboard
+        # JÁ tolera o mesmo atraso ("fetch ao backend pode demorar se o Render
+        # estava dormindo") e segue em frente. Aqui a mesma causa era fatal.
+        # 🔑 `networkidle` é contrato errado pra uma página que consulta o
+        # backend: a prova de que ela carregou não é a rede calar, é o botão
+        # "Baixar XLSX" ficar clicável — e o passo 3 já cobra exatamente isso,
+        # com mensagem própria. Aqui basta abrir a página.
         try:
-            page.goto(href, wait_until="networkidle", timeout=30_000)
+            page.goto(href, wait_until="domcontentloaded", timeout=30_000)
         except PlaywrightTimeoutError:
-            failures.append(f"projeto.html?job_id={job_id} não carregou em 30s")
+            failures.append(f"projeto.html?job_id={job_id} não abriu em 30s")
             return _close_and_report(browser, failures)
+        # Folga pra a página se acalmar, sem transformar backend frio em falha.
+        try:
+            page.wait_for_load_state("networkidle", timeout=20_000)
+        except PlaywrightTimeoutError:
+            print("[e2e] projeto.html ainda com rede ativa; sigo pro botão",
+                  flush=True)
 
         # ── 2b. ABRIR A VISTA DO QUANTITATIVO ────────────────────
         # 🚨 Em 04/08/2026 a página do projeto foi dividida em 4 VISTAS e o

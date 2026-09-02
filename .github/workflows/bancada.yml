@@ -61,7 +61,11 @@ jobs:
           # Guarda com folga de 137 protege cada vez menos.
           # 📌 Ao acrescentar teste, subir isto junto — a margem é de ~30, o
           # bastante pra não quebrar num commit que remove um caso obsoleto.
-          PISO: 1044
+          # 02/09/2026: 1044 -> 1367. A bancada foi a 1397 num dia (motor,
+          # painel admin e smoke), e o piso velho já deixava passar a perda de
+          # 25% dela. O guarda `test_o_piso_do_CI_faz_sentido_contra_a_realidade`
+          # foi quem cobrou — piso que envelhece é piso que não guarda nada.
+          PISO: 1367
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
