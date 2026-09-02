@@ -3822,7 +3822,20 @@
 
       // Set step text without time (time is separate now)
       const cleanStep = step.split(' \u2014')[0].split(' —')[0];
-      processingStep.textContent = cleanStep;
+      // 🩸 02/09/2026 — QUEM ESPERAVA NA FILA NÃO SABIA QUE ESTAVA NA FILA.
+      // O servidor processa UM projeto por vez (semáforo posto depois do caso
+      // Adriano, 16/06: 2-3 simultâneos somavam picos de RAM e derrubavam a
+      // instância). Quem chega no meio fica com status 'queued' — e esta tela
+      // só sabia desenhar `current_step`, que num job em fila ainda não existe.
+      // O Alan Vitor ficou 12 minutos hoje olhando uma barra parada perto de
+      // zero, sem uma palavra. O admin já mostrava "Na fila"; o cliente não.
+      // 🪤 SEM CONTAGEM e SEM ESTIMATIVA, de propósito. "3 na frente" vira
+      // ansiedade e muda enquanto ele olha; e tempo seria número inventado — a
+      // mediana é 8 min, mas os dois jobs de hoje levaram 23 e 14. O que ele
+      // precisa saber é uma coisa só: não quebrou, está esperando a vez.
+      processingStep.textContent = (status === 'queued')
+        ? 'Na fila — a gente processa um projeto por vez pra cada leitura sair inteira. O seu começa assim que o da frente terminar.'
+        : cleanStep;
 
       // Update per-file progress
       renderFileProgress(step, realProgress);

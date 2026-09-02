@@ -9842,9 +9842,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
         if _uta > 0 and not (project_data.total_area or 0):
             project_data.total_area = round(_uta, 2)
             project_data.total_area_source = "informado"
+            # 🩸 02/09/2026 — ESTE AVISO PROMETIA O QUE NÃO TINHA ACONTECIDO.
+            # Ele dizia "Ela entra como BASE pros itens de área", e é escrito
+            # AQUI, antes de `_apply_area_honesty` decidir. Só que aquele ramo
+            # exige `pdfvec_m2 <= 0`: se a geometria mediu, a área informada NÃO
+            # é usada. Caso Luana Oliveira (job bf72d192, hoje): informou 150 m²,
+            # as 10 pranchas mediram, `preenchidos=0` — e ela recebeu o aviso
+            # dizendo que os 150 viraram base. Zero itens com 150, zero itens
+            # dizendo "informado por você". Ela ia procurar e não ia achar.
+            # 🔑 Aqui o aviso só CONSTATA o que já é fato. O resultado (usou ou
+            # não usou) vira aviso depois, quando existir — ver o bloco que lê
+            # `_n_fill` no fim do `_apply_area_honesty`.
             project_data.warnings = (project_data.warnings or []) + [
-                f"Área total de {_uta:.0f} m² foi INFORMADA POR VOCÊ no upload (a planta não trazia "
-                f"cota/quadro pra medir). Ela entra como BASE pros itens de área — confira antes de orçar."
+                f"Área total de {_uta:.0f} m² informada por você no upload — a planta não trazia "
+                f"cota nem quadro de áreas pra medir."
             ]
             print(f"[area-informada] job={job_id}: usando área do cliente {_uta} m² (planta sem medição)")
         elif _uta > 0 and (project_data.total_area or 0) > 0:
@@ -10287,6 +10298,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # o mezanino de 255,66 m² da karina — número escrito na prancha —
             # virou linha vazia. Ver o comentário em `_apply_area_honesty`.
             medicao_incompleta=bool(_pdfvec_falhas_flag))
+        # 🩸 02/09 — O DESTINO DA ÁREA INFORMADA VIRA AVISO **DEPOIS DE ACONTECER**.
+        # O aviso antigo, escrito lá atrás, prometia "ela entra como BASE pros
+        # itens de área" antes de esta função decidir — e no job da Luana ela
+        # não entrou em nada (`preenchidos=0`), porque a geometria mediu e o
+        # ramo da área informada exige justamente que ela NÃO tenha medido.
+        # 🔑 Agora o cliente lê o que aconteceu de verdade, nos dois casos:
+        # usou (e em quantos itens) ou não usou (e por quê).
+        if str(getattr(project_data, "total_area_source", "")) == "informado":
+            try:
+                if _n_fill:
+                    project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                        "A área que você informou preencheu %d item(ns) de piso, forro ou laje, "
+                        "como ESTIMATIVA a conferir — não é medição nossa." % _n_fill]
+                else:
+                    project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                        "A área que você informou NÃO foi usada nos itens: a gente conseguiu medir "
+                        "a geometria das pranchas, e medição sempre vence declaração. Ela fica só "
+                        "como referência pra você conferir o total."]
+            except Exception:
+                pass
         if _n_fill:
             print(f"[honestidade-m2] job={job_id}: preenchi {_n_fill} itens de piso/forro/laje "
                   f"com a área INFORMADA {project_data.total_area} m² (estimado, a conferir)")
