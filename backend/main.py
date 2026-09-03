@@ -18133,6 +18133,59 @@ def _assinatura_atual(job_id: str) -> str:
         return ""
 
 
+def _project_data_do_banco(proj: dict, total_area=None, total_area_source=None):
+    """Reconstrói o ProjectData a partir da LINHA do projeto, pra regerar a
+    planilha sem perder o que já se sabia dele.
+
+    🩸 03/09/2026 — A PLANILHA REVISADA NASCIA MAIS LIMPA E MENOS HONESTA.
+    Os DOIS caminhos que refazem o .xlsx (finalizar revisão e informar área)
+    montavam o ProjectData com três campos: nome, área e layout. Sumiam
+    `warnings`, `address` e `phase` — e o arquivo refeito SOBRESCREVE o
+    original no Storage, então a versão honesta se perdia.
+    📏 Medido: 9 projetos de cliente, 24 avisos apagados do arquivo entregue.
+
+    🚨 E o pior: dois clientes (jobs 29e2cfc4 e f271473f) receberam a capa
+    dizendo "Área construída — perímetro externo da laje" em cima de um número
+    que ELES digitaram. Sem `total_area_source`, `spreadsheet.py:419` assume
+    que a área é medida por nós — regra dura nº1 violada no arquivo que já
+    está na mão do cliente.
+
+    🪤 Isto existia em DOIS lugares fazendo a mesma coisa pela metade. Cópia
+    velha ao lado da nova é a próxima pessoa consertando a errada.
+    """
+    from models import ProjectData
+    _area = (proj.get("total_area") or 0) if total_area is None else total_area
+    pd = ProjectData(
+        name=proj.get("project_name", "") or "Projeto",
+        total_area=_area,
+        layout_area=proj.get("layout_area") or 0,
+    )
+    # best-effort: campo que o banco não trouxer fica no default do modelo —
+    # regerar planilha nunca pode falhar por causa de metadado.
+    try:
+        pd.warnings = list(proj.get("warnings") or [])
+    except Exception:
+        pass
+    try:
+        pd.address = proj.get("address") or ""
+        if proj.get("phase"):
+            pd.phase = proj.get("phase")
+        pd.user_pe_direito = float(proj.get("user_pe_direito") or 0)
+    except Exception:
+        pass
+    try:
+        if total_area_source is not None:
+            pd.total_area_source = total_area_source
+        else:
+            _inf = float(proj.get("user_total_area") or 0)
+            if _inf > 0 and abs(float(_area or 0) - _inf) <= 0.01 * _inf:
+                # a área da capa é a que o CLIENTE informou: não é medição nossa
+                pd.total_area_source = "informado"
+    except (TypeError, ValueError):
+        pass
+    return pd
+
+
 def _projeto_patch(job_id: str, campos: dict) -> bool:
     """Grava campos em `projects` que a RPC de status NÃO conhece.
 
@@ -19646,7 +19699,7 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
     Busca items atuais do Supabase (já com edits/rejects aplicados) e
     passa pro generate_spreadsheet. Retorna URL de download."""
     import urllib.request, urllib.error, json
-    from models import BudgetItem, Confidence, ProjectData
+    from models import BudgetItem, Confidence
     from spreadsheet import generate_spreadsheet
 
     # 🧊 29/08/2026 — a ÚLTIMA rota da catraca do relógio: corpo bloqueante
@@ -19686,11 +19739,7 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
             raise HTTPException(500, f"Erro ao buscar itens: {e}")
 
         # 3) Reconstituir ProjectData + BudgetItems
-        pd = ProjectData(
-            name=proj.get("project_name", "") or "Projeto",
-            total_area=proj.get("total_area") or 0,
-            layout_area=proj.get("layout_area") or 0,
-        )
+        pd = _project_data_do_banco(proj)
         items = []
         for r in rows:
             try:
@@ -19858,7 +19907,7 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         pass        # log nunca derruba o clique do cliente
     _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
-    from models import BudgetItem, Confidence, ProjectData
+    from models import BudgetItem, Confidence
     from spreadsheet import generate_spreadsheet
 
     # 1) Validar o que veio — área, pé-direito, ou os dois
@@ -19925,11 +19974,7 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         _area_ja_tinha = float(proj.get("total_area") or 0)
     except (TypeError, ValueError):
         _area_ja_tinha = 0.0
-    pd = ProjectData(
-        name=proj.get("project_name", "") or "Projeto",
-        total_area=(area or _area_ja_tinha),
-        layout_area=proj.get("layout_area") or 0,
-    )
+    pd = _project_data_do_banco(proj, total_area=(area or _area_ja_tinha))
     # 🪤 02/09/2026 — CONFIRMAR NÃO É INFORMAR. Com a porta 1 aberta, o convite
     # passa a aparecer também para projeto que JÁ tem área na capa, e o campo
     # chega pré-preenchido com ela: o gesto mais provável do cliente é
