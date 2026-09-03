@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+<title>A IA conta melhor do que mede: o que descobrimos em 5.121 linhas de quantitativo</title>
+<meta name="description" content="Levantamos 5.121 linhas geradas por IA a partir de plantas reais e separamos por unidade. Contagem sai certificada em 32,4% dos casos; área, em 2%. Por que essa diferença existe e o que o seu desenho precisa ter.">
+<meta name="keywords" content="ia le planta, ia mede planta, quantitativo por ia confiavel, ia quantitativo obra, extrair quantitativo do cad, ia arquitetura limites, quantitativo automatico precisao">
+<meta name="author" content="AI.arq">
+
+<link rel="canonical" href="https://ai.arq.br/blog/posts/ia-conta-melhor-do-que-mede-planta.html">
+<meta name="robots" content="noindex, follow">
+<link rel="icon" type="image/x-icon" href="/favicon-v2.ico">
+
+<!-- Open Graph -->
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://ai.arq.br/blog/posts/ia-conta-melhor-do-que-mede-planta.html">
+<meta property="og:title" content="A IA conta melhor do que mede: o que descobrimos em 5.121 linhas de quantitativo">
+<meta property="og:description" content="Levantamos 5.121 linhas geradas por IA a partir de plantas reais e separamos por unidade. Contagem sai certificada em 32,4% dos casos; área, em 2%. Por que essa diferença existe e o que o seu desenho precisa ter.">
+<meta property="og:image" content="https://ai.arq.br/blog/og/ia-conta-melhor-do-que-mede-planta.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:locale" content="pt_BR">
+<meta property="og:site_name" content="AI.arq">
+<meta property="article:published_time" content="2026-10-18T10:00:00-03:00">
+<meta property="article:author" content="AI.arq">
+<meta property="article:section" content="Quantitativos">
+
+<!-- Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="A IA conta melhor do que mede: o que descobrimos em 5.121 linhas de quantitativo">
+<meta name="twitter:description" content="Levantamos 5.121 linhas geradas por IA a partir de plantas reais e separamos por unidade. Contagem sai certificada em 32,4% dos casos; área, em 2%. Por que essa diferença existe e o que o seu desenho precisa ter.">
+<meta name="twitter:image" content="https://ai.arq.br/blog/og/ia-conta-melhor-do-que-mede-planta.png">
+
+<!-- Data agendada (lida por JS pra esconder antes da hora) -->
+<meta name="publish-date" content="2026-10-18">
+
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  body { font-family: 'Inter', sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .gradient-text { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .prose-aiarq h2 { font-size: 1.75rem; font-weight: 700; color: #0f172a; margin-top: 2.5rem; margin-bottom: 1rem; line-height: 1.3; }
+  .prose-aiarq h3 { font-size: 1.25rem; font-weight: 600; color: #1e293b; margin-top: 2rem; margin-bottom: .75rem; }
+  .prose-aiarq p { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: 1.25rem; }
+  .prose-aiarq ul, .prose-aiarq ol { margin-bottom: 1.5rem; padding-left: 1.75rem; }
+  .prose-aiarq ul li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: disc; }
+  .prose-aiarq ol li { font-size: 1.0625rem; line-height: 1.75; color: #334155; margin-bottom: .5rem; list-style: decimal; }
+  .prose-aiarq strong { color: #0f172a; font-weight: 600; }
+  .prose-aiarq a { color: #4f46e5; text-decoration: underline; }
+  .prose-aiarq a:hover { color: #4338ca; }
+  /* Cards de download: tira sublinhado e força cor do gray-900 */
+  .prose-aiarq .aiarq-dl-btn { text-decoration: none !important; color: #111827 !important; }
+  .prose-aiarq .aiarq-dl-btn:hover { text-decoration: none !important; }
+  /* Bloco de fontes: lista mais densa, sem disc */
+  .aiarq-sources ul li { list-style: none; line-height: 1.5; padding: 0; margin: 0; }
+  .aiarq-sources ul { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+</style>
+
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "A IA conta melhor do que mede: o que descobrimos em 5.121 linhas de quantitativo",
+  "description": "Levantamos 5.121 linhas geradas por IA a partir de plantas reais e separamos por unidade. Contagem sai certificada em 32,4% dos casos; área, em 2%. Por que essa diferença existe e o que o seu desenho precisa ter.",
+  "datePublished": "2026-10-18T10:00:00-03:00",
+  "dateModified": "2026-10-18T10:00:00-03:00",
+  "author": {
+    "@type": "Organization",
+    "name": "AI.arq"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": "AI.arq",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://ai.arq.br/favicon.png"
+    }
+  },
+  "image": "https://ai.arq.br/blog/og/ia-conta-melhor-do-que-mede-planta.png",
+  "url": "https://ai.arq.br/blog/posts/ia-conta-melhor-do-que-mede-planta.html",
+  "mainEntityOfPage": {
+    "@type": "WebPage",
+    "@id": "https://ai.arq.br/blog/posts/ia-conta-melhor-do-que-mede-planta.html"
+  },
+  "keywords": "ia le planta, ia mede planta, quantitativo por ia confiavel, ia quantitativo obra, extrair quantitativo do cad, ia arquitetura limites, quantitativo automatico precisao",
+  "articleSection": "Quantitativos"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "AI.arq",
+      "item": "https://ai.arq.br/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Blog",
+      "item": "https://ai.arq.br/blog/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 3,
+      "name": "A IA conta melhor do que mede: o que descobrimos em 5.121 linhas de quantitativo",
+      "item": "https://ai.arq.br/blog/posts/ia-conta-melhor-do-que-mede-planta.html"
+    }
+  ]
+}
+</script>
+</head>
+<body class="bg-white text-gray-900 antialiased">
+
+
+<nav class="sticky top-0 z-50 border-b bg-white/90 backdrop-blur-md">
+  <div class="mx-auto flex h-16 max-w-6xl items-center justify-between px-4">
+    <a href="/" class="flex items-center gap-2 no-underline">
+      <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
+      <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+    </a>
+    <div class="hidden md:flex items-center gap-8 text-sm text-gray-600">
+      <a href="/#como-funciona" class="hover:text-indigo-600 transition">Como Funciona</a>
+      <a href="/precos.html" class="hover:text-indigo-600 transition">Planos</a>
+      <a href="/blog/" class="text-indigo-600 font-medium transition">Blog</a>
+      <a href="/faq.html" class="hover:text-indigo-600 transition">FAQ</a>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="/login.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Entrar</a>
+      <a href="/login.html?novo=1" class="text-sm gradient-main text-white px-4 py-2 rounded-lg font-medium transition shadow-sm">Comece Grátis</a>
+    </div>
+  </div>
+</nav>
+
+
+<!-- Guard JS: se publish_date > hoje, redireciona pra /blog -->
+<script>
+(function () {
+  const meta = document.querySelector('meta[name="publish-date"]');
+  if (!meta) return;
+  const pubDate = new Date(meta.content + 'T10:00:00-03:00');
+  if (pubDate > new Date()) {
+    document.documentElement.style.display = 'none';
+    window.location.replace('/blog/');
+  }
+})();
+</script>
+
+<article class="mx-auto max-w-3xl px-4 py-12">
+  <!-- Breadcrumb -->
+  <nav class="text-sm text-gray-500 mb-6">
+    <a href="/" class="hover:text-indigo-600">Início</a>
+    <span class="mx-2">›</span>
+    <a href="/blog/" class="hover:text-indigo-600">Blog</a>
+    <span class="mx-2">›</span>
+    <span class="text-gray-700">Quantitativos</span>
+  </nav>
+
+  <!-- Categoria -->
+  <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-3 py-1 rounded-full mb-4">Quantitativos</span>
+
+  <!-- Título -->
+  <h1 class="text-3xl md:text-4xl font-bold text-gray-900 leading-tight mb-4">A IA conta melhor do que mede: o que descobrimos em 5.121 linhas de quantitativo</h1>
+
+  <!-- Meta -->
+  <div class="flex items-center gap-4 text-sm text-gray-500 mb-10 pb-6 border-b">
+    <span>📅 18/10/2026</span>
+    <span>·</span>
+    <span>⏱️ 3 min de leitura</span>
+  </div>
+
+  
+  <!-- Intro destacada -->
+  <p class="text-xl text-gray-700 leading-relaxed mb-8 italic">A pergunta que mais chega aqui é alguma versão de “dá pra confiar?”. Resposta honesta: depende do que você está pedindo pra IA fazer. Contar e medir são tarefas diferentes, e a distância entre as duas é maior do que a gente imaginava antes de olhar os próprios dados. Levantamos 5.121 linhas de quantitativo geradas a partir de plantas reais de clientes e separamos por unidade. O resultado está abaixo, incluindo a parte que não nos favorece.</p>
+
+  <!-- Corpo -->
+  <div class="prose-aiarq">
+    <h2>O número: 32,4% contra 2,0%</h2><p>Separando as linhas por família de unidade e olhando quantas saem seladas como MEDIDO do CAD (a nossa marca de que o número veio da geometria do desenho, não de estimativa):</p><ul><li>Contagem (un, peça) — 32,4% seladas como medidas: 901 de 2.779 linhas</li><li>Comprimento (m, ml) — 16,8%: 139 de 828 linhas</li><li>Área (m², m³) — 2,0%: 31 de 1.514 linhas</li></ul><p>A IA sela dezesseis vezes mais contagem do que área. Não é uma diferença de ajuste fino: é uma diferença de natureza da tarefa.</p><p>Um aviso de leitura, porque a confusão é fácil e vale 20 pontos percentuais: “linha com número” e “linha certificada como medida” são coisas diferentes. Área tem número em 47,9% das linhas, mas selo de medida em 2,0%. O resto vem como estimativa marcada pra revisar.</p><h2>Por que contar é mais fácil do que medir</h2><p>Contar é reconhecer um objeto repetido. Uma luminária, uma porta, um vaso sanitário são blocos inseridos no CAD: existem como entidade, têm nome, e contá-los é somar ocorrências. O desenho já traz a resposta.</p><p>Medir área é outra coisa. Uma sala não é um objeto no arquivo — é o vazio cercado por linhas que representam paredes. Pra virar metro quadrado, alguém precisa fechar aquele contorno, saber a escala e confirmar a unidade do desenho. Quando o projeto traz quadro de áreas, cota ou hachura identificada, o número aparece. Quando não traz, ele não existe em lugar nenhum do arquivo — e nenhuma IA tira do nada o que o desenho não tem.</p><p>Comprimento fica no meio: a linha existe, mas frequentemente representa as duas faces de uma parede, ou repete o mesmo trecho em pranchas diferentes. Por isso 16,8%, e não 80%.</p><h2>A linha em branco não é um erro — é a pergunta honesta</h2><p>Nas nossas planilhas, 54,8% das linhas de medida saem em branco: 1.283 de 2.342. É bastante, e a gente publica esse número de propósito.</p><p>Uma linha em branco quer dizer “o desenho não me deu isso”. A alternativa seria preencher com uma estimativa plausível — e é aí que quantitativo automático vira armadilha, porque um número inventado com cara de medido não é conferido por ninguém. Prefere-se o branco, que é uma pergunta, ao número bonito, que é uma afirmação falsa.</p><p>O custo disso é real: você preenche na mão o que ficou em branco. O ganho é que o que está preenchido e selado, você pode usar sem reconferir.</p><h2>O que o seu desenho precisa ter pra a IA medir</h2><p>Pela nossa medição, quatro coisas mudam o resultado mais do que qualquer ajuste de IA:</p><ol><li>Formato vetorial. DXF e DWG carregam geometria; PDF carrega imagem de geometria. Em PDF, quase tudo vira estimativa.</li><li>Unidade declarada no arquivo. Desenho sem unidade definida gera erro de escala — e erro de escala em área é erro ao quadrado.</li><li>Quadro de áreas ou cota. É a fonte que a IA lê pra confirmar o que mediu. Sem ele, sobra o contorno, que nem sempre fecha.</li><li>Pé-direito. Sem a altura, nada que dependa dela fecha: pintura de parede, volume, revestimento vertical. Ele quase nunca está no arquivo, e é informado em um campo.</li></ol><p>Nenhum desses itens é sobre a IA. Todos são sobre o desenho.</p><h2>O que fazer com a planilha que volta com branco</h2><p>Três movimentos, do mais barato pro mais caro:</p><ul><li>Informar a área total ou o pé-direito. Um número seu completa as linhas que dependem dele, e elas saem marcadas como informadas por você — não como medidas.</li><li>Reenviar em DXF, se você mandou PDF. É o que mais muda o resultado.</li><li>Preencher na mão o que sobrou. É trabalho, mas sobre uma base que já contou o que dava pra contar.</li></ul><p>O que a IA resolve bem hoje é o levantamento repetitivo: contar peça, listar esquadria, organizar por disciplina, cruzar com referência SINAPI. O julgamento técnico — o que entra, o que vira composição, o que o desenho não diz — continua sendo do profissional. Não por modéstia: porque é o que os dados mostram.</p>
+  </div>
+
+  <!-- Compartilhar (28/08/2026) -->
+  <!-- Por que WhatsApp e copiar link, e NAO comentario nem curtida: o Pedro
+       perguntou os tres. Comentario num blog com poucos leitores por dia deixa
+       secao vazia, que grita "site morto" - mesma razao pela qual a comunidade
+       ficou pra depois. Curtida com contador em 0 ou 1 e pior que contador
+       nenhum. Ja compartilhar nao tem estado: nao precisa de backend, nao tem
+       o que moderar, nao guarda dado de ninguem - e no Brasil e por WhatsApp
+       que conteudo profissional circula.
+       Os dois botoes tem data-track, entao o clique vira evento sozinho pelo
+       ouvinte delegado do aiarq-utils.js (que passou a carregar no blog hoje).
+       Sem isso a gente poria o botao no escuro, como quase aconteceu. -->
+  <div class="mt-12 flex flex-wrap items-center gap-3 border-t border-gray-200 pt-6">
+    <span class="text-sm text-gray-500 font-medium">Achou útil? Compartilhe:</span>
+    <a id="btn-zap" data-track="compartilhar-whatsapp" target="_blank" rel="noopener"
+       href="#"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 no-underline hover:bg-gray-50 transition">
+      <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M17.5 14.4c-.3-.2-1.7-.9-2-1-.3-.1-.5-.1-.7.1-.2.3-.7 1-.9 1.2-.2.2-.3.2-.6.1-.3-.2-1.2-.5-2.3-1.4-.9-.8-1.4-1.7-1.6-2-.2-.3 0-.5.1-.6l.5-.5c.1-.2.2-.3.3-.5 0-.2 0-.4-.1-.5l-.9-2.2c-.2-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1.1 2.8 1.2 3c.2.2 2.1 3.2 5.1 4.4.7.3 1.3.5 1.7.6.7.2 1.4.2 1.9.1.6-.1 1.7-.7 2-1.4.2-.7.2-1.2.2-1.4-.1-.1-.3-.2-.5-.3z"/><path d="M12 2a10 10 0 00-8.6 15.1L2 22l5-1.3A10 10 0 1012 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1112 20.2z"/></svg>
+      WhatsApp
+    </a>
+    <button type="button" id="btn-copiar" data-track="copiar-link-do-post"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition cursor-pointer">
+      <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <span id="txt-copiar">Copiar link</span>
+    </button>
+  </div>
+
+  <!-- CTA -->
+  <div class="mt-12 p-8 rounded-2xl bg-gradient-to-br from-indigo-50 to-cyan-50 border-2 border-indigo-100">
+    <h3 class="text-xl font-bold text-gray-900 mb-3">⚡ Pronto pra acelerar seu trabalho?</h3>
+    <p class="text-gray-700 mb-5">Tem um projeto em DXF ou DWG parado? Sobe no AI.arq e veja o que já sai medido do próprio desenho — e o que vem em branco, com o motivo. Grátis durante o beta, quantos projetos quiser.</p>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="/login.html?novo=1" class="inline-flex items-center gap-2 gradient-main text-white font-semibold px-6 py-3 rounded-xl no-underline shadow-btn">
+        Começar grátis
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+      </a>
+      <!-- Caminho de baixo atrito: leitor orgânico que não quer se cadastrar
+           ainda vê a prova (25 itens reais, sem login) em vez de bater no muro -->
+      <a href="/exemplo.html" class="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-indigo-200 text-indigo-700 font-semibold no-underline hover:bg-indigo-50">
+        Ver um quantitativo real →
+      </a>
+    </div>
+    <p class="mt-3 text-xs text-gray-500">Grátis no beta, quantos projetos quiser. Sem cartão. O exemplo abre sem cadastro.</p>
+  </div>
+
+  
+    <aside class="aiarq-sources mt-12 p-6 rounded-2xl bg-gray-50 border border-gray-200">
+      <h3 class="flex items-center gap-2 text-sm font-bold text-gray-900 uppercase tracking-wide mb-5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+        Fontes &amp; Referências
+      </h3>
+      <div class="mb-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Normas ABNT</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>ABNT NBR 12721:2006 — Avaliação de custos de construção para incorporação imobiliária</strong> &mdash; <span class="text-gray-600">Define como as áreas de um projeto são apuradas e apresentadas em quadro — a fonte que um leitor automático usa pra confirmar área.</span></li></ul></div><div><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Web</div><ul class="space-y-1.5 text-sm text-gray-700"><li><a href="https://www.caixa.gov.br/poder-publico/modernizacao-gestao/sinapi/Paginas/default.aspx" target="_blank" rel="noopener nofollow" class="text-indigo-600 hover:text-indigo-800">SINAPI — Sistema Nacional de Pesquisa de Custos e Índices (Caixa Econômica Federal)</a> &mdash; <span class="text-gray-600">Referência das unidades de medida por serviço, usada pra checar se a unidade do item bate com a composição correspondente.</span></li></ul></div><div class="mt-4"><div class="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">Dados do AI.arq</div><ul class="space-y-1.5 text-sm text-gray-700"><li><strong>Medição própria — AI.arq, base de produção (03/09/2026)</strong> &mdash; <span class="text-gray-600">5.121 linhas de quantitativo geradas a partir de plantas de clientes em projetos concluídos, agrupadas por família de unidade. Contagem (un/pç): 901 de 2.779 seladas como medidas (32,4%). Comprimento (m/ml): 139 de 828 (16,8%). Área (m²/m³): 31 de 1.514 (2,0%). Linhas de medida em branco: 1.283 de 2.342 (54,8%). Projetos de avaliação e contas internas ficam fora da contagem.</span></li></ul></div>
+      <p class="mt-4 text-xs text-gray-400 italic">
+        Última atualização: 18/10/2026. Normas e documentos citados podem ter sido revisados após esta data — sempre consulte a versão vigente.
+      </p>
+    </aside>
+    
+
+  <!-- Leia também (posts relacionados) -->
+  
+    <section class="aiarq-related mt-16 pt-8 border-t border-gray-200">
+      <h2 class="flex items-center gap-2 text-lg font-bold text-gray-900 mb-5">
+        <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+        Leia também
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-3">
+        
+        <a href="/blog/posts/extrair-quantitativo-do-dwg-automatico-sem-bim.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">Como extrair o quantitativo de um DWG/DXF automaticamente, sem BIM</div>
+        </a>
+        <a href="/blog/posts/sinapi-vs-tcpo-qual-usar.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Referências Técnicas</span>
+          <div class="font-semibold text-gray-900 leading-snug">SINAPI vs TCPO vs SICRO: Qual Usar no Seu Projeto (Guia 2026)</div>
+        </a>
+        <a href="/blog/posts/5-erros-quantitativo-atraso-de-obra.html" class="aiarq-related-card block p-5 rounded-xl bg-white border border-gray-200 hover:border-indigo-400 hover:shadow-md transition no-underline">
+          <span class="inline-block bg-indigo-100 text-indigo-700 text-xs font-semibold uppercase tracking-wide px-2.5 py-1 rounded-full mb-3">Quantitativos</span>
+          <div class="font-semibold text-gray-900 leading-snug">5 erros de quantitativo que viram atraso de obra (e como evitar)</div>
+        </a>
+      </div>
+    </section>
+    
+
+  <!-- Voltar ao blog -->
+  <div class="mt-12 text-center">
+    <a href="/blog/" class="text-indigo-600 hover:text-indigo-800 font-medium no-underline">← Ver mais artigos</a>
+  </div>
+</article>
+
+
+<footer class="border-t bg-gray-50 mt-20">
+  <div class="mx-auto max-w-6xl px-4 py-12 grid gap-8 md:grid-cols-4">
+    <div>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg gradient-main text-white font-bold text-xs">AI</div>
+        <span class="text-lg font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
+      </div>
+      <p class="text-sm text-gray-500">Quantitativo de obra com IA, em 5 minutos.</p>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900 mb-3">Produto</h2>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/" class="hover:text-indigo-600">Início</a></li>
+        <li><a href="/#como-funciona" class="hover:text-indigo-600">Como funciona</a></li>
+        <li><a href="/precos.html" class="hover:text-indigo-600">Preços</a></li>
+        <li><a href="/login.html" class="hover:text-indigo-600">Entrar</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900 mb-3">Conteúdo</h2>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/blog/" class="hover:text-indigo-600">Blog</a></li>
+        <li><a href="/faq.html" class="hover:text-indigo-600">FAQ</a></li>
+        <li><a href="javascript:void(0)" onclick="aiArqContactOpen()" class="hover:text-indigo-600">Contato</a></li>
+      </ul>
+    </div>
+    <div>
+      <h2 class="text-sm font-semibold text-gray-900 mb-3">Legal</h2>
+      <ul class="space-y-2 text-sm text-gray-600">
+        <li><a href="/termos.html" class="hover:text-indigo-600">Termos</a></li>
+        <li><a href="/privacidade.html" class="hover:text-indigo-600">Privacidade</a></li>
+        <li><a href="/licencas.html" class="hover:text-indigo-600">Licenças</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="border-t bg-gray-100">
+    <div class="mx-auto max-w-6xl px-4 py-4 text-center text-xs text-gray-500">
+      &copy; 2026 ai.arq.br · Todos os direitos reservados
+    </div>
+  </div>
+</footer>
+
+
+<!-- Chat widget + Modal de contato (compartilhados com o resto do site) -->
+<script src="/chat-widget.js"></script>
+<script src="/contact-modal.js"></script>
+<script src="/cookie-consent.js" defer></script>
+<!-- 28/08/2026 - TELEMETRIA NO BLOG. O blog e a MAIOR porta de entrada do
+     produto: no dia 28/08, TODAS as paginas que gente de verdade abriu eram
+     post de blog (zero na home, zero no cadastro). E os 26 posts nao mediam
+     nada - todo numero de funil ignorava a principal fonte de visita.
+     Nao bastou incluir o arquivo: o guarda do supabase-js dentro dele fazia
+     `return` em pagina estatica, antes de definir o `trackEvent`. A telemetria
+     foi movida pra ANTES desse guarda no mesmo commit.
+     O `cookie-consent.js` acima ja roda aqui; o `trackEvent` so grava com o
+     "sim" do visitante. -->
+<script src="/aiarq-utils.js"></script>
+<script>
+  (function () {
+    try {
+      var p = location.pathname;
+      var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
+      if (window.trackEvent) window.trackEvent('view_blog_post', { campo: slug });
+    } catch (e) { }
+  })();
+
+  // Compartilhar (28/08/2026). Sem backend, sem estado, sem dado guardado.
+  (function () {
+    try {
+      // 'url' e montada AQUI e nao no HTML: o link precisa ser o CANONICO, sem
+      // o ?semcache=... ou ?utm=... que a pessoa tenha na barra - senao o
+      // compartilhamento propaga parametro de teste.
+      var url = (document.querySelector('link[rel=canonical]') || {}).href
+                || (location.origin + location.pathname);
+      var titulo = (document.title || '').split('|')[0].trim();
+      var zap = document.getElementById('btn-zap');
+      if (zap) zap.href = 'https://wa.me/?text=' + encodeURIComponent(titulo + ' ' + url);
+
+      var btn = document.getElementById('btn-copiar');
+      var txt = document.getElementById('txt-copiar');
+      if (btn && txt) {
+        btn.addEventListener('click', function () {
+          function ok() {
+            var antes = txt.textContent;
+            txt.textContent = 'Link copiado!';
+            setTimeout(function () { txt.textContent = antes; }, 2000);
+          }
+          // navigator.clipboard so existe em HTTPS e pode ser negado; o
+          // fallback cobre navegador velho e permissao recusada.
+          if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(url).then(ok).catch(function () { copiaAntiga(); });
+          } else { copiaAntiga(); }
+          function copiaAntiga() {
+            try {
+              var c = document.createElement('textarea');
+              c.value = url; c.setAttribute('readonly', '');
+              c.style.position = 'fixed'; c.style.opacity = '0';
+              document.body.appendChild(c); c.select();
+              document.execCommand('copy'); document.body.removeChild(c); ok();
+            } catch (e) { txt.textContent = 'Copie da barra do navegador'; }
+          }
+        });
+      }
+    } catch (e) { }
+  })();
+</script>
+</body>
+</html>
