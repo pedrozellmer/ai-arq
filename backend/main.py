@@ -166,6 +166,7 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
+    "motor:consolida-tipo",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
     "pdfvec:shadow", "pdfvec:promo", "dxfrooms:shadow",
     "dwg:aec-detectado-no-upload",
@@ -4243,7 +4244,7 @@ def _mover_avisos_para_warnings(items: list, project_data) -> list:
     return ficam
 
 
-def _consolidate_by_type_code(items: list) -> list:
+def _consolidate_by_type_code(items: list, project_data=None) -> list:
     """Funde o MESMO tipo de divisória/parede (DRY 07, DW-12...) que aparece em
     VÁRIAS pranchas: SOMA as qtys (paredes diferentes em ambientes diferentes),
     1 linha por (tipo, unidade, disciplina). Marca estimado (soma cross-prancha =
@@ -4259,6 +4260,7 @@ def _consolidate_by_type_code(items: list) -> list:
             by_key.setdefault((tc, it.unit, it.discipline), []).append(it)
     merged = list(passthrough)
     fundidos = 0
+    _resumo: list = []
     for (tc, _u, _d), group in by_key.items():
         if len(group) == 1:
             merged.append(group[0])
@@ -4277,8 +4279,26 @@ def _consolidate_by_type_code(items: list) -> list:
             f" | Tipo '{tc}' somado de {len(group)} entradas em várias pranchas — confira o total").strip(" |")
         merged.append(best)
         fundidos += len(group) - 1
+        _resumo.append("%s: %d" % (tc, len(group)))
+    # 🚨 03/09/2026 — O DESCARTE ERA INVISÍVEL PRO CLIENTE. Medido no acervo:
+    # 75 itens fundidos em 4 projetos engoliram 274 entradas — ou seja, 199
+    # linhas sumiram da planilha e o único registro era um print() no log do
+    # servidor, que ninguém lê. O cliente abre a planilha, conta menos linhas
+    # do que a planta tem, e não tem como saber por quê.
+    # 🔑 Fundir é a decisão certa (o caso Thamiry tinha 191 itens de drywall
+    # fragmentados); esconder que fundiu é que não é.
+    _consolidate_by_type_code.ultimo_fundidos = fundidos
+    _consolidate_by_type_code.ultimo_grupos = len(_resumo)
     if fundidos:
         print(f"[consolida-tipo] {fundidos} entradas de tipo de divisória fundidas")
+        if project_data is not None:
+            _atuais = list(getattr(project_data, "warnings", None) or [])
+            _lista = ", ".join(_resumo[:4]) + ("…" if len(_resumo) > 4 else "")
+            project_data.warnings = _atuais + [
+                "Itens do MESMO tipo que apareciam em várias pranchas foram somados "
+                "numa linha só: %d linha(s) viraram %d. Os totais somados saem como "
+                "estimado e trazem 'somado de N entradas' na observação — confira "
+                "antes de orçar (%s)." % (fundidos + len(_resumo), len(_resumo), _lista)]
     return merged
 
 
@@ -9577,7 +9597,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
         all_items = _drop_nonsense_items(all_items)       # tira "seção transversal" e afins
         # Aviso da IA não é item de planilha — vai pro bloco de avisos.
         all_items = _mover_avisos_para_warnings(all_items, project_data)
-        all_items = _consolidate_by_type_code(all_items)  # funde mesmo tipo (DRY 07) entre pranchas
+        all_items = _consolidate_by_type_code(all_items, project_data)  # funde mesmo tipo (DRY 07) entre pranchas
+        # 🚨 Registrar SEMPRE, inclusive com 0: "não fundiu nada" e "não medi
+        # se fundiu" são a mesma linha ausente no banco — foi assim que 199
+        # linhas sumiram de 4 planilhas sem ninguém saber.
+        try:
+            _log_error("motor:consolida-tipo",
+                       f"fundidos={getattr(_consolidate_by_type_code, 'ultimo_fundidos', 0)} "
+                       f"grupos={getattr(_consolidate_by_type_code, 'ultimo_grupos', 0)} "
+                       f"itens_depois={len(all_items)}", job_id)
+        except Exception:
+            pass
         # Validar qty/unit após consolidação
         for it in all_items:
             new_qty, adjusted = _validate_quantity_for_unit(it)
