@@ -12026,9 +12026,36 @@ def _nome_parece_estrutural(nome: str) -> bool:
     global _RX_ESTRUT_NOME, _RX_NEGACAO_ANTES
     import re as _re
     if _RX_ESTRUT_NOME is None:
+        # 🩸 03/09/2026 — SEGUNDA VEZ QUE ESTE AVISO DISPARA, E A SEGUNDA
+        # ERRADA. Cliente `v.anjos.ia.81@` mandou
+        # "CIQUANTA-CABEAMENTO ESTRUTURADO.dwg" e foi avisado de que parecia
+        # projeto estrutural. Cabeamento ESTRUTURADO é rede de dados; o pedaço
+        # solto `estrut` casava com "estruturado".
+        # Rodando a versão antiga contra nomes plausíveis, mais dois:
+        #     NAVIGATION-PLAN.dwg  → "viga" dentro de naVIGAtion
+        #     LAJEADO-CENTRO.dwg   → "laje" dentro de Lajeado (cidade)
+        # 🔑 O placar deste aviso na vida inteira: 2 disparos, 2 errados. Aviso
+        # que só erra treina o cliente a ignorar TODOS os nossos avisos — o
+        # custo não fica no aviso falso, fica nos verdadeiros.
+        # 🪤 Fronteira dos DOIS lados. `estrutura|estrutural|estruturas|
+        # estruturais` valem; `estruturado` não. Nas palavras curtas a
+        # fronteira à direita é a que importa (laje/lajeado); em `viga` é a da
+        # esquerda (navigation).
         _RX_ESTRUT_NOME = _re.compile(
-            r"estrut|(?<![a-zà-ü])f[oô]rmas?(?![a-zà-ü])|funda[cç]|arma[cç]"
-            r"|pilar|viga|laje|baldrame|sapata", _re.IGNORECASE)
+            # 🪤 "ESTRUT_TERREO.pdf" é abreviação legítima e comum, e um
+            # guarda que já existia pegou ela caindo quando eu apertei
+            # demais. Então: a palavra inteira OU a abreviação — as duas
+            # com fronteira à direita, que é o que exclui "estruturado".
+            r"(?<![a-zà-ü])estrutur(?:a|al|as|ais)(?![a-zà-ü])"
+            r"|(?<![a-zà-ü])estrut(?![a-zà-ü])"
+            r"|(?<![a-zà-ü])f[oô]rmas?(?![a-zà-ü])"
+            r"|(?<![a-zà-ü])funda[cç]"
+            r"|(?<![a-zà-ü])arma[cç][aã]o"
+            r"|(?<![a-zà-ü])pilares?(?![a-zà-ü])"
+            r"|(?<![a-zà-ü])vigas?(?![a-zà-ü])"
+            r"|(?<![a-zà-ü])lajes?(?![a-zà-ü])"
+            r"|(?<![a-zà-ü])baldrames?(?![a-zà-ü])"
+            r"|(?<![a-zà-ü])sapatas?(?![a-zà-ü])", _re.IGNORECASE)
         _RX_NEGACAO_ANTES = _re.compile(
             r"(?<![a-zà-ü])(?:sem|s/|n[aã]o|exceto|menos)[ _./-]*$", _re.IGNORECASE)
     m = _RX_ESTRUT_NOME.search(nome or "")
