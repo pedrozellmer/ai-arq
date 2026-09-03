@@ -10329,15 +10329,41 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # reenviar 2x e desistir da prancha. Só sugere reprocessar quando a
             # falha for de prancha (pode ter sido soluço da IA); quando for DWG,
             # o caminho é mandar o arquivo em DXF.
-            if _dwg_sem_irmao and not (sheet_errors or dxf_errors):
-                _saida = ("Reprocessar não resolve — o conversor vai falhar igual. "
-                          "Abra no seu CAD e salve como DXF, e suba o DXF aqui.")
-            elif _dwg_sem_irmao:
-                _saida = ("Pras pranchas, reprocessar (grátis) pode completar. "
-                          "Pro DWG que não abriu, reprocessar não resolve: salve como "
-                          "DXF no seu CAD e suba o DXF.")
-            else:
-                _saida = "Reprocessar é grátis e pode completar."
+            # 🩸 03/09/2026 — ESTA ERA A ÚNICA TELA QUE OS 4 CONSERTOS DE COPY
+            # DE HOJE NÃO ALCANÇAVAM. Prancha recusada por TAMANHO entra em
+            # `dxf_errors` (nunca em `dwg_failed` — ver o comentário do ramo de
+            # recusa no laço de conversão), então `_dwg_sem_irmao` fica vazio e
+            # o cliente caía no `else`: "Reprocessar é grátis e pode completar."
+            # Para uma prancha recusada por tamanho isso é FALSO: reprocessar dá
+            # exatamente o mesmo. É o mesmo erro do caso Thalison (29/07), que
+            # reenviou 2× e desistiu — só que pela outra porta.
+            _grandes = [e for e in (dxf_errors or [])
+                        if "grande demais pro nosso limite de memória" in str(e)]
+            _receita_grande = ("Pras que são grandes demais, reprocessar não "
+                               "resolve: um PURGE no desenho, ou mandar só a "
+                               "prancha que você precisa medir.")
+            _receita_dwg = ("Pro DWG que não abriu, reprocessar não resolve: "
+                            "salve como DXF no seu CAD e suba o DXF.")
+            _outras = [e for e in partial_errors
+                       if e not in _grandes and e not in (_dwg_failed_msgs or [])]
+            _partes = []
+            if _outras:
+                _partes.append("Pras demais, reprocessar (grátis) pode completar.")
+            if _grandes:
+                _partes.append(_receita_grande)
+            if _dwg_sem_irmao:
+                _partes.append(_receita_dwg)
+            if not _partes:
+                _partes.append("Reprocessar é grátis e pode completar.")
+            # Quando SÓ há um motivo, a frase não precisa dizer "pras demais".
+            if len(_partes) == 1 and _grandes and not _outras and not _dwg_sem_irmao:
+                _partes = ["Reprocessar não resolve: um PURGE no desenho, ou "
+                           "mandar só a prancha que você precisa medir."]
+            elif len(_partes) == 1 and _dwg_sem_irmao and not _outras and not _grandes:
+                _partes = ["Reprocessar não resolve — o conversor vai falhar "
+                           "igual. Abra no seu CAD e salve como DXF, e suba o "
+                           "DXF aqui."]
+            _saida = " ".join(_partes)
             _aviso_cob = (f"⚠ {len(partial_errors)} prancha(s)/arquivo(s) não entraram nesta "
                           f"planilha — ela pode estar INCOMPLETA. {_saida} "
                           f"Faltaram: {_falhos[:280]}")

@@ -22,6 +22,22 @@ backstop — recusa com mensagem clara em vez de derrubar o servidor.
 import os
 from typing import Optional
 
+
+# 🩸 03/09/2026 — ESTE NÚMERO ESTAVA 100 MB DEFASADO E RECUSAVA RESGATE BOM.
+# Ele dizia "espelha _MAX_DXF_BYTES" e valia 150 MB; o `_MAX_DXF_BYTES` de
+# `dwg_extractor` subiu pra 250 MB em 26/08 e este ficou pra trás. Efeito: um
+# DXF de 400 MB cujo filtro textual entregaria 200 MB NÃO era resgatado
+# (200 > 150), embora 200 MB passe folgado pelo teto real de 250 MB do
+# `extract_from_file`. Comentário que promete espelhar e não espelha é pior
+# que número solto — ele desliga a suspeita de quem lê.
+#
+# 🪤 Por que não importar de `dwg_extractor`: este módulo roda dentro do worker
+# de extração e é de propósito leve (só `os` e `typing`). Importar o extrator
+# inteiro por uma constante custa segundos em cada prancha. A igualdade fica
+# travada por teste (`test_o_teto_do_emagrecedor_espelha_o_do_extrator`), que é
+# onde ela deveria estar desde o começo.
+_LIMITE_DURO = 250 * 1024 * 1024        # espelha dwg_extractor._MAX_DXF_BYTES
+
 # Acima disso o readfile começa a ser arriscado no Render 2GB (o DXF em RAM
 # vira ~5-10× o tamanho em disco, e ainda tem o resto do job).
 LIMIAR_SLIM_MB = 60
@@ -259,7 +275,6 @@ def emagrecer_dxf_se_preciso(path: str, limiar_mb: int = LIMIAR_SLIM_MB,
         # ASSIM QUE o enxuto prova que vale, e o enxuto é apagado na hora se
         # não valer — nunca ficam os dois grandes ao mesmo tempo por mais que
         # o instante da avaliação.
-        _LIMITE_DURO = 150 * 1024 * 1024        # espelha _MAX_DXF_BYTES
         try:
             # 🚦 MEDE ANTES DE ESCREVER. Sem isto, um arquivo de 370 MB que só
             # encolhe 0,17% gera uma cópia de 369 MB em disco pra ser apagada

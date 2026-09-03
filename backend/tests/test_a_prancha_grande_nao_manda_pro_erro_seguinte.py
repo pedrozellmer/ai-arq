@@ -180,8 +180,18 @@ def test_o_gatilho_continua_casando():
     # tem QUATRO ocorrências: as 3 mensagens MAIS o literal da própria busca,
     # que não é copy de cliente nenhum. Apagando a frase de UMA das mensagens a
     # conta caía pra 3 e o teste seguia VERDE, com só 2 mensagens carregando o
-    # gatilho. Tira a linha da busca e trava em `== 3`.
-    colado = _copy_que_o_cliente_le(_FONTE.replace(busca, ""))
+    # gatilho. Trava em `== 3` sobre as MENSAGENS.
+    #
+    # 🪤 E a 2ª versão tirava só AQUELA busca, pelo literal exato. Em 03/09 eu
+    # acrescentei uma segunda busca pela mesma frase (o filtro `_grandes` do
+    # aviso de falha parcial) e o teste reprovou um conserto legítimo, contando
+    # 4. O critério certo não é "esta linha específica": é **toda ocorrência
+    # dentro de um teste de pertencimento** (`in str(...)`) é BUSCA, não copy.
+    _linhas_de_copy = [
+        l for l in _FONTE.splitlines()
+        if not (frase in l and ("in str(" in l or "in (dxf_errors" in l))
+    ]
+    colado = _copy_que_o_cliente_le(chr(10).join(_linhas_de_copy))
     quantas = colado.count(frase)
     assert quantas == 3, (
         "%d mensagem(ns) por prancha carregam a frase-gatilho, e têm que ser 3; "
