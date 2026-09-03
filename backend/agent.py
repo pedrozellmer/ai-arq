@@ -698,6 +698,21 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
     messages.append({"role": "user", "content": question})
     tool_calls_log = []
     final_answer = ""
+    # 🩸 03/09/2026 — A RESPOSTA SAÍA CORTADA NO MEIO DA PALAVRA, E CALADA.
+    # Cliente `v.anjos.ia.81@` (job eebe543a) pediu uma análise longa; a
+    # resposta bateu no teto de 2.000 tokens e terminou em "O projeto usa dois
+    # sím". O `stop_reason` da API diz `max_tokens` — e não era lido em lugar
+    # NENHUM deste arquivo. A gente entregava o pedaço como se fosse a resposta.
+    # 🔑 Duas defesas, porque teto maior sozinho só empurra o problema pra
+    # frente:
+    #   • se cortou, PEDE PRA CONTINUAR de onde parou (até 2 vezes);
+    #   • se ainda assim cortar, DIZ ao cliente que cortou.
+    # Resposta incompleta avisada é utilizável; resposta incompleta calada vira
+    # decisão errada com a nossa assinatura embaixo.
+    _MAX_CONTINUACOES = 2
+    _partes_cortadas = []
+    _continuacoes = 0
+    _ficou_truncada = False
 
     from llm_retry import call_with_retry
     for it in range(max_iterations):
@@ -707,7 +722,7 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
                 tag=f"agent:job={job_id}",
                 max_retries=3,
                 model="claude-sonnet-4-6",
-                max_tokens=2000,
+                max_tokens=4000,
                 system=SYSTEM_PROMPT.format(job_id=job_id),
                 tools=TOOLS,
                 messages=messages,
@@ -731,6 +746,19 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
         # Se não houve tool_use, é a resposta final
         if not tool_uses:
             final_answer = "\n".join(text_chunks).strip()
+            if getattr(resp, "stop_reason", None) == "max_tokens":
+                if _continuacoes < _MAX_CONTINUACOES and it < max_iterations - 1:
+                    _continuacoes += 1
+                    _partes_cortadas.append(final_answer)
+                    messages.append({"role": "assistant", "content": final_answer})
+                    messages.append({"role": "user", "content":
+                                     "Sua resposta foi cortada no limite de "
+                                     "tamanho. Continue EXATAMENTE de onde parou, "
+                                     "sem repetir o que já escreveu e sem "
+                                     "recomeçar."})
+                    final_answer = ""
+                    continue
+                _ficou_truncada = True
             break
 
         # Adiciona a resposta do assistant ao histórico
@@ -754,8 +782,16 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
             })
         messages.append({"role": "user", "content": tool_results})
 
+    if _partes_cortadas:
+        final_answer = "".join(_partes_cortadas) + final_answer
     if not final_answer:
         final_answer = "Não consegui formular uma resposta após várias iterações."
+    if _ficou_truncada:
+        final_answer += (
+            "\n\n---\n\n⚠ **Esta resposta foi cortada no limite de tamanho** — "
+            "ela está incompleta. Pergunte de novo pedindo a continuação de um "
+            "tópico específico (ex.: \"continue a partir do PROBLEMA 1\") que eu "
+            "retomo daí.")
 
     duration_ms = int((_t.time() - t0) * 1000)
     _log_conversation(job_id, question, final_answer, tool_calls_log,
