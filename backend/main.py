@@ -12782,7 +12782,8 @@ async def debug_storage_limit(request: Request, mb: int = 60):
                 escrito += len(bloco)
         tamanho_real = os.path.getsize(caminho) / 1048576.0
         nome = "diagnostico-limite.dxf"
-        ok = _supabase_storage_upload_prancha(caminho, PASTA_DIAG, nome)
+        ok = await run_in_threadpool(
+            _supabase_storage_upload_prancha, caminho, PASTA_DIAG, nome)
         resp = {
             "tamanho_testado_mb": round(tamanho_real, 1),
             "subiu": ok,
@@ -18550,9 +18551,10 @@ async def memorial_docx(job_id: str, request: Request):
         if salvo:
             estrutura = salvo
         else:
-            projeto, items = _memorial_dados_frescos(job_id)
+            projeto, items = await run_in_threadpool(
+                _memorial_dados_frescos, job_id)
             from memorial import montar_estrutura
-            estrutura = montar_estrutura(projeto, items)
+            estrutura = await run_in_threadpool(montar_estrutura, projeto, items)
         tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
         tmp.close()
         resumo = estrutura_para_docx(tmp.name, estrutura)
@@ -18811,11 +18813,12 @@ async def memorial_pdf(job_id: str, request: Request):
         if salvo:
             estrutura = salvo
         else:
-            projeto, items = _memorial_dados_frescos(job_id)
+            projeto, items = await run_in_threadpool(
+                _memorial_dados_frescos, job_id)
             from memorial import montar_estrutura
-            estrutura = montar_estrutura(projeto, items)
+            estrutura = await run_in_threadpool(montar_estrutura, projeto, items)
         from memorial import estrutura_para_pdf_bytes
-        pdf = estrutura_para_pdf_bytes(estrutura)
+        pdf = await run_in_threadpool(estrutura_para_pdf_bytes, estrutura)
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.write(pdf)
         tmp.close()
@@ -18845,9 +18848,11 @@ async def memorial_estrutura(job_id: str, request: Request):
         salvo = None if fresco else _memorial_carregar_salvo(job_id)
         if salvo:
             return {"status": "ok", "salvo": True, "estrutura": salvo}
-        projeto, items = _memorial_dados_frescos(job_id)
+        projeto, items = await run_in_threadpool(
+            _memorial_dados_frescos, job_id)
         from memorial import montar_estrutura
-        return {"status": "ok", "salvo": False, "estrutura": montar_estrutura(projeto, items)}
+        _est = await run_in_threadpool(montar_estrutura, projeto, items)
+        return {"status": "ok", "salvo": False, "estrutura": _est}
     except HTTPException:
         raise
     except Exception as e:
@@ -19558,7 +19563,8 @@ async def get_cronograma_full(job_id: str, request: Request):
     if not saved:
         raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
     try:
-        cron, _branding = _build_cronograma_for_export(job_id, request=request)
+        cron, _branding = await run_in_threadpool(
+            _build_cronograma_for_export, job_id, request=request)
         return cron
     except HTTPException:
         raise
@@ -19650,7 +19656,8 @@ async def _cronograma_preview_png_impl(job_id: str, request: Request,
     if tmpl not in _CRONO_TEMPLATES:
         tmpl = "escuro"
     try:
-        cron, branding = _build_cronograma_for_export(job_id, request=request)
+        cron, branding = await run_in_threadpool(
+            _build_cronograma_for_export, job_id, request=request)
         from cronograma_render import render_pdf_bytes, render_png_paginas
         pdf = render_pdf_bytes(cron, branding, tmpl, (accent or "").strip() or None)
         if not pdf:
@@ -19684,7 +19691,8 @@ async def export_cronograma_pdf(job_id: str, request: Request,
     _require_project_owner(request, job_id)
     import tempfile
     from fastapi.responses import FileResponse
-    cron, branding = _build_cronograma_for_export(job_id, request=request)
+    cron, branding = await run_in_threadpool(
+        _build_cronograma_for_export, job_id, request=request)
     tmpl = (template or "").strip().lower()
     if tmpl not in _CRONO_TEMPLATES:
         tmpl = "escuro"
@@ -19693,7 +19701,7 @@ async def export_cronograma_pdf(job_id: str, request: Request,
     # 1) Novo render HTML->PDF (fiel aos 5 templates do handoff)
     try:
         from cronograma_render import render_pdf_bytes
-        pdf = render_pdf_bytes(cron, branding, tmpl, acc)
+        pdf = await run_in_threadpool(render_pdf_bytes, cron, branding, tmpl, acc)
         if pdf:
             tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
             tmp.write(pdf)
@@ -19709,7 +19717,7 @@ async def export_cronograma_pdf(job_id: str, request: Request,
         from cronograma_export import exportar_pdf
         tmp = tempfile.NamedTemporaryFile(suffix='.pdf', delete=False)
         tmp.close()
-        exportar_pdf(cron, tmp.name, branding=branding)
+        await run_in_threadpool(exportar_pdf, cron, tmp.name, branding=branding)
         return FileResponse(tmp.name, media_type='application/pdf', filename=fname)
     except Exception as e:
         import traceback
@@ -19731,7 +19739,8 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
     import tempfile
     from fastapi.responses import FileResponse
-    cron, branding = _build_cronograma_for_export(job_id, request=request)
+    cron, branding = await run_in_threadpool(
+        _build_cronograma_for_export, job_id, request=request)
     tem_fin = bool((cron.get("financeiro") or {}).get("total_informado"))
     sufixo = "fisico_financeiro" if tem_fin else "fisico"
     fname = f"cronograma_{sufixo}_{_slug_filename(branding['project_name'])}.xlsx"
@@ -19739,7 +19748,7 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
         from cronograma_xlsx import gerar_cronograma_xlsx
         tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
         tmp.close()
-        gerar_cronograma_xlsx(cron, tmp.name, branding)
+        await run_in_threadpool(gerar_cronograma_xlsx, cron, tmp.name, branding)
         return FileResponse(
             tmp.name, filename=fname,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -19756,7 +19765,8 @@ async def export_cronograma_pptx(job_id: str, request: Request,
     _require_project_owner(request, job_id)
     import tempfile
     from fastapi.responses import FileResponse
-    cron, branding = _build_cronograma_for_export(job_id, request=request)
+    cron, branding = await run_in_threadpool(
+        _build_cronograma_for_export, job_id, request=request)
     tmpl = (template or "").strip().lower()
     if tmpl not in _CRONO_TEMPLATES:
         tmpl = "escuro"
@@ -19766,8 +19776,8 @@ async def export_cronograma_pptx(job_id: str, request: Request,
     # 1) Novo: PDF -> PNGs -> slides full-bleed
     try:
         from cronograma_render import render_pdf_bytes, render_png_paginas
-        pdf = render_pdf_bytes(cron, branding, tmpl, acc)
-        pngs = render_png_paginas(pdf) if pdf else []
+        pdf = await run_in_threadpool(render_pdf_bytes, cron, branding, tmpl, acc)
+        pngs = (await run_in_threadpool(render_png_paginas, pdf)) if pdf else []
         if pngs:
             from pptx import Presentation
             from pptx.util import Inches
@@ -20182,7 +20192,7 @@ async def admin_revision_learn(job_id: str, request: Request):
     _require_admin(request)
     try:
         import revision_feedback as _rfi
-        gerou = _rfi.processar_revisao_inline(job_id)
+        gerou = await run_in_threadpool(_rfi.processar_revisao_inline, job_id)
         _log_error("motor:revisao-aprendizado",
                    f"manual (admin) gerou_linha={bool(gerou)}", job_id,
                    severity=("info" if gerou else "error"))
@@ -21746,7 +21756,8 @@ async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
     alvo = next((n for n in nomes if n == nome or _unq(n) == nome), None)
     if not alvo:
         raise HTTPException(404, f"'{nome}' não está no job (tem: {nomes[:10]})")
-    data = _supabase_storage_download_prancha(job_id, alvo)
+    data = await run_in_threadpool(
+        _supabase_storage_download_prancha, job_id, alvo)
     if not data:
         raise HTTPException(404, "download vazio — arquivo sumiu do Storage?")
     return Response(content=data, media_type="application/octet-stream",
@@ -21787,7 +21798,11 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
             preview_filename = _png_name
             mime = "image/png"
         else:
-            _png_data = _supabase_storage_download_prancha(job_id, _png_name)
+            # 🧊 03/09 — este download roda em rota `async`. Ele agora tem
+            # timeout de 120 s e 3 tentativas (conserto do truncamento), o
+            # que no laço de eventos vira até 6 min de site congelado. Sai.
+            _png_data = await run_in_threadpool(
+                _supabase_storage_download_prancha, job_id, _png_name)
             if _png_data:
                 return Response(
                     content=_png_data, media_type="image/png",
@@ -21816,7 +21831,8 @@ async def get_sheet_pdf(job_id: str, request: Request, ref: str = ""):
             pass
 
     # Storage
-    data = _supabase_storage_download_prancha(job_id, preview_filename)
+    data = await run_in_threadpool(
+        _supabase_storage_download_prancha, job_id, preview_filename)
     if data:
         return Response(
             content=data, media_type=mime,
@@ -21972,7 +21988,8 @@ async def reprocess_project(job_id: str, request: Request):
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     for fname in original_filenames:
         local_path = os.path.join(new_work_dir, fname)
-        data = _supabase_storage_download_prancha(job_id, fname)
+        data = await run_in_threadpool(
+            _supabase_storage_download_prancha, job_id, fname)
         if not data:
             continue
         with open(local_path, "wb") as f:
@@ -23511,7 +23528,8 @@ async def admin_merge_preview(eval_job_id: str, request: Request):
     """
     _require_admin(request)
     com_juiza = str(request.query_params.get("juiza", "1")).strip() not in ("0", "nao", "false")
-    pai, filho, ip, if_, plano, revisoes = _merge_montar(eval_job_id, com_juiza)
+    pai, filho, ip, if_, plano, revisoes = await run_in_threadpool(
+        _merge_montar, eval_job_id, com_juiza)
 
     from engine_rules import merge_itens as _m_itens
     from engine_rules import merge_sobreposicoes as _m_sobrep
@@ -23903,7 +23921,8 @@ async def admin_eval_combine(job_id: str, request: Request):
     eval_file_paths = []
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     for bn, src in seen.items():
-        data = _supabase_storage_download_prancha(src, bn)
+        data = await run_in_threadpool(
+            _supabase_storage_download_prancha, src, bn)
         if not data:
             continue
         lp = os.path.join(eval_work_dir, bn)
@@ -24044,7 +24063,8 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
             try: os.remove(new_local)
             except OSError: pass
             raise HTTPException(413, f"'{_f.filename}' passa de 150 MB. Exporte só a prancha necessária.")
-        if not _supabase_storage_upload_prancha(new_local, job_id, safe_local):
+        if not await run_in_threadpool(
+                _supabase_storage_upload_prancha, new_local, job_id, safe_local):
             raise HTTPException(500, "Não consegui guardar um dos arquivos. Tenta de novo.")
         saved += 1
     if not saved:
@@ -24068,7 +24088,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     for n in names:
         bn = os.path.basename(n)
         lp = os.path.join(work_dir, _safe_local_filename(bn))
-        d = _supabase_storage_download_prancha(job_id, bn)
+        d = await run_in_threadpool(_supabase_storage_download_prancha, job_id, bn)
         if not d:
             continue
         with open(lp, "wb") as f:
