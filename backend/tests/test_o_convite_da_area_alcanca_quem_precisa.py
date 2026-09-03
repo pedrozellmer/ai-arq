@@ -43,32 +43,17 @@ _BACKEND = os.path.dirname(_AQUI)
 sys.path.insert(0, _BACKEND)
 sys.path.insert(0, _AQUI)
 
-from _corpo import corpo_de, fonte, sem_comentarios     # noqa: E402
+from _corpo import corpo_de, corpo_js, fonte, sem_comentarios   # noqa: E402
 
 _PROJ = fonte("projeto.html")
 
 
 def _corpo_js(nome, src=None):
-    """A função JS INTEIRA, achando o fim REAL por balanço de chaves.
-
-    🚨 Janela de tamanho fixo é proibida nesta casa (`test_guardas_sem_janela_fixa`):
-    maior que a função lê o vizinho e passa verde por engano; menor, não vê o
-    que diz guardar. `_corpo.py` resolve isso para Python; aqui é JS, então o
-    fim é a chave que fecha a primeira — não um número de caracteres."""
-    src = _PROJ if src is None else src
-    i = src.find("function %s(" % nome)
-    assert i >= 0, "não achei function %s()" % nome
-    prof, k = 0, src.find("{", i)
-    assert k > 0, "função %s sem corpo" % nome
-    while k < len(src):
-        if src[k] == "{":
-            prof += 1
-        elif src[k] == "}":
-            prof -= 1
-            if prof == 0:
-                return src[i:k + 1]
-        k += 1
-    raise AssertionError("chaves desbalanceadas em %s" % nome)
+    """🪤 Este extrator nasceu AQUI e virou cópia quando a tela da revisão
+    ganhou o mesmo convite (02/09). Duas cópias da mesma regra é exatamente o
+    defeito que a gente passou o dia inteiro consertando — mora em `_corpo.py`,
+    junto do `corpo_de`."""
+    return corpo_js(nome, "projeto.html", _PROJ if src is None else src)
 
 
 def _js_limpo(nome):

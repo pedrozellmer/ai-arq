@@ -19806,6 +19806,23 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
     medido' (regra dura nº1, via _apply_area_honesty) — e regenera a planilha in-place
     (mesmo projeto, sem criar cópia). Itens que não escalam com piso (pintura de
     parede, rodapé) NÃO são preenchidos."""
+    # 🚨 02/09/2026 — REGISTRO NA ENTRADA, ANTES DA CHECAGEM DE DONO.
+    # O único log desta rota rodava na ÚLTIMA linha do caminho de sucesso. Com
+    # isso, "0 acionamentos em 293 projetos" significava, com rigor, "0
+    # acionamentos BEM-SUCEDIDOS": quem clicou e tomou 401, 500 ou caiu na
+    # validação não deixava rastro em lugar NENHUM do sistema — nem no banco,
+    # nem no log, nem na telemetria. "O convite não convence" e "o convite está
+    # quebrado e engole o erro" produziam exatamente o mesmo zero.
+    # 🔑 Fica ANTES do _require_project_owner de propósito: clique que morre na
+    # autorização é justamente o caso que a gente precisa poder descartar.
+    # 🪤 É o ÚNICO canal que não depende de aceite de cookie — a telemetria de
+    # navegador cobre 53% dos donos que comprovadamente agem no app.
+    try:
+        _log_error("motor:informou-depois",
+                   f"entrou area={getattr(payload, 'area', None)} "
+                   f"pe_direito={getattr(payload, 'pe_direito', None)}", job_id)
+    except Exception:
+        pass        # log nunca derruba o clique do cliente
     _require_project_owner(request, job_id)
     import urllib.request, urllib.error, json
     from models import BudgetItem, Confidence, ProjectData
@@ -19820,15 +19837,25 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         pe_dir = round(float(payload.pe_direito or 0), 2)
     except (TypeError, ValueError):
         pe_dir = 0
+    def _recusa(motivo: str, msg: str):
+        """Recusa que DEIXA RASTRO. Sem isto, cliente barrado na validação é
+        indistinguível de cliente que nunca clicou."""
+        try:
+            _log_error("motor:informou-depois",
+                       f"recusado motivo={motivo} area={area} pe_direito={pe_dir}", job_id)
+        except Exception:
+            pass
+        raise HTTPException(400, msg)
+
     if area and (area <= 0 or area > 1_000_000):
-        raise HTTPException(400, "Informe uma área válida em m² (maior que 0).")
+        _recusa("area-fora-da-faixa", "Informe uma área válida em m² (maior que 0).")
     # 🪤 Mesma faixa do campo do upload (1,8 a 8 m): fora disso não é pé-direito
     # de edificação, é erro de digitação — e um pé-direito errado multiplica a
     # pintura inteira.
     if pe_dir and not (1.8 <= pe_dir <= 8):
-        raise HTTPException(400, "Informe um pé-direito entre 1,80 m e 8,00 m.")
+        _recusa("pe-direito-fora-da-faixa", "Informe um pé-direito entre 1,80 m e 8,00 m.")
     if area <= 0 and pe_dir <= 0:
-        raise HTTPException(400, "Informe a área total (m²) ou o pé-direito (m).")
+        _recusa("veio-vazio", "Informe a área total (m²) ou o pé-direito (m).")
 
     # 2) Projeto + itens atuais (mesmo padrão do finalize_review)
     try:
@@ -20035,8 +20062,11 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
         _patch_user["user_pe_direito"] = pe_dir
     if _patch_user:
         _projeto_patch(job_id, _patch_user)
+    # 🪤 Prefixo "concluiu": o mesmo stage registra ENTROU / RECUSADO / CONCLUIU.
+    # Uma consulta só conta o funil inteiro da rota, e a diferença entre entrou e
+    # concluiu é exatamente o que faltava pra saber se o clique morria no meio.
     _log_error("motor:informou-depois",
-               f"area={area} pe_direito={pe_dir} preenchidos={filled} "
+               f"concluiu area={area} pe_direito={pe_dir} preenchidos={filled} "
                f"pintura_derivada={_pintou} itens={len(items)}", job_id)
 
     return {
@@ -20773,8 +20803,18 @@ async def track_event(payload: TrackPayload, request: Request):
         # funil de revisão que a gente investigou em 26/08 às cegas.
         # 🔒 Só NÚMERO, com teto: não é texto do cliente, não vira porta de
         # HTML/JS no painel. Valor absurdo ou não-numérico é ignorado.
+        # 🚨 02/09/2026 — o convite da área na tela da revisão. Estas cinco
+        # chaves são o funil inteiro dele: quantas linhas estavam em branco
+        # (o tamanho do problema), se a capa tinha área, quantas linhas o
+        # servidor completou, e o status HTTP quando o clique morre.
+        # 🔒 `tem_area_capa` chega como 0/1 e `area` arredondada de propósito:
+        # o front manda NÚMERO, não texto — e `bruto`/`erro` (entrada digitada
+        # e mensagem de exceção) NÃO são enviados. Texto livre de cliente não
+        # vira linha de banco só porque seria conveniente pra depurar.
         for _k in ("n_itens", "n_estimados", "ja_revisados", "pendentes",
-                   "confirmados", "excluidos", "editados"):
+                   "confirmados", "excluidos", "editados",
+                   "linhas_vazias", "preenchidos", "area", "tem_area_capa",
+                   "status"):
             try:
                 _v = payload.meta.get(_k)
                 if _v is None or isinstance(_v, bool):
@@ -20809,7 +20849,10 @@ async def track_event(payload: TrackPayload, request: Request):
         #    pode postar aqui, e isso não pode virar porta pro painel.
         for _k, _limpa, _teto in (
                 ("motivo", r"[^a-z0-9_-]", 40),
-                ("formato", r"[^a-z0-9_-]", 20)):
+                ("formato", r"[^a-z0-9_-]", 20),
+                # `tela` é slug NOSSO ('revisao', 'projeto'): diz de onde o
+                # convite foi acionado, agora que ele existe em duas telas.
+                ("tela", r"[^a-z0-9_-]", 20)):
             # 🩸 29/08: esta linha ficou 29 HORAS derrubando a rota inteira.
             # `re.sub` pede TRÊS argumentos (padrão, substituição, texto) e eu
             # passei dois — TypeError em TODO POST, 500 pra todo evento de todo

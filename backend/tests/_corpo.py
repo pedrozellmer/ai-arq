@@ -70,6 +70,36 @@ def corpo_de(nome: str, arquivo: str = "main.py", src: str = None) -> str:
     return "".join(linhas[ini:fim])
 
 
+def corpo_js(nome: str, arquivo: str = "projeto.html", src: str = None) -> str:
+    """A função JS inteira, achando o fim REAL por balanço de chaves.
+
+    🚨 02/09/2026. Mesmo motivo do `corpo_de`: janela de tamanho fixo mede o
+    vizinho ou um pedaço, e as duas formas dão VERDE FALSO. Em JS o fim da
+    função é a chave que fecha a primeira — não um número de caracteres.
+
+    🪤 Balanço de chaves não entende chave dentro de string ou regex. Nas
+    funções que esta casa guarda isso não ocorre, e o teste de controle
+    (`o extrator para antes da próxima função`) reprova se passar a ocorrer.
+    """
+    src = src if src is not None else fonte(arquivo)
+    i = src.find("function %s(" % nome)
+    if i < 0:
+        raise AssertionError("não achei function %s() em %s" % (nome, arquivo))
+    prof = 0
+    k = src.find("{", i)
+    if k < 0:
+        raise AssertionError("função %s sem corpo em %s" % (nome, arquivo))
+    while k < len(src):
+        if src[k] == "{":
+            prof += 1
+        elif src[k] == "}":
+            prof -= 1
+            if prof == 0:
+                return src[i:k + 1]
+        k += 1
+    raise AssertionError("chaves desbalanceadas em %s (%s)" % (nome, arquivo))
+
+
 def sem_docstring(texto: str) -> str:
     """Tira a docstring.
 

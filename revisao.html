@@ -208,6 +208,33 @@
     <button type="button" id="rv-filter-btn" onclick="toggleOnlyEstimates()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-300 text-amber-700 text-xs font-medium hover:bg-amber-50 transition">&#9888; Mostrar s&oacute; as estimativas</button>
   </div>
 
+  <!-- 🩸 02/09/2026 — O CONVITE MUDOU DE TELA. Ele existia só em projeto.html
+       desde 21/07 e teve ZERO acionamentos em 43 dias. A investigação mostrou
+       que a pergunta "por que ninguém clica" estava mal posta: de 18 projetos,
+       só 3 têm prova de que o DONO abriu a página onde a caixa morava (7 das
+       10 "visitas" eram do admin). E o caminho principal DESVIA dela — o botão
+       "Revisar" do dashboard e o menu lateral linkam esta tela direto: desde
+       24/08, 8 de 19 donos (42%) chegaram aqui sem nunca abrir projeto.html.
+       🔑 A janela de atenção é de 3 MINUTOS (mediana até a 1ª ação; dos 11 que
+       receberam e-mail de reengajamento, 11 de 11 não voltaram). Então o
+       convite tem que estar onde o cliente JÁ está, olhando a linha vazia. -->
+  <div id="convite-area" class="hidden rounded-xl border-2 border-indigo-200 bg-indigo-50 p-5 mb-4">
+    <div class="flex items-start gap-3">
+      <span class="text-2xl shrink-0" aria-hidden="true">📐</span>
+      <div class="flex-1">
+        <h3 id="convite-area-titulo" class="font-semibold text-indigo-900 mb-1">A planta não trazia cota de área</h3>
+        <p id="convite-area-texto" class="text-sm text-indigo-800 mb-3">Por isso os itens de <b>piso, forro e laje</b> ficaram em branco &mdash; a gente não inventa metragem.</p>
+        <div class="flex flex-wrap items-center gap-2">
+          <label for="convite-area-input" class="sr-only">Área total em metros quadrados</label>
+          <input type="number" id="convite-area-input" min="0" step="0.01" inputmode="decimal" placeholder="Ex: 120" class="w-32 px-3 py-2 rounded-lg border border-indigo-300 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <span class="text-sm text-indigo-700">m²</span>
+          <button type="button" id="convite-area-submit" data-track="convite-area-completar" onclick="submitConviteArea()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-medium disabled:opacity-50">Completar itens de área</button>
+          <span id="convite-area-msg" class="text-sm" aria-live="polite"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="items-container" class="space-y-4 rv-rise rv-rise-3"></div>
 
 </main>
@@ -374,6 +401,10 @@ async function loadItems() {
       authFetch(`${API_BASE}/api/items/${jobId}/review-state?marcar=1`).then(r => r.json()).catch(() => ({state: {}})),
     ]);
     items = itemsRes.items || [];
+    // `project` já traz total_area, user_total_area e user_pe_direito (rota
+    // /api/items, main.py ~17983) — o convite da área decide com isso, sem
+    // chamada extra.
+    projMeta = itemsRes.project || {};
     // Restaura state persistido: aprovar/remover/editar anteriores
     const persisted = (stateRes && stateRes.state) || {};
     Object.entries(persisted).forEach(([itemId, rev]) => {
@@ -419,11 +450,137 @@ async function loadItems() {
   }
 }
 
+// ═══ Convite da área, na tela onde o cliente REALMENTE está ═══════════
+// 🪤 O gatilho é o FATO (linha de m² com quantidade zero), NUNCA a frase que a
+// IA escreveu na observação: em projeto.html a peneira de texto calava 22
+// projetos porque o modelo dizia "Área total não extraída do DXF" em vez de
+// uma das 4 frases procuradas.
+// 🪤 Some quando o cliente JÁ informou (`user_total_area`): repetir o pedido
+// depois de atendido é cobrar duas vezes pela mesma coisa.
+let projMeta = {};
+let _conviteAreaContado = false;
+const _AREA_M2_RV = ['m²', 'm2', 'm2.', 'm².'];
+
+function maybeShowConviteArea() {
+  const cx = document.getElementById('convite-area');
+  if (!cx) return;
+  try {
+    if (Number(projMeta.user_total_area || 0) > 0) { cx.classList.add('hidden'); return; }
+    const vazias = (items || []).filter(it => {
+      const u = String(it.unit || '').toLowerCase().trim();
+      return _AREA_M2_RV.includes(u) && Number(it.quantity || 0) === 0;
+    }).length;
+    if (!vazias) { cx.classList.add('hidden'); return; }
+
+    const areaCapa = Number(projMeta.total_area || 0);
+    const tit = document.getElementById('convite-area-titulo');
+    const txt = document.getElementById('convite-area-texto');
+    const inp = document.getElementById('convite-area-input');
+    const plural = vazias === 1 ? 'linha' : 'linhas';
+    // 🪤 Os DOIS ramos escrevem os DOIS campos. Em 02/09 o ramo sem área
+    // trocava só o título e o parágrafo do outro ramo sobrevivia, afirmando
+    // uma área de capa que não existia.
+    if (areaCapa > 0) {
+      const nf = areaCapa.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+      tit.textContent = vazias + ' ' + plural + ' de área ' +
+        (vazias === 1 ? 'está' : 'estão') + ' em branco';
+      txt.innerHTML = 'A capa deste projeto traz <b>' + escapeHtml(nf) + ' m²</b>, mas a ' +
+        'medição da planta não alcançou ' + (vazias === 1 ? 'essa linha' : 'essas linhas') +
+        '. Se a metragem estiver certa, confirme aqui pra completar <b>piso, forro e laje</b> ' +
+        '&mdash; sai como <b>&#9888; estimado (informado por você)</b>, e nada que já tem ' +
+        'número medido é sobrescrito.';
+      if (inp && !inp.value) inp.value = areaCapa;
+    } else {
+      tit.textContent = vazias + ' ' + plural + ' de área ' +
+        (vazias === 1 ? 'está' : 'estão') + ' em branco';
+      txt.innerHTML = 'A planta não trazia cota de área, e a gente não inventa metragem. ' +
+        'Se você souber a <b>área total do projeto</b>, informe aqui pra completar ' +
+        '<b>piso, forro e laje</b> &mdash; sai como <b>&#9888; estimado (informado por ' +
+        'você)</b>, pra conferir antes de orçar. A planilha é refeita na hora.';
+    }
+    cx.classList.remove('hidden');
+    // 🚨 O DENOMINADOR. Sem este evento, "ninguém clicou" e "ninguém viu" são a
+    // mesma linha do banco — foi exatamente essa cegueira que fez a gente passar
+    // 43 dias sem saber por que o convite não convertia.
+    if (!_conviteAreaContado && window.trackEvent) {
+      _conviteAreaContado = true;
+      // 🔒 Só número e slug nosso. O /api/track tem lista branca de chaves de
+      // meta (`test_track_meta_allowlist`) e descarta CALADO o que não está
+      // nela — por isso `tem_area_capa` vai como 0/1, não como booleano.
+      trackEvent('convite-area:exibido', {
+        job_id: jobId, linhas_vazias: vazias,
+        tem_area_capa: areaCapa > 0 ? 1 : 0, tela: 'revisao',
+      });
+    }
+  } catch (e) {
+    // 🪤 O catch antigo só fazia console.warn: o convite sumia e ninguém ficava
+    // sabendo. Falha de render agora deixa rastro.
+    console.warn('[convite-area]', e);
+    cx.classList.add('hidden');
+    // 🔒 Sem a mensagem da exceção: texto livre não vira linha de banco por
+    // conveniência de depuração. O detalhe fica no console do cliente; o que
+    // precisa chegar aqui é o FATO de ter falhado.
+    if (window.trackEvent) trackEvent('convite-area:render-falhou', { job_id: jobId, tela: 'revisao' });
+  }
+}
+
+async function submitConviteArea() {
+  const inp = document.getElementById('convite-area-input');
+  const btn = document.getElementById('convite-area-submit');
+  const msg = document.getElementById('convite-area-msg');
+  const val = parseFloat(String(inp.value || '').replace(',', '.'));
+  if (!val || val <= 0 || val > 1000000) {
+    msg.textContent = '⚠ Informe a área total em m² (maior que zero).';
+    msg.className = 'text-sm text-amber-700';
+    if (window.trackEvent) trackEvent('convite-area:submit-invalido', {
+      job_id: jobId, tela: 'revisao' });
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = '⏳ Refazendo a planilha...';
+  msg.className = 'text-sm text-indigo-700';
+  try {
+    const r = await authFetch(`${API_BASE}/api/project/${jobId}/inform-area`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ area: val }),
+    });
+    if (!r.ok) { const err = new Error('o servidor respondeu ' + r.status); err.status = r.status; throw err; }
+    const data = await r.json().catch(() => ({}));
+    const n = Number(data.filled_count || 0);
+    if (window.trackEvent) trackEvent('convite-area:submit-ok', {
+      job_id: jobId, area: Math.round(val), preenchidos: n, tela: 'revisao' });
+    // 🪤 Diz o que ACONTECEU, não o que era esperado acontecer. Quem decide item
+    // a item é a honestidade de área no backend — prometer número que a tela não
+    // controla é o aviso que a Luana leu e não se cumpriu (01/09).
+    msg.textContent = n > 0
+      ? '✓ Pronto — ' + n + (n === 1 ? ' linha completada' : ' linhas completadas') + '.'
+      : '✓ Recebido, mas nenhuma linha pôde ser completada com essa área.';
+    msg.className = 'text-sm text-emerald-700';
+    projMeta.user_total_area = val;
+    await loadItems();     // recarrega e mostra as linhas preenchidas
+  } catch (e) {
+    console.error('[convite-area]', e);
+    // 🔑 O STATUS é o que separa "morreu na autorização" de "morreu no
+    // servidor" — a distinção que faltava pra saber se o clique some por
+    // defeito nosso. 0 = não chegou a ter resposta (rede).
+    if (window.trackEvent) trackEvent('convite-area:submit-erro', {
+      job_id: jobId, status: Number(e && e.status) || 0, tela: 'revisao' });
+    msg.textContent = '✗ Não consegui agora. Tenta de novo.';
+    msg.className = 'text-sm text-red-700';
+    btn.disabled = false;
+  }
+}
+
 function render() {
   // Resumo (sobre TODOS os itens, não muda com o filtro)
   const _medidoAll = items.filter(it => it.confidence === 'confirmado').length;
   const _mEl = document.getElementById('rv-medido'); if (_mEl) _mEl.textContent = _medidoAll;
   const _eEl = document.getElementById('rv-estimado'); if (_eEl) _eEl.textContent = items.length - _medidoAll;
+
+  // Chamado a CADA render (não só no load): assim o convite some sozinho
+  // quando as linhas deixam de estar vazias, sem depender de recarga.
+  maybeShowConviteArea();
 
   // Filtro "só as estimativas": esconde os medidos (confirmado)
   const _base = showOnlyEstimates ? items.filter(it => it.confidence !== 'confirmado') : items;
