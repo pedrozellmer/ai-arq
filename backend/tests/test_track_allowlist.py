@@ -20,7 +20,13 @@ def _allowlist():
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     m = re.search(r"_TRACK_ALLOWED\s*=\s*\{(.*?)\n\}", src, re.S)
     assert m, "_TRACK_ALLOWED não encontrada em main.py"
-    return set(re.findall(r'"([a-z_]+)"', m.group(1)))
+    # 03/09/2026: o alfabeto era [a-z_]+ e nao lia nome com hifen nem
+    # dois-pontos. `convite-area:exibido` era INVISIVEL pros DOIS lados deste
+    # guarda. O comentario sai ANTES de extrair: o bloco tem aspas dentro de
+    # comentario, e sem isso texto de comentario viraria 'evento permitido'.
+    corpo = chr(10).join(l for l in m.group(1).splitlines()
+                         if not l.strip().startswith('#'))
+    return set(re.findall(r'"([a-z0-9_:-]+)"', corpo))
 
 
 def _eventos_do_front():
@@ -42,7 +48,17 @@ def _eventos_do_front():
         # rodei este teste esperando que ele reprovasse, e ele passou VERDE.
         # O guarda contra "evento descartado em silêncio" tinha ele próprio um
         # ponto cego silencioso.
-        for n in re.findall(r"trackEvent\s*\??\.?\(\s*['\"]([a-z_]+)['\"]", txt):
+        # 03/09/2026 - O QUARTO PONTO CEGO DESTE GUARDA (depois de 'so a raiz'
+        # e de trackEvent?.( ): o alfabeto [a-z_]+ nao aceitava hifen nem
+        # dois-pontos. Os cinco eventos convite-area:* que subiram em 02/09
+        # eram DESCARTADOS pelo /api/track e este teste passou VERDE, porque
+        # nem conseguia LER o nome deles.
+        for n in re.findall(r"trackEvent\s*\??\.?\(\s*['\"]([a-z0-9_:-]+)['\"]", txt):
+            # `trackEvent('clique:' + nome, ...)` (aiarq-utils.js:204) monta o
+            # nome em tempo de execucao: o literal e PREFIXO, nao evento.
+            # Nome de evento de verdade nunca termina em dois-pontos.
+            if n.endswith(':'):
+                continue
             nomes.add(n)
         for slug in re.findall(r'data-track="([^"]+)"', txt):
             nomes.add("clique:" + slug)
@@ -64,3 +80,48 @@ def test_todo_evento_do_front_esta_na_allowlist():
 
 def test_allowlist_nao_vazia():
     assert len(_allowlist()) >= 13
+
+
+def test_CONTROLE_o_extrator_LE_nome_com_hifen_e_dois_pontos():
+    """🩸 03/09/2026 — O QUARTO PONTO CEGO, e o mais caro até agora.
+
+    Em 02/09 subiram SEIS eventos do convite da área. CINCO tinham hífen e
+    dois-pontos no nome (`convite-area:exibido` e irmãos) e o `/api/track`
+    DESCARTAVA os cinco — inclusive o `exibido`, que é o DENOMINADOR e a razão
+    de existir da mudança inteira. Este guarda passou VERDE porque o alfabeto
+    dele (`[a-z_]+`) não conseguia sequer LER aquele nome.
+
+    🔑 Só se descobriu no dia seguinte, chamando `_track_evento_aceito` de
+    verdade. Um guarda que não enxerga o formato novo não reprova nada — e o
+    silêncio dele lê-se como aprovação.
+    """
+    achou = re.findall(r"trackEvent\s*\??\.?\(\s*['\"]([a-z0-9_:-]+)['\"]",
+                       "trackEvent('convite-area:exibido', {a: 1})")
+    assert achou == ["convite-area:exibido"], achou
+    # e o lado da allowlist tem que ler o mesmo alfabeto
+    assert re.findall(r'"([a-z0-9_:-]+)"', '    "convite-area:submit-ok",') == \
+        ["convite-area:submit-ok"]
+
+
+def test_CONTROLE_a_leitura_da_allowlist_IGNORA_comentario():
+    """🪤 Alargar o alfabeto fez o extrator enxergar aspas dentro de
+    COMENTÁRIO. O bloco tem `{"status":"ignored"}` escrito num comentário —
+    sem tirar comentário, 'status' e 'ignored' virariam eventos permitidos e o
+    guarda passaria a aprovar nome que o backend descarta."""
+    allow = _allowlist()
+    for lixo in ("status", "ignored"):
+        assert lixo not in allow, (
+            "%r veio de texto de comentário e entrou na allowlist lida" % lixo)
+    assert "convite-area:exibido" in allow, (
+        "o evento real sumiu da leitura — o filtro de comentário comeu demais")
+
+
+def test_CONTROLE_o_prefixo_montado_em_runtime_NAO_vira_evento():
+    """🪤 Alargar o alfabeto fez o extrator enxergar o literal `'clique:'` de
+    `aiarq-utils.js:204`, que é PREFIXO concatenado com o slug em tempo de
+    execução. Sem este filtro o guarda reprova um evento que não existe — e
+    guarda que acusa o que não é defeito acaba desligado."""
+    achou = _eventos_do_front()
+    assert "clique:" not in achou, "o prefixo cru voltou a ser lido como evento"
+    assert "clique:convite-area-completar" in achou, (
+        "o data-track de verdade sumiu da varredura")

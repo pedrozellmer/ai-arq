@@ -20670,6 +20670,17 @@ _TRACK_ALLOWED = {
     # com zero telemetria, e o único gatilho `use_cronograma` (projeto.html)
     # parou em 03/08. Estes fecham o buraco; o slug do post/página vai no campo.
     "view_cronograma", "view_exemplo", "view_precos", "view_faq", "view_memorial",
+    # 🩸 03/09/2026 — NASCERAM MORTOS. Subi os seis eventos do convite da área
+    # em 02/09 (commit 2d539fe) e CINCO caíam aqui: o /api/track respondia 200
+    # {"status":"ignored"} e jogava fora — inclusive o `exibido`, que é O
+    # DENOMINADOR e a razão de existir da mudança inteira. Eu só descobriria
+    # em 16/09, lendo zeros, e podia ter lido "ninguém viu" no lugar de
+    # "ninguém gravou". Mesma família do NULL virando afirmação.
+    # 🪤 O guarda `test_track_allowlist` PASSOU: o extrator dele lia nome de
+    # evento com `[a-z_]+`, sem hífen nem dois-pontos — cego pra este formato
+    # inteiro. É o QUARTO ponto cego dele (raiz-só, `?.(`, e agora o alfabeto).
+    "convite-area:exibido", "convite-area:submit-ok", "convite-area:submit-erro",
+    "convite-area:submit-invalido", "convite-area:render-falhou",
 }
 _TRACK_CLIQUE_RX = _re.compile(r"^clique:[a-z0-9][a-z0-9-]{0,39}$")
 
