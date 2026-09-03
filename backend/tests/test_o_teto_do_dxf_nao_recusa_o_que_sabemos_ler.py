@@ -73,12 +73,30 @@ def test_CONTROLE_disco_apertado_recusa():
 
 
 def test_a_margem_de_disco_e_a_regra_e_nao_um_detalhe():
-    """A fronteira tem que ficar onde o comentário promete: 2 GB de folga."""
+    """A reserva real é MARGEM + o tamanho do arquivo, e isso é de propósito.
+
+    🪤 Este teste dizia só "2 GB de folga", subestimando a própria garantia. A
+    revisão adversarial de 03/09 mostrou por quê o extra importa: `livre` é
+    lido DEPOIS de o DXF estar escrito (já o desconta), e subtrair `tam` de
+    novo reserva um segundo espaço do mesmo tamanho — que tem dono, o
+    `<nome>.slim.dxf` que o emagrecedor escreve AO LADO do original sem apagá-lo
+    no caminho principal, e que pode ter até 95% do tamanho dele.
+
+    Documentação que promete menos do que garante é convite pra alguém
+    "simplificar" e quebrar.
+    """
     margem = main._DXF_MARGEM_DISCO
     assert margem == 2 * GB
-    # Um byte a mais de folga que a margem passa; um a menos, não.
+    # A fronteira fica em MARGEM + tam, não em MARGEM.
     assert _pode(_RAFAEL, _RAFAEL + margem + 1)
     assert not _pode(_RAFAEL, _RAFAEL + margem)
+    # E o extra reservado dá pra uma cópia do arquivo inteiro — que é o pior
+    # caso do enxuto (95% do original).
+    _livre_no_limite = _RAFAEL + margem + 1
+    assert _livre_no_limite - _RAFAEL >= margem, (
+        "sobrou menos que a margem depois de guardar o original")
+    assert _livre_no_limite >= margem + _RAFAEL, (
+        "a reserva parou de cobrir a cópia .slim.dxf que o emagrecedor escreve")
 
 
 def test_disco_que_nao_deu_pra_medir_nao_vira_recusa():

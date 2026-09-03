@@ -235,12 +235,59 @@ def _apaga_dir_de_conversao(dxf_path):
 
 
 
+def _avisos_com(job_id, novo_aviso):
+    """Os avisos que o projeto JÁ tem, mais este. Nunca troca o array inteiro.
+
+    🩸 03/09/2026, achado pela revisão adversarial. Dois pontos gravavam
+    `{"warnings": [um_aviso_só]}` quando o COMPLEMENTO (add-file) falhava e a
+    planilha anterior era mantida. O `warnings` é um array: escrever um array
+    novo de um elemento **apaga tudo** que o motor tinha dito sobre o projeto
+    original — escala, área, plano B, estrutura.
+
+    🔑 O cliente ficava com a tela dizendo só "o complemento não deu certo",
+    como se o projeto dele não tivesse mais nenhuma ressalva. A planilha era
+    preservada e a explicação dela, não.
+
+    🪤 Best-effort de propósito: se a leitura falhar, devolve só o aviso novo —
+    que é o comportamento de hoje. Perder histórico é ruim; perder o aviso do
+    complemento (que é o que o cliente está esperando ler AGORA) é pior.
+    Devolve a lista pronta pra gravar.
+    """
+    try:
+        _st, _r = _supa_rest_service(
+            "GET", "projects",
+            params={"job_id": f"eq.{job_id}", "select": "warnings"})
+        if _st != 200 or not _r:
+            return [novo_aviso]
+        _atuais = [str(a) for a in (_r[0].get("warnings") or []) if str(a).strip()]
+    except Exception as _e:
+        print(f"[avisos] não consegui ler os atuais de {job_id} ({_e}) — só o novo")
+        return [novo_aviso]
+    if novo_aviso in _atuais:
+        return _atuais
+    return _atuais + [novo_aviso]
+
+
 def _dxf_grande_pode_seguir(tam_bytes, teto_antigo, livre_bytes):
     """O DXF passou do teto antigo — dá pra mandar pro emagrecedor mesmo assim?
 
     `livre_bytes=None` significa "não consegui medir o disco": nesse caso
     segue, porque o filho ainda tem a trava de memória e o pior caso é ele
     morrer sozinho — recusar por não ter medido seria recusar por medo.
+
+    🔑 A RESERVA REAL É `_DXF_MARGEM_DISCO + tam_bytes`, e isso é DE PROPÓSITO,
+    não sobra de conta. `livre_bytes` é lido DEPOIS de o DXF já estar escrito,
+    então ele já desconta o arquivo; subtrair `tam_bytes` de novo reserva um
+    segundo espaço do mesmo tamanho.
+    Esse segundo espaço tem dono: o `dxf_slim` escreve `<nome>.slim.dxf` ao
+    lado do original e, no caminho principal (ezdxf/iterdxf), **não apaga o
+    original** — o `os.remove` só existe no plano B textual. O critério de
+    aceite do enxuto é `novo < size * 0.95`, ou seja ele pode ter até 95% do
+    tamanho do original. Sem essa reserva, um par original+enxuto caberia na
+    conta e não caberia no disco.
+    🪤 Isto foi descoberto por revisão adversarial: a conta ESTAVA certa e o
+    comentário e o teste diziam "2 GB". Documentação que subestima a própria
+    garantia é convite pra alguém "simplificar" e quebrar.
     """
     if tam_bytes <= teto_antigo:
         return True                      # nem era caso de recusa
@@ -7832,7 +7879,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _supabase_update("projects", "job_id", job_id, {
                                 "status": "done",
                                 "error_message": None,
-                                "warnings": [_warn_txt],
+                                "warnings": _avisos_com(job_id, _warn_txt),
                                 "completed_at": datetime.utcnow().isoformat(),
                             })
                         except Exception as _upe:
@@ -10115,7 +10162,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _supabase_update("projects", "job_id", job_id, {
                         "status": "done",
                         "error_message": None,
-                        "warnings": [_warn_zero],
+                        "warnings": _avisos_com(job_id, _warn_zero),
                         "completed_at": datetime.utcnow().isoformat(),
                     })
                 except Exception as _upe:
