@@ -9181,7 +9181,34 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _vet_secao = ""
                 try:
                     import subprocess as _sp, json as _jv, sys as _sysv
+                    # 🩸 03/09/2026 — ESTE FILHO DERRUBOU O SERVIDOR DE TODOS.
+                    # Caso Edvaldo (job 7ddbccc1, PDF de 2,63 MB): a memória do
+                    # contêiner foi de 94,6 MB → 350,7 → 3.107,8 MB contra teto
+                    # de 4 GiB, e o serviço ficou com ZERO instância por 2
+                    # minutos (medido no Render, instance_count=0 às 12:33 e
+                    # 12:34 UTC). Quem estivesse no site levou erro.
+                    # 🔑 O único freio aqui era o cronômetro de 75 s — e nessa
+                    # rodada ele perdeu a corrida pro estouro por ~20 s. Um
+                    # cronômetro não limita memória; só o kernel limita.
+                    # 📏 A amplificação é o ponto: 2,63 MB de arquivo viraram
+                    # ~2,7 GB de RAM (≈500×). Memória não é proporcional a
+                    # bytes, é proporcional a quantos elementos vetoriais a
+                    # prancha tem — e o teto de 12 MB por arquivo que existia
+                    # não protege nada (este PDF tem 4,6× menos que ele).
+                    # 🪤 2 GB e não 1,5: não medimos ainda o pico das 109
+                    # medições que DÃO certo, e teto apertado mata trabalho
+                    # legítimo. 2 GB já impediria as duas quedas de hoje e
+                    # deixa 2 GB de folga. Apertar depois, com dado.
+                    # ✅ Estourou, o filho levanta MemoryError, sai com rc≠0 e
+                    # cai no ramo logo abaixo, que JÁ grava o log e JÁ avisa o
+                    # cliente. Zero tratamento novo.
                     _cmd = [_sysv.executable, "-c", (
+                        # 🪤 `resource` é só de Unix. Em produção (Linux) o teto
+                        # vale; no Windows o try/except deixa passar, senão TODA
+                        # medição de PDF morreria de ImportError em desenvolvimento.
+                        "try:\n    import resource; resource.setrlimit("
+                        "resource.RLIMIT_AS, (2_000_000_000, 2_000_000_000))\n"
+                        "except Exception:\n    pass\n"
                         "import sys, json; sys.path.insert(0, r'" +
                         os.path.dirname(os.path.abspath(__file__)) + "'); "
                         "from pdf_vector import _measure_page; "
