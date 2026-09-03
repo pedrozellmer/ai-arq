@@ -17177,7 +17177,17 @@ async def update_project_meta(job_id: str, payload: ProjectMetaPayload, request:
     if not updates:
         raise HTTPException(400, "Nenhum campo a atualizar")
 
-    ok = _supabase_update("projects", "job_id", job_id, updates)
+    # 🩸 03/09/2026 — ESTA ROTA NUNCA SALVOU NADA. `_supabase_update` roteia
+    # projects+job_id pra RPC `update_project_status`, que aceita SETE campos
+    # fixos (status, items_count, total_area, layout_area, error_message,
+    # completed_at, warnings). Nome, tipologia, endereço e fase caíam fora do
+    # pacote e a RPC devolvia sucesso — a tela dizia "Salvando…", o cliente via
+    # OK, e o banco não mudava. No ar desde 13/05/2026.
+    # 📏 Medido: de 157 projetos de cliente, 2 têm endereço, 2 têm fase, e 60
+    # seguem com o nome genérico "Projeto <data>".
+    # 🔑 `_projeto_patch` é o desvio que existe exatamente pra isto (criado em
+    # 03/08, com a planilha da Eloídes na mão, pelo MESMO motivo).
+    ok = _projeto_patch(job_id, updates)
     if not ok:
         raise HTTPException(500, "Erro ao salvar no banco")
     return {"status": "ok", "job_id": job_id, "updated": list(updates.keys())}
@@ -23622,11 +23632,21 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         _e = os.path.splitext(_n.lower())[1].lstrip(".")
         if _e in _comp:
             _comp[_e] += 1
-    _upd = {"status": "queued", "error_message": None}
+    # 🩸 03/09/2026 — E ESTE CONSERTO NUNCA FUNCIONOU. O bloco acima existe
+    # desde 31/07 pra corrigir "o painel mostra 1 PDF num projeto que já tem
+    # CAD" (caso Fernando) — e `files_count`/`file_types` iam pelo
+    # `_supabase_update`, que os descarta (a RPC só aceita 7 campos). Como o
+    # mesmo pacote levava `status`, a RPC devolvia SUCESSO.
+    # 📏 5 projetos de cliente afetados desde 31/07; o pior (2a42f7ec) mostra
+    # "1 prancha" com 18 DWG no Storage, e dois seguem contados como PDF puro
+    # na estatística PDF × CAD depois de o cliente anexar o CAD.
+    # 🔑 Status continua pela RPC (é o que ela existe pra fazer); a COMPOSIÇÃO
+    # vai pelo patch direto.
+    _supabase_update("projects", "job_id", job_id,
+                     {"status": "queued", "error_message": None})
     if sum(_comp.values()) > 0:
-        _upd["file_types"] = _comp
-        _upd["files_count"] = sum(_comp.values())
-    _supabase_update("projects", "job_id", job_id, _upd)
+        _projeto_patch(job_id, {"file_types": _comp,
+                                "files_count": sum(_comp.values())})
 
     jobs[job_id] = ProcessingStatus(
         job_id=job_id, status="queued", progress=0,
