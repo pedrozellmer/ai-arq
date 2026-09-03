@@ -135,8 +135,16 @@ def test_o_aviso_acende_quando_a_serie_PAROU_mesmo_com_o_token_no_lugar():
     """🚨 O único critério era "a variável CLOUDFLARE_API_TOKEN existe". A
     coleta ficou 3 dias e 7 horas sem gravar nada e o painel manteve a cara
     normal, porque o token estava lá o tempo todo. Guarda que confere a
-    CONFIGURAÇÃO e não o RESULTADO não é guarda."""
-    hoje = date.today()
+    CONFIGURAÇÃO e não o RESULTADO não é guarda.
+
+    🩸 02/09/2026, CI VERMELHO: este teste montava a série com `date.today()`,
+    que é UTC no runner, e comparava com a função, que conta em BRASÍLIA desde
+    o conserto da manhã. Entre 21h e meia-noite de Brasília o UTC já virou o
+    dia seguinte, e os 5 dias viravam 4 (`assert 4 == 5`). Passava sempre aqui
+    (fuso local = Brasília) e falhava lá só numa janela de 3 horas por dia.
+    🔑 O teste tem que usar o MESMO relógio da função que ele mede — ver
+    [[feedback_tz_nao_move_date_today_no_windows]]."""
+    hoje = _m._hoje_br()
     parada = [{"dia": str(hoje - timedelta(days=5))}]
     r = _m._saude_da_coleta(parada, True)
     assert r["aviso"], "serie parada ha 5 dias e o painel nao avisa nada"
@@ -144,12 +152,44 @@ def test_o_aviso_acende_quando_a_serie_PAROU_mesmo_com_o_token_no_lugar():
     assert r["atraso_dias"] == 5
 
 
+def test_CONTROLE_o_fuso_so_se_prova_FALSIFICANDO_o_relogio():
+    """🧪 Rodar isto na minha máquina não prova nada: o fuso local É Brasília,
+    então o certo e o errado dão o mesmo número — foi por isso que o CI ficou
+    vermelho e a bancada local, verde.
+
+    Reproduz o instante exato do incidente: 02/09/2026 20h56 em Brasília, que é
+    23h56 UTC — o runner já virou o dia 03, Brasília ainda está no dia 02.
+    O segundo `assert` é o controle: ele exige que o jeito ERRADO continue
+    dando 4. Se um dia parar de dar, este teste deixou de provar fuso.
+    """
+    import datetime as _dt
+    br = _dt.datetime(2026, 9, 2, 20, 56)      # relógio de Brasília
+    utc_hoje = _dt.date(2026, 9, 3)            # o que `date.today()` daria no CI
+    _orig = _m._agora_br_fn
+    try:
+        _m._agora_br_fn = lambda: br
+        certo = _m._saude_da_coleta(
+            [{"dia": str(br.date() - _dt.timedelta(days=5))}], True)
+        assert certo["atraso_dias"] == 5, (
+            "a função parou de contar o atraso pelo relógio de Brasília")
+        errado = _m._saude_da_coleta(
+            [{"dia": str(utc_hoje - _dt.timedelta(days=5))}], True)
+        assert errado["atraso_dias"] == 4, (
+            "o controle deixou de reproduzir o erro do CI — sem ele este "
+            "arquivo volta a passar verde com o fuso trocado")
+    finally:
+        _m._agora_br_fn = _orig
+
+
 def test_CONTROLE_serie_em_dia_NAO_acende_alarme_falso():
     """🧪 O outro lado, e ele é essencial: o tick grava sempre `today - 1`, então
     a série estar UM dia atrás é o estado SAUDÁVEL. Um alarme que acende todo
     dia é um alarme que o Pedro aprende a ignorar — e aí o dia que importa passa
-    batido."""
-    hoje = date.today()
+    batido.
+
+    🪤 Mesmo relógio da função (Brasília), não `date.today()` — ver o teste
+    acima: o descompasso de fuso reprovava o CI só entre 21h e meia-noite."""
+    hoje = _m._hoje_br()
     for atras in (0, 1):
         r = _m._saude_da_coleta([{"dia": str(hoje - timedelta(days=atras))}], True)
         assert r["aviso"] is None, (
@@ -159,7 +199,7 @@ def test_CONTROLE_serie_em_dia_NAO_acende_alarme_falso():
 def test_sem_token_o_aviso_continua_falando_do_token():
     """🪤 Três estados, não dois: desligada, atrasada e ok. Trocar um pelo outro
     mandaria o Pedro conferir o agendamento quando o problema é a variável."""
-    r = _m._saude_da_coleta([{"dia": str(date.today())}], False)
+    r = _m._saude_da_coleta([{"dia": str(_m._hoje_br())}], False)
     assert "CLOUDFLARE_API_TOKEN" in (r["aviso"] or "")
 
 
