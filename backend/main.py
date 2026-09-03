@@ -12169,7 +12169,21 @@ async def process_files(
         user_total_area = float(user_total_area or 0)
     except (TypeError, ValueError):
         user_total_area = 0
-    if user_total_area < 0 or user_total_area > 1_000_000:
+    # 🩸 03/09/2026, caso FÁBIO SHIRAISHI (job 3eb748e3): ele digitou
+    # **880.000** no campo de área e passou, porque o teto era 1 km². O número
+    # foi pra planilha dele, carimbado como "informada por você".
+    # 🔑 Teto não é conferência de plausibilidade. Medido: TODAS as áreas já
+    # informadas por cliente, do maior pro menor, são
+    #     880.000 (a do Fábio) · 3.274 · 400 · 378 · 335 · 290 · 192 · 190 ·
+    #     150 · 73 · 31
+    # A segunda maior é 3.274 m². A dele é 269× isso. 100.000 m² (10 hectares
+    # de área construída) é 30× a maior real — generoso e ainda pega o caso.
+    # 🪤 E zerar CALADO é a doença do dia: o cliente digitou e a gente ignorou
+    # sem contar. Agora registra, e a resposta do upload devolve o aviso.
+    _AREA_PLAUSIVEL_MAX = 100_000
+    aviso_area_implausivel = None
+    if user_total_area < 0 or user_total_area > _AREA_PLAUSIVEL_MAX:
+        aviso_area_implausivel = user_total_area
         user_total_area = 0
     if not files:
         raise HTTPException(400, "Nenhum arquivo enviado")
@@ -12460,6 +12474,32 @@ async def process_files(
                           _repet["job_id"], 100 * _repet["fracao"],
                           user_pe_direito or "-", user_total_area or "-"),
                        job_id, severity="info")
+        except Exception:
+            pass
+    if aviso_area_implausivel is not None:
+        resp["aviso_area"] = {
+            "valor": aviso_area_implausivel,
+            "titulo": "Conferir a área total informada",
+            # 🪤 O número é formatado SOZINHO. A 1ª versão fazia
+            # `.format(...).replace(",", ".")` na frase inteira e comeu a
+            # vírgula do texto: "…3.274 m²). então NÃO usamos". Trocar
+            # separador no texto todo estraga a pontuação.
+            "texto": ("Você informou {} m² de área total. Isso é muito "
+                      "acima do que a gente vê em projeto (a maior já informada "
+                      "aqui tem 3.274 m²), então NÃO usamos esse número — "
+                      "provavelmente foi um dígito a mais, ou a unidade errada.\n\n"
+                      "O projeto segue normalmente e a área sai medida da "
+                      "prancha, se ela tiver cota ou quadro de áreas. Se o "
+                      "número estiver certo mesmo, é só reenviar e a gente "
+                      "olha o caso.").format(
+                          ("{:,.0f}".format(aviso_area_implausivel)
+                           .replace(",", "."))),
+        }
+        try:
+            _log_error("upload:area-implausivel",
+                       f"cliente informou {aviso_area_implausivel} m² "
+                       f"(teto de plausibilidade {_AREA_PLAUSIVEL_MAX}) — "
+                       f"IGNORADA e cliente avisado no envio", job_id)
         except Exception:
             pass
     if avisos_estrutural and project_type != "estrutura":
@@ -23029,7 +23069,25 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
     return {"ok": True, "revogado": revogar, "eval_job_id": eval_job_id, "parent_job_id": pai_id,
             "dono": pai.get("user_email") or "(sem e-mail)",
             "antes": antes, "depois": depois,
-            "melhorou": (depois["medidos"] > antes["medidos"]),
+            # 🩸 03/09/2026 — ESTE CAMPO CONTRADIZIA A PRÓPRIA RESPOSTA. No
+            # caso FÁBIO (filhote ev572486) a rota devolveu `melhorou: false` e
+            # `email_motivo: "em envio"` no MESMO json — e o e-mail saiu, certo,
+            # porque foram 19 → 83 itens.
+            # A causa: `melhorou` olhava SÓ medidos, e o portão do e-mail exige
+            # "mais medidos OU mais itens". Os dois estavam certos isoladamente
+            # e mentiam juntos, na tela de quem clica o botão.
+            # 🔑 Passa a ser o MESMO critério do e-mail — um só, pra não voltar
+            # a divergir — e ganha `melhorou_em`, que diz no QUÊ melhorou, que é
+            # o que quem libera precisa saber pra decidir.
+            "melhorou": (depois["medidos"] > antes["medidos"]
+                         or depois["itens"] > antes["itens"]),
+            "melhorou_em": ", ".join(
+                [t for t in (
+                    ("%d → %d medidos" % (antes["medidos"], depois["medidos"])
+                     if depois["medidos"] > antes["medidos"] else ""),
+                    ("%d → %d itens" % (antes["itens"], depois["itens"])
+                     if depois["itens"] > antes["itens"] else ""),
+                ) if t]) or "nada",
             "revisoes_no_original": revisoes,
             "email_enviado": email_enviado,
             "email_motivo": email_motivo,

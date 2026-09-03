@@ -614,11 +614,31 @@ def _log_conversation(job_id: str, question: str, answer: str,
 _LACUNA_RE = re.compile(
     r"(n[ãa]o\s+(tem|veio|apareceu|consta|calculou|mediu|bateu)|"
     r"falt(a|ou|aram|ando)|sem\s+(quantitativo|medi[çc][ãa]o|quantidade)|"
-    r"(t[áa]|est[áa])\s+(em\s+branco|zerad|vazi|errad)|"
+    # 🪤 03/09 — o plural NAO casava: "os itens ESTAO zerados na tabela" e
+    # queixa de manual e passava batido, porque so havia `est[áa]` no
+    # singular. Achado pelo controle positivo do guarda do alarme.
+    r"(t[áãa]o?|est[áãa]o?)\s+(em\s+branco|zerad|vazi|errad)|"
     r"n[ãa]o\s+apresentou|incomplet|"
     r"(pq|por\s*que|porqu[êe])\s+(n[ãa]o|nao))",
     re.IGNORECASE,
 )
+
+
+# O que é NOSSO entregável. A queixa só vira alerta se estiver perto de um
+# destes — senão é o cliente falando do projeto dele, não da nossa planilha.
+_NOSSO_ENTREGAVEL_RE = re.compile(
+    r"planilha|quantitativ|quantidade|medi[çc][ãa]o|medid|"
+    r"\bitem\b|\bitens\b|\blinha|tabela|or[çc]amento|"
+    r"\bm2\b|m²|metragem|\b[áa]rea\b|relat[óo]rio|xlsx|excel",
+    re.IGNORECASE,
+)
+# 🪤 Os `\b` acima TÊM que ser barra invertida + b. Escrevendo este arquivo por
+# heredoc eu transformei `\b` em caractere de BACKSPACE (0x08) e o regex passou
+# a nunca casar "item" — alarme cego, sem erro nenhum. Foi o SEXTO escape errado
+# do mesmo tipo em 03/09/2026. Este assert custa nada e reprova na importação,
+# antes de qualquer cliente perguntar.
+assert _NOSSO_ENTREGAVEL_RE.search("item") and _NOSSO_ENTREGAVEL_RE.search("área"), (
+    "_NOSSO_ENTREGAVEL_RE nao casa o vocabulario basico — escape quebrado?")
 
 
 def _alerta_lacuna(job_id: str, question: str) -> None:
@@ -628,7 +648,20 @@ def _alerta_lacuna(job_id: str, question: str) -> None:
     Deduplica por job (1 alerta por projeto) pra não virar spam em conversa
     longa — o objetivo é sinalizar o projeto, não cada frase.
     """
+    # 🩸 03/09/2026 — ESTE ALARME LEU O CHECKLIST DO CLIENTE COMO QUEIXA.
+    # O FÁBIO (job eebe543a) mandou um briefing pedindo auditoria do projeto de
+    # rede DELE, com itens tipo "Falta de reserva técnica" e "Falta de espaço
+    # para expansão futura". O `falt(a|ou)` casou, e o Pedro recebeu
+    # "Chat: cliente diz que faltou medição" — coisa que ele não disse.
+    # 🔑 A palavra sozinha não distingue "faltou medição NA PLANILHA" de "falta
+    # reserva técnica NO PROJETO DELE". O que distingue é a queixa estar perto
+    # de algo NOSSO. Alarme falso gasta a atenção do Pedro, que é o recurso
+    # mais escasso da casa — e treina ele a ignorar os verdadeiros.
     if not question or not _LACUNA_RE.search(question):
+        return
+    _m = _LACUNA_RE.search(question)
+    _perto = question[max(0, _m.start() - 90):_m.end() + 90]
+    if not _NOSSO_ENTREGAVEL_RE.search(_perto):
         return
     try:
         from main import _notify_admin, _email_auto_registrar, _email_auto_ja_enviado, NOTIFY_EMAIL
