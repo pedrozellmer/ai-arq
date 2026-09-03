@@ -18322,7 +18322,29 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
 
     try:
         from agent import ask
-        result = ask(job_id=job_id, question=question.strip(), history=history)
+        # 🧊 03/09/2026 — ESTA ROTA DERRUBOU O SITE. Cliente `v.anjos.ia.81@`
+        # (job eebe543a) mandou uma pergunta no chat às 15:07:36 BRT; às
+        # 15:07:30–15:09 o `instance_count` do Render foi a ZERO e o e-mail de
+        # "HTTP health check failed (timed out after 5 seconds)" chegou.
+        #
+        # NÃO foi memória: o pico do container no episódio inteiro foi 906 MB,
+        # 22% dos 4 GiB. Foi BLOQUEIO. `agent.ask` é SÍNCRONA — até 8 iterações
+        # seguidas de chamada ao modelo, cada uma com execução de tool que lê
+        # DXF — e estava sendo chamada direto de um `async def`, ou seja, DENTRO
+        # do laço de eventos. Com `--workers 1` isso congela o processo inteiro
+        # enquanto o agente pensa: o health check de 5 s morre e o Render mata a
+        # instância. Qualquer cliente que pergunte no chat derruba o site pra
+        # todos os outros.
+        #
+        # 🪤 Mesma doença de 28/08 ([[project_relogio_congelava_o_site]]), que
+        # foi consertada em 61 rotas — esta ficou de fora, provavelmente porque
+        # a varredura procurou I/O óbvio (urllib, requests) e aqui o bloqueio
+        # está atrás de um `from agent import ask`.
+        # 🪤 Por NOME, não por posição: `ask` tem `max_iterations` no meio da
+        # assinatura, e passar posicional fixaria o default aqui — mudar a
+        # assinatura lá quebraria isto de um jeito silencioso.
+        result = await run_in_threadpool(
+            ask, job_id=job_id, question=question.strip(), history=history)
         return {"status": "ok", **result}
     except Exception as e:
         raise HTTPException(500, f"Erro do agente: {type(e).__name__}: {e}")
