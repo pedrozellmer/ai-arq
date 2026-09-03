@@ -4327,6 +4327,28 @@ def _origem_do_grupo(grupo, regra="todos"):
     return "dxf_geom" if origens and all(o == "dxf_geom" for o in origens) else ""
 
 
+def _resumo_do_grupo(group, teto: int = 4) -> str:
+    """"Lajes 12.72 · Vigas 0 · Pilares 0 (+1)" — o que a fusão consumiu.
+
+    🩸 03/09/2026: sem isto, quando um número some entre duas rodadas não dá
+    pra separar "a consolidação comeu" de "a IA não produziu". Aconteceu com o
+    Edvaldo e a resposta levou uma consulta ao banco e uma leitura de código
+    pra sair — devia estar escrita na própria linha."""
+    partes = []
+    for it in group[:teto]:
+        _d = (getattr(it, "description", "") or "").strip()
+        for sep in (" — ", " - "):
+            _d = _d.split(sep)[-1] if sep in _d else _d
+        try:
+            _q = round(float(getattr(it, "quantity", 0) or 0), 2)
+        except (TypeError, ValueError):
+            _q = 0
+        partes.append("%s %s" % (_d[:28] or "?", _q))
+    if len(group) > teto:
+        partes.append("(+%d)" % (len(group) - teto))
+    return " · ".join(partes)
+
+
 def _consolidate_items(items: list) -> list:
     """Consolida itens redundantes em múltiplas passadas:
 
@@ -4386,6 +4408,21 @@ def _consolidate_items(items: list) -> list:
         # Réplica por departamento tem prioridade (4+ itens com qty < 2) —
         # independente de qtys serem idênticas, porque itens "Contabilidade"
         # e "RH" costumam bater mesmo quando são na verdade áreas distintas.
+        # 🩸 03/09/2026, caso EDVALDO (job d2bedf82, o maior lead B2B). Quatro
+        # linhas de concreto — Lajes, Vigas, Pilares, Escadas — viraram UMA,
+        # chamada "Concreto estrutural fck=30MPa (várias variantes)", com
+        # quantidade 0. Ele tinha quatro linhas ESPECÍFICAS pra preencher e
+        # ficou com uma genérica.
+        # 🔑 A verdade de campo diz que 87% do que o cliente corrige é PREENCHER
+        # linha zerada (96 correções, 6 clientes). Fundir quatro zeros remove
+        # exatamente a especificidade que ele usaria pra preencher: "fôrma de
+        # pilar" ele sabe responder; "várias variantes" não.
+        # 🪤 Isto NÃO afeta fusão que soma algo: a regra já exige max < 2,0, e
+        # o corte novo só dispensa o caso em que o total é ZERO.
+        _total_do_grupo = round(sum(quantities), 2)
+        if max(quantities) < 2.0 and len(group) >= 4 and _total_do_grupo <= 0:
+            pass1.extend(group)
+            continue
         if max(quantities) < 2.0 and len(group) >= 4:
             best = max(group, key=lambda x: (len(x.description or ""), _desempate_estavel(x)))
             clean_desc = best.description
@@ -4400,6 +4437,11 @@ def _consolidate_items(items: list) -> list:
                 observations=(
                     f"Consolidado de {len(group)} entradas replicadas por "
                     f"departamento/variante — soma de qtys: {total_qty} {best.unit}. "
+                    # 🩸 03/09: a mensagem dizia só o TOTAL. Quando o Edvaldo
+                    # perdeu um número entre duas rodadas, não deu pra saber se
+                    # a consolidação tinha comido ou se a IA não produziu — a
+                    # linha não registrava o que consumiu. Agora registra.
+                    f"Veio de: {_resumo_do_grupo(group)}. "
                     f"Revisar se faz sentido tratar como item único."
                 ),
                 ref_sheet=best.ref_sheet,
