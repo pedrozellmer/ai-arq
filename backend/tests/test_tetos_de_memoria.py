@@ -39,8 +39,21 @@ import dwg_extractor as dx   # noqa: E402
 
 _MB = 1024 * 1024
 _CONTAINER_MB = 4096            # Render Pro
+
+# 🩸 03/09/2026 — O FATOR DE CONVERSÃO ERA 53, E RECUSOU UM CLIENTE À TOA.
+# Os 53× vinham de arquivos PEQUENOS (3,1 a 24,6 MB). Parte do custo da
+# conversão é FIXA, então o fator CAI conforme o arquivo cresce. Medido em três
+# arquivos GRANDES de cliente no mesmo dia:
+#     11,7 MB → ~29×   (produção, Render)
+#     44,5 MB →  18,8×  ← o do FÁBIO, recusado por 44 > 40 MB
+#     53,2 MB →  26×
+# Aplicar 53× a um arquivo de 44 MB previa 2.227 MB; o real foi 836 MB.
+# O preço do erro: cliente novo recusado no primeiro projeto, e ele foi tentar
+# de PDF — o caminho que só estima.
+# 🪤 35 é PESSIMISTA de propósito (o pior medido é 29). Este número decide se a
+# conversão cabe; ele não pode ser o melhor caso.
 _FATOR_EXTRACAO = 8.6           # pior caso medido
-_FATOR_CONVERSAO = 53           # pior caso medido
+_FATOR_CONVERSAO = 35           # pessimista sobre 18,8–29× medidos nos grandes
 
 
 def test_os_dois_tetos_cabem_no_container():

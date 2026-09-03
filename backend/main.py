@@ -7502,7 +7502,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 "motor:prancha-grande-demais",
                                 f"{_bn_dwg}: DWG de {_tam_dwg // 1048576} MB passa "
                                 f"do teto de {_TETO_DWG // 1048576} MB — converter "
-                                f"pediria ~{int(_tam_dwg * 50 / 1048576)} MB de RAM e "
+                                f"pediria ~{int(_tam_dwg * 30 / 1048576)} MB de RAM e "
                                 f"derrubaria o servidor; nem tentei", job_id)
                             _dxf_grandes_msgs.append(
                                 f"{_bn_dwg}: essa prancha é grande demais pro nosso "

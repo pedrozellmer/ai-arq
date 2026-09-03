@@ -1894,9 +1894,34 @@ _MAX_DXF_BYTES = 250 * 1024 * 1024  # 250 MB — prancha normal é <20 MB
 #     DWG  5,4 MB ->   249 MB   (46x)
 #     DWG  6,4 MB ->   337 MB   (53x)
 #     DWG 24,6 MB -> 1.056 MB   (43x)
-# A 40 MB o pico da conversao fica em ~2,1 GB, 51% do container — mesma folga
-# que o teto de DXF deixa pra extracao, e as duas fases sao sequenciais.
-_MAX_DWG_BYTES = 40 * 1024 * 1024  # 40 MB de DWG ≈ 2,1 GB na conversão
+#
+# 🩸 03/09/2026 — O TETO RECUSOU UM ARQUIVO QUE A GENTE LÊ. Caso FABIO
+# SHIRAISHI (job 75dab573, "BRB Estadio"), primeiro projeto dele: DWG de
+# 44,5 MB recusado, com o log dizendo "converter pediria ~2227 MB de RAM e
+# derrubaria o servidor; nem tentei". Baixei o arquivo dele e medi:
+#
+#     conversão: pico  836 MB (18,8x) em 27 s   ← previsto: 2.227 MB
+#     DXF gerado: 248,3 MB
+#     extração:  pico 1.964 MB (7,9x o DXF) em 87 s, exit 0
+#
+# Ou seja: cabia FOLGADO, nas três etapas. Ele reagiu subindo um PDF, que é o
+# caminho que só estima. Recusa errada não devolve o cliente pro lugar certo.
+#
+# 🔑 POR QUE A PREVISÃO ERRAVA: todas as medidas acima são de arquivo PEQUENO
+# (3,1 a 24,6 MB). O fator CAI conforme o arquivo cresce — parte do custo da
+# conversão é fixa. Medido nos grandes, no mesmo dia:
+#     DWG 11,7 MB -> ~29x   (produção, Render, amostragem de 30 s)
+#     DWG 44,5 MB ->  18,8x
+#     DWG 53,2 MB ->  26x
+# Extrapolar 53x de um arquivo de 3 MB pra um de 44 MB errou por 2,7 vezes.
+#
+# 🪤 A trava de memória do FILHO (2,5 GB) continua sendo o juiz da extração —
+# este teto só protege a CONVERSÃO, que roda no processo do servidor e não tem
+# trava nenhuma. A 60 MB, com o pior fator medido nos grandes (29x), o pico
+# fica em ~1,7 GB; com um pessimista 35x, em 2,1 GB — a mesma folga que o teto
+# antigo se propunha a deixar, agora sobre número medido e não sobre
+# extrapolação.
+_MAX_DWG_BYTES = 60 * 1024 * 1024  # 60 MB de DWG ≈ 1,7 GB na conversão (medido)
 
 
 # Fator em metros por $INSUNITS, lido direto do TEXTO do cabeçalho (sem ezdxf).
