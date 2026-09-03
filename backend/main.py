@@ -2704,8 +2704,21 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                       "acontecer com arquivo salvo numa versão muito recente do AutoCAD, ou "
                       "com objetos especiais (comum em incêndio, hidráulica e elétrica feitos "
                       "em software MEP).")
-            fix = ("O ideal é <b>reenviar em DXF ou PDF vetorial</b>, ou salvar o DWG numa "
-                   "<b>versão mais antiga</b> do AutoCAD (ex.: 2013) e mandar de novo.")
+            # 🩸 03/09/2026, caso FÁBIO SHIRAISHI. Esta frase oferecia DXF e PDF
+            # como se fossem equivalentes. Ele recebeu este e-mail às 14:02 e
+            # subiu um PDF às 14:04 — dois minutos depois. Recebeu 19 de 19
+            # linhas ZERADAS.
+            # 🔑 Medido em 118 projetos de cliente concluídos:
+            #     só CAD  → 73,6% com algum item MEDIDO (média 14,3)
+            #     só PDF  →  5,4% (média 0,1) — 35 de 37 receberam ZERO
+            # Oferecer os dois lado a lado é mandar o cliente pro caminho que
+            # falha 18 vezes em 19, com a nossa recomendação em cima.
+            fix = ("O ideal é <b>reenviar em DXF</b> — ou salvar o DWG numa "
+                   "<b>versão mais antiga</b> do AutoCAD (ex.: 2013) e mandar de "
+                   "novo.<br><br>Se não der nenhum dos dois, dá pra mandar o PDF "
+                   "vetorial — mas aí a gente <b>identifica e estima</b>, não "
+                   "mede: de PDF quase nunca sai quantidade medida do desenho. "
+                   "O DXF é o que vira quantitativo com número medido.")
             alt_img = "Um ajuste no arquivo resolve — exporte em DXF"
             pre_txt = "Reprocessar não resolve este caso: exporte em DXF e reenvie."
         elif "grande demais" in _eh or ("limite" in _eh and "mb" in _eh):
@@ -7767,8 +7780,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             f"2. Na janela que abrir, escolha a versão 2013 e confirme — ele cria "
                             f"um arquivo novo (o seu original não é alterado)\n"
                             f"3. Abra esse arquivo novo e salve como DXF. Suba o DXF aqui\n\n"
-                            f"Não tem o AutoCAD Architecture? Mande o PDF vetorial da prancha "
-                            f"(plotado com escala) — a gente mede pela geometria."
+                            f"Não tem o AutoCAD Architecture? Dá pra mandar o PDF "
+                            f"vetorial da prancha (plotado com escala) — mas aí a "
+                            f"gente identifica e ESTIMA, não mede: medido em 37 "
+                            f"projetos só-PDF, 35 saíram sem nenhuma quantidade "
+                            f"medida do desenho. O DXF é o caminho que mede."
                         )
                     elif _truncados:
                         msg = (
@@ -22083,7 +22099,8 @@ async def reprocess_project(job_id: str, request: Request):
 
 
 @app.post("/api/admin/eval-reprocess/{job_id}")
-def admin_eval_reprocess(job_id: str, request: Request):
+def admin_eval_reprocess(job_id: str, request: Request,
+                         project_type: Optional[str] = None):
     """ADMIN — "modo avaliação": re-roda os arquivos de um projeto num job
     ISOLADO, sem tocar no projeto do cliente. Serve pra comparar leituras sem
     risco (ex.: DWG vs PDF, ou motor novo vs antigo).
@@ -22158,7 +22175,30 @@ def admin_eval_reprocess(job_id: str, request: Request):
 
     # 4) Row de avaliação ISOLADA
     typology = orig.get("typology") or "office"
+    # 🩸 03/09/2026, caso FÁBIO SHIRAISHI (job 3eb748e3). Ele mandou uma prancha
+    # de REDE Wi-Fi marcando "Estrutura" no tipo. O motor DETECTOU o engano —
+    # gravou o aviso "este arquivo parece ser de ARQUITETURA, não de estrutura"
+    # — e mesmo assim mediu como estrutura, entregou 19 de 19 linhas ZERADAS e
+    # pediu ao cliente "planta de fôrma, detalhamento de armação ou quadro de
+    # ferros". Para um projeto de cabeamento.
+    # 🔑 A gente SABIA e mandou ELE resolver. E o filhote copiava o mesmo tipo
+    # errado, então nem dava pra conferir a hipótese sem mexer no banco à mão.
+    # Agora dá: `?project_type=arquitetura` roda a MESMA prancha no tipo certo,
+    # isolado, sem tocar no projeto do cliente e sem e-mail.
     ptype = orig.get("project_type") or "arquitetura"
+    _tipo_pedido = (project_type or "").strip().lower()
+    if _tipo_pedido:
+        if _tipo_pedido not in ("arquitetura", "estrutura"):
+            raise HTTPException(400,
+                                "project_type tem que ser 'arquitetura' ou 'estrutura'")
+        if _tipo_pedido != ptype:
+            try:
+                _log_error("admin:filhote-troca-tipo",
+                           f"pai={job_id} tipo {ptype} -> {_tipo_pedido} "
+                           f"(o motor tinha apontado o engano no aviso)", job_id)
+            except Exception:
+                pass
+        ptype = _tipo_pedido
     types_summary = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
     jobs[eval_job_id] = ProcessingStatus(
         job_id=eval_job_id, status="queued", progress=0,
