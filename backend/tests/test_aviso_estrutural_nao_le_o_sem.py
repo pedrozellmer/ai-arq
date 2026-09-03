@@ -114,3 +114,37 @@ def test_CONTROLE_o_estrutural_de_VERDADE_continua_disparando(nome):
     FORMA.pdf/fundacao.pdf passavam como arquitetura).
     """
     assert _m._nome_parece_estrutural(nome), nome
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🩸 APERTAR O REGEX DESLIGOU DUAS DETECÇÕES VERDADEIRAS (03/09, mesma tarde)
+# ══════════════════════════════════════════════════════════════════════════
+# A revisão adversarial do meu próprio commit achou, horas depois:
+#   • `pilares?` = "pilare" + s OPCIONAL → **nunca casa PILAR no singular**;
+#   • `arma[cç][aã]o` não cobre o PLURAL ("ARMAÇÕES", "ARMACOES").
+# Tirei dois falsos positivos e criei dois falsos NEGATIVOS, calados. O
+# controle antigo tinha "Armacao-Laje-Tipo.pdf" (que passa pelo "Laje") e
+# "pilares e vigas.dxf" (plural) — nenhum dos dois exercia a forma quebrada.
+# 🔑 Controle que só testa a forma fácil não é controle.
+
+@pytest.mark.parametrize("nome", [
+    "PILAR-P1.dwg",          # singular, sem outra palavra estrutural junto
+    "pilar_p12_terreo.dwg",
+    "ARMAÇÕES.pdf",          # plural com ç e til
+    "ARMACOES.dwg",          # plural sem acento
+])
+def test_as_formas_que_o_aperto_de_regex_QUEBROU(nome):
+    assert _m._nome_parece_estrutural(nome), (
+        "%r deixou de avisar — foi assim que `pilares?` e `arma[cç][aã]o` "
+        "desligaram detecção verdadeira sem ninguém ver" % nome)
+
+
+@pytest.mark.parametrize("nome", [
+    "CIQUANTA-CABEAMENTO ESTRUTURADO.dwg",
+    "NAVIGATION-PLAN.dwg",
+    "LAJEADO-CENTRO.dwg",
+    "ARQ_EXE_REV01_SEM ESTRUTURAL.pdf",
+])
+def test_CONTROLE_os_falsos_positivos_continuam_fora(nome):
+    """Consertar o falso negativo não pode reabrir o falso positivo."""
+    assert not _m._nome_parece_estrutural(nome), nome

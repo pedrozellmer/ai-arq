@@ -12139,8 +12139,14 @@ def _nome_parece_estrutural(nome: str) -> bool:
             r"|(?<![a-zà-ü])estrut(?![a-zà-ü])"
             r"|(?<![a-zà-ü])f[oô]rmas?(?![a-zà-ü])"
             r"|(?<![a-zà-ü])funda[cç]"
-            r"|(?<![a-zà-ü])arma[cç][aã]o"
-            r"|(?<![a-zà-ü])pilares?(?![a-zà-ü])"
+            # 🩸 03/09, 2ª mordida do mesmo conserto: `arma[cç][aã]o` não pega
+            # o PLURAL ("ARMAÇÕES", "ARMACOES"). Achado por revisão adversarial
+            # do meu próprio commit, horas depois.
+            r"|(?<![a-zà-ü])arma[cç](?:[ãa]o|[õo]es)(?![a-zà-ü])"
+            # 🩸 `pilares?` significa "pilare" + s OPCIONAL — nunca casa PILAR
+            # no singular. Apertando o regex pra tirar dois falsos positivos eu
+            # DESLIGUEI uma detecção verdadeira, calado. O certo é `pilar(es)?`.
+            r"|(?<![a-zà-ü])pilar(?:es)?(?![a-zà-ü])"
             r"|(?<![a-zà-ü])vigas?(?![a-zà-ü])"
             r"|(?<![a-zà-ü])lajes?(?![a-zà-ü])"
             r"|(?<![a-zà-ü])baldrames?(?![a-zà-ü])"
@@ -16492,7 +16498,11 @@ async def public_chat(request: Request):
         # O padrão do módulo (8 tentativas, backoff até 90s) faria ele esperar
         # minutos achando que travou — num chat, falhar rápido é melhor que
         # insistir muito. 2 tentativas cobrem o 429 de rajada, que é o caso real.
-        resp = call_with_retry(
+        # 🧊 03/09 — TERCEIRO chat no laço. Achado só quando eu ampliei a
+        # lista `_PESADAS` do guarda: o defeito estava aqui o tempo todo e
+        # a varredura passava verde porque não olhava este nome.
+        resp = await run_in_threadpool(
+            call_with_retry,
             client,
             tag="chat-publico", max_retries=2, base_delay=1.0, max_delay=6.0,
             model="claude-haiku-4-5",
@@ -16622,7 +16632,18 @@ async def project_chat(job_id: str, request: Request):
         # Aqui o `context` carrega descrição de item vinda da leitura do CAD —
         # é o call site com mais chance de trazer texto de origem duvidosa, e
         # agora ele herda o `_scrub_payload` do wrapper junto com o retry.
-        resp = call_with_retry(
+        # 🧊 03/09/2026 — O SEGUNDO CHAT, QUE O CONSERTO DA QUEDA NÃO ALCANÇOU.
+        # Às 15:07 o site caiu 1,5 min porque `agent.ask` rodava síncrona no
+        # laço de eventos (rota /api/agent/ask). Consertei aquela e deixei ESTA,
+        # que tem o mesmo defeito: `call_with_retry` é síncrona, com 2 retries
+        # e timeout de 60 s cada — até ~3 min de laço congelado, e o health
+        # check do Render morre em 5 s.
+        # 🪤 A varredura por AST que eu criei no mesmo dia não pegou: ela filtra
+        # por uma LISTA de nomes pesados (`_PESADAS`) e `call_with_retry` não
+        # estava nela. **A lista é a fronteira do guarda** — guarda com lista
+        # curta certifica o que não olha. `call_with_retry` entrou.
+        resp = await run_in_threadpool(
+            call_with_retry,
             client,
             tag="chat-projeto", max_retries=2, base_delay=1.0, max_delay=6.0,
             model="claude-haiku-4-5",
@@ -16631,6 +16652,12 @@ async def project_chat(job_id: str, request: Request):
             messages=clean,
         )
         reply = resp.content[0].text if resp.content else "Não consegui responder agora."
+        # 🩸 Mesmo defeito do chat do projeto que consertei em `agent.py` hoje:
+        # a resposta batia no teto de tokens e saía cortada no meio da palavra,
+        # sem ninguém ler o `stop_reason`. Aqui o teto é 500 — corta MAIS fácil.
+        if getattr(resp, "stop_reason", None) == "max_tokens":
+            reply += ("\n\n⚠ Resposta cortada no limite de tamanho — pergunte de "
+                      "novo pedindo a continuação de um ponto específico.")
         return {"status": "ok", "reply": reply}
     except Exception as e:
         print(f"[project_chat] erro: {e}")
@@ -18686,7 +18713,8 @@ async def memorial_docx(job_id: str, request: Request):
             estrutura = await run_in_threadpool(montar_estrutura, projeto, items)
         tmp = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
         tmp.close()
-        resumo = estrutura_para_docx(tmp.name, estrutura)
+        resumo = await run_in_threadpool(
+            estrutura_para_docx, tmp.name, estrutura)
         print(f"[memorial] job={job_id} salvo={bool(salvo)} → {resumo}")
         fname = f"memorial_descritivo_rascunho_{_slug_filename(estrutura.get('obra') or job_id)}.docx"
         return FileResponse(
@@ -19788,10 +19816,19 @@ async def _cronograma_preview_png_impl(job_id: str, request: Request,
         cron, branding = await run_in_threadpool(
             _build_cronograma_for_export, job_id, request=request)
         from cronograma_render import render_pdf_bytes, render_png_paginas
-        pdf = render_pdf_bytes(cron, branding, tmpl, (accent or "").strip() or None)
+        # 🧊 03/09 — ESTE ficou de fora do conserto de 3338b79 e a varredura
+        # não o via **por construção**: ela só olhava `async def` COM `@app`, e
+        # isto é um helper sem decorador, chamado pela rota logo abaixo. O
+        # cliente comparando os 5 modelos de cronograma congelava o laço no
+        # WeasyPrint (5 páginas A4) e no pypdfium (rasterização a 1,6×), com o
+        # guarda verde dizendo que não havia rota pesada no laço.
+        # 🔑 Guarda que não olha uma forma inteira certifica o que não olha.
+        pdf = await run_in_threadpool(
+            render_pdf_bytes, cron, branding, tmpl,
+            (accent or "").strip() or None)
         if not pdf:
             raise RuntimeError("PDF vazio")
-        pngs = render_png_paginas(pdf, scale=1.6)
+        pngs = await run_in_threadpool(render_png_paginas, pdf, scale=1.6)
         if not pngs:
             raise RuntimeError("rasterização falhou")
         tmp = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
@@ -19933,7 +19970,12 @@ async def export_cronograma_pptx(job_id: str, request: Request,
         from cronograma_export import exportar_pptx
         tmp = tempfile.NamedTemporaryFile(suffix='.pptx', delete=False)
         tmp.close()
-        exportar_pptx(cron, tmp.name, branding=branding)
+        # 🪤 O irmão `exportar_pdf` foi movido no mesmo commit e este ficou —
+        # os dois fazem as MESMAS duas gerações matplotlib. Este é o ramo
+        # de fallback, que só roda quando o render novo falha; ou seja, ele
+        # bloqueia justamente no dia ruim.
+        await run_in_threadpool(
+            exportar_pptx, cron, tmp.name, branding=branding)
         return FileResponse(tmp.name, media_type=_pptx_mime, filename=fname)
     except Exception as e:
         import traceback

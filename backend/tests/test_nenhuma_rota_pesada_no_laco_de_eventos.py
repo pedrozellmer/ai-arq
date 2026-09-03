@@ -37,9 +37,15 @@ _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Funções cujo custo é medido em SEGUNDOS, não milissegundos.
 _PESADAS = (
-    "ask", "analyz", "extract",
+    # 🩸 03/09, 2ª revisão: ESTA LISTA É A FRONTEIRA DO GUARDA, e ela estava
+    # curta. `project_chat` (@app.post) chamava `call_with_retry` — o modelo,
+    # com 2 retries de 60 s — DIRETO no laço, e a varredura passou verde porque
+    # o nome não estava aqui. Guarda com lista curta certifica o que não olha.
+    # Toda chamada ao modelo e todo gerador de arquivo entram, sem exceção.
+    "ask", "analyz", "extract", "call_with_retry",
     "generate_spreadsheet", "_carimbar_planilha",
-    "render_pdf", "render_png", "exportar_pdf", "estrutura_para_pdf",
+    "render_pdf", "render_png", "exportar_pdf", "exportar_pptx",
+    "estrutura_para_pdf", "estrutura_para_docx",
     "gerar_cronograma_xlsx", "montar_estrutura",
     "_memorial_dados_frescos", "_build_cronograma_for_export",
     "processar_revisao_inline", "_merge_montar",
@@ -95,8 +101,15 @@ def _rotas_que_bloqueiam():
     for rota in ast.walk(tree):
         if not isinstance(rota, ast.AsyncFunctionDef):
             continue
-        if not any(ast.unparse(d).startswith("app.") for d in rota.decorator_list):
-            continue
+        # 🩸 03/09, 2ª revisão: aqui havia um filtro `if not decorador @app:
+        # continue`. Ele deixava a varredura CEGA para helper `async` sem
+        # decorador — e era exatamente onde estava o defeito vivo:
+        # `_cronograma_preview_png_impl` renderizava PDF e rasterizava PNG no
+        # laço, chamada pela rota logo abaixo dela. O guarda passava VERDE
+        # dizendo "nenhuma rota pesada no laço".
+        # 🔑 O que bloqueia o laço é qualquer `async def` alcançável de rota,
+        # com ou sem `@app`. Guarda que não olha uma forma inteira certifica o
+        # que não olha — por isso o filtro saiu.
         protegidos = _fora_do_laco(rota)
         for c in ast.walk(rota):
             if not isinstance(c, ast.Call) or id(c) in protegidos:
@@ -175,3 +188,57 @@ def test_CONTROLE_a_varredura_ABSOLVE_quem_roda_em_Thread():
              if isinstance(c, ast.Call) and id(c) not in protegidos
              and getattr(c.func, "id", "") == "processar_revisao_inline"]
     assert not cruas, "acusou trabalho que roda em Thread própria"
+
+
+def test_CONTROLE_a_varredura_ENXERGA_helper_async_SEM_decorador():
+    """🩸 O buraco que deixou a prévia do cronograma congelando o site.
+
+    A 1ª versão desta varredura pulava toda `async def` sem `@app`. O
+    `_cronograma_preview_png_impl` é exatamente isso — um helper chamado pela
+    rota logo abaixo — e renderizava PDF + rasterizava PNG no laço, com este
+    guarda passando verde.
+
+    🔑 Sem este controle, alguém "otimiza" o filtro de volta daqui a um mês e
+    ninguém percebe: o teste continua verde, agora certificando menos.
+    """
+    fonte = (
+        "@app.get('/x')" + chr(10) +
+        "async def rota(request):" + chr(10) +
+        "    return await _impl(request)" + chr(10) +
+        "" + chr(10) +
+        "async def _impl(request):" + chr(10) +
+        "    return render_pdf_bytes(1, 2)" + chr(10))
+    tree = ast.parse(fonte)
+    helper = [n for n in ast.walk(tree)
+              if isinstance(n, ast.AsyncFunctionDef) and n.name == "_impl"][0]
+    assert not any(ast.unparse(d).startswith("app.") for d in helper.decorator_list), (
+        "o controle precisa de um helper SEM decorador pra provar o ponto")
+    protegidos = _fora_do_laco(helper)
+    cruas = [c for c in ast.walk(helper)
+             if isinstance(c, ast.Call) and id(c) not in protegidos
+             and getattr(c.func, "id", "") == "render_pdf_bytes"]
+    assert cruas, (
+        "a varredura voltou a pular `async def` sem @app — é onde o defeito "
+        "de 03/09 estava escondido")
+
+
+def test_a_lista_de_PESADAS_cobre_TODA_chamada_ao_modelo():
+    """🩸 A lista é a fronteira do guarda, e ela estava curta.
+
+    `project_chat` e `public_chat` chamavam `call_with_retry` — o modelo, com
+    2 retries de 60 s — direto no laço, e a varredura passava verde porque o
+    nome não estava aqui. Chamada ao modelo é o item mais caro que existe
+    nesta casa; se algum dia houver outro nome pra ela, entra aqui junto.
+    """
+    assert "call_with_retry" in _PESADAS, (
+        "o wrapper de chamada ao modelo saiu da lista — o guarda volta a "
+        "certificar rotas que congelam o site por minutos")
+    # E os pares gêmeos: se o PDF está na lista, o PPTX/DOCX também têm que
+    # estar — foi assim que `exportar_pptx` ficou de fora enquanto o irmão
+    # `exportar_pdf` era movido no mesmo commit.
+    for a, b in (("exportar_pdf", "exportar_pptx"),
+                 ("estrutura_para_pdf", "estrutura_para_docx")):
+        assert (a in _PESADAS) == (b in _PESADAS), (
+            "%r e %r são irmãos e custam o mesmo; um está na lista e o outro "
+            "não — foi exatamente esse descuido que deixou o pptx no laço"
+            % (a, b))
