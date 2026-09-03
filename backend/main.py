@@ -165,6 +165,43 @@ def _supabase_insert(table, data):
 _DXF_TETO_ARQUIVO = 900 * 1024 * 1024      # sanidade: acima disso nem tenta
 _DXF_MARGEM_DISCO = 2 * 1024 * 1024 * 1024  # folga que o job precisa deixar
 
+def _origem_das_quantidades(all_items):
+    """(n_geo, frase) — a verdade sobre a ORIGEM dos números, escrita UMA vez.
+
+    🩸 03/09/2026 — CINCO LUGARES DIZIAM A MESMA MENTIRA. O motor contava
+    `confidence == 'confirmado'`, achava zero, e afirmava ao cliente que "os
+    números vieram de texto lido das pranchas". Selo e origem são dois fatos:
+      • selo zero = ninguém passou na conferência que libera o branco;
+      • origem    = de onde a quantidade saiu.
+    O EDVALDO (job b5ce23ff, maior lead B2B) leu que a planilha dele era
+    transcrição de legenda — com 90,86 m² vindos de hachura do layer LAJE e
+    169,83 m vindos do comprimento das linhas do layer VIGA.
+
+    🔑 Afirmar procedência sem olhar a procedência é a regra dura nº1 pelo
+    avesso. Lá é "não diga MEDIDO sem medir"; aqui é "não diga que NÃO mediu
+    sem olhar".
+
+    🪤 Frase escrita num lugar só, de propósito: eram cinco cópias divergindo,
+    e consertar quatro deixaria o cliente lendo a quinta.
+
+    n_geo = -1 (não deu pra contar) devolve frase VAZIA: calar sobre origem é
+    melhor que afirmar errado.
+    """
+    try:
+        from engine_rules import quantidades_da_geometria as _qg
+        _n = _qg(all_items)
+    except Exception:
+        _n = -1
+    if _n is None or _n < 0:
+        return -1, ""
+    if _n > 0:
+        return _n, ("Parte das quantidades foi tirada da geometria do desenho "
+                    "(hachura, comprimento de layer) e está em laranja pra você "
+                    "conferir — não é transcrição de legenda; o resto veio de "
+                    "texto lido das pranchas.")
+    return 0, "O que saiu na planilha veio de texto lido das pranchas."
+
+
 def _apaga_dir_de_conversao(dxf_path):
     """Apaga a pasta temporária `arq_dxf_*` de UMA conversão. Devolve True se apagou.
 
@@ -2761,9 +2798,26 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
                       "da geometria do desenho (os itens em branco). Os em laranja dependem da "
                       "sua conferência.")
         elif n_cad > 0:
-            porque = ("Seu arquivo é CAD, mas a IA não conseguiu medir a geometria diretamente "
-                      "(comum quando os elementos foram desenhados como linhas soltas, não como "
-                      "blocos) — identificamos os itens, mas a quantidade ficou pra você confirmar.")
+            # 🩸 03/09/2026 — duas afirmações aqui, e as duas sem dado por trás.
+            # (1) "a IA não conseguiu medir a geometria": isso é `medidos == 0`,
+            #     que é SELO, não origem. Ver `_origem_das_quantidades`.
+            # (2) "(comum quando os elementos foram desenhados como linhas
+            #     soltas, não como blocos)": o motor NUNCA mediu isso. É uma
+            #     causa inventada, dita ao cliente com cara de diagnóstico —
+            #     e ele vai mexer no desenho por causa dela.
+            try:
+                _n_geo_d, _ = _origem_das_quantidades(all_items)
+            except Exception:
+                _n_geo_d = -1
+            if _n_geo_d > 0:
+                porque = ("Seu arquivo é CAD e a geometria foi lida — parte das "
+                          "quantidades saiu do desenho —, mas nenhum item passou na "
+                          "conferência que libera o selo <b>✓ MEDIDO do CAD</b>. "
+                          "Por isso tudo está em laranja, pra sua confirmação.")
+            else:
+                porque = ("Seu arquivo é CAD, mas não conseguimos ligar as medidas do "
+                          "desenho aos itens da lista — identificamos os itens, e a "
+                          "quantidade ficou pra você confirmar.")
         else:
             porque = ("Os itens em branco foram medidos do desenho; os em laranja são pra você "
                       "confirmar a quantidade.")
@@ -6984,7 +7038,8 @@ def _resumo_escala_arquivo(caminho: str, md: dict) -> dict:
             "declarada": md.get("unidade_desenho") or "?"}
 
 
-def _linhas_escala_projeto(arqs: list, n_medidos: int = -1) -> list:
+def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
+                           frase_origem: str = "") -> list:
     """Uma linha ✅ (provadas) e/ou uma linha de atenção (sem prova) por projeto.
     O ✅ no início é sinal pro projeto.html mostrar ✅ em vez de ⚠ (regra nº7:
     conferência positiva não pode diluir aviso de verdade).
@@ -7040,10 +7095,18 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1) -> list:
                 partes.append(f"{a['nome']}: usa a escala provada por cota em outra prancha deste projeto{u}")
         _linha_ok = "✅ Escala conferida pelo próprio desenho — " + "; ".join(partes) + "."
         if n_medidos == 0:
-            _linha_ok += (" ⚠ Mesmo assim, NENHUM item desta planilha saiu com quantidade "
-                          "medida do desenho: saber a escala é um passo, ligar a medida a "
-                          "um item da lista é outro, e foi nesse que o motor parou aqui. "
-                          "Os números que você vê vieram de texto lido das pranchas.")
+            # 🩸 03/09/2026 — a última frase daqui dizia "Os números que você vê
+            # vieram de texto lido das pranchas", decidida SÓ pelo selo. Esta
+            # função nunca teve o dado de ORIGEM: ela recebia `n_medidos` e
+            # afirmava procedência. O EDVALDO leu isso com 90,86 m² de hachura e
+            # 169,83 m de comprimento de layer na planilha dele.
+            # 🔑 Agora ou recebe a frase pronta (`_origem_das_quantidades`, um
+            # lugar só), ou CALA sobre origem — nunca inventa.
+            _linha_ok += (" ⚠ Mesmo assim, NENHUM item desta planilha saiu com o selo "
+                          "'✓ MEDIDO do CAD': saber a escala é um passo, ligar a medida a "
+                          "um item da lista é outro, e foi nesse que o motor parou aqui.")
+            if frase_origem:
+                _linha_ok += " " + frase_origem
         out.append(_linha_ok)
     if sem:
         nomes = ", ".join(f"{a['nome']} (arquivo declara: {a.get('declarada') or '?'})" for a in sem[:4])
@@ -10132,9 +10195,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _cab = (f"{_quantos} arquivo(s) precisaram do leitor alternativo "
                     f"(plano B): {_lista_lw}. ")
             if _n_medidos == 0:
-                _fim = ("Ele abriu os desenhos, mas **nenhuma quantidade foi medida da "
-                        "geometria** — o que saiu na planilha veio de texto lido das "
-                        "pranchas. Trate a planilha como um mapa do que existe, não "
+                _n_geo_lw, _frase_lw = _origem_das_quantidades(all_items)
+                _fim = ("Ele abriu os desenhos, mas **nenhum item saiu com o selo "
+                        "'✓ MEDIDO do CAD'**. " + (_frase_lw + " " if _frase_lw else "")
+                        + "Trate a planilha como um mapa do que existe, não "
                         "como quantitativo fechado.")
             elif _n_medidos > 0:
                 _fim = (f"As medições saíram ({_n_medidos} item(ns) medido(s) do CAD), "
@@ -10507,10 +10571,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         1 for _it in (all_items or [])
                         if getattr(_it, "confidence", None) == "confirmado")
                     if _med_fim == 0:
-                        _fim2 = ("Ele abriu os desenhos, mas **nenhuma quantidade foi "
-                                 "medida da geometria** — o que saiu na planilha veio de "
-                                 "texto lido das pranchas. Trate a planilha como um mapa "
-                                 "do que existe, não como quantitativo fechado.")
+                        # 🪤 A MESMA FRASE NASCE EM DOIS LUGARES: aqui e na 1ª
+                        # escrita (`if _n_medidos == 0`, mais acima). Consertar
+                        # só um deixa o furo aberto — se o bloco de lá levantar,
+                        # o `except` engole calado e o texto velho sobrevive.
+                        # Por isso as duas chamam `_origem_das_quantidades`.
+                        _n_geo2, _frase2 = _origem_das_quantidades(all_items)
+                        _fim2 = ("Ele abriu os desenhos, mas **nenhum item saiu com o "
+                                 "selo '✓ MEDIDO do CAD'**. "
+                                 + (_frase2 + " " if _frase2 else "")
+                                 + "Trate a planilha como um mapa do que existe, "
+                                 "não como quantitativo fechado.")
                     else:
                         _fim2 = ("As medições saíram (%d item(ns) medido(s) do CAD), mas "
                                  "vale conferir 2-3 medidas-chave contra o projeto antes "
@@ -10535,7 +10606,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                    getattr(_it, "confidence", "")) or "") == "confirmado")
             except Exception:
                 _n_med_esc = -1
-            _linhas_esc = _linhas_escala_projeto(_escala_arqs, n_medidos=_n_med_esc)
+            _, _frase_esc = _origem_das_quantidades(all_items)
+            _linhas_esc = _linhas_escala_projeto(_escala_arqs, n_medidos=_n_med_esc,
+                                                 frase_origem=_frase_esc)
         except NameError:
             _linhas_esc = []            # job sem CAD (só PDF): nada a dizer
         except Exception as _ele:
@@ -11497,6 +11570,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _n_med_c = sum(1 for it in all_items
                                    if str(getattr(getattr(it, "confidence", None), "value",
                                                   getattr(it, "confidence", "")) or "") == "confirmado")
+                    _, _frase_origem_c = _origem_das_quantidades(all_items)
                     _proximos_c = _next_steps_html(job_id, _n_med_c, len(all_items), _n_cad_c == 0 and _n_pdf_c > 0)
                     # 🚨 A releitura pode sair PIOR (motor não-determinístico). Não
                     # anunciar "atualizada" como se fosse melhora quando não foi —
@@ -11528,10 +11602,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> com o <b>CAD</b> que você "
                                    f"anexou — a planilha foi atualizada, agora com "
                                    f"<b>{len(all_items)} itens</b>.<br><br>"
-                                   f"<b>Nenhuma quantidade saiu da geometria desta vez.</b> O que "
-                                   f"está na planilha veio de texto lido das pranchas (quadros, "
-                                   f"legendas, tabelas) — trate como mapa do que existe, não como "
-                                   f"levantamento fechado.")
+                                   f"<b>Nenhum item saiu com o selo ✓ MEDIDO do CAD desta "
+                                   f"vez.</b> {_frase_origem_c} Trate como mapa do que "
+                                   f"existe, não como levantamento fechado.")
                     _body_c = f"{_greet_c}<br><br>{_abre_c}{_diag_c}{_proximos_c}"
                     _pn_c_raw = (_rows[0].get("project_name") or "").strip()
                     if _piorou_c:
@@ -11677,7 +11750,19 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # baixo ficam de fora, inclusive o estudo de layout da Catarina
                 # (60%), que é entrega legítima de planta sem cota.
                 _LIMITE_BRANCO = 0.8
+                # 🩸 03/09/2026 — a condição olhava só o SELO. `_n_med == 0`
+                # quer dizer "ninguém passou na conferência do branco", não
+                # "não medimos nada": o job b5ce23ff tem selo zero COM 90,86 m²
+                # de hachura e 169,83 m de comprimento de layer. Mandar
+                # "não consegui medir esse arquivo" pra quem teve o desenho
+                # lido é dizer que o arquivo dele não serve — e ele vai
+                # procurar outro que não existe.
+                try:
+                    _n_geo_nm, _ = _origem_das_quantidades(all_items)
+                except Exception:
+                    _n_geo_nm = -1
                 _nada_medido = (len(all_items) > 0 and _n_med == 0
+                                and _n_geo_nm == 0
                                 and _n_zerado >= _LIMITE_BRANCO * len(all_items))
                 if _nada_medido:
                     _pn_nm = (_rows[0].get("project_name") or "").strip()

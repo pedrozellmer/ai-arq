@@ -81,7 +81,14 @@ def test_existe_um_ramo_pra_quando_NAO_mediu():
     corpo = _bloco()
     assert "_mediu_c = _n_med_c > 0" in corpo, (
         "o e-mail voltou a não perguntar se mediu antes de dizer que mediu")
-    assert "Nenhuma quantidade saiu da geometria" in corpo
+    # 🩸 03/09/2026 — a frase era "Nenhuma quantidade saiu da geometria", e ela
+    # é FALSA quando o selo é zero mas a geometria foi lida (job b5ce23ff, do
+    # Edvaldo: 90,86 m² de hachura e 169,83 m de comprimento de layer). Selo e
+    # origem são dois fatos; o e-mail passa a afirmar só o selo, e a origem vem
+    # de `_origem_das_quantidades`, que é quem tem o dado.
+    assert "Nenhum item saiu com o selo" in corpo, corpo[:300]
+    assert "_frase_origem_c" in corpo, (
+        "o e-mail voltou a afirmar procedência sem consultar a origem real")
 
 
 @pytest.mark.parametrize("frase", [
@@ -139,4 +146,4 @@ _EMAIL_ANTIGO = '''
 def test_controle_positivo_o_email_de_antes_nao_passaria():
     assert '_piorou_c = bool(_cmp_c.get("frase"))' not in _EMAIL_ANTIGO
     assert "_mediu_c = _n_med_c > 0" not in _EMAIL_ANTIGO
-    assert "Nenhuma quantidade saiu da geometria" not in _EMAIL_ANTIGO
+    assert "Nenhum item saiu com o selo" not in _EMAIL_ANTIGO

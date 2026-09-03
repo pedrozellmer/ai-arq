@@ -1192,6 +1192,52 @@ _QUADRO_DE_ACO = (
 )
 
 
+def quantidades_da_geometria(items):
+    """Quantas linhas têm QUANTIDADE que saiu da geometria do desenho.
+
+    🩸 03/09/2026 — A DOENÇA QUE ISTO CURA, EM CINCO LUGARES DE UMA VEZ.
+    O motor contava `confidence == 'confirmado'`, achava zero, e escrevia ao
+    cliente que **"os números vieram de texto lido das pranchas"**. São dois
+    fatos diferentes:
+      • SELO zero  = nenhum item passou na conferência que libera o branco;
+      • ORIGEM     = de onde a quantidade saiu.
+    O job `b5ce23ff` (EDVALDO, maior lead B2B) prova que dá pra ter selo zero
+    com geometria medida: 90,86 m² de laje saíram de **hachura do layer LAJE**
+    e 169,83 m de viga saíram do **comprimento das linhas do layer VIGA**, e
+    ele leu que a planilha dele era transcrição de legenda.
+
+    🔑 Afirmar procedência sem olhar a procedência é a regra dura nº1 pelo
+    avesso: lá é "não diga MEDIDO sem medir"; aqui é "não diga QUE NÃO MEDIU
+    sem olhar". Os dois erram sobre a mesma coisa — a origem do número.
+
+    Usa o MESMO critério de `selos_sem_geometria` (`_PROVA_GEOMETRIA` e
+    `_PROVA_LAYER_MEDIDO`), porque duas definições de "veio da geometria" numa
+    casa só é como ter duas balanças.
+
+    🪤 Exige `quantity > 0`. Observação que CITA hachura numa linha zerada não é
+    quantidade tirada de hachura — o item "Escada — Fôrma" do mesmo job diz
+    "área hachurada" e no texto seguinte "NÃO calculada".
+
+    Devolve -1 quando não deu pra contar. Nunca 0 por engano: quem chama usa o
+    -1 pra CALAR sobre origem, e calar é melhor que afirmar errado.
+    """
+    try:
+        n = 0
+        for it in (items or []):
+            try:
+                q = float(_campo_do_item(it, "quantity", 0) or 0)
+            except (TypeError, ValueError):
+                q = 0.0
+            if q <= 0:
+                continue
+            obs = str(_campo_do_item(it, "observations", "") or "").lower()
+            if any(p in obs for p in _PROVA_GEOMETRIA) or _PROVA_LAYER_MEDIDO.search(obs):
+                n += 1
+        return n
+    except Exception:
+        return -1
+
+
 def selos_sem_geometria(items):
     """Índices das linhas seladas como MEDIDAS cuja procedência é só TEXTO.
 
