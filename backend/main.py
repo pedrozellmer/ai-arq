@@ -1966,17 +1966,24 @@ def _supabase_storage_download_prancha(job_id: str, filename: str,
                                        tentativas: int = 3) -> Optional[bytes]:
     """Baixa prancha do Storage CONFERINDO o tamanho. Devolve bytes ou None.
 
-    🩸 03/09/2026, caso FÁBIO SHIRAISHI. Isto era `return resp.read()`, sem
-    conferir NADA. `read()` numa conexão que fecha no meio devolve o pedaço que
-    chegou **sem levantar exceção** — e o pedaço era gravado no disco como se
-    fosse o arquivo. O ODA leu o toco e disse:
+    🩸 03/09/2026. Isto era `return resp.read()`, sem conferir NADA. `read()`
+    numa conexão que fecha no meio devolve o pedaço que chegou **sem levantar
+    exceção** — e o pedaço era gravado no disco como se fosse o arquivo do
+    cliente.
 
-        Object improperly read: <AcDbTextStyleTableRecord> (11)
-        Previous error: Unexpected end of file
+    🪤 HONESTIDADE SOBRE A ORIGEM DESTE CONSERTO: eu cheguei aqui investigando
+    o caso FÁBIO SHIRAISHI (job 75dab573), cujo ODA dizia "Unexpected end of
+    file", e afirmei que a causa dele era esta. **Estava errado.** Com a
+    conferência ligada, o arquivo dele baixa INTEIRO (nenhum
+    `storage:download-truncado` no log) e o ODA do servidor falha do mesmo
+    jeito — o que sobra lá é diferença entre o build Windows do ODA 27.1 (que
+    converte) e o Linux QT6 27.1 do container (que recusa).
 
-    O MESMO arquivo, baixado inteiro do MESMO Storage, converte em 27 s. Ou
-    seja: o defeito não estava no desenho do cliente nem no conversor — estava
-    aqui, num `read()` que não sabe dizer que leu menos do que devia.
+    🔑 O buraco daqui é real e continua valendo por si: um `read()` que não
+    sabe dizer que leu menos do que devia, num caminho que roda em TODO filhote
+    e em todo reprocesso. Falha silenciosa não produz erro — produz leitura
+    PIOR, debitada do desenho do cliente ou do "não-determinismo da IA". Só não
+    foi o que pegou o Fábio.
 
     🔑 Isto roda em TODO filhote e em todo caminho que rebaixa o original. Um
     arquivo truncado não dá erro: dá uma leitura PIOR, que a gente ia debitar

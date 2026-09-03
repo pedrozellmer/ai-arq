@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
 """Arquivo baixado pela metade não pode virar "o desenho do cliente está ruim".
 
-🩸 03/09/2026, caso FÁBIO SHIRAISHI (job `75dab573`, primeiro projeto dele).
-O filhote baixou o DWG dele do nosso Storage e o ODA cuspiu:
+🩸 03/09/2026. Achado investigando o caso FÁBIO SHIRAISHI (job `75dab573`),
+cujo ODA dizia "Unexpected end of file".
 
-    Object improperly read: <AcDbTextStyleTableRecord> (11)
-    Previous error: Unexpected end of file
+🪤 E EU ATRIBUÍ O CASO DELE A ISTO, ERRADO. Com a conferência ligada, o arquivo
+dele baixa INTEIRO (nenhum `storage:download-truncado` no log) e o ODA do
+servidor recusa igual — lá a diferença é entre o build Windows do ODA 27.1, que
+converte em 27 s, e o Linux QT6 27.1 do container, que recusa. Duas teorias
+minhas caíram nesse caso: "o servidor só tem libredwg" (falso, tem ODA) e "o
+download truncou" (falso, veio inteiro).
 
-O MESMO arquivo, baixado inteiro do MESMO Storage, converte em 27 s e gera um
-DXF de 248 MB. O desenho dele não tem defeito nenhum.
-
-🔑 A CAUSA era uma linha:
+🔑 Mas o buraco daqui é real e vale por si — era uma linha:
 
     resp = urllib.request.urlopen(req, timeout=30)
     return resp.read()
