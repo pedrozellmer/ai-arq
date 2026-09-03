@@ -1962,20 +1962,78 @@ def _supabase_storage_upload_prancha(local_path: str, job_id: str, filename: str
 _supabase_storage_upload_pdf = _supabase_storage_upload_prancha
 
 
-def _supabase_storage_download_prancha(job_id: str, filename: str) -> Optional[bytes]:
-    """Baixa prancha (PDF/PNG/etc) do Storage. Retorna bytes ou None."""
+def _supabase_storage_download_prancha(job_id: str, filename: str,
+                                       tentativas: int = 3) -> Optional[bytes]:
+    """Baixa prancha do Storage CONFERINDO o tamanho. Devolve bytes ou None.
+
+    🩸 03/09/2026, caso FÁBIO SHIRAISHI. Isto era `return resp.read()`, sem
+    conferir NADA. `read()` numa conexão que fecha no meio devolve o pedaço que
+    chegou **sem levantar exceção** — e o pedaço era gravado no disco como se
+    fosse o arquivo. O ODA leu o toco e disse:
+
+        Object improperly read: <AcDbTextStyleTableRecord> (11)
+        Previous error: Unexpected end of file
+
+    O MESMO arquivo, baixado inteiro do MESMO Storage, converte em 27 s. Ou
+    seja: o defeito não estava no desenho do cliente nem no conversor — estava
+    aqui, num `read()` que não sabe dizer que leu menos do que devia.
+
+    🔑 Isto roda em TODO filhote e em todo caminho que rebaixa o original. Um
+    arquivo truncado não dá erro: dá uma leitura PIOR, que a gente ia debitar
+    do motor ou do não-determinismo da IA.
+
+    🪤 `Content-Length` é a única testemunha, e ela nem sempre vem (resposta em
+    chunked). Quando não vier, não dá pra afirmar que veio inteiro — mas
+    tampouco dá pra recusar; então segue e REGISTRA, que é diferente de calar.
+    """
     import urllib.request, urllib.parse as _up
+    remote_key = f"{job_id}/{_up.quote(filename)}"
+    url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{remote_key}"
+    _ultimo = None
+    for _n in range(1, max(1, tentativas) + 1):
+        try:
+            req = urllib.request.Request(url, method="GET")
+            req.add_header("apikey", SUPABASE_KEY)
+            req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+            resp = urllib.request.urlopen(req, timeout=120)
+            _esperado = resp.headers.get("Content-Length")
+            data = resp.read()
+            try:
+                _esperado = int(_esperado) if _esperado is not None else None
+            except (TypeError, ValueError):
+                _esperado = None
+            if _esperado is None:
+                try:
+                    _log_error("storage:download-sem-tamanho",
+                               f"{filename}: servidor não mandou Content-Length "
+                               f"({len(data)} bytes recebidos) — não dá pra "
+                               f"provar que veio inteiro", job_id)
+                except Exception:
+                    pass
+                return data
+            if len(data) == _esperado:
+                if _n > 1:
+                    try:
+                        _log_error("storage:download-truncado",
+                                   f"{filename}: veio inteiro na tentativa {_n} "
+                                   f"({_esperado} bytes)", job_id, severity="warning")
+                    except Exception:
+                        pass
+                return data
+            _ultimo = (f"recebi {len(data)} de {_esperado} bytes "
+                       f"({100.0 * len(data) / max(1, _esperado):.1f}%)")
+            print(f"[storage pranchas] {filename} TRUNCADO na tentativa {_n}: {_ultimo}")
+        except Exception as e:
+            _ultimo = f"{type(e).__name__}: {e}"
+            print(f"[storage pranchas] download {filename} tentativa {_n}: {e}")
     try:
-        remote_key = f"{job_id}/{_up.quote(filename)}"
-        url = f"{SUPABASE_URL}/storage/v1/object/{PRANCHAS_BUCKET}/{remote_key}"
-        req = urllib.request.Request(url, method="GET")
-        req.add_header("apikey", SUPABASE_KEY)
-        req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
-        resp = urllib.request.urlopen(req, timeout=30)
-        return resp.read()
-    except Exception as e:
-        print(f"[storage pranchas] download {filename}: {e}")
-        return None
+        _log_error("storage:download-truncado",
+                   f"{filename}: NÃO consegui baixar inteiro em {tentativas} "
+                   f"tentativas — {_ultimo}. Arquivo DESCARTADO em vez de "
+                   f"processar um pedaço.", job_id, severity="critical")
+    except Exception:
+        pass
+    return None
 
 
 # Alias de compatibilidade
