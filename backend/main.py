@@ -165,6 +165,38 @@ def _supabase_insert(table, data):
 _DXF_TETO_ARQUIVO = 900 * 1024 * 1024      # sanidade: acima disso nem tenta
 _DXF_MARGEM_DISCO = 2 * 1024 * 1024 * 1024  # folga que o job precisa deixar
 
+def _apaga_dir_de_conversao(dxf_path):
+    """Apaga a pasta temporária `arq_dxf_*` de UMA conversão. Devolve True se apagou.
+
+    🩸 03/09/2026, achado da revisão adversarial do conserto do mesmo dia. O laço
+    de extração limpa a pasta da conversão no FIM do corpo — e tem dois `continue`
+    que saltam por cima dela:
+      • `dxf:extract-timeout` (extração passou de 900 s)
+      • extração falhou (o ramo que monta `dxf_errors`)
+    Prancha que caísse num dos dois deixava a conversão inteira no disco até o
+    fim do job, e não existe faxineiro de `arq_dxf_*` em lugar nenhum do repo.
+
+    🔑 Ficou MAIS caro hoje: o teto passou a deixar seguir DXF de até 900 MB
+    (ver `_dxf_grande_pode_seguir`). O que vazava eram dezenas de MB; agora seria
+    centenas — e disco cheio no Render derruba o job de todo mundo, não só o
+    desta prancha.
+
+    🪤 Só é seguro porque, depois do laço, `dxf_paths` é usado apenas em `bool()`
+    e `len()` — ninguém lê o arquivo de uma prancha que foi pulada. Se isso
+    mudar, este apagamento tem que mudar junto.
+    """
+    import shutil as _sh_lim
+    try:
+        _d = os.path.dirname(dxf_path or "")
+        if _d and os.path.basename(_d).startswith("arq_dxf_"):
+            _sh_lim.rmtree(_d, ignore_errors=True)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+
 
 def _dxf_grande_pode_seguir(tam_bytes, teto_antigo, livre_bytes):
     """O DXF passou do teto antigo — dá pra mandar pro emagrecedor mesmo assim?
@@ -2573,6 +2605,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             fix = ("O ideal é <b>reenviar em DXF ou PDF vetorial</b>, ou salvar o DWG numa "
                    "<b>versão mais antiga</b> do AutoCAD (ex.: 2013) e mandar de novo.")
             alt_img = "Um ajuste no arquivo resolve — exporte em DXF"
+            pre_txt = "Reprocessar não resolve este caso: exporte em DXF e reenvie."
         elif "grande demais" in _eh or ("limite" in _eh and "mb" in _eh):
             motivo = "o arquivo ficou <b>grande demais</b> pra processar com segurança."
             fix = ("Exporte <b>só a prancha necessária</b> (não o projeto inteiro), ou "
@@ -2582,6 +2615,12 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             # abaixo e manda o cliente pra mesma falha (DXF é texto puro e
             # nasce 30–50x o DWG). Caso Rafael Lima, job 28f140ef.
             alt_img = "Um ajuste no arquivo resolve — mande só a prancha necessária"
+            # 🩸 03/09 — o preheader (a linha que aparece na CAIXA DE ENTRADA,
+            # antes de abrir) dizia "exporte em DXF" nos TRÊS ramos. No ramo de
+            # tamanho isso é o conselho que não funciona, e é a PRIMEIRA coisa
+            # que o cliente lê — antes do texto certo lá dentro.
+            pre_txt = ("Reprocessar não resolve: o caminho é aliviar o arquivo "
+                       "(PURGE) ou mandar só a prancha necessária.")
         else:
             motivo = ("não conseguimos ler as quantidades nesse arquivo. Quase sempre é "
                       "porque o PDF é uma imagem escaneada/fotografada, ou a prancha tem só "
@@ -2589,6 +2628,8 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             fix = ("O ideal é <b>reenviar a planta completa exportada direto do CAD</b> "
                    "(PDF vetorial, DWG ou DXF).")
             alt_img = "Um ajuste no arquivo resolve — reenvie exportado do CAD"
+            pre_txt = ("Reprocessar não resolve este caso: reenvie a planta "
+                       "exportada direto do CAD.")
         body = (f"{greet}<br><br>"
                 f"Recebemos o projeto <b>{pn}</b>, mas {motivo} Ou seja, <b>reprocessar o "
                 f"mesmo arquivo não vai resolver</b>."
@@ -2601,7 +2642,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
         html = _email_wrap("Precisamos de outro arquivo pra continuar", body,
                            "Enviar outra prancha", "https://ai.arq.br/dashboard.html",
                            badge="⚠ Revisar o arquivo", badge_color="amber",
-                           preheader="Reprocessar não resolve este caso: exporte em DXF e reenvie.",
+                           preheader=pre_txt,
                            reason="Você está recebendo este e-mail porque enviou um projeto ao AI.arq.")
     return subject, html
 
@@ -7909,6 +7950,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         except Exception:
                             pass
                         dxf_errors.append(f"{_bn_dxf}: a leitura da geometria demorou demais (prancha muito grande/pesada) — mande essa prancha isolada, ou reexporte só o pavimento que você precisa")
+                        _apaga_dir_de_conversao(dxf_path)   # senão vaza até o fim do job
                         continue
                     except Exception as _ex_dxf:
                         _bn_dxf = os.path.basename(dxf_path)
@@ -7971,12 +8013,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"limite de memória de hoje ({_mb_dxf:.0f} MB depois de "
                                 f"convertida) — o arquivo não tem defeito. Um PURGE "
                                 f"no desenho, ou mandar só a prancha que você precisa "
-                                f"medir, resolve; reexportar em DXF não, porque DXF é "
-                                f"texto e nasce desse tamanho mesmo")
+                                f"medir, resolve. Reexportar em DXF não resolve, "
+                                f"porque DXF é texto e nasce desse tamanho mesmo")
                         else:
                             dxf_errors.append(
                                 f"{_bn_dxf}: não consegui ler a geometria desse arquivo "
                                 f"(pode estar corrompido ou ter objetos não suportados)")
+                        _apaga_dir_de_conversao(dxf_path)   # senão vaza até o fim do job
                         continue
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
                     # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
@@ -9994,22 +10037,29 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _um_so = len(file_paths) <= 1
                     except Exception:
                         _um_so = False
+                    # 🪲 03/09 — a 1a versao desta mensagem saiu SEM ACENTO
+                    # nenhum, porque eu escapei demais ao montar a string. Ela
+                    # divide a tela do cliente com tres mensagens acentuadas
+                    # (main.py:7404/7506/7970) e vai pro banco em `error_message`,
+                    # renderizada em projeto.html e no dashboard. Texto do produto
+                    # sem acento parece defeito, e defeito na mensagem de defeito
+                    # e onde menos se pode ter.
                     _saidas = ["limpe o desenho antes de exportar (o comando "
                                "PURGE do AutoCAD, tirando camadas e blocos que "
-                               "nao sao usados) — costuma cortar boa parte do peso"]
+                               "não são usados) — costuma cortar boa parte do peso"]
                     if not _um_so:
                         _saidas.append("mande uma prancha por vez")
-                    _saidas.append("mande so a prancha (ou so a area) que voce "
+                    _saidas.append("mande só a prancha (ou só a área) que você "
                                    "precisa medir agora")
                     raise RuntimeError(
                         "⚠ %s grande%s demais pro nosso limite de hoje — e "
-                        "isso e limitacao NOSSA, nao defeito do seu arquivo. "
-                        "Reprocessar do jeito que esta vai dar no mesmo, e "
-                        "reexportar em DXF tambem nao resolve: DXF e texto puro, "
-                        "entao ele nasce de 30 a 50 vezes maior que o DWG, por "
-                        "natureza do formato. O que funciona: %s. Ja estamos "
+                        "isso é limitação NOSSA, não defeito do seu arquivo. "
+                        "Reprocessar do jeito que está vai dar no mesmo, e "
+                        "reexportar em DXF também não resolve: DXF é texto puro, "
+                        "então ele nasce de 30 a 50 vezes maior que o DWG, por "
+                        "natureza do formato. O que funciona: %s. Já estamos "
                         "trabalhando pra levantar esse teto." % (
-                            "Suas pranchas sao" if _quantas > 1 else "Sua prancha e",
+                            "Suas pranchas são" if _quantas > 1 else "Sua prancha é",
                             "s" if _quantas > 1 else "",
                             "; ou ".join(_saidas))
                     )

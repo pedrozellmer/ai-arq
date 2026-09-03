@@ -403,14 +403,22 @@
   },
   {
     // Arquivo maior que o teto de processamento.
+    // 🩸 03/09/2026 — ESTA RECEITA SOBREPUNHA A MENSAGEM DO MOTOR. No caso do
+    // RAFAEL LIMA (job 28f140ef) o backend foi consertado pra parar de mandar
+    // "divida / mande vários" pra quem mandou UMA prancha — e a tela devolvia
+    // exatamente isso, porque os passos e a linha em negrito saem DAQUI, não do
+    // texto do banco (projeto.html:1842-1858). Consertar a copy do motor e
+    // deixar esta parada é consertar onde o cliente não olha.
+    // 🔑 O front não sabe quantos arquivos vieram, então o conselho tem que ser
+    // verdadeiro nos dois casos — e o que serve pra UMA prancha pesada é PURGE.
     quando: /grande demais|limite \d+ ?MB|excede o limite/i,
     titulo: 'Como resolver',
     passos: [
-      'Abra o arquivo no seu CAD',
-      'Exporte <b>só as pranchas que você quer medir</b> (ou divida em partes menores)',
-      'Envie os arquivos menores aqui — pode mandar vários de uma vez',
+      'No CAD, rode <b>PURGE</b> no desenho — tira camadas e blocos que não são usados, e costuma cortar boa parte do peso',
+      'Se o arquivo tem várias pranchas, exporte <b>só a que você quer medir</b>',
+      'Envie de novo aqui',
     ],
-    acao: 'Cada prancha separada mede igual: o que pesa é o arquivo inteiro de uma vez.',
+    acao: 'Reexportar em DXF não resolve: DXF é texto puro e nasce de 30 a 50 vezes maior que o DWG. O que pesa é a quantidade de desenho, não o formato.',
   },
   {
     // DWG do AutoCAD Architecture/MEP com objetos "inteligentes" (proxy).

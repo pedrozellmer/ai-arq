@@ -55,19 +55,44 @@ def _copy_que_o_cliente_le(src):
     return _COLA.sub("", chr(10).join(linhas))
 
 
+# 🩸 A 1ª VERSÃO DESTE GUARDA TINHA TRÊS BURACOS, provados RODANDO (revisão
+# adversarial do meu próprio commit, 03/09). Os três deixavam passar copy que
+# manda o cliente pra segunda falha, com o controle positivo ainda verde:
+#
+#   (A) absolvia pela LINHA, não pela ORAÇÃO. Um "não resolve" sobre outro
+#       assunto na mesma linha libertava o conselho errado ao lado:
+#       "…reprocessar não resolve; exporte em DXF e mande de novo" → passava.
+#   (B) a janela só olhava DEPOIS da âncora. Conselho ANTES escapava:
+#       "Exporte em DXF e reenvie: essa prancha é grande demais…" → passava.
+#   (C) a lista de verbos era só suba|sobe|exporte|reexporte. "Manda ela em DXF
+#       que a gente lê" → passava.
+#
+# 🔑 Guarda estreito demais é pior que guarda nenhum: ele dá a sensação de
+# cobertura. Os três casos acima viraram controle lá embaixo.
+_VERBOS = "(?:sub[ai]|sobe|export|reexport|mand|salv|convert|ger[ae])"
+
+
+def _oracoes(texto):
+    """Quebra em orações — a absolvição vale por oração, não pela linha."""
+    return [o for o in re.split("[;.]", texto) if o.strip()]
+
+
 def _conselhos_errados(src):
     """Conselhos de DXF dentro da copy de tamanho. Fora dela, não é da conta."""
     txt = _copy_que_o_cliente_le(src)
     achados = []
     for m in re.finditer(re.escape(_ANCORA), txt):
-        janela = txt[m.start():m.start() + _JANELA]
-        for m2 in re.finditer("[^" + _NL + "]*(?:suba|sobe|exporte|reexporte)"
-                              "[^" + _NL + "]*em DXF[^" + _NL + "]*",
-                              janela, re.I):
-            trecho = m2.group(0).strip()
+        # janela nos DOIS sentidos: o conselho pode vir antes da âncora
+        janela = txt[max(0, m.start() - _JANELA):m.start() + _JANELA]
+        for o in _oracoes(janela):
+            if not re.search("em DXF", o, re.I):
+                continue
+            if not re.search(_VERBOS, o, re.I):
+                continue
             # Dizer que DXF NÃO resolve é o conserto — não pode ser acusado.
-            if not re.search("n[ãa]o (resolve|adianta|ajuda)", trecho, re.I):
-                achados.append(trecho)
+            if re.search("n[ãa]o (resolve|adianta|ajuda)", o, re.I):
+                continue
+            achados.append(o.strip())
     return achados
 
 
@@ -96,6 +121,25 @@ def test_CONTROLE_o_guarda_ACEITA_dizer_que_DXF_nao_resolve():
     boa = ('    msg = ("essa prancha é grande demais pro nosso limite de "' + chr(10) +
            '           "memória — reexportar em DXF não resolve, DXF é texto puro")' + chr(10))
     assert not _conselhos_errados(boa)
+
+
+def test_CONTROLE_os_TRES_BURACOS_provados_na_revisao_adversarial():
+    """Os três casos que a 1ª versão deste guarda deixava passar.
+
+    Cada um foi provado RODANDO contra o guarda velho, com o controle positivo
+    dele ainda verde — que é exatamente o jeito de um guarda mentir.
+    """
+    A = ('    msg = ("essa prancha é grande demais pro nosso limite de memória "' + chr(10) +
+         '           "de hoje — reprocessar não resolve; exporte em DXF e mande de novo")' + chr(10))
+    B = ('    msg = ("Exporte em DXF e reenvie: essa prancha é grande demais pro "' + chr(10) +
+         '           "nosso limite de memória de hoje")' + chr(10))
+    C = ('    msg = ("essa prancha é grande demais pro nosso limite de memória — "' + chr(10) +
+         '           "o arquivo não tem defeito. Manda ela em DXF que a gente lê")' + chr(10))
+    for nome, copy in (("A/absolvição pela linha", A),
+                       ("B/conselho ANTES da âncora", B),
+                       ("C/verbo fora da lista", C)):
+        assert _conselhos_errados(copy), (
+            "buraco %s voltou: o guarda não acusa essa copy" % nome)
 
 
 def test_CONTROLE_o_guarda_NAO_se_mete_com_DWG_que_nao_abre():
@@ -128,15 +172,21 @@ def test_o_gatilho_continua_casando():
     genérica de "problema técnico nosso" — sem nenhum teste reclamar.
     """
     frase = "grande demais pro nosso limite de memória"
-    assert _FONTE.count('if "%s" in str(_e))' % frase) == 1, (
+    busca = 'if "%s" in str(_e))' % frase
+    assert _FONTE.count(busca) == 1, (
         "mudou a frase que o process_job procura pra identificar recusa por "
         "tamanho")
-    colado = _copy_que_o_cliente_le(_FONTE)
+    # 🪤 A 1ª versão contava `>= 3` sobre o texto inteiro — e o texto inteiro
+    # tem QUATRO ocorrências: as 3 mensagens MAIS o literal da própria busca,
+    # que não é copy de cliente nenhum. Apagando a frase de UMA das mensagens a
+    # conta caía pra 3 e o teste seguia VERDE, com só 2 mensagens carregando o
+    # gatilho. Tira a linha da busca e trava em `== 3`.
+    colado = _copy_que_o_cliente_le(_FONTE.replace(busca, ""))
     quantas = colado.count(frase)
-    assert quantas >= 3, (
-        "só %d mensagem(ns) por prancha ainda carrega(m) a frase-gatilho; "
-        "as outras vão cair na mensagem genérica de problema técnico"
-        % quantas)
+    assert quantas == 3, (
+        "%d mensagem(ns) por prancha carregam a frase-gatilho, e têm que ser 3; "
+        "a que perdeu vai jogar o cliente na mensagem genérica de 'problema "
+        "técnico nosso'" % quantas)
 
 
 def test_o_email_de_falha_nao_contradiz_o_proprio_texto():
@@ -150,4 +200,19 @@ def test_o_email_de_falha_nao_contradiz_o_proprio_texto():
         "diagnóstico")
     assert _FONTE.count("alt_img = ") >= 3, (
         "faltou legenda em algum ramo: um ramo sem alt_img levanta NameError "
+        "no envio do e-mail de falha")
+
+
+def test_o_preheader_do_email_segue_o_ramo():
+    """A linha da caixa de entrada é a PRIMEIRA coisa que o cliente lê.
+
+    🩸 Ela dizia "exporte em DXF" nos três ramos — inclusive no de tamanho, onde
+    esse é justamente o conselho que não funciona. O texto certo ficava lá
+    dentro, depois de um preheader que já tinha mandado pro lugar errado.
+    """
+    assert "preheader=pre_txt," in _FONTE, (
+        "o preheader do e-mail de falha voltou a ser fixo — ele precisa seguir "
+        "o ramo do diagnóstico, igual à legenda da arte")
+    assert _FONTE.count("pre_txt = ") >= 3, (
+        "faltou preheader em algum ramo: um ramo sem pre_txt levanta NameError "
         "no envio do e-mail de falha")
