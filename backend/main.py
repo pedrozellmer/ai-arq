@@ -167,6 +167,7 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
+    "motor:avisos-no-erro",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
     "pdfvec:shadow", "pdfvec:promo", "dxfrooms:shadow",
     "dwg:aec-detectado-no-upload",
@@ -11498,9 +11499,33 @@ bloco — só cite os que estão no inventário deste arquivo."""
         import traceback as _tb_err
         _log_error("process_job", f"{type(e).__name__}: {e}\n{_tb_err.format_exc()[:1500]}", job_id)
 
+        # 🩸 03/09/2026 — O QUE O MOTOR JÁ SABIA MORRIA JUNTO COM O JOB.
+        # Medido: 94 projetos em erro (42 de cliente) com ZERO aviso gravado,
+        # contra 59% dos concluídos. Prancha cortada, plano B acionado, página
+        # não lida — tudo já descoberto ANTES da falha, e o cliente lia só
+        # "deu erro". A gente também: o estado se perdia pra sempre.
+        # 🪤 `project_data` nasce lá em cima e o `try` começa ANTES dela: falha
+        # precoce não tem avisos, e citar a variável aqui levantaria NameError
+        # DENTRO do except — escondendo o erro original do cliente. Daí o
+        # bloco defensivo: instrumentação nunca pode engolir o que ela mede.
+        # 🔑 `warnings` é um dos 7 campos que a RPC aceita, então vai no mesmo
+        # pacote — sem chamada extra.
+        _avisos_ate_aqui = []
+        try:
+            _avisos_ate_aqui = [str(_a) for _a in (getattr(project_data, "warnings", None) or [])]
+        except Exception:
+            _avisos_ate_aqui = []
+        if _avisos_ate_aqui:
+            try:
+                _log_error("motor:avisos-no-erro",
+                           f"salvos={len(_avisos_ate_aqui)} aviso(s) que o motor "
+                           f"tinha acumulado antes da falha", job_id)
+            except Exception:
+                pass
         # Atualizar erro no Supabase
         _supabase_update("projects", "job_id", job_id, {
             "status": "error",
+            **({"warnings": _avisos_ate_aqui} if _avisos_ate_aqui else {}),
             # 🚨 ERA [:500] E CORTAVA A INSTRUCAO NO MEIO. As mensagens de erro
             # amigaveis tem ~800 caracteres e terminam com os PASSOS pra
             # resolver ("1. Abra o arquivo no seu CAD... 3. Suba o arquivo

@@ -67,7 +67,21 @@ def corpo_de(nome: str, arquivo: str = "main.py", src: str = None) -> str:
         if len(l) - len(l.lstrip()) <= ind:
             fim = n
             break
-    return "".join(linhas[ini:fim])
+    corpo = "".join(linhas[ini:fim])
+    # 🩸 03/09/2026 — ELE CORTAVA DENTRO DE STRING E NÃO CONTAVA A NINGUÉM.
+    # `process_job` tem um prompt em f-string de várias linhas cujo texto
+    # começa na COLUNA 0; a heurística de indentação leu aquilo como "a função
+    # acabou" e devolveu 1.270 de ~3.900 linhas. Um guarda que procurasse
+    # código depois daquele ponto passaria VERDE sem nunca ter olhado — meia
+    # leitura é o mesmo defeito que este arquivo existe pra impedir, dentro
+    # dele. 🔑 Aspas triplas em número ÍMPAR = o recorte parou no meio.
+    if (corpo.count('"""') % 2) or (corpo.count("'''") % 2):
+        raise AssertionError(
+            "corpo_de(%r, %r) cortou DENTRO de uma string de várias linhas: "
+            "o recorte tem %d linhas e está incompleto. Não recorte esta "
+            "função — ancore num trecho único do fonte inteiro."
+            % (nome, arquivo, len(corpo.splitlines())))
+    return corpo
 
 
 def corpo_js(nome: str, arquivo: str = "projeto.html", src: str = None) -> str:
