@@ -3373,6 +3373,13 @@
       // pranchas 11 minutos depois, achando que o problema era o arquivo dele.
       // O aviso não bloqueia — diz o que realmente muda o resultado.
       if (data.aviso_repetido) mostrarAvisoAec(data.aviso_repetido, 'reenvio');
+      // 🩸 03/09 — o backend passou a devolver `aviso_area` quando a metragem
+      // digitada é implausível (o Fábio digitou 880.000 m², 269× a maior área
+      // real já informada), e NENHUMA tela lia a chave. Eu tinha trocado
+      // "zerar calado" por "avisar" e o aviso morria no JSON — a mesma falha
+      // silenciosa, um degrau adiante. É aqui, na tela do envio, que ele ainda
+      // dá pra corrigir.
+      if (data.aviso_area) mostrarAvisoAec(data.aviso_area, 'indigo');
 
       processingStep.textContent = 'Analisando pranchas...';
       // Não setar barra manualmente aqui — startPolling() cuida da progressão

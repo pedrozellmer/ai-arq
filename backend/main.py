@@ -195,10 +195,18 @@ def _origem_das_quantidades(all_items):
     if _n is None or _n < 0:
         return -1, ""
     if _n > 0:
+        # 🪤 03/09, revisão adversarial do próprio conserto: a frase terminava
+        # com "…; o resto veio de texto lido das pranchas" — e esta função NÃO
+        # OLHA o resto. Ela conta só quem veio da GEOMETRIA. "O resto" inclui
+        # linha zerada (31% dos itens, historicamente), chute do modelo, item
+        # de catálogo e a linha "informado por você". Ou seja: a função criada
+        # pra parar de afirmar procedência sem olhar estava afirmando
+        # procedência sem olhar, na outra metade da mesma frase.
+        # 🔑 Calar sobre o que não foi medido é o conserto. Se um dia a gente
+        # quiser falar do resto, mede o resto (`_PROCEDENCIA_TEXTO` existe).
         return _n, ("Parte das quantidades foi tirada da geometria do desenho "
                     "(hachura, comprimento de layer) e está em laranja pra você "
-                    "conferir — não é transcrição de legenda; o resto veio de "
-                    "texto lido das pranchas.")
+                    "conferir — não é transcrição de legenda.")
     return 0, "O que saiu na planilha veio de texto lido das pranchas."
 
 
@@ -266,6 +274,18 @@ def _avisos_com(job_id, novo_aviso):
     if novo_aviso in _atuais:
         return _atuais
     return _atuais + [novo_aviso]
+
+
+# 🩸 03/09/2026 — A BANDA DE ÁREA EXISTIA EM UM LUGAR E O TETO VELHO EM DOIS.
+# O FÁBIO digitou 880.000 m² e passou; consertei o UPLOAD e a revisão
+# adversarial mostrou que `/inform-area` e `/respostas-processamento` — que
+# escrevem o MESMO campo `user_total_area` — continuavam com o teto de 1 km².
+# Conserto que cobre uma porta de três é conserto que engana quem o leu.
+# 🔑 Medido: TODAS as áreas já informadas por cliente são 3.274 · 400 · 378 ·
+# 335 · 290 · 192 · 190 · 150 · 73 · 31 (a de 880.000 é a errada). 100.000 m²
+# é 30× a maior real — generoso de propósito: pega dígito a mais e unidade
+# errada, não recusa projeto grande de verdade.
+_AREA_PLAUSIVEL_MAX = 100_000
 
 
 def _dxf_grande_pode_seguir(tam_bytes, teto_antigo, livre_bytes):
@@ -10410,6 +10430,15 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _partes = ["Reprocessar não resolve — o conversor vai falhar "
                            "igual. Abra no seu CAD e salve como DXF, e suba o "
                            "DXF aqui."]
+            elif len(_partes) == 1 and _outras and not _grandes and not _dwg_sem_irmao:
+                # 🩸 03/09, mesma tarde: eu cobri os dois casos únicos NOVOS e
+                # esqueci o mais FREQUENTE — uma prancha comum que a IA não
+                # respondeu. Ele ficava lendo "Pras demais, reprocessar pode
+                # completar" sem que existisse nenhuma "demais". Antes do meu
+                # conserto essa frase era só "Reprocessar é grátis e pode
+                # completar", que estava certa. Achado pela revisão adversarial
+                # do próprio commit, horas depois.
+                _partes = ["Reprocessar é grátis e pode completar."]
             _saida = " ".join(_partes)
             _aviso_cob = (f"⚠ {len(partial_errors)} prancha(s)/arquivo(s) não entraram nesta "
                           f"planilha — ela pode estar INCOMPLETA. {_saida} "
@@ -11828,10 +11857,16 @@ bloco — só cite os que estão no inventário deste arquivo."""
             if _pe and not is_complement and not _is_reproc:
                 _aviso_html = ""
                 if partial_failure:
-                    # 🪤 Mesma correção do aviso na tela: não sugerir reprocesso quando
-                    # o que falhou foi DWG que não converte — reprocessar falha igual.
-                    _rep = ("" if _dwg_sem_irmao
-                            else " Reprocessar é grátis e tenta completar.")
+                    # 🩸 03/09 — A TELA E O E-MAIL DIZIAM O CONTRÁRIO UM DO OUTRO,
+                    # no MESMO caso. Aqui a condição era recalculada olhando só
+                    # `_dwg_sem_irmao`; prancha recusada por TAMANHO entra em
+                    # `dxf_errors` e nunca em `dwg_failed`, então `_rep` virava
+                    # " Reprocessar é grátis e tenta completar" — enquanto a tela,
+                    # consertada horas antes, dizia "reprocessar não resolve:
+                    # PURGE ou mande só a prancha". O cliente lia as duas.
+                    # 🔑 Uma frase, um lugar: reusa o `_saida` que a tela montou,
+                    # em vez de recalcular a regra numa segunda voz.
+                    _rep = (" " + _saida) if _saida else ""
                     _aviso_html = (f"<br><br><b>&#9888; Atenção:</b> {len(partial_errors)} prancha(s) "
                                    f"não entraram — a planilha pode estar incompleta.{_rep}")
                 # DWG que não abriu: o cliente PRECISA saber, senão ele acha que o
@@ -12259,7 +12294,6 @@ async def process_files(
     # de área construída) é 30× a maior real — generoso e ainda pega o caso.
     # 🪤 E zerar CALADO é a doença do dia: o cliente digitou e a gente ignorou
     # sem contar. Agora registra, e a resposta do upload devolve o aviso.
-    _AREA_PLAUSIVEL_MAX = 100_000
     aviso_area_implausivel = None
     if user_total_area < 0 or user_total_area > _AREA_PLAUSIVEL_MAX:
         aviso_area_implausivel = user_total_area
@@ -13055,7 +13089,7 @@ async def respostas_processamento(job_id: str, request: Request):
 
     patch = {}
     _pd = _num("pe_direito", 1.8, 8.0)       # mesma faixa do upload
-    _ar = _num("area_total", 5.0, 1_000_000)
+    _ar = _num("area_total", 5.0, _AREA_PLAUSIVEL_MAX)
     _pz = _num("prazo_meses", 1, 120)
     if _pd is not None:
         patch["user_pe_direito"] = round(_pd, 2)
@@ -20615,7 +20649,7 @@ def inform_project_area(job_id: str, payload: InformAreaPayload, request: Reques
             pass
         raise HTTPException(400, msg)
 
-    if area and (area <= 0 or area > 1_000_000):
+    if area and (area <= 0 or area > _AREA_PLAUSIVEL_MAX):
         _recusa("area-fora-da-faixa", "Informe uma área válida em m² (maior que 0).")
     # 🪤 Mesma faixa do campo do upload (1,8 a 8 m): fora disso não é pé-direito
     # de edificação, é erro de digitação — e um pé-direito errado multiplica a

@@ -93,9 +93,30 @@ def test_a_frase_da_origem_muda_conforme_a_origem():
     n_geo, frase = main._origem_das_quantidades(_EDVALDO)
     assert n_geo == 2
     assert "tirada da geometria do desenho" in frase
-    assert "veio de texto lido das pranchas" in frase, (
-        "a frase precisa dizer as DUAS coisas: o que veio de geometria e o "
-        "que veio de texto — senão troca uma meia-verdade por outra")
+    # 🩸 03/09, revisão adversarial: este assert exigia que a frase também
+    # dissesse "o resto veio de texto lido das pranchas" — e a função NÃO OLHA
+    # o resto. Ela conta só quem veio da geometria. "O resto" inclui linha
+    # zerada (31% dos itens), chute do modelo, item de catálogo e a linha
+    # "informado por você". O teste estava CODIFICANDO o exagero: a função
+    # criada pra parar de afirmar procedência sem olhar afirmava procedência
+    # sem olhar, e o guarda cobrava que continuasse.
+    # 🔑 Calar sobre o que não foi medido é o conserto — e é o que se cobra.
+    assert "o resto veio de texto" not in frase, (
+        "a frase voltou a afirmar a procedência do RESTO da planilha, que esta "
+        "função nunca olhou")
+
+
+def test_CONTROLE_a_frase_do_caso_SEM_geometria_continua_afirmando_texto():
+    """Quando a contagem é ZERO, aí sim a afirmação é sustentada.
+
+    Sem este controle, "não afirmar procedência" viraria "nunca dizer nada" — e
+    o cliente perde a informação que o impede de tratar legenda como
+    levantamento.
+    """
+    so_texto = [_It(264.54, "Fonte: texto layer 'X': 'AREA = 264,54 m2'")]
+    n_geo, frase = main._origem_das_quantidades(so_texto)
+    assert n_geo == 0
+    assert "veio de texto lido das pranchas" in frase
 
 
 def test_CONTROLE_quando_a_origem_E_texto_a_frase_diz_isso():
