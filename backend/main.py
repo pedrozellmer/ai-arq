@@ -148,6 +148,41 @@ def _supabase_insert(table, data):
         return False
 
 
+# 🩸 03/09/2026 — a decisão de deixar um DXF grande SEGUIR mora aqui, e não
+# solta no meio do `process_job`, por um motivo prático: dentro do laço ela é
+# inalcançável por teste, e um guarda que só lê o fonte erra nos dois sentidos
+# (já me custou cinco verdes falsos em 02/09). Aqui ela roda com número real.
+#
+# O que mudou: o teto de tamanho do DXF convertido era uma recusa de MEMÓRIA
+# tomada no lugar errado. Quem julga memória é o processo filho, que tem trava
+# de 2,5 GB e morre sozinho. O que se decide aqui é DISCO — porque nada apaga
+# os DXF convertidos dentro do laço e eles se somam até o fim do job.
+#
+# Medido no arquivo do Rafael (job 28f140ef), rodando o worker de verdade:
+#     DXF 409 MB --dxf-slim--> 34 MB · pico 305 MB · 19 s · exit 0
+#     67.953 paredes, 1.636 cotas, 1.780 textos
+# A previsão de RAM que o motor usava (9,6x o DXF) errou por 13x nesse arquivo.
+_DXF_TETO_ARQUIVO = 900 * 1024 * 1024      # sanidade: acima disso nem tenta
+_DXF_MARGEM_DISCO = 2 * 1024 * 1024 * 1024  # folga que o job precisa deixar
+
+
+def _dxf_grande_pode_seguir(tam_bytes, teto_antigo, livre_bytes):
+    """O DXF passou do teto antigo — dá pra mandar pro emagrecedor mesmo assim?
+
+    `livre_bytes=None` significa "não consegui medir o disco": nesse caso
+    segue, porque o filho ainda tem a trava de memória e o pior caso é ele
+    morrer sozinho — recusar por não ter medido seria recusar por medo.
+    """
+    if tam_bytes <= teto_antigo:
+        return True                      # nem era caso de recusa
+    if tam_bytes > _DXF_TETO_ARQUIVO:
+        return False
+    if livre_bytes is None:
+        return True
+    return (livre_bytes - tam_bytes) > _DXF_MARGEM_DISCO
+
+
+
 # 🚨 23/08/2026 (auditoria): o painel "Erros do motor" mostra as 40 linhas mais
 # recentes do error_log — e 20 delas eram BOOKKEEPING, não erro. Em 30 dias:
 # motor:unidade 166, motor:preview-prancha 139, motor:consenso-area 135,
@@ -2537,20 +2572,27 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
                       "em software MEP).")
             fix = ("O ideal é <b>reenviar em DXF ou PDF vetorial</b>, ou salvar o DWG numa "
                    "<b>versão mais antiga</b> do AutoCAD (ex.: 2013) e mandar de novo.")
+            alt_img = "Um ajuste no arquivo resolve — exporte em DXF"
         elif "grande demais" in _eh or ("limite" in _eh and "mb" in _eh):
             motivo = "o arquivo ficou <b>grande demais</b> pra processar com segurança."
             fix = ("Exporte <b>só a prancha necessária</b> (não o projeto inteiro), ou "
                    "<b>divida o arquivo em partes</b> e reenvie.")
+            # 🩸 03/09 — a arte deste e-mail dizia "exporte em DXF" nos TRÊS
+            # ramos. No ramo de tamanho isso contradiz o próprio texto logo
+            # abaixo e manda o cliente pra mesma falha (DXF é texto puro e
+            # nasce 30–50x o DWG). Caso Rafael Lima, job 28f140ef.
+            alt_img = "Um ajuste no arquivo resolve — mande só a prancha necessária"
         else:
             motivo = ("não conseguimos ler as quantidades nesse arquivo. Quase sempre é "
                       "porque o PDF é uma imagem escaneada/fotografada, ou a prancha tem só "
                       "o desenho, sem cotas e quadros de áreas.")
             fix = ("O ideal é <b>reenviar a planta completa exportada direto do CAD</b> "
                    "(PDF vetorial, DWG ou DXF).")
+            alt_img = "Um ajuste no arquivo resolve — reenvie exportado do CAD"
         body = (f"{greet}<br><br>"
                 f"Recebemos o projeto <b>{pn}</b>, mas {motivo} Ou seja, <b>reprocessar o "
                 f"mesmo arquivo não vai resolver</b>."
-                + _email_img("falha-arquivo.png", "Um ajuste no arquivo resolve — exporte em DXF")
+                + _email_img("falha-arquivo.png", alt_img)
                 + f"{fix}<br><br>"
                 f"Se quiser, responda este e-mail com o arquivo que a gente te ajuda a "
                 f"preparar. 🙂")
@@ -7361,8 +7403,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             _dxf_grandes_msgs.append(
                                 f"{_bn_dwg}: essa prancha é grande demais pro nosso "
                                 f"limite de memória de hoje ({_tam_dwg // 1048576} MB) "
-                                f"— o arquivo não tem defeito. Sobe ela em DXF, ou só "
-                                f"a área que você precisa medir, que a gente lê")
+                                f"— o arquivo não tem defeito. Reexportar em DXF "
+                                f"não resolve (DXF é texto e fica ainda maior): o "
+                                f"que resolve é um PURGE no desenho, ou mandar só "
+                                f"a área que você precisa medir")
                             jobs.update_field(
                                 job_id,
                                 current_step=f"{_bn_dwg}: prancha grande demais "
@@ -7400,8 +7444,50 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 _tam_conv = os.path.getsize(dxf_path)
                             except OSError:
                                 _tam_conv = 0
+                            # 🩸 03/09/2026 — ESTE TETO RECUSAVA ARQUIVO QUE A
+                            # GENTE SABE LER. Caso RAFAEL LIMA (job 28f140ef):
+                            # DWG de 11,7 MB, DXF de 376 MB, recusado aqui. Baixei
+                            # o arquivo dele e rodei o worker de verdade:
+                            #     DXF 409 MB --dxf-slim--> 34 MB
+                            #     pico 305 MB (0,7x o DXF), 19 s, exit 0
+                            #     67.953 paredes, 1.636 cotas, 1.780 textos
+                            # O `dxf_extract_worker` SEMPRE chama o emagrecedor
+                            # antes de parsear — só que este teto apaga o arquivo
+                            # antes do worker existir. Um emagrecedor que funciona,
+                            # atrás de uma porta que fecha primeiro.
+                            # 🪤 Duas ideias minhas morreram medindo: não é bloat
+                            # do libredwg (o ODA gerou 409 contra 376 MB), e a
+                            # previsão de RAM de 9,6x o DXF errou por 13x aqui.
+                            # 🔑 O que decide memória é o FILHO, que tem trava de
+                            # 2,5 GB e morre sozinho sem levar o site junto. O que
+                            # este ponto decide é DISCO — e disco se MEDE, não se
+                            # chuta: nada apaga os DXF convertidos dentro do laço,
+                            # então eles se somam até o fim do job (o `dbd0d97e`
+                            # de 18/08 tinha 8 pranchas de ~340 MB e perdeu TODAS).
+                            _bn_conv = os.path.basename(cad_path)
+                            _livre = None
+                            try:
+                                import shutil as _sh_disco
+                                _livre = _sh_disco.disk_usage(
+                                    os.path.dirname(dxf_path)).free
+                            except Exception:
+                                _livre = None
+                            if (_tam_conv > _TETO_DXF and _dxf_grande_pode_seguir(
+                                    _tam_conv, _TETO_DXF, _livre)):
+                                # Passa. Quem julga se cabe na memória é o filho.
+                                try:
+                                    _log_error(
+                                        "motor:prancha-grande-segue",
+                                        f"{_bn_conv}: DXF nasceu com "
+                                        f"{_tam_conv // 1048576} MB (acima do teto "
+                                        f"antigo de {_TETO_DXF // 1048576} MB) — "
+                                        f"SEGUINDO pro emagrecedor; disco livre "
+                                        f"{'?' if _livre is None else _livre // 1048576} MB",
+                                        job_id)
+                                except Exception:
+                                    pass
+                                _tam_conv = 0     # desliga a recusa abaixo
                             if _tam_conv > _TETO_DXF:
-                                _bn_conv = os.path.basename(cad_path)
                                 try:
                                     os.remove(dxf_path)
                                 except OSError:
@@ -7421,8 +7507,10 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                     f"nosso limite de memória de hoje "
                                     f"({_tam_conv // 1048576} MB depois de "
                                     f"convertida) — o arquivo não tem defeito. "
-                                    f"Sobe ela em DXF, ou só a área que você "
-                                    f"precisa medir, que a gente lê")
+                                    f"Reexportar em DXF não resolve (esses "
+                                    f"{_tam_conv // 1048576} MB SÃO o DXF): o que "
+                                    f"resolve é um PURGE no desenho, ou mandar só "
+                                    f"a área que você precisa medir")
                                 jobs.update_field(
                                     job_id,
                                     current_step=f"{_bn_conv}: prancha grande demais "
@@ -7872,11 +7960,19 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                     f"— limite NOSSO, arquivo do cliente está ok", job_id)
                             except Exception:
                                 pass
+                            # 🩸 03/09 — o conselho "sobe ela em DXF" era FALSO e
+                            # mandava o cliente pra uma segunda falha: os 376 MB
+                            # são do FORMATO DXF (texto puro), não da conversão.
+                            # A frase-chave "grande demais pro nosso limite de
+                            # memória" é o que o bloco de erro do process_job
+                            # procura pra montar a mensagem final — não mudar.
                             dxf_errors.append(
                                 f"{_bn_dxf}: essa prancha é grande demais pro nosso "
                                 f"limite de memória de hoje ({_mb_dxf:.0f} MB depois de "
-                                f"convertida) — o arquivo não tem defeito. Sobe ela "
-                                f"em DXF, ou uma prancha por vez, que a gente lê")
+                                f"convertida) — o arquivo não tem defeito. Um PURGE "
+                                f"no desenho, ou mandar só a prancha que você precisa "
+                                f"medir, resolve; reexportar em DXF não, porque DXF é "
+                                f"texto e nasce desse tamanho mesmo")
                         else:
                             dxf_errors.append(
                                 f"{_bn_dxf}: não consegui ler a geometria desse arquivo "
@@ -9880,15 +9976,42 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                  if "grande demais pro nosso limite de memória" in str(_e))
                 if _n_grandes and _n_grandes == len(ai_errors):
                     _quantas = _n_grandes
+                    # 03/09/2026, caso RAFAEL LIMA (job 28f140ef) — primeiro
+                    # projeto dele, canal novo (ChatGPT), e esta mensagem dava
+                    # DOIS conselhos, os DOIS errados pro caso dele:
+                    #  (1) "suba em DXF, a conversao do DWG e o que multiplica"
+                    #      e FALSO. DXF e TEXTO e DWG e binario comprimido: o
+                    #      DXF que ele exportar do AutoCAD tem o MESMO tamanho
+                    #      que a nossa conversao gerou. O DWG dele tinha 11,68
+                    #      MB e virou 376 MB de DXF. Mandar ele reexportar em
+                    #      DXF e mandar pra uma SEGUNDA falha, com a nossa
+                    #      assinatura embaixo.
+                    #  (2) "mande uma prancha por vez" — ele mandou UMA.
+                    # Conselho que nao serve pro caso e pior que conselho
+                    # nenhum: parece ajuda e queima a segunda tentativa.
+                    _um_so = False
+                    try:
+                        _um_so = len(file_paths) <= 1
+                    except Exception:
+                        _um_so = False
+                    _saidas = ["limpe o desenho antes de exportar (o comando "
+                               "PURGE do AutoCAD, tirando camadas e blocos que "
+                               "nao sao usados) — costuma cortar boa parte do peso"]
+                    if not _um_so:
+                        _saidas.append("mande uma prancha por vez")
+                    _saidas.append("mande so a prancha (ou so a area) que voce "
+                                   "precisa medir agora")
                     raise RuntimeError(
-                        f"⚠ {'Suas pranchas são' if _quantas > 1 else 'Sua prancha é'} "
-                        f"grande{'s' if _quantas > 1 else ''} demais pro nosso limite "
-                        f"de memória de hoje — e isso é limitação NOSSA, não defeito "
-                        f"do seu arquivo. Reprocessar do jeito que está vai dar no "
-                        f"mesmo. Dois caminhos que funcionam agora: (1) suba em DXF "
-                        f"em vez de DWG — a conversão do DWG é o que multiplica o "
-                        f"tamanho; ou (2) mande uma prancha por vez. Já estamos "
-                        f"trabalhando pra levantar esse teto."
+                        "⚠ %s grande%s demais pro nosso limite de hoje — e "
+                        "isso e limitacao NOSSA, nao defeito do seu arquivo. "
+                        "Reprocessar do jeito que esta vai dar no mesmo, e "
+                        "reexportar em DXF tambem nao resolve: DXF e texto puro, "
+                        "entao ele nasce de 30 a 50 vezes maior que o DWG, por "
+                        "natureza do formato. O que funciona: %s. Ja estamos "
+                        "trabalhando pra levantar esse teto." % (
+                            "Suas pranchas sao" if _quantas > 1 else "Sua prancha e",
+                            "s" if _quantas > 1 else "",
+                            "; ou ".join(_saidas))
                     )
                 # permanent OU unknown: NUNCA culpar o provedor sem prova. Mensagem
                 # honesta — problema técnico do nosso lado, reprocessável, com suporte.
