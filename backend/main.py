@@ -168,6 +168,7 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:respostas-releitura", "motor:informou-depois",
     "motor:consolida-tipo",
     "motor:avisos-no-erro",
+    "motor:refaz-planilha-admin",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
     "pdfvec:shadow", "pdfvec:promo", "dxfrooms:shadow",
     "dwg:aec-detectado-no-upload",
@@ -12654,6 +12655,34 @@ def notify_welcome(request: Request):
     except Exception:
         pass
     return {"status": "ok", "sent": sent}
+
+
+@app.post("/api/admin/refazer-planilha/{job_id}")
+async def admin_refazer_planilha(job_id: str, request: Request):
+    """Refaz o .xlsx do banco e substitui o do Storage. SÓ admin.
+
+    🩸 Por que existe (03/09/2026): a gente consertou um defeito que já tinha
+    entregue arquivo errado — a planilha refeita nascia sem os avisos e com a
+    área que o CLIENTE digitou carimbada como "Área construída — perímetro
+    externo da laje", ou seja, afirmando uma medição que não houve (regra dura
+    nº1). Dois clientes ficaram com esse arquivo na mão. O conserto vale do
+    próximo arquivo em diante, e não havia como refazer os que já saíram: a
+    rota que refaz é travada no dono, e não existia caminho de admin.
+
+    🔑 Isto NÃO é reprocessar. Não relê o CAD, não chama IA, não gasta o
+    reprocesso grátis do cliente e não manda e-mail. Só remonta o .xlsx a
+    partir dos itens que já estão no banco (com as revisões dele aplicadas) e
+    sobe por cima. É a mesma coisa que acontece quando ele mesmo finaliza uma
+    revisão.
+
+    ⏭️ Serve pra toda vez que um conserto nosso deixar arquivo velho lá atrás —
+    que, pelo dia de hoje, não vai ser raro.
+    """
+    _require_admin(request)
+    _log_error("motor:refaz-planilha-admin",
+               "planilha refeita pelo admin (conserto que alcança arquivo já "
+               "entregue) — sem IA, sem e-mail, sem gastar reprocesso", job_id)
+    return await rebuild_planilha_from_review(job_id, request)
 
 
 @app.post("/api/admin/send-welcome")
