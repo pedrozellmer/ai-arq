@@ -314,8 +314,14 @@
   // login, "Sair" não significa nada e só polui a barra.
   // 🪤 Desloga ANTES de navegar. Mandar pro login com a sessão viva devolve a
   // pessoa pro dashboard, o dashboard devolve pra cá, e o beco continua.
+  // 🪤 04/09 — apaga o rascunho ANTES do signOut, e a ordem é o conserto.
+  // A chave do rascunho é derivada de `currentUser.id`; depois do signOut essa
+  // sessão morreu e o `clearDraft()` calcularia outra chave (ou nenhuma). A
+  // limpeza passaria verde e o nome, o WhatsApp e o CPF continuariam no disco
+  // — que é o defeito que este botão, sozinho, deixou fácil de alcançar.
   async function sairDoCadastro() {
     if (window.trackEvent) trackEvent('clique:sair-do-cadastro');
+    clearDraft();
     try { await sbClient.auth.signOut(); } catch (_) {}
     window.location.href = 'index.html';
   }
@@ -460,13 +466,19 @@
     currentUser = session.user;
     const meta = currentUser.user_metadata || {};
 
+    // 🔑 04/09/2026 — O RASCUNHO ENTRA AQUI, e não mais no fim do script.
+    // Desde que a chave passou a ter dono, restaurar antes de saber QUEM está
+    // logado é impossível — e era exatamente o que a chamada do fim do script
+    // fazia. Ela virou no-op e saiu.
+    // 🪤 A ORDEM importa e é o que preserva o conserto de 09/08: o rascunho
+    // vem PRIMEIRO, o nome do Google só preenche o que ficou vazio. Se eu
+    // deixasse o restore depois, o Google encheria o campo e o rascunho (que
+    // só preenche campo vazio, de propósito) não teria mais o que devolver —
+    // quem escreveu "Maria S. Souza Neta" viraria "Maria Souza" de novo.
+    restoreDraft();
+
     // Pre-fill from Google session.
-    // 🪤 O NOME só entra se o campo estiver VAZIO. O `restoreDraft()` do fim do
-    // script já rodou e pode ter devolvido o que a pessoa digitou antes de ir
-    // pro Google; sem esta guarda, o nome da conta Google sobrescrevia a edição
-    // dela (quem escreveu "Maria S. Souza Neta" virava "Maria Souza").
-    // Pego no teste de rascunho em 09/08 — o restoreDraft não conserta depois,
-    // porque ele só preenche campo vazio, de propósito.
+    // O NOME só entra se o campo estiver VAZIO (ver acima).
     // O E-MAIL sempre vem do Google: é o e-mail da conta, não uma preferência.
     if (!nomeInput.value) nomeInput.value = meta.full_name || meta.name || '';
     emailInput.value = currentUser.email || '';
@@ -505,12 +517,12 @@
       ? 'Não consegui confirmar se você já tem cadastro. Se já preencheu antes, '
         + 'atualize a página; se não, é só continuar daqui.'
       : null);
-    // 🪤 De propósito DEPOIS do pré-preenchimento do Google: o que a pessoa
-    // digitou tem que vencer o nome que vem da conta Google. Há um
-    // restoreDraft() no fim do script, mas ele roda ANTES desta função async
-    // terminar — sem esta segunda chamada, o valor do Google sobrescreveria
-    // o rascunho de quem já tinha começado a preencher.
-    restoreDraft();
+    // 🪤 04/09 — a restauração do rascunho SAIU daqui e subiu pra antes do
+    // pré-preenchimento do Google (ver o comentário lá em cima). Ela existia
+    // aqui embaixo porque a chamada do fim do script rodava cedo demais; agora
+    // a chave tem dono e só existe UMA chamada, no único ponto em que já se
+    // sabe quem é a pessoa. `mostrarFormulario()` só troca classes `hidden`,
+    // não mexe em valor de campo — por isso restaurar antes dele é seguro.
   }
   checkAuth();
 
@@ -581,23 +593,45 @@
   //  Backup local pra não perder o que digitou se fechar a aba sem submit.
   //  Restaura na próxima abertura. Limpa depois de submit bem-sucedido.
   // ══════════════════════════════════════════════
-  const DRAFT_KEY = 'aiarq_cadastro_draft';
+  // 🩸 04/09/2026 — O RASCUNHO ERA DE TODO MUNDO E DE NINGUÉM.
+  // A chave era UMA SÓ, sem dono, e o `clearDraft()` só rodava quando a ficha
+  // era salva com sucesso. Quem desistia deixava nome, WhatsApp e CPF gravados
+  // no navegador — e a PRÓXIMA pessoa a abrir esta tela, com outra conta
+  // Google, recebia o formulário preenchido com os dados dela e um aviso verde
+  // "✓ Restauramos 3 campo(s) do seu cadastro anterior". Se não reparasse e
+  // salvasse, o CPF da primeira entrava na ficha da segunda.
+  //
+  // 🪤 O botão "Sair / usar outra conta" entrou HOJE (`ab7097f`) e pôs a troca
+  // de conta a UM clique exatamente nesta tela. O vazamento já existia; eu
+  // deixei ele fácil.
+  //
+  // 🧹 A chave velha sai do navegador de quem já a tem: consertar daqui pra
+  // frente não apaga o CPF que já está gravado no disco de alguém.
+  try { localStorage.removeItem('aiarq_cadastro_draft'); } catch (e) {}
+
+  const DRAFT_BASE = 'aiarq_cadastro_draft';
   const DRAFT_FIELDS = ['nome', 'whatsapp', 'cpf_cnpj', 'empresa', 'area', 'cargo', 'referral_source', 'referral_detail'];
 
+  // 🔑 Sem dono conhecido, o rascunho não é gravado NEM restaurado. Perder um
+  // rascunho é barato; entregar o de alguém pra outra pessoa, não.
   function saveDraft() {
+    if (!currentUser || !currentUser.id) return;
+    const k = DRAFT_BASE + ':' + currentUser.id;
     try {
       const data = {};
       DRAFT_FIELDS.forEach(id => {
         const el = document.getElementById(id);
         if (el) data[id] = el.value;
       });
-      localStorage.setItem(DRAFT_KEY, JSON.stringify(data));
+      localStorage.setItem(k, JSON.stringify(data));
     } catch (e) { /* localStorage full ou disabled — ignora */ }
   }
 
   function restoreDraft() {
+    if (!currentUser || !currentUser.id) return;
+    const k = DRAFT_BASE + ':' + currentUser.id;
     try {
-      const raw = localStorage.getItem(DRAFT_KEY);
+      const raw = localStorage.getItem(k);
       if (!raw) return;
       const data = JSON.parse(raw);
       let restored = 0;
@@ -620,11 +654,16 @@
   }
 
   function clearDraft() {
-    try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    if (!currentUser || !currentUser.id) return;
+    const k = DRAFT_BASE + ':' + currentUser.id;
+    try { localStorage.removeItem(k); } catch (e) {}
   }
 
-  // Restaura na carga
-  restoreDraft();
+  // 🪤 Aqui havia um `restoreDraft()` "na carga". Ele rodava ANTES de o
+  // `checkAuth()` async resolver a sessão — ou seja, sem saber de quem era o
+  // rascunho. Era esse desconhecimento que fazia o vazamento: restaurava o que
+  // estivesse na chave, fosse de quem fosse. Agora a restauração mora dentro do
+  // `checkAuth()`, depois de `currentUser` existir.
   // Salva quando user digita ou seleciona (debounced)
   let saveTimer = null;
   DRAFT_FIELDS.forEach(id => {
