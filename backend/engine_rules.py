@@ -2007,3 +2007,46 @@ def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
     if _RE_IDENT_POR.search(_d):
         return False
     return bool(_RE_LIDERA_BLOCO.search(_d) or _RE_NAO_IDENT.search(_d))
+
+
+# ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ──────────────────────
+# 🩸 04/09/2026, no 1º projeto da Caroline (Bolognesi). O motor mediu
+# **17,18 m** de parede numa casa de **46,79 m²** — e daí saiu a alvenaria
+# (44,67 m² = 17,18 × 2,60), o chapisco e o rodapé.
+#
+# 🔑 Entre todos os retângulos de mesma área, o QUADRADO tem o menor perímetro.
+# Então nenhuma edificação pode ter menos parede que `4·√área`:
+#
+#     4 · √46,79 = 27,36 m   contra   17,18 m medidos
+#
+# Faltam 59% de parede — e isso IGNORANDO as paredes internas, que só aumentam
+# o mínimo. Não é regra de bolso nem benchmark de obra: é geometria, e por isso
+# não esbarra na regra nº3 (ratio só alerta). O limite é uma impossibilidade.
+#
+# 🔑 MEDIDO na base: dos 19 projetos de cliente em que a gente mede parede em
+# metro, **3 (16%) estão abaixo do mínimo** — humberto.oliveira 88% abaixo,
+# marcioeng72 42%, Caroline 59%. Onze itens BRANCOS saíram desses três.
+#
+# 🪤 Folga de 5%: o limite é exato só pro quadrado perfeito sem parede interna,
+# e medição tem ruído. Os três casos reais estão 42–88% abaixo — a folga não
+# muda nenhum deles e evita alarme em planta quase quadrada.
+# 🪤 SÓ APONTA. Não corrige o número (regra nº3) — corrigir seria inventar
+# parede que ninguém mediu. Quem rebaixa o selo é o chamador.
+_FOLGA_PERIMETRO = 0.95
+
+
+def parede_abaixo_do_minimo(comprimento_m, area_m2):
+    """(impossível, mínimo_m). `impossível` = há parede faltando, com certeza.
+
+    `área` é a área de piso medida/lida; `comprimento` é a metragem de parede
+    que o motor apurou. Devolve (False, 0.0) quando não dá pra avaliar.
+    """
+    try:
+        _c = float(comprimento_m or 0)
+        _a = float(area_m2 or 0)
+    except (TypeError, ValueError):
+        return False, 0.0
+    if _c <= 0 or _a <= 0:
+        return False, 0.0
+    _minimo = 4.0 * (_a ** 0.5)
+    return (_c < _minimo * _FOLGA_PERIMETRO), _minimo

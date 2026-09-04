@@ -11036,6 +11036,74 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _log_error("motor:escala-divergente", f"FALHOU: {_eed}", job_id,
                        severity="warning")
 
+        # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ───────────────
+        # 🩸 04/09/2026, no 1º projeto da Caroline (Bolognesi): 17,18 m de
+        # parede numa casa de 46,79 m². O mínimo geométrico — o perímetro do
+        # quadrado de mesma área — é 27,36 m. Faltam 59%, e isso IGNORANDO as
+        # paredes internas. Dessa metragem saíram a alvenaria (44,67 m²), o
+        # chapisco e o rodapé dela.
+        # 🔑 MEDIDO: dos 19 projetos de cliente em que medimos parede em metro,
+        # 3 (16%) estão abaixo do mínimo — 11 itens BRANCOS saíram deles.
+        # 🪤 SÓ REBAIXA e AVISA; não corrige (regra nº3). Corrigir seria
+        # inventar parede que ninguém mediu.
+        try:
+            from engine_rules import (parede_abaixo_do_minimo as _par_min,
+                                      item_e_de_escala as _e_escala_p)
+            from models import Confidence as _CfP
+            _area_ref = 0.0
+            try:
+                _area_ref = float(getattr(project_data, "total_area", 0) or 0)
+            except (TypeError, ValueError):
+                _area_ref = 0.0
+            _paredes_ml = [float(getattr(_it, "quantity", 0) or 0)
+                           for _it in (all_items or [])
+                           if str(getattr(_it, "discipline", "") or "") == "Fechamentos Verticais"
+                           and str(getattr(_it, "unit", "") or "").lower() in ("ml", "m")
+                           and float(getattr(_it, "quantity", 0) or 0) > 0]
+            _impossivel, _min_per = _par_min(max(_paredes_ml or [0]), _area_ref)
+            if _impossivel:
+                _maior = max(_paredes_ml)
+                _reb_p = 0
+                for _it in (all_items or []):
+                    if str(getattr(_it, "discipline", "") or "") != "Fechamentos Verticais":
+                        continue
+                    if not _e_escala_p(getattr(_it, "unit", "")):
+                        continue
+                    _cfp = str(getattr(getattr(_it, "confidence", None), "value",
+                                       getattr(_it, "confidence", "")) or "")
+                    if _cfp == "confirmado":
+                        try:
+                            _it.confidence = _CfP.ESTIMADO
+                            _reb_p += 1
+                        except Exception:
+                            pass
+                    _obp = str(getattr(_it, "observations", "") or "")
+                    if "menos parede do que o mínimo" not in _obp:
+                        _it.observations = (
+                            "⚠ A leitura encontrou MENOS parede do que o mínimo "
+                            "possível pra área deste projeto (%.1f m contra %.1f m, "
+                            "que é o perímetro de um quadrado de %.0f m² — e ainda "
+                            "sem as paredes internas). Faltou parede na leitura: "
+                            "trate este número como piso, não como medida. "
+                            % (_maior, _min_per, _area_ref) + _obp)[:1000]
+                _log_error("motor:parede-abaixo-do-minimo",
+                           "parede=%.2f m area=%.2f m² minimo=%.2f m "
+                           "(faltam %.0f%%) rebaixei=%d"
+                           % (_maior, _area_ref, _min_per,
+                              (_min_per / _maior - 1) * 100 if _maior else 0, _reb_p),
+                           job_id, severity="critical")
+                project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    "⚠ PAREDE INCOMPLETA: a leitura achou %.1f m de parede, e o "
+                    "mínimo possível pra uma área de %.0f m² é %.1f m (o perímetro "
+                    "de um quadrado dessa área, sem contar paredes internas). "
+                    "Alguma parede não foi lida — provavelmente está num layer que "
+                    "o motor não reconheceu. Tudo que depende de parede (alvenaria, "
+                    "chapisco, reboco, pintura, rodapé) está subestimado na mesma "
+                    "proporção. Se puder, me diga em qual layer estão as paredes "
+                    "que eu releio." % (_maior, _area_ref, _min_per)]
+        except Exception as _epm:
+            print(f"[parede-minimo] nao-fatal: {_epm}")
+
         # ── RECONTA O AVISO DO PLANO B COM A VERDADE (caso Tiago, 01/09) ─────
         # Tudo que rebaixa selo já rodou: selos_sem_geometria e escala-divergente.
         # Só AGORA o número de medidos é o que o cliente vai ver na planilha.
