@@ -226,9 +226,21 @@ def _apaga_dir_de_conversao(dxf_path):
     centenas — e disco cheio no Render derruba o job de todo mundo, não só o
     desta prancha.
 
-    🪤 Só é seguro porque, depois do laço, `dxf_paths` é usado apenas em `bool()`
-    e `len()` — ninguém lê o arquivo de uma prancha que foi pulada. Se isso
-    mudar, este apagamento tem que mudar junto.
+    🪤 A 1ª versão desta docstring dizia: "só é seguro porque, depois do laço,
+    `dxf_paths` é usado apenas em `bool()` e `len()` — ninguém lê o arquivo de
+    uma prancha que foi pulada". **Era falso.** A thread de preview de CAD
+    (`_render_cad_previews_bg`) itera `dxf_paths` e ABRE cada arquivo. Escrever
+    uma invariante que não é verdade é pior que não escrever nenhuma: ela é
+    exatamente o que a próxima pessoa vai citar pra não conferir.
+
+    🔑 O que torna o apagamento seguro, de verdade, são dois fatos:
+      • a thread do preview só é disparada MUITO depois do laço (não há corrida
+        entre apagar aqui e renderizar lá); e
+      • ela trata arquivo ausente (`os.path.isfile`), não quebra.
+
+    🪤 E ela CONTAVA a nossa exclusão no balde `sem_dxf`, que existe pra achar
+    causa de preview faltando. Por isso quem chama esta função também registra
+    o caminho em `_descartadas`: ausência que a gente causou é outro fato.
     """
     import shutil as _sh_lim
     try:
@@ -7554,7 +7566,11 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # Este contador NÃO conserta o render — faz ele parar de falhar
                 # escondido, pra o próximo projeto dizer se é tempo, memória ou
                 # arquivo. Sem isso eu só posso chutar qual dos três é.
-                _prev = {"ok": 0, "falhou": 0, "sem_dxf": 0, "erro": 0}
+                # 🪤 `descartada` nasceu em 03/09 pra tirar do balde `sem_dxf` a
+                # prancha que a GENTE apagou (extração falhou/estourou o tempo).
+                # Misturar as duas transforma o contador de diagnóstico em ruído.
+                _prev = {"ok": 0, "falhou": 0, "sem_dxf": 0, "erro": 0,
+                         "descartada": 0}
                 try:
                     from dxf_render import render_dxf_to_png_safe
                 except Exception as _imp_e:
@@ -7574,7 +7590,13 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # o convertido quando veio DWG. É a fonte certa.
                 for _dxf_path in dxf_paths:
                     if not os.path.isfile(_dxf_path):
-                        _prev["sem_dxf"] += 1
+                        # Duas ausências DIFERENTES, com consertos diferentes:
+                        # a que a gente causou (extração falhou → apagamos) e a
+                        # que ninguém explica. Só a segunda pede investigação.
+                        if _dxf_path in _descartadas:
+                            _prev["descartada"] += 1
+                        else:
+                            _prev["sem_dxf"] += 1
                         continue
                     # Nome do PNG pelo arquivo do CLIENTE, sem o sufixo do
                     # conversor — "planta_libredwg.png" não diz nada pra ele.
@@ -7629,7 +7651,8 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 _log_error("motor:preview-prancha",
                            f"resumo enviadas={len(cad_paths)} legiveis={len(dxf_paths)} "
                            f"ok={_prev['ok']} falhou={_prev['falhou']} "
-                           f"sem_dxf={_prev['sem_dxf']} erro={_prev['erro']}", job_id)
+                           f"sem_dxf={_prev['sem_dxf']} erro={_prev['erro']} "
+                           f"descartada={_prev['descartada']}", job_id)
             # NÃO inicia o preview aqui (fix OOM 2026-07-22): rodar o matplotlib
             # concorrente com a análise soma o pico de RAM do render EM CIMA do
             # pico da análise — justamente a janela de perigo em projeto com muitas
@@ -7664,6 +7687,14 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
 
         # Converter DWG→DXF se necessário
         dxf_paths = []
+        # 🩸 03/09/2026 — as pranchas que NÓS apagamos de propósito (extração
+        # falhou/estourou o tempo). Sem esta lista, a thread de preview acha o
+        # caminho morto em `dxf_paths` e conta `sem_dxf` — o mesmo balde de
+        # "sumiu e não sei por quê" que existe justamente pra achar causa. Foi
+        # olhando `sem_dxf` que a causa do preview do cliente franweldon
+        # apareceu, em 10/08; se ele vier envenenado pela nossa própria
+        # limpeza, a próxima investigação começa por uma pista falsa.
+        _descartadas = set()
         # (caminho, fator_para_metros) das pranchas DXF que a extração leu com
         # sucesso — alimenta a SOMBRA de montagem de cômodos no fim do job.
         _dxfrooms_units: list = []
@@ -8248,6 +8279,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             pass
                         dxf_errors.append(f"{_bn_dxf}: a leitura da geometria demorou demais (prancha muito grande/pesada) — mande essa prancha isolada, ou reexporte só o pavimento que você precisa")
                         _apaga_dir_de_conversao(dxf_path)   # senão vaza até o fim do job
+                        _descartadas.add(dxf_path)          # não é 'sumiu': fomos nós
                         continue
                     except Exception as _ex_dxf:
                         _bn_dxf = os.path.basename(dxf_path)
@@ -8317,6 +8349,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                 f"{_bn_dxf}: não consegui ler a geometria desse arquivo "
                                 f"(pode estar corrompido ou ter objetos não suportados)")
                         _apaga_dir_de_conversao(dxf_path)   # senão vaza até o fim do job
+                        _descartadas.add(dxf_path)          # não é 'sumiu': fomos nós
                         continue
                     # Cap de segurança (auditoria 06/07): projeto gigante pode gerar
                     # prompt enorme e estourar RAM/contexto do modelo. 300k chars é
