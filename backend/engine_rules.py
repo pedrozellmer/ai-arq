@@ -912,11 +912,52 @@ def unidade_conflita_com_sinapi(unidade_item, unidade_sinapi):
     """True quando as duas descrevem GRANDEZAS diferentes (área × comprimento,
     contagem × área...). False quando batem, quando são a mesma grandeza, ou
     quando qualquer uma é incomparável — na dúvida, cala a boca."""
-    a = grandeza_da_unidade(unidade_item)
-    b = grandeza_da_unidade(unidade_sinapi)
-    if not a or not b:
-        return False
-    return a != b
+    return tipo_de_conflito_de_unidade(unidade_item, unidade_sinapi) is not None
+
+
+# Grandezas em que NOSSO lado é o suspeito: medir comprimento, área ou volume
+# é afirmar uma dimensão do desenho. Contar não é — contar é sempre uma base
+# legítima, e o SINAPI só usa outra pra precificar.
+_NOSSAS_GRANDEZAS_DIMENSIONAIS = ("comprimento", "area", "volume")
+
+
+def tipo_de_conflito_de_unidade(unidade_item, unidade_sinapi):
+    """Que TIPO de divergência é esta? `None` = nenhuma.
+
+    Devolve `"base"` quando as duas medidas são plausíveis e só diferem de
+    base (a gente CONTA janela, o SINAPI PRECIFICA por m²), ou `"grandeza"`
+    quando o lado suspeito é o NOSSO — medimos uma dimensão que não é a do
+    serviço.
+
+    🩸 04/09/2026, do 1º projeto da Caroline (Bolognesi). Ela recebeu, e
+    apagou em 3 minutos, uma linha com a nossa própria observação:
+
+        "⚠ CONFERIR A UNIDADE: o serviço SINAPI 103689 é medido em M2, e
+         esta linha saiu em un. Uma das duas está errada."
+
+    🔑 MEDIDO na base: **160 itens, 39 projetos, 29 clientes** receberam esse
+    aviso. E **89 deles (56%) são FALSO ALARME** — "Janela maxim-ar, 46 un"
+    contra M2, "Bloco cerâmico, un" contra M2, "Estaca, 187 un" contra M.
+    Contar janela está certo; a SINAPI é que precifica por área. Nenhuma das
+    duas está errada, e a gente afirmava que uma estava.
+
+    🪤 Alarme que grita 56% à toa é [[alarme sem controle]]: ensina o cliente a
+    ignorar — e dilui os **27 casos reais** (11 clientes), que são justamente
+    os "Ripas de madeira 1,18 ml" contra M2, onde a gente pegou o comprimento
+    de um layer e chamou de item de área.
+
+    🪤 A assimetria NÃO é "contagem nunca conflita". É quem mediu: se NÓS
+    dissemos comprimento/área/volume e o serviço é de outra grandeza, o número
+    é de outra coisa. Se nós CONTAMOS, contar é base legítima pra qualquer
+    item físico. Conferido contra a matriz inteira do banco antes de escrever.
+    """
+    _a = grandeza_da_unidade(unidade_item)
+    _b = grandeza_da_unidade(unidade_sinapi)
+    if not _a or not _b or _a == _b:
+        return None
+    if _a in _NOSSAS_GRANDEZAS_DIMENSIONAIS:
+        return "grandeza"
+    return "base"
 
 
 # ── O elo que faltava: o RÓTULO está dentro de QUAL região? ──────────────────

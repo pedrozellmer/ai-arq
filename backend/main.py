@@ -66,7 +66,8 @@ from engine_rules import (
     pode_fundir as _pode_fundir,
     caveat_atinge_unidade as _caveat_atinge_unidade,
     selos_sem_medida as _selos_sem_medida,
-    unidade_conflita_com_sinapi as _unidade_conflita_sinapi,
+    unidade_conflita_com_sinapi as _unidade_conflita_sinapi,  # noqa: F401
+    tipo_de_conflito_de_unidade as _tipo_conflito_unidade,
     quantidade_da_procedencia as _quantidade_da_procedencia,
     quantidade_medida_pelo_pdf as _quantidade_medida_pelo_pdf,
 )
@@ -11749,25 +11750,66 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # 🪤 Só olha o código que a IA CONFIRMOU (`_llm_picked`): candidato
             # por nota de similaridade erra demais e viraria alarme falso.
             try:
-                _n_unid = 0
+                _n_unid = _n_base = _n_reb_un = 0
                 for e in lote:
                     _it_u = e["_item"]
                     _m = (getattr(_it_u, "sinapi_matches", None) or [None])[0]
                     if not _m or not _m.get("_llm_picked"):
                         continue
-                    if not _unidade_conflita_sinapi(getattr(_it_u, "unit", ""), _m.get("unidade")):
+                    _tipo_cu = _tipo_conflito_unidade(
+                        getattr(_it_u, "unit", ""), _m.get("unidade"))
+                    if not _tipo_cu:
                         continue
-                    _av_u = (f"⚠ CONFERIR A UNIDADE: o serviço SINAPI {_m.get('codigo')} "
-                             f"é medido em {_m.get('unidade')}, e esta linha saiu em "
-                             f"{getattr(_it_u, 'unit', '') or '—'}. Uma das duas está errada. ")
+                    _nossa_un = getattr(_it_u, "unit", "") or "—"
+                    if _tipo_cu == "base":
+                        # 🩸 04/09: 56% dos avisos eram DESTE tipo e diziam
+                        # "uma das duas está errada" — quando nenhuma está.
+                        # Contar janela em `un` é certo; a SINAPI precifica por
+                        # m². Alarme que grita à toa ensina a ignorar alarme.
+                        _av_u = (f"ℹ BASE DE MEDIÇÃO DIFERENTE: a gente levantou em "
+                                 f"{_nossa_un} e o serviço SINAPI {_m.get('codigo')} é "
+                                 f"medido em {_m.get('unidade')}. Em geral é só base de "
+                                 f"preço diferente (contar a peça × precificar por "
+                                 f"área) — converta antes de usar o código. ")
+                    else:
+                        _av_u = (f"⚠ CONFERIR A GRANDEZA: esta linha saiu em "
+                                 f"{_nossa_un} e o serviço SINAPI {_m.get('codigo')} é "
+                                 f"medido em {_m.get('unidade')}. Aqui o lado suspeito "
+                                 f"é o NOSSO: pode ser que a gente tenha pegado o "
+                                 f"comprimento de um layer no lugar da área. Confira "
+                                 f"contra a prancha antes de usar este número. ")
                     _obs_u = getattr(_it_u, "observations", "") or ""
-                    if "CONFERIR A UNIDADE" not in _obs_u:
+                    if ("CONFERIR A UNIDADE" not in _obs_u
+                            and "CONFERIR A GRANDEZA" not in _obs_u
+                            and "BASE DE MEDIÇÃO DIFERENTE" not in _obs_u):
                         _it_u.observations = (_av_u + _obs_u)[:1000]
                         _n_unid += 1
+                        if _tipo_cu == "base":
+                            _n_base += 1
+                    # 🩸 04/09 — o selo. A doutrina antiga ("só avisa, nunca
+                    # rebaixa") vale pro conflito de BASE: contar janela é
+                    # medição boa e o match SINAPI é o lado fraco. Não vale
+                    # quando a grandeza suspeita é a NOSSA: aí o número é de
+                    # outra coisa, e "✓ MEDIDO" afirma justamente que ele é
+                    # deste item. É o caso "Ripas de madeira 1,18 ml" da
+                    # Caroline, contra um serviço medido em m².
+                    if _tipo_cu == "grandeza":
+                        _cfu = str(getattr(getattr(_it_u, "confidence", None), "value",
+                                           getattr(_it_u, "confidence", "")) or "")
+                        if _cfu == "confirmado":
+                            try:
+                                from models import Confidence as _CfU
+                                _it_u.confidence = _CfU.ESTIMADO
+                                _n_reb_un += 1
+                            except Exception:
+                                pass
                 if _n_unid:
                     print(f"[sinapi-unidade] job={job_id}: {_n_unid} item(ns) com unidade "
                           f"divergente do código SINAPI confirmado")
-                    _log_error("motor:sinapi-unidade", f"n={_n_unid}", job_id)
+                    _log_error("motor:sinapi-unidade",
+                               "n=%d (base=%d grandeza=%d) rebaixei=%d"
+                               % (_n_unid, _n_base, _n_unid - _n_base, _n_reb_un),
+                               job_id)
             except Exception as _eu:
                 print(f"[sinapi-unidade] job={job_id}: checagem falhou: {_eu}")
             # Libera o pool 60-wide de candidatos SINAPI (de TODAS as pranchas)
