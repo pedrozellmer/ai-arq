@@ -124,3 +124,41 @@ def test_CONTROLE_deslogar_DEPOIS_de_navegar_e_reprovado():
     fn = _NAVEGA_ANTES[i:i + 500]
     assert fn.index("signOut") > fn.index("location.href"), (
         "o controle está mal montado")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A outra porta: criar conta por SENHA e nunca conseguir entrar
+# ══════════════════════════════════════════════════════════════════════════
+_LOGIN = io.open(os.path.join(_RAIZ, "login.html"), encoding="utf-8").read()
+
+
+def test_a_confirmacao_de_email_avisa_do_SPAM():
+    """🩸 04/09 — a mensagem de "conta criada" NÃO falava de spam, enquanto a
+    de redefinir senha, duas telas acima, fala. É a assimetria ao contrário:
+    sem confirmar o e-mail a pessoa não ENTRA, e o remetente é o
+    `noreply@mail.app.supabase.io`, que filtro corporativo segura.
+
+    🪤 Achado com o Arthur (Tenda) parado nisso: ficha completa numa conta
+    Google de manhã, e 5 h depois criou outra com o e-mail da empresa —
+    `email_confirmed_at` nulo, `last_sign_in_at` nulo, nunca entrou.
+
+    🚫 Isto NÃO prova que o e-mail dele caiu no spam (n=1, 1 hora, e 3 de 4
+    contas corporativas por senha confirmaram normal). A frase entra porque a
+    inconsistência é real e custa nada.
+    """
+    corpo = _sem_comentario_html(_LOGIN)
+    i = corpo.index("Conta criada!")
+    msg = corpo[i:i + 320]
+    assert "spam" in msg.lower(), (
+        "a mensagem de conta criada voltou a não avisar do spam — e sem "
+        "confirmar o e-mail a pessoa nem consegue entrar")
+
+
+def test_CONTROLE_a_redefinicao_de_senha_ja_avisava():
+    """O paralelo que revelou a assimetria: se ESTA também perder o aviso, o
+    teste de cima vira exigência arbitrária em vez de consistência."""
+    corpo = _sem_comentario_html(_LOGIN)
+    i = corpo.index("link de redefini")
+    assert "spam" in corpo[i:i + 260].lower(), (
+        "a mensagem de redefinição perdeu o aviso de spam — era ela o padrão "
+        "que a de conta criada estava quebrando")

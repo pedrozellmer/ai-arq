@@ -337,7 +337,21 @@
         if (data.user && data.user.identities && data.user.identities.length === 0) {
           showEmailError('Este e-mail j\u00e1 est\u00e1 cadastrado. Tente fazer login.');
         } else {
-          showEmailSuccess('Conta criada! Verifique seu e-mail para confirmar e depois fa\u00e7a login.');
+          // \ud83e\ude78 04/09/2026 \u2014 esta mensagem N\u00c3O falava de spam, enquanto a de
+          // redefinir senha (duas telas acima) fala. \u00c9 a assimetria ao
+          // contr\u00e1rio: sem confirmar o e-mail a pessoa n\u00e3o ENTRA, e o remetente
+          // \u00e9 o `noreply@mail.app.supabase.io` \u2014 exatamente o tipo que filtro
+          // corporativo segura.
+          // \ud83e\udea4 Achado com o Arthur, da Tenda, parado nisso: ele j\u00e1 tinha ficha
+          // completa numa conta Google de manh\u00e3 e voltou 5 h depois pra criar
+          // outra com o e-mail da empresa. `email_confirmed_at` nulo,
+          // `last_sign_in_at` nulo \u2014 ele nunca chegou a entrar.
+          // \ud83d\udeab N\u00c3O afirmo que o e-mail dele caiu no spam: s\u00e3o 4 contas
+          // corporativas por senha e 3 confirmaram normal (n=1, e faz 1 hora).
+          // A frase entra porque a inconsist\u00eancia \u00e9 real e custa nada, n\u00e3o
+          // porque eu provei a causa.
+          showEmailSuccess('Conta criada! Verifique seu e-mail para confirmar e depois fa\u00e7a login. '
+                           + 'Confira tamb\u00e9m a caixa de spam \u2014 o e-mail de confirma\u00e7\u00e3o costuma cair l\u00e1.');
         }
       } else {
         const { data, error } = await sbClient.auth.signInWithPassword({ email, password });
