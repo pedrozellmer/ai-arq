@@ -26,6 +26,7 @@ chamado de medido. O selo da planilha respeita isso desde sempre; o assunto do
 e-mail, não.
 """
 import os
+import re
 import sys
 
 import pytest
@@ -123,10 +124,38 @@ def test_o_selo_de_quem_nao_mediu_e_honesto():
 
 def test_o_preheader_nao_promete_medicao():
     """🪤 O Gmail bloqueia imagem por padrão, então o preheader é uma das
-    primeiras linhas que o cliente lê — mente ali e mentiu no e-mail todo."""
+    primeiras linhas que o cliente lê — mente ali e mentiu no e-mail todo.
+
+    🩸 03/09: este teste ancorava na FRASE LITERAL ("nenhuma quantidade saiu
+    da") e reprovou um conserto legítimo. O e-mail passou a ter DOIS preheaders
+    no ramo de zero-medidos, porque o anterior contradizia o próprio corpo:
+    dizia "nenhuma quantidade saiu da geometria" enquanto o corpo, três linhas
+    abaixo, dizia "parte das quantidades foi tirada da geometria".
+
+    🔑 O que o guarda tem que cobrar é a INTENÇÃO — nenhum preheader do ramo
+    pode afirmar que mediu — e não uma redação específica. Guarda preso à
+    redação vira obstáculo ao conserto certo.
+    """
     corpo = _bloco()
-    i = corpo.index("_pre_c = (\"O CAD entrou na conta")
-    assert "nenhuma quantidade saiu da" in corpo[i:i + 220]
+    ini = corpo.index("_badge_c = \"&#9888;")
+    ramo = corpo[ini:ini + 900]
+    pres = re.findall(r'_pre_c = \((.{0,320}?)\)\n', ramo, re.S)
+    assert len(pres) >= 2, (
+        "o ramo de zero-medidos precisa de um preheader por caso de origem "
+        "(com geometria lida e sem) — achei %d" % len(pres))
+    for p in pres:
+        assert not re.search(r"medimos|foi medid[oa]|quantidade medida", p, re.I), (
+            "preheader afirmando medição num e-mail de ZERO medidos: %s" % p[:120])
+    # E o par tem que cobrir os dois casos, senão voltou a ser um só.
+    # 🪤 Colar os literais adjacentes ANTES de procurar: a frase do cliente não
+    # existe inteira no fonte ("…mas nenhuma quantidade " + "saiu da geometria.").
+    # Procurar no fonte cru devolve zero e o guarda acusa o texto CERTO.
+    junto = re.sub(r'"\s*\n\s*"', "", " ".join(pres))
+    assert "nenhuma quantidade saiu da" in junto, (
+        "sumiu o preheader do caso em que NADA saiu da geometria")
+    assert "parte das quantidades" in junto or "selo de medido" in junto, (
+        "sumiu o preheader do caso em que a geometria FOI lida — é ele que "
+        "para de contradizer o corpo")
 
 
 # ══════════════════════════════════════════════════════════════════════════

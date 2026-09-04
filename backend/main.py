@@ -11767,7 +11767,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _n_med_c = sum(1 for it in all_items
                                    if str(getattr(getattr(it, "confidence", None), "value",
                                                   getattr(it, "confidence", "")) or "") == "confirmado")
-                    _, _frase_origem_c = _origem_das_quantidades(all_items)
+                    # 🪤 O n_geo era descartado (`_,`) e o preheader/selo deste
+                    # e-mail acabaram contradizendo o CORPO dele. Guardado.
+                    _n_geo_c, _frase_origem_c = _origem_das_quantidades(all_items)
                     _proximos_c = _next_steps_html(job_id, _n_med_c, len(all_items), _n_cad_c == 0 and _n_pdf_c > 0)
                     # 🚨 A releitura pode sair PIOR (motor não-determinístico). Não
                     # anunciar "atualizada" como se fosse melhora quando não foi —
@@ -11820,9 +11822,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _subj_c = (f"{_pn_c_raw} — planilha atualizada com o CAD"
                                    if _pn_c_raw else "Planilha atualizada com o CAD")
                         _titulo_c = "Planilha atualizada com o CAD"
-                        _badge_c = "&#9888; Sem medida do desenho"
-                        _pre_c = ("O CAD entrou na conta, mas nenhuma quantidade saiu da "
-                                  "geometria.")
+                        # 🩸 03/09 — O PREHEADER CONTRADIZIA O PRÓPRIO CORPO.
+                        # Ele dizia "nenhuma quantidade saiu da geometria" e o
+                        # corpo, três linhas abaixo, dizia "parte das quantidades
+                        # foi tirada da geometria do desenho". O preheader é o
+                        # que aparece na CAIXA DE ENTRADA — o cliente lê a
+                        # negação antes de abrir e a afirmação depois de abrir.
+                        # 🔑 Vem da MESMA fonte do corpo (`_origem_das_
+                        # quantidades`), como o `_saida` da falha parcial. Duas
+                        # vozes sobre o mesmo fato é como isto começa.
+                        if _n_geo_c > 0:
+                            _badge_c = "&#9888; Sem selo de medido"
+                            _pre_c = ("O CAD entrou na conta e parte das quantidades "
+                                      "saiu do desenho — mas nada ganhou o selo de "
+                                      "medido.")
+                        else:
+                            _badge_c = "&#9888; Sem medida do desenho"
+                            _pre_c = ("O CAD entrou na conta, mas nenhuma quantidade "
+                                      "saiu da geometria.")
                     _ok_c = _send_email_smtp(
                         _pe, _subj_c,
                         _email_wrap(
