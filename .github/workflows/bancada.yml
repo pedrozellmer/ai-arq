@@ -65,7 +65,10 @@ jobs:
           # painel admin e smoke), e o piso velho já deixava passar a perda de
           # 25% dela. O guarda `test_o_piso_do_CI_faz_sentido_contra_a_realidade`
           # foi quem cobrou — piso que envelhece é piso que não guarda nada.
-          PISO: 1367
+          # 04/09/2026: 1367 -> 1550. A bancada foi a 1824 em dois dias (varredura
+          # adversarial + os achados que saíram da planilha da Caroline). Mesmo
+          # guarda cobrando de novo, pelo mesmo motivo.
+          PISO: 1550
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"

@@ -104,7 +104,12 @@ def test_o_confirm_DIZ_o_que_a_acao_NAO_faz():
     foi exatamente a pergunta dele em 24/08: 'isso não confunde?'."""
     fn = _funcao_js("adminRefazerPlanilha")
     baixo = fn.lower()
-    assert "confirm(" in fn, "some sem confirmação numa ação que sobrescreve arquivo"
+    # 🩸 04/09: casava o literal `confirm(` e quebrou quando as dez ações
+    # do painel passaram a usar `_confirmaOuAvisa(` — invólucro que confirma E
+    # avisa na recusa (antes, cancelar sumia em silêncio). O que importa é ter
+    # confirmação bloqueante, não o nome dela.
+    assert ("confirm(" in fn or "_confirmaOuAvisa(" in fn), (
+        "some sem confirmação numa ação que sobrescreve arquivo")
     assert "nao rele o cad" in baixo or "não relê o cad" in baixo
     assert "nao gasta o reprocesso" in baixo or "não gasta o reprocesso" in baixo
 

@@ -20,12 +20,33 @@ Quando o dono do produto hesita entre dois botões, o problema é do botão.
 """
 import io
 import os
+import re as _re
 
 _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _admin():
     return io.open(os.path.join(_RAIZ, "admin.html"), encoding="utf-8").read()
+
+
+# 🩸 04/09/2026 — estes guardas casavam o literal `confirm(`, e quebraram
+# quando as dez ações do painel passaram a chamar `_confirmaOuAvisa(`, um
+# invólucro que confirma E avisa quando a resposta é não (antes, recusar sumia
+# em silêncio). O COMPORTAMENTO que eles protegem — um diálogo por botão, antes
+# do window.open — não mudou. Guarda preso ao NOME da função reprova refactor
+# honesto; o que importa é a chamada de confirmação, em qualquer das formas.
+_RE_CONFIRMA = _re.compile(r"(?<![\w_])(confirm|_confirmaOuAvisa)\s*\(")
+
+
+def _confirmacoes(corpo):
+    """Quantas confirmações bloqueantes este corpo tem."""
+    return len(_RE_CONFIRMA.findall(corpo))
+
+
+def _onde_confirma(corpo):
+    """Posição da PRIMEIRA confirmação. -1 se não houver."""
+    m = _RE_CONFIRMA.search(corpo)
+    return m.start() if m else -1
 
 
 def test_o_botao_que_mexe_no_cliente_avisa_no_rotulo():
@@ -98,7 +119,8 @@ def test_confirm_vem_ANTES_do_window_open():
 
     Regra: diálogo bloqueante SEMPRE antes de abrir janela."""
     corpo = _funcao("adminEvalReprocess")
-    i_conf = corpo.index("confirm(")
+    i_conf = _onde_confirma(corpo)
+    assert i_conf >= 0, "sumiu a confirmação do botão de avaliar"
     i_open = corpo.index("window.open(")
     assert i_conf < i_open, (
         "tem confirm DEPOIS do window.open — no celular ele abre numa aba que o "
@@ -109,7 +131,7 @@ def test_um_confirm_so_por_botao():
     """Dois diálogos seguidos pro mesmo clique é ruído; e foi o segundo que
     quebrou tudo."""
     for nome in ("adminEvalReprocess", "adminReprocess"):
-        n = _funcao(nome).count("confirm(")
+        n = _confirmacoes(_funcao(nome))
         assert n == 1, "%s tem %d confirms — esperado 1" % (nome, n)
 
 

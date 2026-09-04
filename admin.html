@@ -1693,7 +1693,7 @@ async function costSave(i){
 async function costDelete(i){
   const c = COSTS[i]; if (!c) return;
   if (!c.id){ COSTS.splice(i,1); renderCosts(); return; }
-  if (!confirm('Excluir "'+(c.servico||'')+'"?')) return;
+  if (!_confirmaOuAvisa('Excluir "'+(c.servico||'')+'"?')) return;
   try {
     const res = await authFetch(`${API_BASE}/api/admin/costs/delete`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id:c.id})});
     if (!res.ok){ const d=await res.json().catch(()=>({})); throw new Error(d.detail||'erro'); }
@@ -2215,7 +2215,7 @@ function mergeHtml(d, jobId){
 async function mergeCriar(jobId){
   // 🪤 Diálogo bloqueante SEMPRE antes de qualquer coisa (lição de 24/08: um
   // confirm depois do window.open some no celular e trava o botão).
-  if (!confirm('Criar o projeto COMBINADO?\n\n'
+  if (!_confirmaOuAvisa('Criar o projeto COMBINADO?\n\n'
       + '• junta a melhor leitura de cada prancha\n'
       + '• nasce como TESTE — o cliente NÃO vê e NÃO recebe e-mail\n'
       + '• não gasta o reprocesso grátis dele\n'
@@ -2361,7 +2361,7 @@ async function liberarFilhote(jobId, revogar){
     : `${acao}\n\n${String(jobId).startsWith('mg')
           ? 'Versão COMBINADA (' + jobId + ') — a melhor prancha de cada leitura.'
           : 'RELEITURA (' + jobId + ') — o motor releu os arquivos.'}\n\nO cliente RECEBE e-mail automático explicando o que mudou (não vai se ele já revisou itens à mão).`;
-  if (!confirm(_txt)) return;
+  if (!_confirmaOuAvisa(_txt)) return;
   try {
     const res = await authFetch(`${API_BASE}/api/admin/liberar-filhote/${jobId}${revogar?'?revogar=1':''}`, {method:'POST'});
     const d = await res.json().catch(()=>({}));
@@ -3453,7 +3453,7 @@ async function loadNewsletterScheduled() {
 }
 
 async function cancelNewsletter(id) {
-  if (!confirm('Cancelar este envio agendado?')) return;
+  if (!_confirmaOuAvisa('Cancelar este envio agendado?')) return;
   try {
     await authFetch(`${API_BASE}/api/admin/newsletter/cancel`, {
       method: 'POST',
@@ -4472,7 +4472,7 @@ async function adminReprocess(jobId) {
   // Confunde: os dois re-rodam os arquivos, mas este QUEIMA o reprocesso grátis
   // do cliente (1 por projeto, a rota devolve 402 depois) e o outro não encosta
   // em nada. O confirm dizia só "(cria um novo job)", que soa inofensivo.
-  if (!confirm(
+  if (!_confirmaOuAvisa(
       'ATENÇÃO — isto age NO PROJETO DO CLIENTE.\n\n'
       + 'Projeto: ' + jobId + '\n\n'
       + '\u2022 o cliente PASSA A VER esta versão nova\n'
@@ -4504,7 +4504,7 @@ async function adminReprocess(jobId) {
 // o .xlsx com os itens que ja estao no banco.
 async function adminRefazerPlanilha(jobId) {
   if (!jobId) return;
-  if (!confirm(
+  if (!_confirmaOuAvisa(
       'Refazer a planilha de ' + jobId + '?\n\n'
       + '\u2022 remonta o .xlsx com os itens que JA estao no banco\n'
       + '\u2022 substitui o arquivo atual no Storage\n'
@@ -4533,7 +4533,7 @@ async function adminEvalReprocess(jobId) {
   // esperando resposta de um diálogo invisível. Nada chegou na API.
   // 🪤 Qualquer confirm/prompt TEM que vir ANTES do window.open. E o aviso que
   // eu queria dar já morava aqui: bastava reforçar este texto.
-  if (!confirm('Avaliar o projeto ' + jobId + ' num TESTE isolado?\n\n'
+  if (!_confirmaOuAvisa('Avaliar o projeto ' + jobId + ' num TESTE isolado?\n\n'
       + '• o cliente NÃO vê nada\n'
       + '• NÃO manda e-mail\n'
       + '• NÃO gasta o reprocesso grátis dele (1 por projeto)\n'
@@ -5816,6 +5816,21 @@ async function loadOrigem(){
 }
 
 // Mini toast pra feedback de ações
+// 🩸 04/09/2026 — DEZ ações deste painel pediam confirmação e sumiam em
+// SILÊNCIO quando a resposta era não. Pra quem clicou em Cancelar está certo; o
+// problema é que "eu cancelei" e "o botão está quebrado" ficam IGUAIS na tela.
+// 🚨 Aconteceu comigo hoje: cliquei em "Refazer planilha" da Caroline, o
+// diálogo foi descartado pela automação, a função saiu pela porta dos fundos e
+// eu só descobri que NADA tinha rodado indo olhar o error_log — não houve toast,
+// não houve erro, não houve nada.
+// 🔑 Silêncio depois de clique é ambíguo. É a família da "gravação que falha
+// calada", aqui no admin: toda recusa agora avisa.
+function _confirmaOuAvisa(msg) {
+  if (confirm(msg)) return true;
+  _adminToast('Cancelado — nada foi feito.', 'warn');
+  return false;
+}
+
 function _adminToast(msg, type) {
   const color = type === 'error' ? 'bg-red-600' : (type === 'warn' ? 'bg-yellow-600' : 'bg-green-600');
   const el = document.createElement('div');
@@ -5832,7 +5847,7 @@ function _adminToast(msg, type) {
 async function sendActivationLink(email, btnEl) {
   email = String(email || '').trim().toLowerCase();
   if (!email) return;
-  if (!confirm(`Enviar link de login para ${email}?\n\nO usu\u00e1rio vai receber um email da Supabase com um bot\u00e3o "Log in". Ao clicar, entra direto no site e pode finalizar o cadastro.`)) return;
+  if (!_confirmaOuAvisa(`Enviar link de login para ${email}?\n\nO usu\u00e1rio vai receber um email da Supabase com um bot\u00e3o "Log in". Ao clicar, entra direto no site e pode finalizar o cadastro.`)) return;
 
   if (btnEl) {
     btnEl.disabled = true;
@@ -5873,7 +5888,7 @@ async function sendWelcomeEmail(userId, email, btnEl) {
   userId = String(userId || '').trim();
   email = String(email || '').trim();
   if (!userId) { _adminToast('Usuário sem ID (cadastro incompleto)', 'warn'); return; }
-  if (!confirm(`Enviar o email de boas-vindas do AI.arq para ${email}?\n\nÉ o mesmo email bonito que os novos recebem (logo, assinatura). Útil pra quem se cadastrou antes do welcome existir.`)) return;
+  if (!_confirmaOuAvisa(`Enviar o email de boas-vindas do AI.arq para ${email}?\n\nÉ o mesmo email bonito que os novos recebem (logo, assinatura). Útil pra quem se cadastrou antes do welcome existir.`)) return;
 
   const _orig = btnEl ? btnEl.innerHTML : '';
   if (btnEl) {
@@ -5910,7 +5925,7 @@ async function sendNudge(email, kind, btnEl) {
   if (!email) return;
   const u = (typeof allUsers !== 'undefined' ? allUsers : []).find(x => x.email === email) || {};
   const label = kind === 'cadastro' ? 'lembrete pra terminar o cadastro' : 'convite pra subir a 1ª prancha';
-  if (!confirm(`Enviar ${label} para ${email}?\n\nVai um email nosso (logo + assinatura) com login de 1 clique — ele entra direto, sem senha.`)) return;
+  if (!_confirmaOuAvisa(`Enviar ${label} para ${email}?\n\nVai um email nosso (logo + assinatura) com login de 1 clique — ele entra direto, sem senha.`)) return;
 
   const _orig = btnEl ? btnEl.innerHTML : '';
   if (btnEl) { btnEl.disabled = true; btnEl.style.opacity = '0.6'; btnEl.innerHTML = '<span class="text-xs">Enviando...</span>'; }
