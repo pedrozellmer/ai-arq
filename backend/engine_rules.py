@@ -2091,3 +2091,32 @@ def parede_abaixo_do_minimo(comprimento_m, area_m2):
         return False, 0.0
     _minimo = 4.0 * (_a ** 0.5)
     return (_c < _minimo * _FOLGA_PERIMETRO), _minimo
+
+
+# 🩸 04/09/2026, rodando o conserto num arquivo REAL (filhote `ev6edc7e` da
+# Caroline). O guarda do mínimo de parede não disparou — porque nessa rodada a
+# parede saiu só em **m²**, e ele só olhava `ml`/`m`. O motor não é
+# determinístico: o MESMO arquivo produziu "17,18 ml" numa rodada e
+# "44,67 m²" na outra. Guarda que depende da forma do item guarda metade.
+#
+# 🔑 Mas o comprimento NÃO se perde — ele fica escrito na observação:
+#     "comprimento total do layer PAREDES = 17,18 m (confirmado)
+#      × pé-direito estimado 2,60 m = 44,67 m²"
+# Ler dali é EXATO. A alternativa que eu ia usar — supor um pé-direito mínimo
+# pra converter m² em metro — foi medida e daria **72% de disparo** (13 de 18
+# projetos), que é o alarme sem controle de novo. Por este caminho dá 31%
+# (5 de 16), que é taxa de defeito, não de ruído.
+_RE_COMPR_LAYER = _re.compile(
+    r"comprimento\s+total\s+do\s+layer[^=]{0,60}=\s*([0-9]+(?:[.,][0-9]+)?)\s*m",
+    _re.I)
+
+
+def comprimento_de_parede_na_observacao(observacao):
+    """O comprimento de parede que a observação declara, em metros. None se não há."""
+    _m = _RE_COMPR_LAYER.search(str(observacao or ""))
+    if not _m:
+        return None
+    try:
+        return float(_m.group(1).replace(",", "."))
+    except (TypeError, ValueError):
+        return None

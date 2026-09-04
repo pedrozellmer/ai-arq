@@ -11049,18 +11049,36 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # inventar parede que ninguém mediu.
         try:
             from engine_rules import (parede_abaixo_do_minimo as _par_min,
-                                      item_e_de_escala as _e_escala_p)
+                                      item_e_de_escala as _e_escala_p,
+                                      comprimento_de_parede_na_observacao as _compr_obs)
             from models import Confidence as _CfP
             _area_ref = 0.0
             try:
                 _area_ref = float(getattr(project_data, "total_area", 0) or 0)
             except (TypeError, ValueError):
                 _area_ref = 0.0
+            # 🩸 04/09, rodando o conserto num arquivo REAL (filhote `ev6edc7e`
+            # da Caroline): o guarda NÃO disparou, porque naquela rodada a
+            # parede saiu só em **m²**. O motor não é determinístico — o MESMO
+            # arquivo deu "17,18 ml" numa rodada e "44,67 m²" na outra. Guarda
+            # que depende da FORMA do item guarda metade das vezes.
+            # 🔑 Mas o comprimento não se perde: fica escrito na observação —
+            #   "comprimento total do layer PAREDES = 17,18 m (confirmado)
+            #    × pé-direito estimado 2,60 m = 44,67 m²"
+            # Ler dali é EXATO. A alternativa que eu ia usar (supor um
+            # pé-direito mínimo pra converter m² em metro) foi MEDIDA e daria
+            # 72% de disparo — alarme sem controle. Por aqui dá 31%.
+            # 🪤 Pega o MAIOR comprimento das duas fontes: maior = violação
+            # menos provável, então o erro do guarda cai pro lado de calar.
             _paredes_ml = [float(getattr(_it, "quantity", 0) or 0)
                            for _it in (all_items or [])
                            if str(getattr(_it, "discipline", "") or "") == "Fechamentos Verticais"
                            and str(getattr(_it, "unit", "") or "").lower() in ("ml", "m")
                            and float(getattr(_it, "quantity", 0) or 0) > 0]
+            for _it in (all_items or []):
+                _c_obs = _compr_obs(getattr(_it, "observations", ""))
+                if _c_obs and _c_obs > 0:
+                    _paredes_ml.append(_c_obs)
             _impossivel, _min_per = _par_min(max(_paredes_ml or [0]), _area_ref)
             if _impossivel:
                 _maior = max(_paredes_ml)

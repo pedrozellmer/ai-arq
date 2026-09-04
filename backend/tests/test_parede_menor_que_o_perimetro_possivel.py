@@ -93,8 +93,16 @@ def test_nao_avalia_o_que_nao_da_pra_avaliar():
 #  O motor tem que APLICAR — e só rebaixar
 # ══════════════════════════════════════════════════════════════════════════
 def _bloco():
+    """Do import até o `except` que fecha o bloco.
+
+    🪤 04/09: era `_FONTE[i:i + 3800]` — janela de tamanho fixo. Bastou eu
+    acrescentar o comentário do conserto seguinte pra o aviso e o log saírem
+    da janela e DOIS testes reprovarem código correto. Janela de N caracteres
+    envelhece a cada linha; âncora nos dois extremos, não.
+    """
     i = _FONTE.index("from engine_rules import (parede_abaixo_do_minimo")
-    return _FONTE[i:i + 3800]
+    j = _FONTE.index("print(f\"[parede-minimo] nao-fatal:", i)
+    return _FONTE[i:j]
 
 
 def test_o_motor_consulta_a_regra():
@@ -150,3 +158,73 @@ def test_CONTROLE_sem_a_regra_os_tres_casos_passavam():
     assert len(pega) == 3, (
         "a regra de hoje não cobre os três casos reais que a motivaram — "
         "escapariam %s" % [q for q, p, a in _REAIS if not _abaixo(p, a)[0]])
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  O guarda não pode depender da FORMA do item
+# ══════════════════════════════════════════════════════════════════════════
+from engine_rules import comprimento_de_parede_na_observacao as _compr  # noqa: E402
+
+# A observação REAL do filhote `ev6edc7e` (Caroline), 04/09/2026.
+_OBS_REAL = ("Estimativa: comprimento total do layer PAREDES = 17,18 m "
+             "(confirmado) × pé-direito estimado 2,60 m = 44,67 m². Descontar "
+             "vãos de esquadrias > 2 m² na revisão. Confirmar pé-direito em corte.")
+
+
+def test_o_comprimento_e_lido_da_OBSERVACAO():
+    """🩸 O furo que só apareceu RODANDO num arquivo real.
+
+    O conserto foi escrito olhando a 1ª rodada da Caroline, onde a parede saiu
+    como "17,18 ml". Rodei o filhote do MESMO arquivo e o guarda ficou mudo: o
+    motor não é determinístico e naquela rodada a parede saiu só em **m²**.
+
+    🔑 O comprimento não se perde — fica escrito na observação. Ler dali é
+    exato e cobre as duas formas.
+    """
+    assert _compr(_OBS_REAL) == 17.18, (
+        "parou de ler o comprimento da observação — o guarda volta a depender "
+        "da forma do item e some nas rodadas em que a parede sai em m²")
+
+
+def test_o_caso_da_Caroline_e_pego_pelas_DUAS_formas():
+    area = 46.79
+    por_ml = _abaixo(17.18, area)[0]                 # rodada 1: item em ml
+    por_obs = _abaixo(_compr(_OBS_REAL), area)[0]    # rodada 2: item em m²
+    assert por_ml and por_obs, (
+        "a mesma casa tem que ser acusada nas duas formas: ml=%s obs=%s"
+        % (por_ml, por_obs))
+
+
+def test_a_leitura_da_observacao_nao_inventa():
+    for obs in ("área do layer PAREDES = 44,67 m²", "", None,
+                "comprimento total do layer PAREDES = m",
+                "pé-direito estimado 2,60 m"):
+        assert _compr(obs) is None, (
+            "extraiu comprimento de onde não há: %r" % (obs,))
+
+
+def test_o_motor_junta_as_DUAS_fontes():
+    b = _FONTE[_FONTE.index("_paredes_ml = ["):]
+    b = b[:b.index("_impossivel, _min_per")]
+    assert "_compr_obs(" in b, (
+        "o motor voltou a olhar só a unidade do item — perde a rodada em que "
+        "a parede sai em m² com o comprimento na observação")
+    assert "_paredes_ml.append" in b
+
+
+def test_pega_o_MAIOR_comprimento_das_fontes():
+    """🪤 Maior = violação menos provável. O erro do guarda tem que cair pro
+    lado de CALAR, nunca pro de acusar quem está certo.
+
+    🩸 04/09, teste de mutação DESTE teste: a 1ª versão procurava
+    `"max(_paredes_ml" in _FONTE[i:i+160]` — e passou VERDE com a mutação
+    aplicada, porque existe um SEGUNDO `max(_paredes_ml)` poucas linhas abaixo
+    (o `_maior` do bloco de rebaixamento) que cai dentro da janela. Guarda
+    satisfeito por texto vizinho e sem relação é a família que eu passei o dia
+    inteiro consertando — e reapareceu no meu próprio teste. Âncora na CHAMADA
+    inteira, não numa janela.
+    """
+    assert "_par_min(max(_paredes_ml" in _FONTE, (
+        "parou de usar o maior comprimento na conferência — passa a acusar por "
+        "causa de um trecho curto de parede")
+    assert "_par_min(min(_paredes_ml" not in _FONTE
