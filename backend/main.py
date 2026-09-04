@@ -13376,14 +13376,66 @@ async def respostas_processamento(job_id: str, request: Request):
         patch["user_total_area"] = round(_ar, 2)
     if _pz is not None:
         patch["user_prazo_meses"] = round(_pz, 1)
+    # 🩸 04/09/2026, varredura adversarial — TRÊS defeitos nestas linhas.
+    #
+    # (1) A FAIXA ANUNCIADA ERA A VELHA. Estava escrita à mão como
+    #     "5–1.000.000 m²" e a banda real virou 100.000 em 03/09. O cliente que
+    #     digitasse 500.000 levava um 400 dizendo que 500.000 está dentro da
+    #     faixa. Número de regra escrito à mão envelhece calado — sai da
+    #     constante agora.
+    _faixa_area = ("area_total 5–%s m²"
+                   % f"{_AREA_PLAUSIVEL_MAX:,}".replace(",", "."))
     if not patch:
         raise HTTPException(400, "Nenhuma resposta válida (pe_direito 1,8–8 m; "
-                                 "area_total 5–1.000.000 m²; prazo_meses 1–120).")
-    _supa_rest_service("PATCH", "projects", body=patch,
-                       params={"job_id": f"eq.{job_id}"})
+                                 f"{_faixa_area}; prazo_meses 1–120).")
+    # (2) ÁREA IMPLAUSÍVEL SUMIA CALADA. Se ele digitasse 880.000 JUNTO com o
+    #     pé-direito, `_ar` virava None, a área não entrava no patch e a rota
+    #     devolvia 200 — sem aviso pra ele e sem registro pra nós. As duas
+    #     portas irmãs que escrevem o MESMO campo já avisam: o upload devolve
+    #     `aviso_area` e loga `upload:area-implausivel`; o /inform-area levanta
+    #     400 e loga. Só esta calava. É o mesmo furo do Fábio (880.000 m²) na
+    #     terceira porta.
+    _aviso_area = None
+    if str(body.get("area_total", "")).strip() and _ar is None:
+        _aviso_area = (
+            "A área total que você informou está fora da faixa que a gente "
+            "aceita (5 a %s m²) — então ela NÃO entrou na conta. Se digitou "
+            "certo, me diga pelo chat que eu confiro."
+            % f"{_AREA_PLAUSIVEL_MAX:,}".replace(",", "."))
+        try:
+            _log_error("respostas:area-implausivel",
+                       f"cliente digitou {body.get('area_total')!r} durante o "
+                       f"job — fora de 5..{_AREA_PLAUSIVEL_MAX}, DESCARTADA",
+                       job_id, severity="warning")
+        except Exception:
+            pass
+    # (3) O PATCH NÃO ERA CONFERIDO. `_supa_rest_service` NUNCA levanta: erro
+    #     devolve `(code, None)` e falha total devolve `(0, None)`. O retorno
+    #     não era amarrado, então a rota respondia `{"ok": true}` e o error_log
+    #     afirmava "cliente respondeu" mesmo quando nada foi gravado.
+    # 🪤 Conferir só o status NÃO basta: o PostgREST devolve sucesso com ZERO
+    #     linhas quando o filtro não casa nada — que é justamente o caso de
+    #     "gravou nada". Por isso pede `return=representation` e exige linha.
+    _st_r, _js_r = _supa_rest_service(
+        "PATCH", "projects", body=patch,
+        params={"job_id": f"eq.{job_id}"}, prefer="return=representation")
+    if _st_r not in (200, 201) or not _js_r:
+        try:
+            _log_error("motor:respostas-processamento",
+                       f"PATCH NÃO gravou (st={_st_r}, linhas="
+                       f"{len(_js_r) if isinstance(_js_r, list) else 'n/a'}): "
+                       f"{patch}", job_id, severity="critical")
+        except Exception:
+            pass
+        raise HTTPException(
+            502, "Não consegui salvar sua resposta agora. Tenta de novo em "
+                 "alguns segundos — o processamento segue normalmente.")
     _log_error("motor:respostas-processamento",
                f"cliente respondeu durante o job: {patch}", job_id)
-    return {"ok": True, "salvo": sorted(patch.keys())}
+    _resp = {"ok": True, "salvo": sorted(patch.keys())}
+    if _aviso_area:
+        _resp["aviso_area"] = _aviso_area
+    return _resp
 
 
 @app.get("/api/download/{job_id}")

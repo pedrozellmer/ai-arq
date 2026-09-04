@@ -1419,8 +1419,11 @@ async function carregarStatsEntregas() {
 // fase da IA), sem passar de 95% até concluir de verdade. Quando o status
 // virar done/error, a página recarrega sozinha.
 // Card das 3 perguntas: envia o que o cliente preencheu; o backend valida
-// faixas (PD 1,8–8 m; área 5–1M m²; prazo 1–120) e a consolidação relê antes
-// das derivações. Já respondeu neste job → card some (localStorage).
+// faixas (PD 1,8–8 m; área 5–100 mil m²; prazo 1–120) e a consolidação relê
+// antes das derivações. Já respondeu neste job → card some (localStorage).
+// 🩸 04/09: dizia "5–1M m²" — a faixa velha. A banda virou 100.000 em
+// 03/09 e este comentário ficou pra trás, igual à mensagem de erro do backend.
+// Número de regra copiado pra prosa envelhece calado.
 async function enviarRespostasProc() {
   const st = document.getElementById('pp-status');
   const corpo = {};
@@ -1437,6 +1440,14 @@ async function enviarRespostasProc() {
     });
     const b = await r.json().catch(() => ({}));
     if (!r.ok) { st.textContent = b.detail || 'Não consegui salvar — confira os valores.'; return; }
+    // 🩸 04/09: o backend pode ACEITAR o pe-direito e DESCARTAR a area (fora
+    // da faixa). Antes o card virava "✓ Valeu!" e o cliente ia embora achando
+    // que a area entrou. Se veio `aviso_area`, o card FICA e mostra o aviso.
+    if (b.aviso_area) {
+      st.textContent = '⚠ ' + b.aviso_area;
+      st.className = 'text-sm text-amber-700 font-medium';
+      return;
+    }
     try { localStorage.setItem('pp_respondido_' + jobId, '1'); } catch (_) {}
     const card = document.getElementById('proc-perguntas');
     if (card) card.innerHTML = '<p class="text-sm text-emerald-700 font-medium">✓ Valeu! Suas respostas entram nesta leitura.</p>';
