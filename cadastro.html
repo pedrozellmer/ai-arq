@@ -41,7 +41,25 @@
       <div class="flex h-9 w-9 items-center justify-center rounded-lg gradient-main text-white font-bold text-sm">AI</div>
       <span class="text-xl font-bold text-gray-900">AI<span class="gradient-text">.arq</span></span>
     </a>
-    <a href="index.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Voltar ao site</a>
+    <div class="flex items-center gap-1">
+      <!-- 🩸 04/09/2026 — esta página não tinha PORTA DE SAÍDA. Quem entra pelo
+           Google vira conta na hora, antes de preencher qualquer coisa; se não
+           terminar a ficha fica num circuito: login vê sessão e manda pro
+           dashboard, dashboard vê que não tem perfil e manda pra cá, e aqui não
+           havia "sair" nem menu lateral — zero ocorrências de signOut no
+           arquivo inteiro. Os 6 links do rodapé são páginas públicas: nenhum
+           desloga nem troca de conta.
+           🪤 Medido: 14 contas Google nunca completaram a ficha, e 6 delas têm
+           evento de tela aqui (uma foi e voltou 6 vezes em 28 s; outra, 81 s
+           depois, foi clicar em "Entrar" já estando logada).
+           🚫 NÃO afirmo que o beco causou essas perdas — nenhuma das 14 tentou
+           trocar de conta. Isto é higiene, não conversão: pessoa logada em tela
+           sem saída é defeito por si só, e a amostra (14 em meses) nunca daria
+           número pra atribuir efeito nenhum. -->
+      <button id="btn-sair" type="button" onclick="sairDoCadastro()" style="display:none"
+              class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Sair / usar outra conta</button>
+      <a href="index.html" class="text-sm text-gray-600 hover:text-gray-900 px-3 py-2 rounded-lg hover:bg-gray-100 transition">Voltar ao site</a>
+    </div>
   </div>
 </nav>
 
@@ -291,6 +309,25 @@
   const sbClient = window.sbClient;
   // Rastreio anônimo do funil (chegou na página de cadastro).
   if (window.trackEvent) trackEvent('view_cadastro');
+
+  // 🔑 A saída. Só aparece pra quem TEM sessão — pra quem chegou aqui sem
+  // login, "Sair" não significa nada e só polui a barra.
+  // 🪤 Desloga ANTES de navegar. Mandar pro login com a sessão viva devolve a
+  // pessoa pro dashboard, o dashboard devolve pra cá, e o beco continua.
+  async function sairDoCadastro() {
+    if (window.trackEvent) trackEvent('clique:sair-do-cadastro');
+    try { await sbClient.auth.signOut(); } catch (_) {}
+    window.location.href = 'index.html';
+  }
+  (async () => {
+    try {
+      const { data } = await sbClient.auth.getSession();
+      if (data && data.session) {
+        const b = document.getElementById('btn-sair');
+        if (b) b.style.display = '';
+      }
+    } catch (_) {}
+  })();
 
   // 🎯 PRIMEIRO TOQUE no formulário (05/08/2026). É o marco que separa
   // "bateu o olho e foi embora" (desinteresse) de "tentou preencher e
