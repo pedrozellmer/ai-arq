@@ -27,6 +27,35 @@ from typing import Dict, List, Optional, Tuple
 from openpyxl import load_workbook
 
 
+def _ate(tamanho, teto: int) -> int:
+    """Até onde varrer, quando `ws.max_row`/`max_column` podem vir `None`.
+
+    🩸 04/09/2026. Os três lugares que procuram o cabeçalho faziam
+    `min(25, ws.max_row + 1)`. Em `read_only=True`, o openpyxl só sabe o
+    tamanho se o .xlsx trouxer o registro `<dimension>` — e **arquivo válido
+    pode não trazer**: o próprio openpyxl, no modo `write_only`, gera assim, e
+    exportador de ERP faz o mesmo. Aí `max_row` é `None` e a conta estoura
+    `TypeError: unsupported operand type(s) for +: 'NoneType' and 'int'`.
+
+    🚨 O que o cliente lia, para um arquivo PERFEITO:
+
+        "Não consegui abrir esse arquivo como planilha Excel.
+         Confira se é um .xlsx válido e tente de novo."
+
+    Culpar o arquivo do cliente por defeito nosso é a doença do dia inteiro,
+    aqui em forma de `+ 1`.
+
+    🔑 O teto já limita a varredura: quando não dá pra saber onde a planilha
+    acaba, varrer até ele é exatamente o comportamento pretendido. Medido:
+    ler 24×19 células além do fim de uma planilha de 2 linhas leva 0,11 s e
+    devolve `None` em cada uma — não levanta nada.
+    """
+    try:
+        return min(teto, int(tamanho) + 1)
+    except (TypeError, ValueError):
+        return teto
+
+
 # Cabeçalhos de preço, já normalizados (sem acento/pontuação, minúsculo).
 # Ancorados no início pra não confundir coluna vizinha: "OBSERVAÇÕES" não vira
 # mão de obra, "MATERIAL APLICADO" vira MAT. Aceitam o "unit." opcional na frente
@@ -80,9 +109,9 @@ def _find_header_row(ws) -> Tuple[int, Dict[str, int]]:
 
     Retorna: (header_row, {col_name: col_idx})
     """
-    for row_idx in range(1, min(25, ws.max_row + 1)):
+    for row_idx in range(1, _ate(ws.max_row, 25)):
         row = [ws.cell(row=row_idx, column=c).value
-               for c in range(1, min(20, ws.max_column + 1))]
+               for c in range(1, _ate(ws.max_column, 20))]
         joined = " | ".join(str(c) for c in row if c)
         joined_n = _normalize(joined)
 
@@ -151,7 +180,7 @@ def parse_strict(fname: str, supplier_name: str) -> Dict:
 
     # Acha header procurando "ESPECIFICAÇÃO"
     header_row = None
-    for i in range(1, min(15, ws.max_row + 1)):
+    for i in range(1, _ate(ws.max_row, 15)):
         row = [ws.cell(row=i, column=c).value for c in range(1, 11)]
         joined = " | ".join(str(c) for c in row if c).upper()
         if "ESPECIFICAÇÃO" in joined or "ESPECIFICACAO" in joined:
