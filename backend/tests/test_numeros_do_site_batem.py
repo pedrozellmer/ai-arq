@@ -42,6 +42,19 @@ ESPERADO = {
     "exemplo.html": [PREENCHIDO_CAD, PREENCHIDO_PDF, MEDIDO_CAD],
 }
 
+# 🚨 04/09/2026 — a regra "o zero do PDF nunca aparece sozinho" cobria só as
+# páginas públicas, e o DASHBOARD escapava dela — justo a tela onde a pessoa
+# decide se sobe ou desiste. A caixa de "só PDF" dizia "não conseguimos medir
+# nada" E "os itens saem sem quantidade". Medido nos projetos reais de cliente:
+#
+#                       só PDF      só CAD
+#     linhas             1.756        3.938
+#     COM QUANTIDADE     71,0%        69,6%      <- praticamente igual
+#     com selo             3          1.039
+#
+# A 1ª frase é verdade; a 2ª é FALSA. E era a falsa que assustava.
+_TELA_DE_DECISAO = "dashboard.html"
+
 # números que a gente APOSENTOU — não podem reaparecer em copy viva
 APOSENTADOS = ("21,6%", "4,7%", "25,5%", "2,0%", "4,6&times;", "4,6×")
 
@@ -104,3 +117,34 @@ def test_CONTROLE_o_guarda_REPROVA_numero_divergente():
     falso = "a home diz 21,6% em CAD"
     assert any(v in falso for v in APOSENTADOS), (
         "a lista de aposentados não pega o número que causou o problema")
+
+
+def test_a_caixa_do_SO_PDF_no_dashboard_nao_diz_sem_quantidade():
+    """🚨 A tela onde a pessoa decide, e que escapava da regra de cima.
+
+    A afirmação "os itens saem sem quantidade" é FALSA: 71% das linhas do
+    só-PDF vêm preenchidas — mais que as do CAD (69,6%). O que falta é o SELO,
+    não o número. Dizer o contrário empurra pra fora quem só tem PDF, com base
+    numa frase que os nossos próprios dados desmentem.
+    """
+    t = _texto(_TELA_DE_DECISAO)
+    i = t.index("S&oacute; PDF")
+    caixa = t[i:i + 900]
+    assert "sem quantidade" not in caixa.lower(), (
+        "a caixa do só-PDF voltou a dizer que os itens saem SEM QUANTIDADE — "
+        "medido: 71% das linhas vêm com quantidade, mais que no CAD")
+    assert "71%" in caixa, (
+        "a caixa fala do PDF sem dizer quanto da planilha volta preenchida — "
+        "é a metade que evita o mal-entendido")
+    assert "selo" in caixa.lower(), (
+        "sumiu a explicação do que REALMENTE muda (o selo, não a quantidade)")
+
+
+def test_a_caixa_do_SO_PDF_nao_e_vermelha():
+    """🪤 Vermelho diz "não faça isso". O dado não sustenta: a planilha de PDF
+    volta tão preenchida quanto a de CAD. É ressalva, não impedimento."""
+    t = _texto(_TELA_DE_DECISAO)
+    i = t.index("S&oacute; PDF")
+    assert "bg-red-50" not in t[max(0, i - 400):i], (
+        "a caixa do só-PDF voltou a ser vermelha — ela é uma ressalva sobre o "
+        "selo, não um aviso para não subir")

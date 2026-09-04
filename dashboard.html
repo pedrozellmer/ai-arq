@@ -2656,12 +2656,31 @@
       const _soPdf = selectedFiles.every(f => /\.pdf$/i.test(f.name));
       const _rem = document.createElement('div');
       if (_soPdf) {
-        _rem.className = 'flex items-start gap-2.5 rounded-xl bg-red-50 border border-red-100 px-4 py-3';
+        // 🩸 04/09/2026 — esta caixa dizia "na maioria das vezes NÃO CONSEGUIMOS
+        // MEDIR NADA" e "os itens saem reconhecidos e SEM QUANTIDADE". Medi as
+        // duas afirmações contra os projetos reais de cliente:
+        //
+        //                      só PDF        só CAD
+        //   linhas              1.756         3.938
+        //   COM QUANTIDADE      71,0%         69,6%     <- praticamente IGUAL
+        //   com selo de medida      3         1.039
+        //
+        // A primeira frase é verdade (3 selos em 1.756 linhas). A SEGUNDA É
+        // FALSA: a planilha de PDF volta 71% preenchida — um pouquinho MAIS
+        // que a de CAD. O que falta não é quantidade, é o SELO.
+        // 🚨 E era a metade falsa que assustava, na tela onde a pessoa decide
+        // se sobe ou desiste. Existe até uma regra escrita pra isso
+        // (`test_o_ZERO_do_PDF_nunca_aparece_sozinho`), mas ela só cobria
+        // index/faq/exemplo — o dashboard escapava.
+        // 🪤 Vermelho vira âmbar: é ressalva, não impedimento. Vermelho diz
+        // "não faça isso", e o dado não sustenta isso.
+        _rem.className = 'flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3';
         _rem.innerHTML = '<span class="text-base shrink-0" aria-hidden="true">&#9888;&#65039;</span>'
-          + '<p class="text-xs text-red-900 leading-relaxed"><strong class="font-semibold">S&oacute; PDF: na maioria das vezes n&atilde;o conseguimos medir nada.</strong> '
-          + 'O PDF guarda o desenho, mas n&atilde;o a geometria &mdash; ent&atilde;o os itens saem reconhecidos e <strong>sem quantidade</strong>. '
-          + 'Se voc&ecirc; tem o <strong>DXF</strong> ou o <strong>DWG</strong> dessa mesma prancha, mande junto (pode mandar os dois). '
-          + '<button type="button" onclick="openExportModal()" class="underline font-medium hover:text-red-700">Como exportar DXF &rarr;</button></p>';
+          + '<p class="text-xs text-amber-900 leading-relaxed"><strong class="font-semibold">S&oacute; PDF: a planilha vem preenchida, mas como estimativa.</strong> '
+          + 'Medido nos projetos reais: <strong>71% das linhas saem com quantidade</strong> &mdash; igual ao CAD. '
+          + 'O que muda &eacute; o selo: no PDF a escala vem do carimbo, que &eacute; declara&ccedil;&atilde;o e n&atilde;o prova, ent&atilde;o quase nada sai como <strong>&#10003; medido</strong>. '
+          + 'Se voc&ecirc; tem o <strong>DXF</strong> ou o <strong>DWG</strong> dessa mesma prancha, mande junto (pode mandar os dois) &mdash; a&iacute; a gente mede de verdade. '
+          + '<button type="button" onclick="openExportModal()" class="underline font-medium hover:text-amber-900">Como exportar DXF &rarr;</button></p>';
       } else if (_semDxf) {
         _rem.className = 'flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-100 px-4 py-3';
         _rem.innerHTML = '<span class="text-base shrink-0" aria-hidden="true">&#128161;</span>'
