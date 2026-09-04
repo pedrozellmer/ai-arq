@@ -472,6 +472,7 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:geometria", "motor:comprimento", "motor:dxf-slim",
     "motor:prancha-itens", "motor:sinapi-unidade", "motor:area-regra",
     "motor:pe-direito", "motor:escala-aviso", "motor:concordancia-rotulo",
+    "motor:parede-medida",
     "motor:revisao-concluida", "motor:fusao-revisao", "motor:honestidade-area",
     "motor:versao-anterior", "motor:pai-e-filho", "motor:download-regen",
     "motor:respostas-releitura", "motor:informou-depois",
@@ -7827,6 +7828,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # si: `fator_para_metros` só era lido pela linha de log e pela sombra de
         # cômodos. Esta lista existe pra fechar esse buraco.
         _escala_por_prancha: list = []
+        _compr_paredes: list = []   # 04/09: quanto de parede a EXTRAÇÃO achou, por prancha
         dwg_failed = []  # DWGs que não converteram — reportar mesmo quando outros deram certo (escopo garantido)
         dwg_via_libredwg = []  # convertidos pelo plano B — aviso pro cliente conferir (escopo garantido)
         # Pranchas cujo DXF nasceu acima da trava dura e foram APAGADAS na hora.
@@ -8542,6 +8544,38 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         })
                     except (TypeError, ValueError):
                         pass
+                    # 🩸 04/09/2026 — QUANTA PAREDE A EXTRAÇÃO ACHOU, do próprio
+                    # objeto de extração e não da prosa do item.
+                    # Duas tentativas minhas de conferir o mínimo de parede já
+                    # falharam por depender de FORMA: a 1ª olhava a unidade do
+                    # item (`ml`), e a rodada seguinte do MESMO arquivo saiu em
+                    # `m²`; a 2ª lia o comprimento da observação, e a rodada
+                    # seguinte trocou "comprimento total do layer X = 17,18 m"
+                    # por "perímetro de paredes 17,18 ml (layer X)". A
+                    # observação é escrita pela IA — depender da frase é tão
+                    # frágil quanto depender da unidade.
+                    # 🔑 `get_walls_by_layer()` é MEDIÇÃO, não texto. Somando
+                    # TODOS os layers de parede: se nem a soma alcança o
+                    # perímetro mínimo da área, não existe geometria de parede
+                    # suficiente no desenho pra fechar o edifício — e aí o que
+                    # faltou foi a leitura, não o projeto.
+                    # 🪤 GRAVA SEMPRE, inclusive quando está tudo bem: sem o
+                    # número no banco não dá pra saber se o critério serve. É a
+                    # mesma doutrina do `motor:unidade`.
+                    try:
+                        _wl = extraction.get_walls_by_layer() or {}
+                        _soma_par = sum(float(v or 0) for v in _wl.values())
+                        _maior_lay = max(_wl.items(), key=lambda kv: float(kv[1] or 0),
+                                         default=("-", 0))
+                        _compr_paredes.append(_soma_par)
+                        _log_error(
+                            "motor:parede-medida",
+                            "arq=%s layers_de_parede=%d soma=%.2f m maior=%s(%.2f m)"
+                            % (os.path.basename(dxf_path), len(_wl), _soma_par,
+                               _maior_lay[0], float(_maior_lay[1] or 0)),
+                            job_id)
+                    except Exception as _ewl:
+                        print(f"[parede-medida] nao-fatal: {_ewl}")
                     # 🪤 GRAVAR SEMPRE a decisão de unidade — inclusive quando não
                     # há nada de errado. Até 05/08 o motor escolhia a unidade e não
                     # registrava em lugar consultável nenhum: `error_log` com stage
@@ -11079,6 +11113,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _c_obs = _compr_obs(getattr(_it, "observations", ""))
                 if _c_obs and _c_obs > 0:
                     _paredes_ml.append(_c_obs)
+            # 🔑 A terceira fonte, e a única que não depende de FORMA: o que a
+            # extração mediu. Entra na mesma lista, e o `max` continua fazendo o
+            # erro cair pro lado de calar.
+            if _compr_paredes:
+                _paredes_ml.append(sum(_compr_paredes))
             _impossivel, _min_per = _par_min(max(_paredes_ml or [0]), _area_ref)
             if _impossivel:
                 _maior = max(_paredes_ml)
