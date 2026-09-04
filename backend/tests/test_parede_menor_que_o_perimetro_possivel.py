@@ -21,9 +21,25 @@ gente mede parede em metro, **3 (16%)** estão abaixo do mínimo —
 Caroline 59% (hoje). **Onze itens BRANCOS** saíram desses três.
 
 🪤 SÓ APONTA e REBAIXA. Não corrige o número: inventar a parede que falta seria
-exatamente o que a regra nº3 proíbe. O que muda é o selo (número que não pode
-estar certo não é "✓ MEDIDO") e o aviso, que agora diz onde procurar — a
-parede quase sempre está num layer que o motor não reconheceu.
+exatamente o que a regra nº3 proíbe. O que muda é o selo — número que não pode
+estar certo não é "✓ MEDIDO" — e o aviso ao cliente.
+
+🚫 **UMA AFIRMAÇÃO MINHA QUE MORREU NO MESMO DIA.** A 1ª versão deste arquivo
+(e do aviso ao cliente) dizia que "a parede quase sempre está num layer que o
+motor não reconheceu". Fui MEDIR os layers do arquivo da Caroline pra provar
+isso, e o dado derrubou:
+
+    ARQ_HAT=57,9 · ARQ_VISTA01=22,3 · Camada 1=22,1 · PAREDES=17,2
+    ARQ_VISTA02=16,5 · ARQ_ESTRUTURA=14,0 · ARQ_VISTA00=11,2 · ARQ_ESQUADRIA=11,0
+
+Dos 251 m, os outros 234 são hachura, as três FACHADAS (elevação, não planta),
+caixilho e o layer padrão do AutoCAD. **A escolha de `PAREDES` estava CERTA** —
+a parede dela tem 17,18 m mesmo. E 2.408 segmentos somando 251 m dá 10 cm por
+segmento: é linha de detalhe, não corrida de parede.
+
+🔑 Eu inventei uma causa — o mesmo pecado que passei o dia inteiro tirando do
+motor. O aviso agora diz o que a gente SABE (falta parede) e oferece as duas
+hipóteses sem escolher nenhuma.
 """
 import ast
 import io
@@ -262,3 +278,39 @@ def test_a_MEDICAO_da_extracao_continua_sendo_gravada():
         "sumiu o log que mede quanta parede a extração acha — sem ele a gente "
         "não teria descoberto que o problema é escolha de layer, não leitura")
     assert "layers_de_parede=%d" in _FONTE
+
+
+def test_o_aviso_NAO_inventa_a_causa():
+    """🩸 04/09, mesmo dia: a 1ª redação dizia "provavelmente está num layer que
+    o motor não reconheceu". Fui MEDIR os layers do arquivo da Caroline pra
+    provar a frase, e o dado derrubou:
+
+        ARQ_HAT=57,9 · ARQ_VISTA01=22,3 · Camada 1=22,1 · PAREDES=17,2
+        ARQ_VISTA02=16,5 · ARQ_ESTRUTURA=14,0 · ARQ_VISTA00=11,2 · ARQ_ESQUADRIA=11,0
+
+    Os outros 234 m são hachura, as três FACHADAS (elevação, não planta),
+    caixilho e o layer padrão do AutoCAD. A escolha de `PAREDES` estava CERTA;
+    a parede dela tem 17,18 m mesmo.
+
+    🔑 Ou seja: eu inventei uma causa — exatamente o pecado que passei o dia
+    tirando do motor (`project_selo_zero_nao_prova_origem`). O aviso tem que
+    dizer o que a gente SABE e oferecer as hipóteses sem escolher uma.
+    """
+    import re as _re
+    b = _bloco()
+    i = b.index("PAREDE INCOMPLETA")
+    # 🪤 A frase que o cliente lê NÃO existe inteira no fonte: ela é montada de
+    # literais adjacentes quebrados por linha ("...não sabe qual é a " + "sua:
+    # as paredes..."). Procurar no fonte cru devolve zero e o guarda acusa o
+    # texto CERTO — mesmo tropeço de `test_email_nao_afirma_medicao`. Cola os
+    # literais antes de procurar.
+    frase = _re.sub(r'"\s*\n\s*"', "", b[i:i + 1600])
+    assert "provavelmente está num layer" not in frase, (
+        "o aviso voltou a AFIRMAR a causa; medido no arquivo real, ela estava "
+        "errada — os outros layers eram fachada e hachura, não parede")
+    assert "hachura ou sólido" in frase, (
+        "sumiu a 1ª hipótese (parede desenhada como hachura/sólido) — é a que "
+        "o dado da Caroline torna mais provável")
+    assert "não sabe qual é a sua" in frase, (
+        "o aviso parou de admitir que não sabe qual das causas é — voltou a "
+        "vender palpite como diagnóstico")

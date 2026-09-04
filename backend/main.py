@@ -11176,14 +11176,30 @@ bloco — só cite os que estão no inventário deste arquivo."""
                               (_min_per / _maior - 1) * 100 if _maior else 0, _reb_p),
                            job_id, severity="critical")
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
+                    # 🩸 04/09, MESMO DIA: a 1ª redação afirmava "provavelmente
+                    # está num layer que o motor não reconheceu". Fui MEDIR os
+                    # layers do arquivo da Caroline pra provar isso e o dado
+                    # DERRUBOU a frase — os outros 234 m estão em ARQ_HAT
+                    # (hachura), ARQ_VISTA00/01/02 (as fachadas, 50 m de
+                    # elevação e não de planta), ARQ_ESQUADRIA e Camada 1. A
+                    # escolha do layer `PAREDES` estava CERTA; a parede dela
+                    # tem 17,18 m mesmo.
+                    # 🔑 Ou seja, eu inventei uma causa — exatamente o que o
+                    # motor fazia e que eu passei o dia tirando dele. A frase
+                    # agora diz o QUE a gente sabe e oferece as duas hipóteses
+                    # sem escolher nenhuma.
                     "⚠ PAREDE INCOMPLETA: a leitura achou %.1f m de parede, e o "
                     "mínimo possível pra uma área de %.0f m² é %.1f m (o perímetro "
                     "de um quadrado dessa área, sem contar paredes internas). "
-                    "Alguma parede não foi lida — provavelmente está num layer que "
-                    "o motor não reconheceu. Tudo que depende de parede (alvenaria, "
-                    "chapisco, reboco, pintura, rodapé) está subestimado na mesma "
-                    "proporção. Se puder, me diga em qual layer estão as paredes "
-                    "que eu releio." % (_maior, _area_ref, _min_per)]
+                    "Então falta parede na nossa leitura, e tudo que depende dela "
+                    "(alvenaria, chapisco, reboco, pintura, rodapé) está "
+                    "subestimado na mesma proporção. Duas causas comuns, e a "
+                    "gente não sabe qual é a sua: as paredes podem estar "
+                    "desenhadas como hachura ou sólido (a gente mede LINHA), ou "
+                    "estar num layer que não reconhecemos. Se você me disser em "
+                    "qual layer elas estão — ou mandar a planta com as paredes "
+                    "em linha/polilinha — eu releio."
+                    % (_maior, _area_ref, _min_per)]
         except Exception as _epm:
             print(f"[parede-minimo] nao-fatal: {_epm}")
 
