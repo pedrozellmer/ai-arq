@@ -11113,11 +11113,26 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 _c_obs = _compr_obs(getattr(_it, "observations", ""))
                 if _c_obs and _c_obs > 0:
                     _paredes_ml.append(_c_obs)
-            # 🔑 A terceira fonte, e a única que não depende de FORMA: o que a
-            # extração mediu. Entra na mesma lista, e o `max` continua fazendo o
-            # erro cair pro lado de calar.
-            if _compr_paredes:
-                _paredes_ml.append(sum(_compr_paredes))
+            # 🚨 04/09 — A SOMA DA EXTRAÇÃO NÃO ENTRA NA COMPARAÇÃO, e isto é o
+            # conserto de um erro MEU do mesmo dia. Eu tinha acabado de
+            # acrescentá-la como "terceira fonte", achando que era a medida
+            # robusta. MEDI no arquivo da Caroline e o número desmentiu:
+            #
+            #     layers_de_parede=31  soma=251,23 m  maior=ARQ_HAT(57,94 m)
+            #
+            # 251 m contra um mínimo de 27,36 m. Como a comparação usa `max`,
+            # entrar com a soma **desligava o alarme em todo projeto** — eu
+            # anulei o próprio guarda que estava consertando.
+            # 🔑 E o maior "layer de parede" é `ARQ_HAT`: a soma inclui hachura
+            # e tudo que o extrator classifica como segmento linear. Ela mede
+            # "quanta linha existe no desenho", não "quanta parede tem o
+            # edifício". Não serve de piso pra nada.
+            # 🔑 O que o número ENSINA (e por isso o log fica): a geometria das
+            # paredes ESTÁ no desenho — 251 m —, mas o item usou só os 17,18 m
+            # do layer chamado `PAREDES`. O defeito da Caroline não é leitura
+            # que falhou, é ESCOLHA DE LAYER: as paredes dela não estão todas
+            # no layer que se chama PAREDES. Isso é outro conserto, e agora tem
+            # dado pra fazê-lo.
             _impossivel, _min_per = _par_min(max(_paredes_ml or [0]), _area_ref)
             if _impossivel:
                 _maior = max(_paredes_ml)

@@ -228,3 +228,37 @@ def test_pega_o_MAIOR_comprimento_das_fontes():
         "parou de usar o maior comprimento na conferência — passa a acusar por "
         "causa de um trecho curto de parede")
     assert "_par_min(min(_paredes_ml" not in _FONTE
+
+
+def test_a_soma_da_EXTRACAO_nao_entra_na_comparacao():
+    """🚨 Conserto de um erro meu, no mesmo dia em que o cometi.
+
+    Eu tinha acrescentado `sum(_compr_paredes)` (a soma de TODOS os layers de
+    parede da extração) como "terceira fonte", achando que era a medida
+    robusta. Medi no arquivo da Caroline e o número desmentiu:
+
+        layers_de_parede=31   soma=251,23 m   maior=ARQ_HAT(57,94 m)
+
+    251 m contra um mínimo de 27,36 m. Como a comparação usa `max`, entrar com
+    a soma **desligava o alarme em todo projeto** — eu anulei o guarda que
+    estava consertando, e só descobri porque RODEI e li o número.
+
+    🔑 E o maior "layer de parede" é `ARQ_HAT` — hachura. A soma mede "quanta
+    linha existe no desenho", não "quanta parede tem o edifício".
+    """
+    i = _FONTE.index("_impossivel, _min_per = _par_min(")
+    trecho = _FONTE[max(0, i - 2500):i]
+    assert "_paredes_ml.append(sum(_compr_paredes))" not in trecho, (
+        "a soma da extração voltou pra dentro da comparação — com `max` ela "
+        "desliga o alarme em todo projeto (251 m contra um mínimo de 27 m)")
+    assert "_paredes_ml.append(sum(" not in _FONTE, (
+        "alguma soma de layers voltou pra lista comparada")
+
+
+def test_a_MEDICAO_da_extracao_continua_sendo_gravada():
+    """Ela não serve de piso, mas é o dado que explicou o caso da Caroline:
+    a parede ESTÁ no desenho (251 m) e o item usou 17,18 m de um layer só."""
+    assert "motor:parede-medida" in _FONTE, (
+        "sumiu o log que mede quanta parede a extração acha — sem ele a gente "
+        "não teria descoberto que o problema é escolha de layer, não leitura")
+    assert "layers_de_parede=%d" in _FONTE
