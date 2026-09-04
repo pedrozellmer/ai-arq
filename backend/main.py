@@ -10273,6 +10273,45 @@ bloco — só cite os que estão no inventário deste arquivo."""
         all_items = _consolidate_items(all_items)
         all_items = _dedupe_by_block(all_items)  # funde itens do mesmo bloco CAD (anti-duplicação)
         all_items = _drop_nonsense_items(all_items)       # tira "seção transversal" e afins
+        # ── SELO BRANCO NÃO VAI EM ITEM QUE A GENTE NÃO SABE O QUE É ────────
+        # 🩸 04/09/2026, olhando o 1º projeto da Caroline (Bolognesi): a planilha
+        # dela trazia "Equipamento não identificado — bloco CAD '1258C37_v'",
+        # 1 un, com o selo ✓ MEDIDO DO CAD.
+        # 🔑 Medido na base: 75 itens assim, 55 com o selo branco. E das 6 vezes
+        # em que um cliente rejeitou um item BRANCO, 6 de 6 eram desta classe.
+        # A geometria prova que existem N ocorrências DE ALGUMA COISA — não
+        # prova QUE COISA. O selo mais forte no item mais fraco.
+        # 🪤 Só REBAIXA, nunca promove (regra nº1). E fala com o cliente na
+        # LINHA, que é onde ele lê — não num aviso de topo.
+        try:
+            from engine_rules import item_e_bloco_sem_identidade as _sem_ident
+            from models import Confidence as _CfB
+            _n_reb_bloco = 0
+            for _it in (all_items or []):
+                if not _sem_ident(getattr(_it, "description", ""),
+                                  getattr(_it, "unit", "")):
+                    continue
+                _cf = str(getattr(getattr(_it, "confidence", None), "value",
+                                  getattr(_it, "confidence", "")) or "")
+                if _cf == "confirmado":
+                    try:
+                        _it.confidence = _CfB.ESTIMADO
+                        _n_reb_bloco += 1
+                    except Exception:
+                        pass
+                _ob = str(getattr(_it, "observations", "") or "")
+                if "não sabemos o que é" not in _ob:
+                    _it.observations = (
+                        "⚠ A CONTAGEM é do desenho, mas não sabemos o que é "
+                        "este elemento: o nome do bloco no CAD não diz. Vale a "
+                        "quantidade; a descrição precisa vir do projetista. " + _ob)[:1000]
+            if _n_reb_bloco:
+                _log_error("motor:bloco-sem-identidade",
+                           "rebaixei %d item(ns) de contagem cuja identidade é o "
+                           "nome do bloco do CAD" % _n_reb_bloco, job_id,
+                           severity="warning")
+        except Exception as _ebi:
+            print(f"[bloco-sem-identidade] nao-fatal: {_ebi}")
         # Aviso da IA não é item de planilha — vai pro bloco de avisos.
         all_items = _mover_avisos_para_warnings(all_items, project_data)
         all_items = _consolidate_by_type_code(all_items, project_data)  # funde mesmo tipo (DRY 07) entre pranchas

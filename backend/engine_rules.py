@@ -1955,3 +1955,55 @@ def quantidade_da_procedencia(observacao, unidade, areas_por_layer=None,
         if abs(valor / real - 1.0) <= _TOL_PROCEDENCIA:
             return round(valor, 2)
     return None
+
+
+# ── ITEM CUJA IDENTIDADE É O BLOCO DO CAD (regra nº1) ──────────────────────
+# 🩸 04/09/2026, olhando o 1º projeto da Caroline (Bolognesi). A planilha dela
+# trazia "Equipamento não identificado — bloco CAD '1258C37_v' — verificar com
+# projetista", 1 un, carimbado **✓ MEDIDO DO CAD**.
+#
+# 🔑 MEDIDO na base inteira: 75 itens assim em projetos de cliente, 55 deles
+# com o selo branco (5% de TODO o branco da história). E das 6 vezes em que um
+# cliente rejeitou um item BRANCO, **6 de 6 eram desta classe** — é a única
+# coisa que faz alguém apagar algo que a gente disse ter medido.
+#
+# Nomes reais que já saíram na planilha de um cliente pagante, todos brancos:
+#     'ftjrtf' · 'WGWRRG' · '6we4f65we4f' · 'dgcfr' · 'esw3r' · 'CP525_p'
+#
+# O que a geometria prova aqui é que existem N ocorrências DE ALGUMA COISA. Não
+# prova QUE COISA é. "✓ Medido do CAD" numa linha que o cliente não consegue
+# orçar é a regra nº1 ao contrário: o selo mais forte no item mais fraco.
+#
+# 🪤 A fronteira é estreita de propósito, e foi calibrada contra a base:
+#   • só CONTAGEM (un/pç) — em m²/ml "não identificado" quase sempre fala do
+#     MATERIAL ("cobertura — material não identificado"), e o item existe;
+#   • "Portas ... não identificadas POR bloco específico" fica de fora — porta
+#     é item identificado, o que falta é o bloco;
+#   • "Janela j3 — conforme bloco 'j3'", "Difusor/Grelha", "Esquadria flexível"
+#     e "Mobiliário — bloco e48" ficam de fora: o nome do item é real, só o
+#     tipo é que falta.
+# Sem esses três cortes a regra pegava 58 itens em vez de 75 e levava junto
+# item legítimo — conferido item a item antes de escrever.
+_RE_TEM_BLOCO = _re.compile(r"bloco|layer", _re.I)
+_RE_LIDERA_BLOCO = _re.compile(r"^\s*(blocos?|elementos?)\s", _re.I)
+_RE_NAO_IDENT = _re.compile(
+    r"(bloco|layer)[^.]{0,60}n[ãa]o\s+identificad"
+    r"|n[ãa]o\s+identificad[^.]{0,60}(bloco|layer)", _re.I)
+# "não identificados POR bloco específico" = o item existe, o bloco é que falta.
+_RE_IDENT_POR = _re.compile(r"n[ãa]o\s+identificad[oa]s?\s+por\s", _re.I)
+_UNIDADES_DE_CONTAGEM = ("un", "pç", "pc", "und", "unid")
+
+
+def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
+    """A identidade deste item é o nome de um bloco do CAD? Só APONTA.
+
+    Quem rebaixa o selo é o chamador — e só rebaixa, nunca promove.
+    """
+    _d = str(descricao or "")
+    if str(unidade or "").strip().lower() not in _UNIDADES_DE_CONTAGEM:
+        return False
+    if not _RE_TEM_BLOCO.search(_d):
+        return False
+    if _RE_IDENT_POR.search(_d):
+        return False
+    return bool(_RE_LIDERA_BLOCO.search(_d) or _RE_NAO_IDENT.search(_d))
