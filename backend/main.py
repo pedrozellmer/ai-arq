@@ -16954,12 +16954,29 @@ async def upload_supplier_quote(
     os.makedirs(work_dir, exist_ok=True)
     safe_name = _safe_local_filename(file.filename)
     temp_path = os.path.join(work_dir, safe_name)
-    with open(temp_path, "wb") as f:
-        f.write(_quote_bytes)
+
+    # 🩸 04/09/2026, varredura adversarial. Esta rota é `async def` e fazia TRÊS
+    # coisas demoradas dentro do laço de eventos: gravar até 15 MB em disco,
+    # parsear a planilha e falar com o Supabase com 20 s de timeout. Com
+    # `--workers 1`, qualquer uma delas congela o servidor INTEIRO — o health
+    # check do Render expira em 5 s e a instância é morta. Foi assim que o site
+    # caiu às 15:07 de 03/09, por outra rota.
+    # 🔑 MEDIDO nesta máquina (que é mais rápida que o Render), com arquivos
+    # MUITO abaixo do teto de 15 MB da própria rota:
+    #     0,24 MB (12 mil linhas × 4 abas) → 0,68 s
+    #     0,80 MB (40 mil linhas × 4 abas) → 3,54 s
+    # Ou seja: já em 1 MB a gente encosta nos 5 s, e a rota aceita 15.
+    # 🪤 E ela NÃO é admin-only — `_require_project_owner` libera o dono do
+    # projeto, então qualquer cliente chega aqui.
+    def _grava_a_cotacao():
+        with open(temp_path, "wb") as _f:
+            _f.write(_quote_bytes)
+    await run_in_threadpool(_grava_a_cotacao)
 
     # Parseia (arquivo corrompido/renomeado lançava BadZipFile → HTTP 500 cru)
     try:
-        parsed = parse_supplier_quote(temp_path, supplier_name, mode=parser_mode)
+        parsed = await run_in_threadpool(
+            parse_supplier_quote, temp_path, supplier_name, mode=parser_mode)
     except Exception as e:
         print(f"[quotes/upload] parse falhou ({file.filename}): {e}")
         return {"status": "error",
@@ -16985,7 +17002,10 @@ async def upload_supplier_quote(
     }
 
     try:
-        st, inserted = _supa_rest_as_user(
+        # 🪤 20 s de timeout SÍNCRONO na mesma rota async: sozinho já basta pra
+        # matar o health check quatro vezes seguidas.
+        st, inserted = await run_in_threadpool(
+            _supa_rest_as_user,
             request, "POST",
             "/project_supplier_quotes",
             body=payload, prefer="return=representation", timeout=20,

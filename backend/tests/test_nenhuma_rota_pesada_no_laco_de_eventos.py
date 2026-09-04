@@ -50,6 +50,13 @@ _PESADAS = (
     "_memorial_dados_frescos", "_build_cronograma_for_export",
     "processar_revisao_inline", "_merge_montar",
     "storage_download", "storage_upload",
+    # 🩸 04/09, varredura adversarial: a lista curta deixou passar de novo.
+    # `upload_supplier_quote` (@app.post, aberta ao DONO do projeto, não só
+    # admin) parseava o .xlsx do cliente no laço. MEDIDO: 0,80 MB → 3,54 s
+    # nesta máquina, e o teto da própria rota é 15 MB. Parsear planilha é da
+    # mesma família de "gerar planilha", que já estava aqui — a fronteira era
+    # arbitrária, não conceitual.
+    "parse_supplier_quote", "parse_strict", "parse_fuzzy",
 )
 
 
