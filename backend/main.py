@@ -8565,14 +8565,24 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     try:
                         _wl = extraction.get_walls_by_layer() or {}
                         _soma_par = sum(float(v or 0) for v in _wl.values())
-                        _maior_lay = max(_wl.items(), key=lambda kv: float(kv[1] or 0),
-                                         default=("-", 0))
                         _compr_paredes.append(_soma_par)
+                        # 🩸 04/09 — o TOPO por layer, não só a soma. A soma já
+                        # ensinou que a geometria de parede EXISTE (251 m no
+                        # arquivo da Caroline) enquanto o item usou 17,18 m de
+                        # um layer só. O que falta pra consertar é saber ONDE
+                        # estão os outros 234 m: se num layer com cara de
+                        # parede que o motor ignorou, o conserto é a escolha de
+                        # layer; se em hachura e mobiliário, é outro problema.
+                        # Sem a lista não dá pra decidir — e decidir sem dado
+                        # foi o que me fez errar três versões deste guarda.
+                        _topo = sorted(_wl.items(), key=lambda kv: float(kv[1] or 0),
+                                       reverse=True)[:8]
                         _log_error(
                             "motor:parede-medida",
-                            "arq=%s layers_de_parede=%d soma=%.2f m maior=%s(%.2f m)"
+                            "arq=%s layers_de_parede=%d soma=%.2f m | topo: %s"
                             % (os.path.basename(dxf_path), len(_wl), _soma_par,
-                               _maior_lay[0], float(_maior_lay[1] or 0)),
+                               " · ".join("%s=%.1f" % (k, float(v or 0))
+                                          for k, v in _topo)),
                             job_id)
                     except Exception as _ewl:
                         print(f"[parede-medida] nao-fatal: {_ewl}")
