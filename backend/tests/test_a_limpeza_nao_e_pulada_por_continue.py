@@ -58,16 +58,22 @@ def _acha_laco(arvore):
 
 
 def _continues_do_laco(laco):
-    """(Continue, lista de irmãos) de cada `continue` QUE PERTENCE a este laço.
+    """(saída, lista de irmãos) de cada saída antecipada DESTE laço.
 
-    Não desce em `for`/`while`/`def`/`class` de dentro: o `continue` de lá é do
-    laço de lá.
+    Não desce em `for`/`while`/`def`/`class` de dentro: a saída de lá é de lá.
+
+    🩸 03/09, varredura adversarial: a 1ª versão contava só `ast.Continue` — e o
+    laço tem uma quarta saída que é `return` (o freio de memória, linha ~8166).
+    Ela escapou inteira do guarda, e é justamente a que mais deixa lixo: as
+    conversões são TODAS feitas antes do laço, então abortar na prancha `idx`
+    abandona no disco todas as `n - idx` seguintes. Guarda que enumera um tipo
+    de saída em vez de TODAS erra pelo lado que ninguém confere.
     """
     achados = []
 
     def anda(corpo):
         for st in corpo:
-            if isinstance(st, ast.Continue):
+            if isinstance(st, (ast.Continue, ast.Break, ast.Return)):
                 achados.append((st, corpo))
             elif isinstance(st, (ast.For, ast.AsyncFor, ast.While,
                                  ast.FunctionDef, ast.AsyncFunctionDef,
@@ -117,18 +123,22 @@ def test_nenhum_continue_do_laco_escapa_sem_limpar():
         % ", ".join(str(n) for n in fujoes))
 
 
-def test_o_laco_tem_as_tres_saidas_que_a_gente_conhece():
+def test_o_laco_tem_as_quatro_saidas_que_a_gente_conhece():
     """Se o número cair, alguém apagou uma saída — ou o guarda parou de achar.
 
-    🪤 Sem isto, um `_acha_laco` que devolvesse um laço ERRADO (sem `continue`
-    nenhum) faria o teste de cima passar vazio, e o verde seria falso.
+    🪤 Sem isto, um `_acha_laco` que devolvesse um laço ERRADO (sem saída
+    nenhuma) faria o teste de cima passar vazio, e o verde seria falso.
+
+    🩸 03/09, varredura adversarial: o número era 3 porque o guarda só enxergava
+    `continue`. O `return` do freio de memória era a quarta, e estava fora da
+    conta — a saída que mais deixa lixo no disco.
     """
     laco = _acha_laco(ast.parse(_FONTE))
     n = len(_continues_do_laco(laco))
-    assert n >= 3, (
-        "o laço tinha 3 saídas antecipadas (timeout, extração falhou, "
-        "checkpoint) e agora tem %d — ou sumiu uma, ou o guarda está olhando "
-        "pro laço errado" % n)
+    assert n >= 4, (
+        "o laço tinha 4 saídas antecipadas (timeout, extração falhou, "
+        "checkpoint e o `return` do freio de memória) e agora tem %d — ou "
+        "sumiu uma, ou o guarda está olhando pro laço errado" % n)
 
 
 def test_a_saida_da_retomada_guarda_a_prancha_pro_preview():

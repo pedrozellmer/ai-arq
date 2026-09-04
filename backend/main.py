@@ -253,28 +253,40 @@ def _apaga_dir_de_conversao(dxf_path):
     return False
 
 
-def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id):
+def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id, descartadas=None):
     """Move o DXF convertido pro `_preview` do work_dir e apaga o temp da conversão.
 
     Devolve o caminho novo, ou None quando não moveu (DXF do próprio cliente,
     grande demais pro render, ou falha no move).
 
     🩸 03/09/2026, 2ª rodada da revisão adversarial. Este bloco vivia INLINE no
-    fim do corpo do laço de extração — e o laço tem TRÊS `continue` que saltam
-    por cima dele. Dois já tinham sido tapados de manhã com
-    `_apaga_dir_de_conversao`; o terceiro passou batido:
+    fim do corpo do laço de extração — e o laço tem QUATRO saídas antecipadas
+    que saltam por cima dele: três `continue` e o `return` do freio de memória.
+    O que passou batido foi o da RETOMADA:
 
-        if _dxf_stem in _ckpt_cache:   ...   continue      ← a RETOMADA
+        if _dxf_stem in _ckpt_cache:   ...   continue
 
-    E ele é o pior dos três, porque some com DUAS coisas de uma vez:
-      • o `arq_dxf_*` da conversão fica no disco até o fim do job (a conversão
-        de DWG **roda de novo** na retomada — nada a pula), e
-      • a prancha nunca chega no `_preview`, então o **preview morre justo nos
-        jobs que caíram e voltaram** — que são os grandes, os que mais precisam.
+    Efeito: o `arq_dxf_*` da conversão ficava no disco até o fim do job — e a
+    conversão de DWG **roda de novo** na retomada, nada a pula.
 
-    🔑 A lição é a de sempre: limpeza escrita no FIM de um corpo de laço é uma
-    promessa que todo `continue` quebra em silêncio. Virou função pra ter um
-    lugar só — e pra o guarda conseguir contar os chamadores.
+    🚨 CORREÇÃO DE UMA AFIRMAÇÃO MINHA, no mesmo dia. O commit que criou esta
+    função dizia também que "a prancha nunca chega no `_preview`, então o
+    preview morre nos jobs que caíram e voltaram". **É falso, e se contradiz
+    sozinho**: se a pasta VAZAVA, o arquivo continuava no disco, e a thread de
+    preview — que itera `dxf_paths` e testa `os.path.isfile` — achava e
+    renderizava normalmente. O vazamento e a perda do preview não podiam ser
+    verdade ao mesmo tempo. O defeito era um só: disco. Explicação errada fecha
+    a investigação; melhor uma causa provada que duas plausíveis.
+
+    🔑 A lição que fica de pé: limpeza escrita no FIM de um corpo de laço é uma
+    promessa que toda saída antecipada quebra em silêncio. Virou função pra ter
+    um lugar só — e pra o guarda conseguir achar os chamadores.
+
+    🪤 `descartadas` é o registro de "fomos NÓS que apagamos". Sem ele, a
+    prancha que esta função apaga (acima do teto de preview, ou quando o move
+    falha) reaparece na thread de preview como `sem_dxf` — o balde de "sumiu e
+    ninguém sabe por quê", que existe pra investigar. Envenenar o balde de
+    diagnóstico com a própria limpeza foi o achado gêmeo deste.
 
     🪤 O `startswith("arq_dxf_")` é o que protege o arquivo do cliente: DXF que
     ele mesmo subiu não vive em pasta de conversão e não é tocado aqui.
@@ -314,6 +326,9 @@ def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id):
                        f"tam={_tam_mb:.1f}MB > teto {_PREVIEW_MOVE_MAX_MB}MB "
                        f"(renderizar estouraria o timeout)", job_id)
         shutil.rmtree(_dir, ignore_errors=True)
+        if _destino is None and descartadas is not None:
+            # apagamos NOS: acima do teto de preview, ou o move falhou.
+            descartadas.add(dxf_path)
         return _destino
     except Exception:
         return None
@@ -8163,6 +8178,19 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # (idx>0) — se estourar já na 1ª, é caso de prancha única densa.
                     if idx > 0 and _mem_pressure(0.85):
                         _abort_job_mem(job_id, idx, n_dxf)
+                        # 🩸 03/09, varredura adversarial: esta é a QUARTA saída
+                        # antecipada do laço, e a única que não é `continue` —
+                        # por isso escapou do conserto de mais cedo, que só
+                        # olhava `continue`.
+                        # 🔑 É também a que mais deixa lixo: TODAS as conversões
+                        # são feitas de uma vez, antes deste laço, então abortar
+                        # na prancha `idx` abandona no disco as `n - idx` que já
+                        # estavam convertidas. E abortar aqui é exatamente o
+                        # momento de menos folga — o container está a 85% de RAM
+                        # e disco cheio no Render derruba o job de todo mundo.
+                        for _resto in dxf_paths[idx:]:
+                            _apaga_dir_de_conversao(_resto)
+                            _descartadas.add(_resto)
                         return
                     # Cada DXF ocupa 1/N da faixa. Extração 30% + IA 70% dentro da faixa.
                     dxf_base = extract_start + int((idx / max(n_dxf, 1)) * dxf_span)
@@ -8226,7 +8254,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # 🩸 Este `continue` pulava a limpeza do fim do laço: o
                         # `arq_dxf_*` da conversão (que ROLA de novo na retomada)
                         # ficava no disco, e a prancha nunca chegava no _preview.
-                        _novo_dxf = _guarda_dxf_pro_preview(dxf_path, work_dir, job_id)
+                        _novo_dxf = _guarda_dxf_pro_preview(dxf_path, work_dir, job_id, _descartadas)
                         if _novo_dxf:
                             dxf_paths[idx] = _novo_dxf
                         continue
@@ -9408,7 +9436,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # desde 03/09 — porque escrita AQUI, no fim do laço, ela era
                     # pulada pelos três `continue` do corpo (dois de falha e o da
                     # retomada por checkpoint). Um lugar só.
-                    _novo_dxf = _guarda_dxf_pro_preview(dxf_path, work_dir, job_id)
+                    _novo_dxf = _guarda_dxf_pro_preview(dxf_path, work_dir, job_id, _descartadas)
                     if _novo_dxf:
                         dxf_paths[idx] = _novo_dxf
                     gc.collect()

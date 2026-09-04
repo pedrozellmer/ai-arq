@@ -59,17 +59,38 @@ def _contem(externo, interno):
 
 
 def _descartes_nao_registrados(codigo):
-    """Blocos que apagam a conversão SEM anotar que a ausência foi nossa."""
+    """Blocos que apagam a conversão SEM anotar que a ausência foi nossa.
+
+    🩸 03/09, varredura adversarial: a 1ª versão só olhava
+    `_apaga_dir_de_conversao`. Mas `_guarda_dxf_pro_preview` TAMBÉM apaga — nos
+    dois casos em que não consegue guardar (acima do teto de 50 MB do render, e
+    quando o `shutil.move` falha) — e não anotava nada. Ou seja: o guarda que eu
+    escrevi pra impedir exatamente isto não enxergava a outra metade do próprio
+    conserto, porque eu o escrevi olhando UMA função em vez do COMPORTAMENTO
+    (apagar).
+
+    🔑 Lá dentro o registro é feito pelo parâmetro `descartadas`, então o
+    julgamento aceita as duas formas: `_descartadas.add(...)` no bloco, ou o
+    conjunto passado como argumento pra função que apaga.
+    """
     ruins = []
-    for bloco in _blocos_com(codigo, "_apaga_dir_de_conversao"):
-        anota = any(
-            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
-            and n.func.attr == "add"
-            and isinstance(n.func.value, ast.Name)
-            and n.func.value.id == "_descartadas"
-            for st in bloco for n in ast.walk(st))
-        if not anota:
-            ruins.append(min(st.lineno for st in bloco))
+    for nome in ("_apaga_dir_de_conversao", "_guarda_dxf_pro_preview"):
+        for bloco in _blocos_com(codigo, nome):
+            anota = any(
+                isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "add"
+                and isinstance(n.func.value, ast.Name)
+                and n.func.value.id == "_descartadas"
+                for st in bloco for n in ast.walk(st))
+            # ou o registro viaja como argumento pra quem apaga
+            passa = any(
+                isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == nome
+                and any(isinstance(a, ast.Name) and a.id == "_descartadas"
+                        for a in n.args)
+                for st in bloco for n in ast.walk(st))
+            if not (anota or passa):
+                ruins.append(min(st.lineno for st in bloco))
     return ruins
 
 
@@ -91,6 +112,30 @@ def test_existem_os_dois_sitios_de_descarte():
     assert n >= 2, (
         "o laço tinha 2 descartes (timeout e extração falhou) e o guarda achou "
         "%d — verde vazio é verde falso" % n)
+
+
+def test_quem_recebe_o_registro_de_fato_ANOTA():
+    """🪤 O julgamento aceita "passou `_descartadas` como argumento" — e isso
+    seria fácil de enganar: bastava a função receber o conjunto e ignorar.
+
+    Então aqui a cobrança é dentro de `_guarda_dxf_pro_preview`: ela tem que
+    chamar `descartadas.add(...)` quando não conseguiu guardar a prancha.
+    """
+    fn = [n for n in ast.walk(ast.parse(_FONTE))
+          if isinstance(n, ast.FunctionDef)
+          and n.name == "_guarda_dxf_pro_preview"]
+    assert fn, "sumiu `_guarda_dxf_pro_preview`"
+    assert "descartadas" in [a.arg for a in fn[0].args.args], (
+        "a função parou de receber o registro dos descartes")
+    anota = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+                and n.func.attr == "add"
+                and isinstance(n.func.value, ast.Name)
+                and n.func.value.id == "descartadas"
+                for n in ast.walk(fn[0]))
+    assert anota, (
+        "`_guarda_dxf_pro_preview` recebe o registro e não anota nada — a "
+        "prancha que ELA apaga (acima do teto de preview, ou move falhado) "
+        "volta pro balde `sem_dxf`, que é o de causa desconhecida")
 
 
 def test_o_preview_separa_o_que_a_gente_apagou():
