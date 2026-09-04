@@ -402,13 +402,43 @@ def _dxf_grande_pode_seguir(tam_bytes, teto_antigo, livre_bytes):
     comentário e o teste diziam "2 GB". Documentação que subestima a própria
     garantia é convite pra alguém "simplificar" e quebrar.
     """
+    return _motivo_de_nao_seguir_dxf(tam_bytes, teto_antigo, livre_bytes) is None
+
+
+def _motivo_de_nao_seguir_dxf(tam_bytes, teto_antigo, livre_bytes):
+    """POR QUE este DXF grande não pode seguir. `None` = pode seguir.
+
+    Devolve `"tamanho"` (o arquivo é grande de verdade, passou de
+    `_DXF_TETO_ARQUIVO`) ou `"disco"` (o arquivo caberia, mas não sobrou
+    espaço temporário). São duas coisas diferentes, com consertos diferentes
+    do lado do cliente.
+
+    🩸 04/09/2026, varredura adversarial. As duas razões saíam pela MESMA porta
+    e o cliente lia sempre a mesma frase: "essa prancha é grande demais pro
+    nosso limite de memória — o que resolve é um PURGE no desenho". Pra recusa
+    por DISCO isso é falso duas vezes: o arquivo não é grande demais (as
+    pranchas anteriores do mesmo envio, do mesmo tamanho, passaram), e o PURGE
+    não é o que resolve.
+
+    🔑 Medido com a função real: 8 pranchas iguais de 409 MB, 4 GB livres →
+    **as 5 primeiras passam e as 3 últimas são recusadas**. Mesmo arquivo,
+    mesmo tamanho, resultado decidido pela POSIÇÃO na fila. Do lado de lá isso
+    não tem explicação possível: o cliente reenvia a mesma prancha, ela passa,
+    e ele nunca entende o que mudou.
+
+    🪤 O booleano `_dxf_grande_pode_seguir` é implementado EM CIMA desta função
+    de propósito — se fossem duas contas paralelas, um dia elas discordariam e
+    a mensagem diria uma coisa enquanto a decisão fazia outra.
+    """
     if tam_bytes <= teto_antigo:
-        return True                      # nem era caso de recusa
+        return None                      # nem era caso de recusa
     if tam_bytes > _DXF_TETO_ARQUIVO:
-        return False
+        return "tamanho"
     if livre_bytes is None:
-        return True
-    return (livre_bytes - tam_bytes) > _DXF_MARGEM_DISCO
+        return None
+    if (livre_bytes - tam_bytes) > _DXF_MARGEM_DISCO:
+        return None
+    return "disco"
 
 
 
@@ -7863,34 +7893,65 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                                     pass
                                 _tam_conv = 0     # desliga a recusa abaixo
                             if _tam_conv > _TETO_DXF:
+                                # 🩸 04/09 — POR QUE recusou muda o que o cliente
+                                # tem que fazer. "disco" quer dizer que as
+                                # pranchas ANTERIORES deste mesmo envio encheram
+                                # o espaço: o arquivo dele não tem nada de
+                                # errado, e mandar em lotes menores resolve.
+                                # Dizer "grande demais, faça um PURGE" nesse caso
+                                # é mandar o cliente mexer no desenho por causa
+                                # de um limite nosso, e ele nem consegue
+                                # reproduzir — a mesma prancha passa se for a
+                                # primeira da fila.
+                                _motivo_rec = _motivo_de_nao_seguir_dxf(
+                                    _tam_conv, _TETO_DXF, _livre)
+                                _mb_conv = _tam_conv // 1048576
                                 try:
                                     os.remove(dxf_path)
                                 except OSError:
                                     pass
                                 try:
                                     _log_error(
-                                        "motor:prancha-grande-demais",
-                                        f"{_bn_conv}: DXF nasceu com "
-                                        f"{_tam_conv // 1048576} MB (teto "
-                                        f"{_TETO_DXF // 1048576} MB) — APAGADO na "
-                                        f"conversão pra não ocupar disco; as outras "
-                                        f"pranchas do envio seguem", job_id)
+                                        "motor:prancha-grande-demais"
+                                        if _motivo_rec != "disco"
+                                        else "motor:disco-cheio-na-conversao",
+                                        f"{_bn_conv}: DXF nasceu com {_mb_conv} MB "
+                                        f"(teto {_TETO_DXF // 1048576} MB, motivo "
+                                        f"{_motivo_rec or 'tamanho'}, disco livre "
+                                        f"{'?' if _livre is None else _livre // 1048576} MB)"
+                                        f" — APAGADO na conversão pra não ocupar "
+                                        f"disco; as outras pranchas do envio seguem",
+                                        job_id,
+                                        severity=("critical" if _motivo_rec == "disco"
+                                                  else "error"))
                                 except Exception:
                                     pass
-                                _dxf_grandes_msgs.append(
-                                    f"{_bn_conv}: essa prancha é grande demais pro "
-                                    f"nosso limite de memória de hoje "
-                                    f"({_tam_conv // 1048576} MB depois de "
-                                    f"convertida) — o arquivo não tem defeito. "
-                                    f"Reexportar em DXF não resolve (esses "
-                                    f"{_tam_conv // 1048576} MB SÃO o DXF): o que "
-                                    f"resolve é um PURGE no desenho, ou mandar só "
-                                    f"a área que você precisa medir")
-                                jobs.update_field(
-                                    job_id,
-                                    current_step=f"{_bn_conv}: prancha grande demais "
-                                                 f"({_tam_conv // 1048576} MB) — "
-                                                 f"seguindo com as outras")
+                                if _motivo_rec == "disco":
+                                    _dxf_grandes_msgs.append(
+                                        f"{_bn_conv}: não sobrou espaço temporário "
+                                        f"pra converter essa prancha ({_mb_conv} MB) "
+                                        f"— as pranchas anteriores deste mesmo envio "
+                                        f"ocuparam o espaço. Não é defeito do seu "
+                                        f"arquivo e um PURGE não muda isso: mande "
+                                        f"essa prancha sozinha, ou em lotes menores, "
+                                        f"que ela passa")
+                                    _passo_rec = (f"{_bn_conv}: sem espaço temporário "
+                                                  f"pra esta prancha — seguindo com "
+                                                  f"as outras")
+                                else:
+                                    _dxf_grandes_msgs.append(
+                                        f"{_bn_conv}: essa prancha é grande demais pro "
+                                        f"nosso limite de memória de hoje "
+                                        f"({_mb_conv} MB depois de "
+                                        f"convertida) — o arquivo não tem defeito. "
+                                        f"Reexportar em DXF não resolve (esses "
+                                        f"{_mb_conv} MB SÃO o DXF): o que "
+                                        f"resolve é um PURGE no desenho, ou mandar só "
+                                        f"a área que você precisa medir")
+                                    _passo_rec = (f"{_bn_conv}: prancha grande demais "
+                                                  f"({_mb_conv} MB) — seguindo com "
+                                                  f"as outras")
+                                jobs.update_field(job_id, current_step=_passo_rec)
                                 # 🪤 NÃO zerar dxf_path aqui. Zerar fazia o descarte
                                 # cair no ramo de "DWG não converteu" logo abaixo, e
                                 # a MESMA prancha entrava em dwg_failed E em
