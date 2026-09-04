@@ -9574,6 +9574,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # CHECKPOINT: prancha já analisada antes do restart — reusa o
                 # resultado salvo (pula texto, crops e IA).
                 result = _ckpt_cache[_ck_key]
+                # 🩸 03/09/2026, achado pela varredura adversarial. O fim do
+                # corpo deste laço faz `del text, crop_paths, sheet, result` —
+                # e os TRÊS primeiros nascem só no `else` (o caminho normal).
+                # Este ramo criava só `result`, caía no mesmo `del` e levantava
+                # `UnboundLocalError: cannot access local variable 'text'`.
+                # Ou seja: **a retomada morria na primeira prancha de PDF que
+                # tinha checkpoint** — justo o mecanismo que existe pra salvar o
+                # job pesado que já caiu uma vez. Conferido: as 5 instruções
+                # entre o if/else e o `del` leem só `result`, então ninguém
+                # consome estes três aqui.
+                # 🪤 `None` de propósito, não `""`/`[]`: se alguém um dia LER um
+                # deles neste caminho, tem que estourar alto, não seguir medindo
+                # uma lista vazia calado.
+                text = crop_paths = sheet = None
                 jobs.update_field(job_id, current_step=f"Prancha {i+1} de {total} {_u_total}{_sufixo_total}: {_disp} — análise já concluída, retomando ✓")
                 print(f"[ckpt] {_stem}: análise reaproveitada do checkpoint")
                 # 🚨 31/08 (auditoria do mesmo dia): TODO o bloco de medição
