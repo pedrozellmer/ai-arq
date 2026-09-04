@@ -241,6 +241,72 @@ def _apaga_dir_de_conversao(dxf_path):
     return False
 
 
+def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id):
+    """Move o DXF convertido pro `_preview` do work_dir e apaga o temp da conversão.
+
+    Devolve o caminho novo, ou None quando não moveu (DXF do próprio cliente,
+    grande demais pro render, ou falha no move).
+
+    🩸 03/09/2026, 2ª rodada da revisão adversarial. Este bloco vivia INLINE no
+    fim do corpo do laço de extração — e o laço tem TRÊS `continue` que saltam
+    por cima dele. Dois já tinham sido tapados de manhã com
+    `_apaga_dir_de_conversao`; o terceiro passou batido:
+
+        if _dxf_stem in _ckpt_cache:   ...   continue      ← a RETOMADA
+
+    E ele é o pior dos três, porque some com DUAS coisas de uma vez:
+      • o `arq_dxf_*` da conversão fica no disco até o fim do job (a conversão
+        de DWG **roda de novo** na retomada — nada a pula), e
+      • a prancha nunca chega no `_preview`, então o **preview morre justo nos
+        jobs que caíram e voltaram** — que são os grandes, os que mais precisam.
+
+    🔑 A lição é a de sempre: limpeza escrita no FIM de um corpo de laço é uma
+    promessa que todo `continue` quebra em silêncio. Virou função pra ter um
+    lugar só — e pra o guarda conseguir contar os chamadores.
+
+    🪤 O `startswith("arq_dxf_")` é o que protege o arquivo do cliente: DXF que
+    ele mesmo subiu não vive em pasta de conversão e não é tocado aqui.
+    """
+    try:
+        _dir = os.path.dirname(dxf_path or "")
+        if not os.path.basename(_dir).startswith("arq_dxf_"):
+            return None
+        try:
+            _tam_mb = os.path.getsize(dxf_path) / (1024 * 1024)
+        except OSError:
+            _tam_mb = 0.0
+        _destino = None
+        if _tam_mb <= _PREVIEW_MOVE_MAX_MB:
+            # 🚨 Subpasta própria, NUNCA a raiz do work_dir: o conversor ODA
+            # devolve "<nome>.dxf", então um cliente que sobe `planta.dwg` E
+            # `planta.dxf` teria o DXF ORIGINAL dele sobrescrito aqui
+            # (shutil.move sobrescreve calado). O arquivo do cliente é
+            # intocável — o preview usa o cantinho dele.
+            _prev_dir = os.path.join(work_dir, "_preview")
+            os.makedirs(_prev_dir, exist_ok=True)
+            _alvo = os.path.join(_prev_dir, os.path.basename(dxf_path))
+            try:
+                shutil.move(dxf_path, _alvo)
+                _destino = _alvo
+            except Exception as _mv_e:
+                _log_error("motor:preview-prancha",
+                           f"nao consegui guardar {os.path.basename(dxf_path)} "
+                           f"pro preview: {type(_mv_e).__name__}: {_mv_e}", job_id)
+        else:
+            # 🪤 Acima do teto o render estoura o timeout de 60 s de qualquer
+            # jeito (o DXF de 262 MB do job 9bf827fc bateu nele em 12/08), então
+            # guardar seria só ocupar disco. Quando pula, GRAVA o motivo — "sem
+            # preview" nunca pode voltar a ser silêncio.
+            _log_error("motor:preview-prancha",
+                       f"preview pulado arq={os.path.basename(dxf_path)} "
+                       f"tam={_tam_mb:.1f}MB > teto {_PREVIEW_MOVE_MAX_MB}MB "
+                       f"(renderizar estouraria o timeout)", job_id)
+        shutil.rmtree(_dir, ignore_errors=True)
+        return _destino
+    except Exception:
+        return None
+
+
 
 
 def _avisos_com(job_id, novo_aviso):
@@ -8126,6 +8192,12 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             project_data.name = _cp["name"]
                         jobs.update_field(job_id, current_step=f"DXF {idx+1}/{n_dxf}: análise já concluída, retomando ✓")
                         print(f"[ckpt] {os.path.basename(dxf_path)}: {_rest} itens reaproveitados do checkpoint")
+                        # 🩸 Este `continue` pulava a limpeza do fim do laço: o
+                        # `arq_dxf_*` da conversão (que ROLA de novo na retomada)
+                        # ficava no disco, e a prancha nunca chegava no _preview.
+                        _novo_dxf = _guarda_dxf_pro_preview(dxf_path, work_dir, job_id)
+                        if _novo_dxf:
+                            dxf_paths[idx] = _novo_dxf
                         continue
                     # snapshot dos acumuladores ANTES de processar (pro checkpoint no fim)
                     _snap = {
@@ -9299,46 +9371,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # continua fechado. Atualiza `dxf_paths[idx]` pra todo mundo
                     # depois daqui ver o caminho vivo.
                     #
-                    # 🪤 Teto de tamanho: acima dele o render estoura o timeout de
-                    # 60s de qualquer forma (o DXF de 262 MB do job 9bf827fc bateu
-                    # no timeout em 12/08), então guardar o arquivo seria só ocupar
-                    # disco à toa. Quando pula, GRAVA o motivo — "sem preview" nunca
-                    # pode voltar a ser silêncio.
-                    try:
-                        _dxf_dir = os.path.dirname(dxf_path)
-                        if os.path.basename(_dxf_dir).startswith("arq_dxf_"):
-                            try:
-                                _tam_mb = os.path.getsize(dxf_path) / (1024 * 1024)
-                            except OSError:
-                                _tam_mb = 0.0
-                            if _tam_mb <= _PREVIEW_MOVE_MAX_MB:
-                                # 🚨 Subpasta própria, NUNCA a raiz do work_dir: o
-                                # conversor ODA devolve "<nome>.dxf", então um
-                                # cliente que sobe `planta.dwg` E `planta.dxf`
-                                # teria o DXF ORIGINAL dele sobrescrito aqui
-                                # (shutil.move sobrescreve calado). O arquivo do
-                                # cliente é intocável — o preview usa o cantinho
-                                # dele.
-                                _prev_dir = os.path.join(work_dir, "_preview")
-                                os.makedirs(_prev_dir, exist_ok=True)
-                                _destino = os.path.join(
-                                    _prev_dir, os.path.basename(dxf_path))
-                                try:
-                                    shutil.move(dxf_path, _destino)
-                                    dxf_paths[idx] = _destino
-                                except Exception as _mv_e:
-                                    _log_error("motor:preview-prancha",
-                                               f"nao consegui guardar {os.path.basename(dxf_path)} "
-                                               f"pro preview: {type(_mv_e).__name__}: {_mv_e}",
-                                               job_id)
-                            else:
-                                _log_error("motor:preview-prancha",
-                                           f"preview pulado arq={os.path.basename(dxf_path)} "
-                                           f"tam={_tam_mb:.1f}MB > teto {_PREVIEW_MOVE_MAX_MB}MB "
-                                           f"(renderizar estouraria o timeout)", job_id)
-                            shutil.rmtree(_dxf_dir, ignore_errors=True)
-                    except Exception:
-                        pass
+                    # 🪤 O corpo desta limpeza mora em `_guarda_dxf_pro_preview`
+                    # desde 03/09 — porque escrita AQUI, no fim do laço, ela era
+                    # pulada pelos três `continue` do corpo (dois de falha e o da
+                    # retomada por checkpoint). Um lugar só.
+                    _novo_dxf = _guarda_dxf_pro_preview(dxf_path, work_dir, job_id)
+                    if _novo_dxf:
+                        dxf_paths[idx] = _novo_dxf
                     gc.collect()
 
             except Exception as e:
