@@ -25,13 +25,13 @@ seria debitado do desenho dele, do conversor, ou do "não-determinismo da IA".
 silenciosa não produz erro — produz uma leitura PIOR, que é muito mais difícil
 de rastrear que uma que quebra.
 """
-import io
-import os
-
 import main
 
-_FONTE = io.open(os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), "main.py"), encoding="utf-8").read()
+# 🪤 Este arquivo NÃO lê mais o fonte do main.py, de propósito. A única coisa
+# que ele fazia com o fonte era `assert "timeout=120" in _FONTE`, um guarda que
+# passava com o defeito de volta (ver o teste do timeout, lá embaixo). Todos os
+# testes daqui exercitam o comportamento — se voltar um `_FONTE = open(...)`,
+# provavelmente voltou também um guarda que casa string em vez de medir.
 
 
 class _Resp:
@@ -60,12 +60,14 @@ def _resp(corpo, content_length):
 
 
 def _com_respostas(monkeypatch, respostas):
-    """Troca o urlopen por uma fila de respostas e conta as chamadas."""
-    chamadas = {"n": 0}
+    """Troca o urlopen por uma fila de respostas; conta chamadas e guarda o
+    `timeout` que o código REALMENTE passou."""
+    chamadas = {"n": 0, "timeouts": []}
     fila = list(respostas)
 
     def _fake(req, timeout=None):
         chamadas["n"] += 1
+        chamadas["timeouts"].append(timeout)
         if not fila:
             raise AssertionError("urlopen chamado mais vezes que o previsto")
         r = fila.pop(0)
@@ -144,12 +146,28 @@ def test_a_desistencia_deixa_RASTRO_critico(monkeypatch):
         "desistiu do arquivo sem registrar — ninguém ia descobrir por quê")
 
 
-def test_o_timeout_nao_voltou_a_ser_curto_demais():
+def test_o_timeout_nao_voltou_a_ser_curto_demais(monkeypatch):
     """🪤 30 s é pouco pra 44 MB em rede ruim, e o corte vira truncamento.
 
     O arquivo do Fábio tem 44,5 MB. Com 30 s, qualquer soluço de rede corta a
     leitura no meio — que é exatamente o defeito que este arquivo guarda.
+
+    🩸 03/09, revisão adversarial: este teste era `assert "timeout=120" in
+    _FONTE` sobre as 25 mil linhas do main.py. Rodei a mutação — troquei o
+    `timeout=120` do download por `timeout=30` — e ELE CONTINUOU PASSANDO,
+    porque `timeout=120.0` do cliente da IA (duas linhas, nada a ver com o
+    Storage) contém a substring. Guarda que passa com o defeito de volta é
+    guarda que certifica o que não olha.
+
+    🔑 Agora mede COMPORTAMENTO: lê o `timeout` que o código realmente passou
+    ao `urlopen`. Sobrevive a refatoração e não pode ser satisfeito por outra
+    linha do arquivo.
     """
-    assert "timeout=120" in _FONTE, (
-        "o timeout do download do Storage voltou a ser curto: em arquivo de "
-        "dezenas de MB isso reintroduz o truncamento")
+    chamadas = _com_respostas(monkeypatch, [_resp(b"X" * 10, 10)])
+    main._supabase_storage_download_prancha("job1", "planta.dwg")
+    assert chamadas["timeouts"], "o urlopen não foi chamado — teste inútil"
+    for t in chamadas["timeouts"]:
+        assert t is not None and t >= 120, (
+            "o download do Storage passou timeout=%r; abaixo de 120 s um "
+            "arquivo de dezenas de MB é cortado no meio e vira 'unexpected "
+            "end of file'" % t)
