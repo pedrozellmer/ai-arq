@@ -74,6 +74,37 @@ def _oferece_pdf_como_igual(src=None):
     return ruins
 
 
+def _pdf_vem_primeiro(src=None):
+    """Recomendação que nomeia PDF ANTES de DXF/DWG.
+
+    🩸 03/09, 2ª revisão: a absolvição de "lista dos três nomes adjacentes"
+    (necessária, porque listar formatos aceitos é legítimo) escondia um
+    problema de ORDEM. O ramo "não conseguimos ler as quantidades" dizia
+    "reenviar exportado direto do CAD **(PDF vetorial, DWG ou DXF)**" — com o
+    PDF primeiro — e `_oferece_pdf_como_igual` absolvia por causa da forma.
+
+    🔑 Numa frase que RECOMENDA o que mandar, o formato citado primeiro é o que
+    o cliente vai tentar. Só CAD mede em 73,6% dos projetos; só PDF em 5,4%.
+    Liderar pelo PDF é mandar 18 em 19 pro caminho que não mede.
+
+    🪤 Só vale onde há RECOMENDAÇÃO. "Envie ao menos um arquivo: DWG, DXF ou
+    PDF" é lista de aceitos e não recomenda nada — nela a ordem é irrelevante.
+    """
+    txt = _copy(src)
+    ruins = []
+    recomenda = r"(?:ideal|reenvi|reexport|manda|mande|suba|sobe|exporte|replote)"
+    for m in re.finditer(recomenda + "[^" + _NL + "]{0,200}", txt, re.I):
+        t = m.group(0)
+        pos_pdf = t.upper().find("PDF")
+        pos_cad = min([p for p in (t.upper().find("DXF"), t.upper().find("DWG"))
+                       if p >= 0] or [-1])
+        if pos_pdf < 0 or pos_cad < 0:
+            continue
+        if pos_pdf < pos_cad:
+            ruins.append(t.strip())
+    return ruins
+
+
 def test_a_copy_nao_oferece_PDF_como_alternativa_igual_ao_DXF():
     """🩸 A frase que o Fábio leu dois minutos antes de subir um PDF."""
     ruins = _oferece_pdf_como_igual()
@@ -118,3 +149,38 @@ def test_CONTROLE_a_recomendacao_de_DXF_continua_de_pe():
     txt = _copy()
     assert re.search("reenviar em <b>DXF</b>|reenviar em DXF", txt, re.I), (
         "sumiu a recomendação de reenviar em DXF")
+
+
+def test_nenhuma_recomendacao_cita_PDF_antes_do_CAD():
+    """🩸 O ramo vizinho, que a absolvição de 'lista de três' escondia."""
+    ruins = _pdf_vem_primeiro()
+    assert not ruins, (
+        "recomendação citando PDF antes de DXF/DWG — o formato citado primeiro "
+        "é o que o cliente tenta, e só PDF mede em 5,4% contra 73,6% do CAD:"
+        + _NL + "  " + (_NL + "  ").join(r[:110] for r in ruins))
+
+
+def test_CONTROLE_o_guarda_de_ordem_REPROVA_a_copy_que_estava_no_ar():
+    """A frase real do ramo, como estava antes deste conserto."""
+    antiga = ('    fix = ("O ideal é <b>reenviar a planta completa exportada '
+              'direto do CAD</b> (PDF vetorial, DWG ou DXF).")' + chr(10))
+    assert _pdf_vem_primeiro(antiga), (
+        "o guarda de ordem não acusa a frase que estava em produção — foi "
+        "exatamente ela que a absolvição de 'lista de três' deixou passar")
+
+
+def test_CONTROLE_o_guarda_de_ordem_ACEITA_a_ordem_CERTA():
+    """DXF primeiro, PDF depois e rotulado — é o conserto, não pode ser acusado."""
+    boa = ('    fix = ("O ideal é reenviar exportado direto do CAD, em DXF. Se '
+           'você só tem o PDF, replote em PDF vetorial — aí a gente estima.")' + chr(10))
+    assert not _pdf_vem_primeiro(boa)
+
+
+def test_CONTROLE_lista_de_formatos_ACEITOS_nao_e_recomendacao():
+    """🪤 "Envie ao menos um arquivo: DWG, DXF ou PDF" não recomenda nada.
+
+    Sem esta absolvição o guarda acusaria a validação de upload, viraria ruído
+    e pararia de ser lido — que é como um guarda morre.
+    """
+    lista = '    raise HTTPException(400, "Envie ao menos um arquivo: DWG, DXF ou PDF.")' + chr(10)
+    assert not _pdf_vem_primeiro(lista)

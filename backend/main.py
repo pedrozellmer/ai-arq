@@ -2807,8 +2807,22 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             motivo = ("não conseguimos ler as quantidades nesse arquivo. Quase sempre é "
                       "porque o PDF é uma imagem escaneada/fotografada, ou a prancha tem só "
                       "o desenho, sem cotas e quadros de áreas.")
-            fix = ("O ideal é <b>reenviar a planta completa exportada direto do CAD</b> "
-                   "(PDF vetorial, DWG ou DXF).")
+            # 🩸 03/09 — o ramo vizinho (DWG que não abre) foi consertado hoje
+            # pra parar de oferecer PDF como igual ao DXF, com o número medido
+            # no comentário: só CAD mede em 73,6% dos projetos, só PDF em 5,4%.
+            # ESTE ramo ficou intocado, listando "PDF vetorial, DWG ou DXF" —
+            # com o PDF PRIMEIRO. O meu guarda absolve a lista dos três nomes
+            # adjacentes de propósito (lista de formatos aceitos é legítima), e
+            # foi exatamente essa absolvição que escondeu o problema de ORDEM.
+            # 🪤 Aqui o PDF vetorial É uma saída legítima — o caso é PDF
+            # escaneado, e replotar em vetorial ajuda de verdade. Só não é a
+            # primeira: quem tem o CAD ganha muito mais mandando DXF.
+            fix = ("O ideal é <b>reenviar exportado direto do CAD, em DXF</b> — "
+                   "é dele que sai quantidade medida do desenho.<br><br>"
+                   "Se você só tem o PDF, replote em <b>PDF vetorial</b> (não "
+                   "escaneado): aí a gente identifica os itens e <b>estima</b> "
+                   "as quantidades, o que já ajuda — mas medida do desenho "
+                   "quase nunca sai de PDF.")
             alt_img = "Um ajuste no arquivo resolve — reenvie exportado do CAD"
             pre_txt = ("Reprocessar não resolve este caso: reenvie a planta "
                        "exportada direto do CAD.")
@@ -3398,7 +3412,7 @@ def _build_nudge_email(name: str, kind: str, magic_link: str):
         title = "Vem subir sua primeira prancha"
         body = (_email_img("nudge-foto.jpg", "Sua primeira prancha vira planilha medida em minutos", margem="2px 0 14px")
                 + f"{greet}<br><br>Você já tem conta no AI.arq, mas ainda não testou com uma prancha. "
-                f"Que tal agora? Manda um PDF, DWG ou DXF e em minutos você recebe a planilha de "
+                f"Que tal agora? Manda um DXF, DWG ou PDF e em minutos você recebe a planilha de "
                 f"quantitativos — e no beta está <b>grátis, quantos projetos você quiser</b>.<br><br>"
                 f"Clica abaixo pra entrar direto e subir:")
         cta = "Subir minha primeira prancha"
@@ -13485,7 +13499,7 @@ def _build_retorno30_email(name: str):
             f"última visita o AI.arq melhorou bastante: a leitura das pranchas ficou mais "
             f"precisa e agora todo projeto vira também <b>cronograma de obra</b> e <b>memorial "
             f"descritivo em rascunho</b> (editável na tela, sai em Word ou PDF) — de graça."
-            f"<br><br>Se tiver um projeto na mesa, manda a prancha (PDF, DWG ou DXF) "
+            f"<br><br>Se tiver um projeto na mesa, manda a prancha (DXF, DWG ou PDF) "
             f"que em minutos você recebe a planilha de quantitativos. Nessa fase de beta está "
             f"<b>grátis e ilimitado</b>.")
     subject = "Seu próximo quantitativo sai em minutos"
@@ -13525,8 +13539,8 @@ def _build_proximo_projeto_email(name: str, project_name: str):
     body = (_email_img("proximo-foto.jpg", "Outro projeto? A planilha sai em minutos, grátis no beta", margem="2px 0 14px")
             + f"{greet}<br><br>"
             f"O quantitativo do <b>{pn}</b> te ajudou? Se tiver outro projeto na mesa — "
-            f"mesmo que seja um estudo ou uma reforma pequena — manda a prancha (PDF, DWG "
-            f"ou DXF): o próximo sai em minutos, e nessa fase de beta está <b>grátis e "
+            f"mesmo que seja um estudo ou uma reforma pequena — manda a prancha (DXF, DWG "
+            f"ou PDF): o próximo sai em minutos, e nessa fase de beta está <b>grátis e "
             f"ilimitado</b>.<br><br>"
             f"E se você chegou a <b>revisar</b> a planilha do primeiro, subir a sua versão "
             f"corrigida na página do projeto afina o motor — os seus próximos quantitativos "
