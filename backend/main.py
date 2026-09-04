@@ -12745,6 +12745,44 @@ def _nome_parece_estrutural(nome: str) -> bool:
     antes = (nome or "")[max(0, m.start() - 12):m.start()]
     return not _RX_NEGACAO_ANTES.search(antes)
 
+def _recusa_no_upload(status: int, mensagem: str, motivo: str,
+                      detalhe: str = "", quem: str = ""):
+    """Recusa o upload DEIXANDO RASTRO. Sempre levanta — nunca devolve.
+
+    🩸 04/09/2026. As SETE portas de recusa do `/api/process` não gravavam
+    absolutamente nada: sem login, token trocado, muitos envios seguidos,
+    request acima de 450 MB, nenhum arquivo, formato não aceito, mais de 50
+    arquivos. A pessoa via o erro na tela e, do nosso lado, **não tinha
+    acontecido nada**.
+
+    🔑 Consequência medida hoje, investigando por que 15 de 96 contas nunca
+    subiram projeto: no banco, **"tentou e a gente recusou" e "nunca tentou"
+    são a mesma coisa**. A investigação inteira esbarrou nisso e teve que
+    escrever "indeterminado" caso após caso. Já existe um cliente
+    (`thallisson.producao@`) que mandou o POST e sumiu — hoje ele conta como
+    "desistiu".
+
+    🔑 Isto não conserta o funil; conserta a nossa capacidade de MEDIR o funil.
+    Sem ele, toda pergunta sobre entrada continua sendo respondida com palpite
+    — e hoje eu tive seis hipóteses derrubadas por medição, uma atrás da outra.
+
+    🪤 `severity="warning"`: recusa não é erro do motor, mas também não é
+    migalha de diagnóstico. Tem que aparecer sem afogar o painel.
+    🪤 O `detalhe` é o que transforma a linha em informação: qual extensão a
+    pessoa tentou, quantos MB, quantos arquivos. "Recusado" sozinho não ensina
+    nada sobre o que ela queria fazer.
+    """
+    try:
+        _log_error("upload:recusado",
+                   "motivo=%s http=%d quem=%s%s"
+                   % (motivo, status, (quem or "?")[:80],
+                      (" | " + detalhe[:200]) if detalhe else ""),
+                   None, severity="warning")
+    except Exception:
+        pass
+    raise HTTPException(status, mensagem)
+
+
 @app.post("/api/process")
 async def process_files(
     request: Request,
@@ -12788,9 +12826,13 @@ async def process_files(
     # O painel já loga e manda o Bearer, então não muda nada pro usuário real.
     jwt_user = _get_user_from_request(request)
     if not jwt_user:
-        raise HTTPException(401, "Faça login para enviar um projeto.")
+        _recusa_no_upload(401, "Faça login para enviar um projeto.",
+                          "sem-login", quem=user_email or user_id)
     if user_id and user_id != "anonymous" and jwt_user.get("id") != user_id and jwt_user.get("email", "").lower() != ADMIN_EMAIL:
-        raise HTTPException(403, "user_id não corresponde ao token de autenticação")
+        _recusa_no_upload(403, "user_id não corresponde ao token de autenticação",
+                          "token-nao-bate",
+                          detalhe="form=%s token=%s" % (user_id, jwt_user.get("id")),
+                          quem=jwt_user.get("email") or user_email)
     # Dono autoritativo vem do token (não confia só no parâmetro).
     if not user_id or user_id == "anonymous":
         user_id = jwt_user.get("id") or user_id
@@ -12800,8 +12842,10 @@ async def process_files(
     # logado num loop queimaria gasto sem teto. Limite por usuário+IP, generoso —
     # um humano sobe poucos projetos por sessão; robô em loop é barrado.
     if not _rate_limit_ok(f"process:{user_id}", request, limit=12, window_s=600):
-        raise HTTPException(429, "Muitos projetos enviados em pouco tempo. Espere "
-                            "alguns minutos e tente de novo.")
+        _recusa_no_upload(429, "Muitos projetos enviados em pouco tempo. Espere "
+                          "alguns minutos e tente de novo.",
+                          "muitos-envios", detalhe="teto=12 em 600s",
+                          quem=jwt_user.get("email") or user_email)
 
     # Teto de tamanho do REQUEST (anti-OOM). Desde 21/07 o upload é gravado em
     # disco em pedaços (_stream_upload_to_disk) — NÃO bufferiza mais o arquivo
@@ -12814,7 +12858,10 @@ async def process_files(
     # 21/07: em 2 GB, cap de 700MB + upload de 506MB deu OOM; agora é outro cenário).
     _clen = request.headers.get("content-length") or request.headers.get("Content-Length")
     if _clen and _clen.isdigit() and int(_clen) > 450 * 1024 * 1024:
-        raise HTTPException(413, "Arquivos muito grandes (máx. ~450 MB no total). Envie as pranchas do projeto — se for um projeto enorme, mande em 2 lotes.")
+        _recusa_no_upload(413, "Arquivos muito grandes (máx. ~450 MB no total). Envie as pranchas do projeto — se for um projeto enorme, mande em 2 lotes.",
+                          "request-grande",
+                          detalhe="%d MB (teto 450)" % (int(_clen) // 1048576),
+                          quem=jwt_user.get("email") or user_email)
 
     if typology not in _VALID_TYPOLOGIES:
         typology = "office"
@@ -12850,7 +12897,8 @@ async def process_files(
         aviso_area_implausivel = user_total_area
         user_total_area = 0
     if not files:
-        raise HTTPException(400, "Nenhum arquivo enviado")
+        _recusa_no_upload(400, "Nenhum arquivo enviado", "sem-arquivo",
+                          quem=jwt_user.get("email") or user_email)
 
     # Validar arquivos (aceitar PDF, DWG e DXF)
     valid_extensions = ('.pdf', '.dwg', '.dxf')
@@ -12863,10 +12911,20 @@ async def process_files(
             amb = sheet_ambientes[idx] if idx < len(sheet_ambientes) else ""
             valid_pairs.append((f, st, amb))
     if not valid_pairs:
-        raise HTTPException(400, "Nenhum arquivo válido encontrado. Aceito: PDF, DWG ou DXF.")
+        # 🔑 O detalhe aqui é o mais valioso dos sete: diz QUE FORMATO a pessoa
+        # tentou subir. Se aparecer .rvt, .skp ou .ifc com frequência, isso é
+        # informação de PRODUTO, não de erro.
+        _ext = sorted({(f.filename or "?").lower().rsplit(".", 1)[-1][:8]
+                       for f in files if f.filename})
+        _recusa_no_upload(400, "Nenhum arquivo válido encontrado. Aceito: PDF, DWG ou DXF.",
+                          "formato-nao-aceito",
+                          detalhe="tentou: %s (%d arquivo(s))" % (", ".join(_ext) or "?", len(files)),
+                          quem=jwt_user.get("email") or user_email)
 
     if len(valid_pairs) > 50:
-        raise HTTPException(400, "Máximo de 50 arquivos por projeto")
+        _recusa_no_upload(400, "Máximo de 50 arquivos por projeto", "muitos-arquivos",
+                          detalhe="%d arquivos (teto 50)" % len(valid_pairs),
+                          quem=jwt_user.get("email") or user_email)
 
     # ── TRAVA DE ENVIO EM DOBRO ──────────────────────────────────────────
     # 🚨 26/08/2026, caso AMANDA. O site mandou o MESMO arquivo DUAS VEZES,
@@ -12953,31 +13011,41 @@ async def process_files(
         if upload_file.size and n_written != upload_file.size:
             try: os.remove(file_path)
             except OSError: pass
-            raise HTTPException(
+            # 🔑 A recusa MAIS importante das dez: significa que a conexão
+            # caiu no meio do envio. É literalmente "tentou e falhou" — e era
+            # justamente o caso que ficava indistinguível de "nunca tentou".
+            _recusa_no_upload(
                 400,
                 f"Arquivo '{upload_file.filename}' chegou incompleto: "
                 f"recebido {n_written} de {upload_file.size} bytes. "
-                f"Provável conexão instável durante upload — tente de novo."
-            )
+                f"Provável conexão instável durante upload — tente de novo.",
+                "envio-incompleto",
+                detalhe="%s: %d de %d bytes" % (upload_file.filename, n_written,
+                                                upload_file.size),
+                quem=jwt_user.get("email") or user_email)
         ext = upload_file.filename.lower().rsplit('.', 1)[-1]
         if ext == "dwg":
             if n_written < 100:
                 try: os.remove(file_path)
                 except OSError: pass
-                raise HTTPException(
+                _recusa_no_upload(
                     400,
                     f"DWG '{upload_file.filename}' muito pequeno ({n_written} bytes) — "
-                    f"provavelmente corrompido. Verifique se o arquivo abre no AutoCAD."
-                )
+                    f"provavelmente corrompido. Verifique se o arquivo abre no AutoCAD.",
+                    "dwg-pequeno-demais",
+                    detalhe="%s: %d bytes" % (upload_file.filename, n_written),
+                    quem=jwt_user.get("email") or user_email)
             if head[:2] != b"AC":
                 try: os.remove(file_path)
                 except OSError: pass
-                raise HTTPException(
+                _recusa_no_upload(
                     400,
                     f"DWG '{upload_file.filename}' não tem assinatura válida "
                     f"(esperado iniciar com 'AC10xx'). Arquivo corrompido — "
-                    f"verifique no AutoCAD ou exporte como PDF e suba o PDF."
-                )
+                    f"verifique no AutoCAD ou exporte como PDF e suba o PDF.",
+                    "dwg-sem-assinatura",
+                    detalhe="%s: começa com %r" % (upload_file.filename, head[:4]),
+                    quem=jwt_user.get("email") or user_email)
             # AEC/MEP: avisar AGORA, não depois de 5 min de processamento.
             # Medido em 01/08/2026: 13 das 29 falhas de DWG são objetos AEC
             # (AutoCAD Architecture/MEP), que nenhum conversor livre abre. A
