@@ -55,11 +55,24 @@ def test_o_arquivo_do_fabio_passa():
         "nas três etapas")
 
 
-def test_CONTROLE_o_teto_ANTIGO_reprovaria_o_arquivo_do_fabio():
-    """Sem isto o teste acima poderia estar medindo nada."""
-    assert 44.5 * MB > 40 * MB, (
-        "o controle está errado: o teto antigo tem que REPROVAR o arquivo do "
-        "Fábio, senão o teste de cima não mede a mudança")
+def test_NOTA_o_teto_antigo_era_40MB_e_o_arquivo_tinha_44():
+    """📌 NOTA DE CALIBRAÇÃO — não é controle positivo.
+
+    🩸 03/09, 2ª revisão: isto se chamava `test_CONTROLE_...` e a docstring
+    dizia "sem isto o teste acima poderia estar medindo nada". Era aritmética
+    pura (`44.5 * MB > 40 * MB`): não exercita nenhuma função do produto, e
+    passaria com o código inteiro quebrado. Controle que não exercita nada
+    **infla a contagem de guardas** e dá a sensação de cobertura.
+
+    🔑 O que ela é de verdade: o registro dos dois números do caso, pra que a
+    próxima pessoa saiba de onde veio o teto — e reprove se alguém "arredondar"
+    a história. Renomeada pra dizer isso.
+    """
+    TETO_ANTIGO_MB, ARQUIVO_DO_FABIO_MB = 40, 44.5
+    assert ARQUIVO_DO_FABIO_MB > TETO_ANTIGO_MB, (
+        "os números do caso mudaram: o arquivo do Fábio tinha 44,5 MB e o teto "
+        "de então era 40 MB — se isso não é mais verdade, a história escrita "
+        "nesta docstring precisa ser refeita")
 
 
 def test_o_teto_novo_cabe_no_orcamento_de_memoria():
@@ -85,8 +98,15 @@ def test_CONTROLE_um_teto_grande_demais_REPROVA_neste_criterio():
 def test_nenhum_caso_medido_desmente_o_fator_pessimista():
     """Se um arquivo real medir acima do fator pessimista, o teto está errado.
 
-    🪤 Este é o teste que avisa quando a próxima medição derrubar a conta —
-    em vez de a gente descobrir por um cliente recusado, como hoje.
+    🪤 03/09, 2ª revisão: a docstring prometia "avisa quando a PRÓXIMA medição
+    derrubar a conta", e isso não é automático — este teste só enxerga o que
+    estiver escrito em `_MEDIDOS`, que é uma lista à mão. Ele não vai buscar
+    medição nova em lugar nenhum.
+
+    🔑 A promessa honesta é: **mediu um arquivo grande? acrescente aqui.** É a
+    lista que faz o teste valer, e a única coisa que a impede de envelhecer é
+    esta frase. Se um dia houver telemetria do fator real por conversão, aí sim
+    dá pra automatizar — hoje não há.
     """
     piores = [(nome, f) for nome, _mb, f in _MEDIDOS if f > _FATOR_PESSIMISTA]
     assert not piores, (

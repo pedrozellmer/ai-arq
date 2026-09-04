@@ -52,10 +52,25 @@ def test_o_valor_do_fabio_e_recusado():
     assert not _passa(880000)
 
 
-def test_CONTROLE_o_teto_ANTIGO_deixava_passar():
-    """Sem isto o teste acima não prova que algo mudou."""
-    assert not (880000 < 0 or 880000 > 1_000_000), (
-        "o controle está errado: o teto antigo TEM que aceitar 880.000")
+def test_NOTA_o_teto_antigo_de_1km2_aceitava_880_mil():
+    """📌 NOTA DE CALIBRAÇÃO — não é controle positivo.
+
+    🩸 03/09, 2ª revisão: isto se chamava `test_CONTROLE_...` e prometia
+    "prova que algo mudou". Era aritmética pura sobre dois literais — passaria
+    com o produto inteiro quebrado. Controle que não exercita nada infla a
+    contagem de guardas.
+
+    🔑 O controle DE VERDADE deste arquivo é `test_o_valor_do_fabio_e_recusado`,
+    que chama `_passa()` sobre a constante REAL do main. Esta aqui só registra
+    por que o teto antigo não servia: 880.000 < 1.000.000, então passava.
+    """
+    TETO_ANTIGO, VALOR_DO_FABIO = 1_000_000, 880_000
+    assert VALOR_DO_FABIO < TETO_ANTIGO, (
+        "os números do caso mudaram: o teto de então era 1 km² e o Fábio "
+        "digitou 880.000 m² — por isso passou")
+    assert not _passa(VALOR_DO_FABIO), (
+        "e a banda de HOJE tem que recusar o mesmo valor — este é o elo com o "
+        "código real")
 
 
 def test_CONTROLE_toda_area_real_ja_informada_continua_passando():

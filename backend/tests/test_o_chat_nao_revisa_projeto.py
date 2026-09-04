@@ -36,6 +36,29 @@ def _prompt():
     return _AGENT[i:j]
 
 
+def _falta_a_regra_de_nao_revisar(prompt):
+    """O que falta neste prompt pra ele proibir revisão de projeto.
+
+    🩸 03/09, 2ª revisão: o "controle positivo" deste arquivo afirmava que uma
+    string escrita DUAS LINHAS ACIMA não continha a frase nova. Isso é uma
+    tautologia — não toca no prompt real, não exercita regra nenhuma, e a
+    docstring dele prometia "prova que estes testes medem a mudança".
+
+    🔑 Controle de verdade passa o artefato ANTIGO pela MESMA função que julga
+    o atual. É o que esta função existe pra permitir: um só julgamento, dois
+    insumos.
+    """
+    faltando = []
+    if "NÃO REVISA PROJETO" not in prompt:
+        faltando.append("a proibição de dar veredito sobre o projeto")
+    for termo in ("subdimensionado", "norma", "dimensionamento"):
+        if termo not in prompt:
+            faltando.append("o exemplo concreto %r" % termo)
+    if "em vez de recusar seco" not in prompt:
+        faltando.append("o que ENTREGAR no lugar do veredito")
+    return faltando
+
+
 def test_o_prompt_proibe_dar_veredito_sobre_o_projeto():
     """🩸 A metade da regra dura nº5 que faltava."""
     p = _prompt()
@@ -77,9 +100,24 @@ def test_o_prompt_registra_o_caso_que_originou():
         "ler acha que é preciosismo e tira")
 
 
-def test_CONTROLE_o_prompt_ANTIGO_nao_passaria():
-    """Prova que estes testes medem a mudança, e não um sempre-verde."""
+def test_o_prompt_ATUAL_nao_deixa_nada_faltando():
+    """O julgamento real, pela mesma função que o controle usa."""
+    faltando = _falta_a_regra_de_nao_revisar(_prompt())
+    assert not faltando, "falta no prompt: " + "; ".join(faltando)
+
+
+def test_CONTROLE_o_prompt_ANTIGO_REPROVA_na_mesma_funcao():
+    """🩸 O controle que era tautologia.
+
+    Ele escrevia uma string e afirmava que ela não continha a frase nova —
+    sem tocar em `_prompt()` nem em `_AGENT`. Agora o prompt antigo passa pela
+    MESMA função que julga o atual, e tem que sair com pendências.
+    """
     antigo = ("REGRAS:\n- O AI.arq NÃO precifica. Se pedirem preço, explique "
               "que quem precifica é o orçamentista.\n")
-    assert "NÃO REVISA PROJETO" not in antigo, (
-        "o controle está errado: o prompt antigo TEM que falhar nesta regra")
+    faltando = _falta_a_regra_de_nao_revisar(antigo)
+    assert faltando, (
+        "a função de julgamento aprova o prompt ANTIGO — ela não está julgando "
+        "nada, e o teste de cima é verde falso")
+    assert any("veredito" in f for f in faltando), (
+        "o julgamento não percebe que falta a proibição principal")
