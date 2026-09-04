@@ -337,7 +337,16 @@ def _guarda_dxf_pro_preview(dxf_path, work_dir, job_id, descartadas=None):
 
 
 def _avisos_com(job_id, novo_aviso):
-    """Os avisos que o projeto JÁ tem, mais este. Nunca troca o array inteiro.
+    """Os avisos que o projeto JÁ tem, mais este(s). Nunca troca o array inteiro.
+
+    Aceita um aviso ou uma LISTA de avisos.
+
+    🩸 04/09/2026 — a versão de ontem só aceitava UM aviso, e por isso os dois
+    pontos que gravam a lista inteira do motor (`project_data.warnings`, no fim
+    do job e no ramo de erro) ficaram de fora do conserto: eles seguem
+    escrevendo o array de memória por cima do que estiver no banco. Isso apaga,
+    entre outras coisas, o aviso de prancha perdida que a retomada acabou de
+    gravar. Aceitar lista é o que permite os dois usarem o mesmo caminho.
 
     🩸 03/09/2026, achado pela revisão adversarial. Dois pontos gravavam
     `{"warnings": [um_aviso_só]}` quando o COMPLEMENTO (add-file) falhava e a
@@ -354,19 +363,24 @@ def _avisos_com(job_id, novo_aviso):
     complemento (que é o que o cliente está esperando ler AGORA) é pior.
     Devolve a lista pronta pra gravar.
     """
+    _novos = ([str(a) for a in novo_aviso if str(a).strip()]
+              if isinstance(novo_aviso, (list, tuple))
+              else [str(novo_aviso)])
     try:
         _st, _r = _supa_rest_service(
             "GET", "projects",
             params={"job_id": f"eq.{job_id}", "select": "warnings"})
         if _st != 200 or not _r:
-            return [novo_aviso]
+            return _novos
         _atuais = [str(a) for a in (_r[0].get("warnings") or []) if str(a).strip()]
     except Exception as _e:
         print(f"[avisos] não consegui ler os atuais de {job_id} ({_e}) — só o novo")
-        return [novo_aviso]
-    if novo_aviso in _atuais:
-        return _atuais
-    return _atuais + [novo_aviso]
+        return _novos
+    _saida = list(_atuais)
+    for _a in _novos:
+        if _a not in _saida:
+            _saida.append(_a)
+    return _saida
 
 
 # 🩸 03/09/2026 — A BANDA DE ÁREA EXISTIA EM UM LUGAR E O TETO VELHO EM DOIS.
@@ -2237,6 +2251,46 @@ def _supabase_storage_download_prancha(job_id: str, filename: str,
 _supabase_storage_download_pdf = _supabase_storage_download_prancha
 
 
+def _alerta_pranchas_perdidas(job_id, perdidos, total, onde):
+    """Arquivo que não voltou do Storage NUNCA some calado. Devolve o aviso.
+
+    🩸 04/09/2026, varredura adversarial. Ontem a função acima passou a
+    DESCARTAR download truncado (`Content-Length` não bate) — conserto certo,
+    metade feito. Os cinco laços que baixam do Storage tratam o `None` com um
+    `continue` e só reclamam quando NÃO VEIO NADA (`if not file_paths`).
+    Perder **1 de 9** seguia direto: o job rodava com menos pranchas e o
+    cliente recebia `done` numa leitura incompleta.
+
+    🔑 É o caso de **18/08** — um cliente perdeu 8 pranchas e recebeu `done` —
+    voltando pela porta que a gente mesmo abriu. Detectar sem consequência não
+    é conserto; é o defeito com um log a mais.
+
+    🪤 Os dois piores dos cinco: `_retomar_job_do_storage`, que é a retomada
+    automática depois de queda (justo quando o job já está fragilizado), e
+    `add_file_and_reprocess`, que é o caminho em que o cliente manda o CAD que
+    A GENTE PEDIU — perder arquivo ali é o pior lugar possível.
+
+    🪤 Devolve a frase em vez de gravá-la: cada chamador pendura onde faz
+    sentido (aviso do projeto, resposta da rota), e dois deles nem têm projeto
+    ainda quando isto roda.
+    """
+    if not perdidos:
+        return None
+    _nomes = ", ".join(str(p) for p in perdidos)
+    try:
+        _log_error("storage:pranchas-perdidas",
+                   "%s: %d de %d não voltaram do Storage: %s — a leitura "
+                   "seguiria INCOMPLETA sem ninguém saber"
+                   % (onde, len(perdidos), total, _nomes[:300]),
+                   job_id, severity="critical")
+    except Exception:
+        pass
+    return ("⚠ %d de %d arquivo(s) não puderam ser recuperados do nosso "
+            "armazenamento nesta releitura (%s). O que saiu abaixo veio de uma "
+            "leitura INCOMPLETA — reprocessar costuma resolver."
+            % (len(perdidos), total, _nomes[:200]))
+
+
 # ─── CHECKPOINT por prancha (19/07) ───────────────────────────────────
 # A retomada pós-restart refazia o job INTEIRO do zero — num projeto de 22
 # pranchas isso paga a IA de novo e reabre a janela pra outra queda. Agora o
@@ -3832,9 +3886,11 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
         work_dir = os.path.join(WORK_DIR, job_id)
         os.makedirs(work_dir, exist_ok=True)
         file_paths = []
+        _perdidas = []
         for n in names:
             data = _supabase_storage_download_prancha(job_id, os.path.basename(n))
             if not data:
+                _perdidas.append(os.path.basename(n))
                 continue
             lp = os.path.join(work_dir, os.path.basename(n))
             with open(lp, "wb") as f:
@@ -3842,6 +3898,18 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
             file_paths.append(lp)
         if not file_paths:
             return False
+        # 🩸 04/09 — perder ALGUMAS era silêncio: só o caso ZERO reclamava.
+        # Aqui é a retomada automática depois de queda, então o job já está
+        # fragilizado; seguir com menos prancha e carimbar `done` é o caso de
+        # 18/08 (cliente perdeu 8 pranchas e recebeu `done`).
+        _av_perda = _alerta_pranchas_perdidas(
+            job_id, _perdidas, len(names), "retomada automática")
+        if _av_perda:
+            try:
+                _supabase_update("projects", "job_id", job_id,
+                                 {"warnings": _avisos_com(job_id, _av_perda)})
+            except Exception as _ape:
+                print(f"[recovery-retomar] aviso de perda {job_id}: {_ape}")
         # Idempotência: limpa itens parciais antes de reprocessar (DELETE REST)
         try:
             del_url = f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}"
@@ -11810,8 +11878,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # campo `warnings` da tabela projects — exibido em Meus Projetos
         # como alerta "precisa de complemento".
         if getattr(project_data, 'warnings', None):
+            # 🩸 04/09 — escrevia o array de MEMORIA por cima do banco,
+            # apagando o que outro caminho tivesse gravado antes (o aviso de
+            # prancha perdida da retomada, por exemplo). Merge, nao troca.
             _supabase_update("projects", "job_id", job_id, {
-                "warnings": project_data.warnings,
+                "warnings": _avisos_com(job_id, project_data.warnings),
             })
 
         # Persistir no Supabase Storage pra sobreviver redeploy do Render
@@ -12248,7 +12319,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # Atualizar erro no Supabase
         _supabase_update("projects", "job_id", job_id, {
             "status": "error",
-            **({"warnings": _avisos_ate_aqui} if _avisos_ate_aqui else {}),
+            # 🩸 04/09 — mesmo clobber do fim do job, no ramo de ERRO.
+            **({"warnings": _avisos_com(job_id, _avisos_ate_aqui)}
+               if _avisos_ate_aqui else {}),
             # 🚨 ERA [:500] E CORTAVA A INSTRUCAO NO MEIO. As mensagens de erro
             # amigaveis tem ~800 caracteres e terminam com os PASSOS pra
             # resolver ("1. Abra o arquivo no seu CAD... 3. Suba o arquivo
@@ -22416,12 +22489,14 @@ async def reprocess_project(job_id: str, request: Request):
     os.makedirs(new_work_dir, exist_ok=True)
 
     new_file_paths = []
+    _perdidas = []
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     for fname in original_filenames:
         local_path = os.path.join(new_work_dir, fname)
         data = await run_in_threadpool(
             _supabase_storage_download_prancha, job_id, fname)
         if not data:
+            _perdidas.append(fname)
             continue
         with open(local_path, "wb") as f:
             f.write(data)
@@ -22432,6 +22507,10 @@ async def reprocess_project(job_id: str, request: Request):
     if not new_file_paths:
         shutil.rmtree(new_work_dir, ignore_errors=True)
         raise HTTPException(500, "Falha ao baixar arquivos do Storage")
+    # 🩸 04/09 — o guarda acima só pega o caso ZERO. Perder 1 de 9 seguia
+    # calado e o cliente recebia `done` numa releitura incompleta.
+    _av_perda = _alerta_pranchas_perdidas(
+        job_id, _perdidas, len(original_filenames), "reprocessamento")
 
     # 4) Criar novo projeto + status
     types_summary = ", ".join(f"{v} {k.upper()}" for k, v in file_types.items() if v > 0)
@@ -22474,6 +22553,10 @@ async def reprocess_project(job_id: str, request: Request):
         "parent_job_id": job_id,  # rastreabilidade: novo projeto é filho do original
         "user_total_area": _uta_orig if _uta_orig > 0 else None,  # propaga área informada
         "user_pe_direito": _upd_orig if _upd_orig > 0 else None,  # idem (faltou até 15/08)
+        # 🩸 04/09 — o aviso nasce JUNTO com o projeto novo. Gravar depois
+        # correria contra o `process_job`, que já está na fila e escreve
+        # `warnings` também.
+        **({"warnings": [_av_perda]} if _av_perda else {}),
     })
 
     # Incrementar contador do ORIGINAL via RPC atômica
@@ -22573,10 +22656,12 @@ def admin_eval_reprocess(job_id: str, request: Request,
     eval_work_dir = os.path.join(WORK_DIR, eval_job_id)
     os.makedirs(eval_work_dir, exist_ok=True)
     eval_file_paths = []
+    _perdidas = []
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     for fname in original_filenames:
         data = _supabase_storage_download_prancha(job_id, fname)
         if not data:
+            _perdidas.append(fname)
             continue
         lp = os.path.join(eval_work_dir, fname)
         with open(lp, "wb") as f:
@@ -22587,6 +22672,8 @@ def admin_eval_reprocess(job_id: str, request: Request,
     if not eval_file_paths:
         shutil.rmtree(eval_work_dir, ignore_errors=True)
         raise HTTPException(500, "Falha ao baixar arquivos do Storage")
+    _alerta_pranchas_perdidas(job_id, _perdidas, len(original_filenames),
+                              "filhote (eval-reprocess)")
 
     # 4) Row de avaliação ISOLADA
     typology = orig.get("typology") or "office"
@@ -24392,11 +24479,13 @@ async def admin_eval_combine(job_id: str, request: Request):
                     seen.setdefault(os.path.basename(n), src)
 
     eval_file_paths = []
+    _perdidas = []
     file_types = {'pdf': 0, 'dwg': 0, 'dxf': 0}
     for bn, src in seen.items():
         data = await run_in_threadpool(
             _supabase_storage_download_prancha, src, bn)
         if not data:
+            _perdidas.append(bn)
             continue
         lp = os.path.join(eval_work_dir, bn)
         with open(lp, "wb") as f:
@@ -24407,6 +24496,8 @@ async def admin_eval_combine(job_id: str, request: Request):
     if not eval_file_paths:
         shutil.rmtree(eval_work_dir, ignore_errors=True)
         raise HTTPException(400, "Nenhum arquivo encontrado no Storage desses projetos.")
+    _alerta_pranchas_perdidas(job_id, _perdidas, len(seen),
+                              "filhote combinado (eval-combine)")
 
     # 3) Row de avaliação ISOLADA (mesma blindagem do eval-reprocess)
     typology = base.get("typology") or "office"
@@ -24558,17 +24649,31 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     names = [unquote(o.get("name", "")) for o in objs if o.get("name")]
     names = [n for n in names if n.lower().endswith((".pdf", ".dwg", ".dxf"))]
     file_paths = []
+    _perdidas = []
     for n in names:
         bn = os.path.basename(n)
         lp = os.path.join(work_dir, _safe_local_filename(bn))
         d = await run_in_threadpool(_supabase_storage_download_prancha, job_id, bn)
         if not d:
+            _perdidas.append(bn)
             continue
         with open(lp, "wb") as f:
             f.write(d)
         file_paths.append(lp)
     if not file_paths:
         raise HTTPException(500, "Falha ao preparar os arquivos pra reprocessar.")
+    # 🩸 04/09 — este é o caminho em que o cliente manda o CAD que A GENTE
+    # PEDIU. Perder um arquivo aqui em silêncio é o pior lugar possível: ele
+    # fez exatamente o que a gente mandou e recebe uma leitura incompleta sem
+    # saber. O guarda acima só pegava o caso ZERO.
+    _av_perda = _alerta_pranchas_perdidas(
+        job_id, _perdidas, len(names), "complemento (add-file)")
+    if _av_perda:
+        try:
+            _supabase_update("projects", "job_id", job_id,
+                             {"warnings": _avisos_com(job_id, _av_perda)})
+        except Exception as _ape:
+            print(f"[add-file] aviso de perda {job_id}: {_ape}")
 
     # Se há CAD (dwg/dxf), processa SÓ o CAD e descarta os PDFs. O PDF era o
     # stand-in que deu "estimado"; misturar os dois DUPLICA a quantidade (PDF

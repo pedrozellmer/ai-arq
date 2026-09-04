@@ -45,12 +45,45 @@ def test_o_aviso_novo_ENTRA_sem_apagar_os_de_antes(monkeypatch):
     assert len(saida) == 4
 
 
+def test_uma_LISTA_de_avisos_tambem_entra_sem_apagar(monkeypatch):
+    """🩸 04/09 — o helper só aceitava UM aviso, e por isso os dois pontos que
+    gravam a lista inteira do motor (`project_data.warnings`, no fim do job e
+    no ramo de erro) ficaram de fora do conserto de ontem: eles seguiam
+    escrevendo o array de memória por cima do banco.
+
+    Na prática isso apagava o aviso de prancha perdida que a retomada acabava
+    de gravar — o conserto de um caminho destruído pelo outro.
+    """
+    _com_avisos(monkeypatch, ["⚠ Escala conferida pelo desenho"])
+    saida = main._avisos_com("job1", ["⚠ do motor A", "⚠ do motor B"])
+    assert saida == ["⚠ Escala conferida pelo desenho",
+                     "⚠ do motor A", "⚠ do motor B"], saida
+
+
+def test_a_lista_tambem_nao_duplica_nem_deixa_entrar_vazio(monkeypatch):
+    _com_avisos(monkeypatch, ["já estou aqui"])
+    saida = main._avisos_com("job1", ["já estou aqui", "  ", "", "novo"])
+    assert saida == ["já estou aqui", "novo"], saida
+
+
 def test_CONTROLE_o_comportamento_ANTIGO_apagaria(monkeypatch):
-    """Sem isto o teste acima não prova que algo mudou."""
-    antes = ["a", "b", "c"]
-    antigo = ["o novo"]          # era literalmente `{"warnings": [_warn]}`
-    assert antigo != antes + ["o novo"], (
-        "o controle está errado: trocar o array TEM que perder os anteriores")
+    """🧪 Trocar o array TEM que perder os anteriores — provado no helper.
+
+    🪤 04/09: este controle comparava duas listas escritas nele mesmo
+    (`["o novo"] != ["a","b","c","o novo"]`), sem tocar em `_avisos_com`.
+    Aritmética, não controle. Agora o comportamento ANTIGO é aplicado ao MESMO
+    insumo do teste de cima, pela mesma via.
+    """
+    antes = ["⚠ Escala conferida pelo desenho", "⚠ ESTRUTURA: falta a altura"]
+    _com_avisos(monkeypatch, antes)
+    novo = "O arquivo anexado não pôde ser aberto"
+
+    def _antigo(_job, aviso):
+        return [aviso]           # era literalmente `{"warnings": [_warn]}`
+
+    assert _antigo("job1", novo) == [novo]
+    assert main._avisos_com("job1", novo) == antes + [novo], (
+        "o helper parou de preservar o histórico — voltou a ser o antigo")
 
 
 def test_nao_duplica_quando_o_mesmo_aviso_ja_esta_la(monkeypatch):
@@ -78,56 +111,40 @@ def test_projeto_sem_aviso_nenhum_fica_so_com_o_novo(monkeypatch):
 
 
 def test_nenhum_caminho_troca_o_array_inteiro():
-    """Guarda de forma: dicionário com `"warnings": [lista literal]`.
+    """O julgamento mora em `test_prancha_perdida_no_storage_nao_some_calada`.
 
-    🪤 A 1ª versão procurava o texto `"warnings": [` linha a linha e acusou a
-    DOCSTRING do próprio conserto, que cita a forma proibida pra explicar por
-    que ela saiu. Foi a oitava vez em 03/09 que um guarda meu leu documentação
-    como código. AST não confunde prosa com dicionário — e é a mesma solução
-    que resolveu as outras.
+    🩸 04/09, varredura adversarial: a versao daqui tinha DOIS furos.
+    (1) So enxergava lista LITERAL, entao bastava passar por uma variavel
+        (`{"warnings": _lst_novo}`) pra escapar - provado por mutacao.
+    (2) Nao distinguia INSERT de UPDATE, e reprovou um `_supabase_insert`
+        LEGITIMO: linha nova nao tem historico pra apagar.
+
+    O julgamento novo cobre as duas coisas e roda la, com controle positivo
+    sobre cinco formas. Aqui fica so o elo, pra quem chegar por este arquivo
+    saber onde procurar.
+    """
+    from test_prancha_perdida_no_storage_nao_some_calada import (
+        _updates_que_trocam_o_array)
+    ruins = _updates_que_trocam_o_array(_FONTE)
+    assert not ruins, (
+        "UPDATE gravando `warnings` sem ler o que ja existe: linha %s"
+        % ", ".join(str(n) for n in ruins))
+
+
+def test_os_pontos_que_acrescentam_usam_o_helper():
+    """🩸 04/09: era `_FONTE.count("_avisos_com(job_id,") >= 2` - e a
+    PROPRIA DEFINICAO da funcao casa essa string. Com 3 ocorrencias no fonte
+    (1 def + 2 usos), um dos usos podia sumir que a conta ainda fechava.
+    Provado por mutacao: devolvi o defeito num dos dois e o arquivo inteiro
+    ficou verde.
+
+    🔑 Agora conta CHAMADAS por AST, que nao inclui a definicao.
     """
     import ast
-
-    ruins = []
-    for no in ast.walk(ast.parse(_FONTE)):
-        if not isinstance(no, ast.Dict):
-            continue
-        for chave, valor in zip(no.keys, no.values):
-            if (isinstance(chave, ast.Constant) and chave.value == "warnings"
-                    and isinstance(valor, ast.List)):
-                ruins.append("linha %d" % getattr(no, "lineno", 0))
-    assert not ruins, (
-        "algum ponto voltou a gravar um array NOVO de warnings, apagando os "
-        "anteriores: " + ", ".join(ruins))
-
-
-def test_CONTROLE_o_guarda_de_forma_REPROVA_o_codigo_antigo():
-    """Sem isto, o teste acima passa por não achar nada."""
-    import ast
-
-    antigo = 'x = {"status": "done", "warnings": [_warn_txt]}'
-    achou = any(
-        isinstance(c, ast.Constant) and c.value == "warnings"
-        and isinstance(v, ast.List)
-        for no in ast.walk(ast.parse(antigo)) if isinstance(no, ast.Dict)
-        for c, v in zip(no.keys, no.values))
-    assert achou, "o guarda de forma não reprova o código que causou o defeito"
-
-
-def test_CONTROLE_o_guarda_de_forma_ACEITA_a_chamada_do_helper():
-    """E não pode acusar o conserto."""
-    import ast
-
-    novo = 'x = {"status": "done", "warnings": _avisos_com(job_id, _warn_txt)}'
-    achou = any(
-        isinstance(c, ast.Constant) and c.value == "warnings"
-        and isinstance(v, ast.List)
-        for no in ast.walk(ast.parse(novo)) if isinstance(no, ast.Dict)
-        for c, v in zip(no.keys, no.values))
-    assert not achou, "o guarda de forma acusaria o próprio conserto"
-
-
-def test_os_dois_pontos_do_complemento_usam_o_helper():
-    assert _FONTE.count("_avisos_com(job_id,") >= 2, (
-        "um dos dois caminhos do complemento parou de acrescentar e voltou a "
-        "trocar o array")
+    chamadas = [n.lineno for n in ast.walk(ast.parse(_FONTE))
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                and n.func.id == "_avisos_com"]
+    assert len(chamadas) >= 4, (
+        "esperava pelo menos 4 chamadas a `_avisos_com` (os 2 do complemento, "
+        "o fim do job e o ramo de erro) e achei %d, nas linhas %s"
+        % (len(chamadas), chamadas))

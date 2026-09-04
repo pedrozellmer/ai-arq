@@ -42,9 +42,19 @@ _CORPO = sem_comentarios(fonte("main.py"))
 
 # ── O conserto ─────────────────────────────────────────────────────────────
 def test_o_erro_SALVA_os_avisos_acumulados():
-    """🩸 Os 94 projetos. Se cair, o motor volta a esquecer o que descobriu."""
-    assert '"warnings": _avisos_ate_aqui' in _CORPO, (
-        "o pacote de erro voltou a gravar só status e mensagem")
+    """🩸 Os 94 projetos. Se cair, o motor volta a esquecer o que descobriu.
+
+    🪤 04/09: este assert era `'"warnings": _avisos_ate_aqui' in _CORPO` e
+    reprovou um conserto LEGÍTIMO — o pacote passou a gravar
+    `_avisos_com(job_id, _avisos_ate_aqui)`, que faz a mesma coisa E ainda
+    preserva o que já estava no banco. Guarda ancorado na REDAÇÃO barra a
+    melhoria; o que ele tem que cobrar é que os avisos acumulados cheguem ao
+    pacote, em qualquer forma.
+    """
+    import re
+    assert re.search(r'"warnings":[^\n]*_avisos_ate_aqui', _CORPO), (
+        "o pacote de erro voltou a gravar só status e mensagem — os avisos "
+        "acumulados até o momento da falha não chegam mais")
     assert "_avisos_ate_aqui" in _CORPO
 
 
