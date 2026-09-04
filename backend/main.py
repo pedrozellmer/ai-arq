@@ -11204,44 +11204,55 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[parede-minimo] nao-fatal: {_epm}")
 
         # ── RECONTA O AVISO DO PLANO B COM A VERDADE (caso Tiago, 01/09) ─────
-        # Tudo que rebaixa selo já rodou: selos_sem_geometria e escala-divergente.
-        # Só AGORA o número de medidos é o que o cliente vai ver na planilha.
-        # 🪤 Reescreve por ÍNDICE. Procurar a frase antiga por texto seria a
+        # 🚨 04/09/2026 — ISTO ERA UM BLOCO SOLTO e o comentário dele dizia
+        # "tudo que rebaixa selo já rodou". **Deixou de ser verdade no mesmo dia**:
+        # eu acrescentei o rebaixamento por GRANDEZA do SINAPI, que roda ~19 s
+        # DEPOIS daqui (ele espera as consultas de rede da tabela SINAPI).
+        # Resultado, no projeto b5693ca6 do cliente jssoliveira88: o e-mail dele
+        # afirmou "✓ 5 medido(s) direto do CAD" no cabeçalho e, três linhas
+        # abaixo, "As medições saíram (6 item(ns) medido(s))". Dois números pro
+        # mesmo fato, na mesma mensagem.
+        # 🔑 Virou função e é chamada DUAS vezes: aqui (pros jobs que nem
+        # chegam no SINAPI) e de novo depois do último rebaixamento. É idempotente
+        # — reescreve por ÍNDICE com a contagem do momento.
+        # 🩸 Reescreve por ÍNDICE. Procurar a frase antiga por texto seria a
         # família do guarda que falha calado: muda uma palavra e ele para de
         # achar, sem quebrar nada e sem avisar ninguém.
-        if _aviso_lw_idx is not None:
-            try:
-                _av = project_data.warnings or []
-                if 0 <= _aviso_lw_idx < len(_av):
-                    _med_fim = sum(
-                        1 for _it in (all_items or [])
-                        if getattr(_it, "confidence", None) == "confirmado")
-                    if _med_fim == 0:
-                        # 🪤 A MESMA FRASE NASCE EM DOIS LUGARES: aqui e na 1ª
-                        # escrita (`if _n_medidos == 0`, mais acima). Consertar
-                        # só um deixa o furo aberto — se o bloco de lá levantar,
-                        # o `except` engole calado e o texto velho sobrevive.
-                        # Por isso as duas chamam `_origem_das_quantidades`.
-                        _n_geo2, _frase2 = _origem_das_quantidades(all_items)
-                        _fim2 = ("Ele abriu os desenhos, mas **nenhum item saiu com o "
-                                 "selo '✓ MEDIDO do CAD'**. "
-                                 + (_frase2 + " " if _frase2 else "")
-                                 + "Trate a planilha como um mapa do que existe, "
-                                 "não como quantitativo fechado.")
-                    else:
-                        _fim2 = ("As medições saíram (%d item(ns) medido(s) do CAD), mas "
-                                 "vale conferir 2-3 medidas-chave contra o projeto antes "
-                                 "de fechar orçamento." % _med_fim)
-                    _novo = _aviso_lw_cab + _fim2
-                    if _av[_aviso_lw_idx] != _novo:
-                        _log_error("motor:aviso-planob-recontado",
-                                   "o aviso afirmava outra contagem antes dos guardas; "
-                                   "medidos finais=%d" % _med_fim, job_id,
-                                   severity="warning")
-                    _av[_aviso_lw_idx] = _novo
-                    project_data.warnings = _av
-            except Exception as _ealw:
-                print(f"[aviso-planob] recontagem nao-fatal: {_ealw}")
+        def _recontar_aviso_planob():
+            if _aviso_lw_idx is not None:
+                try:
+                    _av = project_data.warnings or []
+                    if 0 <= _aviso_lw_idx < len(_av):
+                        _med_fim = sum(
+                            1 for _it in (all_items or [])
+                            if getattr(_it, "confidence", None) == "confirmado")
+                        if _med_fim == 0:
+                            # 🪤 A MESMA FRASE NASCE EM DOIS LUGARES: aqui e na 1ª
+                            # escrita (`if _n_medidos == 0`, mais acima). Consertar
+                            # só um deixa o furo aberto — se o bloco de lá levantar,
+                            # o `except` engole calado e o texto velho sobrevive.
+                            # Por isso as duas chamam `_origem_das_quantidades`.
+                            _n_geo2, _frase2 = _origem_das_quantidades(all_items)
+                            _fim2 = ("Ele abriu os desenhos, mas **nenhum item saiu com o "
+                                     "selo '✓ MEDIDO do CAD'**. "
+                                     + (_frase2 + " " if _frase2 else "")
+                                     + "Trate a planilha como um mapa do que existe, "
+                                     "não como quantitativo fechado.")
+                        else:
+                            _fim2 = ("As medições saíram (%d item(ns) medido(s) do CAD), mas "
+                                     "vale conferir 2-3 medidas-chave contra o projeto antes "
+                                     "de fechar orçamento." % _med_fim)
+                        _novo = _aviso_lw_cab + _fim2
+                        if _av[_aviso_lw_idx] != _novo:
+                            _log_error("motor:aviso-planob-recontado",
+                                       "o aviso afirmava outra contagem antes dos guardas; "
+                                       "medidos finais=%d" % _med_fim, job_id,
+                                       severity="warning")
+                        _av[_aviso_lw_idx] = _novo
+                        project_data.warnings = _av
+                except Exception as _ealw:
+                    print(f"[aviso-planob] recontagem nao-fatal: {_ealw}")
+        _recontar_aviso_planob()
 
         try:
             _n_med_esc = -1
@@ -11973,6 +11984,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _esm:
             print(f"[selo-sem-medida] job={job_id}: checagem falhou: {_esm}")
             _log_error("motor:selo-sem-medida", f"FALHOU: {_esm}", job_id)
+
+        # 🚨 AQUI é o fim da fila de quem rebaixa selo. A recontagem do aviso
+        # do plano B roda de novo agora, com o número que o cliente vai ler.
+        # 🩸 04/09 — medido no fonte: ANTES deste conserto havia **cinco**
+        # atribuições de `.confidence` depois da recontagem original (escala
+        # divergente, bloco sem identidade, parede, SINAPI, selo-sem-medida). Ou
+        # seja, o aviso está desatualizado desde 01/09, quando nasceu dizendo
+        # "tudo que rebaixa selo já rodou". Eu só acrescentei a sexta e o
+        # sintoma apareceu: o e-mail do job b5693ca6 afirmou "5 medidos" no
+        # cabeçalho e "6 medidos" três linhas abaixo.
+        try:
+            _recontar_aviso_planob()
+        except Exception as _erp:
+            print(f"[aviso-planob] recontagem final nao-fatal: {_erp}")
 
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         _carimbar_spec(all_items)

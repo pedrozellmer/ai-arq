@@ -32,7 +32,14 @@ import textwrap
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
-_INI = "        if _aviso_lw_idx is not None:"
+# 🪤 04/09/2026 — a âncora era `"        if _aviso_lw_idx is not None:"` (8
+# espaços). Quando o bloco virou função, essa linha passou a ter 12 espaços — e
+# a âncora de 8 CASOU COMO SUBSTRING dentro dela. O recorte saiu sem a linha
+# `def` e com a chamada no fim: `NameError` em 12 testes de uma vez, e nenhum
+# deles falando de âncora.
+# 🔑 Ancorar no `def` resolve e ainda melhora: o teste passa a exercitar a
+# função inteira, que é o que roda em produção.
+_INI = "        def _recontar_aviso_planob():"
 _FIM = "        try:\n            _n_med_esc = -1"
 
 _CAB = ("18 arquivo(s) precisaram do leitor alternativo (plano B): "
@@ -64,6 +71,13 @@ def _roda(itens, warnings, idx=0, cab=_CAB):
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     assert src.count(_INI) == 1, "a âncora de início do trecho mudou"
     assert src.count(_FIM) == 1, "a âncora de fim do trecho mudou"
+    # 🪤 CASAMENTO PARCIAL: âncora indentada casa DENTRO de uma linha mais
+    # indentada ainda, e o recorte sai mutilado sem ninguém perceber. Foi
+    # exatamente o que quebrou 12 testes em 04/09. Exigir que ela comece logo
+    # depois de uma quebra de linha fecha isso.
+    assert ("\n" + _INI) in src, (
+        "a âncora de início casou no meio de uma linha mais indentada — o "
+        "recorte sairia mutilado")
     i = src.index(_INI)
     trecho = textwrap.dedent(src[i:src.index(_FIM, i)])
     pd = _PD(warnings)
