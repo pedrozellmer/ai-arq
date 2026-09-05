@@ -689,7 +689,7 @@ cotas — nunca deixar em branco quando a planta permite medir.
 Itens padrão de obra (sempre incluir, marcando "estimado" — quantidade a confirmar pelo orçamentista):
 - Mobilização e desmobilização de obra (un: vb)
 - Projeto executivo complementar (un: vb)
-- Administração local de obra (un: mês — quantidade conforme prazo)
+- Administração local de obra (un: vb — NUNCA cotar em meses/dias: o prazo da obra não sai da planta, vem do cronograma)
 - Limpeza permanente e final de obra (un: vb)
 - Proteção de áreas sem intervenção (un: vb)
 

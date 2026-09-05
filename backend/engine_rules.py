@@ -2120,3 +2120,71 @@ def comprimento_de_parede_na_observacao(observacao):
         return float(_m.group(1).replace(",", "."))
     except (TypeError, ValueError):
         return None
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  ADMINISTRAÇÃO LOCAL DE OBRA — o motor chutava o PRAZO
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 04/09/2026. O prompt mandava emitir "Administração local de obra
+# (un: mês — quantidade conforme prazo)". A IA obedecia e INVENTAVA a duração
+# da obra. Medido em 156 projetos de cliente:
+#
+#     79 itens · unidade "mês" em 76 · quantidade de 0 a 18 · média 3,8
+#     29 dos 79 (37%) saíram ZERO — "Administração local de obra — 0 meses"
+#
+# Os outros quatro preliminares saem como verba (260 de 346) e têm 7,5% de
+# zero. Só este chuta tempo. E é o mais EDITADO do grupo na revisão: 5 edições
+# para 9 aprovações — o cliente conserta o nosso palpite.
+#
+# 🔑 Prazo de obra não sai de planta, sai de cronograma. É a regra dura nº5:
+# publicar "3 meses" é a gente virar orçamentista por um instante.
+#
+# 🪤 O PRÓPRIO PROJETO JÁ NÃO CONFIA NESTE NÚMERO. O cronograma se recusa a
+# consumi-lo, e o comentário lá (main.py, caso Eloídes 03/08) diz por quê:
+# "usar esse chute aqui seria o cronograma aprendendo com o palpite dele mesmo
+# e chamando de informação". Só o quantitativo ainda o publicava.
+#
+# 🚫 NÃO remove o item: medido, os Preliminares são APROVADOS (58 aprovações de
+# 9 pessoas contra 11 rejeições de 3) — tirá-los iria contra o que o cliente
+# faz com eles. O que sai é o número inventado, não a linha.
+_RE_ADMIN_LOCAL = _re.compile(
+    r"administra(?:ç|c)(?:ã|a)o\s+local", _re.I)
+
+# Unidades de TEMPO: é o que denuncia o chute de prazo. "vb" não é chute —
+# verba é justamente dizer "isto é um item, o valor é do orçamentista".
+_UNIDADES_DE_TEMPO = (
+    "mes", "mês", "meses", "dia", "dias", "semana", "semanas",
+    "hora", "horas", "h", "ano", "anos",
+)
+
+_FRASE_SEM_PRAZO = (
+    "⚠ A duração da obra NÃO foi medida — ela não sai da planta. Este item "
+    "entra como verba; o prazo vem do cronograma ou do orçamentista."
+)
+
+
+def administracao_local_com_prazo_chutado(descricao, unidade):
+    """O item é administração local de obra cotada em unidade de TEMPO?
+
+    Só isso: a pergunta é sobre a natureza do item, não sobre o valor. Um
+    item com quantidade 3 e outro com 0 são o mesmo defeito — nos dois a
+    unidade declara um prazo que ninguém mediu.
+    """
+    if not _RE_ADMIN_LOCAL.search(str(descricao or "")):
+        return False
+    return str(unidade or "").strip().lower() in _UNIDADES_DE_TEMPO
+
+
+def normalizar_administracao_local(descricao, unidade, observacao=""):
+    """Devolve (unidade, quantidade, observação) já corrigidos, ou None.
+
+    None = a regra não se aplica; quem chama não mexe em nada.
+    🪤 Quantidade 1 de propósito, nunca 0: zero era metade do defeito (37% dos
+    casos), e uma verba com quantidade 0 não é honestidade, é linha quebrada.
+    """
+    if not administracao_local_com_prazo_chutado(descricao, unidade):
+        return None
+    _obs = str(observacao or "")
+    if _FRASE_SEM_PRAZO in _obs:
+        return ("vb", 1.0, _obs)
+    return ("vb", 1.0, (_FRASE_SEM_PRAZO + " " + _obs).strip()[:1000])

@@ -1722,6 +1722,48 @@ def _contar_itens_no_banco(job_id: str):
         return None
 
 
+def _aplicar_admin_local(all_items) -> int:
+    """Tira o PRAZO CHUTADO de "Administração local de obra". Devolve quantos.
+
+    🩸 04/09/2026 — o prompt mandava "un: mês — quantidade conforme prazo", e a
+    IA inventava a duração da obra. Medido em 156 projetos: 79 itens, 76 em
+    "mês", quantidade de 0 a 18, e **29 deles (37%) saíram ZERO** — a planilha
+    entregava "Administração local de obra — 0 meses".
+
+    🔑 Prazo de obra não sai de planta, sai de cronograma (regra nº5). O
+    cronograma deste mesmo projeto já se RECUSA a consumir esse número — ver o
+    caso Eloídes (03/08): "usar esse chute aqui seria o cronograma aprendendo
+    com o palpite dele mesmo e chamando de informação". Só o quantitativo ainda
+    o publicava.
+
+    🚫 Não remove o item nem os outros Preliminares: medido nas revisões, eles
+    são APROVADOS (58 aprovações de 9 pessoas × 11 rejeições de 3). Sai o número
+    inventado, não a linha.
+
+    🪤 Determinístico de propósito. O prompt PEDE; só a regra GARANTE — este
+    motor não é determinístico, e guarda que depende da redação da IA guarda
+    metade das vezes.
+    """
+    try:
+        from engine_rules import normalizar_administracao_local as _norm_al
+    except Exception as _eimp:
+        print(f"[admin-local] regra indisponivel: {_eimp}")
+        return 0
+    _n = 0
+    for _it in (all_items or []):
+        try:
+            _r = _norm_al(getattr(_it, "description", ""),
+                          getattr(_it, "unit", ""),
+                          getattr(_it, "observations", ""))
+        except Exception:
+            continue
+        if not _r:
+            continue
+        _it.unit, _it.quantity, _it.observations = _r
+        _n += 1
+    return _n
+
+
 def _gritar_perda_total(job_id: str, n_montados: int, causa: str):
     """A gravação dos itens falhou INTEIRA — isso tem que sair do dyno.
 
@@ -11103,6 +11145,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[escala-divergente] nao-fatal: {_eed}")
             _log_error("motor:escala-divergente", f"FALHOU: {_eed}", job_id,
                        severity="warning")
+
+        # ── ADMINISTRAÇÃO LOCAL: o prazo não sai da planta (regra nº5) ──────
+        try:
+            _n_al = _aplicar_admin_local(all_items)
+            if _n_al:
+                _log_error("motor:admin-local-sem-prazo",
+                           f"{_n_al} item(ns) de administração local saíram com "
+                           f"unidade de TEMPO; normalizados pra verba. O prazo "
+                           f"vem do cronograma, não da planta.",
+                           job_id, severity="info")
+        except Exception as _eal:
+            print(f"[admin-local] nao-fatal: {_eal}")
 
         # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ───────────────
         # 🩸 04/09/2026, no 1º projeto da Caroline (Bolognesi): 17,18 m de
