@@ -10715,13 +10715,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # quem não perdeu nada — mesmo bug que o guard do DWG inválido conserta,
             # só que por outra porta. Restaura 'done' + aviso; nunca marca erro.
             if is_complement and _complement_base_has_items(job_id):
-                _anexados = ', '.join(os.path.basename(p) for p in (file_paths or [])) or 'o arquivo'
-                _warn_zero = (
-                    f"O arquivo que você anexou ({_anexados}) foi lido, mas não rendeu "
-                    f"nenhum item quantificável — pode ser prancha só de layout, sem "
-                    f"quadros/legendas, ou um PDF escaneado. Sua planilha anterior foi "
-                    f"mantida — nada foi perdido. Pra medir pelo CAD, anexe o DWG/DXF "
-                    f"da planta arquitetônica.")
+                # 05/09 (William, 19:24): o texto mora em `_aviso_complemento_sem_itens`
+                # — três situações, três verdades (nada entrou / não consegui ler /
+                # lido sem item). Aqui dizia "foi lido" com `file_paths` VAZIO.
+                _warn_zero = _aviso_complemento_sem_itens(
+                    file_paths or [], list(dxf_errors or []) + list(sheet_errors or []))
                 jobs.update_field(job_id, status="done", progress=100, error_message=None,
                                   current_step="Complemento sem itens — planilha anterior mantida")
                 try:
@@ -11815,11 +11813,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
             _apt = int(getattr(_apply_area_honesty, "ultimo_apertou_teto", 0) or 0)
             if _apt:
                 _teto_log = float(getattr(_apply_area_honesty, "ultimo_teto_m2", 0) or 0)
+                # 05/09: mesma regra do aviso de METRO — quem mandou CAD não ouve "envie o DXF".
+                try:
+                    _tem_cad_teto = bool(cad_paths)
+                except NameError:
+                    _tem_cad_teto = False
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
-                    "⚠ %d item(ns) de área vieram com metragem maior do que cabe na "
-                    "maior prancha medida (%.0f m²) — deixamos em branco em vez de "
-                    "publicar número que a gente não consegue sustentar. Preencha a "
-                    "metragem ou envie o DXF pra medirmos." % (_apt, _teto_log)]
+                    ("⚠ %d item(ns) de área vieram com metragem maior do que cabe na "
+                     "maior prancha medida (%.0f m²) — deixamos em branco em vez de "
+                     "publicar número que a gente não consegue sustentar. "
+                     % (_apt, _teto_log))
+                    + ("Preencha a metragem na revisão." if _tem_cad_teto
+                       else "Preencha a metragem ou envie o DXF pra medirmos.")]
                 _log_error("motor:teto-por-prancha",
                            "zerei %d item(ns) de área: passavam no teto da SOMA "
                            "(%.2f m², a mesma planta contada em cada disciplina) e "
@@ -11840,13 +11845,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
         try:
             _lz = int(getattr(_apply_area_honesty, "ultimo_lineares_zerados", 0) or 0)
             if _lz >= 5:
+                # 05/09: com CAD no envio, o texto não pode pedir o DXF nem falar de
+                # PDF — ver `_aviso_lineares_zerados`.
+                try:
+                    _tem_cad_lz = bool(cad_paths)
+                except NameError:
+                    _tem_cad_lz = False
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
-                    "⚠ %d item(ns) em METRO ficaram sem quantidade. Nós medimos a "
-                    "geometria das suas pranchas, mas comprimento tirado de PDF não "
-                    "é confiável o bastante pra virar número na sua planilha — "
-                    "rodapé, soleira e tubulação dependem do percurso real, não do "
-                    "total de parede. Preencha esses metros ou mande o DXF que a "
-                    "gente mede." % _lz]
+                    _aviso_lineares_zerados(_lz, _tem_cad_lz)]
                 _log_error("motor:linear-zerado",
                            "%d item(ns) linear(es) zerados — resgate por medição não "
                            "casou (a IA escreveu estimativa visual, não a nossa "
@@ -13038,6 +13044,51 @@ def _formato_cad_pelo_conteudo(path: str) -> Optional[str]:
     if _re_ext.match(rb"(0|999)\r?\n", _t):
         return "dxf"
     return None
+
+
+def _aviso_complemento_sem_itens(lidos, falhas_leitura):
+    """Texto do aviso quando um COMPLEMENTO (/add-file) termina com 0 itens e a
+    planilha anterior é mantida. Três situações, três verdades diferentes:
+      • nada entrou na leitura (lista vazia) — 05/09, William, 19:24: as duas
+        regras do anexo se anularam, e o aviso dizia "foi lido" com o nome
+        virando "o arquivo";
+      • entrou, mas a leitura FALHOU (dxf_errors/sheet_errors) — "não consegui ler";
+      • entrou, foi lido e não rendeu item — só aqui cabe "foi lido, mas não rendeu".
+    🚫 Nunca chutar causa ("prancha só de layout", "PDF escaneado") pra falha que
+    a gente não viu — é o mesmo defeito do "não consegui medir" de 03/09.
+    Regra nº7 de texto: o aviso é acessório; sempre diz que nada foi perdido."""
+    nomes = ", ".join(os.path.basename(str(p)) for p in (lidos or []) if p)
+    if not nomes:
+        return ("Nenhum arquivo novo entrou nesta leitura — o que você anexou repetia um "
+                "arquivo que o projeto já tinha (mesmo conteúdo, com outro nome). Sua "
+                "planilha anterior foi mantida — nada foi perdido. Se a intenção era mandar "
+                "outra prancha, confira o arquivo e anexe de novo.")
+    if falhas_leitura:
+        return (f"Não consegui ler o arquivo que você anexou ({nomes}). Sua planilha "
+                f"anterior foi mantida — nada foi perdido. O detalhe está no diagnóstico do "
+                f"projeto; na maioria das vezes resolve salvar como DXF (versão 2013) e "
+                f"anexar de novo.")
+    return (f"O arquivo que você anexou ({nomes}) foi lido, mas não rendeu nenhum item "
+            f"quantificável. Sua planilha anterior foi mantida — nada foi perdido. Isso "
+            f"acontece com prancha só de layout (sem quadros nem legendas) ou PDF "
+            f"escaneado; pra medir pelo CAD, anexe o DWG/DXF da planta arquitetônica.")
+
+
+def _aviso_lineares_zerados(n, tem_cad):
+    """Aviso de itens em METRO sem quantidade. Com CAD no envio NÃO diz "mande o
+    DXF" (a pessoa já mandou) nem fala de "comprimento tirado de PDF" — 05/09,
+    Pedro: os dois textos errados pro cliente. O que é verdade nos dois casos:
+    a gente não publica estimativa visual como metro."""
+    if tem_cad:
+        return ("⚠ %d item(ns) em METRO ficaram sem quantidade. Seu CAD entrou na medição, "
+                "mas o comprimento dessas linhas (rodapé, soleira, tubulação) não saiu da "
+                "geometria — só de estimativa visual, e a gente não publica estimativa como "
+                "número. Preencha esses metros na revisão." % n)
+    return ("⚠ %d item(ns) em METRO ficaram sem quantidade. Nós medimos a geometria das "
+            "suas pranchas, mas comprimento tirado de PDF não é confiável o bastante pra "
+            "virar número na sua planilha — rodapé, soleira e tubulação dependem do percurso "
+            "real, não do total de parede. Preencha esses metros ou mande o DXF que a gente "
+            "mede." % n)
 
 
 def _escolher_cads_do_anexo(cads, job_id: str):
@@ -25857,6 +25908,480 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     ).start()
 
     return {"status": "ok", "job_id": job_id, "files_count": len(file_paths)}
+
+
+# ═══════════════════════════════════════════════════════════════
+#  FINANCEIRO DA OBRA — etapa 1: lançamentos (tabela financeiro_lancamentos)
+# ═══════════════════════════════════════════════════════════════
+# 05/09/2026. Maquete aprovada pelo Pedro e tabela criada no mesmo dia
+# (migration financeiro_lancamentos_da_obra). Aqui SÓ o CRUD por projeto, como
+# o USUÁRIO (`_supa_rest_as_user` → RLS owner_all_financeiro_lancamentos; todo
+# PATCH/DELETE filtra por id E job_id — isolamento nº2 também na URL).
+# Regra nº5: nenhum valor nasce aqui — tudo vem digitado pelo arquiteto ou
+# copiado da cotação que ELE subiu no Comparativo. Regra nº7: quem nasce do
+# quantitativo/da cotação guarda o RETRATO da origem (descricao crua,
+# origem_quantidade, origem_unidade) no MESMO insert, e o GET diz se mudou.
+import re as _re_fin
+
+_FIN_TABELA = "financeiro_lancamentos"
+_FIN_ORIGENS = ("quantitativo", "comparativo", "livre")
+_FIN_STATUS = ("cotado", "enviado", "aprovado", "contratado", "pago")
+_FIN_VENC_TIPOS = ("fase", "data")
+_FIN_VENC_QUANDO = ("inicio", "fim")
+_FIN_EDITAVEIS = ("categoria", "descricao", "fornecedor", "valor", "forma_pagamento",
+                  "venc_tipo", "venc_fase", "venc_quando", "venc_data", "status", "pago_em")
+_FIN_UUID_RX = _re_fin.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+
+class FinanceiroLancamentoIn(BaseModel):
+    escopo: str = "obra"                   # etapa 1 só aceita 'obra'; 'honorarios' é Fase 5 (400 até lá)
+    categoria: str
+    descricao: Optional[str] = ""          # obrigatória na linha livre; nas outras vem da origem
+    origem: str = "livre"                  # quantitativo | comparativo | livre
+    origem_ref_id: Optional[str] = None    # project_items.id ou project_supplier_quotes.id
+    origem_ref_pos: Optional[int] = None   # linha dentro da cotação (comparativo)
+    fornecedor: Optional[str] = ""
+    valor: Optional[float] = None          # None = não informado (nunca 0)
+    forma_pagamento: Optional[str] = ""
+    venc_tipo: str = "fase"                # fase | data
+    venc_fase: Optional[str] = None        # padrão: a própria categoria
+    venc_quando: Optional[str] = "inicio"  # inicio | fim
+    venc_data: Optional[str] = None        # AAAA-MM-DD quando venc_tipo = data
+    status: str = "cotado"
+    pago_em: Optional[str] = None
+
+
+class FinanceiroLancamentoPatch(BaseModel):
+    """Só o que vier muda (pydantic v2: `model_fields_set` distingue 'não veio'
+    de 'veio null'). A coerência (vencimento, pago) é julgada na linha INTEIRA,
+    mesclada com a atual — o PATCH da tela manda um campo por vez."""
+    categoria: Optional[str] = None
+    descricao: Optional[str] = None
+    fornecedor: Optional[str] = None
+    valor: Optional[float] = None
+    forma_pagamento: Optional[str] = None
+    venc_tipo: Optional[str] = None
+    venc_fase: Optional[str] = None
+    venc_quando: Optional[str] = None
+    venc_data: Optional[str] = None
+    status: Optional[str] = None
+    pago_em: Optional[str] = None
+
+
+_FIN_TETO = {"categoria": 120, "descricao": 500, "fornecedor": 200,
+             "forma_pagamento": 120, "venc_fase": 120}
+
+
+def _fin_texto(v, campo: str) -> str:
+    """Texto aparado com teto — em PT-BR, antes do pydantic (o 422 sairia em
+    inglês). Sem teto, uma conta do beta gravaria megabytes num `fornecedor` e
+    cada GET do projeto passaria isso pelo servidor de 2 GB (OOM já derrubou o
+    site 2×)."""
+    t = str(v or "").strip()
+    if len(t) > _FIN_TETO[campo]:
+        raise HTTPException(400, f"{campo}: no máximo {_FIN_TETO[campo]} caracteres")
+    return t
+
+
+def _fin_norm(s) -> str:
+    """Chave de religação por descrição = a MESMA régua da casa (`_norm_desc`,
+    chave cheia, como a fusão faz desde 24/08). 🔁 Não reimplemente a régua: a
+    1ª versão daqui só tirava acento e caixa, e "[EXISTENTE - manter]" casava
+    na fusão e não casava aqui — duas réguas com o mesmo nome divergem sozinhas."""
+    return _norm_desc(s, cortar=False)
+
+
+def _fin_eh_admin(request, owner) -> bool:
+    """O admin passa em `_require_project_owner` sem ser o dono — mas o JWT dele
+    NÃO passa na RLS (a policy é do dono): o GET voltaria `200 []` com cara de
+    verdade e a escrita cairia em 403 mascarado. Aqui o admin só LÊ (LGPD nº6:
+    o financeiro é do arquiteto), pelo service_role e com `somente_leitura`."""
+    u = _get_user_from_request(request) or {}
+    return bool(owner) and str(u.get("id") or "") != str(owner)
+
+
+def _fin_get(request, path: str, eh_admin: bool = False, timeout: int = 10):
+    """(status, dados) — desempacotado explicitamente: o guarda da casa
+    (test_supa_rest_tupla) reprova qualquer uso de `_supa_rest_service` que não
+    seja `a, b = ...`, porque a tupla já foi lida como lista 11 vezes (23/08)."""
+    if eh_admin:
+        st, dados = _supa_rest_service("GET", path, timeout=timeout)
+        return st, dados
+    return _supa_rest_as_user(request, "GET", path, timeout=timeout)
+
+
+def _fin_data_iso(v, campo: str):
+    """'AAAA-MM-DD' ou None; qualquer outra coisa é 400 com o nome do campo."""
+    if v in (None, ""):
+        return None
+    try:
+        from datetime import date as _d
+        return _d.fromisoformat(str(v)[:10]).isoformat()
+    except Exception:
+        raise HTTPException(400, f"{campo}: use a data no formato AAAA-MM-DD")
+
+
+def _fin_valor(v):
+    """None = não informado (NUNCA vira 0). Número: não negativo, com teto e até
+    2 casas — a mesma régua do CHECK do banco, dita em português ANTES de bater
+    no banco (o cliente não pode ler 'violates check constraint')."""
+    if v is None or v == "":
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise HTTPException(400, "valor: use número (vírgula pros centavos)")
+    if f != f or f in (float("inf"), float("-inf")):
+        raise HTTPException(400, "valor: número inválido")
+    if f < 0:
+        raise HTTPException(400, "valor: não pode ser negativo")
+    if f > 999999999999.99:
+        raise HTTPException(400, "valor: acima do teto (R$ 999.999.999.999,99)")
+    if abs(round(f, 2) - f) > 1e-9:
+        raise HTTPException(400, "valor: no máximo centavos (2 casas)")
+    return round(f, 2)
+
+
+def _fin_normalizar(linha: dict) -> dict:
+    """Valida e normaliza UMA linha inteira (criação, ou PATCH já mesclado com a
+    linha atual). Devolve só as colunas editáveis da tabela, coerentes entre si:
+    vencimento por fase OU por data (nunca os dois), pago exige valor, pago_em
+    só em pago. Erros são 400 em português."""
+    out = {}
+    cat = _fin_texto(linha.get("categoria"), "categoria")
+    if not cat:
+        raise HTTPException(400, "categoria: obrigatória (é a fase do cronograma)")
+    out["categoria"] = cat
+    origem = str(linha.get("origem") or "livre").strip()
+    if origem not in _FIN_ORIGENS:
+        raise HTTPException(400, f"origem: use {', '.join(_FIN_ORIGENS)}")
+    out["origem"] = origem
+    desc = _fin_texto(linha.get("descricao"), "descricao")
+    if not desc:
+        raise HTTPException(400, "descricao: obrigatória (o item que está sendo pago)")
+    out["descricao"] = desc
+    out["fornecedor"] = _fin_texto(linha.get("fornecedor"), "fornecedor")
+    out["forma_pagamento"] = _fin_texto(linha.get("forma_pagamento"), "forma_pagamento")
+    out["valor"] = _fin_valor(linha.get("valor"))
+    tipo = str(linha.get("venc_tipo") or "fase").strip()
+    if tipo not in _FIN_VENC_TIPOS:
+        raise HTTPException(400, "venc_tipo: use fase ou data")
+    out["venc_tipo"] = tipo
+    if tipo == "fase":
+        fase = _fin_texto(linha.get("venc_fase"), "venc_fase") or cat   # a fase da categoria é o padrão da tela
+        quando = str(linha.get("venc_quando") or "inicio").strip()
+        if quando not in _FIN_VENC_QUANDO:
+            raise HTTPException(400, "venc_quando: use inicio ou fim")
+        out["venc_fase"], out["venc_quando"], out["venc_data"] = fase, quando, None
+    else:
+        d = _fin_data_iso(linha.get("venc_data"), "venc_data")
+        if not d:
+            raise HTTPException(400, "venc_data: obrigatória quando o vencimento é data fixa")
+        out["venc_fase"], out["venc_quando"], out["venc_data"] = None, None, d
+    st = str(linha.get("status") or "cotado").strip()
+    if st not in _FIN_STATUS:
+        raise HTTPException(400, f"status: use {', '.join(_FIN_STATUS)}")
+    out["status"] = st
+    pago_em = _fin_data_iso(linha.get("pago_em"), "pago_em")
+    if st == "pago":
+        if out["valor"] is None:
+            raise HTTPException(400, "status pago exige valor — informe o valor antes de marcar como pago")
+        out["pago_em"] = pago_em       # pode ficar NULL: a verdade do "pago" é o status
+    else:
+        out["pago_em"] = None          # a maquete zera pago_em ao sair de "pago"
+    return out
+
+
+def _fin_retrato_da_origem(request, job_id: str, origem: str, ref_id, ref_pos) -> dict:
+    """Colunas do RETRATO (regra nº7) lidas da origem NO MOMENTO do lançamento —
+    e a prova de isolamento (nº2): a origem tem que ser DESTE job_id (o filtro vai
+    na URL), senão 404. Devolve origem_ref_id/origem_ref_pos/origem_quantidade/
+    origem_unidade e, quando a origem traz, descricao (crua) / fornecedor / valor.
+    O valor da cotação é o que o cliente subiu — copiar não é precificar (nº5)."""
+    if origem not in _FIN_ORIGENS:
+        # julgado PRIMEIRO: senão "comp" cairia no ramo da cotação e bateria no banco
+        raise HTTPException(400, f"origem: use {', '.join(_FIN_ORIGENS)}")
+    if origem == "livre":
+        return {"origem_ref_id": None, "origem_ref_pos": None,
+                "origem_quantidade": None, "origem_unidade": None}
+    ref = str(ref_id or "").strip()
+    if not _FIN_UUID_RX.fullmatch(ref):
+        raise HTTPException(400, "origem_ref_id: obrigatório (uuid do item ou da cotação) fora da linha livre")
+    jq = urllib.parse.quote(job_id)
+    if origem == "quantitativo":
+        _st, rows = _supa_rest_as_user(
+            request, "GET",
+            f"/project_items?id=eq.{ref}&job_id=eq.{jq}&select=id,description,quantity,unit&limit=1",
+            timeout=10)
+        if _st != 200 or rows is None:      # 🪤 vazio ≠ falhou: banco fora não é "não existe"
+            _fin_erro_do_banco(_st, "ler o item do quantitativo", job_id)
+        if not rows:
+            raise HTTPException(404, "item do quantitativo não encontrado neste projeto")
+        it = rows[0]
+        q = it.get("quantity")
+        return {"origem_ref_id": ref, "origem_ref_pos": None,
+                "origem_quantidade": (round(float(q), 4) if q is not None else None),
+                "origem_unidade": str(it.get("unit") or ""),
+                "descricao": str(it.get("description") or "").strip()}
+    # comparativo: a cotação é UM registro por planilha; a linha é items[pos]
+    if ref_pos is None or int(ref_pos) < 0:
+        raise HTTPException(400, "origem_ref_pos: obrigatório (linha da cotação) em origem comparativo")
+    _st, rows = _supa_rest_as_user(
+        request, "GET",
+        f"/project_supplier_quotes?id=eq.{ref}&job_id=eq.{jq}&select=id,supplier_name,items&limit=1",
+        timeout=10)
+    if _st != 200 or rows is None:
+        _fin_erro_do_banco(_st, "ler a cotação", job_id)
+    if not rows:
+        raise HTTPException(404, "cotação não encontrada neste projeto")
+    cot = rows[0]
+    itens = cot.get("items") or []
+    pos = int(ref_pos)
+    if pos >= len(itens):
+        raise HTTPException(404, f"a cotação tem {len(itens)} linha(s); não existe a linha {pos}")
+    ln = itens[pos] or {}
+    q = ln.get("qtd")
+    out = {"origem_ref_id": ref, "origem_ref_pos": pos,
+           "origem_quantidade": (round(float(q), 4) if q is not None else None),
+           "origem_unidade": str(ln.get("un") or ""),
+           "descricao": str(ln.get("desc") or "").strip(),
+           "fornecedor": str(cot.get("supplier_name") or "").strip()}
+    tot = ln.get("total")
+    # O parser grava o total CRU da célula (fórmula =QTD*UNIT deixa 56795.8272);
+    # copiar arredondado em centavos é cópia do que o cliente subiu, não preço
+    # nosso (nº5) — a régua de 2 casas é pra dígito de teclado. Total 0 é linha
+    # sem preço pro parser (total > 0): fica "não informado", não R$ 0,00.
+    if isinstance(tot, (int, float)) and not isinstance(tot, bool) and tot > 0:
+        out["valor"] = round(float(tot), 2)
+    return out
+
+
+def _fin_estado_da_origem(lanc: dict, itens_por_id: dict, itens_por_desc: dict) -> dict:
+    """'ok' | 'mudou' | 'removido' | 'ambiguo' — a régua ÚNICA do aviso da regra
+    nº7, a mesma escrita no COMMENT da coluna origem_quantidade: quantidade (4
+    casas) OU unidade diferentes do retrato. Só pra origem = quantitativo (cotação
+    é imutável). `itens_por_desc` mapeia chave normalizada → LISTA de itens.
+    🪤 project_items.id NÃO é estável (o /add-file recria os itens): ref não
+    achada → religa por descrição normalizada DENTRO do job antes de dizer
+    'removido'. Com dois itens de MESMA descrição (5 pares em 4 jobs, medido
+    05/09) só religa no que casa com o retrato; senão 'ambiguo' — nunca escolhe
+    às cegas (seria 'mudou' falso sobre dinheiro, ou 'ok' falso escondendo o
+    item que sumiu)."""
+    if lanc.get("origem") != "quantitativo":
+        return {"origem_estado": "ok"}
+    rq = lanc.get("origem_quantidade")
+    rq4 = round(float(rq), 4) if rq is not None else None
+    ru = str(lanc.get("origem_unidade") or "")
+
+    def _q4(i):
+        q = i.get("quantity")
+        return round(float(q), 4) if q is not None else None
+
+    it = itens_por_id.get(str(lanc.get("origem_ref_id") or ""))
+    religado = None
+    if it is None:
+        cands = list(itens_por_desc.get(_fin_norm(lanc.get("descricao")), []) or [])
+        if len(cands) > 1:
+            iguais = [c for c in cands if _q4(c) == rq4 and str(c.get("unit") or "") == ru]
+            if len(iguais) != 1:
+                return {"origem_estado": "ambiguo", "origem_candidatos": len(cands)}
+            cands = iguais
+        if cands:
+            it = cands[0]
+            religado = str(it.get("id"))
+    if it is None:
+        return {"origem_estado": "removido"}
+    q4 = _q4(it)
+    u = str(it.get("unit") or "")
+    mudou = (q4 != rq4) or (u != ru)
+    out = {"origem_estado": "mudou" if mudou else "ok",
+           "origem_atual": {"quantidade": q4, "unidade": u}}
+    if religado:
+        out["origem_ref_id_atual"] = religado
+    return out
+
+
+def _fin_erro_do_banco(st: int, acao: str, job_id: str, detalhe: str = "", escrita: bool = False):
+    """O `_supa_rest_as_user` devolve (código, None) sem o texto do PostgREST; o
+    que dá pra dizer com verdade é o código — e por código, não por faixa:
+      401 → 401 (o authFetch da tela só reage a 401: "sessão expirou");
+      403 → 403 (RLS: não é o dono — inclusive o admin, que aqui só lê);
+      400/409/422 em ESCRITA → 400 com orientação (se acontecer, a régua Python
+        e o CHECK divergiram — bug nosso; o rastro fica no error_log);
+      tudo o mais (0 rede, 404 tabela ausente, 5xx, 4xx em LEITURA) → 502.
+    🪤 A 1ª versão mandava "confira valor" pra qualquer 4xx, até numa leitura."""
+    try:
+        _log_error(f"financeiro:{acao}", f"HTTP {st} {detalhe}".strip(), job_id, severity="warning")
+    except Exception:
+        pass
+    st = int(st or 0)
+    if st == 401:
+        raise HTTPException(401, "sua sessão expirou — recarregue a página e entre de novo")
+    if st == 403:
+        raise HTTPException(403, "só o dono do projeto pode mexer no financeiro dele")
+    if escrita and st in (400, 409, 422):
+        raise HTTPException(400, f"o banco recusou {acao}: confira valor (até 2 casas), "
+                                 f"vencimento (fase OU data) e status (pago exige valor)")
+    raise HTTPException(502, f"não consegui {acao} agora — tente de novo em instantes")
+
+
+def _fin_so_o_dono_escreve(request, owner):
+    if _fin_eh_admin(request, owner):
+        raise HTTPException(403, "o financeiro é do arquiteto: como admin você só consulta")
+
+
+@app.get("/api/financeiro/{job_id}")
+def financeiro_listar(job_id: str, request: Request):
+    """Lançamentos do projeto (escopo obra) + estado da origem de cada um.
+    Admin lê pelo service_role (a RLS é do dono) e recebe `somente_leitura`."""
+    owner = _require_project_owner(request, job_id)
+    eh_admin = _fin_eh_admin(request, owner)
+    jq = urllib.parse.quote(job_id)
+    st, rows = _fin_get(
+        request, f"/{_FIN_TABELA}?job_id=eq.{jq}&escopo=eq.obra&select=*&order=created_at.asc",
+        eh_admin)
+    if st != 200 or rows is None:      # 🪤 vazio ≠ falhou: lista vazia é [] com 200
+        _fin_erro_do_banco(st, "ler os lançamentos", job_id)
+    st2, itens = _fin_get(
+        request, f"/project_items?job_id=eq.{jq}&select=id,description,quantity,unit", eh_admin)
+    truncado = bool(itens) and len(itens) >= 1000     # PostgREST corta em 1000 e não avisa
+    base = {"status": "ok", "job_id": job_id, "escopo": "obra", "somente_leitura": eh_admin}
+    if st2 != 200 or itens is None or truncado:
+        # 🩸 NÃO derivar estado sem a origem: com `itens` vazio, TODA linha do
+        # quantitativo sairia "removido" com HTTP 200 — NULL virando afirmação
+        # (painel de 02/09), em cima de dinheiro combinado com fornecedor.
+        try:
+            _log_error("financeiro:listar",
+                       f"project_items HTTP {st2} truncado={truncado} — estado da origem "
+                       f"indisponível nesta leitura", job_id, severity="warning")
+        except Exception:
+            pass
+        saida = [{**l, "origem_estado": ("indisponivel" if l.get("origem") == "quantitativo" else "ok")}
+                 for l in rows]
+        return {**base, "lancamentos": saida, "itens_lidos": False, "itens_truncados": truncado}
+    por_id = {str(i.get("id")): i for i in itens}
+    por_desc = {}
+    for i in itens:
+        por_desc.setdefault(_fin_norm(i.get("description")), []).append(i)
+    saida = [{**l, **_fin_estado_da_origem(l, por_id, por_desc)} for l in rows]
+    return {**base, "lancamentos": saida, "itens_lidos": True, "itens_truncados": False}
+
+
+@app.post("/api/financeiro/{job_id}")
+def financeiro_criar(job_id: str, payload: FinanceiroLancamentoIn, request: Request):
+    """Novo lançamento. Origem quantitativo/comparativo: a descrição vem da origem
+    (crua) e o retrato é gravado junto. Fornecedor/valor da cotação entram como
+    padrão SÓ quando a tela não mandou o campo (`model_fields_set`): se o cliente
+    apagou o valor pré-preenchido pra negociar depois, o None dele vale."""
+    owner = _require_project_owner(request, job_id)
+    _fin_so_o_dono_escreve(request, owner)
+    if (payload.escopo or "obra") != "obra":
+        raise HTTPException(400, "nesta etapa só existe o financeiro da obra (escopo=obra)")
+    dados = payload.model_dump()
+    enviados = set(getattr(payload, "model_fields_set", set()) or set())
+    origem = str(dados.get("origem") or "livre").strip()
+    ret = _fin_retrato_da_origem(request, job_id, origem,
+                                 dados.get("origem_ref_id"), dados.get("origem_ref_pos"))
+    if origem != "livre":
+        dados["descricao"] = ret.pop("descricao", "") or dados.get("descricao")
+        for k in ("fornecedor", "valor"):
+            if k in ret and k not in enviados:
+                dados[k] = ret[k]
+            ret.pop(k, None)
+    # O que veio explícito e não se aplica não pode sumir calado com 200.
+    if dados.get("pago_em") and str(dados.get("status") or "cotado") != "pago":
+        raise HTTPException(400, "pago_em: data de pagamento só em lançamento pago")
+    if str(dados.get("venc_tipo") or "fase") == "fase" and dados.get("venc_data"):
+        raise HTTPException(400, "vencimento: escolha fase OU data, não os dois")
+    linha = _fin_normalizar(dados)
+    linha.update({"job_id": job_id, "escopo": "obra", **ret})
+    st, criado = _supa_rest_as_user(request, "POST", f"/{_FIN_TABELA}", body=linha,
+                                    prefer="return=representation", timeout=10)
+    if st not in (200, 201) or not criado:
+        _fin_erro_do_banco(st, "gravar o lançamento", job_id, f"origem={origem}", escrita=True)
+    return {"status": "ok", "lancamento": criado[0] if isinstance(criado, list) else criado}
+
+
+@app.patch("/api/financeiro/{job_id}/{lanc_id}")
+def financeiro_editar(job_id: str, lanc_id: str, payload: FinanceiroLancamentoPatch, request: Request):
+    """Edita campos de UM lançamento (clique-para-editar da tela).
+
+    Contrato com a tela (a maquete manda um campo por vez; a coerência é
+    julgada na linha inteira, mesclada com a atual):
+      • descrição só se edita na linha livre — nas outras é o retrato da origem;
+      • apagar o valor de linha PAGA: mande junto o novo status
+        (`{valor: null, status: 'contratado'}`) — o servidor não rebaixa calado;
+      • marcar pago: `{status: 'pago', pago_em: 'AAAA-MM-DD'}` — o servidor NÃO
+        carimba a data (é do arquiteto e do fuso dele); sair de pago zera pago_em;
+      • trocar a categoria arrasta o vencimento por fase quando ele era só o
+        padrão (fase == categoria antiga); escolha explícita de fase fica."""
+    owner = _require_project_owner(request, job_id)
+    _fin_so_o_dono_escreve(request, owner)
+    if not _FIN_UUID_RX.fullmatch(lanc_id or ""):
+        raise HTTPException(400, "lançamento inválido")
+    vieram = {k for k in (getattr(payload, "model_fields_set", set()) or set()) if k in _FIN_EDITAVEIS}
+    if not vieram:
+        raise HTTPException(400, "nada pra alterar")
+    jq = urllib.parse.quote(job_id)
+    st, rows = _supa_rest_as_user(
+        request, "GET", f"/{_FIN_TABELA}?id=eq.{lanc_id}&job_id=eq.{jq}&select=*&limit=1",
+        timeout=10)
+    if st != 200 or rows is None:
+        _fin_erro_do_banco(st, "ler o lançamento", job_id)
+    if not rows:
+        raise HTTPException(404, "lançamento não encontrado neste projeto")
+    atual = rows[0]
+    if "descricao" in vieram and atual.get("origem") != "livre":
+        raise HTTPException(400, "este item vem do quantitativo ou da cotação — edite lá; aqui ele é só leitura")
+    mesclado = {**atual, **{k: getattr(payload, k) for k in vieram}}
+    if ("valor" in vieram and payload.valor is None and "status" not in vieram
+            and atual.get("status") == "pago"):
+        raise HTTPException(400, "esta linha está paga: pra apagar o valor, mande também o novo "
+                                 "status (a tela rebaixa pra contratado)")
+    if "pago_em" in vieram and payload.pago_em and str(mesclado.get("status") or "") != "pago":
+        raise HTTPException(400, "pago_em: data de pagamento só em lançamento pago — mande status junto")
+    if "venc_data" in vieram and payload.venc_data and str(mesclado.get("venc_tipo") or "") == "fase":
+        raise HTTPException(400, "vencimento: escolha fase OU data, não os dois")
+    if "venc_tipo" in vieram and payload.venc_tipo == "fase" and "venc_fase" not in vieram:
+        # voltou pra "fase" sem dizer qual: a fase que a linha já tinha, senão a categoria
+        mesclado["venc_fase"] = atual.get("venc_fase") or mesclado.get("categoria")
+    if ("categoria" in vieram and "venc_fase" not in vieram and atual.get("venc_tipo") == "fase"
+            and (atual.get("venc_fase") or "") == (atual.get("categoria") or "")):
+        mesclado["venc_fase"] = payload.categoria     # o padrão acompanha; a escolha explícita fica
+    linha = _fin_normalizar(mesclado)
+    mudancas = {k: v for k, v in linha.items() if v != atual.get(k)}
+    if not mudancas:
+        return {"status": "ok", "lancamento": atual, "sem_mudanca": True}
+    mudancas["updated_at"] = "now()"
+    st, rows2 = _supa_rest_as_user(
+        request, "PATCH", f"/{_FIN_TABELA}?id=eq.{lanc_id}&job_id=eq.{jq}",
+        body=mudancas, prefer="return=representation", timeout=10)
+    if st not in (200, 204):
+        _fin_erro_do_banco(st, "salvar a alteração", job_id, f"campos={sorted(mudancas)}", escrita=True)
+    if not rows2:
+        # PostgREST responde 200 [] quando o filtro não casa mais (a linha foi
+        # removida em outra aba): repetir nunca resolveria — é 404, não 502.
+        raise HTTPException(404, "este lançamento não existe mais (foi removido em outra aba)")
+    return {"status": "ok", "lancamento": rows2[0] if isinstance(rows2, list) else rows2}
+
+
+@app.delete("/api/financeiro/{job_id}/{lanc_id}")
+def financeiro_remover(job_id: str, lanc_id: str, request: Request):
+    """Remove UM lançamento (a tela dá 'Desfazer' por 6 s antes de chamar)."""
+    owner = _require_project_owner(request, job_id)
+    _fin_so_o_dono_escreve(request, owner)
+    if not _FIN_UUID_RX.fullmatch(lanc_id or ""):
+        raise HTTPException(400, "lançamento inválido")
+    jq = urllib.parse.quote(job_id)
+    st, rows = _supa_rest_as_user(
+        request, "DELETE", f"/{_FIN_TABELA}?id=eq.{lanc_id}&job_id=eq.{jq}",
+        prefer="return=representation", timeout=10)
+    if st not in (200, 204):
+        _fin_erro_do_banco(st, "remover o lançamento", job_id)
+    if not rows:
+        raise HTTPException(404, "lançamento não encontrado neste projeto")
+    return {"status": "ok", "removido": rows[0] if isinstance(rows, list) else rows}
 
 
 @app.post("/api/items/{job_id}/review-finalize")

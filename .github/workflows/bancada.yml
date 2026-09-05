@@ -68,7 +68,11 @@ jobs:
           # 04/09/2026: 1367 -> 1550. A bancada foi a 1824 em dois dias (varredura
           # adversarial + os achados que saíram da planilha da Caroline). Mesmo
           # guarda cobrando de novo, pelo mesmo motivo.
-          PISO: 1550
+          # 05/09/2026: 1550 -> 1800. A bancada colhe 2099 (e-mails, anexo,
+          # financeiro). O guarda test_o_piso_do_CI_faz_sentido_contra_a_realidade
+          # exige piso >= 75% do colhido — 1550 já deixava passar a perda de
+          # 500 testes calada.
+          PISO: 1800
         run: |
           N=$(python -m pytest tests/ -q --collect-only 2>/dev/null | tail -1 | grep -oE '^[0-9]+' || echo 0)
           echo "testes colhidos: $N (piso: $PISO)"
