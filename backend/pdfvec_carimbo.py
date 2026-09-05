@@ -290,7 +290,17 @@ def read_carimbo_scale(pdf_path: str, page_index: int = 0,
         "confidence": confidence,
         "model_used": model_used,
     }
-    if use_cache:
+    # 🩸 05/09/2026 — NÃO CACHEAR NEGATIVO. A A08 do William (135fdfac) teve a
+    # escala lida como 1:75 em cinco chamadas ao longo do dia; na sexta o Haiku
+    # respondeu diferente (sem escala), o resultado foi gravado aqui, e a
+    # tentativa seguinte NEM PERGUNTOU à Vision — leu o cache e saiu "sem
+    # escala", a sombra idem. Uma leitura ruim virava permanente pro arquivo
+    # até o próximo deploy (o disco do Render zera no deploy — por isso as
+    # cinco anteriores "deram certo": eram todas chamadas novas).
+    # Só grava quando LEU uma escala. Negativo (incluindo "indicadas" sem
+    # número) é reperguntado na próxima — custa uma chamada do Haiku e dá à
+    # segunda tentativa a chance de acertar.
+    if use_cache and result["main_scale"] is not None:
         cache[key] = result
         _cache_save(cache)
     return result
