@@ -2275,3 +2275,64 @@ def retrato_do_selo(items):
         "laranja_com_prova": laranja_com_prova,
         "branco_sem_prova": branco_sem_prova,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  NÚMERO QUE O PRÓPRIO MOTOR DIZ SER PARCIAL não pode levar selo BRANCO
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 05/09/2026. MEDIDO: 4 itens com selo ✓ MEDIDO cuja observação, na mesma
+# linha, diz que o número é um pedaço:
+#
+#   "comprimento total do layer SAN = 1,42 m. Valor provavelmente parcial"
+#   "layer 'A-DUTO-E' = 3,93 m. Trecho curto — provável trecho parcial"
+#   "1 ocorrência listada: 9.71 m². Parcial — existem +229 pares não listados"
+#
+# A geometria FOI medida — por isso o `selos_sem_geometria` os absolve, e com
+# razão. O defeito é outro: mediu-se um PEDAÇO e carimbou-se como se fosse o
+# item inteiro. O cliente vê 1,42 m de esgoto num prédio e um selo de confiança.
+# Regra dura nº1: "medido" quer dizer que a medição é DO ITEM.
+#
+# 🚫 SÓ REBAIXA. Não corrige o número (regra nº3) — corrigir seria inventar o
+# resto que ninguém mediu. E nunca promove nada.
+#
+# 🪤 A palavra "parcial" sozinha NÃO serve: "planta parcial do 2º pavimento"
+# fala do DESENHO, não da medição. Por isso a janela de contexto antes da
+# palavra — é a diferença entre guarda e ruído, e alarme com ruído a gente
+# desliga em duas semanas.
+# 🩸 A 1ª VERSÃO DESTE GUARDA TINHA 80% DE PRECISÃO E EU SÓ VI MEDINDO.
+# Ela casava "parcial" e descontava quando vinha depois de palavra de desenho
+# ("planta parcial"). Rodei nos 6 brancos reais que contêm a palavra: acertou 4,
+# errou 1 — o job `66ebe2d9` diz "(comprimentos PARCIAIS em cm)" falando das
+# BARRAS INDIVIDUAIS de uma tabela de aço, não do total entregue. Rebaixar o
+# selo de um item legítimo é o custo que [[feedback_alarme_sem_controle_20260826]]
+# descreve: o alarme perde crédito e alguém o desliga.
+#
+# 🔑 Invertido para lista POSITIVA: exige frase que afirme que o VALOR ENTREGUE
+# é um pedaço. Falha pra menos (deixa passar redação nova) e nunca pra mais —
+# que é o lado certo de errar quando se mexe no selo do cliente.
+_FRASES_DE_VALOR_PARCIAL = (
+    _re.compile(r"valor\s+(?:\w+\s+){0,2}parcia(?:l|is)", _re.IGNORECASE),
+    _re.compile(r"trecho\s+parcia(?:l|is)", _re.IGNORECASE),
+    _re.compile(r"quantidade\s+(?:\w+\s+){0,2}parcia(?:l|is)", _re.IGNORECASE),
+    _re.compile(r"medi[çc][ãa]o\s+parcia(?:l|is)", _re.IGNORECASE),
+    # "1 ocorrência listada: 9,71 m². Parcial — existem +229 pares NÃO LISTADOS"
+    _re.compile(r"n[ãa]o\s+list", _re.IGNORECASE),
+    _re.compile(r"sem\s+list(?:ar|agem)", _re.IGNORECASE),
+)
+
+
+def numero_declarado_parcial(observacao):
+    """A observação admite que a quantidade entregue cobre só PARTE do item?
+
+    Duas famílias, ambas escritas pelo próprio motor:
+      · "Valor provavelmente parcial", "trecho parcial" → mediu um pedaço;
+      · "+229 pares não listados"                       → somou o que coube.
+
+    🚫 NÃO casa "planta parcial" nem "comprimentos parciais em cm": a primeira
+    fala do desenho, a segunda das peças de uma tabela. Nenhuma das duas é
+    confissão sobre o número entregue.
+    """
+    obs = str(observacao or "")
+    if not obs:
+        return False
+    return any(rx.search(obs) for rx in _FRASES_DE_VALOR_PARCIAL)

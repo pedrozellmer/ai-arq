@@ -12062,6 +12062,51 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[selo-sem-medida] job={job_id}: checagem falhou: {_esm}")
             _log_error("motor:selo-sem-medida", f"FALHOU: {_esm}", job_id)
 
+        # ── NÚMERO QUE O MOTOR DIZ SER PARCIAL não leva selo BRANCO ─────────
+        # 🩸 05/09/2026 — MEDIDO: 4 itens com "✓ MEDIDO do CAD" cuja observação,
+        # na mesma linha, diz que o número é um pedaço:
+        #   "layer SAN = 1,42 m. Valor provavelmente parcial"
+        #   "layer 'A-DUTO-E' = 3,93 m. ... trecho parcial"
+        # A geometria FOI medida — por isso o `selos_sem_geometria` os absolve,
+        # e com razão. O defeito é outro: mediu-se um PEDAÇO e carimbou-se como
+        # se fosse o item inteiro. O cliente vê 1,42 m de esgoto num prédio com
+        # selo de confiança. Regra nº1: "medido" quer dizer medido DO ITEM.
+        # 🚫 SÓ REBAIXA. Não corrige o número (regra nº3) — corrigir seria
+        # inventar o resto que ninguém mediu.
+        # 📏 Taxa medida antes de ligar: 4 em 1.313 brancos = 0,3%. É taxa de
+        # defeito, não de ruído. E a 1ª versão do critério tinha 80% de precisão
+        # (acusava "comprimentos parciais em cm" de uma tabela de aço); virou
+        # lista positiva de frases justamente por isso.
+        try:
+            from engine_rules import numero_declarado_parcial as _e_parcial
+            from models import Confidence as _CfPar
+            _n_par = 0
+            for _it in (all_items or []):
+                _cf = str(getattr(getattr(_it, "confidence", None), "value",
+                                  getattr(_it, "confidence", "")) or "")
+                if _cf != "confirmado":
+                    continue
+                _ob = str(getattr(_it, "observations", "") or "")
+                if not _e_parcial(_ob):
+                    continue
+                _it.confidence = _CfPar.ESTIMADO
+                if "cobre só parte" not in _ob:
+                    _it.observations = (
+                        "⚠ O número mede só PARTE deste item — o próprio "
+                        "levantamento diz isso na observação abaixo. Não leve "
+                        "como quantidade fechada: cobre só parte do que existe. "
+                        + _ob)[:1000]
+                _n_par += 1
+            if _n_par:
+                _log_error("motor:selo-parcial-rebaixado",
+                           f"{_n_par} item(ns) tinham selo MEDIDO com número que "
+                           f"a própria observação declara PARCIAL — rebaixados.",
+                           job_id, severity="warning")
+        except Exception as _epar:
+            print(f"[selo-parcial] nao-fatal: {_epar}")
+            _log_error("motor:selo-parcial-rebaixado", f"FALHOU: {_epar}",
+                       job_id, severity="warning")
+
         # 🚨 AQUI é o fim da fila de quem rebaixa selo. A recontagem do aviso
         # do plano B roda de novo agora, com o número que o cliente vai ler.
         # 🩸 04/09 — medido no fonte: ANTES deste conserto havia **cinco**
