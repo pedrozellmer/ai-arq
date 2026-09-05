@@ -2867,7 +2867,26 @@ function renderRevisionFeedback(d){
           <div class="text-amber-950 mt-1">"${esc(f.texto || '')}"</div>
         </div>`).join('')}
     </div>` : '';
-  const inlineHtml = faltouHtml + ((ri.aprovacoes || ri.edicoes) ? `
+  // 🩸 05/09/2026 — AS EXCLUSÕES ERAM INVISÍVEIS AQUI, e são o sinal MAIS
+  // direto de erro do motor: o cliente dizendo "isto não existe na minha obra".
+  // 48 delas, de 6 projetos, desde 31/08 — quando a exclusão parou de se
+  // autodestruir (a FK é CASCADE e o registro sumia junto com o item).
+  // 🪤 Mostra O QUE foi apagado, do retrato `_antes` — o item não existe mais
+  // em project_items, então sem o retrato o registro não diz nada.
+  const excHtml = (ri.exclusoes) ? `
+    <div class="rounded-xl border border-red-200 bg-red-50 p-4 mb-4">
+      <p class="text-sm font-semibold text-red-900 mb-1">🗑️ ${ri.exclusoes} item(ns) que o cliente APAGOU</p>
+      <p class="text-xs text-red-800 mb-2">"Isto não existe na minha obra" — o sinal mais direto de erro do motor. É item que a gente inventou.</p>
+      ${(ri.exclusoes_itens || []).map(x => `
+        <div class="text-xs text-red-900 border-t border-red-200 pt-2 mt-2">
+          <span class="font-mono">${esc(x.job_id)}</span> · ${esc(window.fmtBR(x.quando))}
+          ${x.disciplina ? ` · ${esc(x.disciplina)}` : ''}
+          ${x.selo ? ` · <b>${esc(x.selo)}</b>` : ''}
+          <div class="line-through text-red-800 mt-1">${esc(x.descricao || '(sem descrição no retrato)')}
+            ${x.quantidade != null ? ` — ${esc(num(x.quantidade))} ${esc(x.unidade || '')}` : ''}</div>
+        </div>`).join('')}
+    </div>` : '';
+  const inlineHtml = faltouHtml + excHtml + ((ri.aprovacoes || ri.edicoes) ? `
     <div class="rounded-xl border border-gray-200 bg-white p-4 mb-4">
       <p class="text-sm font-semibold text-gray-800 mb-1">✏️ Revisão inline (na tela de revisão)</p>
       <p class="text-xs text-gray-600 mb-2">

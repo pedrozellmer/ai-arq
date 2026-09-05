@@ -18235,9 +18235,37 @@ def admin_revision_feedback(request: Request):
             # dizendo o que o motor NEM VIU — a única pergunta de cobertura que
             # existe. Ver [[feedback_o_aviso_tem_que_chegar]].
             faltou = [r for r in rows2 if r.get("action") == "faltou"]
+            # 🩸 05/09/2026 — AS EXCLUSÕES ERAM INVISÍVEIS, e são 48 de 6
+            # projetos. Pelo comentário do próprio `submit_item_review`:
+            # "exclusão é o sinal MAIS direto de erro do motor — o cliente
+            # dizendo 'isto não existe na minha obra'". Ficaram fora do painel
+            # desde sempre porque este resumo só separava approve e edit.
+            # 🪤 O que interessa é O QUE foi apagado, e isso NÃO está mais em
+            # `project_items`: a FK é ON DELETE CASCADE e o item some. O retrato
+            # vive em `edits._antes`, gravado de propósito em 31/08 justamente
+            # porque a exclusão se autodestruía. Ver
+            # [[project_exclusao_se_autodestruia_20260831]].
+            rejeicoes = [r for r in rows2 if r.get("action") == "reject"]
+
+            def _antes_do_item(r):
+                _e = r.get("edits") or {}
+                _a = _e.get("_antes") if isinstance(_e, dict) else None
+                return _a if isinstance(_a, dict) else {}
+
             resumo["revisao_inline"] = {
                 "aprovacoes": len(aprov),
                 "edicoes": len(edits),
+                "exclusoes": len(rejeicoes),
+                "exclusoes_itens": [
+                    {"job_id": r.get("job_id"),
+                     "quando": r.get("reviewed_at"),
+                     "descricao": _antes_do_item(r).get("description"),
+                     "unidade": _antes_do_item(r).get("unit"),
+                     "quantidade": _antes_do_item(r).get("quantity"),
+                     "disciplina": _antes_do_item(r).get("discipline"),
+                     "selo": _antes_do_item(r).get("confidence")}
+                    for r in rejeicoes[:20]
+                ],
                 "faltou": len(faltou),
                 "faltou_recados": [
                     {"job_id": r.get("job_id"),
