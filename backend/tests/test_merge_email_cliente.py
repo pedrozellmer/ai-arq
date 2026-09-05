@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
 # verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
 # certo mora num lugar só.
-from _corpo import corpo_de  # noqa: E402
+from _corpo import corpo_de, ENVIO_E_BUILDER  # noqa: E402
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -43,7 +43,13 @@ def _corpo(nome, tam=12000):
     marcas = [src.find(m, i + 10)
               for m in (nl + "def ", nl + "@app.", nl + "async def ")]
     marcas = [m for m in marcas if m > 0]
-    return src[i:min(marcas) if marcas else i + tam]
+    corpo = src[i:min(marcas) if marcas else i + tam]
+    # 05/09: o e-mail virou envio + builder (ver ENVIO_E_BUILDER em _corpo.py) —
+    # o texto que o cliente lê mora no builder; medir só o envio é meia leitura.
+    _b = ENVIO_E_BUILDER.get(nome)
+    if _b and ("def " + _b) in src:
+        corpo += _corpo(_b, tam)
+    return corpo
 
 
 def _sem_comentarios(src):

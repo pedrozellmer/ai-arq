@@ -25,6 +25,17 @@ _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RAIZ = os.path.dirname(_BACKEND)
 _NL = chr(10)
 
+# 05/09/2026 — e-mails que viraram ENVIO + BUILDER: a Central de E-mails monta o
+# preview e o "teste pra mim" pelo MESMO builder do envio real. Pra quem mede
+# "o que o e-mail diz", os dois são UMA função — medir só o envio é meia
+# leitura, e meia leitura é o defeito que este arquivo existe pra impedir.
+# 🪤 Um lugar só pra este mapa: dois arquivos de teste com a mesma lista
+# divergem sozinhos.
+ENVIO_E_BUILDER = {
+    "_email_leitura_nova": "_build_leitura_nova_email",
+    "_email_leitura_combinada": "_build_leitura_combinada_email",
+}
+
 
 def fonte(arquivo: str = "main.py") -> str:
     """Lê um arquivo do backend (ou da raiz, pros .html)."""
@@ -81,6 +92,9 @@ def corpo_de(nome: str, arquivo: str = "main.py", src: str = None) -> str:
             "o recorte tem %d linhas e está incompleto. Não recorte esta "
             "função — ancore num trecho único do fonte inteiro."
             % (nome, arquivo, len(corpo.splitlines())))
+    _builder = ENVIO_E_BUILDER.get(nome)
+    if _builder and arquivo == "main.py" and ("def %s(" % _builder) in src:
+        corpo += corpo_de(_builder, arquivo, src)
     return corpo
 
 
