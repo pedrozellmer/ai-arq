@@ -21729,6 +21729,63 @@ def update_project_user_status(job_id: str, payload: StatusPayload, request: Req
         raise HTTPException(500, f"Erro: {e}")
 
 
+class FaltouPayload(BaseModel):
+    texto: str
+    reviewed_by: Optional[str] = ""
+
+
+@app.post("/api/items/{job_id}/faltou")
+def registrar_item_faltando(job_id: str, payload: FaltouPayload, request: Request):
+    """O cliente diz que a planilha ESQUECEU alguma coisa.
+
+    🩸 05/09/2026 — MEDIDO: **0 em 413 ações de revisão**. Não porque ninguém
+    quis: porque não havia como dizer. A tela de revisão só deixa aprovar,
+    editar e excluir — as três coisas que se fazem com um item que EXISTE.
+    Item que falta não tem onde ser apontado.
+    🔑 É a única pergunta de COBERTURA que existe. Sem ela a gente mede o quanto
+    o motor erra no que entregou, e fica cego no que ele nem viu — e "o que o
+    motor não viu" é metade da qualidade de um quantitativo.
+
+    🚫 NÃO cria item, NÃO mexe em `items_count`, NÃO entra no quantitativo.
+    Regra nº7: se entrasse, cronograma, memorial e comparativo ficariam velhos
+    na hora — e a gente estaria deixando o cliente escrever quantidade sem
+    medição nenhuma, que é a regra nº1 pelo avesso. Isto é RECADO, não linha.
+
+    Mora em `item_reviews` com `item_id` NULO — forma que a tabela já tem (as
+    48 exclusões são assim, porque a FK é ON DELETE CASCADE).
+    """
+    _require_project_owner(request, job_id)
+    texto = (payload.texto or "").strip()
+    if not texto:
+        raise HTTPException(400, "Escreva o que faltou na planilha.")
+    if len(texto) > 2000:
+        texto = texto[:2000]
+
+    linha = {
+        "job_id": job_id,
+        "item_id": None,
+        "action": "faltou",
+        "comment": texto,
+        "reviewed_by": (payload.reviewed_by or "")[:120],
+    }
+    # 🪤 CONFERE O RETORNO. `_supabase_insert` devolve False em falha e só
+    # registra num arquivo local do Render, que some no redeploy — foi
+    # exatamente esse buraco que escondeu a perda total de itens por 4 meses
+    # (`2e96daf`, 04/09). Um "faltou" perdido calado é PIOR que não ter botão:
+    # o cliente sai achando que contou, e a gente nunca soube.
+    if not _supabase_insert("item_reviews", linha):
+        _log_error("revisao:faltou-nao-gravou",
+                   f"o cliente apontou item faltando e a gravação FALHOU. "
+                   f"Texto perdido: {texto[:300]}",
+                   job_id, severity="critical")
+        raise HTTPException(500, "Não consegui salvar seu recado. Tenta de novo?")
+
+    _log_error("revisao:faltou-item",
+               f"o cliente apontou item faltando: {texto[:300]}",
+               job_id, severity="info")
+    return {"status": "ok"}
+
+
 class NotePayload(BaseModel):
     note: str
     author: Optional[str] = ""

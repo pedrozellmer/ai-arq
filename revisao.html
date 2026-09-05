@@ -237,6 +237,39 @@
 
   <div id="items-container" class="space-y-4 rv-rise rv-rise-3"></div>
 
+  <!-- 🩸 05/09/2026 — "FALTOU UM ITEM": a pergunta que a tela não deixava fazer.
+       MEDIDO: 0 em 413 ações de revisão. Não porque ninguém quis — porque a tela
+       só oferece aprovar, editar e excluir, as três coisas que se faz com item
+       que EXISTE. O que o motor NEM VIU não tinha onde ser apontado, e isso é
+       metade da qualidade de um quantitativo.
+       🚫 Fica FORA do quantitativo de propósito (regra nº7): não vira linha, não
+       mexe em contagem, não deixa cronograma/memorial velhos. É recado. -->
+  <div id="bloco-faltou" class="hidden mt-8 rounded-xl border border-gray-200 bg-white p-5">
+    <h3 class="font-semibold text-gray-900 text-sm">Faltou alguma coisa na planilha?</h3>
+    <p class="text-xs text-gray-500 mt-1 mb-3">
+      Se o levantamento esqueceu um serviço ou material, escreve aqui. Isso não entra
+      na planilha nem muda quantidade nenhuma — é recado pra gente conferir e corrigir
+      o motor.
+    </p>
+    <textarea id="faltou-texto" rows="3" maxlength="2000"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Ex.: não vi impermeabilização das áreas molhadas, nem a bancada da cozinha."></textarea>
+    <div class="flex items-center gap-3 mt-2">
+      <!-- 🪤 Botão SECUNDÁRIO de propósito: o primário desta tela é "Concluir
+           revisão", e dois botões fortes competindo confundem.
+           🚨 Tailwind aqui é build ESTÁTICO — classe que não está no
+           `tailwind.min.css` sai INERTE, sem erro nenhum. A 1ª versão usava
+           `bg-gray-900 hover:bg-gray-700`: nenhuma das duas existe no build, e
+           o botão sairia com texto branco sem fundo, invisível. Pego pelo
+           `test_tailwind_classes_vivas`. Estas aqui a própria tela já usa. -->
+      <button id="faltou-enviar" type="button"
+              class="bg-white border border-gray-300 text-gray-800 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-semibold transition">
+        Enviar recado
+      </button>
+      <span id="faltou-msg" class="text-sm" aria-live="polite"></span>
+    </div>
+  </div>
+
 </main>
 
 <!-- ═════════════════════════════════════════════════════════════ -->
@@ -593,6 +626,10 @@ function render() {
   });
 
   const container = document.getElementById('items-container');
+  // 🔑 O bloco "faltou alguma coisa?" só aparece quando há planilha pra olhar.
+  // Perguntar "o que faltou?" numa tela vazia não faz sentido nenhum.
+  const _bf = document.getElementById('bloco-faltou');
+  if (_bf) _bf.classList.toggle('hidden', !(_base && _base.length));
   // Ordenar por número da seção (ex: "4. Revestimentos" vem antes de "16. Marcenaria").
   // Antes: Object.keys().sort() fazia alfabético — "16" vinha antes de "4".
   const sortedSecs = Object.keys(groups).sort((a, b) => {
@@ -1329,6 +1366,45 @@ function updateCounters() {
 }
 
 // Handler do "Concluir revisão"
+// ── "Faltou um item" ───────────────────────────────────────────────────────
+// 🪤 O sucesso só é anunciado quando o SERVIDOR confirma. Um recado perdido em
+// silêncio é pior que não ter o botão: o cliente sai achando que contou.
+document.getElementById('faltou-enviar')?.addEventListener('click', async () => {
+  const ta  = document.getElementById('faltou-texto');
+  const msg = document.getElementById('faltou-msg');
+  const btn = document.getElementById('faltou-enviar');
+  const texto = (ta.value || '').trim();
+  if (!texto) {
+    msg.textContent = 'Escreve o que faltou primeiro.';
+    msg.className = 'text-sm text-amber-700';
+    ta.focus();
+    return;
+  }
+  btn.disabled = true;
+  msg.textContent = 'Enviando…';
+  msg.className = 'text-sm text-gray-500';
+  try {
+    if (window.trackEvent) trackEvent('clique:faltou-item');
+    const r = await authFetch(`${API_BASE}/api/items/${jobId}/faltou`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ texto })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    msg.textContent = '✓ Recebido, obrigado. A gente confere.';
+    msg.className = 'text-sm text-emerald-700';
+    ta.value = '';
+    ta.disabled = true;
+    btn.classList.add('hidden');
+  } catch (e) {
+    // 🪤 Devolve o botão: sem isso o cliente fica com o texto escrito e sem
+    // como reenviar — e o recado morre na tela dele.
+    msg.textContent = 'Não consegui enviar. Tenta de novo?';
+    msg.className = 'text-sm text-red-600';
+    btn.disabled = false;
+  }
+});
+
 document.getElementById('btn-finish')?.addEventListener('click', async () => {
   if (document.getElementById('btn-finish').disabled) return;
   const counts = {
