@@ -10002,6 +10002,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                    job_id, severity="error")
                         print(f"[pdfvec] {_stem}: filho rc={_pr.returncode} — {_err[:200]}")
                     _vm = _jv.loads(_pr.stdout.strip().splitlines()[-1]) if _pr.returncode == 0 and _pr.stdout.strip() else {}
+                    # 🔬 05/09 — as saídas MUDAS do filho ganham voz (ver _saida_do_filho_pdfvec).
+                    _tipo_saida, _det_saida = _saida_do_filho_pdfvec(_pr.returncode, _vm)
+                    if _tipo_saida == "memoria":
+                        _pdfvec_falhas.append({
+                            "prancha": _stem, "arquivo": filename,
+                            "motivo": "memoria", "rc": 0,
+                        })
+                        _log_error("pdfvec:filho-morreu",
+                                   f"{_stem} ({filename}): MemoryError capturado por etapa "
+                                   f"(rc=0, resultado parcial) — {_det_saida}",
+                                   job_id, severity="error")
+                    elif _tipo_saida == "sem_escala":
+                        _log_error("pdfvec:sem-escala", f"{_stem} ({filename}): {_det_saida}",
+                                   job_id, severity="warning")
                     if _vm.get("escala_validada") and (_vm.get("n_rooms") or _vm.get("walls_m")):
                         _linhas = [
                             "",
@@ -11614,15 +11628,24 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # ficava fora do aviso — invisível pro cliente exatamente como antes.
             # Pro cliente o efeito é o mesmo: a prancha não foi medida. O motivo
             # muda o texto, não o direito dele de saber.
+            # 05/09: "memoria" = MemoryError engolido por etapa (filho rc=0, parcial).
+            # Pro cliente é a mesma coisa: a prancha não foi medida. Frase própria:
+            # 'densa demais' ≠ 'não havia o que medir'.
             _falhou = [f for f in _pdfvec_falhas
-                       if f.get("motivo") in ("tempo", "processo")]
+                       if f.get("motivo") in ("tempo", "processo", "memoria")]
             if _falhou:
                 _arqs = sorted({f["arquivo"] for f in _falhou})
                 _nomes = ", ".join(_arqs[:3])
                 _mais = "" if len(_arqs) <= 3 else " e outras"
-                _so_tempo = all(f.get("motivo") == "tempo" for f in _falhou)
-                _porque = ("não deram tempo de ser medidas geometricamente"
-                           if _so_tempo else "não puderam ser medidas geometricamente")
+                _motivos = {f.get("motivo") for f in _falhou}
+                _so_tempo = _motivos == {"tempo"}
+                if _so_tempo:
+                    _porque = "não deram tempo de ser medidas geometricamente"
+                elif "memoria" in _motivos:
+                    _porque = ("são densas demais para a nossa medição geométrica "
+                               "(faltou memória — limite nosso, não defeito do arquivo)")
+                else:
+                    _porque = "não puderam ser medidas geometricamente"
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
                     "⚠ %d prancha(s) %s (%s%s). Elas foram lidas assim mesmo, mas os "
                     "itens delas saem como estimativa — confira essas contra o projeto "
@@ -13036,6 +13059,39 @@ def _normalizar_extensao_cad(cad_paths, job_id: str):
             f"SALVAR COMO → tipo \"DXF 2013\"; renomear o .dwg não converte.")
         novos.append(alvo)
     return novos, avisos, mapa
+
+
+def _saida_do_filho_pdfvec(rc, vm) -> tuple:
+    """Classifica a saída do filho da medição de PDF que hoje termina MUDA.
+
+    Devolve (tipo, detalhe): tipo é "memoria", "sem_escala" ou None.
+
+    🔬 05/09/2026 (estudo do teto, passo 6 + o que a A08 do William custou):
+    - "memoria": rc=0 mas alguma etapa engoliu um MemoryError (o try/except por
+      etapa segura a falha quando ela cai em Python/GEOS — medido: FORRO com
+      teto de 1,5 GB devolveu rc=0 e JSON parcial com err_views/err_rooms
+      'MemoryError'). Saía como "sucesso" parcial e o cliente NÃO era avisado —
+      o oposto do que o comentário do teto prometia.
+    - "sem_escala": rc=0 e o filho pulou por falta de escala (viewport, carimbo,
+      cota). Não deixava NENHUMA linha na promoção — só a sombra anotava. Duas
+      tentativas na A08 do William pra descobrir que era o cache do carimbo.
+    Só classifica; quem grava e avisa é o chamador.
+    """
+    if rc != 0 or not isinstance(vm, dict) or not vm:
+        return None, ""
+    errs_mem = {k: str(v)[:80] for k, v in vm.items()
+                if k.startswith("err_") and "MemoryError" in str(v)}
+    if errs_mem:
+        return "memoria", "; ".join(f"{k}={v}" for k, v in sorted(errs_mem.items()))
+    if vm.get("skip"):
+        carimbo = (vm.get("err_carimbo")
+                   or ("indicadas" if vm.get("indicadas") else None)
+                   or (vm.get("declared") or None) or "-")
+        cotas = vm.get("cotas_derivacao") or vm.get("err_cotas_derive") or "-"
+        viewport = vm.get("err_viewport") or vm.get("n_viewports") or "-"
+        return "sem_escala", (f"{vm.get('skip')} — viewport={viewport} carimbo={carimbo} "
+                              f"cotas={cotas} secs={vm.get('secs')}")
+    return None, ""
 
 
 _RX_ESTRUT_NOME = None
