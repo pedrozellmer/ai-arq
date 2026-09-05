@@ -3375,6 +3375,64 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
             f'</div>')
 
 
+def _build_sem_medida_email(name: str, project_name: str, job_id: str,
+                            n_total: int, n_zerados: int, extra_body_html: str = "",
+                            email: str = ""):
+    """Monta (subject, html) do e-mail 'não consegui medir esse arquivo' — a irmã
+    de má notícia da 'planilha pronta', que sai NO LUGAR dela quando nada foi
+    medido do CAD (`_nada_medido` em process_job).
+
+    05/09: separado do envio pelo mesmo motivo da irmã — a Central de E-mails
+    (preview e "teste pra mim") monta pelo MESMO builder do envio real. Até
+    aqui o texto vivia inline no process_job e a Central o listava como "fora
+    do catálogo", sem ficha e sem preview.
+    `extra_body_html` = aviso de leitura + diagnóstico (reais no envio, vazio
+    no preview)."""
+    import html as _hs
+    _pn = (project_name or "").strip()
+    subject = (f"{_pn} — não consegui medir esse arquivo"
+               if _pn else "Não consegui medir esse arquivo")
+    corpo = (
+        f"{_greeting_line(_hs.escape(name or ''))}<br><br>"
+        # 🪤 A frase tem que caber nos DOIS casos. Com o limite em
+        # 80%, até 1 em cada 5 linhas pode ter número (chute da
+        # IA, nunca medição) — dizer "nenhuma quantidade" seria
+        # falso. O que é sempre verdade aqui é `_n_med == 0`:
+        # não medimos NADA do CAD. E o número de linhas em branco
+        # vai explícito, pra ele não precisar contar.
+        f"Li o que você enviou, mas <b>não consegui medir nada do "
+        f"CAD</b> — {n_zerados} das {n_total} linhas saíram "
+        f"sem quantidade. Não tem planilha pra entregar ainda, e "
+        f"prefiro te dizer isso do que mandar uma lista pra você "
+        f"preencher na mão.<br><br>"
+        f"O motivo está no diagnóstico abaixo. Na maioria das vezes é "
+        f"escala: sem cota, sem carimbo e sem viewport, não dá pra saber "
+        f"o tamanho real do que está desenhado — e a gente não inventa "
+        f"medida.<br><br>"
+        f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> "
+        f"(no AutoCAD ou BricsCAD: Salvar Como → DXF 2013) no mesmo "
+        f"projeto. A gente refaz medindo de verdade, de graça. Se só "
+        f"existe o desenho à mão, me diga a área total no upload que eu "
+        f"uso como base — rotulada como informada por você, não medida."
+        f"{extra_body_html}"
+        # Aqui a pergunta vale MAIS: e o caso em que a entrega
+        # falhou, e a nota vem junto com o motivo. So muda a
+        # copy (sem_medida=True) — perguntar "ficou boa?" depois
+        # de nao medir nada seria surdo.
+        + _bloco_avaliar_projeto(job_id, email, sem_medida=True))
+    html = _email_wrap(
+        "Não consegui medir esse arquivo", corpo,
+        "Abrir meu projeto",
+        f"https://ai.arq.br/projeto.html?job_id={job_id}",
+        badge="&#9888; Sem medida",
+        # 🪤 Preheader de ma noticia nao pode soar animado. Diz o
+        # fato e o caminho, sem promessa que a gente nao cumpre.
+        preheader="Os itens saíram identificados, mas sem quantidade medida — "
+                  "veja o motivo e o que resolve.",
+        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
+    return subject, html
+
+
 def _build_planilha_pronta_email(name: str, project_name: str, job_id: str,
                                  n_total: int, extra_body_html: str = "",
                                  email: str = ""):
@@ -12667,7 +12725,11 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             _body_c,
                             "Abrir meu projeto", f"https://ai.arq.br/projeto.html?job_id={job_id}",
                             badge=_badge_c,
-                            preheader=_pre_c))
+                            preheader=_pre_c),
+                        # 05/09: sem etiqueta este e-mail caía no balde "email" da
+                        # Central. Mesmo nome do gate em email_auto_log, pra os
+                        # dois logs contarem a mesma coisa.
+                        log_kind="complemento_pronto")
                     if _ok_c:
                         _email_auto_registrar(_pe, "complemento_pronto", ref=job_id)
                     print(f"[email] complemento-pronto -> enviado={_ok_c}")
@@ -12701,7 +12763,8 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                     f"https://ai.arq.br/projeto.html?job_id={job_id}#quantitativo",
                                     badge="&#10003; Atualizado",
                                     preheader="Rodamos os mesmos arquivos no motor de hoje. "
-                                              "A versão anterior continua no painel."))
+                                              "A versão anterior continua no painel."),
+                        log_kind="reprocesso_pronto")
                     if _ok_r:
                         _email_auto_registrar(_pe, "reprocesso_pronto", ref=job_id)
                     print(f"[email] reprocesso-pronto -> enviado={_ok_r}")
@@ -12805,47 +12868,12 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 and _n_geo_nm == 0
                                 and _n_zerado >= _LIMITE_BRANCO * len(all_items))
                 if _nada_medido:
-                    _pn_nm = (_rows[0].get("project_name") or "").strip()
-                    _subj_pp = (f"{_pn_nm} — não consegui medir esse arquivo"
-                                if _pn_nm else "Não consegui medir esse arquivo")
-                    _corpo_nm = (
-                        f"{_greeting_line(_html.escape(_nm))}<br><br>"
-                        # 🪤 A frase tem que caber nos DOIS casos. Com o limite em
-                        # 80%, até 1 em cada 5 linhas pode ter número (chute da
-                        # IA, nunca medição) — dizer "nenhuma quantidade" seria
-                        # falso. O que é sempre verdade aqui é `_n_med == 0`:
-                        # não medimos NADA do CAD. E o número de linhas em branco
-                        # vai explícito, pra ele não precisar contar.
-                        f"Li o que você enviou, mas <b>não consegui medir nada do "
-                        f"CAD</b> — {_n_zerado} das {len(all_items)} linhas saíram "
-                        f"sem quantidade. Não tem planilha pra entregar ainda, e "
-                        f"prefiro te dizer isso do que mandar uma lista pra você "
-                        f"preencher na mão.<br><br>"
-                        f"O motivo está no diagnóstico abaixo. Na maioria das vezes é "
-                        f"escala: sem cota, sem carimbo e sem viewport, não dá pra saber "
-                        f"o tamanho real do que está desenhado — e a gente não inventa "
-                        f"medida.<br><br>"
-                        f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> "
-                        f"(no AutoCAD ou BricsCAD: Salvar Como → DXF 2013) no mesmo "
-                        f"projeto. A gente refaz medindo de verdade, de graça. Se só "
-                        f"existe o desenho à mão, me diga a área total no upload que eu "
-                        f"uso como base — rotulada como informada por você, não medida."
-                        f"{_aviso_html}{_diag}"
-                        # Aqui a pergunta vale MAIS: e o caso em que a entrega
-                        # falhou, e a nota vem junto com o motivo. So muda a
-                        # copy (sem_medida=True) — perguntar "ficou boa?" depois
-                        # de nao medir nada seria surdo.
-                        + _bloco_avaliar_projeto(job_id, _pe, sem_medida=True))
-                    _html_pp = _email_wrap(
-                        "Não consegui medir esse arquivo", _corpo_nm,
-                        "Abrir meu projeto",
-                        f"https://ai.arq.br/projeto.html?job_id={job_id}",
-                        badge="&#9888; Sem medida",
-                        # 🪤 Preheader de ma noticia nao pode soar animado. Diz o
-                        # fato e o caminho, sem promessa que a gente nao cumpre.
-                        preheader="Os itens saíram identificados, mas sem quantidade medida — "
-                                  "veja o motivo e o que resolve.",
-                        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
+                    # 05/09: o texto mora em `_build_sem_medida_email` — o MESMO
+                    # builder que a Central de E-mails usa no preview e no "teste
+                    # pra mim". Aqui entram só os números reais do job.
+                    _subj_pp, _html_pp = _build_sem_medida_email(
+                        _nm, _rows[0].get("project_name") or "", job_id,
+                        len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe)
                     _log_error("motor:sem-medida-nenhuma",
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
                                f"— e-mail trocado por 'não consegui medir'", job_id)
@@ -15337,7 +15365,9 @@ def _newsletter_blast(subject, html_template, recipients):
             html = (html_template.replace("{{SAUDACAO}}", greet)
                     .replace("{{UNSUB}}", unsub)
                     .replace("{{WPP}}", _WHATSAPP_LINK))
-            ok = _send_email_smtp(email, subject, html)
+            # 05/09: sem etiqueta a newsletter caía no balde "email" do
+            # email_sent_log — 101 dos 112 "fora do catálogo" da Central eram ela.
+            ok = _send_email_smtp(email, subject, html, log_kind="newsletter")
             sent += 1 if ok else 0
             fail += 0 if ok else 1
         except Exception as _e:
@@ -16639,6 +16669,36 @@ _EMAIL_CATALOG = [
     {"key": "nps_relacional", "nome": "Pesquisa de NPS (0-10)", "grupo": "auto",
      "gatilho": "auto: 90 dias de casa e depois a cada 6 meses · pula quem "
                 "respondeu nos últimos 60 dias"},
+    # 05/09/2026 — os "fora do catálogo" que o Pedro viu na Central ganham ficha.
+    # 🪤 Nasceram DEPOIS do catálogo (variantes de 14/08, 23/08, 24/08, 26/08) e
+    # ninguém deu ficha; e três envios (newsletter, complemento, reprocesso) saíam
+    # SEM etiqueta e caíam no balde "email" (112 sem nome). O guarda
+    # test_todo_email_que_sai_tem_ficha reprova log_kind sem ficha daqui em diante.
+    # "sem_preview" = ficha sem botão de preview/teste, com o MOTIVO escrito.
+    {"key": "sem_medida", "nome": "Não consegui medir (no lugar da Planilha pronta)", "grupo": "auto",
+     "gatilho": "auto: o processamento terminou mas NADA foi medido do CAD (≥80% das "
+                "linhas sem quantidade) — sai em vez da Planilha pronta"},
+    {"key": "boas_vindas_cadastro", "nome": "Boas-vindas + terminar o cadastro", "grupo": "auto",
+     "gatilho": "auto (tick horário): conta criada pelo Google sem perfil completo — "
+                "sai em vez do Boas-vindas, com link de 1 clique"},
+    {"key": "leitura_nova", "nome": "Refizemos a leitura (filhote liberado)", "grupo": "auto",
+     "gatilho": "auto: o Pedro libera um filhote que mediu MAIS que o original e o "
+                "cliente não revisou linha à mão"},
+    {"key": "leitura_combinada", "nome": "Versão combinada de duas leituras", "grupo": "auto",
+     "gatilho": "auto: o Pedro libera um filhote COMBINADO — prancha por prancha, a "
+                "leitura mais completa de cada uma"},
+    {"key": "complemento_pronto", "nome": "Complemento processado", "grupo": "auto",
+     "gatilho": "auto: o cliente subiu arquivo a mais no mesmo projeto e a planilha "
+                "foi atualizada (1x por job)",
+     "sem_preview": "o texto nasce no processamento, com os números do job"},
+    {"key": "reprocesso_pronto", "nome": "Reprocesso pronto", "grupo": "auto",
+     "gatilho": "auto: reprocesso do mesmo projeto (pelo cliente ou resgate nosso), "
+                "1x por job",
+     "sem_preview": "o texto nasce no processamento, com os números do job"},
+    {"key": "newsletter", "nome": "Newsletter mensal", "grupo": "manual",
+     "gatilho": "manual: aba Newsletter — último dia útil do mês, cada edição "
+                "aprovada pelo Pedro",
+     "sem_preview": "o preview mora na aba Newsletter"},
 ]
 
 
@@ -16658,6 +16718,12 @@ def _neutraliza_links_de_avaliacao(html: str) -> str:
     return _re_prev.sub(
         r'href="[^"]*obrigado\.html\?[^"]*"',
         'href="#" title="exemplo: link desativado no teste"', html or "")
+
+
+class _SemPreview(KeyError):
+    """Tipo que TEM ficha no catálogo mas não tem preview (o texto nasce no
+    processamento, ou mora em outra aba). Herda de KeyError pra quem só trata
+    'tipo desconhecido' continuar funcionando; quem sabe distinguir diz o motivo."""
 
 
 def _render_email_by_type(key: str):
@@ -16706,6 +16772,25 @@ def _render_email_by_type_raw(key: str):
         return _build_cronograma_checkin_email(nome, projeto, 6, fake_job)
     if key == "calibracao":
         return _build_calibracao_email(nome, projeto)
+    # 05/09: os que estavam "fora do catálogo" — pelo MESMO builder do envio real.
+    if key == "sem_medida":
+        return _build_sem_medida_email(nome, projeto, fake_job, 30, 27, "",
+                                       email="cliente@exemplo.com")
+    if key == "boas_vindas_cadastro":
+        return _build_welcome_email(nome, True, fake_link)
+    if key in ("leitura_nova", "leitura_combinada"):
+        # Exemplo com ganho E com uma prancha que piorou, pra o preview mostrar
+        # o quadro de honestidade dos dois lados.
+        _antes = {"medidos": 12, "itens": 38, "pranchas": 5,
+                  "por_prancha": {"A01": {"medidos": 6}, "A02": {"medidos": 6}}}
+        _depois = {"medidos": 27, "itens": 46, "pranchas": 7,
+                   "por_prancha": {"A01": {"medidos": 22}, "A02": {"medidos": 5}}}
+        if key == "leitura_nova":
+            return _build_leitura_nova_email(nome, projeto, fake_job, _antes, _depois)
+        return _build_leitura_combinada_email(nome, projeto, fake_job, _antes, _depois, [])
+    _ficha = next((c for c in _EMAIL_CATALOG if c["key"] == key), None)
+    if _ficha and _ficha.get("sem_preview"):
+        raise _SemPreview(_ficha["sem_preview"])
     raise KeyError(key)
 
 
@@ -16717,6 +16802,8 @@ async def admin_email_render(request: Request, type: str = ""):
     key = (type or "").strip()
     try:
         subject, html = _render_email_by_type(key)
+    except _SemPreview as _sp:
+        raise HTTPException(400, f"este tipo não tem preview: {_sp.args[0]}")
     except KeyError:
         raise HTTPException(400, f"tipo de email desconhecido: {key}")
     return {"type": key, "subject": subject, "html": html}
@@ -16744,6 +16831,8 @@ def admin_email_teste(payload: TesteEmailPayload, request: Request):
     key = (payload.type or "").strip()
     try:
         subject, html = _render_email_by_type(key)
+    except _SemPreview as _sp:
+        raise HTTPException(400, f"este tipo não tem preview nem teste: {_sp.args[0]}")
     except KeyError:
         raise HTTPException(400, f"tipo de email desconhecido: {key}")
     ok = _send_email_smtp(ADMIN_EMAIL, f"[TESTE] {subject}", html)
@@ -23958,13 +24047,34 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
       5. o aviso de sobreposição entre pranchas, quando houver
       6. que a versão dele continua lá (regra dura nº7)
     """
-    import html as _hc
     email = (pai.get("user_email") or "").strip()
     if not email:
         return False
     nome = (pai.get("user_name") or "").strip().split(" ")[0] or ""
     proj = (pai.get("project_name") or "seu projeto")[:60]
+    subject, html = _build_leitura_combinada_email(
+        nome, proj, merge_job, antes, depois, filho.get("warnings") or [])
+    # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
+    # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
+    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
+    # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
+    # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
+    # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
+    # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
+    # os transacionais também, e isso calaria a esteira inteira.
+    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_combinada")
+    if _ok:
+        _email_auto_registrar(email, "leitura_combinada", ref=merge_job or "")
+    return _ok
 
+
+def _build_leitura_combinada_email(nome: str, proj: str, merge_job: str,
+                                   antes: dict, depois: dict, avisos_filho: list):
+    """Monta (subject, html) da 'versão combinada'. 05/09: separado do envio pra
+    Central de E-mails ter ficha, preview e "teste pra mim" pelo MESMO builder.
+    `avisos_filho` = warnings do projeto combinado (procedência por prancha e
+    sobreposição), escritos quando ele nasceu."""
+    import html as _hc
     ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
     ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
 
@@ -23987,7 +24097,7 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
     # A procedência por prancha e o aviso de sobreposição já foram escritos como
     # avisos do projeto combinado quando ele nasceu. Reaproveita em vez de
     # recalcular: cálculo repetido é um lugar a mais pra divergir.
-    _avisos = [str(w).strip() for w in (filho.get("warnings") or []) if str(w).strip()]
+    _avisos = [str(w).strip() for w in (avisos_filho or []) if str(w).strip()]
     _proc = next((w for w in _avisos if w.startswith("Esta planilha junta")), "")
     _sobre = next((w for w in _avisos if "CONFERIR ANTES DE SOMAR" in w), "")
 
@@ -24063,18 +24173,7 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
         preheader="%d itens medidos do CAD, contra %d na leitura anterior. "
                   "A sua versão original continua no painel."
                   % (depois.get("medidos", 0), antes.get("medidos", 0)))
-    # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
-    # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
-    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
-    # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
-    # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
-    # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
-    # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
-    # os transacionais também, e isso calaria a esteira inteira.
-    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_combinada")
-    if _ok:
-        _email_auto_registrar(email, "leitura_combinada", ref=merge_job or "")
-    return _ok
+    return subject, html
 
 
 def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) -> bool:
@@ -24103,12 +24202,32 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
     irmão dele (`_email_leitura_combinada`) foi consertado primeiro; a auditoria
     dos 17 e-mails achou que este tinha ficado pra trás. Mesmo conserto.
     """
-    import html as _hn
     email = (pai.get("user_email") or "").strip()
     if not email:
         return False
     nome = (pai.get("user_name") or "").strip().split(" ")[0] or ""
     proj = (pai.get("project_name") or "seu projeto")[:60]
+    subject, html = _build_leitura_nova_email(nome, proj, filho_job, antes, depois)
+    # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
+    # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
+    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
+    # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
+    # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
+    # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
+    # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
+    # os transacionais também, e isso calaria a esteira inteira.
+    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_nova")
+    if _ok:
+        _email_auto_registrar(email, "leitura_nova", ref=filho_job or "")
+    return _ok
+
+
+def _build_leitura_nova_email(nome: str, proj: str, filho_job: str,
+                              antes: dict, depois: dict):
+    """Monta (subject, html) do 'refizemos a leitura'. 05/09: separado do envio
+    pra Central de E-mails ter ficha, preview e "teste pra mim" pelo MESMO
+    builder — até aqui a Central listava este e-mail como "fora do catálogo"."""
+    import html as _hn
     ganho_med = depois.get("medidos", 0) - antes.get("medidos", 0)
     ganho_itens = depois.get("itens", 0) - antes.get("itens", 0)
     ganho_pr = depois.get("pranchas", 0) - antes.get("pranchas", 0)
@@ -24176,18 +24295,8 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
         badge="&#10003; Atualizado",
         reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.",
         preheader=_pre)
-    # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
-    # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
-    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
-    # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
-    # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
-    # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
-    # 🪤 NÃO fazer `_email_auto_recente` ler `email_sent_log`: aquela tabela tem
-    # os transacionais também, e isso calaria a esteira inteira.
-    _ok = _send_email_smtp(email, subject, html, log_kind="leitura_nova")
-    if _ok:
-        _email_auto_registrar(email, "leitura_nova", ref=filho_job or "")
-    return _ok
+    return subject, html
+
 
 @app.get("/api/admin/onde-o-motor-erra")
 def admin_onde_o_motor_erra(request: Request):

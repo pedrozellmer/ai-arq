@@ -3530,16 +3530,12 @@ function _emailCard(item) {
   const vol = semLeitura ? null : Number(item.volume);
   const volTxt = semLeitura ? 'volume desconhecido (a contagem falhou)'
                             : (vol === 1 ? '1 email enviado' : `${vol} emails enviados`);
-  return `
-    <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
-      <div class="flex items-start justify-between gap-2">
-        <h4 class="font-semibold text-gray-900 text-sm leading-snug">${esc(item.nome)}</h4>
-        ${item.orfao ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold" title="Este tipo SAI pelo motor mas nao tem ficha no catalogo — sem nome amigavel, sem preview e sem botao de teste">&#9888; fora do cat&aacute;logo</span>' : _emailBadge(item.grupo)}
-      </div>
-      <p class="text-xs text-gray-500 leading-relaxed">${esc(item.gatilho || '')}</p>
-      <div class="flex items-center justify-between mt-auto pt-1">
-        <span class="inline-flex items-center gap-1 text-xs text-gray-600" title="Total enviado pra usuários reais (email_sent_log)">&#128231; ${volTxt}</span>
-        <div class="flex items-center gap-1.5">
+  // 05/09: ficha SEM preview (o texto nasce no processamento, ou mora em outra
+  // aba) mostra o MOTIVO no lugar dos botões — botão que abre "(erro)" é pior
+  // que botão nenhum.
+  const acoes = item.sem_preview
+    ? `<span class="text-xs text-gray-400 italic" title="${esc(item.sem_preview)}">sem preview — ${esc(item.sem_preview)}</span>`
+    : `<div class="flex items-center gap-1.5">
           <button onclick="enviarEmailTeste('${esc(item.key)}', this)"
                   title="Manda este email pra VOCÊ, com dados de exemplo. Gmail e Outlook reescrevem CSS — só na caixa de verdade dá pra ver como fica."
                   class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold transition">
@@ -3549,7 +3545,17 @@ function _emailCard(item) {
                   class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold transition">
             &#128065; Ver preview
           </button>
-        </div>
+        </div>`;
+  return `
+    <div class="bg-white rounded-2xl border border-gray-200 p-4 shadow-sm flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-2">
+        <h4 class="font-semibold text-gray-900 text-sm leading-snug">${esc(item.nome)}</h4>
+        ${item.orfao ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold" title="Este tipo SAI pelo motor mas nao tem ficha no catalogo — sem nome amigavel, sem preview e sem botao de teste">&#9888; fora do cat&aacute;logo</span>' : _emailBadge(item.grupo)}
+      </div>
+      <p class="text-xs text-gray-500 leading-relaxed">${esc(item.gatilho || '')}</p>
+      <div class="flex items-center justify-between mt-auto pt-1">
+        <span class="inline-flex items-center gap-1 text-xs text-gray-600" title="Total enviado pra usuários reais (email_sent_log)">&#128231; ${volTxt}</span>
+        ${acoes}
       </div>
     </div>`;
 }
