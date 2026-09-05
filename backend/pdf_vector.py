@@ -33,6 +33,43 @@ BUDGET_S = 180.0       # teto de tempo total do shadow por job
 MAX_FILE_MB = 12       # PDF maior que isso não é medido (memória)
 
 
+def _parse_proc_status(texto: str) -> dict:
+    """Tira de /proc/self/status os campos de memória, em kB. Tolerante a lixo."""
+    m: dict = {}
+    for ln in (texto or "").splitlines():
+        k, _, v = ln.partition(":")
+        if k in ("VmPeak", "VmHWM", "VmRSS", "VmSize", "VmData"):
+            try:
+                m[k] = int(v.strip().split()[0])
+            except (ValueError, IndexError):
+                pass
+    return m
+
+
+def _mem_kb() -> dict:
+    """Memória do PRÓPRIO processo, em kB — a régua que o teto usa.
+
+    🔬 05/09/2026, PASSO 3 do estudo do teto. O RLIMIT_AS cobra endereço
+    VIRTUAL (VmPeak); tudo que a gente tinha medido era RESIDENTE (VmHWM, o
+    que o Render mostra). O filho do William morreu com ≤ ~1,06 GB residentes
+    quando o kernel cobrou 2 GB virtuais — a diferença entre os dois é a
+    incógnita que decide o valor do teto, e nunca foi medida em produção.
+    Devolve {} onde não existe /proc (Windows). Nunca levanta: é observação.
+    """
+    m: dict = {}
+    try:
+        with open("/proc/self/status", encoding="ascii", errors="ignore") as f:
+            m = _parse_proc_status(f.read())
+    except Exception:
+        pass
+    try:
+        import resource
+        m["ru_maxrss"] = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except Exception:
+        pass
+    return m
+
+
 def _grupos_por_proximidade_pdf(rooms: list, den: float, gap_m: float = 1.0) -> dict:
     """Agrupa cômodos que se tocam — cada grupo ≈ uma VISTA da folha.
 
@@ -94,6 +131,16 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     """Mede UMA página. Cada etapa é best-effort; devolve o que conseguiu."""
     out: dict = {"file": os.path.basename(pdf_path)[:60], "page": page_index}
     t0 = time.time()
+    # PASSO 3 (05/09): tempo e memória POR ETAPA, devolvidos no mesmo JSON.
+    out["mem_kb_inicio"] = _mem_kb()
+    _etapas: dict = {}
+    _mem_et: dict = {}
+
+    def _marca(nome: str, t_ini: float) -> None:
+        _etapas[nome] = round(time.time() - t_ini, 1)
+        _m = _mem_kb()
+        if _m:
+            _mem_et[nome] = [_m.get("VmRSS"), _m.get("VmHWM")]
 
     # 1) ESCALA — fonte primária: viewport embutido no PDF (exato, R$0, resolve
     # "INDICADAS"). Fallback: carimbo via Vision. (Achado #2 do estudo 07/07.)
@@ -101,6 +148,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     bbox = None
     alt_viewports: list = []      # demais viewports do /VP (fallback de salas)
     vp_page_area = None
+    _t_et = time.time()
     try:
         from pdfvec_layers import scale_from_viewport
         vp = scale_from_viewport(pdf_path, page_index)
@@ -116,8 +164,10 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             vp_page_area = (pw * ph) or None
     except Exception as e:
         out["err_viewport"] = f"{type(e).__name__}: {e}"[:120]
+    _marca("viewport", _t_et)
 
     if not den:  # fallback: carimbo Vision
+        _t_et = time.time()
         try:
             from pdfvec_carimbo import read_carimbo_scale
             car = read_carimbo_scale(pdf_path, page_index)
@@ -128,6 +178,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
                 out["scale_src"] = "carimbo"
         except Exception as e:
             out["err_carimbo"] = f"{type(e).__name__}: {e}"[:120]
+        _marca("carimbo", _t_et)
 
     if not den:
         # 3ª fonte: DERIVAR a escala das cotas escritas (01/08/2026).
@@ -136,6 +187,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         # uma escala já conhecida; agora ela também descobre.
         # Roda por último e só quando as outras duas falham: não pode regredir
         # nada que hoje funciona.
+        _t_et = time.time()
         try:
             from pdfvec_cotas import derive_scale_from_cotas
             from pdfvec_walls import detect_walls
@@ -160,15 +212,20 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
                 out["scale_derivada_por_cota"] = True
         except Exception as e:
             out["err_cotas_derive"] = f"{type(e).__name__}: {e}"[:120]
+        _marca("cotas_derivacao", _t_et)
 
     if not den:
         out["skip"] = "sem escala (viewport, carimbo nem cota)"
         out["secs"] = round(time.time() - t0, 1)
+        out["etapas"] = _etapas
+        out["mem_etapas"] = _mem_et
+        out["mem_kb"] = _mem_kb()
         return out
     out["scale"] = den
 
     # 2) view principal — se o viewport não deu o bbox, cai pro clustering
     if bbox is None:
+        _t_et = time.time()
         try:
             from pdfvec_views import detect_views
             views = detect_views(pdf_path, page_index)
@@ -178,11 +235,13 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
                 bbox = main["bbox"]
         except Exception as e:
             out["err_views"] = f"{type(e).__name__}: {e}"[:120]
+        _marca("views", _t_et)
 
     # 3) ambientes (banda de sala) + envoltória (banda alta, ponte proporcional)
     room_den, room_bbox = den, bbox   # viewport que efetivamente mediu salas
     rooms_ok: list = []               # salas finais (consumidas pela validação por cota)
     walls_ok: list = []               # paredes finais (idem)
+    _t_et = time.time()
     try:
         from pdfvec_rooms import PT_TO_M, detect_rooms
         # bridge_gaps_m=1.2: se a geometria pura fechar quase nada, refaz com
@@ -238,6 +297,8 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             out["rooms_bridges"] = rmeta.get("n_bridges")
         # envoltória: ponte proporcional à escala (1,2 m reais). Antes era 12pt
         # fixo — batia com 1,2 m só em 1:100; em 1:50 fechava apenas 0,6 m.
+        _marca("rooms", _t_et)
+        _t_et = time.time()
         env_gap_pt = 1.2 / (PT_TO_M * den)
         # 🪤 O piso de 400 m² é arbitrário e estava DESCARTANDO setor real: no
         # projeto de teste o setor "área sem intervenção" tem 380,9 m² e ficava
@@ -251,12 +312,15 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         out["envelope_m2"] = round(max((a for a in _env_areas if a >= 400), default=0), 1) or None
         out["envelope_m2_150"] = round(_env_areas[0], 1) if _env_areas else None
         out["envelope_top"] = [round(a, 1) for a in _env_areas[:4]]
+        _marca("envoltoria", _t_et)
     except Exception as e:
         out["err_rooms"] = f"{type(e).__name__}: {e}"[:120]
+        _marca("envoltoria" if "rooms" in _etapas else "rooms", _t_et)
 
     # 4) paredes/divisórias (medição por pares de paralelas na sopa) — na
     # MESMA viewport/escala que mediu as salas (numa prancha de detalhe, medir
     # parede da elevação seria ruído)
+    _t_et = time.time()
     try:
         from pdfvec_walls import detect_walls
         w = detect_walls(pdf_path, page_index, room_den, room_bbox)
@@ -265,6 +329,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         out["n_walls"] = len(walls_ok)
     except Exception as e:
         out["err_walls"] = f"{type(e).__name__}: {e}"[:120]
+    _marca("walls", _t_et)
 
     # 4.5) VALIDAÇÃO POR COTA (pdfvec_cotas): cruza as cotas ESCRITAS na view
     # medida com paredes/arestas de sala MEDIDAS. >= 2 cotas independentes
@@ -273,6 +338,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     # viewports com escalas distintas): a validação usa apenas tokens dentro
     # do bbox da view medida, então "escala_validada" vale SÓ pra ela —
     # "cotas_escopo" marca isso no log.
+    _t_et = time.time()
     try:
         from pdfvec_cotas import validate_scale
         cot = validate_scale(pdf_path, page_index, room_den, room_bbox,
@@ -287,17 +353,23 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
             out["cotas_escopo"] = "view_principal"
     except Exception as e:
         out["err_cotas"] = f"{type(e).__name__}: {e}"[:120]
+    _marca("cotas", _t_et)
 
     # 5) POR LAYER (descoberta 07/07: OCG preserva os layers do CAD no PDF) —
     # parede só do layer de alvenaria/divisória (sem contaminação) + inventário
     # de símbolos (IND-*/LUM-*). Determinístico, sem IA. Coleta pra calibrar.
+    _t_et = time.time()
     try:
         from pdfvec_layers import summarize_layers
         out["layers"] = summarize_layers(pdf_path, page_index, room_den, room_bbox)
     except Exception as e:
         out["err_layers"] = f"{type(e).__name__}: {e}"[:120]
+    _marca("layers", _t_et)
 
     out["secs"] = round(time.time() - t0, 1)
+    out["etapas"] = _etapas
+    out["mem_etapas"] = _mem_et
+    out["mem_kb"] = _mem_kb()
     return out
 
 

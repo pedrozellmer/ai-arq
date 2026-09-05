@@ -480,7 +480,7 @@ _STAGES_DIAGNOSTICO = frozenset({
     "motor:avisos-no-erro",
     "motor:refaz-planilha-admin",
     "libredwg:usado-no-fluxo", "libredwg:qualidade", "libredwg:batch",
-    "pdfvec:shadow", "pdfvec:promo", "dxfrooms:shadow",
+    "pdfvec:shadow", "pdfvec:promo", "pdfvec:memoria", "dxfrooms:shadow",
     "dwg:aec-detectado-no-upload",
     "admin:filhote", "admin:filhote-inicio", "admin:filhote-email",
     "admin:desarquivar-fixture", "admin:reparo-aviso-falso",
@@ -10038,6 +10038,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # timeout", que é a pergunta que o
                                 # MAX_PAGES existe pra resolver.
                                 "secs": float(_vm.get("secs") or 0),
+                                # PASSO 3 (05/09): o filho devolve o próprio pico
+                                # (VmPeak = virtual, a régua do RLIMIT_AS; VmHWM =
+                                # residente, o que o Render mostra) e o tempo por
+                                # etapa. Sai no log pdfvec:memoria, mais abaixo.
+                                "mem_kb": _vm.get("mem_kb") or {},
+                                "mem_kb_inicio": _vm.get("mem_kb_inicio") or {},
+                                "etapas": _vm.get("etapas") or {},
+                                "mem_etapas": _vm.get("mem_etapas") or {},
                             }
                         except (TypeError, ValueError):
                             pass
@@ -10115,6 +10123,14 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 # timeout", que é a pergunta que o
                                 # MAX_PAGES existe pra resolver.
                                 "secs": float(_vm.get("secs") or 0),
+                                # PASSO 3 (05/09): o filho devolve o próprio pico
+                                # (VmPeak = virtual, a régua do RLIMIT_AS; VmHWM =
+                                # residente, o que o Render mostra) e o tempo por
+                                # etapa. Sai no log pdfvec:memoria, mais abaixo.
+                                "mem_kb": _vm.get("mem_kb") or {},
+                                "mem_kb_inicio": _vm.get("mem_kb_inicio") or {},
+                                "etapas": _vm.get("etapas") or {},
+                                "mem_etapas": _vm.get("mem_etapas") or {},
                             }
                         except (TypeError, ValueError):
                             pass
@@ -11545,6 +11561,32 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                                         r.get("walls_m") or 0)
                                  for r in _res[:6])),
                     job_id, severity="info")
+                # 🔬 PASSO 3 (05/09) — a MEMÓRIA de cada medição, em MB, numa linha
+                # compacta: pico virtual (VmPeak — a régua do RLIMIT_AS), pico
+                # residente (VmHWM — o que o Render mostra), virtual no início
+                # (custo fixo dos imports) e os segundos por etapa. É o número que
+                # faltava pra escolher o teto com dado: até aqui NENHUMA medida de
+                # memória do caminho PDF existia no banco.
+                def _mb(d, k):
+                    try:
+                        return int((d or {}).get(k) or 0) // 1024
+                    except (TypeError, ValueError):
+                        return 0
+                _linhas_mem = []
+                for r in _res[:6]:
+                    _mk, _mi = r.get("mem_kb") or {}, r.get("mem_kb_inicio") or {}
+                    if not _mk:
+                        continue
+                    _et = r.get("etapas") or {}
+                    _linhas_mem.append(
+                        "%s p%s: VmPeak=%dMB VmHWM=%dMB ini_VmSize=%dMB secs=%.0f etapas={%s}"
+                        % (r["arquivo"][:24], r.get("pagina"),
+                           _mb(_mk, "VmPeak"), _mb(_mk, "VmHWM"), _mb(_mi, "VmSize"),
+                           r.get("secs") or 0,
+                           ",".join("%s:%s" % (k[:5], v) for k, v in _et.items())))
+                if _linhas_mem:
+                    _log_error("pdfvec:memoria", " | ".join(_linhas_mem), job_id,
+                               severity="info")
         except NameError:
             pass              # job sem PDF
 
