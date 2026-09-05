@@ -9995,6 +9995,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _pdfvec_falhas.append({
                             "prancha": _stem, "arquivo": filename,
                             "motivo": "processo", "rc": _pr.returncode,
+                            "pdf_path": pdf_path, "pagina": page_index,
                         })
                         _log_error("pdfvec:filho-morreu",
                                    f"{_stem} ({filename}): medição geométrica morreu "
@@ -10008,6 +10009,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         _pdfvec_falhas.append({
                             "prancha": _stem, "arquivo": filename,
                             "motivo": "memoria", "rc": 0,
+                            "pdf_path": pdf_path, "pagina": page_index,
                         })
                         _log_error("pdfvec:filho-morreu",
                                    f"{_stem} ({filename}): MemoryError capturado por etapa "
@@ -10190,6 +10192,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _pdfvec_falhas.append({
                         "prancha": _stem, "arquivo": filename,
                         "motivo": "tempo" if _eh_tempo else type(_ve).__name__,
+                        "pdf_path": pdf_path, "pagina": page_index,
                     })
                     print(f"[pdfvec-promo] {_stem}: sem promoção ({_ve})")
                     # 🚨 31/08 (auditoria): a severidade nascia INVERTIDA. O
@@ -12499,7 +12502,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # mora num lugar só, e lá ela é registrada.
         try:
             from pdf_vector import shadow_measure_async
-            shadow_measure_async(page_units, job_id, api_key, _log_error)
+            # 🔬 05/09 — PASSO 7: a sombra NÃO repete, dentro do processo do
+            # servidor e SEM teto, a página que acabou de matar o filho por
+            # memória (rc≠0 ou MemoryError engolido). Era o único jeito de a
+            # mesma prancha que estourou 2 GB virtuais rodar de novo no pai
+            # (300-400 MB) — sobreviveu 3× hoje, mas coincidir com o filho do
+            # próximo job num contêiner de 4 GB é o risco de 03/09 de volta.
+            # Página perdida por TEMPO continua indo à sombra: ela é hoje a
+            # única que mede além dos 75 s, e o pai já grava quanto o filho
+            # que morreu de memória precisava (pdfvec:filho-morreu + memoria).
+            try:
+                _pular_sombra = {(f.get("pdf_path"), f.get("pagina")) for f in _pdfvec_falhas
+                                 if f.get("motivo") in ("processo", "memoria") and f.get("pdf_path")}
+            except NameError:
+                _pular_sombra = set()      # job sem PDF: o loop nem existiu
+            shadow_measure_async(page_units, job_id, api_key, _log_error, pular=_pular_sombra)
         except Exception as _sve:
             print(f"[pdfvec] shadow não iniciado: {_sve}")
             _log_error("pdfvec:shadow",

@@ -400,7 +400,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
     return out
 
 
-def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
+def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> None:
     # respiro pro fluxo pós-done (email/DB) terminar antes do trabalho pesado
     time.sleep(8)
     deadline = time.time() + BUDGET_S
@@ -420,6 +420,13 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
         if time.time() > deadline:
             results.append({"file": filename[:60], "page": page_index, "skip": "budget de tempo"})
             break
+        # PASSO 7 (05/09): página que matou o filho por memória não roda de novo
+        # aqui, sem teto, dentro do servidor. O skip fica REGISTRADO — recusa de
+        # propósito não é silêncio.
+        if k in (pular or ()):
+            results.append({"file": filename[:60], "page": page_index,
+                            "skip": "filho morreu por memória — não repetir no servidor"})
+            continue
         try:
             if os.path.getsize(pdf_path) > MAX_FILE_MB * 1024 * 1024:
                 results.append({"file": filename[:60], "page": page_index, "skip": "arquivo grande"})
@@ -485,7 +492,7 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn) -> None:
         print(f"[pdfvec] shadow log falhou: {e}")
 
 
-def shadow_measure_async(page_units: list, job_id: str, api_key: str, log_fn) -> None:
+def shadow_measure_async(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> None:
     """Dispara o shadow em thread daemon. page_units = lista de tuplas
     (pdf_path, filename, sheet_type, page_index, ...) do process_job."""
     # 🪤 As duas saídas abaixo eram MUDAS. "Desligado por env" e "sem páginas"
@@ -523,7 +530,8 @@ def shadow_measure_async(page_units: list, job_id: str, api_key: str, log_fn) ->
     except Exception:
         pass
     try:
-        t = threading.Thread(target=_run, args=(list(page_units), job_id, api_key, log_fn),
+        t = threading.Thread(target=_run,
+                             args=(list(page_units), job_id, api_key, log_fn, set(pular or ())),
                              daemon=True, name=f"pdfvec-shadow-{job_id}")
         t.start()
     except Exception as e:
