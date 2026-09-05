@@ -9958,8 +9958,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # abaixo continua igual). Só observação: zero mudança quando
                     # dá certo. Vai no env, NÃO no texto do `-c` (o teste do teto
                     # congela aquele prefixo).
+                    # 🔬 05/09 — PASSO 8: cortar a RESERVA VIRTUAL fixa do filho.
+                    # Medido em produção (filhote ev1c03c1, PDF de 0,49 MB): VmPeak
+                    # 1.717 MB contra VmHWM 385 MB — 1,3 GB de endereço reservado
+                    # que não é RAM, e o RLIMIT_AS cobra endereço. Parte disso é o
+                    # OpenBLAS (que o numpy do shapely importa) criando (nCPU−1)
+                    # threads com pilha + buffers no import, e as arenas do malloc
+                    # da glibc (128 MB reservados por arena). O filho não faz
+                    # nenhuma operação BLAS e é monothread em Python. Só o env do
+                    # FILHO — nunca o do servidor. Tem que estar no ambiente ANTES
+                    # do `import numpy`, por isso aqui e não dentro do `-c`.
+                    # Efeito é medível na linha pdfvec:memoria (VmPeak antes × depois).
                     _pr = _sp.run(_cmd, capture_output=True, text=True, timeout=75,
-                                  env={**os.environ, "PYTHONFAULTHANDLER": "1"})
+                                  env={**os.environ, "PYTHONFAULTHANDLER": "1",
+                                       "OPENBLAS_NUM_THREADS": "1",
+                                       "MALLOC_ARENA_MAX": "2"})
                     # 🚨 31/08 (auditoria do mesmo dia): o commit se chama "parar de
                     # perder prancha em silêncio" e ESTE caminho continuava mudo.
                     # `_pdfvec_falhas` só era alimentado pelo `except` lá embaixo, que
