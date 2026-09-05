@@ -12076,6 +12076,41 @@ bloco — só cite os que estão no inventário deste arquivo."""
         except Exception as _erp:
             print(f"[aviso-planob] recontagem final nao-fatal: {_erp}")
 
+        # ── RETRATO DO SELO (instrumento, não conserto) ─────────────────────
+        # 🩸 04/09/2026 — MEDIDO: 53% dos projetos concluídos não têm UMA linha
+        # branca, e o selo varia entre rodadas do MESMO commit (3 s de
+        # diferença: 9 × 6 medidos). Enquanto isso for verdade, nenhum conserto
+        # de selo pode ser provado — o de 26/08 passou 9 dias parecendo ter
+        # funcionado porque não havia contador.
+        # 🔑 Tirado AQUI de propósito: é o fim da fila de quem rebaixa, logo é o
+        # estado que o cliente vai ler. Mais cedo, fotografaria o que ainda vai
+        # mudar.
+        # 🚫 SÓ LOGA. Não promove nada, não muda item nenhum — `laranja_com_prova`
+        # é o TETO do que poderia virar branco, não uma lista de promoção.
+        # Promover a partir daqui seria o cross-check aposentado voltando pela
+        # janela.
+        try:
+            from engine_rules import retrato_do_selo as _retrato
+            _rs = _retrato(all_items)
+            _log_error("motor:retrato-do-selo",
+                       "itens=%d brancos=%d laranjas=%d zerados=%d "
+                       "laranja_com_prova=%d branco_sem_prova=%d"
+                       % (_rs["itens"], _rs["brancos"], _rs["laranjas"],
+                          _rs["zerados"], _rs["laranja_com_prova"],
+                          _rs["branco_sem_prova"]),
+                       job_id, severity="info")
+            # 🪤 `branco_sem_prova` DEVE ser ~0 aqui: o `selos_sem_medida` acabou
+            # de rebaixar esses. Se subir, é regressão DAQUELE guarda, e o
+            # cliente está recebendo selo branco sem medição — regra nº1.
+            if _rs["branco_sem_prova"]:
+                _log_error("motor:branco-sem-prova-sobrou",
+                           "%d item(ns) continuam BRANCOS sem prova de geometria "
+                           "depois do selos_sem_medida — regressão daquele guarda"
+                           % _rs["branco_sem_prova"],
+                           job_id, severity="critical")
+        except Exception as _ers2:
+            print(f"[retrato-selo] nao-fatal: {_ers2}")
+
         output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")
         _carimbar_spec(all_items)
         generate_spreadsheet(project_data, all_items, output_path, typology=typology)

@@ -2188,3 +2188,90 @@ def normalizar_administracao_local(descricao, unidade, observacao=""):
     if _FRASE_SEM_PRAZO in _obs:
         return ("vb", 1.0, _obs)
     return ("vb", 1.0, (_FRASE_SEM_PRAZO + " " + _obs).strip()[:1000])
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  RETRATO DO SELO — instrumento, NÃO conserto
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 04/09/2026. Medido em 156 projetos: **53% não têm uma única linha branca**
+# e o selo VARIA entre rodadas do mesmo commit (duas rodadas com 3 s de
+# diferença deram 9 e 6 medidos). Enquanto isso for verdade, nenhum conserto de
+# selo pode ser provado — foi assim que o conserto de 26/08 passou 9 dias
+# parecendo ter funcionado, sem ninguém ter contador pra dizer.
+#
+# 🔑 O que falta medir é o OUTRO LADO do guarda que já existe. `selos_sem_medida`
+# olha branco SEM prova (e rebaixa). Ninguém olha laranja COM prova — o teto do
+# que poderia ser branco. Sem esse número, mexer no selo é no escuro.
+#
+# 🚫 ISTO NÃO PROMOVE NADA, e não pode passar a promover. Regra dura nº1: só é
+# branco o que veio da geometria, e quem decide isso é o caminho de medição, não
+# um contador. Promover a partir daqui seria ressuscitar o cross-check
+# aposentado e o "área lida vira medida" — os dois já refutados com medição.
+# Este módulo devolve NÚMERO. Quem chama, LOGA.
+#
+# 🪤 Usa AS MESMAS constantes do guarda que rebaixa (`_PROVA_GEOMETRIA`,
+# `_PROVA_LAYER_MEDIDO`). Uma segunda definição de "prova" divergiria da
+# primeira em semanas, e aí os dois lados contariam coisas diferentes com o
+# mesmo nome.
+
+
+def _tem_prova_de_geometria(observacao):
+    """A observação declara medição de geometria? Mesma régua do `selos_sem_medida`."""
+    _obs = str(observacao or "").lower()
+    if not _obs:
+        return False
+    if any(p in _obs for p in _PROVA_GEOMETRIA):
+        return True
+    return bool(_PROVA_LAYER_MEDIDO.search(_obs))
+
+
+def retrato_do_selo(items):
+    """Fotografia do selo deste job. SÓ CONTA — não altera item nenhum.
+
+    Devolve dict com:
+      itens, brancos, laranjas, zerados,
+      laranja_com_prova  → o TETO do que poderia virar branco (nunca vira aqui),
+      branco_sem_prova   → o inverso; deve ser ~0 porque `selos_sem_medida` já
+                           rebaixa. Se subir, é regressão daquele guarda.
+    """
+    # 🩸 04/09 — RELENDO O PRÓPRIO DIFF. A 1ª versão reimplementava aqui a
+    # pergunta "este branco tem prova?" com as mesmas duas constantes do
+    # `selos_sem_geometria`. Parecia idêntico e NÃO era: aquele guarda tem
+    # ABSOLVIÇÕES que eu não copiei — a principal é o QUADRO DE AÇO (tabela com
+    # colunas rotuladas, que ele deliberadamente não rebaixa). Medido no próprio
+    # comentário dele: 38 dos 46 confirmados com procedência de texto são aço.
+    # Minha versão os acusaria, e o alarme crítico abaixo dispararia FALSO em
+    # todo projeto com quadro de aço — alarme sem controle, que a gente desliga
+    # em duas semanas e perde o instrumento inteiro.
+    # 🔑 Então não reimplemento: PERGUNTO AO GUARDA. O número passa a ser
+    # exatamente "o que o `selos_sem_geometria` ainda acusaria depois de ter
+    # rodado" — que é 0 quando ele funcionou. Zero divergência possível.
+    try:
+        branco_sem_prova = len(selos_sem_geometria(items or []))
+    except Exception:
+        branco_sem_prova = 0
+    n = brancos = zerados = laranja_com_prova = 0
+    for it in (items or []):
+        n += 1
+        selo = _campo_do_item(it, "confidence", "")
+        selo = str(getattr(selo, "value", selo) or "").strip().lower()
+        try:
+            qtd = float(_campo_do_item(it, "quantity", 0) or 0)
+        except (TypeError, ValueError):
+            qtd = 0.0
+        if qtd == 0:
+            zerados += 1
+        prova = _tem_prova_de_geometria(_campo_do_item(it, "observations", ""))
+        if selo == "confirmado":
+            brancos += 1
+        elif qtd > 0 and prova:
+            # 🚫 Contado, NUNCA promovido. Ver o bloco de comentário acima.
+            laranja_com_prova += 1
+    return {
+        "itens": n,
+        "brancos": brancos,
+        "laranjas": n - brancos,
+        "zerados": zerados,
+        "laranja_com_prova": laranja_com_prova,
+        "branco_sem_prova": branco_sem_prova,
+    }
