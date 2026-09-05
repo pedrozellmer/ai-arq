@@ -7660,6 +7660,24 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         cad_paths = sorted((f for f in file_paths if f.lower().endswith(('.dwg', '.dxf'))),
                            key=_ordem)
 
+        # 🩸 05/09 — O NOME DO ARQUIVO PODE MENTIR (DWG salvo como .dxf, caso
+        # William). Decide pelo CONTEÚDO antes de qualquer coisa que olhe a
+        # extensão: a regra "DXF supera DWG do mesmo nome" logo abaixo, a
+        # assinatura, o laço de conversão e a gravação dos originais.
+        cad_paths, _avisos_ext, _mapa_ext = _normalizar_extensao_cad(cad_paths, job_id)
+        if _mapa_ext:
+            file_paths = [_mapa_ext.get(_p, _p) for _p in file_paths
+                          if _mapa_ext.get(_p, _p) is not None]
+            for _dic in (user_sheet_types, user_ambientes):
+                if isinstance(_dic, dict):
+                    for _velho, _novo in _mapa_ext.items():
+                        if _velho in _dic:
+                            _val = _dic.pop(_velho)
+                            if _novo is not None:
+                                _dic[_novo] = _val
+        if _avisos_ext:
+            project_data.warnings = (project_data.warnings or []) + _avisos_ext
+
         # Assinatura do desenho (identidade, não medição): guarda o
         # FINGERPRINTGUID + layers do 1º DXF pra reconhecer o MESMO projeto num
         # envio futuro, mesmo se o cliente renomear o arquivo. Lê só o começo do
@@ -12848,6 +12866,103 @@ async def _stream_upload_to_disk(upload_file, file_path, *, head_bytes=16, chunk
                             "(sem espaço em disco no momento). Tente de novo em instantes.") from e
     return total, head
 
+
+
+def _formato_cad_pelo_conteudo(path: str) -> Optional[str]:
+    """'dwg', 'dxf' ou None — pelo CONTEÚDO do arquivo, não pelo nome.
+
+    🩸 05/09/2026, caso William (job 8b7a2b71, engenheiro de orçamento vindo
+    do Google): mandou HNSC-...-A01-R02.dxf de 5,4 MB. O arquivo começa com
+    `AC1024` — é um DWG do AutoCAD 2010 com a extensão trocada. A gente
+    decidia o caminho só pelo nome, jogou o DWG no leitor de DXF, e ele morreu
+    com "is not a DXF file"; o cliente leu que o arquivo "foi lido, mas não
+    rendeu nenhum item — pode ser prancha só de layout". Nada disso era
+    verdade. Primeira ocorrência em 120 dias — e caiu no lead que fez tudo
+    certo. Reproduzido localmente com um DWG de teste renomeado: mesmos erros.
+    🪤 O upload já lia os primeiros bytes pra RECUSAR .dwg sem `AC10xx`;
+    faltava o espelho (.dxf que é DWG). Aqui é o lugar que vale pra todo
+    caminho — upload, reprocesso, add-file e filhote passam pelo process_job.
+    """
+    try:
+        with open(path, "rb") as _f:
+            head = _f.read(64)
+    except OSError:
+        return None
+    import re as _re_ext
+    if _re_ext.match(rb"AC1\d{3}", head):
+        return "dwg"
+    if head.startswith(b"AutoCAD Binary DXF"):
+        return "dxf"
+    _t = head.lstrip(b"\xef\xbb\xbf \t\r\n")
+    if _re_ext.match(rb"(0|999)\r?\n", _t):
+        return "dxf"
+    return None
+
+
+def _normalizar_extensao_cad(cad_paths, job_id: str):
+    """Renomeia NO DISCO o CAD cujo nome mente sobre o conteúdo.
+
+    Devolve (caminhos_corrigidos, avisos_pro_cliente, mapa) — `mapa` é
+    {caminho_antigo: caminho_novo ou None se descartado}, pra quem guarda
+    listas paralelas (file_paths, tipos por prancha) acompanhar a troca.
+    O Storage guarda o nome que o cliente deu; só a cópia local ganha a
+    extensão verdadeira — por isso o reprocesso e o filhote, que baixam do
+    Storage, passam por aqui de novo.
+
+    Colisão (x.dwg real + x.dxf que é o MESMO DWG renomeado — foi exatamente
+    o 2º envio do William, que anexou o .dwg de verdade depois): a cópia
+    renomeada é descartada, não processada duas vezes — duplicar prancha
+    dobraria as quantidades, que é pior que perder a cópia. E a regra
+    "DXF supera DWG do mesmo nome" logo abaixo deixa de apagar o DWG bom por
+    causa de um .dxf que nem era DXF.
+    """
+    novos, avisos, mapa = [], [], {}
+    for p in cad_paths:
+        ext = p.lower().rsplit(".", 1)[-1]
+        real = _formato_cad_pelo_conteudo(p)
+        if not real or real == ext:
+            novos.append(p)
+            continue
+        bn = os.path.basename(p)
+        alvo = p[: -len(ext)] + real
+        if os.path.exists(alvo):
+            try:
+                _log_error("motor:extensao-corrigida",
+                           f"{bn}: nome diz .{ext}, conteúdo é {real.upper()} — e "
+                           f"{os.path.basename(alvo)} já está no envio: descartei a "
+                           f"cópia renomeada pra não medir a prancha duas vezes",
+                           job_id, severity="warning")
+            except Exception:
+                pass
+            mapa[p] = None
+            continue
+        try:
+            os.replace(p, alvo)
+        except OSError as _e_ren:
+            try:
+                _log_error("motor:extensao-corrigida",
+                           f"{bn}: conteúdo é {real.upper()} mas não consegui "
+                           f"renomear ({_e_ren}) — segue com o nome original",
+                           job_id, severity="warning")
+            except Exception:
+                pass
+            novos.append(p)
+            continue
+        mapa[p] = alvo
+        try:
+            _log_error("motor:extensao-corrigida",
+                       f"{bn}: nome diz .{ext}, conteúdo é {real.upper()} → tratado "
+                       f"como {real.upper()} ({os.path.basename(alvo)})",
+                       job_id, severity="warning")
+        except Exception:
+            pass
+        avisos.append(
+            f"O arquivo {bn} veio com a extensão .{ext}, mas o conteúdo é um "
+            f"{real.upper()}. Tratamos como {real.upper()} — não é defeito do "
+            f"arquivo, só o nome. Pra a próxima: o DXF sai do AutoCAD por "
+            f"SALVAR COMO → tipo \"DXF 2013\"; renomear o .dwg não converte.")
+        novos.append(alvo)
+    return novos, avisos, mapa
 
 
 _RX_ESTRUT_NOME = None
