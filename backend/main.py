@@ -13040,6 +13040,34 @@ def _formato_cad_pelo_conteudo(path: str) -> Optional[str]:
     return None
 
 
+def _escolher_cads_do_anexo(cads, job_id: str):
+    """Quais CADs do anexo (/add-file) entram no reprocesso — pelo CONTEÚDO
+    primeiro, pelo nome depois. Devolve (cads_escolhidos, avisos_pro_cliente).
+
+    🩸 05/09/2026, William, 3º anexo do dia (19:24). O anexo tinha a regra
+    "DXF vence o DWG do mesmo nome", julgada pelo NOME: um .dxf que era DWG
+    renomeado "venceu" o .dwg de verdade e o jogou fora. Em seguida, no
+    process_job, a checagem pelo conteúdo viu que o "DXF" era DWG com o irmão
+    .dwg no disco e descartou a cópia. Sobrou ZERO arquivo — zero item em
+    0,3 s, sem erro, sem e-mail, e um aviso na tela dizendo que o arquivo
+    dele "não rendeu nenhum item". Duas regras certas, na ordem errada.
+
+    🔑 A ordem é a regra: primeiro o conteúdo (`_normalizar_extensao_cad`
+    renomeia o DWG disfarçado, ou descarta a cópia se o .dwg real já está no
+    envio); só então "DXF vence DWG do mesmo nome" enxerga DXF de verdade
+    (caso forro MEP do Pedro, 15/07 — DWG AEC não abre, o DXF re-exportado sim).
+    """
+    if not cads:
+        return [], []
+    cads, avisos, _ = _normalizar_extensao_cad(list(cads), job_id)
+    dxf_stems = {os.path.splitext(os.path.basename(p))[0].lower()
+                 for p in cads if p.lower().endswith(".dxf")}
+    cads = [p for p in cads
+            if not (p.lower().endswith(".dwg")
+                    and os.path.splitext(os.path.basename(p))[0].lower() in dxf_stems)]
+    return cads, avisos
+
+
 def _normalizar_extensao_cad(cad_paths, job_id: str):
     """Renomeia NO DISCO o CAD cujo nome mente sobre o conteúdo.
 
@@ -25647,6 +25675,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     work_dir = os.path.join(WORK_DIR, job_id)
     os.makedirs(work_dir, exist_ok=True)
     saved = 0
+    _enviados = []  # o que a pessoa anexou AGORA (pro alerta dizer a verdade)
     for _f in files:
         safe_local = _safe_local_filename(_f.filename or f"arquivo_{saved}")
         new_local = os.path.join(work_dir, safe_local)
@@ -25665,6 +25694,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
                 _supabase_storage_upload_prancha, new_local, job_id, safe_local):
             raise HTTPException(500, "Não consegui guardar um dos arquivos. Tenta de novo.")
         saved += 1
+        _enviados.append(safe_local)
     if not saved:
         raise HTTPException(400, "Arquivo(s) vazio(s).")
 
@@ -25713,17 +25743,23 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     # stand-in que deu "estimado"; misturar os dois DUPLICA a quantidade (PDF
     # estima 100, CAD mede 95 → 2 linhas). Com CAD presente, o CAD manda.
     _cads = [p for p in file_paths if p.lower().endswith((".dwg", ".dxf"))]
+    _avisos_ext = []
     if _cads:
-        # Se existe o DXF re-exportado de um DWG que falhava (MESMO nome), prefere
-        # o DXF e descarta o DWG. Senão o DWG velho no Storage re-falha a cada
-        # reprocesso e gera aviso "planilha INCOMPLETA" enganoso, mesmo o DXF tendo
-        # medido tudo (caso forro MEP do Pedro, 15/07 — DWG AEC não abre, DXF sim).
-        _dxf_stems = {os.path.splitext(os.path.basename(p))[0].lower()
-                      for p in _cads if p.lower().endswith(".dxf")}
-        _cads = [p for p in _cads
-                 if not (p.lower().endswith(".dwg")
-                         and os.path.splitext(os.path.basename(p))[0].lower() in _dxf_stems)]
+        # Conteúdo ANTES do nome — ver `_escolher_cads_do_anexo` (05/09, William:
+        # a regra "DXF vence DWG do mesmo nome" pelo nome jogava fora o DWG bom
+        # por causa de um .dxf que nem era DXF, e o reprocesso rodava com ZERO
+        # arquivo). Caso forro MEP do Pedro (15/07) continua coberto: DXF de
+        # verdade re-exportado de um DWG que falhava segue vencendo o DWG.
+        _cads, _avisos_ext = _escolher_cads_do_anexo(_cads, job_id)
         file_paths = _cads
+    if _avisos_ext:
+        # O process_job só avisa quem ELE renomeia; aqui a renomeação já
+        # aconteceu, então o aviso pro cliente sai deste ponto.
+        try:
+            _supabase_update("projects", "job_id", job_id,
+                             {"warnings": _avisos_com(job_id, _avisos_ext)})
+        except Exception as _aex:
+            print(f"[add-file] aviso de extensão {job_id}: {_aex}")
 
     # 🚨 TRAVA ANTI-PERDA (caso Walter, 30/07/2026). O complemento refaz o projeto
     # a partir do que está no STORAGE. Se o CAD original não subiu (o upload tem
@@ -25790,10 +25826,16 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     try:
         import html as _h5, threading as _th5
         _comp_str = ", ".join(f"{v} {k.upper()}" for k, v in _comp.items() if v > 0)
-        _novos = ", ".join(_h5.escape(os.path.basename(str(p))) for p in file_paths[:4])
+        # 🪤 05/09: esta linha listava `file_paths` — o que o motor DECIDIU
+        # processar — sob o título "anexados agora". O William anexou o .dwg
+        # duas vezes e o alerta disse ".dxf" nas duas. O que a pessoa mandou e
+        # o que vai rodar são duas linhas, cada uma com o próprio nome.
+        _novos = ", ".join(_h5.escape(n) for n in _enviados[:4]) or "—"
+        _vai = ", ".join(_h5.escape(os.path.basename(str(p))) for p in file_paths[:4]) or "—"
         _tem_cad = "SIM" if _cads else "não — só PDF"
         _alert5 = (f"<b>Projeto:</b> {_h5.escape(str(job_id))}<br>"
                    f"<b>Arquivos anexados agora:</b> {_novos}<br>"
+                   f"<b>Vai processar:</b> {_vai}<br>"
                    f"<b>Veio CAD junto?</b> {_tem_cad}<br>"
                    f"<b>Composição do projeto:</b> {_comp_str or '—'}<br>"
                    f"<b>Itens medidos antes:</b> {_job_medidos_count(job_id)}<br>"
