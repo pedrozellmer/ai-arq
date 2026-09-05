@@ -559,6 +559,7 @@ def detect_rooms(
     bridge_gaps_pt: float = 0.0,
     bridge_gaps_m: float = 0.0,
     return_meta: bool = False,
+    _segments: Optional[tuple[list, float, float]] = None,
 ):
     """Detecta ambientes (areas de piso) numa prancha CAD vetorial em PDF.
 
@@ -583,16 +584,23 @@ def detect_rooms(
             descartada.
         return_meta: True => retorna (rooms, meta) com o estagio usado e o
             nº de pontes — transparencia pro log do shadow.
+        _segments: (raw, width, height) pre-extraidos por _collect_raw_segments
+            — atalho interno (PASSO 13, 05/09/2026) p/ o integrador parsear a
+            pagina UMA vez e servir views + rooms + envoltoria. Mesma funcao
+            de coleta, mesma entrada => mesmo resultado; None = parseia aqui.
 
     Returns:
         Lista de dicts {"area_m2", "centroid", "bbox"} (coords em pontos PDF,
         y para cima), ordenada por area decrescente. Com return_meta=True,
         tupla (rooms, meta).
     """
-    with pdfplumber.open(pdf_path) as pdf:
-        page = pdf.pages[page_index]
-        raw = _collect_raw_segments(page)
-        w, h = float(page.width), float(page.height)
+    if _segments is not None:
+        raw, w, h = _segments
+    else:
+        with pdfplumber.open(pdf_path) as pdf:
+            page = pdf.pages[page_index]
+            raw = _collect_raw_segments(page)
+            w, h = float(page.width), float(page.height)
     segs = _filter_segments(raw, w, h, region_bbox)
     # snap de pontas SEMPRE: fecha micro-gaps de arredondamento da plotagem
     # sem inventar geometria (deslocamento maximo ~0,35 pt por ponta).

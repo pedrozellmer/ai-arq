@@ -223,12 +223,37 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         return out
     out["scale"] = den
 
+    # ── PASSO 13 (05/09/2026): LER A PÁGINA UMA VEZ ─────────────────────────
+    # detect_views, detect_rooms e a envoltória chamavam a MESMA coleta
+    # (pdfvec_rooms._collect_raw_segments) três vezes na mesma página — e o
+    # parse do pdfminer é ~85% do tempo de cada etapa (medido: HNSC 31+33+32 s;
+    # CPQ11 50+74+92 s) e três picos de memória empilhados em vez de um. A
+    # coleta é função determinística da página e nenhum consumidor muta a
+    # lista, então servir a mesma lista aos três não muda um número — o A/B
+    # local em 11 pranchas e os filhotes em produção conferem isso.
+    # 🪤 Interruptor: PDFVEC_PARSE_UNICO=0 no env volta ao parse por etapa sem
+    # deploy. Qualquer falha na coleta única cai em None = comportamento antigo.
+    _segs = None
+    if os.environ.get("PDFVEC_PARSE_UNICO", "1") != "0":
+        _t_et = time.time()
+        try:
+            import pdfplumber
+            from pdfvec_rooms import _collect_raw_segments
+            with pdfplumber.open(pdf_path) as _pdf:
+                _pg = _pdf.pages[page_index]
+                _segs = (_collect_raw_segments(_pg), float(_pg.width), float(_pg.height))
+            out["parse_unico"] = len(_segs[0])
+        except Exception as e:
+            out["err_parse_unico"] = f"{type(e).__name__}: {e}"[:120]
+            _segs = None
+        _marca("parse", _t_et)
+
     # 2) view principal — se o viewport não deu o bbox, cai pro clustering
     if bbox is None:
         _t_et = time.time()
         try:
             from pdfvec_views import detect_views
-            views = detect_views(pdf_path, page_index)
+            views = detect_views(pdf_path, page_index, _segments=_segs)
             out["n_views"] = len(views)
             main = next((v for v in views if v.get("is_main")), None)
             if main:
@@ -249,7 +274,8 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         # adota só se medir mais. Sala que dependa de ponte demais é
         # descartada lá dentro (regra nº 1).
         rooms, rmeta = detect_rooms(pdf_path, page_index, den, bbox,
-                                    bridge_gaps_m=1.2, return_meta=True)
+                                    bridge_gaps_m=1.2, return_meta=True,
+                                    _segments=_segs)
         # fallback multi-viewport: em prancha de DETALHE a viewport principal
         # (maior área) pode ser uma VISTA/elevação — 0 salas ali é honesto,
         # mas a PLANTA mora numa viewport irmã. Cada viewport do /VP traz a
@@ -270,7 +296,7 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
                 tried += 1
                 r2, m2 = detect_rooms(pdf_path, page_index, v["scale"],
                                       tuple(vb), bridge_gaps_m=1.2,
-                                      return_meta=True)
+                                      return_meta=True, _segments=_segs)
                 tot2 = sum(x["area_m2"] for x in r2)
                 if r2 and (best is None or tot2 > best[0]):
                     best = (tot2, r2, m2, v)
@@ -307,7 +333,8 @@ def _measure_page(pdf_path: str, page_index: int, api_key: str) -> dict:
         # comportamento atual, e a mais baixa) pra decidir o piso com dado real.
         # Mesmo custo: continua UMA passada. 30/07/2026.
         env = detect_rooms(pdf_path, page_index, den, bbox,
-                           min_m2=150, max_m2=5000, bridge_gaps_pt=env_gap_pt)
+                           min_m2=150, max_m2=5000, bridge_gaps_pt=env_gap_pt,
+                           _segments=_segs)
         _env_areas = sorted((r["area_m2"] for r in env), reverse=True)
         out["envelope_m2"] = round(max((a for a in _env_areas if a >= 400), default=0), 1) or None
         out["envelope_m2_150"] = round(_env_areas[0], 1) if _env_areas else None
