@@ -178,6 +178,52 @@ def test_o_bloco_so_aparece_quando_HA_planilha():
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  5. O RECADO TEM QUE CHEGAR EM ALGUÉM
+# ══════════════════════════════════════════════════════════════════════════
+def _admin_html():
+    return io.open(os.path.join(os.path.dirname(_BACKEND), "admin.html"),
+                   encoding="utf-8").read()
+
+
+def test_o_resumo_do_admin_TRAZ_os_recados():
+    """🪤 Botão cujo recado ninguém lê é poço.
+
+    Foi a doença de 01/08, escrita no próprio código: a revisão inline gravou
+    24 sinais durante meses enquanto o painel olhava OUTRA tabela. Ver
+    [[feedback_o_aviso_tem_que_chegar]].
+    """
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    i = src.index('resumo["revisao_inline"] = {')
+    bloco = src[i:i + 900]
+    assert '"faltou"' in bloco, (
+        "o resumo do admin não conta os recados de item faltando")
+    assert '"faltou_recados"' in bloco, (
+        "o resumo manda só o NÚMERO — sem o texto, o painel diz 'existem 3' e "
+        "não diz o que o cliente escreveu, que é a única parte útil")
+
+
+def test_o_painel_MOSTRA_os_recados():
+    html = _admin_html()
+    assert "faltouHtml" in html and "faltou_recados" in html, (
+        "o painel não renderiza os recados de item faltando")
+    assert "inlineHtml = faltouHtml +" in html, (
+        "o bloco existe mas não entra no que é exibido")
+
+
+def test_o_texto_do_CLIENTE_e_escapado_no_painel():
+    """🚨 O recado é texto livre escrito pelo cliente e vai pro painel por
+    innerHTML. Sem escape, um cliente (ou alguém que use a conta dele) injeta
+    HTML/JS na tela do admin."""
+    html = _admin_html()
+    i = html.index("faltouHtml")
+    bloco = html[i:i + 900]
+    assert "esc(f.texto" in bloco, (
+        "o texto do cliente entra no painel SEM escapar — porta de injeção "
+        "na tela do admin")
+    assert "esc(f.job_id)" in bloco
+
+
+# ══════════════════════════════════════════════════════════════════════════
 #  🧪 CONTROLES POSITIVOS
 # ══════════════════════════════════════════════════════════════════════════
 def test_CONTROLE_anunciar_antes_do_servidor_e_reprovado():

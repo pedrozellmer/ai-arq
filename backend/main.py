@@ -18226,9 +18226,25 @@ def admin_revision_feedback(request: Request):
         if isinstance(rows2, list):
             aprov = [r for r in rows2 if r.get("action") == "approve"]
             edits = [r for r in rows2 if r.get("action") == "edit"]
+            # 🩸 05/09/2026 — O "FALTOU UM ITEM" NASCEU NO MESMO DIA E ESTE
+            # PAINEL NÃO O MOSTRAVA. Botão cujo recado ninguém lê é poço: o
+            # cliente escreve, sai achando que avisou, e o sinal morre no banco.
+            # É a mesma doença do parágrafo acima (a revisão inline gravou 24
+            # sinais por meses enquanto o painel olhava outra tabela).
+            # 🔑 Vai INTEIRO e no topo: são poucos, e cada um é o cliente
+            # dizendo o que o motor NEM VIU — a única pergunta de cobertura que
+            # existe. Ver [[feedback_o_aviso_tem_que_chegar]].
+            faltou = [r for r in rows2 if r.get("action") == "faltou"]
             resumo["revisao_inline"] = {
                 "aprovacoes": len(aprov),
                 "edicoes": len(edits),
+                "faltou": len(faltou),
+                "faltou_recados": [
+                    {"job_id": r.get("job_id"),
+                     "quando": r.get("reviewed_at"),
+                     "texto": r.get("comment")}
+                    for r in faltou[:20]
+                ],
                 "projetos": len({r.get("job_id") for r in rows2 if r.get("job_id")}),
                 "ultimos_edits": [
                     {"job_id": r.get("job_id"),

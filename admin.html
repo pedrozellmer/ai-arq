@@ -2854,7 +2854,20 @@ function renderRevisionFeedback(d){
   // Descoberto em 01/08: 24 sinais acumulados enquanto o painel olhava só
   // a tabela de planilhas reenviadas (que ninguém usa — 0 em 3 meses).
   const ri = d.revisao_inline || {};
-  const inlineHtml = (ri.aprovacoes || ri.edicoes) ? `
+  // 🩸 05/09/2026 — "FALTOU UM ITEM": o cliente dizendo o que o motor NEM VIU.
+  // É a única pergunta de cobertura que existe, e por isso vem PRIMEIRO e
+  // INTEIRO, não como número numa linha de resumo. São poucos por natureza.
+  const faltouHtml = (ri.faltou) ? `
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-4">
+      <p class="text-sm font-semibold text-amber-900 mb-1">🕳️ ${ri.faltou} recado(s) de "faltou um item"</p>
+      <p class="text-xs text-amber-800 mb-2">O cliente diz o que a planilha esqueceu — o que o motor não viu. Não entra no quantitativo.</p>
+      ${(ri.faltou_recados || []).map(f => `
+        <div class="text-xs text-amber-900 border-t border-amber-200 pt-2 mt-2">
+          <span class="font-mono">${esc(f.job_id)}</span> · ${esc(window.fmtBR(f.quando))}
+          <div class="text-amber-950 mt-1">"${esc(f.texto || '')}"</div>
+        </div>`).join('')}
+    </div>` : '';
+  const inlineHtml = faltouHtml + ((ri.aprovacoes || ri.edicoes) ? `
     <div class="rounded-xl border border-gray-200 bg-white p-4 mb-4">
       <p class="text-sm font-semibold text-gray-800 mb-1">✏️ Revisão inline (na tela de revisão)</p>
       <p class="text-xs text-gray-600 mb-2">
@@ -2867,7 +2880,7 @@ function renderRevisionFeedback(d){
           ${e.comment ? ` · "${esc(e.comment)}"` : ''}
           <div class="text-gray-500 break-all">${esc(JSON.stringify(e.edits || {}).slice(0, 220))}</div>
         </div>`).join('')}
-    </div>` : '';
+    </div>` : '');
   if (!d || !d.n_planilhas){
     return inlineHtml + `<div class="rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6 text-center">
       <div class="text-3xl mb-2">📭</div>
