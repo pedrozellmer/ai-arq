@@ -9949,7 +9949,17 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         "from pdf_vector import _measure_page; "
                         f"print(json.dumps(_measure_page(r'{pdf_path}', {page_index}, '')))"
                     )]
-                    _pr = _sp.run(_cmd, capture_output=True, text=True, timeout=75)
+                    # 🔬 05/09/2026 — PASSO 1 do estudo do teto: NOMEAR A MORTE.
+                    # O filho do William (135fdfac) morreu com rc=-6 e stderr
+                    # VAZIO: alocação falhando dentro de código C aborta mudo e
+                    # pula todo try/except. `PYTHONFAULTHANDLER=1` faz o Python
+                    # escrever a pilha no fd 2 sem alocar memória — exatamente na
+                    # condição de OOM — e re-levanta o sinal (rc segue -6, o ramo
+                    # abaixo continua igual). Só observação: zero mudança quando
+                    # dá certo. Vai no env, NÃO no texto do `-c` (o teste do teto
+                    # congela aquele prefixo).
+                    _pr = _sp.run(_cmd, capture_output=True, text=True, timeout=75,
+                                  env={**os.environ, "PYTHONFAULTHANDLER": "1"})
                     # 🚨 31/08 (auditoria do mesmo dia): o commit se chama "parar de
                     # perder prancha em silêncio" e ESTE caminho continuava mudo.
                     # `_pdfvec_falhas` só era alimentado pelo `except` lá embaixo, que
@@ -9960,14 +9970,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # rastro. E o traceback ESTAVA ali, em `_pr.stderr`, capturado e
                     # jogado fora (`capture_output=True` desde sempre).
                     if _pr.returncode != 0:
-                        _err = (_pr.stderr or "").strip()[-400:] or "(sem stderr)"
+                        # 1500 e não 400: o traceback do faulthandler vem com a
+                        # pilha inteira e o corte curto o decapitava — sobrava só
+                        # o cabeçalho, sem o `File "...pdfvec_*.py", line N` que
+                        # é a resposta.
+                        _err = (_pr.stderr or "").strip()[-1500:] or "(sem stderr)"
+                        # Rabo do stdout: JSON + rc≠0 = medição BOA perdida no
+                        # encerramento; vazio = morreu no meio. Dois diagnósticos
+                        # diferentes que hoje viram o mesmo silêncio.
+                        _saida = (_pr.stdout or "").strip()[-300:] or "(vazio)"
                         _pdfvec_falhas.append({
                             "prancha": _stem, "arquivo": filename,
                             "motivo": "processo", "rc": _pr.returncode,
                         })
                         _log_error("pdfvec:filho-morreu",
                                    f"{_stem} ({filename}): medição geométrica morreu "
-                                   f"com rc={_pr.returncode} — {_err}",
+                                   f"com rc={_pr.returncode} — {_err} | stdout: {_saida}",
                                    job_id, severity="error")
                         print(f"[pdfvec] {_stem}: filho rc={_pr.returncode} — {_err[:200]}")
                     _vm = _jv.loads(_pr.stdout.strip().splitlines()[-1]) if _pr.returncode == 0 and _pr.stdout.strip() else {}
