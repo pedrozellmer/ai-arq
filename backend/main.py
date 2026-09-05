@@ -1722,6 +1722,27 @@ def _contar_itens_no_banco(job_id: str):
         return None
 
 
+def _gritar_perda_total(job_id: str, n_montados: int, causa: str):
+    """A gravação dos itens falhou INTEIRA — isso tem que sair do dyno.
+
+    🩸 04/09/2026: os dois `except` do persist só chamavam `_supa_log`, que
+    escreve num ARQUIVO LOCAL do Render. O disco é efêmero: no redeploy
+    seguinte, o único registro de que um cliente ficou sem tela de revisão
+    desaparecia. Nada em `error_log`, nada consultável.
+    🔑 Perda PARCIAL já gritava em `error_log` desde 01/09. Perda TOTAL, não —
+    e é a pior das duas.
+    """
+    try:
+        _log_error("motor:persist-perdeu-TUDO",
+                   f"a gravação dos itens falhou INTEIRA: {n_montados} item(ns) "
+                   f"montados, NENHUM entrou em project_items. A planilha em "
+                   f"anexo está completa; a tela de revisão do site fica vazia. "
+                   f"Causa: {causa}",
+                   job_id, severity="critical")
+    except Exception:
+        pass
+
+
 def _persist_items_to_supabase(job_id: str, items: list) -> int:
     """Insere cada BudgetItem como row em project_items.
     Permite revisão inline no navegador via endpoint /api/items/{job_id}.
@@ -1885,10 +1906,12 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
             resp = '(unreadable)'
         _supa_log(f"PERSIST items job={job_id} HTTP {e.code}: {resp}")
         print(f"[persist_items] HTTP {e.code}: {resp}")
+        _gritar_perda_total(job_id, len(rows), f"HTTP {e.code}: {resp}")
         return 0
     except Exception as e:
         _supa_log(f"PERSIST items job={job_id} ERR {type(e).__name__}: {e}")
         print(f"[persist_items] err: {e}")
+        _gritar_perda_total(job_id, len(rows), f"{type(e).__name__}: {e}")
         return 0
 
 
@@ -12173,7 +12196,18 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # mandou. Se a gravação perdeu linha, o número do projeto conta a
         # verdade — e o cliente é avisado logo abaixo, em vez de ver "50 itens"
         # numa tela de revisão com 33.
-        _itens_no_banco = _n_gravados if isinstance(_n_gravados, int) and _n_gravados > 0 \
+        # 🩸 04/09/2026 — ERA `> 0`, E O ZERO É JUSTAMENTE O PIOR CASO.
+        # `_persist_items_to_supabase` devolve 0 nos DOIS caminhos de exceção
+        # (HTTPError do PostgREST e qualquer outra falha). Com `> 0`, esse zero
+        # não passava e o chamador adotava `len(all_items)` — o número que a
+        # gente MANDOU. Aí a comparação de baixo dava igual, o aviso não saía, e
+        # `items_count` anunciava 50 com o banco vazio: planilha cheia em anexo,
+        # tela de revisão vazia, ninguém avisado.
+        # 🪤 Perder METADE gritava (guarda de 01/09); perder TUDO era mudo. Uma
+        # condição separava os dois.
+        # 🔑 O fallback continua certo para retorno NÃO numérico: aí a gente
+        # realmente não sabe, e o que montamos é a melhor informação que existe.
+        _itens_no_banco = _n_gravados if isinstance(_n_gravados, int) and _n_gravados >= 0 \
             else len(all_items)
         if _itens_no_banco != len(all_items):
             project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
@@ -12189,7 +12223,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
             "layout_area": project_data.layout_area if project_data.layout_area else None,
             "completed_at": datetime.utcnow().isoformat(),
         })
-        print(f"[supabase] update job={job_id} status=done items={len(all_items)} "
+        # 🪤 04/09: aqui imprimia `len(all_items)` — o nosso PRÓPRIO log dizia
+        # "items=50" com o banco em 0. Foi parte de como isso ficou invisível.
+        print(f"[supabase] update job={job_id} status=done "
+              f"items={_itens_no_banco} (montados={len(all_items)}) "
               f"total_area={project_data.total_area} layout_area={project_data.layout_area} "
               f"ok={_supa_ok}")
 
