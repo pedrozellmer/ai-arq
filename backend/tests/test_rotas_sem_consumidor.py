@@ -34,15 +34,11 @@ _IGNORA = ("/api/admin/", "/api/debug/", "/api/instagram/", "/api/whatsapp/",
 # As 7: calibration/reclassify-raws, checkout/verify, heuristics/check,
 # heuristics/summary, projects-confidence, tcpo/details, tcpo/search.
 #
-# ⏳ 05/09/2026 — +2 DE PROPÓSITO E COM PRAZO: as rotas do Financeiro da obra
-# (GET/POST em /api/financeiro/{job_id} e PATCH/DELETE em
-# /api/financeiro/{job_id}/{lanc_id} — o detector conta CAMINHOS, não métodos)
-# nasceram ANTES da tela, por decisão do Pedro ("faz 2 e 3": tabela → rotas →
-# tela, um passo por vez). Não são mortas: são o passo do meio. Quando
-# financeiro.html chamar `/api/financeiro`, o detector deixa de contá-las e
-# `test_quando_uma_ORFA_some_o_teto_cai_junto` OBRIGA a voltar este teto pra 7
-# no mesmo commit — a catraca continua valendo.
-_TETO_ROTAS_ORFAS = 9
+# ⏳ 05/09/2026 — as 2 rotas do Financeiro da obra nasceram ANTES da tela (teto
+# subiu pra 9 por umas horas, com prazo) e voltaram pra 7 no MESMO dia, quando
+# financeiro.html passou a chamar `/api/financeiro`. A catraca funcionou como
+# desenhada: `test_quando_uma_ORFA_some_o_teto_cai_junto` cobrou a volta.
+_TETO_ROTAS_ORFAS = 7
 
 
 def _fonte_do_site():

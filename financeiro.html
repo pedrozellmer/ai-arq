@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Financeiro da obra — AI.arq</title>
+<meta name="robots" content="noindex,follow">
+<link rel="stylesheet" href="/tailwind.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ── A mesma base das telas do cliente (cronograma.html / projeto.html) ── */
+  body { font-family: 'Inter', -apple-system, sans-serif; }
+  .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
+  .kpi { position:relative; overflow:hidden; transition:transform .18s ease, box-shadow .18s ease; }
+  .kpi:hover { transform:translateY(-3px); box-shadow:0 2px 4px rgba(15,23,42,.06), 0 18px 38px -16px rgba(79,70,229,.30); }
+  .kpi::before { content:""; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(135deg,#4f46e5,#22d3ee); }
+  .kpi.kpi-ok::before { background:linear-gradient(135deg,#10b981,#34d399); }
+  .kpi.kpi-alerta::before { background:linear-gradient(135deg,#f59e0b,#fbbf24); }
+  .kpi-ico { width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:#EEF2FF; color:#4F46E5; flex:none; }
+  .kpi-ok .kpi-ico { background:#ECFDF5; color:#059669; }
+  .kpi-alerta .kpi-ico { background:#FFFBEB; color:#B45309; }
+  .tabular { font-variant-numeric: tabular-nums; }
+
+  /* ── Tailwind AUSENTE do build estático (tailwind.min.css é gerado à mão e
+     só tem o que já estava no site — reference_tailwind_build_estatico).
+     Medido em 05/09 contra o build: estas 14 classes da maquete não pintam.
+     Definidas aqui com o seletor escapado, pra o HTML ficar igual ao da maquete. ── */
+  .flex-nowrap { flex-wrap: nowrap; }
+  .gap-x-3 { column-gap: .75rem; }
+  .grid-cols-\[1fr_auto\] { grid-template-columns: 1fr auto; }
+  details[open] > summary .group-open\:rotate-90 { transform: rotate(90deg); }
+  @media (min-width: 768px) { .md\:px-4 { padding-left: 1rem; padding-right: 1rem; } }
+  .normal-case { text-transform: none; }
+  .pr-8 { padding-right: 2rem; }
+  .rounded-tl-lg { border-top-left-radius: .5rem; }
+  .rounded-tr-lg { border-top-right-radius: .5rem; }
+  .text-\[11\.5px\] { font-size: 11.5px; }
+  .text-\[12\.5px\] { font-size: 12.5px; }
+  .text-\[13px\] { font-size: 13px; }
+  .tracking-normal { letter-spacing: 0; }
+  .w-fit { width: fit-content; }
+
+  /* ── Específico desta tela (igual à maquete aprovada) ── */
+  .in { border:1px solid #CBD5E1; border-radius:8px; padding:4px 8px; font-size:13px; height:28px; color:#1E293B; background:#fff; width:100%; min-width:0; font-family:inherit; }
+  .in.money { text-align:right; font-variant-numeric:tabular-nums; }
+  .in::placeholder { color:#64748B; }
+  .in[aria-invalid="true"] { border-color:#F87171; }
+  .in-lg { height:38px; padding:8px 10px; }
+  .in:focus-visible, .status:focus-visible, .fin-chip:focus-visible, .cell:focus-visible, .acao:focus-visible, .rd:focus-visible, .cb-tog:focus-visible { outline:2px solid #4F46E5; outline-offset:2px; border-color:#64748B; }
+  .cell { display:block; position:relative; border-radius:6px; padding:2px 4px; margin:-2px -4px; cursor:text; min-width:0; }
+  .cell.ro { cursor:default; }
+  .cell:not(.ro)::after { content:""; position:absolute; right:-13px; top:50%; width:11px; height:11px; margin-top:-5px; opacity:0; transition:opacity .15s;
+    background:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 20h9'/><path d='M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z'/></svg>") no-repeat center/contain; }
+  tr.row:hover .cell:not(.ro)::after, .cell:focus-visible::after { opacity:.9; }
+  .cell:not(.ro):hover, .cell:focus-visible { background:#F1F5F9; }
+  .cell.vazio { color:#4F46E5; font-weight:500; }
+  .cell.vazio > span { border-bottom:1px dashed #A5B4FC; }
+  .truncate1 { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .clamp2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; flex:none; }
+  .src { display:inline-block; font-size:10px; font-weight:600; padding:1px 7px; border-radius:99px; white-space:nowrap; }
+  .src.cron { background:#ECFEFF; color:#155E75; }
+  .src.semdata { background:#FEF3C7; color:#92400E; }
+  .status { display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:99px; border:1px solid; cursor:pointer; white-space:nowrap; font-family:inherit; max-width:100%; transition:filter .15s; }
+  .status:hover { filter:brightness(.96); }
+  .status i { width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.75; flex:none; }
+  .status .chev { width:10px; height:10px; opacity:.7; margin-left:-2px; }
+  .status.ro { cursor:default; } .status.ro .chev { display:none; }
+  .st-cotado     { background:#F1F5F9; color:#475569; border-color:#E2E8F0; }
+  .st-enviado    { background:#FEF3C7; color:#92400E; border-color:#FDE68A; }
+  .st-aprovado   { background:#EEF2FF; color:#4338CA; border-color:#C7D2FE; }
+  .st-contratado { background:#ECFEFF; color:#155E75; border-color:#A5F3FC; }
+  .st-pago       { background:#ECFDF5; color:#065F46; border-color:#A7F3D0; }
+  .st-semvalor   { background:#fff; color:#64748B; border-color:#CBD5E1; border-style:dashed; cursor:not-allowed; }
+  .acao { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:8px; color:#94A3B8; background:transparent; border:0; cursor:pointer; opacity:0; transition:opacity .15s, color .15s, background .15s; }
+  .acao:hover { background:#F1F5F9; }
+  .acao.ok:hover { color:#059669; } .acao.del:hover { color:#DC2626; }
+  tr.row:hover .acao, tr.row:focus-within .acao { opacity:1; }
+  @media (hover:none) { .acao { opacity:1; } }
+  tr.row:hover td { background:#FAFBFC; }
+  tr.row.salvando td { opacity:.6; }
+  .fin-chip { font-size:12px; padding:5px 11px; border-radius:99px; border:1px solid #E2E8F0; color:#475569; background:#fff; cursor:pointer; font-family:inherit; font-weight:500; transition:background .15s; white-space:nowrap; }
+  .fin-chip:hover { background:#F8FAFC; }
+  .fin-chip[aria-pressed="true"] { border-color:#C7D2FE; color:#4338CA; background:#EEF2FF; font-weight:600; }
+  .fin-chip .n { margin-left:4px; font-size:10.5px; opacity:.7; font-variant-numeric:tabular-nums; }
+  table.fin { table-layout:fixed; width:100%; border-collapse:collapse; }
+  table.fin th, table.fin td { padding:10px 12px; vertical-align:middle; }
+  table.fin thead th { position:sticky; top:calc(var(--cr-header-h,60px) + var(--fin-bar-h,63px)); z-index:20; }
+  .tbl-wrap { overflow:visible; }
+  .forn-sub { display:none; }
+  @media (max-width:1239px) {
+    .c-forn, .th-forn, .td-forn { display:none; }
+    .forn-sub { display:block; }
+  }
+  @media (max-width:767px) {
+    .tbl-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    table.fin { min-width:640px; }
+    table.fin thead th { position:static; }
+    #cr-actionbar { flex-wrap:wrap; }
+    #cr-actionbar > .flex-1 { display:none; }
+    #cr-actionbar > .exp:first-of-type { margin-left:auto; }
+    table.fin th:first-child, table.fin td:first-child { position:sticky; left:0; background:#fff; z-index:1; }
+    table.fin thead th:first-child { background:#1E293B; }
+    table.fin tr.cat td:first-child { background:#F8FAFC; }
+  }
+  .pop { position:absolute; z-index:60; background:#fff; border:1px solid #E2E8F0; border-radius:12px; box-shadow:0 10px 30px -10px rgba(15,23,42,.35); }
+  #pop-status { width:284px; padding:4px; }
+  #pop-status button { width:100%; display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:8px; border:0; background:transparent; text-align:left; cursor:pointer; font-family:inherit; }
+  #pop-status button:hover, #pop-status button[aria-selected="true"] { background:#F8FAFC; }
+  #pop-status button .lg { font-size:11px; color:#64748B; flex:1; min-width:0; }
+  #pop-status button .nx { font-size:10px; color:#4F46E5; font-weight:600; }
+  #pop-venc { width:300px; padding:12px; }
+  .cb-list { position:absolute; z-index:70; background:#fff; border:1px solid #E2E8F0; border-radius:10px; box-shadow:0 10px 30px -10px rgba(15,23,42,.35); max-height:224px; overflow:auto; padding:4px 0; font-size:13px; list-style:none; margin:0; }
+  .cb-grp { font-size:10px; text-transform:uppercase; letter-spacing:.06em; color:#64748B; padding:6px 12px 2px; font-weight:700; }
+  .cb-opt { padding:6px 12px; cursor:pointer; color:#1E293B; }
+  .cb-opt:hover, .cb-opt[aria-selected="true"] { background:#EEF2FF; color:#3730A3; }
+  .cb-opt.cb-novo { color:#4F46E5; font-weight:500; }
+  .cb-wrap { position:relative; }
+  .cb-tog { position:absolute; right:4px; top:50%; transform:translateY(-50%); width:22px; height:22px; border:0; background:transparent; color:#94A3B8; cursor:pointer; border-radius:6px; display:flex; align-items:center; justify-content:center; }
+  .cb-tog:hover { background:#F1F5F9; color:#64748B; }
+  .rd { display:flex; align-items:center; gap:8px; padding:8px 11px; border:1px solid #E2E8F0; border-radius:10px; cursor:pointer; font-size:13px; color:#334155; font-family:inherit; background:#fff; text-align:left; }
+  .rd.on { border-color:#4F46E5; background:#EEF2FF; color:#3730A3; font-weight:600; }
+  .rd[disabled] { opacity:.45; cursor:not-allowed; }
+  label.lbl { display:block; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:#64748B; margin-bottom:6px; }
+  #modal-novo:not([hidden]) { display:flex; }
+  /* toast próprio desta tela (o toast.js da casa não tem botão de ação; e o nome `toast` é dele) */
+  .fin-toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(10px); background:#1E293B; color:#fff; font-size:13px; font-weight:500; padding:10px 16px; border-radius:10px; box-shadow:0 10px 30px -10px rgba(15,23,42,.5); opacity:0; transition:all .25s; z-index:80; pointer-events:none; max-width:min(92vw, 560px); }
+  .fin-toast.on { opacity:1; transform:translateX(-50%) translateY(0); }
+  .fin-toast.erro { background:#991B1B; }
+  .chart-txt { font-size:11px; fill:#64748B; }
+  @keyframes cr-rise { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:none } }
+  .rise { animation: cr-rise .45s cubic-bezier(.22,.61,.36,1) both; }
+  .exp[aria-disabled="true"] { opacity:.5; cursor:not-allowed; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important; }
+  }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<a href="#main" class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:bg-white focus:px-4 focus:py-2 focus:rounded focus:shadow z-50">Pular pro conteúdo</a>
+
+<!-- Loading gate -->
+<div id="gate" class="fixed inset-0 bg-white z-50 flex items-center justify-center">
+  <div class="text-center">
+    <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto"></div>
+    <p class="mt-3 text-sm text-gray-500">Carregando financeiro...</p>
+  </div>
+</div>
+
+<!-- Header (o ☰ do menu lateral é plantado aqui pelo menu-lateral.js) -->
+<header id="cabecalho" class="bg-white border-b sticky top-0 z-40">
+  <div class="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
+    <div class="flex-1 min-w-0">
+      <nav class="text-[11px] text-gray-500 flex items-center gap-1">
+        <a href="dashboard.html" class="hover:text-indigo-600">Início</a>
+        <span>›</span>
+        <a id="back-projeto" href="#" class="hover:text-indigo-600">Projeto</a>
+        <span>›</span>
+        <span class="text-gray-500">Financeiro</span>
+      </nav>
+      <h1 class="font-semibold text-gray-800 truncate leading-tight">
+        Financeiro da obra <span class="text-gray-500 font-normal text-sm">· lançamentos e desembolso</span>
+      </h1>
+    </div>
+    <span id="pill-leitura" hidden class="inline-flex items-center gap-1.5 text-xs bg-amber-100 text-amber-800 px-2.5 py-1 rounded-full font-medium whitespace-nowrap" title="Você está vendo o financeiro deste cliente como admin: pode consultar, não pode alterar">Somente leitura</span>
+    <span class="hidden md:inline-flex items-center gap-1.5 text-xs bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full font-medium">
+      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+      Beta
+    </span>
+  </div>
+</header>
+
+<main id="main" class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+  <!-- Erro de carga: nunca lista vazia com cara de verdade -->
+  <div id="erro-carga" hidden class="rounded-2xl border-2 border-red-200 bg-red-50 p-6">
+    <h3 class="font-semibold text-red-900 mb-1">Não consegui carregar o financeiro</h3>
+    <p id="erro-carga-txt" class="text-sm text-red-800"></p>
+    <button onclick="location.reload()" class="inline-block mt-3 text-sm font-medium text-indigo-600 hover:underline">Tentar de novo →</button>
+  </div>
+
+  <div id="conteudo" hidden class="space-y-6">
+  <!-- Regra nº5, no mesmo molde do banner "gerado automaticamente" -->
+  <div id="banner-regra" class="rise rounded-xl bg-gradient-to-r from-indigo-50 to-cyan-50 border-2 border-indigo-200 p-4 flex items-start gap-3">
+    <span class="shrink-0 mt-0.5 text-indigo-600"><svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg></span>
+    <div class="flex-1 text-sm">
+      <p class="font-semibold text-gray-800">O AI.arq não calcula preço.</p>
+      <p class="text-xs text-gray-600 mt-0.5">Todo valor desta tela foi digitado por você ou veio de uma cotação que você subiu no <strong>Comparativo</strong>. A gente organiza por categoria, cruza com o <strong>Cronograma</strong> e mostra o que vence, o que está pago e o que o cliente ainda não aprovou.</p>
+    </div>
+    <button onclick="document.getElementById('banner-regra').hidden=true" class="text-gray-500 hover:text-gray-700 shrink-0" title="Fechar" aria-label="Fechar aviso">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- Sem cronograma: o vencimento por fase não tem data -->
+  <div id="aviso-cronograma" hidden class="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+    <p class="font-semibold">Este projeto ainda não tem cronograma salvo.</p>
+    <p class="text-xs text-amber-800 mt-0.5">O vencimento por fase precisa das datas do Gantt pra dizer o que venceu. Até lá, use <strong>data fixa</strong> nos lançamentos — ou <a id="link-cronograma" href="#" class="font-medium text-indigo-700 hover:underline">gere o cronograma</a> e volte aqui.</p>
+  </div>
+
+  <!-- Barra de ações: fixa enquanto rola (igual à do cronograma) -->
+  <div id="cr-actionbar" class="rise sticky z-30 rounded-xl bg-white/90 backdrop-blur-sm border border-slate-200 shadow-sm p-3 flex flex-nowrap items-center gap-3 transition-shadow duration-200" style="top:var(--cr-header-h,60px)">
+    <button id="btn-novo" onclick="abrirNovo()" class="px-4 py-2 rounded-lg gradient-main text-white text-sm font-semibold shadow-lg hover:scale-[1.02] transition flex items-center gap-2 whitespace-nowrap">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      Novo lançamento
+    </button>
+    <span id="save-status" class="text-xs text-slate-500 whitespace-nowrap" aria-live="polite">Cada alteração é salva na hora.</span>
+    <div class="flex-1"></div>
+    <a href="#" class="exp px-3 md:px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium no-underline flex items-center gap-2" aria-label="Exportar PDF" aria-disabled="true" title="O PDF físico-financeiro sai na próxima etapa" onclick="event.preventDefault(); avisar('O PDF físico-financeiro sai na próxima etapa do financeiro.')">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+      <span class="hidden md:inline">PDF</span>
+    </a>
+    <a href="#" class="exp px-3 md:px-4 py-2 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 text-sm font-medium no-underline flex items-center gap-2" aria-label="Exportar planilha" aria-disabled="true" title="A aba Financeiro da planilha .xlsx sai na próxima etapa" onclick="event.preventDefault(); avisar('A aba Financeiro da planilha .xlsx sai na próxima etapa do financeiro.')">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6h6v6M3 7h18M5 7v12a2 2 0 002 2h10a2 2 0 002-2V7M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+      <span class="hidden md:inline">Planilha</span>
+    </a>
+  </div>
+
+  <!-- KPIs: o mesmo card do cronograma -->
+  <div class="rise grid gap-4 sm:grid-cols-2 md:grid-cols-4">
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6zM15 3v5h5M9 13h6M9 17h4"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Contratado</p>
+      </div>
+      <p id="k-contr" class="text-lg font-bold text-gray-900 tabular">—</p>
+      <p id="k-contr-s" class="text-xs text-slate-500 mt-1">—</p>
+    </div>
+    <div class="kpi kpi-ok rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-emerald-700">Pago</p>
+      </div>
+      <p id="k-pago" class="text-lg font-bold text-emerald-900 tabular">—</p>
+      <p id="k-pago-s" class="text-xs text-emerald-700 mt-1">—</p>
+    </div>
+    <div class="kpi kpi-alerta rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">A pagar até 30 dias</p>
+      </div>
+      <p id="k-30" class="text-lg font-bold text-gray-900 tabular">—</p>
+      <p id="k-30-s" class="text-xs text-slate-500 mt-1">—</p>
+    </div>
+    <div class="kpi rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="flex items-center gap-2 mb-2">
+        <span class="kpi-ico" style="background:#FEF3C7;color:#B45309"><svg class="w-[17px] h-[17px]" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4z"/><path d="M9 10h6"/></svg></span>
+        <p class="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">Aguardando o cliente</p>
+      </div>
+      <p id="k-ag" class="text-lg font-bold text-gray-900 tabular">—</p>
+      <p id="k-ag-s" class="text-xs text-slate-500 mt-1">—</p>
+    </div>
+  </div>
+
+  <!-- LANÇAMENTOS -->
+  <section class="rise rounded-2xl bg-white border border-slate-200 shadow-sm p-6" aria-labelledby="h-lanc">
+    <div class="flex flex-wrap items-center justify-between gap-2 mb-1">
+      <h2 id="h-lanc" class="text-lg font-bold text-gray-900">Lançamentos por categoria</h2>
+      <div id="filtros" class="flex flex-wrap gap-1.5" aria-label="Filtrar lançamentos">
+        <button class="fin-chip" data-f="todos" aria-pressed="true" onclick="filtrar('todos')">Todos<span class="n"></span></button>
+        <button class="fin-chip" data-f="avencer" aria-pressed="false" onclick="filtrar('avencer')">A vencer<span class="n"></span></button>
+        <button class="fin-chip" data-f="vencidos" aria-pressed="false" onclick="filtrar('vencidos')">Vencidos<span class="n"></span></button>
+        <button class="fin-chip" data-f="aguardando" aria-pressed="false" onclick="filtrar('aguardando')">Aguardando<span class="n"></span></button>
+        <button class="fin-chip" data-f="pagos" aria-pressed="false" onclick="filtrar('pagos')">Pagos<span class="n"></span></button>
+        <button class="fin-chip" data-f="semvalor" aria-pressed="false" onclick="filtrar('semvalor')">Sem valor<span class="n"></span></button>
+      </div>
+    </div>
+    <p id="ajuda-tabela" class="text-xs text-gray-500 mb-4">
+      Clique numa célula pra editar. Clique no status pra avançar de Cotado a Pago. O vencimento nasce <strong>amarrado à fase do cronograma</strong> — mexeu a fase no Gantt, o pagamento anda junto — e pode virar data fixa a qualquer hora.
+    </p>
+    <div class="tbl-wrap">
+      <table class="fin text-sm" aria-label="Lançamentos financeiros">
+        <colgroup>
+          <col>
+          <col class="c-forn" style="width:168px">
+          <col style="width:128px">
+          <col style="width:140px">
+          <col style="width:128px">
+          <col style="width:80px">
+        </colgroup>
+        <thead><tr>
+          <th class="text-left bg-slate-800 text-white text-xs uppercase tracking-wider font-semibold rounded-tl-lg">Item</th>
+          <th class="th-forn text-left bg-slate-800 text-slate-200 text-xs font-medium">Fornecedor</th>
+          <th class="text-right bg-slate-800 text-slate-200 text-xs font-medium">Valor (R$)<span class="block text-[10px] font-normal normal-case tracking-normal text-slate-400">forma de pagamento</span></th>
+          <th class="text-left bg-slate-800 text-slate-200 text-xs font-medium">Vencimento</th>
+          <th class="text-left bg-slate-800 text-slate-200 text-xs font-medium">Status</th>
+          <th class="bg-slate-800 rounded-tr-lg"><span class="sr-only">Ações</span></th>
+        </tr></thead>
+        <tbody id="ledger"></tbody>
+      </table>
+      <div id="vazio" hidden class="rounded-xl border-2 border-amber-200 bg-amber-50 p-5 mt-3 text-sm text-amber-900">Nenhum lançamento neste filtro.</div>
+    </div>
+    <div class="flex flex-wrap items-center gap-3 mt-4">
+      <button id="btn-novo-2" onclick="abrirNovo()" class="text-sm px-3 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 font-medium transition flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Adicionar lançamento
+      </button>
+      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 ml-auto">
+        <span>Valores informados por você. Origem:</span>
+        <span class="inline-flex items-center"><i class="dot" style="background:#4F46E5"></i>do quantitativo</span>
+        <span class="inline-flex items-center"><i class="dot" style="background:#D97706"></i>da cotação (Comparativo)</span>
+        <span class="inline-flex items-center"><i class="dot" style="background:#94A3B8"></i>digitado por você</span>
+        <span class="src cron">fase do cronograma</span>
+      </div>
+    </div>
+    <p class="text-xs text-gray-500 mt-3">Quando o quantitativo muda depois do lançamento, a linha avisa <em>"o item mudou"</em> — como o cronograma e o memorial já avisam.</p>
+    <p id="aviso-itens" hidden class="text-xs text-amber-800 mt-2">Não consegui conferir os itens do quantitativo nesta leitura — o aviso "item mudou" fica de fora até a próxima vez que a página carregar.</p>
+  </section>
+
+  <!-- DESEMBOLSO -->
+  <section class="rise rounded-2xl bg-white border border-slate-200 shadow-sm p-6" aria-labelledby="h-graf">
+    <div class="flex flex-wrap items-baseline justify-between gap-2 mb-1">
+      <h2 id="h-graf" class="text-lg font-bold text-gray-900">Desembolso no tempo</h2>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+        <span class="inline-flex items-center gap-1.5"><i class="inline-block w-3 h-3 rounded-sm" style="background:#4F46E5"></i>A pagar (aprovado ou contratado)</span>
+        <span class="inline-flex items-center gap-1.5"><i class="inline-block w-3 h-3 rounded-sm" style="background:#10B981"></i>Pago</span>
+        <span class="inline-flex items-center gap-1.5"><i class="inline-block w-3 h-3 rounded-sm" style="background:#DC2626"></i>Vencido</span>
+        <span id="leg-fisico" class="inline-flex items-center gap-1.5"><i class="inline-block w-5 border-t-2 border-dashed" style="border-color:#06B6D4"></i>Avanço físico previsto</span>
+      </div>
+    </div>
+    <p class="text-xs text-gray-500 mb-4">As barras nascem dos vencimentos reais. A linha tracejada é o avanço físico do cronograma — quando o dinheiro corre na frente da obra, dá pra ver aqui.</p>
+    <div class="overflow-x-auto"><svg id="chart" viewBox="0 0 1040 320" width="100%" role="img" aria-label="Desembolso mensal e avanço físico"></svg></div>
+  </section>
+
+  <details class="rise rounded-2xl bg-white border border-slate-200 shadow-sm p-5 group">
+    <summary class="cursor-pointer text-sm font-semibold text-indigo-700 flex items-center gap-2 list-none">
+      <svg class="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
+      Ainda sem contratos? Projeção pelo peso físico
+    </summary>
+    <p class="text-sm text-gray-600 mt-3 leading-relaxed">Enquanto nada foi contratado, você informa só o <strong>valor total previsto</strong> no Cronograma e ele distribui pelas etapas conforme o peso físico de cada uma. Serve pra ter uma curva de desembolso antes das cotações. Assim que um lançamento real entra numa categoria, ele passa a valer aqui.</p>
+  </details>
+
+  <div class="rounded-xl bg-amber-50 border border-amber-200 p-5">
+    <p class="text-xs text-amber-900 leading-relaxed">
+      <strong class="text-amber-950">⚠️ Controle de referência.</strong>
+      O AI.arq organiza o que você e seus fornecedores informaram. Não substitui a conferência do profissional, o contrato assinado nem a nota fiscal.
+    </p>
+  </div>
+  </div><!-- /conteudo -->
+</main>
+
+<!-- ═══════════════ MODAL: NOVO LANÇAMENTO ═══════════════ -->
+<div id="modal-novo" hidden class="fixed inset-0 z-50 items-center justify-center p-4" style="background:rgba(15,23,42,.45)" role="dialog" aria-modal="true" aria-labelledby="h-novo">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[92vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-6 pt-5 pb-3 border-b border-slate-100">
+      <h2 id="h-novo" class="text-lg font-bold text-gray-900">Novo lançamento</h2>
+      <button type="button" onclick="fecharNovo()" class="text-gray-500 hover:text-gray-700 p-1" aria-label="Fechar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <form id="form-novo" class="px-6 py-5 space-y-5" onsubmit="salvarNovo(event)">
+      <div>
+        <label class="lbl">De onde vem</label>
+        <div class="grid grid-cols-3 gap-2" id="origem-chips">
+          <button type="button" class="rd on" data-src="quant" onclick="setOrigem('quant')">Do quantitativo</button>
+          <button type="button" class="rd" data-src="comp" onclick="setOrigem('comp')">Do comparativo</button>
+          <button type="button" class="rd" data-src="livre" onclick="setOrigem('livre')">Linha livre</button>
+        </div>
+        <div id="origem-quant" class="mt-3">
+          <label class="lbl" for="sel-quant">Item da planilha de quantitativos</label>
+          <select id="sel-quant" class="in in-lg" onchange="puxarQuant()"></select>
+          <p class="text-[11px] text-slate-500 mt-1">A descrição vem da planilha. Categoria, fornecedor e valor você informa.</p>
+        </div>
+        <div id="origem-comp" class="mt-3" hidden>
+          <label class="lbl" for="sel-comp">Linha da cotação recebida (Comparativo)</label>
+          <select id="sel-comp" class="in in-lg" onchange="puxarComp()"></select>
+          <p class="text-[11px] text-slate-500 mt-1">Fornecedor e valor vêm da cotação que você subiu. Nada é inventado.</p>
+        </div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-4">
+        <div>
+          <label class="lbl" for="f-cat">Categoria</label>
+          <select id="f-cat" class="in in-lg" onchange="sincFase(this.value)"></select>
+          <input id="f-cat-livre" class="in in-lg mt-2" placeholder="nome da categoria" hidden maxlength="120">
+        </div>
+        <div>
+          <label class="lbl" for="f-oque">Item</label>
+          <input id="f-oque" class="in in-lg" placeholder="ex.: Porcelanato 60×60 — 1.062 m²" required maxlength="500">
+        </div>
+        <div>
+          <label class="lbl" for="f-forn">Fornecedor <span class="normal-case font-normal text-slate-500">(opcional)</span></label>
+          <div class="cb-wrap"><input id="f-forn" class="in in-lg pr-8" placeholder="quem executa ou fornece" autocomplete="off" maxlength="200"><button type="button" class="cb-tog" tabindex="-1" aria-label="Ver sugestões" onclick="document.getElementById('f-forn').focus()"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="lbl" for="f-valor">Valor (R$)</label>
+            <input id="f-valor" class="in in-lg money" inputmode="decimal" placeholder="ex.: 12.500,00" autocomplete="off">
+          </div>
+          <div>
+            <label class="lbl" for="f-forma">Forma de pagamento</label>
+            <div class="cb-wrap"><input id="f-forma" class="in in-lg pr-8" placeholder="à vista, 3×…" autocomplete="off" maxlength="120"><button type="button" class="cb-tog" tabindex="-1" aria-label="Ver sugestões" onclick="document.getElementById('f-forma').focus()"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <label class="lbl">Vencimento</label>
+        <div id="venc-modal"></div>
+        <p class="text-[11px] text-slate-500 mt-1">Amarrado à fase, o vencimento acompanha o Gantt: adiantou ou atrasou a etapa, o pagamento vai junto.</p>
+      </div>
+      <div>
+        <label class="lbl">Status</label>
+        <div class="flex flex-wrap gap-1.5" id="st-chips"></div>
+        <p id="st-aviso" class="text-[11px] text-amber-800 mt-1.5" hidden>Sem valor ainda: a linha entra como “Sem valor” e o status escolhido passa a valer quando você informar o valor.</p>
+        <input type="hidden" id="f-st" value="cotado">
+      </div>
+      <p id="f-erro" hidden class="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2"></p>
+      <div class="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+        <button type="button" onclick="fecharNovo()" class="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50 text-slate-700 text-sm font-medium transition">Cancelar</button>
+        <button id="btn-salvar-novo" type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm rounded-lg font-semibold transition flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          Adicionar lançamento
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="pop-status" class="pop" hidden role="listbox" aria-label="Escolher status"></div>
+<div id="pop-venc" class="pop" hidden role="dialog" aria-label="Editar vencimento"></div>
+<div id="fin-toast" class="fin-toast" role="status" aria-live="polite"></div>
+
+<!-- supabase-js + utils compartilhados (sbClient, authFetch, escapeHtml, API_BASE) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+<script src="aiarq-utils.js"></script>
+<script src="menu-lateral.js"></script>
+<script>
+// Helpers globais (sbClient, authFetch, escapeHtml, API_BASE, aiArqNotify) vêm de
+// aiarq-utils.js. Reimportamos como const locais — o mesmo padrão do cronograma.
+const API_BASE = window.API_BASE;
+const sbClient = window.sbClient;
+const notify   = window.aiArqNotify;
+
+// job_id da URL — aceita ?job_id= (padrão do menu) e ?job= (links antigos)
+const params = new URLSearchParams(window.location.search);
+const jobId = params.get('job_id') || params.get('job') || '';
+if (!jobId) {
+  document.body.innerHTML = '<div class="p-8 text-center text-gray-600">Falta job_id. Volte ao <a href="dashboard.html" class="text-indigo-600 underline">dashboard</a> e abra um projeto.</div>';
+  throw new Error('no job');
+}
+document.getElementById('back-projeto').href = `projeto.html?job_id=${jobId}`;
+document.getElementById('link-cronograma').href = `cronograma.html?job_id=${jobId}`;
+if (window.trackEvent) trackEvent('view_financeiro', { job_id: jobId });
+
+// ── constantes da tela (iguais à maquete aprovada) ──
+const CRONO_CORES = ['#4F46E5', '#0E7490', '#B0603F', '#1F8A5B', '#8B2E5D', '#111827'];
+const STATUS = ["cotado","enviado","aprovado","contratado","pago"];
+const ST_LABEL = {cotado:"Cotado", enviado:"Aguardando", aprovado:"Aprovado", contratado:"Contratado", pago:"Pago"};
+const ST_LONG  = {cotado:"Cotado — preço do fornecedor em mão", enviado:"Aguardando o cliente", aprovado:"Aprovado pelo cliente", contratado:"Contratado / assinado", pago:"Pago"};
+const FORMAS = ["À vista","2× (50/50)","3× mensais","Por medição","Entrada + entrega"];
+const SRC_COR = {quant:"#4F46E5", comp:"#D97706", livre:"#94A3B8"};
+const SRC_TXT = {quant:"do quantitativo", comp:"da cotação (Comparativo)", livre:"digitado por você"};
+// a tela fala quant/comp/livre; o servidor fala quantitativo/comparativo/livre
+const SRC_API = {quant:"quantitativo", comp:"comparativo", livre:"livre"};
+const SRC_VIEW = {quantitativo:"quant", comparativo:"comp", livre:"livre"};
+// "hoje" é a data local de quem olha — meia-noite, pra comparar só o dia
+const HOJE = (function(){ const d = new Date(); d.setHours(0,0,0,0); return d; })();
+
+// ── estado ──
+let FASES = {};            // label da fase → [inicio, fim] (ISO AAAA-MM-DD)
+let FASES_ORDEM = [];      // labels na ordem do cronograma
+let TEM_CRONOGRAMA = false;
+let L = [];                // lançamentos (forma da tela)
+let ITENS = [];            // itens do quantitativo (pro modal)
+let COTACOES = [];         // cotações com linhas (pro modal)
+let SOMENTE_LEITURA = false;
+let ITENS_LIDOS = true;
+let FILTRO = 'todos';
+
+// ── utilitários ──
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = s => String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+const BRL  = v => (v||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0});
+const fmt2 = v => (v==null?'':Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}));
+const MES = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const mesLabel = d => MES[d.getMonth()] + '/' + String(d.getFullYear()).slice(-2);
+const dISO = s => { const p=String(s||'').slice(0,10).split('-').map(Number); if(p.length<3||!p[0]) return null; return new Date(p[0],p[1]-1,p[2]); };
+const dBR  = d => d.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit'});
+const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+// Um parser só, a mesma regra do backend: se tem ponto E vírgula, o ÚLTIMO separador é o decimal.
+// Devolve number; null = vazio; undefined = não entendi.
+function parseBRL(s){
+  s = String(s==null?'':s).replace(/R\$|\s/g,'');
+  if (!s) return null;
+  if (!/^[\d.,]+$/.test(s)) return undefined;
+  const p = s.lastIndexOf('.'), v = s.lastIndexOf(',');
+  let dec = '';
+  if (p>-1 && v>-1) dec = p>v ? '.' : ',';
+  else if (v>-1) dec = ',';
+  else if (p>-1) dec = /\.\d{1,2}$/.test(s) ? '.' : '';
+  let inteiro = s, frac = '';
+  if (dec) { const k = s.lastIndexOf(dec); inteiro = s.slice(0,k); frac = s.slice(k+1); }
+  inteiro = inteiro.replace(/[.,]/g,''); frac = frac.replace(/[.,]/g,'');
+  if (frac.length > 2) return undefined;
+  const n = parseFloat((inteiro||'0') + '.' + (frac||'0'));
+  return isFinite(n) ? n : undefined;
+}
+// A linha como o servidor devolve → a forma da tela (a maquete). Nada é inventado aqui.
+function daApi(r){
+  return {
+    id: r.id, cat: r.categoria || '', oque: r.descricao || '', src: SRC_VIEW[r.origem] || 'livre',
+    forn: r.fornecedor || '', valor: (r.valor==null ? null : Number(r.valor)), forma: r.forma_pagamento || '',
+    venc: r.venc_tipo === 'data' ? {tipo:'data', d: String(r.venc_data||'').slice(0,10)} : {tipo:'fase', fase: r.venc_fase || r.categoria || '', quando: r.venc_quando || 'inicio'},
+    st: r.status || 'cotado', pago_em: r.pago_em ? String(r.pago_em).slice(0,10) : null,
+    estado: r.origem_estado || 'ok', origem_atual: r.origem_atual || null, origem_candidatos: r.origem_candidatos || 0,
+    origem_quantidade: r.origem_quantidade, origem_unidade: r.origem_unidade || '',
+  };
+}
+// Data do vencimento: fixa, ou início/fim da fase (pelo label, com a categoria de reserva). null = fase sem data.
+function vencData(l){
+  if (l.venc.tipo==='data') return dISO(l.venc.d);
+  const f = FASES[l.venc.fase] || FASES[l.cat];
+  if (!f) return null;
+  return dISO(l.venc.quando==='fim' ? f[1] : f[0]);
+}
+const pago     = l => l.st==='pago';
+const temValor = l => l.valor!=null;
+const emAberto = l => !pago(l) && temValor(l) && ['contratado','aprovado'].includes(l.st);
+const vencido  = l => { if(!emAberto(l)) return false; const d=vencData(l); return !!d && d < HOJE; };
+const PRED = {
+  todos: () => true,
+  avencer: l => { if(!emAberto(l)) return false; const d=vencData(l); return !d || d >= HOJE; },
+  vencidos: vencido,
+  aguardando: l => l.st==='enviado',
+  pagos: pago,
+  semvalor: l => !temValor(l),
+};
+const idx = l => L.indexOf(l);
+
+// ── conversa com o servidor (sempre pelo authFetch: Bearer, 45 s, aviso único de sessão) ──
+async function lerJson(r){ try { return await r.json(); } catch (e) { return {}; } }
+function erroDe(r, d){ return new Error((d && d.detail) || (d && d.error) || ('o servidor respondeu ' + r.status)); }
+async function api(method, caminho, corpo){
+  const opts = { method };
+  if (corpo !== undefined) { opts.headers = {'Content-Type':'application/json'}; opts.body = JSON.stringify(corpo); }
+  const r = await authFetch(`${API_BASE}/api/financeiro/${jobId}${caminho}`, opts);
+  const d = await lerJson(r);
+  if (!r.ok) throw erroDe(r, d);
+  return d;
+}
+function marcarSalvando(l, on){ const tr = document.querySelector(`tr.row[data-id="${l.id}"]`); if (tr) tr.classList.toggle('salvando', !!on); }
+function statusSalvo(txt, erro){ const el=document.getElementById('save-status'); if(!el) return; el.textContent = txt; el.className = 'text-xs whitespace-nowrap ' + (erro ? 'text-red-700 font-medium' : 'text-slate-500'); }
+// PATCH de UM lançamento: otimista na tela, servidor confirma; se recusar, a tela volta ao que o servidor tem.
+async function persistir(l, campos, msgOk){
+  marcarSalvando(l, true); statusSalvo('Salvando…');
+  try {
+    const d = await api('PATCH', `/${encodeURIComponent(l.id)}`, campos);
+    if (d.lancamento) Object.assign(l, daApi(d.lancamento));
+    statusSalvo('Salvo agora.');
+    if (msgOk) avisar(msgOk);
+    renderRow(l);
+  } catch (e) {
+    statusSalvo('Não salvou — veja o aviso.', true);
+    avisar(e.message || 'não consegui salvar', 'erro');
+    await recarregar();   // o que está na tela volta a ser o que o servidor tem
+  }
+}
+
+// ── carga ──
+async function carregarFases(){
+  FASES = {}; FASES_ORDEM = []; TEM_CRONOGRAMA = false;
+  let fases = [];
+  try {
+    const r = await authFetch(`${API_BASE}/api/cronograma/${jobId}`);
+    if (r.ok) { const c = await lerJson(r); if (c && c.status==='ok' && c.saved) fases = c.saved.fases_custom || []; }
+  } catch (e) { console.warn('cronograma salvo:', e); }
+  if (!fases.length) {
+    // salvo sem fases (só config) ou nunca gerado: o /full gera as fases dos itens (404 = nunca gerado)
+    try {
+      const r2 = await authFetch(`${API_BASE}/api/cronograma/${jobId}/full`);
+      if (r2.ok) { const cf = await lerJson(r2); fases = (cf && cf.fases) || []; }
+    } catch (e) { console.warn('cronograma full:', e); }
+  }
+  const ord = fases.slice().sort((a,b)=>((a.ordem||0)-(b.ordem||0)) || String(a.inicio||'').localeCompare(String(b.inicio||'')));
+  ord.forEach(f => {
+    const lab = String(f.label||'').trim(); if (!lab || !f.inicio || !f.fim) return;
+    if (!FASES[lab]) { FASES[lab] = [String(f.inicio).slice(0,10), String(f.fim).slice(0,10)]; FASES_ORDEM.push(lab); }
+  });
+  TEM_CRONOGRAMA = FASES_ORDEM.length > 0;
+  document.getElementById('aviso-cronograma').hidden = TEM_CRONOGRAMA;
+  document.getElementById('leg-fisico').style.display = TEM_CRONOGRAMA ? '' : 'none';
+}
+async function carregarLancamentos(){
+  const d = await api('GET', '');
+  SOMENTE_LEITURA = !!d.somente_leitura;
+  ITENS_LIDOS = d.itens_lidos !== false;
+  L = (d.lancamentos || []).map(daApi);
+  document.getElementById('aviso-itens').hidden = ITENS_LIDOS;
+}
+async function carregarFontesDoModal(){
+  // itens do quantitativo e cotações — só pro modal; falhar aqui não derruba a tela
+  try {
+    const r = await authFetch(`${API_BASE}/api/items/${jobId}`);
+    if (r.ok) { const d = await lerJson(r); ITENS = (d.items || []).filter(it => it && it.id && it.description); }
+  } catch (e) { console.warn('itens:', e); }
+  try {
+    const r = await authFetch(`${API_BASE}/api/projects/${jobId}/quotes`);
+    if (r.ok) { const d = await lerJson(r); COTACOES = (d.quotes || []).filter(q => q && q.id); }
+  } catch (e) { console.warn('cotações:', e); }
+}
+async function recarregar(){ try { await carregarLancamentos(); } catch (e) { avisar(e.message, 'erro'); } render(); }
+function aplicarSomenteLeitura(){
+  const ro = SOMENTE_LEITURA;
+  document.getElementById('pill-leitura').hidden = !ro;
+  document.getElementById('btn-novo').hidden = ro;
+  document.getElementById('btn-novo-2').hidden = ro;
+  document.getElementById('save-status').hidden = ro;
+  if (ro) document.getElementById('ajuda-tabela').textContent = 'Você está vendo o financeiro deste cliente como admin: dá pra consultar, não pra alterar.';
+}
+async function init(){
+  const { data: { session } } = await sbClient.auth.getSession();
+  if (!session) { window.location.href = `login.html?redirect=financeiro.html?job_id=${jobId}`; return; }
+  try {
+    await Promise.all([carregarLancamentos(), carregarFases()]);
+  } catch (e) {
+    document.getElementById('erro-carga-txt').textContent = e.message || 'erro desconhecido';
+    document.getElementById('erro-carga').hidden = false;
+    document.getElementById('gate').classList.add('hidden');
+    return;
+  }
+  aplicarSomenteLeitura();
+  document.getElementById('conteudo').hidden = false;
+  document.getElementById('gate').classList.add('hidden');
+  medirSticky(); render(); setTimeout(medirSticky, 300);
+  carregarFontesDoModal();   // em paralelo, sem travar a tela
+}
+
+// ── filtros com contagem ──
+function filtrar(f){ FILTRO=f; document.querySelectorAll('.fin-chip').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.f===f))); render(); }
+function contagens(){ document.querySelectorAll('.fin-chip').forEach(b=>{ const n=L.filter(PRED[b.dataset.f]).length; b.querySelector('.n').textContent=n; }); }
+
+// ── KPIs ──
+function kpis(){
+  const contr=L.filter(l=>['contratado','pago'].includes(l.st)); const vc=contr.reduce((s,l)=>s+(l.valor||0),0);
+  const pg=L.filter(pago); const vp=pg.reduce((s,l)=>s+(l.valor||0),0);
+  const em30=L.filter(l=>{ if(!emAberto(l)) return false; const d=vencData(l); return !!d && (d-HOJE)/864e5<=30; });
+  const v30=em30.reduce((s,l)=>s+(l.valor||0),0); const venc=em30.filter(l=>vencData(l)<HOJE);
+  const semData=L.filter(l=>emAberto(l) && !vencData(l)).length;
+  const ag=L.filter(l=>l.st==='enviado'); const vag=ag.reduce((s,l)=>s+(l.valor||0),0);
+  document.getElementById('k-contr').textContent=BRL(vc);
+  document.getElementById('k-contr-s').textContent=`${contr.length} lançamento${contr.length!==1?'s':''}`;
+  document.getElementById('k-pago').textContent=BRL(vp);
+  document.getElementById('k-pago-s').textContent=vc?`${Math.round(100*vp/vc)}% do contratado`:'—';
+  document.getElementById('k-30').textContent=BRL(v30);
+  document.getElementById('k-30-s').innerHTML=(venc.length?`<span class="text-red-600 font-semibold">${venc.length} já vencido${venc.length>1?'s':''}</span> · ${em30.length-venc.length} a vencer`:`${em30.length} a vencer`) + (semData?` · <span class="text-amber-700">${semData} sem data</span>`:'');
+  document.getElementById('k-ag').textContent=BRL(vag);
+  document.getElementById('k-ag-s').textContent=`${ag.length} aguardando o cliente`;
+  // selo no menu lateral: só afirma o que sabe (sem cronograma, não dá pra dizer "em dia")
+  const nv=L.filter(vencido).length;
+  if (TEM_CRONOGRAMA || L.every(l=>l.venc.tipo==='data')) pintaSelo(nv ? `${nv} vencido${nv>1?'s':''}` : 'em dia', nv ? 'pend' : 'ok');
+  else pintaSelo('—', 'nao');
+  contagens();
+}
+function pintaSelo(texto, classe){ const e=document.querySelector('.side-est[data-est="financeiro"]'); if(!e) return; e.textContent=texto; e.className='side-est '+classe; }
+
+// ── linhas ──
+function badgeOrigem(l){
+  // regra nº7 por linha: o servidor compara o retrato com o item vivo (quantidade OU unidade)
+  if (l.src!=='quant') return '';
+  const b = (txt, tit, cor) => `<span class="block w-fit mt-1 text-[10.5px] font-semibold ${cor} rounded px-1.5 py-0.5" title="${esc(tit)}">${txt}</span>`;
+  if (l.estado==='mudou') { const a=l.origem_atual||{}; const era = l.origem_quantidade!=null ? `era ${fmt2(l.origem_quantidade)} ${esc(l.origem_unidade)}` : 'quantidade mudou'; const ag = a.quantidade!=null ? `, agora ${fmt2(a.quantidade)} ${esc(a.unidade||'')}` : ''; return b('item mudou no quantitativo — conferir valor', `${era}${ag}`, 'text-amber-800 bg-amber-50 border border-amber-200'); }
+  if (l.estado==='removido') return b('item removido do quantitativo', 'O item que originou este lançamento não está mais na planilha. O dinheiro combinado continua valendo — você decide o que fazer.', 'text-red-800 bg-red-50 border border-red-200');
+  if (l.estado==='ambiguo') return b('item com nome repetido na planilha — conferir', `${l.origem_candidatos||2} itens com a mesma descrição; não dá pra saber qual é este.`, 'text-amber-800 bg-amber-50 border border-amber-200');
+  return '';
+}
+function celulaItem(l){
+  const i=idx(l);
+  const ro = l.src!=='livre' || SOMENTE_LEITURA;
+  const titulo = l.src!=='livre' ? `Vem ${SRC_TXT[l.src]} — edite lá; a linha avisa quando o item mudar` : esc(l.oque);
+  const tab = ro ? '' : 'tabindex="0" role="button"';
+  return `<span class="cell clamp2 text-[13px] font-medium text-slate-800 ${ro?'ro':''}" data-i="${i}" data-campo="oque" ${tab} title="${titulo}" aria-label="Item — ${esc(l.oque)}"><i class="dot" style="background:${SRC_COR[l.src]}" title="${SRC_TXT[l.src]}"></i>${esc(l.oque)}</span>${badgeOrigem(l)}
+    <span class="cell forn-sub text-[11.5px] text-slate-500 truncate1 mt-0.5 ${SOMENTE_LEITURA?'ro':''}" data-i="${i}" data-campo="forn" ${SOMENTE_LEITURA?'':'tabindex="0" role="button"'} aria-label="Fornecedor — ${esc(l.oque)}: ${l.forn?esc(l.forn):'informar'}">${l.forn?esc(l.forn):'<span class="text-indigo-600">informar fornecedor</span>'}</span>`;
+}
+function celulaForn(l){
+  const i=idx(l), ro=SOMENTE_LEITURA?'ro':'', tab=SOMENTE_LEITURA?'':'tabindex="0" role="button"';
+  return l.forn
+    ? `<span class="cell truncate1 text-slate-700 ${ro}" data-i="${i}" data-campo="forn" ${tab} title="${esc(l.forn)}" aria-label="Fornecedor — ${esc(l.oque)}: ${esc(l.forn)}">${esc(l.forn)}</span>`
+    : `<span class="cell vazio truncate1 ${ro}" data-i="${i}" data-campo="forn" ${tab} aria-label="Fornecedor — ${esc(l.oque)}: informar"><span>${SOMENTE_LEITURA?'—':'informar fornecedor'}</span></span>`;
+}
+function celulaValor(l){
+  const i=idx(l), ro=SOMENTE_LEITURA?'ro':'', tab=SOMENTE_LEITURA?'':'tabindex="0" role="button"';
+  const v = temValor(l)
+    ? `<span class="cell text-right tabular font-semibold text-slate-800 ${ro}" data-i="${i}" data-campo="valor" ${tab} aria-label="Valor — ${esc(l.oque)}: R$ ${fmt2(l.valor)}">${fmt2(l.valor)}</span>`
+    : `<span class="cell vazio text-right ${ro}" data-i="${i}" data-campo="valor" ${tab} aria-label="Valor — ${esc(l.oque)}: informar"><span>${SOMENTE_LEITURA?'—':'informar valor'}</span></span>`;
+  const f = l.forma
+    ? `<span class="cell truncate1 text-right text-[11px] text-slate-500 mt-0.5 ${ro}" data-i="${i}" data-campo="forma" ${tab} title="${esc(l.forma)}" aria-label="Forma de pagamento — ${esc(l.oque)}: ${esc(l.forma)}">${esc(l.forma)}</span>`
+    : `<span class="cell truncate1 text-right text-[11px] text-slate-500 italic mt-0.5 ${ro}" data-i="${i}" data-campo="forma" ${tab} aria-label="Forma de pagamento — ${esc(l.oque)}: informar">${SOMENTE_LEITURA?'':'forma de pagamento'}</span>`;
+  return v+f;
+}
+function celulaVenc(l){
+  const i=idx(l), vd=vencData(l), atr=vencido(l);
+  const dias = vd ? Math.round((HOJE-vd)/864e5) : 0;
+  const l1 = vd
+    ? `<span class="tabular text-[12.5px] ${atr?'text-red-700 font-semibold':'text-slate-700'}">${dBR(vd)}</span>${atr?` <span class="text-[10px] font-bold px-1.5 rounded-full bg-red-50 text-red-700 border border-red-200" title="vencido há ${dias} dia${dias>1?'s':''}">vencido</span>`:''}`
+    : `<span class="text-[12.5px] text-slate-400">—</span>`;
+  const l2 = l.venc.tipo==='fase'
+    ? (vd ? `<span class="src cron" title="${esc(l.venc.fase)} — mover a fase move o vencimento">${l.venc.quando==='fim'?'fim':'início'}${l.venc.fase && l.venc.fase!==l.cat ? ' · '+esc(l.venc.fase) : ' da fase'}</span>`
+          : `<span class="src semdata" title="A fase “${esc(l.venc.fase||l.cat)}” não tem data no cronograma — gere/ajuste o cronograma ou use data fixa">fase sem data</span>`)
+    : `<span class="text-[11px] text-slate-500">data fixa</span>`;
+  const aria = l.venc.tipo==='fase' ? `${vd?dBR(vd):'sem data'}, ${l.venc.quando==='fim'?'fim':'início'} da fase ${esc(l.venc.fase)}` : `${vd?dBR(vd):'sem data'}, data fixa`;
+  const ro=SOMENTE_LEITURA?'ro':'', tab=SOMENTE_LEITURA?'':'tabindex="0" role="button"';
+  return `<span class="cell ${ro}" data-i="${i}" data-campo="venc" ${tab} aria-label="Vencimento — ${esc(l.oque)}: ${aria}"><span class="block">${l1}</span><span class="block mt-0.5">${l2}</span></span>`;
+}
+function celulaStatus(l){
+  const i=idx(l);
+  if(!temValor(l)) return `<span class="status st-semvalor" title="informe o valor primeiro" aria-disabled="true"><i></i>Sem valor</span>`;
+  const sub = pago(l) && l.pago_em ? `<span class="block text-[10.5px] text-emerald-700 mt-0.5">pago em ${dBR(dISO(l.pago_em))}</span>` : '';
+  if (SOMENTE_LEITURA) return `<span class="status ro st-${l.st}" title="${ST_LONG[l.st]}"><i></i>${ST_LABEL[l.st]}</span>${sub}`;
+  return `<button class="status st-${l.st}" data-i="${i}" aria-haspopup="listbox" aria-expanded="false" aria-label="Status — ${esc(l.oque)}: ${ST_LONG[l.st]}" title="${ST_LONG[l.st]}" onclick="abrirStatus(this,${i})"><i></i>${ST_LABEL[l.st]}<svg class="chev" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>${sub}`;
+}
+function celulaAcoes(l){
+  if (SOMENTE_LEITURA) return '';
+  const i=idx(l);
+  const ok = (!pago(l) && temValor(l)) ? `<button class="acao ok" title="Marcar como pago" aria-label="Marcar como pago — ${esc(l.oque)}" onclick="marcarPago(${i})"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg></button>` : '';
+  return `<div class="flex items-center justify-end gap-2">${ok}<button class="acao del" title="Remover lançamento" aria-label="Remover lançamento — ${esc(l.oque)}" onclick="remover(${i})"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg></button></div>`;
+}
+function rowHtml(l){
+  return `<td class="border-t border-slate-100">${celulaItem(l)}</td>
+    <td class="td-forn border-t border-slate-100">${celulaForn(l)}</td>
+    <td class="border-t border-slate-100 text-right">${celulaValor(l)}</td>
+    <td class="border-t border-slate-100">${celulaVenc(l)}</td>
+    <td class="border-t border-slate-100">${celulaStatus(l)}</td>
+    <td class="border-t border-slate-100">${celulaAcoes(l)}</td>`;
+}
+function corDaCat(cat){ const k=FASES_ORDEM.indexOf(cat); return CRONO_CORES[(k<0?FASES_ORDEM.length:k)%CRONO_CORES.length]; }
+function catHtml(cat, rows){
+  const tot=rows.reduce((s,l)=>s+(l.valor||0),0), pg=rows.filter(pago).reduce((s,l)=>s+(l.valor||0),0);
+  const semv=rows.filter(l=>!temValor(l)).length, todosSem = semv===rows.length;
+  const f=FASES[cat]; const fi=f?dISO(f[0]):null, ff=f?dISO(f[1]):null;
+  return `<td class="border-t border-slate-200"><span class="inline-flex items-center gap-2 font-semibold text-slate-800 text-[13px]"><i class="inline-block w-2.5 h-2.5 rounded-sm" style="background:${corDaCat(cat)}"></i>${esc(cat)}</span>${fi&&ff?` <span class="src cron ml-1">${mesLabel(fi)} → ${mesLabel(ff)}</span>`:''}</td>
+    <td class="td-forn border-t border-slate-200"></td>
+    <td class="border-t border-slate-200 text-right font-semibold text-slate-800 tabular">${todosSem?'—':fmt2(tot)}</td>
+    <td colspan="3" class="border-t border-slate-200 text-xs text-slate-500">${pg?`<span class="text-emerald-700 font-medium">pago ${BRL(pg)}</span> · `:''}${rows.length} lançamento${rows.length>1?'s':''}${semv&&!todosSem?` · ${semv} sem valor`:''}</td>`;
+}
+function novaTr(l){ const tr=document.createElement('tr'); tr.className='row'; tr.dataset.i=idx(l); tr.dataset.id=l.id; tr.innerHTML=rowHtml(l); return tr; }
+function render(){
+  const tb=document.getElementById('ledger'); tb.innerHTML='';
+  const vis=L.filter(PRED[FILTRO]);
+  const vz=document.getElementById('vazio'); vz.hidden = vis.length>0;
+  vz.textContent = FILTRO==='todos' ? (SOMENTE_LEITURA ? 'Este projeto ainda não tem lançamentos.' : 'Nenhum lançamento ainda — comece por “Novo lançamento”.') : 'Nenhum lançamento neste filtro.';
+  const cats=FASES_ORDEM.filter(c=>vis.some(l=>l.cat===c)).concat([...new Set(vis.map(l=>l.cat))].filter(c=>!FASES[c]));
+  cats.forEach(cat=>{
+    const rows=vis.filter(l=>l.cat===cat);
+    const trc=document.createElement('tr'); trc.className='cat bg-slate-50'; trc.style.height='36px'; trc.innerHTML=catHtml(cat,rows); tb.appendChild(trc);
+    rows.forEach(l=>tb.appendChild(novaTr(l)));
+  });
+  kpis(); chart();
+}
+function renderRow(l){
+  // com filtro ativo, a linha que deixou de caber nele SAI da tela — senão o total da categoria e os chips já a descontam enquanto ela continua visível
+  if(idx(l)<0 || !PRED[FILTRO](l)){ fecharPops(); render(); return; }
+  const tr=document.querySelector(`tr.row[data-id="${l.id}"]`); if(!tr){ render(); return; }
+  const novo=novaTr(l); tr.replaceWith(novo);
+  const rows=L.filter(PRED[FILTRO]).filter(x=>x.cat===l.cat);
+  let el=novo.previousElementSibling; while(el && !el.classList.contains('cat')) el=el.previousElementSibling; if(el) el.innerHTML=catHtml(l.cat,rows);
+  kpis(); chart();
+}
+
+// ── clique-para-editar ──
+const CAMPOS_ORDEM = ['oque','forn','valor','forma','venc'];
+function focar(i,campo){ const el=[...document.querySelectorAll(`.cell[data-i="${i}"][data-campo="${campo}"][tabindex], .status[data-i="${i}"]`)].find(x=>x.offsetParent!==null); if(el) el.focus(); }
+function vizinho(i,campo,dir){
+  const ordem=CAMPOS_ORDEM.filter(c=>[...document.querySelectorAll(`.cell[data-i="${i}"][data-campo="${c}"][tabindex]`)].some(x=>x.offsetParent!==null));
+  const k=ordem.indexOf(campo)+dir; if(k>=0 && k<ordem.length) focar(i,ordem[k]); else if(k>=ordem.length){ const st=document.querySelector(`.status[data-i="${i}"]`); if(st) st.focus(); }
+}
+document.getElementById('ledger').addEventListener('click', e=>{ const c=e.target.closest('.cell'); if(c && !c.classList.contains('ro') && c.hasAttribute('tabindex')) editar(c); });
+document.getElementById('ledger').addEventListener('keydown', e=>{ const c=e.target.closest('.cell'); if(!c) return; if(e.key==='Enter'||e.key==='F2'||e.key===' '){ e.preventDefault(); editar(c); } });
+function editar(span){
+  if (SOMENTE_LEITURA) return;
+  const i=+span.dataset.i, campo=span.dataset.campo, l=L[i]; if(!l) return;
+  if(campo==='venc'){ abrirVenc(span,l); return; }
+  if(campo==='oque' && l.src!=='livre') return;
+  const inp=document.createElement('input'); inp.className='in'+(campo==='valor'?' money':''); inp.dataset.i=i; inp.dataset.campo=campo; inp.autocomplete='off';
+  inp.setAttribute('aria-label', span.getAttribute('aria-label')||campo);
+  inp.value = campo==='valor' ? fmt2(l.valor) : (l[campo]||'');
+  if(campo==='valor'){ inp.inputMode='decimal'; inp.placeholder='ex.: 12.500,00'; inp.addEventListener('beforeinput', e=>{ if(e.data && /[^\d.,]/.test(e.data)) e.preventDefault(); }); }
+  if(campo==='forma'){ inp.placeholder='à vista, 3×…'; inp.classList.add('text-right'); inp.maxLength=120; }
+  if(campo==='forn'){ inp.placeholder='fornecedor'; inp.maxLength=200; }
+  if(campo==='oque'){ inp.maxLength=500; }
+  span.replaceWith(inp); inp.focus(); inp.select();
+  let fechado=false, proximo=null;
+  const fim=(gravar)=>{
+    if(fechado) return;
+    let campos=null;
+    if(gravar){
+      if(campo==='valor'){
+        const v=parseBRL(inp.value);
+        if(v===undefined){ inp.setAttribute('aria-invalid','true'); inp.title='use vírgula pros centavos'; inp.focus(); return; }
+        if(v!==l.valor){
+          campos={valor:v};
+          // apagou o valor de linha PAGA: a maquete rebaixa pra contratado — o servidor exige que a tela mande o status junto
+          if(v==null && l.st==='pago'){ campos.status='contratado'; l.st='contratado'; l.pago_em=null; }
+          l.valor=v;
+        }
+      } else {
+        const t=inp.value.trim(); const chave = campo==='forma' ? 'forma_pagamento' : (campo==='oque' ? 'descricao' : 'fornecedor');
+        if(t!==(l[campo]||'')){ l[campo]=t; campos={}; campos[chave]=t; }
+      }
+    }
+    fechado=true; fecharCb();
+    renderRow(l);
+    if(proximo){ const [pi,pc]=proximo; if(pc==='vizinho+') vizinho(i,campo,1); else if(pc==='vizinho-') vizinho(i,campo,-1); else focar(pi,pc); } else focar(i,campo);
+    if(campos) persistir(l, campos);
+  };
+  inp.addEventListener('keydown', e=>{
+    if(e.key==='Enter'){ e.preventDefault(); if(cbAtivo && cbAtivo.pick()) return; fim(true); }
+    else if(e.key==='Escape'){ e.preventDefault(); if(cbAtivo && !cbAtivo.ul.hidden){ fecharCb(); return; } fim(false); }
+    else if(e.key==='Tab'){ e.preventDefault(); proximo=[i, e.shiftKey?'vizinho-':'vizinho+']; fim(true); }
+  });
+  inp.addEventListener('blur', ()=> setTimeout(()=>{ if(cbSegurando) return; fim(true); }, 0));
+  if(campo==='forn') combobox(inp, fontesForn, ()=>fim(true));
+  if(campo==='forma') combobox(inp, fontesForma, ()=>fim(true));
+}
+
+// ── combobox: sugestões + já usadas + texto livre (um componente pra fornecedor, forma e modal) ──
+let cbAtivo=null, cbSegurando=false;
+function fontesForn(){
+  const usados={}; L.forEach(l=>{ if(l.forn){ const k=norm(l.forn); usados[k]=usados[k]||{t:l.forn,n:0}; usados[k].n++; } });
+  const comp=[...new Set(COTACOES.map(c=>String(c.supplier_name||'').trim()).filter(Boolean))];
+  const ja=Object.values(usados).sort((a,b)=>b.n-a.n).map(x=>x.t).filter(t=>!comp.some(c=>norm(c)===norm(t)));
+  return [{grupo:'Do Comparativo', itens:comp},{grupo:'Já usados neste projeto', itens:ja}];
+}
+function fontesForma(){
+  const ja=[...new Set(L.map(l=>l.forma).filter(Boolean))].filter(f=>!FORMAS.some(x=>norm(x)===norm(f)));
+  return [{grupo:'Sugestões', itens:FORMAS},{grupo:'Usadas neste projeto', itens:ja}];
+}
+function combobox(input, fontes, onPick){
+  let ul=document.getElementById('cb-list'); if(!ul){ ul=document.createElement('ul'); ul.id='cb-list'; ul.className='cb-list'; ul.setAttribute('role','listbox'); ul.hidden=true; document.body.appendChild(ul);
+    ul.addEventListener('mousedown', e=>{ cbSegurando=true; e.preventDefault(); });
+    ul.addEventListener('mouseup', ()=>{ setTimeout(()=>cbSegurando=false,0); });
+  }
+  const st={input, ul, itens:[], idx:-1, onPick, digitou:false,
+    build(){ const q=st.digitou ? norm(input.value) : ''; st.itens=[]; let html='';
+      fontes().forEach(g=>{ const its=g.itens.filter(t=>!q||norm(t).includes(q)); if(!its.length) return; html+=`<li class="cb-grp">${esc(g.grupo)}</li>`; its.forEach(t=>{ st.itens.push(t); html+=`<li role="option" data-k="${st.itens.length-1}" class="cb-opt">${esc(t)}</li>`; }); });
+      const tx=input.value.trim(); if(st.digitou && tx && !st.itens.some(t=>norm(t)===norm(tx))){ st.itens.push(tx); html+=`<li role="option" data-k="${st.itens.length-1}" class="cb-opt cb-novo">Usar “${esc(tx)}”</li>`; }
+      ul.innerHTML=html; st.idx=-1; ul.hidden=!html; st.pos(); input.setAttribute('aria-expanded', String(!ul.hidden)); },
+    pos(){ const r=input.getBoundingClientRect(); ul.style.width=Math.max(224,r.width)+'px'; ul.style.left=(r.left+scrollX)+'px'; const h=Math.min(224, ul.scrollHeight+8); if(r.bottom+h+8<=innerHeight) ul.style.top=(r.bottom+scrollY+4)+'px'; else ul.style.top=(r.top+scrollY-h-4)+'px'; },
+    mark(){ [...ul.querySelectorAll('.cb-opt')].forEach(li=>li.setAttribute('aria-selected', String(+li.dataset.k===st.idx))); const a=ul.querySelector('[aria-selected="true"]'); if(a) a.scrollIntoView({block:'nearest'}); },
+    pick(){ if(ul.hidden || st.idx<0) return false; st.escolher(st.itens[st.idx]); return true; },
+    escolher(t){ const can=[...FORMAS, ...COTACOES.map(c=>String(c.supplier_name||''))].find(x=>norm(x)===norm(t)); input.value=can||t; fecharCb(); if(onPick) onPick(); },
+  };
+  input.setAttribute('role','combobox'); input.setAttribute('aria-autocomplete','list'); input.setAttribute('aria-controls','cb-list'); input.setAttribute('aria-expanded','false');
+  input.addEventListener('input', ()=>{ st.digitou=true; st.build(); });
+  input.addEventListener('focus', ()=>{ cbAtivo=st; st.digitou=false; st.build(); });
+  input.addEventListener('blur', ()=> setTimeout(()=>{ if(!cbSegurando && cbAtivo===st) fecharCb(); }, 0));
+  input.addEventListener('keydown', e=>{ if(e.key==='ArrowDown'){ e.preventDefault(); if(ul.hidden) st.build(); st.idx=Math.min(st.itens.length-1, st.idx+1); st.mark(); } else if(e.key==='ArrowUp'){ e.preventDefault(); st.idx=Math.max(-1, st.idx-1); st.mark(); } });
+  ul.onclick = e=>{ const li=e.target.closest('.cb-opt'); if(!li) return; st.escolher(st.itens[+li.dataset.k]); };
+  if(document.activeElement===input){ cbAtivo=st; st.build(); }
+  return st;
+}
+function fecharCb(){ const ul=document.getElementById('cb-list'); if(ul){ ul.hidden=true; } if(cbAtivo){ cbAtivo.input.setAttribute('aria-expanded','false'); } cbAtivo=null; }
+
+// ── status: menu de escolha (sem ciclo) ──
+let popAlvo=null;
+function abrirStatus(btn,i){
+  const l=L[i]; if(!l) return;
+  const pop=document.getElementById('pop-status'); const k=STATUS.indexOf(l.st);
+  pop.innerHTML=STATUS.map((s,j)=>`<button role="option" aria-selected="${s===l.st}" data-s="${s}"><span class="status st-${s}" style="pointer-events:none"><i></i>${ST_LABEL[s]}</span><span class="lg truncate1">${ST_LONG[s]}</span>${j===k+1?'<span class="nx">próximo</span>':''}${s===l.st?'<svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>':''}</button>`).join('');
+  pop.querySelectorAll('button').forEach(b=>b.onclick=()=>{ setStatus(l,b.dataset.s); fecharPops(); focar(idx(l),'status'); });
+  posicionar(pop, btn); pop.hidden=false; btn.setAttribute('aria-expanded','true'); popAlvo=btn;
+  const sel=pop.querySelector('[aria-selected="true"]'); (sel||pop.querySelector('button')).focus();
+  pop.onkeydown=e=>{ const bs=[...pop.querySelectorAll('button')]; const c=bs.indexOf(document.activeElement); if(e.key==='ArrowDown'){ e.preventDefault(); bs[Math.min(bs.length-1,c+1)].focus(); } else if(e.key==='ArrowUp'){ e.preventDefault(); bs[Math.max(0,c-1)].focus(); } else if(e.key==='Escape'){ e.preventDefault(); fecharPops(); btn.focus(); } };
+}
+function setStatus(l,s){
+  if(l.st===s) return;
+  const campos={status:s};
+  // marcar pago: a data é de quem marca (o servidor não carimba — é do arquiteto e do fuso dele)
+  if(s==='pago'){ campos.pago_em=toISO(HOJE); l.pago_em=campos.pago_em; } else { l.pago_em=null; }
+  l.st=s; renderRow(l);
+  persistir(l, campos, `Status: ${ST_LABEL[s]} — ${l.oque}`);
+}
+function marcarPago(i){ const l=L[i]; if(l) setStatus(l,'pago'); }
+// remover: some da tela e do servidor na hora, e "Desfazer" por 6 s recria a linha (mesmos campos)
+async function remover(i){
+  const l=L[i]; if(!l) return;
+  L.splice(i,1); render();
+  try {
+    await api('DELETE', `/${encodeURIComponent(l.id)}`);
+    avisar(`Removido: ${l.oque}`, null, {acao:'Desfazer', fn:()=>recriar(l)});
+  } catch (e) {
+    avisar(e.message || 'não consegui remover', 'erro'); await recarregar();
+  }
+}
+async function recriar(l){
+  const corpo=corpoDaLinha(l);
+  try { const d=await api('POST','',corpo); if(d.lancamento){ L.push(daApi(d.lancamento)); render(); avisar('Lançamento de volta'); } }
+  catch (e) { avisar('Não consegui desfazer: ' + (e.message||''), 'erro'); }
+}
+function corpoDaLinha(l){
+  const c={ escopo:'obra', categoria:l.cat, origem:SRC_API[l.src], fornecedor:l.forn||'', valor:l.valor, forma_pagamento:l.forma||'', status:l.st };
+  if(l.src==='livre') c.descricao=l.oque;
+  if(l.venc.tipo==='data'){ c.venc_tipo='data'; c.venc_data=l.venc.d; } else { c.venc_tipo='fase'; c.venc_fase=l.venc.fase||l.cat; c.venc_quando=l.venc.quando||'inicio'; }
+  if(l.st==='pago' && l.pago_em) c.pago_em=l.pago_em;
+  if(l.src!=='livre'){ c.origem_ref_id=l.origem_ref_id; if(l.src==='comp') c.origem_ref_pos=l.origem_ref_pos; }
+  return c;
+}
+
+// ── vencimento: popover com o mesmo bloco do modal ──
+function opcoesDeFase(sel){
+  const labels = FASES_ORDEM.length ? FASES_ORDEM : [...new Set(L.map(l=>l.cat))];
+  if (sel && !labels.includes(sel)) labels.push(sel);
+  return labels;
+}
+function blocoVenc(root, venc, onChange){
+  const podeFase = TEM_CRONOGRAMA;
+  root.innerHTML=`<div class="grid grid-cols-2 gap-2 mb-2">
+      <button type="button" class="rd ${venc.tipo==='fase'?'on':''}" data-v="fase" ${podeFase?'':'disabled title="Sem cronograma salvo, a fase não tem data"'}><svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M8 2v3M16 2v3M3.5 9h17M5 5h14a1.5 1.5 0 011.5 1.5V19A1.5 1.5 0 0119 20.5H5A1.5 1.5 0 013.5 19V6.5A1.5 1.5 0 015 5z"/></svg>Fase do cronograma ${podeFase?'<span class="text-[10px] font-semibold text-indigo-600 ml-auto">padrão</span>':''}</button>
+      <button type="button" class="rd ${venc.tipo==='data'?'on':''}" data-v="data">Data fixa</button>
+    </div>
+    <div class="v-fase grid grid-cols-[1fr_auto] gap-2" ${venc.tipo==='fase'?'':'hidden'}>
+      <select class="in in-lg f-fase">${opcoesDeFase(venc.fase).map(c=>`<option ${c===venc.fase?'selected':''}>${esc(c)}</option>`).join('')}</select>
+      <select class="in in-lg f-quando" style="width:auto"><option value="inicio" ${venc.quando!=='fim'?'selected':''}>no início</option><option value="fim" ${venc.quando==='fim'?'selected':''}>no fim</option></select>
+    </div>
+    <div class="v-data" ${venc.tipo==='data'?'':'hidden'}><input type="date" class="in in-lg f-data" value="${esc(venc.d||toISO(HOJE))}"></div>`;
+  const ler=()=>{ const tipo=root.querySelector('.rd.on').dataset.v; return tipo==='fase' ? {tipo:'fase', fase:root.querySelector('.f-fase').value, quando:root.querySelector('.f-quando').value} : {tipo:'data', d:root.querySelector('.f-data').value||toISO(HOJE)}; };
+  root.querySelectorAll('.rd').forEach(b=>b.onclick=()=>{ if(b.disabled) return; root.querySelectorAll('.rd').forEach(x=>x.classList.toggle('on', x===b)); root.querySelector('.v-fase').hidden=b.dataset.v!=='fase'; root.querySelector('.v-data').hidden=b.dataset.v!=='data'; onChange&&onChange(ler()); });
+  root.querySelectorAll('select,input').forEach(el=>el.onchange=()=>onChange&&onChange(ler()));
+  return ler;
+}
+function abrirVenc(cell,l){
+  const pop=document.getElementById('pop-venc');
+  pop.innerHTML='<div class="text-[11px] font-bold uppercase tracking-wider text-slate-500 mb-2">Vencimento</div><div class="corpo"></div><p class="text-[11px] text-slate-500 mt-2">Muda na hora. Esc fecha.</p>';
+  // semeia com o que a linha JÁ mostra: "Data fixa" nasce na data exibida e "Fase" nasce na categoria da linha
+  const vd=vencData(l);
+  const semente=Object.assign({}, l.venc, {d: l.venc.d || toISO(vd||HOJE), fase: l.venc.fase || l.cat, quando: l.venc.quando || 'inicio'});
+  blocoVenc(pop.querySelector('.corpo'), semente, v=>{
+    const campos = v.tipo==='data' ? {venc_tipo:'data', venc_data:v.d} : {venc_tipo:'fase', venc_fase:v.fase, venc_quando:v.quando};
+    l.venc=v; renderRow(l); persistir(l, campos);
+  });
+  posicionar(pop, cell); pop.hidden=false; popAlvo=cell; (pop.querySelector('.rd.on')||pop.querySelector('.rd')).focus();
+  pop.onkeydown=e=>{ if(e.key==='Escape'){ e.preventDefault(); fecharPops(); focar(idx(l),'venc'); } };
+}
+function posicionar(pop, alvo){
+  const r=alvo.getBoundingClientRect(); pop.hidden=false; const h=pop.offsetHeight, w=pop.offsetWidth;
+  let left=r.left+scrollX; if(left+w>innerWidth-8) left=innerWidth-8-w;
+  const top = (r.bottom+h+8<=innerHeight) ? r.bottom+scrollY+6 : r.top+scrollY-h-6;
+  pop.style.left=left+'px'; pop.style.top=top+'px';
+}
+function fecharPops(){ ['pop-status','pop-venc'].forEach(id=>{ const p=document.getElementById(id); if(!p.hidden){ p.hidden=true; } }); if(popAlvo){ popAlvo.setAttribute && popAlvo.setAttribute('aria-expanded','false'); popAlvo=null; } }
+document.addEventListener('mousedown', e=>{ if(!e.target.closest('#pop-status,#pop-venc,.status[data-i],.cell[data-campo="venc"]')) fecharPops(); });
+// Esc com a lista de sugestões aberta fecha SÓ a lista — nunca o modal com tudo digitado
+document.addEventListener('keydown', e=>{ if(e.key!=='Escape') return; if(cbAtivo && !cbAtivo.ul.hidden){ fecharCb(); return; } fecharPops(); fecharNovo(); });
+window.addEventListener('scroll', ()=>{ if(popAlvo) fecharPops(); }, {passive:true});
+
+// ── Modal Novo lançamento ──
+let ORIGEM='quant', lerVencModal=null, focoAntes=null, tocouValor=false, tocouForn=false;
+function catAtual(){ const sel=document.getElementById('f-cat'); const liv=document.getElementById('f-cat-livre'); return (sel.value==='__outra__' || sel.hidden) ? liv.value.trim() : sel.value; }
+function montarCategorias(pre){
+  const sel=document.getElementById('f-cat'), liv=document.getElementById('f-cat-livre');
+  const labels=[...FASES_ORDEM]; L.forEach(l=>{ if(l.cat && !labels.includes(l.cat)) labels.push(l.cat); });
+  if(pre && !labels.includes(pre)) labels.unshift(pre);
+  sel.innerHTML = labels.map(c=>`<option>${esc(c)}</option>`).join('') + '<option value="__outra__">Outra categoria…</option>';
+  sel.hidden=false; liv.hidden=true;
+  sel.onchange=()=>{ const outra=sel.value==='__outra__'; liv.hidden=!outra; if(outra){ liv.focus(); } else sincFase(sel.value); };
+  if(pre) sel.value=pre;
+}
+function abrirNovo(pre){
+  if (SOMENTE_LEITURA) return;
+  focoAntes=document.activeElement;
+  const m=document.getElementById('modal-novo'); m.hidden=false;
+  document.getElementById('f-erro').hidden=true;
+  montarCategorias(pre&&pre.cat);
+  const sq=document.getElementById('sel-quant');
+  sq.innerHTML = ITENS.length
+    ? ITENS.map((it,i)=>`<option value="${i}">${esc(it.discipline||'')}${it.discipline?' — ':''}${esc(it.description)}${it.quantity!=null&&it.quantity!==0?` (${fmt2(it.quantity)} ${esc(it.unit||'')})`:''}</option>`).join('')
+    : '<option value="">(a planilha deste projeto ainda não tem itens)</option>';
+  const linhas=[]; COTACOES.forEach((q,qi)=>(q.items||[]).forEach((ln,pos)=>{ if(!ln || ln.is_section || !ln.desc) return; linhas.push({qi,pos,q,ln}); }));
+  const sc=document.getElementById('sel-comp');
+  sc.innerHTML = linhas.length
+    ? linhas.map(x=>`<option value="${x.qi}:${x.pos}">${esc(x.q.supplier_name||'')} · ${esc(x.ln.desc)}${x.ln.total>0?` · ${BRL(x.ln.total)}`:''}</option>`).join('')
+    : '<option value="">(nenhuma cotação subida no Comparativo ainda)</option>';
+  document.querySelector('#origem-chips .rd[data-src="quant"]').disabled = !ITENS.length;
+  document.querySelector('#origem-chips .rd[data-src="comp"]').disabled = !linhas.length;
+  document.getElementById('st-chips').innerHTML=STATUS.filter(s=>s!=='pago').map(s=>`<button type="button" class="status st-${s}" data-st="${s}" title="${ST_LONG[s]}" onclick="setSt('${s}')" style="opacity:${s==='cotado'?1:.55}"><i></i>${ST_LABEL[s]}</button>`).join('');
+  document.getElementById('f-st').value='cotado';
+  document.getElementById('f-forn').value=''; document.getElementById('f-valor').value=''; document.getElementById('f-forma').value='';
+  tocouValor=false; tocouForn=false;
+  const primeira = (pre&&pre.cat) || FASES_ORDEM[0] || catAtual();
+  lerVencModal = blocoVenc(document.getElementById('venc-modal'), TEM_CRONOGRAMA ? {tipo:'fase', fase:primeira, quando:'inicio'} : {tipo:'data', d:toISO(HOJE)});
+  if(!document.getElementById('f-forn').dataset.cb){
+    combobox(document.getElementById('f-forn'), fontesForn); combobox(document.getElementById('f-forma'), fontesForma);
+    document.getElementById('f-valor').addEventListener('input', ()=>{ tocouValor=true; avisoSemValor(); });
+    document.getElementById('f-forn').addEventListener('input', ()=>{ tocouForn=true; });
+    document.getElementById('f-forn').dataset.cb='1';
+  }
+  setOrigem(ITENS.length ? 'quant' : 'livre');
+  setTimeout(()=>document.getElementById(ORIGEM==='quant'?'sel-quant':ORIGEM==='comp'?'sel-comp':'f-oque').focus(),50);
+}
+function fecharNovo(){ const m=document.getElementById('modal-novo'); if(m.hidden) return; m.hidden=true; fecharCb(); if(focoAntes && focoAntes.focus) focoAntes.focus(); }
+function setOrigem(o){
+  const antes=ORIGEM; ORIGEM=o; document.querySelectorAll('#origem-chips .rd').forEach(b=>b.classList.toggle('on', b.dataset.src===o));
+  document.getElementById('origem-quant').hidden = o!=='quant';
+  document.getElementById('origem-comp').hidden = o!=='comp';
+  // saiu do Comparativo: fornecedor e valor da cotação não viajam pra uma linha "digitado por você"
+  if(antes==='comp' && o!=='comp'){ document.getElementById('f-forn').value=''; document.getElementById('f-valor').value=''; document.getElementById('f-forma').value=''; tocouValor=false; tocouForn=false; }
+  // o Item só se edita na linha livre — a mesma regra da tabela (o servidor recusa descrição fora dela)
+  const oq=document.getElementById('f-oque'); oq.readOnly = o!=='livre'; oq.style.background = o!=='livre' ? '#F8FAFC' : ''; oq.title = o==='livre' ? '' : 'Vem da planilha ou da cotação — edite lá';
+  if(o==='comp') puxarComp(); else if(o==='quant') puxarQuant(); else { oq.value=''; }
+  avisoSemValor();
+}
+function avisoSemValor(){ const vazio=!document.getElementById('f-valor').value.trim(); document.getElementById('st-aviso').hidden=!vazio; document.getElementById('st-chips').style.opacity = vazio ? .45 : 1; }
+function sincFase(cat){ const sel=document.querySelector('#venc-modal .f-fase'); if(sel && FASES[cat]) sel.value=cat; }
+function puxarQuant(){
+  const it=ITENS[+document.getElementById('sel-quant').value]; if(!it) return;
+  document.getElementById('f-oque').value=it.description||'';
+  // a categoria é a fase do cronograma; a disciplina do item só sugere quando os nomes batem
+  const alvo=FASES_ORDEM.find(f=>norm(f)===norm(it.discipline||'')); if(alvo){ document.getElementById('f-cat').value=alvo; sincFase(alvo); }
+}
+function puxarComp(){
+  const v=document.getElementById('sel-comp').value; if(!v) return; const [qi,pos]=v.split(':').map(Number);
+  const q=COTACOES[qi]; const ln=q&&q.items&&q.items[pos]; if(!ln) return;
+  document.getElementById('f-oque').value=ln.desc||'';
+  document.getElementById('f-forn').value=q.supplier_name||''; tocouForn=false;
+  document.getElementById('f-valor').value = ln.total>0 ? fmt2(Math.round(ln.total*100)/100) : ''; tocouValor=false;
+  avisoSemValor();
+}
+function setSt(s){ document.getElementById('f-st').value=s; document.querySelectorAll('#st-chips .status').forEach(b=>b.style.opacity=b.dataset.st===s?1:.55); }
+async function salvarNovo(ev){
+  ev.preventDefault();
+  const erro=document.getElementById('f-erro'); erro.hidden=true;
+  const fv=document.getElementById('f-valor'); const valor=parseBRL(fv.value);
+  if(valor===undefined){ fv.setAttribute('aria-invalid','true'); fv.title='use vírgula pros centavos'; fv.focus(); return; } fv.removeAttribute('aria-invalid');
+  const cat=catAtual(); if(!cat){ erro.textContent='Escolha ou digite a categoria.'; erro.hidden=false; return; }
+  const venc=lerVencModal();
+  const corpo={ escopo:'obra', categoria:cat, origem:SRC_API[ORIGEM], forma_pagamento:document.getElementById('f-forma').value.trim(), status:document.getElementById('f-st').value };
+  if(venc.tipo==='data'){ corpo.venc_tipo='data'; corpo.venc_data=venc.d; } else { corpo.venc_tipo='fase'; corpo.venc_fase=venc.fase; corpo.venc_quando=venc.quando; }
+  if(ORIGEM==='livre'){
+    corpo.descricao=document.getElementById('f-oque').value.trim(); if(!corpo.descricao){ erro.textContent='Diga o que está sendo pago (o item).'; erro.hidden=false; return; }
+    corpo.fornecedor=document.getElementById('f-forn').value.trim(); corpo.valor=valor;
+  } else if(ORIGEM==='quant'){
+    const it=ITENS[+document.getElementById('sel-quant').value]; if(!it){ erro.textContent='Escolha um item da planilha.'; erro.hidden=false; return; }
+    corpo.origem_ref_id=it.id; corpo.fornecedor=document.getElementById('f-forn').value.trim(); corpo.valor=valor;
+  } else {
+    const v=document.getElementById('sel-comp').value; if(!v){ erro.textContent='Escolha uma linha da cotação.'; erro.hidden=false; return; }
+    const [qi,pos]=v.split(':').map(Number); corpo.origem_ref_id=COTACOES[qi].id; corpo.origem_ref_pos=pos;
+    // fornecedor/valor: só mando o que a pessoa MEXEU — o que ficou como veio da cotação, o servidor copia de lá
+    if(tocouForn) corpo.fornecedor=document.getElementById('f-forn').value.trim();
+    if(tocouValor) corpo.valor=valor;
+  }
+  const btn=document.getElementById('btn-salvar-novo'); btn.disabled=true; statusSalvo('Salvando…');
+  try {
+    const d=await api('POST','',corpo);
+    if(d.lancamento){ L.push(daApi(d.lancamento)); }
+    fecharNovo(); filtrar('todos'); statusSalvo('Salvo agora.'); avisar(`Lançamento adicionado em ${cat}`);
+  } catch (e) {
+    erro.textContent=e.message||'não consegui gravar'; erro.hidden=false; statusSalvo('Não salvou — veja o aviso.', true);
+  } finally { btn.disabled=false; }
+}
+document.getElementById('modal-novo').addEventListener('mousedown', e=>{ if(e.target.id==='modal-novo') fecharNovo(); });
+document.getElementById('modal-novo').addEventListener('keydown', e=>{ if(e.key!=='Tab') return; const f=[...e.currentTarget.querySelectorAll('button,input,select,[tabindex="0"]')].filter(x=>!x.hidden && x.offsetParent && x.tabIndex>=0 && !x.disabled); if(!f.length) return; const first=f[0], last=f[f.length-1]; if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); } else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); } });
+
+// ── aviso próprio (com botão de ação), barra sticky ──
+let _t; function avisar(msg, tipo, op){
+  const t=document.getElementById('fin-toast'); t.textContent=msg; t.style.pointerEvents=''; t.classList.toggle('erro', tipo==='erro');
+  if(op && op.acao){ const b=document.createElement('button'); b.type='button'; b.textContent=op.acao; b.className='ml-3 underline font-semibold'; b.onclick=()=>{ t.classList.remove('on'); op.fn(); }; t.appendChild(b); t.style.pointerEvents='auto'; }
+  t.classList.add('on'); clearTimeout(_t); _t=setTimeout(()=>t.classList.remove('on'), (op&&op.acao) ? 6000 : (tipo==='erro' ? 6000 : 2600));
+}
+function medirSticky(){
+  const h=document.getElementById('cabecalho').offsetHeight, bar=document.getElementById('cr-actionbar');
+  document.documentElement.style.setProperty('--cr-header-h', h+'px');
+  document.documentElement.style.setProperty('--fin-bar-h', (bar.offsetHeight+8)+'px');
+}
+window.addEventListener('resize', medirSticky);
+window.addEventListener('scroll', ()=>{ const bar=document.getElementById('cr-actionbar'); const grudou=bar.getBoundingClientRect().top<=parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--cr-header-h'))+1; bar.classList.toggle('shadow-lg',grudou); bar.classList.toggle('shadow-sm',!grudou); }, {passive:true});
+
+// ── Gráfico: cores da marca (índigo / esmeralda / vermelho / ciano) ──
+function mesesDoGrafico(){
+  const datas=[]; Object.values(FASES).forEach(f=>{ const a=dISO(f[0]), b=dISO(f[1]); if(a) datas.push(a); if(b) datas.push(b); });
+  L.forEach(l=>{ const d=vencData(l); if(d) datas.push(d); });
+  let ini, fim;
+  if(datas.length){ ini=new Date(Math.min.apply(null, datas)); fim=new Date(Math.max.apply(null, datas)); }
+  else { ini=new Date(HOJE); fim=new Date(HOJE.getFullYear(), HOJE.getMonth()+11, 1); }
+  ini=new Date(ini.getFullYear(), ini.getMonth(), 1); fim=new Date(fim.getFullYear(), fim.getMonth(), 1);
+  const out=[]; let d=ini; while(d<=fim && out.length<36){ out.push(new Date(d)); d=new Date(d.getFullYear(), d.getMonth()+1, 1); }
+  return out;
+}
+function chart(){
+  const svg=document.getElementById('chart'); const MESES=mesesDoGrafico(); if(!MESES.length){ svg.innerHTML=''; return; }
+  const W=1040,H=320,Lm=70,R=56,T=18,B=40; const cw=W-Lm-R, ch=H-T-B, n=MESES.length, bw=cw/n;
+  const prev=MESES.map(()=>0), pg=MESES.map(()=>0), venc=MESES.map(()=>0);
+  L.forEach(l=>{ if(!['contratado','pago','aprovado'].includes(l.st)||!l.valor) return; const d=vencData(l); if(!d) return;
+    const i=MESES.findIndex(m=>m.getFullYear()===d.getFullYear()&&m.getMonth()===d.getMonth()); if(i<0) return;
+    if(pago(l)) pg[i]+=l.valor; else if(d<HOJE) venc[i]+=l.valor; else prev[i]+=l.valor; });
+  const tot=MESES.map((_,i)=>prev[i]+pg[i]+venc[i]); const maxV=Math.max(1,...tot)*1.15;
+  const y=v=>T+ch-(v/maxV)*ch, yp=p=>T+ch-p*ch, x=i=>Lm+i*bw;
+  let s='';
+  for(let g=0;g<=4;g++){ const v=maxV*g/4, yy=y(v); s+=`<line x1="${Lm}" x2="${W-R}" y1="${yy}" y2="${yy}" stroke="#E2E8F0"/><text class="chart-txt" x="${Lm-8}" y="${yy+4}" text-anchor="end">${v>=1e6?(v/1e6).toFixed(1)+'M':Math.round(v/1e3)+'k'}</text>`;
+    if(TEM_CRONOGRAMA) s+=`<text class="chart-txt" x="${W-R+8}" y="${yp(g/4)+4}">${g*25}%</text>`; }
+  MESES.forEach((m,i)=>{ let base=y(0); const seg=(v,cor)=>{ if(v>0){ const h=(v/maxV)*ch; base-=h; s+=`<rect x="${x(i)+bw*0.18}" y="${base}" width="${bw*0.64}" height="${h}" fill="${cor}" rx="2"><title>${mesLabel(m)}: ${BRL(v)}</title></rect>`; } };
+    seg(pg[i],'#10B981'); seg(venc[i],'#DC2626'); seg(prev[i],'#4F46E5'); });
+  const hi=MESES.findIndex(m=>m.getFullYear()===HOJE.getFullYear()&&m.getMonth()===HOJE.getMonth());
+  if(hi>=0){ const hx=x(hi)+bw*(HOJE.getDate()/30); s+=`<line x1="${hx}" x2="${hx}" y1="${T}" y2="${T+ch}" stroke="#334155" stroke-dasharray="3 3"/><rect x="${hx-18}" y="${T-14}" width="36" height="14" rx="7" fill="#334155"/><text x="${hx}" y="${T-4}" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">HOJE</text>`; }
+  if(TEM_CRONOGRAMA){
+    const fases=Object.values(FASES).map(f=>{ const a=dISO(f[0]), b=dISO(f[1]); return {a,b,dur:Math.max(1,(b-a)/864e5+1)}; }); const totD=fases.reduce((s2,f)=>s2+f.dur,0)||1;
+    const fis=MESES.map(m=>{ const mf=new Date(m.getFullYear(),m.getMonth()+1,0); let feito=0; fases.forEach(f=>{ if(mf>=f.b) feito+=f.dur; else if(mf>=f.a) feito+=(mf-f.a)/864e5+1; }); return Math.min(1, feito/totD); });
+    const pts=fis.map((p,i)=>`${i?'L':'M'}${(x(i)+bw/2).toFixed(1)} ${yp(p).toFixed(1)}`).join(' ');
+    s+=`<path d="${pts}" fill="none" stroke="#06B6D4" stroke-width="2" stroke-dasharray="5 5"/>`;
+  }
+  MESES.forEach((m,i)=>{ if(n<=18 || i%2===0) s+=`<text class="chart-txt" x="${x(i)+bw/2}" y="${H-B+18}" text-anchor="middle">${mesLabel(m)}</text>`; });
+  s+=`<text class="chart-txt" x="${Lm}" y="${H-4}">R$ por mês de vencimento (barras)${TEM_CRONOGRAMA?' · avanço físico acumulado (linha, eixo direito)':''}</text>`;
+  svg.innerHTML=s;
+}
+
+init();
+</script>
+
+<script src="toast.js" defer></script>
+<footer class="border-t bg-gray-50 py-12">
+  <div class="mx-auto max-w-6xl px-4">
+    <div class="flex flex-col items-center gap-5 text-center">
+      <div class="flex items-center gap-2">
+        <div class="flex h-8 w-8 items-center justify-center rounded-lg text-white font-bold text-xs" style="background:linear-gradient(135deg,#4F46E5 0%,#22D3EE 100%)">AI</div>
+        <span class="font-bold text-gray-900">AI<span style="background:linear-gradient(135deg,#4F46E5,#22D3EE);-webkit-background-clip:text;background-clip:text;color:transparent">.arq</span></span>
+      </div>
+      <div class="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500">
+        <a href="precos.html" class="hover:text-gray-900 transition">Preços</a>
+        <a href="faq.html" class="hover:text-gray-900 transition">FAQ</a>
+        <a href="termos.html" class="hover:text-gray-900 transition">Termos de Uso</a>
+        <a href="privacidade.html" class="hover:text-gray-900 transition">Privacidade</a>
+        <button type="button" onclick="window.aiarqCookieConsent?window.aiarqCookieConsent.open():window.location.href='privacidade.html'" class="hover:text-gray-900 transition">Gerenciar cookies</button>
+        <a href="javascript:void(0)" onclick="window.aiArqContactOpen?aiArqContactOpen():window.location.href='mailto:contato@ai.arq.br'" class="hover:text-gray-900 transition">Contato</a>
+      </div>
+    </div>
+    <div class="mt-6 pt-6 border-t border-gray-100 text-center text-xs text-gray-400">
+      &copy; 2026 ai.arq.br · Todos os direitos reservados
+    </div>
+  </div>
+</footer>
+<script src="whatsapp-button.js" defer></script>
+<script src="contact-modal.js" defer></script>
+</body>
+</html>

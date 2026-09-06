@@ -18,7 +18,8 @@ import strip_html_comments as sh  # noqa: E402
 
 # páginas do app onde as notas de dev vivem
 _PAGINAS = ["cadastro.html", "dashboard.html", "revisao.html", "projeto.html",
-            "faq.html", "index.html", "login.html", "cronograma.html"]
+            "faq.html", "index.html", "login.html", "cronograma.html",
+            "financeiro.html"]
 
 # padrões de métrica de negócio que não podem chegar ao público
 _METRICA = re.compile(

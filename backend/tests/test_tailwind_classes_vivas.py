@@ -36,7 +36,8 @@ import pytest
 
 _RAIZ = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _PAGINAS = ("admin.html", "projeto.html", "dashboard.html", "revisao.html",
-            "index.html", "cadastro.html", "login.html", "faq.html")
+            "index.html", "cadastro.html", "login.html", "faq.html",
+            "financeiro.html")
 
 # Só cor/fundo/borda: espaçamento inerte se nota na hora, cor inerte deixa
 # conteúdo invisível — que é o defeito que originou este arquivo.

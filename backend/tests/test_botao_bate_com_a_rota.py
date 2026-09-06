@@ -34,6 +34,7 @@ _RAIZ = os.path.dirname(_BACKEND)
 # quem chama o backend pelo authFetch
 _ARQUIVOS = ("admin.html", "admin-usuario.html", "dashboard.html", "projeto.html",
              "revisao.html", "memorial.html", "feedback.html", "cronograma.html",
+             "financeiro.html",
              "aiarq-utils.js", "coerencia.js", "menu-lateral.js")
 
 _CURINGA = "\x01"          # marca de "aqui entra um valor" nos dois lados

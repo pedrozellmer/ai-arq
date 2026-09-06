@@ -18141,7 +18141,9 @@ def list_supplier_quotes(job_id: str, request: Request):
             f"/project_supplier_quotes?job_id=eq.{job_id}"
             f"&select=id,supplier_name,original_filename,parser_mode,"
             f"n_items_quoted,total_bruto,total_material,total_mao_obra,"
-            f"status,uploaded_at"
+            # 05/09: `items` (as LINHAS cotadas) entra pra o modal do financeiro
+            # escolher a linha de origem (origem_ref_pos) — projeto.html ignora.
+            f"status,uploaded_at,items"
             f"&order=uploaded_at.asc",
             timeout=8,
         )
@@ -22857,6 +22859,7 @@ _TRACK_ALLOWED = {
     # com zero telemetria, e o único gatilho `use_cronograma` (projeto.html)
     # parou em 03/08. Estes fecham o buraco; o slug do post/página vai no campo.
     "view_cronograma", "view_exemplo", "view_precos", "view_faq", "view_memorial",
+    "view_financeiro",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)
     # 🩸 03/09/2026 — NASCERAM MORTOS. Subi os seis eventos do convite da área
     # em 02/09 (commit 2d539fe) e CINCO caíam aqui: o /api/track respondia 200
     # {"status":"ignored"} e jogava fora — inclusive o `exibido`, que é O

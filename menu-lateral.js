@@ -201,6 +201,7 @@
     cronograma: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7 14h5M10 17.5h6"/>',
     memorial: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M8.5 13h7M8.5 16.5h4.5"/>',
     comparativo: '<path d="M4 8h13l-3-3M20 16H7l3 3"/>',
+    financeiro:  '<path d="M3 6h18M3 12h18M3 18h12M17 15l3 3-3 3"/>',
     download: '<path d="M12 3v11M8 10.5l4 4 4-4M4 18.5h16"/>',
     pessoa: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
     presente: '<path d="M4 11h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20z"/><rect x="3" y="7" width="18" height="4" rx="1"/><path d="M12 7v14M12 7S10.5 3 8.4 3a2.2 2.2 0 0 0 0 4.4M12 7s1.5-4 3.6-4a2.2 2.2 0 0 1 0 4.4"/>',
@@ -272,6 +273,10 @@
         { href: url('projeto.html') + '#quantitativo', rotulo: 'Quantitativo', ic: 'planilha',    chave: 'quantitativo' },
         { href: url('revisao.html'),                   rotulo: 'Revisão',      ic: 'revisao',     chave: 'revisao' },
         { href: url('cronograma.html'),                rotulo: 'Cronograma',   ic: 'cronograma',  chave: 'cronograma' },
+        // 05/09/2026: Financeiro da obra (etapa 1). O selo `financeiro` é pintado
+        // pela própria financeiro.html depois de carregar (N vencidos / em dia);
+        // nas outras telas fica vazio — não afirmamos o que não lemos.
+        { href: url('financeiro.html'),                rotulo: 'Financeiro',   ic: 'financeiro',  chave: 'financeiro' },
         { href: url('memorial.html'),                  rotulo: 'Memorial',     ic: 'memorial',    chave: 'memorial' },
         { href: url('projeto.html') + '#cotacoes',     rotulo: 'Comparativo',  ic: 'comparativo', chave: 'comparativo' },
         // 🪤 A vista se chama 'processamento'. Ela já se chamou 'dados', e o
