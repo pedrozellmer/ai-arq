@@ -15,6 +15,10 @@
   /* [hidden] perde pra .inline-flex/.flex do build (mesma camada, o utilitário vence):
      a pill "Somente leitura" aparecia mesmo escondida. Visto ao vivo em 05/09/2026. */
   [hidden]{display:none !important}
+  /* o build estático não tem as variantes `file:` — o botão do seletor de arquivo é escrito aqui */
+  .lote-file::file-selector-button{margin-right:12px;padding:6px 12px;border:0;border-radius:8px;
+    font-size:12px;font-weight:600;background:#EEF2FF;color:#4338CA;cursor:pointer}
+  .lote-file::file-selector-button:hover{background:#E0E7FF}
     /* [hidden] perde pra .inline-flex/.flex do build (mesma camada, utilitário vence): a pill "Somente leitura" aparecia escondida */
     [hidden]{display:none !important}
   /* ── A mesma base das telas do cliente (cronograma.html / projeto.html) ── */
@@ -226,6 +230,11 @@
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6h6v6M3 7h18M5 7v12a2 2 0 002 2h10a2 2 0 002-2V7M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
       <span class="hidden md:inline">Planilha</span>
     </a>
+    <!-- 06/09: preencher em LOTE — a planilha vai, o arquiteto (ou o fornecedor) preenche, e volta -->
+    <button id="btn-lote" type="button" onclick="abrirLote()" class="exp px-3 md:px-4 py-2 rounded-lg border border-indigo-300 bg-indigo-50 text-indigo-800 text-sm font-medium flex items-center gap-2" title="Baixar a planilha pra preencher os preços e subir de volta">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v12m0 0l-4-4m4 4l4-4M4 20h16"/></svg>
+      <span class="hidden md:inline">Preencher em lote</span>
+    </button>
   </div>
 
   <!-- KPIs: o mesmo card do cronograma -->
@@ -352,6 +361,41 @@
   </div>
   </div><!-- /conteudo -->
 </main>
+
+<!-- ═══════════════ MODAL: PREENCHER EM LOTE (06/09) ═══════════════
+     A planilha vai, o arquiteto (ou o fornecedor dele) preenche, e volta. Nada é gravado antes de
+     ele VER o que vai acontecer — a conferência é o passo do meio, não um detalhe. -->
+<div id="modal-lote" hidden class="fixed inset-0 z-50 items-center justify-center p-4" style="background:rgba(15,23,42,.45)" role="dialog" aria-modal="true" aria-labelledby="h-lote">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-xl max-h-[92vh] overflow-y-auto">
+    <div class="flex items-center justify-between px-6 pt-5 pb-3 border-b border-slate-100">
+      <h2 id="h-lote" class="text-lg font-bold text-gray-900">Preencher os preços em lote</h2>
+      <button type="button" onclick="fecharLote()" class="text-gray-500 hover:text-gray-700 p-1" aria-label="Fechar"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+    </div>
+    <div class="px-6 py-5 space-y-4">
+      <ol class="space-y-3 text-sm text-gray-700">
+        <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">1</span>
+          <span>Baixe a planilha com uma linha por item do seu quantitativo.
+            <a id="btn-lote-baixar" href="javascript:void(0)" onclick="baixarModeloLote()" class="block mt-1.5 font-semibold text-indigo-700 hover:underline">Baixar a planilha pra preencher</a></span></li>
+        <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">2</span>
+          <span>Preencha <strong>fornecedor, valor, forma de pagamento, vencimento e status</strong> — no Excel, ou mande o arquivo pro fornecedor preencher. Deixe em branco o que ainda não sabe.</span></li>
+        <li class="flex gap-3"><span class="shrink-0 w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">3</span>
+          <span>Suba de volta. Eu mostro <strong>o que vai acontecer</strong> antes de gravar qualquer coisa.
+            <input id="lote-arquivo" type="file" accept=".xlsx" onchange="conferirLote()" class="lote-file block mt-1.5 text-xs text-gray-600"></span></li>
+      </ol>
+      <div id="lote-status" hidden class="text-sm text-gray-600"></div>
+      <div id="lote-conferencia" hidden class="rounded-xl border-2 border-indigo-200 bg-indigo-50 p-4">
+        <p id="lote-frase" class="text-sm font-bold text-indigo-900"></p>
+        <p id="lote-total" class="text-xs text-indigo-800 mt-1"></p>
+        <ul id="lote-avisos" class="mt-2 space-y-1 text-xs text-amber-800"></ul>
+      </div>
+      <div id="lote-erro" hidden class="rounded-xl border-2 border-red-200 bg-red-50 p-3 text-sm text-red-800"></div>
+    </div>
+    <div class="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+      <button type="button" onclick="fecharLote()" class="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium">Cancelar</button>
+      <button id="btn-lote-aplicar" type="button" hidden onclick="aplicarLote()" class="px-4 py-2 rounded-lg gradient-main text-white text-sm font-semibold">Confirmar e gravar</button>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════ MODAL: NOVO LANÇAMENTO ═══════════════ -->
 <div id="modal-novo" hidden class="fixed inset-0 z-50 items-center justify-center p-4" style="background:rgba(15,23,42,.45)" role="dialog" aria-modal="true" aria-labelledby="h-novo">
@@ -1155,6 +1199,76 @@ async function exportar(fmt){
   const ok = await downloadProtected(`${API_BASE}/api/financeiro/${jobId}/export/${fmt}?hoje=${toISO(HOJE)}`, `financeiro_${jobId}.${fmt}`);
   // só conta como export o que virou arquivo na mão do arquiteto — 404/500 não inflam a métrica
   if (ok) trackEvent('export_financeiro', { job_id: jobId, formato: fmt });
+}
+// ── Preencher em LOTE (06/09): a planilha vai, volta preenchida, e SÓ grava depois da conferência ──
+function abrirLote(){
+  if (SOMENTE_LEITURA) return;
+  document.getElementById('modal-lote').hidden = false;
+  limparLote();
+  trackEvent('fin_lote_abriu', { job_id: jobId });
+}
+function fecharLote(){ document.getElementById('modal-lote').hidden = true; limparLote(); }
+function limparLote(){
+  const f = document.getElementById('lote-arquivo'); if (f) f.value = '';
+  document.getElementById('lote-conferencia').hidden = true;
+  document.getElementById('lote-erro').hidden = true;
+  document.getElementById('lote-status').hidden = true;
+  document.getElementById('btn-lote-aplicar').hidden = true;
+}
+async function baixarModeloLote(){
+  const ok = await downloadProtected(`${API_BASE}/api/financeiro/${jobId}/modelo.xlsx`, `financeiro_preencher_${jobId}.xlsx`);
+  if (ok) trackEvent('fin_lote_modelo', { job_id: jobId });
+}
+function loteStatus(txt, erro){
+  const s = document.getElementById('lote-status'); s.hidden = !txt; s.textContent = txt || '';
+  s.className = 'text-sm ' + (erro ? 'text-red-700 font-medium' : 'text-gray-600');
+}
+function loteErro(msg){
+  const e = document.getElementById('lote-erro'); e.hidden = false; e.textContent = msg;
+  document.getElementById('lote-conferencia').hidden = true;
+  document.getElementById('btn-lote-aplicar').hidden = true;
+}
+// a conferência é o passo que o Pedro pediu: "sempre deixa aviso pro usuário"
+async function loteEnviar(caminho){
+  const f = document.getElementById('lote-arquivo');
+  if (!f || !f.files || !f.files[0]) return null;
+  const fd = new FormData(); fd.append('file', f.files[0]);
+  const r = await authFetch(`${API_BASE}/api/financeiro/${jobId}/lote/${caminho}`, { method: 'POST', body: fd });
+  const d = await lerJson(r);
+  if (!r.ok) throw erroDe(r, d);
+  return d;
+}
+async function conferirLote(){
+  limparLote(); loteStatus('Lendo a planilha…');
+  try {
+    const d = await loteEnviar('conferir');
+    if (!d) { loteStatus(''); return; }
+    if (d.status === 'erro' || d.erro) { loteStatus(''); loteErro(d.erro || 'não consegui ler a planilha'); return; }
+    loteStatus('');
+    document.getElementById('lote-frase').textContent = d.frase || '';
+    document.getElementById('lote-total').textContent = (d.total && d.total !== '—')
+      ? `Somando ${d.total} nesta planilha. Confira antes de gravar.`
+      : 'Nenhum valor preenchido nesta planilha.';
+    const ul = document.getElementById('lote-avisos');
+    ul.innerHTML = (d.avisos || []).slice(0, 12).map(a => `<li>⚠ ${esc(a)}</li>`).join('')
+      + ((d.avisos || []).length > 12 ? `<li>… e mais ${d.avisos.length - 12}</li>` : '');
+    document.getElementById('lote-conferencia').hidden = false;
+    document.getElementById('btn-lote-aplicar').hidden = !(d.acoes && d.acoes.length);
+    if (!(d.acoes && d.acoes.length)) loteStatus('Não há nada pra gravar nesta planilha.');
+  } catch (e) { loteStatus(''); loteErro(e.message || 'não consegui ler a planilha'); }
+}
+async function aplicarLote(){
+  const b = document.getElementById('btn-lote-aplicar'); b.disabled = true;
+  loteStatus('Gravando…');
+  try {
+    const d = await loteEnviar('aplicar');
+    if (d && d.erro) { loteErro(d.erro); return; }
+    trackEvent('fin_lote_aplicou', { job_id: jobId });
+    fecharLote();
+    await recarregar();
+    avisar(d && d.frase ? d.frase : 'Lote gravado', (d && d.falhas && d.falhas.length) ? 'erro' : null);
+  } catch (e) { loteErro(e.message || 'não consegui gravar'); }
+  finally { b.disabled = false; loteStatus(''); }
 }
 // descrição de item do quantitativo chega a 200 caracteres — no toast, o começo basta (visto ao vivo em 05/09)
 function curto(s, n){ s=String(s||''); n=n||72; return s.length>n ? s.slice(0,n-1).trimEnd()+'…' : s; }

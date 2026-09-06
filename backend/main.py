@@ -23077,6 +23077,9 @@ _TRACK_ALLOWED = {
     # parou em 03/08. Estes fecham o buraco; o slug do post/página vai no campo.
     "view_cronograma", "view_exemplo", "view_precos", "view_faq", "view_memorial",
     "view_financeiro", "export_financeiro",
+    # 06/09 — preencher em lote: as 3 pontas do funil (abriu, baixou o modelo, gravou).
+    # Sem elas não dá pra saber se a planilha volta ou morre no caminho.
+    "fin_lote_abriu", "fin_lote_modelo", "fin_lote_aplicou",
     # 🩸 auditoria 06/09: "abriu" e "exportou" não dizem se alguém USOU. O memorial ficou 30 dias
     # invisível justamente por medir só abertura. Este é o evento que responde "o financeiro pegou?".
     "fin_lancamento_criado",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)
@@ -26748,6 +26751,205 @@ def _fin_apagar_depois(*caminhos):
 
 
 _FIN_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _fin_itens_do_job(request, job_id: str, eh_admin: bool):
+    """(status, [itens]) do quantitativo — a fonte do modelo e do retrato da origem (nº7)."""
+    jq = urllib.parse.quote(job_id)
+    return _fin_get(request, f"/project_items?job_id=eq.{jq}"
+                             "&select=id,description,quantity,unit,discipline,sort_order"
+                             "&order=sort_order.asc", eh_admin)
+
+
+@app.get("/api/financeiro/{job_id}/modelo.xlsx")
+def financeiro_modelo_lote(job_id: str, request: Request):
+    """A planilha PRA PREENCHER: uma linha por item medido (mais o que já foi lançado), com as
+    colunas de dinheiro em branco. Pedido do Pedro em 06/09: o arquiteto manda essa planilha pro
+    fornecedor e sobe de volta, em vez de digitar item por item.
+    🔒 nº5: nenhum valor sai preenchido daqui. 🔗 nº7: cada linha carrega a âncora do item."""
+    owner = _require_project_owner(request, job_id)
+    eh_admin = _fin_eh_admin(request, owner)
+    import tempfile
+    jq = urllib.parse.quote(job_id)
+    st, lanc = _fin_get(request, f"/{_FIN_TABELA}?job_id=eq.{jq}&escopo=eq.obra&select=*"
+                                 "&order=created_at.asc", eh_admin)
+    if st != 200 or lanc is None:
+        _fin_erro_do_banco(st, "ler os lançamentos", job_id)
+    st2, itens = _fin_itens_do_job(request, job_id, eh_admin)
+    if st2 != 200 or itens is None:
+        _fin_erro_do_banco(st2, "ler o quantitativo", job_id)
+    if not itens and not lanc:
+        raise HTTPException(404, "Este projeto ainda não tem itens no quantitativo nem lançamentos — "
+                                 "não há o que preencher.")
+    if len(itens) >= 1000 or len(lanc) >= 1000:
+        raise HTTPException(409, "este projeto tem mais de 1000 linhas e o modelo sairia incompleto — "
+                                 "fale com a gente pelo chat")
+    st3, nome = _fin_nome_do_projeto(None if eh_admin else request, job_id)
+    if st3 != 200:
+        raise HTTPException(502, "não consegui ler os dados do projeto agora — tente de novo em instantes")
+    branding = {"project_name": nome or "Projeto sem nome"}
+    try:
+        from financeiro_lote import montar_linhas_do_modelo, gerar_modelo_xlsx
+        from starlette.background import BackgroundTask
+        linhas = montar_linhas_do_modelo(itens, lanc)
+        tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+        tmp.close()
+        gerar_modelo_xlsx(linhas, tmp.name, branding, hoje=_fin_hoje())
+        fname = _fin_nome_do_arquivo(branding, job_id, "xlsx").replace("financeiro_obra_",
+                                                                      "financeiro_preencher_")
+        return FileResponse(tmp.name, filename=fname, media_type=_FIN_XLSX_MIME,
+                            background=BackgroundTask(_fin_apagar_depois, tmp.name))
+    except HTTPException:
+        raise
+    except Exception as e:
+        _log_error("financeiro:modelo", str(e), job_id=job_id)
+        raise HTTPException(500, "não consegui gerar a planilha pra preencher — tente de novo")
+
+
+@app.post("/api/financeiro/{job_id}/lote/conferir")
+async def financeiro_lote_conferir(job_id: str, request: Request, file: UploadFile = File(...)):
+    """Lê a planilha preenchida e diz o que VAI acontecer — sem gravar NADA.
+
+    O Pedro pediu, no mesmo dia: *"e sempre deixa aviso pro usuário né"*. É esta rota: ela devolve a
+    frase em português ("30 novos, 8 atualizados, 2 sem vínculo…"), os avisos linha a linha e o
+    total em dinheiro. Só depois do OK dele o `/lote/aplicar` grava."""
+    owner = _require_project_owner(request, job_id)
+    eh_admin = _fin_eh_admin(request, owner)
+    _fin_so_o_dono_escreve(request, owner)
+    dados = await _fin_lote_ler_upload(file)
+    conf = await run_in_threadpool(_fin_lote_conferencia, request, job_id, eh_admin, dados)
+    return conf
+
+
+@app.post("/api/financeiro/{job_id}/lote/aplicar")
+async def financeiro_lote_aplicar(job_id: str, request: Request, file: UploadFile = File(...)):
+    """Grava o lote — só o que a conferência disse que ia acontecer. Relê a planilha do zero (o
+    cliente não manda a lista de ações de volta: o servidor não confia em lista vinda de fora)."""
+    owner = _require_project_owner(request, job_id)
+    eh_admin = _fin_eh_admin(request, owner)
+    _fin_so_o_dono_escreve(request, owner)
+    dados = await _fin_lote_ler_upload(file)
+    conf = await run_in_threadpool(_fin_lote_conferencia, request, job_id, eh_admin, dados)
+    if conf.get("erro"):
+        return conf
+    return await run_in_threadpool(_fin_lote_gravar, request, job_id, conf)
+
+
+_FIN_LOTE_TETO_MB = 8
+
+
+async def _fin_lote_ler_upload(file: UploadFile) -> bytes:
+    """Bytes do .xlsx, com teto. Arquivo torto é MENSAGEM em português, não 500."""
+    nome = (getattr(file, "filename", "") or "").lower()
+    if not nome.endswith(".xlsx"):
+        raise HTTPException(400, "Envie a planilha em .xlsx — o mesmo arquivo que você baixou aqui. "
+                                 "Se estiver em .xls ou .csv, salve como .xlsx no Excel.")
+    dados = await file.read()
+    if not dados:
+        raise HTTPException(400, "A planilha chegou vazia — tente enviar de novo.")
+    if len(dados) > _FIN_LOTE_TETO_MB * 1024 * 1024:
+        raise HTTPException(413, f"A planilha passa de {_FIN_LOTE_TETO_MB} MB. "
+                                 f"Apague abas e imagens que não sejam a de preenchimento.")
+    return dados
+
+
+def _fin_lote_conferencia(request, job_id: str, eh_admin: bool, dados: bytes) -> dict:
+    """Planilha (bytes) + estado de AGORA do projeto → o que vai acontecer. Não grava nada."""
+    import tempfile
+    from financeiro_lote import ler_planilha_lote, conferir_lote, total_das_acoes
+    jq = urllib.parse.quote(job_id)
+    st, lanc = _fin_get(request, f"/{_FIN_TABELA}?job_id=eq.{jq}&escopo=eq.obra&select=*", eh_admin)
+    if st != 200 or lanc is None:
+        _fin_erro_do_banco(st, "ler os lançamentos", job_id)
+    st2, itens = _fin_itens_do_job(request, job_id, eh_admin)
+    if st2 != 200 or itens is None:
+        _fin_erro_do_banco(st2, "ler o quantitativo", job_id)
+    tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+    try:
+        tmp.write(dados)
+        tmp.close()
+        lido = ler_planilha_lote(tmp.name)
+    finally:
+        _fin_apagar_depois(tmp.name)
+    if lido.get("erro_fatal"):
+        return {"status": "erro", "erro": lido["erro_fatal"], "acoes": [], "avisos": [],
+                "resumo": {}, "frase": ""}
+    conf = conferir_lote(lido["linhas"],
+                         {str(i.get("id")): i for i in itens},
+                         {str(l.get("id")): l for l in lanc})
+    conf["status"] = "ok"
+    conf["total"] = total_das_acoes(conf["acoes"])
+    return conf
+
+
+def _fin_lote_gravar(request, job_id: str, conf: dict) -> dict:
+    """Aplica as ações uma a uma, como o usuário (RLS). Uma linha que falha NÃO derruba as outras —
+    ela volta na lista de falhas, com o motivo em português."""
+    jq = urllib.parse.quote(job_id)
+    criados = atualizados = 0
+    falhas = []
+    for a in conf.get("acoes", []):
+        try:
+            if a["acao"] == "cria":
+                payload = FinanceiroLancamentoIn(**a["corpo"])
+                # o retrato da origem (nº7) sai do MESMO helper do lançamento feito na tela
+                dados_l = payload.model_dump()
+                enviados = set(getattr(payload, "model_fields_set", set()) or set())
+                origem = str(dados_l.get("origem") or "livre")
+                ret = _fin_retrato_da_origem(request, job_id, origem,
+                                             dados_l.get("origem_ref_id"), dados_l.get("origem_ref_pos"))
+                if origem != "livre":
+                    dados_l["descricao"] = ret.pop("descricao", "") or dados_l.get("descricao")
+                    for k in ("fornecedor", "valor"):
+                        if k in ret and k not in enviados:
+                            dados_l[k] = ret[k]
+                        ret.pop(k, None)
+                linha = _fin_normalizar(dados_l)
+                linha.update({"job_id": job_id, "escopo": "obra", **ret})
+                st, _ = _supa_rest_as_user(request, "POST", f"/{_FIN_TABELA}", body=linha,
+                                           prefer="return=minimal", timeout=10)
+                if st not in (200, 201, 204):
+                    raise HTTPException(400, f"o banco recusou (HTTP {st})")
+                criados += 1
+            else:
+                # coerência julgada na linha MESCLADA, como no PATCH da tela
+                mesclado = {**(a.get("atual") or {}), **a["campos"]}
+                st, _ = _supa_rest_as_user(
+                    request, "PATCH",
+                    f"/{_FIN_TABELA}?id=eq.{urllib.parse.quote(str(a['id']))}&job_id=eq.{jq}",
+                    body=_fin_normalizar(mesclado),
+                    prefer="return=minimal", timeout=10)
+                if st not in (200, 204):
+                    raise HTTPException(400, f"o banco recusou (HTTP {st})")
+                atualizados += 1
+        except HTTPException as e:
+            falhas.append({"n": a.get("n"), "item": a.get("item", "")[:80], "motivo": str(e.detail)})
+        except Exception as e:
+            falhas.append({"n": a.get("n"), "item": a.get("item", "")[:80],
+                           "motivo": f"{type(e).__name__}"})
+    if falhas:
+        try:
+            _log_error("financeiro:lote", f"{len(falhas)} linha(s) recusada(s) de "
+                                          f"{len(conf.get('acoes', []))}", job_id, severity="warning")
+        except Exception:
+            pass
+    return {"status": "ok", "criados": criados, "atualizados": atualizados,
+            "falhas": falhas, "avisos": conf.get("avisos", []),
+            "frase": _fin_lote_frase_final(criados, atualizados, falhas)}
+
+
+def _fin_lote_frase_final(criados: int, atualizados: int, falhas: list) -> str:
+    partes = []
+    if criados:
+        partes.append(f"{criados} lançamento{'s' if criados > 1 else ''} criado{'s' if criados > 1 else ''}")
+    if atualizados:
+        partes.append(f"{atualizados} atualizado{'s' if atualizados > 1 else ''}")
+    if not partes:
+        partes.append("nada foi gravado")
+    frase = " e ".join(partes)
+    if falhas:
+        frase += f" — {len(falhas)} linha{'s' if len(falhas) > 1 else ''} não entrou{'ram' if len(falhas) > 1 else ''}"
+    return frase[0].upper() + frase[1:]
 
 
 @app.get("/api/financeiro/{job_id}/export/xlsx")

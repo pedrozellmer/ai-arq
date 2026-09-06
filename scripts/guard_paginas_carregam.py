@@ -56,7 +56,9 @@ VIGIADAS = {
     # guarda parava no 1º fetch e dava verde com `render`/`kpis`/`daApi` quebrados.
     "financeiro.html": ("?job_id=teste",
                         ["exportar", "abrirNovo", "fecharNovo", "salvarNovo", "filtrar",
-                         "setOrigem", "avisar", "remover", "marcarPago"],
+                         "setOrigem", "avisar", "remover", "marcarPago",
+                         # 06/09: preencher em lote
+                         "abrirLote", "fecharLote", "baixarModeloLote", "conferirLote", "aplicarLote"],
                         [
                             {"re": "/api/financeiro/teste", "body": {
                                 "status": "ok", "job_id": "teste", "escopo": "obra",
