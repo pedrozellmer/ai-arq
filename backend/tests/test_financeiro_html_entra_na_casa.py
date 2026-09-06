@@ -225,6 +225,29 @@ def test_a_linha_guarda_a_referencia_da_origem_para_o_desfazer_recriar():
     assert "c.origem_ref_id=l.origem_ref_id" in js[j:j + 900], "o corpo do Desfazer manda a referência que a linha guardou"
 
 
+def test_exportar_usa_downloadProtected_nas_duas_rotas_e_nao_link_direto():
+    """05/09, etapa export: <a href> direto não manda Authorization (bug Daniela 18/05) —
+    os dois botões chamam exportar(fmt) → downloadProtected na rota protegida."""
+    js = _js()
+    assert 'id="btn-export-pdf"' in HTML and 'id="btn-export-xlsx"' in HTML
+    assert 'onclick="exportar(\'pdf\')"' in HTML and 'onclick="exportar(\'xlsx\')"' in HTML
+    assert not re.search(r'<a[^>]*aria-disabled="true"', HTML), "os botões deixaram de ser 'em breve'"
+    assert "sai na próxima etapa" not in HTML
+    assert "downloadProtected(`${API_BASE}/api/financeiro/${jobId}/export/${fmt}?hoje=${toISO(HOJE)}`" in js, (
+        "o arquivo usa o HOJE da tela (fuso do arquiteto), não o do servidor")
+    assert "if (!L.length) { avisar(SOMENTE_LEITURA ?" in js, (
+        "sem lançamento não bate no servidor; e o admin não recebe 'adicione o primeiro' (ele não pode)")
+    fn = js[js.find("async function exportar(fmt)"):]
+    fn = fn[:fn.find("\n}") + 2]
+    assert "const ok = await downloadProtected(" in fn and "if (ok) trackEvent('export_financeiro'" in fn, (
+        "o evento só conta quando o arquivo chegou — 404/500 não inflam a métrica")
+    assert fn.find("downloadProtected(") < fn.find("trackEvent(")
+    assert '"export_financeiro"' in MAIN
+    utils = fonte("aiarq-utils.js")
+    assert "return true;" in utils[utils.find("window.downloadProtected"):] and "Content-Disposition" in utils, (
+        "downloadProtected devolve true/false e lê o nome que o servidor mandou")
+
+
 def test_hidden_vence_as_classes_de_display_do_build():
     """05/09 ao vivo: a pill 'Somente leitura' tinha `hidden` e aparecia — `.inline-flex`
     do build vence o `[hidden]` do preflight (mesma camada). A página fecha isso."""

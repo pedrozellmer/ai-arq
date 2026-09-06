@@ -57,6 +57,8 @@ _PESADAS = (
     # mesma família de "gerar planilha", que já estava aqui — a fronteira era
     # arbitrária, não conceitual.
     "parse_supplier_quote", "parse_strict", "parse_fuzzy",
+    # 05/09: export do financeiro — planilha, PDF e a montagem (lê banco + monta cronograma)
+    "gerar_financeiro_xlsx", "render_financeiro_pdf", "_fin_montar_export",
 )
 
 

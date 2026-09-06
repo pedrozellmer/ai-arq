@@ -22997,7 +22997,7 @@ _TRACK_ALLOWED = {
     # com zero telemetria, e o único gatilho `use_cronograma` (projeto.html)
     # parou em 03/08. Estes fecham o buraco; o slug do post/página vai no campo.
     "view_cronograma", "view_exemplo", "view_precos", "view_faq", "view_memorial",
-    "view_financeiro",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)
+    "view_financeiro", "export_financeiro",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)
     # 🩸 03/09/2026 — NASCERAM MORTOS. Subi os seis eventos do convite da área
     # em 02/09 (commit 2d539fe) e CINCO caíam aqui: o /api/track respondia 200
     # {"status":"ignored"} e jogava fora — inclusive o `exibido`, que é O
@@ -26523,6 +26523,138 @@ def financeiro_remover(job_id: str, lanc_id: str, request: Request):
     if not rows:
         raise HTTPException(404, "lançamento não encontrado neste projeto")
     return {"status": "ok", "removido": rows[0] if isinstance(rows, list) else rows}
+
+
+# ── exportação do financeiro (.xlsx e PDF): a MESMA tabela e os MESMOS números da tela ──
+def _fin_hoje(hoje_str: str = ""):
+    """O 'hoje' da régua de vencido / 30 dias. A tela manda o dia DELA (?hoje=AAAA-MM-DD):
+    o arquiteto em Manaus às 23h30 ainda está em "ontem" pra Brasília, e o arquivo tem que
+    dizer o mesmo que a tela dele. Só aceita data válida a até 2 dias de Brasília; senão, Brasília."""
+    brasilia = (datetime.utcnow() - timedelta(hours=3)).date()
+    try:
+        d = datetime.strptime(str(hoje_str or "")[:10], "%Y-%m-%d").date()
+    except Exception:
+        return brasilia
+    return d if abs((d - brasilia).days) <= 2 else brasilia
+
+
+def _fin_cronograma_salvo(req_leitura, job_id: str):
+    """(status, linha|None) do cronograma salvo. Dono lê com o JWT (RLS); admin (req None) pelo
+    service_role. Devolve o STATUS porque o export precisa distinguir "não existe" (200, None)
+    de "não consegui ler" — `_supabase_get_cronograma` engole os dois em None."""
+    jq = urllib.parse.quote(job_id)
+    path = f"/cronogramas?job_id=eq.{jq}&select=*&limit=1"
+    if req_leitura is not None:
+        st, rows = _supa_rest_as_user(req_leitura, "GET", path, timeout=10)
+    else:
+        st, rows = _supa_rest_service("GET", path, timeout=10)
+    if st != 200 or rows is None:
+        return st, None
+    return 200, (rows[0] if rows else None)
+
+
+def _fin_montar_export(request, job_id: str, eh_admin: bool, hoje_str: str = ""):
+    """Tudo o que os dois exports precisam: lançamentos da obra, fases do cronograma (pra datar
+    o vencimento por fase) e branding. Admin lê pelo service_role (como no GET) e monta
+    cronograma/branding sem o JWT dele — a RLS do cronograma é do dono, e um export "fase sem
+    data" pra admin seria mentira.
+    🔑 As fases vêm da MESMA fonte da tela (carregarFases): `fases_custom` CRU quando existe;
+    só sem ele o cronograma recalculado (o /full). O recalculado aplica cascade de dependência e
+    reescreve fim de fase de um dia — moveria um vencimento que a tela não move.
+    🩸 Três estados do cronograma, não dois: não existe → aviso no arquivo; existe e leu →
+    datas; NÃO CONSEGUI LER → 502. Um documento que vai pro banco não pode afirmar "este
+    projeto não tem cronograma" porque o Supabase deu timeout."""
+    from financeiro_export import montar_dados_export
+    jq = urllib.parse.quote(job_id)
+    st, rows = _fin_get(
+        request, f"/{_FIN_TABELA}?job_id=eq.{jq}&escopo=eq.obra&select=*&order=created_at.asc",
+        eh_admin)
+    if st != 200 or rows is None:      # 🪤 vazio ≠ falhou
+        _fin_erro_do_banco(st, "ler os lançamentos", job_id)
+    if not rows:
+        raise HTTPException(404, ("Este projeto ainda não tem lançamentos pra exportar." if eh_admin
+                                  else "Nenhum lançamento ainda — adicione o primeiro pra exportar."))
+    req_leitura = None if eh_admin else request
+    st_c, saved = _fin_cronograma_salvo(req_leitura, job_id)
+    if st_c != 200:
+        _log_error("financeiro:export",
+                   f"cronogramas HTTP {st_c} — export recusado pra não afirmar 'sem cronograma'",
+                   job_id, severity="warning")
+        raise HTTPException(502, "não consegui ler o cronograma agora — tente exportar de novo em instantes")
+    fases, branding = [], None
+    if saved and saved.get("fases_custom"):
+        fases = saved["fases_custom"]
+    elif saved:
+        try:
+            cron, branding = _build_cronograma_for_export(job_id, request=req_leitura)
+            fases = (cron or {}).get("fases") or []
+        except HTTPException as e:
+            if e.status_code != 404:
+                _log_error("financeiro:export", f"cronograma não montou: HTTP {e.status_code} {e.detail}",
+                           job_id, severity="warning")
+                raise HTTPException(502, "não consegui montar o cronograma agora — tente de novo em instantes")
+            fases, branding = [], None      # só config salva e projeto sem itens: a tela também fica sem datas
+        except Exception as e:
+            _log_error("financeiro:export", f"cronograma não montou: {e}", job_id, severity="warning")
+            raise HTTPException(502, "não consegui montar o cronograma agora — tente de novo em instantes")
+    if branding is None:
+        branding = _get_branding_context(job_id, request=req_leitura)
+    if not (branding or {}).get("project_name"):
+        # 🩸 branding engole erro de leitura e devolve '' — o arquivo sairia "Projeto sem nome" pro cliente
+        _log_error("financeiro:export", "branding sem nome do projeto — leitura de projects falhou?",
+                   job_id, severity="warning")
+        raise HTTPException(502, "não consegui ler os dados do projeto agora — tente de novo em instantes")
+    return montar_dados_export(rows, fases, _fin_hoje(hoje_str)), branding
+
+
+_FIN_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@app.get("/api/financeiro/{job_id}/export/xlsx")
+def financeiro_export_xlsx(job_id: str, request: Request, hoje: str = ""):
+    """Planilha do financeiro — mesmo padrão visual do quantitativo e do cronograma
+    (estilos importados de spreadsheet.py). Admin pode baixar (é leitura).
+    `hoje` = o dia da tela (fuso do arquiteto), pra régua de vencido bater com ela.
+    Rota SÍNCRONA de propósito (como financeiro_listar): o FastAPI roda `def` no threadpool, e
+    aqui é tudo rede + arquivo — três leituras antes de gerar. Uma `async def` faria a checagem
+    do dono e do JWT no laço, e com --workers 1 isso trava o site inteiro."""
+    owner = _require_project_owner(request, job_id)
+    eh_admin = _fin_eh_admin(request, owner)
+    import tempfile
+    dados, branding = _fin_montar_export(request, job_id, eh_admin, hoje)
+    fname = f"financeiro_obra_{_slug_filename(branding.get('project_name') or job_id)}.xlsx"
+    try:
+        from financeiro_export import gerar_financeiro_xlsx
+        tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+        tmp.close()
+        gerar_financeiro_xlsx(dados, tmp.name, branding)
+        return FileResponse(tmp.name, filename=fname, media_type=_FIN_XLSX_MIME)
+    except Exception as e:
+        _log_error("financeiro:xlsx", str(e), job_id=job_id)
+        raise HTTPException(500, "não consegui gerar a planilha do financeiro agora — tente de novo")
+
+
+@app.get("/api/financeiro/{job_id}/export/pdf")
+def financeiro_export_pdf(job_id: str, request: Request, hoje: str = ""):
+    """PDF do financeiro — A4 retrato no molde do memorial (WeasyPrint), cor da marca.
+    Síncrona pelo mesmo motivo da planilha."""
+    owner = _require_project_owner(request, job_id)
+    eh_admin = _fin_eh_admin(request, owner)
+    import tempfile
+    dados, branding = _fin_montar_export(request, job_id, eh_admin, hoje)
+    fname = f"financeiro_obra_{_slug_filename(branding.get('project_name') or job_id)}.pdf"
+    try:
+        from financeiro_export import render_financeiro_pdf_bytes
+        pdf = render_financeiro_pdf_bytes(dados, branding)
+        if not pdf:
+            raise RuntimeError("render devolveu vazio")
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp.write(pdf)
+        tmp.close()
+        return FileResponse(tmp.name, filename=fname, media_type="application/pdf")
+    except Exception as e:
+        _log_error("financeiro:pdf", str(e), job_id=job_id)
+        raise HTTPException(500, "não consegui gerar o PDF do financeiro agora — tente de novo")
 
 
 @app.post("/api/items/{job_id}/review-finalize")

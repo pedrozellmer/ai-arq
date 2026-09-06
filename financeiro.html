@@ -215,11 +215,12 @@
     </button>
     <span id="save-status" class="text-xs text-slate-500 whitespace-nowrap" aria-live="polite">Cada alteração é salva na hora.</span>
     <div class="flex-1"></div>
-    <a href="#" class="exp px-3 md:px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium no-underline flex items-center gap-2" aria-label="Exportar PDF" aria-disabled="true" title="O PDF físico-financeiro sai na próxima etapa" onclick="event.preventDefault(); avisar('O PDF físico-financeiro sai na próxima etapa do financeiro.')">
+    <!-- Endpoints protegidos: link direto não manda o token (bug Daniela 18/05) — exportar() usa downloadProtected -->
+    <a id="btn-export-pdf" href="javascript:void(0)" class="exp px-3 md:px-4 py-2 rounded-lg border border-slate-300 text-slate-700 text-sm font-medium no-underline flex items-center gap-2" aria-label="Exportar PDF" title="Baixar o financeiro em PDF (A4, cor do seu escritório)" onclick="exportar('pdf')">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
       <span class="hidden md:inline">PDF</span>
     </a>
-    <a href="#" class="exp px-3 md:px-4 py-2 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 text-sm font-medium no-underline flex items-center gap-2" aria-label="Exportar planilha" aria-disabled="true" title="A aba Financeiro da planilha .xlsx sai na próxima etapa" onclick="event.preventDefault(); avisar('A aba Financeiro da planilha .xlsx sai na próxima etapa do financeiro.')">
+    <a id="btn-export-xlsx" href="javascript:void(0)" class="exp px-3 md:px-4 py-2 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 text-sm font-medium no-underline flex items-center gap-2" aria-label="Exportar planilha" title="Baixar a planilha .xlsx do financeiro (mesmo padrão do quantitativo)" onclick="exportar('xlsx')">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17v-6h6v6M3 7h18M5 7v12a2 2 0 002 2h10a2 2 0 002-2V7M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
       <span class="hidden md:inline">Planilha</span>
     </a>
@@ -1059,6 +1060,14 @@ document.getElementById('modal-novo').addEventListener('mousedown', e=>{ if(e.ta
 document.getElementById('modal-novo').addEventListener('keydown', e=>{ if(e.key!=='Tab') return; const f=[...e.currentTarget.querySelectorAll('button,input,select,[tabindex="0"]')].filter(x=>!x.hidden && x.offsetParent && x.tabIndex>=0 && !x.disabled); if(!f.length) return; const first=f[0], last=f[f.length-1]; if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); } else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); } });
 
 // ── aviso próprio (com botão de ação), barra sticky ──
+// exportar: rota protegida — fetch com token e blob (downloadProtected, da casa); <a href> direto daria 401
+async function exportar(fmt){
+  if (!L.length) { avisar(SOMENTE_LEITURA ? 'Este projeto ainda não tem lançamentos pra exportar.' : 'Nenhum lançamento ainda — adicione o primeiro pra exportar.'); return; }
+  // ?hoje= o dia DESTA tela: a régua de vencido/30 dias do arquivo tem que bater com a daqui (fuso do arquiteto)
+  const ok = await downloadProtected(`${API_BASE}/api/financeiro/${jobId}/export/${fmt}?hoje=${toISO(HOJE)}`, `financeiro_${jobId}.${fmt}`);
+  // só conta como export o que virou arquivo na mão do arquiteto — 404/500 não inflam a métrica
+  if (ok) trackEvent('export_financeiro', { job_id: jobId, formato: fmt });
+}
 // descrição de item do quantitativo chega a 200 caracteres — no toast, o começo basta (visto ao vivo em 05/09)
 function curto(s, n){ s=String(s||''); n=n||72; return s.length>n ? s.slice(0,n-1).trimEnd()+'…' : s; }
 let _t; function avisar(msg, tipo, op){

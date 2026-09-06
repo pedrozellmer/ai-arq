@@ -550,6 +550,7 @@ def test_toda_escrita_por_id_no_fonte_filtra_job_id_na_url():
     assert regiao.count("?id=eq.{lanc_id}&job_id=eq.{jq}") == 3, "GET-atual, PATCH e DELETE"
     assert not re.search(r'\?id=eq\.\{lanc_id\}(?!&job_id=eq\.\{jq\})', regiao), \
         "sobrou escrita/leitura por id sem o filtro de job logo em seguida"
-    assert regiao.count("_require_project_owner(request, job_id)") == 4
+    # 4 do CRUD + 2 dos exports (.xlsx e PDF, 05/09): toda rota da seção confere o dono
+    assert regiao.count("_require_project_owner(request, job_id)") == 6
     # o `def` também casa: 1 definição + 3 chamadas (POST, PATCH e DELETE recusam admin)
     assert regiao.count("_fin_so_o_dono_escreve(request, owner)") == 4, "POST, PATCH e DELETE recusam admin"

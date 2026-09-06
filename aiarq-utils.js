@@ -566,12 +566,14 @@
   // enviam header customizado → backend retorna 401 mesmo com sessão
   // válida (bug Daniela 2026-05-18). Solução: fetch com Bearer → blob →
   // <a> programático → cleanup do object URL.
+  // Devolve true quando o arquivo chegou na mão do cliente, false quando não — quem chama
+  // decide o que fazer (o financeiro só registra o evento de export no true, 05/09/2026).
   window.downloadProtected = async function (url, filename) {
     const { data: { session } } = await _sbClient.auth.getSession();
     if (!session) {
       notify.warn('Sua sessão expirou. Faça login de novo pra baixar.');
       window.location.href = 'login.html';
-      return;
+      return false;
     }
     try {
       const resp = await fetch(url, {
@@ -581,20 +583,32 @@
         let detail = 'HTTP ' + resp.status;
         try { const j = await resp.json(); detail = j.detail || detail; } catch (_) {}
         notify.error('Não consegui baixar o arquivo: ' + detail);
-        return;
+        return false;
       }
       const blob = await resp.blob();
+      // Nome do arquivo: o que o servidor mandou no Content-Disposition (ex.: financeiro_obra_Casa_X.pdf),
+      // com o `filename` da tela de reserva. O header só chega porque o CORS do backend o expõe.
+      let nome = filename || 'arquivo';
+      try {
+        const cd = resp.headers.get('Content-Disposition') || '';
+        const mUtf = /filename\*=(?:UTF-8|utf-8)''([^;]+)/.exec(cd);
+        const mSimples = /filename="?([^";]+)"?/.exec(cd);
+        if (mUtf && mUtf[1]) nome = decodeURIComponent(mUtf[1].trim());
+        else if (mSimples && mSimples[1]) nome = mSimples[1].trim();
+      } catch (_) {}
       const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = filename || 'arquivo';
+      a.download = nome;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       // Pequeno delay pro browser começar o download antes do GC.
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      return true;
     } catch (e) {
       notify.error('Erro de rede ao baixar: ' + (e && e.message ? e.message : e));
+      return false;
     }
   };
   // Alias usado em templates inline com onclick (dashboard.html).

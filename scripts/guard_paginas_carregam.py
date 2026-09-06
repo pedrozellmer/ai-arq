@@ -53,7 +53,7 @@ VIGIADAS = {
                       "maybeShowFeedback", "_fbSalvaAntesDeSair"]),
     # 05/09/2026: Financeiro da obra (etapa 1) — as funções que o HTML chama por onclick
     "financeiro.html": ("?job_id=teste",
-                        ["abrirNovo", "fecharNovo", "salvarNovo", "filtrar",
+                        ["exportar", "abrirNovo", "fecharNovo", "salvarNovo", "filtrar",
                          "setOrigem", "avisar", "remover", "marcarPago"]),
     "dashboard.html": ("", ["__maybeShowNPS"]),
     "admin.html": ("", ["switchTab", "loadUsers", "renderUsers",
