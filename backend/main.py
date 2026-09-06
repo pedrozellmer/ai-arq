@@ -5741,39 +5741,70 @@ def _consolidate_items(items: list) -> list:
             pass6.extend(group)
             continue
 
-        # Confirmada duplicação cross-prancha. Manter o item de MAIOR especificidade.
-        winner = max(group, key=lambda it: (_item_score(it), _desempate_estavel(it)))
-        losers = [it for it in group if id(it) != id(winner)]
-        total_pranchas = len(ref_sheets)
+        # 🚨 GUARDA DE GRANDEZA (06/09/2026) — o irmão do guarda de atributo
+        # acima, e pela mesma razão: coisas diferentes não são duplicata.
+        #
+        # 🩸 O caso que revelou (Flavio Hermolin, job d5e073cf): a linha
+        # "Alvenaria de vedação — levantamento de parede" saiu com 255,06 ml e
+        # selo CONFIRMADO, e a observação lista o que foi jogado fora:
+        # 819,06 m², 810,36 m², 50,37 m², 73,05 m². Metro LINEAR venceu metro
+        # QUADRADO — grandezas diferentes, que nem deveriam disputar.
+        #
+        # E as pranchas descartadas eram DEMOLIR-CONSTRUIR, LAYOUT e
+        # LEVANTAMENTO: fases diferentes da mesma obra. O que existe pra
+        # demolir não é o que existe pra construir.
+        _uns = {(it.unit or "").strip().lower() for it in group}
+        _dims = {_UNIT_PRIORITY.get(u, 50) for u in _uns}
+        if len(_dims) > 1:
+            pass6.extend(group)
+            continue
 
-        # Anota no obs do vencedor que dedupliquei
-        loser_summary = "; ".join(
-            f"{it.quantity} {it.unit} ({it.ref_sheet[:30] if it.ref_sheet else 'sem ref'})"
-            for it in losers
-        )
-        merged_obs = (winner.observations or "").rstrip(". ") + (". " if winner.observations else "")
-        merged_obs += (
-            f"Deduplicado: este item aparecia em {total_pranchas} pranchas diferentes "
-            f"do mesmo projeto. Versões descartadas: {loser_summary}. "
-            f"Versão mantida tem maior especificidade (unidade física, qty>0)."
-        )
-        merged_item = BudgetItem(
-            item_num=winner.item_num,
-            description=winner.description,
-            unit=winner.unit,
-            quantity=winner.quantity,
-            observations=merged_obs,
-            ref_sheet=winner.ref_sheet,
-            confidence=winner.confidence,
-            discipline=winner.discipline,
-            # a quantidade É a do vencedor: herda a origem e as specs dele
-            origem=getattr(winner, "origem", "") or "",
-            marca=getattr(winner, "marca", "") or "",
-            codigo_fabricante=getattr(winner, "codigo_fabricante", "") or "",
-            cor=getattr(winner, "cor", "") or "",
-            spec_origem=getattr(winner, "spec_origem", "") or "",
-        )
-        pass6.append(merged_item)
+        # 🚨 NÃO DESCARTAR (06/09/2026, decisão do Pedro). Até aqui esta passada
+        # era a única que fazia winner/losers de verdade: escolhia UMA leitura e
+        # APAGAVA as outras. Em obra de vários pavimentos isso apaga um andar —
+        # térreo e pavimento superior têm a mesma descrição e a mesma
+        # disciplina, e `pode_fundir` não conhece a categoria PAVIMENTO.
+        #
+        # Medido no banco: 1.245 itens em 80 projetos, 159 deles com selo
+        # MEDIDO. E o cliente já tinha nos dito: o Marcelo Affonso escreveu em
+        # 24/08 "são de pavimentos diferentes... teria como separar a quantidade
+        # de paredes para cada um dos três pavimentos?" — e o nosso chat
+        # respondeu mandando separar os arquivos por pavimento. O Jessé fez
+        # exatamente isso, com 8 DWG, e deduplicou do mesmo jeito.
+        #
+        # 🔑 Por que MANTER e não somar: somar exige saber se são trechos
+        # distintos ou a mesma coisa desenhada duas vezes, e disso o motor não
+        # tem prova. Duplicar é um erro que o arquiteto VÊ e corrige; apagar é
+        # um erro que ele não tem como ver. Entre os dois, fica o visível.
+        #
+        # 🔑 Por que o selo NÃO é rebaixado: cada linha FOI medida de verdade na
+        # prancha dela. O que não se sabe é se somar. Rebaixar tudo pra estimado
+        # jogaria fora medição legítima — trocaria um erro por outro (regra nº1
+        # protege contra afirmar o que não se mediu, não manda esquecer o que se
+        # mediu).
+        _pranchas_txt = ", ".join(sorted(
+            (it.ref_sheet or "sem referência")[:40] for it in group))
+        for _it in group:
+            _obs = (_it.observations or "").rstrip(". ")
+            _obs += (". " if _obs else "")
+            _obs += (
+                f"⚠ Este serviço aparece em {len(ref_sheets)} pranchas do "
+                f"projeto ({_pranchas_txt}). Cada linha é a medição da prancha "
+                f"dela — confira se são trechos diferentes da obra (pavimentos, "
+                f"fases, blocos), que somam, ou o mesmo trecho desenhado mais de "
+                f"uma vez, que não soma."
+            )
+            _it.observations = _obs
+        pass6.extend(group)
+        continue
+
+        # 🪤 Aqui morava o winner/losers — o `max(group, ...)` que elegia uma
+        # leitura e descartava as outras, com `_item_score` premiando o selo
+        # CONFIRMADO acima da quantidade (por isso a leitura parcial branca
+        # vencia a medição maior e saía carimbada como medida do CAD).
+        # Removido em 06/09/2026. É AQUI que a soma por pavimento vai encostar
+        # quando existir: agrupar por prancha/pavimento e somar o que for
+        # trecho distinto, em vez de escolher um sobrevivente.
 
     return pass6
 

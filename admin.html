@@ -2274,6 +2274,22 @@ async function mergeEstudar(jobId){
   alvo.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
+// 🚨 06/09/2026 — XSS armazenado, achado da auditoria total. O nome do projeto
+// é escolhido pelo CLIENTE e gravado verbatim (main.py:13885, sem sanitização —
+// ao contrário do nome de ARQUIVO, que passa por _sanitize_filename_for_storage).
+// Aqui ele entrava cru no innerHTML: um projeto batizado com uma tag de imagem e
+// um handler de erro executaria código na sessão do ADMIN, na origem ai.arq.br,
+// onde mora o token do Supabase. E a CSP não segura: script-src tem
+// 'unsafe-inline' (autoriza o handler) e connect-src tem curinga *.supabase.co
+// (destino de exfiltração autorizado). Era o ÚNICO dos 6 lugares que renderizam
+// project_name sem escapar.
+// 🪤 Buraco VAZIO, não sangramento: SQL em produção deu 0 de 330 projetos com
+// sinal de payload no nome. Guarda: test_admin_escapa_dado_do_cliente.py
+// 🪤 E a explicação mora AQUI, fora do template literal: a primeira versão
+// deste comentário citava o payload entre crases, DENTRO da template string —
+// crase fecha a string e o JavaScript da página inteira quebrou. Um guarda
+// pegou. É a quarta vez hoje que um comentário meu planta o defeito que ele
+// explica.
 function mergeHtml(d, jobId){
   const nome = (p) => String(p||'').replace(/_libredwg\.dxf$/,'').replace(/\.(dxf|dwg)$/i,'');
   const ganho = d.merge.medidos - Math.max(d.original.medidos, d.releitura.medidos);
@@ -2281,7 +2297,7 @@ function mergeHtml(d, jobId){
   const cabecalho = `
     <div class="rounded-xl border border-violet-200 bg-white p-4 mb-4">
       <h3 class="font-semibold text-gray-900 mb-1">🧬 Estudo do merge &mdash; <span class="text-amber-700">nada foi criado ainda</span></h3>
-      <p class="text-xs text-gray-500 mb-3">${d.original.nome || ''} &middot; ${d.original.dono || ''}
+      <p class="text-xs text-gray-500 mb-3">${esc(d.original.nome || '')} &middot; ${esc(d.original.dono || '')}
         &middot; isto é uma prévia; o botão no fim da página é que cria.</p>
       <div class="grid grid-cols-3 gap-3 text-sm">
         <div class="rounded-lg bg-gray-50 p-3">
