@@ -212,6 +212,26 @@ def test_view_financeiro_esta_na_allowlist_do_track():
     assert "trackEvent('view_financeiro', { job_id: jobId })" in HTML
 
 
+def test_a_linha_guarda_a_referencia_da_origem_para_o_desfazer_recriar():
+    """05/09 ao vivo: remover uma linha do quantitativo e clicar Desfazer dava 400 —
+    `daApi` descartava origem_ref_id, e o POST exige a referência fora da linha livre."""
+    js = _js()
+    i = js.find("function daApi(r)")
+    fim = js.find("\n}", i)
+    corpo = js[i:fim]
+    assert "origem_ref_id: r.origem_ref_id" in corpo, "a linha em memória tem que carregar a referência da origem"
+    assert "origem_ref_pos:" in corpo, "e a posição, pro comparativo"
+    j = js.find("function corpoDaLinha(l)")
+    assert "c.origem_ref_id=l.origem_ref_id" in js[j:j + 900], "o corpo do Desfazer manda a referência que a linha guardou"
+
+
+def test_hidden_vence_as_classes_de_display_do_build():
+    """05/09 ao vivo: a pill 'Somente leitura' tinha `hidden` e aparecia — `.inline-flex`
+    do build vence o `[hidden]` do preflight (mesma camada). A página fecha isso."""
+    assert "[hidden]{display:none !important}" in _style()
+    assert 'id="pill-leitura" hidden' in HTML
+
+
 def test_rota_de_cotacoes_devolve_as_linhas_pro_modal():
     i = MAIN.find('@app.get("/api/projects/{job_id}/quotes")')
     assert i > 0

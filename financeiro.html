@@ -12,6 +12,11 @@
 <link rel="stylesheet" href="/tailwind.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
+  /* [hidden] perde pra .inline-flex/.flex do build (mesma camada, o utilitário vence):
+     a pill "Somente leitura" aparecia mesmo escondida. Visto ao vivo em 05/09/2026. */
+  [hidden]{display:none !important}
+    /* [hidden] perde pra .inline-flex/.flex do build (mesma camada, utilitário vence): a pill "Somente leitura" aparecia escondida */
+    [hidden]{display:none !important}
   /* ── A mesma base das telas do cliente (cronograma.html / projeto.html) ── */
   body { font-family: 'Inter', -apple-system, sans-serif; }
   .gradient-main { background: linear-gradient(135deg, #4f46e5 0%, #06b6d4 100%); }
@@ -505,6 +510,9 @@ function daApi(r){
     st: r.status || 'cotado', pago_em: r.pago_em ? String(r.pago_em).slice(0,10) : null,
     estado: r.origem_estado || 'ok', origem_atual: r.origem_atual || null, origem_candidatos: r.origem_candidatos || 0,
     origem_quantidade: r.origem_quantidade, origem_unidade: r.origem_unidade || '',
+    // o Desfazer recria pela API, e fora da linha livre o servidor EXIGE a referência — sem estes
+    // dois campos aqui, todo Desfazer de linha do quantitativo/comparativo dava 400 (visto ao vivo 05/09)
+    origem_ref_id: r.origem_ref_id || null, origem_ref_pos: (r.origem_ref_pos==null ? null : Number(r.origem_ref_pos)),
   };
 }
 // Data do vencimento: fixa, ou início/fim da fase (pelo label, com a categoria de reserva). null = fase sem data.
@@ -868,7 +876,7 @@ function setStatus(l,s){
   // marcar pago: a data é de quem marca (o servidor não carimba — é do arquiteto e do fuso dele)
   if(s==='pago'){ campos.pago_em=toISO(HOJE); l.pago_em=campos.pago_em; } else { l.pago_em=null; }
   l.st=s; renderRow(l);
-  persistir(l, campos, `Status: ${ST_LABEL[s]} — ${l.oque}`);
+  persistir(l, campos, `Status: ${ST_LABEL[s]} — ${curto(l.oque)}`);
 }
 function marcarPago(i){ const l=L[i]; if(l) setStatus(l,'pago'); }
 // remover: some da tela e do servidor na hora, e "Desfazer" por 6 s recria a linha (mesmos campos)
@@ -877,7 +885,7 @@ async function remover(i){
   L.splice(i,1); render();
   try {
     await api('DELETE', `/${encodeURIComponent(l.id)}`);
-    avisar(`Removido: ${l.oque}`, null, {acao:'Desfazer', fn:()=>recriar(l)});
+    avisar(`Removido: ${curto(l.oque)}`, null, {acao:'Desfazer', fn:()=>recriar(l)});
   } catch (e) {
     avisar(e.message || 'não consegui remover', 'erro'); await recarregar();
   }
@@ -1051,6 +1059,8 @@ document.getElementById('modal-novo').addEventListener('mousedown', e=>{ if(e.ta
 document.getElementById('modal-novo').addEventListener('keydown', e=>{ if(e.key!=='Tab') return; const f=[...e.currentTarget.querySelectorAll('button,input,select,[tabindex="0"]')].filter(x=>!x.hidden && x.offsetParent && x.tabIndex>=0 && !x.disabled); if(!f.length) return; const first=f[0], last=f[f.length-1]; if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); } else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); } });
 
 // ── aviso próprio (com botão de ação), barra sticky ──
+// descrição de item do quantitativo chega a 200 caracteres — no toast, o começo basta (visto ao vivo em 05/09)
+function curto(s, n){ s=String(s||''); n=n||72; return s.length>n ? s.slice(0,n-1).trimEnd()+'…' : s; }
 let _t; function avisar(msg, tipo, op){
   const t=document.getElementById('fin-toast'); t.textContent=msg; t.style.pointerEvents=''; t.classList.toggle('erro', tipo==='erro');
   if(op && op.acao){ const b=document.createElement('button'); b.type='button'; b.textContent=op.acao; b.className='ml-3 underline font-semibold'; b.onclick=()=>{ t.classList.remove('on'); op.fn(); }; t.appendChild(b); t.style.pointerEvents='auto'; }
