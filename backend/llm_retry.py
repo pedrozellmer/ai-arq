@@ -28,6 +28,8 @@ Observação sobre Anthropic SDK:
 import os
 import time
 import random
+import contextlib
+import contextvars
 from typing import Any
 
 try:
@@ -35,6 +37,178 @@ try:
     _HAS_ANTHROPIC = True
 except ImportError:
     _HAS_ANTHROPIC = False
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  Custo por projeto: de quem foi o gasto (06/09/2026)
+# ─────────────────────────────────────────────────────────────────────────────
+# 🚨 O Pedro perguntou "quanto custa processar um projeto" e não havia resposta:
+# o registro que existia (error_log stage='llm:cache') não dizia QUAL MODELO
+# gastou nem DE QUEM foi o gasto. Sem modelo não vira reais; sem job_id não dá
+# pra separar cliente de bancada — e na janela medida havia MAIS avaliação nossa
+# (38) do que projeto de cliente (39).
+#
+# 🪤 POR QUE ContextVar E NÃO VARIÁVEL DE MÓDULO: a sombra do PDF é disparada
+# DENTRO do process_job (main.py:12664), dorme 8s (pdf_vector.py:405) e trabalha
+# por até 180s (pdf_vector.py:32) — ela ATRAVESSA o semáforo de 1 job
+# (main.py:6198) e roda junto com o PRÓXIMO projeto. Uma global carimbaria o
+# custo do projeto A no projeto B: regra dura nº2 violada, e em silêncio.
+# Medido em Python 3.13: thread nova nasce com contexto VAZIO (não herda), e o
+# anyio copia o contexto por chamada HTTP. Os dois fatos tornam a ContextVar
+# segura por construção — o ÚNICO jeito de vazar é chamar `.set()` solto dentro
+# de um worker de pool reusado, e é isso que o guarda proíbe.
+_JOB_ATUAL: contextvars.ContextVar = contextvars.ContextVar("aiarq_job_id", default=None)
+
+
+@contextlib.contextmanager
+def escopo_job(job_id: str | None):
+    """Marca o dono do gasto de IA enquanto o bloco roda. SEMPRE faz reset.
+
+    🚨 Este é o ÚNICO lugar autorizado a chamar `_JOB_ATUAL.set`. Um `.set()`
+    solto dentro de um worker de ThreadPoolExecutor VAZA pra tarefa seguinte
+    naquele worker (medido) — com set+reset no finally, a seguinte lê None.
+    """
+    token = _JOB_ATUAL.set(job_id or None)
+    try:
+        yield
+    finally:
+        try:
+            _JOB_ATUAL.reset(token)
+        except ValueError:
+            # Token criado em outro Context (gerador / fronteira de await).
+            # Telemetria não pode derrubar o job DEPOIS do trabalho pronto.
+            _JOB_ATUAL.set(None)
+
+
+# Catálogo FECHADO de etapas. O `escopo` sai DAQUI, nunca da presença do job_id:
+# derivar de "tem dono? então é de projeto" tornaria o guarda de órfãos
+# tautológico — toda chamada que perdesse o dono seria reetiquetada 'plataforma'
+# e a consulta daria 0 pra sempre, lavando exatamente o defeito que ela procura.
+_ETAPAS: dict[str, str] = {
+    "dxf": "projeto",                  # extração de DXF (main.py:9391)
+    "prancha": "projeto",              # analyzer.py:1243 (tag crua: "analyzer:<arquivo>")
+    "sinapi_pick": "projeto",          # sinapi_matcher.py:584
+    "classifier": "projeto",           # classifier.py:186
+    "salvage-layout-counts": "projeto",  # main.py:6379
+    "pdfvec-carimbo": "projeto",       # pdfvec_carimbo.py:170
+    "memorial-intro": "projeto",       # main.py:20571
+    "chat-projeto": "projeto",         # main.py:18102
+    "agent": "projeto",                # agent.py:756 (tag crua: "agent:job=<id>")
+    "filhote-juiz": "projeto",         # main.py:24302
+    "merge-juiza": "plataforma",       # main.py:25032 — bancada, não cliente
+    "chat-publico": "plataforma",      # main.py:17961 — visitante, sem projeto
+    "admin-sugestao-anexo": "plataforma",  # main.py:24173
+    "instagram": "plataforma",
+    # Classificação do catálogo SINAPI: script de carga, rodado à parte —
+    # nenhum arquivo do backend importa sinapi_classifier. Custo da casa, não
+    # de projeto. (Achado pelo próprio guarda de cobertura, 06/09.)
+    "sinapi_batch": "plataforma",          # sinapi_classifier.py:160
+}
+
+# A tag de produção carrega o NOME DO ARQUIVO DO CLIENTE em dois pontos
+# (analyzer.py:1243, main.py:9391) e o job_id num terceiro (agent.py:756).
+# Normalizar aqui resolve os três de uma vez: a etapa vira slug agrupável e
+# nome de arquivo de cliente NÃO entra numa tabela de dinheiro interno (nº6).
+_PREFIXO_ETAPA = {"analyzer": "prancha", "dxf": "dxf", "agent": "agent"}
+
+
+def _etapa_e_escopo(tag: str) -> tuple[str, str]:
+    base = (tag or "").split(":", 1)[0].strip() or "desconhecido"
+    etapa = _PREFIXO_ETAPA.get(base, base)
+    return etapa, _ETAPAS.get(etapa, "desconhecido")
+
+
+_PRECOS_CACHE: dict[str, Any] = {"ate": 0.0, "mapa": None}
+_PRECOS_TTL_S = 600
+
+
+def _precos() -> dict:
+    """{modelo: (versao, in, out, cache_read, cache_write)}. Falha -> {} (custo NULL)."""
+    agora = time.time()
+    if _PRECOS_CACHE["mapa"] is not None and agora < _PRECOS_CACHE["ate"]:
+        return _PRECOS_CACHE["mapa"]
+    mapa: dict = {}
+    try:
+        from main import _supa_rest_service
+        _st, _rows = _supa_rest_service(
+            "GET", "llm_precos",
+            params={"select": "modelo,vigencia_inicio,usd_in_mtok,usd_out_mtok,"
+                              "usd_cache_read_mtok,usd_cache_write_mtok",
+                    "order": "vigencia_inicio.desc"})
+        for r in (_rows or []):
+            m = r.get("modelo")
+            if m and m not in mapa:   # a primeira é a vigência mais recente
+                mapa[m] = ("%s@%s" % (m, r.get("vigencia_inicio")),
+                           float(r.get("usd_in_mtok") or 0),
+                           float(r.get("usd_out_mtok") or 0),
+                           float(r.get("usd_cache_read_mtok") or 0),
+                           float(r.get("usd_cache_write_mtok") or 0))
+    except Exception:
+        mapa = {}
+    _PRECOS_CACHE["mapa"] = mapa
+    # 🪤 Guarda o TTL mesmo quando a leitura falhou: senão cada chamada de IA
+    # tentaria ler preço de novo e a telemetria viraria o gargalo do motor.
+    _PRECOS_CACHE["ate"] = agora + _PRECOS_TTL_S
+    return mapa
+
+
+def _custo_usd(modelo: str | None, novo: int, le: int, esc: int, out: int):
+    """(custo, preco_ver) ou (None, None). Modelo sem preço casado NUNCA dá 0."""
+    if not modelo:
+        return None, None
+    p = _precos().get(modelo)
+    if not p:
+        return None, None
+    ver, u_in, u_out, u_le, u_esc = p
+    total = (novo * u_in + le * u_le + esc * u_esc + out * u_out) / 1e6
+    return round(total, 6), ver
+
+
+def _gravar_uso(*, tag: str, resultado: str, modelo=None, job_id=None,
+                novo=None, le=None, esc=None, out=None,
+                cache_marcado: bool = False, erro=None) -> None:
+    """UMA linha por passagem por call_with_retry. Sempre. Nunca levanta.
+
+    🔑 O PRINCÍPIO: linha ausente, somada por SUM e dividida por projeto, é
+    indistinguível de custo baixo. Então o que varia é o `resultado`
+    ('api' | 'cache' | 'sem_usage' | 'falhou') e se os tokens vêm NULL — a
+    CONTAGEM de chamadas fica certa mesmo quando o valor não é conhecido.
+    """
+    if os.environ.get("LLM_USO_TELEMETRIA", "1") == "0":
+        return
+    # 🩸 06/09/2026 — a BANCADA estava escrevendo na tabela de PRODUÇÃO. Dois
+    # testes de `test_cache_telemetria.py` chamam `_registrar_uso` com uma
+    # resposta falsa; assim que ele passou a gravar de verdade, cada rodada da
+    # suíte inseria linha de mentira na conta de custo do Pedro. Descoberto
+    # porque a sequence da tabela pulou pra 13 sem ninguém ter subido nada.
+    # Custo inventado é pior que custo ausente: ele tem cara de fato.
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return
+    try:
+        etapa, escopo = _etapa_e_escopo(tag)
+        dono = job_id or _JOB_ATUAL.get()
+        linha = {
+            "etapa": etapa, "escopo": escopo, "resultado": resultado,
+            "job_id": dono or None, "modelo": modelo or None,
+            "cache_marcado": bool(cache_marcado),
+        }
+        if resultado in ("api", "cache"):
+            linha.update({"tokens_novos": int(novo or 0),
+                          "tokens_cache_read": int(le or 0),
+                          "tokens_cache_write": int(esc or 0),
+                          "tokens_saida": int(out or 0)})
+            custo, ver = _custo_usd(modelo, int(novo or 0), int(le or 0),
+                                    int(esc or 0), int(out or 0))
+            if custo is not None:
+                linha["custo_usd"] = custo
+                linha["preco_ver"] = ver
+        if erro:
+            linha["erro"] = str(erro)[:200]
+        from main import _supabase_insert
+        _supabase_insert("llm_uso", linha)
+    except Exception:
+        # Telemetria NUNCA derruba o fluxo do cliente.
+        pass
 
 
 def _clean_str(s: str) -> str:
@@ -218,7 +392,7 @@ def _extract_retry_after(exc: Exception) -> float | None:
 
 
 
-def _registrar_uso(tag: str, resp, cache_system: bool) -> None:
+def _registrar_uso(tag: str, resp, cache_system: bool, model=None, job_id=None) -> None:
     """Grava o resultado REAL do prompt caching, por chamada.
 
     🚨 24/08/2026: o caching foi ligado em 23/07 e conferido com duas chamadas
@@ -235,11 +409,23 @@ def _registrar_uso(tag: str, resp, cache_system: bool) -> None:
     Best-effort e silencioso: nunca pode derrubar uma extração por causa de
     telemetria.
     """
+    # 🔑 06/09/2026 — o modelo REAL vem da resposta quando ela diz quem respondeu:
+    # o modelo do DXF muda por variável de ambiente SEM deploy (main.py:2498,
+    # DXF_EXTRACT_MODEL), e sem o id certo os mesmos tokens custam 3× mais ou
+    # menos. Sem modelo, nenhum custo é reconstituível.
+    _modelo = getattr(resp, "model", None) or model
     if os.environ.get("LLM_CACHE_TELEMETRIA", "1") == "0":
         return
     try:
         u = getattr(resp, "usage", None)
         if u is None:
+            # 🪤 Antes isto era `return` puro: uma chamada que ACONTECEU e foi
+            # COBRADA sumia sem rastro, e o projeto parecia mais barato do que
+            # foi. Agora vira linha com tokens NULL — "não sei quanto custou"
+            # é diferente de "custou zero".
+            _gravar_uso(tag=tag, resultado="sem_usage", modelo=_modelo,
+                        job_id=job_id, cache_marcado=cache_system,
+                        erro="usage_ausente")
             return
         _le = int(getattr(u, "cache_read_input_tokens", 0) or 0)
         _esc = int(getattr(u, "cache_creation_input_tokens", 0) or 0)
@@ -247,7 +433,13 @@ def _registrar_uso(tag: str, resp, cache_system: bool) -> None:
         _out = int(getattr(u, "output_tokens", 0) or 0)
         _tot = _le + _esc + _novo
         if _tot <= 0:
+            _gravar_uso(tag=tag, resultado="sem_usage", modelo=_modelo,
+                        job_id=job_id, cache_marcado=cache_system,
+                        erro="usage_zerado")
             return
+        _gravar_uso(tag=tag, resultado="api", modelo=_modelo, job_id=job_id,
+                    novo=_novo, le=_le, esc=_esc, out=_out,
+                    cache_marcado=cache_system)
         _pct = round(100.0 * _le / _tot, 1)
         print(f"[llm_cache:{tag}] total_in={_tot} cache_read={_le} ({_pct}%) "
               f"cache_write={_esc} novo={_novo} out={_out} "
@@ -261,7 +453,8 @@ def _registrar_uso(tag: str, resp, cache_system: bool) -> None:
             _log_error("llm:cache",
                        f"{tag} total_in={_tot} read={_le} ({_pct}%) "
                        f"write={_esc} novo={_novo} out={_out} "
-                       f"marcado={int(bool(cache_system))}")
+                       f"marcado={int(bool(cache_system))} "
+                       f"modelo={_modelo or '?'}")
         except Exception:
             pass
     except Exception:
@@ -346,6 +539,7 @@ def call_with_retry(
     tag: str = "anthropic",
     cache_system: bool = False,
     cache: bool = False,
+    job_id: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Wrapper em torno de `client.messages.create(**kwargs)` com retry.
@@ -358,6 +552,11 @@ def call_with_retry(
         tag: string pra log identificar qual chamada tá retentando.
         cache_system: se True, marca o system prompt como cacheável (economia de
             custo em chamadas repetidas com o mesmo system). Ver _apply_system_cache.
+        job_id: dono do gasto, quando o call site sabe. Vale MAIS que a
+            ContextVar — use nos pontos que rodam fora da thread do job (rota
+            HTTP, pool de threads), onde o contexto não chega. 🪤 É parâmetro
+            NOMEADO de propósito: assim não entra em `kwargs`, não vai pro
+            `messages.create` e não invalida as chaves do llm_cache.
         **kwargs: passados direto pra `messages.create`.
 
     Returns:
@@ -369,6 +568,11 @@ def call_with_retry(
     kwargs = _scrub_payload(kwargs)  # limpa surrogates antes do 1º envio
     _chave, _do_cache = _cache_antes(kwargs, tag=tag, cache=cache)
     if _do_cache is not None:
+        # 🔑 Cache servido é economia AFIRMADA, não deduzida de um buraco: sem
+        # esta linha, ligar o LLM_CACHE faria o custo por projeto cair e
+        # ninguém saberia se foi economia ou telemetria quebrada.
+        _gravar_uso(tag=tag, resultado="cache", modelo=kwargs.get("model"),
+                    job_id=job_id, novo=0, le=0, esc=0, out=0)
         return _do_cache
     if cache_system:
         kwargs = _apply_system_cache(kwargs)
@@ -378,13 +582,20 @@ def call_with_retry(
     for attempt in range(max_retries + 1):
         try:
             _resp = client.messages.create(**kwargs)
-            _registrar_uso(tag, _resp, cache_system)
+            _registrar_uso(tag, _resp, cache_system,
+                           model=kwargs.get("model"), job_id=job_id)
             _cache_depois(_chave, _resp, kwargs, tag=tag)
             return _resp
         except Exception as e:
             last_exc = e
 
             if not _is_retryable(e) or attempt >= max_retries:
+                # 🪤 Chamada que estoura o timeout DEPOIS de o modelo já ter
+                # gerado saída é COBRADA pela Anthropic. Sem esta linha a
+                # subcontagem se concentraria justamente nos jobs ruins.
+                _gravar_uso(tag=tag, resultado="falhou",
+                            modelo=kwargs.get("model"), job_id=job_id,
+                            cache_marcado=cache_system, erro=type(e).__name__)
                 # Não é transitório, ou esgotou: propaga
                 raise
 
@@ -416,6 +627,7 @@ def call_with_retry_stream(
     tag: str = "anthropic-stream",
     cache_system: bool = False,
     cache: bool = False,
+    job_id: str | None = None,
     **kwargs: Any,
 ) -> Any:
     """Igual a call_with_retry, mas via STREAMING (client.messages.stream).
@@ -434,6 +646,8 @@ def call_with_retry_stream(
     # CUSTO da Anthropic e não podem invalidar o cache de conteúdo.
     _chave, _do_cache = _cache_antes(kwargs, tag=tag, cache=cache)
     if _do_cache is not None:
+        _gravar_uso(tag=tag, resultado="cache", modelo=kwargs.get("model"),
+                    job_id=job_id, novo=0, le=0, esc=0, out=0)
         return _do_cache
     if cache_system:
         kwargs = _apply_system_cache(kwargs)
@@ -444,13 +658,17 @@ def call_with_retry_stream(
         try:
             with client.messages.stream(**kwargs) as stream:
                 _resp = stream.get_final_message()
-            _registrar_uso(tag, _resp, cache_system)
+            _registrar_uso(tag, _resp, cache_system,
+                           model=kwargs.get("model"), job_id=job_id)
             _cache_depois(_chave, _resp, kwargs, tag=tag)
             return _resp
         except Exception as e:
             last_exc = e
 
             if not _is_retryable(e) or attempt >= max_retries:
+                _gravar_uso(tag=tag, resultado="falhou",
+                            modelo=kwargs.get("model"), job_id=job_id,
+                            cache_marcado=cache_system, erro=type(e).__name__)
                 raise
 
             sleep_for = _extract_retry_after(e) or delay

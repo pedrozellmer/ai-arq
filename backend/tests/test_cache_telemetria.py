@@ -71,10 +71,38 @@ def test_kill_switch(capsys, monkeypatch):
 
 
 def test_os_dois_wrappers_medem():
+    """🪤 06/09/2026 — este guarda estava preso à FORMA, não ao FATO.
+
+    Ele contava a string exata `_registrar_uso(tag, _resp, cache_system)`. Ao
+    acrescentar `model=` e `job_id=` na chamada (pra saber QUANTO custou e DE
+    QUEM foi o gasto), o texto mudou e o guarda reprovou uma mudança correta —
+    enquanto continuaria VERDE se alguém apagasse a medição e deixasse a linha
+    escrita em outro formato. Agora ele ancora no fato: cada wrapper mede, e
+    mede passando modelo e dono.
+    """
     src = io.open(os.path.join(_BACKEND, "llm_retry.py"), encoding="utf-8").read()
-    assert src.count("_registrar_uso(tag, _resp, cache_system)") == 2, (
-        "os DOIS wrappers (create e stream) precisam medir — a extração de "
-        "prancha usa o stream, e é ela que domina o gasto")
+    for wrapper in ("def call_with_retry(", "def call_with_retry_stream("):
+        i = src.index(wrapper)
+        fim = src.index("\ndef ", i + 10) if "\ndef " in src[i + 10:] else len(src)
+        corpo = src[i:fim]
+        assert "_registrar_uso(" in corpo, (
+            "%s não mede — a extração de prancha usa o stream, e é ela que "
+            "domina o gasto" % wrapper)
+        assert "model=" in corpo and "job_id=" in corpo, (
+            "%s mede sem dizer o modelo e o dono: sem modelo o token não vira "
+            "real, sem dono não dá pra dividir por projeto" % wrapper)
+
+
+def test_CONTROLE_o_guarda_dos_wrappers_REPROVA_quem_nao_mede():
+    """O teste acima só vale se souber acusar a ausência da medição."""
+    falso = ('def call_with_retry(client, **kw):\n'
+             '    return client.messages.create(**kw)\n'
+             'def call_with_retry_stream(client, **kw):\n'
+             '    return None\n')
+    i = falso.index("def call_with_retry(")
+    fim = falso.index("\ndef ", i + 10)
+    assert "_registrar_uso(" not in falso[i:fim], (
+        "o recorte por wrapper parou de isolar o corpo da função")
 
 
 def test_o_log_nao_entope_o_painel_de_erros():

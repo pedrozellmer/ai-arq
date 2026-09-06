@@ -489,6 +489,10 @@ _STAGES_DIAGNOSTICO = frozenset({
     # Sem isto aqui, entupiria o painel "Erros do motor" no primeiro job
     # (foi o achado 45 de ontem: 20 das 40 linhas do painel eram bookkeeping).
     "llm:cache",
+    # 06/09: aviso de disparo de process_job fora do contrato posicional. É
+    # diagnóstico do carimbo de custo, não erro do motor — mas TEM que ficar
+    # visível: dono errado é pior que dono ausente.
+    "llm:dono",
 })
 
 
@@ -6198,10 +6202,36 @@ def _measure_unambiguous(value: float, cat: str, by_cat: dict) -> bool:
 import threading as _threading_sem
 _JOB_SEMAPHORE = _threading_sem.Semaphore(1)
 
+# Régua do job_id, pro carimbo de custo não aceitar qualquer coisa como dono.
+# 🪤 job_id NÃO é UUID: nasce como `str(uuid.uuid4())[:8]` (main.py:13604), e as
+# avaliações/merges ganham prefixo — "ev"+6 (main.py:24035) e "mg"+6
+# (main.py:25570). Reusar a régua de `_COST_UUID_RE` (32-40 chars) rejeitaria
+# TODOS eles e o carimbo nasceria morto, em silêncio.
+_JOB_ID_RE = __import__("re").compile(r"^[0-9a-zA-Z]{6,16}$")
+
 
 def _process_job_throttled(*args, **kwargs):
-    """Wrapper que serializa process_job via semáforo (1 por vez)."""
-    with _JOB_SEMAPHORE:
+    """Wrapper que serializa process_job via semáforo (1 por vez).
+
+    🔑 06/09/2026 — é também a PORTA ÚNICA por onde todo projeto entra, então é
+    aqui que o dono do gasto de IA é carimbado. Os 6 disparos (main.py:4187
+    retomada, 13736 upload, 23938 reprocesso, 24091 filhote, 25913 combine,
+    26171 add_file) passam `args=(job_id, file_paths, work_dir)` — conferidos um
+    a um. Uma linha cobre os seis.
+
+    🪤 O contrato posicional é implícito: um 7º disparo com outra ordem não
+    deixaria a linha órfã, deixaria ERRADA — custo de um projeto carimbado em
+    outro. Por isso a forma é validada antes de carimbar; o que não parece
+    job_id não vira dono de nada.
+    """
+    _dono = args[0] if args else kwargs.get("job_id")
+    if not (isinstance(_dono, str) and _JOB_ID_RE.match(_dono or "")):
+        if _dono is not None:
+            _log_error("llm:dono", f"disparo de process_job fora do contrato: {str(_dono)[:60]!r}",
+                       severity="warning")
+        _dono = None
+    from llm_retry import escopo_job
+    with _JOB_SEMAPHORE, escopo_job(_dono):
         process_job(*args, **kwargs)
 
 
@@ -12182,7 +12212,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # Best-effort: item que falhar sai fora sem derrubar a planilha.
             with ThreadPoolExecutor(max_workers=5) as _ex:   # 8→5: gentileza com a CPU da instância Supabase (fix SINAPI timeout 2026-07-22)
                 lote = [r for r in _ex.map(_cands, all_items) if r]
-            n_conf = apply_llm_pick(lote)   # sem ANTHROPIC_API_KEY → 0, cai no corte por nota
+            n_conf = apply_llm_pick(lote, job_id=job_id)   # sem ANTHROPIC_API_KEY → 0, cai no corte por nota
             for e in lote:
                 if e["candidates"]:
                     e["_item"].sinapi_matches = e["candidates"][:3]
@@ -18102,7 +18132,7 @@ async def project_chat(job_id: str, request: Request):
         resp = await run_in_threadpool(
             call_with_retry,
             client,
-            tag="chat-projeto", max_retries=2, base_delay=1.0, max_delay=6.0,
+            tag="chat-projeto", job_id=job_id, max_retries=2, base_delay=1.0, max_delay=6.0,
             model="claude-haiku-4-5",
             max_tokens=500,
             system=PROJECT_CHAT_SYSTEM.format(context=context),
@@ -20570,7 +20600,7 @@ def memorial_redigir_ia(job_id: str, request: Request):
             # longo multiplicaria pelo nº de seções.
             r = _cwr(
                 _client,
-                tag="memorial-intro", max_retries=3, base_delay=1.5, max_delay=12.0,
+                tag="memorial-intro", job_id=job_id, max_retries=3, base_delay=1.5, max_delay=12.0,
                 model="claude-haiku-4-5", max_tokens=300,
                 system=system, messages=[{"role": "user", "content": user}])
             return r.content[0].text if r.content else ""
@@ -22069,7 +22099,7 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
 
             with _TPE(max_workers=5) as _exr:   # mesmo teto do fluxo principal
                 _lote_rb = [r for r in _exr.map(_cands_rb, items) if r]
-            _nc_rb = apply_llm_pick(_lote_rb)
+            _nc_rb = apply_llm_pick(_lote_rb, job_id=job_id)
             for _e in _lote_rb:
                 if _e["candidates"]:
                     _e["_item"].sinapi_matches = _e["candidates"][:3]
@@ -24299,7 +24329,7 @@ def _auto_liberar_filhote_quando_pronto(eval_job_id: str, pai_id: str,
             import anthropic as _an
             from llm_retry import call_with_retry as _cwr
             _cli = _an.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""), timeout=120.0)
-            _r = _cwr(_cli, tag="filhote-juiz", model="claude-sonnet-4-6",
+            _r = _cwr(_cli, tag="filhote-juiz", job_id=eval_job_id, model="claude-sonnet-4-6",
                       max_tokens=600, temperature=0,
                       messages=[{"role": "user", "content": prompt}])
             _txt = _r.content[0].text if _r.content else ""

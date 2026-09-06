@@ -547,7 +547,8 @@ def _client():
         return None
 
 
-def pick_best_batch(items: List[Dict], batch_size: int = 12) -> Dict[int, Optional[str]]:
+def pick_best_batch(items: List[Dict], batch_size: int = 12,
+                    job_id: Optional[str] = None) -> Dict[int, Optional[str]]:
     """A IA escolhe, entre os candidatos de cada item, o código SINAPI certo.
 
     O trigrama é bom pra JUNTAR candidatos e péssimo pra ESCOLHER — ele não sabe
@@ -582,7 +583,7 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12) -> Dict[int, Option
         try:
             from llm_retry import call_with_retry
             resp = call_with_retry(
-                client, tag="sinapi_pick", max_retries=3,
+                client, tag="sinapi_pick", job_id=job_id, max_retries=3,
                 model="claude-haiku-4-5-20251001", max_tokens=1500,
                 messages=[{"role": "user",
                            "content": _PICK_PROMPT.format(items="\n".join(linhas))}],
@@ -608,10 +609,10 @@ def pick_best_batch(items: List[Dict], batch_size: int = 12) -> Dict[int, Option
     return escolhas
 
 
-def apply_llm_pick(items: List[Dict]) -> int:
+def apply_llm_pick(items: List[Dict], job_id: Optional[str] = None) -> int:
     """Aplica a escolha da IA in-place: põe o código escolhido em 1º e marca
     `_llm_picked`. Devolve quantos itens a IA confirmou."""
-    escolhas = pick_best_batch(items)
+    escolhas = pick_best_batch(items, job_id=job_id)
     n = 0
     for idx, cod in escolhas.items():
         cands = items[idx].get('candidates') or []
