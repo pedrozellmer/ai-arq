@@ -2789,7 +2789,74 @@ def _spec_campos(descricao) -> dict:
         return {}
 
 
+# ── Lista de SUPRESSÃO de e-mail (05/09/2026, Pedro: "tem vários e-mails que
+# ficam voltando... vamos tirar eles de qq envio") ────────────────────────────
+# Medido no Gmail dele (60 dias): 2 endereços com TODAS as mensagens devolvidas
+# por "caixa de entrada cheia" (7 e 3). Cada devolução pesa na reputação do
+# remetente. Tabela `email_suprimidos` (bastidor, só service_role; `liberado_em`
+# NULL = suprimido). A trava mora AQUI, em `_send_email_smtp`, porque é a única
+# porta de saída de e-mail da casa — transacional, esteira, newsletter, teste.
+# 🔑 Falha ABERTA: lista ilegível → o e-mail sai e fica o rastro (mandar pra
+# caixa cheia é mal menor que calar todo e-mail da casa por um soluço do banco).
+_SUPRIMIDOS_TTL_S = 300
+_SUPRIMIDOS_CACHE = {"em": 0.0, "mapa": None}   # mapa: {email: motivo} dos ativos
+_SUPRIMIDO_AVISADO = set()                      # (dia, email, kind) → um log por dia
+
+
+def _suprimidos(force: bool = False) -> dict:
+    """{email: motivo} dos suprimidos ATIVOS (liberado_em NULL), com cache de 5 min.
+    Um e-mail não pode custar uma leitura no banco; e a esteira horária tentaria
+    24× por dia o mesmo endereço."""
+    agora = time.time()
+    cache = _SUPRIMIDOS_CACHE
+    if not force and cache["mapa"] is not None and agora - cache["em"] < _SUPRIMIDOS_TTL_S:
+        return cache["mapa"]
+    st, rows = _supa_rest_service(
+        "GET", "/email_suprimidos?select=email,motivo,liberado_em&liberado_em=is.null", timeout=8)
+    if st == 200 and isinstance(rows, list):
+        cache["mapa"] = {str(r.get("email") or "").strip().lower(): str(r.get("motivo") or "")
+                         for r in rows if r.get("email")}
+    else:
+        # falha aberta, com rastro — e mantendo o último mapa bom (vale mais que nada)
+        try:
+            _log_error("email:supressao-ilegivel",
+                       f"HTTP {st} lendo email_suprimidos — seguindo com o cache anterior "
+                       f"({len(cache['mapa'] or {})} endereço(s))", severity="warning")
+        except Exception:
+            pass
+        if cache["mapa"] is None:
+            cache["mapa"] = {}      # 1ª leitura já falhou: cache vazio (não None) pra respeitar o TTL
+    cache["em"] = agora     # também na falha: não martelar um banco caído a cada e-mail
+    return cache["mapa"] or {}
+
+
+def _email_suprimido(email: str):
+    """O motivo (str) se o endereço está na lista de supressão; None se pode receber."""
+    e = (email or "").strip().lower()
+    if not e:
+        return None
+    return _suprimidos().get(e)
+
+
 def _send_email_smtp(to_email: str, subject: str, html_body: str, text_body: str = "", log_kind: str = "email") -> bool:
+    # 🚫 Supressão vem ANTES de tudo — e só pra endereço de fora (interno nunca é calado:
+    # alerta pro Pedro não pode morrer por um endereço posto na lista por engano).
+    if to_email and not _email_eh_interno(to_email):
+        _motivo_sup = _email_suprimido(to_email)
+        if _motivo_sup:
+            _chave = (datetime.utcnow().strftime("%Y-%m-%d"), to_email.strip().lower(), log_kind or "email")
+            if _chave not in _SUPRIMIDO_AVISADO:
+                if len(_SUPRIMIDO_AVISADO) > 5000:
+                    _SUPRIMIDO_AVISADO.clear()
+                _SUPRIMIDO_AVISADO.add(_chave)
+                try:
+                    _log_error("email:suprimido",
+                               f"{log_kind or 'email'} para {to_email} NÃO saiu — na lista de "
+                               f"supressão: {_motivo_sup}", severity="info")
+                except Exception:
+                    pass
+            print(f"[email] suprimido -> {to_email} ({log_kind}): {_motivo_sup}")
+            return False
     host = os.getenv("SMTP_HOST", "")
     user = os.getenv("SMTP_USER", "")
     password = os.getenv("SMTP_PASSWORD", "")
@@ -16929,6 +16996,77 @@ def admin_email_teste(payload: TesteEmailPayload, request: Request):
                    severity="warning")
         raise HTTPException(502, f"não enviei: {_motivo}")
     return {"status": "ok", "type": key, "para": ADMIN_EMAIL, "subject": subject}
+
+
+class SuprimirPayload(BaseModel):
+    email: str
+    motivo: Optional[str] = ""
+    tipo: str = "manual"                 # caixa_cheia | inexistente | reclamou | manual
+    n_devolucoes: int = 0
+    primeira_devolucao: Optional[str] = None
+    ultima_devolucao: Optional[str] = None
+
+
+_SUPRIMIR_TIPOS = ("caixa_cheia", "inexistente", "reclamou", "manual")
+
+
+def _email_normalizado_ou_400(email: str) -> str:
+    e = (email or "").strip().lower()
+    if len(e) > 254 or "@" not in e[1:-1] or " " in e:
+        raise HTTPException(400, "e-mail inválido")
+    return e
+
+
+@app.get("/api/admin/email-suprimidos")
+def admin_email_suprimidos(request: Request):
+    """A lista de supressão inteira (ativos e liberados), pra Central de E-mails."""
+    _require_admin(request)
+    st, rows = _supa_rest_service("GET", "/email_suprimidos?select=*&order=criado_em.desc", timeout=10)
+    if st != 200 or rows is None:      # 🪤 vazio ≠ falhou
+        raise HTTPException(502, "não consegui ler a lista de supressão agora — tente de novo")
+    return {"status": "ok", "itens": rows, "ativos": sum(1 for r in rows if not r.get("liberado_em"))}
+
+
+@app.post("/api/admin/email-suprimir")
+def admin_email_suprimir(payload: SuprimirPayload, request: Request):
+    """Põe (ou repõe) um endereço na lista de supressão. Upsert: quem tinha sido
+    liberado volta a ficar bloqueado (liberado_em volta a NULL)."""
+    _require_admin(request)
+    e = _email_normalizado_ou_400(payload.email)
+    if payload.tipo not in _SUPRIMIR_TIPOS:
+        raise HTTPException(400, f"tipo: use {', '.join(_SUPRIMIR_TIPOS)}")
+    corpo = {
+        "email": e,
+        "motivo": (payload.motivo or "").strip() or "adicionado pelo admin",
+        "tipo": payload.tipo,
+        "n_devolucoes": max(0, int(payload.n_devolucoes or 0)),
+        "primeira_devolucao": payload.primeira_devolucao or None,
+        "ultima_devolucao": payload.ultima_devolucao or None,
+        "criado_por": "admin",
+        "liberado_em": None,
+        "liberado_por": None,
+    }
+    st, _ = _supa_rest_service("POST", "/email_suprimidos?on_conflict=email", body=corpo,
+                               prefer="resolution=merge-duplicates,return=minimal", timeout=10)
+    if st not in (200, 201, 204):
+        raise HTTPException(502, "não consegui gravar na lista de supressão — tente de novo")
+    _suprimidos(force=True)     # a próxima tentativa de envio já bloqueia
+    return {"status": "ok", "email": e}
+
+
+@app.post("/api/admin/email-liberar")
+def admin_email_liberar(payload: SuprimirPayload, request: Request):
+    """Libera um endereço: preenche liberado_em (o histórico fica) e o e-mail volta a sair."""
+    _require_admin(request)
+    e = _email_normalizado_ou_400(payload.email)
+    st, _ = _supa_rest_service(
+        "PATCH", f"/email_suprimidos?email=eq.{urllib.parse.quote(e)}",
+        body={"liberado_em": datetime.utcnow().isoformat() + "Z", "liberado_por": "admin"},
+        prefer="return=minimal", timeout=10)
+    if st not in (200, 204):
+        raise HTTPException(502, "não consegui liberar agora — tente de novo")
+    _suprimidos(force=True)
+    return {"status": "ok", "email": e}
 
 
 @app.get("/api/admin/email-catalog")
