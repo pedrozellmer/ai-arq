@@ -1175,6 +1175,78 @@ def _get_project_owner(job_id: str):
         return None
 
 
+# ─── A CAIXA REGISTRADORA (06/09/2026) ───────────────────────────────────────
+# Desenho escolhido pelo Pedro: PROCESSA PRIMEIRO, COBRA PRA BAIXAR. Processar
+# é livre; o que o pagamento destrava é o ENTREGÁVEL. O cliente vê o Raio-X
+# ("medimos 34 de 51 linhas") antes de decidir — por isso o reembolso quase não
+# existe neste desenho, e a régua de cobrança vira automática.
+#
+# 🚨 NASCE DESLIGADA. Enquanto COBRANCA_LIGADA != "1" nada muda pro cliente: o
+# beta segue grátis e ilimitado, que é promessa pública e integra o contrato
+# (CDC art. 30). Ligar é decisão do Pedro, por variável de ambiente, DEPOIS do
+# aviso de 30 dias que os próprios Termos exigem (termos.html:531).
+#
+# 🪤 O interruptor mora no SERVIDOR de propósito. O paywall de hoje é
+# `const BETA_FREE = true` no dashboard.html — JavaScript servido estático pelo
+# GitHub Pages, editável no próprio navegador.
+def _cobranca_ligada() -> bool:
+    return os.getenv("COBRANCA_LIGADA", "0") == "1"
+
+
+def _entregavel_liberado(job_id: str) -> tuple:
+    """(liberado, motivo). Decide se os entregáveis deste projeto podem sair.
+
+    Libera quando: a cobrança está desligada · o projeto foi pago · foi marcado
+    isento · ou a RÉGUA REPROVOU (cobravel=false — não cobramos por entrega que
+    não mediu nada, então também não trancamos).
+
+    🚨 FALHA ABERTA, e isto é decisão consciente: se a leitura do banco falhar,
+    o download é liberado. Trancar o arquivo de quem PAGOU por causa de um
+    soluço de rede é pior — e mais caro em confiança — do que deixar escapar um
+    download num minuto ruim. Mesma escolha da lista de supressão de e-mail.
+    """
+    if not _cobranca_ligada():
+        return True, "cobranca_desligada"
+    try:
+        _st, _rows = _supa_rest_service(
+            "GET", "projects",
+            params={"job_id": "eq." + str(job_id),
+                    "select": "pagamento,cobravel", "limit": "1"})
+        if _st >= 400 or not _rows:
+            _log_error("cobranca:leitura",
+                       f"nao consegui ler pagamento (status={_st}) — LIBERANDO",
+                       job_id, severity="warning")
+            return True, "leitura_falhou"
+        _p = (_rows[0].get("pagamento") or "").strip()
+        if _p in ("pago", "isento", "devolvido"):
+            return True, _p
+        # 🔑 A régua manda: entrega que não mediu nada não se cobra, logo não se
+        # tranca. `cobravel` tem TRÊS estados — só o false explícito libera aqui;
+        # NULL ("não avaliado") não é permissão pra nada.
+        if _rows[0].get("cobravel") is False:
+            return True, "regua_reprovou"
+        return False, "aguardando_pagamento"
+    except Exception as _e:
+        print(f"[cobranca] checagem falhou, liberando: {_e}")
+        return True, "excecao"
+
+
+def _require_entregavel_pago(job_id: str):
+    """Trava dos entregáveis. Levanta 402 quando falta pagar.
+
+    🚨 Chame em TODA rota que devolve arquivo do cliente. O guarda de bancada
+    `test_toda_rota_de_entregavel_passa_pela_caixa` reprova rota nova que
+    esqueça — porta esquecida é a trava inteira perdida, e o vazamento seria
+    silencioso: ninguém reclama de receber de graça.
+    """
+    _ok, _motivo = _entregavel_liberado(job_id)
+    if not _ok:
+        raise HTTPException(
+            status_code=402,
+            detail="Este projeto ainda não foi pago. Abra a página do projeto "
+                   "para liberar os downloads.")
+
+
 def _require_project_owner(request, job_id: str):
     """Valida que quem chamou é dono do projeto.
 
@@ -14501,6 +14573,7 @@ async def respostas_processamento(job_id: str, request: Request):
 @app.get("/api/download/{job_id}")
 async def download_file(job_id: str, request: Request):
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     """Baixa a planilha gerada. Tenta cache local primeiro; se sumiu
     (Render redeploy), busca no Supabase Storage."""
     # Suaviza a checagem de job — se o JSON foi limpo no restart mas o
@@ -18686,6 +18759,7 @@ def _quotes_download_path(job_id: str, ext: str) -> Optional[str]:
 @app.get("/api/projects/{job_id}/quotes/download/xlsx")
 async def download_quotes_xlsx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     """Baixa o comparativo XLSX gerado (disco → fallback Storage)."""
     path = _quotes_download_path(job_id, "xlsx")
     if not path:
@@ -18703,6 +18777,7 @@ async def download_quotes_xlsx(job_id: str, request: Request):
 @app.get("/api/projects/{job_id}/quotes/download/pptx")
 async def download_quotes_pptx(job_id: str, request: Request):
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     """Baixa o comparativo PPT gerado (disco → fallback Storage)."""
     path = _quotes_download_path(job_id, "pptx")
     if not path:
@@ -20372,6 +20447,7 @@ async def memorial_docx(job_id: str, request: Request):
     da versão salva em project_memorial. Download exige downloadProtected no
     frontend (armadilha nº9: <a href> não manda Authorization)."""
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     import tempfile
     try:
         from memorial import estrutura_para_docx
@@ -20636,6 +20712,7 @@ async def memorial_pdf(job_id: str, request: Request):
     """Memorial em PDF (WeasyPrint, mesmo motor do cronograma). Prefere a
     versão editada/salva, igual ao .docx."""
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     import tempfile
     try:
         salvo = _memorial_carregar_salvo(job_id)
@@ -21592,6 +21669,7 @@ async def export_cronograma_pdf(job_id: str, request: Request,
     """Exporta cronograma como PDF co-branded. Usa os novos templates (WeasyPrint,
     5 direcoes, cor da marca); se falhar, cai no gerador antigo (reportlab)."""
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
@@ -21640,6 +21718,7 @@ async def export_cronograma_xlsx(job_id: str, request: Request):
     Vira "físico-FINANCEIRO" só quando o cliente informou valor; sem valor sai
     o cronograma físico de sempre, sem falar em dinheiro em lugar nenhum."""
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
@@ -21666,6 +21745,7 @@ async def export_cronograma_pptx(job_id: str, request: Request,
     """Exporta cronograma como PPTX (5 slides). Novo: renderiza o PDF dos templates
     e insere 1 imagem full-bleed por slide (A4 paisagem). Fallback: gerador antigo."""
     _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     import tempfile
     from fastapi.responses import FileResponse
     cron, branding = await run_in_threadpool(
@@ -26954,6 +27034,11 @@ def financeiro_modelo_lote(job_id: str, request: Request):
     fornecedor e sobe de volta, em vez de digitar item por item.
     🔒 nº5: nenhum valor sai preenchido daqui. 🔗 nº7: cada linha carrega a âncora do item."""
     owner = _require_project_owner(request, job_id)
+    # 🪤 06/09: o guarda de cobertura pegou ESTA rota, que eu mesmo criei horas
+    # antes. A planilha-modelo do preenchimento em lote leva UMA LINHA POR ITEM
+    # MEDIDO — ou seja, carrega o quantitativo. Sem a trava, ela seria a porta
+    # dos fundos por onde o produto sairia de graça.
+    _require_entregavel_pago(job_id)
     eh_admin = _fin_eh_admin(request, owner)
     import tempfile
     jq = urllib.parse.quote(job_id)
@@ -27147,6 +27232,7 @@ def financeiro_export_xlsx(job_id: str, request: Request, hoje: str = ""):
     aqui é tudo rede + arquivo — três leituras antes de gerar. Uma `async def` faria a checagem
     do dono e do JWT no laço, e com --workers 1 isso trava o site inteiro."""
     owner = _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     eh_admin = _fin_eh_admin(request, owner)
     import tempfile
     dados, branding = _fin_montar_export(request, job_id, eh_admin, hoje)
@@ -27169,6 +27255,7 @@ def financeiro_export_pdf(job_id: str, request: Request, hoje: str = ""):
     """PDF do financeiro — A4 retrato no molde do memorial (WeasyPrint), cor da marca.
     Síncrona pelo mesmo motivo da planilha."""
     owner = _require_project_owner(request, job_id)
+    _require_entregavel_pago(job_id)
     eh_admin = _fin_eh_admin(request, owner)
     import tempfile
     dados, branding = _fin_montar_export(request, job_id, eh_admin, hoje)
