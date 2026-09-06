@@ -23091,6 +23091,8 @@ _TRACK_ALLOWED = {
     "nps_exibido",         # o DENOMINADOR: 5 avaliações na vida — ninguém vê ou ninguém responde?
     "revisao_item_acao",   # confirmar/excluir item na revisão (o William abriu 9× e não agiu)
     "revisao_saiu",        # saiu da revisão sem terminar, e quanto sobrou
+    "revisao_lote",        # confirmar/excluir uma seção inteira — com o que REALMENTE salvou
+    "revisao_salvou_erro",  # o servidor recusou e a tela desfez na frente do cliente
     "cronograma_gerado", "cronograma_salvo",
     "download_cronograma", "download_memorial", "download_comparativo",
     "cotacao_enviada", "planilha_revisada_enviada",

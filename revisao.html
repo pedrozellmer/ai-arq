@@ -859,12 +859,19 @@ async function review(itemId, action) {
       else if (action === 'reject') window.toast.info('Excluído');
       else window.toast.info('Editado');
     }
+    // 🩸 06/09 (Pedro: "registrar TUDO"): o William abriu esta tela 9× e não corrigiu nada — e a
+    // gente só sabia disso olhando o banco. O evento sai DEPOIS do servidor aceitar: ação que
+    // falhou não pode contar como revisão feita.
+    try { if (window.trackEvent) trackEvent('revisao_item_acao', { job_id: jobId,
+      type: action === 'approve' ? 'confirmar' : (action === 'reject' ? 'excluir' : 'editar') }); } catch (_) {}
   } catch (e) {
     // 🚨 A tela mostrava o item como salvo mesmo quando o servidor recusou.
     // Devolve pro estado anterior: melhor o cliente ver que não salvou do que
     // fechar o navegador achando que salvou.
     if (_antes === undefined) delete reviewState[itemId]; else reviewState[itemId] = _antes;
     render();
+    // o salvamento falhar e a tela desfazer na frente do cliente é o pior desfecho e era invisível
+    try { if (window.trackEvent) trackEvent('revisao_salvou_erro', { job_id: jobId }); } catch (_) {}
     const msg = 'Erro ao salvar: ' + e.message;
     window.toast ? window.toast.error(msg) : alert(msg);
   }
@@ -1037,6 +1044,7 @@ document.getElementById('btn-save-later').addEventListener('click', () => {
   if (window.trackEvent) trackEvent('revisao_pausada', {
     job_id: jobId, n_itens: items.length, pendentes: pending,
   });
+  window.__saiuPeloBotao = true;   // pra não contar duas vezes na saída silenciosa
   window.toast?.success('Progresso salvo');
   notify.ok(msg);
   setTimeout(() => { window.location.href = 'meus-projetos.html'; }, 1200);
@@ -1178,6 +1186,13 @@ async function bulkReview(section, action) {
       .catch(e => { falhou.push({ it: it, erro: (e && e.message) || String(e) }); })
     ));
   }
+  // 🩸 o número que vai pra telemetria é o que REALMENTE salvou (`_salvos`), nunca o tentado —
+  // foi exatamente o erro de 23/08 nesta função (falha contava como processado).
+  try {
+    if (window.trackEvent) trackEvent('revisao_lote', { job_id: jobId,
+      type: action === 'approve' ? 'confirmar' : 'excluir', confirmados: _salvos });
+    if (falhou.length && window.trackEvent) trackEvent('revisao_salvou_erro', { job_id: jobId });
+  } catch (_) {}
   if (falhou.length) {
     falhou.forEach(f => {
       if (_antesDoLote[f.it.id] === undefined) delete reviewState[f.it.id];
@@ -1489,6 +1504,32 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
     </div>
   </footer>
 
+<script>
+// 🩸 06/09/2026 (Pedro: "registrar TUDO"). O desfecho MAIS COMUM desta tela não tinha handler
+// nenhum: fechar a aba, voltar pelo menu, apertar Voltar do navegador. O William abriu esta tela
+// 9 vezes e saiu 9 vezes — e a saída era invisível. Sem ela, "abriu e desistiu" some do mapa.
+// 🪤 `visibilitychange → hidden` é o único que o celular garante disparar (o beforeunload não é
+// chamado quando o app vai pro fundo). O trackEvent já usa keepalive, então sobrevive ao fechamento.
+(function () {
+  var jaMandou = false;
+  function saiu() {
+    if (jaMandou || window.__saiuPeloBotao) return;      // quem clicou "terminar depois" já contou
+    if (!window.trackEvent || typeof items === 'undefined' || !items.length) return;
+    jaMandou = true;
+    try {
+      var pend = items.filter(function (it) {
+        return !reviewState[it.id] || reviewState[it.id] === 'pending';
+      }).length;
+      trackEvent('revisao_saiu', { job_id: jobId, n_itens: items.length,
+                                   pendentes: pend, confirmados: items.length - pend });
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') saiu();
+  });
+  window.addEventListener('pagehide', saiu);
+})();
+</script>
 <script src="toast.js" defer></script>
 <script src="contact-modal.js" defer></script>
 <script src="whatsapp-button.js" defer></script>
