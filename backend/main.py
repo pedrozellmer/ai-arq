@@ -23080,6 +23080,20 @@ _TRACK_ALLOWED = {
     # 06/09 — preencher em lote: as 3 pontas do funil (abriu, baixou o modelo, gravou).
     # Sem elas não dá pra saber se a planilha volta ou morre no caminho.
     "fin_lote_abriu", "fin_lote_modelo", "fin_lote_aplicou",
+    # ── 06/09/2026 — Pedro: "vamos registrar TUDO no site, qq movimento de usuários" ──
+    # Gatilho: o William subiu 5 projetos, abriu a revisão 9× e a gente não sabia se ele tinha
+    # BAIXADO a planilha — o botão do painel não registrava. Métrica cega = decisão no escuro.
+    # 🔒 LGPD: aqui entra a FORMA da ação (que botão, que aba, deu certo?), nunca o que o cliente
+    # escreveu, o nome do arquivo dele ou valor em dinheiro.
+    "view_aba",            # trocar de aba no painel — 9 telas estavam atrás de 1 evento só
+    "upload_ok",           # o projeto NASCEU (start_project é só "apertou processar")
+    "agente_pergunta",     # o chat da IA custa dinheiro e não tinha 1 evento
+    "nps_exibido",         # o DENOMINADOR: 5 avaliações na vida — ninguém vê ou ninguém responde?
+    "revisao_item_acao",   # confirmar/excluir item na revisão (o William abriu 9× e não agiu)
+    "revisao_saiu",        # saiu da revisão sem terminar, e quanto sobrou
+    "cronograma_gerado", "cronograma_salvo",
+    "download_cronograma", "download_memorial", "download_comparativo",
+    "cotacao_enviada", "planilha_revisada_enviada",
     # 🩸 auditoria 06/09: "abriu" e "exportou" não dizem se alguém USOU. O memorial ficou 30 dias
     # invisível justamente por medir só abertura. Este é o evento que responde "o financeiro pegou?".
     "fin_lancamento_criado",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)

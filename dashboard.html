@@ -1437,6 +1437,10 @@
   };
 
   function switchTab(tabName) {
+    // 🩸 06/09 (Pedro: "registrar TUDO"): NOVE telas viviam atrás de um único `view_dashboard` da
+    // carga. Sem isto não dava pra saber se alguém abre "Esperando sua revisão" ou "Downloads" —
+    // as duas telas feitas justamente pra trazer o cliente de volta.
+    try { if (window.trackEvent) trackEvent('view_aba', { tela: String(tabName || '').slice(0, 20) }); } catch (e) {}
     // Hide all tabs
     document.querySelectorAll('.tab-content').forEach(t => t.classList.add('hidden'));
     // Show target
@@ -1696,7 +1700,8 @@
         // não pedia avaliação depois. O commit de hoje ligou o convite em 2 dos
         // 3 botões e contou os 3 na mensagem — esta aba ficou de fora. Com 5
         // avaliações em toda a história do produto, cada caminho conta.
-        : '<button onclick="window.downloadProtected(\'' + url + '\',\'' + nome + '\');'
+        : '<button onclick="window.trackEvent&&window.trackEvent(\'download_xlsx\',{job_id:\'' + l.p.job_id + '\',origem:\'aba-downloads\',formato:\'' + l.tipo + '\'});'
+          + 'window.downloadProtected(\'' + url + '\',\'' + nome + '\');'
           + 'setTimeout(function(){window.__maybeShowNPS&&window.__maybeShowNPS(\'after_download\');},4000)"'
           + ' class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold">Baixar</button>';
       const velho = l.p.entregaveis[l.tipo].desatualizado
@@ -3365,8 +3370,10 @@
           text: () => Promise.resolve(xhr.responseText || ''),
           json: () => Promise.resolve(JSON.parse(xhr.responseText || '{}')),
         });
-        xhr.onerror = () => reject(new Error('Falha de rede no envio — confira a conexão e tente de novo.'));
-        xhr.ontimeout = () => reject(new Error('O envio demorou demais (arquivo muito grande ou conexão lenta).'));
+        // 🩸 06/09: falha de REDE era a única que não deixava rastro — e é a mais comum em obra e
+        // no celular. Sem isto, quem apertou "Processar" e perdeu o sinal some do mapa.
+        xhr.onerror = () => { try { trackEvent('upload_erro', { type: 'rede' }); } catch (_) {} reject(new Error('Falha de rede no envio — confira a conexão e tente de novo.')); };
+        xhr.ontimeout = () => { try { trackEvent('upload_erro', { type: 'timeout' }); } catch (_) {} reject(new Error('O envio demorou demais (arquivo muito grande ou conexão lenta).')); };
         xhr.send(formData);
       });
 
@@ -3378,6 +3385,9 @@
 
       const data = await res.json();
       currentJobId = data.job_id;
+      // `start_project` conta INTENÇÃO (apertou o botão). Este conta ENTREGA: o projeto nasceu.
+      // Sem os dois não existe denominador pra "de cada 10 que tentam, quantos conseguem".
+      try { trackEvent('upload_ok', { job_id: currentJobId, type: params.project_type || '' }); } catch (_) {}
 
       // Aviso de AEC/MEP na hora do envio (01/08/2026). Antes o cliente
       // esperava o processamento inteiro pra descobrir que o DWG era do
@@ -3939,6 +3949,9 @@
     if (currentJobId) {
       // Download protegido: window.open NÃO enviaria o Authorization header
       // → backend retornaria 401 (bug Daniela 2026-05-18).
+      // 🩸 06/09: ESTE caminho — quem acabou de esperar o processamento e baixa na hora — era o
+      // único dos três que não registrava. Todo número de "baixou?" estava enviesado pra quem volta.
+      if (window.trackEvent) trackEvent('download_xlsx', { job_id: currentJobId, origem: 'fluxo-novo' });
       downloadProtected(`${API_BASE}/api/download/${currentJobId}`, `quantitativos_aiarq_${currentJobId}.xlsx`);
       // Dispara o pedido de avaliacao depois do download (valor entregue).
       // 🪤 31/08: eram 10 s. Quem baixa costuma sair da aba pra abrir o arquivo
@@ -4168,6 +4181,10 @@
     const q = agentInput.value.trim();
     if (q.length < 2) return;
     hideAgentSuggestions();
+    // 🔒 LGPD: só o ATO e de onde veio (chip pronto ou digitado) — nunca o texto da pergunta.
+    // O chat dispara chamada PAGA ao Claude e não tinha um único evento: custo sem número de uso.
+    try { if (window.trackEvent) trackEvent('agente_pergunta', { job_id: currentJobId, origem: window.__agentDoChip ? 'chip' : 'digitado' }); } catch (_) {}
+    window.__agentDoChip = false;
     appendAgentMessage('user', q);
     agentInput.value = '';
     btnAgentAsk.disabled = true;
@@ -4220,6 +4237,7 @@
       const q = chip.getAttribute('data-suggestion') || '';
       if (!q) return;
       agentInput.value = q;
+      window.__agentDoChip = true;   // pra saber se as sugestões prontas puxam o uso
       askAgent();
     });
   });
@@ -4727,7 +4745,7 @@
            class="inline-flex items-center px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold no-underline transition shrink-0">Abrir</a>
         ${done ? `<a href="revisao.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()"
            class="hidden sm:inline text-xs font-semibold text-amber-600 hover:text-amber-800 no-underline shrink-0">Revisar</a>
-        <a href="javascript:void(0)" onclick="event.stopPropagation();window.aiArqDownloadProtected('${API_BASE}/api/download/${escProj(p.job_id)}','quantitativos_aiarq_${escProj(p.job_id)}.xlsx');setTimeout(function(){window.__maybeShowNPS&&window.__maybeShowNPS('after_download');},4000)"
+        <a href="javascript:void(0)" onclick="event.stopPropagation();window.trackEvent&&window.trackEvent('download_xlsx',{job_id:'${escProj(p.job_id)}'});window.aiArqDownloadProtected('${API_BASE}/api/download/${escProj(p.job_id)}','quantitativos_aiarq_${escProj(p.job_id)}.xlsx');setTimeout(function(){window.__maybeShowNPS&&window.__maybeShowNPS('after_download');},4000)"
            class="hidden sm:inline text-xs font-semibold text-emerald-600 hover:text-emerald-800 no-underline shrink-0">XLSX</a>` : ''}
     ` : '';
 
@@ -5147,6 +5165,9 @@
   function showNPSWidget() {
     if (document.getElementById('nps-widget')) return;
     npsShown = true;
+    // 🩸 06/09: 5 avaliações em toda a história do produto, e não dava pra saber a causa — o
+    // widget não aparece, ou aparece e as pessoas fecham? Sem o DENOMINADOR os dois leem igual.
+    try { if (window.trackEvent) trackEvent('nps_exibido', { job_id: currentJobId || '' }); } catch (e) {}
 
     const widget = document.createElement('div');
     widget.id = 'nps-widget';

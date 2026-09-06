@@ -232,24 +232,24 @@
   // Menu da CONTA — quando ninguém está fixado.
   var GRUPOS_CONTA = [
     { titulo: '', itens: [
-      { aba: 'home',            rotulo: 'Painel',          ic: 'painel' },
-      { aba: 'meus-projetos',   rotulo: 'Meus projetos',   ic: 'pasta' },
-      { aba: 'revisao',         rotulo: 'Revisão',         ic: 'revisao', selo: 'selo-revisao' },
-      { aba: 'downloads',       rotulo: 'Downloads',       ic: 'download' }
+      { aba: 'home',            rotulo: 'Painel',          ic: 'painel', track: 'menu-painel' },
+      { aba: 'meus-projetos',   rotulo: 'Meus projetos',   ic: 'pasta', track: 'menu-meus-projetos' },
+      { aba: 'revisao',         rotulo: 'Revisão',         ic: 'revisao', selo: 'selo-revisao', track: 'menu-revisao' },
+      { aba: 'downloads',       rotulo: 'Downloads',       ic: 'download', track: 'menu-downloads' }
     ]},
     { titulo: 'Conta', itens: [
-      { aba: 'meu-cadastro',    rotulo: 'Meu cadastro',    ic: 'pessoa' },
+      { aba: 'meu-cadastro',    rotulo: 'Meu cadastro',    ic: 'pessoa', track: 'menu-cadastro' },
       // 🚫 'Contribuições' saiu do menu em 05/08. Era formulário DUPLICADO —
       // o envio da planilha revisada e das cotações já vive dentro do
       // projeto, com o contexto aberto. E o contador mostrava 0 pra todo
       // mundo: em 102 projetos prontos, ZERO planilha revisada e ZERO
       // cotação enviadas. Entrada permanente de menu pra uma tela que nunca
       // teve conteúdo. A aba continua existindo pra link antigo não morrer.
-      { aba: 'meus-pagamentos', rotulo: 'Meus pagamentos', ic: 'cartao' }
+      { aba: 'meus-pagamentos', rotulo: 'Meus pagamentos', ic: 'cartao', track: 'menu-pagamentos' }
     ]},
     { titulo: 'Ajuda', itens: [
-      { aba: 'como-funciona',   rotulo: 'Como funciona',   ic: 'duvida' },
-      { href: 'faq.html',       rotulo: 'Dúvidas frequentes', ic: 'duvida' }
+      { aba: 'como-funciona',   rotulo: 'Como funciona',   ic: 'duvida', track: 'menu-como-funciona' },
+      { href: 'faq.html',       rotulo: 'Dúvidas frequentes', ic: 'duvida', track: 'menu-faq' }
     ]}
   ];
 
@@ -269,27 +269,27 @@
       // da pessoa. Menu de contexto fala do contexto; a ponte pra sair é o
       // "← Todos os projetos", que está lá em cima e é explícito.
       { titulo: '', itens: [
-        { href: url('projeto.html') + '#visao',        rotulo: 'Visão geral',  ic: 'painel' },
-        { href: url('projeto.html') + '#quantitativo', rotulo: 'Quantitativo', ic: 'planilha',    chave: 'quantitativo' },
-        { href: url('revisao.html'),                   rotulo: 'Revisão',      ic: 'revisao',     chave: 'revisao' },
-        { href: url('cronograma.html'),                rotulo: 'Cronograma',   ic: 'cronograma',  chave: 'cronograma' },
+        { href: url('projeto.html') + '#visao',        rotulo: 'Visão geral',  ic: 'painel', track: 'menu-visao-geral' },
+        { href: url('projeto.html') + '#quantitativo', rotulo: 'Quantitativo', ic: 'planilha',    chave: 'quantitativo', track: 'menu-quantitativo' },
+        { href: url('revisao.html'),                   rotulo: 'Revisão',      ic: 'revisao',     chave: 'revisao', track: 'menu-revisao-projeto' },
+        { href: url('cronograma.html'),                rotulo: 'Cronograma',   ic: 'cronograma',  chave: 'cronograma', track: 'menu-cronograma' },
         // 05/09/2026: Financeiro da obra (etapa 1). O selo `financeiro` é pintado
         // pela própria financeiro.html depois de carregar (N vencidos / em dia);
         // nas outras telas fica vazio — não afirmamos o que não lemos.
-        { href: url('financeiro.html'),                rotulo: 'Financeiro',   ic: 'financeiro',  chave: 'financeiro' },
-        { href: url('memorial.html'),                  rotulo: 'Memorial',     ic: 'memorial',    chave: 'memorial' },
-        { href: url('projeto.html') + '#cotacoes',     rotulo: 'Comparativo',  ic: 'comparativo', chave: 'comparativo' },
+        { href: url('financeiro.html'),                rotulo: 'Financeiro',   ic: 'financeiro',  chave: 'financeiro', track: 'menu-financeiro' },
+        { href: url('memorial.html'),                  rotulo: 'Memorial',     ic: 'memorial',    chave: 'memorial', track: 'menu-memorial' },
+        { href: url('projeto.html') + '#cotacoes',     rotulo: 'Comparativo',  ic: 'comparativo', chave: 'comparativo', track: 'menu-comparativo' },
         // 🪤 A vista se chama 'processamento'. Ela já se chamou 'dados', e o
         // menu ficou apontando pro nome velho: o item caía calado na visão
         // geral. Nome de vista e link nascem no mesmo lugar, de propósito.
-        { href: url('projeto.html') + '#processamento', rotulo: 'Processamento', ic: 'duvida' }
+        { href: url('projeto.html') + '#processamento', rotulo: 'Processamento', ic: 'duvida', track: 'menu-processamento' }
       ]},
       // Próximas entregas do ciclo, já no roadmap. Não são links: item de menu
       // que não leva a lugar nenhum vira reclamação. Aqui está escrito que
       // ainda não existe, e é só isso que ele promete.
       { titulo: 'Em breve', embreve: true, itens: [
-        { rotulo: 'Caderno de acabamentos', nota: 'FF&E', ic: 'memorial' },
-        { rotulo: 'BDI Helper',             ic: 'planilha' }
+        { rotulo: 'Caderno de acabamentos', nota: 'FF&E', ic: 'memorial', track: 'menu-embreve-caderno' },
+        { rotulo: 'BDI Helper',             ic: 'planilha', track: 'menu-embreve-bdi' }
       ]}
     ];
   }
@@ -432,7 +432,9 @@
         // "Em breve": não é link. Item de menu que não leva a lugar nenhum
         // vira reclamação; aqui está escrito que ainda não existe.
         if (g.embreve) {
-          out += '<div class="side-it side-embreve">' + svg(it.ic) + it.rotulo
+          // clique em "Em breve" e a leitura mais barata de DEMANDA do que ainda nao existe
+          out += '<div class="side-it side-embreve"' + (it.track ? ' data-track="' + it.track + '"' : '') + '>'
+               + svg(it.ic) + it.rotulo
                + (it.nota ? '<span class="side-nota">' + it.nota + '</span>' : '')
                + '</div>';
           return;
@@ -443,14 +445,18 @@
         // que faz a regra nº7 virar navegação: dá pra ver o que está velho
         // antes de clicar. Preenchido depois, quando os dados chegam.
         if (it.chave) selo = '<span class="side-est" data-est="' + it.chave + '"></span>';
+        // 🩸 06/09/2026 (Pedro: "registrar TUDO"): este arquivo — a navegacao principal de quem
+        // esta logado — nao tinha UM evento. `data-track` vira `clique:<slug>` pelo ouvinte
+        // delegado do aiarq-utils.js; zero mudanca no backend (o prefixo ja e aceito).
+        var marca = it.track ? ' data-track="' + it.track + '"' : '';
         if (it.href) {
-          out += '<a class="side-it" href="' + it.href + '" data-arq="' + it.href + '"'
+          out += '<a class="side-it" href="' + it.href + '" data-arq="' + it.href + '"' + marca
                + (it.chave ? ' data-chave="' + it.chave + '"' : '') + '>'
                + svg(it.ic) + it.rotulo + selo + '</a>';
         } else {
           // Sempre <a>: o link e o comportamento base e funciona sem JS. Se a
           // pagina souber trocar a aba sozinha, o clique intercepta.
-          out += '<a class="side-it" href="dashboard.html#' + it.aba + '" data-tab="' + it.aba + '">'
+          out += '<a class="side-it" href="dashboard.html#' + it.aba + '" data-tab="' + it.aba + '"' + marca + '>'
                + svg(it.ic) + it.rotulo + selo + '</a>';
         }
       });
@@ -583,6 +589,9 @@
   function plantarBurger() {
     var b = document.createElement('button');
     b.id = 'aiarq-burger';
+    // no celular o menu comeca FECHADO: sem este evento nao da nem pra saber se
+    // o cliente de celular descobre que o menu existe (06/09)
+    b.setAttribute('data-track', 'menu-abrir');
     b.setAttribute('aria-label', 'Abrir menu');
     b.setAttribute('aria-expanded', 'false');
     b.setAttribute('aria-controls', 'aiarq-side');

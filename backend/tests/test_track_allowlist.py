@@ -61,6 +61,14 @@ def _eventos_do_front():
                 continue
             nomes.add(n)
         for slug in re.findall(r'data-track="([^"]+)"', txt):
+            # 🪤 06/09: o menu lateral monta o atributo em JS (`' data-track="' + it.track + '"'`),
+            # e o regex acima capturava o PEDAÇO DE CÓDIGO como se fosse o nome. Slug de verdade é
+            # só letra/dígito/hífen — o resto é expressão, e os nomes dela são lidos logo abaixo.
+            if re.fullmatch(r"[a-z0-9][a-z0-9-]*", slug):
+                nomes.add("clique:" + slug)
+        # ...e a definição de onde esses slugs saem (`track: 'menu-revisao'` em menu-lateral.js):
+        # assim o guarda continua VENDO cada nome, em vez de ficar cego no dinâmico.
+        for slug in re.findall(r"\btrack:\s*'([a-z0-9][a-z0-9-]*)'", txt):
             nomes.add("clique:" + slug)
     return nomes
 
