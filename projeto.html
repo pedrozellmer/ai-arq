@@ -1170,10 +1170,12 @@ async function carregarStatsEntregas() {
       btnDownload.style.cursor = 'pointer';
       btnDownload.removeAttribute('target');
       btnDownload.setAttribute('href', 'javascript:void(0)');
-      btnDownload.addEventListener('click', (e) => {
+      btnDownload.addEventListener('click', async (e) => {
         e.preventDefault();
-        if (window.trackEvent) trackEvent('download_xlsx', { job_id: jobId });
-        downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
+        // 🩸 06/09: o evento saía ANTES do download — sessão expirada (401), 404 e queda de rede
+        // contavam como "baixou". `downloadProtected` devolve true/false exatamente pra isso.
+        const _ok = await downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
+        if (window.trackEvent) trackEvent('download_xlsx', { job_id: jobId, tela: 'projeto', motivo: _ok ? 'ok' : 'falhou' });
       });
     }
     enableLink('btn-cronograma', `cronograma.html?job=${jobId}`);
@@ -2398,16 +2400,20 @@ async function uploadQuote() {
     });
     const data = await res.json();
     if (data.status === 'ok') {
+      // 🔒 nunca o total em dinheiro, o nome do fornecedor nem o do arquivo — só a contagem
+      try { if (window.trackEvent) trackEvent('cotacao_enviada', { job_id: jobId, n_itens: data.n_items_quoted || 0 }); } catch (_) {}
       statusDiv.className = 'mt-3 text-xs text-emerald-700';
       statusDiv.textContent = `✓ ${data.n_items_quoted} itens lidos. Total R$ ${data.total_bruto.toLocaleString('pt-BR')}`;
       document.getElementById('q-supplier-name').value = '';
       document.getElementById('q-file').value = '';
       loadQuotes();
     } else {
+      try { if (window.trackEvent) trackEvent('cotacao_erro', { job_id: jobId, motivo: 'nao-abriu' }); } catch (_) {}
       statusDiv.className = 'mt-3 text-xs text-red-700';
       statusDiv.textContent = '✗ ' + (data.error || 'erro');
     }
   } catch (e) {
+    try { if (window.trackEvent) trackEvent('cotacao_erro', { job_id: jobId, motivo: 'servidor' }); } catch (_) {}
     statusDiv.className = 'mt-3 text-xs text-red-700';
     statusDiv.textContent = '✗ ' + e.message;
   } finally {
@@ -2461,11 +2467,15 @@ async function uploadRevisedSheet() {
     const data = await res.json();
     if (data.status === 'ok') {
       statusEl.className = 'mt-2 text-xs text-emerald-700';
+      // a planilha revisada é o que CALIBRA o motor — o dado mais valioso que o cliente devolve,
+      // e o envio dele não deixava rastro nenhum (06/09)
+      try { if (window.trackEvent) trackEvent('planilha_revisada_enviada', { job_id: jobId }); } catch (_) {}
       statusEl.textContent = `✓ Planilha recebida! Muito obrigado — isso ajuda demais a afinar o motor. 🙏`;
       document.getElementById('rev-file').value = '';
       loadProjectCashback();  // atualiza resumo
     } else {
       statusEl.className = 'mt-2 text-xs text-red-700';
+      try { if (window.trackEvent) trackEvent('planilha_revisada_erro', { job_id: jobId, motivo: 'nao-abriu' }); } catch (_) {}
       statusEl.textContent = '✗ ' + (data.error || 'erro');
     }
   } catch (e) {
@@ -2489,6 +2499,10 @@ async function generateComparison() {
     const data = await res.json();
     if (data.status === 'ok') {
       const s = data.summary;
+      // 06/09: `use_comparativo` JÁ existia na allowlist e já tinha rótulo no painel — só faltava
+      // alguém DISPARAR. O comparativo tem 0 uso na vida do produto e ninguém sabia se falta gente
+      // chegando ou se quem chega desiste no meio.
+      try { if (window.trackEvent) trackEvent('use_comparativo', { job_id: jobId, n_itens: s.paired_count || 0 }); } catch (_) {}
       // Guarda-corpo: com poucos itens pareados o ranking não compara nada —
       // sem troféu/verde, e aviso claro no lugar (senão coroava "🏆 R$ 0,00").
       const rkOk = !!s.ranking_confiavel;

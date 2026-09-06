@@ -45,6 +45,9 @@
     var a = document.createElement('a');
     a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer';
     a.setAttribute('aria-label', 'Falar com o AI.arq no WhatsApp');
+    // 06/09: este botao leva a pessoa PRA FORA do site (conversa direta) e nao deixava rastro —
+    // era a saida mais cara do funil, invisivel. `clique:` ja e aceito pelo backend.
+    a.setAttribute('data-track', 'whatsapp-flutuante');
     a.title = 'Fale com a gente no WhatsApp';
     a.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;width:68px;height:68px;border-radius:18px;background:#25D366;box-shadow:0 8px 26px rgba(37,211,102,.55);transition:transform .15s ease,box-shadow .15s ease;animation:aiarq-wa-wiggle 4s ease-in-out infinite;transform-origin:center;';
     a.innerHTML = WA_LOGO;

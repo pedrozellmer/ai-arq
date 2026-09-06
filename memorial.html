@@ -145,6 +145,10 @@ if (window.trackEvent) trackEvent('view_memorial', { job_id: jobId });
     const semItens = /sem itens|gere o quantitativo|404/i.test(e.message || '');
     const como = document.querySelector('#main > .bg-white');
     if (como) como.classList.add('hidden');       // a instrução não serve agora
+    // chegar no memorial e não poder usar era invisível: `view_memorial` conta igual pra quem
+    // escreve e pra quem bate na parede (06/09)
+    try { if (window.trackEvent) trackEvent('memorial_sem_quantitativo', { job_id: jobId,
+      motivo: semItens ? 'sem-itens' : 'erro-carga' }); } catch (_) {}
     const cx = document.getElementById('doc-container');
     if (cx) {
       cx.innerHTML = semItens
@@ -359,6 +363,16 @@ async function salvar() {
     setDirty(false);
     st.textContent = `✓ salvo às ${_horaAgora()}`;
     st.style.color = '#059669';
+    // 🩸 06/09: só a ABERTURA do memorial era medida — e ele passou 30 dias invisível justamente
+    // por isso. Salvar é o ato que diz "esse texto virou meu". `pendentes` conta os [A PREENCHER]
+    // que sobraram: é o número que explica por que alguém não leva o documento adiante.
+    try {
+      if (window.trackEvent) {
+        var _txt = JSON.stringify(estrutura || {});
+        var _pend = (_txt.match(/A PREENCHER/g) || []).length;
+        trackEvent('memorial_salvo', { job_id: jobId, pendentes: _pend });
+      }
+    } catch (_) {}
     // O salvamento carimba a assinatura do quantitativo atual — se o aviso de
     // desatualizado estava na tela, ele some sozinho agora.
     if (window.aiArqCoerencia) window.aiArqCoerencia(jobId, 'memorial').then(wireBotaoAtualizar);
@@ -380,10 +394,12 @@ async function _baixar(formato) {
   // Edição pendente vai junto: salva antes, o arquivo sai do que está no banco
   const ok = await salvar();
   if (!ok) return;
-  if (window.trackEvent) trackEvent('download_memorial', { job_id: jobId, formato });
   const sufixo = formato === 'pdf' ? '/pdf' : '';
-  downloadProtected(`${API_BASE}/api/memorial/${jobId}${sufixo}`,
+  // 🩸 06/09: o evento saía ANTES do download — sessão expirada, 500 do WeasyPrint e queda de rede
+  // contavam como "baixou". `downloadProtected` já devolve true/false exatamente pra isso.
+  const baixou = await downloadProtected(`${API_BASE}/api/memorial/${jobId}${sufixo}`,
     `memorial_descritivo_rascunho_${jobId}.${formato}`);
+  if (baixou && window.trackEvent) trackEvent('download_memorial', { job_id: jobId, formato });
 }
 document.getElementById('btn-docx').addEventListener('click', () => _baixar('docx'));
 document.getElementById('btn-pdf').addEventListener('click', () => _baixar('pdf'));

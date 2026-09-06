@@ -58,7 +58,7 @@
       <p class="text-gray-600 text-sm mb-8"><strong>Grátis durante o beta</strong> — quantos projetos quiser, sem cartão. Entre com o Google (cria a conta na hora) ou com e-mail. É novo por aqui? Clique em Cadastre-se logo abaixo.</p>
 
       <!-- Google Button -->
-      <button id="btn-google-login" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-6 py-4 text-base font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:shadow-md transition-all duration-200 shadow-sm">
+      <button id="btn-google-login" data-track="login-google" class="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 rounded-xl px-6 py-4 text-base font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-400 hover:shadow-md transition-all duration-200 shadow-sm">
         <svg width="20" height="20" viewBox="0 0 48 48">
           <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
           <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
@@ -334,6 +334,9 @@
       if (isSignupMode) {
         const { data, error } = await sbClient.auth.signUp({ email, password });
         if (error) throw error;
+        // 06/09: criar conta por e-mail/senha nao tinha evento — so o caminho do Google era medido,
+        // entao o funil de entrada estava contando so metade das portas. 🔒 nunca o e-mail.
+        try { if (window.trackEvent) trackEvent('signup_criado', { tela: 'email' }); } catch (_) {}
         if (data.user && data.user.identities && data.user.identities.length === 0) {
           showEmailError('Este e-mail j\u00e1 est\u00e1 cadastrado. Tente fazer login.');
         } else {
@@ -360,6 +363,15 @@
       }
     } catch (err) {
       console.error('Erro:', err);
+      // 06/09: quem tenta entrar e NAO consegue sumia do mapa — e "e-mail nao confirmado" e um
+      // problema NOSSO (a confirmacao pode nao ter chegado). 🔒 nunca o e-mail digitado.
+      try {
+        if (window.trackEvent) {
+          var _m = String(err.message || '');
+          trackEvent('login_falhou', { motivo: /Invalid login/.test(_m) ? 'senha'
+            : (/Email not confirmed/.test(_m) ? 'nao-confirmado' : 'outro') });
+        }
+      } catch (_) {}
       if (err.message.includes('Invalid login')) {
         showEmailError('E-mail ou senha incorretos.');
       } else if (err.message.includes('Email not confirmed')) {

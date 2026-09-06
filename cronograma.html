@@ -441,6 +441,9 @@ async function init() {
     const items = data.items || [];
 
     if (items.length === 0) {
+      // 🩸 06/09: chegar na tela e nao poder gerar era invisivel — `view_cronograma` conta igual
+      // pra quem gera e pra quem bate na parede. Agora os dois casos tem nome.
+      try { if (window.trackEvent) trackEvent('cronograma_sem_itens', { job_id: jobId, motivo: 'sem-itens' }); } catch (_) {}
       document.getElementById('no-items').classList.remove('hidden');
       document.getElementById('gate').classList.add('hidden');
       return;
@@ -451,6 +454,7 @@ async function init() {
            .filter(d => d && !d.includes('PREMISSA'))
     );
     if (disciplinas.size === 0) {
+      try { if (window.trackEvent) trackEvent('cronograma_sem_itens', { job_id: jobId, motivo: 'sem-disciplina' }); } catch (_) {}
       document.getElementById('no-items').classList.remove('hidden');
       document.getElementById('gate').classList.add('hidden');
       return;
@@ -475,6 +479,7 @@ async function init() {
     const _h = _ni.querySelector('h3'), _p = _ni.querySelector('p');
     if (_h) _h.textContent = 'N\u00e3o consegui carregar os itens deste projeto';
     if (_p) _p.textContent = ((e && e.message) || 'erro inesperado') + '. Recarregue a p\u00e1gina; se persistir, abra o projeto e tente de novo.';
+    try { if (window.trackEvent) trackEvent('cronograma_sem_itens', { job_id: jobId, motivo: 'erro-carga' }); } catch (_) {}
     _ni.classList.remove('hidden');
     document.getElementById('gate').classList.add('hidden');
   }
@@ -1083,6 +1088,9 @@ async function salvarCronograma() {
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     showSaveStatus('Cronograma salvo. Botões PDF/PPT já podem ser usados.', 'success');
+    // salvar é o ato que separa "olhei o cronograma" de "esse cronograma é meu"
+    try { if (window.trackEvent) trackEvent('cronograma_salvo', { job_id: jobId,
+      origem: 'botao', editados: fasesEditadas.length }); } catch (_) {}
     // Salvar carimba a assinatura do quantitativo atual: se o aviso de
     // "desatualizado" estava na tela, some agora.
     if (window.aiArqCoerencia) window.aiArqCoerencia(jobId, 'cronograma');
@@ -1329,9 +1337,13 @@ function atualizarLinksExport() {
     // Remove listeners antigos clonando o nó (atualizarLinksExport pode ser chamado várias vezes)
     const clone = el.cloneNode(true);
     el.parentNode.replaceChild(clone, el);
-    clone.addEventListener('click', (e) => {
+    clone.addEventListener('click', async (e) => {
       e.preventDefault();
-      downloadProtected(url, filename);
+      // 🩸 06/09: exportar o cronograma não deixava rastro nenhum — só a ABERTURA da tela era
+      // medida. E o evento sai no RETORNO true: sessão expirada e queda de rede não contam
+      // como export (a mesma lição do memorial e do financeiro).
+      const ok = await downloadProtected(url, filename);
+      if (ok && window.trackEvent) trackEvent('download_cronograma', { job_id: jobId, formato: String(id).replace('btn-export-', '') });
     });
   };
   wireExport('btn-export-pdf', `${API_BASE}/api/cronograma/${jobId}/export/pdf${qs}`, `cronograma_${jobId}.pdf`);
@@ -1411,6 +1423,10 @@ async function gerarCronograma() {
     const _valoresAntigos = _guardado;   // usado no aviso abaixo
 
     cronogramaAtual = cronog;
+    // gerou de verdade (o servidor respondeu). `origem` separa a auto-geração da 1ª visita
+    // do "Regerar" que a pessoa pediu — são intenções diferentes e liam igual.
+    try { if (window.trackEvent) trackEvent('cronograma_gerado', { job_id: jobId,
+      origem: window.__autoGerou ? 'auto' : 'regerar', editados: (cronog.fases || []).length }); } catch (_) {}
     atualizarLinksExport();
 
     renderResumo(cronog);
@@ -1468,6 +1484,8 @@ async function gerarCronograma() {
     const err = document.getElementById('error-banner');
     err.textContent = `Erro: ${e.message}`;
     err.classList.remove('hidden');
+    // gerar falhando é o desfecho que empurra o cliente pra fora e era invisível
+    try { if (window.trackEvent) trackEvent('cronograma_gerar_erro', { job_id: jobId }); } catch (_) {}
   } finally {
     btn.disabled = false;
     // Se já há resultado na tela, mantém "Regerar". Senão volta pra "Gerar"

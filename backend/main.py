@@ -23093,9 +23093,30 @@ _TRACK_ALLOWED = {
     "revisao_saiu",        # saiu da revisão sem terminar, e quanto sobrou
     "revisao_lote",        # confirmar/excluir uma seção inteira — com o que REALMENTE salvou
     "revisao_salvou_erro",  # o servidor recusou e a tela desfez na frente do cliente
-    "cronograma_gerado", "cronograma_salvo",
+    # ONDA 3 — cronograma e memorial: até aqui só se media a ABERTURA das duas telas.
+    # Sem o "gerou / salvou / exportou" não dá pra separar quem usou de quem só espiou.
+    "cronograma_gerado", "cronograma_salvo", "cronograma_gerar_erro",
+    "cronograma_fase_editada", "cronograma_sem_itens", "cronograma_saiu_sem_salvar",
+    "memorial_salvo", "memorial_sem_quantitativo", "memorial_saiu_sem_salvar",
     "download_cronograma", "download_memorial", "download_comparativo",
-    "cotacao_enviada", "planilha_revisada_enviada",
+    "coerencia_aviso",     # o aviso da regra nº7: exibido × clicado (hoje só existe o exibido no código)
+    # ONDA 4 — comparativo, uploads e reprocesso: o comparativo tem 0 uso na vida do produto e
+    # ninguém sabia se falta gente chegando lá ou se quem chega desiste no meio.
+    "view_comparativo", "cotacao_enviada", "cotacao_erro", "comparativo_erro",
+    "planilha_revisada_enviada", "planilha_revisada_erro",
+    "reprocesso_pedido", "reprocesso_erro", "reprocesso_bloqueado",
+    "chat_pergunta",       # o chat do quantitativo (o de dentro do projeto)
+    # os convites que completam o quantitativo — o de área já existia; o de pé-direito nasceu mudo
+    "convite-pd:exibido", "convite-pd:submit-ok", "convite-pd:submit-erro", "convite-pd:submit-invalido",
+    "proc_perguntas:exibido", "proc_perguntas:respondido", "proc_perguntas:recusado",
+    # ONDA 5 — o público (o topo do funil): a landing e o blog trazem quase todo cadastro
+    # (project_google_traz_cadastro_20260831) e o caminho até o "criar conta" era cego.
+    "signup_criado",       # criou conta por e-mail/senha (o Google já tinha)
+    "signup_bloqueado",    # a validação do cadastro barrou — e em QUAL campo
+    "login_falhou",        # senha errada ou e-mail não confirmado (nunca o e-mail digitado)
+    "chat_portao_exibido", "chat_lead_ok",   # o chat público pede nome+e-mail ANTES de responder
+    "contato_abriu", "contato_enviado", "contato_falhou",
+    "view_blog",           # a vitrine /blog/ (os posts já têm view_blog_post)
     # 🩸 auditoria 06/09: "abriu" e "exportou" não dizem se alguém USOU. O memorial ficou 30 dias
     # invisível justamente por medir só abertura. Este é o evento que responde "o financeiro pegou?".
     "fin_lancamento_criado",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)

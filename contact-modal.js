@@ -232,6 +232,14 @@
     if (e.key === 'Escape') aiArqContactClose();
   };
   window.aiArqContactOpen = function (opts) {
+    // 06/09: o contato e a unica porta de fala do visitante que nao passa pelo chat, e abrir o
+    // modal nao deixava rastro — so dava pra ver quem chegou ate o FIM (a mensagem no banco).
+    try {
+      if (window.trackEvent) {
+        var _t = (typeof opts === 'string') ? opts : ((opts && opts.type) || 'geral');
+        window.trackEvent('contato_abriu', { type: String(_t).slice(0, 20) });
+      }
+    } catch (_) {}
     _aicmRestoreFocus = document.activeElement;
     modal.classList.add('open');
     document.addEventListener('keydown', _aicmEscHandler);
@@ -417,6 +425,7 @@
       .then(function (r) { return r.json(); })
       .then(function (res) {
         if (!res.ok) {
+          try { if (window.trackEvent) window.trackEvent('contato_falhou', { motivo: 'servidor' }); } catch (_) {}
           errorEl.textContent = res.error || 'Erro ao enviar. Tenta de novo.';
           errorEl.style.display = 'block';
           btn.disabled = false;
@@ -427,6 +436,8 @@
         // ao reabrir/fechar (antes só um location.reload aos 5s, e só se o modal
         // já estivesse fechado — senão o form ficava destruído e travava).
         _aicmSent = true;
+        // 🔒 so o tipo do assunto (slug NOSSO) — nunca o texto, o e-mail ou o anexo
+        try { if (window.trackEvent) window.trackEvent('contato_enviado', {}); } catch (_) {}
         var _emEsc = (window.escapeHtml ? window.escapeHtml(sentEmail) : sentEmail);
         var emailHtml = sentEmail
           ? 'A gente responde em até 24h úteis no email <strong>' + _emEsc + '</strong>.'
@@ -440,6 +451,7 @@
           '</div>';
       })
       .catch(function () {
+        try { if (window.trackEvent) window.trackEvent('contato_falhou', { motivo: 'rede' }); } catch (_) {}
         errorEl.textContent = 'Erro de conexão. Tenta de novo em alguns segundos.';
         errorEl.style.display = 'block';
         btn.disabled = false;

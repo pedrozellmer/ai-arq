@@ -413,6 +413,9 @@
       });
       const data = await res.json();
       showTyping(false);
+      // 🔒 so o ATO: nunca o texto da pergunta. O chat publico chama o Claude (custo por pergunta)
+      // e nao tinha um unico evento — dava pra saber o gasto, nao o uso.
+      try { if (window.trackEvent) window.trackEvent('chat_pergunta', { type: 'publico' }); } catch (_) {}
 
       if (data.error) {
         messages.push({
@@ -452,6 +455,9 @@
   }
 
   function showLeadForm() {
+    // 06/09: o portao que pede nome+e-mail ANTES de responder e o maior filtro do chat publico,
+    // e ninguem sabia quantos batiam nele e desistiam. Este e o DENOMINADOR.
+    try { if (window.trackEvent) window.trackEvent('chat_portao_exibido', {}); } catch (_) {}
     document.getElementById('aiarq-chat-lead-form').style.display = 'block';
     document.getElementById('aiarq-chat-messages').style.display = 'none';
     document.getElementById('aiarq-chat-input-wrap').style.display = 'none';
@@ -488,6 +494,8 @@
     } catch (_) {}
 
     lead = { name, email, phone };
+    // 🔒 so a CONTAGEM do ato — nunca o nome, o e-mail ou o telefone que a pessoa digitou
+    try { if (window.trackEvent) window.trackEvent('chat_lead_ok', {}); } catch (_) {}
     try { localStorage.setItem(LEAD_KEY, JSON.stringify(lead)); } catch (_) {}
 
     btnSub.disabled = false;
@@ -497,6 +505,7 @@
 
   // ═══ Event wiring ═══
   btn.addEventListener('click', () => {
+    try { if (window.trackEvent) window.trackEvent('clique:chat-abrir', {}); } catch (_) {}
     panel.classList.add('open');
     btn.style.display = 'none';
     if (lead) showChatUI();  // já tem lead, vai direto pro chat
