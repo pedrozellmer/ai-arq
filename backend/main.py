@@ -15914,8 +15914,14 @@ def admin_costs_list(request: Request):
         r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         rows = _json.loads(_ur.urlopen(r, timeout=15).read().decode("utf-8"))
     except Exception as _e:
+        # 🪴 06/09/2026 — antes isto era `rows = []` e a rota respondia HTTP 200.
+        # A tela somava zero e pintava "custo fixo / mês R$ 0,00" SEM banner, porque
+        # o aviso de "N a confirmar" depende de existir linha. Era o zero
+        # silencioso vivo na tela que o Pedro vai usar pra decidir preço. None
+        # é "não sei"; zero é uma afirmação.
         print(f"[costs] list erro: {_e}")
-        rows = []
+        _log_error("costs:leitura", f"financial_costs ilegivel: {_e}", severity="warning")
+        rows = None
     # projetos concluídos nos últimos 30d → base pro "custo por projeto" no painel.
     # 🩸 02/09/2026 — MEDIDO: 98 concluídos em 30 dias, 41 eram avaliação NOSSA
     # (is_eval). O divisor contava os 98 e o custo por projeto saía 42% mais
@@ -15923,11 +15929,35 @@ def admin_costs_list(request: Request):
     # de contagem devolve None (a tela mostra "sem medição"), nunca zero.
     _p30 = _projetos_para_custo_30d()
     return {"costs": rows,
+            "custo_ia": _custo_ia_resumo(30),
             # nome antigo mantido pra tela velha não quebrar — mas agora é SÓ cliente
             "projetos_30d": _p30["cliente"],
             "projetos_30d_cliente": _p30["cliente"],
             "projetos_30d_avaliacoes": _p30["avaliacoes"],
             "janela_dias": 30}
+
+
+def _custo_ia_resumo(dias: int = 30):
+    """Resumo do gasto de IA medido (tabela llm_uso). None quando ilegivel.
+
+    🚨 A leitura e AGREGADA no banco de proposito: o PostgREST corta em 1000
+    linhas em silencio, e com ~990 chamadas em 13 dias um select simples de 30
+    dias mostraria menos da metade do custo sem erro nenhum na tela.
+
+    🔑 O resumo carrega, junto do total, quantas chamadas ficaram SEM PRECO,
+    SEM DONO e em etapa nao declarada — porque SUM ignora NULL: bastaria trocar
+    DXF_EXTRACT_MODEL por um id sem preco cadastrado pra etapa mais cara somar
+    zero e o total sair com cara de fato.
+    """
+    try:
+        _st, _r = _supa_rest_service("POST", "rpc/admin_custo_ia_resumo",
+                                     {"dias": int(dias)})
+        if _st >= 400 or _r is None:
+            return None
+        return _r
+    except Exception as _ce:
+        print(f"[costs] resumo IA erro: {_ce}")
+        return None
 
 
 def _projetos_para_custo_30d() -> dict:

@@ -1613,6 +1613,8 @@ function renderOps(d){
 let COSTS = [];
 let COSTS_PROJ30 = null;  // projetos de CLIENTE concluídos nos últimos 30d (divisor do custo/projeto); null = sem medição
 let COSTS_EVAL30 = null;  // avaliações NOSSAS concluídas nos últimos 30d (ficam fora do divisor); null = sem medição
+let COSTS_IA = null;      // resumo do gasto de IA medido (llm_uso); null = sem medição
+let COSTS_ILEGIVEL = false;  // a tabela de custos não pôde ser lida (≠ tabela vazia)
 const COST_CATS = ['infra','ia','email','dominio','pagamento','outro'];
 const COST_MOEDAS = ['BRL','USD'];
 const COST_PERIODOS = ['mensal','anual','uso'];
@@ -1637,7 +1639,12 @@ async function loadCosts(){
     const res = await authFetch(`${API_BASE}/api/admin/costs`);
     const d = await res.json();
     if (!res.ok) throw new Error(d.detail || 'erro');
-    COSTS = d.costs || [];
+    // 🪴 06/09: `d.costs || []` transformava falha de leitura em lista vazia,
+    // e a tela pintava "custo fixo / mês R$ 0,00" sem banner nenhum. Agora a
+    // ausência aparece como ausência.
+    COSTS_ILEGIVEL = (d.costs == null);
+    COSTS = COSTS_ILEGIVEL ? [] : d.costs;
+    COSTS_IA = (d.custo_ia && typeof d.custo_ia === 'object') ? d.custo_ia : null;
     // 🪤 null = o backend não conseguiu contar. NÃO vira zero: zero é afirmação
     // ("nenhum projeto de cliente"), falha de contagem é outra coisa.
     COSTS_PROJ30 = (typeof d.projetos_30d_cliente === 'number') ? d.projetos_30d_cliente : null;
@@ -1670,9 +1677,44 @@ function renderCosts(){
   box.innerHTML = html;
   renderCostTotals();
 }
+// 💸 Custo de IA MEDIDO por projeto (tabela llm_uso, ligada em 06/09/2026).
+// Até aqui a tela era estruturalmente incapaz de mostrar isto: `costMonthlyBRL`
+// devolve 0 pra `periodo==='uso'` (linha acima), então o MAIOR item de custo do
+// produto era justamente o único que ela foi construída pra ignorar — mesmo se
+// alguém digitasse a fatura na mão.
+function _kpiCustoIA(custoFixoPorProjeto){
+  const d = COSTS_IA;
+  if (!d) return `<div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">—</div><div class="text-xs text-gray-500">custo de <b>IA</b> / projeto<br>sem medição (não consegui ler)</div></div>`;
+  const taxa = costUsdRate();
+  const medidas = Number(d.entregas_medidas)||0, entregas = Number(d.entregas)||0;
+  const usdEnt = (d.usd_por_entrega_medida == null) ? null : Number(d.usd_por_entrega_medida);
+  // 🚨 Cobertura ANTES do valor: nos primeiros 30 dias o numerador só tem o
+  // que rodou DEPOIS da subida e o divisor tem a janela inteira — a média nasce
+  // barata e sobe sozinha. Sem esta linha o número mente sem errar uma conta.
+  const cob = `medido em <b>${medidas}</b> de ${entregas} projeto${entregas===1?'':'s'} entregue${entregas===1?'':'s'}`;
+  let html = `<div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${usdEnt!=null?costFmt(usdEnt*taxa):'—'}</div><div class="text-xs text-gray-500">custo de <b>IA</b> / projeto de cliente<br>${cob}</div></div>`;
+  const total = (usdEnt!=null && custoFixoPorProjeto!=null) ? (usdEnt*taxa + custoFixoPorProjeto) : null;
+  html += `<div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${total!=null?costFmt(total):'—'}</div><div class="text-xs text-gray-500"><b>custo total</b> / projeto de cliente<br>fixo rateado + IA medida${total!=null?'':' — falta uma das duas metades'}</div></div>`;
+  html += `<div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt((Number(d.usd_total)||0)*taxa)}</div><div class="text-xs text-gray-500">IA nos últimos ${d.dias} dias (${d.chamadas} chamadas)<br>projeto ${costFmt((Number(d.usd_projeto)||0)*taxa)} · plataforma ${costFmt((Number(d.usd_plataforma)||0)*taxa)}</div></div>`;
+  // 🚨 SUM IGNORA NULL: chamada sem preço casado soma ZERO e o total sai com
+  // cara de fato. Bastaria trocar DXF_EXTRACT_MODEL (muda por variável de
+  // ambiente, SEM deploy) pra etapa mais cara sumir da conta em silêncio.
+  const buracos = [];
+  if (Number(d.sem_preco)>0) buracos.push(`<b>${d.sem_preco}</b> chamada(s) <b>sem preço cadastrado</b> (modelo novo?) — não entraram no total`);
+  if (Number(d.sem_dono)>0) buracos.push(`<b>${d.sem_dono}</b> de projeto <b>sem dono</b> — gastaram e não caem em nenhum projeto`);
+  if (Number(d.etapa_nao_declarada)>0) buracos.push(`<b>${d.etapa_nao_declarada}</b> em <b>etapa não declarada</b> — declare no catálogo (llm_retry._ETAPAS)`);
+  if (Number(d.falharam)>0) buracos.push(`<b>${d.falharam}</b> <b>falharam</b> depois de gerar saída — foram cobradas e não têm token medido`);
+  if (Number(d.sem_usage)>0) buracos.push(`<b>${d.sem_usage}</b> responderam <b>sem contador</b> de token`);
+  if (buracos.length) html += `<div class="col-span-2 md:col-span-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">⚠ O total de IA acima <b>não inclui tudo</b>: ${buracos.join('; ')}.</div>`;
+  return html;
+}
 function renderCostTotals(){
   const el = document.getElementById('cost-totals'); if (!el) return;
   const fixoMensal = COSTS.reduce((s,c)=> s + costMonthlyBRL(c), 0);
+  // 🚨 Regra dura nº1 no NÚMERO GRANDE, não só na linha: o KPI somava
+  // confirmado com estimado e quem batia o olho lia o total como fato. Agora o
+  // total diz quanto dele está confirmado.
+  const fixoConfirmado = COSTS.filter(c=>c.confirmado).reduce((s,c)=> s + costMonthlyBRL(c), 0);
   const nUso = COSTS.filter(c=>c.periodo==='uso').length;
   const nConfirmar = COSTS.filter(c=>!c.confirmado).length;
   // 🩸 02/09: o divisor contava avaliação NOSSA como projeto de cliente (98 no
@@ -1684,11 +1726,13 @@ function renderCostTotals(){
                           : `${COSTS_PROJ30} concluído${COSTS_PROJ30===1?'':'s'}, criados nos últimos 30 dias`);
   const evalTxt = (COSTS_EVAL30 == null) ? '—' : String(COSTS_EVAL30);
   el.innerHTML = `
-    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(fixoMensal)}</div><div class="text-xs text-gray-500">custo fixo / mês</div></div>
+    <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(fixoMensal)}</div><div class="text-xs text-gray-500">custo fixo / mês<br><b>${costFmt(fixoConfirmado)}</b> confirmado na fatura; o resto é estimativa</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(fixoMensal*12)}</div><div class="text-xs text-gray-500">custo fixo / ano</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${custoProj!=null?costFmt(custoProj):'—'}</div><div class="text-xs text-gray-500">custo fixo / projeto de <b>cliente</b><br>${projTxt}</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${nUso}</div><div class="text-xs text-gray-500">itens "por uso" (variável)</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${evalTxt}</div><div class="text-xs text-gray-500">avaliações nossas concluídas (últimos 30 dias)<br>ficam FORA da conta ao lado; também gastam IA, e esse gasto não está registrado aqui</div></div>`;
+  el.innerHTML += _kpiCustoIA(custoProj);
+  if (COSTS_ILEGIVEL) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-900">⚠ Não consegui <b>ler</b> a tabela de custos — os números acima estão vazios por falha de leitura, não porque o custo seja zero.</div>`;
   if (nConfirmar>0) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">⚠ ${nConfirmar} valor(es) <b>a confirmar</b> (linhas em amarelo). Preenche o real e marca ✓ — o total ainda não é definitivo.</div>`;
 }
 function costEdit(i, field, val){ if (!COSTS[i]) return; COSTS[i][field] = val; if (['valor','moeda','periodo','confirmado'].indexOf(field)>=0) renderCostTotals(); }
