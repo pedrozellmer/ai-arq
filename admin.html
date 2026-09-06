@@ -1615,7 +1615,13 @@ let COSTS_PROJ30 = null;  // projetos de CLIENTE concluídos nos últimos 30d (d
 let COSTS_EVAL30 = null;  // avaliações NOSSAS concluídas nos últimos 30d (ficam fora do divisor); null = sem medição
 let COSTS_IA = null;      // resumo do gasto de IA medido (llm_uso); null = sem medição
 let COSTS_ILEGIVEL = false;  // a tabela de custos não pôde ser lida (≠ tabela vazia)
-const COST_CATS = ['infra','ia','email','dominio','pagamento','outro'];
+// 🚨 'desenvolvimento' é o que custa CONSTRUIR o produto (Claude Code), não
+// processar projeto de cliente. Decisão do Pedro em 06/09/2026: aparece na tela,
+// mas FICA FORA do rateio por projeto — senão infla o custo marginal e o número
+// deixa de servir pra decidir preço.
+const COST_CATS = ['infra','ia','email','dominio','pagamento','desenvolvimento','outro'];
+const COST_CATS_FORA_DO_RATEIO = ['desenvolvimento'];
+function costEntraNoRateio(c){ return COST_CATS_FORA_DO_RATEIO.indexOf(c.categoria||'outro') < 0; }
 const COST_MOEDAS = ['BRL','USD'];
 const COST_PERIODOS = ['mensal','anual','uso'];
 function costEscAttr(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -1710,11 +1716,12 @@ function _kpiCustoIA(custoFixoPorProjeto){
 }
 function renderCostTotals(){
   const el = document.getElementById('cost-totals'); if (!el) return;
-  const fixoMensal = COSTS.reduce((s,c)=> s + costMonthlyBRL(c), 0);
+  const fixoMensal = COSTS.filter(costEntraNoRateio).reduce((s,c)=> s + costMonthlyBRL(c), 0);
+  const desenvMensal = COSTS.filter(c=>!costEntraNoRateio(c)).reduce((s,c)=> s + costMonthlyBRL(c), 0);
   // 🚨 Regra dura nº1 no NÚMERO GRANDE, não só na linha: o KPI somava
   // confirmado com estimado e quem batia o olho lia o total como fato. Agora o
   // total diz quanto dele está confirmado.
-  const fixoConfirmado = COSTS.filter(c=>c.confirmado).reduce((s,c)=> s + costMonthlyBRL(c), 0);
+  const fixoConfirmado = COSTS.filter(c=>c.confirmado && costEntraNoRateio(c)).reduce((s,c)=> s + costMonthlyBRL(c), 0);
   const nUso = COSTS.filter(c=>c.periodo==='uso').length;
   const nConfirmar = COSTS.filter(c=>!c.confirmado).length;
   // 🩸 02/09: o divisor contava avaliação NOSSA como projeto de cliente (98 no
@@ -1732,6 +1739,7 @@ function renderCostTotals(){
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${nUso}</div><div class="text-xs text-gray-500">itens "por uso" (variável)</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${evalTxt}</div><div class="text-xs text-gray-500">avaliações nossas concluídas (últimos 30 dias)<br>ficam FORA da conta ao lado; também gastam IA, e esse gasto não está registrado aqui</div></div>`;
   el.innerHTML += _kpiCustoIA(custoProj);
+  if (desenvMensal > 0) el.innerHTML += `<div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(desenvMensal)}</div><div class="text-xs text-gray-500"><b>desenvolvimento</b> / mês<br>custo de construir o produto — <b>fora</b> do rateio por projeto</div></div>`;
   if (COSTS_ILEGIVEL) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-900">⚠ Não consegui <b>ler</b> a tabela de custos — os números acima estão vazios por falha de leitura, não porque o custo seja zero.</div>`;
   if (nConfirmar>0) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">⚠ ${nConfirmar} valor(es) <b>a confirmar</b> (linhas em amarelo). Preenche o real e marca ✓ — o total ainda não é definitivo.</div>`;
 }
