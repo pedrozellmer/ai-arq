@@ -60,6 +60,16 @@ def _eventos_do_front():
             if n.endswith(':'):
                 continue
             nomes.add(n)
+        # 🪤 06/09: `trackEvent(cond ? 'tour_pulado' : 'tour_concluido')` — nome escolhido por
+        # condição. O padrão acima só lê o literal COLADO no parêntese, então esses dois pareciam
+        # órfãos (e o banco prova que disparam: o William tem tour_concluido).
+        # 🪤 e o ternário tem que estar no PRIMEIRO argumento: sem essa trava, o padrão pescava
+        # `{ origem: x ? 'auto' : 'regerar' }` do META e inventava 15 "eventos" que não existem —
+        # guarda que acusa o que não é defeito acaba desligado.
+        for a, b in re.findall(
+                r"trackEvent\s*\??\.?\(\s*[^,)'\"]*\?\s*'([a-z0-9_:-]+)'\s*:\s*'([a-z0-9_:-]+)'\s*[,)]", txt):
+            nomes.add(a)
+            nomes.add(b)
         for slug in re.findall(r'data-track="([^"]+)"', txt):
             # 🪤 06/09: o menu lateral monta o atributo em JS (`' data-track="' + it.track + '"'`),
             # e o regex acima capturava o PEDAÇO DE CÓDIGO como se fosse o nome. Slug de verdade é
@@ -133,3 +143,24 @@ def test_CONTROLE_o_prefixo_montado_em_runtime_NAO_vira_evento():
     assert "clique:" not in achou, "o prefixo cru voltou a ser lido como evento"
     assert "clique:convite-area-completar" in achou, (
         "o data-track de verdade sumiu da varredura")
+
+
+def test_nenhum_nome_MORTO_na_allowlist():
+    """O caminho inverso: nome na allowlist que NINGUÉM dispara.
+
+    🩸 06/09/2026. Ao instrumentar o site inteiro ("registrar TUDO", Pedro) eu pus 21 nomes novos
+    na allowlist e implementei o front aos poucos — ficaram 19 entradas mortas. O próprio arquivo
+    do backend já avisava, em 30/08: *"Entrada morta em whitelist não custa, mas confunde: 'existe
+    na lista' lê-se como 'medido'"*. Este guarda é essa frase virada teste: quem lê a lista pra
+    saber o que está medido tem que poder confiar nela.
+
+    🪤 Se um evento sair do front de propósito, TIRE o nome daqui no mesmo commit.
+    """
+    allow = _allowlist()
+    front = _eventos_do_front()
+    # `clique:<slug>` é aceito por regex no backend, não por nome — fora desta conta.
+    mortos = sorted(n for n in allow if n not in front and not n.startswith("clique:"))
+    assert not mortos, (
+        "Nomes na _TRACK_ALLOWLIST que nenhum arquivo do site dispara — ou implemente o disparo, "
+        f"ou tire o nome da lista no mesmo commit: {mortos}"
+    )

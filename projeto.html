@@ -1433,7 +1433,10 @@ async function enviarRespostasProc() {
   if (v('pp-pd')) corpo.pe_direito = v('pp-pd');
   if (v('pp-area')) corpo.area_total = v('pp-area');
   if (v('pp-prazo')) corpo.prazo_meses = v('pp-prazo');
-  if (!Object.keys(corpo).length) { st.textContent = 'Preencha ao menos um campo.'; return; }
+  if (!Object.keys(corpo).length) {
+    try { if (window.trackEvent) trackEvent('proc_perguntas:recusado', { job_id: jobId, motivo: 'vazio' }); } catch (_) {}
+    st.textContent = 'Preencha ao menos um campo.'; return;
+  }
   st.textContent = 'Enviando…';
   try {
     const r = await authFetch(`${API_BASE}/api/project/${jobId}/respostas-processamento`, {
@@ -1450,6 +1453,11 @@ async function enviarRespostasProc() {
       st.className = 'text-sm text-amber-700 font-medium';
       return;
     }
+    // 🔒 só QUAIS campos vieram (slug nosso), nunca os valores que a pessoa digitou
+    try {
+      if (window.trackEvent) trackEvent('proc_perguntas:respondido', { job_id: jobId,
+        campo: Object.keys(corpo).map(k => k.replace('pe_direito','pd').replace('area_total','area').replace('prazo_meses','prazo')).join('-') });
+    } catch (_) {}
     try { localStorage.setItem('pp_respondido_' + jobId, '1'); } catch (_) {}
     const card = document.getElementById('proc-perguntas');
     if (card) card.innerHTML = '<p class="text-sm text-emerald-700 font-medium">✓ Valeu! Suas respostas entram nesta leitura.</p>';
@@ -1510,6 +1518,7 @@ function mostrarProcessando(live, session, pmeta) {
     let _respondido = false;
     try { _respondido = localStorage.getItem('pp_respondido_' + jobId) === '1'; } catch (_) {}
     if (_card && (_faltam === 0 || _respondido)) _card.classList.add('hidden');
+    else if (_card) { try { if (window.trackEvent) trackEvent('proc_perguntas:exibido', { job_id: jobId, pendentes: _faltam }); } catch (_) {} }
     else if (_card && _jaTem.length) {
       const _t = _card.querySelector('p');
       if (_t) _t.textContent = _faltam === 1
@@ -1956,7 +1965,12 @@ function mostrarVista(nome) {
   } catch (_) {}
   // A aba de cotações mora dentro da vista 'cotacoes'; só dá pra mexer nela
   // depois que a vista aparece, senão o painel ainda está escondido.
-  if (nome === 'cotacoes') { try { switchUploadTab('cotacoes'); } catch (_) {} }
+  if (nome === 'cotacoes') {
+    try { switchUploadTab('cotacoes'); } catch (_) {}
+    // 06/09: o comparativo tem 0 uso na vida do produto e ninguem sabia se falta gente CHEGANDO
+    // la ou se quem chega desiste. Este e o denominador (a familia view_cronograma/view_memorial).
+    try { if (window.trackEvent) trackEvent('view_comparativo', { job_id: jobId }); } catch (_) {}
+  }
   window.scrollTo({ top: 0, behavior: 'instant' });
   if (window.aiarqMenu) window.aiarqMenu.marcarAtivo();
   return nome;
@@ -2532,7 +2546,7 @@ async function generateComparison() {
         `;
       }
       const pptxBtn = data.pptx_url ? `
-        <button type="button" onclick="downloadProtected('${API_BASE}${data.pptx_url}', 'comparativo_fornecedores.pptx')" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-sm rounded-lg font-medium">
+        <button type="button" onclick="downloadProtected('${API_BASE}${data.pptx_url}', 'comparativo_fornecedores.pptx').then(function(o){ if(o&&window.trackEvent) trackEvent('download_comparativo',{job_id:'${jobId}',formato:'pptx'}); })" class="inline-flex items-center gap-2 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 text-white text-sm rounded-lg font-medium">
           📊 Baixar apresentação PPT
         </button>
       ` : '';
@@ -2543,7 +2557,7 @@ async function generateComparison() {
           ${s.n_discrepancies_above_100pct ? `<p class="mt-2 text-xs text-red-600">⚠ ${s.n_discrepancies_above_100pct} itens com diferença > 100% entre fornecedores</p>` : ''}
           ${refHtml}
           <div class="mt-4 flex flex-wrap gap-2">
-            <button type="button" onclick="downloadProtected('${API_BASE}${data.xlsx_url}', 'comparativo_fornecedores.xlsx')" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium">
+            <button type="button" onclick="downloadProtected('${API_BASE}${data.xlsx_url}', 'comparativo_fornecedores.xlsx').then(function(o){ if(o&&window.trackEvent) trackEvent('download_comparativo',{job_id:'${jobId}',formato:'xlsx'}); })" class="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium">
               📥 Baixar comparativo XLSX
             </button>
             ${pptxBtn}
@@ -2556,6 +2570,7 @@ async function generateComparison() {
       result.classList.remove('hidden');
     }
   } catch (e) {
+    try { if (window.trackEvent) trackEvent('comparativo_erro', { job_id: jobId, motivo: 'servidor' }); } catch (_) {}
     result.innerHTML = `<p class="text-sm text-red-600">${esc(e.message)}</p>`;
     result.classList.remove('hidden');
   } finally {
@@ -2618,7 +2633,7 @@ function renderHeader(p) {
         const ok = window.toast
           ? await window.toast.confirm(_aviso, { ok: 'Reprocessar', cancel: 'Cancelar' })
           : confirm(_aviso);
-        if (!ok) return;
+        if (!ok) { try { if (window.trackEvent) trackEvent('reprocesso_bloqueado', { job_id: jobId, motivo: 'cancelou' }); } catch (_) {} return; }
         // 🩸 02/09/2026 — O ADMIN, DE VISITA, GASTAVA O REPROCESSO DO CLIENTE.
         // Esta é a tela do CLIENTE; o Pedro entra nela pelos links do painel
         // (`adm=1`, barra "voltar ao painel"). O aviso de cima diz "1 por
@@ -2656,18 +2671,23 @@ function renderHeader(p) {
           });
           const data = await res.json();
           if (res.status === 402) {
+            try { if (window.trackEvent) trackEvent('reprocesso_bloqueado', { job_id: jobId, motivo: 'limite' }); } catch (_) {}
             notify.warn(data.detail || 'Limite de reprocessamento atingido.');
             btnReprocess.disabled = true;
             btnReprocess.textContent = 'Limite atingido';
             return;
           }
           if (!res.ok) throw new Error(data.detail || 'Erro');
+          // 06/09: o reprocesso é 1 por projeto — o gesto mais caro que o cliente tem — e não
+          // deixava rastro nenhum. `type` diz se ele trocou a pergunta (ler como estrutura).
+          try { if (window.trackEvent) trackEvent('reprocesso_pedido', { job_id: jobId, type: _novoTipo || 'mesmo' }); } catch (_) {}
           notify.ok('Reprocessamento iniciado. O novo código é ' + (data.new_job_id || jobId) + '. Vou redirecionar em 5s.');
           setTimeout(() => {
             if (data.new_job_id) window.location.href = `projeto.html?job_id=${data.new_job_id}`;
             else window.location.reload();
           }, 5000);
         } catch (e) {
+          try { if (window.trackEvent) trackEvent('reprocesso_erro', { job_id: jobId }); } catch (_) {}
           notify.error('Erro ao reprocessar: ' + e.message);
           btnReprocess.disabled = false;
           btnReprocess.textContent = 'Reprocessar';
@@ -3063,6 +3083,8 @@ function maybeShowPeDireitoPrompt(proj, items) {
         (d.includes('parede') || d.includes('alvenaria') || d.includes('drywall'));
     });
     if (!paredeMedida) return;
+    // o DENOMINADOR: quantos VEEM o convite (sem ele, "ninguem responde" e "ninguem ve" leem igual)
+    try { if (window.trackEvent) trackEvent('convite-pd:exibido', { job_id: jobId, tela: 'projeto' }); } catch (_) {}
     document.getElementById('pd-prompt').classList.remove('hidden');
   } catch (e) { console.warn('[pd-prompt]', e); }
 }
@@ -3073,6 +3095,7 @@ async function submitInformedPeDireito() {
   const msg = document.getElementById('pd-msg');
   const val = parseFloat(String(inp.value || '').replace(',', '.'));
   if (!val || val < 1.8 || val > 8) {
+    try { if (window.trackEvent) trackEvent('convite-pd:submit-invalido', { job_id: jobId, tela: 'projeto' }); } catch (_) {}
     msg.textContent = '⚠ Informe um pé-direito entre 1,80 m e 8,00 m.';
     msg.className = 'text-sm text-amber-700';
     return;
@@ -3092,6 +3115,9 @@ async function submitInformedPeDireito() {
     });
     if (!r.ok) { throw new Error(await r.text() || ('HTTP ' + r.status)); }
     const data = await r.json();
+    // 06/09: o convite de ÁREA tinha os 4 eventos desde 02/09; o de pé-direito nasceu mudo.
+    // Sem o par exibido/resultado não dá pra dizer se o convite funciona ou se ninguém vê.
+    try { if (window.trackEvent) trackEvent('convite-pd:submit-ok', { job_id: jobId, tela: 'projeto' }); } catch (_) {}
     msg.textContent = data.pintura_derivada
       ? '✓ Pintura de parede calculada. Recarregando...'
       : '✓ Pé-direito salvo. Recarregando...';
@@ -3099,6 +3125,7 @@ async function submitInformedPeDireito() {
     setTimeout(() => location.reload(), 1200);
   } catch (e) {
     console.error('[inform-pe-direito]', e);
+    try { if (window.trackEvent) trackEvent('convite-pd:submit-erro', { job_id: jobId, tela: 'projeto' }); } catch (_) {}
     msg.textContent = '✗ Não consegui completar agora. Tenta de novo.';
     msg.className = 'text-sm text-red-700';
     btn.disabled = false;

@@ -444,6 +444,11 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('beforeunload', (e) => {
   if (dirty) { e.preventDefault(); e.returnValue = ''; }
 });
+// 06/09: sair com texto NAO salvo e o desfecho que diz que o editor cansou antes do fim — e era
+// invisivel. `pagehide` porque o beforeunload nao dispara no celular; o trackEvent usa keepalive.
+window.addEventListener('pagehide', function () {
+  try { if (dirty && window.trackEvent) trackEvent('memorial_saiu_sem_salvar', { job_id: jobId }); } catch (_) {}
+});
 </script>
 <script src="toast.js" defer></script>
 </body>

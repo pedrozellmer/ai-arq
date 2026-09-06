@@ -828,7 +828,22 @@ function moverRow(row, delta) {
 
 // Debounce do live-apply pra não recalcular Gantt a cada keypress.
 let _liveApplyTimer = null;
+// 06/09: editar fase (nome, data, cor, %, valor) e o que separa "olhei o cronograma" de "trabalhei
+// nele" — e nao tinha evento. UMA vez por sessao: o listener e `input`, dispararia a cada tecla.
+var _fasesEditadasSessao = false;
+function _marcarFaseEditada() {
+  if (_fasesEditadasSessao) return;
+  _fasesEditadasSessao = true;
+  try { if (window.trackEvent) trackEvent('cronograma_fase_editada', { job_id: jobId }); } catch (_) {}
+}
+window.addEventListener('pagehide', function () {
+  try {
+    if (_fasesEditadasSessao && !window.__cronSalvou && window.trackEvent)
+      trackEvent('cronograma_saiu_sem_salvar', { job_id: jobId });
+  } catch (_) {}
+});
 function scheduleLiveApply() {
+  _marcarFaseEditada();
   if (_liveApplyTimer) clearTimeout(_liveApplyTimer);
   _liveApplyTimer = setTimeout(() => {
     // Mesma lógica do aplicarEdits, mas sem mensagem de sucesso ruidosa
@@ -1089,6 +1104,7 @@ async function salvarCronograma() {
     if (!r.ok) throw new Error(`HTTP ${r.status}: ${await r.text()}`);
     showSaveStatus('Cronograma salvo. Botões PDF/PPT já podem ser usados.', 'success');
     // salvar é o ato que separa "olhei o cronograma" de "esse cronograma é meu"
+    window.__cronSalvou = true;   // pra saida sem salvar nao acusar quem salvou
     try { if (window.trackEvent) trackEvent('cronograma_salvo', { job_id: jobId,
       origem: 'botao', editados: fasesEditadas.length }); } catch (_) {}
     // Salvar carimba a assinatura do quantitativo atual: se o aviso de

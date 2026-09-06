@@ -570,6 +570,22 @@
   //  SHOW / HIDE ERROR
   // ══════════════════════════════════════════════
   function showError(msg) {
+    // 06/09 (Pedro: "registrar TUDO"): a validacao barra o cadastro em 10 pontos e nenhum deixava
+    // rastro — "onde o cadastro para" era palpite. 🔒 so o CAMPO (slug nosso), nunca o que foi
+    // digitado; a mensagem vira um slug curto por palavra-chave.
+    try {
+      if (window.trackEvent) {
+        var _m = String(msg || '').toLowerCase();
+        var _campo = /nome/.test(_m) ? 'nome'
+                   : (/whats|telefone|celular/.test(_m) ? 'whatsapp'
+                   : (/cpf|cnpj/.test(_m) ? 'cpf'
+                   : (/termo/.test(_m) ? 'termos'
+                   : (/idade|18/.test(_m) ? 'idade'
+                   : (/area|área/.test(_m) ? 'area'
+                   : (/origem|conheceu/.test(_m) ? 'origem' : 'outro'))))));
+        trackEvent('signup_bloqueado', { motivo: _campo });
+      }
+    } catch (e) {}
     formError.textContent = msg;
     formError.classList.remove('hidden');
     // 28/07/2026: o erro nasce no rodapé do formulário. Em tela de celular, a

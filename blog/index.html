@@ -691,7 +691,9 @@
     try {
       var p = location.pathname;
       var slug = (p.split('/').pop() || 'index').replace(/[.]html$/, '').slice(0, 40);
-      if (window.trackEvent) window.trackEvent('view_blog_post', { campo: slug });
+      // 06/09: a VITRINE usava o mesmo nome dos posts, entao "abriu o blog" e "leu um post"
+      // caiam no mesmo balde e nao dava pra separar quem folheia de quem le.
+      if (window.trackEvent) window.trackEvent('view_blog', { campo: slug });
     } catch (e) { }
   })();
 </script>

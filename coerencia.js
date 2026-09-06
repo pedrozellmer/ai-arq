@@ -158,6 +158,14 @@
   // página do projeto dividida em vistas, o alerta precisa aparecer tanto
   // na Visão geral quanto ao lado dos botões de baixar.
   function render(caixa, txt) {
+    // 06/09: o aviso da regra nº7 (o entregavel envelheceu) so tinha o lado do CODIGO — ninguem
+    // sabia quantas vezes ele aparece nem se alguem age nele. `ctx` diz em que tela.
+    try {
+      if (window.trackEvent && !render._contado) {
+        render._contado = true;
+        window.trackEvent('coerencia_aviso', { tela: String(window.__coerCtx || 'projeto').slice(0, 20), motivo: 'exibido' });
+      }
+    } catch (e) {}
     var html =
       '<div class="rounded-xl border-2 border-amber-300 bg-amber-50 px-4 py-3">' +
         '<div class="flex items-start gap-3">' +
@@ -189,6 +197,16 @@
   // mudam de estado juntos: ver "Atualizar" ainda ativo do outro lado enquanto
   // a coisa já está rodando faz a pessoa clicar de novo.
   function ligarTodos(tipo, aoClicar) {
+    try {
+      if (window.trackEvent) {
+        var _bs = document.querySelectorAll('[data-coer="' + tipo + '"]');
+        for (var _i = 0; _i < _bs.length; _i++) {
+          _bs[_i].addEventListener('click', function () {
+            try { window.trackEvent('coerencia_aviso', { tela: String(window.__coerCtx || 'projeto').slice(0, 20), motivo: 'clicou' }); } catch (e) {}
+          }, { once: true });
+        }
+      }
+    } catch (e) {}
     var btns = [].slice.call(document.querySelectorAll('[data-coer="' + tipo + '"]'));
     if (!btns.length) return null;
     var estado = function (texto, travado) {
@@ -252,6 +270,7 @@
   }
 
   async function aiArqCoerencia(jobId, contexto) {
+    try { window.__coerCtx = contexto || 'projeto'; } catch (e) {}
     // 🚨 REGRA DURA nº7 — o aviso tem que estar ONDE O CLIENTE BAIXA.
     // A página do projeto virou 4 vistas em 04/08 e este aviso ficou só na
     // "Visão geral", enquanto os botões de baixar foram pra "Sua planilha".
