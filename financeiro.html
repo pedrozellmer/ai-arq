@@ -203,8 +203,10 @@
 
   <!-- Sem cronograma: o vencimento por fase não tem data -->
   <div id="aviso-cronograma" hidden class="rounded-xl border-2 border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-    <p class="font-semibold">Este projeto ainda não tem cronograma salvo.</p>
-    <p class="text-xs text-amber-800 mt-0.5">O vencimento por fase precisa das datas do Gantt pra dizer o que venceu. Até lá, use <strong>data fixa</strong> nos lançamentos — ou <a id="link-cronograma" href="#" class="font-medium text-indigo-700 hover:underline">gere o cronograma</a> e volte aqui.</p>
+    <p id="aviso-cron-titulo" class="font-semibold">Este projeto ainda não tem cronograma salvo.</p>
+    <p id="aviso-cron-sub" class="text-xs text-amber-800 mt-0.5">O vencimento por fase precisa das datas do Gantt pra dizer o que venceu. Até lá, use <strong>data fixa</strong> nos lançamentos — ou <a id="link-cronograma" href="#" class="font-medium text-indigo-700 hover:underline">gere o cronograma</a> e volte aqui.</p>
+    <!-- falha de leitura NÃO é "não tem cronograma" (auditoria 06/09) -->
+    <p id="aviso-cron-erro" hidden class="text-xs text-amber-800 mt-0.5">Os vencimentos amarrados a fase podem aparecer sem data até a leitura voltar. Recarregue a página em instantes.</p>
   </div>
 
   <!-- Barra de ações: fixa enquanto rola (igual à do cronograma) -->
@@ -315,6 +317,7 @@
     </div>
     <p class="text-xs text-gray-500 mt-3">Quando o quantitativo muda depois do lançamento, a linha avisa <em>"o item mudou"</em> — como o cronograma e o memorial já avisam.</p>
     <p id="aviso-itens" hidden class="text-xs text-amber-800 mt-2">Não consegui conferir os itens do quantitativo nesta leitura — o aviso "item mudou" fica de fora até a próxima vez que a página carregar.</p>
+    <p id="aviso-lanc" hidden class="text-xs text-red-700 font-semibold mt-2">Este projeto tem mais de 1000 lançamentos e o banco devolve só os primeiros mil: os totais desta tela estão INCOMPLETOS. Fale com a gente pelo chat pra liberar a leitura completa.</p>
   </section>
 
   <!-- DESEMBOLSO -->
@@ -335,9 +338,10 @@
   <details class="rise rounded-2xl bg-white border border-slate-200 shadow-sm p-5 group">
     <summary class="cursor-pointer text-sm font-semibold text-indigo-700 flex items-center gap-2 list-none">
       <svg class="w-4 h-4 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>
-      Ainda sem contratos? Projeção pelo peso físico
+      Ainda sem contratos? O cronograma já projeta o desembolso
     </summary>
-    <p class="text-sm text-gray-600 mt-3 leading-relaxed">Enquanto nada foi contratado, você informa só o <strong>valor total previsto</strong> no Cronograma e ele distribui pelas etapas conforme o peso físico de cada uma. Serve pra ter uma curva de desembolso antes das cotações. Assim que um lançamento real entra numa categoria, ele passa a valer aqui.</p>
+    <!-- auditoria 06/09: o texto antigo prometia uma projeção por "valor total" que viria pra esta tela — nem o cronograma pede total (é por etapa), nem esta tela mistura previsão com lançamento -->
+    <p class="text-sm text-gray-600 mt-3 leading-relaxed">Enquanto nada foi contratado, o <strong>Cronograma</strong> faz a projeção: lá você informa o <strong>valor previsto de cada etapa</strong> e ele distribui pelos meses no ritmo da obra — uma curva de desembolso antes das cotações. Este financeiro registra o que foi de fato cotado, contratado e pago. Os dois se complementam; nenhum substitui o outro.</p>
   </details>
 
   <div class="rounded-xl bg-amber-50 border border-amber-200 p-5">
@@ -516,13 +520,17 @@ function daApi(r){
     origem_ref_id: r.origem_ref_id || null, origem_ref_pos: (r.origem_ref_pos==null ? null : Number(r.origem_ref_pos)),
   };
 }
-// Data do vencimento: fixa, ou início/fim da fase (pelo label, com a categoria de reserva). null = fase sem data.
+// Data do vencimento: fixa, ou início/fim da fase (pelo label; a categoria só é reserva quando não há fase).
+// 🩸 auditoria 06/09: com `FASES[fase] || FASES[cat]`, fase APAGADA do Gantt herdava calada a data da
+// categoria e a tela ainda rotulava a fase morta. Fase escolhida e ausente do cronograma = sem data.
 function vencData(l){
   if (l.venc.tipo==='data') return dISO(l.venc.d);
-  const f = FASES[l.venc.fase] || FASES[l.cat];
+  const f = FASES[l.venc.fase || l.cat];
   if (!f) return null;
   return dISO(l.venc.quando==='fim' ? f[1] : f[0]);
 }
+// a fase existe no cronograma? (só pra explicar ao cliente por que ficou sem data)
+const faseSumiu = l => l.venc.tipo==='fase' && TEM_CRONOGRAMA && !FASES[l.venc.fase || l.cat];
 const pago     = l => l.st==='pago';
 const temValor = l => l.valor!=null;
 const emAberto = l => !pago(l) && temValor(l) && ['contratado','aprovado'].includes(l.st);
@@ -543,9 +551,11 @@ function erroDe(r, d){ return new Error((d && d.detail) || (d && d.error) || ('o
 async function api(method, caminho, corpo){
   const opts = { method };
   if (corpo !== undefined) { opts.headers = {'Content-Type':'application/json'}; opts.body = JSON.stringify(corpo); }
-  const r = await authFetch(`${API_BASE}/api/financeiro/${jobId}${caminho}`, opts);
+  let r;
+  try { r = await authFetch(`${API_BASE}/api/financeiro/${jobId}${caminho}`, opts); }
+  catch (e) { const err = new Error('sem conexão com o servidor — confira a internet e tente de novo'); err.rede = true; throw err; }  // "Failed to fetch" em inglês não ajuda ninguém
   const d = await lerJson(r);
-  if (!r.ok) throw erroDe(r, d);
+  if (!r.ok) { const err = erroDe(r, d); err.status = r.status; throw err; }
   return d;
 }
 function marcarSalvando(l, on){ const tr = document.querySelector(`tr.row[data-id="${l.id}"]`); if (tr) tr.classList.toggle('salvando', !!on); }
@@ -553,33 +563,51 @@ function statusSalvo(txt, erro){ const el=document.getElementById('save-status')
 // PATCH de UM lançamento: otimista na tela, servidor confirma; se recusar, a tela volta ao que o servidor tem.
 async function persistir(l, campos, msgOk){
   marcarSalvando(l, true); statusSalvo('Salvando…');
+  // duas edições rápidas na mesma linha: a resposta atrasada da 1ª não pode sobrescrever a 2ª (auditoria 06/09)
+  l._seq = (l._seq || 0) + 1; const seq = l._seq;
   try {
     const d = await api('PATCH', `/${encodeURIComponent(l.id)}`, campos);
-    if (d.lancamento) Object.assign(l, daApi(d.lancamento));
+    if (seq !== l._seq) return;
+    if (d.lancamento) {
+      // o PATCH devolve a linha do banco SEM o estado da origem — o selo da regra nº7 ("item mudou") não pode sumir na edição
+      const selo = { estado: l.estado, origem_atual: l.origem_atual, origem_candidatos: l.origem_candidatos };
+      Object.assign(l, daApi(d.lancamento));
+      if (d.lancamento.origem_estado == null) Object.assign(l, selo);
+    }
     statusSalvo('Salvo agora.');
     if (msgOk) avisar(msgOk);
     renderRow(l);
   } catch (e) {
+    if (seq !== l._seq) return;
     statusSalvo('Não salvou — veja o aviso.', true);
     avisar(e.message || 'não consegui salvar', 'erro');
-    await recarregar();   // o que está na tela volta a ser o que o servidor tem
+    const voltou = await recarregar();   // o que está na tela volta a ser o que o servidor tem
+    if (!voltou) {
+      // 🩸 falhou o salvar E o recarregar: o que está na tela NÃO é o que o servidor tem — dizer isso, não fingir
+      statusSalvo('Não salvou e não consegui recarregar — recarregue a página.', true);
+      const tr=document.querySelector(`tr.row[data-id="${l.id}"]`); if(tr) tr.classList.add('erro');
+    }
   }
 }
 
 // ── carga ──
+let CRONOGRAMA_ERRO = false;
 async function carregarFases(){
-  FASES = {}; FASES_ORDEM = []; TEM_CRONOGRAMA = false;
-  let fases = [];
+  FASES = {}; FASES_ORDEM = []; TEM_CRONOGRAMA = false; CRONOGRAMA_ERRO = false;
+  let fases = [], TEM_SALVO = false;
   try {
     const r = await authFetch(`${API_BASE}/api/cronograma/${jobId}`);
-    if (r.ok) { const c = await lerJson(r); if (c && c.status==='ok' && c.saved) fases = c.saved.fases_custom || []; }
-  } catch (e) { console.warn('cronograma salvo:', e); }
-  if (!fases.length) {
-    // salvo sem fases (só config) ou nunca gerado: o /full gera as fases dos itens (404 = nunca gerado)
+    if (r.ok) { const c = await lerJson(r); if (c && c.status==='ok' && c.saved) { TEM_SALVO = true; fases = c.saved.fases_custom || []; } }
+    else CRONOGRAMA_ERRO = true;
+  } catch (e) { CRONOGRAMA_ERRO = true; console.warn('cronograma salvo:', e); }
+  // o /full só tem o que dizer quando EXISTE cronograma salvo sem fases (só config). Sem nada salvo ele é
+  // 404 garantido — e custava 3 idas ao banco por abertura em 97% dos projetos (auditoria 06/09).
+  if (!fases.length && !CRONOGRAMA_ERRO && TEM_SALVO) {
     try {
       const r2 = await authFetch(`${API_BASE}/api/cronograma/${jobId}/full`);
       if (r2.ok) { const cf = await lerJson(r2); fases = (cf && cf.fases) || []; }
-    } catch (e) { console.warn('cronograma full:', e); }
+      else if (r2.status !== 404) CRONOGRAMA_ERRO = true;
+    } catch (e) { CRONOGRAMA_ERRO = true; console.warn('cronograma full:', e); }
   }
   const ord = fases.slice().sort((a,b)=>((a.ordem||0)-(b.ordem||0)) || String(a.inicio||'').localeCompare(String(b.inicio||'')));
   ord.forEach(f => {
@@ -588,6 +616,10 @@ async function carregarFases(){
   });
   TEM_CRONOGRAMA = FASES_ORDEM.length > 0;
   document.getElementById('aviso-cronograma').hidden = TEM_CRONOGRAMA;
+  // 🩸 auditoria 06/09: a leitura falhando virava "este projeto não tem cronograma" — o texto diz a verdade
+  document.getElementById('aviso-cron-titulo').textContent = CRONOGRAMA_ERRO ? 'Não consegui ler o cronograma agora.' : 'Este projeto ainda não tem cronograma salvo.';
+  document.getElementById('aviso-cron-sub').hidden = CRONOGRAMA_ERRO;
+  document.getElementById('aviso-cron-erro').hidden = !CRONOGRAMA_ERRO;
   document.getElementById('leg-fisico').style.display = TEM_CRONOGRAMA ? '' : 'none';
 }
 async function carregarLancamentos(){
@@ -595,20 +627,31 @@ async function carregarLancamentos(){
   SOMENTE_LEITURA = !!d.somente_leitura;
   ITENS_LIDOS = d.itens_lidos !== false;
   L = (d.lancamentos || []).map(daApi);
-  document.getElementById('aviso-itens').hidden = ITENS_LIDOS;
+  // o servidor diz quando o banco cortou a leitura em 1000 (itens ou lançamentos) — a tela repete, não esconde
+  const avi = document.getElementById('aviso-itens');
+  avi.hidden = ITENS_LIDOS;
+  avi.textContent = d.itens_truncados
+    ? 'A planilha tem mais de 1000 itens: nesta leitura eu não confiro "item mudou" em nenhum lançamento, pra não marcar como removido quem só ficou fora da leitura.'
+    : 'Não consegui conferir os itens do quantitativo nesta leitura — o aviso "item mudou" fica de fora até a próxima vez que a página carregar.';
+  document.getElementById('aviso-lanc').hidden = !d.lancamentos_truncados;
 }
+let ITENS_ERRO = false, COTACOES_ERRO = false, FONTES_PRONTAS = null;
 async function carregarFontesDoModal(){
-  // itens do quantitativo e cotações — só pro modal; falhar aqui não derruba a tela
+  // itens do quantitativo e cotações — só pro modal; falhar aqui não derruba a tela,
+  // mas o modal tem que dizer "não consegui ler", não "não tem" (auditoria 06/09)
+  ITENS_ERRO = false; COTACOES_ERRO = false;
   try {
     const r = await authFetch(`${API_BASE}/api/items/${jobId}`);
     if (r.ok) { const d = await lerJson(r); ITENS = (d.items || []).filter(it => it && it.id && it.description); }
-  } catch (e) { console.warn('itens:', e); }
+    else ITENS_ERRO = true;
+  } catch (e) { ITENS_ERRO = true; console.warn('itens:', e); }
   try {
     const r = await authFetch(`${API_BASE}/api/projects/${jobId}/quotes`);
     if (r.ok) { const d = await lerJson(r); COTACOES = (d.quotes || []).filter(q => q && q.id); }
-  } catch (e) { console.warn('cotações:', e); }
+    else COTACOES_ERRO = true;
+  } catch (e) { COTACOES_ERRO = true; console.warn('cotações:', e); }
 }
-async function recarregar(){ try { await carregarLancamentos(); } catch (e) { avisar(e.message, 'erro'); } render(); }
+async function recarregar(){ try { await carregarLancamentos(); render(); return true; } catch (e) { avisar(e.message, 'erro'); render(); return false; } }
 function aplicarSomenteLeitura(){
   const ro = SOMENTE_LEITURA;
   document.getElementById('pill-leitura').hidden = !ro;
@@ -632,7 +675,7 @@ async function init(){
   document.getElementById('conteudo').hidden = false;
   document.getElementById('gate').classList.add('hidden');
   medirSticky(); render(); setTimeout(medirSticky, 300);
-  carregarFontesDoModal();   // em paralelo, sem travar a tela
+  FONTES_PRONTAS = carregarFontesDoModal();   // em paralelo, sem travar a tela — o modal espera terminar
 }
 
 // ── filtros com contagem ──
@@ -640,6 +683,11 @@ function filtrar(f){ FILTRO=f; document.querySelectorAll('.fin-chip').forEach(b=
 function contagens(){ document.querySelectorAll('.fin-chip').forEach(b=>{ const n=L.filter(PRED[b.dataset.f]).length; b.querySelector('.n').textContent=n; }); }
 
 // ── KPIs ──
+// 🔒 nº5 no card: balde só com linha sem valor NÃO vira "R$ 0" — a tabela já mostra "Sem valor" e o
+// rodapé da categoria já mostra "—". Um número só some quando existe (auditoria 06/09).
+const kpiMoeda = (balde, soma) => (balde.length && !balde.some(temValor)) ? '—' : BRL(soma);
+const semValorNo = balde => balde.filter(l=>!temValor(l)).length;
+const sufixoSemValor = n => n ? ` · ${n} sem valor` : '';
 function kpis(){
   const contr=L.filter(l=>['contratado','pago'].includes(l.st)); const vc=contr.reduce((s,l)=>s+(l.valor||0),0);
   const pg=L.filter(pago); const vp=pg.reduce((s,l)=>s+(l.valor||0),0);
@@ -647,18 +695,21 @@ function kpis(){
   const v30=em30.reduce((s,l)=>s+(l.valor||0),0); const venc=em30.filter(l=>vencData(l)<HOJE);
   const semData=L.filter(l=>emAberto(l) && !vencData(l)).length;
   const ag=L.filter(l=>l.st==='enviado'); const vag=ag.reduce((s,l)=>s+(l.valor||0),0);
-  document.getElementById('k-contr').textContent=BRL(vc);
-  document.getElementById('k-contr-s').textContent=`${contr.length} lançamento${contr.length!==1?'s':''}`;
-  document.getElementById('k-pago').textContent=BRL(vp);
+  document.getElementById('k-contr').textContent=kpiMoeda(contr, vc);
+  document.getElementById('k-contr-s').textContent=`${contr.length} lançamento${contr.length!==1?'s':''}`+sufixoSemValor(semValorNo(contr));
+  document.getElementById('k-pago').textContent=kpiMoeda(pg, vp);
   document.getElementById('k-pago-s').textContent=vc?`${Math.round(100*vp/vc)}% do contratado`:'—';
-  document.getElementById('k-30').textContent=BRL(v30);
+  document.getElementById('k-30').textContent=kpiMoeda(em30, v30);
   document.getElementById('k-30-s').innerHTML=(venc.length?`<span class="text-red-600 font-semibold">${venc.length} já vencido${venc.length>1?'s':''}</span> · ${em30.length-venc.length} a vencer`:`${em30.length} a vencer`) + (semData?` · <span class="text-amber-700">${semData} sem data</span>`:'');
-  document.getElementById('k-ag').textContent=BRL(vag);
-  document.getElementById('k-ag-s').textContent=`${ag.length} aguardando o cliente`;
-  // selo no menu lateral: só afirma o que sabe (sem cronograma, não dá pra dizer "em dia")
+  document.getElementById('k-ag').textContent=kpiMoeda(ag, vag);
+  document.getElementById('k-ag-s').textContent=`${ag.length} aguardando o cliente`+sufixoSemValor(semValorNo(ag));
+  // selo no menu lateral: só afirma o que sabe (sem cronograma, não dá pra dizer "em dia";
+  // e com lançamento em aberto SEM data também não — ele pode estar vencido e a gente não sabe)
   const nv=L.filter(vencido).length;
-  if (TEM_CRONOGRAMA || L.every(l=>l.venc.tipo==='data')) pintaSelo(nv ? `${nv} vencido${nv>1?'s':''}` : 'em dia', nv ? 'pend' : 'ok');
-  else pintaSelo('—', 'nao');
+  if (!(TEM_CRONOGRAMA || L.every(l=>l.venc.tipo==='data'))) pintaSelo('—', 'nao');
+  else if (nv) pintaSelo(`${nv} vencido${nv>1?'s':''}`, 'pend');
+  else if (semData) pintaSelo(`${semData} sem data`, 'pend');
+  else pintaSelo('em dia', 'ok');
   contagens();
 }
 function pintaSelo(texto, classe){ const e=document.querySelector('.side-est[data-est="financeiro"]'); if(!e) return; e.textContent=texto; e.className='side-est '+classe; }
@@ -705,7 +756,7 @@ function celulaVenc(l){
     : `<span class="text-[12.5px] text-slate-400">—</span>`;
   const l2 = l.venc.tipo==='fase'
     ? (vd ? `<span class="src cron" title="${esc(l.venc.fase)} — mover a fase move o vencimento">${l.venc.quando==='fim'?'fim':'início'}${l.venc.fase && l.venc.fase!==l.cat ? ' · '+esc(l.venc.fase) : ' da fase'}</span>`
-          : `<span class="src semdata" title="A fase “${esc(l.venc.fase||l.cat)}” não tem data no cronograma — gere/ajuste o cronograma ou use data fixa">fase sem data</span>`)
+          : `<span class="src semdata" title="${faseSumiu(l) ? `A fase “${esc(l.venc.fase||l.cat)}” não está mais no cronograma (foi renomeada ou apagada) — clique pra escolher outra fase ou usar data fixa` : `A fase “${esc(l.venc.fase||l.cat)}” não tem data no cronograma — gere/ajuste o cronograma ou use data fixa`}">fase sem data</span>`)
     : `<span class="text-[11px] text-slate-500">data fixa</span>`;
   const aria = l.venc.tipo==='fase' ? `${vd?dBR(vd):'sem data'}, ${l.venc.quando==='fim'?'fim':'início'} da fase ${esc(l.venc.fase)}` : `${vd?dBR(vd):'sem data'}, data fixa`;
   const ro=SOMENTE_LEITURA?'ro':'', tab=SOMENTE_LEITURA?'':'tabindex="0" role="button"';
@@ -714,7 +765,13 @@ function celulaVenc(l){
 function celulaStatus(l){
   const i=idx(l);
   if(!temValor(l)) return `<span class="status st-semvalor" title="informe o valor primeiro" aria-disabled="true"><i></i>Sem valor</span>`;
-  const sub = pago(l) && l.pago_em ? `<span class="block text-[10.5px] text-emerald-700 mt-0.5">pago em ${dBR(dISO(l.pago_em))}</span>` : '';
+  // "pago em" editável: obra em andamento registra pagamento de ontem, do mês passado — a data do
+  // clique ia parar no PDF e na planilha como se fosse a do pagamento (auditoria 06/09)
+  const sub = pago(l) && l.pago_em
+    ? (SOMENTE_LEITURA
+        ? `<span class="block text-[10.5px] text-emerald-700 mt-0.5">pago em ${dBR(dISO(l.pago_em))}</span>`
+        : `<span class="cell block text-[10.5px] text-emerald-700 mt-0.5" data-i="${i}" data-campo="pago_em" tabindex="0" role="button" title="clique pra corrigir a data do pagamento" aria-label="Pago em ${dBR(dISO(l.pago_em))} — ${esc(l.oque)}">pago em ${dBR(dISO(l.pago_em))}</span>`)
+    : '';
   if (SOMENTE_LEITURA) return `<span class="status ro st-${l.st}" title="${ST_LONG[l.st]}"><i></i>${ST_LABEL[l.st]}</span>${sub}`;
   return `<button class="status st-${l.st}" data-i="${i}" aria-haspopup="listbox" aria-expanded="false" aria-label="Status — ${esc(l.oque)}: ${ST_LONG[l.st]}" title="${ST_LONG[l.st]}" onclick="abrirStatus(this,${i})"><i></i>${ST_LABEL[l.st]}<svg class="chev" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>${sub}`;
 }
@@ -767,7 +824,7 @@ function renderRow(l){
 }
 
 // ── clique-para-editar ──
-const CAMPOS_ORDEM = ['oque','forn','valor','forma','venc'];
+const CAMPOS_ORDEM = ['oque','forn','valor','forma','venc','pago_em'];
 function focar(i,campo){ const el=[...document.querySelectorAll(`.cell[data-i="${i}"][data-campo="${campo}"][tabindex], .status[data-i="${i}"]`)].find(x=>x.offsetParent!==null); if(el) el.focus(); }
 function vizinho(i,campo,dir){
   const ordem=CAMPOS_ORDEM.filter(c=>[...document.querySelectorAll(`.cell[data-i="${i}"][data-campo="${c}"][tabindex]`)].some(x=>x.offsetParent!==null));
@@ -782,7 +839,8 @@ function editar(span){
   if(campo==='oque' && l.src!=='livre') return;
   const inp=document.createElement('input'); inp.className='in'+(campo==='valor'?' money':''); inp.dataset.i=i; inp.dataset.campo=campo; inp.autocomplete='off';
   inp.setAttribute('aria-label', span.getAttribute('aria-label')||campo);
-  inp.value = campo==='valor' ? fmt2(l.valor) : (l[campo]||'');
+  if(campo==='pago_em'){ inp.type='date'; inp.max=toISO(HOJE); }
+  inp.value = campo==='valor' ? fmt2(l.valor) : (campo==='pago_em' ? (l.pago_em||'') : (l[campo]||''));
   if(campo==='valor'){ inp.inputMode='decimal'; inp.placeholder='ex.: 12.500,00'; inp.addEventListener('beforeinput', e=>{ if(e.data && /[^\d.,]/.test(e.data)) e.preventDefault(); }); }
   if(campo==='forma'){ inp.placeholder='à vista, 3×…'; inp.classList.add('text-right'); inp.maxLength=120; }
   if(campo==='forn'){ inp.placeholder='fornecedor'; inp.maxLength=200; }
@@ -802,6 +860,10 @@ function editar(span){
           if(v==null && l.st==='pago'){ campos.status='contratado'; l.st='contratado'; l.pago_em=null; }
           l.valor=v;
         }
+      } else if(campo==='pago_em'){
+        const t=inp.value.trim();
+        // data vazia ou futura não entra; o servidor exige o status junto de pago_em
+        if(t && t<=toISO(HOJE) && t!==(l.pago_em||'')){ l.pago_em=t; campos={status:'pago', pago_em:t}; }
       } else {
         const t=inp.value.trim(); const chave = campo==='forma' ? 'forma_pagamento' : (campo==='oque' ? 'descricao' : 'fornecedor');
         if(t!==(l[campo]||'')){ l[campo]=t; campos={}; campos[chave]=t; }
@@ -853,7 +915,8 @@ function combobox(input, fontes, onPick){
   input.addEventListener('input', ()=>{ st.digitou=true; st.build(); });
   input.addEventListener('focus', ()=>{ cbAtivo=st; st.digitou=false; st.build(); });
   input.addEventListener('blur', ()=> setTimeout(()=>{ if(!cbSegurando && cbAtivo===st) fecharCb(); }, 0));
-  input.addEventListener('keydown', e=>{ if(e.key==='ArrowDown'){ e.preventDefault(); if(ul.hidden) st.build(); st.idx=Math.min(st.itens.length-1, st.idx+1); st.mark(); } else if(e.key==='ArrowUp'){ e.preventDefault(); st.idx=Math.max(-1, st.idx-1); st.mark(); } });
+  // Enter com sugestão marcada ESCOLHE a sugestão — no modal, sem isso, o Enter enviava o formulário (auditoria 06/09)
+  input.addEventListener('keydown', e=>{ if(e.key==='ArrowDown'){ e.preventDefault(); if(ul.hidden) st.build(); st.idx=Math.min(st.itens.length-1, st.idx+1); st.mark(); } else if(e.key==='ArrowUp'){ e.preventDefault(); st.idx=Math.max(-1, st.idx-1); st.mark(); } else if(e.key==='Enter' && !ul.hidden && st.idx>=0){ e.preventDefault(); st.pick(); } });
   ul.onclick = e=>{ const li=e.target.closest('.cb-opt'); if(!li) return; st.escolher(st.itens[+li.dataset.k]); };
   if(document.activeElement===input){ cbAtivo=st; st.build(); }
   return st;
@@ -888,13 +951,27 @@ async function remover(i){
     await api('DELETE', `/${encodeURIComponent(l.id)}`);
     avisar(`Removido: ${curto(l.oque)}`, null, {acao:'Desfazer', fn:()=>recriar(l)});
   } catch (e) {
-    avisar(e.message || 'não consegui remover', 'erro'); await recarregar();
+    // 🩸 auditoria 06/09: a linha já tinha sumido da tela; se o DELETE E o recarregar falham, ela
+    // sumia calada. Devolve pro lugar e diz o que houve — dinheiro não some por falha de rede.
+    avisar(e.message || 'não consegui remover', 'erro');
+    const voltou = await recarregar();
+    if (!voltou) { L.splice(i, 0, l); render(); statusSalvo('Não removi — a linha continua aí.', true); }
   }
 }
 async function recriar(l){
   const corpo=corpoDaLinha(l);
   try { const d=await api('POST','',corpo); if(d.lancamento){ L.push(daApi(d.lancamento)); render(); avisar('Lançamento de volta'); } }
-  catch (e) { avisar('Não consegui desfazer: ' + (e.message||''), 'erro'); }
+  catch (e) {
+    // a origem sumiu (re-subir a planta recria os ids dos itens; cotação apagada): não perder o dinheiro — volta como linha livre (auditoria 06/09)
+    if (e.status === 404 && corpo.origem !== 'livre') {
+      try {
+        const livre = Object.assign({}, corpo, { origem:'livre', descricao: l.oque }); delete livre.origem_ref_id; delete livre.origem_ref_pos;
+        const d2 = await api('POST','',livre);
+        if (d2.lancamento) { L.push(daApi(d2.lancamento)); render(); avisar('O item de origem não existe mais com aquela identidade (planta re-subida ou cotação apagada) — o lançamento voltou como linha livre, com o mesmo valor.'); return; }
+      } catch (e2) { avisar('Não consegui desfazer: ' + (e2.message||''), 'erro'); return; }
+    }
+    avisar('Não consegui desfazer: ' + (e.message||''), 'erro');
+  }
 }
 function corpoDaLinha(l){
   const c={ escopo:'obra', categoria:l.cat, origem:SRC_API[l.src], fornecedor:l.forn||'', valor:l.valor, forma_pagamento:l.forma||'', status:l.st };
@@ -958,27 +1035,34 @@ function catAtual(){ const sel=document.getElementById('f-cat'); const liv=docum
 function montarCategorias(pre){
   const sel=document.getElementById('f-cat'), liv=document.getElementById('f-cat-livre');
   const labels=[...FASES_ORDEM]; L.forEach(l=>{ if(l.cat && !labels.includes(l.cat)) labels.push(l.cat); });
+  // sem cronograma salvo e sem lançamento (219 dos 229 projetos concluídos): as disciplinas do quantitativo servem de categoria
+  if(!labels.length) ITENS.forEach(it=>{ const d=String(it.discipline||'').trim(); if(d && !labels.includes(d)) labels.push(d); });
   if(pre && !labels.includes(pre)) labels.unshift(pre);
   sel.innerHTML = labels.map(c=>`<option>${esc(c)}</option>`).join('') + '<option value="__outra__">Outra categoria…</option>';
-  sel.hidden=false; liv.hidden=true;
+  // 🩸 auditoria 06/09: sem nenhuma categoria a única opção era "Outra…" com o campo de texto ESCONDIDO — o 1º lançamento era impossível
+  const soOutra = !labels.length;
+  sel.hidden=false; liv.hidden=!soOutra;
   sel.onchange=()=>{ const outra=sel.value==='__outra__'; liv.hidden=!outra; if(outra){ liv.focus(); } else sincFase(sel.value); };
   if(pre) sel.value=pre;
 }
-function abrirNovo(pre){
+async function abrirNovo(pre){
   if (SOMENTE_LEITURA) return;
   focoAntes=document.activeElement;
   const m=document.getElementById('modal-novo'); m.hidden=false;
   document.getElementById('f-erro').hidden=true;
+  // 🩸 auditoria 06/09: abrir o modal antes de as fontes chegarem mostrava "a planilha ainda não tem
+  // itens" — mentira de corrida. Espera a leitura que já está em curso (não dispara outra).
+  if (FONTES_PRONTAS) { try { await FONTES_PRONTAS; } catch (e) {} FONTES_PRONTAS = null; }
   montarCategorias(pre&&pre.cat);
   const sq=document.getElementById('sel-quant');
   sq.innerHTML = ITENS.length
     ? ITENS.map((it,i)=>`<option value="${i}">${esc(it.discipline||'')}${it.discipline?' — ':''}${esc(it.description)}${it.quantity!=null&&it.quantity!==0?` (${fmt2(it.quantity)} ${esc(it.unit||'')})`:''}</option>`).join('')
-    : '<option value="">(a planilha deste projeto ainda não tem itens)</option>';
+    : `<option value="">${ITENS_ERRO ? '(não consegui ler os itens da planilha agora — recarregue a página)' : '(a planilha deste projeto ainda não tem itens)'}</option>`;
   const linhas=[]; COTACOES.forEach((q,qi)=>(q.items||[]).forEach((ln,pos)=>{ if(!ln || ln.is_section || !ln.desc) return; linhas.push({qi,pos,q,ln}); }));
   const sc=document.getElementById('sel-comp');
   sc.innerHTML = linhas.length
     ? linhas.map(x=>`<option value="${x.qi}:${x.pos}">${esc(x.q.supplier_name||'')} · ${esc(x.ln.desc)}${x.ln.total>0?` · ${BRL(x.ln.total)}`:''}</option>`).join('')
-    : '<option value="">(nenhuma cotação subida no Comparativo ainda)</option>';
+    : `<option value="">${COTACOES_ERRO ? '(não consegui ler as cotações agora — recarregue a página)' : '(nenhuma cotação subida no Comparativo ainda)'}</option>`;
   document.querySelector('#origem-chips .rd[data-src="quant"]').disabled = !ITENS.length;
   document.querySelector('#origem-chips .rd[data-src="comp"]').disabled = !linhas.length;
   document.getElementById('st-chips').innerHTML=STATUS.filter(s=>s!=='pago').map(s=>`<button type="button" class="status st-${s}" data-st="${s}" title="${ST_LONG[s]}" onclick="setSt('${s}')" style="opacity:${s==='cotado'?1:.55}"><i></i>${ST_LABEL[s]}</button>`).join('');
@@ -988,7 +1072,9 @@ function abrirNovo(pre){
   const primeira = (pre&&pre.cat) || FASES_ORDEM[0] || catAtual();
   lerVencModal = blocoVenc(document.getElementById('venc-modal'), TEM_CRONOGRAMA ? {tipo:'fase', fase:primeira, quando:'inicio'} : {tipo:'data', d:toISO(HOJE)});
   if(!document.getElementById('f-forn').dataset.cb){
-    combobox(document.getElementById('f-forn'), fontesForn); combobox(document.getElementById('f-forma'), fontesForma);
+    // escolher na LISTA é mexer: sem o onPick, `input.value=...` por script não dispara `input`,
+    // `tocouForn` ficava false e o servidor regravava o fornecedor da cotação (auditoria 06/09)
+    combobox(document.getElementById('f-forn'), fontesForn, ()=>{ tocouForn=true; }); combobox(document.getElementById('f-forma'), fontesForma);
     document.getElementById('f-valor').addEventListener('input', ()=>{ tocouValor=true; avisoSemValor(); });
     document.getElementById('f-forn').addEventListener('input', ()=>{ tocouForn=true; });
     document.getElementById('f-forn').dataset.cb='1';
@@ -1051,6 +1137,8 @@ async function salvarNovo(ev){
   try {
     const d=await api('POST','',corpo);
     if(d.lancamento){ L.push(daApi(d.lancamento)); }
+    // medir USO, não só abertura: é este evento que diz, daqui a 30 dias, se o financeiro pegou
+    trackEvent('fin_lancamento_criado', { job_id: jobId, origem: SRC_API[ORIGEM] });
     fecharNovo(); filtrar('todos'); statusSalvo('Salvo agora.'); avisar(`Lançamento adicionado em ${cat}`);
   } catch (e) {
     erro.textContent=e.message||'não consegui gravar'; erro.hidden=false; statusSalvo('Não salvou — veja o aviso.', true);
@@ -1072,8 +1160,10 @@ async function exportar(fmt){
 function curto(s, n){ s=String(s||''); n=n||72; return s.length>n ? s.slice(0,n-1).trimEnd()+'…' : s; }
 let _t; function avisar(msg, tipo, op){
   const t=document.getElementById('fin-toast'); t.textContent=msg; t.style.pointerEvents=''; t.classList.toggle('erro', tipo==='erro');
-  if(op && op.acao){ const b=document.createElement('button'); b.type='button'; b.textContent=op.acao; b.className='ml-3 underline font-semibold'; b.onclick=()=>{ t.classList.remove('on'); op.fn(); }; t.appendChild(b); t.style.pointerEvents='auto'; }
-  t.classList.add('on'); clearTimeout(_t); _t=setTimeout(()=>t.classList.remove('on'), (op&&op.acao) ? 6000 : (tipo==='erro' ? 6000 : 2600));
+  if(op && op.acao){ const b=document.createElement('button'); b.type='button'; b.textContent=op.acao; b.className='ml-3 underline font-semibold'; b.onclick=()=>{ t.classList.remove('on'); t.style.pointerEvents='none'; b.remove(); op.fn(); }; t.appendChild(b); t.style.pointerEvents='auto'; }
+  t.classList.add('on'); clearTimeout(_t);
+  // ao sumir, some de verdade: o botão "Desfazer" invisível continuava clicável no rodapé e recriava a linha (auditoria 06/09)
+  _t=setTimeout(()=>{ t.classList.remove('on'); t.style.pointerEvents='none'; t.querySelectorAll('button').forEach(b=>b.remove()); }, (op&&op.acao) ? 6000 : (tipo==='erro' ? 6000 : 2600));
 }
 function medirSticky(){
   const h=document.getElementById('cabecalho').offsetHeight, bar=document.getElementById('cr-actionbar');

@@ -136,12 +136,40 @@ def _chamadas(src, arquivo="?"):
     return saida
 
 
+_RE_WRAPPER = re.compile(
+    r"async function (\w+)\(method[^)]*\)\s*\{.*?authFetch\(`\$\{API_BASE\}(/api/[^`]*)`", re.S)
+
+
+def _chamadas_por_wrapper(src, arquivo="?"):
+    """Páginas que falam com a API por um wrapper próprio — `api('PATCH', '/x')` no financeiro.
+
+    🩸 auditoria 06/09: o guarda só via `authFetch(` e enxergava UMA chamada (GET) numa tela que faz
+    quatro (GET/POST/PATCH/DELETE). Guarda que não conhece a forma certifica o que não olha.
+    """
+    saida = []
+    for w in _RE_WRAPPER.finditer(src):
+        nome, base = w.group(1), w.group(2)
+        # o ÚLTIMO `${...}` da base é o parâmetro do wrapper (o `caminho`) — ele é substituído pelo
+        # argumento de cada chamada, não vira curinga (senão sobra `\x01\x01` colado)
+        base = re.sub(r"\$\{[^}]*\}$", "", base)
+        base = re.sub(r"\$\{[^}]*\}", _CURINGA, base)
+        for m in re.finditer(r"\b%s\(\s*'(\w+)'\s*,\s*(`[^`]*`|'[^']*')" % re.escape(nome), src):
+            metodo, arg = m.group(1).upper(), m.group(2)
+            sufixo = re.sub(r"\$\{[^}]*\}", _CURINGA, arg[1:-1])
+            caminho = (base.rstrip("/") + sufixo) if sufixo else base
+            if caminho.startswith("/api/"):
+                saida.append((arquivo, caminho.rstrip("?"), metodo))
+    return saida
+
+
 def _chamadas_do_site():
     saida = []
     for nome in _ARQUIVOS:
         caminho = os.path.join(_RAIZ, nome)
         if os.path.exists(caminho):
-            saida += _chamadas(io.open(caminho, encoding="utf-8").read(), nome)
+            src = io.open(caminho, encoding="utf-8").read()
+            saida += _chamadas(src, nome)
+            saida += _chamadas_por_wrapper(src, nome)
     return saida
 
 
@@ -232,6 +260,39 @@ def test_controle_entende_os_DOIS_jeitos_de_chamar():
     mais = "await window.authFetch(window.API_BASE + '/api/items/' + jobId + '/finalize', { method: 'POST' })"
     for src in (crase, mais):
         assert _chamadas(src) == [("?", "/api/items/%s/finalize" % _CURINGA, "POST")], src
+
+
+_WRAPPER_FALSO = """
+async function api(method, caminho, corpo){
+  const opts = { method };
+  const r = await authFetch(`${API_BASE}/api/financeiro/${jobId}${caminho}`, opts);
+  return r;
+}
+await api('GET', '');
+await api('POST', '');
+await api('PATCH', `/${encodeURIComponent(l.id)}`, campos);
+await api('DELETE', `/${encodeURIComponent(l.id)}`);
+"""
+
+
+def test_controle_enxerga_o_wrapper_api_e_seus_QUATRO_metodos():
+    """🪤 auditoria 06/09: a tela do financeiro fala com a API por `api(metodo, caminho)`. O guarda
+    só conhecia `authFetch(` e via UMA chamada (o GET de dentro do wrapper) — POST, PATCH e DELETE
+    passariam com a rota errada sem ninguém reclamar."""
+    achadas = _chamadas_por_wrapper(_WRAPPER_FALSO, "fake.html")
+    assert {m for _a, _c, m in achadas} == {"GET", "POST", "PATCH", "DELETE"}
+    base = "/api/financeiro/%s" % _CURINGA
+    assert (("fake.html", base, "GET") in achadas and ("fake.html", base, "POST") in achadas)
+    assert ("fake.html", base + "/" + _CURINGA, "PATCH") in achadas
+    assert ("fake.html", base + "/" + _CURINGA, "DELETE") in achadas
+    # e o guarda REPROVA quando o método não existe na rota
+    rotas = {"/api/financeiro/{job_id}": {"GET", "POST"},
+             "/api/financeiro/{job_id}/{lanc_id}": {"PATCH", "DELETE"}}
+    assert "PUT" not in _casa(base, rotas), "controle: método que a rota não aceita tem que ficar de fora"
+    assert _chamadas_por_wrapper(_WRAPPER_FALSO.replace("api('DELETE'", "api('PUT'"), "fake.html")
+    ruins = [c for c in _chamadas_por_wrapper(_WRAPPER_FALSO.replace("api('DELETE'", "api('PUT'"), "f.html")
+             if c[2] == "PUT" and c[2] not in _casa(c[1], rotas)]
+    assert ruins, "o guarda vê o PUT plantado e ele NÃO casa com a rota — é isso que reprova o push"
 
 
 def test_controle_escolhe_a_rota_MAIS_ESPECIFICA():

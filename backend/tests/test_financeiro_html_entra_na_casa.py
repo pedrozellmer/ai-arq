@@ -29,7 +29,7 @@ _RAIZ = os.path.dirname(_BACKEND)
 sys.path.insert(0, _BACKEND)
 sys.path.insert(0, _AQUI)
 
-from _corpo import fonte, sem_comentarios  # noqa: E402
+from _corpo import fonte, sem_comentarios, corpo_js  # noqa: E402
 
 HTML = fonte("financeiro.html")
 MENU = fonte("menu-lateral.js")
@@ -180,7 +180,7 @@ def test_indisponivel_nao_vira_removido_e_admin_e_somente_leitura():
     js = _js()
     assert "l.estado==='removido'" in js and "l.estado==='mudou'" in js and "l.estado==='ambiguo'" in js
     assert "'indisponivel'" not in js.replace("origem_estado || 'ok'", ""), "indisponivel não ganha badge — fica o aviso geral"
-    assert "ITENS_LIDOS = d.itens_lidos !== false" in js and "document.getElementById('aviso-itens').hidden = ITENS_LIDOS" in js
+    assert "ITENS_LIDOS = d.itens_lidos !== false" in js and "avi.hidden = ITENS_LIDOS" in js
     assert "SOMENTE_LEITURA = !!d.somente_leitura" in js and "function aplicarSomenteLeitura" in js
 
 
@@ -215,14 +215,14 @@ def test_view_financeiro_esta_na_allowlist_do_track():
 def test_a_linha_guarda_a_referencia_da_origem_para_o_desfazer_recriar():
     """05/09 ao vivo: remover uma linha do quantitativo e clicar Desfazer dava 400 —
     `daApi` descartava origem_ref_id, e o POST exige a referência fora da linha livre."""
+    # 🪤 auditoria 06/09: aqui havia `js[i:js.find("\\n}", i)]` e `js[j:j+900]` — janela fixa lê a
+    # função VIZINHA e dá verde falso, o defeito que o próprio `corpo_js` existe pra fechar.
     js = _js()
-    i = js.find("function daApi(r)")
-    fim = js.find("\n}", i)
-    corpo = js[i:fim]
+    corpo = corpo_js("daApi", src=js)
     assert "origem_ref_id: r.origem_ref_id" in corpo, "a linha em memória tem que carregar a referência da origem"
     assert "origem_ref_pos:" in corpo, "e a posição, pro comparativo"
-    j = js.find("function corpoDaLinha(l)")
-    assert "c.origem_ref_id=l.origem_ref_id" in js[j:j + 900], "o corpo do Desfazer manda a referência que a linha guardou"
+    assert "c.origem_ref_id=l.origem_ref_id" in corpo_js("corpoDaLinha", src=js), (
+        "o corpo do Desfazer manda a referência que a linha guardou")
 
 
 def test_exportar_usa_downloadProtected_nas_duas_rotas_e_nao_link_direto():
@@ -246,6 +246,67 @@ def test_exportar_usa_downloadProtected_nas_duas_rotas_e_nao_link_direto():
     utils = fonte("aiarq-utils.js")
     assert "return true;" in utils[utils.find("window.downloadProtected"):] and "Content-Disposition" in utils, (
         "downloadProtected devolve true/false e lê o nome que o servidor mandou")
+
+
+def test_auditoria_0609_os_consertos_da_tela_estao_no_fonte():
+    """Cada linha abaixo é um defeito confirmado na auditoria de 06/09 — e o FATO no fonte
+    que o conserta (não a forma)."""
+    js = _js()
+    # 1º lançamento sem cronograma: disciplinas do quantitativo viram categoria; só "Outra…" abre o texto
+    assert "if(!labels.length) ITENS.forEach(it=>{ const d=String(it.discipline||'').trim();" in js
+    assert "const soOutra = !labels.length;" in js and "liv.hidden=!soOutra;" in js
+    # leitura do cronograma falhando ≠ "não tem cronograma"
+    assert "CRONOGRAMA_ERRO = true" in js and 'id="aviso-cron-erro"' in HTML
+    assert "'Não consegui ler o cronograma agora.' : 'Este projeto ainda não tem cronograma salvo.'" in js
+    # erro de rede em português, e o status vem junto (o Desfazer decide pelo 404)
+    assert "sem conexão com o servidor" in js and "err.status = r.status" in js
+    # Desfazer de origem que sumiu volta como linha livre, com o mesmo valor
+    assert "if (e.status === 404 && corpo.origem !== 'livre')" in js and "origem:'livre', descricao: l.oque" in js
+    # duas edições rápidas: resposta atrasada não sobrescreve; selo da regra nº7 não some na edição
+    assert "l._seq = (l._seq || 0) + 1; const seq = l._seq;" in js and "if (seq !== l._seq) return;" in js
+    assert "if (d.lancamento.origem_estado == null) Object.assign(l, selo);" in js
+    # salvar E recarregar falhando: a tela diz, não finge
+    assert "const voltou = await recarregar();" in js and "Não salvou e não consegui recarregar" in js
+    # toast que some, some de verdade (o Desfazer invisível recriava a linha)
+    assert "t.querySelectorAll('button').forEach(b=>b.remove())" in js
+    # Enter com sugestão marcada escolhe a sugestão (no modal, enviava o formulário)
+    assert "else if(e.key==='Enter' && !ul.hidden && st.idx>=0){ e.preventDefault(); st.pick(); }" in js
+    # modal: "não consegui ler" ≠ "não tem"
+    assert "ITENS_ERRO ? '(não consegui ler os itens" in js and "COTACOES_ERRO ? '(não consegui ler as cotações" in js
+    # corte de 1000: itens e lançamentos, os dois avisados
+    assert 'id="aviso-lanc"' in HTML and "!d.lancamentos_truncados" in js and "d.itens_truncados" in js
+    # texto que prometia o que a tela não faz (no que o cliente VÊ — comentários fora)
+    visivel = re.sub(r"<!--.*?-->", "", HTML, flags=re.S)
+    assert "Projeção pelo peso físico" not in visivel and "passa a valer aqui" not in visivel
+
+
+def test_auditoria_0609_segunda_rodada_kpi_fase_e_rede():
+    """Achados confirmados pelos céticos: card que diz R$ 0 sem valor informado, fase apagada do
+    Gantt emprestando a data da categoria, selo 'em dia' com lançamento sem data, fornecedor
+    escolhido na lista sobrescrito, e o /full chamado à toa em 97% dos projetos."""
+    js = _js()
+    # nº5 no card: balde só com linha sem valor mostra "—", e o subtítulo conta o sem-valor DAQUELE balde
+    assert "const kpiMoeda = (balde, soma) => (balde.length && !balde.some(temValor)) ? '—' : BRL(soma);" in js
+    assert "kpiMoeda(contr, vc)" in js and "kpiMoeda(pg, vp)" in js and "kpiMoeda(em30, v30)" in js and "kpiMoeda(ag, vag)" in js
+    assert "sufixoSemValor(semValorNo(contr))" in js and "sufixoSemValor(semValorNo(ag))" in js
+    # fase escolhida que sumiu do cronograma NÃO herda a data da categoria
+    assert "const f = FASES[l.venc.fase || l.cat];" in js and "FASES[l.venc.fase] || FASES[l.cat]" not in js
+    assert "const faseSumiu = l =>" in js and "não está mais no cronograma (foi renomeada ou apagada)" in js
+    # selo do menu: com lançamento em aberto sem data não dá pra dizer "em dia"
+    assert "else if (semData) pintaSelo(`${semData} sem data`, 'pend');" in js
+    # escolher o fornecedor na lista conta como mexido (senão o servidor regrava o da cotação)
+    assert "combobox(document.getElementById('f-forn'), fontesForn, ()=>{ tocouForn=true; })" in js
+    # o /full só quando existe cronograma salvo sem fases
+    assert "if (!fases.length && !CRONOGRAMA_ERRO && TEM_SALVO) {" in js
+    # e as duas rotas que a tela consome deixaram de bloquear o laço
+    assert "\ndef get_cronograma(" in MAIN and "async def get_cronograma(" not in MAIN
+    assert "\ndef get_cronograma_full(" in MAIN and "async def get_cronograma_full(" not in MAIN
+    # o JWT validado é reaproveitado dentro do mesmo request
+    assert "request.state.usuario_validado = user" in MAIN and "_usuario_ja_validado(request) or _get_user_from_request(request)" in MAIN
+    # medir USO, não só abertura (a lição do memorial: 30 dias com 0 aberturas e nenhum sinal de uso)
+    assert "trackEvent('fin_lancamento_criado'" in js and '"fin_lancamento_criado"' in MAIN
+    i_ev = js.find("trackEvent('fin_lancamento_criado'")
+    assert 0 < js.rfind("await api('POST','',corpo)", 0, i_ev), "o evento só sai DEPOIS do servidor aceitar"
 
 
 def test_hidden_vence_as_classes_de_display_do_build():

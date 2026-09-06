@@ -51,10 +51,58 @@ VIGIADAS = {
     "projeto.html": ("?job_id=teste",
                      ["postNps", "sendFeedback", "sendFeedbackComment",
                       "maybeShowFeedback", "_fbSalvaAntesDeSair"]),
-    # 05/09/2026: Financeiro da obra (etapa 1) — as funções que o HTML chama por onclick
+    # 05/09/2026: Financeiro da obra (etapa 1) — as funções que o HTML chama por onclick.
+    # 06/09: e as RESPOSTAS que fazem a página RENDERIZAR de verdade (3º campo). Sem elas o
+    # guarda parava no 1º fetch e dava verde com `render`/`kpis`/`daApi` quebrados.
     "financeiro.html": ("?job_id=teste",
                         ["exportar", "abrirNovo", "fecharNovo", "salvarNovo", "filtrar",
-                         "setOrigem", "avisar", "remover", "marcarPago"]),
+                         "setOrigem", "avisar", "remover", "marcarPago"],
+                        [
+                            {"re": "/api/financeiro/teste", "body": {
+                                "status": "ok", "job_id": "teste", "escopo": "obra",
+                                "somente_leitura": False, "itens_lidos": True,
+                                "itens_truncados": False, "lancamentos_truncados": False,
+                                "lancamentos": [
+                                    {"id": "11111111-1111-4111-8111-111111111111", "job_id": "teste",
+                                     "escopo": "obra", "categoria": "Pisos",
+                                     "descricao": "Porcelanato 60x60 — 1.062 m2",
+                                     "origem": "quantitativo",
+                                     "origem_ref_id": "22222222-2222-4222-8222-222222222222",
+                                     "origem_ref_pos": None, "origem_quantidade": 1062.0,
+                                     "origem_unidade": "m2", "fornecedor": "Ceramica Boa",
+                                     "valor": 48000, "forma_pagamento": "3x", "venc_tipo": "fase",
+                                     "venc_fase": "Pisos", "venc_quando": "inicio", "venc_data": None,
+                                     "status": "contratado", "pago_em": None, "origem_estado": "mudou",
+                                     "origem_atual": {"quantidade": 990.0, "unidade": "m2"}},
+                                    {"id": "33333333-3333-4333-8333-333333333333", "job_id": "teste",
+                                     "escopo": "obra", "categoria": "Complementares",
+                                     "descricao": "Luminaria de emergencia", "origem": "livre",
+                                     "origem_ref_id": None, "origem_ref_pos": None,
+                                     "origem_quantidade": None, "origem_unidade": "",
+                                     "fornecedor": "", "valor": None, "forma_pagamento": "",
+                                     "venc_tipo": "data", "venc_data": "2026-10-01",
+                                     "venc_fase": "", "venc_quando": "inicio",
+                                     "status": "cotado", "pago_em": None, "origem_estado": "ok"},
+                                    {"id": "44444444-4444-4444-8444-444444444444", "job_id": "teste",
+                                     "escopo": "obra", "categoria": "Pisos", "descricao": "Rejunte",
+                                     "origem": "livre", "origem_ref_id": None, "origem_ref_pos": None,
+                                     "origem_quantidade": None, "origem_unidade": "", "fornecedor": "",
+                                     "valor": 1200, "forma_pagamento": "", "venc_tipo": "fase",
+                                     "venc_fase": "Fase que sumiu", "venc_quando": "fim",
+                                     "venc_data": None, "status": "pago", "pago_em": "2026-09-01",
+                                     "origem_estado": "ok"},
+                                ]}},
+                            {"re": "/api/cronograma/teste", "body": {
+                                "status": "ok", "job_id": "teste", "saved": {"fases_custom": [
+                                    {"label": "Pisos", "inicio": "2026-09-10", "fim": "2026-10-05", "ordem": 1},
+                                    {"label": "Complementares", "inicio": "2026-11-01", "fim": "2026-12-01", "ordem": 2},
+                                ]}}},
+                            {"re": "/api/items/teste", "body": {"items": [
+                                {"id": "22222222-2222-4222-8222-222222222222",
+                                 "description": "Porcelanato 60x60", "quantity": 990.0,
+                                 "unit": "m2", "discipline": "Pisos"}]}},
+                            {"re": "/quotes", "body": {"quotes": []}},
+                        ]),
     "dashboard.html": ("", ["__maybeShowNPS"]),
     "admin.html": ("", ["switchTab", "loadUsers", "renderUsers",
                         "loadEmailCatalog", "enviarEmailTeste",
@@ -82,9 +130,30 @@ window.onerror = function (m, u, l) {
 window.addEventListener('unhandledrejection', function (e) {
   window.__erros.push('promise: ' + String((e.reason && e.reason.message) || e.reason));
 });
-window.fetch = function () { return Promise.resolve({
-  ok: false, status: 0, json: function () { return Promise.resolve({}); },
-  text: function () { return Promise.resolve(''); } }); };
+// Duble de fetch. Por padrao devolve "nao ok" (a pagina so precisa nao quebrar), mas quando a
+// pagina declara RESPOSTAS (3o campo de VIGIADAS) ele responde 200 com o JSON combinado — e ai o
+// codigo de RENDER roda de verdade.
+// 🩸 06/09/2026: os dois defeitos do financeiro (Desfazer 400 por campo perdido no mapeamento e
+// pilula visivel com `hidden`) passaram por este guarda em VERDE porque nada aqui chegava a
+// executar `render`/`kpis`: "funcao viva" era so hoisting. Guarda que nao executa certifica o que
+// nao olha.
+window.__RESP = window.__RESP || [];
+window.fetch = function (u) {
+  var url = String((u && u.url) || u || '');
+  for (var i = 0; i < window.__RESP.length; i++) {
+    if (url.indexOf(window.__RESP[i].re) >= 0) {
+      var corpo = window.__RESP[i].body;
+      return Promise.resolve({ ok: true, status: 200,
+        headers: { get: function () { return null; } },
+        json: function () { return Promise.resolve(corpo); },
+        text: function () { return Promise.resolve(JSON.stringify(corpo)); } });
+    }
+  }
+  return Promise.resolve({ ok: false, status: 0,
+    headers: { get: function () { return null; } },
+    json: function () { return Promise.resolve({}); },
+    text: function () { return Promise.resolve(''); } });
+};
 </script>"""
 
 
@@ -242,10 +311,16 @@ def main():
                 html = html.replace(
                     '<script src="aiarq-utils.js"></script>',
                     '<script src="aiarq-utils.js"></script>' + _ABRE_PORTAO, 1)
-                query, funcs = VIGIADAS[pagina]
-                sonda = ("<script>document.title = JSON.stringify({erros: window.__erros, "
-                         "faltando: " + json.dumps(funcs) +
-                         ".filter(function(f){return typeof window[f] !== 'function';})});</script>")
+                cfg = VIGIADAS[pagina]
+                query, funcs = cfg[0], cfg[1]
+                respostas = cfg[2] if len(cfg) > 2 else []
+                if respostas:
+                    # as respostas entram ANTES do coletor: o duble de fetch le window.__RESP
+                    html = ("<script>window.__RESP = " + json.dumps(respostas) + ";</script>") + html
+                sonda = ("<script>setTimeout(function(){ document.title = JSON.stringify({"
+                         "erros: window.__erros, faltando: " + json.dumps(funcs) +
+                         ".filter(function(f){return typeof window[f] !== 'function';})});"
+                         "}, 1200);</script>")
                 # 🪤 O PRIMEIRO `</body>` DO ARQUIVO PODE ESTAR DENTRO DE UMA
                 # STRING JS. Em admin.html existe um `document.write('…</body>')`
                 # na linha 4239: injetar a sonda ali metia um <script> no meio de

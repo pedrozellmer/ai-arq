@@ -104,11 +104,11 @@ def vencimento(l: Dict, fases: Dict[str, Tuple[date, date]]) -> Tuple[Optional[d
     Fase por label, com a categoria de reserva — igual à tela (`vencData`)."""
     if str(l.get("venc_tipo") or "fase") == "data":
         return _data(l.get("venc_data")), "data fixa"
+    # 🩸 auditoria 06/09: a categoria era reserva mesmo quando a fase FOI escolhida e sumiu do Gantt —
+    # o arquivo herdava calado a data de outra fase. Reserva só quando não há fase informada.
     cat = str(l.get("categoria") or "").strip()
     lab = str(l.get("venc_fase") or "").strip() or cat
     f = fases.get(lab)
-    if not f and cat and cat in fases:
-        lab, f = cat, fases[cat]        # reserva pela categoria — e a regra diz a fase que DATOU, não a pedida
     if not f:
         return None, "fase sem data"
     quando = "fim" if str(l.get("venc_quando") or "inicio") == "fim" else "inicio"
@@ -183,15 +183,20 @@ def montar_dados_export(rows: List[Dict], fases_lista: Optional[List[Dict]], hoj
     vencidos = [l for l in em30 if l["vencido"]]
     aguard = [l for l in linhas if l["status"] == "enviado"]
     sem_data = [l for l in linhas if l["em_aberto"] and l["venc"] is None]
+
+    def _kpi(balde):
+        """🔒 nº5, igual à tela: balde só com linha sem valor não vira R$ 0 — o número é AUSENTE."""
+        return _soma(balde) if any(l["valor"] is not None for l in balde) else None
     vc, vp = _soma(contr), _soma(pagos)
     kpis = {
-        "contratado": vc, "contratado_n": len(contr),
-        "pago": vp, "pago_n": len(pagos),
+        "contratado": _kpi(contr), "contratado_n": len(contr), "contratado_sem_valor": sum(1 for l in contr if l["valor"] is None),
+        "pago": _kpi(pagos), "pago_n": len(pagos),
         "pago_pct": _pct(vp, vc),
-        "a_pagar_30": _soma(em30), "a_pagar_30_n": len(em30),
+        "a_pagar_30": _kpi(em30), "a_pagar_30_n": len(em30),
         "vencidos_n": len(vencidos), "vencidos": _soma(vencidos),
         "sem_data_n": len(sem_data),
-        "aguardando": _soma(aguard), "aguardando_n": len(aguard),
+        "aguardando": _kpi(aguard), "aguardando_n": len(aguard),
+        "aguardando_sem_valor": sum(1 for l in aguard if l["valor"] is None),
         "sem_valor_n": sum(1 for l in linhas if l["valor"] is None),
         # ausente quando NENHUMA linha tem valor (nº5: não existe "total R$ 0,00" de nada informado)
         "total_com_valor": (_soma(linhas) if any(l["valor"] is not None for l in linhas) else None),
@@ -268,11 +273,14 @@ def gerar_financeiro_xlsx(dados: Dict, output_path: str, branding: Optional[Dict
                else f"{k['a_pagar_30_n']} a vencer")
     if k["sem_data_n"]:
         a30_sub += f" · {k['sem_data_n']} sem data"
+    _sufixo = lambda n: f" · {n} sem valor" if n else ""
     kpis = (
-        ('Contratado', k["contratado"], f"{k['contratado_n']} lançamento{'s' if k['contratado_n'] != 1 else ''}"),
+        ('Contratado', k["contratado"], f"{k['contratado_n']} lançamento{'s' if k['contratado_n'] != 1 else ''}"
+                                        + _sufixo(k.get("contratado_sem_valor", 0))),
         ('Pago', k["pago"], pago_sub),
         ('A pagar até 30 dias', k["a_pagar_30"], a30_sub),
-        ('Aguardando o cliente', k["aguardando"], f"{k['aguardando_n']} aguardando o cliente"),
+        ('Aguardando o cliente', k["aguardando"], f"{k['aguardando_n']} aguardando o cliente"
+                                                  + _sufixo(k.get("aguardando_sem_valor", 0))),
     )
     slots = ((1, 2, 3), (4, 5, 6), (7, 8, 9), (10, 10, 11))     # (rótulo de, rótulo até, coluna do valor)
     linha_kpi, linha_sub = ro, ro + 1
@@ -285,10 +293,11 @@ def gerar_financeiro_xlsx(dados: Dict, output_path: str, branding: Optional[Dict
         c.fill = P_SUB
         c.alignment = AL
         c.border = BD
-        v = ws.cell(row=linha_kpi, column=cv, value=val)
+        v = ws.cell(row=linha_kpi, column=cv, value=(val if val is not None else "—"))
         v.font = F_BOLD
         v.fill = P_SUB
-        v.number_format = FMT_MOEDA
+        if val is not None:
+            v.number_format = FMT_MOEDA      # 🔒 nº5: ausente é "—", nunca R$ 0,00
         v.alignment = AR
         v.border = BD
         s = ws.cell(row=linha_sub, column=c1, value=sub)
@@ -410,6 +419,14 @@ def _brl(v: Optional[float]) -> str:
     return f"R$ {s}"
 
 
+def _brl0(v: Optional[float]) -> str:
+    """Sem centavos — é como a tela mostra os 4 números do topo (BRL com maximumFractionDigits:0),
+    e cabe na caixa do KPI do PDF a partir de R$ 1 milhão (auditoria 06/09)."""
+    if v is None:
+        return "—"
+    return "R$ " + f"{int(round(v)):,}".replace(",", ".")
+
+
 def _accent(branding: Dict) -> str:
     h = str((branding or {}).get("brand_color") or "").strip().lower()
     body = h[1:] if h.startswith("#") else ""
@@ -464,14 +481,17 @@ def montar_html_financeiro(dados: Dict, branding: Optional[Dict] = None) -> str:
                else f"{k['a_pagar_30_n']} a vencer")
     if k["sem_data_n"]:
         a30_sub += f" · {k['sem_data_n']} sem data"
+    _suf = lambda n: f" · {n} sem valor" if n else ""
     kpis = "".join(
-        f'<div class="kpi {cls}"><div class="k">{_esc(rot)}</div><div class="v">{_esc(_brl(val))}</div>'
+        f'<div class="kpi {cls}"><div class="k">{_esc(rot)}</div><div class="v">{_esc(_brl0(val))}</div>'
         f'<div class="s">{_esc(sub)}</div></div>'
         for rot, val, sub, cls in (
-            ("Contratado", k["contratado"], f"{k['contratado_n']} lançamento{'s' if k['contratado_n'] != 1 else ''}", ""),
+            ("Contratado", k["contratado"], f"{k['contratado_n']} lançamento{'s' if k['contratado_n'] != 1 else ''}"
+                                            + _suf(k.get("contratado_sem_valor", 0)), ""),
             ("Pago", k["pago"], pago_sub, "ok"),
             ("A pagar até 30 dias", k["a_pagar_30"], a30_sub, "alerta" if k["vencidos_n"] else ""),
-            ("Aguardando o cliente", k["aguardando"], f"{k['aguardando_n']} aguardando o cliente", ""),
+            ("Aguardando o cliente", k["aguardando"], f"{k['aguardando_n']} aguardando o cliente"
+                                                      + _suf(k.get("aguardando_sem_valor", 0)), ""),
         ))
 
     avisos = [f'<p class="nota">{_esc(AVISO_NAO_PRECIFICA)}</p>']

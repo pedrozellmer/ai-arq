@@ -78,13 +78,17 @@
     }
 
     // Página do projeto: o painel geral de todos os entregáveis.
-    var pl = d.planilha || {}, comp = d.comparativo || {};
+    var pl = d.planilha || {}, comp = d.comparativo || {}, fin = d.financeiro || {};
     var velhos = [];
     if (pl.desatualizado)  velhos.push({ artigo: 'a', nome: 'planilha',   info: pl  });
     if (cronVelho)         velhos.push({ artigo: 'o', nome: 'cronograma', info: cron });
     if (memVelho)          velhos.push({ artigo: 'o', nome: 'memorial',   info: mem });
     if (comp.desatualizado) velhos.push({ artigo: 'o', nome: 'comparativo de fornecedores',
                                           chave: 'comparativo', info: comp });
+    // Financeiro da obra (06/09/2026): lançamentos apontando pra item que mudou/saiu do
+    // quantitativo. Ele guarda dinheiro combinado com fornecedor — o aviso é o do dono.
+    if (fin.desatualizado) velhos.push({ artigo: 'o', nome: 'financeiro da obra',
+                                         chave: 'financeiro', info: fin });
 
     var nomes = velhos.map(function (v) { return v.artigo + ' ' + v.nome; });
     var alvo = nomes.length > 2
@@ -104,6 +108,10 @@
         acoes += '<button type="button" data-coer="comparativo" ' +
                  'class="inline-block rounded-lg px-3 py-1.5 text-xs font-bold ' +
                  'bg-amber-600 text-white">Refazer comparativo</button> ';
+      } else if (v.chave === 'financeiro') {
+        // Tem valor e fornecedor escritos pelo arquiteto: nunca refazer sozinho.
+        // A tela marca linha a linha ("item mudou" / "item saiu") — o botão leva lá.
+        acoes += botao('financeiro.html?job_id=' + d._jobId, 'Abrir o financeiro', primeiro) + ' ';
       } else {
         // job_id nos dois: e o nome que projeto/revisao/memorial usam. As duas
         // paginas aceitam os dois, mas link novo nasce no padrao certo.
@@ -114,6 +122,16 @@
     });
 
     var so = velhos[0];
+    if (velhos.length === 1 && so.chave === 'financeiro') {
+      // Só o financeiro: a frase é outra — não é "arquivo velho", é linha apontando pra item que mudou.
+      return {
+        titulo: 'Seu financeiro da obra tem lançamentos que precisam de conferência',
+        corpo: 'Você mexeu no quantitativo depois de lançar: ' + (fin.frase || 'algum item de origem mudou') +
+               '. O valor e o fornecedor continuam os que você combinou — abra o financeiro e confira ' +
+               'as linhas com o selo "item mudou" ou "item saiu".',
+        acoes: acoes
+      };
+    }
     return {
       titulo: velhos.length === 1
         ? (so.artigo === 'a' ? 'Sua ' : 'Seu ') + so.nome + ' ficou desatualizad' +

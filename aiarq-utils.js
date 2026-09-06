@@ -607,7 +607,11 @@
       setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
       return true;
     } catch (e) {
-      notify.error('Erro de rede ao baixar: ' + (e && e.message ? e.message : e));
+      // "Failed to fetch" / "The user aborted a request" não dizem nada a quem está esperando o arquivo
+      var msg = (e && e.message) || String(e);
+      if (/failed to fetch|networkerror|load failed/i.test(msg)) msg = 'sem conexão com o servidor';
+      else if (/abort|timeout/i.test(msg)) msg = 'o servidor demorou demais pra responder';
+      notify.error('Não consegui baixar o arquivo: ' + msg + '. Tente de novo em instantes.');
       return false;
     }
   };

@@ -97,7 +97,12 @@ def test_valor_ausente_fica_None_nunca_zero_e_nao_entra_em_soma():
     d = fe.montar_dados_export([_l(valor=None, status="contratado")], FASES, HOJE)
     l = d["linhas"][0]
     assert l["valor"] is None and l["em_aberto"] is False, "sem valor não está 'em aberto' (tela: temValor)"
-    assert d["kpis"]["contratado"] == 0.0 and d["kpis"]["contratado_n"] == 1
+    # auditoria 06/09: balde só com linha sem valor tem número AUSENTE (a tela mostra "—"), não R$ 0
+    assert d["kpis"]["contratado"] is None and d["kpis"]["contratado_n"] == 1
+    assert d["kpis"]["contratado_sem_valor"] == 1
+    html = fe.montar_html_financeiro(d, {})
+    assert 'class="v">—<' in html and "R$ 0" not in html, "o card do PDF também mostra '—'"
+    assert "1 lançamento · 1 sem valor" in html, "o subtítulo do card diz quantos ficaram sem valor"
 
 
 def test_vencimento_por_fase_vira_data_pela_fase_com_categoria_de_reserva():
@@ -108,10 +113,10 @@ def test_vencimento_por_fase_vira_data_pela_fase_com_categoria_de_reserva():
     assert sem_ordem == ["A", "B"], "sem `ordem`, pela data de início"
     assert fe.vencimento(_l(venc_quando="inicio"), fases) == (date(2026, 9, 10), "início da fase Pisos")
     assert fe.vencimento(_l(venc_quando="fim"), fases) == (date(2026, 10, 5), "fim da fase Pisos")
-    assert fe.vencimento(_l(venc_fase="", categoria="Pisos"), fases)[0] == date(2026, 9, 10), "categoria de reserva"
+    assert fe.vencimento(_l(venc_fase="", categoria="Pisos"), fases)[0] == date(2026, 9, 10), "sem fase: a categoria"
     assert fe.vencimento(_l(venc_fase="Acabamentos", categoria="Acabamentos"), fases) == (None, "fase sem data")
-    # fase pedida sem data mas categoria com data: a tela cai na categoria — e a regra nomeia a fase que DATOU
-    assert fe.vencimento(_l(venc_fase="Acabamentos", categoria="Pisos"), fases) == (date(2026, 9, 10), "início da fase Pisos")
+    # auditoria 06/09: fase ESCOLHIDA que sumiu do Gantt não herda a data da categoria — some do prazo
+    assert fe.vencimento(_l(venc_fase="Acabamentos", categoria="Pisos"), fases) == (None, "fase sem data")
     assert fe.vencimento(_l(venc_tipo="data", venc_data="2026-09-30"), fases) == (date(2026, 9, 30), "data fixa")
     assert fe.vencimento(_l(venc_tipo="data", venc_data="lixo"), fases) == (None, "data fixa")
 
@@ -251,6 +256,11 @@ def test_cor_da_marca_invalida_cai_no_indigo_da_casa():
 
 def test_brl_formata_pt_br():
     assert fe._brl(1234567.5) == "R$ 1.234.567,50" and fe._brl(0) == "R$ 0,00" and fe._brl(None) == "—"
+    # os 4 números do topo saem sem centavos, como a tela (BRL maximumFractionDigits:0)
+    assert fe._brl0(1234567.5) == "R$ 1.234.568" and fe._brl0(0) == "R$ 0" and fe._brl0(None) == "—"
+    d = fe.montar_dados_export([_l(valor=1250000.55, status="pago")], [], HOJE)
+    html = fe.montar_html_financeiro(d, {})
+    assert 'class="v">R$ 1.250.001<' in html and "R$ 1.250.000,55" in html, "KPI sem centavos; a linha da tabela com"
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -274,6 +284,7 @@ def casa(monkeypatch):
     monkeypatch.setattr(main, "_fin_eh_admin", lambda request, owner: False)
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     monkeypatch.setattr(main, "_fin_cronograma_salvo", lambda req, job_id: (200, None))
+    monkeypatch.setattr(main, "_fin_nome_do_projeto", lambda req, job_id: (200, "Casa Teste"))
     chamadas = {}
     monkeypatch.setattr(main, "_get_branding_context",
                         lambda job_id, request=None: chamadas.setdefault("branding", []).append(request) or
@@ -415,14 +426,65 @@ def test_cronograma_so_config_e_projeto_sem_itens_fica_sem_datas_como_a_tela(mon
     assert ex2.value.status_code == 502
 
 
-def test_branding_sem_nome_do_projeto_e_502_nao_Projeto_sem_nome(monkeypatch, casa):
-    """Revisão 05/09: `_get_branding_context` engole timeout e devolve '' — o PDF sairia
-    'Projeto sem nome' pro cliente, com HTTP 200 e sem rastro."""
+def test_projeto_ilegivel_e_502_nao_Projeto_sem_nome(monkeypatch, casa):
+    """Auditoria 06/09: `_get_branding_context` engole a falha e devolve 'Projeto sem nome' — a
+    guarda por nome vazio era código MORTO. O nome vem de uma leitura própria, com status."""
     _banco(monkeypatch, (200, ROWS))
-    monkeypatch.setattr(main, "_get_branding_context", lambda job_id, request=None: {"project_name": ""})
+    monkeypatch.setattr(main, "_get_branding_context", lambda job_id, request=None: {"project_name": "Projeto sem nome"})
+    monkeypatch.setattr(main, "_fin_nome_do_projeto", lambda req, job_id: (500, ""))
     with pytest.raises(main.HTTPException) as ex:
         main._fin_montar_export(REQ, JOB, False)
     assert ex.value.status_code == 502 and "dados do projeto" in ex.value.detail
+    # leitura ok com nome vazio no banco: sai "Projeto sem nome" (é o que há), sem 502
+    monkeypatch.setattr(main, "_fin_nome_do_projeto", lambda req, job_id: (200, ""))
+    _, branding = main._fin_montar_export(REQ, JOB, False)
+    assert branding["project_name"] == "Projeto sem nome"
+
+
+def test_leitura_do_nome_do_projeto_devolve_status(monkeypatch):
+    monkeypatch.setattr(main, "_supa_rest_as_user", lambda request, method, path, **k: (200, [{"project_name": " Apto 301 "}]))
+    monkeypatch.setattr(main, "_supa_rest_service", lambda method, path, **k: (503, None))
+    assert main._fin_nome_do_projeto(REQ, JOB) == (200, "Apto 301")
+    assert main._fin_nome_do_projeto(None, JOB) == (503, ""), "admin lê pelo service_role; falha volta como status"
+
+
+def test_nome_do_arquivo_nao_cai_no_cronograma_do_slug():
+    assert main._fin_nome_do_arquivo({"project_name": "Apto 301 Ipanema"}, JOB, "pdf") == "financeiro_obra_Apto_301_Ipanema.pdf"
+    assert main._fin_nome_do_arquivo({"project_name": "日本語"}, "job-export-1", "xlsx") == "financeiro_obra_job-expo.xlsx", (
+        "nome sem letra/dígito ASCII: o slug da casa devolve 'cronograma' — aqui vira o começo do job")
+
+
+def test_mais_de_1000_lancamentos_recusa_o_export_em_vez_de_sair_incompleto(monkeypatch, casa):
+    _banco(monkeypatch, (200, [dict(_l(), id=str(i)) for i in range(1000)]))
+    with pytest.raises(main.HTTPException) as ex:
+        main._fin_montar_export(REQ, JOB, False)
+    assert ex.value.status_code == 409 and "1000" in ex.value.detail
+
+
+def test_export_apaga_os_temporarios_depois_da_resposta(monkeypatch, casa, tmp_path):
+    _banco(monkeypatch, (200, ROWS))
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(b"png")
+    monkeypatch.setattr(main, "_get_branding_context",
+                        lambda job_id, request=None: {"project_name": "Casa Teste", "logo_local_path": str(logo)})
+    r = main.financeiro_export_xlsx(JOB, REQ)
+    assert r.background is not None and r.background.func is main._fin_apagar_depois
+    assert os.path.exists(r.path) and logo.exists()
+    main._fin_apagar_depois(*r.background.args)
+    assert not os.path.exists(r.path) and not logo.exists(), "saída e logo somem depois que a resposta foi entregue"
+    main._fin_apagar_depois(None, str(tmp_path / "nao-existe.pdf"))    # nunca explode
+
+
+def test_sem_usuario_legivel_e_401_nao_admin(monkeypatch):
+    """Auditoria 06/09: `_fin_eh_admin` inferia "não é o dono → é admin" e falhava ABERTA."""
+    monkeypatch.setattr(main, "_get_user_from_request", lambda request, tolerante=False: None)
+    with pytest.raises(main.HTTPException) as ex:
+        main._fin_eh_admin(REQ, "uid-dono")
+    assert ex.value.status_code == 401
+    monkeypatch.setattr(main, "_get_user_from_request", lambda request, tolerante=False: {"id": "uid-dono"})
+    assert main._fin_eh_admin(REQ, "uid-dono") is False
+    monkeypatch.setattr(main, "_get_user_from_request", lambda request, tolerante=False: {"id": "uid-admin"})
+    assert main._fin_eh_admin(REQ, "uid-dono") is True
 
 
 def test_hoje_da_tela_e_aceito_so_perto_de_brasilia():

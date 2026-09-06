@@ -4734,7 +4734,12 @@
     // Nota de estado (erro/arquivado) — linha abaixo, largura toda.
     let note = '';
     if (isArchived) {
-      note = `<div class="px-4 pb-3 -mt-1 text-xs text-gray-500">Arquivos expirados (90 dias)</div>`;
+      // 🩸 auditoria 06/09: o cleanup de 90 dias apaga os ARQUIVOS, mas cronograma e financeiro
+      // continuam no banco — e o card arquivado não abre, então o arquiteto perdia o acesso ao
+      // livro de dinheiro de uma obra que ainda está rolando. Os dados sobrevivem; o caminho também.
+      note = `<div class="px-4 pb-3 -mt-1 text-xs text-gray-500">Arquivos expirados (90 dias) — o
+        <a href="financeiro.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()" class="font-semibold text-indigo-600 hover:text-indigo-800">financeiro</a> e o
+        <a href="cronograma.html?job_id=${escProj(p.job_id)}" onclick="event.stopPropagation()" class="font-semibold text-indigo-600 hover:text-indigo-800">cronograma</a> desta obra continuam aqui.</div>`;
     } else if (p.status === 'error') {
       // Erro PASSAGEIRO (infra/IA) com re-tentativa automática pendente vs. erro
       // de arquivo/tentativas esgotadas (mesma classificação do _TRANSIENT_ERR_RX).

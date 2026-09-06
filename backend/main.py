@@ -1203,12 +1203,26 @@ def _require_project_owner(request, job_id: str):
     user = _get_user_from_request(request)
     if not user:
         raise HTTPException(401, "Autenticação requerida para acessar este projeto")
+    # o usuário JÁ validado fica guardado no request: quem precisar dele em seguida (ex.: `_fin_eh_admin`)
+    # não paga outra ida ao GoTrue no mesmo request (auditoria 06/09; ~100 ms por chamada)
+    try:
+        request.state.usuario_validado = user
+    except Exception:
+        pass
     # Admin liberado
     if user.get("email", "").lower() == ADMIN_EMAIL:
         return owner
     if user.get("id") != owner:
         raise HTTPException(403, "Acesso restrito ao dono do projeto")
     return owner
+
+
+def _usuario_ja_validado(request):
+    """O usuário que `_require_project_owner` acabou de validar neste request, se houver."""
+    try:
+        return getattr(getattr(request, "state", None), "usuario_validado", None)
+    except Exception:
+        return None
 
 
 _DISCIPLINE_TO_SECTION = {
@@ -20661,9 +20675,55 @@ def _frase_mudanca(m: dict) -> str:
     return " e ".join(p)
 
 
+def _coerencia_do_financeiro(job_id: str) -> dict:
+    """Quantos lançamentos do financeiro da obra apontam pra item do quantitativo que
+    mudou de quantidade, saiu da planilha ou ficou ambíguo — pela MESMA régua do GET da
+    tela (`_fin_estado_da_origem`). Regra nº7: o financeiro nasceu do quantitativo em
+    05/09 e entra no aviso de coerência do projeto. Leitura falhando devolve
+    `indisponivel` — nunca "está tudo em dia" por engano."""
+    import urllib.parse
+    jq = urllib.parse.quote(job_id)
+    st, rows = _supa_rest_service(
+        "GET", f"/financeiro_lancamentos?job_id=eq.{jq}&escopo=eq.obra"
+               "&select=id,origem,origem_ref_id,origem_ref_pos,origem_quantidade,origem_unidade,descricao",
+        timeout=8)
+    if st != 200 or rows is None:
+        return {"existe": False, "desatualizado": False, "indisponivel": True}
+    if not rows:
+        return {"existe": False, "desatualizado": False}
+    base = {"existe": True, "n": len(rows)}
+    do_quant = [l for l in rows if l.get("origem") == "quantitativo"]
+    if not do_quant:
+        return {**base, "desatualizado": False, "mudados": 0, "removidos": 0, "ambiguos": 0, "frase": ""}
+    st2, itens = _supa_rest_service(
+        "GET", f"/project_items?job_id=eq.{jq}&select=id,description,quantity,unit", timeout=8)
+    if st2 != 200 or itens is None or len(itens) >= 1000:
+        return {**base, "desatualizado": False, "indisponivel": True}
+    por_id = {str(i.get("id")): i for i in itens}
+    por_desc = {}
+    for i in itens:
+        por_desc.setdefault(_fin_norm(i.get("description")), []).append(i)
+    contagem = {"mudou": 0, "removido": 0, "ambiguo": 0}
+    for l in do_quant:
+        est = (_fin_estado_da_origem(l, por_id, por_desc) or {}).get("origem_estado")
+        if est in contagem:
+            contagem[est] += 1
+    partes = []
+    if contagem["mudou"]:
+        partes.append(f"{contagem['mudou']} com item que mudou de quantidade")
+    if contagem["removido"]:
+        partes.append(f"{contagem['removido']} com item que saiu da planilha")
+    if contagem["ambiguo"]:
+        partes.append(f"{contagem['ambiguo']} com item repetido na planilha")
+    n_velhos = sum(contagem.values())
+    return {**base, "desatualizado": n_velhos > 0, "n_velhos": n_velhos,
+            "mudados": contagem["mudou"], "removidos": contagem["removido"], "ambiguos": contagem["ambiguo"],
+            "frase": " e ".join(partes)}
+
+
 def _coerencia_do_projeto(job_id: str) -> dict:
     """Estado de sincronia dos entregáveis do projeto: planilha, cronograma,
-    memorial e comparativo de fornecedores."""
+    memorial, comparativo de fornecedores e financeiro da obra."""
     import urllib.parse
     atual = _assinatura_atual(job_id)
 
@@ -20724,16 +20784,27 @@ def _coerencia_do_projeto(job_id: str) -> dict:
         "itens_assinatura": _row.get("comparativo_assinatura"),
     } if _row and _row.get("comparativo_gerado_em") else None)
 
+    # O financeiro da obra (05/09/2026) nasce do quantitativo: cada linha guarda o retrato do
+    # item de origem e a tela marca "item mudou / saiu". Aqui a mesma régua chega ao painel do
+    # projeto — regra nº7: entregável novo entra no aviso no dia em que nasce.
+    try:
+        financeiro = _coerencia_do_financeiro(job_id)
+    except Exception as e:
+        _log_error("coerencia:financeiro", str(e), job_id=job_id, severity="warning")
+        financeiro = {"existe": False, "desatualizado": False, "indisponivel": True}
+
     desatualizados = [n for n, v in (("planilha", planilha),
                                      ("cronograma", cronograma),
                                      ("memorial", memorial),
-                                     ("comparativo", comparativo)) if v.get("desatualizado")]
+                                     ("comparativo", comparativo),
+                                     ("financeiro", financeiro)) if v.get("desatualizado")]
     return {
         "assinatura": atual,
         "planilha": planilha,
         "cronograma": cronograma,
         "memorial": memorial,
         "comparativo": comparativo,
+        "financeiro": financeiro,
         "desatualizados": desatualizados,
         "tudo_em_dia": not desatualizados,
     }
@@ -20776,7 +20847,7 @@ async def projeto_coerencia(job_id: str, request: Request):
         _log_error("coerencia:projeto", str(e), job_id=job_id)
         _vazio = {"existe": False, "desatualizado": False}
         return {"assinatura": "", "planilha": _vazio, "cronograma": _vazio,
-                "memorial": _vazio, "comparativo": _vazio,
+                "memorial": _vazio, "comparativo": _vazio, "financeiro": _vazio,
                 "desatualizados": [], "tudo_em_dia": True, "erro": True}
 
 
@@ -21143,7 +21214,7 @@ def _supabase_upsert_cronograma(job_id: str, data: dict, request=None) -> bool:
 
 
 @app.get("/api/cronograma/{job_id}")
-async def get_cronograma(job_id: str, request: Request):
+def get_cronograma(job_id: str, request: Request):     # `def`: zero await no corpo, e 3 chamadas de rede — o FastAPI roda em thread (auditoria 06/09)
     """Retorna cronograma salvo do projeto (config + fases custom se houver).
 
     Se não houver salvo, devolve sugestão de duração + flag indicando que
@@ -21151,7 +21222,13 @@ async def get_cronograma(job_id: str, request: Request):
     se mostra inputs (gerar primeiro) ou já renderiza o salvo.
     """
     _require_project_owner(request, job_id)
-    saved = _supabase_get_cronograma(job_id, request=request)
+    # 🩸 auditoria 06/09: `_supabase_get_cronograma` engole erro de leitura e devolve None — a resposta
+    # saía `200 empty` e quem lê (financeiro, cronograma) afirmava "este projeto não tem cronograma".
+    # Falha de leitura é 502; "não existe" continua sendo `empty`.
+    st, saved = _fin_cronograma_salvo(request, job_id)
+    if st != 200:
+        _log_error("cronograma:ler", f"cronogramas HTTP {st}", job_id, severity="warning")
+        raise HTTPException(502, "não consegui ler o cronograma agora — recarregue em instantes")
     if not saved:
         return {"status": "empty", "job_id": job_id, "saved": None}
     return {"status": "ok", "job_id": job_id, "saved": saved}
@@ -21216,21 +21293,23 @@ async def preview_cronograma(job_id: str, payload: CronogramaSavePayload, reques
 
 
 @app.get("/api/cronograma/{job_id}/full")
-async def get_cronograma_full(job_id: str, request: Request):
+def get_cronograma_full(job_id: str, request: Request):
     """Retorna o cronograma já renderizado (Gantt+CurvaS+Matriz+PPC) pra
     abrir a página sem precisar clicar em 'Gerar'.
 
     Se o cliente já salvou (com ou sem fases_custom), reusa a config salva.
     Se não há salvo, retorna 404 — frontend mostra o form pra gerar pela
     primeira vez.
-    """
+
+    `def`, não `async def`: a checagem do dono e a leitura do cronograma já eram
+    3 chamadas de rede SÍNCRONAS antes do primeiro await — com --workers 1 isso
+    segurava o laço de eventos do site inteiro (auditoria 06/09)."""
     _require_project_owner(request, job_id)
     saved = _supabase_get_cronograma(job_id)
     if not saved:
         raise HTTPException(404, "Cronograma ainda não gerado para este projeto")
     try:
-        cron, _branding = await run_in_threadpool(
-            _build_cronograma_for_export, job_id, request=request)
+        cron, _branding = _build_cronograma_for_export(job_id, request=request)
         return cron
     except HTTPException:
         raise
@@ -22997,7 +23076,10 @@ _TRACK_ALLOWED = {
     # com zero telemetria, e o único gatilho `use_cronograma` (projeto.html)
     # parou em 03/08. Estes fecham o buraco; o slug do post/página vai no campo.
     "view_cronograma", "view_exemplo", "view_precos", "view_faq", "view_memorial",
-    "view_financeiro", "export_financeiro",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)
+    "view_financeiro", "export_financeiro",
+    # 🩸 auditoria 06/09: "abriu" e "exportou" não dizem se alguém USOU. O memorial ficou 30 dias
+    # invisível justamente por medir só abertura. Este é o evento que responde "o financeiro pegou?".
+    "fin_lancamento_criado",   # 05/09/2026 — tela do Financeiro da obra (etapa 1)
     # 🩸 03/09/2026 — NASCERAM MORTOS. Subi os seis eventos do convite da área
     # em 02/09 (commit 2d539fe) e CINCO caíam aqui: o /api/track respondia 200
     # {"status":"ignored"} e jogava fora — inclusive o `exibido`, que é O
@@ -23194,7 +23276,12 @@ async def track_event(payload: TrackPayload, request: Request):
                 ("formato", r"[^a-z0-9_-]", 20),
                 # `tela` é slug NOSSO ('revisao', 'projeto'): diz de onde o
                 # convite foi acionado, agora que ele existe em duas telas.
-                ("tela", r"[^a-z0-9_-]", 20)):
+                ("tela", r"[^a-z0-9_-]", 20),
+                # 06/09: `origem` do lançamento do financeiro — slug NOSSO
+                # ('quantitativo', 'comparativo', 'livre'). Diz de onde o dinheiro
+                # entrou: sem isso não dá pra saber se o vínculo com o quantitativo
+                # (o nosso diferencial) é o que o arquiteto de fato usa.
+                ("origem", r"[^a-z0-9_-]", 20)):
             # 🩸 29/08: esta linha ficou 29 HORAS derrubando a rota inteira.
             # `re.sub` pede TRÊS argumentos (padrão, substituição, texto) e eu
             # passei dois — TypeError em TODO POST, 500 pra todo evento de todo
@@ -26137,8 +26224,12 @@ def _fin_eh_admin(request, owner) -> bool:
     """O admin passa em `_require_project_owner` sem ser o dono — mas o JWT dele
     NÃO passa na RLS (a policy é do dono): o GET voltaria `200 []` com cara de
     verdade e a escrita cairia em 403 mascarado. Aqui o admin só LÊ (LGPD nº6:
-    o financeiro é do arquiteto), pelo service_role e com `somente_leitura`."""
-    u = _get_user_from_request(request) or {}
+    o financeiro é do arquiteto), pelo service_role e com `somente_leitura`.
+    🩸 auditoria 06/09: sem usuário legível a inferência "não é o dono → é admin"
+    falhava ABERTA (o dono virava leitor). Sem usuário é 401, não admin."""
+    u = _usuario_ja_validado(request) or _get_user_from_request(request) or {}
+    if not u.get("id"):
+        raise HTTPException(401, "sua sessão expirou — recarregue a página e entre de novo")
     return bool(owner) and str(u.get("id") or "") != str(owner)
 
 
@@ -26387,7 +26478,16 @@ def financeiro_listar(job_id: str, request: Request):
     st2, itens = _fin_get(
         request, f"/project_items?job_id=eq.{jq}&select=id,description,quantity,unit", eh_admin)
     truncado = bool(itens) and len(itens) >= 1000     # PostgREST corta em 1000 e não avisa
-    base = {"status": "ok", "job_id": job_id, "escopo": "obra", "somente_leitura": eh_admin}
+    # ...e os lançamentos também: com 1000+ a tela mostraria totais parciais com cara de completos
+    lanc_truncados = len(rows) >= 1000
+    if lanc_truncados:
+        try:
+            _log_error("financeiro:listar", "1000+ lançamentos — leitura cortada pelo PostgREST",
+                       job_id, severity="warning")
+        except Exception:
+            pass
+    base = {"status": "ok", "job_id": job_id, "escopo": "obra", "somente_leitura": eh_admin,
+            "lancamentos_truncados": lanc_truncados}
     if st2 != 200 or itens is None or truncado:
         # 🩸 NÃO derivar estado sem a origem: com `itens` vazio, TODA linha do
         # quantitativo sairia "removido" com HTTP 200 — NULL virando afirmação
@@ -26574,6 +26674,10 @@ def _fin_montar_export(request, job_id: str, eh_admin: bool, hoje_str: str = "")
     if not rows:
         raise HTTPException(404, ("Este projeto ainda não tem lançamentos pra exportar." if eh_admin
                                   else "Nenhum lançamento ainda — adicione o primeiro pra exportar."))
+    if len(rows) >= 1000:
+        # o PostgREST corta em 1000 calado: um arquivo "completo" com totais parciais é pior que nenhum
+        _log_error("financeiro:export", "1000+ lançamentos — export recusado (leitura cortada)", job_id, severity="warning")
+        raise HTTPException(409, "este projeto tem mais de 1000 lançamentos e o arquivo sairia incompleto — fale com a gente pelo chat")
     req_leitura = None if eh_admin else request
     st_c, saved = _fin_cronograma_salvo(req_leitura, job_id)
     if st_c != 200:
@@ -26599,12 +26703,48 @@ def _fin_montar_export(request, job_id: str, eh_admin: bool, hoje_str: str = "")
             raise HTTPException(502, "não consegui montar o cronograma agora — tente de novo em instantes")
     if branding is None:
         branding = _get_branding_context(job_id, request=req_leitura)
-    if not (branding or {}).get("project_name"):
-        # 🩸 branding engole erro de leitura e devolve '' — o arquivo sairia "Projeto sem nome" pro cliente
-        _log_error("financeiro:export", "branding sem nome do projeto — leitura de projects falhou?",
+    # 🩸 auditoria 06/09: `_get_branding_context` engole a falha e devolve "Projeto sem nome" — o
+    # arquivo sairia com esse nome pro cliente, com 200. O nome vem de uma leitura própria, com status.
+    st_n, nome = _fin_nome_do_projeto(req_leitura, job_id)
+    if st_n != 200:
+        _log_error("financeiro:export", f"projects HTTP {st_n} — export recusado pra não sair 'Projeto sem nome'",
                    job_id, severity="warning")
         raise HTTPException(502, "não consegui ler os dados do projeto agora — tente de novo em instantes")
+    branding = dict(branding or {})
+    branding["project_name"] = nome or branding.get("project_name") or "Projeto sem nome"
     return montar_dados_export(rows, fases, _fin_hoje(hoje_str)), branding
+
+
+def _fin_nome_do_projeto(req_leitura, job_id: str):
+    """(status, nome) direto de `projects` — com STATUS, pra distinguir 'sem nome' de 'não li'."""
+    jq = urllib.parse.quote(job_id)
+    path = f"/projects?job_id=eq.{jq}&select=project_name&limit=1"
+    if req_leitura is not None:
+        st, rows = _supa_rest_as_user(req_leitura, "GET", path, timeout=8)
+    else:
+        st, rows = _supa_rest_service("GET", path, timeout=8)
+    if st != 200 or rows is None:
+        return st, ""
+    return 200, str((rows[0] if rows else {}).get("project_name") or "").strip()
+
+
+def _fin_nome_do_arquivo(branding: dict, job_id: str, ext: str) -> str:
+    """financeiro_obra_<projeto>.<ext>; nome sem letra/dígito ASCII cairia no 'cronograma' do slug."""
+    slug = _slug_filename(str((branding or {}).get("project_name") or ""))
+    if slug == "cronograma":
+        slug = job_id[:8]
+    return f"financeiro_obra_{slug}.{ext}"
+
+
+def _fin_apagar_depois(*caminhos):
+    """Some com os temporários do export depois que a resposta saiu (BackgroundTask):
+    sem isso cada clique deixava 2 arquivos no disco do Render (auditoria 06/09)."""
+    for c in caminhos:
+        try:
+            if c and os.path.isfile(c):
+                os.remove(c)
+        except Exception:
+            pass
 
 
 _FIN_XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -26622,13 +26762,15 @@ def financeiro_export_xlsx(job_id: str, request: Request, hoje: str = ""):
     eh_admin = _fin_eh_admin(request, owner)
     import tempfile
     dados, branding = _fin_montar_export(request, job_id, eh_admin, hoje)
-    fname = f"financeiro_obra_{_slug_filename(branding.get('project_name') or job_id)}.xlsx"
+    fname = _fin_nome_do_arquivo(branding, job_id, "xlsx")
     try:
+        from starlette.background import BackgroundTask
         from financeiro_export import gerar_financeiro_xlsx
         tmp = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
         tmp.close()
         gerar_financeiro_xlsx(dados, tmp.name, branding)
-        return FileResponse(tmp.name, filename=fname, media_type=_FIN_XLSX_MIME)
+        return FileResponse(tmp.name, filename=fname, media_type=_FIN_XLSX_MIME,
+                            background=BackgroundTask(_fin_apagar_depois, tmp.name, branding.get("logo_local_path")))
     except Exception as e:
         _log_error("financeiro:xlsx", str(e), job_id=job_id)
         raise HTTPException(500, "não consegui gerar a planilha do financeiro agora — tente de novo")
@@ -26642,8 +26784,9 @@ def financeiro_export_pdf(job_id: str, request: Request, hoje: str = ""):
     eh_admin = _fin_eh_admin(request, owner)
     import tempfile
     dados, branding = _fin_montar_export(request, job_id, eh_admin, hoje)
-    fname = f"financeiro_obra_{_slug_filename(branding.get('project_name') or job_id)}.pdf"
+    fname = _fin_nome_do_arquivo(branding, job_id, "pdf")
     try:
+        from starlette.background import BackgroundTask
         from financeiro_export import render_financeiro_pdf_bytes
         pdf = render_financeiro_pdf_bytes(dados, branding)
         if not pdf:
@@ -26651,7 +26794,8 @@ def financeiro_export_pdf(job_id: str, request: Request, hoje: str = ""):
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.write(pdf)
         tmp.close()
-        return FileResponse(tmp.name, filename=fname, media_type="application/pdf")
+        return FileResponse(tmp.name, filename=fname, media_type="application/pdf",
+                            background=BackgroundTask(_fin_apagar_depois, tmp.name, branding.get("logo_local_path")))
     except Exception as e:
         _log_error("financeiro:pdf", str(e), job_id=job_id)
         raise HTTPException(500, "não consegui gerar o PDF do financeiro agora — tente de novo")
