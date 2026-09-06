@@ -2,7 +2,7 @@
 """Toda nota NPS avisa o Pedro na hora — nao so o detrator (31/08/2026).
 
 O BURACO: a rota fazia `if category == "detractor": _alerta_detrator(row)`.
-Promotor e neutro gravavam calados. Em 24/08 o Marcelo deu **9 com o
+Promotor e neutro gravavam calados. Em 24/08 o cliente-13 deu **9 com o
 comentario "Gostei muito do resultado"** e o Pedro descobriu em **31/08**,
 sete dias depois, olhando o painel por acaso.
 
@@ -51,10 +51,10 @@ def _chamar(score, monkeypatch, comentario="", detalhado=False):
 
 
 def test_promotor_AVISA(monkeypatch):
-    """O caso Marcelo: nota 9 com elogio ficou 7 dias invisivel."""
+    """O caso cliente-13: nota 9 com elogio ficou 7 dias invisivel."""
     resp, alertas = _chamar(9, monkeypatch, comentario="Gostei muito do resultado")
     assert resp["category"] == "promoter"
-    assert len(alertas) == 1, "nota 9 nao avisou ninguem — foi exatamente o caso Marcelo"
+    assert len(alertas) == 1, "nota 9 nao avisou ninguem — foi exatamente o caso cliente-13"
     linha, cat = alertas[0]
     assert cat == "promoter"
     assert linha["comment"] == "Gostei muito do resultado"
@@ -74,7 +74,7 @@ def test_neutro_AVISA(monkeypatch):
 
 def test_detrator_CONTINUA_avisando(monkeypatch):
     """CONTROLE: o comportamento que ja existia nao pode ter sido perdido
-    (caso Eduarda, 16/08 — nota 2 as 19:18, janela de resgate de horas)."""
+    (caso cliente-20, 16/08 — nota 2 as 19:18, janela de resgate de horas)."""
     resp, alertas = _chamar(2, monkeypatch)
     assert resp["category"] == "detractor"
     assert len(alertas) == 1 and alertas[0][1] == "detractor"
@@ -114,7 +114,7 @@ def test_o_alerta_MONTA_email_diferente_por_faixa(monkeypatch):
     monkeypatch.setattr(main, "_notify_admin", _fake_notify)
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
     monkeypatch.setattr(main, "_supa_rows", lambda *a, **k: [])
-    base = {"score": 9, "user_email": "a@b.com", "user_name": "Marcelo",
+    base = {"score": 9, "user_email": "a@b.com", "user_name": "cliente-13",
             "comment": "Gostei muito", "job_id": ""}
     main._alerta_nps(dict(base), "promoter")
     main._alerta_nps(dict(base, score=2, comment=""), "detractor")

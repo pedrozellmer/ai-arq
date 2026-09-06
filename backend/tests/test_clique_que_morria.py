@@ -5,8 +5,8 @@
 e zero clientes". Fui olhar o funil e achei o que interessa: **dois clientes
 escolheram arquivo e sumiram**.
 
-  ialves943@gmail.com          25/08 14:07  PDF  — já tinha 4 projetos
-  estudosmaraligrupo@gmail.com 24/08 22:10  PDF  — fez o tour inteiro, 0 projetos
+  cliente4@example.com          25/08 14:07  PDF  — já tinha 4 projetos
+  cliente3@example.com 24/08 22:10  PDF  — fez o tour inteiro, 0 projetos
 
 Nos dois o rastro é idêntico: `arquivo_escolhido` e depois **silêncio**.
 

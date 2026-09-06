@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O alarme de "faltou medição" leu o briefing do cliente como queixa.
 
-🩸 03/09/2026, cliente `v.anjos.ia.81@` (job `eebe543a`). Ele mandou no chat um
+🩸 03/09/2026, cliente `cliente-11@` (job `eebe543a`). Ele mandou no chat um
 briefing pedindo auditoria técnica do projeto de REDE dele, com itens de
 checklist como:
 

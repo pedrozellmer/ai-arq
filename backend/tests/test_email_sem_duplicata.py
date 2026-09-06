@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Boas-vindas duplicado: o cliente novo levou DOIS em 2 minutos.
 
-🚨 24/08/2026, caso Alan (alansilvacosta@gmail.com), primeiro dia de conta:
+🚨 24/08/2026, caso cliente-19 (cliente1@example.com), primeiro dia de conta:
 
     19:28:35  Bem-vindo ao AI.arq — seu projeto vira planilha medida
     19:30:55  Bem-vindo ao AI.arq — seu projeto vira planilha medida   ← de novo

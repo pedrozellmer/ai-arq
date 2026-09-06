@@ -13,7 +13,7 @@ superior têm a mesma descrição e a mesma disciplina, então viravam a mesma
 linha. E o desempate premiava o selo CONFIRMADO acima da quantidade: a leitura
 parcial branca vencia a medição maior e saía carimbada como medida do CAD.
 
-O CASO (Flavio Hermolin, job d5e073cf), lido no banco de produção:
+O CASO (cliente-14, job d5e073cf), lido no banco de produção:
     "Alvenaria de vedação — levantamento de parede" · 255,06 ml · CONFIRMADO
     Versões descartadas: 819,06 m², 810,36 m², 50,37 m², 73,05 m², 15,48 ml
 Metro LINEAR venceu metro QUADRADO. E as pranchas eram DEMOLIR-CONSTRUIR,
@@ -21,10 +21,10 @@ LAYOUT e LEVANTAMENTO — fases diferentes da mesma obra, não duplicatas.
 
 TAMANHO: 1.245 itens em 80 projetos, 159 com selo de medido.
 
-O CLIENTE JÁ TINHA DITO. Marcelo Affonso, 24/08: "são de pavimentos
+O CLIENTE JÁ TINHA DITO. cliente-13, 24/08: "são de pavimentos
 diferentes... teria como separar a quantidade de paredes para cada um dos três
 pavimentos?" — e o chat respondeu mandando separar os arquivos por pavimento.
-O Jessé fez isso, com 8 DWG, e deduplicou do mesmo jeito.
+O cliente-32 fez isso, com 8 DWG, e deduplicou do mesmo jeito.
 
 🔑 A DECISÃO: manter as linhas, não somar. Somar exige saber se são trechos
 distintos ou a mesma coisa desenhada duas vezes, e disso o motor não tem prova.
@@ -103,7 +103,7 @@ def test_o_selo_de_medido_NAO_e_rebaixado():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_grandezas_diferentes_nunca_disputam():
-    """O caso do Flavio: 255 ml contra 819 m². Comprimento e área não são a
+    """O caso do cliente-14: 255 ml contra 819 m². Comprimento e área não são a
     mesma medida, e nem deveriam entrar no mesmo grupo."""
     corpo = _passada6(_fonte())
     assert "_UNIT_PRIORITY.get(u, 50) for u in _uns" in corpo, (
@@ -118,9 +118,9 @@ def test_CONTROLE_a_trava_separa_ml_de_m2():
         "m": 80, "ml": 80, "kg": 60, "un": 40, "cj": 35,
         "mês": 30, "dia": 25, "vb": 10, "%": 5,
     }
-    # o caso do Flavio: ml x m²
+    # o caso do cliente-14: ml x m²
     dims = {_UNIT_PRIORITY.get(u, 50) for u in {"ml", "m²"}}
-    assert len(dims) > 1, "a trava não separaria ml de m² — o caso do Flavio passaria"
+    assert len(dims) > 1, "a trava não separaria ml de m² — o caso do cliente-14 passaria"
     # e o caso legítimo: duas leituras da MESMA grandeza continuam agrupando
     dims_iguais = {_UNIT_PRIORITY.get(u, 50) for u in {"m²", "m2"}}
     assert len(dims_iguais) == 1, (
@@ -140,12 +140,12 @@ def test_CONTROLE_ml_e_m_continuam_juntos():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_o_guarda_do_ACO_de_17_08_continua_intocado():
-    """🪤 A passada 6 já tinha matado o aço da Eduarda: 6 bitolas viravam 1
+    """🪤 A passada 6 já tinha matado o aço da cliente-20: 6 bitolas viravam 1
     linha, 3.028 kg viravam 508 kg. O guarda de atributo que consertou aquilo
     não pode ter sido perdido no conserto de hoje."""
     corpo = _passada6(_fonte())
     assert "_pode_fundir(" in corpo, (
-        "o guarda de atributo (bitola/classe/fck) sumiu — o aço da Eduarda "
+        "o guarda de atributo (bitola/classe/fck) sumiu — o aço da cliente-20 "
         "volta a ser apagado")
 
 

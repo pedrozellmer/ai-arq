@@ -1439,7 +1439,7 @@ def analyze_all_sheets(sheets: list[SheetInfo], api_key: str,
                     # 🩸 02/09/2026 — A PÁGINA ENTRA AQUI, e só quando existe.
                     # Um PDF de N pranchas gerava N itens com `ref_sheet`
                     # idêntico, e a atribuição da medição desistia por
-                    # ambiguidade (caso Luana: 10 pranchas, 583,6 m² medidos,
+                    # ambiguidade (caso cliente-31: 10 pranchas, 583,6 m² medidos,
                     # zero itens preenchidos).
                     # 🪤 Vai DENTRO dos parênteses de propósito: o site faz
                     # `raw.split('(')[0]` pra achar o nome do arquivo

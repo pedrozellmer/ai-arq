@@ -5,7 +5,7 @@ Mesma prancha em várias revisões (só muda o sufixo -RNN) → mantém a mais n
 senão o quantitativo conta a prancha 2x. CONSERVADOR: nunca descarta prancha sem
 sufixo de revisão nem funde bases diferentes (regra nº1 — nada some em silêncio).
 
-Caso motivador: Rafael/Engefast 21/07 (008 R03+R04, 009 R02+R03)."""
+Caso motivador: cliente-40/Engefast 21/07 (008 R03+R04, 009 R02+R03)."""
 import os
 import sys
 

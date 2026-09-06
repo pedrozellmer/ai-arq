@@ -164,7 +164,7 @@ def test_o_filtro_so_muda_DEPOIS_de_medir():
         "0" — **nenhum é layer de pilar**, ou seja, o filtro de nome estava
         ACERTANDO;
       · o gargalo é outro: o detector só olha polilinha FECHADA, e o arquivo do
-        Edvaldo (RACIONAL) não tem nenhuma — 2.158 LINE, 448 HATCH, 0
+        cliente-23 (RACIONAL) não tem nenhuma — 2.158 LINE, 448 HATCH, 0
         LWPOLYLINE. Os 54 pilares dele são HACHURA, no layer `S-COLS`.
     "COLS" entrou porque é o padrão AIA (Structural Columns) e apareceu num
     arquivo real. 🪤 "COLUNA" foi testado e RECUSADO: o Tiago (METAL-AR) tem o

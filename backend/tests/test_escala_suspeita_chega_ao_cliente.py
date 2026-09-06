@@ -125,7 +125,7 @@ def test_plausibilidade_tambem_entra():
 
 # ── CONTROLES: tem que RECUSAR ─────────────────────────────────────────────
 def test_CONTROLE_prancha_PROVADA_nao_ganha_aviso_de_suspeita():
-    """🧪 Caso Edvaldo (175 cotas batem). Se este falhar, a regra virou spam."""
+    """🧪 Caso cliente-23 (175 cotas batem). Se este falhar, a regra virou spam."""
     resumo, linhas = _fns()
     a = resumo("/tmp/TOP-EST-PE-116-FRM-TIP-R00.dxf",
                {"unidade_validada_por_cotas": 175, "unidade_nome_provada": "centímetros"})

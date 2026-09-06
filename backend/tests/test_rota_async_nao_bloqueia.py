@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Rota `async` não pode rodar trabalho pesado no laço de eventos.
 
-🚨 27/08/2026, madrugada. **Maria Victoria Suica**, orçamentista, chegou pelo
+🚨 27/08/2026, madrugada. **cliente-18 Suica**, orçamentista, chegou pelo
 ChatGPT e cadastrou às 02:02 — do primeiro clique ao cadastro em 2 segundos.
 Às 02:03 selecionou 17 arquivos. E foi embora às 02:04:47 sem enviar nada.
 
@@ -125,7 +125,7 @@ def test_a_estimativa_usa_thread():
 
 def test_o_precheck_tem_TETO_de_espera():
     """🪤 Thread livra o SERVIDOR, não o CLIENTE. 17 s por PDF viraria minutos
-    de tela parada — e foi tela parada que espantou a Maria Victoria."""
+    de tela parada — e foi tela parada que espantou a cliente-18."""
     src = _fonte()
     assert "_PRECHECK_ORCAMENTO_S" in src, "o precheck ficou sem teto de tempo"
     i = src.find("_PRECHECK_ORCAMENTO_S = ")

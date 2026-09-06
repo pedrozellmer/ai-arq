@@ -3,7 +3,7 @@
 
 🩸 31/08/2026 — ACHADO PELA AUDITORIA ADVERSARIAL DO MESMO DIA. A regra da casa
 é no máximo 1 e-mail automático por pessoa por semana, e ela é aplicada lendo a
-tabela `email_auto_log`. O conserto de 29/08 (caso Eduarda, que levou 3 e-mails
+tabela `email_auto_log`. O conserto de 29/08 (caso cliente-20, que levou 3 e-mails
 num dia) fez a LIBERAÇÃO do filhote consultar esse teto — e esqueceu de fazer o
 ENVIO alimentar ele. Meia porta.
 

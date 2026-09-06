@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O cache do carimbo guarda só leitura COM escala. Negativo é reperguntado.
 
-🩸 05/09/2026, A08 do William (135fdfac). A escala do carimbo foi lida como
+🩸 05/09/2026, A08 do cliente-39 (135fdfac). A escala do carimbo foi lida como
 1:75 em cinco chamadas à Vision ao longo do dia. Na sexta (17:03) o Haiku
 respondeu diferente — sem escala — e `read_carimbo_scale` gravou isso no
 `carimbo_cache.json` (chave = sha256 do arquivo + página). A tentativa

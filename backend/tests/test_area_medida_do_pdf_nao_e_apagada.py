@@ -158,7 +158,7 @@ def test_numero_que_NAO_CABE_na_medicao_e_apagado():
 def test_sem_medicao_do_PDF_nada_muda():
     """Regressão: job sem motor vetorial se comporta EXATAMENTE como antes.
 
-    O caso Catarina (20/07) é o motivo de a regra existir: Vision chuta
+    O caso cliente-21 (20/07) é o motivo de a regra existir: Vision chuta
     "Forro Sala 52 m²" numa planta sem cota. Isso tem que continuar zerando.
     """
     h = _fatia()["_apply_area_honesty"]

@@ -118,7 +118,7 @@ def is_likely_wrong_type(quantities, threshold=0.75):
 def detectar_laco_repeticao(texto: str, tokens_saida: int = 0) -> dict:
     """A IA entrou em laco de repeticao e queimou a resposta inteira?
 
-    🚨 26/08/2026, caso Amanda (job 43a799c0). De 4 pranchas, 1 chegou na
+    🚨 26/08/2026, caso cliente-16 (job 43a799c0). De 4 pranchas, 1 chegou na
     planilha. Duas devolveram ZERO item com stop=max_tokens -- e o log dizia
     `perdidos=0`. O que a IA escrevia:
 
@@ -305,7 +305,7 @@ _NONSENSE_PAT = _re.compile(r"se[çc][ãa]o\s+transversal|[áa]rea\s+de\s+se[çc
 def is_nonsense_item(description):
     """Item-ARTEFATO que não é quantitativo real: 'área de seção transversal' de
     parede = a hachura da ESPESSURA da parede virou item de m². Ninguém compra
-    'seção transversal' — é lixo de extração. Caso Thamiry (projeto drywall)."""
+    'seção transversal' — é lixo de extração. Caso cliente-24 (projeto drywall)."""
     if not description:
         return False
     return bool(_NONSENSE_PAT.search(description))
@@ -318,7 +318,7 @@ def extract_type_code(description):
     """Extrai código de TIPO de divisória/parede (DRY 07, DW-12, DIV 03...) pra
     consolidar o MESMO tipo que aparece em várias pranchas. None se não houver.
     Em projeto multi-prancha de drywall, o mesmo tipo se fragmenta em dezenas de
-    linhas (caso Thamiry: 191 itens, 156 zerados)."""
+    linhas (caso cliente-24: 191 itens, 156 zerados)."""
     if not description:
         return None
     m = _TYPE_CODE_PAT.search(description)
@@ -374,7 +374,7 @@ FLOOR_AREA_BLOCK_KW = (
     "m do piso", "bancada", "balcão", "balcao", "bebedouro", "purificador",
 )
 
-# 🩸 31/08/2026 (caso Flavio, job f271473f): "Rasgo em laje de concreto armado
+# 🩸 31/08/2026 (caso cliente-14, job f271473f): "Rasgo em laje de concreto armado
 # para implantação de nova escada" herdou a ÁREA TOTAL informada pelo cliente e
 # saiu com 400 m² — um vão de escada caracol. São palavras do ATO de intervenção
 # parcial: o item MENCIONA laje/piso, mas cobre um recorte, não a superfície.
@@ -427,7 +427,7 @@ def is_floor_surface_para_criar(desc):
 
 
 # ── Coerência de unidade: item CONTÁVEL não sai em metro/m² ──────────────────
-# Caso Rafael (visto em 01/08/2026, job ed655532): "Condulete de dados —
+# Caso cliente-40 (visto em 01/08/2026, job ed655532): "Condulete de dados —
 # 155,6 ml — CONFIRMADO". Condulete é caixa: conta-se em unidade. O motor mediu
 # 155,6 m de infra linear (fix do Fábio) e a IA pendurou os metros na linha
 # ERRADA — o condulete virou falso-medido e o eletroduto ficou zerado.
@@ -473,7 +473,7 @@ def is_unit_mismatch_countable(desc, unit):
 #
 # 🔒 A regra é CONSERVADORA de propósito. Só age quando a medida está na
 # observação DO PRÓPRIO ITEM (não move nada entre linhas — essa é a diferença
-# em relação ao caso Rafael acima, onde mover seria adivinhar) e só em dois
+# em relação ao caso cliente-40 acima, onde mover seria adivinhar) e só em dois
 # casos sem ambiguidade:
 #   1. quantidade == medida, mas a unidade não é de comprimento → só o rótulo
 #      está errado; corrige a unidade e mantém tudo o mais.
@@ -529,7 +529,7 @@ _RE_BASE_DE_CALCULO = _re.compile(
     r"n[ãa]o\s+(?:segregad|discriminad)[ao]\s+(?:no|por)|"
     r"inclui\s+todos\s+os\s+tipos|"
     r"m[úu]ltiplas\s+vistas|"
-    # 🚨 Termos do caso REAL que passou reto (rafaelcmnz@, 05/08): a
+    # 🚨 Termos do caso REAL que passou reto (cliente-06@, 05/08): a
     # observação avisava "inclui faces duplas ... e possíveis duplicações
     # ... dividir por 2" e a regra gravou 1960,75 ml assim mesmo. Quando o
     # próprio texto diz que o número está dobrado ou somado de mais, ele não
@@ -929,7 +929,7 @@ def tipo_de_conflito_de_unidade(unidade_item, unidade_sinapi):
     quando o lado suspeito é o NOSSO — medimos uma dimensão que não é a do
     serviço.
 
-    🩸 04/09/2026, do 1º projeto da Caroline (Bolognesi). Ela recebeu, e
+    🩸 04/09/2026, do 1º projeto da cliente-22 (Bolognesi). Ela recebeu, e
     apagou em 3 minutos, uma linha com a nossa própria observação:
 
         "⚠ CONFERIR A UNIDADE: o serviço SINAPI 103689 é medido em M2, e
@@ -1059,8 +1059,8 @@ def casar_texto_com_regiao(textos, regioes, max_por_regiao=1, min_preenchimento=
 #  UNIDADE IMPERIAL EM PROJETO BRASILEIRO — desconfiar, nunca corrigir
 #
 # Medido em 10/08/2026 no `error_log` (stage motor:unidade): 9 pranchas
-# declararam Polegadas — 7 da escola FNDE da Amanda (349e75a5) e 2 de outros
-# clientes. As 7 da Amanda são TODAS as elétricas do projeto: não é arquivo
+# declararam Polegadas — 7 da escola FNDE da cliente-16 (349e75a5) e 2 de outros
+# clientes. As 7 da cliente-16 são TODAS as elétricas do projeto: não é arquivo
 # estragado, é o template de elétrica do projetista saindo em polegada.
 # Nas nove, `cotas=-`: nenhuma tinha cota pra confirmar nem desmentir o
 # cabeçalho, e nenhuma foi corrigida.
@@ -1113,7 +1113,7 @@ def aviso_unidade_imperial(insunits, dim_status=None):
 # resultado é nada. O cliente lê "medido: 0" e conclui que o serviço não
 # existe no projeto, quando a verdade é que a gente não conseguiu medir.
 #
-# Achado em 10/08/2026 no 1º projeto da Amanda (349e75a5, escola FNDE de 14
+# Achado em 10/08/2026 no 1º projeto da cliente-16 (349e75a5, escola FNDE de 14
 # pranchas): 4 linhas brancas com 0 — e a observação de cada uma CARREGAVA o
 # número medido ("área de contorno fechado no layer ARQ-COBERTURA = 752,21
 # m²"; "comprimento do layer 'EL-Condutos (Teto)' = 79,65 m"). O número se
@@ -1123,7 +1123,7 @@ def aviso_unidade_imperial(insunits, dim_status=None):
 # quantidade DE PROPÓSITO quando a área veio de Vision e não da geometria, e
 # esse ramo não toca no selo — enquanto o ramo vizinho, que preenche, rebaixa
 # pra estimado (linha 4327). Mas aquele caminho só olha unidade de ÁREA, e 3
-# das 4 linhas da Amanda eram `ml`. Por isso a regra mora AQUI, no fim da
+# das 4 linhas da cliente-16 eram `ml`. Por isso a regra mora AQUI, no fim da
 # esteira e valendo pra qualquer origem, em vez de remendar um por um os
 # caminhos que zeram.
 #
@@ -1375,7 +1375,7 @@ def linhas_pai_e_filho(items, tolerancia=0.35):
             continue
         partes = [(j, n) for j, n in enumerate(norm)
                   if j != i and n[1] == unidade and n[3] == disc and n[2] > 0 and not n[4]]
-        # 🔑 PRANCHA PRIMEIRO (16/08/2026, caso Eduarda 42c354a1): o quadro de
+        # 🔑 PRANCHA PRIMEIRO (16/08/2026, caso cliente-20 42c354a1): o quadro de
         # aço tem UM total POR PRANCHA, e as partes dele são as bitolas DA
         # MESMA prancha. Misturar as 12 pranchas somava tudo contra cada total
         # e a folga estourava — 0 marcados em 71 linhas de kg com totais
@@ -1407,7 +1407,7 @@ def linhas_pai_e_filho(items, tolerancia=0.35):
 # ══════════════════════════════════════════════════════════════════════
 #  ATRIBUTO DISTINTIVO — o que NUNCA pode ser fundido (regra dura nº4)
 # ══════════════════════════════════════════════════════════════════════
-# 🚨 Por que existe (17/08/2026, caso Eduarda): a passada 2 do
+# 🚨 Por que existe (17/08/2026, caso cliente-20): a passada 2 do
 # `_consolidate_items` funde dois itens quando as descrições têm >= 2
 # palavras em comum. Em projeto ESTRUTURAL toda linha compartilha
 # "armadura" + "vigas" — então Ø8, Ø12,5 e Ø16 caíam na mesma família e a
@@ -1640,7 +1640,7 @@ def unidade_provada_por_rotulo(pares, tol: float = _AREA_TOL) -> dict:
 # isso pelo motor tb? tipo um terceiro projeto"*.
 #
 # 🔑 POR QUE ISSO É PRECISO. A releitura de um projeto NÃO é superconjunto da
-# leitura antiga. Caso Alan (e1c48ed7 × ev597afa), medido no banco:
+# leitura antiga. Caso cliente-19 (e1c48ed7 × ev597afa), medido no banco:
 #   • nas 3 pranchas NOVAS (que morriam no KeyError): ganho puro, 0 → 151 itens
 #   • nas 4 pranchas que JÁ iam: PERDA pura, 147 → 112 itens, 92 → 72 medidos
 #   • as 38 portas dele (23 P80E + 9 P80 + 4 P60T + 1 P70 + 1 PD120, 34 MEDIDAS)
@@ -1751,7 +1751,7 @@ def merge_plano(itens_pai, itens_filho) -> dict:
     fica com o ORIGINAL — o cliente já viu aquilo, e trocar sem ganho é churn.
 
     🪤 "Melhor" aqui é por PRANCHA, não pela planilha inteira. No agregado o
-    filhote do Alan parecia melhor (151 × 92) e ainda assim tinha perdido 20
+    filhote do cliente-19 parecia melhor (151 × 92) e ainda assim tinha perdido 20
     medições nas pranchas que já funcionavam.
     """
     def _resumo(itens):
@@ -1856,7 +1856,7 @@ def quantidade_medida_pelo_pdf(observacao, unidade, area_pdf=0, comprimento_pdf=
     📐 `area_pdf` e `comprimento_pdf` aceitam um NÚMERO ou uma LISTA de números.
     Passe a lista com a medição de cada PRANCHA: em job multi-página a soma não
     corresponde a nada físico, e comparar contra ela faz a régua nunca casar
-    (caso Flavio, 31/08 — 16 pranchas, `resgate_pdf=0` com medição existindo).
+    (caso cliente-14, 31/08 — 16 pranchas, `resgate_pdf=0` com medição existindo).
 
     🚨 E a família da unidade tem que bater: área com área, comprimento com
     comprimento. É essa trava que segura o caso perigoso do MESMO cliente:
@@ -1876,7 +1876,7 @@ def quantidade_medida_pelo_pdf(observacao, unidade, area_pdf=0, comprimento_pdf=
         return None
     u = str(unidade).strip().lower()
 
-    # 🩸 31/08/2026 (caso Flavio) — A RÉGUA COMPARAVA CONTRA A SOMA DO JOB.
+    # 🩸 31/08/2026 (caso cliente-14) — A RÉGUA COMPARAVA CONTRA A SOMA DO JOB.
     # `area_pdf` chegava como `_pdfvec_area_m2`, que acumula página a página.
     # Num projeto de 16 pranchas do mesmo imóvel isso é a mesma casa contada
     # várias vezes (741,8 m² num imóvel de 400). A observação do item cita o
@@ -1932,7 +1932,7 @@ def quantidade_da_procedencia(observacao, unidade, areas_por_layer=None,
     """Devolve a quantidade quando a observação CITA uma medição nossa que
     CONFERE com a extração — senão devolve None.
 
-    🚨 26/08/2026, caso Alan (job de 24/08 21:39): 31 de 73 linhas de área e
+    🚨 26/08/2026, caso cliente-19 (job de 24/08 21:39): 31 de 73 linhas de área e
     comprimento saíram com quantidade ZERO **tendo o número medido escrito na
     própria observação**:
 
@@ -1999,7 +1999,7 @@ def quantidade_da_procedencia(observacao, unidade, areas_por_layer=None,
 
 
 # ── ITEM CUJA IDENTIDADE É O BLOCO DO CAD (regra nº1) ──────────────────────
-# 🩸 04/09/2026, olhando o 1º projeto da Caroline (Bolognesi). A planilha dela
+# 🩸 04/09/2026, olhando o 1º projeto da cliente-22 (Bolognesi). A planilha dela
 # trazia "Equipamento não identificado — bloco CAD '1258C37_v' — verificar com
 # projetista", 1 un, carimbado **✓ MEDIDO DO CAD**.
 #
@@ -2051,7 +2051,7 @@ def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
 
 
 # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ──────────────────────
-# 🩸 04/09/2026, no 1º projeto da Caroline (Bolognesi). O motor mediu
+# 🩸 04/09/2026, no 1º projeto da cliente-22 (Bolognesi). O motor mediu
 # **17,18 m** de parede numa casa de **46,79 m²** — e daí saiu a alvenaria
 # (44,67 m² = 17,18 × 2,60), o chapisco e o rodapé.
 #
@@ -2065,8 +2065,8 @@ def item_e_bloco_sem_identidade(descricao, unidade) -> bool:
 # não esbarra na regra nº3 (ratio só alerta). O limite é uma impossibilidade.
 #
 # 🔑 MEDIDO na base: dos 19 projetos de cliente em que a gente mede parede em
-# metro, **3 (16%) estão abaixo do mínimo** — humberto.oliveira 88% abaixo,
-# marcioeng72 42%, Caroline 59%. Onze itens BRANCOS saíram desses três.
+# metro, **3 (16%) estão abaixo do mínimo** — cliente-07 88% abaixo,
+# cliente-08 42%, cliente-22 59%. Onze itens BRANCOS saíram desses três.
 #
 # 🪤 Folga de 5%: o limite é exato só pro quadrado perfeito sem parede interna,
 # e medição tem ruído. Os três casos reais estão 42–88% abaixo — a folga não
@@ -2094,7 +2094,7 @@ def parede_abaixo_do_minimo(comprimento_m, area_m2):
 
 
 # 🩸 04/09/2026, rodando o conserto num arquivo REAL (filhote `ev6edc7e` da
-# Caroline). O guarda do mínimo de parede não disparou — porque nessa rodada a
+# cliente-22). O guarda do mínimo de parede não disparou — porque nessa rodada a
 # parede saiu só em **m²**, e ele só olhava `ml`/`m`. O motor não é
 # determinístico: o MESMO arquivo produziu "17,18 ml" numa rodada e
 # "44,67 m²" na outra. Guarda que depende da forma do item guarda metade.

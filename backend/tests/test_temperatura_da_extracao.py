@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O `temperature=0` custava a prancha inteira — e nunca deu o que prometia.
 
-🚨 26/08/2026, caso Amanda (job 43a799c0). De 4 pranchas, 1 chegou na planilha.
+🚨 26/08/2026, caso cliente-16 (job 43a799c0). De 4 pranchas, 1 chegou na planilha.
 As duas densas devolveram ZERO item: a IA somava bloco a bloco no raciocínio
 ("+1+1+1+1…") e `temperature=0` — decodificação gulosa — não a deixava escapar
 do laço. Queimava os 32.000 tokens sem nunca emitir o JSON.
@@ -51,7 +51,7 @@ def test_a_temperatura_NAO_pode_voltar_a_ser_zero():
     assert m, "não achei o valor padrão da temperatura"
     padrao = float(m.group(1))
     assert padrao > 0.3, (
-        "temperatura voltou para %r. Medido em 26/08 nas pranchas da Amanda: "
+        "temperatura voltou para %r. Medido em 26/08 nas pranchas da cliente-16: "
         "em 0 e em 0,3 a IA entra em laço de repetição e devolve ZERO item; "
         "de 0,5 pra cima ela escapa. O zero não dá determinismo (provado em "
         "08/08: 458,54 m² e 177 m² no mesmo arquivo)." % padrao)

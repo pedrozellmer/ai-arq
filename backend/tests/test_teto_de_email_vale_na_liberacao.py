@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O teto de 1 e-mail por semana não valia na porta da liberação.
 
-🚨 29/08/2026. A Eduarda (a cliente do NPS 2) recebeu TRÊS e-mails num dia:
+🚨 29/08/2026. A cliente-20 (a cliente do NPS 2) recebeu TRÊS e-mails num dia:
 
     08:00  "Que tal ajudar a afinar seu quantitativo?"   esteira automática
     13:59  "ARMAÇÃO FUNDAÇÃO — refizemos a leitura"      disparado pela liberação
@@ -53,12 +53,12 @@ def _bloco(marca, tamanho=2600):
 
 
 def test_o_botao_MANUAL_consulta_o_teto_antes_de_mandar():
-    """🚨 O caso da Eduarda. Sem esta checagem, liberar dispara e-mail mesmo
+    """🚨 O caso da cliente-20. Sem esta checagem, liberar dispara e-mail mesmo
     pra quem já recebeu outro na mesma semana."""
     b = _bloco('email_motivo = "NÃO enviado: a versão nova não ficou melhor')
     assert "_email_auto_recente" in b, (
         "a liberação manual voltou a mandar e-mail sem olhar o teto de 1 por "
-        "semana — foi assim que a Eduarda recebeu 3 num dia")
+        "semana — foi assim que a cliente-20 recebeu 3 num dia")
 
 
 def test_e_o_caminho_AUTOMATICO_tambem():

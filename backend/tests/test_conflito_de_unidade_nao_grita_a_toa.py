@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A gente dizia "uma das duas está errada" quando nenhuma estava — 56% do tempo.
 
-🩸 04/09/2026, do PRIMEIRO projeto da Caroline (Bolognesi). Ela apagou, três
+🩸 04/09/2026, do PRIMEIRO projeto da cliente-22 (Bolognesi). Ela apagou, três
 minutos depois de receber a planilha, uma linha que trazia a NOSSA observação:
 
     "⚠ CONFERIR A UNIDADE: o serviço SINAPI 103689 é medido em M2, e esta

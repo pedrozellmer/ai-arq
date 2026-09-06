@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Layout que o ezdxf não resolve não pode matar a prancha.
 
-🚨 Caso Alan (24/08/2026, job e1c48ed7). Cliente novo, 7 DWG. TRÊS pranchas
+🚨 Caso cliente-19 (24/08/2026, job e1c48ed7). Cliente novo, 7 DWG. TRÊS pranchas
 morreram — 43% do projeto dele —, entre elas as DUAS de ARQUITETURA:
 
     File ".../ezdxf/layouts/layouts.py", line 219, in get
@@ -80,7 +80,7 @@ def test_recover_salva_a_prancha_quando_o_readfile_morre(
 
     assert chamadas["n"] >= 1, "o teste não chegou a sabotar o readfile"
     assert r is not None, (
-        "a prancha morreu — é o caso Alan: 2 arquivos de arquitetura perdidos "
+        "a prancha morreu — é o caso cliente-19: 2 arquivos de arquitetura perdidos "
         "por nome de layout acentuado")
     assert "recover" in capsys.readouterr().out.lower(), (
         "abriu sem passar pelo recover? então o teste não está medindo o que diz")

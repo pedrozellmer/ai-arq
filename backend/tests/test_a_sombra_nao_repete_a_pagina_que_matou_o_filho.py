@@ -4,7 +4,7 @@
 🔬 05/09/2026, PASSO 7 do estudo do teto. A medição vetorial de PDF roda em
 DOIS lugares: (A) num filho com RLIMIT_AS de 2 GB (promoção) e (B) na sombra,
 uma thread DENTRO do processo do servidor, SEM teto. Quando o filho morre de
-memória, a sombra refaz a mesma página no pai — hoje a A08 do William rodou
+memória, a sombra refaz a mesma página no pai — hoje a A08 do cliente-39 rodou
 assim 3 vezes e o servidor sobreviveu; mas o pai (300-400 MB) + a sombra da
 página que estourou 2 GB + o filho do próximo job (até 2 GB) num contêiner de
 4 GB é exatamente o risco de 03/09 (contêiner a 3,1 GB, site fora por 2 min).

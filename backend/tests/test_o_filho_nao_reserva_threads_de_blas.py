@@ -4,7 +4,7 @@
 🔬 05/09/2026, PASSO 8 do estudo do teto. Medido em produção (filhote ev1c03c1,
 PDF de 0,49 MB): VmPeak 1.717 MB contra VmHWM 385 MB — 1,3 GB de endereço
 reservado que não é RAM. O RLIMIT_AS de 2 GB cobra ENDEREÇO, então a folga come
-o teto: o filho do William morreu com ~1 GB de RAM real.
+o teto: o filho do cliente-39 morreu com ~1 GB de RAM real.
 
 Parte da reserva é o OpenBLAS (o numpy que o shapely importa) criando (nCPU−1)
 threads com pilha + buffers no import, e as arenas do malloc da glibc. O filho

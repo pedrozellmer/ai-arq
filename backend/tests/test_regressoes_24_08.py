@@ -80,7 +80,7 @@ def test_inform_area_nao_zera_area_com_procedencia():
     """🚨 Regressão: o conserto da manhã de 23/08 (passar o pé-direito) foi
     desfeito pelo da noite (travas por origem), porque `project_items` nunca
     guardou a origem — na reidratação tudo volta com origem='' e as duas travas
-    falham juntas. Caso Tammyres: pintura 1.641 m² e massa corrida 817 m²
+    falham juntas. Caso cliente-25: pintura 1.641 m² e massa corrida 817 m²
     iam pra 0 e eram GRAVADAS assim."""
     f = _fatia_motor()["_apply_area_honesty"]
     pintura = _Item("Pintura latex acrilica em parede", "m²", 1641.4,

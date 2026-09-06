@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O aviso que explica a falha tem que CHEGAR — e ser verdade.
 
-🚨 24/08/2026, caso Alan (job e1c48ed7). Pedro perguntou: *"e quando morrer,
+🚨 24/08/2026, caso cliente-19 (job e1c48ed7). Pedro perguntou: *"e quando morrer,
 temos que explicar isso para os clientes né"*. A gente explicava. Mal.
 
 Ele mandou 7 pranchas; 3 morreram (as DUAS de arquitetura entre elas). O motor
@@ -73,7 +73,7 @@ def test_o_email_nao_corta_mais_nos_dois_primeiros():
     src = _main()
     assert 'or [])[:2]:' not in src, (
         "voltou o corte cego em 2 avisos — foi assim que o 'ⓘ 3 pranchas não "
-        "entraram' do Alan nunca saiu por e-mail")
+        "entraram' do cliente-19 nunca saiu por e-mail")
 
 
 def test_o_email_ordena_por_gravidade_e_prancha_faltando_vem_primeiro():
@@ -115,7 +115,7 @@ def test_o_aviso_de_corte_nao_manda_mais_reprocessar():
     trecho = src[max(0, i - 900):i + 900]
     assert "Reprocessar normalmente NÃO" in trecho, (
         "o aviso de corte voltou a prometer que reprocessar completa a planilha "
-        "— na elétrica do Alan cortou 3 de 3 vezes, e a 3ª deu MENOS itens")
+        "— na elétrica do cliente-19 cortou 3 de 3 vezes, e a 3ª deu MENOS itens")
     assert "Reprocessar pode completar a planilha" not in _sem_o_que_e_removido(
         _sem_comentarios(src)), (
         "o texto antigo ainda é ENVIADO ao cliente (fora de comentário e fora "

@@ -2,7 +2,7 @@
 """Clicar num botão do admin e nada acontecer não pode ser indistinguível de bug.
 
 🩸 04/09/2026, comigo, neste painel. Cliquei em "↻ Refazer planilha" no projeto
-da Caroline. O `confirm()` foi descartado pela automação, a função saiu pela
+da cliente-22. O `confirm()` foi descartado pela automação, a função saiu pela
 porta dos fundos (`if (!confirm(...)) return;`) e **nada aconteceu — sem toast,
 sem erro, sem linha no log**. Só descobri indo consultar o `error_log` e ver
 que a ação não tinha sido registrada.

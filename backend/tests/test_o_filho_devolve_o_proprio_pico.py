@@ -3,7 +3,7 @@
 
 🔬 05/09/2026, PASSO 3 do estudo do teto. O RLIMIT_AS de 2 GB cobra endereço
 VIRTUAL (VmPeak). Tudo que a gente tinha medido era RESIDENTE (VmHWM): o
-contêiner no Render, o RSS local. O filho do William (135fdfac) morreu com
+contêiner no Render, o RSS local. O filho do cliente-39 (135fdfac) morreu com
 ≤ ~1,06 GB residentes quando o kernel cobrou 2 GB virtuais — a folga entre os
 dois é a incógnita que decide o valor do teto, e NUNCA foi medida em produção.
 O próprio comentário do teto (03/09) admite: "não medimos ainda o pico das 109

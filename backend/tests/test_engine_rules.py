@@ -113,7 +113,7 @@ check("sem bloco -> None", extract_block_name("Piso vinilico em m2") is None)
 check("alvenaria bloco ceramico SEM aspas -> None", extract_block_name("Alvenaria de bloco ceramico ou de concreto") is None)
 check("descricao vazia -> None", extract_block_name("") is None)
 
-print("== is_nonsense_item / extract_type_code (caso Thamiry: drywall inflado 284 itens) ==")
+print("== is_nonsense_item / extract_type_code (caso cliente-24: drywall inflado 284 itens) ==")
 check("secao transversal -> nonsense", is_nonsense_item("Area de secao transversal de paredes drywall") is True)
 check("area de secao -> nonsense", is_nonsense_item("área de seção de parede no layer A-WALL") is True)
 check("item normal -> NAO nonsense", is_nonsense_item("Divisoria drywall DRY 07") is False)
@@ -162,7 +162,7 @@ check("contrapiso H=5cm -> SIM (espessura, nao posicao)", is_floor_surface("Cont
 # arquivo; teste novo entra ANTES dele.
 
 
-# ── coerência de unidade em item contável (caso Rafael, 01/08/2026) ─────────
+# ── coerência de unidade em item contável (caso cliente-40, 01/08/2026) ─────────
 from engine_rules import is_unit_mismatch_countable
 
 check("condulete em ml -> MISMATCH", is_unit_mismatch_countable("Condulete de dados", "ml") is True)
@@ -312,7 +312,7 @@ check("carimbo: vazio nao quebra", _lic("") is False and _lic(None) is False)
 
 
 # 🚨 Observação que DENUNCIA o próprio número não pode virar quantidade.
-# Caso real (rafaelcmnz@, 05/08/2026): a regra gravou 1960,75 ml de alvenaria
+# Caso real (cliente-06@, 05/08/2026): a regra gravou 1960,75 ml de alvenaria
 # a partir de uma observação que dizia "inclui faces duplas ... e possíveis
 # duplicações ... dividir por 2". O freio não cobria esses termos.
 _OBS_FACES_DUPLAS = (
@@ -546,7 +546,7 @@ check("texto sem posição não quebra",
 
 
 
-# ── unidade IMPERIAL sem cota que prove a escala (Amanda 10/08, 7 elétricas) ──
+# ── unidade IMPERIAL sem cota que prove a escala (cliente-16 10/08, 7 elétricas) ──
 from engine_rules import aviso_unidade_imperial  # noqa: E402
 
 check("polegada sem cota avisa", bool(aviso_unidade_imperial(1, None)))
@@ -568,7 +568,7 @@ check("insunits None não quebra", aviso_unidade_imperial(None, None) is None)
 check("insunits como texto numérico funciona", bool(aviso_unidade_imperial("1", None)))
 
 
-# ── selo BRANCO com quantidade 0 (achado no job 349e75a5, Amanda, 10/08) ──────
+# ── selo BRANCO com quantidade 0 (achado no job 349e75a5, cliente-16, 10/08) ──────
 from engine_rules import selos_sem_medida  # noqa: E402
 
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Os avisos do projeto COMBINADO nao podem se contradizer na cara do cliente.
 
-🚨 Auditoria de 25/08/2026. O projeto combinado que o Alan RECEBEU saiu com 11
+🚨 Auditoria de 25/08/2026. O projeto combinado que o cliente-19 RECEBEU saiu com 11
 avisos, sendo 6 em pares que se contradiziam:
 
     "li 162 itens"   x   "li 112 itens"      (a MESMA prancha)
@@ -64,7 +64,7 @@ def _rodar(avisos_pai, avisos_filho, medidos=179, tem_area=True, plano=None):
 #  Os pares que se contradiziam
 # ══════════════════════════════════════════════════════════════════════════
 def test_o_mesmo_corte_da_MESMA_prancha_sai_UMA_vez():
-    """🚨 O caso literal do Alan: 162 e 112 pra 4366-EL-E."""
+    """🚨 O caso literal do cliente-19: 162 e 112 pra 4366-EL-E."""
     r = _rodar(
         ["A leitura de '4366-EL-E_libredwg.dxf' pode estar INCOMPLETA (a resposta "
          "da IA foi cortada por tamanho — li 162 itens, mas pode faltar algum)."],
@@ -171,7 +171,7 @@ def test_familia_reconhece_os_tipos_reais():
 def test_cada_quantidade_sai_com_a_prancha_certa():
     """🚨 Auditoria de 25/08. As quantidades saiam de `linhas` (ordenadas por
     TAMANHO) e as pranchas de `pranchas` (ordem ALFABETICA), e as duas listas
-    eram juntadas por POSICAO. No projeto do Alan saiu:
+    eram juntadas por POSICAO. No projeto do cliente-19 saiu:
 
         "CFTV (17 + 13 + 1 em 3073-AQ-E, 4366-EL-E e 4366-LO-E)"
 

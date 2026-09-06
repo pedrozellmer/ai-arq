@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O conversor renomeia bloco por instância — juntar sim, mas só o que é IGUAL.
 
-🚨 26/08/2026, caso Amanda (job 43a799c0, "Harmonia - 9º Pavimentos").
+🚨 26/08/2026, caso cliente-16 (job 43a799c0, "Harmonia - 9º Pavimentos").
 De 4 pranchas, 1 chegou na planilha. As duas densas devolveram ZERO item com
 `stop=max_tokens`, e o log ainda dizia `perdidos=0`.
 
@@ -144,7 +144,7 @@ def test_a_secao_ENCOLHE_de_verdade(dxf_com_blocos_renomeados):
     """O motivo de existir: o prompt tem que ficar menor.
 
     Sem isso, o conserto pode estar 'certo' e não resolver o problema que a
-    Amanda teve — que foi a seção inflar até a leitura devolver zero.
+    cliente-16 teve — que foi a seção inflar até a leitura devolver zero.
     """
     ext = extract_from_file(dxf_com_blocos_renomeados)
     secao = _secao_blocos(ext.to_structured_prompt())

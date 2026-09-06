@@ -14,7 +14,7 @@ Política:
 - 429 / 529 / timeout: retry com backoff exponencial (2s, 4s, 8s, 16s, 32s,
   64s, 90s, 90s) — cobre ~5min de sobrecarga (529 "overloaded" da Anthropic
   costuma durar minutos; cobertura curta fazia o projeto inteiro falhar e o
-  usuário re-subir na mão. Caso ivaldogss 16/06: só funcionou na 4ª tentativa
+  usuário re-subir na mão. Caso cliente-02 16/06: só funcionou na 4ª tentativa
   manual em ~5min — agora a 1ª já aguenta).
 - Outros erros: não retenta (erro de prompt, API key inválida, etc).
 - Máximo 8 tentativas por padrão.

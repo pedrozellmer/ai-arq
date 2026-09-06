@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O filho da medição de PDF morria MUDO. Agora diz em que linha morreu.
 
-🩸 05/09/2026, job 135fdfac (William): o filho que mede a geometria do PDF morreu
+🩸 05/09/2026, job 135fdfac (cliente-39): o filho que mede a geometria do PDF morreu
 com rc=-6 e stderr VAZIO, 19 s depois de ter a escala. A sombra mediu a mesma
 página sem teto (40 ambientes, 581,7 m²). O estudo do teto reproduziu a morte
 localmente: quando a alocação falha dentro de código C (PDFium/pikepdf), o

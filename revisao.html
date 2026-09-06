@@ -585,7 +585,7 @@ async function submitConviteArea() {
       job_id: jobId, area: Math.round(val), preenchidos: n, tela: 'revisao' });
     // 🪤 Diz o que ACONTECEU, não o que era esperado acontecer. Quem decide item
     // a item é a honestidade de área no backend — prometer número que a tela não
-    // controla é o aviso que a Luana leu e não se cumpriu (01/09).
+    // controla é o aviso que a cliente-31 leu e não se cumpriu (01/09).
     msg.textContent = n > 0
       ? '✓ Pronto — ' + n + (n === 1 ? ' linha completada' : ' linhas completadas') + '.'
       : '✓ Recebido, mas nenhuma linha pôde ser completada com essa área.';
@@ -859,7 +859,7 @@ async function review(itemId, action) {
       else if (action === 'reject') window.toast.info('Excluído');
       else window.toast.info('Editado');
     }
-    // 🩸 06/09 (Pedro: "registrar TUDO"): o William abriu esta tela 9× e não corrigiu nada — e a
+    // 🩸 06/09 (Pedro: "registrar TUDO"): o cliente-39 abriu esta tela 9× e não corrigiu nada — e a
     // gente só sabia disso olhando o banco. O evento sai DEPOIS do servidor aceitar: ação que
     // falhou não pode contar como revisão feita.
     try { if (window.trackEvent) trackEvent('revisao_item_acao', { job_id: jobId,
@@ -1057,7 +1057,7 @@ document.getElementById('btn-export').addEventListener('click', async () => {
   try {
     await authFetch(`${API_BASE}/api/items/${jobId}/finalize`, { method: 'POST' });
     // Download protegido: usa fetch com Authorization. window.location.href NÃO
-    // enviaria o JWT → backend retornaria 401 (bug Daniela 2026-05-18).
+    // enviaria o JWT → backend retornaria 401 (bug cliente-38 2026-05-18).
     await downloadProtected(`${API_BASE}/api/download/${jobId}`, `quantitativos_aiarq_${jobId}.xlsx`);
   } catch (e) {
     const msg = 'Erro ao exportar: ' + e.message;
@@ -1507,7 +1507,7 @@ document.getElementById('btn-finish')?.addEventListener('click', async () => {
 
 <script>
 // 🩸 06/09/2026 (Pedro: "registrar TUDO"). O desfecho MAIS COMUM desta tela não tinha handler
-// nenhum: fechar a aba, voltar pelo menu, apertar Voltar do navegador. O William abriu esta tela
+// nenhum: fechar a aba, voltar pelo menu, apertar Voltar do navegador. O cliente-39 abriu esta tela
 // 9 vezes e saiu 9 vezes — e a saída era invisível. Sem ela, "abriu e desistiu" some do mapa.
 // 🪤 `visibilitychange → hidden` é o único que o celular garante disparar (o beforeunload não é
 // chamado quando o app vai pro fundo). O trackEvent já usa keepalive, então sobrevive ao fechamento.

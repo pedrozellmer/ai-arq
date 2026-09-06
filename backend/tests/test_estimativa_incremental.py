@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A estimativa incremental (29/08/2026) — `known_pranchas`.
 
-🎯 O caso Maria Victoria (27/08): 17 arquivos selecionados, cada mudança na
+🎯 O caso cliente-18 (27/08): 17 arquivos selecionados, cada mudança na
 seleção re-enviava TUDO de novo (upload quadrático), pelo caminho do Cloudflare
 que corta em 100 MB — acima disso a estimativa saía errada CALADA. O conserto:
 o front manda só o arquivo NOVO + o total já contado (`known_pranchas`), e o

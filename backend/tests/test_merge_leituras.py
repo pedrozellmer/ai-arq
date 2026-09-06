@@ -4,7 +4,7 @@
 Pedro, 24/08/2026: *"não podemos fazer um merge entre as planilhas e unificar
 isso pelo motor tb? tipo um terceiro projeto"*.
 
-Os números do caso que motivou (Alan, e1c48ed7 × ev597afa), medidos no banco:
+Os números do caso que motivou (cliente-19, e1c48ed7 × ev597afa), medidos no banco:
 
     original   147 itens ·  92 medidos · 4 pranchas
     releitura  263 itens · 151 medidos · 7 pranchas
@@ -34,7 +34,7 @@ def _it(prancha, desc, qtd=1, medido=True, unit="un", sort=0):
             "origem": None}
 
 
-# ── O caso Alan, reduzido ao essencial ─────────────────────────────────────
+# ── O caso cliente-19, reduzido ao essencial ─────────────────────────────────────
 PAI = (
     [_it("4366-EL-E.dxf", "Porta P80E — bloco P80E", 23),
      _it("4366-EL-E.dxf", "Porta P80 — bloco P80", 9),
@@ -55,7 +55,7 @@ FILHO = (
 #  O plano: quem vence cada prancha
 # ══════════════════════════════════════════════════════════════════════════
 def test_prancha_que_so_a_releitura_tem_entra():
-    """É o motivo nº1 do merge: 3 pranchas do Alan tinham morrido na 1ª leitura."""
+    """É o motivo nº1 do merge: 3 pranchas do cliente-19 tinham morrido na 1ª leitura."""
     plano = merge_plano(PAI, FILHO)
     p = [x for x in plano["pranchas"] if x["prancha"] == "3073-AQ-E.dxf"][0]
     assert p["lado"] == "filho"
@@ -230,7 +230,7 @@ def test_unidade_diferente_nao_e_a_mesma_coisa():
 #
 # 🪤 A lição de 11/08: "teste fora do caminho real mede outra coisa" — me pegou
 # 3 vezes numa noite. Estas strings vieram do banco de produção (jobs e1c48ed7
-# e ev597afa, cliente Alan). O Postgres e o Python têm motores de regex
+# e ev597afa, cliente cliente-19). O Postgres e o Python têm motores de regex
 # diferentes; a detecção roda no Python e foi conferida contra o SQL: os dois
 # apontam os MESMOS 16 códigos neste projeto.
 _REAIS = [

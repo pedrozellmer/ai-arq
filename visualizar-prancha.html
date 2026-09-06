@@ -92,7 +92,7 @@ if (!jobId || !ref) {
   // Ajustar título da aba com nome do arquivo
   document.title = decodeURIComponent(ref) + ' — AI.arq';
 
-  // FIX bug Daniela 2026-06-02: iframe.src={endpoint protegido} NÃO envia
+  // FIX bug cliente-38 2026-06-02: iframe.src={endpoint protegido} NÃO envia
   // Authorization → 401. Solução: fetch com Bearer, gerar blob URL, atribuir
   // ao iframe. CLAUDE.md item 9.
   async function loadPdfIntoFrame() {

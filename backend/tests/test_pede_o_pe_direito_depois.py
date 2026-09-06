@@ -3,7 +3,7 @@
 o cliente ainda não viu o problema.
 
 🎯 26/08/2026. A rota `/api/project/{job}/inform-area` existe desde o caso
-Catarina: o cliente informa DEPOIS do processamento e a planilha é refeita na
+cliente-21: o cliente informa DEPOIS do processamento e a planilha é refeita na
 hora, sem reprocessar e sem custo de IA. Só que ela aceitava **apenas a ÁREA** —
 e a própria docstring dela sempre disse: *"itens que não escalam com piso
 (pintura de parede, rodapé) NÃO são preenchidos"*.
@@ -167,7 +167,7 @@ def test_o_backend_escreve_o_aviso_que_a_tela_le():
 
 
 def test_o_caminho_da_AREA_continua_igual():
-    """Regressão: o caso Catarina não pode quebrar."""
+    """Regressão: o caso cliente-21 não pode quebrar."""
     i = _MAIN.find("def inform_project_area")
     t = _MAIN[i:i + 9000]
     assert "_apply_area_honesty(" in t and "apenas_preencher=True" in t, (

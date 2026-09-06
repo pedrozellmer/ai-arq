@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """`S-COLS` é pilar. `AC-Indicação coluna Frigorígenas` NÃO é.
 
-🏗️ 01/09/2026 — arquivo do Edvaldo (RACIONAL), planta de fôrma
+🏗️ 01/09/2026 — arquivo do cliente-23 (RACIONAL), planta de fôrma
 `TOP-EST-PE-116-FRM-TIP-R00`: os 54 pilares vivem no layer **`S-COLS`**, que é o
 padrão AIA/CAD para pilar estrutural (Structural Columns). O filtro conhecia só
 "PILAR" e "COLUMN", e `_has_token` quebra "S-COLS" em ["S","COLS"] — "COLS" não
@@ -13,7 +13,7 @@ pilar. Aceitar "COLUNA" faria toda prancha de climatização virar candidata a
 pilar. O teste abaixo guarda essa decisão pra ninguém "melhorar" o filtro
 adicionando COLUNA depois.
 
-⚠️ HONESTIDADE SOBRE O ALCANCE: isto sozinho NÃO destrava o caso do Edvaldo. O
+⚠️ HONESTIDADE SOBRE O ALCANCE: isto sozinho NÃO destrava o caso do cliente-23. O
 detector de pilar só olha polilinha FECHADA e o arquivo dele não tem nenhuma
 (2.158 LINE, 448 HATCH, 0 LWPOLYLINE). Medido em 01/09: **210 de 213 pranchas**
 da base saem com `pilares=0`. Este conserto é correto por mérito próprio e fica
@@ -29,7 +29,7 @@ from structural_extractor import layer_is_pilar  # noqa: E402
 
 
 def test_o_padrao_AIA_S_COLS_e_pilar():
-    """🩸 O layer do Edvaldo."""
+    """🩸 O layer do cliente-23."""
     for nome in ("S-COLS", "S-COLS-IDEN", "s-cols", "COLS", "A-COLS-STRUCT"):
         assert layer_is_pilar(nome) is True, "recusou layer de pilar: %r" % nome
 

@@ -26,7 +26,7 @@ class _Req:
     client = None
 
 
-PERFIL = {"user_id": "u-9", "full_name": "Marcelo Affonso",
+PERFIL = {"user_id": "u-9", "full_name": "cliente-13",
           "email": "marcelo@exemplo.com", "company": "MA Arq", "role": "arquiteto"}
 PROJETO = {"job_id": "j1", "project_name": "Casa", "status": "done",
            "items_count": 40, "is_eval": False}

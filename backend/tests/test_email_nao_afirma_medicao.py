@@ -84,7 +84,7 @@ def test_existe_um_ramo_pra_quando_NAO_mediu():
         "o e-mail voltou a não perguntar se mediu antes de dizer que mediu")
     # 🩸 03/09/2026 — a frase era "Nenhuma quantidade saiu da geometria", e ela
     # é FALSA quando o selo é zero mas a geometria foi lida (job b5ce23ff, do
-    # Edvaldo: 90,86 m² de hachura e 169,83 m de comprimento de layer). Selo e
+    # cliente-23: 90,86 m² de hachura e 169,83 m de comprimento de layer). Selo e
     # origem são dois fatos; o e-mail passa a afirmar só o selo, e a origem vem
     # de `_origem_das_quantidades`, que é quem tem o dado.
     assert "Nenhum item saiu com o selo" in corpo, corpo[:300]

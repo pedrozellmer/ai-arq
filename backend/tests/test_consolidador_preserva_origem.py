@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""O selo de medição sobrevive à consolidação — caso Amanda (30/08/2026).
+"""O selo de medição sobrevive à consolidação — caso cliente-16 (30/08/2026).
 
 🩸 O bug: o consolidador criava BudgetItem novo SEM `origem` em 6 lugares.
 Item de m² MEDIDO por hachura no DXF (origem 'dxf_geom') era fundido entre
@@ -33,7 +33,7 @@ def _consolida(itens):
 
 
 def test_fusao_de_mesma_qty_preserva_o_selo():
-    """Passada 2 (o berço do caso Amanda): 4 pranchas, mesma área medida."""
+    """Passada 2 (o berço do caso cliente-16): 4 pranchas, mesma área medida."""
     itens = [_item("Piso — área total de padrões de piso (layer A-FLOR-PATT)",
                    2528.97, sheet=f"ARQ_HARMONIA_0{i}.dxf") for i in range(1, 5)]
     saida = _consolida(itens)
@@ -86,7 +86,7 @@ def test_o_zerador_POUPA_o_item_fundido_medido():
 
 def test_CONTROLE_POSITIVO_sem_selo_o_zerador_zera():
     """🧪 O zerador continua fazendo o trabalho dele: m² sem origem = zera
-    (caso Catarina segue protegido)."""
+    (caso cliente-21 segue protegido)."""
     import main
     itens = [_item("Forro estimado pela IA", 52.0, origem="")]
     fill, blank = main._apply_area_honesty(itens, 0, "", pe_direito=0)

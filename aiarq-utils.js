@@ -278,7 +278,7 @@
 
   // ─── Notificação (toast com fallback alert) ──────────────────
   // toast.js carrega via defer — se ainda não montou window.toast,
-  // cai pro alert nativo. Bug Daniela 2026-05-18 mostrou que silenciar
+  // cai pro alert nativo. Bug cliente-38 2026-05-18 mostrou que silenciar
   // erro de download é pior que feio.
   const notify = {
     warn:  (m) => (window.toast ? window.toast.warn(m)    : alert(m)),
@@ -564,7 +564,7 @@
   // Baixa endpoint protegido enviando Authorization header. Armadilha #9
   // do CLAUDE.md: <a href>, window.open() e window.location.href NÃO
   // enviam header customizado → backend retorna 401 mesmo com sessão
-  // válida (bug Daniela 2026-05-18). Solução: fetch com Bearer → blob →
+  // válida (bug cliente-38 2026-05-18). Solução: fetch com Bearer → blob →
   // <a> programático → cleanup do object URL.
   // Devolve true quando o arquivo chegou na mão do cliente, false quando não — quem chama
   // decide o que fazer (o financeiro só registra o evento de export no true, 05/09/2026).

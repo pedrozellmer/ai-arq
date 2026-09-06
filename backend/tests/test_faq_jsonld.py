@@ -75,7 +75,7 @@ def test_nao_promete_medir_area_de_hachura_sem_ressalva():
     """🚨 O motor rebaixa DE PROPÓSITO a área que é soma de várias hachuras
     (main.py, rede de segurança sempre ligada). Medido em 555 itens: forro 0%,
     revestimento 1%, piso 2% de área medida. Prometer 'medimos área de hachura'
-    sem a ressalva é o caso Eduarda (NPS 2) esperando pra acontecer."""
+    sem a ressalva é o caso cliente-20 (NPS 2) esperando pra acontecer."""
     src = _faq()
     if "hachura" not in src.lower():
         return

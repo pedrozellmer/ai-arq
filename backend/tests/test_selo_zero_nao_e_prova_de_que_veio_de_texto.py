@@ -75,7 +75,7 @@ def test_CONTROLE_procedencia_de_TEXTO_nao_conta():
 def test_CONTROLE_linha_ZERADA_que_cita_hachura_nao_conta():
     """Observação que CITA geometria numa linha sem quantidade não é medição.
 
-    É o item "Escada — Fôrma" do próprio Edvaldo: a observação fala em área
+    É o item "Escada — Fôrma" do próprio cliente-23: a observação fala em área
     hachurada e, na frase seguinte, diz "NÃO calculada". Contar isso seria
     inventar procedência na direção oposta — o mesmo vício, de costas.
     """

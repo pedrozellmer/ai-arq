@@ -11,7 +11,7 @@ uma linha de erro: o HTTP voltou 2xx e o resto era suposição.
     chamava descartava até esse retorno, e `items_count` virava len(all_items).
 
 Assinatura do estrago: nos 120 jobs sãos o `sort_order` é contíguo 0..N-1; nos
-24 afetados ele SEMPRE tem buraco. Caso vivo — job d5e073cf (Flavio Hermolin,
+24 afetados ele SEMPRE tem buraco. Caso vivo — job d5e073cf (cliente-14,
 01/09): 50 linhas montadas, 33 no banco, faltando 14,15,18-21,23,30-33,35,40,
 42,47-49, numa gravação só. O cliente vê os 50 itens na planilha que baixa e
 33 na tela de revisão do site.
@@ -133,7 +133,7 @@ def _verificador(gravadas):
 
 
 def test_perda_vira_ERRO_CRITICO_e_devolve_o_numero_REAL():
-    """🩸 O caso do Flavio: mandou 50, entraram 33."""
+    """🩸 O caso do cliente-14: mandou 50, entraram 33."""
     v, logs, _ = _verificador(33)
     assert v("d5e073cf", [None] * 50) == 33, (
         "devolveu o número que MANDOU em vez do que entrou")

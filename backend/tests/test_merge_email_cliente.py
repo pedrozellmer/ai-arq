@@ -296,7 +296,7 @@ def test_montar_a_tela_esta_dentro_de_try():
 #  🚨 Duas linhas do MESMO projeto, o mesmo botao azul
 # ══════════════════════════════════════════════════════════════════════════
 #
-# 24/08, depois que o merge do Alan nasceu: a aba Filhotes passou a ter DUAS
+# 24/08, depois que o merge do cliente-19 nasceu: a aba Filhotes passou a ter DUAS
 # linhas do projeto dele — a releitura (ev597afa, 92→151) e a combinada
 # (mg634d18, 92→179). As duas "concluído", as duas marcadas "melhorou", as duas
 # com o mesmo botao azul "Liberar pro cliente".

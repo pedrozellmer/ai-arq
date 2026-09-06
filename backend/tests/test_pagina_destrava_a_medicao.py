@@ -60,7 +60,7 @@ def _prancha(arquivo, pagina, m2):
             "scale_src": "cotas", "escala_validada": True, "cotas_batem": 44}
 
 
-# as pranchas reais do job da Luana (3 das 10, com os m² do error_log)
+# as pranchas reais do job da cliente-31 (3 das 10, com os m² do error_log)
 CADERNO_LUANA = {
     "p0": _prancha("casa bruna - plantas anteprojeto.pdf", 0, 29.1),
     "p3": _prancha("casa bruna - plantas anteprojeto.pdf", 3, 85.6),
@@ -109,7 +109,7 @@ def test_CONTROLE_o_NOME_DO_ARQUIVO_continua_recuperavel():
 
 # ── A atribuição, que é o ponto ────────────────────────────────────────────
 def test_com_a_pagina_o_item_RECEBE_a_medicao_da_prancha_dele():
-    """🩸 O que a Luana não teve. O item da página 3 recebe os 85,6 m² da
+    """🩸 O que a cliente-31 não teve. O item da página 3 recebe os 85,6 m² da
     página 3 — não os 95,7 da maior, não zero."""
     it = _Item("Piso cerâmico", "m²", 0, ref_sheet="%s (p4)" % ARQ)
     main._apply_area_honesty([it], pdfvec_m2=210.4,
@@ -127,7 +127,7 @@ def test_cada_pagina_recebe_a_SUA_medicao():
 
 
 def test_CONTROLE_POSITIVO_SEM_a_pagina_continua_ambiguo():
-    """🧪 O comportamento ANTIGO, que é o que a Luana pegou. Se este teste
+    """🧪 O comportamento ANTIGO, que é o que a cliente-31 pegou. Se este teste
     passar a preencher, a trava 4 caiu e a gente voltou a chutar prancha."""
     it = _Item("Piso cerâmico", "m²", 0, ref_sheet=ARQ)   # sem (pN)
     main._apply_area_honesty([it], pdfvec_m2=210.4,

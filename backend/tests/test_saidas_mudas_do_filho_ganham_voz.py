@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """As duas saídas MUDAS do filho da medição de PDF passam a deixar rastro.
 
-🔬 05/09/2026 (estudo do teto, passo 6 + o custo da A08 do William).
+🔬 05/09/2026 (estudo do teto, passo 6 + o custo da A08 do cliente-39).
 
 1. **MemoryError engolido por etapa.** Cada etapa de `_measure_page` está num
    try/except. Quando a falta de memória cai em Python/GEOS (não no C que
@@ -13,7 +13,7 @@
 
 2. **"Sem escala".** O filho pula (viewport, carimbo e cota falharam) e sai
    rc=0 sem `n_rooms` — a promoção não grava NENHUMA linha; só a sombra anota.
-   Custou duas tentativas na A08 do William pra achar o cache do carimbo.
+   Custou duas tentativas na A08 do cliente-39 pra achar o cache do carimbo.
 
 Agora: `_saida_do_filho_pdfvec(rc, vm)` classifica; o chamador grava
 `pdfvec:filho-morreu` (motivo "memoria", entra no aviso ao cliente com frase

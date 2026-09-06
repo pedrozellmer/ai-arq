@@ -43,7 +43,7 @@ thread separado e o laço fica livre. Zero mudança de lógica.
 sempre o pior dos dois mundos: paga o preço do laço e não usa o benefício.
 
 📌 IRMÃO DESTE ARQUIVO: `test_rota_async_nao_bloqueia.py`, do caso Maria
-Victoria (27/08), que é a MESMA doença num lugar diferente — lá era a estimativa
+cliente-18 (27/08), que é a MESMA doença num lugar diferente — lá era a estimativa
 de preço travando na mão dela. Aquele guarda vigia funções pesadas nomeadas;
 este vigia o formato da rota. Nenhum dos dois pegaria o caso do outro.
 """

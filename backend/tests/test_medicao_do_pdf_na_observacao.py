@@ -169,7 +169,7 @@ def test_o_call_site_do_PDF_usa_isso():
     # 🩸 31/08 (passo 6): os alvos passaram a ser as medições POR PRANCHA. A
     # soma do job não corresponde a nada físico em projeto multi-página (mesma
     # casa contada em cada disciplina), e comparar contra ela fazia a régua
-    # NUNCA casar — o caso Flavio fechou com `resgate_pdf=0` tendo medição.
+    # NUNCA casar — o caso cliente-14 fechou com `resgate_pdf=0` tendo medição.
     # O assert antigo cobrava a string `area_pdf=_pdfvec_area_m2`; agora cobra
     # o que importa: que os valores por prancha cheguem à régua.
     assert "_pdfvec_por_prancha" in antes or "_pdfvec_por_prancha" in janela, (
@@ -222,7 +222,7 @@ def test_o_log_conta_o_resgate_e_nao_mente_mais_no_nome():
 
 
 # ═══════════════════════════════════════════════════════════════════════
-# 31/08/2026 — A RÉGUA COMPARAVA CONTRA A SOMA DO JOB (caso Flavio)
+# 31/08/2026 — A RÉGUA COMPARAVA CONTRA A SOMA DO JOB (caso cliente-14)
 # ═══════════════════════════════════════════════════════════════════════
 # `area_pdf` recebia `_pdfvec_area_m2`, que acumula página a página. Num
 # projeto de 16 pranchas do MESMO imóvel (alvenaria, layout, forro e

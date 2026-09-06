@@ -10,7 +10,7 @@ tela e, do nosso lado, não tinha acontecido nada.
 🔑 O custo não é uma linha de log a menos: é que, no banco, **"tentou subir e a
 gente recusou" fica IDÊNTICO a "nunca tentou"**. A investigação inteira dos
 primeiros 10 minutos esbarrou nisso e teve que escrever "indeterminado" caso
-após caso. Já existe um cliente (`thallisson.producao@`) que mandou o POST e
+após caso. Já existe um cliente (`cliente-01@`) que mandou o POST e
 sumiu — hoje ele conta como "desistiu".
 
 🔑 Isto não conserta o funil. Conserta a capacidade de MEDIR o funil, que é

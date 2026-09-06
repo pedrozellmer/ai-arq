@@ -281,7 +281,7 @@ class DXFExtraction:
                 # 🚨 JUNTA O QUE O CONVERSOR FRAGMENTOU (26/08/2026).
                 # O libredwg (88% das conversoes) renomeia bloco POR INSTANCIA:
                 # num DXF real, 1.202 nomes distintos pra 1.349 pecas. A secao
-                # virava 44% do prompt, e na prancha da Amanda a entrada chegou a
+                # virava 44% do prompt, e na prancha da cliente-16 a entrada chegou a
                 # 74.875 tokens com ZERO item de volta. Pior: o cliente via
                 # "Viga_1_1: 1 un" 209 vezes em vez de "Viga: 209 un".
                 #
@@ -300,7 +300,7 @@ class DXFExtraction:
                     a = _assin.get(name, "")
                     # 🚨 DOIS formatos de fragmentacao, medidos em arquivo real:
                     #  a) Revit/ArchiCAD: "CHUVEIRO - CHUVEIRO-1320392-PORTARIA"
-                    #     (FAMILIA - TIPO-<id>-<vista>). Nas pranchas da Amanda
+                    #     (FAMILIA - TIPO-<id>-<vista>). Nas pranchas da cliente-16
                     #     os nomes tinham 55 a 61 caracteres e eram 1.570 -- so
                     #     essa secao dava 99.901 chars. Agrupar pela FAMILIA
                     #     derruba pra 17.464 (-83%).
@@ -1769,7 +1769,7 @@ def convert_dwg_to_dxf(dwg_path: str) -> Optional[str]:
         # 🪤 Sem isto a CAUSA se perde: o .err mora num tempdir que o Render apaga,
         # e o _oda_log.txt (o que /api/debug/oda-log devolve) é escrito ANTES desta
         # checagem. Resultado: "DWG não converteu" sem nunca dizer por quê — caso
-        # Walter 29/07, em que o ODA saiu com rc=0 e só deixou o .err pra trás.
+        # cliente-30 29/07, em que o ODA saiu com rc=0 e só deixou o .err pra trás.
         try:
             with open(os.path.join(os.path.dirname(dwg_path), "_oda_log.txt"), "a") as _lf:
                 _lf.write(f"\n--- conteudo do .dxf.err ---\n{err_content}\n")
@@ -1844,7 +1844,7 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
             # 🪤 A bancada anterior disse "5 de 5 IGUAL" porque comparava
             # hachura, texto e área — tudo do NÍVEL DE CIMA. O que mora dentro
             # do bloco não aparecia na comparação. Bloco nomeado é como as 385
-            # estacas da Eduarda foram medidas.
+            # estacas da cliente-20 foram medidas.
             # Entregar planilha sem isso pareceria completa e não seria: pior
             # que a falha honesta que o cliente recebe hoje (ver a mensagem de
             # `motor:prancha-grande-demais`).
@@ -1870,7 +1870,7 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
 # 🚨 250 MB, medido em 26/08/2026 — era 150 MB, calibrado quando o Render tinha
 # 2 GB. O plano subiu pra 4 GB em 21/07 e o teto nunca foi revisitado.
 #
-# O que a extracao gasta de RAM, medido nas 4 pranchas reais do caso Amanda:
+# O que a extracao gasta de RAM, medido nas 4 pranchas reais do caso cliente-16:
 #     DXF  27,1 MB ->   215 MB de pico   (7,9x)
 #     DXF  45,7 MB ->   374 MB           (8,2x)
 #     DXF  53,8 MB ->   461 MB           (8,6x)
@@ -1878,7 +1878,7 @@ def _try_libredwg_convert(dwg_path: str, output_dir: str) -> Optional[str]:
 # Fator estavel de ~8,6x no pior caso. A 250 MB o pico fica em ~2,15 GB, 52% do
 # container de 4 GB.
 #
-# A prancha 01 da Amanda (176,5 MB) era DESCARTADA por este teto e roda
+# A prancha 01 da cliente-16 (176,5 MB) era DESCARTADA por este teto e roda
 # completa em 82s, sobrando 64% do container.
 #
 # 🪤 O teto de DXF sozinho nao protege: quem explode primeiro e a CONVERSAO,
@@ -2355,7 +2355,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
         unit_factor_override: escala (fator p/ metros) PROVADA por cota em OUTRA
             prancha do mesmo projeto (consenso de unidade). Só é usada quando ESTA
             prancha NÃO tem cota própria que prove a escala — cota local sempre
-            vence. Evita "pés" numa prancha BR sem cota (caso Rafael 21/07).
+            vence. Evita "pés" numa prancha BR sem cota (caso cliente-40 21/07).
 
     Returns:
         DXFExtraction with all extracted elements.
@@ -2427,7 +2427,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
             continue
 
     if doc is None or _erro_estrutura is not None:
-        # 🚨 24/08/2026 (caso Alan, job e1c48ed7): o readfile normal morre em
+        # 🚨 24/08/2026 (caso cliente-19, job e1c48ed7): o readfile normal morre em
         # ezdxf/layouts/layouts.py:219 com KeyError do NOME DO LAYOUT. As três
         # ocorrências do MESMO job:
         #     KeyError: 'DO'
@@ -2549,7 +2549,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     _unit_consenso[0], _unit_consenso[1])
     # ── Unidade IMPERIAL em projeto brasileiro: desconfiar, nunca corrigir ────
     # Medido em 10/08/2026 no `error_log` (stage motor:unidade): 9 pranchas
-    # declararam Polegadas — 6 da escola FNDE da Amanda (349e75a5, todas as
+    # declararam Polegadas — 6 da escola FNDE da cliente-16 (349e75a5, todas as
     # elétricas) e 3 de outros clientes. Nas NOVE, `cotas=-`: nenhuma tinha
     # cota pra confirmar ou desmentir o cabeçalho, e nenhuma foi corrigida.
     # Projeto de escola pública brasileira não é desenhado em polegada — é o
@@ -2721,7 +2721,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
     # Assinatura da definicao do bloco (tipos de entidade + quantos de cada).
     # 🚨 26/08/2026: o libredwg — que faz 88% das conversoes — renomeia bloco POR
     # INSTANCIA. Num DXF real: 1.202 nomes distintos pra 1.349 pecas, e a secao
-    # CONTAGEM DE BLOCOS virou 44% do prompt. Na prancha da Amanda isso levou a
+    # CONTAGEM DE BLOCOS virou 44% do prompt. Na prancha da cliente-16 isso levou a
     # entrada a 74.875 tokens e a leitura devolveu ZERO item.
     # 🪤 Agrupar so pelo NOME estava errado e eu quase shipei: `Parede_1_1` e
     # `Parede_2_1` tinham 6 definicoes geometricas diferentes na amostra. Somar
@@ -2742,7 +2742,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                     # 🪤 So contar TIPO de entidade colide: dois chuveiros
                     # diferentes com "LINE:4" cada teriam a mesma assinatura e
                     # seriam somados. O tamanho da definicao separa. Medido nas
-                    # pranchas da Amanda: custa 2 pontos de reducao e separa
+                    # pranchas da cliente-16: custa 2 pontos de reducao e separa
                     # 32 e 59 grupos que estavam sendo juntados errado.
                     _bb = _bbox_for_block_def(bname)
                     if _bb:
@@ -3005,7 +3005,7 @@ def extract_dxf(filepath: str, unit_factor_override: Optional[float] = None) -> 
                         continue
                     # A explosão do ezdxf é LAZY: cada next() pode estourar (ex.:
                     # MLEADER degenerado → ZeroDivisionError). next() protegido pra
-                    # um bloco ruim não derrubar a prancha (caso Rafael 004, 21/07).
+                    # um bloco ruim não derrubar a prancha (caso cliente-40 004, 21/07).
                     while True:
                         try:
                             _e = next(_vents)
@@ -3685,7 +3685,7 @@ def probe_unit(filepath: str) -> Optional[float]:
                 if enc is None:
                     break
         if doc is None:
-            # 24/08: erro de ESTRUTURA (KeyError de layout, caso Alan) devolvia
+            # 24/08: erro de ESTRUTURA (KeyError de layout, caso cliente-19) devolvia
             # None calado e esta leitura sumia do consenso de area sem deixar
             # rastro. Agora tenta o recover, igual as outras portas.
             if _erro is None:

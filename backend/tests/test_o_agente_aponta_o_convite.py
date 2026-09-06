@@ -6,9 +6,9 @@ queixa REALMENTE chega — e não é o formulário de contato (1 linha em toda a
 história, e é teste interno) nem o chat público (0 linhas). É o chat do agente,
 dentro do produto. As frases textuais dos clientes:
 
-    eng.kovatch  29/07 17:53  "qual a metragem de laje"
-    eng.kovatch  29/07 18:12  "qual a metragem da laje do segundo pavijmento"
-    kasavitski   02/09 16:25  "preciso do levantamento de paredes internas e
+    cliente-04  29/07 17:53  "qual a metragem de laje"
+    cliente-04  29/07 18:12  "qual a metragem da laje do segundo pavijmento"
+    cliente-05   02/09 16:25  "preciso do levantamento de paredes internas e
                                externas para calcular a quantitdade de tinta"
 
 🔑 Nenhum deles diz "veio vazio" ou "faltou". Eles pedem O NÚMERO — não percebem
@@ -110,7 +110,7 @@ def test_TODO_prompt_de_projeto_oferece_o_convite_ANTES_do_caminho_caro():
 def test_TODO_prompt_de_projeto_diz_o_que_o_campo_NAO_resolve():
     """🚫 Pintura de parede e qualquer coisa que dependa de altura NÃO são
     preenchidas pela área total. Sem este NÃO, a regra vira promessa falsa —
-    o caso valimduda: ela mexeu num item que precisava de ALTURA, a quantidade
+    o caso cliente-09: ela mexeu num item que precisava de ALTURA, a quantidade
     continuou 0, e 11 minutos depois deu nota 2."""
     for arq, nome, corpo in _de_projeto():
         assert "pintura de PAREDE" in corpo, (
@@ -121,7 +121,7 @@ def test_TODO_prompt_de_projeto_diz_o_que_o_campo_NAO_resolve():
 
 def test_TODO_prompt_de_projeto_proibe_prometer_quantas_linhas():
     """🪤 Quem decide item a item é `_apply_area_honesty`. Prometer número que
-    o agente não controla é o aviso que a Luana leu e não se cumpriu."""
+    o agente não controla é o aviso que a cliente-31 leu e não se cumpriu."""
     for arq, nome, corpo in _de_projeto():
         assert "NUNCA prometa QUANTAS linhas" in corpo, (
             "%s:%s pode prometer quantas linhas serão preenchidas" % (arq, nome))
@@ -130,7 +130,7 @@ def test_TODO_prompt_de_projeto_proibe_prometer_quantas_linhas():
 def test_TODO_prompt_de_projeto_PROIBE_inventar_campo():
     """🩸 ACHADO RODANDO O AGENTE DE VERDADE, não lendo o prompt.
 
-    Com a 1ª versão desta regra, o Haiku respondeu à pergunta da kasavitski:
+    Com a 1ª versão desta regra, o Haiku respondeu à pergunta da cliente-05:
     *"Tem um campo 'Altura' logo acima da lista de itens na tela — preencha
     lá"*. **Esse campo não existe.** Eu dei ao modelo a FORMA da frase ("campo
     X logo acima da lista") e ele generalizou pra um controle inventado —

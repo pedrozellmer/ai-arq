@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Uma pergunta no chat derrubava o site pra todos os clientes.
 
-🩸 03/09/2026, 15:07 BRT. O cliente `v.anjos.ia.81@` (job `eebe543a`) mandou uma
+🩸 03/09/2026, 15:07 BRT. O cliente `cliente-11@` (job `eebe543a`) mandou uma
 pergunta no chat do projeto. Medido no Render:
 
     15:07:30 → 15:09:00   instance_count = 0     ← o site FORA do ar

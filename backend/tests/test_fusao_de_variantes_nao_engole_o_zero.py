@@ -50,7 +50,7 @@ def _concretos(qtds):
 
 # ── O conserto ─────────────────────────────────────────────────────────────
 def test_quatro_linhas_ZERADAS_nao_viram_uma_generica():
-    """🩸 O caso do Edvaldo."""
+    """🩸 O caso do cliente-23."""
     saida = m._consolidate_items(_concretos([0, 0, 0, 0]))
     assert len(saida) == 4, (
         "quatro zeros específicos viraram %d linha(s) — o cliente perde a "
@@ -74,12 +74,12 @@ def test_CONTROLE_um_zero_no_meio_de_numeros_nao_dispensa_a_fusao():
 
 
 def test_CONTROLE_grupo_com_numero_GRANDE_nunca_foi_fundido():
-    """🔑 A prova de que a consolidação NÃO comeu os 12,72 do Edvaldo: a regra
+    """🔑 A prova de que a consolidação NÃO comeu os 12,72 do cliente-23: a regra
     exige max < 2,0. Se este teste mudar, a minha conclusão sobre o caso dele
     deixa de valer e precisa ser refeita."""
     saida = m._consolidate_items(_concretos([12.72, 0, 0, 0]))
     assert len(saida) == 4, (
-        "grupo com 12,72 passou a ser fundido — a explicação do caso Edvaldo "
+        "grupo com 12,72 passou a ser fundido — a explicação do caso cliente-23 "
         "(a IA não produziu, a fusão não comeu) precisa ser reavaliada")
 
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Um DWG salvo como .dxf tem que ser tratado como DWG — pelo CONTEÚDO, não pelo nome.
 
-🩸 05/09/2026, caso William (job 8b7a2b71): engenheiro de orçamento, veio do
+🩸 05/09/2026, caso cliente-39 (job 8b7a2b71): engenheiro de orçamento, veio do
 Google, subiu HNSC-...-A01-R02.dxf de 5,4 MB. O arquivo começa com `AC1024`:
 é um DWG do AutoCAD 2010 com a extensão trocada. A gente decidia o caminho só
 pelo nome, jogou o DWG no leitor de DXF e ele morreu ("is not a DXF file");
@@ -26,7 +26,7 @@ sys.path.insert(0, _BACKEND)
 
 import main  # noqa: E402
 
-# Cabeçalhos REAIS: o do William (AC1024, 2010) e o de um DWG local (AC1032, 2018).
+# Cabeçalhos REAIS: o do cliente-39 (AC1024, 2010) e o de um DWG local (AC1032, 2018).
 DWG_2010 = b"AC1024\x00\x00\x00\x00\x00\xe2\x03 \x01\x00\x00!\xe7\x1e\x00\x00" + b"\x00" * 200
 DWG_2018 = b"AC1032\x00\x00\x00\x00\x00\x00" + b"\x00" * 200
 DXF_ASCII = b"  0\r\nSECTION\r\n  2\r\nHEADER\r\n  9\r\n$ACADVER\r\n  1\r\nAC1027\r\n  0\r\nENDSEC\r\n  0\r\nEOF\r\n"
@@ -97,7 +97,7 @@ def test_arquivo_honesto_nao_e_tocado(tmp_path, monkeypatch):
 
 
 def test_colisao_descarta_a_copia_renomeada_e_preserva_o_dwg_bom(tmp_path, monkeypatch):
-    """O 2º envio do William: x.dwg (real) + x.dxf (o mesmo DWG renomeado).
+    """O 2º envio do cliente-39: x.dwg (real) + x.dxf (o mesmo DWG renomeado).
     Sem isto, ou a prancha era medida DUAS vezes, ou — pior, como aconteceu —
     a regra 'DXF supera DWG do mesmo nome' apagava o DWG bom."""
     monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)

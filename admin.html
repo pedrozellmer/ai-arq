@@ -2432,7 +2432,7 @@ async function mergeCriar(jobId){
   }
 }
 
-// 🚨 24/08: depois que o merge nasceu, o projeto do Alan passou a ter DUAS
+// 🚨 24/08: depois que o merge nasceu, o projeto do cliente-19 passou a ter DUAS
 // linhas aqui — a releitura (ev...) e a combinada (mg...), as duas com o mesmo
 // botão azul "Liberar pro cliente" e as duas marcadas "melhorou". Clicar na
 // errada entrega ao cliente a versão que PERDE as 38 portas dele.
@@ -4339,7 +4339,7 @@ async function loadNPSData() {
         // (11 botões, 0 a 10) e a página do projeto (TRÊS botões, que a gente
         // traduz pra 9/7/2 — projeto.html:441-443). Das 6 avaliações da história
         // do produto, 2 vieram da escala de três, e o painel mostrava as seis do
-        // mesmo jeito. O Alan clicou "😐 Mais ou menos" e virou "7".
+        // mesmo jeito. O cliente-19 clicou "😐 Mais ou menos" e virou "7".
         // 🪤 Fora dos três valores conhecidos cai no número cru: se a página
         // mudar, é melhor mostrar o que foi guardado do que inventar carinha.
         const _btn3 = { 9: '👍 Ajudou bastante', 7: '😐 Mais ou menos', 2: '👎 Não muito' };
@@ -4509,7 +4509,7 @@ async function loadProjects() {
     // mostra as avaliações com etiqueta e botão "Abrir teste". Os CARTÕES, não:
     // eles contam projeto de cliente, e a regra disso mora na view
     // projetos_de_cliente (sem avaliação, com e-mail, fora as contas da casa).
-    // Antes era `!p.is_eval` e deixava dentro 28 projetos do Pedro e da Daniela.
+    // Antes era `!p.is_eval` e deixava dentro 28 projetos do Pedro e da cliente-38.
     const _rCli = await sbClient
       .from('projetos_de_cliente')
       .select('job_id,status,created_at,completed_at,reprocess_count')
@@ -5784,7 +5784,7 @@ const DDD_UF = {
   '91':'PA','93':'PA','94':'PA','92':'AM','97':'AM','95':'RR','96':'AP','98':'MA','99':'MA'
 };
 const UF_NOME = { SP:'São Paulo', RJ:'Rio de Janeiro', ES:'Espírito Santo', MG:'Minas Gerais',
-  PR:'Paraná', SC:'Santa Catarina', RS:'Rio Grande do Sul', DF:'Distrito Federal', GO:'Goiás',
+  PR:'Paraná', SC:'Santa cliente-21', RS:'Rio Grande do Sul', DF:'Distrito Federal', GO:'Goiás',
   TO:'Tocantins', MT:'Mato Grosso', MS:'Mato Grosso do Sul', AC:'Acre', RO:'Rondônia', BA:'Bahia',
   SE:'Sergipe', PE:'Pernambuco', AL:'Alagoas', PB:'Paraíba', RN:'Rio Grande do Norte', CE:'Ceará',
   PI:'Piauí', PA:'Pará', AM:'Amazonas', RR:'Roraima', AP:'Amapá', MA:'Maranhão' };
@@ -5959,8 +5959,8 @@ async function loadOrigem(){
   // 🪤 `dias_com_projeto` já vem do RPC ignorando is_eval — job de avaliação é
   // nosso, contar inflaria a retenção com o nosso próprio teste.
   const _DIA = 86400000;
-  // 🚨 CONTAS DE TESTE FORA (Pedro, 12/08: "tira Dani e Pedro Zellmer").
-  // São nossas, não de cliente — o Pedro tem 18 projetos e a Daniela 12, os
+  // 🚨 CONTAS DE TESTE FORA (Pedro, 12/08: "tira cliente-38 e Pedro Zellmer").
+  // São nossas, não de cliente — o Pedro tem 18 projetos e a cliente-38 12, os
   // dois maiores da base. Deixar dentro faria a retenção parecer o dobro do
   // que é, que é o mesmo vício dos "57%" que na real eram 2%.
   // 🪤 O painel MOSTRA que foram tiradas. Excluir calado é como número honesto
@@ -6099,7 +6099,7 @@ async function loadOrigem(){
 // 🩸 04/09/2026 — DEZ ações deste painel pediam confirmação e sumiam em
 // SILÊNCIO quando a resposta era não. Pra quem clicou em Cancelar está certo; o
 // problema é que "eu cancelei" e "o botão está quebrado" ficam IGUAIS na tela.
-// 🚨 Aconteceu comigo hoje: cliquei em "Refazer planilha" da Caroline, o
+// 🚨 Aconteceu comigo hoje: cliquei em "Refazer planilha" da cliente-22, o
 // diálogo foi descartado pela automação, a função saiu pela porta dos fundos e
 // eu só descobri que NADA tinha rodado indo olhar o error_log — não houve toast,
 // não houve erro, não houve nada.

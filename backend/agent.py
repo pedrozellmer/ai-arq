@@ -735,7 +735,7 @@ def ask(job_id: str, question: str, max_iterations: int = 8,
     tool_calls_log = []
     final_answer = ""
     # 🩸 03/09/2026 — A RESPOSTA SAÍA CORTADA NO MEIO DA PALAVRA, E CALADA.
-    # Cliente `v.anjos.ia.81@` (job eebe543a) pediu uma análise longa; a
+    # Cliente `cliente-11@` (job eebe543a) pediu uma análise longa; a
     # resposta bateu no teto de 2.000 tokens e terminou em "O projeto usa dois
     # sím". O `stop_reason` da API diz `max_tokens` — e não era lido em lugar
     # NENHUM deste arquivo. A gente entregava o pedaço como se fosse a resposta.

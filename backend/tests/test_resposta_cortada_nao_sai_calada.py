@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Resposta cortada no teto de tokens não pode sair como se estivesse inteira.
 
-🩸 03/09/2026, cliente `v.anjos.ia.81@` (job `eebe543a`). Ele pediu uma análise
+🩸 03/09/2026, cliente `cliente-11@` (job `eebe543a`). Ele pediu uma análise
 longa no chat do projeto. A resposta bateu no teto de 2.000 tokens e terminou
 assim, no meio da palavra:
 

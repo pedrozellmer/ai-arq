@@ -24,7 +24,7 @@ nenhuma prancha prova (que é o caso), ele fica nulo e o portão nunca dispara.
 
 📏 MEDIDO NO ACERVO em 01/09/2026: **6 de 73 jobs de CAD** têm fatores
 divergentes, e os 6 divergem **100× ou mais**. Três são entrega real de
-cliente (Alan 24/08, Amanda 10/08 ×2).
+cliente (cliente-19 24/08, cliente-16 10/08 ×2).
 
 🪤 A regra NÃO pune quem está bem: 92% dos jobs têm todas as pranchas de acordo
 e não são tocados. E contagem ('un', 'pç') nunca entra — contar bloco não
@@ -68,7 +68,7 @@ def _tiago():
 def test_amanda_TRES_escalas_e_ninguem_confiavel():
     """🩸 O caso do dia. Sem árbitro, ninguém sai medido."""
     div, susp, resumo = escala_divergente(_amanda())
-    assert div is True, "não viu a divergência de 1000× do caso Amanda"
+    assert div is True, "não viu a divergência de 1000× do caso cliente-16"
     assert len(susp) == 12, (
         "com NENHUMA prancha provada por cota não há árbitro — todas as 12 "
         "deveriam entrar, entraram %d" % len(susp))
@@ -84,7 +84,7 @@ def test_alan_tambem_diverge():
 
 def test_quando_UMA_prancha_PROVA_por_cota_ela_e_o_arbitro():
     """🔑 O caso bom: se alguém provou a escala, esse fator é a verdade e só
-    quem discorda dele é suspeito. O Alan manteria os 20 itens medidos."""
+    quem discorda dele é suspeito. O cliente-19 manteria os 20 itens medidos."""
     esc = [_p("4366-EL-B", 0.001),
            _p("4366-EL-E", 1.0, "validada"),
            _p("4366-IH-E", 1.0), _p("4366-VA-E", 1.0)]
@@ -128,7 +128,7 @@ def test_CONTROLE_projeto_saudavel_NAO_e_tocado():
 
 
 def test_CONTROLE_uma_prancha_so_nunca_diverge():
-    """Caso Edvaldo (b5ce23ff/d2bedf82): 1 prancha, fator 0.01, régua validada."""
+    """Caso cliente-23 (b5ce23ff/d2bedf82): 1 prancha, fator 0.01, régua validada."""
     div, susp, _ = escala_divergente([_p("TOP-EST-PE-116-FRM-TIP-R00", 0.01, "validada")])
     assert div is False and susp == set()
 

@@ -13,7 +13,7 @@ queda) cria só `result`, cai no mesmo `del` e levanta:
     UnboundLocalError: cannot access local variable 'text'
 
 🔑 O que torna isso grave é ONDE acontece: o checkpoint existe justamente pra
-salvar o job pesado que já caiu uma vez (caso perplan/Rafael, 43 pranchas,
+salvar o job pesado que já caiu uma vez (caso perplan/cliente-40, 43 pranchas,
 21/07). O mecanismo de recuperação morria na hora de recuperar. Medido no banco
 em 03/09: **31 projetos já auto-retomaram**, 20 deles com o cache ligado.
 

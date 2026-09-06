@@ -70,7 +70,7 @@ def test_numero_que_ja_existia_NAO_VIRA_a_area_da_casa():
     🪤 Escrevi este teste na 1a versão exigindo que o 18,05 fosse PRESERVADO —
     e ele falhou. O certo era o meu teste, não o código: o 18,05 veio da IA
     LENDO a prancha, não da geometria, e a regra dura nº1 zera área lida por
-    IA por design (caso Catarina, 20/07) — o número do desenho fica preservado
+    IA por design (caso cliente-21, 20/07) — o número do desenho fica preservado
     no TEXTO da observação, pro cliente conferir.
     O ganho deste conserto é não virar 400. Preencher com o valor lido é outra
     decisão (o resgate de linha zerada), e não é esta."""

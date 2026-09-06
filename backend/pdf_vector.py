@@ -51,7 +51,7 @@ def _mem_kb() -> dict:
 
     🔬 05/09/2026, PASSO 3 do estudo do teto. O RLIMIT_AS cobra endereço
     VIRTUAL (VmPeak); tudo que a gente tinha medido era RESIDENTE (VmHWM, o
-    que o Render mostra). O filho do William morreu com ≤ ~1,06 GB residentes
+    que o Render mostra). O filho do cliente-39 morreu com ≤ ~1,06 GB residentes
     quando o kernel cobrou 2 GB virtuais — a diferença entre os dois é a
     incógnita que decide o valor do teto, e nunca foi medida em produção.
     Devolve {} onde não existe /proc (Windows). Nunca levanta: é observação.
@@ -457,7 +457,7 @@ def _run(page_units: list, job_id: str, api_key: str, log_fn, pular=None) -> Non
         # 🪤 A coluna do log corta em 2.000 caracteres. Despejar o dict inteiro
         # (que traz nomes de camada, contagens etc.) fazia justamente os projetos
         # GRANDES — mais páginas, JSON mais longo — serem truncados. E são eles a
-        # evidência que interessa: em 30/07 os 3 jobs do cliente Walter, os únicos
+        # evidência que interessa: em 30/07 os 3 jobs do cliente cliente-30, os únicos
         # com CAD do MESMO projeto pra comparar, estavam todos cortados em 2000.
         # Agora grava só o que decide se o leitor vetorial sai da sombra.
         def _resumo(r: dict) -> dict:

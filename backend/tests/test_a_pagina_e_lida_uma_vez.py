@@ -6,7 +6,7 @@ envoltória chamavam a MESMA coleta (pdfvec_rooms._collect_raw_segments) três
 vezes na mesma página. Medido: o parse é ~85% do tempo de cada etapa (HNSC
 31+33+32 s; CPQ11 50+74+92 s) e três picos de memória empilhados em vez de um.
 Com o teto de memória já domado (passo 8), o muro que sobrou é o cronômetro de
-75 s — e a página do William leva 103 s.
+75 s — e a página do cliente-39 leva 103 s.
 
 A coleta é função determinística da página e nenhum consumidor muta a lista
 (`_filter_segments` cria `kept`; `_drop_frame_and_stamp` cria `out`), então

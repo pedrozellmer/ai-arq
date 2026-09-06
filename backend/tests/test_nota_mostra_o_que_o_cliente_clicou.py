@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A nota mostrada é o que a pessoa CLICOU, não a tradução que a gente guardou.
 
-🩸 02/09/2026, caso Alan Vitor (job `17d6e1f2`). Ele clicou **"😐 Mais ou
+🩸 02/09/2026, caso cliente-19 (job `17d6e1f2`). Ele clicou **"😐 Mais ou
 menos"** na página do projeto, e o alerta chegou pro Pedro dizendo:
 
     🟡 NPS 7 — neutro
@@ -21,7 +21,7 @@ informação diferente e mais pobre.
     O número é tradução NOSSA. A pessoa nunca viu uma régua de 0 a 10.
 
 📏 Das SEIS avaliações da história inteira do produto, DUAS vieram da escala de
-três (Alan e valimduda) — e o painel mostrava as seis do mesmo jeito. Com seis
+três (cliente-19 e cliente-09) — e o painel mostrava as seis do mesmo jeito. Com seis
 respostas, misturar uma escala de 3 pontos com uma de 11 esvazia o número.
 
 🔑 Este conserto NÃO mexe na coleta nem no valor guardado — isso é decisão de
@@ -45,7 +45,7 @@ import main  # noqa: E402
 
 # ── O rótulo ───────────────────────────────────────────────────────────────
 def test_a_escolha_de_3_botoes_mostra_a_CARINHA():
-    """🩸 O caso do Alan."""
+    """🩸 O caso do cliente-19."""
     r = main._nps_rotulo(7, "after_project")
     assert "Mais ou menos" in r, r
     assert "7 de 10" not in r, (

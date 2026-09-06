@@ -37,7 +37,7 @@ from dwg_extractor import _MAX_DWG_BYTES
 MB = 1024 * 1024
 
 # Os três casos reais medidos em 03/09/2026: (nome, MB do DWG, fator medido).
-_MEDIDOS = [("Rafael (produção)", 11.7, 29.0),
+_MEDIDOS = [("cliente-40 (produção)", 11.7, 29.0),
             ("Fábio 75dab573", 44.5, 18.8),
             ("Patrick dbd0d97e", 53.2, 26.0)]
 

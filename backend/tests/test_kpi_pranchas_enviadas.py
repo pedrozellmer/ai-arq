@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 """O KPI "pranchas enviadas" tem que contar o que o cliente ENVIOU.
 
-🚨 24/08/2026, caso Alan (job e1c48ed7). Ele enviou 7 arquivos DWG. A tela do
+🚨 24/08/2026, caso cliente-19 (job e1c48ed7). Ele enviou 7 arquivos DWG. A tela do
 projeto mostrava, sob o rótulo "pranchas enviadas", o número 4.
 
 O 4 era `collectCadFiles(items).size` — quantas pranchas RENDERAM item. As
 outras 3 morreram na leitura (KeyError de layout do libredwg). Ou seja: o
 número que faltava era exatamente a notícia, e o rótulo jurava outra coisa.
 
-Olhando a tela, o Alan não tinha como saber que perdeu quase metade do projeto.
+Olhando a tela, o cliente-19 não tinha como saber que perdeu quase metade do projeto.
 E o e-mail dele também não contou (o aviso que dizia isso era o 3º de 7, e o
 e-mail mandava só os 2 primeiros — ver test_avisos_chegam_ao_cliente).
 
@@ -28,7 +28,7 @@ def _projeto():
 def test_o_numero_grande_e_o_que_o_cliente_enviou():
     src = _projeto()
     assert "setKpi('kpi-arquivos', String(_enviadas || _renderam || '--'));" in src, (
-        "o KPI voltou a liderar com as pranchas que renderam item — o Alan "
+        "o KPI voltou a liderar com as pranchas que renderam item — o cliente-19 "
         "enviou 7 e a tela dizia 4")
     assert "setKpi('kpi-arquivos', String(_files.size || p.files_count" not in src, (
         "a ordem antiga (renderam primeiro) está de volta")

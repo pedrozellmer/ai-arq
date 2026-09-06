@@ -159,7 +159,7 @@ def _supabase_insert(table, data):
 # de 2,5 GB e morre sozinho. O que se decide aqui é DISCO — porque nada apaga
 # os DXF convertidos dentro do laço e eles se somam até o fim do job.
 #
-# Medido no arquivo do Rafael (job 28f140ef), rodando o worker de verdade:
+# Medido no arquivo do cliente-40 (job 28f140ef), rodando o worker de verdade:
 #     DXF 409 MB --dxf-slim--> 34 MB · pico 305 MB · 19 s · exit 0
 #     67.953 paredes, 1.636 cotas, 1.780 textos
 # A previsão de RAM que o motor usava (9,6x o DXF) errou por 13x nesse arquivo.
@@ -505,7 +505,7 @@ _STAGES_DIAGNOSTICO = frozenset({
 })
 
 
-# ── Trava de envio em dobro (26/08/2026, caso Amanda) ────────────────────
+# ── Trava de envio em dobro (26/08/2026, caso cliente-16) ────────────────────
 # A janela é curta de propósito: barra o clique/retry duplicado, e NÃO barra
 # quem reenvia o mesmo projeto meia hora depois (isso é intenção real do
 # cliente — ex.: corrigiu o arquivo e mandou de novo).
@@ -1049,7 +1049,7 @@ def _supa_rest_as_user(request, method: str, path: str, body=None, params=None,
     Substitui o padrão antigo `Authorization: Bearer SUPABASE_KEY` (anon),
     que causa dois problemas:
       1) RLS bloqueia: anon não casa com `auth.uid()` → rows=[] mesmo com
-         usuário autorizado (bug Daniela 2026-05-18 download, Pedro 2026-05-25
+         usuário autorizado (bug cliente-38 2026-05-18 download, Pedro 2026-05-25
          reprocessar);
       2) RLS permissiva: anon vaza dado de outros usuários se a policy de
          SELECT for ampla demais.
@@ -1146,7 +1146,7 @@ def _get_project_owner(job_id: str):
     sem autorização e retornava 0 rows, levando ao falso 404 'Projeto não
     encontrado' em todos os endpoints que chamavam _require_project_owner —
     download, items, cronograma, quotes, agent/ask, projects/{id}/client.
-    Bug detectado pela Daniela em 2026-05-18 ao tentar baixar a planilha.
+    Bug detectado pela cliente-38 em 2026-05-18 ao tentar baixar a planilha.
     """
     import urllib.request, urllib.error, json as _j
     try:
@@ -1717,7 +1717,7 @@ def _comparar_com_versao_anterior(job_id: str, n_medidos: int, n_itens: int) -> 
       {versao, antes_itens, antes_medidos, perdeu_medidos, frase}
     `perdeu_medidos` > 0 significa que a leitura NOVA mediu MENOS que a velha.
 
-    🚨 Por que isto existe: em 10/08 a Amanda anexou arquivo, o motor releu as
+    🚨 Por que isto existe: em 10/08 a cliente-16 anexou arquivo, o motor releu as
     mesmas pranchas, entregou 28 medidos no lugar de 47 — e o e-mail automático
     anunciou "planilha atualizada", como se fosse melhora. A gente sabia o
     número e não contou. Fato que a gente tem, o cliente tem que ter.
@@ -1944,7 +1944,7 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
     # 📦 ANTES de apagar: guarda a versão que está lá. O /add-file reprocessa NO
     # MESMO job_id, então o swap abaixo é destrutivo — e o desenho dele assume
     # que anexar arquivo só MELHORA ("veio PDF, agora mando o CAD"). Com o motor
-    # não-determinístico essa premissa caiu: em 10/08 a Amanda (349e75a5) anexou
+    # não-determinístico essa premissa caiu: em 10/08 a cliente-16 (349e75a5) anexou
     # 4 arquivos que JÁ estavam no projeto, o motor releu as mesmas 14 pranchas e
     # a planilha saiu com 28 medidos no lugar de 47. A versão boa sumiu.
     # Best-effort: se arquivar falhar, o reprocesso segue — perder a versão velha
@@ -2006,7 +2006,7 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
         # primeiro job da base (19/04). Nenhum deles deixou uma linha de erro:
         # o HTTP voltou 2xx e o resto foi suposição.
         # Assinatura do estrago: nos 120 jobs sãos o `sort_order` é contíguo
-        # 0..N-1; nos 24 afetados ele SEMPRE tem buraco (job d5e073cf, Flavio:
+        # 0..N-1; nos 24 afetados ele SEMPRE tem buraco (job d5e073cf, cliente-14:
         # 50 montadas, 33 no banco, faltando 14,15,18-21,23,30-33,35,40,42,47-49).
         # O cliente vê os itens na planilha que baixa e NÃO na tela de revisão.
         # 🔑 Este guarda não depende de saber a CAUSA: ele compara o que a gente
@@ -3205,7 +3205,7 @@ def _build_falha_email(name: str, project_name: str, reprocessavel: bool, error_
             # 🩸 03/09 — a arte deste e-mail dizia "exporte em DXF" nos TRÊS
             # ramos. No ramo de tamanho isso contradiz o próprio texto logo
             # abaixo e manda o cliente pra mesma falha (DXF é texto puro e
-            # nasce 30–50x o DWG). Caso Rafael Lima, job 28f140ef.
+            # nasce 30–50x o DWG). Caso cliente-40 Lima, job 28f140ef.
             alt_img = "Um ajuste no arquivo resolve — mande só a prancha necessária"
             # 🩸 03/09 — o preheader (a linha que aparece na CAIXA DE ENTRADA,
             # antes de abrir) dizia "exporte em DXF" nos TRÊS ramos. No ramo de
@@ -3396,7 +3396,7 @@ def _build_reading_diagnostic(all_items, n_pdf, n_cad, project_type, project_dat
                        "m&sup2; e aço em kg — o peso de aço sai medido quando a prancha tem um "
                        "<b>quadro/resumo de aço</b>.")
 
-        # 🚨 24/08/2026 (caso Alan, job e1c48ed7): isto era `[:2]` e mandava os
+        # 🚨 24/08/2026 (caso cliente-19, job e1c48ed7): isto era `[:2]` e mandava os
         # DOIS PRIMEIROS avisos, na ordem em que o motor calhou de gerar. Ele
         # tinha 7. Os dois que sairam por e-mail foram "leitura incompleta" e
         # "usamos o leitor alternativo". O TERCEIRO, que nunca saiu, era:
@@ -3458,7 +3458,7 @@ def _next_steps_html(job_id: str, n_medido: int = 0, n_total: int = 0,
             f"que a gente <b>refaz medindo de verdade</b> &mdash; de gra&ccedil;a."))
     # 2) Revisar — mas apontando ONDE, não mandando revisar tudo.
     # 🪤 Até 10/08 este passo dizia "Revise os N itens em laranja", e N era
-    # `total - medido`: pra escola da Amanda (349e75a5) deu **198**. Pedir 198
+    # `total - medido`: pra escola da cliente-16 (349e75a5) deu **198**. Pedir 198
     # revisões não é pedido, é muro — e `revision_feedback` está em 0 linhas
     # desde que o produto existe. Os dois grupos abaixo somam 101 no mesmo
     # projeto, cada um com um motivo concreto, e são onde o cliente realmente
@@ -3604,7 +3604,7 @@ def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
                                email: str = ""):
     """O TERCEIRO e-mail: 'li o seu desenho, mas não medi nada dele'.
 
-    🩸 06/09/2026, visto AO VIVO. O Devair subiu 3 PDFs de uma guarita e
+    🩸 06/09/2026, visto AO VIVO. O cliente-15 subiu 3 PDFs de uma guarita e
     recebeu "sua planilha está pronta" — com 124 itens e ZERO medidos do CAD.
     Antes tinha recebido "seu projeto vira planilha medida" nas boas-vindas.
     Dois e-mails prometendo medição pra uma entrega que não mediu nada.
@@ -4107,7 +4107,7 @@ class JobsStore:
         """Quantos jobs estão REALMENTE em curso agora.
 
         Existe pra trava de deploy (Pedro, 03/08/2026): subir código no meio de
-        um processamento mata o job do cliente — foi o caso Walter (29/07).
+        um processamento mata o job do cliente — foi o caso cliente-30 (29/07).
         O hook de pre-push lê isto pelo /api/health e recusa o push.
 
         🚨 26/08/2026 — ERRAVA NOS DOIS SENTIDOS, e os dois no MESMO DIA, com
@@ -4117,7 +4117,7 @@ class JobsStore:
           mora no disco EFÊMERO do Render. Todo reinício nasce sem o arquivo, e
           `_load_jobs()` devolve `{}` SEM levantar exceção — a contagem virava 0
           e o deploy passava. Às 08:26 o banco dizia `processing` há 130s no job
-          da Amanda e a trava dizia 0: um push ali teria matado o processamento
+          da cliente-16 e a trava dizia 0: um push ali teria matado o processamento
           dela. O `return -1` protegia só o caso de EXCEÇÃO; arquivo ausente é
           caminho feliz, e caminho feliz que devolve 0 é uma trava desarmada.
         - **Bloqueou sem ninguém rodando (o chato).** Depois do OOM das 10:19
@@ -4222,7 +4222,7 @@ def _retomar_job_do_storage(job_id: str, typology: str = "office",
     processamento. Retorna True se conseguiu re-disparar; False se não há
     arquivos no Storage (job antigo, pré-resiliência) — aí o caller marca erro.
 
-    Antes (bug que derrubou o Adriano 2x): qualquer restart no meio do
+    Antes (bug que derrubou o cliente-29 2x): qualquer restart no meio do
     processamento matava o job pra sempre — 92% dos erros históricos."""
     import urllib.request, json as _j
     from urllib.parse import unquote
@@ -4357,7 +4357,7 @@ _TRANSIENT_ERR_RX = _re_auto.compile(
 def _auto_retry_erros_transitorios():
     """REVISÃO AUTOMÁTICA (decisão Pedro 07/07): projeto que caiu por causa
     passageira re-tenta SOZINHO na varredura de 5min — o que antes era resgate
-    manual (casos sumi/Lia/Thamiry 06/07). Mesma trava do recovery:
+    manual (casos sumi/Lia/cliente-24 06/07). Mesma trava do recovery:
     auto_resume_count < 2. Quando o erro vira TERMINAL (esgotou tentativas ou
     é problema do arquivo), alerta interno pro Pedro com o diagnóstico — 1x
     por job (dedup em email_auto_log) — pra ele nunca mais descobrir fuçando."""
@@ -5040,7 +5040,7 @@ def _dedupe_by_block(items: list) -> list:
 def _drop_nonsense_items(items: list) -> list:
     """Remove itens-artefato que não são quantitativo de verdade (ex: 'área de
     seção transversal' de parede — a hachura da ESPESSURA virou item de m²).
-    Caso Thamiry (projeto drywall multi-prancha)."""
+    Caso cliente-24 (projeto drywall multi-prancha)."""
     kept = [it for it in items if not _is_nonsense_item(getattr(it, "description", "") or "")]
     n = len(items) - len(kept)
     if n:
@@ -5093,7 +5093,7 @@ def _consolidate_by_type_code(items: list, project_data=None) -> list:
     """Funde o MESMO tipo de divisória/parede (DRY 07, DW-12...) que aparece em
     VÁRIAS pranchas: SOMA as qtys (paredes diferentes em ambientes diferentes),
     1 linha por (tipo, unidade, disciplina). Marca estimado (soma cross-prancha =
-    revisar). Caso Thamiry: 191 itens fragmentados de drywall, 156 zerados."""
+    revisar). Caso cliente-24: 191 itens fragmentados de drywall, 156 zerados."""
     from models import Confidence
     by_key: dict = {}
     passthrough: list = []
@@ -5130,7 +5130,7 @@ def _consolidate_by_type_code(items: list, project_data=None) -> list:
     # linhas sumiram da planilha e o único registro era um print() no log do
     # servidor, que ninguém lê. O cliente abre a planilha, conta menos linhas
     # do que a planta tem, e não tem como saber por quê.
-    # 🔑 Fundir é a decisão certa (o caso Thamiry tinha 191 itens de drywall
+    # 🔑 Fundir é a decisão certa (o caso cliente-24 tinha 191 itens de drywall
     # fragmentados); esconder que fundiu é que não é.
     _consolidate_by_type_code.ultimo_fundidos = fundidos
     _consolidate_by_type_code.ultimo_grupos = len(_resumo)
@@ -5150,7 +5150,7 @@ def _consolidate_by_type_code(items: list, project_data=None) -> list:
 def _origem_do_grupo(grupo, regra="todos"):
     """Origem do item CONSOLIDADO — o selo tem que sobreviver à fusão.
 
-    🩸 30/08/2026 (eval ev502981, caso Amanda): o consolidador criava
+    🩸 30/08/2026 (eval ev502981, caso cliente-16): o consolidador criava
     BudgetItem novo SEM origem em 6 lugares. Item medido por hachura no DXF
     (origem 'dxf_geom') era fundido, perdia o selo, e _apply_area_honesty —
     que só poupa 'dxf_geom' — zerava m² MEDIDO como se fosse chute de Vision:
@@ -5175,7 +5175,7 @@ def _resumo_do_grupo(group, teto: int = 4) -> str:
 
     🩸 03/09/2026: sem isto, quando um número some entre duas rodadas não dá
     pra separar "a consolidação comeu" de "a IA não produziu". Aconteceu com o
-    Edvaldo e a resposta levou uma consulta ao banco e uma leitura de código
+    cliente-23 e a resposta levou uma consulta ao banco e uma leitura de código
     pra sair — devia estar escrita na própria linha."""
     partes = []
     for it in group[:teto]:
@@ -5243,7 +5243,7 @@ def _consolidate_items(items: list) -> list:
         # 🚨 GUARDA DE ATRIBUTO na passada 1 também: se o grupo mistura
         # atributos distintivos (bitola/classe/fck/dimensão/código), NÃO é
         # duplicata — são itens diferentes que a chave normalizada achatou.
-        # Mantém todos e sai. (Caso Eduarda, 17/08/2026.)
+        # Mantém todos e sai. (Caso cliente-20, 17/08/2026.)
         if any(not _pode_fundir(group[0].description, _o.description) for _o in group[1:]):
             pass1.extend(group)
             continue
@@ -5280,7 +5280,7 @@ def _consolidate_items(items: list) -> list:
                 observations=(
                     f"Consolidado de {len(group)} entradas replicadas por "
                     f"departamento/variante — soma de qtys: {total_qty} {best.unit}. "
-                    # 🩸 03/09: a mensagem dizia só o TOTAL. Quando o Edvaldo
+                    # 🩸 03/09: a mensagem dizia só o TOTAL. Quando o cliente-23
                     # perdeu um número entre duas rodadas, não deu pra saber se
                     # a consolidação tinha comido ou se a IA não produziu — a
                     # linha não registrava o que consumiu. Agora registra.
@@ -5350,7 +5350,7 @@ def _consolidate_items(items: list) -> list:
                 fam_noun = _primary_noun(fam[0].description)
                 fam_tokens = set(_normalize_description_key(fam[0].description).split())
                 overlap = key_tokens & fam_tokens
-                # 🚨 GUARDA DE ATRIBUTO (17/08/2026, caso Eduarda): bitola,
+                # 🚨 GUARDA DE ATRIBUTO (17/08/2026, caso cliente-20): bitola,
                 # classe de aço, fck, dimensão e código IDENTIFICAM o item —
                 # aço Ø8 e Ø16 são materiais diferentes (regra dura nº4). O
                 # critério de "2 palavras em comum" fundia os dois, porque toda
@@ -5647,7 +5647,7 @@ def _consolidate_items(items: list) -> list:
     # ═══════════════════════════════════════════════════════════════
     #  PASSADA 6 — DEDUP CROSS-PRANCHA (mesmo elemento em pranchas diferentes)
     # ═══════════════════════════════════════════════════════════════
-    # Caso real Weslei (2026-05-08): "Escada metálica" apareceu 2 vezes:
+    # Caso real cliente-35 (2026-05-08): "Escada metálica" apareceu 2 vezes:
     #   - "PROJETO AMPLIACAO" → qty=8.6, unit=m² (medida REAL da legenda)
     #   - "eletrico.pdf" → qty=1, unit=un (vista da mesma escada na elétrica)
     # Resultado: usuário recebia 2 escadas, sendo a mesma física.
@@ -5722,7 +5722,7 @@ def _consolidate_items(items: list) -> list:
             continue
 
         # 🚨 GUARDA DE ATRIBUTO (17/08/2026) — ESTA passada era a que matava o
-        # aço da Eduarda, e é a única que faz winner/losers (descarta de
+        # aço da cliente-20, e é a única que faz winner/losers (descarta de
         # verdade, não funde). Ela agrupa por (substantivo, disciplina): as 6
         # bitolas caíam todas em ("armadura","Estrutura"), vinham de pranchas
         # diferentes, tinham "armadura" em comum → declarava "duplicação
@@ -5744,7 +5744,7 @@ def _consolidate_items(items: list) -> list:
         # 🚨 GUARDA DE GRANDEZA (06/09/2026) — o irmão do guarda de atributo
         # acima, e pela mesma razão: coisas diferentes não são duplicata.
         #
-        # 🩸 O caso que revelou (Flavio Hermolin, job d5e073cf): a linha
+        # 🩸 O caso que revelou (cliente-14, job d5e073cf): a linha
         # "Alvenaria de vedação — levantamento de parede" saiu com 255,06 ml e
         # selo CONFIRMADO, e a observação lista o que foi jogado fora:
         # 819,06 m², 810,36 m², 50,37 m², 73,05 m². Metro LINEAR venceu metro
@@ -5766,10 +5766,10 @@ def _consolidate_items(items: list) -> list:
         # disciplina, e `pode_fundir` não conhece a categoria PAVIMENTO.
         #
         # Medido no banco: 1.245 itens em 80 projetos, 159 deles com selo
-        # MEDIDO. E o cliente já tinha nos dito: o Marcelo Affonso escreveu em
+        # MEDIDO. E o cliente já tinha nos dito: o cliente-13 escreveu em
         # 24/08 "são de pavimentos diferentes... teria como separar a quantidade
         # de paredes para cada um dos três pavimentos?" — e o nosso chat
-        # respondeu mandando separar os arquivos por pavimento. O Jessé fez
+        # respondeu mandando separar os arquivos por pavimento. O cliente-32 fez
         # exatamente isso, com 8 DWG, e deduplicou do mesmo jeito.
         #
         # 🔑 Por que MANTER e não somar: somar exige saber se são trechos
@@ -5811,7 +5811,7 @@ def _consolidate_items(items: list) -> list:
 
 # ═══════════════════════════════════════════════════════════════════════════
 #  REGRAS PÓS-CONSOLIDAÇÃO (fixes aplicados em 2026-05-17 após auditoria
-#  do projeto do Yuri / job b82a72ed):
+#  do projeto do cliente-33 / job b82a72ed):
 #
 #  🅐 Detector multifamiliar — flag quando contar 5+ bacias OU porta-elevador
 #     OU porta corta-fogo, sinaliza no warning do projeto pra cliente decidir.
@@ -6373,7 +6373,7 @@ def _measure_unambiguous(value: float, cat: str, by_cat: dict) -> bool:
 # Cada upload dispara process_job() numa thread daemon. SEM limite, 2-3
 # projetos processando ao mesmo tempo somam picos de RAM (render PDF +
 # Vision + listas de itens + XLSX) e estouram os 2GB do Render → OOM +
-# restart → derruba quem está processando. Foi o que pegou o Adriano em
+# restart → derruba quem está processando. Foi o que pegou o cliente-29 em
 # 16/06/2026. O semáforo força 1 job por vez: quem chega depois espera na
 # fila em vez de competir por memória. Reduz o pico de ~2GB pra 400-600MB.
 import threading as _threading_sem
@@ -6509,7 +6509,7 @@ def _salvage_layout_esquadrias(file_paths):
     """Última cartada antes de declarar "0 itens" numa planta de LAYOUT vetorial:
     lê as ESQUADRIAS das cotas escritas no texto do PDF (largura×altura/peitoril,
     ex. "160x150/86"). 100% DETERMINÍSTICO — não chama IA, não inventa dimensão,
-    só conta o que está escrito na prancha. Caso Catarina (20/07): estudo de layout
+    só conta o que está escrito na prancha. Caso cliente-21 (20/07): estudo de layout
     de interiores sem quadro de áreas dava erro "nenhum item"; agora entrega as
     esquadrias medidas na prancha, marcadas 'estimado' (é leitura de layout, não
     medição geométrica nossa — regra dura nº1). Só PDF; retorna [] se nada casar.
@@ -7241,14 +7241,14 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
       honesta (não é medição nossa, segue como estimativa a conferir).
     - Se o cliente INFORMOU o PÉ-DIREITO e a observação do item mostra a conta
       feita com ele (ex.: "A-WALL = 303,96 ml × 2,70 m (pé-direito informado)"),
-      PRESERVA a quantidade. 🚨 Caso Tammyres (23/08/2026): ela informou 2,70 no
+      PRESERVA a quantidade. 🚨 Caso cliente-25 (23/08/2026): ela informou 2,70 no
       envio, a leitura mediu 303,96 m de parede no layer A-WALL, a conta foi
       escrita na observação de 3 itens — e esta função zerou 2 deles (pintura e
       alvenaria), deixando a massa corrida com 817 m² e a pintura que a originou
       em 0. O comprimento vem da GEOMETRIA do CAD e o pé-direito veio do cliente:
       é estimativa honesta com procedência, não m² inventado. Segue 'estimado'.
     - Caso contrário, ZERA a quantidade (Vision não mede geometria → evita m²
-      inventado, caso Catarina 20/07) e anota que a área não foi medida.
+      inventado, caso cliente-21 20/07) e anota que a área não foi medida.
 
     Contagens (un), verbas (vb) e itens medidos do CAD (origem 'dxf_geom') ficam
     intocados. Devolve (n_preenchidos, n_zerados)."""
@@ -7259,13 +7259,13 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     _mediu_linear = _tem_comprimento_medido(items)
     filled = blanked = preservados = criados_prancha = apertou_teto = 0
     lineares_zerados = 0
-    # 🩸 31/08 (caso Flavio): quantas vezes a área informada já foi
+    # 🩸 31/08 (caso cliente-14): quantas vezes a área informada já foi
     # atribuída, por família de superfície. A soma das superfícies
     # horizontais não pode passar do total declarado — 6 itens com 400 m²
     # num imóvel de 400 m² são 2.400 m² de piso e forro.
     _usou_area_informada = {}
     # 🎯 31/08/2026 — PASSO 7: a medição da PRÓPRIA prancha do item.
-    # O caso Flavio mostrou 6 pranchas medidas (80,5 · 107,7 · 166,1 · 77,1 ·
+    # O caso cliente-14 mostrou 6 pranchas medidas (80,5 · 107,7 · 166,1 · 77,1 ·
     # 112,0 · 198,4 m²) e 32 linhas de área saindo ZERADAS. A medição existia,
     # por prancha, e não chegava a nenhum item.
     #
@@ -7356,7 +7356,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
         # 🔑 Arquivo com mais de uma página medida é AMBÍGUO, igual à trava 4:
         # não preenche nenhum item dele. Linha vazia é honesta; a maior é chute.
         # 🩸 02/09/2026 — A AMBIGUIDADE DEIXOU DE SER FATAL: AGORA TEM A PÁGINA.
-        # Caso Luana Oliveira (job bf72d192): 10 pranchas num PDF só, 583,6 m²
+        # Caso cliente-31 Oliveira (job bf72d192): 10 pranchas num PDF só, 583,6 m²
         # medidos, e `preenchidos=0 criados_prancha=0`. A medição existia e não
         # chegava em item nenhum, porque o item guardava só o nome do arquivo.
         # Agora `ref_sheet` carrega `(pN)` quando o arquivo tem mais de uma
@@ -7466,7 +7466,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # a partir de linhas que perderam metade do contexto, é decidir com MENOS
     # informação e não com mais. Esta rota preenche o que está em branco e não
     # encosta em número que já existe. Medido: sem isso ela zerava e GRAVAVA
-    # pintura de 1.641 m² e massa corrida de 817 m² do caso Tammyres.
+    # pintura de 1.641 m² e massa corrida de 817 m² do caso cliente-25.
     for it in items:
         if getattr(it, "origem", "") == "dxf_geom":
             continue
@@ -7654,7 +7654,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             it.quantity = 0
             # 🪤 Zerar sem soltar o selo deixa a linha BRANCA ("medido do CAD")
             # com quantidade 0 — o ramo de cima rebaixa e este não rebaixava.
-            # Achado no job 349e75a5 (Amanda, 10/08). A rede de segurança geral
+            # Achado no job 349e75a5 (cliente-16, 10/08). A rede de segurança geral
             # é `selos_sem_medida`, mas a origem se conserta na origem.
             try:
                 it.confidence = Confidence("estimado")
@@ -7743,7 +7743,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
 def _dedupe_revisoes(file_paths: list) -> tuple:
     """Quando a MESMA prancha vem em várias revisões (mesmo nome-base, só muda o
     sufixo -RNN), mantém só a revisão mais alta — senão o quantitativo conta a
-    mesma prancha 2x (caso Rafael/Engefast 21/07: 008 R03+R04, 009 R02+R03).
+    mesma prancha 2x (caso cliente-40/Engefast 21/07: 008 R03+R04, 009 R02+R03).
 
     CONSERVADOR (regra nº1 — nunca apagar prancha real em silêncio):
     - só trata como REVISÃO quando veio "REV" explícito OU o número tem 2+ dígitos
@@ -8026,7 +8026,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # Dedupe de REVISÃO: mesma prancha em várias revisões (só muda o -RNN) →
         # mantém a mais nova, senão o quantitativo conta a prancha 2x. Conservador
         # e TRANSPARENTE (avisa o usuário quais tratou como antigas). Vale pra todo
-        # caminho (upload, reprocesso, add-file, recovery). Caso Rafael/Engefast 21/07.
+        # caminho (upload, reprocesso, add-file, recovery). Caso cliente-40/Engefast 21/07.
         file_paths, _revs_desc = _dedupe_revisoes(file_paths)
         if _revs_desc:
             _pares = "; ".join(f"{os.path.basename(_v)} → {os.path.basename(_n)}"
@@ -8048,7 +8048,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # planilhas diferentes — e as duas portas de entrada entregam ordens
         # diferentes: o upload manda na ordem que o cliente escolheu, o
         # /add-file relista o Storage (main.py ~15730), que não garante ordem.
-        # Foi por essa porta que a Amanda passou em 10/08: mesmas 14 pranchas,
+        # Foi por essa porta que a cliente-16 passou em 10/08: mesmas 14 pranchas,
         # 47 medidos viraram 28.
         # 🪤 Ordem alfabética NÃO é "mais correta" que a do cliente — é apenas
         # REPETÍVEL. O ganho aqui é acabar com a loteria, não com o erro.
@@ -8058,7 +8058,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                            key=_ordem)
 
         # 🩸 05/09 — O NOME DO ARQUIVO PODE MENTIR (DWG salvo como .dxf, caso
-        # William). Decide pelo CONTEÚDO antes de qualquer coisa que olhe a
+        # cliente-39). Decide pelo CONTEÚDO antes de qualquer coisa que olhe a
         # extensão: a regra "DXF supera DWG do mesmo nome" logo abaixo, a
         # assinatura, o laço de conversão e a gravação dos originais.
         cad_paths, _avisos_ext, _mapa_ext = _normalizar_extensao_cad(cad_paths, job_id)
@@ -8116,7 +8116,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         #    processamento (deploy/OOM/idle), o recovery encontra os arquivos
         #    aqui e RETOMA o job. Por isso o upload é SÍNCRONO e a PRIMEIRA
         #    coisa do processamento — antes era background e se perdia no
-        #    crash (caso Adriano: 2 falhas, arquivo sumiu nas duas).
+        #    crash (caso cliente-29: 2 falhas, arquivo sumiu nas duas).
         _t0_upload = time.time()
         _n_ok = 0
         for _p in file_paths:
@@ -8127,7 +8127,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # 2ª tentativa: o timeout é de 60s e CAD grande passa perto
                     # disso. Falhar aqui não interrompe o processamento — mas deixa
                     # o projeto SEM o original, e aí um complemento futuro refaz sem
-                    # o CAD e apaga a medição (caso Walter 30/07).
+                    # o CAD e apaga a medição (caso cliente-30 30/07).
                     _ok_up = _supabase_storage_upload_prancha(_p, job_id, _fname)
                 if _ok_up:
                     _n_ok += 1
@@ -8152,7 +8152,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         if cad_paths:
             def _render_cad_previews_bg():
                 # 🚨 A FALHA TEM QUE GRITAR. Medido em 10/08/2026: o projeto da
-                # Amanda (349e75a5, 14 pranchas) gerou **1 PNG**, e o de 8 DWG
+                # cliente-16 (349e75a5, 14 pranchas) gerou **1 PNG**, e o de 8 DWG
                 # (fa371b0c) gerou **ZERO** — 1 imagem em 22 pranchas. Ninguém
                 # sabia, porque o render morre no timeout de 60s e não grava
                 # nada em lugar nenhum. É a "gravação que falha calada": o botão
@@ -8177,7 +8177,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # ele NUNCA esteve: `convert_dwg_to_dxf` grava em
                 # `tempfile.mkdtemp(prefix="arq_dxf_")` (dwg_extractor.py:1402).
                 # Resultado: TODO projeto de DWG pulava o preview, sempre, calado.
-                # Medido em 10/08/2026 no Storage: o projeto de 8 DWG da Amanda
+                # Medido em 10/08/2026 no Storage: o projeto de 8 DWG da cliente-16
                 # (fa371b0c) gerou ZERO PNG; o cliente franweldon (f9ccf0e4) deu
                 # `sem_dxf=1` no contador novo — foi ele que entregou a causa, 1h
                 # depois de o contador subir. Eu tinha apostado em timeout.
@@ -8298,7 +8298,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # fatores que diferem 100× ou 1000×, pelo menos uma está errada e a
         # gente NÃO SABE qual. Medido no acervo em 01/09: 6 de 73 jobs de CAD
         # têm isso, e os 6 divergem 100× ou mais.
-        # 🩸 Caso Amanda (job 349e75a5, 10/08): o MESMO projeto foi lido em três
+        # 🩸 Caso cliente-16 (job 349e75a5, 10/08): o MESMO projeto foi lido em três
         # escalas — 0.001 (mm) em 2 pranchas, 0.0254 (POLEGADAS) em 6, e 1.0
         # (metros) em 4. Uma das pranchas em polegadas entregou
         # "Condutos no teto = 9,92 ml ✓ MEDIDO do CAD". Se o desenho é mm o
@@ -8696,7 +8696,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
         # cache fica vazio (nada a reaproveitar), mas os checkpoints são SALVOS
         # durante o run — pra existir se o servidor cair no meio. Antes só o
         # caminho PDF salvava/lia; o DXF não guardava nada, então um job de 43
-        # DXF que caía refazia TUDO na retomada (caso perplan/Rafael 21/07).
+        # DXF que caía refazia TUDO na retomada (caso perplan/cliente-40 21/07).
         _ckpt_cache = {}
         # 🪤 Default 0 e NÃO "desconhecido": se esta consulta falhar, o cache por
         # conteúdo fica LIGADO. É a escolha certa porque o pior caso do cache
@@ -8738,7 +8738,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 # sondamos algumas pranchas (planta primeiro, menor primeiro) até
                 # UMA provar a escala por cota, e usamos essa nas pranchas sem cota.
                 # Cota PRÓPRIA da prancha sempre vence (não sobrescreve quem tem
-                # prova). Caso Rafael 21/07: 501 provou metros, 004/201 chutavam
+                # prova). Caso cliente-40 21/07: 501 provou metros, 004/201 chutavam
                 # pés — achado na 6ª sondagem em ~10s. Kill: DXF_UNIT_CONSENSUS=0.
                 _unit_consensus = None
                 if os.getenv("DXF_UNIT_CONSENSUS", "1") != "0" and len(dxf_paths) >= 2:
@@ -8887,7 +8887,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                     # proxy, DXF truncado, entidade não suportada), registra em dxf_errors
                     # e PULA pro próximo — não derruba os outros DXF/PDF do job. Antes a
                     # exceção subia pro except externo que fazia raise e matava a planilha
-                    # inteira por causa de uma prancha só (caso Thamiry: 22 DWGs).
+                    # inteira por causa de uma prancha só (caso cliente-24: 22 DWGs).
                     try:
                         # ARQUIVO GRANDE (19/07): DXF acima do teto de leitura
                         # segura passa por emagrecimento streaming (iterdxf) que
@@ -9048,7 +9048,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         _compr_paredes.append(_soma_par)
                         # 🩸 04/09 — o TOPO por layer, não só a soma. A soma já
                         # ensinou que a geometria de parede EXISTE (251 m no
-                        # arquivo da Caroline) enquanto o item usou 17,18 m de
+                        # arquivo da cliente-22) enquanto o item usou 17,18 m de
                         # um layer só. O que falta pra consertar é saber ONDE
                         # estão os outros 234 m: se num layer com cara de
                         # parede que o motor ignorou, o conserto é a escolha de
@@ -9171,7 +9171,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                         # 🚨 Até 11/08/2026 isto não existia em lugar consultável
                         # — só um `print` dentro do bloco de linha de comando
                         # (dwg_extractor.py ~3166), que produção nunca executa.
-                        # O custo apareceu com o lpleonardo (97392e5b): 29 itens
+                        # O custo apareceu com o cliente-10 (97392e5b): 29 itens
                         # com quantidade ZERO num DWG, ele preencheu 28 na mão, e
                         # eu não consigo dizer se o arquivo veio sem hachura ou
                         # se a gente falhou em ler as que vieram. São diagnósticos
@@ -9666,7 +9666,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         )
                         if not any(_t in _dxf_model for _t in ("opus-4-8", "opus-4-7", "fable")):
                             # 🚨 ERA 0, E O ZERO CUSTAVA A PRANCHA INTEIRA (26/08/2026).
-                            # Caso Amanda (job 43a799c0): 2 de 4 pranchas devolveram
+                            # Caso cliente-16 (job 43a799c0): 2 de 4 pranchas devolveram
                             # ZERO item. A IA somava bloco a bloco no raciocinio
                             # ("+1+1+1+1...") e temperature=0 -- decodificacao gulosa --
                             # nao a deixava escapar do laco: queimava os 32.000 tokens
@@ -9679,7 +9679,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             # gulosa, nao garantia de determinismo." Pagava-se o custo
                             # sem receber o beneficio.
                             #
-                            # Curva medida nas pranchas REAIS da Amanda, com o prompt
+                            # Curva medida nas pranchas REAIS da cliente-16, com o prompt
                             # de producao (itens devolvidos):
                             #     temp     0     0,3    0,5    0,7    1,0
                             #     pr.03    0      0      56     71     53
@@ -9746,7 +9746,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         if _dxf_truncado:
                             try:
                                 _n_salv = len(result.get("items", []))
-                                # 🚨 24/08 (caso Alan): este aviso dizia
+                                # 🚨 24/08 (caso cliente-19): este aviso dizia
                                 # "Reprocessar pode completar a planilha" — conselho
                                 # IMPOSSIVEL. Na prancha de eletrica dele o corte
                                 # aconteceu nas 3 leituras (162, 156 e 112 itens); o
@@ -9785,7 +9785,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                             if pd.get("kept_elements"): project_data.kept_elements.extend(pd["kept_elements"])
 
                         # 🎯 26/08/2026 — A MEDIÇÃO ESTAVA NA OBSERVAÇÃO E A
-                        # QUANTIDADE VINHA ZERO. Caso Alan (24/08 21:39): 31 de
+                        # QUANTIDADE VINHA ZERO. Caso cliente-19 (24/08 21:39): 31 de
                         # 73 linhas de área/comprimento saíram zeradas com o
                         # número medido escrito na própria linha ("área hachurada
                         # do layer -TEPAR = 268.39 m²"). O motor mediu, a IA citou
@@ -9809,7 +9809,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 conf = item_data.get("confidence", "estimado")
                                 if conf not in ["confirmado", "estimado", "verificar"]: conf = "estimado"
                                 # trava de procedência: extração com ressalva → nunca confirmado.
-                                # 🔑 EXCEÇÃO (16/08/2026, caso Eduarda 42c354a1): peso de aço
+                                # 🔑 EXCEÇÃO (16/08/2026, caso cliente-20 42c354a1): peso de aço
                                 # lido de QUADRO/RESUMO em texto não depende da escala do
                                 # desenho — a ressalva de unidade fala da GEOMETRIA. As 12
                                 # pranchas de armação dela ("maior elemento 19mm") rebaixaram
@@ -9942,7 +9942,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                 dxf_items.append(item)
                             except Exception as _e_item:
                                 # 🚨 ERA UM `except: continue` NU (17/08/2026).
-                                # Caso Eduarda: a IA devolveu 125 itens em 13
+                                # Caso cliente-20: a IA devolveu 125 itens em 13
                                 # pranchas e só 25 chegaram ao banco. O
                                 # consolidador foi inocentado em bancada
                                 # (96→95 com os itens reais); os ~100 morriam
@@ -9965,7 +9965,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
                         print(f"DXF {os.path.basename(dxf_path)}: {len(result.get('items', []))} itens extraídos via Claude")
                         # 🚨 A FICHA DA PRANCHA — SEMPRE, sucesso incluso (17/08/2026).
-                        # Na combinada da Eduarda (ev02f710/ev704ee8), 8 de 12
+                        # Na combinada da cliente-20 (ev02f710/ev704ee8), 8 de 12
                         # armações devolveram ZERO item SEM erro, sem truncamento e
                         # sem exceção — e não havia UMA linha consultável dizendo o
                         # que a IA respondeu. As duas rodadas (11 e 40 itens do
@@ -9973,7 +9973,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # a próxima rodada se diagnostica sozinha: itens=0 com
                         # stop=end_turn e resposta curta é o modelo DECIDINDO não
                         # emitir; resp_chars alto com itens=0 é parse perdendo.
-                        # 🚨 LACO DE REPETICAO (26/08/2026, caso Amanda).
+                        # 🚨 LACO DE REPETICAO (26/08/2026, caso cliente-16).
                         # Duas pranchas devolveram ZERO item com stop=max_tokens
                         # porque a IA somou bloco a bloco no raciocinio
                         # ("+1+1+1+1...") e nao escapou. O log dizia perdidos=0
@@ -10069,7 +10069,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         pass
                     # Libera o DXF convertido (temp dir arq_dxf_*) desta prancha —
                     # senão os N DXFs convertidos acumulam no /tmp do dyno durante o
-                    # job (leak achado na auditoria 06/07; caso Thamiry, 22 DWGs).
+                    # job (leak achado na auditoria 06/07; caso cliente-24, 22 DWGs).
                     #
                     # 🚨 O comentário antigo aqui dizia "o preview lê de work_dir,
                     # então é seguro" — e era FALSO. O DXF convertido de DWG nunca
@@ -10112,7 +10112,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # a chamada Claude falha (timeout/sobrecarga/JSON inválido) — retorna
         # {"items": [], "error": "..."}. Sem coletar isso aqui, o job terminava
         # "done" com planilha vazia e o usuário não sabia que houve falha.
-        # Bug Vinícius (2026-05-21): PDF processou em 17s, 0 itens, status done.
+        # Bug cliente-26 (2026-05-21): PDF processou em 17s, 0 itens, status done.
         sheet_errors: list[str] = []
 
         # Ordenar PDFs por prioridade (layout primeiro)
@@ -10155,7 +10155,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # 🪤 `has_cad` diz "veio DWG/DXF no envio", NÃO "sobrou CAD pra analisar".
         # Quando o DWG não converte (caso AEC/MEP), a faixa de análise CAD não roda —
         # e reservá-la mesmo assim dava 40 pontos de barra por trabalho que não
-        # aconteceu: o cliente via "55%" ainda na prancha 1/7 (caso Walter 29/07).
+        # aconteceu: o cliente via "55%" ainda na prancha 1/7 (caso cliente-30 29/07).
         # Só reserva a faixa se de fato houve DXF pra analisar.
         _cad_analisou = bool(dxf_paths)
         pdf_start_pct = (cad_end_pct if _cad_analisou else conv_end_pct) if has_cad else 5
@@ -10208,7 +10208,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         _pdfvec_area_m2 = 0.0
         _pdfvec_compr_m = 0.0
         _n_resgate_pdf = 0
-        # 🩸 31/08/2026 (caso Flavio) — A SOMA NÃO REPRESENTA NADA FÍSICO.
+        # 🩸 31/08/2026 (caso cliente-14) — A SOMA NÃO REPRESENTA NADA FÍSICO.
         # `_pdfvec_area_m2` acumula página a página, e num projeto de 16
         # pranchas do MESMO imóvel (alvenaria, layout, forro, climatização do
         # mesmo pavimento) é a mesma casa contada várias vezes: deu 741,8 m²
@@ -10314,7 +10314,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 try:
                     import subprocess as _sp, json as _jv, sys as _sysv
                     # 🩸 03/09/2026 — ESTE FILHO DERRUBOU O SERVIDOR DE TODOS.
-                    # Caso Edvaldo (job 7ddbccc1, PDF de 2,63 MB): a memória do
+                    # Caso cliente-23 (job 7ddbccc1, PDF de 2,63 MB): a memória do
                     # contêiner foi de 94,6 MB → 350,7 → 3.107,8 MB contra teto
                     # de 4 GiB, e o serviço ficou com ZERO instância por 2
                     # minutos (medido no Render, instance_count=0 às 12:33 e
@@ -10347,7 +10347,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         f"print(json.dumps(_measure_page(r'{pdf_path}', {page_index}, '')))"
                     )]
                     # 🔬 05/09/2026 — PASSO 1 do estudo do teto: NOMEAR A MORTE.
-                    # O filho do William (135fdfac) morreu com rc=-6 e stderr
+                    # O filho do cliente-39 (135fdfac) morreu com rc=-6 e stderr
                     # VAZIO: alocação falhando dentro de código C aborta mudo e
                     # pula todo try/except. `PYTHONFAULTHANDLER=1` faz o Python
                     # escrever a pilha no fd 2 sem alocar memória — exatamente na
@@ -10574,7 +10574,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                    f"n_paredes={_vm.get('n_walls') or 0} "
                                    f"err_paredes={(_vm.get('err_walls') or '-')[:60]})", job_id)
                 except Exception as _ve:
-                    # 🩸 31/08/2026 (caso Flavio) — A PERDA ERA SILENCIOSA.
+                    # 🩸 31/08/2026 (caso cliente-14) — A PERDA ERA SILENCIOSA.
                     # Duas pranchas de "Forro e Climatização" estouraram o
                     # timeout de 75 s do subprocesso. A prancha seguiu pra IA
                     # SEM geometria nenhuma, a medição parcial foi jogada fora,
@@ -10749,7 +10749,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         # perguntar "esse número parece alguma medição de alguma
                         # prancha?" — a cobertura do espaço de números plausíveis
                         # ia de 0,38% para 2,64% (5,70% com as 16 pranchas do
-                        # caso Flavio). Pior: preenchia com o número da prancha
+                        # caso cliente-14). Pior: preenchia com o número da prancha
                         # errada e, com a linha já preenchida, atropelava o passo
                         # 7, que usaria a prancha CERTA.
                         # 🪤 Tirar a soma não perde nada: em job de uma página
@@ -10863,7 +10863,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         all_items = _dedupe_by_block(all_items)  # funde itens do mesmo bloco CAD (anti-duplicação)
         all_items = _drop_nonsense_items(all_items)       # tira "seção transversal" e afins
         # ── SELO BRANCO NÃO VAI EM ITEM QUE A GENTE NÃO SABE O QUE É ────────
-        # 🩸 04/09/2026, olhando o 1º projeto da Caroline (Bolognesi): a planilha
+        # 🩸 04/09/2026, olhando o 1º projeto da cliente-22 (Bolognesi): a planilha
         # dela trazia "Equipamento não identificado — bloco CAD '1258C37_v'",
         # 1 un, com o selo ✓ MEDIDO DO CAD.
         # 🔑 Medido na base: 75 itens assim, 55 com o selo branco. E das 6 vezes
@@ -10932,7 +10932,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         if n_before != n_after:
             print(f"[consolidação] {n_before} → {n_after} itens ({n_before - n_after} consolidados)")
 
-        # ── Regras pós-consolidação (auditoria 2026-05-17 — projeto Yuri) ──
+        # ── Regras pós-consolidação (auditoria 2026-05-17 — projeto cliente-33) ──
         # 🅑 Dedup m² por layer (evita pisos duplicados somando > área do projeto)
         # 🅒 "Conforme projeto" / "a definir" → estimado obrigatório (regra dura #1)
         # 🅓 "Fundido"/"Consolidado de N entradas" → estimado obrigatório
@@ -11003,7 +11003,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             except Exception as e:
                 print(f"[densidade] Erro no check de anomalia: {e}")
 
-        # ── SALVAMENTO DE LAYOUT (20/07, caso Catarina) ──
+        # ── SALVAMENTO DE LAYOUT (20/07, caso cliente-21) ──
         # Antes de declarar "0 itens = falha": uma planta de ESTUDO DE LAYOUT
         # (interiores, sem quadro de áreas) é legível mas não rende item clássico
         # — a IA rodava de boa e devolvia vazio → erro. Só que a prancha tem
@@ -11040,21 +11040,21 @@ bloco — só cite os que estão no inventário deste arquivo."""
                       f"esquadrias ({len(_salv)} tipos) + {_n_ai} itens de contagem visual")
 
         # ── Resultado vazio: NÃO marcar "done" silencioso ──
-        # Bug Vinícius (2026-05-21): 1 PDF processou em 17s, 0 itens, status
+        # Bug cliente-26 (2026-05-21): 1 PDF processou em 17s, 0 itens, status
         # done. Usuário (1º projeto, grátis) recebeu planilha vazia achando
         # que "concluiu". Planilha com 0 itens é SEMPRE falha — qualquer
         # prancha de arquitetura real tem ao menos paredes/piso/forro.
         # Distingue 2 causas pra orientar o usuário com mensagem certa:
         if len(all_items) == 0:
             # EXCEÇÃO — COMPLEMENTO (/add-file) sobre projeto que já tem planilha:
-            # a regra "0 itens = falha" vale pro projeto NORMAL (bug Vinícius). Num
+            # a regra "0 itens = falha" vale pro projeto NORMAL (bug cliente-26). Num
             # complemento, o arquivo anexado não rendeu nada mas a planilha anterior
             # segue intacta (_persist_items_to_supabase só troca os itens no sucesso).
             # Marcar erro aqui sumia a planilha da tela e mandava email de falha pra
             # quem não perdeu nada — mesmo bug que o guard do DWG inválido conserta,
             # só que por outra porta. Restaura 'done' + aviso; nunca marca erro.
             if is_complement and _complement_base_has_items(job_id):
-                # 05/09 (William, 19:24): o texto mora em `_aviso_complemento_sem_itens`
+                # 05/09 (cliente-39, 19:24): o texto mora em `_aviso_complemento_sem_itens`
                 # — três situações, três verdades (nada entrou / não consegui ler /
                 # lido sem item). Aqui dizia "foi lido" com `file_paths` VAZIO.
                 _warn_zero = _aviso_complemento_sem_itens(
@@ -11187,7 +11187,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # ── Falha PARCIAL: vieram itens, mas pranchas/DXF falharam ──
         # O guard acima só pega o caso de ZERO itens. Se sobram itens mas uma
         # disciplina inteira caiu por um pico passageiro da IA, o usuário recebia
-        # planilha que PARECE completa (bug Vinícius ainda meio aberto).
+        # planilha que PARECE completa (bug cliente-26 ainda meio aberto).
         # DWG que falhou mas tem PDF IRMÃO no mesmo job (mesmo nome-base):
         # a prancha NÃO está perdida — entrou pela leitura do PDF. Caso real
         # 19/07 (validação estrutural): FORMA.dwg falhou na conversão, mas
@@ -11268,7 +11268,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         partial_errors = (sheet_errors or []) + (dxf_errors or []) + _dwg_failed_msgs
         partial_failure = bool(partial_errors)
         if partial_failure:
-            # 🪤 24/08 (caso Alan): saia daqui "3073-AQ-E_libredwg.dxf". Ele
+            # 🪤 24/08 (caso cliente-19): saia daqui "3073-AQ-E_libredwg.dxf". Ele
             # mandou "3073-AQ-E.dwg" — o "_libredwg.dxf" e artefato NOSSO de
             # conversao. O cliente procura na pasta dele um arquivo que nao
             # existe e conclui que a gente leu outra coisa.
@@ -11361,7 +11361,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # 📊 GRAVAR COMO A ÁREA FOI ESCOLHIDA — sempre, mesmo com 1 voto ou zero.
         # Até 10/08 isso só existia como `print` que nem sequer disparava quando
         # as leituras concordavam, e `error_log` tinha ZERO linha de consenso.
-        # Resultado prático: no projeto DWG da Amanda (fa371b0c) a área saiu 68,2
+        # Resultado prático: no projeto DWG da cliente-16 (fa371b0c) a área saiu 68,2
         # m² pra uma escola de 9 salas e eu não consigo dizer de onde veio — as
         # leituras da rodada não existem em lugar nenhum.
         # 🚨 É INSTRUMENTO, não conserto: não melhora um número sozinho. Serve pra
@@ -11381,7 +11381,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 print(f"[consenso-area] log de {_fld} falhou (nao-fatal): {_eca}")
         # ÁREA INFORMADA PELO CLIENTE (campo no upload): só usa como base quando a
         # planta NÃO deu área nenhuma (típico de estudo de layout sem cota, ex.
-        # Catarina). Geometria/leitura da própria planta SEMPRE tem prioridade —
+        # cliente-21). Geometria/leitura da própria planta SEMPRE tem prioridade —
         # a área do cliente nunca sobrescreve o que a planta forneceu. Rótulo
         # 'informado' faz a planilha dizer "informada por você, não medida"
         # (regra dura nº1: não é medição nossa, segue tratada como base a conferir).
@@ -11437,7 +11437,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # Ele dizia "Ela entra como BASE pros itens de área", e é escrito
             # AQUI, antes de `_apply_area_honesty` decidir. Só que aquele ramo
             # exige `pdfvec_m2 <= 0`: se a geometria mediu, a área informada NÃO
-            # é usada. Caso Luana Oliveira (job bf72d192, hoje): informou 150 m²,
+            # é usada. Caso cliente-31 Oliveira (job bf72d192, hoje): informou 150 m²,
             # as 10 pranchas mediram, `preenchidos=0` — e ela recebeu o aviso
             # dizendo que os 150 viraram base. Zero itens com 150, zero itens
             # dizendo "informado por você". Ela ia procurar e não ia achar.
@@ -11561,7 +11561,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 pass
 
         # ── REGRA DURA Nº1: ESCALAS QUE DISCORDAM DENTRO DO MESMO JOB ────────
-        # 🩸 Caso Amanda (349e75a5, 10/08): o mesmo projeto lido em 0.001 (mm),
+        # 🩸 Caso cliente-16 (349e75a5, 10/08): o mesmo projeto lido em 0.001 (mm),
         # 0.0254 (POLEGADAS) e 1.0 (metros). Uma prancha em polegadas entregou
         # "Condutos no teto = 9,92 ml ✓ MEDIDO do CAD" — se o desenho é mm o
         # certo seria 0,39 m, se é metro seria 390 m. Nas duas hipóteses o número
@@ -11636,7 +11636,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             print(f"[admin-local] nao-fatal: {_eal}")
 
         # ── PAREDE MENOR QUE O PERÍMETRO POSSÍVEL (regra nº1) ───────────────
-        # 🩸 04/09/2026, no 1º projeto da Caroline (Bolognesi): 17,18 m de
+        # 🩸 04/09/2026, no 1º projeto da cliente-22 (Bolognesi): 17,18 m de
         # parede numa casa de 46,79 m². O mínimo geométrico — o perímetro do
         # quadrado de mesma área — é 27,36 m. Faltam 59%, e isso IGNORANDO as
         # paredes internas. Dessa metragem saíram a alvenaria (44,67 m²), o
@@ -11656,7 +11656,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             except (TypeError, ValueError):
                 _area_ref = 0.0
             # 🩸 04/09, rodando o conserto num arquivo REAL (filhote `ev6edc7e`
-            # da Caroline): o guarda NÃO disparou, porque naquela rodada a
+            # da cliente-22): o guarda NÃO disparou, porque naquela rodada a
             # parede saiu só em **m²**. O motor não é determinístico — o MESMO
             # arquivo deu "17,18 ml" numa rodada e "44,67 m²" na outra. Guarda
             # que depende da FORMA do item guarda metade das vezes.
@@ -11680,7 +11680,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # 🚨 04/09 — A SOMA DA EXTRAÇÃO NÃO ENTRA NA COMPARAÇÃO, e isto é o
             # conserto de um erro MEU do mesmo dia. Eu tinha acabado de
             # acrescentá-la como "terceira fonte", achando que era a medida
-            # robusta. MEDI no arquivo da Caroline e o número desmentiu:
+            # robusta. MEDI no arquivo da cliente-22 e o número desmentiu:
             #
             #     layers_de_parede=31  soma=251,23 m  maior=ARQ_HAT(57,94 m)
             #
@@ -11693,7 +11693,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             # edifício". Não serve de piso pra nada.
             # 🔑 O que o número ENSINA (e por isso o log fica): a geometria das
             # paredes ESTÁ no desenho — 251 m —, mas o item usou só os 17,18 m
-            # do layer chamado `PAREDES`. O defeito da Caroline não é leitura
+            # do layer chamado `PAREDES`. O defeito da cliente-22 não é leitura
             # que falhou, é ESCOLHA DE LAYER: as paredes dela não estão todas
             # no layer que se chama PAREDES. Isso é outro conserto, e agora tem
             # dado pra fazê-lo.
@@ -11732,7 +11732,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 project_data.warnings = (getattr(project_data, "warnings", None) or []) + [
                     # 🩸 04/09, MESMO DIA: a 1ª redação afirmava "provavelmente
                     # está num layer que o motor não reconheceu". Fui MEDIR os
-                    # layers do arquivo da Caroline pra provar isso e o dado
+                    # layers do arquivo da cliente-22 pra provar isso e o dado
                     # DERRUBOU a frase — os outros 234 m estão em ARQ_HAT
                     # (hachura), ARQ_VISTA00/01/02 (as fachadas, 50 m de
                     # elevação e não de planta), ARQ_ESQUADRIA e Camada 1. A
@@ -11762,7 +11762,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # "tudo que rebaixa selo já rodou". **Deixou de ser verdade no mesmo dia**:
         # eu acrescentei o rebaixamento por GRANDEZA do SINAPI, que roda ~19 s
         # DEPOIS daqui (ele espera as consultas de rede da tabela SINAPI).
-        # Resultado, no projeto b5693ca6 do cliente jssoliveira88: o e-mail dele
+        # Resultado, no projeto b5693ca6 do cliente cliente-03: o e-mail dele
         # afirmou "✓ 5 medido(s) direto do CAD" no cabeçalho e, três linhas
         # abaixo, "As medições saíram (6 item(ns) medido(s))". Dois números pro
         # mesmo fato, na mesma mensagem.
@@ -11831,20 +11831,20 @@ bloco — só cite os que estão no inventário deste arquivo."""
                        " || ".join(l[:160] for l in _linhas_esc), job_id)
 
         # ── ESTRUTURA SEM MEDIÇÃO NÃO PASSA POR LEVANTAMENTO (19/08/2026) ──
-        # Três casos medidos numa semana: Eduarda (16/08, NPS 2 — armadura,
+        # Três casos medidos numa semana: cliente-20 (16/08, NPS 2 — armadura,
         # concreto e fôrma ZERADOS), Silveira (14/08 — 0 medido, digitou
         # 100/500/1500 kg na mão), Elizeu (18/08, orçamentista — 10 itens TODOS
         # "Estimativa por índice": 310 m² × 25 kg/m² = 7.759 kg de tabela).
         # O selo laranja e a fórmula na observação JÁ existem item a item; o que
         # faltava era o aviso de TOPO dizendo o conjunto: "nada de estrutura
         # aqui foi medido do desenho, e é ESTE arquivo que falta". Sem isso, o
-        # cliente descobre sozinho (a Eduarda levou 2h pra achar que faltava a
+        # cliente descobre sozinho (a cliente-20 levou 2h pra achar que faltava a
         # prancha de armação — e deu nota 2).
         # 🪤 Aviso ADITIVO: nenhuma quantidade nem selo muda (regra dura nº1).
         # 🪤 Só project_type=estrutura, onde a dor foi medida. Não generalizar
         # pra arquitetura sem medir de novo.
         # 🪤 Basta 1 item confirmado pra NÃO disparar: estacas medidas por bloco
-        # (caso Eduarda, hipótese confirmada) são medição de verdade.
+        # (caso cliente-20, hipótese confirmada) são medição de verdade.
         if is_structural and all_items:
             # 🪤 Confidence é Enum(str): `str(enum)` dá "Confidence.CONFIRMADO",
             # NUNCA "confirmado" — meu contador original não achava confirmado
@@ -11912,7 +11912,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                   "espessura de laje", "altura não", "altura nao")
                 _falta_altura = any(_m in _obs_todas for _m in _MARCAS_ALTURA)
                 # A dica do pé-direito existia só pro pilar CONTADO em 'un'. No
-                # caso Edvaldo a IA dobrou os 50+ pilares dentro da linha de
+                # caso cliente-23 a IA dobrou os 50+ pilares dentro da linha de
                 # fôrma em m², então a dica não disparou — justo pra quem ela foi
                 # escrita. Agora basta o motor ter dito que falta a altura.
                 _dica_pd = (
@@ -11957,7 +11957,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
         # ── HONESTIDADE DE ÁREA (regra dura nº1) — helper _apply_area_honesty ──
         # Vision (PDF) às vezes CHUTA metragem numa planta sem cota ("Forro Sala 52 m²")
-        # — número que parece medido mas é inventado (caso Catarina 20/07): ZERA.
+        # — número que parece medido mas é inventado (caso cliente-21 20/07): ZERA.
         # PORÉM, se o cliente INFORMOU a área (no upload ou depois), os itens de
         # piso/forro/laje recebem essa área como ESTIMADO rotulado "informado por
         # você" — completar os itens com base honesta, sem fingir medição. O m²
@@ -12016,7 +12016,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             pass              # job sem PDF
 
         # 🩸 31/08/2026 — A PRANCHA QUE NÃO DEU TEMPO DE MEDIR TEM QUE APARECER.
-        # No caso Flavio, 2 das 16 pranchas estouraram o tempo da medição
+        # No caso cliente-14, 2 das 16 pranchas estouraram o tempo da medição
         # geométrica. Elas foram lidas mesmo assim (pela IA), mas SEM geometria
         # — e na planilha isso é indistinguível de "essa prancha não tinha o
         # que medir". O cliente merece saber em qual arquivo olhar.
@@ -12080,7 +12080,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
             medicao_incompleta=bool(_pdfvec_falhas_flag))
         # 🩸 02/09 — O DESTINO DA ÁREA INFORMADA VIRA AVISO **DEPOIS DE ACONTECER**.
         # O aviso antigo, escrito lá atrás, prometia "ela entra como BASE pros
-        # itens de área" antes de esta função decidir — e no job da Luana ela
+        # itens de área" antes de esta função decidir — e no job da cliente-31 ela
         # não entrou em nada (`preenchidos=0`), porque a geometria mediu e o
         # ramo da área informada exige justamente que ela NÃO tenha medido.
         # 🔑 Agora o cliente lê o que aconteceu de verdade, nos dois casos:
@@ -12263,7 +12263,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                            f"informado={_uprazo} administracao_preenchida={_n_adm}", job_id)
         except Exception as _epz:
             _log_error("motor:prazo-informado", f"FALHOU: {_epz}", job_id)
-        # Coerência de unidade (caso Rafael 01/08): item CONTÁVEL (condulete,
+        # Coerência de unidade (caso cliente-40 01/08): item CONTÁVEL (condulete,
         # tomada, ponto...) com unidade linear/área não pode ficar CONFIRMADO —
         # a quantidade veio de outra medição pendurada na linha errada.
         try:
@@ -12498,7 +12498,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # quando a grandeza suspeita é a NOSSA: aí o número é de
                     # outra coisa, e "✓ MEDIDO" afirma justamente que ele é
                     # deste item. É o caso "Ripas de madeira 1,18 ml" da
-                    # Caroline, contra um serviço medido em m².
+                    # cliente-22, contra um serviço medido em m².
                     if _tipo_cu == "grandeza":
                         _cfu = str(getattr(getattr(_it_u, "confidence", None), "value",
                                            getattr(_it_u, "confidence", "")) or "")
@@ -12783,7 +12783,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # saber. Roda AQUI de propósito: `_persist_items_to_supabase` acabou de
         # arquivar a versão velha, e os warnings só vão pro banco na linha ~6990
         # — é a única janela em que os dois números existem juntos.
-        # Caso Amanda (349e75a5, 10/08): 47 medidos viraram 28 numa releitura dos
+        # Caso cliente-16 (349e75a5, 10/08): 47 medidos viraram 28 numa releitura dos
         # MESMOS arquivos, e o e-mail automático anunciou "planilha atualizada".
         try:
             _n_med_versao = sum(
@@ -13012,7 +13012,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _proximos_c = _next_steps_html(job_id, _n_med_c, len(all_items), _n_cad_c == 0 and _n_pdf_c > 0)
                     # 🚨 A releitura pode sair PIOR (motor não-determinístico). Não
                     # anunciar "atualizada" como se fosse melhora quando não foi —
-                    # caso Amanda 10/08: 47 medidos viraram 28 e o e-mail comemorou.
+                    # caso cliente-16 10/08: 47 medidos viraram 28 e o e-mail comemorou.
                     _cmp_c = _comparar_com_versao_anterior(job_id, _n_med_c, len(all_items))
                     # 🚨 25/08: aqui era `bool(_cmp_c.get("perdeu_medidos"))` e
                     # ignorava a queda de LINHAS. No job 6e9649a7 a releitura foi
@@ -13098,7 +13098,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # Antes: mudo (anti-spam). Agora: email PRÓPRIO de reprocesso, 1x por
                 # job (dedup em email_auto_log). Fecha o buraco onde o cliente
                 # reprocessava (ou a gente resgatava) e ninguém avisava — caso
-                # Thamiry 06/07. Automação decidida com o Pedro em 07/07.
+                # cliente-24 06/07. Automação decidida com o Pedro em 07/07.
                 if _email_auto_ja_enviado(_pe, "reprocesso_pronto", ref=job_id):
                     print(f"[email] reprocesso-pronto já enviado pra este job — pulando")
                 else:
@@ -13145,7 +13145,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _aviso_html = (f"<br><br><b>&#9888; Atenção:</b> {len(partial_errors)} prancha(s) "
                                    f"não entraram — a planilha pode estar incompleta.{_rep}")
                 # DWG que não abriu: o cliente PRECISA saber, senão ele acha que o
-                # resultado fraco é o normal do produto. Caso Walter 29/07 — mandou
+                # resultado fraco é o normal do produto. Caso cliente-30 29/07 — mandou
                 # 1 DWG + 7 PDF, o DWG não converteu, e o email não dizia uma palavra.
                 if dwg_failed:
                     import html as _hesc
@@ -13194,10 +13194,10 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 # "ATENÇÃO — Item placeholder" e o e-mail "sua planilha do AI.arq
                 # está pronta". Anunciar isso como entrega é pior que dizer que
                 # não deu — o cliente abre esperando planilha.
-                # A trava do guard de 0 itens (Vinícius 21/05) não pega este
+                # A trava do guard de 0 itens (cliente-26 21/05) não pega este
                 # caso: tem item, o que não tem é número.
                 # 🚨 AFROUXADO EM 11/08/2026, com medição. A versão anterior
-                # exigia zerado == TODOS, e o lpleonardo (97392e5b) mostrou o
+                # exigia zerado == TODOS, e o cliente-10 (97392e5b) mostrou o
                 # custo: 29 itens, ZERO medidos, 27 zerados — **dois itens com
                 # número desligaram a proteção inteira**. Ele recebeu "sua
                 # planilha está pronta" pra uma planilha com 93% das linhas em
@@ -13205,13 +13205,13 @@ bloco — só cite os que estão no inventário deste arquivo."""
                 #
                 # 🔑 Quem protege contra falso positivo é o `_n_med == 0`, NÃO a
                 # exigência de 100%: projeto com UMA medição do CAD já escapa.
-                # A escola da Amanda (84 zeradas, planilha legítima) tem 28
+                # A escola da cliente-16 (84 zeradas, planilha legítima) tem 28
                 # medidos — nunca cairia aqui, nem antes nem agora.
                 #
                 # Conferido sobre todos os `done` não-eval: a 80% passam a ser
                 # pegos 4 casos históricos (93%, 92%, 88%, 86% de linhas em
-                # branco, todos com ZERO medição) + o Leonardo. Os de 76% pra
-                # baixo ficam de fora, inclusive o estudo de layout da Catarina
+                # branco, todos com ZERO medição) + o cliente-37. Os de 76% pra
+                # baixo ficam de fora, inclusive o estudo de layout da cliente-21
                 # (60%), que é entrega legítima de planta sem cota.
                 _LIMITE_BRANCO = 0.8
                 # 🩸 03/09/2026 — a condição olhava só o SELO. `_n_med == 0`
@@ -13239,7 +13239,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
                                f"— e-mail trocado por 'não consegui medir'", job_id)
                 elif _n_med == 0 and len(all_items) > 0:
-                    # 🩸 06/09/2026 — O CASO DO MEIO, visto AO VIVO. O Devair
+                    # 🩸 06/09/2026 — O CASO DO MEIO, visto AO VIVO. O cliente-15
                     # recebeu "sua planilha está pronta" com 124 itens e ZERO
                     # medidos: a irmã de má notícia acima só sai com ≥80% das
                     # linhas EM BRANCO, e ali eram 43% — as outras tinham
@@ -13394,7 +13394,7 @@ async def _stream_upload_to_disk(upload_file, file_path, *, head_bytes=16, chunk
 def _formato_cad_pelo_conteudo(path: str) -> Optional[str]:
     """'dwg', 'dxf' ou None — pelo CONTEÚDO do arquivo, não pelo nome.
 
-    🩸 05/09/2026, caso William (job 8b7a2b71, engenheiro de orçamento vindo
+    🩸 05/09/2026, caso cliente-39 (job 8b7a2b71, engenheiro de orçamento vindo
     do Google): mandou HNSC-...-A01-R02.dxf de 5,4 MB. O arquivo começa com
     `AC1024` — é um DWG do AutoCAD 2010 com a extensão trocada. A gente
     decidia o caminho só pelo nome, jogou o DWG no leitor de DXF, e ele morreu
@@ -13425,7 +13425,7 @@ def _formato_cad_pelo_conteudo(path: str) -> Optional[str]:
 def _aviso_complemento_sem_itens(lidos, falhas_leitura):
     """Texto do aviso quando um COMPLEMENTO (/add-file) termina com 0 itens e a
     planilha anterior é mantida. Três situações, três verdades diferentes:
-      • nada entrou na leitura (lista vazia) — 05/09, William, 19:24: as duas
+      • nada entrou na leitura (lista vazia) — 05/09, cliente-39, 19:24: as duas
         regras do anexo se anularam, e o aviso dizia "foi lido" com o nome
         virando "o arquivo";
       • entrou, mas a leitura FALHOU (dxf_errors/sheet_errors) — "não consegui ler";
@@ -13471,7 +13471,7 @@ def _escolher_cads_do_anexo(cads, job_id: str):
     """Quais CADs do anexo (/add-file) entram no reprocesso — pelo CONTEÚDO
     primeiro, pelo nome depois. Devolve (cads_escolhidos, avisos_pro_cliente).
 
-    🩸 05/09/2026, William, 3º anexo do dia (19:24). O anexo tinha a regra
+    🩸 05/09/2026, cliente-39, 3º anexo do dia (19:24). O anexo tinha a regra
     "DXF vence o DWG do mesmo nome", julgada pelo NOME: um .dxf que era DWG
     renomeado "venceu" o .dwg de verdade e o jogou fora. Em seguida, no
     process_job, a checagem pelo conteúdo viu que o "DXF" era DWG com o irmão
@@ -13506,7 +13506,7 @@ def _normalizar_extensao_cad(cad_paths, job_id: str):
     Storage, passam por aqui de novo.
 
     Colisão (x.dwg real + x.dxf que é o MESMO DWG renomeado — foi exatamente
-    o 2º envio do William, que anexou o .dwg de verdade depois): a cópia
+    o 2º envio do cliente-39, que anexou o .dwg de verdade depois): a cópia
     renomeada é descartada, não processada duas vezes — duplicar prancha
     dobraria as quantidades, que é pior que perder a cópia. E a regra
     "DXF supera DWG do mesmo nome" logo abaixo deixa de apagar o DWG bom por
@@ -13566,7 +13566,7 @@ def _saida_do_filho_pdfvec(rc, vm) -> tuple:
 
     Devolve (tipo, detalhe): tipo é "memoria", "sem_escala" ou None.
 
-    🔬 05/09/2026 (estudo do teto, passo 6 + o que a A08 do William custou):
+    🔬 05/09/2026 (estudo do teto, passo 6 + o que a A08 do cliente-39 custou):
     - "memoria": rc=0 mas alguma etapa engoliu um MemoryError (o try/except por
       etapa segura a falha quando ela cai em Python/GEOS — medido: FORRO com
       teto de 1,5 GB devolveu rc=0 e JSON parcial com err_views/err_rooms
@@ -13574,7 +13574,7 @@ def _saida_do_filho_pdfvec(rc, vm) -> tuple:
       o oposto do que o comentário do teto prometia.
     - "sem_escala": rc=0 e o filho pulou por falta de escala (viewport, carimbo,
       cota). Não deixava NENHUMA linha na promoção — só a sombra anotava. Duas
-      tentativas na A08 do William pra descobrir que era o cache do carimbo.
+      tentativas na A08 do cliente-39 pra descobrir que era o cache do carimbo.
     Só classifica; quem grava e avisa é o chamador.
     """
     if rc != 0 or not isinstance(vm, dict) or not vm:
@@ -13601,7 +13601,7 @@ _RX_NEGACAO_ANTES = None
 def _nome_parece_estrutural(nome: str) -> bool:
     """O nome do arquivo tem cara de projeto ESTRUTURAL — e NÃO está negado.
 
-    🩸 02/09/2026, primeira cliente do dia (Karina, TEKOA): mandou
+    🩸 02/09/2026, primeira cliente do dia (cliente-27, TEKOA): mandou
     "..._EXE_REV01_SEM ESTRUTURAL.pdf" e recebeu no envio o aviso "esses
     arquivos parecem de projeto ESTRUTURAL". O regex achava `estrut` e não lia
     o "SEM" na frente. Medido: foi a ÚNICA vez que esse aviso disparou desde
@@ -13617,7 +13617,7 @@ def _nome_parece_estrutural(nome: str) -> bool:
     import re as _re
     if _RX_ESTRUT_NOME is None:
         # 🩸 03/09/2026 — SEGUNDA VEZ QUE ESTE AVISO DISPARA, E A SEGUNDA
-        # ERRADA. Cliente `v.anjos.ia.81@` mandou
+        # ERRADA. Cliente `cliente-11@` mandou
         # "CIQUANTA-CABEAMENTO ESTRUTURADO.dwg" e foi avisado de que parecia
         # projeto estrutural. Cabeamento ESTRUTURADO é rede de dados; o pedaço
         # solto `estrut` casava com "estruturado".
@@ -13674,7 +13674,7 @@ def _recusa_no_upload(status: int, mensagem: str, motivo: str,
     subiram projeto: no banco, **"tentou e a gente recusou" e "nunca tentou"
     são a mesma coisa**. A investigação inteira esbarrou nisso e teve que
     escrever "indeterminado" caso após caso. Já existe um cliente
-    (`thallisson.producao@`) que mandou o POST e sumiu — hoje ele conta como
+    (`cliente-01@`) que mandou o POST e sumiu — hoje ele conta como
     "desistiu".
 
     🔑 Isto não conserta o funil; conserta a nossa capacidade de MEDIR o funil.
@@ -13921,7 +13921,7 @@ async def process_files(
         # Grava em disco em pedaços (não bufferiza o arquivo inteiro na RAM).
         n_written, head = await _stream_upload_to_disk(upload_file, file_path)
 
-        # Validação de integridade (Bug Rafael 2026-05-04: DWG chegou
+        # Validação de integridade (Bug cliente-40 2026-05-04: DWG chegou
         # truncado e backend processou sem detectar, gerando planilha vazia)
         if upload_file.size and n_written != upload_file.size:
             try: os.remove(file_path)
@@ -14600,7 +14600,7 @@ async def respostas_processamento(job_id: str, request: Request):
     zeradas, medido nas revisões reais da semana —
     - pé-direito  → pintura/revestimento/alvenaria em m² (Giovani informou
       3,73 e a pintura saiu 597 m² no filhote);
-    - área total  → base honesta quando a planta não mede (caso Catarina);
+    - área total  → base honesta quando a planta não mede (caso cliente-21);
     - prazo (meses) → administração local (Giovani digitou 12 nas DUAS
       planilhas — só o cliente sabe o prazo).
 
@@ -14780,7 +14780,7 @@ def notify_welcome(request: Request):
     # Cliente antigo (ou perfil sem data confiável): não manda nada.
     if not is_new:
         return {"status": "ok", "sent": False, "reason": "not_new"}
-    # 🚨 24/08/2026 (caso Alan): o ÚNICO portão aqui era "conta criada há menos
+    # 🚨 24/08/2026 (caso cliente-19): o ÚNICO portão aqui era "conta criada há menos
     # de 1h". O guard do frontend é localStorage, ou seja, POR NAVEGADOR — duas
     # abas, um refresh ou outro browser na primeira hora mandam o boas-vindas de
     # novo. Ele recebeu às 19:28 e às 19:30, dois minutos de diferença, no
@@ -14803,7 +14803,7 @@ def notify_welcome(request: Request):
             # 🪤 Registra no email_auto_log com o MESMO kind/ref que o tick horário
             # usa pra deduplicar ("alerta_novo_cadastro"). Sem isso o Pedro recebe
             # DOIS alertas da mesma pessoa: este (imediato) e o do tick, até 1h
-            # depois — foi o que aconteceu com o cliente Walter em 29/07.
+            # depois — foi o que aconteceu com o cliente cliente-30 em 29/07.
             # Os dois existem de propósito e se completam: este é imediato mas só
             # dispara quando a pessoa ABRE o painel; o do tick pega também quem
             # criou conta e nunca voltou. Quem chegar primeiro cala o outro.
@@ -15547,7 +15547,7 @@ def emails_auto_tick(request: Request, dry: int = 0):
     # cadastro ou parou no meio.
     # ⚠️ CORREÇÃO 29/07: o comentário aqui dizia que não existia alerta de cadastro
     # nenhum. Existia — o "Novo cliente cadastrado", disparado quando a pessoa abre
-    # o painel. Resultado: 2 e-mails pela mesma pessoa (caso Walter). Os dois ficam,
+    # o painel. Resultado: 2 e-mails pela mesma pessoa (caso cliente-30). Os dois ficam,
     # porque se completam — o imediato só dispara pra quem ABRE o painel, este pega
     # quem criou conta e sumiu. Agora aquele registra o mesmo kind/ref aqui embaixo,
     # então quem chegar primeiro cala o outro.
@@ -19817,7 +19817,7 @@ async def estimate_price(request: Request,
         #
         # O comentário original chamava o precheck de "barato". Não é.
         #
-        # 🎯 O caso que revelou: Maria Victoria (orçamentista, chegou pelo
+        # 🎯 O caso que revelou: cliente-18 (orçamentista, chegou pelo
         # ChatGPT, cadastrou 02:02 de 27/08) selecionou 17 arquivos. A CPU foi a
         # 100% de um núcleo, o site parou de responder na mão dela, ela tentou
         # de novo, e foi embora sem enviar nada. A sonda de vida do Render deu
@@ -20450,7 +20450,7 @@ async def agent_ask(request: Request, job_id: str, question: str = ""):
 
     try:
         from agent import ask
-        # 🧊 03/09/2026 — ESTA ROTA DERRUBOU O SITE. Cliente `v.anjos.ia.81@`
+        # 🧊 03/09/2026 — ESTA ROTA DERRUBOU O SITE. Cliente `cliente-11@`
         # (job eebe543a) mandou uma pergunta no chat às 15:07:36 BRT; às
         # 15:07:30–15:09 o `instance_count` do Render foi a ZERO e o e-mail de
         # "HTTP health check failed (timed out after 5 seconds)" chegou.
@@ -22298,7 +22298,7 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
     if action in ("edit", "reject"):
         _assinatura_invalidar(job_id)
         # 🚨 APRENDER SEM DEPENDER DO BOTÃO "CONCLUIR". Até 11/08/2026 a esteira
-        # só rodava no `/review-finalize`, e o cliente lpleonardo (97392e5b)
+        # só rodava no `/review-finalize`, e o cliente cliente-10 (97392e5b)
         # provou o custo: fez 57 ações e 28 correções REAIS de quantidade em 12
         # minutos, e foi embora sem clicar. As correções ficaram em
         # `item_reviews` e `revision_feedback` seguiu com ZERO linhas — a
@@ -22591,7 +22591,7 @@ async def rebuild_planilha_from_review(job_id: str, request: Request):
 class InformAreaPayload(BaseModel):
     area: float = 0
     # 🎯 26/08/2026 — O PÉ-DIREITO É O CAMPO QUE MAIS MUDA A PLANILHA, e esta
-    # rota (que existe desde o caso Catarina) só aceitava a ÁREA — justamente a
+    # rota (que existe desde o caso cliente-21) só aceitava a ÁREA — justamente a
     # que NÃO ajuda. Medido em 45 dias, % de linhas de área/comprimento que saem
     # em branco:
     #     não informou nada .......... 93 projetos ... 59,5%
@@ -22609,7 +22609,7 @@ class InformAreaPayload(BaseModel):
 def inform_project_area(job_id: str, payload: InformAreaPayload, request: Request):
     """Cliente informa a metragem DEPOIS do processamento, pra completar itens de
     área que ficaram em branco porque a planta não tinha cota de área (caso layout,
-    ex. Catarina). NÃO reprocessa do zero (sem custo de IA, sem re-erro): reaproveita
+    ex. cliente-21). NÃO reprocessa do zero (sem custo de IA, sem re-erro): reaproveita
     os itens já salvos, preenche as superfícies horizontais (piso/forro/laje) com a
     área informada — SEMPRE estimado (laranja) e rotulado 'informado por você, não
     medido' (regra dura nº1, via _apply_area_honesty) — e regenera a planilha in-place
@@ -23127,7 +23127,7 @@ async def submit_nps(payload: NPSPayload, request: Request):
     }
     ok = _supabase_insert("nps_responses", row)
     category = "promoter" if payload.score >= 9 else "passive" if payload.score >= 7 else "detractor"
-    # 🩸 31/08/2026 — ANTES daqui só o detrator avisava. O Marcelo deu 9 em
+    # 🩸 31/08/2026 — ANTES daqui só o detrator avisava. O cliente-13 deu 9 em
     # 24/08 com o comentário "Gostei muito do resultado" e o Pedro descobriu
     # em 31/08, sete dias depois, olhando o painel por acaso. Com 5 respostas
     # em toda a história, perder UMA é perder 20% do sinal.
@@ -23144,7 +23144,7 @@ _NPS_BOTOES_DO_PROJETO = {9: "👍 Ajudou bastante", 7: "😐 Mais ou menos",
 def _nps_rotulo(score, context: str) -> str:
     """O que a pessoa CLICOU — não o número que a gente guardou.
 
-    🩸 02/09/2026, caso Alan Vitor. Ele clicou "😐 Mais ou menos" na página do
+    🩸 02/09/2026, caso cliente-19. Ele clicou "😐 Mais ou menos" na página do
     projeto e o alerta chegou pro Pedro dizendo **"Nota: 7/10"**. O Pedro lê
     isso como "ele deu sete", quando o cliente disse "mais ou menos" — que é
     informação diferente e mais pobre.
@@ -23175,13 +23175,13 @@ def _nps_rotulo(score, context: str) -> str:
 def _alerta_nps(row: dict, category: str = "detractor"):
     """TODA nota vira e-mail interno na hora — em thread, best-effort.
 
-    Por que o detrator (16/08/2026): a Eduarda deu nota 2 às 19:18 e o Pedro só
+    Por que o detrator (16/08/2026): a cliente-20 deu nota 2 às 19:18 e o Pedro só
     viu olhando o painel por acaso. Detrator engajado é a janela de recuperação
     mais curta que existe — ela voltou 1h30 depois com as pranchas de armação;
     um alerta imediato teria posto o Pedro na conversa ANTES.
 
     🩸 Por que TODAS (31/08/2026): a regra era `if category == "detractor"`, e
-    promotor não avisava ninguém. O Marcelo deu **9 com comentário** em 24/08 e
+    promotor não avisava ninguém. O cliente-13 deu **9 com comentário** em 24/08 e
     o Pedro viu em 31/08 — 7 dias depois. Com 5 respostas em toda a história do
     produto, cada uma perdida é 20% do sinal. E promotor com comentário é a
     matéria-prima da página de cases, que está parada esperando depoimento.
@@ -23216,7 +23216,7 @@ def _alerta_nps(row: dict, category: str = "detractor"):
             if category == "detractor":
                 _assunto = f"🔴 {_rotulo} — detrator: {row.get('user_email') or 'sem e-mail'}"
                 _fecho = ("Detrator engajado responde melhor a contato pessoal RÁPIDO — "
-                          "a janela é de horas, não dias (caso Eduarda, 16/08).")
+                          "a janela é de horas, não dias (caso cliente-20, 16/08).")
             elif category == "promoter":
                 _assunto = f"🟢 {_rotulo} — promotor: {row.get('user_email') or 'sem e-mail'}"
                 _fecho = ("Promotor é a hora de pedir DEPOIMENTO — a página de cases está "
@@ -23534,7 +23534,7 @@ _TRACK_ALLOWED = {
     # Sem elas não dá pra saber se a planilha volta ou morre no caminho.
     "fin_lote_abriu", "fin_lote_modelo", "fin_lote_aplicou",
     # ── 06/09/2026 — Pedro: "vamos registrar TUDO no site, qq movimento de usuários" ──
-    # Gatilho: o William subiu 5 projetos, abriu a revisão 9× e a gente não sabia se ele tinha
+    # Gatilho: o cliente-39 subiu 5 projetos, abriu a revisão 9× e a gente não sabia se ele tinha
     # BAIXADO a planilha — o botão do painel não registrava. Métrica cega = decisão no escuro.
     # 🔒 LGPD: aqui entra a FORMA da ação (que botão, que aba, deu certo?), nunca o que o cliente
     # escreveu, o nome do arquivo dele ou valor em dinheiro.
@@ -23542,7 +23542,7 @@ _TRACK_ALLOWED = {
     "upload_ok",           # o projeto NASCEU (start_project é só "apertou processar")
     "agente_pergunta",     # o chat da IA custa dinheiro e não tinha 1 evento
     "nps_exibido",         # o DENOMINADOR: 5 avaliações na vida — ninguém vê ou ninguém responde?
-    "revisao_item_acao",   # confirmar/excluir item na revisão (o William abriu 9× e não agiu)
+    "revisao_item_acao",   # confirmar/excluir item na revisão (o cliente-39 abriu 9× e não agiu)
     "revisao_saiu",        # saiu da revisão sem terminar, e quanto sobrou
     "revisao_lote",        # confirmar/excluir uma seção inteira — com o que REALMENTE salvou
     "revisao_salvou_erro",  # o servidor recusou e a tela desfez na frente do cliente
@@ -24056,7 +24056,7 @@ async def admin_baixar_arquivo(job_id: str, request: Request, nome: str = ""):
     """ADMIN — baixa um ARQUIVO ORIGINAL do job direto do Storage.
 
     Por que existe (16/08/2026): investigar o motor exige o arquivo real do
-    cliente (caso Eduarda: ver o que os 504 ATTRIBs contêm; caso Giovani:
+    cliente (caso cliente-20: ver o que os 504 ATTRIBs contêm; caso Giovani:
     143 hachuras somando 0,00 m²). O caminho era o painel do Supabase à mão —
     a UI virtualizada resiste à automação e o /api/sheet só entende PDF
     (`_find_prancha_file` filtra .pdf). Sem `nome`, lista os arquivos do job.
@@ -24234,7 +24234,7 @@ async def reprocess_project(job_id: str, request: Request):
     # bloqueava (a tabela projects exige auth.uid() = user_id). Resultado:
     # rows=[] → falso 404 "Projeto original não encontrado", mesmo o usuário
     # sendo dono. Agora usa o JWT do request (mesmo padrão dos endpoints
-    # outros que sofreram do mesmo problema na onda Daniela 2026-05-18).
+    # outros que sofreram do mesmo problema na onda cliente-38 2026-05-18).
     auth_header = request.headers.get("Authorization", "") or request.headers.get("authorization", "")
     user_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else None
     try:
@@ -24856,7 +24856,7 @@ def _email_leitura_combinada(pai: dict, filho: dict, merge_job: str,
         nome, proj, merge_job, antes, depois, filho.get("warnings") or [])
     # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
     # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
-    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
+    # nunca ALIMENTAR ele. O conserto de 29/08 (caso cliente-20, 3 e-mails num dia)
     # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
     # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
     # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
@@ -25010,7 +25010,7 @@ def _email_leitura_nova(pai: dict, filho_job: str, antes: dict, depois: dict) ->
     subject, html = _build_leitura_nova_email(nome, proj, filho_job, antes, depois)
     # 🚨 31/08 (auditoria): o teto de "1 automático por pessoa por semana" é
     # lido de `email_auto_log`, e o caminho do filhote CONSULTAVA esse teto sem
-    # nunca ALIMENTAR ele. O conserto de 29/08 (caso Eduarda, 3 e-mails num dia)
+    # nunca ALIMENTAR ele. O conserto de 29/08 (caso cliente-20, 3 e-mails num dia)
     # fechou só metade da porta. Resultado vivo: o Pedro libera um filhote hoje,
     # a pessoa recebe "refizemos a leitura", e o tick da hora seguinte manda o
     # nps_relacional pra mesma pessoa — dois automáticos na mesma semana.
@@ -25234,12 +25234,12 @@ def admin_liberar_filhote(eval_job_id: str, request: Request):
         if _st != 200:
             return None
         _r = _r or []
-        # 24/08 (caso Alan): o e-mail dizia "147 -> 263 itens" quando o fato era
+        # 24/08 (caso cliente-19): o e-mail dizia "147 -> 263 itens" quando o fato era
         # "3 das suas 7 pranchas nao tinham entrado". Item e consequencia;
         # prancha e a causa, e e o que ele reclamaria. Conta as duas.
         _pr = {str((x or {}).get("ref_sheet") or "").strip()
                for x in _r if str((x or {}).get("ref_sheet") or "").strip()}
-        # 24/08: por PRANCHA tambem. O saldo do Alan e +59 medidos, mas a
+        # 24/08: por PRANCHA tambem. O saldo do cliente-19 e +59 medidos, mas a
         # prancha de eletrica dele CAIU de 77 para 49 medidos. Um e-mail que
         # diz so "melhoramos" e meia verdade — e meia verdade sobre a planilha
         # do cliente e o tipo de coisa que ele descobre sozinho e nao volta.
@@ -25449,7 +25449,7 @@ def _merge_juiza_prancha(prancha, itens_pai, itens_filho):
     """Lê as DUAS leituras da MESMA prancha e diz qual é mais fiel.
 
     Não é aritmética: a pergunta é de CONTEÚDO. O caso que motivou — a prancha
-    4366-EL-E do Alan tinha, na leitura original, 5 tipos de porta somando 38
+    4366-EL-E do cliente-19 tinha, na leitura original, 5 tipos de porta somando 38
     unidades (34 medidas do CAD); na releitura virou UMA linha "Portas internas",
     quantidade 0, estimado. A contagem também pegaria esse (77 x 49 medidos), mas
     o que o Pedro precisa ler é POR QUE.
@@ -25537,7 +25537,7 @@ def _merge_familia_aviso(texto: str) -> str:
     """Que TIPO de aviso e este. Duas leituras escrevem o MESMO fato com numeros
     diferentes — dedup por texto exato deixa os dois passarem.
 
-    🚨 25/08 (auditoria): o projeto combinado do Alan saiu com 11 avisos, sendo
+    🚨 25/08 (auditoria): o projeto combinado do cliente-19 saiu com 11 avisos, sendo
     6 pares que se contradiziam na cara dele:
         "li 162 itens"  x  "li 112 itens"   (mesma prancha)
         "94 medidos"    x  "157 medidos"    (e o real do merge e 179)
@@ -25597,7 +25597,7 @@ def _merge_avisos(pai: dict, filho: dict, plano: dict, medidos: int,
             # 🚨 25/08 (auditoria): aqui a quantidade era emparelhada com a
             # prancha ERRADA. As quantidades saiam de `linhas` (ordenadas por
             # tamanho) e as pranchas de `pranchas` (ordem alfabetica) — duas
-            # listas juntadas por POSICAO. No caso do Alan saiu
+            # listas juntadas por POSICAO. No caso do cliente-19 saiu
             #     "CFTV (17 + 13 + 1 em 3073-AQ-E, 4366-EL-E e 4366-LO-E)"
             # quando o 17 e da EL-E e o 13 e da AQ-E. Trocado, e o e-mail dele
             # ja tinha saido assim.
@@ -25634,7 +25634,7 @@ def _merge_avisos(pai: dict, filho: dict, plano: dict, medidos: int,
             # 3b. 🪤 Conselho VELHO viaja junto: os jobs de origem foram gerados
             # ANTES do conserto de 24/08 e ainda dizem "Reprocessar pode
             # completar a planilha" pro corte por tamanho. Reprocessar NAO
-            # resolve — na eletrica do Alan cortou 3 de 3 vezes, e a 3a deu
+            # resolve — na eletrica do cliente-19 cortou 3 de 3 vezes, e a 3a deu
             # MENOS. Copiar o texto velho seria reintroduzir o conselho que
             # gasta o unico reprocesso gratis do cliente por nada.
             if fam.startswith("corte"):
@@ -26011,7 +26011,7 @@ def admin_merge_criar(eval_job_id: str, request: Request):
              % (", ".join(do_pai) or "nenhuma", ", ".join(do_filho) or "nenhuma"))
     # 🚨 25/08 (auditoria): antes isto era a UNIÃO dos avisos dos dois jobs, com
     # dedup por texto exato. Como cada leitura escreve o mesmo fato com números
-    # diferentes, os dois passavam — e o Alan recebeu 11 avisos, 6 deles em pares
+    # diferentes, os dois passavam — e o cliente-19 recebeu 11 avisos, 6 deles em pares
     # que se contradiziam ("li 162 itens" x "li 112 itens"; "94 medidos" x "157
     # medidos", sendo 179 o número real). Um deles dizia que não havia área total
     # numa tela que mostrava a área.
@@ -26032,7 +26032,7 @@ def admin_merge_criar(eval_job_id: str, request: Request):
         "status": "done",
         # 🚨 25/08 (auditoria do dia): sem estes DOIS, a tela do cliente mostrava
         # "— itens" e "Concluído em: --" num projeto com 307 itens — enquanto o
-        # e-mail que a gente mandou dizia 307/179. O Alan recebeu assim.
+        # e-mail que a gente mandou dizia 307/179. O cliente-19 recebeu assim.
         # `items_count` e `completed_at` são o que a tela LÊ; o motor os grava no
         # fim do processamento, e o merge nasce pronto, sem passar por lá.
         # 🪤 Mesma família do bug do `origem`: gravado de um lado, lido do outro.
@@ -26517,7 +26517,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
     _cads = [p for p in file_paths if p.lower().endswith((".dwg", ".dxf"))]
     _avisos_ext = []
     if _cads:
-        # Conteúdo ANTES do nome — ver `_escolher_cads_do_anexo` (05/09, William:
+        # Conteúdo ANTES do nome — ver `_escolher_cads_do_anexo` (05/09, cliente-39:
         # a regra "DXF vence DWG do mesmo nome" pelo nome jogava fora o DWG bom
         # por causa de um .dxf que nem era DXF, e o reprocesso rodava com ZERO
         # arquivo). Caso forro MEP do Pedro (15/07) continua coberto: DXF de
@@ -26533,7 +26533,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         except Exception as _aex:
             print(f"[add-file] aviso de extensão {job_id}: {_aex}")
 
-    # 🚨 TRAVA ANTI-PERDA (caso Walter, 30/07/2026). O complemento refaz o projeto
+    # 🚨 TRAVA ANTI-PERDA (caso cliente-30, 30/07/2026). O complemento refaz o projeto
     # a partir do que está no STORAGE. Se o CAD original não subiu (o upload tem
     # timeout de 60s e falha em SILÊNCIO), sobram só os PDFs — e o passo final
     # APAGA os itens antigos antes de gravar os novos. Aconteceu de verdade: um
@@ -26599,7 +26599,7 @@ async def add_file_and_reprocess(job_id: str, request: Request, files: list[Uplo
         import html as _h5, threading as _th5
         _comp_str = ", ".join(f"{v} {k.upper()}" for k, v in _comp.items() if v > 0)
         # 🪤 05/09: esta linha listava `file_paths` — o que o motor DECIDIU
-        # processar — sob o título "anexados agora". O William anexou o .dwg
+        # processar — sob o título "anexados agora". O cliente-39 anexou o .dwg
         # duas vezes e o alerta disse ".dxf" nas duas. O que a pessoa mandou e
         # o que vai rodar são duas linhas, cada uma com o próprio nome.
         _novos = ", ".join(_h5.escape(n) for n in _enviados[:4]) or "—"
@@ -28524,7 +28524,7 @@ def admin_ficha_usuario(chave: str, request: Request):
     visao geral dentro do dashboard na aba usuarios"* e *"Tudo de produto,
     deixar isso claro na aba usuario pra poder ver tudo que foi feito"*.
 
-    Por que nasceu: em 24/08 o Marcelo deu NPS 9 com elogio e isso ficou 7 dias
+    Por que nasceu: em 24/08 o cliente-13 deu NPS 9 com elogio e isso ficou 7 dias
     invisivel. O painel tinha o dado — faltava um lugar onde a pessoa inteira
     aparecesse junta.
 

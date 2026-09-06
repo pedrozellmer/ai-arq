@@ -3,7 +3,7 @@
 
 🩸 03/09/2026. `_consolidate_by_type_code` funde o MESMO tipo de divisória
 (DRY 07, DW-12…) que aparece em várias pranchas: soma as quantidades e mantém
-UMA linha. A decisão é certa — o caso Thamiry tinha 191 itens de drywall
+UMA linha. A decisão é certa — o caso cliente-24 tinha 191 itens de drywall
 fragmentados, 156 zerados.
 
 **Esconder que fundiu é que não era.** Medido no acervo:

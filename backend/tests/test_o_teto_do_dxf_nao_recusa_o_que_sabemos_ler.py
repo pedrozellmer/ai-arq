@@ -43,7 +43,7 @@ def _pode(tam, livre):
 def test_o_arquivo_do_rafael_passa():
     """O caso que originou tudo: 376 MB, disco folgado."""
     assert _pode(_RAFAEL, 8 * GB), (
-        "o DXF de 376 MB do Rafael voltou a ser recusado antes do emagrecedor "
+        "o DXF de 376 MB do cliente-40 voltou a ser recusado antes do emagrecedor "
         "— medido, ele emagrece pra 34 MB e extrai em 19 s com 305 MB")
 
 
@@ -120,13 +120,13 @@ def test_CONTROLE_a_regra_antiga_REPROVARIA_neste_teste():
     """Prova que os testes acima medem a MUDANÇA, e não um sempre-verde.
 
     A regra antiga era literalmente "passou do teto, recusa". Se ela ainda
-    estivesse valendo, o teste do Rafael cairia.
+    estivesse valendo, o teste do cliente-40 cairia.
     """
     def regra_antiga(tam, teto, livre):
         return tam <= teto
     assert not regra_antiga(_RAFAEL, _TETO_ANTIGO, 8 * GB), (
         "o controle está errado: a regra antiga precisa REPROVAR o arquivo do "
-        "Rafael, senão os testes acima não estão medindo nada")
+        "cliente-40, senão os testes acima não estão medindo nada")
 
 
 def test_o_laco_usa_a_funcao_e_nao_uma_copia_da_regra():

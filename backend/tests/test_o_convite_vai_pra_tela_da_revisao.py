@@ -194,7 +194,7 @@ def test_o_sucesso_registra_QUANTAS_linhas_foram_preenchidas():
 
 
 def test_a_mensagem_diz_o_que_ACONTECEU_nao_o_que_era_esperado():
-    """🪤 O aviso que a Luana leu prometia que a área 'entra como base' e a
+    """🪤 O aviso que a cliente-31 leu prometia que a área 'entra como base' e a
     regra impedia. Aqui a mensagem lê `filled_count`, que é o fato."""
     js = _js("submitConviteArea")
     assert "data.filled_count" in js, "a mensagem não lê o que o servidor fez"

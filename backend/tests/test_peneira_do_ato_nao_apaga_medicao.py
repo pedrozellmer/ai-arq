@@ -2,7 +2,7 @@
 """A peneira do ATO de intervenção não pode apagar medição que já existe.
 
 🩸 31/08/2026 — BUG MEU, ACHADO PELA AUDITORIA DO MESMO DIA (algumas horas
-depois de eu subir). Pra consertar o caso Flavio ("Rasgo em laje para nova
+depois de eu subir). Pra consertar o caso cliente-14 ("Rasgo em laje para nova
 escada" herdando os 400 m² que o cliente digitou) eu acrescentei as palavras do
 ATO — rasgo, abertura, vão, furo, recorte, demoli, remoç, shaft — dentro de
 `FLOOR_AREA_BLOCK_KW`.
@@ -68,7 +68,7 @@ def test_a_linha_nao_pode_dizer_MEDIDO_e_NAO_MEDIDA_ao_mesmo_tempo():
 
 def test_CONTROLE_o_rasgo_continua_SEM_herdar_a_area_informada():
     """O conserto de hoje não pode ser desfeito: quem CRIA número segue
-    bloqueando o ato. É o item do caso Flavio."""
+    bloqueando o ato. É o item do caso cliente-14."""
     it = _Item("Rasgo em laje de concreto armado para implantação de nova escada",
                "m²", 0)
     main._apply_area_honesty([it], total_area=400, total_area_source="informado")

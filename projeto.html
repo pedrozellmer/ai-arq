@@ -1161,7 +1161,7 @@ async function carregarStatsEntregas() {
     };
     enableLink('btn-review', `revisao.html?job_id=${jobId}`);
     // btn-download: NÃO usa enableLink porque <a href> não envia Authorization
-    // header → backend retorna 401 (bug Daniela 2026-05-18). Habilitamos o botão
+    // header → backend retorna 401 (bug cliente-38 2026-05-18). Habilitamos o botão
     // e disparamos download programático via fetch+blob.
     const btnDownload = document.getElementById('btn-download');
     if (btnDownload) {
@@ -1476,7 +1476,7 @@ function mostrarProcessando(live, session, pmeta) {
       if (_c) _c.classList.add('hidden');
     }
   } catch (_) {}
-  // 23/08/2026 (Tammyres): ela informou o pé-direito NO ENVIO e a tela pediu de
+  // 23/08/2026 (cliente-25): ela informou o pé-direito NO ENVIO e a tela pediu de
   // novo, com o campo vazio — parecia que o dado tinha sido ignorado. Agora o
   // que já veio informado aparece preenchido e travado, com "informado no envio";
   // se os três já vieram, o card some.
@@ -2757,7 +2757,7 @@ function renderMetrics(p, items) {
   const setKpi = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   setKpi('kpi-itens', _nItensTxt);          // mesma verdade do bloco acima
   setKpi('kpi-medido', _total > 0 ? `${Math.round((_medido / _total) * 100)}%` : '--');
-  // 🚨 24/08 (caso Alan, job e1c48ed7): este KPI mostrava `_files.size` — o
+  // 🚨 24/08 (caso cliente-19, job e1c48ed7): este KPI mostrava `_files.size` — o
   // número de pranchas que RENDERAM item — sob o rótulo "pranchas enviadas".
   // Ele enviou 7 e a tela dizia 4, porque 3 morreram na leitura. O número que
   // faltava era exatamente a notícia: ele não tinha como saber que perdeu
@@ -3193,7 +3193,7 @@ function collectCadFiles(items) {
   // 🚨 Guarda MEDIDOS por prancha, não só a contagem. Até 10/08/2026 a lista
   // dizia "22 itens extraídos" numa prancha em que NADA foi medido do CAD —
   // do lado do cliente isso é indistinguível de uma prancha que mediu bem.
-  // A Amanda (349e75a5) viu a elétrica vazia na planilha, concluiu que as
+  // A cliente-16 (349e75a5) viu a elétrica vazia na planilha, concluiu que as
   // pranchas não tinham subido, REENVIOU 4 arquivos que já estavam lá, esperou
   // 40 min e abriu um projeto novo. As 7 pranchas mudas eram as 7 elétricas —
   // padrão que salta aos olhos numa lista e é invisível numa planilha de 260
@@ -3241,7 +3241,7 @@ function renderFiles(proj, items) {
       const btnIcon = isPdf
         ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 3h6v6M14 10l7-7M10 21H5a2 2 0 01-2-2v-5m0-4V5a2 2 0 012-2h4"/>'
         : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>';
-      // FIX bug Daniela 2026-06-02: endpoint protegido /api/sheet exige Bearer
+      // FIX bug cliente-38 2026-06-02: endpoint protegido /api/sheet exige Bearer
       // token. <a href target="_blank"> NÃO envia Authorization → 401. Usamos
       // os helpers via onclick: PDF → openPdfProtected (abre em nova aba),
       // DWG/DXF → downloadProtected (força download).

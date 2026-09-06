@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O anexo confere o CONTEÚDO do CAD antes de deixar "DXF vencer DWG do mesmo nome".
 
-🩸 05/09/2026, William, 3º anexo do dia (job 8b7a2b71, 19:24). O /add-file tinha
+🩸 05/09/2026, cliente-39, 3º anexo do dia (job 8b7a2b71, 19:24). O /add-file tinha
 a regra "DXF vence o DWG do mesmo nome", julgada pelo NOME: um .dxf que era DWG
 renomeado "venceu" o .dwg de verdade e o jogou fora. Em seguida, no process_job,
 a checagem pelo conteúdo (conserto da manhã do mesmo dia) viu que o "DXF" era
@@ -61,7 +61,7 @@ def test_dwg_disfarcado_de_dxf_NAO_mata_o_dwg_de_verdade(tmp_path, silencio):
     falso = _arq(tmp_path, "x.dxf", DWG)
     real = _arq(tmp_path, "x.dwg", DWG)
     cads, _avisos = main._escolher_cads_do_anexo([falso, real], "job-t")
-    assert cads, "o reprocesso rodaria com ZERO arquivo — o defeito do William"
+    assert cads, "o reprocesso rodaria com ZERO arquivo — o defeito do cliente-39"
     assert _nomes(cads) == ["x.dwg"], cads
 
 

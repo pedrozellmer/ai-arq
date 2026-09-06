@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Os dois tetos de memória — e o lado que não tinha trava nenhuma.
 
-🚨 26/08/2026, caso Amanda (job 43a799c0). A prancha 01 dela (24,58 MB de DWG →
+🚨 26/08/2026, caso cliente-16 (job 43a799c0). A prancha 01 dela (24,58 MB de DWG →
 176,5 MB de DXF) foi DESCARTADA por um teto de 150 MB calibrado quando o Render
 tinha 2 GB. O plano subiu pra 4 GB em 21/07 e ninguém revisitou.
 
@@ -93,7 +93,7 @@ def test_existe_teto_do_lado_do_DWG():
 def test_o_teto_de_DWG_nao_barra_prancha_normal():
     """Controle negativo: apertar demais quebraria quem funciona hoje.
 
-    As 3 pranchas da Amanda que converteram tinham 3,1 / 5,4 / 6,4 MB. A maior
+    As 3 pranchas da cliente-16 que converteram tinham 3,1 / 5,4 / 6,4 MB. A maior
     DWG do acervo local tem 2,9 MB.
     """
     for mb in (3.1, 5.4, 6.4, 24.58):

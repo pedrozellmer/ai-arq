@@ -98,7 +98,7 @@ def render_dxf_to_png(
         return False
 
     try:
-        # 🚨 24/08: o preview do Alan morreu aqui com KeyError: 'LAYOUT' — o
+        # 🚨 24/08: o preview do cliente-19 morreu aqui com KeyError: 'LAYOUT' — o
         # MESMO bug que eu tinha consertado no dwg_extractor no dia anterior,
         # pela segunda porta. `abrir_dxf` tem o recover embaixo.
         # 🪤 recover come mais RAM; este arquivo já roda em subprocesso e o

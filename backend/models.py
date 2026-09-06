@@ -112,7 +112,7 @@ class SheetInfo(BaseModel):
     # item só guardava o nome do arquivo, `_apply_area_honesty` não sabia de
     # qual página cada item veio e, pela trava 4, se recusava a atribuir
     # medição a QUALQUER um deles ("multipagina").
-    # Caso Luana Oliveira (job bf72d192): 10 pranchas num PDF só, 583,6 m²
+    # Caso cliente-31 Oliveira (job bf72d192): 10 pranchas num PDF só, 583,6 m²
     # medidos, `preenchidos=0 criados_prancha=0`. A medição existia e não
     # chegava em item nenhum.
     # 🪤 `page_count` também: sem ele não dá pra distinguir "página 0 de um

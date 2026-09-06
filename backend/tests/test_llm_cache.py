@@ -73,7 +73,7 @@ def test_mudar_o_MODELO_muda_a_chave():
 
 def test_mudar_a_TEMPERATURA_muda_a_chave():
     """`DXF_EXTRACT_TEMP` também é env do Render (default 0,7). Foi ela que
-    custou a prancha da Amanda em 26/08 quando estava em 0."""
+    custou a prancha da cliente-16 em 26/08 quando estava em 0."""
     assert llm_cache.carimbo(_payload()) != llm_cache.carimbo(
         _payload(temperature=0.0)), "trocar a temperatura não invalidou"
 

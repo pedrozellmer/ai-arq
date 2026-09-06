@@ -4,7 +4,7 @@
 🩸 05/09/2026, Pedro: *"os dois textos errados pro cliente"*.
   1. Complemento com 0 itens dizia "O arquivo que você anexou (o arquivo) foi lido,
      mas não rendeu nenhum item — pode ser prancha só de layout ou PDF escaneado".
-     No caso do William (19:24) NADA tinha sido lido (as duas regras do anexo se
+     No caso do cliente-39 (19:24) NADA tinha sido lido (as duas regras do anexo se
      anularam) e o nome virou o placeholder "o arquivo". Chutar causa pra falha
      que a gente não viu é o mesmo defeito do "não consegui medir" de 03/09.
   2. "Preencha esses metros ou mande o DXF que a gente mede" — e "comprimento

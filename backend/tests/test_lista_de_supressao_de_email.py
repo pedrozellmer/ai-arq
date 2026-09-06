@@ -54,16 +54,16 @@ def limpo(monkeypatch):
     return logs
 
 
-LISTA = [{"email": "diana.golin@gmail.com", "motivo": "7 devoluções caixa cheia", "liberado_em": None},
-         {"email": "professormoabgarcia@gmail.com", "motivo": "3 devoluções caixa cheia", "liberado_em": None}]
+LISTA = [{"email": "cliente2@example.com", "motivo": "7 devoluções caixa cheia", "liberado_em": None},
+         {"email": "cliente5@example.com", "motivo": "3 devoluções caixa cheia", "liberado_em": None}]
 
 
 # ── a consulta e o cache ───────────────────────────────────────────────────
 def test_suprimido_devolve_o_motivo_sem_ligar_pra_caixa(monkeypatch, limpo):
     svc = _Servico((200, LISTA))
     monkeypatch.setattr(main, "_supa_rest_service", svc)
-    assert main._email_suprimido("Diana.Golin@gmail.com") == "7 devoluções caixa cheia"
-    assert main._email_suprimido("  PROFESSORMOABGARCIA@gmail.com ") == "3 devoluções caixa cheia"
+    assert main._email_suprimido("cliente2@example.com") == "7 devoluções caixa cheia"
+    assert main._email_suprimido("  cliente5@example.com ") == "3 devoluções caixa cheia"
     assert main._email_suprimido("william@exemplo.com") is None
     assert main._email_suprimido("") is None and main._email_suprimido(None) is None
     assert len(svc.chamadas) == 1, "3 consultas, 1 leitura — o cache segura"
@@ -84,8 +84,8 @@ def test_cache_vence_em_5_min_e_force_reconsulta(monkeypatch, limpo):
 def test_lista_ilegivel_FALHA_ABERTA_com_rastro_e_sem_martelar_o_banco(monkeypatch, limpo):
     svc = _Servico((500, None))
     monkeypatch.setattr(main, "_supa_rest_service", svc)
-    assert main._email_suprimido("diana.golin@gmail.com") is None, "sem lista legível, o e-mail SAI (mal menor)"
-    main._email_suprimido("diana.golin@gmail.com")
+    assert main._email_suprimido("cliente2@example.com") is None, "sem lista legível, o e-mail SAI (mal menor)"
+    main._email_suprimido("cliente2@example.com")
     assert len(svc.chamadas) == 1, "falha também respeita o cache — senão cada e-mail bate no banco caído"
     assert any(s == "email:supressao-ilegivel" for s, _m, _sev in limpo)
 
@@ -96,7 +96,7 @@ def test_lista_ilegivel_mantem_o_ultimo_mapa_bom(monkeypatch, limpo):
     main._email_suprimido("x@y.com")
     main._SUPRIMIDOS_CACHE["em"] = 0.0
     svc.resp = (0, None)
-    assert main._email_suprimido("diana.golin@gmail.com") == "7 devoluções caixa cheia", "a lista antiga vale mais que nada"
+    assert main._email_suprimido("cliente2@example.com") == "7 devoluções caixa cheia", "a lista antiga vale mais que nada"
 
 
 # ── a trava em _send_email_smtp ────────────────────────────────────────────
@@ -110,17 +110,17 @@ def test_endereco_suprimido_NAO_sai_e_fica_o_rastro(monkeypatch, limpo):
     import smtplib
     monkeypatch.setattr(smtplib, "SMTP", lambda *a, **k: (_ for _ in ()).throw(AssertionError("tentou falar com o SMTP")))
     monkeypatch.setenv("SMTP_HOST", "smtp.x"); monkeypatch.setenv("SMTP_USER", "u"); monkeypatch.setenv("SMTP_PASSWORD", "p")
-    ok = main._send_email_smtp("diana.golin@gmail.com", "Assunto", "<b>x</b>", log_kind="proximo_projeto")
+    ok = main._send_email_smtp("cliente2@example.com", "Assunto", "<b>x</b>", log_kind="proximo_projeto")
     assert ok is False
     sup = [l for l in limpo if l[0] == "email:suprimido"]
-    assert len(sup) == 1 and "proximo_projeto" in sup[0][1] and "diana.golin@gmail.com" in sup[0][1] and "caixa cheia" in sup[0][1]
+    assert len(sup) == 1 and "proximo_projeto" in sup[0][1] and "cliente2@example.com" in sup[0][1] and "caixa cheia" in sup[0][1]
 
 
 def test_um_log_por_dia_por_endereco_e_tipo(monkeypatch, limpo):
     monkeypatch.setattr(main, "_email_suprimido", lambda e: "caixa cheia")
     for _ in range(5):
-        main._send_email_smtp("diana.golin@gmail.com", "A", "b", log_kind="proximo_projeto")
-    main._send_email_smtp("diana.golin@gmail.com", "A", "b", log_kind="newsletter")
+        main._send_email_smtp("cliente2@example.com", "A", "b", log_kind="proximo_projeto")
+    main._send_email_smtp("cliente2@example.com", "A", "b", log_kind="newsletter")
     assert len([l for l in limpo if l[0] == "email:suprimido"]) == 2, "24 tentativas/dia da esteira não podem virar 24 logs"
 
 
@@ -177,10 +177,10 @@ def test_suprimir_recusa_entrada_torta(monkeypatch, admin, ruim):
 def test_liberar_preenche_liberado_em_e_nao_apaga(monkeypatch, admin):
     svc = _Servico((204, None))
     monkeypatch.setattr(main, "_supa_rest_service", svc)
-    r = main.admin_email_liberar(main.SuprimirPayload(email="Diana.Golin@gmail.com"), REQ)
+    r = main.admin_email_liberar(main.SuprimirPayload(email="cliente2@example.com"), REQ)
     assert r["status"] == "ok"
     patch = [c for c in svc.chamadas if c["m"] == "PATCH"][0]
-    assert "email=eq.diana.golin%40gmail.com" in patch["path"] and patch["body"]["liberado_em"] and patch["body"]["liberado_por"]
+    assert "email=eq.cliente2%40example.com" in patch["path"] and patch["body"]["liberado_em"] and patch["body"]["liberado_por"]
     assert not [c for c in svc.chamadas if c["m"] == "DELETE"], "liberar guarda o histórico; nada é apagado"
 
 

@@ -12,7 +12,7 @@ Confunde — e o risco é assimétrico:
     🧪 Avaliar      → job isolado: cliente não vê, sem e-mail, não gasta nada.
 
 E o botão PERIGOSO era o único SEM tooltip, com um confirm que dizia apenas
-"(cria um novo job)". Se ele tivesse clicado nele no projeto do Alan naquele
+"(cria um novo job)". Se ele tivesse clicado nele no projeto do cliente-19 naquele
 momento, teria gastado o reprocesso grátis do cliente num teste — justo o que a
 gente queria guardar pra depois de provar o conserto.
 

@@ -141,7 +141,7 @@ def test_poucas_linhas_a_menos_NAO_avisa():
 #  O aviso antigo (medidos) continua funcionando
 # ══════════════════════════════════════════════════════════════════════════
 def test_perder_MEDIDO_continua_avisando():
-    """Caso Amanda (10/08): 47 medidos viraram 28 e o e-mail dizia
+    """Caso cliente-16 (10/08): 47 medidos viraram 28 e o e-mail dizia
     'planilha atualizada'."""
     fn = _comparar(_versao(102, 47))
     r = fn("349e75a5", 28, 100)

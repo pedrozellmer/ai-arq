@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O chat levanta quantidade; ele não dá veredito sobre o projeto do cliente.
 
-🩸 03/09/2026, cliente `v.anjos.ia.81@` (job `eebe543a`). Ele mandou no chat um
+🩸 03/09/2026, cliente `cliente-11@` (job `eebe543a`). Ele mandou no chat um
 briefing pedindo **auditoria técnica completa** de um projeto de cabeamento:
 dimensionamento de rack, rotas de cabo, distâncias, interferências, reserva
 técnica, conformidade com norma. O agente entregou — com seções

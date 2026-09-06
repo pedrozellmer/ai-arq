@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O e-mail da leitura nova tem que contar o que REALMENTE falhou.
 
-🚨 24/08/2026, caso Alan (job e1c48ed7). Ele mandou 7 pranchas; 3 morreram no
+🚨 24/08/2026, caso cliente-19 (job e1c48ed7). Ele mandou 7 pranchas; 3 morreram no
 KeyError de layout do libredwg — entre elas as DUAS de arquitetura. Depois do
 conserto, o filhote leu as 7.
 
@@ -76,7 +76,7 @@ def test_o_email_continua_dizendo_que_o_original_fica():
 #  🚨 Honestidade dos DOIS lados
 # ══════════════════════════════════════════════════════════════════════════
 def test_o_email_conta_tambem_o_que_PIOROU():
-    """No caso do Alan o saldo e +59 medidos — e mesmo assim a prancha de
+    """No caso do cliente-19 o saldo e +59 medidos — e mesmo assim a prancha de
     ELETRICA caiu de 77 para 49 medidos (103 -> 60 itens). Um e-mail que diz so
     "melhoramos" faz o cliente trocar a planilha e descobrir a perda no meio do
     orcamento. Regra da copy publica: nao afirmar o que nao se mede."""

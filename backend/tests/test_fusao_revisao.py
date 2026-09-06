@@ -285,7 +285,7 @@ def test_a_planilha_entregue_e_a_ULTIMA_versao():
 def test_o_aviso_de_mediu_menos_entra_no_arquivo():
     """🚨 24/08: o aviso ia pra tela e nunca pro .xlsx — o cliente encaminhava o
     arquivo pro orçamentista sem a ressalva, justo no caso em que a ressalva É o
-    produto (caso Amanda, 10/08: 47 medidos viraram 28 e o e-mail dizia
+    produto (caso cliente-16, 10/08: 47 medidos viraram 28 e o e-mail dizia
     'planilha atualizada')."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i = src.index("_cmp_v = _comparar_com_versao_anterior(")

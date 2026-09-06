@@ -28,7 +28,7 @@ não fecham m³ de concreto nem m² de fôrma. São dois diagnósticos OPOSTOS e
 motor só sabia dar o primeiro.
 
 🪤 SEGUNDO FURO, no mesmo bloco: a dica "reprocesse informando o pé-direito"
-só disparava se houvesse item de pilar CONTADO em 'un'. A IA do Edvaldo dobrou
+só disparava se houvesse item de pilar CONTADO em 'un'. A IA do cliente-23 dobrou
 os 50+ pilares dentro da linha de fôrma em m², então a dica não apareceu —
 justo pra quem ela foi escrita. O pé-direito é o campo que corta o branco de
 59,5% pra 27,3% ([[project_verdade_de_campo_20260826]]).
@@ -91,7 +91,7 @@ def _roda(itens, pe_direito=0, is_structural=True):
     return pd.warnings, ns, chamadas
 
 
-# ── O caso real do Edvaldo, item por item como saiu no banco ────────────────
+# ── O caso real do cliente-23, item por item como saiu no banco ────────────────
 def _itens_edvaldo():
     return [
         _Item("Concreto estrutural Fck=30 MPa — especificação confirmada", 0, "m³",
@@ -122,7 +122,7 @@ _FRASE_ACUSATORIA = "O arquivo enviado não traz o que a medição de estrutura 
 
 
 def test_planta_de_forma_NAO_e_acusada_de_nao_ser_planta_de_forma():
-    """🩸 O que o Edvaldo leu. Este é o teste do dia."""
+    """🩸 O que o cliente-23 leu. Este é o teste do dia."""
     avisos, _, _ = _roda(_itens_edvaldo())
     assert len(avisos) == 1, "o aviso de estrutura tem que sair (nada foi medido)"
     txt = avisos[0]
@@ -141,7 +141,7 @@ def test_o_aviso_novo_explica_POR_QUE_a_altura_falta():
 
 
 def test_a_dica_do_pe_direito_dispara_SEM_pilar_contado_em_un():
-    """🪤 O 2º furo: nenhum item do Edvaldo é pilar em 'un'."""
+    """🪤 O 2º furo: nenhum item do cliente-23 é pilar em 'un'."""
     itens = _itens_edvaldo()
     assert not any(i.unit == "un" for i in itens), (
         "o caso real não tem pilar contado em 'un' — se tivesse, este teste "

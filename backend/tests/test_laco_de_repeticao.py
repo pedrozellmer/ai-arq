@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A prancha sumia da planilha e o log dizia que não tinha perdido nada.
 
-🚨 26/08/2026, caso Amanda (job 43a799c0, "Harmonia - 9º Pavimentos"). De 4
+🚨 26/08/2026, caso cliente-16 (job 43a799c0, "Harmonia - 9º Pavimentos"). De 4
 pranchas, 1 chegou. Duas devolveram ZERO item com `stop=max_tokens`, e a linha
 de log era `itens=0 perdidos=0` — ou seja, o motor afirmava não ter perdido
 nada enquanto entregava metade do projeto a menos.
@@ -59,7 +59,7 @@ def test_pega_o_laco_que_custou_as_pranchas_da_Amanda():
     t = _resposta_com_laco("+1")
     d = detectar_laco_repeticao(t, tokens_saida=32000)
     assert d["laco"] is True, (
-        "o laço que custou 2 pranchas da Amanda passaria despercebido: %s" % d)
+        "o laço que custou 2 pranchas da cliente-16 passaria despercebido: %s" % d)
     assert d["repeticoes"] >= 60, d
     assert d["densidade"] <= 1.8, d
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O aviso "parece projeto ESTRUTURAL" para de disparar em "SEM ESTRUTURAL".
 
-🩸 02/09/2026 — Karina (TEKOA), primeira cliente do dia, mandou
+🩸 02/09/2026 — cliente-27 (TEKOA), primeira cliente do dia, mandou
 "TEKOÁ RESERVA_EXE_REV01_SEM ESTRUTURAL.pdf" e o envio respondeu "esses
 arquivos parecem de projeto ESTRUTURAL". Medido no error_log: foi a ÚNICA vez
 que o aviso disparou desde que existe (01/08) — e disparou errado. Aviso falso
@@ -30,7 +30,7 @@ def test_nome_NEGADO_nao_avisa():
                  "casa - s/ estrutural.pdf", "executivo NAO estrutural.pdf",
                  "projeto exceto fundação.pdf", "PLANTA SEM-FORMAS.pdf"):
         assert not _m._nome_parece_estrutural(nome), (
-            "%r está NEGADO e o aviso disparou — foi exatamente o erro da Karina" % nome)
+            "%r está NEGADO e o aviso disparou — foi exatamente o erro da cliente-27" % nome)
 
 
 def test_CONTROLE_a_negacao_precisa_ser_palavra_inteira():
@@ -47,7 +47,7 @@ def test_NAO_existe_uma_SEGUNDA_copia_da_regra_no_arquivo():
     ninguém lia, e o pyflakes acusava "assigned to but never used".
 
     O risco não é desempenho: é a próxima pessoa achar a cópia velha primeiro e
-    consertar a errada — foi exatamente assim que o "SEM ESTRUTURAL" da Karina
+    consertar a errada — foi exatamente assim que o "SEM ESTRUTURAL" da cliente-27
     passou, com a regra certa já escrita a duzentas linhas de distância.
     """
     import io
@@ -68,12 +68,12 @@ def test_NAO_existe_uma_SEGUNDA_copia_da_regra_no_arquivo():
 # ══════════════════════════════════════════════════════════════════════════
 #  🩸 03/09/2026 — SEGUNDO DISPARO DESTE AVISO NA VIDA, E O SEGUNDO ERRADO
 # ══════════════════════════════════════════════════════════════════════════
-# Cliente `v.anjos.ia.81@` mandou "CIQUANTA-CABEAMENTO ESTRUTURADO.dwg" e leu
+# Cliente `cliente-11@` mandou "CIQUANTA-CABEAMENTO ESTRUTURADO.dwg" e leu
 # "esses arquivos parecem de projeto ESTRUTURAL". Cabeamento ESTRUTURADO é rede
 # de dados. O pedaço solto `estrut` casava com "estruturado".
 #
 # 🔑 Placar do aviso na vida inteira: 2 disparos, 2 errados (o outro é o caso
-# Karina, logo acima). Aviso que só erra treina o cliente a ignorar TODOS os
+# cliente-27, logo acima). Aviso que só erra treina o cliente a ignorar TODOS os
 # nossos avisos — o custo não fica no aviso falso, fica nos verdadeiros.
 
 def test_cabeamento_ESTRUTURADO_nao_e_projeto_estrutural():

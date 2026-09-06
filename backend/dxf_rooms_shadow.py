@@ -161,7 +161,7 @@ def medir_um(dxf_path: str, fator: float) -> dict:
         out["envelope_top"] = [round(a, 1) for a in todas[:4]]
 
         # 🚨 VISTAS NA MESMA FOLHA — hipótese a medir (31/07/2026).
-        # Primeiro caso real (Rafael): casa de 75,9 m² e a soma dos "cômodos"
+        # Primeiro caso real (cliente-40): casa de 75,9 m² e a soma dos "cômodos"
         # deu 601 m² — 8× o tamanho. Quase certamente porque a prancha traz
         # planta + cortes + fachadas + detalhes na MESMA folha, e a montagem de
         # faces soma todas as vistas. O caminho do PDF não sofre disso porque

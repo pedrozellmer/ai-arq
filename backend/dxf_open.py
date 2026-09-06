@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Abrir DXF que o `ezdxf.readfile` recusa — num lugar só.
 
-🚨 24/08/2026, caso Alan (job e1c48ed7). O `ezdxf.readfile` morre em
+🚨 24/08/2026, caso cliente-19 (job e1c48ed7). O `ezdxf.readfile` morre em
 `ezdxf/layouts/layouts.py:219` com KeyError do NOME DO LAYOUT em arquivos
 escritos pelo libredwg. As três ocorrências do MESMO job:
 

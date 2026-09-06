@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A medição estava escrita na linha e a quantidade vinha ZERO.
 
-🚨 26/08/2026, caso **Alan** (job de 24/08 21:39, 307 itens). De 73 linhas de
+🚨 26/08/2026, caso **cliente-19** (job de 24/08 21:39, 307 itens). De 73 linhas de
 área e comprimento, **31 saíram com quantidade zero** — e várias delas traziam
 o número medido escrito na própria observação:
 
@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from engine_rules import quantidade_da_procedencia as q  # noqa: E402
 
-# a extração REAL da prancha do Alan, do jeito que o motor devolve
+# a extração REAL da prancha do cliente-19, do jeito que o motor devolve
 AREAS = {"-TEFOR": 26.54, "-TEPAR": 268.39, "-TEDUTO": 12.0}
 COMPR = {"-TEPAR": 302.14, "-TEDUTO": 199.08}
 

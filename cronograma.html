@@ -1344,7 +1344,7 @@ function atualizarLinksExport() {
     return s ? '?' + s : '';
   })();
   // Endpoints protegidos: registrar handler que dispara fetch+blob em vez de
-  // .href direto (bug Daniela 2026-05-18: <a href> não envia Authorization).
+  // .href direto (bug cliente-38 2026-05-18: <a href> não envia Authorization).
   const wireExport = (id, url, filename) => {
     const el = document.getElementById(id);
     if (!el) return;

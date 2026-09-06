@@ -112,7 +112,7 @@ def test_CONTROLE_o_guarda_REPROVA_a_copy_que_o_rafael_leu():
         '           "de hoje — o arquivo não tem defeito. Sobe ela em DXF, ou "' + chr(10) +
         '           "uma prancha por vez, que a gente lê")' + chr(10))
     assert _conselhos_errados(antiga), (
-        "o guarda não reprovou a copy que de fato foi entregue ao Rafael — "
+        "o guarda não reprovou a copy que de fato foi entregue ao cliente-40 — "
         "ele está cego, e o teste de cima é verde falso")
 
 

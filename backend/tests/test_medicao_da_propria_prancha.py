@@ -75,7 +75,7 @@ def test_TRAVA_2_numero_que_ja_existe_NAO_VIRA_a_area_da_prancha():
     """🪤 Escrevi este teste exigindo que o 42,0 fosse PRESERVADO, e ele falhou.
     O certo era o teste, não o código: um número que a IA leu (sem prova de
     geometria) é ZERADO pela regra de honestidade que já existia — é o mesmo
-    comportamento do caso Catarina, 20/07.
+    comportamento do caso cliente-21, 20/07.
     O que o passo 7 garante aqui é o que ele NÃO faz: não sobrescreve o número
     existente com a área da prancha. Se um dia o valor lido bater com a
     medição, quem resgata é o passo 6, comparando NÚMERO, não a família."""
@@ -120,7 +120,7 @@ def test_item_SEM_ref_sheet_nao_recebe():
 
 
 def test_CONTROLE_rasgo_de_laje_nao_recebe_a_area_da_prancha():
-    """🪤 O item do caso Flavio. Intervenção parcial não é superfície — a
+    """🪤 O item do caso cliente-14. Intervenção parcial não é superfície — a
     peneira do passo 1 tem que valer aqui também, senão o rasgo troca 400 m²
     por 80,5 m² e continua absurdo."""
     it = _Item("Rasgo em laje para nova escada", "m²", 0,

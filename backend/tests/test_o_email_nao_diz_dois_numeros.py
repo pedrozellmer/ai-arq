@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O mesmo e-mail dizia 5 e 6 medidos, três linhas de distância.
 
-🩸 04/09/2026, job `b5693ca6` — primeiro projeto do cliente `jssoliveira88`,
+🩸 04/09/2026, job `b5693ca6` — primeiro projeto do cliente `cliente-03`,
 8 DWGs de um prédio educacional. O e-mail que ele recebeu dizia:
 
     "✓ 5 medido(s) direto do CAD (em branco na planilha)"

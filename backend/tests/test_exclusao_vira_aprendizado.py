@@ -10,7 +10,7 @@
   3. consertado o CASCADE, as exclusões começaram a chegar — 20 em 2 projetos,
      16 com o `_antes` completo;
   4. 🪤 e aí apareceu ESTE buraco: `processar_revisao_inline` filtrava
-     `action=eq.edit` e jogava fora todo reject. O Flavio fez **18 exclusões**
+     `action=eq.edit` e jogava fora todo reject. O cliente-14 fez **18 exclusões**
      e o aprendizado gerou **zero linhas**.
 
 🔑 É o padrão da casa: consertar um bug LIGA código que estava morto, e o passo
@@ -51,7 +51,7 @@ def _monta(monkeypatch, atuais, editados, excluidos):
 
 
 def test_exclusao_SOZINHA_ja_gera_aprendizado(monkeypatch):
-    """🚨 O caso do Flavio: 18 exclusões, nenhuma edição. Antes disto, o
+    """🚨 O caso do cliente-14: 18 exclusões, nenhuma edição. Antes disto, o
     aprendizado devolvia False e a revisão inteira ia pro lixo."""
     atuais = [_item("1.1", "Piso cerâmico", "m²", 80.0, "Pisos", _id="a")]
     excluido = {k: v for k, v in _item(

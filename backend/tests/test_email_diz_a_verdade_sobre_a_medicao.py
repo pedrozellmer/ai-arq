@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O e-mail fala a mesma língua da régua: entrega sem medição não é comemorada.
 
-🩸 06/09/2026, VISTO AO VIVO. Um cliente novo (Devair, job 40550d3e) subiu 3
+🩸 06/09/2026, VISTO AO VIVO. Um cliente novo (cliente-15, job 40550d3e) subiu 3
 PDFs de uma guarita e recebeu:
   · nas boas-vindas: "seu projeto vira planilha MEDIDA"
   · na entrega:      "sua planilha está PRONTA"
@@ -46,7 +46,7 @@ def _corpo_do_process_job():
 def test_o_terceiro_email_existe_e_nao_comemora():
     """Nem 'está pronta', nem 'não consegui ler seu arquivo'. O meio."""
     assunto, html = main._build_leu_sem_medir_email(
-        "Devair", "orçamento são lourenço", "40550d3e", 124, 53,
+        "cliente-15", "orçamento são lourenço", "40550d3e", 124, 53,
         email="x@y.com")
     assert "pronta" not in assunto.lower(), assunto
     baixo = html.lower()
@@ -61,7 +61,7 @@ def test_o_email_traz_os_NUMEROS_reais_do_projeto():
     genérica igual às outras. Com 124 itens e 53 em branco, as duas contas
     (71 com número, 53 sem) precisam aparecer."""
     _a, html = main._build_leu_sem_medir_email(
-        "Devair", "guarita", "40550d3e", 124, 53, email="x@y.com")
+        "cliente-15", "guarita", "40550d3e", 124, 53, email="x@y.com")
     assert "124" in html, "o total de itens sumiu do texto"
     assert "53" in html, "as linhas em branco sumiram do texto"
     assert "71" in html, ("as linhas COM número estimado sumiram — é o número "

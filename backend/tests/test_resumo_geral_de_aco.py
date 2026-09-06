@@ -230,7 +230,7 @@ def test_CONTROLE_o_aviso_explica_o_que_foi_feito():
 #
 # 🩸 Seis linhas certas viraram laranja por causa de um ferro a 94 unidades.
 
-# O quadro real da Eduarda, com as posições do DXF dela.
+# O quadro real da cliente-20, com as posições do DXF dela.
 _QUADRO_EDUARDA = [
     ("AÇO", 102.12, 60.08), ("BIT", 104.23, 60.08),
     ("COMPR", 106.21, 60.08), ("PESO", 109.84, 60.08),
@@ -273,7 +273,7 @@ def test_o_quadro_da_EDUARDA_sozinho_e_lido_e_confiavel():
 
 
 def test_FERRO_DESENHADO_NA_PLANTA_nao_derruba_o_quadro():
-    """🚨 O caso Eduarda. Mesmo quadro, agora com a planta em volta — que é
+    """🚨 O caso cliente-20. Mesmo quadro, agora com a planta em volta — que é
     como o arquivo dela realmente é. Antes deste conserto: tudo [REFERÊNCIA]."""
     r = parse_steel_table(_texto(_QUADRO_EDUARDA + _FERROS_NA_PLANTA))
     assert r is not None, "não reconheceu o quadro"
@@ -316,7 +316,7 @@ def test_CONTROLE_POSITIVO_a_sabotagem_da_borda_reprova():
 def test_PESO_TOTAL_e_linha_de_total_e_NAO_cabecalho_de_quadro_novo():
     """🚨 O conserto que a sabotagem revelou estar DESCOBERTO.
 
-    O rodapé do quadro da Eduarda é "Peso Total 50 = 685 kgf". Como contém a
+    O rodapé do quadro da cliente-20 é "Peso Total 50 = 685 kgf". Como contém a
     palavra *peso*, o detector de cabeçalho o tratava como início de um QUADRO
     NOVO. Dois estragos de uma vez:
 
@@ -365,7 +365,7 @@ def _quadro_da_eduarda(duplicado=False, com_total=True):
 def test_bitola_REPETIDA_sem_total_pra_conferir_NAO_pode_ser_medido():
     """🚨 REGRA DURA Nº1, e este é o caso que eu quase deixei passar.
 
-    Eu tinha "conferido" os 38 itens da Eduarda recalculando comprimento ×
+    Eu tinha "conferido" os 38 itens da cliente-20 recalculando comprimento ×
     massa linear e comparando com o peso. Passaram 37 de 38 dentro de 1,3%, e
     eu chamei isso de prova.
 
@@ -391,7 +391,7 @@ def test_bitola_REPETIDA_sem_total_pra_conferir_NAO_pode_ser_medido():
 
 def test_CONTROLE_com_TOTAL_declarado_a_conferencia_e_INDEPENDENTE():
     """🧪 O outro lado: quando a prancha declara o peso total, existe âncora de
-    verdade. Foi ela que salvou 5 das 6 pranchas da Eduarda — leitura em dobro
+    verdade. Foi ela que salvou 5 das 6 pranchas da cliente-20 — leitura em dobro
     não bate com o total impresso, e aí o rebaixamento vem pelo motivo certo."""
     r = parse_steel_table(_quadro_da_eduarda(duplicado=True, com_total=True))
     assert r["confiavel"] is False

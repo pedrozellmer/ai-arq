@@ -165,7 +165,7 @@ def test_os_DOIS_ramos_reescrevem_os_DOIS_campos():
 def test_o_convite_NAO_promete_quantas_linhas_serao_preenchidas():
     """🪤 Quem decide item a item é `_apply_area_honesty`, no backend. A tela
     não sabe — e prometer número que não depende dela é como o aviso que a
-    Luana leu e não se cumpriu (ver test_aviso_nao_promete_o_que_nao_fez)."""
+    cliente-31 leu e não se cumpriu (ver test_aviso_nao_promete_o_que_nao_fez)."""
     js = _js_limpo("maybeShowAreaPrompt")
     for promessa in ("ganham número", "serão preenchidas", "vão ser preenchidas",
                      "destravam", "linhas completadas"):

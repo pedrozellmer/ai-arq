@@ -226,7 +226,7 @@ def test_a_linha_guarda_a_referencia_da_origem_para_o_desfazer_recriar():
 
 
 def test_exportar_usa_downloadProtected_nas_duas_rotas_e_nao_link_direto():
-    """05/09, etapa export: <a href> direto não manda Authorization (bug Daniela 18/05) —
+    """05/09, etapa export: <a href> direto não manda Authorization (bug cliente-38 18/05) —
     os dois botões chamam exportar(fmt) → downloadProtected na rota protegida."""
     js = _js()
     assert 'id="btn-export-pdf"' in HTML and 'id="btn-export-xlsx"' in HTML

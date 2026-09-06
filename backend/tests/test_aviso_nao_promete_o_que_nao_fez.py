@@ -3,7 +3,7 @@
 
 🩸 DOIS CASOS REAIS DE 02/09/2026, do mesmo dia.
 
-**(1) O aviso que prometia.** Luana Oliveira (job `bf72d192`) informou 150 m² no
+**(1) O aviso que prometia.** cliente-31 Oliveira (job `bf72d192`) informou 150 m² no
 upload e recebeu: *"Área total de 150 m² foi INFORMADA POR VOCÊ… **Ela entra
 como BASE pros itens de área** — confira antes de orçar."*
 
@@ -19,8 +19,8 @@ um resultado que a própria regra impedia.
 Agora o aviso de cima só CONSTATA o fato (você informou X), e o destino vira
 aviso DEPOIS, quando existir: usou em N itens, ou não usou e por quê.
 
-**(2) A fila muda.** Alan Vitor chegou enquanto o job dela rodava. O servidor
-processa um por vez (semáforo posto depois do caso Adriano, 16/06, quando 2-3
+**(2) A fila muda.** cliente-19 chegou enquanto o job dela rodava. O servidor
+processa um por vez (semáforo posto depois do caso cliente-29, 16/06, quando 2-3
 simultâneos somavam picos de RAM e derrubavam a instância). Ele ficou **12
 minutos** com o status `queued` — e a tela do cliente só sabia desenhar
 `current_step`, que num job em fila ainda não existe. Barra parada perto de
@@ -33,7 +33,7 @@ a mediana é 8 min, e os dois jobs de hoje levaram 23 e 14.
 📏 E a fila é rara: em 158 projetos desde 01/06, só **10 pares** eram de
 clientes DIFERENTES esperando um pelo outro. Por isso o conserto é o aviso, não
 a capacidade — subir pra 2 simultâneos levaria a memória a 3,81 GB de 4,29 GB
-(medido no caso Amanda, 26/08) e o freio de 85% abortaria job de cliente.
+(medido no caso cliente-16, 26/08) e o freio de 85% abortaria job de cliente.
 """
 import io
 import os
@@ -54,7 +54,7 @@ def _sem_comentarios(txt):
 
 # ── (1) o aviso da área informada ──────────────────────────────────────────
 def test_o_aviso_do_upload_NAO_promete_que_vai_usar():
-    """🩸 A frase que a Luana leu e não se cumpriu."""
+    """🩸 A frase que a cliente-31 leu e não se cumpriu."""
     limpo = _sem_comentarios(_main())
     assert "entra como BASE pros itens de área" not in limpo, (
         "o aviso voltou a prometer que a área informada vira base — ela só "
@@ -77,7 +77,7 @@ def test_o_destino_da_area_informada_vira_aviso_DEPOIS():
         "não avisa quando a área informada FOI usada")
     assert "NÃO foi usada nos itens" in limpo, (
         "não avisa quando a área informada NÃO foi usada — que é o caso da "
-        "Luana e o que gerou a contradição")
+        "cliente-31 e o que gerou a contradição")
 
 
 def test_o_aviso_do_destino_LE_o_resultado_real():
@@ -105,14 +105,14 @@ def _dashboard():
 
 
 def test_a_tela_do_cliente_conta_que_ele_esta_na_FILA():
-    """🩸 Os 12 minutos do Alan olhando barra parada.
+    """🩸 Os 12 minutos do cliente-19 olhando barra parada.
 
     🪤 A 1ª versão deste teste procurava `status === 'queued'` e "Na fila" no
     arquivo INTEIRO — e passava mesmo com o conserto desligado, porque a LISTA
     de projetos já tinha um selo "⏳ Na fila" (linha ~4659) e outro trecho já
     comparava com 'queued'. Guarda que acha o que quer em qualquer lugar do
     arquivo não guarda nada. Ancora no `processingStep`, que é a tela onde o
-    Alan de fato estava: a do progresso, logo depois do upload.
+    cliente-19 de fato estava: a do progresso, logo depois do upload.
     """
     js = _sem_comentarios(_dashboard())
     i = js.index("processingStep.textContent = (status")

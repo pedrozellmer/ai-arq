@@ -62,7 +62,7 @@ def _eventos_do_front():
             nomes.add(n)
         # 🪤 06/09: `trackEvent(cond ? 'tour_pulado' : 'tour_concluido')` — nome escolhido por
         # condição. O padrão acima só lê o literal COLADO no parêntese, então esses dois pareciam
-        # órfãos (e o banco prova que disparam: o William tem tour_concluido).
+        # órfãos (e o banco prova que disparam: o cliente-39 tem tour_concluido).
         # 🪤 e o ternário tem que estar no PRIMEIRO argumento: sem essa trava, o padrão pescava
         # `{ origem: x ? 'auto' : 'regerar' }` do META e inventava 15 "eventos" que não existem —
         # guarda que acusa o que não é defeito acaba desligado.

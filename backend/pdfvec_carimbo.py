@@ -290,7 +290,7 @@ def read_carimbo_scale(pdf_path: str, page_index: int = 0,
         "confidence": confidence,
         "model_used": model_used,
     }
-    # 🩸 05/09/2026 — NÃO CACHEAR NEGATIVO. A A08 do William (135fdfac) teve a
+    # 🩸 05/09/2026 — NÃO CACHEAR NEGATIVO. A A08 do cliente-39 (135fdfac) teve a
     # escala lida como 1:75 em cinco chamadas ao longo do dia; na sexta o Haiku
     # respondeu diferente (sem escala), o resultado foi gravado aqui, e a
     # tentativa seguinte NEM PERGUNTOU à Vision — leu o cache e saiu "sem

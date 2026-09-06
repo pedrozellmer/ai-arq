@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A honestidade de área e a derivação por pé-direito, testadas JUNTAS.
 
-🚨 Caso Tammyres (23/08/2026, job 66b4d692): ela informou 2,70 m no envio, a
+🚨 Caso cliente-25 (23/08/2026, job 66b4d692): ela informou 2,70 m no envio, a
 leitura mediu 303,96 m de parede no layer A-WALL e a IA escreveu a conta na
 observação de 3 itens. A honestidade zerou 2 (pintura e alvenaria) e deixou a
 massa corrida com 817 m² — a mesma área. O cliente informou o dado e a conta
@@ -81,7 +81,7 @@ def _parede_medida(metros=303.96):
 #  A CADEIA: é assim que o process_job roda (honestidade e DEPOIS derivação)
 # ══════════════════════════════════════════════════════════════════════════
 def test_cadeia_entrega_a_conta_NOSSA_e_nao_a_do_modelo():
-    """Tammyres, do jeito que a produção roda.
+    """cliente-25, do jeito que a produção roda.
 
     O modelo escreveu 820,69 m² (= 303,96 × 2,70, UMA face). A nossa conta é
     303,96 × 2,70 × 2 faces = 1.641,4 m², que é o contrato documentado da
@@ -122,7 +122,7 @@ def test_cadeia_nao_zera_de_novo_o_que_a_derivacao_preencheu():
 # ══════════════════════════════════════════════════════════════════════════
 def test_sem_comprimento_medido_a_frase_nao_salva_o_numero():
     """Job só-PDF: o modelo inventa o perímetro e escreve a frase que o nosso
-    próprio prompt pediu. Isso é o caso Catarina voltando pela porta do
+    próprio prompt pediu. Isso é o caso cliente-21 voltando pela porta do
     pé-direito — tem que zerar."""
     f = _carrega_funcao()
     it = _Item("Massa corrida sobre paredes", "m²", 817.0,

@@ -2335,7 +2335,7 @@
   let lastEstimate = null;  // {total_pranchas, price_brl, price_cents}
   // 29/08/2026 — cache POR ARQUIVO. Antes, CADA mudança na seleção re-enviava
   // a seleção INTEIRA (17 arquivos = upload quadrático; foi o padrão do caso
-  // Maria Victoria), e pelo caminho do Cloudflare, que corta em 100 MB e
+  // cliente-18), e pelo caminho do Cloudflare, que corta em 100 MB e
   // deixava a estimativa errada CALADA. Agora: só o arquivo NOVO sobe, os já
   // contados viram `known_pranchas`, e a rota é a direta do Render (450 MB).
   const estimateFileCache = new Map();  // "nome:tamanho:mtime" -> {pranchas, warnings}
@@ -2724,7 +2724,7 @@
           try { trackEvent('arquivo_escolhido', { type: ((f.name || '').split('.').pop() || '').toLowerCase().slice(0, 8) }); } catch (_) {}
           // Aviso preventivo (2026-06-02): detecta PDF vetorial sem texto extraível
           // e sugere DWG/DXF. Sem bloquear upload — só alerta o usuário pra precisão.
-          // Caso Daniela Granado: PDFs exportados do CAD em modo desenho viraram
+          // Caso cliente-38 Granado: PDFs exportados do CAD em modo desenho viraram
           // 30 itens com qty=0 em divisórias. DWG resolveu (qty>0 em 100% das linhas).
           if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
             checkPdfTextAndWarn(f).catch(err => console.warn('PDF check falhou:', err));
@@ -3004,7 +3004,7 @@
       if (currPdf) currentFileIndex = globalIdx.get(currPdf);
     }
 
-    // Muitas pranchas (ex.: as 41 do Rafael): em vez de empilhar 40+ linhas,
+    // Muitas pranchas (ex.: as 41 do cliente-40): em vez de empilhar 40+ linhas,
     // recolhe PRONTAS e EM FILA em contadores e deixa só a que processa em
     // destaque — a lista não vira um paredão. Projeto pequeno (<=6) segue detalhado.
     if (selectedFiles.length > 6) {
@@ -3347,7 +3347,7 @@
       if (window.trackEvent) trackEvent('start_project', { type: params.project_type || '' });
 
       // Upload via XHR (não fetch) pra mostrar PROGRESSO REAL do envio: arquivo
-      // grande (ex.: DXF de 30MB+, caso Rafael 21/07) fazia a barra ficar travada
+      // grande (ex.: DXF de 30MB+, caso cliente-40 21/07) fazia a barra ficar travada
       // em 0% com fetch (fetch não reporta upload) — parecia travado mesmo vivo.
       // Agora "Enviando arquivos... 45%" sobe de verdade conforme os bytes sobem.
       const res = await new Promise((resolve, reject) => {
@@ -3521,9 +3521,9 @@
   // o envio existe um `await ensureAgeConfirmed()`; nesse intervalo o segundo
   // clique passa direto e vira um job novo. Medido no banco: **12+ pares** de
   // projetos do mesmo cliente criados com menos de 2 min de diferença, mesmo
-  // número de arquivos — Ana Paula, Rafael (2×), Catarina, Marco, Romulo,
+  // número de arquivos — Ana Paula, cliente-40 (2×), cliente-21, Marco, Romulo,
   // Elizeu. O do Elizeu saiu no MESMO SEGUNDO.
-  // Custo: processamento e IA em dobro. E pior pro cliente — na Catarina saiu
+  // Custo: processamento e IA em dobro. E pior pro cliente — na cliente-21 saiu
   // 48 itens num e 0 no outro; no Marco 43 e 0. Ele vê um projeto quebrado no
   // painel e não faz ideia do porquê.
   // 🪤 Trava por TEMPO, não por flag booleana: flag exige limpar em todo
@@ -3870,10 +3870,10 @@
       const cleanStep = step.split(' \u2014')[0].split(' —')[0];
       // 🩸 02/09/2026 — QUEM ESPERAVA NA FILA NÃO SABIA QUE ESTAVA NA FILA.
       // O servidor processa UM projeto por vez (semáforo posto depois do caso
-      // Adriano, 16/06: 2-3 simultâneos somavam picos de RAM e derrubavam a
+      // cliente-29, 16/06: 2-3 simultâneos somavam picos de RAM e derrubavam a
       // instância). Quem chega no meio fica com status 'queued' — e esta tela
       // só sabia desenhar `current_step`, que num job em fila ainda não existe.
-      // O Alan Vitor ficou 12 minutos hoje olhando uma barra parada perto de
+      // O cliente-19 ficou 12 minutos hoje olhando uma barra parada perto de
       // zero, sem uma palavra. O admin já mostrava "Na fila"; o cliente não.
       // 🪤 SEM CONTAGEM e SEM ESTIMATIVA, de propósito. "3 na frente" vira
       // ansiedade e muda enquanto ele olha; e tempo seria número inventado — a
@@ -3958,7 +3958,7 @@
   btnDownload.addEventListener('click', () => {
     if (currentJobId) {
       // Download protegido: window.open NÃO enviaria o Authorization header
-      // → backend retornaria 401 (bug Daniela 2026-05-18).
+      // → backend retornaria 401 (bug cliente-38 2026-05-18).
       // 🩸 06/09: ESTE caminho — quem acabou de esperar o processamento e baixa na hora — era o
       // único dos três que não registrava. Todo número de "baixou?" estava enviesado pra quem volta.
       if (window.trackEvent) trackEvent('download_xlsx', { job_id: currentJobId, origem: 'fluxo-novo' });

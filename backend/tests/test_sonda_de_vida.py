@@ -17,7 +17,7 @@ todo job em andamento.
 diagnóstico usa `/api/health`.
 
 📌 Contexto de por que restart importa aqui: em 26/08 a instância reiniciou por
-memória às 10:19 e matou os dois jobs da Amanda no meio
+memória às 10:19 e matou os dois jobs da cliente-16 no meio
 ([[test_envio_em_dobro]]). Restart não é evento inofensivo neste produto.
 """
 import io
@@ -90,7 +90,7 @@ def test_a_sonda_e_TRIVIAL():
 def test_o_api_health_CONTINUA_rico():
     """A sonda não substitui o diagnóstico — os dois têm papéis diferentes.
     Se alguém 'simplificar' o /api/health achando que virou redundante, a gente
-    perde a leitura de memória que resolveu o caso da Amanda hoje."""
+    perde a leitura de memória que resolveu o caso da cliente-16 hoje."""
     i = _FONTE.find('@app.get("/api/health")')
     assert i > 0, "o /api/health sumiu"
     trecho = _FONTE[i:i + 2500]

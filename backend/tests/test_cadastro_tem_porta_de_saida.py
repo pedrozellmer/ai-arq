@@ -138,7 +138,7 @@ def test_a_confirmacao_de_email_avisa_do_SPAM():
     sem confirmar o e-mail a pessoa não ENTRA, e o remetente é o
     `noreply@mail.app.supabase.io`, que filtro corporativo segura.
 
-    🪤 Achado com o Arthur (Tenda) parado nisso: ficha completa numa conta
+    🪤 Achado com o cliente-28 (Tenda) parado nisso: ficha completa numa conta
     Google de manhã, e 5 h depois criou outra com o e-mail da empresa —
     `email_confirmed_at` nulo, `last_sign_in_at` nulo, nunca entrou.
 

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Toda porta que abre DXF tem que escolher um lado — conscientemente.
 
-🚨 24/08/2026. Em 23/08 eu consertei o KeyError de layout do caso Alan no
+🚨 24/08/2026. Em 23/08 eu consertei o KeyError de layout do caso cliente-19 no
 `dwg_extractor` e dei o caso por encerrado. No dia seguinte, o log do MESMO
 cliente, no MESMO job:
 
@@ -99,13 +99,13 @@ def test_nenhuma_porta_nova_abriu_calada():
 
 @pytest.mark.parametrize("nome", _PROIBIDAS)
 def test_as_duas_que_regrediram_nao_voltam(nome):
-    """🚨 O preview do Alan morreu em dxf_render.py com o mesmo KeyError que eu
+    """🚨 O preview do cliente-19 morreu em dxf_render.py com o mesmo KeyError que eu
     já tinha consertado. Regressão aqui é a falha se repetindo, não uma nova."""
     caminho = os.path.join(_BACKEND, nome)
     src = io.open(caminho, encoding="utf-8").read()
     assert _chamadas_cruas(src) == 0, (
         "%s voltou a abrir DXF sem rede — foi exatamente assim que a prancha "
-        "do Alan perdeu o preview" % nome)
+        "do cliente-19 perdeu o preview" % nome)
     assert "dxf_open" in src, "%s não usa o abridor com recover" % nome
 
 
@@ -155,5 +155,5 @@ def test_abrir_dxf_recupera_o_keyerror_do_caso_alan(
 
     monkeypatch.setattr(dxf_open.ezdxf, "readfile", _morre)
     doc = dxf_open.abrir_dxf(dxf_valido)
-    assert doc is not None, "a prancha morreu — é o caso Alan de novo"
+    assert doc is not None, "a prancha morreu — é o caso cliente-19 de novo"
     assert "recover" in capsys.readouterr().out.lower()

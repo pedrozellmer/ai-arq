@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O motor mediu MENOS parede do que a geometria permite — e não disse nada.
 
-🩸 04/09/2026, no PRIMEIRO projeto da Caroline (Bolognesi, "Parque Aurora").
+🩸 04/09/2026, no PRIMEIRO projeto da cliente-22 (Bolognesi, "Parque Aurora").
 O motor apurou **17,18 m** de parede numa casa de **46,79 m²**, e daí saíram a
 alvenaria (44,67 m² = 17,18 × 2,60), o chapisco, o reboco e o rodapé dela.
 
@@ -17,8 +17,8 @@ expectativa.
 
 🔑 MEDIDO na base antes de escrever: dos **19** projetos de cliente em que a
 gente mede parede em metro, **3 (16%)** estão abaixo do mínimo —
-`humberto.oliveira@` 88% abaixo (25/06), `marcioeng72@` 42% (30/08) e a
-Caroline 59% (hoje). **Onze itens BRANCOS** saíram desses três.
+`cliente-07@` 88% abaixo (25/06), `cliente-08@` 42% (30/08) e a
+cliente-22 59% (hoje). **Onze itens BRANCOS** saíram desses três.
 
 🪤 SÓ APONTA e REBAIXA. Não corrige o número: inventar a parede que falta seria
 exatamente o que a regra nº3 proíbe. O que muda é o selo — número que não pode
@@ -26,7 +26,7 @@ estar certo não é "✓ MEDIDO" — e o aviso ao cliente.
 
 🚫 **UMA AFIRMAÇÃO MINHA QUE MORREU NO MESMO DIA.** A 1ª versão deste arquivo
 (e do aviso ao cliente) dizia que "a parede quase sempre está num layer que o
-motor não reconheceu". Fui MEDIR os layers do arquivo da Caroline pra provar
+motor não reconheceu". Fui MEDIR os layers do arquivo da cliente-22 pra provar
 isso, e o dado derrubou:
 
     ARQ_HAT=57,9 · ARQ_VISTA01=22,3 · Camada 1=22,1 · PAREDES=17,2
@@ -55,8 +55,8 @@ _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 # Os TRÊS casos reais medidos no banco em 04/09/2026.
 _REAIS = [
     ("caroline.passos (Parque Aurora)", 17.18, 46.79),
-    ("humberto.oliveira", 34.65, 264.54),
-    ("marcioeng72", 49.51, 309.75),
+    ("cliente-07", 34.65, 264.54),
+    ("cliente-08", 49.51, 309.75),
 ]
 
 
@@ -181,7 +181,7 @@ def test_CONTROLE_sem_a_regra_os_tres_casos_passavam():
 # ══════════════════════════════════════════════════════════════════════════
 from engine_rules import comprimento_de_parede_na_observacao as _compr  # noqa: E402
 
-# A observação REAL do filhote `ev6edc7e` (Caroline), 04/09/2026.
+# A observação REAL do filhote `ev6edc7e` (cliente-22), 04/09/2026.
 _OBS_REAL = ("Estimativa: comprimento total do layer PAREDES = 17,18 m "
              "(confirmado) × pé-direito estimado 2,60 m = 44,67 m². Descontar "
              "vãos de esquadrias > 2 m² na revisão. Confirmar pé-direito em corte.")
@@ -190,7 +190,7 @@ _OBS_REAL = ("Estimativa: comprimento total do layer PAREDES = 17,18 m "
 def test_o_comprimento_e_lido_da_OBSERVACAO():
     """🩸 O furo que só apareceu RODANDO num arquivo real.
 
-    O conserto foi escrito olhando a 1ª rodada da Caroline, onde a parede saiu
+    O conserto foi escrito olhando a 1ª rodada da cliente-22, onde a parede saiu
     como "17,18 ml". Rodei o filhote do MESMO arquivo e o guarda ficou mudo: o
     motor não é determinístico e naquela rodada a parede saiu só em **m²**.
 
@@ -251,7 +251,7 @@ def test_a_soma_da_EXTRACAO_nao_entra_na_comparacao():
 
     Eu tinha acrescentado `sum(_compr_paredes)` (a soma de TODOS os layers de
     parede da extração) como "terceira fonte", achando que era a medida
-    robusta. Medi no arquivo da Caroline e o número desmentiu:
+    robusta. Medi no arquivo da cliente-22 e o número desmentiu:
 
         layers_de_parede=31   soma=251,23 m   maior=ARQ_HAT(57,94 m)
 
@@ -272,7 +272,7 @@ def test_a_soma_da_EXTRACAO_nao_entra_na_comparacao():
 
 
 def test_a_MEDICAO_da_extracao_continua_sendo_gravada():
-    """Ela não serve de piso, mas é o dado que explicou o caso da Caroline:
+    """Ela não serve de piso, mas é o dado que explicou o caso da cliente-22:
     a parede ESTÁ no desenho (251 m) e o item usou 17,18 m de um layer só."""
     assert "motor:parede-medida" in _FONTE, (
         "sumiu o log que mede quanta parede a extração acha — sem ele a gente "
@@ -282,7 +282,7 @@ def test_a_MEDICAO_da_extracao_continua_sendo_gravada():
 
 def test_o_aviso_NAO_inventa_a_causa():
     """🩸 04/09, mesmo dia: a 1ª redação dizia "provavelmente está num layer que
-    o motor não reconheceu". Fui MEDIR os layers do arquivo da Caroline pra
+    o motor não reconheceu". Fui MEDIR os layers do arquivo da cliente-22 pra
     provar a frase, e o dado derrubou:
 
         ARQ_HAT=57,9 · ARQ_VISTA01=22,3 · Camada 1=22,1 · PAREDES=17,2
@@ -310,7 +310,7 @@ def test_o_aviso_NAO_inventa_a_causa():
         "errada — os outros layers eram fachada e hachura, não parede")
     assert "hachura ou sólido" in frase, (
         "sumiu a 1ª hipótese (parede desenhada como hachura/sólido) — é a que "
-        "o dado da Caroline torna mais provável")
+        "o dado da cliente-22 torna mais provável")
     assert "não sabe qual é a sua" in frase, (
         "o aviso parou de admitir que não sabe qual das causas é — voltou a "
         "vender palpite como diagnóstico")

@@ -90,7 +90,7 @@ def _num(s) -> float | None:
         return None
     s = str(s).strip().replace(" ", " ").replace(" ", "")
     # 🚨 29/08/2026 — "685 kgf" virava None e o TOTAL do quadro sumia.
-    # No quadro da Eduarda o valor vem com a unidade colada ("131 kgf",
+    # No quadro da cliente-20 o valor vem com a unidade colada ("131 kgf",
     # "685 kgf"). Aceitar sufixo de UNIDADE é diferente de aceitar texto livre:
     # continua exigindo número puro, só tolera a unidade no fim.
     # 🪤 A lista é fechada de propósito. `_num_in_text` (que pega o 1º número de
@@ -128,12 +128,12 @@ _SPLIT_RE = re.compile(r"[-_\s./\\|:]+")
 
 # 🏗️ 01/09/2026 — "COLS" é o padrão AIA/CAD para pilar estrutural (`S-COLS` =
 # Structural Columns), e não casava: `_has_token` quebra "S-COLS" em ["S","COLS"]
-# e "COLS" não começa com "COLUMN". Apareceu no arquivo do Edvaldo (RACIONAL),
+# e "COLS" não começa com "COLUMN". Apareceu no arquivo do cliente-23 (RACIONAL),
 # onde os 54 pilares vivem no layer `S-COLS`.
 # 🪤 "COLUNA" foi TESTADO e RECUSADO: o Tiago (METAL-AR) tem o layer
 # `AC-Indicação coluna Frigorígenas` — coluna frigorígena de ar-condicionado, e
 # não pilar. Casaria como falso positivo em toda prancha de climatização.
-# ⚠️ HONESTIDADE SOBRE O ALCANCE: isto sozinho NÃO destrava o caso do Edvaldo.
+# ⚠️ HONESTIDADE SOBRE O ALCANCE: isto sozinho NÃO destrava o caso do cliente-23.
 # O detector de pilar só olha polilinha FECHADA, e o arquivo dele não tem
 # nenhuma (2.158 LINE, 448 HATCH, 0 LWPOLYLINE) — os pilares são hachura.
 # Medido em 01/09: 210 de 213 pranchas da base saem com `pilares=0`, e o
@@ -174,7 +174,7 @@ _DIA_RE = re.compile(r"(?:ø|Ø|φ|Φ|%%[cC]|\bfi\b)\s*(\d{1,2}(?:[.,]\d{1,2})?)
 _PESO_HDR_RE = re.compile(r"\bpeso\b", re.IGNORECASE)
 _COMP_HDR_RE = re.compile(r"\bcomp|c\.?\s*total|comprimento", re.IGNORECASE)
 # 🚨 29/08/2026 — "BIT" NÃO CASAVA, E ISSO SOZINHO ZERAVA A PLANILHA.
-# Caso Eduarda (job 42c354a1): a coluna do quadro dela se chama "BIT",
+# Caso cliente-20 (job 42c354a1): a coluna do quadro dela se chama "BIT",
 # abreviada. Sem casar, `bitola_x` fica None, TODA linha de dados é pulada, o
 # quadro sai vazio e `parse_steel_table` devolve None — o quadro nunca chega ao
 # prompt e a planilha inteira sai laranja. Seis linhas perfeitas (conferidas
@@ -270,7 +270,7 @@ def parse_steel_table(texts) -> dict | None:
         for c in r["cells"]:
             # 🚨 29/08/2026 — "PESO TOTAL" É LINHA DE TOTAL, NÃO CABEÇALHO.
             #
-            # Caso Eduarda (job 42c354a1). O rodapé do quadro dela é
+            # Caso cliente-20 (job 42c354a1). O rodapé do quadro dela é
             # "Peso Total 50 = 685 kgf" — e como contém a palavra *peso*, virava
             # um CABEÇALHO de quadro novo. Dois estragos de uma vez:
             #
@@ -322,7 +322,7 @@ def parse_steel_table(texts) -> dict | None:
 
         # 🚨 29/08/2026 — O QUADRO NÃO TINHA BORDA E ENGOLIA A PRANCHA INTEIRA.
         #
-        # Caso Eduarda (job 42c354a1, prancha 0653-KZ-EST-PE-1052). O quadro dela
+        # Caso cliente-20 (job 42c354a1, prancha 0653-KZ-EST-PE-1052). O quadro dela
         # é PERFEITO — conferi as 6 linhas contra a NBR 7480, uma por uma:
         #     Ø5,0   852 m × 0,154 = 131,2   quadro diz 131   ✓
         #     Ø6,3   206 m × 0,245 =  50,5   quadro diz  50   ✓
@@ -604,13 +604,13 @@ def parse_steel_table(texts) -> dict | None:
     # 🚨 29/08/2026 — O BURACO QUE DEIXAVA AÇO EM DOBRO SAIR COMO "MEDIDO".
     #
     # Achado por cético adversarial, depois de eu declarar o conserto bom. Eu
-    # tinha "conferido" os 38 itens da Eduarda recalculando comprimento × massa
+    # tinha "conferido" os 38 itens da cliente-20 recalculando comprimento × massa
     # linear e comparando com o peso. Passaram 37 de 38 dentro de 1,3%.
     #
     # 🩸 A conferência era uma TAUTOLOGIA. Quando a mesma bitola cai em mais de
     # um quadro, a consolidação acima soma o `kg` E o `comp_m` JUNTOS — então a
     # razão kg/comp continua exatamente a massa linear da norma. Reproduzido com
-    # o quadro real da Eduarda duplicado sob o mesmo cabeçalho:
+    # o quadro real da cliente-20 duplicado sob o mesmo cabeçalho:
     #
     #     soma lida 1632 kg   (a verdade é 816)   confiavel=True
     #     Ø5,0   262 kg / 1704 m  → NBR 262,8   desvio -0,32%
@@ -628,7 +628,7 @@ def parse_steel_table(texts) -> dict | None:
     # houver um TOTAL declarado pra conferir contra. Sem essa âncora, a soma é
     # indistinguível do dobro, e a resposta honesta é "não sei" → estimado.
     # 🪤 Não rebaixa quando HÁ total: aí a soma tem verificação independente, e
-    # foi o que salvou 5 das 6 pranchas da Eduarda.
+    # foi o que salvou 5 das 6 pranchas da cliente-20.
     if _repetiu_bitola and total_kg is None:
         confiavel = False
         avisos.append(

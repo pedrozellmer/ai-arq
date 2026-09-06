@@ -3,12 +3,12 @@
 
 🚨 26/08/2026. `jobs.em_curso()` é o número que o hook de pre-push lê no
 /api/health pra decidir se pode subir código. Subir no meio de um job mata o
-processamento do cliente (caso Walter, 29/07).
+processamento do cliente (caso cliente-30, 29/07).
 
 Ela lia o `_jobs.json`, que mora no disco EFÊMERO do Render:
 
 - **08:26 — liberou com cliente rodando (o perigoso).** O banco dizia
-  `processing` há 130s no job da Amanda; a trava dizia **0**. Um push naquele
+  `processing` há 130s no job da cliente-16; a trava dizia **0**. Um push naquele
   minuto teria matado o processamento dela. Causa: todo reinício nasce sem o
   arquivo, e `_load_jobs()` devolve `{}` SEM exceção — caminho feliz que
   devolve 0 é uma trava desarmada. O `return -1` só cobria o caso de exceção.
@@ -57,7 +57,7 @@ def test_job_vivo_no_banco_BLOQUEIA_mesmo_com_arquivo_local_vazio(monkeypatch):
     monkeypatch.setattr(main, "_load_jobs", lambda: {})   # disco efêmero zerado
     assert main.jobs.em_curso() == 1, (
         "REGRESSÃO: a trava liberaria o deploy com cliente processando. "
-        "Foi exatamente isso às 08:26 no job da Amanda.")
+        "Foi exatamente isso às 08:26 no job da cliente-16.")
 
 
 def test_job_mudo_ha_muito_tempo_NAO_bloqueia(monkeypatch):
@@ -111,7 +111,7 @@ def test_controle_positivo_a_versao_ANTIGA_liberaria(monkeypatch):
 
     Refaz o comportamento antigo (só o arquivo local) no mesmo cenário do
     primeiro teste: cliente rodando, arquivo vazio. Tem que dar 0 — o número
-    que teria matado o job da Amanda.
+    que teria matado o job da cliente-16.
     """
     def _antiga():
         return sum(1 for j in {}.values()

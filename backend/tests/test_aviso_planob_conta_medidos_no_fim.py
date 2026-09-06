@@ -222,7 +222,7 @@ def test_CONTROLE_selo_zero_SEM_geometria_continua_dizendo_que_veio_de_texto():
 def test_CONTROLE_linha_ZERADA_que_cita_hachura_nao_conta_como_medida():
     """Observação que CITA geometria numa linha sem quantidade não é medição.
 
-    O item "Escada — Fôrma" do job do Edvaldo diz "área hachurada" e, na frase
+    O item "Escada — Fôrma" do job do cliente-23 diz "área hachurada" e, na frase
     seguinte, "NÃO calculada". Contar isso seria inventar procedência na outra
     direção — o mesmo vício que este conserto existe pra tirar.
     """
