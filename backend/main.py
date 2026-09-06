@@ -496,6 +496,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 06/09: a régua de cobrança grava aqui a entrega que NÃO faturaria. Não é
     # erro do motor — é o número que diz quantos projetos a régua está segurando.
     "cobranca:regua",
+    # 06/09: avisa que o Stripe passou a aceitar PIX — a copy do site precisa
+    # acompanhar. Diagnóstico, não erro.
+    "checkout:pix-liberado",
 })
 
 
@@ -19782,7 +19785,23 @@ def _grant_credit(user_id: str, amount_cents: int, source: str,
 
 def _consume_credits(user_id: str, amount_cents: int, job_id: str) -> int:
     """Consome créditos até somar amount_cents. Marca used_at nos usados.
-    Retorna o TOTAL efetivamente consumido (pode ser menor se saldo insuficiente)."""
+    Retorna o TOTAL efetivamente consumido (pode ser menor se saldo insuficiente).
+
+    🩸 06/09/2026 — ANTES ISTO QUEIMAVA A LINHA INTEIRA, SEM TROCO. Quem tivesse
+    um crédito de R$2.000 e usasse R$97 perdia R$1.903 em silêncio: o loop
+    marcava `used_at` na linha toda e somava o valor CHEIO em `consumed`. As
+    cortesias que o Pedro deu em maio diziam "1 mês de uso ilimitado" — a
+    primeira compra as teria zerado.
+
+    Agora o resto vira uma linha nova. Três cuidados que a ordem impõe:
+    · o PATCH vem PRIMEIRO e o INSERT do resto DEPOIS. Invertido, uma queda no
+      meio DUPLICARIA o saldo. Nesta ordem, a queda perde o troco — o mesmo
+      prejuízo de antes, nunca pior. Falha fechada, não aberta;
+    · o filtro `used_at=is.null` da URL NÃO pode sair: é ele que impede baixa
+      dupla numa corrida, e o dashboard tem histórico de duplo clique medido;
+    · PostgREST não dá atomicidade entre os dois. INSERT do troco que falha
+      AVISA — escrita de dinheiro que falha calada é o que a casa mais paga.
+    """
     available = _get_available_credits(user_id)
     if not available:
         return 0
@@ -19792,6 +19811,11 @@ def _consume_credits(user_id: str, amount_cents: int, job_id: str) -> int:
     for cr in available:
         if consumed >= amount_cents:
             break
+        _valor = int(cr.get("amount_cents") or 0)
+        if _valor <= 0:
+            continue
+        _restante = amount_cents - consumed
+        _troco = _valor - _restante if _valor > _restante else 0
         # Marca used_at
         try:
             url = f"{SUPABASE_URL}/rest/v1/user_credits?id=eq.{cr['id']}&used_at=is.null"
@@ -19802,9 +19826,29 @@ def _consume_credits(user_id: str, amount_cents: int, job_id: str) -> int:
             req.add_header("Content-Type", "application/json")
             req.add_header("Prefer", "return=minimal")
             _ur.urlopen(req, timeout=8)
-            consumed += int(cr.get("amount_cents") or 0)
+            consumed += _valor if _troco == 0 else _restante
         except Exception as e:
             print(f"consume credit error: {e}")
+            continue
+        # ── O TROCO ─────────────────────────────────────────────────────────
+        # Só depois de a baixa ter dado certo. O que sobrou volta como crédito
+        # novo, com a mesma origem e a MESMA validade — o troco não pode ganhar
+        # sobrevida que o original não tinha.
+        if _troco > 0:
+            _ok_troco = _supabase_insert("user_credits", {
+                "user_id": user_id,
+                "amount_cents": _troco,
+                "source": cr.get("source") or "troco",
+                "source_ref": cr.get("source_ref"),
+                "expires_at": cr.get("expires_at"),
+                "description": ("Resto de R$ %.2f — o restante foi usado no projeto %s"
+                                % (_valor / 100.0, job_id)),
+            })
+            if not _ok_troco:
+                _log_error("credito:troco-perdido",
+                           f"user={user_id} job={job_id}: baixei R$ {_valor/100:.2f} "
+                           f"mas NAO consegui devolver R$ {_troco/100:.2f} de troco",
+                           job_id, severity="error")
     return consumed
 
 
@@ -19829,6 +19873,35 @@ async def credits_balance(request: Request, user_id: str):
         "total_brl": round(total / 100, 2),
         "credits": credits,
     }
+
+
+# ── PIX: lembrar que ele não está disponível, sem esquecer pra sempre ──────
+# Pra conta BRASILEIRA o PIX à vista é INVITE ONLY no Stripe
+# (docs.stripe.com/payments/pix). Conferido na conta de produção em 06/09/2026:
+# `pix.available = false`. Enquanto for assim, pedir PIX na criação da sessão é
+# uma chamada que falha de propósito, toda vez.
+_PIX_TTL_S = 3600
+_PIX_ESTADO = {"ate": 0.0, "indisponivel": False}
+
+
+def _pix_vale_tentar() -> bool:
+    """False só enquanto a última recusa do Stripe ainda está fresca.
+
+    🔑 O TTL é o ponto: no dia em que o PIX for liberado, o checkout volta a
+    oferecê-lo sozinho, em no máximo uma hora, sem deploy. Cache que não
+    esquece transformaria um erro de uma hora atrás em decisão permanente.
+    """
+    if not _PIX_ESTADO["indisponivel"]:
+        return True
+    if time.time() >= _PIX_ESTADO["ate"]:
+        _PIX_ESTADO["indisponivel"] = False   # expirou: vale tentar de novo
+        return True
+    return False
+
+
+def _pix_marcar_indisponivel() -> None:
+    _PIX_ESTADO["indisponivel"] = True
+    _PIX_ESTADO["ate"] = time.time() + _PIX_TTL_S
 
 
 @app.post("/api/checkout")
@@ -19913,19 +19986,44 @@ async def create_checkout(request: Request, num_pranchas: int = 1, num_files: in
         },
     }
 
-    # Tenta com PIX+card primeiro. Se o Stripe não tiver PIX ativado
-    # (típico em conta nova ou ainda não configurada), cai pra card-only
-    # automaticamente — evita quebrar o fluxo do cliente.
+    # Tenta com PIX+card primeiro. Se o Stripe não tiver PIX ativado, cai pra
+    # card-only automaticamente — evita quebrar o fluxo do cliente.
+    #
+    # 🪤 06/09/2026 — o fallback funciona, mas era pago TODA VEZ: duas chamadas
+    # ao Stripe por checkout, uma delas falhando de propósito. Confirmado na
+    # conta de produção (acct_1SafSd0t4KZGOuLP): `pix.available = false` — e as
+    # 4 sessões reais que existem saíram todas com `["card"]`, ou seja, o
+    # caminho caro rodou nas 4. Pra conta BRASILEIRA o PIX à vista é
+    # INVITE ONLY no Stripe (docs.stripe.com/payments/pix): não é um botão que
+    # o Pedro liga no painel, e enquanto não for liberado a primeira tentativa
+    # é desperdício garantido.
+    #
+    # A lembrança tem TTL de propósito: no dia em que o PIX for liberado, o
+    # checkout volta a oferecê-lo sozinho, sem deploy. Cache que não esquece
+    # viraria uma decisão permanente tomada por um erro de uma hora atrás.
     session = None
     methods_used = []
+    _tentar_pix = _pix_vale_tentar()
+    _metodos = ["card", "pix"] if _tentar_pix else ["card"]
     try:
-        session_params = {**base_params, "payment_method_types": ["card", "pix"]}
+        session_params = {**base_params, "payment_method_types": _metodos}
         session = stripe.checkout.Session.create(**session_params)
-        methods_used = ["card", "pix"]
+        methods_used = list(_metodos)
+        if "pix" in methods_used:
+            # 🚨 O PIX FOI LIBERADO — e a copy do site ainda diz "só cartão".
+            # O TTL acima faz o checkout voltar a oferecer PIX sozinho, sem
+            # deploy; isso é bom pro cliente e ruim pro site, que passa a
+            # prometer menos do que entrega. Sem este aviso, a divergência
+            # apareceria primeiro pro cliente e só depois pra gente.
+            _log_error("checkout:pix-liberado",
+                       "o Stripe aceitou PIX nesta sessão — atualizar a copy do "
+                       "site, que hoje promete só cartão (precos.html, faq.html)",
+                       severity="warning")
     except stripe.error.InvalidRequestError as e:
         msg = str(e).lower()
-        if "pix" in msg or "payment_method_types" in msg:
+        if _tentar_pix and ("pix" in msg or "payment_method_types" in msg):
             print(f"[checkout] PIX indisponível ({e}); caindo pra card-only")
+            _pix_marcar_indisponivel()
             try:
                 session_params = {**base_params, "payment_method_types": ["card"]}
                 session = stripe.checkout.Session.create(**session_params)

@@ -306,7 +306,7 @@
       "name": "Quais dados pessoais são coletados?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "• Via Google: nome, e-mail e foto de perfil • Via cadastro: nome completo, WhatsApp, empresa, área de atuação e cargo (CPF/CNPJ só antes do 1º pagamento, pro recibo — no beta o uso é grátis, sem CPF) • Via uso: Arquivos enviados — PDF, DWG e DXF (armazenados por até 90 dias em storage criptografado, excluídos automaticamente) e histórico de projetos • Via pagamento: processado pelo Stripe — não armazenamos dados de cartão Consulte nossa Política de Privacidade para detalhes completos."
+        "text": "• Via Google: nome, e-mail e foto de perfil • Via cadastro: nome completo, WhatsApp, empresa, área de atuação e cargo (CPF/CNPJ é opcional e só será usado quando a cobrança começar — no beta o uso é grátis e ele não é usado) • Via uso: Arquivos enviados — PDF, DWG e DXF (armazenados por até 90 dias em storage criptografado, excluídos automaticamente) e histórico de projetos • Via pagamento: processado pelo Stripe — não armazenamos dados de cartão Consulte nossa Política de Privacidade para detalhes completos."
       }
     },
     {
@@ -314,7 +314,7 @@
       "name": "Por que vocês não pedem CPF no cadastro?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Durante o beta, todos os projetos são grátis e você não precisa de CPF/CNPJ pra usar. CPF/CNPJ é pedido só antes do 1º pagamento — precisamos pra emitir o recibo da transação. Quem nunca vai pagar (só usa o grátis) nunca precisa preencher. No checkout do Stripe (cartão) o sistema confere se o CPF/CNPJ está preenchido no seu perfil. Se não estiver, abre uma janelinha pra você informar antes do pagamento."
+        "text": "Durante o beta, todos os projetos são grátis e você não precisa de CPF/CNPJ pra usar — o campo é opcional. Ele existe pro dia em que a cobrança começar: aí vamos precisar dele pra identificar quem pagou no documento fiscal. Enquanto o uso é gratuito, o CPF/CNPJ não é usado pra nada — fica guardado no seu perfil e você pode pedir pra gente apagar quando quiser. Quem nunca vai pagar nunca precisa preencher."
       }
     },
     {
@@ -1307,7 +1307,7 @@
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
               <ul class="space-y-1.5 ml-1">
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via Google:</strong> nome, e-mail e foto de perfil</li>
-                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via cadastro:</strong> nome completo, WhatsApp, empresa, &aacute;rea de atua&ccedil;&atilde;o e cargo (CPF/CNPJ s&oacute; antes do 1&ordm; pagamento, pro recibo &mdash; no beta o uso &eacute; gr&aacute;tis, sem CPF)</li>
+                <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via cadastro:</strong> nome completo, WhatsApp, empresa, &aacute;rea de atua&ccedil;&atilde;o e cargo (CPF/CNPJ &eacute; opcional e s&oacute; ser&aacute; usado quando a cobran&ccedil;a come&ccedil;ar &mdash; no beta o uso &eacute; gr&aacute;tis e ele n&atilde;o &eacute; usado)</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via uso:</strong> Arquivos enviados &mdash; PDF, DWG e DXF (armazenados por at&eacute; 90 dias em storage criptografado, exclu&iacute;dos automaticamente) e hist&oacute;rico de projetos</li>
                 <li class="flex items-start gap-2"><span class="text-indigo-400 mt-1.5 shrink-0">&bull;</span> <strong>Via pagamento:</strong> processado pelo Stripe &mdash; n&atilde;o armazenamos dados de cart&atilde;o</li>
               </ul>
@@ -1324,7 +1324,7 @@
           </button>
           <div class="faq-answer px-5">
             <div class="pb-5 text-sm text-gray-600 leading-relaxed">
-              <p>Durante o beta, todos os projetos s&atilde;o gr&aacute;tis e voc&ecirc; n&atilde;o precisa de CPF/CNPJ pra usar. CPF/CNPJ &eacute; pedido s&oacute; antes do 1&ordm; pagamento &mdash; precisamos pra emitir o recibo da transa&ccedil;&atilde;o. Quem nunca vai pagar (s&oacute; usa o gr&aacute;tis) nunca precisa preencher.</p>
+              <p>Durante o beta, todos os projetos s&atilde;o gr&aacute;tis e voc&ecirc; n&atilde;o precisa de CPF/CNPJ pra usar &mdash; o campo &eacute; opcional. Ele existe pro dia em que a cobran&ccedil;a come&ccedil;ar: a&iacute; vamos precisar dele pra identificar quem pagou no documento fiscal. <strong>Enquanto o uso &eacute; gratuito, o CPF/CNPJ n&atilde;o &eacute; usado pra nada</strong> &mdash; fica guardado no seu perfil e voc&ecirc; pode pedir pra gente apagar quando quiser. Quem nunca vai pagar nunca precisa preencher.</p>
               <p class="mt-2 text-xs text-gray-500">No checkout do Stripe (cart&atilde;o) o sistema confere se o CPF/CNPJ est&aacute; preenchido no seu perfil. Se n&atilde;o estiver, abre uma janelinha pra voc&ecirc; informar antes do pagamento.</p>
             </div>
           </div>

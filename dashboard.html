@@ -1213,7 +1213,7 @@
         <h3 id="modal-cpf-title" class="font-semibold text-gray-900">Falta só uma coisa pro pagamento</h3>
         <button type="button" id="modal-cpf-close" aria-label="Fechar" class="text-gray-400 hover:text-gray-600">✕</button>
       </div>
-      <p class="text-sm text-gray-600 mb-4">Pra emitir o recibo do pagamento, a gente precisa do seu CPF ou CNPJ. Pedimos só agora — o cadastro inicial é sem CPF.</p>
+      <p class="text-sm text-gray-600 mb-4">Pra identificar quem pagou no documento fiscal, a gente precisa do seu CPF ou CNPJ. Pedimos só agora — o cadastro inicial é sem CPF.</p>
       <label for="modal-cpf-input" class="block text-xs font-medium text-gray-500 mb-1">CPF ou CNPJ</label>
       <input id="modal-cpf-input" type="text" inputmode="numeric" maxlength="18"
              class="w-full px-3 py-2.5 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500"
@@ -3558,10 +3558,19 @@
     const isUnlimited = !!window.__isUnlimitedUser;  // testing/dev bypass
     // Crédito cobre tudo? (cashback, cupom, referral)
     const creditCoversAll = priceCents > 0 && userCreditsCents >= priceCents;
+    // 🩸 06/09/2026 — O CRÉDITO ERA QUEIMADO NUM PROJETO QUE SAIRIA GRÁTIS.
+    // `creditCoversAll` entrava no `if` abaixo ANTES do `else if (BETA_FREE)`,
+    // então quem tinha saldo pagava com ele um projeto que qualquer outra
+    // pessoa recebe de graça — e não via sumir, porque a pill do saldo está
+    // com display:none desde que o cashback saiu do palco.
+    // O Pedro concedeu cortesia 3× em maio, quando o produto falhou com
+    // cliente: a próxima de R$2.000 viraria R$97 usados e R$1.903 perdidos no
+    // primeiro clique. Durante o beta, crédito NUNCA se gasta.
+    const creditoPaga = creditCoversAll && !BETA_FREE;
 
-    if (isFree || isUnlimited || creditCoversAll) {
+    if (isFree || isUnlimited || creditoPaga) {
       // Se crédito cobre tudo, passa instrução pro backend consumir
-      if (creditCoversAll && !isFree && !isUnlimited) {
+      if (creditoPaga && !isFree && !isUnlimited) {
         window.__creditsToConsumeCents = priceCents;
       } else {
         window.__creditsToConsumeCents = 0;

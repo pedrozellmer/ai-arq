@@ -136,8 +136,14 @@
           <p class="text-xs text-gray-500 mt-1">Usamos seu WhatsApp e e-mail pra te avisar sobre <strong>seus projetos</strong> — quando a planilha fica pronta ou se dá algum problema. (Novidades e promoções só se você marcar a opção abaixo.)</p>
         </div>
 
-        <!-- CPF ou CNPJ — opcional na 1ª etapa: o usuário só precisa fornecer
-             antes de pagar (pro recibo). No beta, todos os projetos são grátis. -->
+        <!-- CPF ou CNPJ — opcional na 1ª etapa: só será necessário no dia em
+             que a cobrança começar, pra identificar quem pagou no documento
+             fiscal. No beta, todos os projetos são grátis e ele NÃO é usado
+             pra nada. 🪤 06/09/2026: este comentário e mais cinco lugares do
+             site justificavam o campo com um comprovante fiscal que o produto
+             não emite (sem receipt_email, sem invoice_creation, sem rota) — e
+             54 pessoas preencheram o campo opcional acreditando nisso. Ver
+             backend/tests/test_copy_nao_promete_recibo_que_nao_existe.py. -->
         <div>
           <label for="cpf_cnpj" class="block text-sm font-medium text-gray-700 mb-1">
             CPF ou CNPJ
