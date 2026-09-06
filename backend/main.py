@@ -496,6 +496,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     # 06/09: a régua de cobrança grava aqui a entrega que NÃO faturaria. Não é
     # erro do motor — é o número que diz quantos projetos a régua está segurando.
     "cobranca:regua",
+    # 06/09: o e-mail do caso do meio (leu, identificou, não mediu). Diagnóstico
+    # do que o cliente LEU, não erro do motor.
+    "motor:leu-sem-medir",
     # 06/09: avisa que o Stripe passou a aceitar PIX — a copy do site precisa
     # acompanhar. Diagnóstico, não erro.
     "checkout:pix-liberado",
@@ -3591,6 +3594,71 @@ def _build_sem_medida_email(name: str, project_name: str, job_id: str,
         # 🪤 Preheader de ma noticia nao pode soar animado. Diz o
         # fato e o caminho, sem promessa que a gente nao cumpre.
         preheader="Os itens saíram identificados, mas sem quantidade medida — "
+                  "veja o motivo e o que resolve.",
+        reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
+    return subject, html
+
+
+def _build_leu_sem_medir_email(name: str, project_name: str, job_id: str,
+                               n_total: int, n_zerados: int, extra_body_html: str = "",
+                               email: str = ""):
+    """O TERCEIRO e-mail: 'li o seu desenho, mas não medi nada dele'.
+
+    🩸 06/09/2026, visto AO VIVO. O Devair subiu 3 PDFs de uma guarita e
+    recebeu "sua planilha está pronta" — com 124 itens e ZERO medidos do CAD.
+    Antes tinha recebido "seu projeto vira planilha medida" nas boas-vindas.
+    Dois e-mails prometendo medição pra uma entrega que não mediu nada.
+
+    Por que a irmã de má notícia não pegou: `_build_sem_medida_email` só sai
+    quando ≥80% das linhas estão EM BRANCO. Ali eram 53 de 124 (43%) — as
+    outras tinham número, só que número ESTIMADO. O critério olhava linha
+    vazia; o que importa é linha MEDIDA. Neste projeto as duas respostas eram
+    opostas.
+
+    🔑 Este texto cobre o meio que faltava: a gente leu (tem 124 itens
+    identificados, e isso é trabalho de verdade), mas nenhuma quantidade veio
+    do desenho. Nem "deu tudo certo", nem "não consegui ler seu arquivo" —
+    dizer a segunda pra quem TEVE o desenho lido o faz procurar um arquivo
+    melhor que não existe (o caso de 03/09 que criou a guarda do `_n_geo_nm`).
+
+    🚫 Não mexi nas condições da irmã: elas continuam valendo pro caso delas.
+    Este builder entra no `else` que antes caía direto na comemoração.
+    """
+    import html as _hs
+    _pn = (project_name or "").strip()
+    # 🪤 O assunto tem teto de 52 caracteres — acima disso o celular corta e o
+    # cliente lê pela metade. O primeiro que escrevi tinha 58 e o guarda pegou.
+    # Numa má notícia, ler pela metade é pior ainda: "identifiquei os itens,
+    # mas não medi as..." cortado vira promessa.
+    subject = (f"{_pn} — sem quantidade medida do CAD"
+               if _pn else "Sem quantidade medida do CAD")
+    _com_numero = max(0, int(n_total) - int(n_zerados))
+    corpo = (
+        f"{_greeting_line(_hs.escape(name or ''))}<br><br>"
+        f"Li o seu desenho e identifiquei <b>{n_total} itens</b> — o escopo "
+        f"está lá, com especificação e referência. Mas preciso te avisar de "
+        f"uma coisa antes de você abrir: <b>nenhuma quantidade foi medida do "
+        f"CAD</b>. As {_com_numero} linhas que vieram com número são "
+        f"<b>estimativa</b>, marcadas em laranja pra você conferir, e outras "
+        f"{n_zerados} ficaram sem número.<br><br>"
+        f"Ou seja: serve como lista do que existe no projeto, <b>não como "
+        f"quantitativo pronto</b>. Prefiro te dizer isso agora do que deixar "
+        f"você descobrir na hora de orçar.<br><br>"
+        f"O motivo costuma ser escala: sem cota, sem carimbo confiável e sem "
+        f"viewport, não dá pra saber o tamanho real do que está desenhado — e "
+        f"a gente não inventa medida.<br><br>"
+        f"<b>O que resolve:</b> mande a mesma planta em <b>DXF</b> (no AutoCAD "
+        f"ou BricsCAD: Salvar Como → DXF 2013) no mesmo projeto. A gente refaz "
+        f"medindo de verdade, de graça. Se só existe o PDF, me diga a área "
+        f"total no upload — entra como informada por você, nunca como medida."
+        f"{extra_body_html}"
+        + _bloco_avaliar_projeto(job_id, email, sem_medida=True))
+    html = _email_wrap(
+        "Identifiquei os itens, mas não medi as quantidades", corpo,
+        "Abrir meu projeto",
+        f"https://ai.arq.br/projeto.html?job_id={job_id}",
+        badge="&#9888; Sem medi&ccedil;&atilde;o do CAD",
+        preheader="O escopo saiu completo, mas as quantidades são estimativa — "
                   "veja o motivo e o que resolve.",
         reason="Você está recebendo este e-mail porque processou um projeto no AI.arq.")
     return subject, html
@@ -13139,14 +13207,35 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     _log_error("motor:sem-medida-nenhuma",
                                f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
                                f"— e-mail trocado por 'não consegui medir'", job_id)
+                elif _n_med == 0 and len(all_items) > 0:
+                    # 🩸 06/09/2026 — O CASO DO MEIO, visto AO VIVO. O Devair
+                    # recebeu "sua planilha está pronta" com 124 itens e ZERO
+                    # medidos: a irmã de má notícia acima só sai com ≥80% das
+                    # linhas EM BRANCO, e ali eram 43% — as outras tinham
+                    # número ESTIMADO. O critério olhava linha vazia; o que
+                    # importa é linha MEDIDA, e neste projeto as duas
+                    # respostas eram opostas.
+                    # 🔑 Mesma régua da cobrança: `_n_med == 0` é exatamente o
+                    # que faz `_carimbar_regua_de_cobranca` marcar cobravel
+                    # = false. O e-mail passa a falar a mesma língua do que a
+                    # gente cobraria.
+                    _subj_pp, _html_pp = _build_leu_sem_medir_email(
+                        _nm, _rows[0].get("project_name") or "", job_id,
+                        len(all_items), _n_zerado, f"{_aviso_html}{_diag}", email=_pe)
+                    _log_error("motor:leu-sem-medir",
+                               f"itens={len(all_items)} medidos=0 zerados={_n_zerado} "
+                               f"— e-mail trocado por 'identifiquei, mas não medi'", job_id)
                 else:
                     _subj_pp, _html_pp = _build_planilha_pronta_email(
                         _nm,
                         _rows[0].get("project_name") or "seu projeto",
                         job_id, len(all_items), f"{_aviso_html}{_diag}{_proximos}",
                         email=_pe)
-                _send_email_smtp(_pe, _subj_pp, _html_pp,
-                                 log_kind="sem_medida" if _nada_medido else "planilha_pronta")
+                _send_email_smtp(
+                    _pe, _subj_pp, _html_pp,
+                    log_kind=("sem_medida" if _nada_medido
+                              else "leu_sem_medir" if (_n_med == 0 and len(all_items) > 0)
+                              else "planilha_pronta"))
         except Exception as _ee:
             print(f"[email] planilha-pronta nao enviada (nao-fatal): {_ee}")
 
@@ -17161,6 +17250,12 @@ def _render_email_by_type_raw(key: str):
     if key == "sem_medida":
         return _build_sem_medida_email(nome, projeto, fake_job, 30, 27, "",
                                        email="cliente@exemplo.com")
+    # 06/09: o TERCEIRO caso — leu e identificou, mas nao mediu nada do CAD.
+    # Numeros do exemplo tirados do caso real que o revelou (job 40550d3e):
+    # 124 itens, 53 em branco, ZERO medidos.
+    if key == "leu_sem_medir":
+        return _build_leu_sem_medir_email(nome, projeto, fake_job, 124, 53, "",
+                                          email="cliente@exemplo.com")
     if key == "boas_vindas_cadastro":
         return _build_welcome_email(nome, True, fake_link)
     if key in ("leitura_nova", "leitura_combinada"):
