@@ -1614,6 +1614,7 @@ let COSTS = [];
 let COSTS_PROJ30 = null;  // projetos de CLIENTE concluídos nos últimos 30d (divisor do custo/projeto); null = sem medição
 let COSTS_EVAL30 = null;  // avaliações NOSSAS concluídas nos últimos 30d (ficam fora do divisor); null = sem medição
 let COSTS_IA = null;      // resumo do gasto de IA medido (llm_uso); null = sem medição
+let COSTS_REGUA = null;   // régua de cobrança: quanto entraria; null = sem medição
 let COSTS_ILEGIVEL = false;  // a tabela de custos não pôde ser lida (≠ tabela vazia)
 // 🚨 'desenvolvimento' é o que custa CONSTRUIR o produto (Claude Code), não
 // processar projeto de cliente. Decisão do Pedro em 06/09/2026: aparece na tela,
@@ -1651,6 +1652,7 @@ async function loadCosts(){
     COSTS_ILEGIVEL = (d.costs == null);
     COSTS = COSTS_ILEGIVEL ? [] : d.costs;
     COSTS_IA = (d.custo_ia && typeof d.custo_ia === 'object') ? d.custo_ia : null;
+    COSTS_REGUA = (d.regua && typeof d.regua === 'object') ? d.regua : null;
     // 🪤 null = o backend não conseguiu contar. NÃO vira zero: zero é afirmação
     // ("nenhum projeto de cliente"), falha de contagem é outra coisa.
     COSTS_PROJ30 = (typeof d.projetos_30d_cliente === 'number') ? d.projetos_30d_cliente : null;
@@ -1714,6 +1716,45 @@ function _kpiCustoIA(custoFixoPorProjeto){
   if (buracos.length) html += `<div class="col-span-2 md:col-span-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">⚠ O total de IA acima <b>não inclui tudo</b>: ${buracos.join('; ')}.</div>`;
   return html;
 }
+// 💰 A RÉGUA DE COBRANÇA (06/09/2026) — a outra metade da conta do Financeiro:
+// de um lado o que SAI (custo medido), do outro o que ENTRARIA.
+// A regra: "só cobra o projeto que mediu pelo menos UMA linha do CAD". Ela
+// converte o pior risco de reembolso em NÃO-COBRANÇA automática.
+function _blocoRegua(){
+  const d = COSTS_REGUA;
+  if (!d) return '';
+  const meses = Array.isArray(d.por_mes) ? d.por_mes : [];
+  if (!meses.length) return '';
+  const preco = Number(d.preco_base) || 97;
+  const linhas = meses.map(m => {
+    const ent = Number(m.entregas)||0, cob = Number(m.cobraveis)||0;
+    const pct = ent ? Math.round(100*cob/ent) : 0;
+    const naoAval = Number(m.nao_avaliadas)||0;
+    // 🚨 NÃO avaliada aparece separada: NULL não é "não cobra". Somar as duas
+    // faria o número parecer pior do que é, e a regra da casa é que ausência
+    // de medição nunca vira afirmação.
+    const aviso = naoAval > 0 ? ` <span class="text-amber-700">(${naoAval} não avaliada${naoAval===1?'':'s'})</span>` : '';
+    return `<tr class="border-t"><td class="py-1.5 pr-3 font-medium text-gray-700">${m.mes}</td>`
+      + `<td class="py-1.5 pr-3 text-right text-gray-600">${ent}</td>`
+      + `<td class="py-1.5 pr-3 text-right font-semibold text-gray-900">${cob}</td>`
+      + `<td class="py-1.5 pr-3 text-right text-gray-500">${pct}%${aviso}</td>`
+      + `<td class="py-1.5 text-right font-semibold text-emerald-700">${costFmt(Number(m.receita_a_97)||0)}</td></tr>`;
+  }).join('');
+  const tot = Number(d.total_cobraveis)||0, totEnt = Number(d.total_entregas)||0;
+  return `<div class="col-span-2 md:col-span-3 rounded-lg border bg-white p-4">
+    <div class="flex items-baseline justify-between mb-1">
+      <div class="text-sm font-semibold text-gray-900">⚖️ Régua de cobrança — só cobra projeto que mediu ≥ 1 linha do CAD</div>
+      <div class="text-xs text-gray-500">${tot} de ${totEnt} entregas cobráveis</div>
+    </div>
+    <p class="text-xs text-gray-500 mb-3">Entregas de cliente concluídas (sem avaliação nossa e sem filhote), a ${costFmt(preco)} por projeto. É simulação: <b>ninguém foi cobrado</b>.</p>
+    <table class="w-full text-xs">
+      <thead><tr class="text-gray-400 uppercase tracking-wider">
+        <th class="text-left pb-1">Mês</th><th class="text-right pb-1 pr-3">Entregas</th>
+        <th class="text-right pb-1 pr-3">Cobráveis</th><th class="text-right pb-1 pr-3">%</th>
+        <th class="text-right pb-1">Receita</th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table></div>`;
+}
 function renderCostTotals(){
   const el = document.getElementById('cost-totals'); if (!el) return;
   const fixoMensal = COSTS.filter(costEntraNoRateio).reduce((s,c)=> s + costMonthlyBRL(c), 0);
@@ -1739,6 +1780,7 @@ function renderCostTotals(){
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${nUso}</div><div class="text-xs text-gray-500">itens "por uso" (variável)</div></div>
     <div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${evalTxt}</div><div class="text-xs text-gray-500">avaliações nossas concluídas (últimos 30 dias)<br>ficam FORA da conta ao lado; também gastam IA, e esse gasto não está registrado aqui</div></div>`;
   el.innerHTML += _kpiCustoIA(custoProj);
+  el.innerHTML += _blocoRegua();
   if (desenvMensal > 0) el.innerHTML += `<div class="rounded-lg border bg-white p-4"><div class="text-2xl font-bold text-gray-900">${costFmt(desenvMensal)}</div><div class="text-xs text-gray-500"><b>desenvolvimento</b> / mês<br>custo de construir o produto — <b>fora</b> do rateio por projeto</div></div>`;
   if (COSTS_ILEGIVEL) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-900">⚠ Não consegui <b>ler</b> a tabela de custos — os números acima estão vazios por falha de leitura, não porque o custo seja zero.</div>`;
   if (nConfirmar>0) el.innerHTML += `<div class="col-span-2 md:col-span-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">⚠ ${nConfirmar} valor(es) <b>a confirmar</b> (linhas em amarelo). Preenche o real e marca ✓ — o total ainda não é definitivo.</div>`;

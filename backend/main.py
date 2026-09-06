@@ -493,6 +493,9 @@ _STAGES_DIAGNOSTICO = frozenset({
     # diagnóstico do carimbo de custo, não erro do motor — mas TEM que ficar
     # visível: dono errado é pior que dono ausente.
     "llm:dono",
+    # 06/09: a régua de cobrança grava aqui a entrega que NÃO faturaria. Não é
+    # erro do motor — é o número que diz quantos projetos a régua está segurando.
+    "cobranca:regua",
 })
 
 
@@ -6233,6 +6236,57 @@ def _process_job_throttled(*args, **kwargs):
     from llm_retry import escopo_job
     with _JOB_SEMAPHORE, escopo_job(_dono):
         process_job(*args, **kwargs)
+
+
+def _carimbar_regua_de_cobranca(job_id: str, n_medidas: int, n_total: int) -> None:
+    """Carimba se este projeto PODE ser cobrado: mediu >= 1 linha do CAD?
+
+    🚨 06/09/2026 — a régua que o Pedro aprovou pra sair do beta. A auditoria de
+    prontidão mediu que a entrega é uma RIFA: em setembro, 12 de 21 entregas
+    saíram com ZERO linha medida (mediana de 0,0%), enquanto o melhor projeto do
+    mês mediu 88 de 108 linhas. Os dois pagariam os mesmos R$97 e nenhum dos
+    dois tinha como saber, antes de pagar, de que lado ia cair.
+
+    A régua converte o pior risco de reembolso em NÃO-COBRANÇA automática — a
+    única forma de devolução que não precisa de suporte humano. E resolve
+    sozinha, sem tocar no motor: PDF-only nunca cobra (0,2% de medição na vida
+    do produto), a entrega vazia não fatura, e quem brigou com o upload não paga
+    9 vezes.
+
+    🔑 É carimbo do MOMENTO DA ENTREGA, não consulta viva: se o cliente revisar
+    e apagar itens depois, o que a gente entregou não muda.
+
+    🪤 Best-effort e silencioso — a régua não pode derrubar a entrega de um
+    projeto. Mas falhar aqui deixa `cobravel` NULL, que quer dizer "não
+    avaliado", NUNCA "não cobrável": quem lê tem que tratar os três estados.
+    """
+    try:
+        # 🩸 06/09/2026 — ESTE CARIMBO NASCEU MORTO e um guarda da casa pegou.
+        # `_supabase_update("projects", …)` NÃO faz UPDATE: roteia pra RPC
+        # `update_project_status`, que aceita 7 parâmetros fixos e DESCARTA o
+        # resto em silêncio — devolvendo sucesso. Os quatro campos da régua
+        # nunca chegariam ao banco, `_ok` viria True, e a tela mostraria "0
+        # cobráveis" como se fosse fato. É o mesmo defeito que já matou
+        # `planilha_gerada_em` e `desenho_assinatura` em agosto.
+        # `_projeto_patch` faz PATCH direto na tabela.
+        _ok = _projeto_patch(job_id, {
+            "cobravel": bool(n_medidas > 0),
+            "cobravel_em": datetime.utcnow().isoformat() + "Z",
+            "linhas_medidas": int(n_medidas),
+            "linhas_total": int(n_total),
+        })
+        if not _ok:
+            _log_error("cobranca:regua",
+                       f"nao consegui carimbar (medidas={n_medidas} total={n_total})",
+                       job_id, severity="warning")
+        elif n_medidas == 0:
+            # Não é erro: é o caso que a régua existe pra pegar. Fica no log de
+            # diagnóstico pra dar pra contar quantas entregas não faturariam.
+            _log_error("cobranca:regua",
+                       f"NAO cobravel: 0 linhas medidas de {n_total}", job_id,
+                       severity="warning")
+    except Exception as _e:
+        print(f"[cobranca] regua nao carimbada (nao-fatal): {_e}")
 
 
 def _job_medidos_count(job_id: str) -> int:
@@ -12613,6 +12667,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
 
         jobs.update_field(job_id, progress=100)
         jobs.update_field(job_id, status="done")
+
+        # ─── A RÉGUA DE COBRANÇA (06/09/2026) ────────────────────────────────
+        # "só cobra o projeto que mediu pelo menos UMA linha do CAD".
+        # 🪤 Nasceu 300 linhas abaixo, junto do `_n_med` que o e-mail já contava
+        # — e ali dentro de `if _pe and not is_complement and not _is_reproc`.
+        # Ou seja: não carimbaria quem não tem e-mail, nem complemento, nem
+        # REPROCESSO — que é justamente o caso em que um projeto passa a medir.
+        # A régua é do PROJETO, não do e-mail: mora onde o projeto termina.
+        try:
+            _n_med_regua = sum(
+                1 for it in all_items
+                if str(getattr(getattr(it, "confidence", None), "value",
+                               getattr(it, "confidence", "")) or "") == "confirmado")
+            _carimbar_regua_de_cobranca(job_id, _n_med_regua, len(all_items))
+        except Exception as _re:
+            print(f"[cobranca] regua nao carimbada (nao-fatal): {_re}")
         jobs.update_field(job_id, current_step="Concluído!")
         jobs.update_field(job_id, download_url=f"/api/download/{job_id}")
 
@@ -15930,11 +16000,30 @@ def admin_costs_list(request: Request):
     _p30 = _projetos_para_custo_30d()
     return {"costs": rows,
             "custo_ia": _custo_ia_resumo(30),
+            "regua": _regua_cobranca_resumo(6),
             # nome antigo mantido pra tela velha não quebrar — mas agora é SÓ cliente
             "projetos_30d": _p30["cliente"],
             "projetos_30d_cliente": _p30["cliente"],
             "projetos_30d_avaliacoes": _p30["avaliacoes"],
             "janela_dias": 30}
+
+
+def _regua_cobranca_resumo(meses: int = 6):
+    """Quanto a regua de cobranca deixaria faturar, mes a mes. None se ilegivel.
+
+    A regua (06/09/2026): "so cobra o projeto que mediu pelo menos UMA linha do
+    CAD". Fica na tela do Financeiro porque e a outra metade da mesma conta —
+    de um lado o que sai (custo medido), do outro o que entraria.
+    """
+    try:
+        _st, _r = _supa_rest_service("POST", "rpc/admin_regua_cobranca",
+                                     {"meses": int(meses)})
+        if _st >= 400 or _r is None:
+            return None
+        return _r
+    except Exception as _re:
+        print(f"[costs] regua erro: {_re}")
+        return None
 
 
 def _custo_ia_resumo(dias: int = 30):
