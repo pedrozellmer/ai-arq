@@ -712,7 +712,9 @@
         </div>
         <div id="filhotes-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
         <div class="flex flex-wrap gap-2 mb-4" id="filhotes-filtros">
-          <button data-fil="pendentes" onclick="filtrarFilhotes('pendentes')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 bg-indigo-50 text-indigo-700">Pra liberar</button>
+          <button data-fil="pendentes" onclick="filtrarFilhotes('pendentes')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-indigo-200 bg-indigo-50 text-indigo-700">Vale liberar<span id="fil-vale-n"></span></button>
+          <button data-fil="estimado" onclick="filtrarFilhotes('estimado')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">S&oacute; item estimado<span id="fil-est-n"></span></button>
+          <button data-fil="segurados" onclick="filtrarFilhotes('segurados')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Segurados<span id="fil-seg-n"></span></button>
           <button data-fil="liberados" onclick="filtrarFilhotes('liberados')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados</button>
           <button data-fil="mudos" onclick="filtrarFilhotes('mudos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Liberados sem aviso<span id="fil-mudos-n" class="font-semibold"></span></button>
           <button data-fil="todos" onclick="filtrarFilhotes('todos')" class="fil-btn px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">Todos</button>
@@ -1897,6 +1899,28 @@ function filtrarFilhotes(qual){
 // mesmo filtro mostrava `!liberado` — o número no menu nunca batia com a tela.
 // Agora existe UMA definição, usada pelos dois.
 function _filPendente(f){ return !f.liberado && f.status === 'done' && f.melhorou; }
+// 🩸 06/09/2026 (Pedro: "os não liberados por algum motivo, tira da lista, deixa em outra aba").
+// A lista "pra liberar" misturava 28 filhotes muito diferentes: os que ganharam MEDIÇÃO, os que só
+// ganharam linha estimada (mais item pra revisar, sem mais certeza — e estimado é justamente o que
+// o cliente mais apaga), e os que NÃO devem ser liberados de jeito nenhum. Uma classificação só,
+// usada pelo KPI, pelas abas e pelo card — a mesma disciplina que consertou o KPI em 23/08.
+function _filSituacao(f){
+  if (f.liberado) return 'liberado';
+  if (f.status !== 'done') return 'erro';
+  if (f.mediu_menos) return 'piorou';
+  if (!f.melhorou) return 'nao_melhorou';
+  if ((f.revisoes_no_original || 0) > 0) return 'tem_correcao';   // regra nº7: o trabalho dele vem primeiro
+  const antes = (f.antes && f.antes.medidos) || 0, depois = (f.depois && f.depois.medidos) || 0;
+  return depois > antes ? 'vale' : 'so_estimado';
+}
+const _FIL_MOTIVO = {
+  erro:          ['Filhote falhou',            'o reprocesso terminou em erro — não há o que liberar'],
+  piorou:        ['Mediu MENOS que o original', 'liberar entregaria menos certeza do que o cliente já tem'],
+  nao_melhorou:  ['Não melhorou',              'mesma medição e nenhum item a mais'],
+  tem_correcao:  ['O cliente já corrigiu à mão', 'a versão nova não tem as correções dele — regra nº7. Se liberar, avise no e-mail'],
+  so_estimado:   ['Só item estimado a mais',   'nenhum item novo veio medido do desenho: dá mais linha pra revisar, não mais certeza'],
+  vale:          ['Ganhou medição',            'itens novos medidos direto do desenho — é o caso que paga o reprocesso'],
+};
 function pintarFilhotes(){
   const L = _filhotes || [];
   const pendentes = L.filter(_filPendente);
@@ -1909,22 +1933,39 @@ function pintarFilhotes(){
   const kpi = (v, rot, cor) => `<div class="rounded-xl border bg-white p-3">
       <div class="text-2xl font-bold ${cor || 'text-gray-900'}">${v}</div>
       <div class="text-xs text-gray-500 mt-0.5 leading-snug">${rot}</div></div>`;
+  const porSit = s => L.filter(f => _filSituacao(f) === s);
+  const vale = porSit('vale'), soEst = porSit('so_estimado');
+  const segurados = L.filter(f => ['erro','piorou','nao_melhorou','tem_correcao'].includes(_filSituacao(f)));
   const box2 = document.getElementById('filhotes-kpis');
   if (box2) box2.innerHTML =
-      kpi(pendentes.length, 'prontos pra liberar', 'text-indigo-600')
-    + kpi(liberados.length, 'liberados pro cliente', 'text-emerald-700')
-    + kpi(avisados.length, 'avisados por e-mail')
+      kpi(vale.length, 'valem liberar <span class="text-gray-400">(ganharam medição)</span>', 'text-indigo-600')
+    + kpi(soEst.length, 'só ganharam item estimado', soEst.length ? 'text-amber-600' : 'text-gray-400')
+    + kpi(liberados.length + ' <span class="text-base text-gray-400">/ ' + avisados.length + ' avisados</span>', 'liberados pro cliente', 'text-emerald-700')
     + kpi(voltaram.length, 'voltaram ao site depois de avisados',
           voltaram.length ? 'text-emerald-700' : 'text-gray-400');
+  const nVale = document.getElementById('fil-vale-n'); if (nVale) nVale.textContent = vale.length ? ' (' + vale.length + ')' : '';
+  const nEst = document.getElementById('fil-est-n'); if (nEst) nEst.textContent = soEst.length ? ' (' + soEst.length + ')' : '';
+  const nSeg = document.getElementById('fil-seg-n'); if (nSeg) nSeg.textContent = segurados.length ? ' (' + segurados.length + ')' : '';
   const bMudos = document.getElementById('fil-mudos-n');
   if (bMudos) bMudos.textContent = mudos.length ? ' (' + mudos.length + ')' : '';
+  // o número no menu passa a ser o que EXIGE decisão (ganhou medição), não a pilha inteira
   const badge = document.getElementById('menu-filhotes-badge');
-  if (badge) badge.textContent = pendentes.length ? String(pendentes.length) : '';
-  const lista = _filFiltro === 'pendentes' ? L.filter(_filPendente)
+  if (badge) badge.textContent = vale.length ? String(vale.length) : '';
+  const lista = _filFiltro === 'pendentes' ? vale
+              : (_filFiltro === 'estimado' ? soEst
+              : (_filFiltro === 'segurados' ? segurados
               : (_filFiltro === 'liberados' ? liberados
-              : (_filFiltro === 'mudos' ? mudos : L));
+              : (_filFiltro === 'mudos' ? mudos : L))));
   const box = document.getElementById('filhotes');
-  if (box) box.innerHTML = renderFilhotes(lista);
+  const vazio = {
+    pendentes: 'Nenhum filhote ganhou medição nova. Os que só acrescentam item estimado estão na aba do lado.',
+    estimado: 'Nenhum filhote nesta situação.',
+    segurados: 'Nenhum filhote segurado — todos os reprocessos melhoraram.',
+    mudos: 'Todos os filhotes liberados foram avisados.',
+  }[_filFiltro];
+  if (box) box.innerHTML = (!lista.length && vazio)
+    ? `<p class="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-xl p-4">${vazio}</p>`
+    : renderFilhotes(lista);
 }
 function _dataCurta(iso){
   if (!iso) return '';
@@ -1999,6 +2040,19 @@ function renderFilhotes(L){
                <button onclick="mergeEstudar('${f.job_id}')" title="Compara as duas leituras prancha por prancha e monta a melhor de cada. Só LÊ — não cria nada." style="min-height:40px" class="px-3 py-2 text-xs rounded-lg border border-violet-300 text-violet-800 bg-violet-50 font-medium">&#129516; Estudar merge (só lê)</button>`)}
         </div>
       </div>
+      ${(() => {
+        // 06/09: cada card diz em UMA frase por que está onde está — sem isso, "Segurados"
+        // seria uma pilha sem explicação e o Pedro teria que reabrir cada projeto pra saber.
+        const _s = _filSituacao(f);
+        if (_s === 'liberado') return '';
+        const _m = _FIL_MOTIVO[_s];
+        if (!_m) return '';
+        const _cor = _s === 'vale' ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                   : (_s === 'so_estimado' ? 'bg-amber-50 border-amber-200 text-amber-900'
+                   : 'bg-gray-50 border-gray-200 text-gray-700');
+        return `<p class="mt-3 text-xs rounded-lg border px-3 py-2 ${_cor}"><b>${_m[0]}</b> — ${_m[1]}${
+          _s === 'tem_correcao' ? ` (${f.revisoes_no_original} correção${f.revisoes_no_original > 1 ? 'ões' : ''})` : ''}</p>`;
+      })()}
       <div class="grid grid-cols-3 gap-2 mt-3 text-xs">
         <div class="rounded-lg bg-gray-50 p-2">
           <span class="text-gray-500">itens</span>
