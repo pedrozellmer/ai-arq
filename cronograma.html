@@ -653,8 +653,21 @@ function addFaseRowEditor(fase, idx) {
   // 01/08 — rótulo de ORIGEM da duração (regra nº1 aplicada ao cronograma):
   // calculada (das quantidades × SINAPI, tooltip mostra a conta) / padrão de
   // mercado / editada por você.
+  // 🩸 07/09/2026 — O CHIP AZUL DIZIA "calculada das quantidades" MESMO QUANDO
+  // A CONTA ERA FEITA DE ESTIMATIVA. Medido nos 10 cronogramas da base: a
+  // mediana é 85% de quantidade LARANJA, e DOIS foram calculados com ZERO item
+  // medido. Azul, nesta casa, é o selo de MEDIDO DO CAD — usá-lo numa conta de
+  // estimativa é a regra dura nº1 pelo avesso, no lugar mais visível do produto.
+  // Agora o backend devolve calculada / calculada-parcial / estimada, e o chip
+  // segue a cor do quantitativo: azul só quando ≥80% veio de linha medida.
+  const _pctMed = (fase.pct_medido == null) ? null : Number(fase.pct_medido);
+  const _quanto = (_pctMed == null) ? '' : ` (${String(_pctMed).replace('.', ',')}% da quantidade veio de linha medida do CAD)`;
   const origemChip = fase.origem === 'calculada'
-    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 cursor-help" title="${escapeAttr(fase.origem_detalhe || 'Duração calculada das quantidades do seu quantitativo')}">⚙ calculada das quantidades</span>`
+    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 cursor-help" title="${escapeAttr((fase.origem_detalhe || 'Duração calculada das quantidades do seu quantitativo') + _quanto)}">⚙ calculada das quantidades</span>`
+    : fase.origem === 'calculada-parcial'
+    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800 cursor-help" title="${escapeAttr((fase.origem_detalhe || '') + _quanto + ' — o resto é estimativa (laranja no quantitativo). Revise essas linhas pra um prazo mais fiel.')}">⚙ calculada em parte</span>`
+    : fase.origem === 'estimada'
+    ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-800 cursor-help" title="${escapeAttr((fase.origem_detalhe || '') + ' — NENHUMA quantidade desta fase saiu da medição do desenho. A conta usa estimativa (laranja no quantitativo); revise essas linhas antes de comprometer prazo.')}">⚙ calculada de ESTIMATIVA</span>`
     : fase.origem === 'editada'
     ? `<span class="shrink-0 text-[10px] font-semibold px-2 py-1 rounded-full bg-amber-100 text-amber-700" title="Você ajustou esta fase — a duração é sua">✎ editada por você</span>`
     : fase.origem === 'padrão'

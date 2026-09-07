@@ -122,7 +122,14 @@ def esforco_por_fase(items, mapear_fase) -> dict:
                           detalhe, refs:[...]}} só pras fases calculáveis.
     """
     # Σ quantidade por (fase, classe de unidade)
+    # 🚨 07/09/2026 — E O SELO DE CADA PARCELA VAI JUNTO. A conta somava
+    # `quantity` de qualquer item e devolvia `origem: 'calculada'`, palavra que
+    # nesta casa significa SAIU DO DESENHO. Medido nos 10 cronogramas da base:
+    # a mediana é 85% de quantidade LARANJA, e DOIS foram calculados com ZERO
+    # item medido — carimbados "⚙ calculada das quantidades" do mesmo jeito.
+    # É a regra dura nº1 no lugar mais visível do produto. Achado nº5/6.
     somas = {}
+    medido = {}      # {label: {cls: quanto DAQUELA soma veio de item medido}}
     for it in items or []:
         label = mapear_fase((it.get('discipline') or '').strip().upper())
         if not label or label not in REFS_POR_FASE:
@@ -138,6 +145,13 @@ def esforco_por_fase(items, mapear_fase) -> dict:
             continue
         somas.setdefault(label, {}).setdefault(cls, 0.0)
         somas[label][cls] += qty
+        # 🪤 O selo pode vir como Enum (`.value`) ou string crua, dependendo de
+        # quem chama — o motor passa objeto, o banco devolve texto.
+        _cf = it.get('confidence')
+        _cf = str(getattr(_cf, 'value', _cf) or '')
+        medido.setdefault(label, {}).setdefault(cls, 0.0)
+        if _cf == 'confirmado':
+            medido[label][cls] += qty
 
     out = {}
     for label, por_cls in somas.items():
@@ -159,10 +173,27 @@ def esforco_por_fase(items, mapear_fase) -> dict:
             continue
         dias_uteis = max(1, math.ceil(hh_total / (equipe * HORAS_DIA)))
         dias_corridos = max(3, math.ceil(dias_uteis / DIAS_UTEIS_POR_CORRIDOS))
+        # 🔑 O CRONOGRAMA HERDA O SELO DAS QUANTIDADES QUE USOU.
+        # `calculada` continua significando o que sempre significou nesta casa:
+        # saiu do desenho. Quando a conta é feita de estimativa, ela é honesta
+        # sobre isso — e o número segue valendo, porque estimativa rotulada é
+        # útil; estimativa com cara de medição é que não.
+        _tot = sum(por_cls.values())
+        _med = sum((medido.get(label) or {}).values())
+        _pct_med = (100.0 * _med / _tot) if _tot else 0.0
+        if _med <= 0:
+            _origem = 'estimada'
+        elif _pct_med >= 80.0:
+            _origem = 'calculada'
+        else:
+            _origem = 'calculada-parcial'
         out[label] = {
             'esforco_hh': round(hh_total, 1),
             'dias_corridos': dias_corridos,
-            'origem': 'calculada',
+            'origem': _origem,
+            'pct_medido': round(_pct_med, 1),
+            'qtd_medida': round(_med, 2),
+            'qtd_total': round(_tot, 2),
             'detalhe': (f"{' + '.join(partes)} = {_fmt_qty(hh_total)} Hh ÷ "
                         f"(equipe de {equipe} × {HORAS_DIA} h/dia) ≈ {dias_uteis} dias úteis "
                         f"(~{dias_corridos} corridos)"),

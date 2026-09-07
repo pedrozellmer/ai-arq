@@ -142,6 +142,11 @@ def _linhas_que_o_persist_manda(monkeypatch, itens, job_id="job-teste"):
     monkeypatch.setattr(m, "_supa_log", lambda *a, **k: None)
     monkeypatch.setattr(m, "_arquivar_versao_anterior", lambda *a, **k: None)
     monkeypatch.setattr(m, "_spec_do_cliente_antes_do_swap", lambda *a, **k: {})
+    # 🪤 07/09: o terceiro resgate do swap. Sem neutralizar, o PATCH dele falha
+    # neste ambiente, o `_log_error` grava — e o POST do log entra na contagem
+    # de "inserts em lote" deste teste, que passa a ver 2 onde espera 1.
+    # Os dois irmãos acima já estavam aqui pelo mesmo motivo.
+    monkeypatch.setattr(m, "_soltar_revisoes_do_cascade", lambda *a, **k: 0)
     monkeypatch.setattr(m, "_contar_itens_no_banco", lambda *a, **k: len(itens))
     n = m._persist_items_to_supabase(job_id, itens)
     assert n == len(itens), "o persist devolveu %r pra %d itens" % (n, len(itens))

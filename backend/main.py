@@ -1975,6 +1975,16 @@ def _persist_items_to_supabase(job_id: str, items: list) -> int:
     # vai pro log — nunca some calado.
     _guardados = _spec_do_cliente_antes_do_swap(job_id)
 
+    # ══════════════════════════════════════════════════════════════════════
+    #  🚨 E O QUE O CLIENTE DISSE TAMBÉM ATRAVESSA O DELETE
+    # ══════════════════════════════════════════════════════════════════════
+    # O resgate acima salva o que ele ESPECIFICOU. As REVISÕES — aprovou,
+    # editou, excluiu, escreveu — estavam presas por FK ON DELETE CASCADE e
+    # iam junto, caladas. Medido: 364 das 413 revisões em job vivo, incluindo
+    # o único recado digitado por uma pessoa em toda a história do produto.
+    # Ver `_soltar_revisoes_do_cascade`.
+    _soltar_revisoes_do_cascade(job_id)
+
     try:
         _del = urllib.request.Request(
             f"{SUPABASE_URL}/rest/v1/project_items?job_id=eq.{job_id}", method='DELETE')
@@ -2779,6 +2789,52 @@ def _carimbar_spec(itens) -> int:
     if n:
         print(f"[spec] especificacao carimbada em {n} item(ns)")
     return n
+
+
+def _soltar_revisoes_do_cascade(job_id: str) -> int:
+    """Solta as revisões do cliente da FK antes do DELETE, pondo `item_id=NULL`.
+
+    Devolve quantas foram soltas.
+
+    🩸 07/09/2026 — `item_reviews.item_id` tem **ON DELETE CASCADE**, e o
+    `/add-file` reprocessa NO MESMO job_id: apaga todas as linhas de
+    `project_items` e insere de novo. Cada revisão presa a uma linha vai junto,
+    em silêncio.
+
+    MEDIDO na base: das 413 revisões em job vivo, **364 morrem no cascade** —
+    e entre elas está o ÚNICO recado digitado por um cliente em toda a história
+    do produto (job 17d6e1f2). A gente passou a noite de 06/09 tornando aquele
+    recado visível; bastava o cliente anexar um arquivo pra ele sumir.
+
+    🔑 A casa já tinha visto METADE disto: `_spec_do_cliente_antes_do_swap`
+    resgata o que o cliente ESPECIFICOU (marca, cor, código). Faltava o que ele
+    DISSE — aprovou, editou, excluiu, escreveu.
+
+    🪤 `item_id = NULL` em vez de re-apontar: as 48 exclusões de 31/08 já vivem
+    assim (o item apagado não existe mais), e o painel lê o retrato em
+    `edits._antes`. Re-apontar exigiria casar por descrição — e descrição muda
+    entre leituras, o que faria a revisão ir parar no item errado. Perder o
+    vínculo é honesto; vincular errado é pior que não vincular.
+
+    🚨 NUNCA levanta: perder o resgate é ruim, não entregar a planilha é pior.
+    A mesma regra do resgate irmão.
+    """
+    try:
+        _st, _ = _supa_rest_service(
+            "PATCH", f"item_reviews?job_id=eq.{job_id}&item_id=not.is.null",
+            {"item_id": None})
+        if not (200 <= int(_st or 0) < 300):
+            _log_error("revisao:cascade-nao-soltou",
+                       "PATCH devolveu HTTP %s — as revisoes deste job vao "
+                       "morrer no DELETE do reprocesso" % _st,
+                       job_id, severity="error")
+            return 0
+        return 1
+    except Exception as _e:
+        _log_error("revisao:cascade-nao-soltou",
+                   "%s — as revisoes deste job vao morrer no DELETE"
+                   % type(_e).__name__, job_id, severity="error")
+        return 0
 
 
 def _spec_do_cliente_antes_do_swap(job_id: str) -> dict:

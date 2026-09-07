@@ -465,10 +465,22 @@ def gerar_cronograma_de_fases_custom(fases_custom: List[Dict], data_inicio: str,
             'PMI PMBOK 7th ed. — Performance Domain Planning',
             'Last Planner System (Ballard 2000) — 4 níveis + PPC',
         ],
+        # 🩸 07/09/2026 — ESTA RESSALVA ERA CURTA DEMAIS, e este é o caminho
+        # PADRÃO: 10 de 10 cronogramas da base têm `fases_custom`. Ela sumia
+        # com a frase que diz que quantidade LARANJA entra na conta — a única
+        # que faz o cliente entender o que está lendo — e ainda afirmava
+        # "editado manualmente pelo usuário" mesmo quando ele só salvou sem
+        # tocar em nada.
+        # 🔑 A ressalva do caminho calculado é a mesma; o que muda aqui é só o
+        # aviso de que as datas podem ter sido ajustadas à mão.
         'ressalva': (
-            'Cronograma editado manualmente pelo usuário. '
-            'Validar com engenheiro responsável (CREA/CAU) antes de comprometer '
-            'prazo com cliente.'
+            'As fases marcadas como "calculada" têm duração derivada das '
+            'QUANTIDADES do seu quantitativo × coeficientes de mão de obra '
+            'SINAPI. As marcadas como "estimada" ou "calculada em parte" usam '
+            'quantidade que NÃO saiu da medição do desenho (laranja no '
+            'quantitativo) — revise essas linhas para um cronograma mais fiel. '
+            'Datas podem ter sido ajustadas manualmente. Validar com engenheiro '
+            'responsável (CREA/CAU) antes de comprometer prazo com cliente.'
         ),
     }
 
@@ -530,7 +542,14 @@ def gerar_cronograma(items: List[Dict], data_inicio: str,
             if calc['dias_corridos'] > duracao_dias:
                 avisos_cap.append(
                     f'{label}: as quantidades pedem ~{calc["dias_corridos"]} dias — mais que a obra inteira ({duracao_dias}); durações limitadas, considere aumentar a duração total.')
-            origem = 'calculada'
+            # 🚨 07/09/2026 — A ORIGEM VEM DO CÁLCULO, NÃO É CRAVADA AQUI.
+            # Antes era `origem = 'calculada'` sempre que houve conta, sem
+            # olhar se a quantidade era MEDIDA ou ESTIMADA. Medido na base: a
+            # mediana dos 10 cronogramas é 85% de laranja, e DOIS foram
+            # calculados com ZERO item medido — e diziam "calculada das
+            # quantidades" igual. Agora `esforco_por_fase` devolve
+            # calculada / calculada-parcial / estimada, e a gente repassa.
+            origem = calc.get('origem') or 'calculada'
         else:
             dur_dias = max(7, int(dur * duracao_dias))
             origem = 'padrão'
