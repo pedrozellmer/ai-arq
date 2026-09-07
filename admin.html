@@ -2799,7 +2799,16 @@ async function loadMotorHealth(){
   }
 }
 function renderMotorHealth(d){
-  const esc = s => String(s==null?'':s);
+  // 🚨 07/09/2026 — ESTE `esc` NÃO ESCAPAVA NADA: era `String(s==null?'':s)`,
+  // passagem direta com nome de escape. Sombreava o nome dentro de 252 linhas
+  // e servia 36 chamadas, incluindo `r.descricao` — que o cliente EDITA na
+  // tela de revisão. As outras três `esc` deste arquivo (2959, 3055, 4171)
+  // sempre fizeram o replace; só esta era de mentira.
+  // 🪤 O pior tipo de defeito: parece proteção, tem nome de proteção, e quem
+  // lê `esc(...)` aqui dentro acha que está coberto.
+  // Achado por um agente que conferia OUTRA coisa. SQL na base: 29 descrições
+  // têm `<` ou `>` e ZERO têm script/img/svg/on*= — buraco vazio, não incêndio.
+  const esc = s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
   // 🚨 08/08 — Pedro: "a gente sempre fala CAD x PDF, na verdade é DXF x DWG x
   // PDF né? Pelo que vejo DXF funciona MUITO mais." Ele está certo, e esta tela
   // apagava a diferença: juntava 'CAD (DWG/DXF)' num cartão só.

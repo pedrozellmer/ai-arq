@@ -105,7 +105,12 @@
 const API_BASE = window.API_BASE;
 // 28/07: repo é público — só a impressão digital do e-mail do admin.
 const ADMIN_EMAIL_HASH = '97bda6eb7aa5b5426da844969ef4d756a77595bc18d12e5a49240598e89b74c2';
-const esc = window.escapeHtml || (s => String(s==null?'':s));
+// 🚨 07/09/2026 — O FALLBACK ERA PASSAGEM DIRETA. Se `window.escapeHtml` não
+// tivesse carregado (script fora de ordem, cache velho, erro num .js anterior),
+// o escape degradava PARA NADA, em silêncio, e a página seguia funcionando.
+// Fallback de proteção tem que proteger; o certo é o `||` cair num escape de
+// verdade, não numa função com nome de escape.
+const esc = window.escapeHtml || (s => String(s==null?'':s).replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c])));
 const _fmtDate = iso => { if(!iso) return '--'; try { return window.fmtDataBR(iso); } catch(e){ return '--'; } };
 const _fmtDateTime = iso => { if(!iso) return '--'; try { return window.fmtBR(iso, {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); } catch(e){ return '--'; } };
 
