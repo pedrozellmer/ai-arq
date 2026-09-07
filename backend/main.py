@@ -19233,9 +19233,27 @@ def admin_revision_feedback(request: Request):
                 _a = _e.get("_antes") if isinstance(_e, dict) else None
                 return _a if isinstance(_a, dict) else {}
 
+            # 🩸 06/09/2026 — O RECADO DIGITADO CAÍA NO VÃO. Este resumo separa
+            # por `action` (approve/edit/reject/faltou) e o modal "Comentar"
+            # grava `action='approve'`: o texto ia pro balde das aprovações e
+            # sumia, porque aprovação só vira NÚMERO aqui. Um recado de 02/09
+            # ficou 4 dias invisível assim.
+            # 🔑 Filtra pelo FATO (tem texto de gente), atravessando as quatro
+            # ações — é o que faz ver o que já está gravado, não só o futuro.
+            recados = [r for r in rows2 if recado_digitado(r.get("comment"))]
             resumo["revisao_inline"] = {
                 "aprovacoes": len(aprov),
                 "edicoes": len(edits),
+                "recados": len(recados),
+                # Vai INTEIRO como os "faltou": recado digitado é o sinal mais
+                # raro do produto — em toda a história foram pouquíssimos.
+                "recados_itens": [
+                    {"job_id": r.get("job_id"),
+                     "quando": r.get("reviewed_at"),
+                     "acao": r.get("action"),
+                     "texto": recado_digitado(r.get("comment"))}
+                    for r in recados[:20]
+                ],
                 "exclusoes": len(rejeicoes),
                 "exclusoes_itens": [
                     {"job_id": r.get("job_id"),
@@ -22041,6 +22059,54 @@ class ReviewPayload(BaseModel):
     reviewed_by: Optional[str] = ""
 
 
+#: Frases que o SISTEMA escreve no campo `comment` — não são recado de gente.
+#: Hoje só uma (revisao.html manda junto do atalho "marcar como existente"), mas
+#: a lista existe pra que a próxima nasça aqui em vez de virar alarme falso.
+#: 🪤 Guardadas em minúsculas e sem acento decidido na comparação: o que importa
+#: é reconhecer o texto NOSSO, não validar ortografia.
+_RECADO_AUTOMATICO = (
+    "usuário marcou como existente",
+    "usuario marcou como existente",
+)
+
+#: Como o append de 09/08 junta dois comentários no mesmo registro.
+_RECADO_SEPARADOR = "\n---\n"
+
+
+def recado_digitado(comment) -> str:
+    """O que o CLIENTE escreveu com as próprias mãos — "" se não escreveu nada.
+
+    🩸 06/09/2026. Um cliente escreveu na tela de revisão em 02/09 às 16h30
+    (job 17d6e1f2): *"faça a separação dos tipo, cada um para cada item"*. Foi
+    o ÚNICO recado digitado por uma pessoa em toda a história do produto — os
+    outros 6 registros com texto são a frase que a nossa própria tela manda.
+    Ficou 4 dias sem resposta, e ninguém foi avisado.
+
+    🔑 POR QUE ANCORAR NO FATO, E NÃO EM `action`. O modal "Comentar" grava
+    `action='approve'` (revisao.html:1017) e os dois painéis onde o dono lê
+    revisão filtram `action=eq.edit`. Consertar mudando o front pra
+    `action='comment'` só salvaria o FUTURO — o recado que já está no banco
+    continuaria invisível, e o dedupe e o append de 09/08 (que existem por
+    causa do 'approve') quebrariam junto. O fato é "tem texto de gente aqui";
+    é nele que a gente ancora. Ver [[feedback_guarda_preso_a_forma_do_item]].
+
+    🪤 Não basta `comment != ''`: 6 dos 7 registros com texto são automáticos.
+    Um aviso que dispara neles é aviso que o dono desliga na primeira semana.
+    """
+    txt = str(comment or "").strip()
+    if not txt:
+        return ""
+    partes = []
+    for pedaco in txt.split(_RECADO_SEPARADOR):
+        p = pedaco.strip()
+        if not p:
+            continue
+        if p.lower() in _RECADO_AUTOMATICO:
+            continue      # texto que a NOSSA tela escreveu
+        partes.append(p)
+    return _RECADO_SEPARADOR.join(partes)
+
+
 def monta_linha_de_revisao(job_id, item_id, action, edits, antes,
                            comment="", reviewed_by=""):
     """Monta a linha que vai pra `item_reviews`. Separada da rota DE PROPOSITO:
@@ -22153,6 +22219,7 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
         pass   # na dúvida, insere (comportamento antigo)
 
     _comentario = str(getattr(payload, "comment", "") or "").strip()
+    _escreveu_comentario = False   # o append de 09/08 pegou? (usado pela campainha)
     if not _ja_tem:
         _rev_gravou = _supabase_insert("item_reviews", review_row)
     elif _comentario and _id_existente:
@@ -22166,11 +22233,25 @@ def submit_item_review(job_id: str, item_id: str, payload: ReviewPayload, reques
         try:
             _ant = str((_rows_rv[0] or {}).get("comment") or "").strip()
             _novo = (_ant + "\n---\n" + _comentario) if _ant else _comentario
-            _supa_rest_service(
+            _st_pc, _ = _supa_rest_service(
                 "PATCH", f"item_reviews?id=eq.{_upq.quote(str(_id_existente))}",
                 {"comment": _novo[:4000]})
+            _escreveu_comentario = 200 <= int(_st_pc or 0) < 300
         except Exception as _ec:
             _supa_log(f"REVIEW comentario item={item_id} NAO GRAVOU: {_ec}")
+
+    # 🔔 06/09/2026 — A CAMPAINHA QUE NÃO EXISTIA.
+    # Um cliente escreveu aqui em 02/09 e ficou 4 dias sem resposta. Nota tinha
+    # alerta desde 16/08; recado digitado, o sinal mais raro do produto, não
+    # tinha nenhum. Ver `_alerta_recado` e `recado_digitado`.
+    # 🪤 Dispara SÓ com texto de gente: 6 dos 7 registros com `comment` são a
+    # frase que a nossa própria tela manda ("Usuário marcou como EXISTENTE").
+    # Alerta que toca nessas é alerta que o dono desliga na primeira semana.
+    # 🪤 E só depois de a escrita PEGAR — avisar sobre recado que não gravou
+    # manda o dono procurar no painel uma coisa que não está lá.
+    _recado = recado_digitado(_comentario)
+    if _recado and (_rev_gravou or _escreveu_comentario):
+        _alerta_recado(job_id, item_id, _recado, payload.reviewed_by or "")
 
     # 2) Aplicar edits à row original (se action=edit)
     if action == "edit" and payload.edits:
@@ -23241,6 +23322,72 @@ def _alerta_nps(row: dict, category: str = "detractor"):
             print(f"[nps] alerta de NPS falhou (não-fatal): {_e}")
 
     _tal.Thread(target=_envia, daemon=True).start()
+
+
+def _alerta_recado(job_id: str, item_id: str, texto: str, reviewed_by: str = ""):
+    """Cliente digitou na tela de revisão → e-mail interno na hora.
+
+    🩸 06/09/2026, o caso que criou isto. Em 02/09 às 16h30 um cliente escreveu
+    *"faça a separação dos tipo, cada um para cada item"* (job 17d6e1f2) e
+    passaram 4 dias sem ninguém ver. Dois minutos ANTES ele tinha dado nota 7 —
+    e ESSA o dono recebeu, porque nota tem alerta desde 16/08. O recado não
+    tinha. O sinal mais caro do produto era o único sem campainha.
+
+    E o recado valia mais que a nota: ele estava respondendo a uma instrução do
+    nosso próprio motor, que mediu 760,6 m de tubulação, escreveu na descrição
+    "subdividir por diâmetro na revisão" e deixou 5 linhas zeradas pro cliente
+    preencher. Ele devolveu a tarefa, com razão.
+
+    🪤 Best-effort em thread, como `_alerta_nps`: alerta que falha NÃO pode
+    derrubar o salvamento da revisão do cliente.
+    🔒 LGPD: o e-mail da pessoa vai no AVISO (o dono precisa saber a quem
+    responder) e NÃO vai no `error_log` — em 06/09 achei 19 linhas de log com
+    endereço de cliente dentro. Log recebe job_id, que já é opaco.
+    """
+    import threading as _tr
+
+    def _envia():
+        # 🚨 O texto é DIGITADO pelo cliente e vai pro corpo de um e-mail HTML
+        # que o dono abre. Sem escape, quem batiza o comentário de
+        # `<img src=x onerror=...>` manda marcação pra dentro da caixa dele —
+        # a mesma classe do XSS do painel admin consertado hoje (ce7846a).
+        import html as _html
+
+        def _e(s):
+            return _html.escape(str(s or ""))
+
+        try:
+            _ctx, _proj = "", ""
+            _jid = (job_id or "").strip()
+            if _jid:
+                try:
+                    _p = _supa_rows("GET", "projects",
+                                    params={"job_id": f"eq.{_jid}",
+                                            "select": "project_name,status,user_email"})
+                    if _p:
+                        _proj = _p[0].get("project_name") or "?"
+                        _ctx = (f"<br><b>Projeto:</b> {_e(_proj)} ({_e(_p[0].get('status'))}) — "
+                                f"https://ai.arq.br/projeto.html?job_id={_e(_jid)}")
+                except Exception:
+                    pass
+            _quem = (reviewed_by or "").strip() or "(sem e-mail na revisão)"
+            _avisou = _notify_admin(
+                f"💬 Recado de cliente na revisão: {_proj or _jid}",
+                f"<b>O cliente escreveu:</b><br>"
+                f"<blockquote style='margin:8px 0;padding:8px 12px;"
+                f"border-left:3px solid #f59e0b'>{_e(texto[:2000])}</blockquote>"
+                f"<b>Quem:</b> {_e(_quem)}<br>"
+                f"<b>Item:</b> {_e(item_id)}{_ctx}<br><br>"
+                "Recado digitado é o sinal mais raro que este produto tem — em "
+                "toda a história foram pouquíssimos. Responder à mão hoje vale "
+                "mais que qualquer melhoria de motor desta semana.")
+            _log_error("cliente:recado",
+                       f"item={item_id} chars={len(texto)} avisei_admin={_avisou}",
+                       _jid, severity="warning")
+        except Exception as _e:
+            print(f"[revisao] alerta de recado falhou (nao-fatal): {_e}")
+
+    _tr.Thread(target=_envia, daemon=True).start()
 
 
 _NPS_STAGES = ("upload", "tempo", "precisao", "planilha")
@@ -27877,8 +28024,39 @@ def admin_voz_do_cliente(request: Request, limit: int = 12):
     um lado quebrado não apagar o outro (nem virar painel mudo que parece zero).
     """
     _require_admin(request)
-    out: dict = {"perguntas": [], "edicoes": [], "erro_perguntas": False,
-                 "erro_edicoes": False}
+    out: dict = {"perguntas": [], "edicoes": [], "recados": [],
+                 "erro_perguntas": False, "erro_edicoes": False,
+                 "erro_recados": False}
+
+    # ── 0. RECADO DIGITADO — o que o cliente escreveu com as próprias mãos
+    # 🩸 06/09/2026: esta seção não existia, e por isso um recado de 02/09
+    # ficou 4 dias invisível. As duas metades abaixo filtram `action=eq.edit`
+    # (aqui) e edit/reject (no resumo do admin); o modal "Comentar" grava
+    # `action='approve'`, então o recado caía exatamente no vão entre as duas.
+    # 🔑 Consulta por FATO (`comment` não vazio), não por `action` — é o que
+    # faz esta seção enxergar o recado que JÁ está no banco, e não só os
+    # próximos. `recado_digitado` tira as frases que a nossa tela escreve.
+    try:
+        _st, _rec = _supa_rest_service(
+            "GET", "item_reviews?select=item_id,job_id,action,comment,reviewed_at,reviewed_by"
+                   "&comment=not.is.null&order=reviewed_at.desc"
+                   f"&limit={max(1, min(limit, 50)) * 4}")
+        if _st == 200 and isinstance(_rec, list):
+            _recados = []
+            for r in _rec:
+                _txt = recado_digitado(r.get("comment"))
+                if not _txt:
+                    continue      # só a frase automática da nossa tela
+                r["recado"] = _txt
+                r["respondido"] = False   # não temos como saber ainda; ver ⏭️
+                _recados.append(r)
+            out["recados"] = _recados[:max(1, min(limit, 50))]
+        else:
+            out["erro_recados"] = True
+            _log_error("voz-do-cliente", f"recados HTTP {_st}")
+    except Exception as e:
+        out["erro_recados"] = True
+        _log_error("voz-do-cliente", f"recados: {e}")
 
     # ── 1. perguntas feitas ao chat do quantitativo
     try:
@@ -28255,6 +28433,80 @@ if __name__ == "__main__":
 # tinha caído do Google. Toda resposta custava meia hora de consulta na mão — e
 # nas duas primeiras eu respondi ERRADO, porque reinventava o critério a cada
 # vez e o número de "únicos" do Cloudflare conta robô.
+
+@app.post("/api/token/tick")
+def token_tick(request: Request, force: int = 0, dry: int = 0):
+    """Renova o token da Meta antes que ele morra. Chamado pelo pg_cron.
+
+    🚨 POR QUE ESTE TICK EXISTE (06/09/2026): `refresh_long_lived_token()`
+    estava quebrado E não era chamado por ninguém. O token do Instagram nunca
+    teve renovação automática — funcionava porque alguém colava um novo à mão.
+    Token de Instagram Login que passa 60 dias sem refresh MORRE EM DEFINITIVO
+    e só volta com Business Login manual.
+
+    🪤 Roda todo dia, mas só AGE quando faltam menos de 30 dias. Cron mensal
+    tem uma única chance de acertar por mês; se falhar naquele dia, ninguém
+    percebe até o token morrer. Diário + decisão no servidor se autocorrige.
+
+    🪤 `def`, não `async def` — o corpo é bloqueante (urllib síncrono). Ver o
+    comentário do /api/emails/auto/tick: rota async com corpo bloqueante
+    congelou o servidor inteiro por 33s.
+
+    force=1 → renova mesmo faltando muito tempo.  dry=1 → só relata.
+    """
+    _require_tick_secret(request)
+    import token_store as _ts
+    from instagram_api import MetaGraphAPI as _IG
+
+    estado = _ts.ler()
+    if not estado["token"]:
+        _log_error("token:tick", "Nenhum token disponível (nem no banco nem em "
+                   "META_ACCESS_TOKEN). O Instagram está sem credencial.",
+                   severity="error")
+        return {"status": "sem_token"}
+
+    dias = _ts.dias_restantes()
+    # dias is None = validade desconhecida (token só existe na env var, que não
+    # carrega data de emissão). Renovar é justamente como se descobre a validade.
+    precisa = force or dias is None or dias < 30
+
+    base = {"origem": estado["origem"], "dias_restantes": dias,
+            "precisa_renovar": bool(precisa)}
+    if dry or not precisa:
+        return {"status": "ok", "renovado": False, **base}
+
+    api = _IG(access_token=estado["token"],
+              ig_user_id=os.getenv("IG_USER_ID", ""),
+              app_secret=os.getenv("META_APP_SECRET"))
+
+    if not api.token_valido():
+        _log_error("token:tick", "O token atual não responde. Se passaram 60 dias "
+                   "sem renovação ele morreu em definitivo e exige Business Login "
+                   "manual no painel da Meta.", severity="error")
+        return {"status": "token_morto", **base}
+
+    novo = api.refresh_long_lived_token()
+    if not novo:
+        _log_error("token:tick", "A Meta recusou a renovação do token. Ver o log "
+                   "da requisição para o motivo.", severity="error")
+        return {"status": "recusado", **base}
+
+    # Usa o expires_in REAL devolvido pela Meta. Supor 60 dias faria a data de
+    # expiração no banco divergir da verdade, e é justamente essa data que
+    # decide a próxima renovação.
+    gravou = _ts.gravar(novo, expires_in=api.ultimo_expires_in)
+    if not gravou:
+        # 🚨 Renovou mas não persistiu: o token novo existe e está perdido. Isso
+        # precisa gritar, senão na próxima rodada renova de novo e o ciclo se
+        # repete até a env var velha morrer.
+        _log_error("token:tick", "Token RENOVADO mas NÃO GRAVADO no banco. O valor "
+                   "novo se perde no próximo restart. Verificar a tabela "
+                   "meta_token e as credenciais do Supabase.", severity="error")
+        return {"status": "renovado_sem_gravar", **base}
+
+    return {"status": "ok", "renovado": True, "origem": estado["origem"],
+            "dias_restantes_antes": dias, "expira_em_dias": 60}
+
 
 @app.post("/api/metricas/tick")
 def metricas_tick(request: Request):

@@ -79,9 +79,15 @@ def test_le_o_retrato_ANTES_e_nao_a_tabela_de_itens():
 #  2. O PAINEL MOSTRA
 # ══════════════════════════════════════════════════════════════════════════
 def test_o_painel_tem_o_bloco_e_ele_ENTRA_no_html():
+    """🩸 06/09/2026 — este guarda cobrava a linha inteira
+    (`inlineHtml = faltouHtml + excHtml +`) e REPROVOU quando um bloco novo
+    entrou na frente do "faltou". Ordem e vizinhos nunca foram o invariante:
+    o fato é que `excHtml` entra no que a tela exibe. Reaproveita o mesmo
+    verificador do guarda do "faltou um item", pra não haver duas réguas."""
+    from test_faltou_um_item import entra_no_inlineHtml
     html = _admin_html()
     assert "excHtml" in html, "o painel não monta o bloco das exclusões"
-    assert "inlineHtml = faltouHtml + excHtml +" in html, (
+    assert entra_no_inlineHtml(html, "excHtml"), (
         "o bloco existe mas não entra no que é exibido — código morto que "
         "passa em teste de existência")
 

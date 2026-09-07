@@ -9,8 +9,17 @@ from typing import Optional
 
 logger = logging.getLogger("instagram_api")
 
-GRAPH_API_BASE = "https://graph.instagram.com/v21.0"
-GRAPH_FB_BASE = "https://graph.facebook.com/v21.0"
+# A versão sai por env var porque VERSÃO DE API TEM PRAZO: pelo changelog da
+# Meta a v21.0 é desativada em 21/01/2027. Com a versão cravada no código, a
+# descoberta vira "os posts pararam de sair" num sábado; com env var, vira uma
+# linha no painel do Render.
+GRAPH_API_VERSION = os.getenv("GRAPH_API_VERSION", "v21.0")
+GRAPH_API_BASE = f"https://graph.instagram.com/{GRAPH_API_VERSION}"
+GRAPH_FB_BASE = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
+
+# Renovação de token não leva versão no caminho e não fica no host do Facebook.
+# Ver refresh_long_lived_token().
+IG_REFRESH_URL = "https://graph.instagram.com/refresh_access_token"
 
 
 def _id_ou_erro(resp: dict):
@@ -50,9 +59,31 @@ class MetaGraphAPI:
         ig_user_id: Optional[str] = None,
         app_secret: Optional[str] = None,
     ):
-        self.access_token = access_token or os.getenv("META_ACCESS_TOKEN", "")
+        # Ordem: argumento explícito → banco → env var.
+        #
+        # 🚨 O banco entra no meio porque a renovação automática precisa de um
+        # lugar durável para guardar o token novo: um processo não altera a
+        # própria env var, então sem isto o token renovado morreria no primeiro
+        # deploy. A env var continua sendo a semente (primeira execução, e
+        # fallback se o banco estiver fora). Ver token_store.py.
+        if access_token:
+            self.access_token = access_token
+        else:
+            self.access_token = os.getenv("META_ACCESS_TOKEN", "")
+            try:
+                from token_store import ler as _ler_token
+                do_banco = _ler_token().get("token")
+                if do_banco:
+                    self.access_token = do_banco
+            except Exception as _e:  # noqa: BLE001
+                # Banco fora não pode impedir publicação: segue com a env var.
+                logger.warning("token_store indisponível, usando env: %s", _e)
+
         self.ig_user_id = ig_user_id or os.getenv("IG_USER_ID", "")
         self.app_secret = app_secret or os.getenv("META_APP_SECRET", "")
+        # Preenchido por refresh_long_lived_token(); quem chama precisa do
+        # valor real para gravar a data de expiração certa, em vez de supor 60.
+        self.ultimo_expires_in: Optional[int] = None
 
     # ── Verificacao de assinatura do webhook ──
     def verify_signature(self, payload: bytes, signature: str) -> bool:
@@ -245,20 +276,62 @@ class MetaGraphAPI:
 
     # ── Token ──
     def refresh_long_lived_token(self) -> Optional[str]:
-        """Renova token de longa duracao (valido por 60 dias)."""
-        url = f"{GRAPH_FB_BASE}/oauth/access_token"
-        params = {
-            "grant_type": "fb_exchange_token",
-            "client_id": os.getenv("META_APP_ID", ""),
-            "client_secret": self.app_secret,
-            "fb_exchange_token": self.access_token,
-        }
-        resp = self._request("GET", url, params=params)
+        """Renova o token de longa duração. Devolve o novo token, ou None.
+
+        🚨 CORRIGIDO EM 06/09/2026. A versão anterior nunca funcionou, por dois
+        motivos independentes:
+
+        1. Chamava `graph.facebook.com/<versão>/oauth/access_token` com
+           `grant_type=fb_exchange_token` — o fluxo do FACEBOOK Login. Este
+           cliente publica em `graph.instagram.com`, ou seja, usa Instagram
+           Login, cujo endpoint de renovação é outro e não leva versão no
+           caminho.
+        2. Passava `client_id=os.getenv("META_APP_ID")`, e META_APP_ID não
+           existe no .env deste projeto. A chamada saía com client_id vazio.
+
+        Verificado contra a API real, com token inválido de propósito:
+            endpoint antigo → 400 "Missing client_id parameter"  (nem chega ao token)
+            endpoint novo   → 400 "Invalid OAuth access token"   (valida o token)
+
+        A função falhava na primeira checagem de parâmetro, sempre.
+
+        ⚠ E ela NUNCA ERA CHAMADA: não há cron nem endpoint que a invoque neste
+        backend. Corrigir o código não basta — sem alguém chamando, o token
+        continua sem renovação automática. Ver `token_status.py`.
+
+        Regras oficiais do fluxo Instagram Login:
+        - só renova token com pelo menos 24h de vida e ainda não expirado;
+        - o renovado vale 60 dias A PARTIR DA RENOVAÇÃO;
+        - passados 60 dias sem renovar, morre em definitivo e só um novo
+          Business Login manual recupera. Daí renovar a cada ~30 dias.
+        """
+        # `_request` já injeta o access_token nos params.
+        resp = self._request("GET", IG_REFRESH_URL,
+                             params={"grant_type": "ig_refresh_token"})
         new_token = resp.get("access_token")
         if new_token:
             self.access_token = new_token
-            logger.info("Token renovado com sucesso")
+            segundos = resp.get("expires_in")
+            self.ultimo_expires_in = int(segundos) if segundos else None
+            if segundos:
+                logger.info("Token renovado — expira em %s dias (%ss)",
+                            int(segundos) // 86400, segundos)
+            else:
+                logger.info("Token renovado com sucesso")
+        else:
+            logger.error("Falha ao renovar token: %s", resp)
         return new_token
+
+    def token_valido(self) -> bool:
+        """O token atual ainda funciona? Não gasta uma renovação para responder.
+
+        Existe para o diagnóstico: `refresh` só pode ser chamado em token vivo,
+        então perguntar "está vivo?" antes evita transformar uma checagem numa
+        renovação desnecessária.
+        """
+        resp = self._request("GET", f"{GRAPH_API_BASE}/me",
+                             params={"fields": "id,username"})
+        return bool(isinstance(resp, dict) and resp.get("id"))
 
     # ── Request interno ──
     def _request(self, method: str, url: str, **kwargs) -> dict:

@@ -191,22 +191,99 @@ def test_o_resumo_do_admin_TRAZ_os_recados():
     Foi a doença de 01/08, escrita no próprio código: a revisão inline gravou
     24 sinais durante meses enquanto o painel olhava OUTRA tabela. Ver
     [[feedback_o_aviso_tem_que_chegar]].
+
+    🩸 06/09/2026 — ESTE GUARDA LIA O FONTE NUMA JANELA FIXA DE 900 CHARS.
+    Entrou um campo novo no dicionário, o `"faltou_recados"` escorregou para
+    além do caractere 900 e ele reprovou uma mudança correta. Régua de texto
+    com janela mágica quebra quando o código cresce e absolve quando o defeito
+    mora fora da janela.
+
+    Agora ele CHAMA a rota com linhas de mentira e olha o que ela DEVOLVE.
     """
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index('resumo["revisao_inline"] = {')
-    bloco = src[i:i + 900]
-    assert '"faltou"' in bloco, (
-        "o resumo do admin não conta os recados de item faltando")
-    assert '"faltou_recados"' in bloco, (
+    import pytest as _pt
+    import main as _m
+
+    linhas = [
+        {"job_id": "j1", "action": "faltou", "comment": "faltou o forro de gesso",
+         "reviewed_at": "2026-09-01T12:00:00Z", "edits": None},
+        {"job_id": "j1", "action": "approve", "comment": "",
+         "reviewed_at": "2026-09-01T12:01:00Z", "edits": None},
+    ]
+
+    # 🪤 Esta rota NÃO usa o helper da casa: ela chama urlopen direto
+    # (`_url_rf.urlopen`). Patchar `_supa_rest_service` aqui não intercepta
+    # nada — o teste roda, devolve tudo zero e passaria a impressão de que o
+    # resumo está vazio de verdade. É preciso patchar a porta que ela usa.
+    import json as _json
+    import urllib.request as _ur
+
+    class _Resposta:
+        def __init__(self, dados):
+            self._b = _json.dumps(dados).encode("utf-8")
+
+        def read(self):
+            return self._b
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def _urlopen(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else str(req)
+        return _Resposta(linhas if "item_reviews" in url else [])
+
+    mp = _pt.MonkeyPatch()
+    try:
+        mp.setattr(_ur, "urlopen", _urlopen)
+        mp.setattr(_m, "_require_admin", lambda r: {"email": _m.ADMIN_EMAIL})
+        mp.setattr(_m, "_log_error", lambda *a, **k: None)
+        mp.setattr(_m, "_supa_rows", lambda *a, **k: [])
+        mp.setattr(_m, "_supa_rest_service", lambda *a, **k: (200, []))
+        out = _m.admin_revision_feedback(type("R", (), {"headers": {}})())
+    finally:
+        mp.undo()
+
+    ri = out.get("revisao_inline") or {}
+    assert ri.get("erro") is None, "a rota nem conseguiu montar o resumo: %r" % ri
+    assert ri.get("faltou") == 1, (
+        "o resumo do admin não conta os recados de item faltando (veio %r)"
+        % ri.get("faltou"))
+    textos = [r.get("texto") for r in (ri.get("faltou_recados") or [])]
+    assert "faltou o forro de gesso" in textos, (
         "o resumo manda só o NÚMERO — sem o texto, o painel diz 'existem 3' e "
-        "não diz o que o cliente escreveu, que é a única parte útil")
+        "não diz o que o cliente escreveu, que é a única parte útil. Veio: %r"
+        % (textos,))
+
+
+def entra_no_inlineHtml(html, termo):
+    """O `termo` é um dos pedaços somados em `inlineHtml`?
+
+    🩸 06/09/2026 — POR QUE ISTO DEIXOU DE SER `assert "inlineHtml = faltouHtml +"`.
+    Entrou um bloco novo (recado digitado do cliente) ANTES do "faltou", a
+    expressão virou `recadosHtml + faltouHtml + ...`, e este guarda REPROVOU uma
+    mudança correta. Guarda preso à FORMA da linha erra dos dois lados: absolve
+    o defeito que não mexe na string e acusa o conserto que mexe.
+
+    O FATO que interessa é só um: este bloco entra no que a tela exibe. Ordem e
+    vizinhos não são invariante — nunca foram.
+    """
+    i = html.find("inlineHtml =")
+    if i < 0:
+        return False
+    # Só o começo da expressão: é onde ficam os identificadores somados, antes
+    # do primeiro template literal (que tem `+`, `;` e chaves dentro).
+    cabeca = html[i:i + 200]
+    import re as _re
+    return bool(_re.search(r"[=+]\s*" + _re.escape(termo) + r"\s*\+", cabeca))
 
 
 def test_o_painel_MOSTRA_os_recados():
     html = _admin_html()
     assert "faltouHtml" in html and "faltou_recados" in html, (
         "o painel não renderiza os recados de item faltando")
-    assert "inlineHtml = faltouHtml +" in html, (
+    assert entra_no_inlineHtml(html, "faltouHtml"), (
         "o bloco existe mas não entra no que é exibido")
 
 

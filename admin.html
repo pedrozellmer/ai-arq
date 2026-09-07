@@ -2962,7 +2962,7 @@ async function loadVozCliente(){
   try {
     const res = await authFetch(`${API_BASE}/api/admin/voz-do-cliente`);
     const d = await res.json();
-    const perg = d.perguntas || [], edic = d.edicoes || [];
+    const perg = d.perguntas || [], edic = d.edicoes || [], recs = d.recados || [];
 
     // Metade quebrada não pode virar "está zerado" — o painel diz qual falhou.
     const vazio = (erro, txt) => erro
@@ -2993,7 +2993,36 @@ async function loadVozCliente(){
       </div>`;
     }).join('') : vazio(d.erro_edicoes, 'Nenhuma edição na tela de revisão ainda.');
 
+    // 06/09/2026 — RECADO DIGITADO VEM PRIMEIRO E EM LARGURA INTEIRA.
+    // Um recado de 02/09 ficou 4 dias invisivel: o modal Comentar grava a acao
+    // como aprovacao, e as duas colunas abaixo leem pergunta-de-chat e edicao.
+    // Nao vira terceira coluna: e o sinal mais raro que o produto tem, e o
+    // objetivo desta faixa e que seja impossivel abrir o painel e nao ver.
+    const colRec = recs.length ? recs.map(r => {
+      const jid = String(r.job_id || '');
+      const link = jid
+        ? `<a href="/projeto.html?job_id=${encodeURIComponent(jid)}" target="_blank"
+              class="underline">abrir projeto</a>`
+        : '';
+      return `
+      <div class="border-l-2 border-amber-300 bg-white pl-3 pr-3 py-2 rounded-md">
+        <p class="text-sm text-gray-900 font-medium">"${esc(r.recado)}"</p>
+        <p class="text-xs text-gray-500 mt-1">
+          ${dt(r.reviewed_at)}${jid ? ' · ' + link : ''}
+        </p>
+      </div>`;
+    }).join('') : vazio(d.erro_recados, 'Ninguém digitou recado na revisão ainda.');
+
+    const faixaRec = recs.length ? `
+      <div class="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4">
+        <h4 class="text-xs font-bold text-amber-900 uppercase mb-2">
+          🔔 Recado digitado por cliente (${recs.length}) — responder à mão
+        </h4>
+        <div class="space-y-2">${colRec}</div>
+      </div>` : '';
+
     el.innerHTML = `
+      ${faixaRec}
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <h4 class="text-xs font-bold text-gray-500 uppercase mb-2">💬 Perguntou no chat (${perg.length})</h4>
@@ -3032,6 +3061,21 @@ function renderRevisionFeedback(d){
   // 🩸 05/09/2026 — "FALTOU UM ITEM": o cliente dizendo o que o motor NEM VIU.
   // É a única pergunta de cobertura que existe, e por isso vem PRIMEIRO e
   // INTEIRO, não como número numa linha de resumo. São poucos por natureza.
+  // 06/09/2026 — O RECADO DIGITADO VEM ANTES DE TUDO.
+  // O bloco de baixo so aparece com aprovacao ou edicao, e o modal Comentar
+  // grava a acao como aprovacao: o texto ia pro balde das aprovacoes, que aqui
+  // e so um NUMERO. Um recado de 02/09 ficou 4 dias invisivel por isso.
+  // Vem inteiro, como o "faltou um item": sao pouquissimos por natureza.
+  const recadosHtml = (ri.recados) ? `
+    <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-4">
+      <p class="text-sm font-semibold text-amber-900 mb-1">🔔 ${ri.recados} recado(s) que o cliente DIGITOU</p>
+      <p class="text-xs text-amber-800 mb-2">Texto escrito à mão na tela de revisão — o sinal mais raro que este produto tem. Pede resposta humana.</p>
+      ${(ri.recados_itens || []).map(c => `
+        <div class="text-xs text-amber-900 border-t border-amber-200 pt-2 mt-2">
+          <span class="font-mono">${esc(c.job_id)}</span> · ${esc(window.fmtBR(c.quando))}
+          <div class="text-amber-950 mt-1">"${esc(c.texto || '')}"</div>
+        </div>`).join('')}
+    </div>` : '';
   const faltouHtml = (ri.faltou) ? `
     <div class="rounded-xl border border-amber-300 bg-amber-50 p-4 mb-4">
       <p class="text-sm font-semibold text-amber-900 mb-1">🕳️ ${ri.faltou} recado(s) de "faltou um item"</p>
@@ -3061,7 +3105,7 @@ function renderRevisionFeedback(d){
             ${x.quantidade != null ? ` — ${esc(num(x.quantidade))} ${esc(x.unidade || '')}` : ''}</div>
         </div>`).join('')}
     </div>` : '';
-  const inlineHtml = faltouHtml + excHtml + ((ri.aprovacoes || ri.edicoes) ? `
+  const inlineHtml = recadosHtml + faltouHtml + excHtml + ((ri.aprovacoes || ri.edicoes) ? `
     <div class="rounded-xl border border-gray-200 bg-white p-4 mb-4">
       <p class="text-sm font-semibold text-gray-800 mb-1">✏️ Revisão inline (na tela de revisão)</p>
       <p class="text-xs text-gray-600 mb-2">

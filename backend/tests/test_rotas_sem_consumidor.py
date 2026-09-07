@@ -42,12 +42,34 @@ _TETO_ROTAS_ORFAS = 7
 
 
 def _fonte_do_site():
-    """Todo HTML e JS que o site serve — é lá que a chamada teria que estar."""
+    """Tudo que pode CHAMAR uma rota — não só o site.
+
+    🩸 06/09/2026 — este detector lia só HTML e JS da raiz e acusou
+    `/api/token/tick` de nascer morta. Ela não nasceu morta: é chamada por um
+    cron do Supabase, declarado em `backend/migrations_pendentes/*.sql`. O
+    guarda media a FORMA ("o site chama?") quando o fato que ele quer é
+    "alguém chama?". Rota de cron, de webhook e de CI é órfã do site por
+    desenho, e acusá-las ensina a desligar o guarda.
+
+    🪤 Continua ESTREITO de propósito: só entra quem é chamador de verdade
+    (site, cron em migração, workflow). Varrer o repo inteiro absolveria
+    qualquer rota citada num comentário — que é o defeito oposto.
+    """
     partes = []
     for nome in os.listdir(RAIZ):
         if nome.endswith((".html", ".js")):
             partes.append(io.open(os.path.join(RAIZ, nome), encoding="utf-8",
                                   errors="replace").read())
+    # cron do Supabase (pg_cron chama a rota por URL) e workflows do GitHub
+    for pasta, exts in ((os.path.join(BACKEND, "migrations_pendentes"), (".sql",)),
+                        (os.path.join(RAIZ, ".github", "workflows"), (".yml", ".yaml")),
+                        (os.path.join(RAIZ, ".github", "scripts"), (".py",))):
+        if not os.path.isdir(pasta):
+            continue
+        for nome in os.listdir(pasta):
+            if nome.endswith(exts):
+                partes.append(io.open(os.path.join(pasta, nome), encoding="utf-8",
+                                      errors="replace").read())
     return "\n".join(partes)
 
 
