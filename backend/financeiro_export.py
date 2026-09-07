@@ -35,7 +35,7 @@ from openpyxl.utils import get_column_letter
 # Mesma paleta/tipografia do quantitativo — importada, nunca duplicada.
 from spreadsheet import (
     F_TITLE, F_SUB, F_HDR, F_N, F_BOLD, F_TOT, F_NOTE,
-    P_SUB, P_HDR, P_TOT, P_LT,
+    P_SUB, P_HDR, P_TOT, P_LT, P_ORANGE,
     AC, AL, AR, BD,
 )
 
@@ -115,7 +115,50 @@ def vencimento(l: Dict, fases: Dict[str, Tuple[date, date]]) -> Tuple[Optional[d
     return (f[1] if quando == "fim" else f[0]), f"{'fim' if quando == 'fim' else 'início'} da fase {lab}"
 
 
-def montar_dados_export(rows: List[Dict], fases_lista: Optional[List[Dict]], hoje: date) -> Dict:
+#: O que a coluna SELO diz, por estado. Três, não dois.
+#: 🩸 07/09/2026 — a planilha do financeiro ia pro FORNECEDOR com a quantidade
+#: do quantitativo e NADA dizendo se ela foi medida do desenho. Ele cota 819 m²
+#: achando que alguém mediu. Achado nº9 da auditoria de 06/09.
+#: 🪤 O terceiro estado existe porque `origem_ref_id` não tem FK: depois de um
+#: reprocesso os itens renascem com UUID novo e a referência fica pendurada.
+#: "Não deu pra conferir" é honesto; assumir medido é a regra nº1 pelo avesso,
+#: e assumir estimado é mentir pro outro lado.
+SELO_LABEL = {
+    "confirmado": "Medido do CAD",
+    "estimado": "Estimativa — confira",
+    "verificar": "Estimativa — confira",
+    "": "Não confirmado",
+}
+#: chave do selo → classe CSS do PDF. Mapa explícito: classe faltando cai em
+#: "nc" (cinza, "não confirmado"), o lado seguro pela regra nº1.
+_SELO_CLS = {"medido": "med", "estimado": "est", "nao_confirmado": "nc"}
+SELO_NOTA = (
+    "A coluna SELO diz de onde saiu a QUANTIDADE de cada linha. "
+    '"Medido do CAD" = medida na geometria do desenho. '
+    '"Estimativa — confira" = número estimado, ainda não medido. '
+    '"Não confirmado" = o item de origem não está mais no quantitativo '
+    "(o projeto foi reprocessado) e não deu pra conferir. "
+    "O valor em R$ é sempre do arquiteto — o AI.arq não precifica obra."
+)
+
+
+def _selo_key(confidence: str) -> str:
+    """confiança crua do item → 'medido' | 'estimado' | 'nao_confirmado'.
+
+    Três estados, os mesmos de `SELO_LABEL`. Qualquer coisa que não seja
+    'confirmado' e não seja um selo conhecido cai em 'nao_confirmado' —
+    a regra nº1 manda errar pro lado de NÃO afirmar medição.
+    """
+    c = str(confidence or "").strip().lower()
+    if c == "confirmado":
+        return "medido"
+    if c in ("estimado", "verificar"):
+        return "estimado"
+    return "nao_confirmado"
+
+
+def montar_dados_export(rows: List[Dict], fases_lista: Optional[List[Dict]],
+                        hoje: date, selos: Optional[Dict] = None) -> Dict:
     """Linhas enriquecidas + grupos por categoria + os 4 KPIs da tela.
 
     Predicados copiados da tela, um a um:
@@ -145,6 +188,23 @@ def montar_dados_export(rows: List[Dict], fases_lista: Optional[List[Dict]], hoj
             "origem": ORIGEM_LABEL.get(str(l.get("origem") or "livre"), "Linha livre"),
             "origem_quantidade": l.get("origem_quantidade"),
             "origem_unidade": str(l.get("origem_unidade") or "").strip(),
+            # 🔑 O selo da QUANTIDADE, não do valor — e SÓ pra linha que veio do
+            # quantitativo. Linha digitada à mão não tem quantidade nossa pra
+            # carimbar; linha do Comparativo tem a quantidade da COTAÇÃO do
+            # fornecedor, que não é medição nossa nem estimativa nossa. Nas duas
+            # o selo fica em branco: "não confirmado" ali sugeriria uma falha
+            # nossa onde não há nada nosso a conferir.
+            "selo": (SELO_LABEL.get(
+                str((selos or {}).get(str(l.get("origem_ref_id") or "")) or ""),
+                SELO_LABEL[""])
+                if (l.get("origem_ref_id") and str(l.get("origem") or "") == "quantitativo")
+                else ""),
+            # `selo_key` é pra COR/ícone (PDF, tela); `selo` é o texto que sai
+            # na planilha. Separados porque casar o rótulo por string quebra
+            # calado no dia em que alguém reescrever o texto do rótulo.
+            "selo_key": (_selo_key(str((selos or {}).get(str(l.get("origem_ref_id") or "")) or ""))
+                         if (l.get("origem_ref_id")
+                             and str(l.get("origem") or "") == "quantitativo") else ""),
             "fornecedor": str(l.get("fornecedor") or "").strip(),
             "forma_pagamento": str(l.get("forma_pagamento") or "").strip(),
             "valor": valor,
@@ -209,10 +269,22 @@ def montar_dados_export(rows: List[Dict], fases_lista: Optional[List[Dict]], hoj
 # ══════════════════════════════════════════════════════════════════════════
 #  .xlsx — mesmo padrão visual do quantitativo e do cronograma
 # ══════════════════════════════════════════════════════════════════════════
-COLS = ['Nº', 'CATEGORIA / FASE', 'ITEM', 'ORIGEM', 'FORNECEDOR', 'FORMA DE PAGAMENTO',
-        'VENCIMENTO', 'REGRA DO VENCIMENTO', 'STATUS', 'PAGO EM', 'VALOR (R$)']
-_COL_VALOR = len(COLS)          # 11
-_LARGURAS = [6, 22, 48, 13, 24, 18, 13, 26, 20, 12, 16]
+COLS = ['Nº', 'CATEGORIA / FASE', 'ITEM', 'ORIGEM', 'SELO', 'FORNECEDOR',
+        'FORMA DE PAGAMENTO', 'VENCIMENTO', 'REGRA DO VENCIMENTO', 'STATUS',
+        'PAGO EM', 'VALOR (R$)']
+_COL_VALOR = len(COLS)          # 12
+_LARGURAS = [6, 22, 48, 13, 22, 24, 18, 13, 26, 20, 12, 16]
+
+# 🪤 07/09/2026 — estes índices eram NÚMEROS CRAVADOS NA MÃO (`i in (7, 10)` pras
+# datas). Ao inserir a coluna SELO no meio, VENCIMENTO e PAGO EM andaram uma casa
+# e as datas sairiam como 46296 na planilha do fornecedor — sem erro, sem aviso.
+# Agora saem do próprio cabeçalho: mudar COLS move tudo junto ou estoura na hora.
+_COL_SELO = COLS.index('SELO') + 1
+_COLS_TEXTO = tuple(COLS.index(c) + 1 for c in
+                    ('CATEGORIA / FASE', 'ITEM', 'FORNECEDOR', 'FORMA DE PAGAMENTO',
+                     'REGRA DO VENCIMENTO', 'STATUS'))
+_COLS_DATA = tuple(COLS.index(c) + 1 for c in ('VENCIMENTO', 'PAGO EM'))
+assert len(_LARGURAS) == len(COLS), "largura por coluna: sobrou ou faltou uma"
 
 
 def _merge_texto(ws, ro, texto, font, fill=None, altura=None, n_cols=_COL_VALOR):
@@ -265,6 +337,10 @@ def gerar_financeiro_xlsx(dados: Dict, output_path: str, branding: Optional[Dict
             "Este projeto ainda não tem cronograma gerado: vencimento amarrado à fase sai como "
             "'fase sem data'. Gere o cronograma e exporte de novo pra ver as datas."
         ), F_NOTE)
+    # Legenda da coluna SELO — só quando há linha com selo (regra nº1: quem
+    # recebe a planilha precisa saber o que é medido e o que é estimativa).
+    if any(l["selo"] for g in dados["grupos"] for l in g["linhas"]):
+        ro = _merge_texto(ws, ro, SELO_NOTA, F_NOTE, altura=30)
 
     # ── os 4 números da tela, numa linha (rótulo | valor) e os subtítulos na linha de baixo
     pago_sub = (f"{k['pago_pct']}% do contratado" if k["pago_pct"] is not None else "—")
@@ -349,17 +425,21 @@ def gerar_financeiro_xlsx(dados: Dict, output_path: str, branding: Optional[Dict
         for idx, l in enumerate(g["linhas"]):
             n += 1
             alt = P_LT if idx % 2 else None
-            vals = [n, l["categoria"], l["descricao"], l["origem"], l["fornecedor"],
-                    l["forma_pagamento"], l["venc"], l["venc_regra"], l["status_label"],
-                    l["pago_em"], l["valor"]]
+            vals = [n, l["categoria"], l["descricao"], l["origem"], l["selo"],
+                    l["fornecedor"], l["forma_pagamento"], l["venc"], l["venc_regra"],
+                    l["status_label"], l["pago_em"], l["valor"]]
             for i, v in enumerate(vals, start=1):
                 c = ws.cell(row=ro, column=i, value=v)
                 c.font = F_N
                 c.border = BD
-                c.alignment = AL if i in (2, 3, 5, 6, 8, 9) else AC
+                c.alignment = AL if i in _COLS_TEXTO else AC
                 if alt:
                     c.fill = alt
-                if i in (7, 10) and isinstance(v, date):
+                # o selo pinta a célula com a MESMA laranja do quantitativo
+                # (P_ORANGE) — quem já viu a planilha de itens reconhece na hora.
+                if i == _COL_SELO and l["selo_key"] in ("estimado", "nao_confirmado"):
+                    c.fill = P_ORANGE if l["selo_key"] == "estimado" else P_HDR
+                if i in _COLS_DATA and isinstance(v, date):
                     c.number_format = FMT_DATA
                 if i == _COL_VALOR:
                     c.alignment = AR
@@ -502,6 +582,10 @@ def montar_html_financeiro(dados: Dict, branding: Optional[Dict] = None) -> str:
     if not dados.get("tem_cronograma"):
         avisos.append('<p class="nota">Projeto sem cronograma gerado: vencimento amarrado à fase sai como '
                       '"fase sem data".</p>')
+    # A nota do selo só entra se ALGUMA linha tiver selo — documento de linhas
+    # todas digitadas à mão não ganha explicação de coisa que não aparece nele.
+    if any(l["selo"] for g in dados["grupos"] for l in g["linhas"]):
+        avisos.append(f'<p class="nota">{_esc(SELO_NOTA)}</p>')
 
     partes = []
     for g in dados["grupos"]:
@@ -525,8 +609,14 @@ def montar_html_financeiro(dados: Dict, branding: Optional[Dict] = None) -> str:
                   + (f'<br><small>em {_esc(_br(l["pago_em"]))}</small>' if l["pago_em"] else ""))
             if l["vencido"]:
                 st += '<br><small class="venc">vencido</small>'
+            # 🔑 achado nº9: a planilha ia pro fornecedor sem dizer se a
+            # quantidade foi medida do desenho. O selo anda GRUDADO na linha,
+            # não numa legenda de rodapé que ninguém lê.
+            selo = (f'<span class="selo {_SELO_CLS.get(l["selo_key"], "nc")}">{_esc(l["selo"])}</span>'
+                    if l["selo"] else "")
             partes.append(
-                f'<tr><td>{_esc(l["descricao"])}<br><small class="mudo">{_esc(l["origem"])}</small></td>'
+                f'<tr><td>{_esc(l["descricao"])}<br><small class="mudo">{_esc(l["origem"])}</small>'
+                f'{selo}</td>'
                 f'<td>{forn}</td><td>{venc}</td><td>{st}</td>'
                 f'<td class="num{"" if l["valor"] is not None else " mudo"}">{_esc(_brl(l["valor"]))}</td></tr>')
     partes.append(
@@ -573,6 +663,12 @@ tr.tot td {{ background: #E8ECF4; font-weight: 700; border-top: 1.5pt solid #94A
 .num {{ text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }}
 small {{ font-size: 7.5pt; color: #64748B; }}
 .mudo {{ color: #94A3B8; }} .semdata {{ color: #B45309; }} .venc {{ color: #B91C1C; font-weight: 700; }}
+/* selo da QUANTIDADE — mesma linguagem branco/laranja do quantitativo (regra nº1) */
+.selo {{ display: inline-block; margin-top: 2pt; font-size: 6.8pt; font-weight: 700; padding: 1pt 4pt;
+        border-radius: 3pt; border: 0.6pt solid; letter-spacing: .2pt; }}
+.selo.med {{ color: #065F46; background: #ECFDF5; border-color: #A7F3D0; }}
+.selo.est {{ color: #92400E; background: #FFF7ED; border-color: #FDBA74; }}
+.selo.nc {{ color: #475569; background: #F1F5F9; border-color: #CBD5E1; }}
 .st {{ font-weight: 600; }}
 th.num, td.num {{ text-align: right; }}
 </style></head><body>

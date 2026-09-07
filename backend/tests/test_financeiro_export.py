@@ -197,6 +197,14 @@ def _linhas(ws):
     return [[c.value for c in r] for r in ws.iter_rows()]
 
 
+# 🪤 07/09/2026 — estes índices eram números crus (`r[6]` = vencimento, `r[7]` =
+# regra). A coluna SELO entrou na posição 5 e os dois testes passaram a ler a
+# coluna errada — reprovando código correto. Índice vem do cabeçalho: se a
+# planilha ganhar outra coluna, ele anda junto.
+def _i(nome):
+    return fe.COLS.index(nome)
+
+
 def test_xlsx_tem_titulo_ressalva_e_os_4_numeros():
     ws = _xlsx(pytest.importorskip("pathlib").Path(os.environ.get("TMP") or os.environ.get("TEMP") or "/tmp"))
     texto = "\n".join(str(c) for r in _linhas(ws) for c in r if c is not None)
@@ -215,7 +223,9 @@ def test_xlsx_valor_ausente_e_celula_VAZIA_e_subtotal_e_total_sao_formulas(tmp_p
     assert len(sem_valor) == 1 and sem_valor[0][col_v] is None, "nº5: sem valor é VAZIO, não 0"
     com_valor = [r for r in linhas if r[2] == "Porcelanato 60x60"][0]
     # openpyxl devolve a data como datetime — compara o dia, não o tipo
-    assert com_valor[col_v] == 1000.0 and str(com_valor[6])[:10] == "2026-09-10" and com_valor[7] == "início da fase Pisos"
+    assert (com_valor[col_v] == 1000.0
+            and str(com_valor[_i("VENCIMENTO")])[:10] == "2026-09-10"
+            and com_valor[_i("REGRA DO VENCIMENTO")] == "início da fase Pisos")
     subtotais = [r[col_v] for r in linhas if isinstance(r[0], str) and r[0].startswith("Pisos  ·")]
     assert subtotais and str(subtotais[0]).startswith("=SUM("), "subtotal por grupo é fórmula VIVA"
     total = [r for r in linhas if isinstance(r[0], str) and r[0].startswith("TOTAL DOS LANÇAMENTOS")][0]
@@ -229,7 +239,14 @@ def test_xlsx_sem_cronograma_avisa_e_nao_inventa_data(tmp_path):
     ws = _xlsx(tmp_path, fases=[])
     texto = "\n".join(str(c) for r in _linhas(ws) for c in r if c is not None)
     assert "ainda não tem cronograma gerado" in texto
-    assert all(r[7] in (None, "fase sem data", "data fixa", "REGRA DO VENCIMENTO") for r in _linhas(ws) if r[7])
+    # 🪤 só as LINHAS DE LANÇAMENTO (as numeradas). Varrer a planilha inteira
+    # pega o "—" da faixa de KPIs, que anda de coluna a cada coluna nova —
+    # o teste reprovava o export por causa de um traço de outro bloco.
+    _r = _i("REGRA DO VENCIMENTO")
+    lanc = [r for r in _linhas(ws) if isinstance(r[0], int)]
+    assert lanc, "nenhuma linha de lançamento na planilha"
+    ruins = sorted({str(r[_r]) for r in lanc} - {"fase sem data", "data fixa"})
+    assert not ruins, f"sem cronograma, alguma linha inventou regra de vencimento: {ruins}"
 
 
 # ══════════════════════════════════════════════════════════════════════════

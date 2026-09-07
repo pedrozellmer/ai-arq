@@ -27278,7 +27278,13 @@ def _fin_estado_da_origem(lanc: dict, itens_por_id: dict, itens_por_desc: dict) 
     u = str(it.get("unit") or "")
     mudou = (q4 != rq4) or (u != ru)
     out = {"origem_estado": "mudou" if mudou else "ok",
-           "origem_atual": {"quantidade": q4, "unidade": u}}
+           "origem_atual": {"quantidade": q4, "unidade": u},
+           # 🔑 07/09/2026 — O SELO SAI DAQUI, da MESMA régua, e não de uma
+           # consulta paralela por `origem_ref_id`. A consulta paralela que eu
+           # tinha escrito não religava por descrição: depois de um /add-file a
+           # tela diria "ok" e a planilha diria "não confirmado" pra mesma
+           # linha. Régua única, resposta única (achado nº9).
+           "origem_selo": str(it.get("confidence") or "")}
     if religado:
         out["origem_ref_id_atual"] = religado
     return out
@@ -27326,7 +27332,10 @@ def financeiro_listar(job_id: str, request: Request):
     if st != 200 or rows is None:      # 🪤 vazio ≠ falhou: lista vazia é [] com 200
         _fin_erro_do_banco(st, "ler os lançamentos", job_id)
     st2, itens = _fin_get(
-        request, f"/project_items?job_id=eq.{jq}&select=id,description,quantity,unit", eh_admin)
+        # `confidence` entra aqui pro selo da regra nº1 sair da MESMA leitura
+        # que já decide "mudou/removido" — uma consulta, uma régua, uma resposta.
+        request, f"/project_items?job_id=eq.{jq}&select=id,description,quantity,unit,confidence",
+        eh_admin)
     truncado = bool(itens) and len(itens) >= 1000     # PostgREST corta em 1000 e não avisa
     # ...e os lançamentos também: com 1000+ a tela mostraria totais parciais com cara de completos
     lanc_truncados = len(rows) >= 1000
@@ -27562,7 +27571,75 @@ def _fin_montar_export(request, job_id: str, eh_admin: bool, hoje_str: str = "")
         raise HTTPException(502, "não consegui ler os dados do projeto agora — tente de novo em instantes")
     branding = dict(branding or {})
     branding["project_name"] = nome or branding.get("project_name") or "Projeto sem nome"
-    return montar_dados_export(rows, fases, _fin_hoje(hoje_str)), branding
+    return (montar_dados_export(rows, fases, _fin_hoje(hoje_str),
+                                selos=_fin_selos_das_origens(req_leitura, job_id, rows)),
+            branding)
+
+
+def _fin_selos_das_origens(req_leitura, job_id: str, rows) -> dict:
+    """{origem_ref_id: 'confirmado'|'estimado'|...} pra carimbar o arquivo.
+
+    🩸 07/09/2026 — O ARQUIVO DO FINANCEIRO SAI PRA TERCEIRO SEM DIZER SE O ITEM
+    FOI MEDIDO. O `.xlsx`/PDF lista "Alvenaria de vedação — R$ 12.000" e vai pro
+    fornecedor e pro banco. Quem lê supõe que alguém mediu o escopo. Medido em
+    07/09 na base: **9.518 itens laranja** (estimados) e ZERO lançamentos — deu
+    pra consertar antes do primeiro cliente usar. Achado nº9 da auditoria 06/09.
+
+    🔑 O SELO SAI DA RÉGUA QUE JÁ EXISTE (`_fin_estado_da_origem`), não de uma
+    consulta própria por `origem_ref_id`. A primeira versão desta função tinha a
+    consulta própria — e ela NÃO religava o item por descrição. Como o `/add-file`
+    recria os itens com UUID novo, a tela diria "ok" e a planilha diria "não
+    confirmado" pra MESMA linha, no mesmo produto, no mesmo dia. Régua copiada
+    envelhece sozinha: as absolvições dela (o religamento, o desempate por
+    retrato) ficam pra trás sem ninguém ver.
+
+    🪤 TRÊS estados, não dois. Item que a régua não achou (removido, ambíguo, ou
+    leitura que não veio) devolve selo VAZIO, que o export escreve como "Não
+    confirmado" — diferente de "estimado" e muito diferente de "medido". Assumir
+    medido seria a regra dura nº1 pelo avesso; assumir estimado seria mentir pro
+    outro lado.
+
+    🚨 NUNCA levanta: sem os selos o arquivo ainda sai, dizendo que não deu pra
+    conferir. Não entregar é pior do que entregar sem afirmar.
+    """
+    if not any(r.get("origem_ref_id") for r in (rows or [])):
+        return {}
+    try:
+        jq = urllib.parse.quote(job_id)
+        st, itens = _fin_get(
+            req_leitura,
+            f"/project_items?job_id=eq.{jq}&select=id,description,quantity,unit,confidence",
+            req_leitura is None)
+        # 🪤 o PostgREST corta em 1000 CALADO: com o corte, item que existe some
+        # da leitura e viraria "não confirmado" sem ser. Melhor não carimbar nada.
+        if st != 200 or itens is None or len(itens) >= 1000:
+            _log_error("financeiro:selo-ilegivel",
+                       "project_items HTTP %s itens=%s — o arquivo sai dizendo que não "
+                       "deu pra conferir o selo" % (st, "corte de 1000" if itens and
+                                                    len(itens) >= 1000 else
+                                                    (len(itens) if itens is not None else "None")),
+                       job_id, severity="warning")
+            return {}
+        por_id = {str(i.get("id")): i for i in itens}
+        por_desc = {}
+        for i in itens:
+            por_desc.setdefault(_fin_norm(i.get("description")), []).append(i)
+        selos = {}
+        for l in rows:
+            ref = str(l.get("origem_ref_id") or "")
+            if not ref:
+                continue
+            est = _fin_estado_da_origem(l, por_id, por_desc) or {}
+            # 'removido'/'ambiguo'/'indisponivel' não têm item resolvido: fora do
+            # mapa, e o export carimba "Não confirmado" por ausência.
+            if est.get("origem_estado") in ("ok", "mudou"):
+                selos[ref] = str(est.get("origem_selo") or "")
+        return selos
+    except Exception as _e:
+        _log_error("financeiro:selo-ilegivel",
+                   "%s — o arquivo sai sem afirmar medição" % type(_e).__name__,
+                   job_id, severity="warning")
+        return {}
 
 
 def _fin_nome_do_projeto(req_leitura, job_id: str):

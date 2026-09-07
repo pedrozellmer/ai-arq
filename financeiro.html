@@ -570,6 +570,9 @@ function daApi(r){
     st: r.status || 'cotado', pago_em: r.pago_em ? String(r.pago_em).slice(0,10) : null,
     estado: r.origem_estado || 'ok', origem_atual: r.origem_atual || null, origem_candidatos: r.origem_candidatos || 0,
     origem_quantidade: r.origem_quantidade, origem_unidade: r.origem_unidade || '',
+    // 🪤 a tela lê ESTE objeto, não o payload cru: badge novo sem linha aqui é
+    // conserto pela metade — o carimbo existe e nunca aparece.
+    origem_selo: r.origem_selo || '',
     // o Desfazer recria pela API, e fora da linha livre o servidor EXIGE a referência — sem estes
     // dois campos aqui, todo Desfazer de linha do quantitativo/comparativo dava 400 (visto ao vivo 05/09)
     origem_ref_id: r.origem_ref_id || null, origem_ref_pos: (r.origem_ref_pos==null ? null : Number(r.origem_ref_pos)),
@@ -770,6 +773,17 @@ function kpis(){
 function pintaSelo(texto, classe){ const e=document.querySelector('.side-est[data-est="financeiro"]'); if(!e) return; e.textContent=texto; e.className='side-est '+classe; }
 
 // ── linhas ──
+// 🔑 07/09/2026 — o SELO da quantidade (regra dura nº1) na linha do dinheiro.
+// Vem do servidor pela MESMA régua que decide "mudou/removido" (origem_selo);
+// a tela não recalcula nada. Sem selo lido → nada aparece: a tela nunca afirma
+// medição por conta própria. Achado nº9.
+function badgeSelo(l){
+  if (l.src!=='quant') return '';
+  const s = String(l.origem_selo||'');
+  if (s==='confirmado') return `<span class="block w-fit mt-1 text-[10.5px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5" title="A quantidade deste item foi medida na geometria do desenho.">✓ medido do CAD</span>`;
+  if (s==='estimado'||s==='verificar') return `<span class="block w-fit mt-1 text-[10.5px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5" title="A quantidade deste item foi estimada, não medida do desenho. Confira antes de fechar o valor.">⚠ estimado — confira</span>`;
+  return '';
+}
 function badgeOrigem(l){
   // regra nº7 por linha: o servidor compara o retrato com o item vivo (quantidade OU unidade)
   if (l.src!=='quant') return '';
@@ -784,7 +798,7 @@ function celulaItem(l){
   const ro = l.src!=='livre' || SOMENTE_LEITURA;
   const titulo = l.src!=='livre' ? `Vem ${SRC_TXT[l.src]} — edite lá; a linha avisa quando o item mudar` : esc(l.oque);
   const tab = ro ? '' : 'tabindex="0" role="button"';
-  return `<span class="cell clamp2 text-[13px] font-medium text-slate-800 ${ro?'ro':''}" data-i="${i}" data-campo="oque" ${tab} title="${titulo}" aria-label="Item — ${esc(l.oque)}"><i class="dot" style="background:${SRC_COR[l.src]}" title="${SRC_TXT[l.src]}"></i>${esc(l.oque)}</span>${badgeOrigem(l)}
+  return `<span class="cell clamp2 text-[13px] font-medium text-slate-800 ${ro?'ro':''}" data-i="${i}" data-campo="oque" ${tab} title="${titulo}" aria-label="Item — ${esc(l.oque)}"><i class="dot" style="background:${SRC_COR[l.src]}" title="${SRC_TXT[l.src]}"></i>${esc(l.oque)}</span>${badgeSelo(l)}${badgeOrigem(l)}
     <span class="cell forn-sub text-[11.5px] text-slate-500 truncate1 mt-0.5 ${SOMENTE_LEITURA?'ro':''}" data-i="${i}" data-campo="forn" ${SOMENTE_LEITURA?'':'tabindex="0" role="button"'} aria-label="Fornecedor — ${esc(l.oque)}: ${l.forn?esc(l.forn):'informar'}">${l.forn?esc(l.forn):'<span class="text-indigo-600">informar fornecedor</span>'}</span>`;
 }
 function celulaForn(l){
