@@ -18,6 +18,8 @@ import re
 import sys
 from datetime import date
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RAIZ = os.path.dirname(_BACKEND)
@@ -373,23 +375,223 @@ def test_a_bolinha_de_mensagens_e_contada_no_boot_sem_abrir_a_aba():
 
 # ═══════════════════ O BUG QUE NENHUMA AUDITORIA VIU ════════════════════════
 
+# -- analise de ESCOPO do JS (esprima) ---------------------------------------
+# BUG_2026_09_06. O guarda de `renderOps` proibia UMA palavra: `inlineHtml`.
+# Acrescentar `const _pre = revisaoHtml;` na funcao produz o MESMO
+# ReferenceError e o MESMO estrago (o bloco de falhas/avisos/PDFs da aba Motor
+# nao renderiza e a tela diz "Nao consegui carregar"), e o guarda passava. Ele
+# estava ancorado no NOME, nao no FATO.
+# CHAVE: o fato e `renderOps` LER um identificador que nao existe em escopo
+# nenhum. Aqui isso e CALCULADO na arvore do JS: todo identificador lido, menos
+# o que a funcao declara, menos o topo do script, menos os globais do navegador.
+# ARMADILHA: o esprima ignora comentario por construcao — o comentario que CITA
+# o defeito pra explica-lo nao pode mais reprovar o codigo certo (ja aconteceu).
+_ABRE_FUNCAO = ("FunctionDeclaration", "FunctionExpression",
+                "ArrowFunctionExpression")
+
+_GLOBAIS_DO_NAVEGADOR = set("""
+window document console navigator location history localStorage sessionStorage
+fetch alert confirm prompt setTimeout setInterval clearTimeout clearInterval
+requestAnimationFrame URL URLSearchParams FormData Blob File FileReader Image
+Number String Boolean Array Object Math JSON Date RegExp Map Set WeakMap Promise
+Error TypeError Intl Symbol BigInt parseInt parseFloat isNaN isFinite
+encodeURIComponent decodeURIComponent encodeURI decodeURI btoa atob
+structuredClone undefined NaN Infinity globalThis arguments AbortController
+Event CustomEvent Node Element HTMLElement MutationObserver IntersectionObserver
+TextDecoder TextEncoder crypto performance queueMicrotask reportError
+""".split())
+
+
+def _js_normaliza(js):
+    """esprima aqui e ES2017: normaliza o que veio depois. Nao muda escopo."""
+    js = js.replace("?.(", ".__oc__(").replace("?.[", ".__oi__[").replace("?.", ".")
+    js = re.sub(r"\bcatch\s*\{", "catch (_e) {", js)
+    return js.replace("??=", "=").replace("??", "||")
+
+
+def _js_filhos(no):
+    for k in dir(no):
+        if k.startswith("_") or k in ("toDict", "type"):
+            continue
+        try:
+            v = getattr(no, k)
+        except Exception:
+            continue
+        for it in (v if isinstance(v, list) else [v]):
+            if hasattr(it, "type"):
+                yield k, it
+
+
+def _js_nomes(alvo):
+    """Nomes que um padrao declara (id simples, desestruturacao, rest)."""
+    t = getattr(alvo, "type", None)
+    if t == "Identifier":
+        return [alvo.name]
+    if t == "ObjectPattern":
+        fora = []
+        for pr in (alvo.properties or []):
+            fora += _js_nomes(getattr(pr, "value", None)
+                              or getattr(pr, "argument", None))
+        return fora
+    if t == "ArrayPattern":
+        fora = []
+        for el in (alvo.elements or []):
+            fora += _js_nomes(el)
+        return fora
+    if t in ("RestElement", "AssignmentPattern"):
+        return _js_nomes(getattr(alvo, "argument", None)
+                         or getattr(alvo, "left", None))
+    return []
+
+
+def _js_declarados(no):
+    """Tudo que este no e seus descendentes DECLARAM (var/let/const/fn/param).
+
+    ARMADILHA: de proposito PERMISSIVO — uma declaracao em bloco interno conta
+    como existente. Erra pro lado de absolver, nunca pro de acusar o certo.
+    """
+    saida = set()
+
+    def anda(x):
+        t = getattr(x, "type", None)
+        if t == "VariableDeclaration":
+            for d in (x.declarations or []):
+                saida.update(_js_nomes(getattr(d, "id", None)))
+        elif t in ("FunctionDeclaration", "ClassDeclaration"):
+            saida.update(_js_nomes(getattr(x, "id", None)))
+        if t in _ABRE_FUNCAO:
+            for pr in (getattr(x, "params", None) or []):
+                saida.update(_js_nomes(pr))
+        if t == "CatchClause":
+            saida.update(_js_nomes(getattr(x, "param", None)))
+        for _k, f in _js_filhos(x):
+            anda(f)
+
+    anda(no)
+    return saida
+
+
+def _js_topo(prog):
+    """O escopo global do script: o que o Program declara no primeiro nivel."""
+    saida = set()
+    for st in (prog.body or []):
+        if st.type == "VariableDeclaration":
+            for d in (st.declarations or []):
+                saida.update(_js_nomes(getattr(d, "id", None)))
+        elif st.type in ("FunctionDeclaration", "ClassDeclaration"):
+            saida.update(_js_nomes(getattr(st, "id", None)))
+    return saida
+
+
+def _js_lidos(no):
+    """Identificadores LIDOS — nem chave de propriedade, nem nome declarado."""
+    saida = set()
+
+    def anda(x):
+        t = getattr(x, "type", None)
+        if t == "Identifier":
+            saida.add(x.name)
+        nao_computado = not getattr(x, "computed", False)
+        for k, it in _js_filhos(x):
+            if t == "MemberExpression" and k == "property" and nao_computado:
+                continue
+            if t in ("Property", "MethodDefinition") and k == "key" and nao_computado:
+                continue
+            if t in _ABRE_FUNCAO + ("ClassDeclaration",) and k in ("id", "params"):
+                continue
+            if t == "VariableDeclarator" and k == "id":
+                continue
+            if t == "CatchClause" and k == "param":
+                continue
+            anda(it)
+
+    anda(no)
+    return saida
+
+
+def _js_acha(prog, nome):
+    achado = []
+
+    def anda(x):
+        if getattr(x, "type", None) == "FunctionDeclaration" and \
+                getattr(getattr(x, "id", None), "name", None) == nome:
+            achado.append(x)
+        for _k, f in _js_filhos(x):
+            anda(f)
+
+    anda(prog)
+    return achado[0] if achado else None
+
+
+def _js_livres(prog, nome, topos=None):
+    """Identificadores que a funcao LE e que nao existem em escopo nenhum."""
+    fn = _js_acha(prog, nome)
+    assert fn is not None, "sumiu a funcao %s" % nome
+    topos = _js_topo(prog) if topos is None else topos
+    return _js_lidos(fn) - _js_declarados(fn) - topos - _GLOBAIS_DO_NAVEGADOR
+
+
+def _js_admin_programas():
+    """Cada <script> inline do admin.html parseado + a uniao dos nomes do topo."""
+    esprima = pytest.importorskip("esprima")
+    progs, topos = [], set()
+    for bruto in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>",
+                            _admin_html(), re.S):
+        prog = esprima.parseScript(_js_normaliza(bruto), {"range": True})
+        progs.append(prog)
+        topos |= _js_topo(prog)
+    return progs, topos
+
+
 def test_renderOps_NAO_usa_variavel_de_outra_funcao():
-    """🩸 `return inlineHtml + html` dentro de renderOps — `inlineHtml` só existe
-    em renderRevisionFeedback. ReferenceError: o bloco inteiro de falhas/avisos/
-    PDFs da aba Motor não renderizava, e ninguém viu porque ninguém EXECUTAVA a
-    função. Recorte da função inteira, não janela fixa (renderOps cresce)."""
-    js = _js_do_admin()
-    i = js.find("function renderOps(d){")
-    assert i > 0, "sumiu renderOps"
-    fim = js.find(chr(10) + "}", i)
-    # 🪤 A 1ª versão deste guarda reprovou o CÓDIGO CERTO: o comentário que
-    # explica o bug cita `inlineHtml`, e o guarda leu o comentário. Quarta vez
-    # hoje. Comentário fora; só o que executa conta.
-    corpo = chr(10).join(l for l in js[i:fim].split(chr(10)) if not l.strip().startswith("//"))
-    assert "inlineHtml" not in corpo, (
-        "renderOps voltou a usar `inlineHtml`, que é de outra função — "
-        "ReferenceError e a aba Motor mostra 'Não consegui carregar'")
-    assert "return html;" in corpo
+    """BUG: `return inlineHtml + html` dentro de renderOps — `inlineHtml` so
+    existe em renderRevisionFeedback. ReferenceError: o bloco inteiro de
+    falhas/avisos/PDFs da aba Motor nao renderizava, e ninguem viu porque
+    ninguem EXECUTAVA a funcao.
+
+    E o guarda que nasceu disso proibia so a PALAVRA `inlineHtml`. Provado em
+    06/09: `const _pre = revisaoHtml;` da o mesmo ReferenceError e o mesmo
+    estrago, e ele passava. Agora o julgamento e o FATO — qualquer identificador
+    que a funcao leia e que nao exista em escopo nenhum reprova.
+    """
+    progs, topos = _js_admin_programas()
+    fn = next((p for p in progs if _js_acha(p, "renderOps")), None)
+    assert fn is not None, "sumiu renderOps"
+    livres = _js_livres(fn, "renderOps", topos)
+    assert not livres, (
+        "renderOps le %s, que nao existe em escopo nenhum — ReferenceError, e "
+        "a aba Motor mostra 'Nao consegui carregar' no lugar de falhas, avisos "
+        "e PDFs" % ", ".join("`%s`" % n for n in sorted(livres)))
+    assert "return html;" in _js_do_admin()
+
+
+def test_CONTROLE_a_analise_PEGA_o_bug_que_estava_no_ar():
+    """CONTROLE POSITIVO: verde vazio e verde falso. O MESMO julgamento, no
+    codigo que estava no ar em 02/09 — e na forma certa, que ele tem de
+    absolver."""
+    esprima = pytest.importorskip("esprima")
+    antes = """
+    function inlineEsc(s){ return s; }
+    function renderRevisionFeedback(d){ const inlineHtml = '<b>'; return inlineHtml; }
+    function renderOps(d){ const html = inlineEsc(d.x); return inlineHtml + html; }
+    """
+    doente = esprima.parseScript(_js_normaliza(antes), {"range": True})
+    assert _js_livres(doente, "renderOps") == {"inlineHtml"}, (
+        "o julgamento nao ve o bug que estava no ar — ele nao esta julgando "
+        "nada, e o teste de cima e verde falso")
+
+    # E a mutacao de 06/09, que o guarda velho deixava passar:
+    mutado = esprima.parseScript(_js_normaliza(
+        antes.replace("const html = inlineEsc(d.x);",
+                      "const html = inlineEsc(d.x); const _pre = revisaoHtml;")),
+        {"range": True})
+    assert "revisaoHtml" in _js_livres(mutado, "renderOps"), (
+        "o julgamento so pega o nome antigo — voltou a ser ancorado na palavra")
+
+    # E NAO reprova a forma certa (`inlineEsc` e do topo do script).
+    sao = esprima.parseScript(_js_normaliza(
+        antes.replace("return inlineHtml + html;", "return html;")), {"range": True})
+    assert not _js_livres(sao, "renderOps"), "apertado demais: reprova o certo"
 
 
 def test_o_divisor_do_custo_tira_FILHOTE_do_lado_do_cliente(monkeypatch):

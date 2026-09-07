@@ -1895,8 +1895,7 @@ _MAX_DXF_BYTES = 250 * 1024 * 1024  # 250 MB — prancha normal é <20 MB
 #     DWG  6,4 MB ->   337 MB   (53x)
 #     DWG 24,6 MB -> 1.056 MB   (43x)
 #
-# 🩸 03/09/2026 — O TETO RECUSOU UM ARQUIVO QUE A GENTE LÊ. Caso FABIO
-# SHIRAISHI (job 75dab573, "BRB Estadio"), primeiro projeto dele: DWG de
+# 🩸 03/09/2026 — O TETO RECUSOU UM ARQUIVO QUE A GENTE LÊ. Caso cliente-48 (job 75dab573, "BRB Estadio"), primeiro projeto dele: DWG de
 # 44,5 MB recusado, com o log dizendo "converter pediria ~2227 MB de RAM e
 # derrubaria o servidor; nem tentei". Baixei o arquivo dele e medi:
 #

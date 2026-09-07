@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Reenviar o mesmo caderno vira AVISO — nunca bloqueio, nunca promessa falsa.
 
-🩸 01/09/2026, flavio anderson (cliente novo, primeiro projeto). Linha do tempo
+🩸 01/09/2026, cliente-42 (cliente novo, primeiro projeto). Linha do tempo
 medida no banco:
 
     20:40  sobe 20 PDFs  ("LUANA E JAILSON")

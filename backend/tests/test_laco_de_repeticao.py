@@ -96,24 +96,142 @@ def test_densidade_sozinha_NAO_condena():
         "o que separa: %s" % d)
 
 
-def test_a_ROTA_registra_o_laco_no_log():
-    """🪤 Guarda que só testa a função não vê o CALL SITE.
+# ══════════════════════════════════════════════════════════════════════════
+#  O CALL SITE, EXECUTADO
+#
+#  🚨 06/09/2026 — POR QUE MUDOU. O guarda antigo conferia que
+#  `_detectar_laco(text`, a string `"motor:laco-repeticao"` e a ORDEM entre as
+#  duas existiam no fonte de `main.py`. Provado cego: trocando
+#  `if _laco.get("laco"):` por `if False:` — com o `_log_error` ainda escrito
+#  logo abaixo, morto — o guarda passava 7/7 e o laço voltava a ser INVISÍVEL,
+#  que é o único propósito declarado deste arquivo.
+#
+#  🪤 `process_job` tem ~3.900 linhas e não roda em bancada. Então usa-se o
+#  padrão da casa (mesmo de `test_aviso_planob_conta_medidos_no_fim`): recorta
+#  o TRECHO REAL do arquivo por âncora e o EXECUTA. Não é leitura de string —
+#  é o código do call site rodando, com a dependência de verdade
+#  (`_detectar_laco` do main) no namespace.
+#  🚫 Sem recorte por tamanho fixo: o fim do trecho é achado pela estrutura
+#  (os dois try/except), não por `src[i:i+900]`.
+# ══════════════════════════════════════════════════════════════════════════
+_ANCORA = '_out_tok = int(getattr(getattr(response, "usage", None),'
 
-    Sem a chamada em main.py o detector existe e nunca roda — que é
-    exatamente o estado em que `_resgatar_dxf_gigante` ficou por semanas.
-    Lê o corpo sem comentários (comentário já me enganou 3 vezes num dia).
-    """
+
+def _fatia_do_call_site():
+    """O trecho REAL de main.py que detecta o laço e o registra."""
     import io as _io
-    fonte = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    linhas = [l for l in fonte.split(chr(10)) if not l.strip().startswith("#")]
-    corpo = chr(10).join(linhas)
-    assert "_detectar_laco(text" in corpo, (
-        "o detector não é chamado no caminho da extração — existe e nunca roda")
-    assert '"motor:laco-repeticao"' in corpo, (
-        "o laço é detectado e não vira linha no log — continua invisível")
-    i_det = corpo.find("_detectar_laco(text")
-    i_log = corpo.find('"motor:laco-repeticao"')
-    assert i_det < i_log, "detecta depois de registrar?"
+    import textwrap
+    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    assert src.count(_ANCORA) == 1, (
+        "a âncora do call site do laço mudou (%d ocorrências) — o recorte "
+        "sairia errado" % (src.count(_ANCORA),))
+    i = src.index(_ANCORA)
+    ini = src.rfind(chr(10), 0, src.rfind(chr(10), 0, i)) + 1
+    assert src[ini:src.index(chr(10), ini)].strip() == "try:", (
+        "o call site não começa mais num `try:` — recorte precisa ser refeito")
+    base = len(src[ini:]) - len(src[ini:].lstrip(" "))
+    saida, excepts = [], 0
+    for l in src[ini:].splitlines(True):
+        if not l.strip():
+            saida.append(l)
+            continue
+        ind = len(l) - len(l.lstrip(" "))
+        cab = l.strip().split()[0].rstrip(":")
+        if ind <= base:
+            if excepts >= 2:
+                break
+            if cab not in ("try", "except", "else", "finally"):
+                break
+        saida.append(l)
+        if ind == base and cab == "except":
+            excepts += 1
+    return textwrap.dedent("".join(saida))
+
+
+class _Uso:
+    def __init__(self, n):
+        self.output_tokens = n
+
+
+class _Resposta:
+    def __init__(self, tokens, stop="max_tokens"):
+        self.usage = _Uso(tokens)
+        self.stop_reason = stop
+
+
+def _rodar_o_call_site(texto, tokens, itens=0):
+    """Executa o trecho real e devolve as linhas de log que ele escreveu."""
+    import main as _m
+    logs = []
+    ns = {
+        "os": os,
+        "text": texto,
+        "response": _Resposta(tokens),
+        "result": {"items": [{}] * itens},
+        "dxf_path": "/tmp/PRANCHA-04.dxf",
+        "job_id": "job-laco-01",
+        "_n_item_perdido": 0,
+        "_dxf_truncado": False,
+        "_n_resgate_proc": 0,
+        # 🪤 A dependência REAL entra de verdade. Se faltasse, o `except` do
+        # próprio trecho engoliria o NameError e `_laco` viraria
+        # {"laco": False} — verde falso pelo pior caminho possível, que é o
+        # jeito exato como este guarda estava mentindo antes.
+        "_detectar_laco": _m._detectar_laco,
+        "_log_error": lambda stage, msg, job=None, **k: logs.append((stage, msg)),
+    }
+    exec(compile(_fatia_do_call_site(), "main_laco_slice", "exec"), ns)
+    return logs
+
+
+def test_a_ROTA_registra_o_laco_no_log():
+    """O laço tem que virar LINHA DE LOG quando acontece — é o único propósito
+    deste arquivo. Aqui o call site de `main.py` é executado de verdade."""
+    logs = _rodar_o_call_site(_resposta_com_laco("+1"), tokens=32000, itens=0)
+    stages = [s for s, _ in logs]
+
+    assert "motor:prancha-itens" in stages, (
+        "a ficha da prancha não saiu — o trecho não chegou a executar, e o "
+        "resto deste guarda não prova nada. Logs: %r" % (stages,))
+    assert "motor:laco-repeticao" in stages, (
+        "a IA queimou 32.000 tokens em laço e NÃO saiu linha de log — a "
+        "prancha some da planilha em silêncio, que é o defeito que viveu "
+        "desde 24/08. Logs: %r" % (stages,))
+
+    msg = next(m for s, m in logs if s == "motor:laco-repeticao")
+    assert "'+1'" in msg, (
+        "a linha de log não diz QUAL padrão a IA repetiu — sem isso não dá "
+        "pra reconhecer o caso: %r" % (msg,))
+    assert "PRANCHA-04" in msg, (
+        "a linha não diz de qual prancha se trata: %r" % (msg,))
+
+
+def test_a_ROTA_nao_acusa_laco_em_prancha_boa():
+    """🧪 CONTROLE POSITIVO do guarda de cima. Se o call site registrasse
+    SEMPRE, o teste anterior passaria com o `if` arrancado — e o alarme viraria
+    ruído em todo job, que ninguém lê."""
+    boa = _resposta_normal(400)
+    logs = _rodar_o_call_site(boa, tokens=int(len(boa) / 2.6), itens=400)
+    stages = [s for s, _ in logs]
+    assert "motor:prancha-itens" in stages, (
+        "nem a ficha saiu — o trecho não executou: %r" % (stages,))
+    assert "motor:laco-repeticao" not in stages, (
+        "acusou laço numa prancha que entregou 400 itens — alarme em todo job "
+        "é ruído que ninguém lê")
+
+
+def test_o_call_site_recortado_e_o_do_main_de_verdade():
+    """🪤 Guarda do guarda: se o recorte pegar o pedaço errado (ou vazio), os
+    dois testes acima passariam sem nunca ter tocado no código de produção."""
+    fatia = _fatia_do_call_site()
+    assert "_detectar_laco(text, _out_tok)" in fatia, (
+        "o recorte não contém a CHAMADA do detector — está medindo outra coisa")
+    assert '"motor:laco-repeticao"' in fatia, (
+        "o recorte não contém o registro do laço")
+    # 🚫 Nada de afirmar sobre a DECISÃO por string: é justamente isso que
+    # deixava o guarda cego. Quem prova a decisão são os dois testes de cima,
+    # que executam o trecho com e sem laço.
+    compile(fatia, "main_laco_slice", "exec")
 
 
 def test_controle_positivo_o_detector_ANTIGO_nao_via_nada():

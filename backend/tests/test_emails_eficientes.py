@@ -181,11 +181,116 @@ def test_o_diagnostico_de_leitura_continua_no_planilha_pronta():
     assert "extra_body_html" in src
 
 
-def test_o_rodape_de_privacidade_continua_em_todos():
-    """Regra dura nº6 — sai do _email_wrap, então basta ele estar em uso."""
-    src = _main()
-    assert "Política de Privacidade" in src
-    assert "Para remover seus dados" in src
+# ══════════════════════════════════════════════════════════════════════════
+#  OS E-MAILS MONTADOS DE VERDADE
+#
+#  🚨 06/09/2026 — POR QUE MUDOU. Os dois guardas abaixo procuravam a frase no
+#  FONTE de `main.py`. Provados cegos:
+#    · o bloco do rodapé LGPD virou a variável `_lgpd` (com o texto intacto) e
+#      logo depois `_lgpd = ""`: `_email_wrap('T','B')` passa a devolver HTML
+#      SEM "Privacidade" e SEM "remover seus dados" — TODOS os e-mails saem
+#      sem o rodapé da regra dura nº6 — e o guarda seguia verde porque as duas
+#      strings continuavam escritas no arquivo.
+#    · o div "Nosso compromisso: cada número diz de onde veio" embrulhado em
+#      `("" if True else ...)`: some do e-mail de boas-vindas, string intacta
+#      no fonte, guarda verde.
+#  🔑 Agora as funções são CHAMADAS e o que se confere é o HTML renderizado.
+# ══════════════════════════════════════════════════════════════════════════
+import sys                                              # noqa: E402
+
+sys.path.insert(0, _BACKEND)
+
+import main                                             # noqa: E402
+
+# 🚫 Regra dura nº6: nada de nome/e-mail de cliente de verdade na bancada.
+_NOME = "cliente-NN"
+_PROJ = "Projeto cliente-NN"
+_JOB = "job-email-01"
+_EMAIL = "cliente-nn@example.com"
+_ANTES = {"itens": 10, "medidos": 4}
+_DEPOIS = {"itens": 12, "medidos": 9}
+
+# Todo montador de e-mail do produto, com um jogo de argumentos plausível.
+# 🪤 Se nascer um `_build_..._email` novo e não entrar aqui, o guarda
+# `test_a_lista_de_emails_cobre_TODOS_os_montadores` reprova.
+_EMAILS = {
+    "_build_calibracao_email": (_NOME, _PROJ, _JOB),
+    "_build_cronograma_checkin_email": (_NOME, _PROJ, 3, _JOB),
+    "_build_falha_email": (_NOME, _PROJ, True, "dxf ilegivel"),
+    "_build_leitura_combinada_email": (_NOME, _PROJ, _JOB, _ANTES, _DEPOIS, ["aviso"]),
+    "_build_leitura_nova_email": (_NOME, _PROJ, _JOB, _ANTES, _DEPOIS),
+    "_build_leu_sem_medir_email": (_NOME, _PROJ, _JOB, 20, 12, "", _EMAIL),
+    "_build_nps_relacional_email": (_NOME, _EMAIL, 2),
+    "_build_nudge_email": (_NOME, "sem_projeto", "https://ai.arq.br/x"),
+    "_build_planilha_pronta_email": (_NOME, _PROJ, _JOB, 20, "", _EMAIL),
+    "_build_proximo_projeto_email": (_NOME, _PROJ),
+    "_build_retorno30_email": (_NOME,),
+    "_build_sem_medida_email": (_NOME, _PROJ, _JOB, 20, 20, "", _EMAIL),
+    "_build_welcome_email": (_NOME,),
+}
+
+
+def _html_do_email(nome):
+    """Monta o e-mail de verdade e devolve o HTML que sairia pro cliente."""
+    r = getattr(main, nome)(*_EMAILS[nome])
+    return str(r[1] if isinstance(r, tuple) else r)
+
+
+def test_a_lista_de_emails_cobre_TODOS_os_montadores():
+    """🪤 Guarda do guarda. Sem isto, um e-mail novo sem rodapé LGPD passaria
+    despercebido — o teste de baixo só olha o que está na lista."""
+    achados = {n for n in dir(main)
+               if n.startswith("_build_") and n.endswith("_email")
+               and callable(getattr(main, n))}
+    faltando = achados - set(_EMAILS)
+    assert not faltando, (
+        "montador de e-mail fora da bancada do rodapé LGPD: %s" % (sorted(faltando),))
+
+
+@pytest.mark.parametrize("nome", sorted(_EMAILS))
+def test_o_rodape_de_privacidade_continua_em_todos(nome):
+    """Regra dura nº6, no HTML QUE SAI — não no fonte que o monta.
+
+    🪤 "sai do _email_wrap, então basta ele estar em uso" era a justificativa
+    do guarda antigo. Só que basta o rodapé virar string vazia dentro do
+    próprio `_email_wrap` pra ele sumir de todos os 13 e-mails de uma vez, com
+    o texto ainda escrito no arquivo."""
+    html = _html_do_email(nome)
+    assert "Política de Privacidade" in html, (
+        "%s foi montado SEM o link da Política de Privacidade — regra dura "
+        "nº6" % (nome,))
+    assert "Para remover seus dados" in html, (
+        "%s foi montado SEM a saída de dados (LGPD): o cliente não tem como "
+        "pedir remoção" % (nome,))
+
+
+def test_o_rodape_sai_do_proprio_email_wrap():
+    """Fecha a porta na origem: qualquer e-mail futuro herda o rodapé daqui."""
+    html = main._email_wrap("Assunto", "<p>corpo</p>")
+    assert "Política de Privacidade" in html and "Para remover seus dados" in html, (
+        "`_email_wrap` parou de escrever o rodapé LGPD — todos os e-mails do "
+        "produto saem sem ele de uma vez só")
+
+
+def test_CONTROLE_o_detector_do_rodape_sabe_REPROVAR(monkeypatch):
+    """🧪 CONTROLE POSITIVO, do jeito que a mutação faria: apaga o rodapé
+    DENTRO do `_email_wrap` (as strings continuam no fonte de `main.py`) e
+    confere que os guardas de cima acusariam. É a prova de que eles não são
+    tautologia."""
+    _real = main._email_wrap
+
+    def _sem_rodape(*a, **k):
+        html = _real(*a, **k)
+        i = html.find("Você está recebendo este e-mail")
+        assert i > 0, "o rodapé mudou de forma — o controle precisa ser refeito"
+        j = html.find("</div>", i)
+        return html[:i] + html[j:]
+
+    monkeypatch.setattr(main, "_email_wrap", _sem_rodape)
+    html = _html_do_email("_build_welcome_email")
+    assert "Política de Privacidade" not in html and "Para remover seus dados" not in html, (
+        "o detector não enxerga a ausência do rodapé — os guardas de cima "
+        "estariam passando por qualquer motivo")
 
 
 def _codigo_dos_emails(src):
@@ -272,8 +377,35 @@ def test_o_planilha_pronta_NAO_foi_encurtado():
 
 
 def test_a_linha_de_honestidade_continua_no_primeiro_email():
-    """A marca do produto e dizer de onde veio cada numero. Isso vai no PRIMEIRO
-    e-mail de proposito e nao entra em corte nenhum."""
-    from _corpo import corpo_de
-    corpo = corpo_de("_build_welcome_email")
-    assert "cada n" in corpo and "de onde veio" in corpo
+    """A marca do produto é dizer de onde veio cada número. Isso vai no PRIMEIRO
+    e-mail de propósito e não entra em corte nenhum.
+
+    🪤 A versão antiga lia o CORPO da função no fonte. Embrulhar o div em
+    `("" if True else ...)` tira a frase do e-mail e deixa o texto no arquivo:
+    a assinatura da regra dura nº1 sumia do primeiro contato com o cliente e o
+    guarda não acusava. Aqui o e-mail é montado."""
+    html = _html_do_email("_build_welcome_email")
+    assert "de onde veio" in html, (
+        "o e-mail de boas-vindas saiu SEM a linha de honestidade — a promessa "
+        "da regra dura nº1 sumiu do primeiro contato com o cliente")
+    assert "Nosso compromisso" in html, (
+        "a frase perdeu o rótulo que a destaca no e-mail")
+    # A linha só vale se disser a REGRA: medido × estimativa.
+    assert "medido" in html and "estimativa" in html, (
+        "a linha ficou sem a distinção medido × estimativa, que é o conteúdo "
+        "dela — sem isso é slogan, não compromisso")
+
+
+def test_CONTROLE_a_linha_de_honestidade_sabe_sumir(monkeypatch):
+    """🧪 Sem isto, o guarda acima poderia estar lendo qualquer HTML."""
+    _real = main._email_wrap
+
+    def _sem_compromisso(title, body_html, *a, **k):
+        i = body_html.find("Nosso compromisso")
+        assert i > 0, "a frase mudou de lugar — o controle precisa ser refeito"
+        j = body_html.find("</div>", i)
+        return _real(title, body_html[:i] + body_html[j:], *a, **k)
+
+    monkeypatch.setattr(main, "_email_wrap", _sem_compromisso)
+    html = _html_do_email("_build_welcome_email")
+    assert "Nosso compromisso" not in html and "de onde veio" not in html

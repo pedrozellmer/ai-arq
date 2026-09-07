@@ -23,13 +23,28 @@ rotas — esta ficou de fora. Provavelmente porque a varredura procurou I/O óbv
 `from agent import ask`. Bloqueio não se acha procurando o NOME da biblioteca;
 se acha procurando função síncrona chamada de rota assíncrona.
 """
+import asyncio
 import io
 import os
 import re
+import sys
+import threading
+import time as _timeb
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BACKEND)
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 _AGENT = io.open(os.path.join(_BACKEND, "agent.py"), encoding="utf-8").read()
+
+import main as M  # noqa: E402
+
+
+class _RequisicaoFalsa:
+    headers = {"user-agent": "bancada"}
+    query_params = {}
+
+    async def body(self):
+        return b""
 
 
 def _corpo_da_rota_do_chat():
@@ -39,16 +54,57 @@ def _corpo_da_rota_do_chat():
     return _FONTE[i:j]
 
 
-def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos():
-    """🩸 O que derrubou o site às 15:07 de 03/09."""
-    corpo = _corpo_da_rota_do_chat()
-    assert "run_in_threadpool" in corpo, (
-        "a rota do chat voltou a rodar o agente no laço de eventos — com "
-        "--workers 1 isso congela o site inteiro enquanto o agente pensa, e o "
-        "health check de 5 s do Render mata a instância")
-    # e a chamada crua não pode voltar
-    assert not re.search(r"^\s*result = ask\(", corpo, re.M), (
-        "voltou a chamada síncrona direta `result = ask(...)`")
+def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos(monkeypatch):
+    """🩸 O que derrubou o site às 15:07 de 03/09.
+
+    🪤 05/09/2026: a versão anterior deste guarda lia `run_in_threadpool` no
+    TEXTO da rota e ficou verde com um `_NO_THREADPOOL = True` guardando o ramo
+    morto e o agente rodando de novo dentro do laço de eventos — o bug inteiro
+    de volta, com a string que o assert procurava ainda escrita ali.
+
+    Agora a rota RODA, com um `agent.ask` síncrono que demora, e o guarda mede
+    duas coisas: em que thread ele rodou, e se o laço continuou atendendo
+    enquanto isso.
+    """
+    import agent as _agente
+
+    monkeypatch.setattr(M, "_require_project_owner",
+                        lambda request, job_id: {"id": "u-cliente-11"})
+
+    visto = {}
+
+    def _ask_lento(job_id, question, max_iterations=8, history=None):
+        visto["thread"] = threading.get_ident()
+        visto["job_id"] = job_id
+        visto["question"] = question
+        _timeb.sleep(0.4)          # o agente "pensando" (8 iterações, DXF etc.)
+        return {"answer": "o forro sai 26,54 m2", "iterations": 1}
+    monkeypatch.setattr(_agente, "ask", _ask_lento)
+
+    async def _cenario():
+        visto["laco"] = threading.get_ident()
+        tarefa = asyncio.ensure_future(
+            M.agent_ask(_RequisicaoFalsa(), job_id="job-11",
+                        question="quanto de forro?"))
+        batidas = 0
+        while not tarefa.done():
+            await asyncio.sleep(0.01)
+            batidas += 1
+        return await tarefa, batidas
+
+    resp, batidas = asyncio.run(_cenario())
+
+    assert resp["status"] == "ok" and resp["answer"], (
+        "a rota parou de responder o agente: %r" % (resp,))
+    assert visto.get("job_id") == "job-11" and visto.get("question") == "quanto de forro?", (
+        "os argumentos do agente voltaram a ir por posição (ou trocados): %r" % (visto,))
+    assert visto["thread"] != visto["laco"], (
+        "o agente rodou DENTRO do laço de eventos — com --workers 1 isso "
+        "congela o site inteiro enquanto ele pensa, e o health check de 5 s do "
+        "Render mata a instância (foi o incidente de 03/09)")
+    assert batidas >= 3, (
+        "o laço de eventos ficou parado enquanto o agente pensava (%d batidas) "
+        "— é exatamente o bloqueio que zerou o instance_count" % batidas)
 
 
 def test_CONTROLE_o_agente_continua_SENDO_chamado():

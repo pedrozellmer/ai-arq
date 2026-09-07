@@ -2724,7 +2724,7 @@
           try { trackEvent('arquivo_escolhido', { type: ((f.name || '').split('.').pop() || '').toLowerCase().slice(0, 8) }); } catch (_) {}
           // Aviso preventivo (2026-06-02): detecta PDF vetorial sem texto extraível
           // e sugere DWG/DXF. Sem bloquear upload — só alerta o usuário pra precisão.
-          // Caso cliente-38 Granado: PDFs exportados do CAD em modo desenho viraram
+          // Caso cliente-51: PDFs exportados do CAD em modo desenho viraram
           // 30 itens com qty=0 em divisórias. DWG resolveu (qty>0 em 100% das linhas).
           if (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')) {
             checkPdfTextAndWarn(f).catch(err => console.warn('PDF check falhou:', err));
@@ -2769,7 +2769,7 @@
         // DWG pesado (3D/instalações/blocos) EXPLODE ao converter pra DXF: um DWG que
         // passa no upload pode virar 212MB de DXF e falhar no processamento (limite
         // 150MB). O tamanho do arquivo bruto NÃO prevê isso — então avisa 1x por sessão
-        // sempre que entra um DWG, independente do tamanho. Caso Luciano Scalise 13/07.
+        // sempre que entra um DWG, independente do tamanho. Caso cliente-49 13/07.
         if ((f.name || '').toLowerCase().endsWith('.dwg') && !_bigWarned.has('__dwg_tip__')) {
           _bigWarned.add('__dwg_tip__');
           _warnToast('💡 Dica pra DWG: exporte só a prancha que você quer orçar (planta, piso, forro, layout). DWG com 3D e instalações pode virar grande demais ao processar e falhar — mesmo que o arquivo pareça pequeno.');
@@ -3398,7 +3398,7 @@
       // Arquivos com cara de estrutural em modo arquitetura (01/08): só 3 de
       // 107 projetos acharam o modo Estrutura no dropdown — o aviso ensina.
       if (data.aviso_estrutural) mostrarAvisoAec(data.aviso_estrutural, 'indigo');
-      // Mesmo caderno reenviado (01/09, caso flavio anderson): ele recebeu uma
+      // Mesmo caderno reenviado (01/09, caso cliente-42): ele recebeu uma
       // planilha com 25 de 25 linhas de metro em branco e remandou as mesmas
       // pranchas 11 minutos depois, achando que o problema era o arquivo dele.
       // O aviso não bloqueia — diz o que realmente muda o resultado.
@@ -3521,7 +3521,7 @@
   // o envio existe um `await ensureAgeConfirmed()`; nesse intervalo o segundo
   // clique passa direto e vira um job novo. Medido no banco: **12+ pares** de
   // projetos do mesmo cliente criados com menos de 2 min de diferença, mesmo
-  // número de arquivos — Ana Paula, cliente-40 (2×), cliente-21, Marco, Romulo,
+  // número de arquivos — cliente-50, cliente-40 (2×), cliente-21, Marco, Romulo,
   // Elizeu. O do Elizeu saiu no MESMO SEGUNDO.
   // Custo: processamento e IA em dobro. E pior pro cliente — na cliente-21 saiu
   // 48 itens num e 0 no outro; no Marco 43 e 0. Ele vê um projeto quebrado no

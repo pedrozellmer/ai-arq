@@ -8,7 +8,7 @@ Cenário que esse teste cobre e o smoke HTTP (smoke_test_production.py) NÃO peg
   retorna 401 mesmo com sessão válida. Smoke HTTP testa o endpoint com Bearer
   manual e fica verde, mas o usuário real não consegue baixar.
 
-Esse caso aconteceu com a Daniela Teixeira (DTZ Arquitetura) entre 13/05 e 18/05.
+Esse caso aconteceu com a cliente-47 (cliente-47) entre 13/05 e 18/05.
 Ela ficou 5 dias clicando em "Baixar XLSX" e recebendo
   {"detail":"Autenticação requerida para acessar este projeto"}
 porque o frontend usava `window.location.href = .../api/download/...` (sem JWT).

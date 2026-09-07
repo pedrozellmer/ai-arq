@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O teto que segura m² inventado é da MAIOR PRANCHA, nunca da SOMA.
 
-🩸 MEDIDO em 01/09/2026, no job 144c1f04 (flavio anderson, 20 PDFs — o maior
+🩸 MEDIDO em 01/09/2026, no job 144c1f04 (cliente-42, 20 PDFs — o maior
 caderno da base). O ramo do pdfvec preserva o número que a IA leu quando ele
 "cabe no que foi medido": `q <= 1.3 * pdfvec_m2`. Só que `pdfvec_m2` acumula
 prancha a prancha, e um caderno do MESMO imóvel (PAREDE, FORRO, ILUMINAÇÃO,
@@ -187,7 +187,7 @@ def test_CONTROLE_a_checagem_de_chamada_sabe_REPROVAR():
 
 
 # ── 🩸 02/09 — QUANDO A MEDIÇÃO ESTÁ INCOMPLETA, O TETO NÃO APERTA ─────────
-# Job 5f28b6ab (karina savitski, TEKOA — PRIMEIRO projeto dela). O PDF tinha 3
+# Job 5f28b6ab (cliente-45, TEKOA — PRIMEIRO projeto dela). O PDF tinha 3
 # páginas e UMA ESTOUROU O TEMPO. Sobraram 2 pranchas medidas (129,1 e 116,4) e
 # o teto virou 168 m². Ele zerou "Mezanino — área total 255,66 m²" — número que
 # estava ESCRITO NA PRANCHA, não chute da IA. O prédio tem 592,08 m² no quadro

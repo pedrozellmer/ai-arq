@@ -28,14 +28,27 @@ então ele segura e registra no log.
 
 📌 Mesma saída da trava de cliente-que-revisou: a máquina não manda, e o humano
 sabe que precisa mandar.
+
+🪤 05/09/2026 — ESTES GUARDAS ERAM CEGOS. Quatro deles liam STRING do main.py e
+ficavam verdes com o defeito aberto: `dias=7` virava `dias=0` (a janela do
+cooldown some e a trava nunca pega) e o nome da função continuava escrito
+exatamente onde o assert procurava; o PATCH da liberação automática perdia o
+`user_id` e o guarda só media a ORDEM de duas strings, que não mudou. Agora
+eles CHAMAM a rota e conferem a saída.
 """
 import io
+import json as _jsonb
 import os
-import re
 import sys
+import time as _timeb
+import urllib.parse as _uparse
+import urllib.request as _ureq
+from datetime import datetime as _dtb, timedelta as _tdb, timezone as _tzb
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+import main as M  # noqa: E402
 
 _MAIN = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 
@@ -52,23 +65,280 @@ def _bloco(marca, tamanho=2600):
     return _sem_comentarios(_MAIN[i:i + tamanho])
 
 
-def test_o_botao_MANUAL_consulta_o_teto_antes_de_mandar():
-    """🚨 O caso da cliente-20. Sem esta checagem, liberar dispara e-mail mesmo
-    pra quem já recebeu outro na mesma semana."""
-    b = _bloco('email_motivo = "NÃO enviado: a versão nova não ficou melhor')
-    assert "_email_auto_recente" in b, (
-        "a liberação manual voltou a mandar e-mail sem olhar o teto de 1 por "
-        "semana — foi assim que a cliente-20 recebeu 3 num dia")
+# ══════════════════════════════════════════════════════════════════════════
+#  🧪 BANCADA QUE EXECUTA — Supabase de mentira, nunca a rede
+# ══════════════════════════════════════════════════════════════════════════
+class _RespostaFalsa:
+    """O que `urlopen` devolve: algo com `.read()` que dá bytes de JSON."""
+
+    def __init__(self, payload):
+        self._b = _jsonb.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._b
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
 
 
-def test_e_o_caminho_AUTOMATICO_tambem():
+def _corte_da_url(url):
+    """O `sent_at=gte.<iso>` que a própria função montou.
+
+    🔑 É ISTO que faz o guarda enxergar `dias=7 → dias=0`: quem decide se a
+    pessoa "recebeu recente" é a data que `_email_auto_recente` CALCULOU e
+    escreveu na consulta — não um mock que devolve True de graça.
+    """
+    q = _uparse.parse_qs(_uparse.urlparse(url).query)
+    bruto = (q.get("sent_at") or [""])[0]
+    assert bruto.startswith("gte."), (
+        "a consulta do cooldown perdeu o filtro de data: %r" % url)
+    return _dtb.fromisoformat(bruto[4:])
+
+
+def _urlopen_de_mentira(dias_desde_o_ultimo_auto=None):
+    """`email_auto_log` que RESPEITA a janela pedida na URL."""
+    def _fake(req, timeout=None):
+        url = getattr(req, "full_url", str(req))
+        if "email_auto_log" in url:
+            if dias_desde_o_ultimo_auto is None:
+                return _RespostaFalsa([])
+            corte = _corte_da_url(url)
+            quando = _dtb.now(_tzb.utc) - _tdb(days=dias_desde_o_ultimo_auto)
+            return _RespostaFalsa([{"id": 1}] if quando >= corte else [])
+        return _RespostaFalsa([])
+    return _fake
+
+
+def _rest_de_mentira(projetos, itens, revisoes=(), patches=None):
+    """Substitui `_supa_rest_service` — e com ele o `_supa_rows`, que o chama."""
+    def _fake(method, path, body=None, params=None, prefer=None, timeout=15):
+        params = params or {}
+        jid = str(params.get("job_id", "")).replace("eq.", "")
+        if method == "PATCH" and path == "projects":
+            if patches is not None:
+                patches.append({"body": body, "job_id": jid})
+            return 200, []
+        if path == "projects":
+            linha = projetos.get(jid)
+            return 200, ([dict(linha)] if linha else [])
+        if path == "project_items":
+            return 200, [dict(x) for x in itens.get(jid, [])]
+        if path == "item_reviews":
+            return 200, [dict(x) for x in revisoes]
+        return 200, []
+    return _fake
+
+
+_PAI = "pai00020"
+_FILHOTE = "ev000020"
+_EMAIL = "cliente-20@example.com"
+
+_PROJETOS = {
+    _PAI: {"job_id": _PAI, "user_id": "u-cliente-20", "user_email": _EMAIL,
+           "user_name": "Cliente 20", "project_name": "Residencial 20",
+           "status": "done"},
+    _FILHOTE: {"job_id": _FILHOTE, "parent_job_id": _PAI, "is_eval": True,
+               "user_id": "eval", "status": "done", "warnings": [],
+               "project_name": "[TESTE] Residencial 20 - avaliacao"},
+}
+# o filhote mede o que o pai deixou zerado — é o caso que dispara o aviso
+_ITENS = {
+    _PAI: [{"description": "Forro de gesso", "unit": "m2", "quantity": 0,
+            "confidence": "estimado", "ref_sheet": "ARQ-01"},
+           {"description": "Piso", "unit": "m2", "quantity": 12,
+            "confidence": "confirmado", "ref_sheet": "ARQ-01"}],
+    _FILHOTE: [{"description": "Forro de gesso", "unit": "m2", "quantity": 26.54,
+                "confidence": "confirmado", "ref_sheet": "ARQ-01"},
+               {"description": "Piso", "unit": "m2", "quantity": 12,
+                "confidence": "confirmado", "ref_sheet": "ARQ-01"},
+               {"description": "Revestimento", "unit": "m2", "quantity": 268.39,
+                "confidence": "confirmado", "ref_sheet": "ARQ-02"},
+               {"description": "Parede nova", "unit": "m", "quantity": 302.14,
+                "confidence": "estimado", "ref_sheet": "ARQ-02"}],
+}
+
+
+class _RequisicaoFalsa:
+    headers = {"user-agent": "bancada"}
+    query_params = {}
+
+
+def _bancada_da_liberacao(monkeypatch, dias_desde_o_ultimo_auto, patches, enviados):
+    """Botão MANUAL: `/api/admin/liberar-filhote/{job}` sem rede e sem banco."""
+    monkeypatch.setattr(M, "_require_admin", lambda request: {"email": "admin@example.com"})
+    monkeypatch.setattr(M, "_log_error", lambda *a, **k: None)
+    monkeypatch.setattr(M, "_notify_admin", lambda *a, **k: True)
+    monkeypatch.setattr(M, "_supa_rest_service",
+                        _rest_de_mentira(_PROJETOS, _ITENS, (), patches))
+    monkeypatch.setattr(_ureq, "urlopen",
+                        _urlopen_de_mentira(dias_desde_o_ultimo_auto))
+
+    def _registra(pai, *a, **k):
+        enviados.append(pai.get("user_email"))
+        return True
+    monkeypatch.setattr(M, "_email_leitura_nova", _registra)
+    monkeypatch.setattr(M, "_email_leitura_combinada", lambda pai, *a, **k: _registra(pai))
+
+
+def _bancada_do_automatico(monkeypatch, dias_desde_o_ultimo_auto, patches, enviados, logs):
+    """Caminho AUTOMÁTICO: a juíza libera, o resto é o código de verdade."""
+    import anthropic as _an
+    import llm_retry as _lr
+
+    monkeypatch.setattr(_timeb, "sleep", lambda s: None)   # a espera de 30 s do vigia
+    monkeypatch.setattr(M, "_supa_rest_service",
+                        _rest_de_mentira(_PROJETOS, _ITENS, (), patches))
+    monkeypatch.setattr(_ureq, "urlopen",
+                        _urlopen_de_mentira(dias_desde_o_ultimo_auto))
+    monkeypatch.setattr(M, "_notify_admin", lambda *a, **k: True)
+    monkeypatch.setattr(M, "_log_error",
+                        lambda stage, message, job_id=None, severity="error":
+                        logs.append("%s|%s" % (stage, message)))
+
+    def _registra(pai, *a, **k):
+        enviados.append(pai.get("user_email"))
+        return True
+    monkeypatch.setattr(M, "_email_leitura_nova", _registra)
+
+    class _ClienteFalso:
+        def __init__(self, *a, **k):
+            pass
+    monkeypatch.setattr(_an, "Anthropic", _ClienteFalso)
+
+    class _Bloco:
+        text = '{"liberar": true, "motivo": "preencheu forro e revestimento"}'
+
+    class _Resp:
+        content = [_Bloco()]
+    monkeypatch.setattr(_lr, "call_with_retry", lambda *a, **k: _Resp())
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Os guardas
+# ══════════════════════════════════════════════════════════════════════════
+def test_o_botao_MANUAL_consulta_o_teto_antes_de_mandar(monkeypatch):
+    """🚨 O caso da cliente-20: liberar disparava e-mail mesmo pra quem já
+    tinha recebido outro automático na mesma semana.
+
+    Isto EXECUTA a rota. O Supabase de mentira respeita a janela que a própria
+    `_email_auto_recente` escreveu na consulta — então encurtar o cooldown
+    (`dias=7` → `dias=0`) reprova aqui, e não passa mais só porque o nome da
+    função continua escrito no arquivo.
+    """
+    patches, enviados = [], []
+    _bancada_da_liberacao(monkeypatch, 3, patches, enviados)   # recebeu há 3 dias
+
+    resp = M.admin_liberar_filhote(_FILHOTE, _RequisicaoFalsa())
+
+    assert resp["email_enviado"] is False, (
+        "a liberação manual disparou e-mail pra quem já recebeu um automático "
+        "há 3 dias — foi assim que a cliente-20 recebeu 3 num dia (%r)"
+        % (resp.get("email_motivo"),))
+    assert enviados == [], "o e-mail chegou a ser montado: %r" % enviados
+    motivo = resp["email_motivo"] or ""
+    assert "NÃO enviado" in motivo, "não devolve o motivo pra quem libera: %r" % motivo
+    assert "painel" in motivo, (
+        "o motivo não diz que a leitura JÁ está no painel — quem lê vai achar "
+        "que a liberação falhou")
+    assert "à mão" in motivo or "a mão" in motivo, (
+        "não aponta a saída (falar à mão), que é o que a regra do Pedro manda "
+        "quando a máquina se cala")
+
+
+def test_CONTROLE_quem_NAO_recebeu_na_semana_continua_avisado(monkeypatch):
+    """🧪 O contrapeso: a trava não pode ter virado "nunca manda".
+
+    Bloquear calado é pior que mandar — o cliente deixa de saber que a leitura
+    melhorou, que é o ponto do mecanismo inteiro.
+    """
+    patches, enviados = [], []
+    _bancada_da_liberacao(monkeypatch, 30, patches, enviados)   # último há 30 dias
+
+    resp = M.admin_liberar_filhote(_FILHOTE, _RequisicaoFalsa())
+    assert resp["email_enviado"] is None and "em envio" in (resp["email_motivo"] or ""), (
+        "o teto passou a segurar até quem não recebeu nada no mês (%r)"
+        % (resp.get("email_motivo"),))
+
+
+def test_e_o_caminho_AUTOMATICO_tambem(monkeypatch):
     """A liberação automática (juíza) usa a mesma porta e tem o mesmo risco —
-    com o agravante de não ter ninguém pra ler o aviso."""
-    b = _bloco("# LIBERAR — mesmo movimento do botão manual")
-    assert "_email_auto_recente" in b, (
-        "o caminho automático de liberação não consulta o teto")
+    com o agravante de não ter ninguém pra ler o aviso.
+
+    Executa `_auto_liberar_filhote_quando_pronto` inteiro: juíza de mentira
+    liberando, e o cooldown REAL consultado contra um log que diz "recebeu há
+    3 dias". Se a janela encolher, o e-mail sai e este guarda reprova.
+    """
+    patches, enviados, logs = [], [], []
+    _bancada_do_automatico(monkeypatch, 3, patches, enviados, logs)
+
+    M._auto_liberar_filhote_quando_pronto(_FILHOTE, _PAI, timeout_min=1)
+
+    assert enviados == [], (
+        "o caminho automático mandou e-mail pra quem já recebeu um automático "
+        "há 3 dias — e aqui não há ninguém pra ver o aviso e decidir")
+    assert any("SEGURADO" in x for x in logs), (
+        "segurou o e-mail sem deixar rastro: 'não mandei' e 'falhou o SMTP' "
+        "viram a mesma coisa no escuro")
 
 
+def test_a_liberacao_acontece_mesmo_quando_o_email_e_segurado(monkeypatch):
+    """🔒 O que NÃO pode: o teto de e-mail impedir a leitura nova de chegar ao
+    painel. São duas coisas diferentes — uma é avisar, a outra é entregar.
+
+    Confere a LINHA QUE SERIA GRAVADA. O guarda antigo media a ORDEM de duas
+    strings no fonte e ficou verde quando o PATCH perdeu o `user_id`: o job era
+    renomeado e nunca chegava ao painel do cliente.
+    """
+    patches, enviados, logs = [], [], []
+    _bancada_do_automatico(monkeypatch, 3, patches, enviados, logs)
+
+    M._auto_liberar_filhote_quando_pronto(_FILHOTE, _PAI, timeout_min=1)
+
+    assert enviados == [], "cenário errado: o e-mail tinha que estar segurado aqui"
+    assert patches, "a liberação não gravou nada — o filhote não chegou ao painel"
+    p = patches[-1]
+    assert p["job_id"] == _FILHOTE, "gravou no job errado: %r" % p["job_id"]
+    assert p["body"].get("user_id") == _PROJETOS[_PAI]["user_id"], (
+        "o filhote foi renomeado mas NÃO foi apontado pro dono do original — "
+        "ele nunca aparece no painel do cliente (%r)" % (p["body"],))
+    assert "nova leitura" in str(p["body"].get("project_name", "")), (
+        "o cliente não tem como saber qual das duas linhas é a nova")
+
+
+def test_CONTROLE_o_teto_existe_e_e_de_7_dias(monkeypatch):
+    """🧪 Executa `_email_auto_recente` contra um log de envios de mentira.
+
+    O antigo lia a assinatura `dias: int = 7` e o `return True` no fonte — com
+    isso o parâmetro podia virar decorativo (janela de zero dia) e o guarda
+    continuava verde. Aqui a janela é medida pelo COMPORTAMENTO.
+    """
+    # 6 dias atrás: DENTRO da semana → segura
+    monkeypatch.setattr(_ureq, "urlopen", _urlopen_de_mentira(6))
+    assert M._email_auto_recente(_EMAIL) is True, (
+        "quem recebeu automático há 6 dias não está mais protegido pelo teto "
+        "de 1 por semana — a janela do cooldown encolheu")
+
+    # 8 dias atrás: FORA da semana → deixa passar
+    monkeypatch.setattr(_ureq, "urlopen", _urlopen_de_mentira(8))
+    assert M._email_auto_recente(_EMAIL) is False, (
+        "o teto passou a segurar e-mail de quem não recebe nada há 8 dias")
+
+    # o parâmetro `dias` tem que ser OBEDECIDO, não decorativo
+    assert M._email_auto_recente(_EMAIL, dias=30) is True, (
+        "`dias` virou enfeite: pedi 30 dias e a função ignorou")
+
+    # falha FECHADA: erro de rede não pode virar e-mail
+    def _explode(req, timeout=None):
+        raise OSError("supabase fora do ar")
+    monkeypatch.setattr(_ureq, "urlopen", _explode)
+    assert M._email_auto_recente(_EMAIL) is True, (
+        "o cooldown passou a falhar ABERTO — erro de rede vira e-mail extra")
+
+
+# ── guardas de forma que continuam valendo (não foram provados cegos) ──────
 def test_o_motivo_VOLTA_pra_quem_libera_em_vez_de_sumir():
     """🪤 Bloquear calado seria pior que mandar: o cliente deixaria de saber que
     a leitura melhorou, e ninguém saberia que ele não soube.
@@ -91,27 +361,3 @@ def test_o_automatico_deixa_RASTRO_quando_segura():
     """Sem log, "não mandei" e "falhou o SMTP" viram a mesma coisa no escuro."""
     b = _bloco("# LIBERAR — mesmo movimento do botão manual")
     assert "SEGURADO" in b, "segura o e-mail sem registrar por quê"
-
-
-def test_a_liberacao_acontece_mesmo_quando_o_email_e_segurado():
-    """🔒 O que NÃO pode: o teto de e-mail impedir a leitura nova de chegar ao
-    painel. São duas coisas diferentes — uma é avisar, a outra é entregar."""
-    b = _bloco("# LIBERAR — mesmo movimento do botão manual")
-    i_patch = b.find('_supa_rest_service("PATCH", "projects"')
-    i_teto = b.find("_email_auto_recente")
-    assert i_patch > 0 and i_teto > i_patch, (
-        "a checagem do teto ficou ANTES da liberação — se ela barrar, o cliente "
-        "deixa de receber a leitura nova, e não só o aviso")
-
-
-def test_CONTROLE_o_teto_existe_e_e_de_7_dias():
-    """🧪 Se `_email_auto_recente` sumir ou mudar de assinatura, os testes acima
-    passariam lendo um nome que não faz mais nada."""
-    assert "def _email_auto_recente(email: str, dias: int = 7)" in _MAIN, (
-        "a função do cooldown mudou de forma — os guardas acima viraram "
-        "leitura de nome, não de comportamento")
-    i = _MAIN.find("def _email_auto_recente")
-    corpo = _sem_comentarios(_MAIN[i:i + 1800])
-    assert "email_auto_log" in corpo, "o cooldown não consulta mais o log de envios"
-    assert re.search(r"return\s+True", corpo), (
-        "o cooldown não tem caminho que devolve True — nunca seguraria nada")

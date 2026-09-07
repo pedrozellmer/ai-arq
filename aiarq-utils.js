@@ -404,7 +404,7 @@
   {
     // Arquivo maior que o teto de processamento.
     // 🩸 03/09/2026 — ESTA RECEITA SOBREPUNHA A MENSAGEM DO MOTOR. No caso do
-    // RAFAEL LIMA (job 28f140ef) o backend foi consertado pra parar de mandar
+    // cliente-43 (job 28f140ef) o backend foi consertado pra parar de mandar
     // "divida / mande vários" pra quem mandou UMA prancha — e a tela devolvia
     // exatamente isso, porque os passos e a linha em negrito saem DAQUI, não do
     // texto do banco (projeto.html:1842-1858). Consertar a copy do motor e

@@ -30,13 +30,92 @@ Por isso o conserto pede `return=representation` e exige linha de volta.
 `projeto.html` mantém o card e mostra o aviso — e há teste pra isso.
 """
 import ast
+import asyncio
 import io
 import os
+import sys
+
+import pytest
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 _PROJETO = io.open(os.path.join(os.path.dirname(_BACKEND), "projeto.html"),
                    encoding="utf-8").read()
+
+
+sys.path.insert(0, _BACKEND)
+import main  # noqa: E402
+
+HTTPException = main.HTTPException
+JOB = "job-de-teste-01"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  A BANCADA QUE EXECUTA — a rota de verdade, o PostgREST de mentira
+# ══════════════════════════════════════════════════════════════════════════
+# 🩸 06/09/2026. Os dois guardas do PATCH liam o fonte e passavam CEGOS:
+#   • trocar `or not _js_r` por `and not _js_r` fazia a rota responder
+#     {"ok": true} com o banco INTACTO (200 + zero linhas = "gravou nada") e as
+#     quatro strings cobradas continuavam todas lá;
+#   • trocar `raise HTTPException(` por `_erro_502 = HTTPException(` deixava o
+#     objeto ser construído e nunca levantado — a rota logava "PATCH NÃO gravou"
+#     como critical e, LOGO EM SEGUIDA, "cliente respondeu durante o job".
+# 🔑 Agora a rota RODA e o que se confere é o que ela DEVOLVE e o que ela GRAVA.
+class _Pedido:
+    """`await request.json()` é tudo que a rota usa do request."""
+
+    def __init__(self, corpo):
+        self._corpo = corpo
+        self.headers = {"Authorization": "Bearer jwt-do-cliente"}
+
+    async def json(self):
+        return dict(self._corpo)
+
+
+class _Postgrest:
+    """Fake do `_supa_rest_service`. Devolve o par (status, json) combinado.
+
+    🪤 O de verdade NUNCA levanta: erro vira (code, None) e falha total vira
+    (0, None). É por isso que o retorno TEM que ser amarrado.
+    """
+
+    def __init__(self, resposta):
+        self.resposta = resposta
+        self.chamadas = []
+
+    def __call__(self, method, path, body=None, params=None, prefer=None,
+                 timeout=15):
+        self.chamadas.append({"m": method, "path": path, "body": body,
+                              "params": params, "prefer": prefer})
+        return self.resposta
+
+
+class _Registro:
+    """Fake do `_log_error`: guarda o que iria pro error_log, em ORDEM."""
+
+    def __init__(self):
+        self.linhas = []
+
+    def __call__(self, stage, message, job_id=None, severity="error"):
+        self.linhas.append({"stage": stage, "message": str(message),
+                            "job_id": job_id, "severity": severity})
+
+    def diz(self, trecho):
+        return [l for l in self.linhas if trecho in l["message"]]
+
+
+def _responde(monkeypatch, resposta_do_banco, corpo=None):
+    """Chama a rota DE VERDADE. Devolve (saida, banco, registro) ou levanta."""
+    banco = _Postgrest(resposta_do_banco)
+    registro = _Registro()
+    monkeypatch.setattr(main, "_require_project_owner",
+                        lambda request, job_id: "uid-do-cliente-01")
+    monkeypatch.setattr(main, "_supa_rest_service", banco)
+    monkeypatch.setattr(main, "_log_error", registro)
+    corpo = {"pe_direito": "2,80"} if corpo is None else corpo
+    saida = asyncio.run(main.respostas_processamento(JOB, _Pedido(corpo)))
+    return saida, banco, registro
+
 
 
 def _rota():
@@ -106,28 +185,81 @@ def test_o_aviso_CHEGA_na_tela_e_nao_morre_no_JSON():
 # ══════════════════════════════════════════════════════════════════════════
 #  (3) O PATCH tem que ser conferido — status E linhas
 # ══════════════════════════════════════════════════════════════════════════
-def test_o_patch_e_conferido():
-    corpo = _sem_comentario(_rota())
-    assert "_st_r, _js_r = _supa_rest_service(" in corpo, (
-        "o retorno do PATCH voltou a ser jogado fora — `_supa_rest_service` "
-        "NUNCA levanta, então a rota responde ok com o banco intacto")
-    assert "return=representation" in corpo, (
-        "sem representação não dá pra saber se alguma linha foi tocada")
-    assert "not _js_r" in corpo, (
-        "🪤 conferir só o status não basta: o PostgREST devolve sucesso com "
-        "ZERO linhas quando o filtro não casa nada")
-    assert "HTTPException(\n            502" in corpo or "502," in corpo, (
-        "a falha de gravação voltou a responder 200")
+def test_o_patch_e_conferido(monkeypatch):
+    """RODA a rota com o banco falhando de tres jeitos. Nenhum pode virar 200.
+
+    🩸 A versao anterior cobrava quatro strings no fonte. Trocar `or not _js_r`
+    por `and not _js_r` deixava as quatro no lugar e a rota respondia
+    {"ok": true} com o banco INTACTO — a armadilha que a docstring do arquivo
+    nomeia: o PostgREST devolve 200 com ZERO linhas quando o filtro nao casa
+    nada, que e exatamente o caso de "gravou nada".
+    """
+    falhas = [
+        ((200, []), "200 com ZERO linhas (o filtro nao casou nada)"),
+        ((200, None), "200 sem corpo"),
+        ((500, None), "erro do banco"),
+        ((0, None), "falha total de rede"),
+    ]
+    for resposta, rotulo in falhas:
+        with pytest.raises(HTTPException) as erro:
+            _responde(monkeypatch, resposta)
+        assert erro.value.status_code == 502, (
+            "%s virou HTTP %s — a rota afirmou sucesso com o banco intacto"
+            % (rotulo, erro.value.status_code))
+
+    # 🪤 E o PATCH tem que PEDIR a linha de volta; sem representacao nao da
+    # pra distinguir "gravou" de "nao casou nada".
+    banco = _Postgrest((200, []))
+    monkeypatch.setattr(main, "_supa_rest_service", banco)
+    monkeypatch.setattr(main, "_require_project_owner", lambda r, j: "uid")
+    monkeypatch.setattr(main, "_log_error", _Registro())
+    with pytest.raises(HTTPException):
+        asyncio.run(main.respostas_processamento(JOB, _Pedido({"pe_direito": "2,80"})))
+    assert banco.chamadas, "a rota nem chamou o banco"
+    assert "return=representation" in str(banco.chamadas[0]["prefer"]), (
+        "o PATCH nao pede a linha de volta: prefer=%r"
+        % banco.chamadas[0]["prefer"])
+
+    # 🧪 CONTROLE POSITIVO: com linha de volta, a resposta e 200 de verdade.
+    saida, banco, _ = _responde(monkeypatch, (200, [{"job_id": JOB}]))
+    assert saida["ok"] is True and saida["salvo"] == ["user_pe_direito"], saida
+    assert banco.chamadas[0]["body"] == {"user_pe_direito": 2.8}, banco.chamadas
 
 
-def test_o_log_de_sucesso_so_roda_DEPOIS_da_conferencia():
-    """🩸 O error_log afirmava "cliente respondeu" sem ninguém ter gravado."""
-    corpo = _sem_comentario(_rota())
-    i_check = corpo.index("if _st_r not in")
-    i_log = corpo.index('"cliente respondeu durante o job')
-    assert i_check < i_log, (
-        "o log de 'cliente respondeu' voltou a rodar antes da conferência do "
-        "PATCH — ele afirma um fato que pode não ter acontecido")
+def test_o_log_de_sucesso_so_roda_DEPOIS_da_conferencia(monkeypatch):
+    """🩸 O error_log afirmava "cliente respondeu" sem ninguem ter gravado.
+
+    A versao anterior comparava a POSICAO das duas frases no fonte. Trocar
+    `raise HTTPException(` por `_erro_502 = HTTPException(` mantinha a ordem
+    intacta — o objeto era construido e nunca levantado — e a rota logava
+    "PATCH NAO gravou" como critical e, LOGO EM SEGUIDA, "cliente respondeu
+    durante o job", devolvendo 200.
+    """
+    registro = _Registro()
+    banco = _Postgrest((0, None))          # falha TOTAL de gravacao
+    monkeypatch.setattr(main, "_require_project_owner", lambda r, j: "uid")
+    monkeypatch.setattr(main, "_supa_rest_service", banco)
+    monkeypatch.setattr(main, "_log_error", registro)
+
+    with pytest.raises(HTTPException) as erro:
+        asyncio.run(main.respostas_processamento(
+            JOB, _Pedido({"pe_direito": "2,80", "prazo_meses": "12"})))
+    assert erro.value.status_code == 502
+
+    assert registro.diz("PATCH NÃO gravou"), (
+        "a falha de gravacao nao deixou rastro: %s" % registro.linhas)
+    assert registro.diz("PATCH NÃO gravou")[0]["severity"] == "critical"
+    assert not registro.diz("cliente respondeu durante o job"), (
+        "a rota registrou 'cliente respondeu durante o job' DEPOIS de saber "
+        "que o PATCH nao gravou — o error_log afirma um fato que nao "
+        "aconteceu: %s" % registro.linhas)
+
+    # 🧪 CONTROLE POSITIVO: quando grava mesmo, a linha de sucesso SAI.
+    saida, _, ok = _responde(monkeypatch, (200, [{"job_id": JOB}]))
+    assert saida["ok"] is True
+    assert ok.diz("cliente respondeu durante o job"), (
+        "o guarda esta apertado demais: nem no sucesso a linha sai")
+    assert not ok.diz("PATCH NÃO gravou")
 
 
 # ══════════════════════════════════════════════════════════════════════════

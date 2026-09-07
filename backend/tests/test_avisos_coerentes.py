@@ -9,7 +9,7 @@
 Do ponto de vista dela: "vocês conferiram a escala contra a geometria e não
 mediram nada dela?". A pergunta é justa, e a contradição é real — provar a
 escala e atribuir a medida a um item são passos diferentes, e o motor para no
-segundo (mesmo gargalo do caso Eng. Silveira, 14/08).
+segundo (mesmo gargalo do caso cliente-46, 14/08).
 
 Esconder o ✅ seria pior: a conferência aconteceu e é informação verdadeira. O
 conserto é o ✅ dizer onde a gente parou.

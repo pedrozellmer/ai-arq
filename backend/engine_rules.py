@@ -385,8 +385,8 @@ FLOOR_AREA_BLOCK_KW = (
 # 🚨 31/08, AUDITORIA DO MESMO DIA: estas palavras nasceram DENTRO de
 # FLOOR_AREA_BLOCK_KW, e essa lista é compartilhada por três ramos da
 # honestidade — dois que CRIAM número e um que PRESERVA medição nossa. O
-# resultado foi apagar dado medido: o item real do job eva97d1d (Construtora
-# Mr, 26/08) "Remoção de revestimento cerâmico existente em piso", 13,60 m²
+# resultado foi apagar dado medido: o item real do job eva97d1d (cliente-41,
+# 26/08) "Remoção de revestimento cerâmico existente em piso", 13,60 m²
 # MEDIDOS da geometria do PDF, passou a sair ZERADO — e com a linha dizendo as
 # duas coisas ao mesmo tempo ("Medido da GEOMETRIA do PDF" + "Área NÃO
 # medida"), que é exatamente a frase falsa que o conserto de 26/08 nasceu pra
@@ -1835,7 +1835,7 @@ def quantidade_medida_pelo_pdf(observacao, unidade, area_pdf=0, comprimento_pdf=
                                tol=0.01):
     """Igual à `quantidade_da_procedencia`, mas para a medição VETORIAL do PDF.
 
-    🚨 26/08/2026, caso **Construtora Mr** (cliente do dia, baixou às 13:20).
+    🚨 26/08/2026, caso **cliente-41** (cliente do dia, baixou às 13:20).
     Rodado em modo avaliação isolada depois do conserto, o resultado mostrou o
     padrão de novo — a IA escreve a medição NOSSA na observação e deixa a
     quantidade em zero:

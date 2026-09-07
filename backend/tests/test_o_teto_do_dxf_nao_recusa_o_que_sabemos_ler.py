@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O teto do DXF convertido recusava arquivo que a gente SABE ler.
 
-🩸 03/09/2026, RAFAEL LIMA (job 28f140ef), primeiro projeto dele, canal novo
+🩸 03/09/2026, cliente-43 (job 28f140ef), primeiro projeto dele, canal novo
 (ChatGPT). DWG de 11,7 MB → DXF de 376 MB → recusado pelo teto de 250 MB, com
 o arquivo APAGADO na hora. Baixei o DWG dele do nosso Storage e rodei o worker
 de verdade (`dxf_extract_worker.py`) na minha máquina:

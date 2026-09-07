@@ -143,7 +143,7 @@ def test_CONTROLE_piso_de_escada_ainda_e_superficie():
     assert is_floor_surface_para_criar("Piso da escada em granito") is True
     assert is_floor_surface_para_criar("Rasgo em laje para nova escada") is False
     # e a peneira de PRESERVAR NÃO bloqueia: 13,6 m² medidos de um rasgo são
-    # 13,6 m² medidos (caso Construtora Mr, job eva97d1d)
+    # 13,6 m² medidos (caso cliente-41, job eva97d1d)
     assert is_floor_surface("Remoção de piso cerâmico") is True
 
 

@@ -542,7 +542,7 @@ _REPETIDO_MIN_FRACAO = 0.7
 def _projeto_ja_enviado(user_id, nomes_novos, pe_direito_agora, area_agora):
     """Este envio é o MESMO caderno que o cliente já processou antes?
 
-    🩸 01/09/2026 (flavio anderson, cliente novo): mandou 20 PDFs às 20:40,
+    🩸 01/09/2026 (cliente-42, cliente novo): mandou 20 PDFs às 20:40,
     recebeu a planilha às 21:08 com 25 de 25 linhas de METRO em branco e 42 de
     50 de área em branco, e **onze minutos depois remandou o mesmo caderno**
     com 5 arquivos a menos. Ele achou que o problema era o arquivo dele. Não
@@ -5952,7 +5952,7 @@ def _apply_post_consolidation_rules(items: list) -> tuple[list, int]:
             n_changed += 1
 
     # ── 🅑 Dedup por layer m² ──
-    # 🩸 31/08/2026 — LAYER DE ANOTAÇÃO NÃO É SOBREPOSIÇÃO (caso Prof. Moab,
+    # 🩸 31/08/2026 — LAYER DE ANOTAÇÃO NÃO É SOBREPOSIÇÃO (caso cliente-44,
     # job 2de6625f). A regra abaixo assume que dois itens no mesmo layer podem
     # ser a mesma geometria contada duas vezes — verdade em layer de PAREDE,
     # falso em layer de TEXTO, onde todo rótulo mora junto por definição.
@@ -7319,7 +7319,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
     # ramo trata justamente `q > 0`. A maior prancha é o melhor limite superior
     # honesto que existe sem inventar atribuição.
     # 🩸 02/09/2026 — O TETO NOVO MORDEU UM CLIENTE NO PRIMEIRO DIA.
-    # Job 5f28b6ab (karina savitski, projeto TEKOA, 1º projeto dela). O PDF tem
+    # Job 5f28b6ab (cliente-45, projeto TEKOA, 1º projeto dela). O PDF tem
     # 3 páginas; UMA ESTOUROU O TEMPO da medição geométrica. Sobraram 2 pranchas
     # medidas — 129,1 e 116,4 m² — e o teto virou 1,3 × 129,1 = 168 m².
     # Aí ele zerou a linha "Mezanino — área total 255,66 m²", e esse número
@@ -7538,7 +7538,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             filled += 1
         elif apenas_preencher:
             continue          # não zera, não rebaixa: a decisão já foi tomada
-        # 🎯 26/08/2026 — ÁREA MEDIDA DO PDF VETORIAL (caso Construtora Mr).
+        # 🎯 26/08/2026 — ÁREA MEDIDA DO PDF VETORIAL (caso cliente-41).
         # O motor mediu a geometria do PDF, o prompt mandou a IA usar, a IA usou,
         # e este ramo apagava — porque só olhava `origem='dxf_geom'`. Ele baixou
         # a planilha com piso, forro, parede e pintura em ZERO.
@@ -7661,7 +7661,7 @@ def _apply_area_honesty(items, total_area: float = 0, total_area_source: str = "
             except Exception:
                 pass
             _obs = it.observations or ""
-            # 🩸 01/09/2026 (job 144c1f04, flavio anderson, 20 PDFs) — A FRASE
+            # 🩸 01/09/2026 (job 144c1f04, cliente-42, 20 PDFs) — A FRASE
             # MENTIA SOBRE O QUE A LINHA É. Os 25 itens LINEARES do job (rodapé,
             # soleira, tubulação frigorígena, dreno, perfil de LED) saíram
             # zerados com "Área NÃO medida ... informe a área no upload":
@@ -7865,7 +7865,7 @@ def _linhas_escala_projeto(arqs: list, n_medidos: int = -1,
     que não mediu nada DELA.
     A contradição é real: provar a escala e atribuir a medida a um item são
     passos diferentes, e é no segundo que o motor para (mesmo gargalo do caso
-    Eng. Silveira, 14/08). Então o ✅ não é escondido — ele passa a dizer onde
+    cliente-46, 14/08). Então o ✅ não é escondido — ele passa a dizer onde
     a gente parou. `n_medidos = -1` significa "não deu pra saber", e aí nada é
     afirmado.
     """
@@ -8522,7 +8522,7 @@ def process_job(job_id: str, file_paths: list[str], work_dir: str,
                             except OSError:
                                 _tam_conv = 0
                             # 🩸 03/09/2026 — ESTE TETO RECUSAVA ARQUIVO QUE A
-                            # GENTE SABE LER. Caso RAFAEL LIMA (job 28f140ef):
+                            # GENTE SABE LER. Caso cliente-43 (job 28f140ef):
                             # DWG de 11,7 MB, DXF de 376 MB, recusado aqui. Baixei
                             # o arquivo dele e rodei o worker de verdade:
                             #     DXF 409 MB --dxf-slim--> 34 MB
@@ -10315,7 +10315,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                          if total != len(pdf_infos) else "")
 
         # 🎯 26/08/2026 — ÁREA MEDIDA DO PDF, SOMADA POR PÁGINA.
-        # Caso Construtora Mr (job de hoje 12:50): o motor vetorial mediu 3
+        # Caso cliente-41 (job de hoje 12:50): o motor vetorial mediu 3
         # ambientes / 13,6 m², injetou no prompt mandando a IA usar, a IA usou —
         # e `_apply_area_honesty` APAGOU os 9 itens de área e comprimento, porque
         # só reconhece `origem='dxf_geom'`. A observação que sobrou pro cliente
@@ -10684,7 +10684,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         print(f"[pdfvec-promo] {_stem}: escala de {_fonte} sem prova — seção ESTIMADA injetada")
                         # 🔍 26/08: o log gravava só ambientes e m², e a PAREDE
                         # ficava de fora — que é justamente o que destrava
-                        # pintura e rodapé. No caso Construtora Mr eu não
+                        # pintura e rodapé. No caso cliente-41 eu não
                         # consegui responder "mediu parede?" olhando o log, e a
                         # resposta decide se vale pedir o pé-direito pra ele.
                         _log_error("pdfvec:promo",
@@ -10842,7 +10842,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                         qty = 0
                     if qty == 0:
                         # 🎯 26/08 — A MEDIÇÃO DO PDF ESTAVA NA LINHA E A
-                        # QUANTIDADE VINHA ZERO. Caso Construtora Mr, visto na
+                        # QUANTIDADE VINHA ZERO. Caso cliente-41, visto na
                         # avaliação isolada `eve9afae`:
                         #   "Piso cerâmico"  qtd 0  obs: "Área total medida
                         #                                 vetorialmente: 13,6 m²"
@@ -11216,7 +11216,7 @@ bloco — só cite os que estão no inventário deste arquivo."""
                                  if "grande demais pro nosso limite de memória" in str(_e))
                 if _n_grandes and _n_grandes == len(ai_errors):
                     _quantas = _n_grandes
-                    # 03/09/2026, caso RAFAEL LIMA (job 28f140ef) — primeiro
+                    # 03/09/2026, caso cliente-43 (job 28f140ef) — primeiro
                     # projeto dele, canal novo (ChatGPT), e esta mensagem dava
                     # DOIS conselhos, os DOIS errados pro caso dele:
                     #  (1) "suba em DXF, a conversao do DWG e o que multiplica"

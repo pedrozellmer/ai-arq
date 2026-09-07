@@ -21,7 +21,7 @@ original e percebeu que a coluna REF tinha 126 células e nenhum código.
 """
 import io
 import os
-import re
+
 import sys
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -97,17 +97,162 @@ def _fonte_sem_comentarios(inicio, fim=None):
                      if not l.lstrip().startswith("#"))
 
 
-def test_a_remontagem_REFAZ_o_sinapi():
-    """🪤 Guarda de ponto de chamada. O controle abaixo prova que ele reprova."""
-    bloco = _fonte_sem_comentarios(
-        "async def rebuild_planilha_from_review", "\n@app.")
-    assert "from sinapi_matcher import" in bloco, (
-        "a remontagem não importa mais o matcher SINAPI — a planilha revisada "
-        "volta a sair sem referência")
-    assert "sinapi_matches" in bloco, "importa o matcher e não preenche o campo"
-    assert "apply_llm_pick" in bloco, (
-        "sem apply_llm_pick o código sai por similaridade — a busca sozinha já "
-        "chamou piso de porcelanato de PISO DE BORRACHA (17/07)")
+# ══════════════════════════════════════════════════════════════════════════
+#  A REMONTAGEM RODANDO DE VERDADE
+#
+#  🚨 06/09/2026 — POR QUE MUDOU. Os dois guardas de ponto de chamada abaixo
+#  liam o fonte de `rebuild_planilha_from_review` e afirmavam por string.
+#  Provados cegos em três mutações:
+#    (a) `if _e["candidates"]:` -> `if not _e["candidates"]:` — nenhum item
+#        recebe `sinapi_matches`, a planilha revisada volta a sair sem
+#        referência (o bug de 01/09 que criou este arquivo). PASSOU.
+#    (b) `_nc_rb = apply_llm_pick(...)` -> `_nc_rb = 0   # apply_llm_pick(...)`
+#        — o comentário no FIM da linha não é apagado pelo filtro de
+#        comentários, o código sai por SIMILARIDADE e volta a chamar piso de
+#        porcelanato de PISO DE BORRACHA (17/07). PASSOU.
+#    (c) `except Exception as _esr:` -> `except ValueError as _esr:` — o
+#        timeout do SINAPI (caso de 22/07) sobe e mata a remontagem inteira,
+#        com o `try:` e a string do log ainda no fonte. PASSOU.
+#  Agora a rota RODA e a prova é o .xlsx que o cliente baixa.
+# ══════════════════════════════════════════════════════════════════════════
+JOB = "job-sinapi-rebuild"
+
+# O erro de 17/07: a busca por texto dá 93% pra PISO DE BORRACHA e 71% pro
+# porcelanato certo. Quem manda no código da REF é a IA, não a similaridade.
+_ERRADO = {"codigo": "88484", "descricao": "PISO EM BORRACHA NATURAL",
+           "unidade": "M2", "familia_id": 9, "similarity": 0.93}
+_CERTO = {"codigo": "87263", "descricao": "REVESTIMENTO CERAMICO PARA PISO",
+          "unidade": "M2", "familia_id": 1, "similarity": 0.71}
+
+
+class _RespRPC:
+    """A rota lê os itens pela RPC `list_project_items` com `urlopen` DIRETO,
+    sem passar por helper — patchar `_supa_rest_service` não intercepta nada."""
+
+    def __init__(self, payload):
+        import json as _j
+        self._b = _j.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._b
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
+              explode=None):
+    """Roda `rebuild_planilha_from_review` de verdade e devolve
+    (resposta, caminho do .xlsx gerado, logs)."""
+    import asyncio
+    import urllib.request
+    import sinapi_matcher
+    import main
+
+    logs = []
+    linhas = [{"item_num": "1.1", "description": "Piso em porcelanato 60x60 cm",
+               "unit": "m²", "quantity": 48.0, "confidence": "estimado",
+               "observations": "", "ref_sheet": "", "origem": "cad",
+               "discipline": "Pisos"}]
+    proj = {"job_id": JOB, "project_name": "Projeto cliente-NN",
+            "typology": "office", "total_area": 120.0, "warnings": [],
+            "layout_area": 0, "address": ""}
+    cands = [dict(c) for c in (candidatos or [_ERRADO, _CERTO])]
+
+    monkeypatch.setattr(main, "_require_project_owner", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, job=None, **k: logs.append((stage, msg)))
+    monkeypatch.setattr(main, "_supa_rest_as_user", lambda *a, **k: (200, [dict(proj)]))
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _RespRPC(linhas))
+    monkeypatch.setattr(sinapi_matcher, "candidates_for",
+                        lambda desc, limit=60: [dict(c) for c in cands])
+    if explode is not None:
+        # 🪤 O erro TEM que estourar em `apply_llm_pick`. `candidates_for` roda
+        # dentro de um `try/except` interno (`_cands_rb`), que engoliria a
+        # exceção antes de ela chegar no `except` que este guarda mede — e o
+        # teste passaria pelo motivo errado.
+        def _explode(*a, **k):
+            raise explode
+        monkeypatch.setattr(sinapi_matcher, "apply_llm_pick", _explode)
+    else:
+        # `apply_llm_pick` é o REAL — só a chamada à IA é dublada. É ele quem
+        # põe o código escolhido em 1º lugar, e é esse movimento que a mutação
+        # (b) mata.
+        monkeypatch.setattr(sinapi_matcher, "pick_best_batch",
+                            lambda itens, **k: {0: escolha_da_ia})
+    monkeypatch.setattr(main, "_supabase_storage_upload", lambda *a, **k: True)
+    monkeypatch.setattr(main, "_carimbar_planilha", lambda *a, **k: None)
+    monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
+
+    r = asyncio.run(main.rebuild_planilha_from_review(JOB, request=None))
+    saida = os.path.join(str(tmp_path), JOB, "orcamento_%s_revisado.xlsx" % JOB)
+    return r, saida, logs
+
+
+def _texto_das_abas(caminho, abas=None):
+    wb = load_workbook(caminho)
+    alvo = wb.sheetnames if abas is None else [a for a in abas if a in wb.sheetnames]
+    return " | ".join(str(c) for nome in alvo
+                      for row in wb[nome].iter_rows(values_only=True)
+                      for c in row if c is not None)
+
+
+def test_a_remontagem_REFAZ_o_sinapi(monkeypatch, tmp_path):
+    """A planilha REMONTADA tem que sair COM a referência SINAPI.
+
+    🪤 O guarda antigo só conferia que `from sinapi_matcher import`,
+    `sinapi_matches` e `apply_llm_pick` estavam ESCRITOS no bloco. Bastava
+    inverter o `if _e["candidates"]:` pra nenhum item receber a referência —
+    tudo continuava escrito e o guarda continuava verde. Aqui o arquivo é
+    aberto e lido."""
+    r, saida, _ = _remontar(monkeypatch, tmp_path)
+    assert r["status"] == "ok"
+    assert os.path.exists(saida), "a remontagem não gerou o .xlsx"
+
+    wb = load_workbook(saida)
+    assert _ABA in wb.sheetnames, (
+        "a planilha revisada saiu SEM a aba de referências: %s — é o bug de "
+        "01/09 de volta (21 jobs de 17 clientes receberam essa versão)"
+        % (wb.sheetnames,))
+    assert "87263" in _texto_das_abas(saida, [_ABA]), (
+        "a aba existe mas não traz o código SINAPI do item")
+
+
+def test_a_remontagem_usa_a_ESCOLHA_DA_IA_e_nao_a_similaridade(monkeypatch, tmp_path):
+    """🚨 17/07: a busca por texto sozinha chamou piso de porcelanato de PISO
+    DE BORRACHA. `apply_llm_pick` é o que promove o código escolhido pra 1º —
+    sem essa chamada, quem manda na coluna REF é a similaridade.
+
+    🪤 A mutação que enganou o guarda antigo (`_nc_rb = 0   # apply_llm_pick(
+    _lote_rb, job_id=job_id)`) deixa a string `apply_llm_pick` no fonte, e o
+    filtro de comentários do teste antigo só descartava linha que COMEÇA com
+    `#`."""
+    r, saida, _ = _remontar(monkeypatch, tmp_path)
+    ref = _texto_das_abas(saida)
+    assert "87263" in ref, (
+        "o código que a IA escolheu não chegou na planilha revisada")
+
+    wb = load_workbook(saida)
+    primeira = None
+    for nome in wb.sheetnames:
+        if nome == _ABA:
+            continue        # a aba técnica lista os dois de propósito
+        for row in wb[nome].iter_rows(values_only=True):
+            for c in row:
+                if c is not None and ("87263" in str(c) or "88484" in str(c)):
+                    primeira = str(c)
+                    break
+            if primeira:
+                break
+        if primeira:
+            break
+    assert primeira and "87263" in primeira and "88484" not in primeira, (
+        "a REF da linha saiu com o código da SIMILARIDADE e não com o que a "
+        "IA conferiu — piso de porcelanato voltou a virar PISO DE BORRACHA. "
+        "Célula: %r" % (primeira,))
 
 
 def test_o_tcpo_continua_sendo_refeito_junto():
@@ -132,16 +277,50 @@ def test_CONTROLE_a_checagem_de_chamada_sabe_REPROVAR():
         "o controle não exercita o mesmo padrão do teste real")
 
 
-def test_CONTROLE_a_falha_do_matcher_NAO_derruba_a_planilha():
-    """Best-effort de verdade: o bloco tem que estar dentro de try/except, senão
-    um timeout do SINAPI (já aconteceu em 22/07) mataria a remontagem inteira."""
-    bloco = _fonte_sem_comentarios(
-        "async def rebuild_planilha_from_review", "\n@app.")
-    i = bloco.index("from sinapi_matcher import")
-    antes = bloco[:i]
-    assert re.search(r"try:\s*$", antes.rstrip().splitlines()[-1].strip() or "x") \
-        or antes.rstrip().endswith("try:"), (
-        "o enriquecimento SINAPI não está dentro de um try — uma falha dele "
-        "derruba a planilha revisada inteira")
-    assert "sinapi-rebuild-falhou" in bloco, (
-        "falhou em silêncio: sem log, ninguém descobre que a referência sumiu")
+def test_CONTROLE_a_falha_do_matcher_NAO_derruba_a_planilha(monkeypatch, tmp_path):
+    """Best-effort de verdade: um timeout do SINAPI (já aconteceu em 22/07) não
+    pode matar a remontagem — a planilha sai, sem a referência, e o log conta.
+
+    🪤 O guarda antigo conferia que existia um `try:` ANTES do import e a string
+    `sinapi-rebuild-falhou` DEPOIS. Trocar `except Exception` por
+    `except ValueError` deixa os dois no lugar e faz o timeout subir de
+    `_trabalho`, virar HTTP 500 e derrubar tudo. Por isso o erro aqui é um
+    `TimeoutError`, que NÃO é ValueError."""
+    r, saida, logs = _remontar(monkeypatch, tmp_path,
+                               explode=TimeoutError("read timed out"))
+
+    assert r["status"] == "ok", (
+        "uma falha do matcher SINAPI derrubou a remontagem inteira — o cliente "
+        "que revisou não recebe planilha nenhuma")
+    assert os.path.exists(saida), "a planilha revisada não foi gerada"
+    wb = load_workbook(saida)
+    assert _ABA not in wb.sheetnames, (
+        "o matcher falhou e a aba apareceu mesmo assim — o teste não exercitou "
+        "o caminho de falha")
+    assert any("sinapi-rebuild-falhou" in s for s, _ in logs), (
+        "o matcher estourou e não saiu log nenhum — ou o `except` deixou de "
+        "registrar, ou o enriquecimento SINAPI nem chegou a ser chamado. Nos "
+        "dois casos a referência some sem ninguém descobrir. Logs: %r" % (logs,))
+
+
+def test_CONTROLE_a_falha_que_NAO_e_do_matcher_continua_subindo():
+    """🧪 Controle positivo do de cima: o `except` do bloco SINAPI não pode ser
+    tão largo que engula a rota inteira. Se `_supa_rest_as_user` estoura, o
+    cliente tem que receber erro — não uma planilha vazia com cara de sucesso."""
+    import asyncio
+    import main
+    import pytest as _pt
+
+    _orig = main._supa_rest_as_user
+    main._supa_rest_as_user = lambda *a, **k: (_ for _ in ()).throw(
+        RuntimeError("supabase fora do ar"))
+    _orig_owner = main._require_project_owner
+    main._require_project_owner = lambda *a, **k: None
+    try:
+        with _pt.raises(Exception) as e:
+            asyncio.run(main.rebuild_planilha_from_review(JOB, request=None))
+        assert "supabase fora do ar" in str(e.value) or isinstance(
+            e.value, main.HTTPException)
+    finally:
+        main._supa_rest_as_user = _orig
+        main._require_project_owner = _orig_owner

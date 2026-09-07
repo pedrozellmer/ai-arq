@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """A recusa por TAMANHO não pode mandar o cliente pra uma SEGUNDA falha.
 
-🩸 03/09/2026, RAFAEL LIMA (job 28f140ef). Primeiro projeto dele, vindo do
+🩸 03/09/2026, cliente-43 (job 28f140ef). Primeiro projeto dele, vindo do
 canal novo (ChatGPT). O DWG de 11,68 MB virou 376 MB de DXF e a gente recusou
 — recusa CERTA: o teto do processo filho é 2,5 GB e a extração pediria ~3,6 GB.
 O defeito não foi recusar. Foi o que a recusa MANDOU ele fazer:

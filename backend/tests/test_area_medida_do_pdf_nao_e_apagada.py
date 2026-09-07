@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """O motor mediu a área do PDF, mandou a IA usar — e depois apagou.
 
-🚨 26/08/2026, caso **Construtora Mr** (job das 12:50, cliente novo do dia).
+🚨 26/08/2026, caso **cliente-41** (job das 12:50, cliente novo do dia).
 O log conta o filme inteiro:
 
     12:51  pdfvec:promo         3 ambientes, 13,6 m² medidos da geometria vetorial
@@ -89,7 +89,7 @@ def _valor(it):
 
 
 def test_a_area_medida_do_PDF_sobrevive():
-    """O caso do Construtora Mr, do jeito que a produção roda."""
+    """O caso do cliente-41, do jeito que a produção roda."""
     h = _fatia()["_apply_area_honesty"]
     piso, forro = _piso(), _forro()
     h([piso, forro], total_area=0, total_area_source="", pe_direito=0,
@@ -113,7 +113,7 @@ def test_a_procedencia_vai_escrita_na_linha():
     assert "carimbo" in obs, "não avisa que a escala veio do carimbo"
     assert "não medida" not in obs and "nao medida" not in obs, (
         "sobrou o aviso ANTIGO dizendo que não foi medida — era justamente a "
-        "frase falsa que o Construtora Mr recebeu")
+        "frase falsa que o cliente-41 recebeu")
 
 
 def test_NUNCA_vira_confirmado():
@@ -192,7 +192,7 @@ def test_o_call_site_acumula_e_PASSA_a_medicao():
         "o acumulador da área medida no PDF sumiu")
     assert corpo.count("_pdfvec_area_m2 +=") >= 2, (
         "a soma não cobre os DOIS ramos da promoção (escala provada por cota e "
-        "escala sem prova) — o caso do Construtora Mr é o segundo")
+        "escala sem prova) — o caso do cliente-41 é o segundo")
     assert "pdfvec_m2=_pv_m2" in corpo, (
         "o valor é acumulado e NÃO é passado pra honestidade — a função existe "
         "e nunca recebe o dado, que é o defeito de origem")

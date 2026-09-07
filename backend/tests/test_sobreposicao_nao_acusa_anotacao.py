@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Aviso de sobreposição não dispara em layer de ANOTAÇÃO (31/08/2026).
 
-🩸 CASO PROF. MOAB (job 2de6625f, cliente novo de 31/08). Quatro itens
+🩸 CASO cliente-44 (job 2de6625f, cliente novo de 31/08). Quatro itens
 diferentes — forro de madeira (55 m²), laje impermeabilizada (15), piso tátil
 direcional (2) e piso tátil de alerta (0,5) — foram acusados de possível
 duplicação entre si. O motivo alegado: "compartilham o mesmo layer
@@ -56,7 +56,7 @@ def _tem_aviso(it):
 
 
 def test_layer_de_TEXTO_nao_gera_aviso_de_sobreposicao():
-    """O caso do Prof. Moab, reduzido."""
+    """O caso do cliente-44, reduzido."""
     itens = [
         _Item("Forro de madeira colonial", "m²", 55, "G-ANNO-TEXT"),
         _Item("Laje de concreto armado impermeabilizada", "m²", 15, "G-ANNO-TEXT"),

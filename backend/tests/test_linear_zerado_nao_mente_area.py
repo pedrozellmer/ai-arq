@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Item em METRO que sai zerado não pode dizer "Área NÃO medida".
 
-🩸 MEDIDO em 01/09/2026, job 144c1f04 (flavio anderson, 20 PDFs — o maior
+🩸 MEDIDO em 01/09/2026, job 144c1f04 (cliente-42, 20 PDFs — o maior
 caderno da base). A planilha saiu com 161 itens:
 
     contagem (un)   73 itens · 73 com número

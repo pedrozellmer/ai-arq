@@ -34,12 +34,17 @@ O que muda aqui é que o número não é da IA: é NOSSO, e é conferido.
 🚫 E não promove nada: quem chama mantém o `confidence` que a IA deu. Preencher
 a quantidade e carimbar 'medido' são passos diferentes (regra dura nº1).
 """
+import ast
+import io
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 from engine_rules import quantidade_da_procedencia as q  # noqa: E402
+
+import main as M  # noqa: E402
 
 # a extração REAL da prancha do cliente-19, do jeito que o motor devolve
 AREAS = {"-TEFOR": 26.54, "-TEPAR": 268.39, "-TEDUTO": 12.0}
@@ -128,28 +133,91 @@ def test_extracao_vazia_nao_quebra_nem_preenche():
     assert q("área hachurada do layer -TEFOR = 26.54 m²", "m²", None, None) is None
 
 
+# ══════════════════════════════════════════════════════════════════════════
+#  🧪 O CALL SITE, RODANDO DE VERDADE
+#
+#  🪤 05/09/2026: o guarda de call site lia quatro strings numa janela de 420
+#  caracteres e ficou verde com o resgate DESLIGADO (`if _q_proc:` virou
+#  `if False and _q_proc:`): a chamada acontecia, o resultado ia pro lixo e a
+#  quantidade continuava 0 — o defeito de 26/08 inteiro, de volta, no verde.
+#
+#  🪤 E nada de recortar o fonte por tamanho fixo: o bloco é achado pela
+#  ÁRVORE SINTÁTICA (o `if` mais interno que contém a chamada), compilado e
+#  executado. Cresce o código, o guarda continua no lugar certo.
+# ══════════════════════════════════════════════════════════════════════════
+def _bloco_do_resgate():
+    """O `if qty == 0:` REAL do `process_job`, compilado pra rodar sozinho."""
+    fonte = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    proc = next((n for n in ast.parse(fonte).body
+                 if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+                 and n.name == "process_job"), None)
+    assert proc is not None, "não achei `process_job` em main.py"
+
+    def _chama(no):
+        return any(isinstance(x, ast.Call) and isinstance(x.func, ast.Name)
+                   and x.func.id == "_quantidade_da_procedencia"
+                   for x in ast.walk(no))
+
+    candidatos = [n for n in ast.walk(proc) if isinstance(n, ast.If) and _chama(n)]
+    assert candidatos, (
+        "`_quantidade_da_procedencia` não é mais chamada no caminho da "
+        "extração — a função existe e nunca roda")
+    no = max(candidatos, key=lambda n: n.lineno)      # o `if` mais interno
+    mod = ast.Module(body=[no], type_ignores=[])
+    ast.fix_missing_locations(mod)
+    return compile(mod, "main.py::process_job::resgate", "exec")
+
+
+_CODIGO_DO_RESGATE = _bloco_do_resgate()
+
+
+def _rodar_resgate(obs, unidade, areas, compr):
+    """Roda o bloco com uma linha ZERADA e devolve o estado que sobrou."""
+    ns = {
+        "qty": 0.0,
+        "conf": "estimado",
+        "item_data": {"observations": obs, "unit": unidade, "quantity": 0},
+        "_areas_ly": areas,
+        "_compr_ly": compr,
+        "_quantidade_da_procedencia": M._quantidade_da_procedencia,
+        "_n_resgate_proc": 0,
+    }
+    exec(_CODIGO_DO_RESGATE, ns)
+    return ns
+
+
 def test_o_call_site_usa_isso_e_NAO_mexe_no_selo():
-    """🪤 Guarda de CALL SITE + regra nº1 no mesmo teste.
+    """🪤 Guarda de CALL SITE + regra nº1 no mesmo teste — agora EXECUTANDO.
 
     A função pode estar perfeita e nunca ser chamada; e se ela mexesse no
     `confidence`, viraria promoção por texto — que é exatamente o que a regra
     nº1 proíbe.
     """
-    import io
-    _b = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    fonte = io.open(os.path.join(_b, "main.py"), encoding="utf-8").read()
-    corpo = chr(10).join(l for l in fonte.split(chr(10))
-                         if not l.strip().startswith("#"))
-    assert "_quantidade_da_procedencia(" in corpo, (
-        "a função existe e nunca é chamada no caminho da extração")
-    i = corpo.find("_quantidade_da_procedencia(")
-    janela = corpo[i:i + 420]
-    assert "_areas_ly" in janela and "_compr_ly" in janela, (
-        "chamada sem passar a extração — sem os dicionários ela não tem como "
-        "conferir nada e viraria confiança no texto")
-    assert "conf =" not in janela and "confidence" not in janela, (
+    ns = _rodar_resgate(
+        "Fonte: área hachurada do layer -TEFOR = 26.54 m² (17 hachuras).",
+        "m²", AREAS, COMPR)
+    assert ns["qty"] == 26.54, (
+        "a linha continua ZERADA com a medição escrita nela — o resgate foi "
+        "desligado no call site (qty=%r)" % ns["qty"])
+    assert ns["_n_resgate_proc"] == 1, "o resgate não vira contagem — conserto invisível"
+    assert ns["conf"] == "estimado", (
         "o resgate está mexendo no selo — preencher quantidade e carimbar "
         "'medido' são passos diferentes (regra dura nº1)")
-    assert "resgate_procedencia=" in corpo, (
+
+    # 🧪 controle negativo: layer que a extração não tem continua zerado
+    ns2 = _rodar_resgate("área hachurada do layer -INVENTADO = 99.90 m²",
+                         "m²", AREAS, COMPR)
+    assert ns2["qty"] == 0 and ns2["_n_resgate_proc"] == 0, (
+        "o call site colou na planilha um número que a geometria não confirma")
+
+    # 🧪 a extração TEM que chegar lá: sem os dicionários não há o que conferir,
+    # e o resgate viraria confiança no texto
+    ns3 = _rodar_resgate(
+        "Fonte: área hachurada do layer -TEFOR = 26.54 m² (17 hachuras).",
+        "m²", {}, {})
+    assert ns3["qty"] == 0, "preencheu sem ter com o que conferir"
+
+    fonte = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    assert "resgate_procedencia=" in fonte, (
         "o resgate não vira linha de log — conserto invisível é o defeito que "
         "custou o dia de hoje três vezes")

@@ -34,12 +34,18 @@ Alvo medido no acervo (134 projetos concluídos):
 Os 15 guardam 38.223 m de parede medida.
 """
 import io
+import json
 import os
 import sys
+import urllib.request
+
+import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RAIZ = os.path.dirname(_BACKEND)
+
+import main  # noqa: E402
 
 
 def _corpo(caminho):
@@ -52,19 +58,159 @@ _MAIN = _corpo(os.path.join(_BACKEND, "main.py"))
 _PROJ = io.open(os.path.join(_RAIZ, "projeto.html"), encoding="utf-8").read()
 
 
-def test_a_rota_aceita_o_pe_direito():
-    assert "pe_direito: float = 0" in _MAIN, (
-        "o payload de inform-area voltou a aceitar só a área — o campo que "
-        "corta a linha em branco pela metade ficou de fora de novo")
+# ══════════════════════════════════════════════════════════════════════════
+#  BANCADA QUE EXECUTA A ROTA
+#
+#  🚨 06/09/2026 — POR QUE ISTO EXISTE. Os quatro guardas críticos deste
+#  arquivo liam o FONTE de `main.py` e afirmavam por string. Provado cego:
+#  trocando `pe_dir = round(float(payload.pe_direito or 0), 2)` por
+#  `pe_dir = 0 * round(...)` — com o campo `pe_direito: float = 0` ainda
+#  declarado no payload e a chamada de `_derive_pintura_pe_direito` ainda
+#  ESCRITA na rota — os quatro seguiam verdes enquanto o pé-direito informado
+#  era jogado fora: não derivava pintura, não era gravado e não virava aviso.
+#  Agora a rota RODA de verdade; só rede, banco e disco são dublados.
+# ══════════════════════════════════════════════════════════════════════════
+JOB = "job-pe-direito-01"
 
 
-def test_area_deixou_de_ser_obrigatoria():
-    """Informar SÓ o pé-direito tem que passar."""
-    assert "area: float = 0" in _MAIN, (
-        "`area` voltou a ser obrigatória: quem quer informar só o pé-direito "
-        "leva 422 e o convite novo não funciona")
-    assert "Informe a área total (m²) ou o pé-direito (m)." in _MAIN, (
-        "sumiu a validação de 'veio um dos dois'")
+class _RespRPC:
+    """Resposta mínima de `urllib.request.urlopen` — a rota lê os itens pela
+    RPC `list_project_items` com urlopen DIRETO, sem passar por helper."""
+
+    def __init__(self, payload):
+        self._b = json.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._b
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def _linhas_do_caso():
+    """O caso real: parede MEDIDA em metro linear + pintura de parede ZERADA.
+
+    É a situação dos 15 projetos do acervo que mostrariam o convite — a linha
+    em branco que o pé-direito fecha (Σ comprimento × altura × 2 faces)."""
+    return [
+        {"item_num": "1.1",
+         "description": "Parede de alvenaria de blocos ceramicos e=14cm",
+         "unit": "m", "quantity": 100.0, "confidence": "confirmado",
+         "observations": "Fonte: comprimento total do layer A-WALL = 100,00 m",
+         "ref_sheet": "PRANCHA-01", "origem": "cad", "discipline": "Arquitetura"},
+        {"item_num": "1.2",
+         "description": "Pintura latex acrilica em paredes internas",
+         "unit": "m2", "quantity": 0.0, "confidence": "estimado",
+         "observations": "requer pe-direito", "ref_sheet": "", "origem": "",
+         "discipline": "Arquitetura"},
+        {"item_num": "1.3", "description": "Piso em porcelanato esmaltado",
+         "unit": "m2", "quantity": 0.0, "confidence": "estimado",
+         "observations": "", "ref_sheet": "", "origem": "",
+         "discipline": "Arquitetura"},
+    ]
+
+
+def _projeto_com_area_medida():
+    return {"job_id": JOB, "project_name": "Projeto cliente-NN",
+            "typology": "office", "total_area": 300.0,
+            "total_area_source": "medido", "warnings": [], "user_pe_direito": 0,
+            "layout_area": 0, "address": "", "user_total_area": 0}
+
+
+def _bancada(monkeypatch, tmp_path, proj=None, rows=None):
+    """Liga a rota REAL. Devolve o registrador do que ela produziu:
+    `planilha` (ProjectData + itens que vão pro .xlsx), `persist` (itens
+    regravados), `update` (patch de `projects`), `patch` (`_projeto_patch`)."""
+    proj = _projeto_com_area_medida() if proj is None else proj
+    rows = _linhas_do_caso() if rows is None else rows
+    reg = {"planilha": [], "persist": [], "update": [], "patch": [], "log": []}
+
+    monkeypatch.setattr(main, "_require_project_owner", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, job=None, **k: reg["log"].append((stage, msg)))
+    monkeypatch.setattr(main, "_supa_rest_as_user", lambda *a, **k: (200, [dict(proj)]))
+    monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **k: _RespRPC(rows))
+    import spreadsheet
+    monkeypatch.setattr(
+        spreadsheet, "generate_spreadsheet",
+        lambda pd, items, path, **k: (reg["planilha"].append((pd, list(items))),
+                                      io.open(path, "wb").write(b"xlsx"))[0])
+    monkeypatch.setattr(main, "_supabase_storage_upload", lambda *a, **k: True)
+    monkeypatch.setattr(
+        main, "_persist_items_to_supabase",
+        lambda job, items: (reg["persist"].append(list(items)), len(items))[1])
+    monkeypatch.setattr(main, "_carimbar_planilha", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_supabase_update",
+                        lambda t, f, v, data: reg["update"].append(dict(data)))
+    monkeypatch.setattr(main, "_projeto_patch",
+                        lambda job, campos: (reg["patch"].append(dict(campos)), True)[1])
+    monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
+    return reg
+
+
+def _informar(monkeypatch, tmp_path, area=0, pe=0, proj=None, rows=None):
+    reg = _bancada(monkeypatch, tmp_path, proj=proj, rows=rows)
+    r = main.inform_project_area(
+        JOB, main.InformAreaPayload(area=area, pe_direito=pe), request=None)
+    return r, reg
+
+
+def _item(items, pedaco):
+    return next(i for i in items if pedaco in (i.description or "").lower())
+
+
+def test_a_rota_aceita_o_pe_direito(monkeypatch, tmp_path):
+    """🪤 ACEITAR NÃO É USAR. O campo pode estar declarado no payload e a rota
+    jogar o valor fora: o cliente digita 2,70, recebe 200 OK e nada acontece.
+    Aqui o pé-direito informado tem que CHEGAR nos três lugares onde ele vale:
+    a resposta, o que é gravado no projeto e o aviso que a tela lê."""
+    r, reg = _informar(monkeypatch, tmp_path, area=200, pe=2.7)
+
+    assert r["pe_direito"] == 2.7, (
+        "a rota aceitou o pé-direito e devolveu %r — o valor informado foi "
+        "jogado fora no caminho" % (r["pe_direito"],))
+    gravado = [p for p in reg["patch"] if "user_pe_direito" in p]
+    assert gravado and gravado[0]["user_pe_direito"] == 2.7, (
+        "o pé-direito não foi gravado por `_projeto_patch` (veio %r) — some no "
+        "próximo reprocesso e a pintura desaparece de novo" % (reg["patch"],))
+    avisos = " | ".join(reg["update"][0]["warnings"]) if reg["update"] else ""
+    assert "Pé-direito de 2,70 m" in avisos.replace(".", ","), (
+        "o pé-direito informado não virou aviso no projeto — a trava da tela "
+        "lê essa frase e o convite passa a aparecer pra quem já informou. "
+        "Avisos escritos: %r" % (avisos,))
+
+
+def test_area_deixou_de_ser_obrigatoria(monkeypatch, tmp_path):
+    """Informar SÓ o pé-direito tem que passar.
+
+    🪤 A versão antiga procurava a string `"Informe a área total (m²) ou o
+    pé-direito (m)."` no fonte. Ela continua lá mesmo quando o pé-direito é
+    descartado antes da validação — e aí é justamente ESSA mensagem que o
+    cliente leva na cara, com o guarda verde."""
+    r, _ = _informar(monkeypatch, tmp_path, area=0, pe=2.7)
+    assert r["status"] == "ok" and r["pe_direito"] == 2.7, (
+        "quem informa só o pé-direito não conseguiu concluir: %r" % (r,))
+
+
+def test_so_a_area_tambem_continua_passando(monkeypatch, tmp_path):
+    """Controle do guarda de cima: a porta velha (só área) não pode fechar."""
+    r, _ = _informar(monkeypatch, tmp_path, area=200, pe=0,
+                     proj=dict(_projeto_com_area_medida(), total_area=0,
+                               total_area_source=""))
+    assert r["status"] == "ok" and r["area"] == 200
+
+
+def test_vazio_dos_dois_lados_continua_recusado(monkeypatch, tmp_path):
+    """🚨 CONTROLE POSITIVO. Sem isto, um guarda que só exige 200 OK ficaria
+    verde se a validação inteira sumisse."""
+    _bancada(monkeypatch, tmp_path)
+    with pytest.raises(main.HTTPException) as e:
+        main.inform_project_area(
+            JOB, main.InformAreaPayload(area=0, pe_direito=0), request=None)
+    assert e.value.status_code == 400
 
 
 def test_pe_direito_fora_da_faixa_e_recusado():
@@ -77,30 +223,61 @@ def test_pe_direito_fora_da_faixa_e_recusado():
         "a faixa do pé-direito sumiu — 27 m viraria pintura 10× maior")
 
 
-def test_a_derivacao_da_pintura_e_CHAMADA_na_rota():
+def test_a_derivacao_da_pintura_e_CHAMADA_na_rota(monkeypatch, tmp_path):
     """🪤 Guarda de CALL SITE. A derivação já existia e essa rota nunca a
-    chamava — era exatamente o buraco."""
-    i_rota = _MAIN.find("def inform_project_area")
-    assert i_rota > 0, "a rota sumiu"
-    trecho = _MAIN[i_rota:i_rota + 9000]
-    assert "_derive_pintura_pe_direito(items" in trecho, (
-        "a rota salva o pé-direito e NÃO deriva a pintura — o cliente informa "
-        "e a linha continua em branco, que é o defeito de origem")
+    chamava — era exatamente o buraco.
+
+    🚨 A versão antiga só conferia que `_derive_pintura_pe_direito(items` estava
+    ESCRITO no trecho da rota. Basta o `if _pd_efetivo > 0:` ficar falso (o
+    pé-direito descartado antes) pra chamada virar código morto: o guarda segue
+    verde e a rota volta a salvar deixando a linha em branco. Agora a prova é a
+    LINHA: 100 m de parede × 2,70 m × 2 faces = 540 m².
+    """
+    r, reg = _informar(monkeypatch, tmp_path, area=200, pe=2.7)
+
+    assert r["pintura_derivada"] == 1, (
+        "a rota não derivou a pintura (pintura_derivada=%r) — o cliente "
+        "informa o pé-direito e a linha continua em branco, que é o defeito "
+        "de origem" % (r["pintura_derivada"],))
+    pintura = _item(reg["persist"][0], "pintura")
+    assert abs(pintura.quantity - 540.0) < 1.0, (
+        "a linha de pintura foi regravada com %r m² — esperava 540 m² "
+        "(100 m de parede × 2,70 m × 2 faces)" % (pintura.quantity,))
+    # 🚫 Regra nº1: conta escrita e nunca 'confirmado'.
+    assert str(getattr(pintura.confidence, "value", pintura.confidence)) == "estimado"
+    assert "2.70" in (pintura.observations or "") or "2,70" in (pintura.observations or ""), (
+        "a observação não mostra a conta com o pé-direito informado: %r"
+        % (pintura.observations,))
+    # E a mesma linha tem que chegar na PLANILHA, não só no banco.
+    assert abs(_item(reg["planilha"][0][1], "pintura").quantity - 540.0) < 1.0
 
 
-def test_informar_SO_o_pe_direito_nao_apaga_a_area_medida():
+def test_informar_SO_o_pe_direito_nao_apaga_a_area_medida(monkeypatch, tmp_path):
     """🚨 Regra nº1: trocar medição por rótulo de estimativa sem pedir.
 
     Se `area` vem 0, a área que o projeto já tinha não pode virar 0 nem ser
     marcada como 'informado por você'.
+
+    🪤 A versão antiga procurava três âncoras no fonte (`_area_ja_tinha`,
+    `if area > 0:`, `pd.total_area_source = "informado"`). Todas continuam na
+    janela mesmo depois de trocar o `else` por `= "informado"` e o
+    `total_area=(area or _area_ja_tinha)` por `total_area=area`: a área MEDIDA
+    pela planta era zerada e carimbada "informado por você", com o guarda verde.
+    Agora a prova é o ProjectData que vai pra CAPA da planilha entregue.
     """
-    i = _MAIN.find("def inform_project_area")
-    t = _MAIN[i:i + 9000]
-    assert "_area_ja_tinha" in t, (
-        "a área anterior não é preservada quando vem só o pé-direito")
-    assert 'if area > 0:' in t and 'pd.total_area_source = "informado"' in t, (
-        "a fonte da área é carimbada 'informado' mesmo quando o cliente não "
-        "informou área nenhuma")
+    _, reg = _informar(monkeypatch, tmp_path, area=0, pe=2.7)
+    pd, _itens = reg["planilha"][0]
+
+    assert pd.total_area == 300.0, (
+        "a área que a planta mediu virou %r na capa da planilha só porque o "
+        "cliente informou a altura" % (pd.total_area,))
+    assert pd.total_area_source != "informado", (
+        "área MEDIDA carimbada 'informado por você' sem o cliente ter "
+        "informado área nenhuma — regra dura nº1")
+    assert pd.total_area_source == "medido", (
+        "a procedência da área medida foi perdida: %r" % (pd.total_area_source,))
+    assert "total_area" not in (reg["update"][0] if reg["update"] else {}), (
+        "a rota regravou `total_area` num fluxo onde o cliente não informou área")
 
 
 def test_o_pe_direito_e_PERSISTIDO_no_projeto():

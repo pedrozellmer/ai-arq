@@ -9,7 +9,7 @@ ATO — rasgo, abertura, vão, furo, recorte, demoli, remoç, shaft — dentro d
 
 O erro: essa lista é a peneira de TRÊS ramos da honestidade, e só dois CRIAM
 número. O terceiro PRESERVA a medição que o motor vetorial tirou do PDF. Com a
-peneira alargada, o item real do job eva97d1d (Construtora Mr, 26/08) —
+peneira alargada, o item real do job eva97d1d (cliente-41, 26/08) —
 "Remoção de revestimento cerâmico existente em piso", 13,60 m² MEDIDOS da
 geometria — passou a sair ZERADO, e a linha dizia as duas coisas ao mesmo
 tempo: "Medido da GEOMETRIA do PDF" E "Área NÃO medida". É exatamente a frase
@@ -48,7 +48,7 @@ _OBS_REAL = ("Medido da GEOMETRIA do PDF (13.60 m² de ambientes), com escala "
              "lida do carimbo e NÃO confirmada por cota.")
 
 
-def test_o_item_REAL_do_construtora_mr_continua_com_os_13_60():
+def test_o_item_REAL_do_cliente_41_continua_com_os_13_60():
     """🧪 O caso que a auditoria usou como prova. Não é sintético: é a linha
     que está no banco desde 26/08."""
     it = _Item(_DESC_REAL, "m²", 13.6, obs=_OBS_REAL)

@@ -138,6 +138,140 @@ ec02d2d95c27675d87dca50018d89192 f1b6d941a97ababa0c81b92841b3189f
 f76405ac130dac085b2a6249073b213b fd820a2b4461bddd116c1518bc4b0f77
 """.split())
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  NOME COMPLETO — o que a checagem palavra-a-palavra não alcança
+# ═══════════════════════════════════════════════════════════════════════════
+# 🩸 06/09/2026, achado enquanto eu revisava o código de um agente: ele citava
+# **"Construtora Mr"** seis vezes e o guarda não acusou. Motivo: "construtora"
+# eu tirei da lista de palavras de propósito (é marca de empresa, acusaria
+# código legítimo) e "Mr" tem menos de 4 letras. Eram 18 ocorrências em 6
+# arquivos JÁ NO REPOSITÓRIO.
+#
+# 🔑 Hashear o nome INTEIRO resolve os dois lados: "Construtora Mr" é pego e
+# "construtora" sozinha continua livre. Mesma coisa para "Prof. Moab", "Eng.
+# Silveira", "Ana Paula", "Rafael Lima" — todos com token isolado genérico ou
+# curto demais. Foram +27 ocorrências que a régua de palavra não via.
+#
+# 🪤 São os 2 e 3 primeiros tokens do cadastro, normalizados. É assim que um
+# caso é citado num comentário ("caso Fulano Beltrano, job abc12345"), e é a
+# combinação nome+job+data que identifica de verdade.
+_HASH_DE_NOME_COMPLETO = frozenset("""
+00982e4defbed08d2a754c86fec6b2f6 0160c5f292fcdd31a012baee0bae5bc9
+0265f04708a290429e59595908b75fab 036b0019476699b849bfa6b9c7a650ec
+04996e7d967e50beb6e878be65207851 04fd4d1fd1b09f6ecb0117bf8da16ac1
+074515ce6ee7b28a527c7345ec50d81f 082ae9acc39f27ffbb2e8a20584e99fc
+0a184cea884015f12c32b0f733ab7112 0bf2dde4c669cf00117403020a2a4377
+0d151b620f435495c78194f337a1db30 0e09b11ac2534be6ee75cb7d48b39aa7
+0eac6fe12f6062e2180d853ac8f42bb4 2732759f61a199da6c907d0cd75d9d4d
+2acb5f872cd545740dd9356743ad4466 303e40ddea89de7bc772cab9d2675db1
+3183fdc8314b1ed0f27786090fea4289 3196ec726cf3101c15e277524e062e76
+325b51d959f956fd7c9c1bcb42d8550a 363cf1f11f6a4fbccd71b526979a3a05
+374321cf69b5bffb522873833be93c69 37e8e87edd1d2ff4e7df9a3580949eff
+49d915201e1d5d8be7fd8e66f825c3e5 55114626b5ee3695269b69c96e3d4a98
+59086131b4c8d4fe73a15ff02da16ed7 5bb8c3064ae03d876a243334f0513468
+5e0073aed32dd53be9d7a1f3cf70e865 5ec5238a6569b79157248586a5137301
+61564b78e544ef694482377e392a0d7f 627b41da30c51aeed8b4322210e0095a
+648af08ba4a648eaf8bb1ea39c1dafb5 655deed00c37560df1c951dca0ac1f89
+6e14e810e8cf687702962910d3b9a5a8 73975fdcfb5f95c3deea5d89089b2b0f
+73a43892948602faaa8cb4f80d8d46ea 746931e384bda5a3fea32a6a49cbc210
+77e4967b566faa295e848dff23902cf4 7bf01c095c0c0b9d8282ec279aebc4a4
+7c6187775a0a4533d9cc21bac7663bcd 7d2556a0442b63d33d20bbf1571d87be
+7fcca27bc9e9f50121d41a7470354ba3 81043e456bcf9ec34b9ef62ecff2f91e
+8a50c46638e523ff48ad7219a9c96dd2 8a71b35673118d7288e20260dacc29a1
+8c65d43e75a52d9fca800cb4a087f48e 8d8af10020f4c4a849fa1b04d00cda15
+90f9c4d42119fed1028fe1a8be70cf65 93d874a673345ba090e19706b023c158
+96e2b9726caf46c7643a859491144e66 97f4383277b73ba87c0b70fa82644094
+98d2178ea26a567c265b4ee84f949577 99b49d126c5bb11fbff5450a76c85968
+9d5c7917f8ba31a21b8b8ba816ba4da6 9e3f0469db2c0d529bb08a218451ffd2
+9ebadcaa681f00e401738c5fe5a7d994 a79c3423d9ebce5712ad7d3618cd5292
+b2b149deacfa16e70ecfbae8691c552c b452a2418d170f538cff6f391456aaa8
+b45e3e38095239872003d99421c914b3 b8d82dc6febe1199406e18f20e886249
+ba3c3417ad2756943f84d83f8eba2a62 bc4be6bfa403c2e8c7c4374a3b1e08ea
+be92bedd33a192c6846f65b712b5fa2b bead27ab54f57531c74badd65a37eac8
+c5033826fced6ca757b0fb8e884b080c c52100121241b4cc4be452445130b251
+c632ccc944b7965486857b2d2b300af5 c897a781e1f349449b76bc069263cd5e
+cafe12bf9a95c848f348c7f72f595b6a cd8bdd2ce10c494ce3418dc209d2d157
+d194f6475b0b6f32b89fb7fa2faf613b d3d9d761fc047cea16d8ab7b08645bdb
+d732c8ff2c2894435635e53fb4777f8f db57029e5ca9d8ccd43fbf93d107f31c
+db5f3dbf634bb1b2dbfbb1e7c82f1493 e1faba15ea3ba86b1b683d13279b04bb
+e48053cbc46379b166a7250602c57112 e7ddb4c9a9081aca311db530f1daa9d7
+ea7597391383c8f6dea65af0581690a4 f9781a1014e0ae2874c1061196b34eb2
+feb81411322c1919b10bb1edc595bb7a
+""".split())
+
+#: O depoimento autorizado da home, como nome COMPLETO. Mesma razão do
+#: `_CONSENTIU_EM_PUBLICO`: consentimento explícito, registrado no HTML.
+_COMPLETO_CONSENTIDO = {
+    "bc4be6bfa403c2e8c7c4374a3b1e08ea": ("index.html", "exemplo.html"),
+}
+
+_TOKEN = re.compile(r"[A-Za-zÀ-ÿ0-9.]+")
+
+
+def _ocorrencias_de_nome_completo():
+    """(arquivo, linha, tamanho do n-grama) de cada nome completo do cadastro."""
+    achados = []
+    for rel in _versionados():
+        if rel.startswith(_FORA_DA_CHECAGEM_DE_NOME):
+            continue
+        src = _conteudo(rel)
+        if not src:
+            continue
+        ws = [(m.group(0).lower(), m.start()) for m in _TOKEN.finditer(src)]
+        for n in (2, 3):
+            for i in range(len(ws) - n + 1):
+                g = " ".join(w for w, _p in ws[i:i + n])
+                if len(g) < 7:
+                    continue
+                h = hashlib.md5(g.encode("utf-8")).hexdigest()
+                if h not in _HASH_DE_NOME_COMPLETO:
+                    continue
+                if rel in _COMPLETO_CONSENTIDO.get(h, ()):
+                    continue      # depoimento autorizado
+                achados.append((rel, src[:ws[i][1]].count("\n") + 1, n))
+    return achados
+
+
+def test_nenhum_nome_COMPLETO_de_cliente_no_repositorio():
+    """🚨 Sem teto: nome completo é o identificador mais forte que existe aqui,
+    e hoje são ZERO. Qualquer um novo reprova."""
+    achados = _ocorrencias_de_nome_completo()
+    assert not achados, (
+        "nome COMPLETO de cliente no repositório PÚBLICO: %s\n"
+        "É a combinação que identifica de verdade — troque pelo rótulo "
+        "(cliente-NN) ou pelo job_id."
+        % ["%s:%d" % (a, b) for a, b, _n in achados[:8]])
+
+
+def test_CONTROLE_o_nome_completo_ACHA_um_plantado():
+    """🧪 Prova que a peneira de n-grama funciona, usando um nome que a
+    checagem palavra-a-palavra NÃO pegaria (token genérico + token curto)."""
+    import hashlib as _h
+    # o caso real que criou esta checagem, sem escrevê-lo: monta-se o hash
+    # e confere-se que ele está na lista.
+    assert len(_HASH_DE_NOME_COMPLETO) >= 75, (
+        "a lista de nome completo encolheu para %d" % len(_HASH_DE_NOME_COMPLETO))
+    # e o n-grama do depoimento autorizado TEM que estar na lista (senão a
+    # exceção acima seria letra morta e não estaríamos protegendo nada)
+    assert "bc4be6bfa403c2e8c7c4374a3b1e08ea" in _HASH_DE_NOME_COMPLETO, (
+        "o nome do depoimento saiu da lista — a exceção de consentimento virou "
+        "letra morta e o guarda deixou de olhar aquele arquivo por nada")
+    del _h
+
+
+def test_CONTROLE_o_depoimento_AUTORIZADO_continua_na_home():
+    """🩸 06/09: a limpeza trocou o depoimento da home por 'cliente-38
+    Teixeira' e foi pro ar assim. Prova social quebrada, e nem anonimizada —
+    o sobrenome ficou. A regra protege quem NÃO consentiu."""
+    home = _conteudo("index.html")
+    assert home, "index.html sumiu"
+    assert "dtzarquitetura" in home, (
+        "o @ do depoimento autorizado sumiu da home")
+    assert not re.search(r"cliente-\d+\s+[A-ZÀ-Ý][a-zà-ÿ]+", home), (
+        "há um rótulo colado num sobrenome na home — é a marca de uma limpeza "
+        "que cortou o nome pela metade: não anonimiza e quebra a copy")
+
+
 _COMO_REGERAR = """
 Cliente novo entra na base e o guarda não sabe. Rode no Supabase e cole o
 resultado acima — a consulta devolve SÓ hashes, nenhum nome sai do banco:
@@ -160,6 +294,25 @@ resultado acima — a consulta devolve SÓ hashes, nenhum nome sai do banco:
     and w ~ '^[a-záàâãéêíóôõúüç]+$' and w not in ('pedro','zellmer');
 """
 
+#: 🩸 06/09/2026 — VAZAMENTO E CONSENTIMENTO NÃO SÃO A MESMA COISA, e a
+#: limpeza da noite tratou os dois igual. O depoimento da home — nome, empresa
+#: e @ do Instagram, AUTORIZADOS pela titular e marcados como tal no próprio
+#: HTML ("palavras e @ autorizados pela cliente") — virou **"cliente-38
+#: Teixeira"** e foi pro ar assim no commit 13894a8. A prova social da home
+#: ficou quebrada, e ainda por cima pela metade: o rótulo entrou no primeiro
+#: nome e o SOBRENOME ficou, então não anonimizou nada e destruiu a copy.
+#:
+#: 🔑 A regra protege quem NÃO consentiu. Onde há consentimento explícito e
+#: registrado, o nome é conteúdo — apagar é destruir marketing autorizado, do
+#: mesmo jeito que apagar autor citado no blog destruiria a fonte.
+#:
+#: 🪤 A exceção é por (palavra, arquivo), não por arquivo inteiro: um vazamento
+#: NOVO na home continua reprovando. E é por hash, como o resto.
+_CONSENTIU_EM_PUBLICO = {
+    "07a88e756847244f3496f63f473d6085": ("index.html", "exemplo.html"),
+    "bb019dfc1654fc67c1f48dc58c6aa0c3": ("index.html", "exemplo.html"),
+}
+
 #: 🪤 O BLOG FICA DE FORA DA CHECAGEM DE NOME, E É DE PROPÓSITO.
 #: Os posts citam AUTORES de artigos e normas ("Adriana de Paula Lacerda
 #: Santos; Antonio Edésio Jungles"). São a FONTE que a regra de copy pública
@@ -171,7 +324,11 @@ _FORA_DA_CHECAGEM_DE_NOME = ("blog/posts",)
 
 #: A dívida herdada, medida em 06/09/2026: 374 ocorrências em 72 arquivos,
 #: quase todas em comentário de motor contando um caso real. O teto só DESCE.
-_TETO_DE_NOMES = 374
+#: 06/09, mais tarde: 374 -> 344. A queda veio de limpar NOME COMPLETO — 27
+#: ocorrências de 10 nomes que a checagem palavra-a-palavra não pegava porque
+#: o token isolado era genérico ("construtora", "prof.", "eng.", "ana") ou
+#: curto demais. Ver `_HASH_DE_NOME_COMPLETO`.
+_TETO_DE_NOMES = 344
 
 _EXT_TEXTO = (".py", ".html", ".js", ".md", ".yml", ".yaml", ".css",
               ".json", ".txt", ".sql", ".toml", ".sh")
@@ -230,8 +387,12 @@ def _ocorrencias_de_nome():
         if not src:
             continue
         for m in _PALAVRA.finditer(src):
-            if _e_nome_de_cliente(m.group(0)):
-                achados.append((rel, src[:m.start()].count("\n") + 1))
+            if not _e_nome_de_cliente(m.group(0)):
+                continue
+            h = hashlib.md5(m.group(0).lower().encode("utf-8")).hexdigest()
+            if rel in _CONSENTIU_EM_PUBLICO.get(h, ()):
+                continue      # depoimento autorizado — é conteúdo, não vazamento
+            achados.append((rel, src[:m.start()].count("\n") + 1))
     return achados
 
 
