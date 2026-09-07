@@ -28560,22 +28560,58 @@ def _supabase_storage_delete(bucket: str, object_path: str) -> bool:
         return False
 
 
-def _supabase_storage_list(bucket: str, prefix: str) -> list:
-    """Lista objetos no bucket com o prefix dado. Retorna lista de nomes."""
+_STORAGE_LIST_TETO = 500
+
+
+def _supabase_storage_list_ou_falha(bucket: str, prefix: str):
+    """(deu_certo, [nomes]) — a versão HONESTA da listagem.
+
+    🩸 07/09/2026 — `_supabase_storage_list` devolve `[]` tanto pra "a pasta
+    está vazia" quanto pra "não consegui listar". No cleanup de 90 dias isso é
+    caro: lista falhou → 0 arquivos pra apagar → o projeto é marcado como
+    ARQUIVADO assim mesmo → a RPC `list_expired_projects` filtra arquivado →
+    **o cron nunca mais volta nele** e os arquivos ficam no Storage pra sempre.
+    Medido hoje: 31 arquivos de 18 projetos, 65,7 MB, todos de projeto já
+    arquivado, todos com mais de 90 dias. A política de privacidade promete
+    apagar; não apagou.
+
+    🪤 O teto de 500 também mentia calado: projeto com mais de 500 arquivos
+    ficava com o resto pra trás e era arquivado como se estivesse limpo. Agora
+    lote cheio conta como falha — melhor voltar amanhã do que dar por feito.
+    """
     import urllib.request, json as _j
     try:
         url = f"{SUPABASE_URL}/storage/v1/object/list/{bucket}"
-        body = _j.dumps({"prefix": prefix, "limit": 500}).encode("utf-8")
+        body = _j.dumps({"prefix": prefix, "limit": _STORAGE_LIST_TETO}).encode("utf-8")
         req = urllib.request.Request(url, data=body, method="POST")
         req.add_header("apikey", SUPABASE_KEY)
         req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
         req.add_header("Content-Type", "application/json")
         resp = urllib.request.urlopen(req, timeout=15)
         files = _j.loads(resp.read().decode("utf-8"))
-        return [f.get("name", "") for f in files if f.get("name")]
+        nomes = [f.get("name", "") for f in files if f.get("name")]
+        if len(files) >= _STORAGE_LIST_TETO:
+            _log_error("storage:list-lote-cheio",
+                       "%s/%s devolveu o teto de %d — a listagem está incompleta"
+                       % (bucket, prefix, _STORAGE_LIST_TETO), None, severity="warning")
+            return False, nomes
+        return True, nomes
     except Exception as e:
         print(f"[cleanup] list {bucket}/{prefix}: {e}")
-        return []
+        _log_error("storage:list-falhou",
+                   "%s ao listar %s/%s" % (type(e).__name__, bucket, prefix),
+                   None, severity="warning")
+        return False, []
+
+
+def _supabase_storage_list(bucket: str, prefix: str) -> list:
+    """Lista objetos no bucket com o prefix dado. Retorna lista de nomes.
+
+    🪤 Não distingue vazio de falha — quem PRECISA da diferença (o cleanup de
+    90 dias) chama `_supabase_storage_list_ou_falha`. Mantida pros 5 chamadores
+    que só querem os nomes e já tratam lista vazia.
+    """
+    return _supabase_storage_list_ou_falha(bucket, prefix)[1]
 
 
 @app.get("/api/admin/cleanup-secret-check")
@@ -28675,17 +28711,38 @@ def cleanup_old_projects(request: Request):
             continue
 
         # 2a) Arquivos originais (bucket aiarq-pranchas/{job_id}/)
-        pranchas_list = _supabase_storage_list(PRANCHAS_BUCKET, f"{job_id}/")
+        listou, pranchas_list = _supabase_storage_list_ou_falha(PRANCHAS_BUCKET, f"{job_id}/")
         files_ok = 0
+        falhas = 0 if listou else 1     # não listei = não sei o que ficou pra trás
         for obj in pranchas_list:
             # list retorna "nome.pdf" (sem prefix). Delete precisa do path completo.
             path = f"{job_id}/{obj}"
             if _supabase_storage_delete(PRANCHAS_BUCKET, path):
                 files_ok += 1
+            else:
+                falhas += 1
 
         # 2b) Planilha (bucket aiarq-planilhas/{job_id}.xlsx)
         if _supabase_storage_delete(PLANILHAS_BUCKET, f"{job_id}.xlsx"):
             files_ok += 1
+        else:
+            falhas += 1
+
+        # 🚨 2b-bis) ARQUIVAR SÓ QUANDO APAGOU TUDO.
+        # Esta era a causa raiz do lixo de 65,7 MB: o projeto era marcado como
+        # arquivado mesmo com a exclusão falhando, e a RPC `list_expired_projects`
+        # filtra `archived = false` — ou seja, o cron NUNCA MAIS volta nele. Um
+        # erro de uma noite virava resíduo permanente. Agora o projeto fica na
+        # fila e a próxima rodada tenta de novo; o rastro fica no error_log
+        # (`storage:delete-falhou`) e aqui no cleanup_log.
+        if falhas:
+            stats["errors"].append({"job_id": job_id,
+                                    "error": f"{falhas} exclusão(ões) falharam — NÃO arquivei, "
+                                             f"o projeto volta na fila amanhã"})
+            stats["jobs"].append({"job_id": job_id, "files_deleted": files_ok,
+                                  "skip": f"{falhas} falha(s) — fica na fila"})
+            stats["files_deleted"] += files_ok
+            continue
 
         # 2c) Marcar projeto como archived
         try:
@@ -28702,6 +28759,46 @@ def cleanup_old_projects(request: Request):
         except Exception as e:
             stats["errors"].append({"job_id": job_id, "error": str(e)[:200]})
 
+    # ── 3) VARREDURA DE RESGATE ────────────────────────────────────────────
+    # 🩸 O passo 2 só alcança projeto NÃO arquivado. Todo arquivo que ficou pra
+    # trás numa noite em que a exclusão falhou some da vista pra sempre, porque
+    # o projeto já foi marcado. Medido em 07/09: 31 arquivos, 18 projetos,
+    # 65,7 MB, com mais de 90 dias — promessa de privacidade descumprida em
+    # silêncio. A RPC olha o STORAGE (não a lista de projetos) e devolve
+    # exatamente o que sobrou; fica vazia sozinha quando não há mais nada.
+    stats["resgatados"] = 0
+    stats["resgate_falhou"] = 0
+    try:
+        _url_r = f"{SUPABASE_URL}/rest/v1/rpc/list_expired_storage_leftovers"
+        _body_r = _j.dumps({"p_days": days, "p_limit": 200}).encode("utf-8")
+        _req_r = urllib.request.Request(_url_r, data=_body_r, method="POST")
+        _req_r.add_header("apikey", SUPABASE_KEY)
+        _req_r.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
+        _req_r.add_header("Content-Type", "application/json")
+        _sobras = _j.loads(urllib.request.urlopen(_req_r, timeout=20).read().decode("utf-8"))
+    except Exception as _e:
+        _sobras = None
+        _log_error("cleanup:resgate-nao-listou",
+                   "%s — não deu pra ver o que sobrou no storage" % type(_e).__name__,
+                   None, severity="warning")
+    for _o in (_sobras or []):
+        _b = str(_o.get("bucket_id") or "")
+        _n = str(_o.get("object_name") or "")
+        if _b not in (PRANCHAS_BUCKET, PLANILHAS_BUCKET) or not _n:
+            continue        # a RPC já filtra, mas o cliente não confia de graça
+        if _supabase_storage_delete(_b, _n):
+            stats["resgatados"] += 1
+        else:
+            stats["resgate_falhou"] += 1
+    # sem teto silencioso: o que passou de 200 fica escrito e sai amanhã
+    if _sobras is not None and len(_sobras) >= 200:
+        _log_error("cleanup:resgate-lote-cheio",
+                   "200 sobras nesta rodada — ainda há mais pra apagar amanhã",
+                   None, severity="warning")
+    if stats["resgatados"] or stats["resgate_falhou"]:
+        _supa_log(f"CLEANUP resgate: {stats['resgatados']} apagados, "
+                  f"{stats['resgate_falhou']} falharam")
+
     _supa_log(f"CLEANUP archived={stats['archived']} files={stats['files_deleted']} "
               f"errors={len(stats['errors'])}")
     print(f"[cleanup] {stats['archived']} projetos arquivados, "
@@ -28715,7 +28812,12 @@ def cleanup_old_projects(request: Request):
         "archived": stats["archived"],
         "files_deleted": stats["files_deleted"],
         "errors_count": len(stats["errors"]),
-        "details": {"jobs": stats["jobs"][:50]},  # limita tamanho
+        # o resgate entra no `details` porque `cleanup_log` não tem coluna
+        # própria — e sem isso a rodada que só resgatou pareceria uma noite
+        # em que nada aconteceu.
+        "details": {"jobs": stats["jobs"][:50],
+                    "resgatados": stats["resgatados"],
+                    "resgate_falhou": stats["resgate_falhou"]},
     })
 
     return stats
