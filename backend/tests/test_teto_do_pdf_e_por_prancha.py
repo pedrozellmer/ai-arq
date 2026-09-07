@@ -247,7 +247,12 @@ def test_o_caller_avisa_o_teto_de_que_faltou_prancha():
         "o motor sabe que uma prancha falhou e não conta isso pro teto")
 
 
-def test_CONTROLE_a_checagem_de_chamada_sabe_REPROVAR():
+def test_CONTROLE_o_comentario_NAO_conta_como_chamada():
+    """🪤 07/09/2026: esta função tinha o MESMO nome da de cima. Em Python a
+    segunda apaga a primeira em silêncio — o controle do aviso de teto nunca
+    rodou. É o incidente de 20/08 ("duas funções com o mesmo nome"), desta vez
+    dentro da bancada. Quem pegou foi o pyflakes, que a casa roda antes do push.
+    """
     falso = "            # medicao_incompleta=bool(_pdfvec_falhas_flag)"
     limpo = "\n".join(l for l in falso.splitlines()
                       if not l.lstrip().startswith("#"))

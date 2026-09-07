@@ -29,11 +29,20 @@ a suspeita de quem lê.
 """
 import io
 import os
-
-import dwg_extractor
-import dxf_slim
+import sys
+import textwrap
+import types
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BACKEND)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import dwg_extractor                                       # noqa: E402
+import dxf_slim                                            # noqa: E402
+
+from _corpo import fonte                                   # noqa: E402
+import main                                                # noqa: E402
+
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 
 _GATILHO = "grande demais pro nosso limite de memória"
@@ -46,14 +55,55 @@ def _bloco_do_aviso():
     return _FONTE[i:j]
 
 
-def test_o_conselho_olha_os_erros_de_TAMANHO():
-    """🩸 O ramo que faltava."""
-    bloco = _bloco_do_aviso()
-    assert _GATILHO in bloco, (
-        "o aviso de falha parcial voltou a ignorar as pranchas recusadas por "
-        "TAMANHO — elas caem no 'reprocessar é grátis', que pra elas é falso")
-    assert "PURGE" in bloco, (
-        "sumiu o conselho que de fato resolve prancha grande")
+_INI_IRMAO = "        def _stem_norm(p):"
+_FIM_IRMAO = "        _pdf_stems = {_stem_norm(p) for p in (pdf_paths or [])}"
+_INI_CONSELHO = "        _dwg_com_irmao = [n for n in (dwg_failed or []) if _stem_norm(n) in _pdf_stems]"
+_FIM_CONSELHO = "            project_data.warnings = (getattr(project_data, 'warnings', None) or []) + [_aviso_cob]"
+
+
+def _trecho(inicio, fim, arquivo="main.py"):
+    """O trecho REAL de produção, do `inicio` até o fim do `fim`, pronto pra rodar.
+
+    🪤 Recorte por ÂNCORA e não por número de linha: a linha muda a cada commit,
+    a âncora só muda quando o código muda. E as duas âncoras têm que ser únicas —
+    senão o teste roda um pedaço que ninguém escolheu.
+    """
+    src = fonte(arquivo)
+    assert src.count(inicio) == 1, "âncora de início não é única: %r" % inicio[:60]
+    a = src.index(inicio)
+    assert src.count(fim, a) >= 1, "âncora de fim não achada: %r" % fim[:60]
+    return textwrap.dedent(src[a:src.index(fim, a) + len(fim)])
+
+
+def _conselho(sheet_errors=(), dxf_errors=(), dwg_failed=(), pdf_paths=()):
+    """RODA o código de produção que monta o aviso de falha parcial e devolve
+    os avisos que o cliente leria — inclusive o `_stem_norm`/`_pdf_stems` de
+    verdade, que é onde mora a regra do 'DWG com irmão em PDF'."""
+    pd = types.SimpleNamespace(warnings=[])
+    ns = {"os": os, "sheet_errors": list(sheet_errors), "dxf_errors": list(dxf_errors),
+          "dwg_failed": list(dwg_failed), "pdf_paths": list(pdf_paths),
+          "_nome_prancha_bonito": main._nome_prancha_bonito, "project_data": pd}
+    codigo = _trecho(_INI_IRMAO, _FIM_IRMAO) + "\n" + _trecho(_INI_CONSELHO, _FIM_CONSELHO)
+    exec(compile(codigo, "conselho-parcial", "exec"), ns)
+    return pd.warnings
+
+
+_GRANDE = ("PRANCHA_A0.dxf: esse desenho é grande demais pro nosso limite de "
+           "memória (412 MB)")
+_SOLUCO = "PRANCHA_B.pdf: a IA não respondeu essa prancha"
+
+
+def test_prancha_grande_demais_NAO_recebe_conselho_de_reprocessar():
+    """🩸 Caso Thalison pela outra porta: reprocessar prancha recusada por
+    TAMANHO dá exatamente o mesmo. O guarda antigo procurava a palavra no fonte
+    do bloco — apagar o filtro (`if False and "grande demais…" in str(e)`)
+    deixava a palavra lá (ela mora na própria linha do filtro) e o cliente
+    voltava a ler 'Reprocessar é grátis e pode completar'."""
+    (aviso,) = _conselho(dxf_errors=[_GRANDE])
+    assert "PURGE" in aviso, "sumiu o conselho que de fato resolve prancha grande: %r" % aviso
+    assert "Reprocessar não resolve" in aviso
+    assert "Reprocessar é grátis" not in aviso, (
+        "o cliente de prancha grande demais recebeu o conselho FALSO: %r" % aviso)
 
 
 def test_CONTROLE_o_conselho_de_reprocessar_continua_existindo():

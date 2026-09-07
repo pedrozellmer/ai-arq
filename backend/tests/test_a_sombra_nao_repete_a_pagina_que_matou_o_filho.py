@@ -20,6 +20,7 @@ test_sombras_nao_perdem_evidencia segue verde); página por tempo NÃO é pulada
 import json
 import os
 import sys
+import textwrap
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
@@ -99,13 +100,79 @@ def test_CONTROLE_shadow_measure_async_repassa_o_pular(monkeypatch, tmp_path):
     assert recebido["args"][4] == {(a, 0)}, "o conjunto a pular não chegou na thread"
 
 
-# ── o pai: só memória entra no pular; as falhas carregam pdf_path/pagina ──
-def test_o_pai_so_pula_processo_e_memoria_NUNCA_tempo():
-    i = _SRC_MAIN.find("shadow_measure_async(page_units, job_id, api_key, _log_error, pular=_pular_sombra)")
-    assert i > 0, "a sombra voltou a ser chamada sem `pular`"
-    trecho = _SRC_MAIN[max(0, i - 900):i]
-    assert 'in ("processo", "memoria")' in trecho, "o filtro do pular tem que ser só memória (processo/memoria)"
-    assert '"tempo"' not in trecho, "página perdida por TEMPO tem que continuar indo à sombra"
+_INI_SOMBRA = "            from pdf_vector import shadow_measure_async"
+_FIM_SOMBRA = "        except Exception as _sve:"
+
+
+def _chamar_a_sombra(monkeypatch, falhas):
+    """RODA o código de produção que decide o que a sombra NÃO vai refazer, e
+    devolve exatamente o que chegou em `shadow_measure_async`."""
+    src = fonte("main.py")
+    assert src.count(_INI_SOMBRA) == 1 and src.count(_FIM_SOMBRA) == 1
+    a = src.index(_INI_SOMBRA)
+    codigo = textwrap.dedent(src[a:src.index(_FIM_SOMBRA, a)])
+    recebido = {}
+
+    def _falsa(*args, **kwargs):
+        recebido["args"] = args
+        recebido["kwargs"] = kwargs
+    monkeypatch.setattr(pv, "shadow_measure_async", _falsa)
+    ns = {"page_units": [("/tmp/a.pdf", "a.pdf", "x", 0)], "job_id": "job-teste",
+          "api_key": "chave", "_log_error": lambda *a, **k: None,
+          "_pdfvec_falhas": list(falhas)}
+    exec(compile(codigo, "sombra-pai", "exec"), ns)
+    assert recebido, "a sombra nem foi chamada"
+    return recebido, ns.get("_pular_sombra")
+
+
+def _falha(motivo, path="/tmp/A08.pdf", pagina=7, **extra):
+    d = {"prancha": "A08", "arquivo": "A08.pdf", "motivo": motivo, "pagina": pagina}
+    if path is not None:
+        d["pdf_path"] = path
+    d.update(extra)
+    return d
+
+
+def test_a_sombra_pula_a_pagina_que_matou_o_filho_e_SO_ela(monkeypatch):
+    """🚨 EXECUTA o bloco do pai e olha o conjunto que sai. O guarda antigo lia
+    900 caracteres do fonte antes da chamada, procurando o texto
+    `in ("processo", "memoria")` — trocar o `and f.get("pdf_path")` por `or`
+    deixava o texto idêntico e passava a pular também a página perdida por
+    TEMPO, que é justamente a única que a sombra ainda consegue medir."""
+    recebido, pular = _chamar_a_sombra(monkeypatch, [
+        _falha("processo", "/tmp/A08.pdf", 7),
+        _falha("memoria", "/tmp/A09.pdf", 2),
+        _falha("tempo", "/tmp/A10.pdf", 3),
+        _falha("JSONDecodeError", "/tmp/A11.pdf", 0),
+    ])
+    assert pular == {("/tmp/A08.pdf", 7), ("/tmp/A09.pdf", 2)}, (
+        "o conjunto a pular saiu %r. Página perdida por TEMPO tem que continuar "
+        "indo à sombra — ela é hoje a única que mede além dos 75 s." % (pular,))
+    assert recebido["kwargs"].get("pular") == pular, (
+        "a sombra foi chamada SEM o `pular=` (recebeu %r / %r) — ela vai refazer, "
+        "dentro do servidor e sem teto, a página que acabou de estourar 2 GB"
+        % (recebido["args"], recebido["kwargs"]))
+
+
+def test_CONTROLE_sem_falha_de_memoria_a_sombra_mede_tudo(monkeypatch):
+    """🧪 'Vazio não é falhou': sem morte por memória, nada é pulado."""
+    recebido, pular = _chamar_a_sombra(monkeypatch, [_falha("tempo", "/tmp/A10.pdf", 3)])
+    assert pular == set()
+    assert recebido["kwargs"].get("pular") == set()
+
+
+def test_CONTROLE_job_sem_PDF_nao_derruba_o_processo(monkeypatch):
+    """🪤 `_pdfvec_falhas` só existe se o laço de PDF rodou — o `except NameError`
+    é o que segura job só-DXF."""
+    src = fonte("main.py")
+    a = src.index(_INI_SOMBRA)
+    codigo = textwrap.dedent(src[a:src.index(_FIM_SOMBRA, a)])
+    recebido = {}
+    monkeypatch.setattr(pv, "shadow_measure_async",
+                        lambda *ar, **kw: recebido.update(kwargs=kw))
+    ns = {"page_units": [], "job_id": "j", "api_key": "k", "_log_error": lambda *a, **k: None}
+    exec(compile(codigo, "sombra-pai", "exec"), ns)      # sem `_pdfvec_falhas`
+    assert recebido["kwargs"].get("pular") == set()
 
 
 def test_toda_falha_do_filho_carrega_pdf_path_e_pagina():

@@ -28,6 +28,7 @@ import sys
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import main  # noqa: E402
 
@@ -89,14 +90,53 @@ def test_o_email_NAO_promete_o_que_nao_temos():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def test_o_motor_escolhe_o_terceiro_email_quando_nao_mediu_nada():
-    """Guarda de FATO: a escolha tem que existir no process_job, ancorada em
-    `_n_med == 0` — a MESMA condição da régua de cobrança."""
-    corpo, _src = _corpo_do_process_job()
-    assert "_build_leu_sem_medir_email(" in corpo, (
-        "o terceiro e-mail existe mas o motor nunca o escolhe — texto morto")
-    assert re.search(r"elif _n_med == 0 and len\(all_items\) > 0", corpo), (
-        "a escolha deixou de ser ancorada em `_n_med == 0`, que é a mesma "
-        "régua da cobrança")
+    """Guarda de FATO, EXECUTADO: com ZERO medidos, o e-mail que SAI é o do
+    meio — nem comemoração, nem "não consegui ler seu arquivo".
+
+    🚨 06/09/2026 — a versão anterior deste guarda lia o fonte e passava com o
+    defeito aberto: bastou `elif _n_med == 0 and len(all_items) > 0 and False:`
+    pra o terceiro e-mail virar código morto. A regex casava igual, o
+    `_build_leu_sem_medir_email(` continuava no corpo, 11/11 verdes — e o
+    cliente com zero medição voltava a receber "sua planilha está pronta",
+    que é o caso visto ao vivo em 06/09.
+    """
+    from _fim_do_job import roda_ate_o_email
+    d = roda_ate_o_email(_itens_do_caso_real(), nome_projeto="guarita")
+    enviado = d["emails"][-1]
+    assert enviado["kind"] == "leu_sem_medir", (
+        "com ZERO medidos o motor mandou o e-mail %r — o do meio virou código "
+        "morto:\n%s" % (enviado["kind"], enviado["assunto"]))
+    assert "pronta" not in enviado["assunto"].lower(), (
+        "o assunto comemora uma entrega que não mediu nada: " + enviado["assunto"])
+    assert "planilha está pronta" not in enviado["html"].lower(), (
+        "o corpo comemora uma entrega que não mediu nada")
+    assert any("motor:leu-sem-medir" in l for l in d["logs"]), (
+        "a troca de e-mail aconteceu sem rastro: %r" % (d["logs"][-4:],))
+
+
+def _itens_do_caso_real():
+    """A aritmetica exata do job 40550d3e: 124 itens, ZERO medidos, 53 zerados."""
+    from models import BudgetItem, Confidence
+    return [BudgetItem(item_num="1.%d" % k, description="Servico %d" % k,
+                       unit="m²", quantity=(0.0 if k < 53 else 12.5 + k),
+                       confidence=Confidence.ESTIMADO, origem="vision_pdf")
+            for k in range(124)]
+
+
+def test_CONTROLE_quem_MEDIU_continua_recebendo_a_planilha_pronta():
+    """O outro lado, no MESMO caminho executado."""
+    from _fim_do_job import roda_ate_o_email
+    from models import BudgetItem, Confidence
+    itens = [BudgetItem(item_num="1.%d" % k, description="Servico %d" % k,
+                        unit="m²", quantity=(0.0 if k < 12 else 12.5 + k),
+                        confidence=(Confidence.CONFIRMADO if k < 88
+                                    else Confidence.ESTIMADO),
+                        origem="dxf_geom")
+             for k in range(108)]
+    d = roda_ate_o_email(itens, nome_projeto="projeto medido")
+    assert d["emails"][-1]["kind"] == "planilha_pronta", (
+        "um projeto com 88 linhas medidas recebeu %r"
+        % d["emails"][-1]["kind"])
 
 
 def test_a_irmã_de_ma_noticia_continua_INTOCADA():

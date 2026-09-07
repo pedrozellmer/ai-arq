@@ -29,11 +29,15 @@ import ast
 import io
 import os
 import sys
+import textwrap
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
+from _corpo import fonte  # noqa: E402
 from engine_rules import numero_declarado_parcial as _parcial  # noqa: E402
+from models import Confidence  # noqa: E402
 
 # ── Textos REAIS da base (05/09), integrais ────────────────────────────────
 _DEVE_DISPARAR = {
@@ -100,12 +104,50 @@ def _bloco_da_aplicacao(src):
     return src[i:src.index("# 🚨 AQUI é o fim da fila de quem rebaixa selo", i)]
 
 
-def test_o_motor_CHAMA_a_regra():
-    chamadas = [n for n in ast.walk(ast.parse(_fonte()))
-                if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                and n.func.id == "_e_parcial"]
-    assert chamadas, "a regra existe e ninguém a chama — não roda em job nenhum"
+_INI_PARCIAL = "            from engine_rules import numero_declarado_parcial as _e_parcial"
+_FIM_PARCIAL = "                _n_par += 1"
 
+_OBS_PARCIAL = ("Fonte: comprimento total do layer SAN = 1,42 m. Valor provavelmente "
+                "parcial (representacao em escala). Confirmar com projeto complementar.")
+_OBS_SA = "Fonte: area hachurada do layer PISO = 120 m2"
+
+
+class _Item:
+    """Item de mentira com a mesma superfície que o bloco toca."""
+
+    def __init__(self, desc, selo, obs, qtd=1.42):
+        self.description = desc
+        self.confidence = selo
+        self.observations = obs
+        self.quantity = qtd
+
+
+def _trecho(inicio, fim, arquivo="main.py"):
+    src = fonte(arquivo)
+    assert src.count(inicio) == 1, "âncora de início não é única: %r" % inicio[:70]
+    a = src.index(inicio)
+    assert src.count(fim, a) >= 1, "âncora de fim não achada: %r" % fim[:70]
+    return textwrap.dedent(src[a:src.index(fim, a) + len(fim)])
+
+
+def _rodar_selo_parcial(itens):
+    """RODA o bloco de produção que rebaixa o selo parcial.
+
+    🪤 O recorte é SEM o `try/except` de produção de propósito: com ele, um erro
+    dentro do bloco viraria silêncio e o teste passaria verde.
+    """
+    ns = {"all_items": itens}
+    exec(compile(_trecho(_INI_PARCIAL, _FIM_PARCIAL), "selo-parcial", "exec"), ns)
+    return ns["_n_par"]
+
+
+def test_o_motor_REBAIXA_o_branco_cujo_numero_e_parcial():
+    """🚨 EXECUTA o bloco. O guarda antigo procurava, na árvore sintática, uma
+    chamada chamada `_e_parcial` — trocar o laço por `for _it in []:` mantinha a
+    chamada no fonte e a regra deixava de rodar em job nenhum."""
+    it = _Item("Tubulação SAN", Confidence.CONFIRMADO, _OBS_PARCIAL)
+    assert _rodar_selo_parcial([it]) == 1, "o motor não rebaixou nada"
+    assert it.confidence == Confidence.ESTIMADO
 
 def test_so_mexe_em_quem_esta_BRANCO():
     """Se tocasse em laranja, seria trabalho à toa; se promovesse, seria nº1."""

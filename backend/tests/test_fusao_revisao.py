@@ -260,26 +260,155 @@ def test_sem_pai_nao_toca_o_banco():
     assert not chamadas
 
 
+def _fatia_do_fim_do_process_job():
+    """Do primeiro `generate_spreadsheet` até o upload pro Storage — o pedaço
+    real do `process_job`, pronto pra executar.
+
+    🪤 Recorte por ÂNCORA dentro do intervalo que o AST diz ser a função. Nunca
+    por tamanho fixo (25/08: janela fixa mede o vizinho ou mede meio guarda) e
+    nunca por `corpo_de`, que nesta função para dentro de uma f-string de várias
+    linhas — ele mesmo denuncia isso e recusa.
+    """
+    import ast
+    import textwrap
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    linhas = src.splitlines(True)
+    achados = [n for n in ast.walk(ast.parse(src))
+               if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+               and n.name == "process_job"]
+    assert len(achados) == 1, "process_job sumiu ou virou duas definições"
+    corpo = "".join(linhas[achados[0].lineno - 1:achados[0].end_lineno])
+    a = 'output_path = os.path.join(work_dir, f"orcamento_{job_id}.xlsx")'
+    z = 'print(f"[storage] upload {job_id}.xlsx ok={_storage_ok}")'
+    assert corpo.count(a) == 1 and corpo.count(z) == 1, (
+        "as âncoras da fatia deixaram de ser únicas dentro do process_job — "
+        "reveja o recorte antes de confiar neste guarda")
+    i = corpo.rfind("\n", 0, corpo.index(a)) + 1
+    j = corpo.index("\n", corpo.index(z, i)) + 1
+    fatia = textwrap.dedent(corpo[i:j])
+    assert fatia.count("generate_spreadsheet(") == 2, (
+        "a fatia tem %d chamadas de generate_spreadsheet — esperava 2 (a que "
+        "nasce cedo e a refação do fim)" % fatia.count("generate_spreadsheet("))
+    return fatia
+
+
+class _ProjFake(object):
+    """O mínimo de `project_data` que a fatia toca."""
+
+    def __init__(self):
+        self.warnings = []
+        self.total_area = None
+        self.layout_area = None
+
+
+def _executa_o_fim(fusao=None, frase_versao="", acrescenta_linha=False,
+                   pai="pai-xyz"):
+    """Roda a fatia real com rede/banco/planilha injetados e devolve o diário.
+
+    A planilha "gerada" é um arquivo de texto com os avisos e as descrições do
+    momento — assim dá pra perguntar o que importa de verdade: **o arquivo que
+    subiu pro Storage contém o que nasceu depois dele?**
+    """
+    import json
+    import tempfile
+    fusao = dict(fusao or {"revisoes": 0, "casadas": 0, "acrescentadas": 0})
+    diario = {"gerou": [], "eventos": [], "logs": [], "subiu": None,
+              "conteudo_subido": None, "cmp_args": None, "avisos_gravados": None}
+    proj = _ProjFake()
+    itens = _itens_da_leitura()
+    work_dir = tempfile.mkdtemp(prefix="fim_process_job_")
+
+    def _gen(project_data, all_items, path, typology=None):
+        diario["gerou"].append(path)
+        diario["eventos"].append("gerou")
+        io.open(path, "w", encoding="utf-8").write(json.dumps(
+            {"avisos": list(getattr(project_data, "warnings", None) or []),
+             "itens": [getattr(i, "description", str(i)) for i in all_items]},
+            ensure_ascii=False))
+
+    def _fundir(all_items, pai_id):
+        novos = list(all_items)
+        if acrescenta_linha:
+            from models import BudgetItem, Confidence
+            novos.append(BudgetItem(
+                item_num="REV.1", description="Alvenaria de bloco 14 cm (REV.)",
+                unit="m²", quantity=96.0, confidence=Confidence.ESTIMADO,
+                origem="revisao_cliente"))
+        return novos, fusao
+
+    def _cmp(job_id, n_med, n_total):
+        diario["cmp_args"] = (job_id, n_med, n_total)
+        return {"frase": frase_versao} if frase_versao else {}
+
+    def _upload(path, nome):
+        diario["eventos"].append("subiu")
+        diario["subiu"] = path
+        if os.path.exists(path):
+            diario["conteudo_subido"] = io.open(path, encoding="utf-8").read()
+        return True
+
+    def _update(tabela, chave, valor, dados):
+        diario["avisos_gravados"] = dados.get("warnings")
+        return True
+
+    ns = {
+        "__name__": "fim_process_job_ns", "os": os,
+        "work_dir": work_dir, "job_id": "job-teste", "typology": None,
+        "cad_paths": [], "project_data": proj, "all_items": itens,
+        "generate_spreadsheet": _gen,
+        "_carimbar_spec": lambda *a, **k: None,
+        "_supa_rest_service": lambda m, p, **k: (200, [{"parent_job_id": pai}]),
+        "_fundir_revisoes_do_cliente": _fundir,
+        "_persist_items_to_supabase": lambda j, its: len(its),
+        "_comparar_com_versao_anterior": _cmp,
+        "_carimbar_planilha": lambda j: diario["eventos"].append("carimbou"),
+        "_supabase_update": _update,
+        "_avisos_com": lambda j, avisos: list(avisos),
+        "_supabase_storage_upload": _upload,
+        "_log_error": lambda *a, **k: diario["logs"].append(
+            " ".join(str(x) for x in a)),
+    }
+    exec(compile(_fatia_do_fim_do_process_job(), "fim_process_job", "exec"), ns)
+
+    # 🪤 A fatia tem três `except` que engolem tudo e seguem. Se o harness
+    # estiver errado, o teste veria "nada aconteceu" e chamaria de defeito do
+    # produto. Denuncia aqui, com o motivo na cara.
+    for _l in diario["logs"]:
+        assert "NÃO fundi" not in _l, "o harness quebrou a fusão: " + _l
+        assert "planilha NÃO foi refeita" not in _l, (
+            "o harness quebrou a refação: " + _l)
+    return diario, proj, ns
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  ORDEM no process_job: a planilha entregue é a de DEPOIS da fusão
 # ══════════════════════════════════════════════════════════════════════════
 def test_a_planilha_entregue_e_a_ULTIMA_versao():
-    """A ordem no process_job é o que garante que o arquivo baixado bate com a tela.
+    """O arquivo que sobe pro Storage é o de DEPOIS da fusão e do aviso.
 
-    Duas coisas nascem DEPOIS da primeira planilha: a fusão das revisões (regra
-    nº7) e o aviso "esta releitura mediu MENOS que a versão anterior". As duas
-    precisam estar no .xlsx, e o carimbo de coerência é calculado sobre o banco —
-    então se o arquivo for o antigo, o detector jura que está tudo em dia.
+    🚨 Achado 22 de 23/08: a planilha nascia ANTES da fusão. Na TELA o cliente
+    via as correções dele preservadas; no ARQUIVO que ele baixa, não — e o
+    `_carimbar_planilha` calcula a assinatura sobre os itens JÁ fundidos do
+    banco, então o detector de coerência jurava que o .xlsx estava em dia.
     """
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i_fusao = src.index("all_items, _fusao = _fundir_revisoes_do_cliente(")
-    i_cmp = src.index("_cmp_v = _comparar_com_versao_anterior(", i_fusao)
-    i_regen = src.index("generate_spreadsheet(project_data, all_items, output_path", i_cmp)
-    i_carimbo = src.index("_carimbar_planilha(job_id)", i_fusao)
-    i_upload = src.index("_supabase_storage_upload(output_path", i_fusao)
-    assert i_fusao < i_cmp < i_regen < i_carimbo < i_upload, (
-        "a planilha tem que ser refeita DEPOIS da fusão E do aviso de versão, e "
-        "antes do carimbo e do upload")
+    d, proj, _ = _executa_o_fim(
+        fusao={"revisoes": 1, "casadas": 1, "acrescentadas": 0},
+        frase_versao="esta releitura mediu MENOS que a versão anterior")
+    assert len(d["gerou"]) == 2, (
+        "a planilha não foi refeita depois da fusão (gerou=%r)" % d["gerou"])
+    assert d["subiu"] == d["gerou"][-1], (
+        "subiu pro Storage %r, mas a última planilha escrita foi %r — o cliente "
+        "baixa a versão pré-fusão" % (d["subiu"], d["gerou"][-1]))
+    conteudo = d["conteudo_subido"] or ""
+    assert "MANTEVE" in conteudo, (
+        "o .xlsx entregue não tem o aviso da fusão:\n" + conteudo[:400])
+    assert "MENOS" in conteudo, (
+        "o .xlsx entregue não tem o aviso de que mediu menos:\n" + conteudo[:400])
+    ordem = d["eventos"]
+    ultimo_gerou = len(ordem) - 1 - ordem[::-1].index("gerou")
+    assert ultimo_gerou < ordem.index("carimbou") < ordem.index("subiu"), (
+        "ordem errada: %r — a planilha tem que ser refeita ANTES do carimbo e "
+        "do upload" % ordem)
 
 
 def test_o_aviso_de_mediu_menos_entra_no_arquivo():

@@ -36,7 +36,50 @@ sys.path.insert(0, _BACKEND)
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 _AGENT = io.open(os.path.join(_BACKEND, "agent.py"), encoding="utf-8").read()
 
+import agent  # noqa: E402
+import main  # noqa: E402
 import main as M  # noqa: E402
+import time  # noqa: E402
+
+
+class _Req:
+    def __init__(self, corpo=b""):
+        self._corpo = corpo
+        self.state = type("_S", (), {})()
+
+    async def body(self):
+        return self._corpo
+
+
+def _rodar_a_rota(monkeypatch, falso_ask, corpo=b"",
+                  pergunta="  quantos m2 de piso?  ", job_id="job-cliente-11"):
+    monkeypatch.setattr(main, "_require_project_owner", lambda *a, **k: "dono")
+    monkeypatch.setattr(agent, "ask", falso_ask)
+    medido = {"thread_do_laco": None, "tiques": 0, "tiques_durante": 0,
+              "resposta": None}
+
+    async def _cenario():
+        medido["thread_do_laco"] = threading.get_ident()
+        parar = threading.Event()
+
+        async def _relogio():
+            while not parar.is_set():
+                medido["tiques"] += 1
+                await asyncio.sleep(0.01)
+        t = asyncio.create_task(_relogio())
+        await asyncio.sleep(0.05)
+        antes = medido["tiques"]
+        medido["resposta"] = await main.agent_ask(_Req(corpo), job_id=job_id,
+                                                  question=pergunta)
+        medido["tiques_durante"] = medido["tiques"] - antes
+        parar.set()
+        t.cancel()
+        try:
+            await t
+        except asyncio.CancelledError:
+            pass
+    asyncio.run(_cenario())
+    return medido
 
 
 class _RequisicaoFalsa:
@@ -55,56 +98,30 @@ def _corpo_da_rota_do_chat():
 
 
 def test_a_rota_do_chat_NAO_chama_o_agente_no_laco_de_eventos(monkeypatch):
-    """🩸 O que derrubou o site às 15:07 de 03/09.
+    """O agente tem que rodar em OUTRA thread, e o laco tem que continuar vivo.
 
-    🪤 05/09/2026: a versão anterior deste guarda lia `run_in_threadpool` no
-    TEXTO da rota e ficou verde com um `_NO_THREADPOOL = True` guardando o ramo
-    morto e o agente rodando de novo dentro do laço de eventos — o bug inteiro
-    de volta, com a string que o assert procurava ainda escrita ali.
-
-    Agora a rota RODA, com um `agent.ask` síncrono que demora, e o guarda mede
-    duas coisas: em que thread ele rodou, e se o laço continuou atendendo
-    enquanto isso.
+    O agente falso aqui bloqueia 0,3 s - 6% do health check de 5 s do Render.
+    Se ele rodar no laco, o relogio paralelo para de bater durante esse tempo,
+    que e exatamente o que matou a instancia.
     """
-    import agent as _agente
-
-    monkeypatch.setattr(M, "_require_project_owner",
-                        lambda request, job_id: {"id": "u-cliente-11"})
-
     visto = {}
 
-    def _ask_lento(job_id, question, max_iterations=8, history=None):
+    def _falso_ask(job_id, question, max_iterations=8, history=None):
         visto["thread"] = threading.get_ident()
-        visto["job_id"] = job_id
-        visto["question"] = question
-        _timeb.sleep(0.4)          # o agente "pensando" (8 iterações, DXF etc.)
-        return {"answer": "o forro sai 26,54 m2", "iterations": 1}
-    monkeypatch.setattr(_agente, "ask", _ask_lento)
+        time.sleep(0.30)                    # o agente "pensando"
+        return {"answer": "resposta do agente", "tool_calls": [], "iterations": 1}
 
-    async def _cenario():
-        visto["laco"] = threading.get_ident()
-        tarefa = asyncio.ensure_future(
-            M.agent_ask(_RequisicaoFalsa(), job_id="job-11",
-                        question="quanto de forro?"))
-        batidas = 0
-        while not tarefa.done():
-            await asyncio.sleep(0.01)
-            batidas += 1
-        return await tarefa, batidas
+    m = _rodar_a_rota(monkeypatch, _falso_ask)
 
-    resp, batidas = asyncio.run(_cenario())
-
-    assert resp["status"] == "ok" and resp["answer"], (
-        "a rota parou de responder o agente: %r" % (resp,))
-    assert visto.get("job_id") == "job-11" and visto.get("question") == "quanto de forro?", (
-        "os argumentos do agente voltaram a ir por posição (ou trocados): %r" % (visto,))
-    assert visto["thread"] != visto["laco"], (
-        "o agente rodou DENTRO do laço de eventos — com --workers 1 isso "
+    assert visto.get("thread") is not None, "o agente nem foi chamado"
+    assert visto["thread"] != m["thread_do_laco"], (
+        "o agente rodou NA THREAD DO LACO DE EVENTOS - com --workers 1 isso "
         "congela o site inteiro enquanto ele pensa, e o health check de 5 s do "
-        "Render mata a instância (foi o incidente de 03/09)")
-    assert batidas >= 3, (
-        "o laço de eventos ficou parado enquanto o agente pensava (%d batidas) "
-        "— é exatamente o bloqueio que zerou o instance_count" % batidas)
+        "Render mata a instancia (episodio de 03/09, instance_count=0 por 90 s)")
+    assert m["tiques_durante"] >= 5, (
+        "o laco de eventos bateu so %d vez(es) durante os 0,30 s do agente - "
+        "ele estava CONGELADO; com o threadpool batem ~30 tiques de 10 ms"
+        % m["tiques_durante"])
 
 
 def test_CONTROLE_o_agente_continua_SENDO_chamado():

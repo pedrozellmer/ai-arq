@@ -20,14 +20,15 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
-# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
-# certo mora num lugar só.
-from _corpo import corpo_de  # noqa: E402
-import sys
+# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa verde por
+# engano — a auditoria de 25/08 achou 17 assim, e a mutação de 06/09 provou
+# que nem o recorte certo salva um guarda que só LÊ o fonte. O que sobrou de
+# leitura aqui é complemento; o julgamento é sobre o que a função DEVOLVE.
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
+
+import main as m  # noqa: E402
 
 
 def _fatia_motor():
@@ -111,14 +112,111 @@ def test_o_controle_prova_que_sem_a_flag_o_estrago_acontece():
         "no de cima")
 
 
-def test_a_origem_e_gravada_e_relida():
-    """Sem isto, a reidratação volta a decidir no escuro."""
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    corpo = corpo_de("_persist_items_to_supabase")
-    assert '"origem"' in corpo, "_persist_items_to_supabase não grava a origem"
-    assert src.count('origem=r.get("origem") or ""') == 2, (
-        "os DOIS pontos que reconstroem BudgetItem a partir do banco precisam "
-        "reler a origem (regeneração da planilha revisada e /inform-area)")
+def _linhas_que_o_persist_manda(monkeypatch, itens, job_id="job-teste"):
+    """Roda `_persist_items_to_supabase` de verdade e devolve o JSON que ele
+    POSTA no PostgREST — as linhas como o banco vai recebê-las.
+
+    🚨 06/09/2026 — a versão anterior deste guarda procurava `"origem"` no
+    CORPO da função. Um `for _r in rows: _r.pop("origem", None)` depois de
+    montar as linhas mantém a chave escrita no dicionário logo acima: o guarda
+    ficava verde e a origem voltava a nunca chegar ao banco — que é o defeito
+    original de 24/08, inteiro.
+    """
+    import json as _json
+    import urllib.request as _ur
+    postados = []
+
+    class _Resp:
+        def read(self):
+            return b"[]"
+
+    def _fake_urlopen(req, timeout=None):
+        dados = getattr(req, "data", None)
+        if dados and req.get_method() == "POST":
+            postados.append(_json.loads(dados.decode("utf-8")))
+        return _Resp()
+
+    monkeypatch.setattr(_ur, "urlopen", _fake_urlopen)
+    monkeypatch.setattr(m, "_supa_log", lambda *a, **k: None)
+    monkeypatch.setattr(m, "_arquivar_versao_anterior", lambda *a, **k: None)
+    monkeypatch.setattr(m, "_spec_do_cliente_antes_do_swap", lambda *a, **k: {})
+    monkeypatch.setattr(m, "_contar_itens_no_banco", lambda *a, **k: len(itens))
+    n = m._persist_items_to_supabase(job_id, itens)
+    assert n == len(itens), "o persist devolveu %r pra %d itens" % (n, len(itens))
+    assert len(postados) == 1, "esperava UM insert em lote, vi %d" % len(postados)
+    return postados[0]
+
+
+def test_a_origem_e_gravada_e_relida(monkeypatch, tmp_path):
+    """Sem isto, a reidratação volta a decidir no escuro.
+
+    Duas metades, as duas EXECUTADAS: o persist manda a origem pro banco, e o
+    caminho que remonta a planilha a partir do banco devolve ela no objeto.
+    """
+    from models import BudgetItem, Confidence
+    itens = [BudgetItem(item_num="1.1", description="Piso porcelanato", unit="m²",
+                        quantity=118.5, confidence=Confidence.CONFIRMADO,
+                        origem="dxf_geom", discipline="Acabamentos"),
+             BudgetItem(item_num="1.2", description="Pintura látex", unit="m²",
+                        quantity=540.0, confidence=Confidence.ESTIMADO,
+                        origem="deriv_pd", discipline="Acabamentos")]
+    linhas = _linhas_que_o_persist_manda(monkeypatch, itens)
+    assert [l.get("origem") for l in linhas] == ["dxf_geom", "deriv_pd"], (
+        "_persist_items_to_supabase parou de mandar a origem pro banco: %r"
+        % [sorted(l) for l in linhas])
+
+    # ── e a volta: o que o banco guardou tem que virar objeto de novo ──
+    import json as _json
+    import urllib.request as _ur
+    import spreadsheet as _sp
+    import sinapi_matcher as _sm
+    import tcpo_matcher as _tm
+    capturado = {}
+
+    def _fake_generate(pd, items, output_path, **kw):
+        capturado["items"] = items
+        open(output_path, "wb").write(b"x")
+
+    class _R2:
+        def __init__(self, c):
+            self._c = c
+
+        def read(self):
+            return self._c
+
+    monkeypatch.setattr(_sp, "generate_spreadsheet", _fake_generate)
+    monkeypatch.setattr(m, "_require_project_owner", lambda *a, **k: None)
+    monkeypatch.setattr(m, "_supa_rest_as_user",
+                        lambda *a, **k: (200, [{"job_id": "job-teste",
+                                                "project_name": "Casa"}]))
+    monkeypatch.setattr(_ur, "urlopen",
+                        lambda *a, **k: _R2(_json.dumps(linhas).encode("utf-8")))
+    monkeypatch.setattr(m, "_supabase_storage_upload", lambda *a, **k: True)
+    monkeypatch.setattr(m, "_carimbar_planilha", lambda *a, **k: None)
+    monkeypatch.setattr(m, "WORK_DIR", str(tmp_path))
+    monkeypatch.setattr(_sm, "candidates_for", lambda *a, **k: [])
+    monkeypatch.setattr(_sm, "apply_llm_pick", lambda *a, **k: 0)
+    monkeypatch.setattr(_tm, "match_item", lambda *a, **k: [])
+    import asyncio
+    asyncio.run(m.rebuild_planilha_from_review("job-teste", object()))
+    assert [i.origem for i in capturado["items"]] == ["dxf_geom", "deriv_pd"], (
+        "a reidratação perdeu a origem — a honestidade de área volta a decidir "
+        "com menos informação do que o motor tinha: %r"
+        % [i.origem for i in capturado["items"]])
+
+
+def test_CONTROLE_o_persist_manda_mesmo_as_linhas(monkeypatch):
+    """🧪 Se o dublê engolisse o POST, o teste acima seria verde por não olhar
+    nada."""
+    from models import BudgetItem, Confidence
+    linhas = _linhas_que_o_persist_manda(
+        monkeypatch,
+        [BudgetItem(item_num="9.9", description="Item de controle", unit="un",
+                    quantity=3, confidence=Confidence.ESTIMADO, origem="")])
+    assert len(linhas) == 1 and linhas[0]["description"] == "Item de controle"
+    assert linhas[0].get("origem", "AUSENTE") is None, (
+        "origem vazia tem que virar NULL, não string vazia nem chave ausente: %r"
+        % linhas[0].get("origem", "AUSENTE"))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -220,9 +318,77 @@ def test_o_controle_prova_que_o_ramo_casado_antigo_seria_reprovado():
     assert it.confidence == Confidence.CONFIRMADO, "o cenário do bug não reproduz mais"
 
 
-def test_a_fusao_le_os_valores_do_project_items_do_pai():
-    """Guarda estrutural: se alguém voltar a tirar valor de `edits`, os bugs
-    #1, #2 e #7 voltam juntos."""
+def _fusao_de_verdade(monkeypatch, revs, linhas_do_pai):
+    """A fusão REAL do main.py, com o banco injetado."""
+    monkeypatch.setattr(m, "_supa_rest_service",
+                        lambda metodo, tabela, **kw:
+                        (200, revs) if tabela == "item_reviews" else (200, []))
+    monkeypatch.setattr(m, "_supa_rest_tudo",
+                        lambda tabela, **kw:
+                        (200, linhas_do_pai) if tabela == "project_items" else (200, []))
+    monkeypatch.setattr(m, "_log_error", lambda *a, **k: None)
+    return m._fundir_revisoes_do_cliente
+
+
+def test_a_fusao_le_os_valores_do_project_items_do_pai(monkeypatch):
+    """🚨 De onde vêm os valores da correção do cliente: da linha ATUAL do pai
+    (`project_items`) e não do payload cru do navegador (`item_reviews.edits`).
+
+    🚨 06/09/2026 — a versão anterior era um guarda ESTRUTURAL: conferia que os
+    nomes dos campos apareciam no `select` de `project_items`. Trocar
+    `linha.get("unit")` por `ed.get("unit")` e `linha.get("quantity")` por
+    `ed.get("quantity")` na montagem deixava o `select` intacto — o guarda
+    ficava verde e os bugs #1, #2 e #7 voltavam juntos.
+
+    O cenário abaixo é o real de 24/08: 7 linhas de armadura CA-50 em que o
+    dropdown apagou a unidade no payload, e a quantidade foi corrigida DUAS
+    vezes (o `edits` guarda a primeira, o pai guarda a última).
+    """
+    from models import BudgetItem, Confidence
+    f = _fusao_de_verdade(
+        monkeypatch,
+        revs=[{"item_id": "id-9", "reviewed_at": "2026-08-23T10:00:00Z",
+               "edits": {"description": "Pilares — armadura CA-50",
+                         "unit": "",              # o dropdown apagou
+                         "quantity": 100.0,       # a PRIMEIRA edição
+                         "_antes": {"unit": "kg", "quantity": 18168.0}}}],
+        linhas_do_pai=[{"id": "id-9", "description": "Pilares — armadura CA-50",
+                        "unit": "kg",             # o endpoint já consertou
+                        "quantity": 1500.0,       # a ÚLTIMA correção
+                        "confidence": "estimado", "observations": ""}])
+    # a leitura nova trouxe a unidade que o persist inventa quando falta
+    alvo = BudgetItem(item_num="3.1", description="Pilares — armadura CA-50",
+                      unit="vb", quantity=18168.0,
+                      confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    f([alvo], "pai123")
+    assert alvo.unit == "kg", (
+        "a fusão voltou a tirar a unidade do payload cru do navegador — "
+        "1.850 kg viram '1850 verbas'. Veio: %r" % alvo.unit)
+    assert alvo.quantity == 1500.0, (
+        "a fusão ressuscitou a 1ª edição (%s) em vez da correção final do "
+        "cliente (1500)" % alvo.quantity)
+    assert str(getattr(alvo.confidence, "value", alvo.confidence)) == "estimado", (
+        "número digitado à mão saiu carimbado como medição do CAD")
+
+
+def test_CONTROLE_a_fusao_reprova_quando_o_pai_nao_responde(monkeypatch):
+    """🧪 Sem isto o teste acima passaria com a fusão desligada: se ela não
+    fundir nada, o item fica com os valores da leitura nova — e é justamente
+    isso que o teste acima chama de defeito."""
+    from models import BudgetItem, Confidence
+    f = _fusao_de_verdade(monkeypatch, revs=[], linhas_do_pai=[])
+    alvo = BudgetItem(item_num="3.1", description="Pilares — armadura CA-50",
+                      unit="vb", quantity=18168.0,
+                      confidence=Confidence.CONFIRMADO, origem="dxf_geom")
+    f([alvo], "pai123")
+    assert alvo.unit == "vb" and alvo.quantity == 18168.0, (
+        "sem revisão nenhuma a fusão mexeu no item — o cenário do teste acima "
+        "não prova nada")
+
+
+def test_a_fusao_continua_lendo_os_campos_do_pai_no_select(monkeypatch):
+    """Complemento estrutural do teste acima: campo que sai do `select` chega
+    vazio na fusão sem quebrar nada — o `.get()` devolve None e ninguém grita."""
     src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     i = src.index("def _fundir_revisoes_do_cliente")
     corpo = src[i:src.index("_CAMPOS_ITEM_VERSAO", i)]

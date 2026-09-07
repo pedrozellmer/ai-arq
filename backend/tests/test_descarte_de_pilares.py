@@ -41,6 +41,7 @@ minhas morreram no teste ([[feedback_motor_sempre_pode_melhorar]]).
 import io
 import os
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -50,17 +51,69 @@ def _fonte(nome):
     return io.open(os.path.join(_BACKEND, nome), encoding="utf-8").read()
 
 
-def test_cada_filtro_do_pilar_conta_separado():
-    """Cinco motivos diferentes, cinco ações diferentes. Um total só não serve."""
-    ext = _fonte("dwg_extractor.py")
-    i = ext.find("def _consider_pilar_poly")
-    assert i > 0, "o detector de pilar sumiu"
-    trecho = ext[i:i + 3000]
-    for chave in ("nome_do_layer", "nao_e_4_lados", "nao_e_retangulo",
-                  "fora_de_escala"):
-        assert '_desc_pil["%s"] += 1' % chave in trecho, (
-            "o filtro %r recusa pilar sem contar" % chave)
+def _prancha_de_forma(caminho):
+    import ezdxf
+    doc = ezdxf.new("R2010"); doc.header["$INSUNITS"] = 6   # metros
+    msp = doc.modelspace()
+    for lay in ("PILAR", "PIL", "COLUNA", "EIXOS"):
+        if lay not in doc.layers: doc.layers.add(lay)
+    def _fecha(layer, pts): msp.add_lwpolyline(pts, close=True, dxfattribs={"layer": layer})
+    _fecha("PILAR", [(0,0),(0.20,0),(0.20,0.40),(0,0.40)])                       # ACEITO
+    _fecha("PILAR", [(2,0),(2.2,0),(2.2,.2),(2.4,.2),(2.4,.4),(2,.4)])           # nao_e_4_lados
+    _fecha("PILAR", [(4,0),(5.0,0),(4.5,0.4),(4,0.4)])                           # nao_e_retangulo
+    _fecha("PILAR", [(10,0),(20,0),(20,10),(10,10)])                             # fora_de_escala
+    _fecha("PIL",    [(0,5),(0.2,5),(0.2,5.4),(0,5.4)])                          # nome_do_layer
+    _fecha("COLUNA", [(1,5),(1.2,5),(1.2,5.4),(1,5.4)])
+    _fecha("EIXOS",  [(2,5),(2.2,5),(2.2,5.4),(2,5.4)])
+    doc.saveas(caminho); return caminho
 
+
+def _extrair(montar):
+    from dwg_extractor import extract_dxf
+    cam = os.path.join(tempfile.mkdtemp(prefix="_pilar_"), "prancha.dxf")
+    try:
+        montar(cam); return extract_dxf(cam)
+    finally:
+        try: os.remove(cam)
+        except OSError: pass
+
+
+
+def test_cada_filtro_do_pilar_conta_separado():
+    """Cinco motivos diferentes, cinco ações diferentes. Um total só não serve.
+
+    🪤 O guarda antigo procurava as quatro strings `_desc_pil["..."] += 1` no
+    fonte. Um `return` antes delas deixava o texto intacto e o contador morto —
+    e a prancha de fôrma voltava a dizer `pilares=0` sem motivo.
+    """
+    ex = _extrair(_prancha_de_forma)
+    d = dict(ex.pilares_descartados or {})
+
+    assert d.get("nome_do_layer", 0) == 3, (
+        "o filtro de NOME recusou %r contornos de 4 lados — esperava 3" % d.get("nome_do_layer"))
+    assert d.get("nao_e_4_lados", 0) == 1, (
+        "polilinha de 6 vértices no layer PILAR foi recusada SEM CONTAR "
+        "(nao_e_4_lados=%r): o filtro está mudo e `pilares=0` volta a não "
+        "dizer nada" % d.get("nao_e_4_lados"))
+    assert d.get("nao_e_retangulo", 0) == 1, (
+        "trapézio no layer PILAR não foi contado: %r" % d.get("nao_e_retangulo"))
+    assert d.get("fora_de_escala", 0) == 1, (
+        "retângulo de 10 × 10 m não foi contado como fora de escala: %r"
+        % d.get("fora_de_escala"))
+    assert "ilegivel" in d, "o 5º contador sumiu do dicionário: %s" % (d,)
+
+
+def test_CONTROLE_o_pilar_BOM_continua_passando():
+    """Contar descarte não pode virar descartar tudo.
+
+    Sem este controle, um detector que recusasse todo mundo (e contasse
+    direitinho) passaria pelo teste acima.
+    """
+    ex = _extrair(_prancha_de_forma)
+    aceitos = [(r.layer, round(r.w_m, 3), round(r.h_m, 3))
+               for r in (ex.struct_rects or [])]
+    assert aceitos == [("PILAR", 0.2, 0.4)], (
+        "o pilar de 20 × 40 cm no layer PILAR não passou: %s" % (aceitos,))
 
 def test_guarda_os_NOMES_dos_layers_recusados():
     """🔑 É o nome que decide entre "não tem pilar" e "o layer se chama PIL"."""

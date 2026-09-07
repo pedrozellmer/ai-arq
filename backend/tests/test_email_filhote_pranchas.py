@@ -16,8 +16,46 @@ para os clientes né"*. Explicar é dizer o que morreu, não só o saldo.
 import io
 import os
 import re
+import sys
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BACKEND)
+
+import main                                              # noqa: E402
+
+
+def _email(antes, depois):
+    """Monta o e-mail real e devolve o HTML que sairia pro cliente."""
+    _assunto, html = main._build_leitura_nova_email(
+        "cliente-19", "Casa de praia", "ev000001", antes, depois)
+    return html
+
+
+def _mesmas_pranchas():
+    """Caso do filhote bom de 15/08: MESMAS pranchas, números um pouco
+    melhores em todas. Nada piorou e nada entrou."""
+    antes = {"itens": 40, "medidos": 12, "pranchas": 3,
+             "por_prancha": {"planta-a.dxf": {"itens": 20, "medidos": 6},
+                             "planta-b.dxf": {"itens": 10, "medidos": 3},
+                             "planta-c.dxf": {"itens": 10, "medidos": 3}}}
+    depois = {"itens": 44, "medidos": 15, "pranchas": 3,
+              "por_prancha": {"planta-a.dxf": {"itens": 22, "medidos": 8},
+                              "planta-b.dxf": {"itens": 11, "medidos": 4},
+                              "planta-c.dxf": {"itens": 11, "medidos": 3}}}
+    return antes, depois
+
+
+def _caso_cliente_19():
+    """24/08, job e1c48ed7: 3 das 7 pranchas tinham morrido (as duas de
+    arquitetura entre elas) e o saldo global é +59 medidos — MAS a prancha de
+    elétrica caiu de 77 pra 49 medidos (103 → 60 itens)."""
+    antes = {"itens": 147, "medidos": 92, "pranchas": 4,
+             "por_prancha": {"4366-AR-A_libredwg.dxf": {"itens": 44, "medidos": 15},
+                             "4366-EL-E_libredwg.dxf": {"itens": 103, "medidos": 77}}}
+    depois = {"itens": 263, "medidos": 151, "pranchas": 7,
+              "por_prancha": {"4366-AR-A_libredwg.dxf": {"itens": 160, "medidos": 102},
+                              "4366-EL-E_libredwg.dxf": {"itens": 60, "medidos": 49}}}
+    return antes, depois
 
 
 def _main():
@@ -87,10 +125,21 @@ def test_o_email_conta_tambem_o_que_PIOROU():
 
 
 def test_o_aviso_do_que_piorou_aparece_no_corpo_do_email():
-    """Calcular e nao mostrar seria pior que nao calcular."""
-    corpo = _corpo("_email_leitura_nova")
-    # o texto do alarme so pode existir DEPOIS de calcular quem piorou
-    assert corpo.index("_piores.sort(") < corpo.index("E o que <b>piorou</b>")
+    """Calcular e nao mostrar seria pior que nao calcular.
+
+    🪤 06/09: o guarda comparava a POSIÇÃO de duas strings no fonte. Trocar o
+    `corpo += (` do quadro amarelo por `_alarme_morto = (` mantém as duas
+    strings na mesma ordem — a conta continua sendo feita, o cliente nunca vê.
+    Agora o teste confere o HTML ENTREGUE."""
+    html = _email(*_caso_cliente_19())
+    i_alarme = html.find("E o que <b>piorou</b>")
+    assert i_alarme > 0, (
+        "o quadro do que piorou foi calculado e NÃO entrou no corpo do e-mail")
+    # o quadro amarelo é o quadro amarelo — e vem antes do rodapé das 2 versões
+    assert "background:#FFFBEB" in html, "o alarme perdeu o destaque visual"
+    assert i_alarme < html.index("A sua vers&atilde;o original continua no painel"), (
+        "o aviso do que piorou caiu depois do rodapé — o cliente lê 'ficou "
+        "melhor' e para de ler")
 
 
 def test_sem_piora_o_email_nao_inventa_alarme():

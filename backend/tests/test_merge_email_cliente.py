@@ -15,15 +15,15 @@ ele perguntar.
 """
 import io
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-# 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
-# verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
-# certo mora num lugar só.
-from _corpo import corpo_de, ENVIO_E_BUILDER  # noqa: E402
-
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BACKEND)
+
+from _corpo import corpo_de, ENVIO_E_BUILDER  # noqa: E402
+import main as _m  # noqa: E402
 
 
 def _main():
@@ -88,18 +88,195 @@ def _so_o_que_o_cliente_le(nome):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+#  🧪 A BANCADA QUE EXECUTA (06/09/2026)
+# ══════════════════════════════════════════════════════════════════════════
+#
+# 🩸 Nove guardas deste arquivo passavam com o defeito ABERTO. Prova: no envio,
+# troquei `_build_leitura_combinada_email(...)` por `_build_leitura_nova_email(
+# nome, proj, merge_job, antes, depois)`. O cliente do merge passa a receber
+# literalmente "Refizemos a leitura do seu projeto" — a mentira que este arquivo
+# inteiro existe pra impedir — e os 38 testes ficaram VERDES, porque o fonte do
+# builder da combinada continua lá: intacto, correto e nunca chamado.
+#
+# 🔑 Guarda que lê fonte prova que o TEXTO existe. Só executar prova que ele
+# CHEGA no cliente. Daqui pra baixo a função real é chamada, com o banco e o
+# SMTP na mão, e o guarda confere a SAÍDA: o HTML que sairia, a linha que seria
+# gravada, o e-mail que seria escolhido.
+
+# O placar do caso cliente-19 (24/08): +87 medidos no total e, ao mesmo tempo,
+# a prancha de elétrica CAINDO de 30 pra 12 — é o que faz o corpo do e-mail
+# passar por todos os blocos (ganho, o que piorou, procedência, sobreposição).
+_ANTES = {"medidos": 92, "itens": 147, "pranchas": 4,
+          "por_prancha": {"4366-EL-E": {"itens": 40, "medidos": 30}}}
+_DEPOIS = {"medidos": 179, "itens": 263, "pranchas": 7,
+           "por_prancha": {"4366-EL-E": {"itens": 38, "medidos": 12}}}
+_AVISOS_DO_COMBINADO = [
+    "Esta planilha junta as DUAS leituras do seu projeto, prancha por prancha "
+    "— ficou com a versão mais completa de cada uma. Nenhuma prancha entrou "
+    "duas vezes.",
+    "⚠ CONFERIR ANTES DE SOMAR: 2 código(s) aparecem em mais de uma prancha.",
+]
+
+# O que `_email_wrap` põe no HTML e o `<div>` cru NÃO tem. As duas últimas são
+# o rodapé de LGPD (regra dura nº6) — o custo real de 24/08, quando TRÊS
+# clientes receberam o e-mail sem ele.
+_MARCAS_DA_MOLDURA = (
+    "https://ai.arq.br/email-logo.png",
+    "linear-gradient(90deg,#4F46E5,#22D3EE)",
+    "https://ai.arq.br/privacidade.html",
+    "Para remover seus dados, é só responder este e-mail.",
+)
+_PREHEADER = '<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">'
+
+
+class _Req:
+    """O pedaço de `Request` que estas rotas realmente leem."""
+
+    def __init__(self, **qp):
+        self.query_params = dict(qp)
+        self.headers = {"user-agent": "pytest"}
+
+
+class _ThreadNaHora:
+    """O envio do e-mail vai em thread desde 23/08 (o SMTP síncrono segurava a
+    resposta e o navegador via erro de rede). Aqui roda na hora — senão o guarda
+    mede antes de a coisa acontecer e dá verde por corrida."""
+
+    def __init__(self, target=None, daemon=None, args=(), kwargs=None, **_kw):
+        self._t, self._a, self._k = target, args, kwargs or {}
+
+    def start(self):
+        self._t(*self._a, **self._k)
+
+    def join(self, *a, **k):
+        pass
+
+
+def _intercepta_o_smtp(monkeypatch):
+    """`_send_email_smtp` é a ÚNICA porta de saída de e-mail da casa. Devolve a
+    lista de (destino, assunto, html) que sairia por ela."""
+    saiu = []
+
+    def _smtp(to_email, subject, html_body, text_body="", log_kind="email"):
+        saiu.append({"para": to_email, "assunto": subject, "html": html_body,
+                     "tipo": log_kind})
+        return True
+
+    monkeypatch.setattr(_m, "_send_email_smtp", _smtp)
+    monkeypatch.setattr(_m, "_email_auto_registrar", lambda *a, **k: None)
+    return saiu
+
+
+def _monta_o_email(qual, job="mg634d18"):
+    """Chama o builder REAL e devolve (assunto, html). `qual` é 'combinada' ou
+    'releitura' — os dois têm assinatura diferente, e o mapa mora aqui."""
+    if qual == "combinada":
+        return _m._build_leitura_combinada_email(
+            "Cliente", "Obra do cliente-01", job, _ANTES, _DEPOIS,
+            list(_AVISOS_DO_COMBINADO))
+    return _m._build_leitura_nova_email(
+        "Cliente", "Obra do cliente-01", job, _ANTES, _DEPOIS)
+
+
+def _liberar_de_verdade(monkeypatch, job_filho, medidos_depois=3):
+    """Roda `admin_liberar_filhote` DE VERDADE, com o banco na mão.
+
+    Devolve (resposta, patches_gravados, emails_escolhidos). O `patches` é o que
+    iria pro PATCH em `projects`; o `emails` é qual dos dois builders foi
+    chamado, com os argumentos.
+
+    🪤 Nada de patchar `_supa_rest_service` e achar que cobriu: esta rota lê
+    `projects` por `_supa_rows` e `project_items`/`item_reviews` pelo
+    `_supa_rest_service`. Faltar um dos dois derruba a rota em 404/502 e o
+    guarda mede o erro, não o comportamento.
+    """
+    import threading as _thr
+
+    PAI = "aa11bb22"
+    projetos = {
+        PAI: {"job_id": PAI, "user_id": "u-cliente-01",
+              "user_email": "cliente-01@example.com", "user_name": "Cliente Um",
+              "project_name": "Obra do cliente-01"},
+        job_filho: {"job_id": job_filho, "parent_job_id": PAI, "is_eval": True,
+                    "status": "done", "user_id": "eval", "warnings": [],
+                    "project_name": "[TESTE] Obra do cliente-01 — avaliação"},
+    }
+    itens = {
+        PAI: [{"confidence": "confirmado", "ref_sheet": "ARQ-01"},
+              {"confidence": "estimado", "ref_sheet": "ARQ-01"}],
+        job_filho: ([{"confidence": "confirmado", "ref_sheet": "ARQ-01"}]
+                    * medidos_depois
+                    + [{"confidence": "estimado", "ref_sheet": "EL-02"}]),
+    }
+    patches, emails = [], []
+
+    def _rows(method, path, **kw):
+        params = kw.get("params") or {}
+        jid = str(params.get("job_id", "")).replace("eq.", "")
+        if path == "projects" and jid in projetos:
+            return [dict(projetos[jid])]
+        return []
+
+    def _svc(method, path, body=None, params=None, **kw):
+        params = params or {}
+        jid = str(params.get("job_id", "")).replace("eq.", "")
+        if method == "GET" and path == "project_items":
+            return 200, [dict(x) for x in itens.get(jid, [])]
+        if method == "GET" and path == "item_reviews":
+            return 200, []
+        if method == "PATCH" and path == "projects":
+            patches.append({"job": jid, "body": dict(body or {})})
+            return 200, []
+        return 200, []
+
+    monkeypatch.setattr(_m, "_require_admin", lambda r: None)
+    monkeypatch.setattr(_m, "_log_error", lambda *a, **k: None)
+    monkeypatch.setattr(_m, "_supa_rows", _rows)
+    monkeypatch.setattr(_m, "_supa_rest_service", _svc)
+    monkeypatch.setattr(_m, "_email_auto_recente", lambda *a, **k: False)
+    monkeypatch.setattr(_m, "_email_leitura_combinada",
+                        lambda *a: emails.append({"qual": "combinada", "args": a}) or True)
+    monkeypatch.setattr(_m, "_email_leitura_nova",
+                        lambda *a: emails.append({"qual": "releitura", "args": a}) or True)
+    monkeypatch.setattr(_thr, "Thread", _ThreadNaHora)
+
+    resp = _m.admin_liberar_filhote(job_filho, _Req())
+    return resp, patches, emails
+
+# ══════════════════════════════════════════════════════════════════════════
 #  O e-mail certo pra cada caso
 # ══════════════════════════════════════════════════════════════════════════
 def test_existe_um_email_proprio_pro_merge():
     assert "def _email_leitura_combinada" in _main()
 
 
-def test_o_email_do_merge_NAO_diz_que_refizemos_a_leitura():
-    """A frase do filhote seria mentira aqui — a gente não releu nada."""
-    corpo = _so_o_que_o_cliente_le("_email_leitura_combinada")
-    assert "refizemos a leitura" not in corpo.lower()
-    assert "Melhoramos o motor" not in corpo
+def test_o_email_do_merge_NAO_diz_que_refizemos_a_leitura(monkeypatch):
+    """A frase do filhote seria mentira aqui — a gente não releu nada.
 
+    🩸 06/09: a versão anterior deste guarda lia o FONTE de
+    `_email_leitura_combinada`. Trocando, no envio, o builder da combinada pelo
+    da releitura, o cliente do merge recebia literalmente "Refizemos a leitura
+    do seu projeto" e o guarda continuava verde — o fonte que ele lia estava
+    intacto e nunca era chamado. Agora o e-mail é MONTADO e lido no HTML que
+    sairia."""
+    saiu = _intercepta_o_smtp(monkeypatch)
+    ok = _m._email_leitura_combinada(
+        {"user_email": "cliente-01@example.com", "user_name": "Cliente Um",
+         "project_name": "Obra do cliente-01"},
+        {"warnings": list(_AVISOS_DO_COMBINADO)},
+        "mg634d18", _ANTES, _DEPOIS)
+
+    assert ok is True and len(saiu) == 1, "o e-mail nem chegou no SMTP: %r" % saiu
+    html, assunto = saiu[0]["html"], saiu[0]["assunto"]
+    assert "refizemos a leitura" not in html.lower(), (
+        "o cliente do MERGE recebeu o texto da releitura — a gente não releu "
+        "nada, juntou duas leituras que já existiam")
+    assert "refizemos a leitura" not in assunto.lower()
+    assert "Melhoramos o motor" not in html
+    # 🧪 controle positivo: é o e-mail da COMBINADA que saiu, não um vazio
+    assert "vers&atilde;o combinada" in html
+    assert "Nenhuma prancha entrou duas vezes" in html
+    assert saiu[0]["tipo"] == "leitura_combinada"
 
 def test_o_email_do_merge_explica_o_que_e():
     corpo = _corpo("_email_leitura_combinada")
@@ -233,7 +410,6 @@ def test_data_ruim_nao_vira_carimbo_errado():
 
 
 def test_as_juizas_rodam_em_paralelo():
-    corpo = _corpo("admin_merge_preview", tam=9000)
     src = _main()
     i = src.index("def _merge_montar")
     j = src.index("@app.get(\"/api/admin/merge-preview", i)
@@ -248,7 +424,6 @@ def test_o_paralelo_preserva_a_ordem_das_pranchas():
     """🪤 `executor.map` devolve na ordem da entrada; um `as_completed` embaralharia
     e o veredito iria pra a prancha errada — o pior tipo de bug, porque a tela
     continuaria bonita."""
-    src = _main()
     montar = corpo_de("_merge_montar")
     assert "zip(_disputadas, _vs)" in montar
 

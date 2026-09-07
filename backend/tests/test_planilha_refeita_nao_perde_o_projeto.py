@@ -96,14 +96,52 @@ def test_o_chamador_pode_FORCAR_a_procedencia():
     assert pd.total_area_source == "informado"
 
 
+def _capa_gerada(**kw):
+    """Gera o .xlsx DE VERDADE e devolve o texto das células.
+
+    🚨 06/09/2026 — a versão anterior deste guarda procurava duas strings no
+    `spreadsheet.py`. Trocar a condição da linha 419 por
+    `if False and getattr(project, 'total_area_source', '') == 'informado':`
+    deixa as duas strings intactas no arquivo e faz a capa voltar a afirmar
+    "Área construída — perímetro externo da laje" em cima do número que o
+    cliente digitou. Regra dura nº1, verde. Agora a planilha é GERADA e o
+    guarda lê o que está escrito nela.
+    """
+    import os as _os
+    import tempfile
+    import openpyxl
+    from models import ProjectData
+    from spreadsheet import generate_spreadsheet
+    pd = m._project_data_do_banco(_linha(**kw))
+    assert isinstance(pd, ProjectData)
+    saida = _os.path.join(tempfile.mkdtemp(prefix="capa_"), "t.xlsx")
+    generate_spreadsheet(pd, [], saida)
+    wb = openpyxl.load_workbook(saida)
+    texto = []
+    for ws in wb.worksheets:
+        for linha in ws.iter_rows(values_only=True):
+            texto.append(" | ".join("" if c is None else str(c) for c in linha))
+    return chr(10).join(texto)
+
+
 def test_a_PLANILHA_de_fato_muda_de_texto_com_isso():
     """🪤 Guarda de ponta a ponta: não basta o campo existir, `spreadsheet.py`
-    tem que ler ELE. Se a condição lá mudar de nome, este teste cai."""
-    src = fonte("spreadsheet.py")
-    assert "getattr(project, 'total_area_source', '') == 'informado'" in src, (
-        "a planilha parou de decidir a linha de premissa por total_area_source")
-    assert "INFORMADA POR VOCÊ (não medida pela planta)" in src
+    tem que ler ELE — e a capa tem que MUDAR de texto por causa dele."""
+    informada = _capa_gerada(total_area=290.0, user_total_area=290.0)
+    assert "INFORMADA POR VOCÊ (não medida pela planta)" in informada, (
+        "a capa parou de dizer que a área veio do cliente — ela volta a afirmar "
+        "uma medição que não existiu (regra dura nº1)")
+    assert "perímetro externo da laje" not in informada, (
+        "a capa afirma medição EM CIMA do número que o cliente digitou")
 
+
+def test_CONTROLE_a_capa_da_area_MEDIDA_continua_dizendo_medida():
+    """🧪 O outro lado, no arquivo gerado: sem ele o teste acima passaria com a
+    condição invertida (que também 'muda o texto')."""
+    medida = _capa_gerada(total_area=290.0, user_total_area=None)
+    assert "perímetro externo da laje" in medida, medida[:400]
+    assert "INFORMADA POR VOCÊ" not in medida, (
+        "rebaixou uma medição de verdade a 'informada por você'")
 
 # ── Um lugar só, e os dois chamadores ──────────────────────────────────────
 def test_os_DOIS_caminhos_usam_o_MESMO_reconstrutor():

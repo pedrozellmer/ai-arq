@@ -38,11 +38,57 @@ Por isso este arquivo cobra a ORDEM, não a frase: a recontagem tem que ser a
 import ast
 import io
 import os
+import sys
 
 import pytest
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BACKEND)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+
+_CAB_PLANOB = ("O motor precisou do leitor alternativo em 1 prancha "
+               "(plano B): PRANCHA-01. ")
+
+_ESCRITAS_DE_SELO = []
+
+
+def _itens(medidos, total, espioes=False):
+    """Itens de um job qualquer — `medidos` com selo branco, o resto laranja."""
+    from models import BudgetItem, Confidence
+    base = _ItemEspiao if espioes else BudgetItem
+    itens = [base(item_num="1.%d" % k, description="Serviço %d" % k, unit="m²",
+                  quantity=10.0 + k,
+                  confidence=(Confidence.CONFIRMADO if k < medidos
+                              else Confidence.ESTIMADO),
+                  origem="dxf_geom")
+             for k in range(total)]
+    del _ESCRITAS_DE_SELO[:]          # o construtor não conta
+    return itens
+
+
+def _monta_espiao():
+    """Item que ANOTA toda escrita em `.confidence`, seja qual for a forma."""
+    from models import BudgetItem
+
+    class _Espiao(BudgetItem):
+        def __setattr__(self, nome, valor):
+            if nome == "confidence":
+                _ESCRITAS_DE_SELO.append(
+                    (getattr(self, "description", "?"), str(valor)))
+            return super().__setattr__(nome, valor)
+    return _Espiao
+
+
+_ItemEspiao = _monta_espiao()
+
+
+def _diagnostico_com(avisos, medidos, total):
+    """O bloco 'Como lemos o seu projeto' — o REAL, o mesmo do e-mail."""
+    import main
+    from _fim_do_job import ProjetoFake
+    return main._build_reading_diagnostic(
+        _itens(medidos=medidos, total=total), 0, 1, "", ProjetoFake(warnings=avisos))
 
 
 def _process_job(arvore=None):
@@ -54,44 +100,38 @@ def _process_job(arvore=None):
     pytest.fail("não achei `process_job`")
 
 
-def _linhas_que_mexem_no_selo(fn):
-    """Toda atribuição a `.confidence` — é o que muda a contagem de medidos."""
-    return sorted(n.lineno for n in ast.walk(fn)
-                  if isinstance(n, ast.Assign)
-                  for alvo in n.targets
-                  if isinstance(alvo, ast.Attribute) and alvo.attr == "confidence")
-
-
 def _linhas_da_recontagem(fn):
     return sorted(n.lineno for n in ast.walk(fn)
                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
                   and n.func.id == "_recontar_aviso_planob")
 
 
-def _recontagem_cedo_demais(codigo):
-    """A última recontagem vem DEPOIS do último rebaixamento? [] = ordem ok."""
-    fn = _process_job(ast.parse(codigo))
-    selos = _linhas_que_mexem_no_selo(fn)
-    recontas = _linhas_da_recontagem(fn)
-    if not recontas:
-        return ["não há recontagem nenhuma"]
-    if not selos:
-        return []
-    if max(recontas) < max(selos):
-        return ["último rebaixamento na linha %d, última recontagem na %d"
-                % (max(selos), max(recontas))]
-    return []
-
-
 # ══════════════════════════════════════════════════════════════════════════
 #  O julgamento sobre o código REAL
 # ══════════════════════════════════════════════════════════════════════════
 def test_a_recontagem_vem_DEPOIS_do_ultimo_rebaixamento():
-    fora_de_ordem = _recontagem_cedo_demais(_FONTE)
-    assert not fora_de_ordem, (
-        "a recontagem do aviso do plano B roda ANTES de algo que ainda rebaixa "
-        "selo — o cliente lê dois números diferentes no mesmo e-mail: %s"
-        % "; ".join(fora_de_ordem))
+    """O MESMO e-mail não pode dizer dois números de medidos.
+
+    Reproduz o job `b5693ca6`: o aviso do plano B nasce com a contagem da hora
+    em que o plano B rodou (aqui, 8), e a recontagem final é quem o corrige pros
+    6 que sobraram. Se alguém rebaixar selo DEPOIS dela — ou se a recontagem
+    deixar de acontecer — o cabeçalho diz um número e o parágrafo diz outro.
+    Foi exatamente o que o cliente `cliente-03` leu.
+    """
+    from _fim_do_job import roda_ate_o_email, medidos_no_placar, medidos_no_aviso
+    d = roda_ate_o_email(_itens(medidos=6, total=20), cab_planob=_CAB_PLANOB,
+                         medidos_antes=8)
+    html = d["emails"][-1]["html"]
+    no_placar = medidos_no_placar(html)
+    no_aviso = medidos_no_aviso(html)
+    assert no_placar is not None, "sumiu o placar de medidos do e-mail"
+    assert no_aviso is not None, (
+        "o aviso do plano B não chegou ao e-mail — sem ele este guarda não "
+        "mede nada")
+    assert no_placar == no_aviso, (
+        "o mesmo e-mail diz %d medido(s) no cabeçalho e %d no aviso do plano B "
+        "— alguém rebaixa selo DEPOIS da recontagem final"
+        % (no_placar, no_aviso))
 
 
 def test_existem_os_dois_pontos_de_recontagem():
@@ -117,48 +157,46 @@ def test_a_recontagem_e_idempotente_por_INDICE():
 
 
 def test_o_rebaixamento_do_SINAPI_e_mesmo_o_ultimo():
-    """🪤 Se alguém acrescentar OUTRO rebaixamento depois da 2ª recontagem, o
-    defeito volta — e este teste é quem vai contar."""
-    fn = _process_job()
-    selos = _linhas_que_mexem_no_selo(fn)
-    recontas = _linhas_da_recontagem(fn)
-    assert selos, "sumiu todo rebaixamento de selo do process_job"
-    assert max(recontas) > max(selos), (
-        "há atribuição de selo na linha %d, depois da última recontagem (%d)"
-        % (max(selos), max(recontas)))
+    """Depois da recontagem final, NADA mexe mais no selo.
+
+    🪤 O outro lado do mesmo fato, e o que pega a forma que enganou o juiz
+    antigo: os itens são espiões, então `setattr` e atribuição direta contam
+    igual."""
+    from _fim_do_job import roda_ate_o_email
+    itens = _itens(medidos=6, total=20, espioes=True)
+    roda_ate_o_email(itens, cab_planob=_CAB_PLANOB)
+    assert not _ESCRITAS_DE_SELO, (
+        "%d item(ns) tiveram o selo mexido DEPOIS da última recontagem: %r — "
+        "o e-mail volta a dizer dois números"
+        % (len(_ESCRITAS_DE_SELO), _ESCRITAS_DE_SELO[:4]))
 
 
 # ══════════════════════════════════════════════════════════════════════════
-#  🧪 CONTROLE POSITIVO — a ordem de ANTES, no MESMO julgamento
+#  🧪 CONTROLE POSITIVO — a conferência sabe REPROVAR
 # ══════════════════════════════════════════════════════════════════════════
-_ANTES = '''
-def process_job():
-    for _it in all_items:
-        _it.confidence = _CfE.ESTIMADO      # escala divergente
-    _recontar_aviso_planob()                # <- recontava AQUI
-    for _it in lote:
-        _it_u.confidence = _CfU.ESTIMADO    # ...e o SINAPI rebaixava DEPOIS
-'''
+def test_CONTROLE_o_email_de_ANTES_seria_reprovado():
+    """A aritmética exata do job b5693ca6: o aviso ficou com 6, os itens com 5.
+
+    Se esta conferência aprovar isto, o guarda de cima é verde falso."""
+    from _fim_do_job import medidos_no_placar, medidos_no_aviso
+    velho = (_CAB_PLANOB + "As medições saíram (6 item(ns) medido(s) do CAD), "
+             "mas vale conferir 2-3 medidas-chave contra o projeto antes de "
+             "fechar orçamento.")
+    html = _diagnostico_com([velho], medidos=5, total=20)
+    assert medidos_no_placar(html) == 5 and medidos_no_aviso(html) == 6, (
+        "não reproduzi o e-mail de 04/09 — placar=%r aviso=%r"
+        % (medidos_no_placar(html), medidos_no_aviso(html)))
+    assert medidos_no_placar(html) != medidos_no_aviso(html), (
+        "a conferência aprova o e-mail que disse 5 e 6 — ela não está "
+        "conferindo nada")
 
 
-def test_CONTROLE_a_ordem_ANTIGA_e_reprovada():
-    fora = _recontagem_cedo_demais(_ANTES)
-    assert fora, (
-        "o julgamento aprova a ordem que produziu o e-mail com 5 e 6 — ele não "
-        "está julgando nada e o teste de cima é verde falso")
-
-
-_DEPOIS = '''
-def process_job():
-    for _it in all_items:
-        _it.confidence = _CfE.ESTIMADO
-    _recontar_aviso_planob()
-    for _it in lote:
-        _it_u.confidence = _CfU.ESTIMADO
-    _recontar_aviso_planob()                # <- e de novo, no fim
-'''
-
-
-def test_CONTROLE_a_ordem_NOVA_passa_no_mesmo_julgamento():
-    assert not _recontagem_cedo_demais(_DEPOIS), (
-        "o julgamento reprova a ordem correta — está apertado demais")
+def test_CONTROLE_o_email_RECONTADO_passa_na_mesma_conferencia():
+    """O outro lado: com o aviso recontado, os dois números batem."""
+    from _fim_do_job import medidos_no_placar, medidos_no_aviso
+    novo = (_CAB_PLANOB + "As medições saíram (5 item(ns) medido(s) do CAD), "
+            "mas vale conferir 2-3 medidas-chave contra o projeto antes de "
+            "fechar orçamento.")
+    html = _diagnostico_com([novo], medidos=5, total=20)
+    assert medidos_no_placar(html) == medidos_no_aviso(html) == 5, (
+        "a conferência reprova o e-mail certo — está apertada demais")

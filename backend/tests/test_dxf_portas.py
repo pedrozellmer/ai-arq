@@ -89,8 +89,57 @@ def test_controle_negativo_recover_nao_conta_como_porta_crua():
 # ══════════════════════════════════════════════════════════════════════════
 #  O guarda de verdade
 # ══════════════════════════════════════════════════════════════════════════
+def _portas_cruas(src: str) -> int:
+    """`ezdxf.readfile(...)` E `from ezdxf import readfile as X; X(...)`.
+
+    🪤 A 1ª versão só via o ATRIBUTO `ezdxf.readfile`. Trocar por um
+    `from ezdxf import readfile as _rf` deixava a porta invisível — mesmo
+    defeito, apelido novo. Comentário e docstring continuam não contando
+    (é AST, não texto).
+    """
+    import ast
+    n = 0
+    apelidos = set()
+    arvore = ast.parse(src)
+    for no in ast.walk(arvore):
+        if isinstance(no, ast.ImportFrom) and no.module == "ezdxf":
+            for a in no.names:
+                if a.name == "readfile":
+                    apelidos.add(a.asname or a.name)
+    for no in ast.walk(arvore):
+        if not isinstance(no, ast.Call):
+            continue
+        f = no.func
+        if (isinstance(f, ast.Attribute) and f.attr == "readfile"
+                and isinstance(f.value, ast.Name) and f.value.id == "ezdxf"):
+            n += 1
+        elif isinstance(f, ast.Name) and f.id in apelidos:
+            n += 1
+    return n
+
+
+def test_CONTROLE_o_detector_ve_a_porta_com_APELIDO():
+    """🧪 Sem este controle o detector volta a ser cego pro apelido."""
+    assert _portas_cruas("import ezdxf\ndoc = ezdxf.readfile(p)\n") == 1
+    assert _portas_cruas("from ezdxf import readfile as _rf\ndoc = _rf(p)\n") == 1
+    assert _portas_cruas("# doc = ezdxf.readfile(p)\n") == 0
+    assert _portas_cruas("import ezdxf.recover\nd,a = ezdxf.recover.readfile(p)\n") == 0
+
+
 def test_nenhuma_porta_nova_abriu_calada():
-    novas = sorted(set(_varrer()) - set(_PORTAS_DELIBERADAS))
+    import io, os
+    achados = {}
+    for nome in sorted(os.listdir(_BACKEND)):
+        if not nome.endswith(".py"):
+            continue
+        try:
+            n = _portas_cruas(io.open(os.path.join(_BACKEND, nome),
+                                      encoding="utf-8").read())
+        except SyntaxError:
+            continue
+        if n:
+            achados[nome] = n
+    novas = sorted(set(achados) - set(_PORTAS_DELIBERADAS))
     assert not novas, (
         "estes arquivos abrem DXF na mão e não estão na lista consciente: %s.\n"
         "Use `from dxf_open import abrir_dxf` (tem o recover embaixo) ou "

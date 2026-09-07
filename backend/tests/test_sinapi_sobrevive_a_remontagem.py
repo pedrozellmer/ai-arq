@@ -153,6 +153,8 @@ def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
     import main
 
     logs = []
+    _VISTO.clear()
+    _VISTO["pick"] = 0
     linhas = [{"item_num": "1.1", "description": "Piso em porcelanato 60x60 cm",
                "unit": "m²", "quantity": 48.0, "confidence": "estimado",
                "observations": "", "ref_sheet": "", "origem": "cad",
@@ -183,6 +185,12 @@ def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
         # (b) mata.
         monkeypatch.setattr(sinapi_matcher, "pick_best_batch",
                             lambda itens, **k: {0: escolha_da_ia})
+        _pick_real = sinapi_matcher.apply_llm_pick
+
+        def _pick_contado(*a, **k):
+            _VISTO["pick"] += 1
+            return _pick_real(*a, **k)
+        monkeypatch.setattr(sinapi_matcher, "apply_llm_pick", _pick_contado)
     monkeypatch.setattr(main, "_supabase_storage_upload", lambda *a, **k: True)
     monkeypatch.setattr(main, "_carimbar_planilha", lambda *a, **k: None)
     monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
@@ -190,6 +198,22 @@ def _remontar(monkeypatch, tmp_path, candidatos=None, escolha_da_ia="87263",
     r = asyncio.run(main.rebuild_planilha_from_review(JOB, request=None))
     saida = os.path.join(str(tmp_path), JOB, "orcamento_%s_revisado.xlsx" % JOB)
     return r, saida, logs
+
+
+#: contador de chamadas de `apply_llm_pick` (a escolha da IA) na remontagem.
+_VISTO = {"pick": 0}
+
+
+def _remontar_v(monkeypatch, tmp_path, **kw):
+    """A mesma remontagem, no formato que o guarda convertido pede:
+    (resposta, visto, workbook aberto)."""
+    r, saida, _logs = _remontar(monkeypatch, tmp_path, **kw)
+    return r, _VISTO, load_workbook(saida)
+
+
+def _texto(wb, aba):
+    return " | ".join(str(c) for row in wb[aba].iter_rows(values_only=True)
+                      for c in row if c is not None)
 
 
 def _texto_das_abas(caminho, abas=None):
@@ -201,24 +225,31 @@ def _texto_das_abas(caminho, abas=None):
 
 
 def test_a_remontagem_REFAZ_o_sinapi(monkeypatch, tmp_path):
-    """A planilha REMONTADA tem que sair COM a referência SINAPI.
+    """🩸 A planilha revisada tem que sair COM referência — e com a referência
+    CERTA, que só sai porque a escolha da IA roda."""
+    r, visto, wb = _remontar_v(monkeypatch, tmp_path)
+    assert r["items_count"] == 1, r
 
-    🪤 O guarda antigo só conferia que `from sinapi_matcher import`,
-    `sinapi_matches` e `apply_llm_pick` estavam ESCRITOS no bloco. Bastava
-    inverter o `if _e["candidates"]:` pra nenhum item receber a referência —
-    tudo continuava escrito e o guarda continuava verde. Aqui o arquivo é
-    aberto e lido."""
-    r, saida, _ = _remontar(monkeypatch, tmp_path)
-    assert r["status"] == "ok"
-    assert os.path.exists(saida), "a remontagem não gerou o .xlsx"
-
-    wb = load_workbook(saida)
     assert _ABA in wb.sheetnames, (
-        "a planilha revisada saiu SEM a aba de referências: %s — é o bug de "
-        "01/09 de volta (21 jobs de 17 clientes receberam essa versão)"
-        % (wb.sheetnames,))
-    assert "87263" in _texto_das_abas(saida, [_ABA]), (
-        "a aba existe mas não traz o código SINAPI do item")
+        "a planilha remontada saiu SEM a aba de referências SINAPI — é o que "
+        "21 jobs de 17 clientes receberam antes de 01/09. Abas: %s"
+        % wb.sheetnames)
+    aba = _texto(wb, _ABA)
+    assert "87263" in aba, "a aba existe e não traz o código conferido: %s" % aba[:400]
+
+    # A REF que vai na linha do orçamento é o PRIMEIRO match. Sem
+    # `apply_llm_pick` ela seria a de similaridade maior — PISO DE BORRACHA.
+    orc = _texto(wb, "Orçamento")
+    assert "SINAPI 87263" in orc, (
+        "a coluna REF da linha não trouxe o código conferido pela IA: %s"
+        % orc[:600])
+    assert "SINAPI 98555" not in orc, (
+        "a REF da linha ficou com o candidato de similaridade maior — a busca "
+        "por texto sozinha chamou porcelanato de PISO DE BORRACHA (17/07); "
+        "`apply_llm_pick` deixou de rodar")
+    assert visto["pick"] == 1, (
+        "a escolha da IA nunca foi chamada na remontagem (%d chamadas)"
+        % visto["pick"])
 
 
 def test_a_remontagem_usa_a_ESCOLHA_DA_IA_e_nao_a_similaridade(monkeypatch, tmp_path):

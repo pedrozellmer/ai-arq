@@ -77,14 +77,52 @@ def test_o_rc_continua_sendo_o_do_sinal_com_faulthandler():
 
 
 # ── O código de produção ───────────────────────────────────────────────────
+# -- helpers: o codigo de producao, tirado por AST e EXECUTADO --------------
+import ast as _ast
+_ARVORE = _ast.parse(fonte("main.py"))
+
+
+def _chamada_do_filho():
+    """O no `_sp.run(_cmd, ...)` que dispara a medicao geometrica do PDF."""
+    achados = [n for n in _ast.walk(_ARVORE)
+               if isinstance(n, _ast.Call)
+               and isinstance(n.func, _ast.Attribute) and n.func.attr == "run"
+               and isinstance(n.func.value, _ast.Name) and n.func.value.id == "_sp"
+               and n.args and isinstance(n.args[0], _ast.Name)
+               and n.args[0].id == "_cmd"]
+    assert len(achados) == 1, (
+        "esperava UMA chamada `_sp.run(_cmd...)`, achei %d" % len(achados))
+    return achados[0]
+
+
+def _kwarg(no, nome):
+    for k in no.keywords:
+        if k.arg == nome:
+            return _ast.unparse(k.value)
+    raise AssertionError("a chamada do filho perdeu o argumento `%s=`" % nome)
+
+
 def test_a_chamada_do_filho_LIGA_o_faulthandler_pelo_env():
-    t = _trecho_da_chamada()
-    assert "env=" in t and '"PYTHONFAULTHANDLER": "1"' in t, (
-        "o filho voltou a rodar sem PYTHONFAULTHANDLER — a próxima morte por "
-        "memória vai chegar de novo como 'rc=-6 (sem stderr)'")
-    assert "**os.environ" in t, (
-        "o env do filho tem que HERDAR o do servidor (chaves, PATH) — env só com "
-        "a variável nova quebraria a Vision e o import")
+    """O dict do env e AVALIADO (e o env EFETIVO) e um filho de verdade aborta
+    com ele pra provar que a pilha sai."""
+    import os, subprocess, sys
+    env = eval(_kwarg(_chamada_do_filho(), "env"), {"os": os})
+    assert isinstance(env, dict)
+    assert env.get("PATH") == os.environ.get("PATH"), (
+        "o env do filho parou de HERDAR o do servidor — sem PATH/chaves a "
+        "Vision e o import quebram")
+    assert env.get("PYTHONFAULTHANDLER") == "1", (
+        "o env EFETIVO do filho leva PYTHONFAULTHANDLER=%r — o faulthandler "
+        "nao liga e a proxima morte por memoria volta como 'rc=-6 (sem stderr)'"
+        % env.get("PYTHONFAULTHANDLER"))
+
+    r = subprocess.run([sys.executable, "-c", "import os; os.abort()"],
+                       capture_output=True, text=True, timeout=60, env=env)
+    assert r.returncode != 0
+    assert "Fatal Python error" in (r.stderr or ""), (
+        "com o env DA PRODUCAO o filho abortou MUDO: %r" % (r.stderr or "")[:200])
+    assert 'File "<string>", line 1' in (r.stderr or ""), (
+        "veio o cabecalho e nao veio a pilha — e a pilha que diz onde morreu")
 
 
 def test_o_texto_do_menos_c_NAO_mudou():

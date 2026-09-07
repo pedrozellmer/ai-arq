@@ -22,6 +22,8 @@ comparação que faltava.
 import io
 import os
 import sys
+
+import pytest  # noqa: F401
 from datetime import date
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -219,14 +221,52 @@ def test_o_tick_USA_a_lista_ao_coletar():
     assert "ips_da_casa=" in bloco, "lê a lista mas não repassa pro coletor"
 
 
-def test_o_IP_real_vem_do_cabecalho_do_cloudflare():
+class _RequisicaoFalsa(object):
+    """O mínimo que a rota lê de um Request."""
+
+    def __init__(self, cabecalhos, ip_da_borda):
+        self.headers = dict(cabecalhos)
+        self.client = type("Cliente", (), {"host": ip_da_borda})()
+
+
+def _armar_rota_do_ip(mp, admin_ok=True):
+    """Tapa só rede/banco/porteiro e devolve o que FOI GRAVADO."""
+    import main as _m
+    gravados = []
+
+    def _rest(metodo, tabela, **kw):
+        gravados.append((metodo, tabela, kw.get("body") or {}))
+        return 201, []
+
+    def _porteiro(req):
+        if not admin_ok:
+            raise _m.HTTPException(status_code=401, detail="não é admin")
+        return {"email": "admin@example.com"}
+
+    mp.setattr(_m, "_require_admin", _porteiro)
+    mp.setattr(_m, "_supa_rest_service", _rest)
+    mp.setattr(_m, "_get_user_from_request",
+               lambda *a, **k: {"email": "dono@example.com"})
+    return gravados
+
+
+def test_o_IP_real_vem_do_cabecalho_do_cloudflare(monkeypatch):
     """🪤 Atrás do Cloudflare, `request.client.host` é o IP da BORDA, igual pra
     todo mundo. Registrar ele excluiria o Cloudflare inteiro da estatística —
     ou seja, zeraria a contagem."""
-    i = _MAIN.find("def admin_marcar_meu_ip")
-    corpo = _MAIN[i:i + 1400]
-    assert "cf-connecting-ip" in corpo, (
-        "não lê o cabeçalho do Cloudflare — registraria o IP da borda")
+    import main as _m
+    gravados = _armar_rota_do_ip(monkeypatch)
+    r = _m.admin_marcar_meu_ip(_RequisicaoFalsa(
+        {"cf-connecting-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.7"},
+        "172.71.0.1"))
+    assert r.get("ok") is True, r
+    assert len(gravados) == 1, "esperava UMA gravação, veio %r" % (gravados,)
+    assert gravados[0][1] == "ips_da_casa"
+    assert gravados[0][2].get("ip") == "203.0.113.9", (
+        "gravou %r — o IP da BORDA do Cloudflare (ou o do proxy) entrou na "
+        "lista da casa: excluiria o Cloudflare inteiro e zeraria a contagem"
+        % (gravados[0][2].get("ip"),))
+    assert r.get("ip") == "203.0.113.9"
 
 
 def test_a_rota_de_marcar_IP_exige_admin():

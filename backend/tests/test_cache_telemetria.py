@@ -16,7 +16,14 @@ import sys
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
+import llm_retry  # noqa: E402
 from llm_retry import _registrar_uso  # noqa: E402
+
+
+def _capturar_gravacoes(monkeypatch):
+    linhas = []
+    monkeypatch.setattr(llm_retry, "_gravar_uso", lambda **kw: linhas.append(kw))
+    return linhas
 
 
 class _Uso:
@@ -55,12 +62,49 @@ def test_campos_ausentes_ou_lixo_nao_quebram():
                                    input_tokens="abc")), True)
 
 
-def test_tudo_zero_nao_loga_divisao_por_zero(capsys):
+def test_tudo_zero_nao_loga_divisao_por_zero(capsys, monkeypatch):
+    """🪤 06/09/2026 — este guarda só olhava a AUSÊNCIA de um print, e ausência
+    de print é o que acontece dos dois lados.
+
+    Mutação que passava por ele: `if _tot <= 0:` → `if _tot < 0:`. Com tudo
+    zerado a linha deixa de ser classificada como `usage_zerado`, é gravada
+    como **`resultado='api'` com 0 tokens** e logo depois o `100.0 * 0 / 0`
+    estoura uma ZeroDivisionError que o `except` geral engole. O print some
+    (guarda velho: verde) e a tabela de custo passa a ter chamadas "de API"
+    que custaram zero — que é exatamente a mentira que a telemetria existe
+    pra não contar ("não sei quanto custou" ≠ "custou zero").
+    """
+    linhas = _capturar_gravacoes(monkeypatch)
     _registrar_uso("x", _Resp(_Uso(cache_read_input_tokens=0,
                                    cache_creation_input_tokens=0,
-                                   input_tokens=0)), True)
-    assert "llm_cache" not in capsys.readouterr().out
+                                   input_tokens=0)), True,
+                   model="claude-haiku-4-5-20251001", job_id="job-zero")
 
+    assert "llm_cache" not in capsys.readouterr().out
+    assert len(linhas) == 1, (
+        "usage zerado tinha que deixar UMA linha (vazio não é falhou): %s"
+        % (linhas,))
+    assert linhas[0]["resultado"] == "sem_usage", (
+        "gravou resultado=%r com tudo zerado — a trava do zero caiu e a "
+        "divisão por zero foi engolida logo depois" % linhas[0]["resultado"])
+    assert linhas[0]["erro"] == "usage_zerado", linhas[0]
+    assert linhas[0].get("novo") is None, (
+        "carimbou 0 token como se fosse medida: %s" % (linhas[0],))
+    assert linhas[0]["job_id"] == "job-zero"
+
+
+def test_CONTROLE_usage_de_verdade_grava_resultado_api(monkeypatch):
+    """Controle do outro lado: com tokens reais, a linha É 'api' e leva os
+    quatro contadores. Sem isto, o guarda acima passaria por um `_registrar_uso`
+    que gravasse 'sem_usage' pra tudo."""
+    linhas = _capturar_gravacoes(monkeypatch)
+    _registrar_uso("dxf:teste", _Resp(_Uso(
+        cache_read_input_tokens=4800, cache_creation_input_tokens=0,
+        input_tokens=95000, output_tokens=3000)), True,
+        model="claude-haiku-4-5-20251001", job_id="job-cheio")
+    assert len(linhas) == 1 and linhas[0]["resultado"] == "api", linhas
+    assert linhas[0]["le"] == 4800 and linhas[0]["novo"] == 95000
+    assert linhas[0]["out"] == 3000
 
 def test_kill_switch(capsys, monkeypatch):
     """Telemetria tem que ter como ser desligada sem deploy."""

@@ -149,3 +149,34 @@ def sem_comentarios(texto: str) -> str:
 def so_o_que_roda(nome: str, arquivo: str = "main.py") -> str:
     """Corpo da função sem docstring e sem comentário — só o que executa."""
     return sem_comentarios(sem_docstring(corpo_de(nome, arquivo)))
+
+
+def bloco_desde(ancora: str, arquivo: str = "main.py", src: str = None) -> str:
+    """O BLOCO que começa na linha da `ancora`, até onde a indentação volta.
+
+    Mesma régua do `corpo_de`: o fim é a primeira linha não-vazia com
+    indentação MENOR que a da linha da âncora. Devolve o trecho já
+    dedentado, pronto pra `compile()`/`exec()`.
+    """
+    import textwrap as _tw
+    src = src if src is not None else fonte(arquivo)
+    i = src.find(ancora)
+    if i < 0:
+        raise AssertionError("não achei %r em %s" % (ancora[:60], arquivo))
+    ini_linha = src.rfind(_NL, 0, i) + 1
+    linhas = src[ini_linha:].splitlines(True)
+    ind = len(linhas[0]) - len(linhas[0].lstrip())
+    # 🪤 `except:`/`else:`/`finally:` voltam à MESMA coluna do `try:` e
+    # continuam o mesmo bloco — parar neles cortaria a metade que trata erro.
+    continua = ("except", "else:", "elif ", "finally:")
+    fim = len(linhas)
+    for n in range(1, len(linhas)):
+        l = linhas[n]
+        if not l.strip():
+            continue
+        if len(l) - len(l.lstrip()) <= ind:
+            if l.lstrip().startswith(continua):
+                continue
+            fim = n
+            break
+    return _tw.dedent("".join(linhas[:fim]))

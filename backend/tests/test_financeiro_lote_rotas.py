@@ -14,7 +14,9 @@ os preços e subir depois, em lote"* e *"sempre deixa aviso pro usuário né"*. 
 🧪 Controles: conferir com o banco fora é 502 (não "planilha vazia"); e a rota de aplicar chama a
 mesma conferência, não uma segunda régua.
 """
+import asyncio
 import io
+import json
 import os
 import sys
 import types
@@ -58,6 +60,11 @@ def _banco(monkeypatch, lanc=(200, []), itens=(200, None)):
         escritas.append({"m": method, "path": path, "body": body})
         return (201, None) if method == "POST" else (204, None)
     monkeypatch.setattr(main, "_supa_rest_as_user", fake)
+
+    def fake_service(method, path, body=None, params=None, prefer=None, timeout=15):
+        return fake(None, method, path, body, params, prefer, timeout)
+
+    monkeypatch.setattr(main, "_supa_rest_service", fake_service)
     return escritas
 
 
@@ -73,6 +80,40 @@ def _planilha_bytes(linhas):
     buf = io.BytesIO()
     wb.save(buf)
     return buf.getvalue()
+
+
+class _Upload:
+    """O que o FastAPI entrega pra rota: nome + bytes."""
+
+    def __init__(self, dados, filename="preenchida.xlsx"):
+        self.filename = filename
+        self._d = dados
+
+    async def read(self):
+        return self._d
+
+
+class _ReqComForm:
+    """Request com `form()` — o formulário que o CLIENTE mandou junto."""
+
+    def __init__(self, acoes_do_cliente):
+        self.headers = {"Authorization": "Bearer jwt"}
+        self.state = types.SimpleNamespace()
+        self._form = {"acoes": json.dumps(acoes_do_cliente)}
+
+    async def form(self):
+        return self._form
+
+
+_ACAO_ENVENENADA = [{
+    "acao": "cria", "n": 1, "item": "Reforma do vizinho",
+    "corpo": {"escopo": "obra", "origem": "livre", "descricao": "Reforma do vizinho",
+              "categoria": "Pisos", "valor": 999999.0, "status": "cotado",
+              "venc_tipo": "fase", "venc_fase": "Pisos", "venc_quando": "inicio"},
+}]
+
+_LINHA_DA_PLANILHA = [[1, "Pisos", "Porcelanato 60x60", 1062, "m2", "Cerâmica Boa",
+                       "48.000,00", "3x", "", "Contratado", "i:%s" % ITEM_A]]
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -206,12 +247,33 @@ def test_atualizar_normaliza_a_linha_MESCLADA(monkeypatch, casa):
 # ══════════════════════════════════════════════════════════════════════════
 #  forma: o que o fonte tem que garantir
 # ══════════════════════════════════════════════════════════════════════════
-def test_aplicar_RELE_a_planilha_e_nao_confia_em_lista_do_cliente():
-    c = corpo_de("financeiro_lote_aplicar")
-    assert "_fin_lote_ler_upload(file)" in c and "_fin_lote_conferencia" in c, (
-        "aplicar relê o arquivo e refaz a conferência — lista de ações vinda do cliente seria porta "
-        "pra gravar no projeto de outro")
-    assert "conf.get(\"erro\")" in c
+def test_aplicar_RELE_a_planilha_e_nao_confia_em_lista_do_cliente(monkeypatch, casa):
+    """🚨 O servidor grava o que a PLANILHA diz, nunca o que o formulário manda."""
+    escritas = _banco(monkeypatch)
+    monkeypatch.setattr(main, "_fin_retrato_da_origem",
+                        lambda request, job_id, origem, ref, pos=None: {
+                            "descricao": "Porcelanato 60x60", "origem_ref_id": ref,
+                            "origem_quantidade": 1062.0, "origem_unidade": "m2"})
+    saida = asyncio.run(main.financeiro_lote_aplicar(
+        JOB, _ReqComForm(_ACAO_ENVENENADA),
+        _Upload(_planilha_bytes(_LINHA_DA_PLANILHA))))
+    posts = [e for e in escritas if e["m"] == "POST"]
+    assert len(posts) == 1, posts
+    corpo = posts[0]["body"]
+    assert corpo["descricao"] == "Porcelanato 60x60", (
+        "o servidor gravou %r — confiou na lista de ações que veio do cliente em "
+        "vez de reler a planilha" % corpo["descricao"])
+    assert corpo["valor"] == 48000.0, "gravou %r" % corpo["valor"]
+    assert saida["criados"] == 1
+
+
+def test_aplicar_com_planilha_torta_devolve_a_MENSAGEM_e_nao_grava(monkeypatch, casa):
+    """🧪 Controle: a conferência mandou parar → nada entra no banco."""
+    escritas = _banco(monkeypatch)
+    saida = asyncio.run(main.financeiro_lote_aplicar(
+        JOB, _ReqComForm(_ACAO_ENVENENADA), _Upload(b"isto nao e uma planilha")))
+    assert saida["status"] == "erro" and "não consegui abrir" in saida["erro"]
+    assert [e for e in escritas if e["m"] in ("POST", "PATCH")] == []
 
 
 def test_as_duas_rotas_do_lote_recusam_o_admin_e_conferem_o_dono():

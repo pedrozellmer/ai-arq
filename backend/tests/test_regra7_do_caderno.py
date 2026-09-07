@@ -22,8 +22,10 @@ e-mail de "planilha atualizada".
 string no fonte e passou verde por meses enquanto a fusão nunca tinha rodado
 em produção. Guarda que não prova que reprova não é guarda.
 """
+import json
 import os
 import sys
+import urllib.request
 
 import pytest
 
@@ -32,6 +34,102 @@ from _corpo import corpo_de, so_o_que_roda  # noqa: E402
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
+
+import main                                              # noqa: E402
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  Um `project_items` de mentira com que o código REAL conversa
+# ══════════════════════════════════════════════════════════════════════════
+class _Banco:
+    """Dubla o PostgREST: guarda linhas, respeita `select=`, APAGA no DELETE."""
+
+    def __init__(self, itens=None):
+        self.itens = [dict(l) for l in (itens or [])]
+        self.versoes = []          # o que entrou em project_items_versoes
+        self.inseridos = []        # o que entrou em project_items
+        self.ops = []              # a ordem do que aconteceu
+
+    @staticmethod
+    def _cols(qs):
+        import urllib.parse as _up
+        for parte in qs.split("&"):
+            if parte.startswith("select="):
+                return [c for c in _up.unquote(parte[7:]).split(",") if c]
+        return []
+
+    @staticmethod
+    def _proj(linhas, cols):
+        return [{c: l.get(c) for c in cols} if cols else dict(l) for l in linhas]
+
+    def rest(self, method, path, params=None, **kw):
+        """O caminho `_supa_rest_service` (por baixo do `_supa_rest_tudo`)."""
+        p = dict(params or {})
+        self.ops.append("rest:%s:%s" % (method, path))
+        if path == "project_items" and method == "GET":
+            linhas = self.itens
+            if str(p.get("spec_origem") or "").startswith("like.cliente"):
+                linhas = [l for l in linhas
+                          if str(l.get("spec_origem") or "").startswith("cliente")]
+            if int(p.get("offset") or 0):
+                return 200, []
+            return 200, self._proj(linhas, [c for c in str(p.get("select") or "").split(",") if c])
+        return 200, []
+
+    def urlopen(self, req, timeout=None):
+        """O caminho urllib direto (persist, arquivamento, contagem)."""
+        tabela, _, qs = req.full_url.split("/rest/v1/")[-1].partition("?")
+        metodo = req.get_method()
+        corpo = json.loads(req.data.decode("utf-8")) if getattr(req, "data", None) else None
+        self.ops.append("http:%s:%s" % (metodo, tabela))
+        if tabela == "project_items":
+            if metodo == "GET":
+                return _Resp(self._proj(self.itens, self._cols(qs)))
+            if metodo == "HEAD":
+                return _Resp([], {"Content-Range": "0-0/%d" % len(self.itens)})
+            if metodo == "DELETE":
+                self.itens = []
+                return _Resp([])
+            if metodo == "POST":
+                self.inseridos = [dict(l) for l in (corpo or [])]
+                self.itens = [dict(l) for l in (corpo or [])]
+                return _Resp([])
+        if tabela == "project_items_versoes":
+            if metodo == "GET":
+                return _Resp(self.versoes)
+            if metodo == "POST":
+                self.versoes.extend(dict(l) for l in (corpo or []))
+                return _Resp([])
+        raise AssertionError("o código bateu numa porta que o teste não conhece: "
+                             "%s %s" % (metodo, req.full_url))
+
+
+class _Resp:
+    def __init__(self, dados, headers=None):
+        self._b = json.dumps(dados).encode("utf-8")
+        self.headers = headers or {}
+
+    def read(self):
+        return self._b
+
+
+def _liga(monkeypatch, banco):
+    monkeypatch.setattr(urllib.request, "urlopen", banco.urlopen)
+    monkeypatch.setattr(main, "_supa_rest_service", banco.rest)
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_supa_log", lambda *a, **k: None)
+    return banco
+
+
+_DESC = "Torneira de mesa bica movel cromado"
+#: A linha que o CLIENTE especificou, do jeito que ela está no banco.
+_LINHA_DO_CLIENTE = {
+    "item_num": "1.1", "description": _DESC, "unit": "un", "quantity": 3.0,
+    "observations": "", "ref_sheet": "", "confidence": "confirmado",
+    "discipline": "Louças e metais", "section": "10. Louças", "sort_order": 0,
+    "marca": "Docol", "codigo_fabricante": "00.123", "cor": "Cromado",
+    "spec_origem": "cliente",
+}
 
 
 def _funcao(nome, extra=None):
@@ -55,14 +153,14 @@ class _It:
 #  Buraco 2 — o INSERT jogava fora o que o objeto carregava
 # ══════════════════════════════════════════════════════════════════════════
 def _spec_do_item():
-    from spec_extract import extrair_spec, spec_origem
+    """A funcao de VERDADE do `main` - com o `_spec_campos` de verdade atras.
 
-    def _spec_campos(descricao):
-        sp = extrair_spec(descricao)
-        return {"marca": sp["marca"], "codigo_fabricante": sp["codigo"],
-                "cor": sp["cor"], "spec_origem": spec_origem(sp) or None}
-
-    return _funcao("_spec_do_item", {"_spec_campos": _spec_campos})
+    🩸 06/09/2026: antes isto re-executava o corpo com um `_spec_campos`
+    reescrito a mao aqui dentro. Duble de dependencia que copia a regra deixa
+    de representa-la no dia em que ela muda.
+    """
+    import main
+    return main._spec_do_item
 
 
 def test_o_que_o_cliente_escolheu_manda_sobre_o_regex():
@@ -78,12 +176,25 @@ def test_o_que_o_cliente_escolheu_manda_sobre_o_regex():
 
 def test_item_com_so_a_cor_tambem_e_protegido():
     """222 dos 556 itens do acervo têm especificação só com cor — a guarda
-    antiga, que olhava `marca`, deixava todos eles de fora."""
-    it = _It("Pintura acrílica cor Azul Munsell", cor="Azul Munsell",
+    antiga, que olhava `marca`, deixava todos eles de fora.
+
+    🩸 06/09/2026 — a versão anterior deste guarda punha no objeto a MESMA cor
+    que o regex acha na descrição ("Azul Munsell" nos dois lados). Com isso,
+    desligar a regra (`if False and ja["spec_origem"]`) dava o mesmo resultado
+    e o teste passava VERDE com o defeito aberto. Agora os dois discordam de
+    propósito: o texto diz uma cor, o objeto diz outra, e só quem respeita o
+    objeto acerta.
+    """
+    it = _It("Pintura acrílica cor Azul Munsell", cor="Branco Neve",
              spec_origem="lido")
     r = _spec_do_item()(it)
-    assert r["cor"] == "Azul Munsell"
+    assert r["cor"] == "Branco Neve", (
+        "o regex passou por cima da cor que a linha já carregava (devolveu "
+        "%r) — no dia da tela do caderno isso apaga o que o cliente escolheu"
+        % r["cor"])
     assert r["spec_origem"] == "lido"
+    assert r["marca"] is None, (
+        "inventou marca num item que só tinha cor: %r" % r["marca"])
 
 
 def test_controle_positivo_item_SEM_procedencia_ainda_le_o_texto():
@@ -194,14 +305,29 @@ def test_o_insert_usa_a_funcao_que_respeita_o_objeto():
     assert '**_spec_campos(getattr(it, "description"' not in src
 
 
-def test_o_resgate_do_swap_e_de_fato_chamado():
-    from _corpo import fonte
-    src = fonte("main.py")
-    assert "_spec_do_cliente_antes_do_swap(job_id)" in src, (
-        "ninguém lê a especificação do cliente antes do DELETE")
-    assert "_devolver_spec_do_cliente(rows," in src, (
-        "ninguém devolve a especificação depois do INSERT — a leitura de "
-        "antes vira código morto e o cliente perde tudo igual")
+def test_o_resgate_do_swap_e_de_fato_chamado(monkeypatch):
+    """🪤 A versão antiga cobrava o prefixo `_devolver_spec_do_cliente(rows,`.
+    Trocar o 2º argumento por `{}` mantinha a chamada escrita e o dicionário
+    chegava VAZIO — o cliente perdia a especificação igual, com log "0 de 0"."""
+    banco = _liga(monkeypatch, _Banco([_LINHA_DO_CLIENTE]))
+    main._persist_items_to_supabase("job1", [_It(_DESC)])
+    linha = banco.inseridos[0]
+    assert linha["marca"] == "Docol", (
+        "a especificação do cliente NÃO atravessou o reprocesso (marca=%r)"
+        % linha["marca"])
+    assert linha["codigo_fabricante"] == "00.123"
+    assert linha["spec_origem"] == "cliente"
+
+
+def test_CONTROLE_o_que_o_MOTOR_leu_nao_e_resgatado(monkeypatch):
+    """🧪 Se o resgate carimbasse tudo, os testes de cima passariam com o
+    extrator desligado — e a leitura nova nunca mais valeria."""
+    velha = dict(_LINHA_DO_CLIENTE, spec_origem="lido", marca="Deca")
+    banco = _liga(monkeypatch, _Banco([velha]))
+    main._persist_items_to_supabase("job1", [_It(_DESC)])
+    assert banco.inseridos[0]["marca"] is None, (
+        "o resgate trouxe de volta o que o MOTOR leu — a leitura nova deixa de "
+        "valer e todo conserto do extrator morre no reprocesso")
 
 
 def test_o_resgate_le_ANTES_do_delete():

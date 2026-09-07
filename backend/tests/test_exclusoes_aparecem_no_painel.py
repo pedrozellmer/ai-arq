@@ -45,14 +45,84 @@ def _bloco_do_resumo(src):
     return src[i:src.index('    except Exception as _e2:', i)]
 
 
+import json as _json_t  # noqa: E402
+import urllib.request as _ureq_t  # noqa: E402
+
+import pytest  # noqa: E402
+
+import main as _m  # noqa: E402
+
+_RETRATO = {"description": "Bancada de granito 3,20 m", "unit": "m",
+            "quantity": 3.2, "discipline": "Marcenaria",
+            "confidence": "confirmado"}
+_LINHA_EXCLUSAO = {"job_id": "job-01", "item_id": None, "action": "reject",
+                   "edits": {"_item_id": "it-1", "_antes": dict(_RETRATO)},
+                   "comment": "", "reviewed_at": "2026-09-05T12:00:00+00:00"}
+_LINHA_APROVACAO = {"job_id": "job-01", "item_id": "it-2", "action": "approve",
+                    "edits": {}, "comment": "",
+                    "reviewed_at": "2026-09-05T12:01:00+00:00"}
+_LINHA_EDICAO = {"job_id": "job-02", "item_id": "it-3", "action": "edit",
+                 "edits": {"quantity": 9.0}, "comment": "",
+                 "reviewed_at": "2026-09-05T12:02:00+00:00"}
+
+
+class _RespT:
+    def __init__(self, payload):
+        self._b = _json_t.dumps(payload).encode("utf-8")
+
+    def read(self):
+        return self._b
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+@pytest.fixture
+def painel(monkeypatch):
+    """Chama `admin_revision_feedback` DE VERDADE, com o banco de mentira."""
+    ctl = {"urls": [], "linhas": []}
+    monkeypatch.setattr(_m, "_require_admin", lambda r: {"email": "admin@example.com"})
+
+    def _fake(req, timeout=None):
+        url = getattr(req, "full_url", str(req))
+        ctl["urls"].append(url)
+        if "item_reviews" in url:
+            return _RespT(list(ctl["linhas"]))
+        return _RespT([])
+
+    monkeypatch.setattr(_ureq_t, "urlopen", _fake)
+
+    def _chamar(linhas):
+        ctl["linhas"] = list(linhas)
+        return _m.admin_revision_feedback(request=None)
+
+    ctl["chamar"] = _chamar
+    return ctl
+
+
+
 # ══════════════════════════════════════════════════════════════════════════
 #  1. O RESUMO CONTA E DESCREVE
 # ══════════════════════════════════════════════════════════════════════════
-def test_o_resumo_separa_as_exclusoes():
-    bloco = _bloco_do_resumo(_main_py())
-    assert '"exclusoes"' in bloco, (
-        "o resumo do admin não conta as exclusões — 48 sinais de item "
-        "inventado seguem invisíveis")
+def test_o_resumo_separa_as_exclusoes(painel):
+    """O guarda antigo so exigia a palavra `"exclusoes"` num recorte do fonte."""
+    ri = painel["chamar"]([_LINHA_EXCLUSAO, _LINHA_APROVACAO,
+                           _LINHA_EDICAO])["revisao_inline"]
+    assert ri["exclusoes"] == 1, (
+        "o resumo do admin nao contou a exclusao (contou %r) - os sinais de "
+        "item inventado seguem invisiveis" % ri["exclusoes"])
+    assert ri["aprovacoes"] == 1 and ri["edicoes"] == 1, (
+        "a separacao por acao se embaralhou: %r" % ri)
+
+
+def test_CONTROLE_a_rota_responde_e_o_bloco_da_revisao_inline_existe(painel):
+    """Sem isto, um `revisao_inline` que virasse `{"erro": ...}` passaria."""
+    ri = painel["chamar"]([_LINHA_APROVACAO])["revisao_inline"]
+    assert "erro" not in ri, ri
+    assert ri["aprovacoes"] == 1, ri
 
 
 def test_o_resumo_manda_O_QUE_foi_apagado():

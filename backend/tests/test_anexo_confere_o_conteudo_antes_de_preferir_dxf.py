@@ -42,6 +42,126 @@ def _arq(tmp_path, nome, conteudo):
 def _nomes(paths):
     return sorted(os.path.basename(p) for p in paths)
 
+# ══════════════════════════════════════════════════════════════════════════
+#  🧪 BANCADA QUE EXECUTA A ROTA /add-file  (conversão 06/09)
+# ══════════════════════════════════════════════════════════════════════════
+import asyncio          # noqa: E402
+import json as _json    # noqa: E402
+import threading        # noqa: E402
+import urllib.request   # noqa: E402
+
+
+class _UploadDeMentira:
+    """O mínimo que `_stream_upload_to_disk` usa: filename, seek, read(n)."""
+
+    def __init__(self, filename, conteudo):
+        self.filename = filename
+        self._b = conteudo
+        self._i = 0
+
+    async def seek(self, n):
+        self._i = n
+
+    async def read(self, n=-1):
+        if n is None or n < 0:
+            n = len(self._b) - self._i
+        pedaco = self._b[self._i:self._i + n]
+        self._i += len(pedaco)
+        return pedaco
+
+
+class _RequestDeMentira:
+    headers = {}
+    client = None
+    query_params = {}
+
+
+class _Anexo(object):
+    def __init__(self, resposta, vai_processar, avisos, alerta):
+        self.resposta = resposta
+        self.vai_processar = vai_processar
+        self.avisos = avisos
+        self.alerta = alerta
+
+
+@pytest.fixture
+def anexar(monkeypatch, tmp_path):
+    """Roda `main.add_file_and_reprocess` de verdade e devolve o que ela decidiu.
+
+    🪤 O Storage é um dict {nome: bytes}. A rota fala com o Supabase por
+    `urllib.request.urlopen` DIRETO (projeto + list do Storage), então é ali
+    que o patch tem que entrar.
+    """
+    def _rodar(envio):
+        storage = {}
+        processou = {"file_paths": None}
+        avisos = []
+        alerta = {"html": None}
+        pronto = threading.Event()
+
+        monkeypatch.setattr(main, "_require_project_owner", lambda *a, **k: None)
+        monkeypatch.setattr(main, "_rate_limit_ok", lambda *a, **k: True)
+        monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+        monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
+        # 🔑 zero medidos: senão o 409 da trava anti-perda esconderia o defeito
+        monkeypatch.setattr(main, "_job_medidos_count", lambda *a, **k: 0)
+        monkeypatch.setattr(main, "_projeto_patch", lambda *a, **k: True)
+
+        def _sobe(caminho, job_id, nome):
+            storage[nome] = open(caminho, "rb").read()
+            return True
+        monkeypatch.setattr(main, "_supabase_storage_upload_prancha", _sobe)
+        monkeypatch.setattr(main, "_supabase_storage_download_prancha",
+                            lambda job_id, nome: storage.get(nome))
+
+        def _update(tabela, col, val, patch):
+            for w in (patch or {}).get("warnings") or []:
+                avisos.append(w)
+            return True
+        monkeypatch.setattr(main, "_supabase_update", _update)
+        monkeypatch.setattr(main, "_avisos_com",
+                            lambda job_id, novos: list(novos or []))
+
+        def _notify(assunto, html):
+            alerta["html"] = html
+            return True
+        monkeypatch.setattr(main, "_notify_admin", _notify)
+
+        def _processa(job_id, file_paths, work_dir, **kw):
+            processou["file_paths"] = list(file_paths)
+            pronto.set()
+        monkeypatch.setattr(main, "_process_job_throttled", _processa)
+
+        def _urlopen(req, timeout=None, **k):
+            url = getattr(req, "full_url", str(req))
+
+            class _R:
+                def read(self_):
+                    if "/storage/v1/object/list/" in url:
+                        return _json.dumps(
+                            [{"name": n} for n in sorted(storage)]).encode("utf-8")
+                    return _json.dumps(
+                        [{"typology": "office", "project_type": "arquitetura",
+                          "status": "done", "user_total_area": 0,
+                          "user_pe_direito": 0}]).encode("utf-8")
+
+                def __enter__(self_):
+                    return self_
+
+                def __exit__(self_, *a):
+                    return False
+            return _R()
+        monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+
+        ups = [_UploadDeMentira(n, c) for n, c in envio]
+        resp = asyncio.run(main.add_file_and_reprocess(
+            "job-anexo", _RequestDeMentira(), files=ups))
+        pronto.wait(timeout=5)
+        nomes = [os.path.basename(p) for p in (processou["file_paths"] or [])]
+        return _Anexo(resp, nomes, avisos, alerta["html"])
+    return _rodar
+
+
 
 @pytest.fixture
 def silencio(monkeypatch):
@@ -98,12 +218,27 @@ def test_CONTROLE_a_ordem_antiga_devolvia_ZERO_no_mesmo_par(tmp_path, silencio):
 
 
 # ── o /add-file usa o seletor; o alerta diz a verdade ─────────────────────
-def test_o_add_file_usa_o_seletor_e_nao_a_regra_pelo_nome():
-    c = corpo_de("add_file_and_reprocess")
-    assert "_escolher_cads_do_anexo(_cads, job_id)" in c
-    assert "_dxf_stems" not in c, "a regra pelo nome voltou pro /add-file, antes do conteúdo"
-    assert "_avisos_com(job_id, _avisos_ext)" in c, "o aviso da extensão não chega ao cliente"
+def test_o_add_file_usa_o_seletor_e_nao_a_regra_pelo_nome(anexar):
+    """🩸 O 3º anexo do cliente-39 (job 8b7a2b71, 19:24): ele anexou o .dwg de
+    verdade num projeto que já tinha um .dxf que era DWG renomeado. A regra
+    pelo NOME jogou o .dwg fora; a checagem pelo CONTEÚDO, logo depois,
+    descartou a cópia — e o reprocesso rodou com ZERO arquivo.
+    """
+    r = anexar([("x.dxf", DWG), ("x.dwg", DWG)])
+    assert r.vai_processar, (
+        "o reprocesso foi disparado com ZERO arquivo — é o defeito do "
+        "cliente-39 de volta: zero item em 0,3 s, sem erro e sem e-mail")
+    assert r.vai_processar == ["x.dwg"], (
+        "o anexo escolheu %r; o certo é o .dwg de verdade — o .dxf do envio "
+        "é o MESMO DWG renomeado" % r.vai_processar)
+    assert r.resposta["files_count"] == 1, r.resposta
 
+
+def test_o_DXF_de_verdade_continua_vencendo_pela_rota(anexar):
+    """🧪 Controle: o caso forro MEP (15/07) — DWG AEC que não abre e o DXF
+    re-exportado dele. Uma rota que sempre preferisse o .dwg mataria isso."""
+    r = anexar([("y.dxf", DXF), ("y.dwg", DWG)])
+    assert r.vai_processar == ["y.dxf"], r.vai_processar
 
 def test_o_alerta_diz_o_que_a_pessoa_anexou_E_o_que_vai_rodar():
     c = corpo_de("add_file_and_reprocess")

@@ -42,6 +42,52 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+import asyncio                                                     # noqa: E402
+import threading                                                   # noqa: E402
+import time                                                        # noqa: E402
+import types                                                       # noqa: E402
+
+import main                                                        # noqa: E402
+import pricing                                                     # noqa: E402
+
+
+class _RequestFake:
+    def __init__(self):
+        self.headers = {}
+        self.client = types.SimpleNamespace(host="127.0.0.1")
+
+
+def _rodar_estimativa(monkeypatch, tmp_path, estimativa=None, precheck=None,
+                      teto_s=None):
+    """Chama a rota /api/estimate-price DE VERDADE. Devolve (resposta, diário)."""
+    diario = {"threads": {}, "logs": []}
+
+    def _est(caminhos, known=0):
+        diario["threads"]["estimate_for_files"] = threading.current_thread()
+        return (estimativa or (lambda: {"pranchas": 1, "preco": 97}))()
+
+    def _pre(caminhos):
+        diario["threads"]["precheck_warnings"] = threading.current_thread()
+        return (precheck or (lambda: ["aviso de precheck"]))()
+
+    monkeypatch.setattr(pricing, "estimate_for_files", _est)
+    monkeypatch.setattr(pricing, "precheck_warnings", _pre)
+    monkeypatch.setattr(main, "_rate_limit_ok", lambda *a, **k: True)
+    monkeypatch.setattr(main, "WORK_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, job=None, **k: diario["logs"].append(
+                            (stage, str(msg))))
+    if teto_s is not None:
+        monkeypatch.setattr(main, "_PRECHECK_ORCAMENTO_S", teto_s)
+
+    t0 = time.monotonic()
+    resp = asyncio.run(main.estimate_price(request=_RequestFake(), files=[],
+                                           known_pranchas=1))
+    diario["segundos"] = time.monotonic() - t0
+    diario["thread_do_laco"] = threading.current_thread()
+    return resp, diario
+
+
 # Funções que ABREM ou PROCESSAM arquivo — caras por natureza.
 _PESADAS = {
     "estimate_for_files", "precheck_warnings", "extract_dxf", "analyze_sheet",
@@ -111,16 +157,21 @@ def test_CONTROLE_POSITIVO_o_detector_pega_de_verdade():
         "falso positivo: a versão em thread foi acusada")
 
 
-def test_a_estimativa_usa_thread():
-    src = _fonte()
-    i = src.find("async def estimate_price")
-    assert i > 0, "a rota de estimativa sumiu"
-    # 🪤 29/08: era src[i:i+4000] — mais uma janela fixa a reprovar código
-    # certo (docstring maior empurrou o precheck pra fora). Corte estrutural.
-    fim = src.find("@app.", i)
-    trecho = src[i:fim if fim > i else len(src)]
-    assert "run_in_threadpool(estimate_for_files" in trecho
-    assert "run_in_threadpool(precheck_warnings" in trecho
+def test_a_estimativa_usa_thread(monkeypatch, tmp_path):
+    """🚨 O incidente da cliente-18: `estimate_for_files` e `precheck_warnings`
+    rodando NO LAÇO DE EVENTOS travam o site inteiro pra todo mundo.
+
+    Guarda por EXECUÇÃO: as duas têm que rodar numa thread que não é a do laço.
+    """
+    resp, d = _rodar_estimativa(monkeypatch, tmp_path)
+    assert resp["status"] == "ok"
+    assert set(d["threads"]) == {"estimate_for_files", "precheck_warnings"}, (
+        "alguma das duas funções pesadas não chegou a rodar: %r" % (d["threads"],))
+    for nome, th in d["threads"].items():
+        assert th is not d["thread_do_laco"], (
+            "%s rodou NA THREAD DO LAÇO DE EVENTOS — isso não deixa o site "
+            "lento, deixa BLOQUEADO: nenhuma outra requisição é atendida "
+            "enquanto roda. É o congelamento que espantou a cliente-18." % nome)
 
 
 def test_o_precheck_tem_TETO_de_espera():

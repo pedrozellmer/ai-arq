@@ -1,34 +1,31 @@
 # -*- coding: utf-8 -*-
-"""PDF e DXF não são caminhos equivalentes — e a copy oferecia como se fossem.
+"""PDF e DXF nao sao caminhos equivalentes - e a copy oferecia como se fossem.
 
-🩸 03/09/2026, FÁBIO SHIRAISHI. O DWG dele não abriu e ele recebeu, às 14:02,
-o e-mail com esta frase:
+Ver o cabecalho original: 03/09/2026, cliente-NN. O DWG dele nao abriu, ele
+recebeu as 14:02 o e-mail com "O ideal e reenviar em DXF ou PDF vetorial",
+subiu um PDF as 14:04 e recebeu 19 de 19 linhas ZERADAS.
 
-    "O ideal é reenviar em DXF ou PDF vetorial"
-
-Ele subiu um PDF às **14:04** — dois minutos depois — e recebeu **19 de 19
-linhas ZERADAS**. Nós o mandamos para o caminho que não mede.
-
-🔑 MEDIDO em 118 projetos de cliente concluídos (03/09/2026):
-
-    só CAD  →  72 projetos, 73,6% com algum item MEDIDO, média 14,3
-    só PDF  →  37 projetos,  5,4% com algum item MEDIDO, média  0,1
-                             ↑ 35 de 37 receberam ZERO
-
-Oferecer os dois lado a lado, com "ou", é recomendar um caminho que falha 18
-vezes em 19 — com a nossa assinatura em cima. E havia uma frase pior ainda,
-prometendo que de PDF "a gente mede pela geometria".
-
-🪤 Isto NÃO é "parar de aceitar PDF". PDF é topo de funil e entrega valor real
-(identifica e estima, e o cliente decide). O que não pode é ser apresentado
-como equivalente a DXF na hora em que o cliente está escolhendo o que reenviar.
+MEDIDO em 118 projetos concluidos: so CAD -> 73,6% com item MEDIDO;
+so PDF -> 5,4% (35 de 37 receberam ZERO).
 """
-import io
 import os
 import re
+import sys
 
-_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_AQUI = os.path.dirname(os.path.abspath(__file__))
+_BACKEND = os.path.dirname(_AQUI)
+for _p in (_BACKEND, _AQUI):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+import _emails_render as _R  # noqa: E402
+
+_NL = chr(10)
+
+import io  # noqa: E402
+
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+
 
 _B = chr(92)
 _NL = _B + "n"
@@ -40,38 +37,6 @@ def _copy(src=None):
     src = src if src is not None else _FONTE
     linhas = [l for l in src.splitlines() if not l.strip().startswith("#")]
     return _COLA.sub("", chr(10).join(linhas))
-
-
-def _oferece_pdf_como_igual(src=None):
-    """Frases que põem PDF e DXF no mesmo nível como resposta ao 'o que mando?'.
-
-    🪤 A 1ª versão deste guarda acusava a LISTA DE FORMATOS ACEITOS ("envie ao
-    menos um arquivo: DWG, DXF ou PDF"), que é legítima e precisa existir —
-    aceitar PDF é topo de funil. O que este guarda cuida é da RECOMENDAÇÃO
-    feita depois de uma falha, quando o cliente está escolhendo o que reenviar.
-    Duas absolvições, as duas necessárias:
-      • a frase cita os TRÊS formatos → é lista do que se aceita, não conselho
-        entre dois caminhos;
-      • a frase DIZ que de PDF a gente estima → é o conserto, não o defeito.
-    """
-    txt = _copy(src)
-    ruins = []
-    for m in re.finditer("[^" + _NL + "]{0,140}DXF[^" + _NL + "]{0,60}PDF"
-                         "[^" + _NL + "]{0,80}", txt, re.I):
-        t = m.group(0)
-        if re.search("estim|n[ãa]o mede|sem.{0,12}medi|zerad", t, re.I):
-            continue
-        # 🪤 A 2ª versão excluía qualquer frase que contivesse "DWG" — e a frase
-        # do Fábio contém ("salvar o DWG numa versão mais antiga"), então o
-        # guarda absolvia justamente o defeito. Foi o controle positivo que
-        # pegou. O que caracteriza LISTA é os três nomes ADJACENTES, separados
-        # só por vírgula/ou/e: "DWG, DXF ou PDF".
-        if re.search(r"(DWG|DXF|PDF)\s*[,/]?\s*(ou|e|,)?\s*(DWG|DXF|PDF)"
-                     r"\s*[,/]?\s*(ou|e|,)?\s*(DWG|DXF|PDF)", t, re.I):
-            continue
-        if re.search(r"\b(ou|,|e)\s+(o\s+)?PDF", t, re.I):
-            ruins.append(t.strip())
-    return ruins
 
 
 def _pdf_vem_primeiro(src=None):
@@ -105,29 +70,97 @@ def _pdf_vem_primeiro(src=None):
     return ruins
 
 
+def _frases_da_recusa():
+    """[(ramo, frase)] de tudo que o cliente lê nos e-mails de "não deu".
+
+    Cobre os TRÊS ramos do `_build_falha_email` (DWG que não abre, arquivo
+    grande, prancha sem cotas) e mais os dois irmãos de má notícia — é
+    exatamente aqui que a pergunta "e agora, o que eu mando?" é respondida.
+    """
+    import main as _m
+    fora = []
+    fontes = [(rot, _R.falha_do_ramo(hint)) for rot, hint in _R.RAMOS_DE_FALHA]
+    fontes.append(("sem_medida", _m._render_email_by_type("sem_medida")))
+    fontes.append(("leu_sem_medir", _m._render_email_by_type("leu_sem_medir")))
+    for rot, (subj, html) in fontes:
+        pedacos = [subj, _R.preheader_de(html)]
+        pedacos += [alt for _arq, alt in _R.imagens_de(html)]
+        for p in pedacos:
+            fora.append((rot, p))
+        for f in _R.frases(html):
+            fora.append((rot, f))
+    return fora
+
+
+_RESSALVA = re.compile(
+    r"estim|n[ãa]o mede|quase nunca|zerad|n[ãa]o [ée] confi|menos confi"
+    r"|sem medi|n[ãa]o medid|nunca(\s+\w+){0,3}\s+medi", re.I)
+_CAD = re.compile(r"\b(DXF|DWG)\b", re.I)
+_PDF = re.compile(r"\bPDF\b", re.I)
+_LISTA_DOS_TRES = re.compile(
+    r"(DWG|DXF|PDF)\s*[,/]?\s*(ou|e|,)?\s*(DWG|DXF|PDF)\s*[,/]?\s*(ou|e|,)?\s*"
+    r"(DWG|DXF|PDF)", re.I)
+
+
+def _frase_poe_pdf_no_mesmo_nivel(frase):
+    """A frase cita PDF e CAD lado a lado sem dizer que o PDF entrega menos."""
+    if not (_PDF.search(frase) and _CAD.search(frase)):
+        return False
+    if _RESSALVA.search(frase) or _LISTA_DOS_TRES.search(frase):
+        return False
+    return True
+
+
 def test_a_copy_nao_oferece_PDF_como_alternativa_igual_ao_DXF():
-    """🩸 A frase que o Fábio leu dois minutos antes de subir um PDF."""
-    ruins = _oferece_pdf_como_igual()
+    """🩸 A frase que o cliente-NN leu dois minutos antes de subir um PDF.
+
+    🚨 06/09/2026 — a janela `DXF[^\\n]{0,60}PDF` era o ponto cego: bastava
+    afastar os dois nomes pra ela não casar. Agora o julgamento é por FRASE, no
+    e-mail montado — a distância entre as palavras deixou de importar.
+    """
+    ruins = [(rot, f) for rot, f in _frases_da_recusa()
+             if _frase_poe_pdf_no_mesmo_nivel(f)]
     assert not ruins, (
         "a copy voltou a oferecer PDF e DXF como equivalentes — medido, só-PDF "
         "entrega item medido em 5,4% dos projetos contra 73,6% do CAD:"
-        + _NL + "  " + (_NL + "  ").join(r[:110] for r in ruins))
+        + _NL + "  " + (_NL + "  ").join("%s: %s" % (r, f[:130]) for r, f in ruins))
 
 
-def test_CONTROLE_o_guarda_REPROVA_a_frase_que_o_fabio_leu():
-    """Sem isto o teste acima passa por não achar nada, não por estar limpo."""
-    antiga = ('    fix = ("O ideal é <b>reenviar em DXF ou PDF vetorial</b>, ou '
-              'salvar o DWG numa versão mais antiga")' + chr(10))
-    assert _oferece_pdf_como_igual(antiga), (
-        "o guarda não reprova a frase que de fato foi entregue ao Fábio")
+def test_CONTROLE_o_julgamento_por_frase_REPROVA_as_duas_versoes_ruins():
+    """🧪 As duas frases que passaram pelo guarda velho, no julgamento novo."""
+    afastada = ("O ideal é reenviar em DXF, que é o formato onde a gente lê a "
+                "geometria exata do desenho e devolve quantidade medida, ou em "
+                "PDF vetorial, se for o que você tiver na mão agora.")
+    # 🔒 Rótulo, nunca o nome (regra dura nº6, repo público): é a frase que o
+    # cliente-NN leu às 14:02 de 03/09, dois minutos antes de subir o PDF.
+    de_0309 = "O ideal é reenviar em DXF ou PDF vetorial, ou salvar o DWG numa versão mais antiga."
+    assert _frase_poe_pdf_no_mesmo_nivel(afastada), (
+        "a frase com os dois formatos afastados continua passando — o guarda "
+        "novo herdou o ponto cego do antigo")
+    assert _frase_poe_pdf_no_mesmo_nivel(de_0309)
 
 
-def test_CONTROLE_o_guarda_ACEITA_a_frase_honesta():
-    """Dizer que PDF estima é o conserto — não pode ser acusado."""
-    boa = ('    fix = ("O ideal é reenviar em DXF. Se não der, dá pra mandar o '
-           'PDF vetorial — mas aí a gente identifica e estima, não mede.")' + chr(10))
-    assert not _oferece_pdf_como_igual(boa), (
-        "o guarda acusou a frase CERTA — ele proibiria o conserto")
+def test_CONTROLE_o_julgamento_por_frase_ACEITA_a_copy_HONESTA():
+    """Dizer que de PDF sai estimativa é o conserto — não pode ser acusado."""
+    boa = ("Se não der nenhum dos dois, dá pra mandar o PDF vetorial — mas aí a "
+           "gente identifica e estima, não mede: de PDF quase nunca sai "
+           "quantidade medida do desenho.")
+    lista = "Envie ao menos um arquivo: DWG, DXF ou PDF."
+    assert not _frase_poe_pdf_no_mesmo_nivel(boa), "o guarda proibiria o conserto"
+    assert not _frase_poe_pdf_no_mesmo_nivel(lista), (
+        "o guarda acusaria a lista de formatos ACEITOS — viraria ruído e "
+        "pararia de ser lido")
+
+
+def test_CONTROLE_o_e_mail_de_falha_e_montado_de_verdade():
+    """🪤 Verde vazio é verde falso: se os builders parassem de ser chamados,
+    os três testes acima passariam sem olhar nada."""
+    frases = _frases_da_recusa()
+    ramos = {r for r, _f in frases}
+    assert len(ramos) == 5, "sumiu um ramo do e-mail de falha: %s" % sorted(ramos)
+    assert len(frases) > 60, "só %d frases — os e-mails não estão sendo montados" % len(frases)
+    assert any("DXF" in f for _r, f in frases), "nenhuma frase cita DXF"
+    assert any("PDF" in f for _r, f in frases), "nenhuma frase cita PDF"
 
 
 def test_nao_prometemos_que_medimos_pela_geometria_do_PDF():

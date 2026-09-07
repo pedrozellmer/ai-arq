@@ -49,6 +49,128 @@ def _chamadas_de_gravacao(src):
 # ══════════════════════════════════════════════════════════════════════════
 #  🧪 Controle: o parser acha as chamadas que existem
 # ══════════════════════════════════════════════════════════════════════════
+def _ast_revisao():
+    import esprima
+    # 🔁 Não reimplemente a régua: `_normaliza` é a MESMA que o validador de JS
+    # das 12 páginas usa pra fazer o esprima (ES2017) engolir `?.` e `??`.
+    from test_js_paginas import _normaliza
+    js = _normaliza("\n".join(re.findall(r"<script>(.*?)</script>", _revisao(), re.S)))
+    return esprima.parseScript(js), js
+
+
+def _declaracao(no, nome):
+    """A `function <nome>` dentro da árvore, em qualquer profundidade."""
+    achado = []
+
+    def _anda(n):
+        if isinstance(n, list):
+            for x in n:
+                _anda(x)
+            return
+        if not hasattr(n, "type"):
+            return
+        if n.type == "FunctionDeclaration" and getattr(n, "id", None) \
+                and n.id.name == nome:
+            achado.append(n)
+        for k in dir(n):
+            if k.startswith("_") or k == "type":
+                continue
+            try:
+                _anda(getattr(n, k))
+            except Exception:
+                pass
+    _anda(no)
+    return achado[0] if achado else None
+
+
+def _avaliar(no, resposta):
+    """Executa a expressão de decisão contra uma resposta HTTP de mentira.
+
+    🔑 É isto que faz o guarda medir COMPORTAMENTO e não texto: `r.ok` e
+    `r.ok || r.status >= 500` são duas strings parecidas e duas decisões
+    opostas.
+    """
+    t = no.type
+    if t == "Literal":
+        return no.value
+    if t == "Identifier":
+        return resposta
+    if t == "MemberExpression":
+        return (_avaliar(no.object, resposta) or {}).get(no.property.name)
+    if t == "UnaryExpression" and no.operator == "!":
+        return not _avaliar(no.argument, resposta)
+    if t == "LogicalExpression":
+        a, b = _avaliar(no.left, resposta), _avaliar(no.right, resposta)
+        return (a or b) if no.operator == "||" else (a and b)
+    if t == "BinaryExpression":
+        a, b = _avaliar(no.left, resposta), _avaliar(no.right, resposta)
+        op = no.operator
+        if op in (">=", ">", "<", "<="):
+            a, b = (a or 0), (b or 0)
+        return {">=": a >= b, ">": a > b, "<": a < b, "<=": a <= b,
+                "===": a == b, "==": a == b, "!==": a != b, "!=": a != b}[op]
+    raise AssertionError("a decisão do salvamento usa `%s`, que este guarda não "
+                         "sabe avaliar — reescreva o guarda, não o afrouxe" % t)
+
+
+#: (resposta do servidor, a chamada devolveu como boa?)
+_RESPOSTAS = [
+    ({"ok": True, "status": 200}, True),
+    ({"ok": False, "status": 400}, False),
+    ({"ok": False, "status": 401}, False),
+    ({"ok": False, "status": 409}, False),
+    ({"ok": False, "status": 500}, False),
+    ({"ok": False, "status": 502}, False),   # 🚨 o caso real de 25/08
+]
+
+
+def _e_salvador_honesto(no, nome):
+    """(ok, motivo) — `nome` só devolve resposta boa e reprova o resto lançando?"""
+    fn = _declaracao(no, nome)
+    if fn is None:
+        return False, ("`%s` não é declarada em revisao.html — o salvamento sai "
+                       "por uma função que este guarda não consegue ler (o "
+                       "`authFetch` DEVOLVE a resposta e só lança em timeout)"
+                       % nome)
+    cond, tem_throw = None, False
+    for st in fn.body.body:
+        if st.type == "IfStatement" and cond is None:
+            filhos = (st.consequent.body if st.consequent.type == "BlockStatement"
+                      else [st.consequent])
+            if any(f.type == "ReturnStatement" for f in filhos):
+                cond = st.test
+        if st.type == "ThrowStatement":
+            tem_throw = True
+    if cond is None:
+        return False, ("`%s` não decide nada sobre o status: salva e devolve a "
+                       "resposta seja ela qual for" % nome)
+    if not tem_throw:
+        return False, "`%s` confere o status e não lança — não adianta nada" % nome
+    for resp, esperado in _RESPOSTAS:
+        if bool(_avaliar(cond, resp)) is not esperado:
+            return False, ("`%s` devolve a resposta como boa para HTTP %s (ok=%s) — "
+                           "um salvamento que NÃO gravou vira 'Salvo' verde"
+                           % (nome, resp["status"], resp["ok"]))
+    return True, ""
+
+
+def test_CONTROLE_a_avaliacao_PEGA_as_duas_formas_de_cegueira():
+    """🧪 Prova, na própria régua, que a avaliação reprova o wrapper cego E a
+    condição frouxa — e aprova o conserto."""
+    import esprima
+    cega = esprima.parseScript("async function _y(u,o){ return await authFetch(u,o); }")
+    ok, motivo = _e_salvador_honesto(cega, "_y")
+    assert not ok and "não decide nada" in motivo, motivo
+    frouxa = esprima.parseScript(
+        "async function _x(u,o){const r=await authFetch(u,o);"
+        "if (r.ok || r.status >= 500) return r; throw new Error('x');}")
+    ok2, motivo2 = _e_salvador_honesto(frouxa, "_x")
+    assert not ok2 and "HTTP 5" in motivo2, motivo2
+    boa = esprima.parseScript("async function _z(u,o){const r=await authFetch(u,o);"
+                              "if (r.ok) return r; throw new Error('x');}")
+    assert _e_salvador_honesto(boa, "_z")[0]
+
+
 def test_controle_acha_os_quatro_salvamentos():
     chamadas = _chamadas_de_gravacao(_revisao())
     assert len(chamadas) >= 4, (
@@ -61,20 +183,20 @@ def test_controle_acha_os_quatro_salvamentos():
 # ══════════════════════════════════════════════════════════════════════════
 def test_nenhum_salvamento_ignora_o_status_da_resposta():
     """🚨 O caso real: `await authFetch(...)` seguido de toast verde."""
-    cruas = [c for c in _chamadas_de_gravacao(_revisao()) if c == "authFetch"]
-    assert not cruas, (
-        "%d salvamento(s) voltaram a chamar authFetch direto. authFetch "
-        "DEVOLVE a resposta e só lança em timeout — um 502 vira 'Salvo' em "
-        "verde na cara do cliente. Use o `_salvar`." % len(cruas))
-
+    no, js = _ast_revisao()
+    chamadas = _chamadas_de_gravacao(js)
+    assert len(chamadas) >= 4, "o parser quebrou ou a tela mudou: %s" % chamadas
+    ruins = []
+    for nome in sorted(set(chamadas)):
+        ok, motivo = _e_salvador_honesto(no, nome)
+        if not ok:
+            ruins.append(motivo)
+    assert not ruins, "salvamento cego na tela de revisão:\n  " + "\n  ".join(ruins)
 
 def test_o_salvar_confere_o_ok_e_lanca():
-    src = _revisao()
-    i = src.index("async function _salvar(")
-    corpo = src[i:i + 700]
-    assert "r.ok" in corpo, "o `_salvar` parou de conferir o status"
-    assert "throw" in corpo, "o `_salvar` confere e não lança — não adianta nada"
-
+    no, _ = _ast_revisao()
+    ok, motivo = _e_salvador_honesto(no, "_salvar")
+    assert ok, motivo
 
 def test_o_salvar_usa_a_frase_que_o_backend_mandou():
     """O 502 traz em `detail` a frase escrita pro cliente ("ela NÃO foi

@@ -35,13 +35,17 @@ da capa, o gesto provável é CONFIRMAR. Carimbar "informado por você" em cima 
 `spreadsheet.py`, que troca a linha de premissa por causa desse mesmo campo).
 Confirmar não é informar — ver `_confirma_o_que_ja_tinha`.
 """
+import json
 import os
+import re
 import sys
 
 _AQUI = os.path.dirname(os.path.abspath(__file__))
 _BACKEND = os.path.dirname(_AQUI)
 sys.path.insert(0, _BACKEND)
 sys.path.insert(0, _AQUI)
+
+import dukpy                                                    # noqa: E402
 
 from _corpo import corpo_de, corpo_js, fonte, sem_comentarios   # noqa: E402
 
@@ -59,6 +63,87 @@ def _corpo_js(nome, src=None):
 def _js_limpo(nome):
     return "\n".join(l for l in _corpo_js(nome).splitlines()
                      if not l.strip().startswith("//"))
+
+
+#: Todo id que EXISTE em projeto.html. getElementById de qualquer outro
+#: devolve null — igualzinho ao navegador.
+_IDS_DA_TELA = sorted(set(re.findall(r'\bid="([^"\s]+)"', _PROJ)))
+
+
+def _bloco_do_script():
+    """O <script> onde o convite mora — o escopo que ele tem no navegador."""
+    i = _PROJ.find("function maybeShowAreaPrompt(")
+    assert i > 0, "o convite sumiu de projeto.html"
+    ini = _PROJ.rfind("<script", 0, i)
+    fim = _PROJ.find("</script>", i)
+    assert 0 < ini < i < fim, "não achei o <script> que contém o convite"
+    return _PROJ[ini:fim]
+
+
+def _dependencias_js(bloco):
+    """As MESMAS coisas que o convite tem à mão no navegador — nada além."""
+    linha = re.search(r"^const _AREA_M2_UI = .*$", bloco, re.M)
+    assert linha, "a lista de unidades de área sumiu do bloco do convite"
+    return linha.group(0) + "\n" + corpo_js("esc", src=bloco) + "\n"
+
+
+def rodar_o_convite(proj, items):
+    """EXECUTA `maybeShowAreaPrompt` num DOM montado com os ids REAIS da tela."""
+    bloco = _bloco_do_script()
+    harness = """
+var _pedidos = [], _faltaram = [], _avisos = [], _escChamado = 0;
+var _IDS = %s;
+var _els = {};
+for (var _i = 0; _i < _IDS.length; _i++) {
+  (function(id){
+    _els[id] = { id: id, textContent: '', innerHTML: '', value: '',
+                 escondido: true,
+                 classList: {
+                   remove: function(c){ if (c === 'hidden') _els[id].escondido = false; },
+                   add: function(c){ if (c === 'hidden') _els[id].escondido = true; } } };
+  })(_IDS[_i]);
+}
+var document = { getElementById: function(id){
+  _pedidos.push(id);
+  if (!_els[id]) { _faltaram.push(id); return null; }
+  return _els[id];
+} };
+var window = {};
+var console = {
+  warn: function(){ _avisos.push(Array.prototype.slice.call(arguments).join(' ')); },
+  log: function(){},
+  error: function(){ _avisos.push('erro'); } };
+""" % json.dumps(_IDS_DA_TELA)
+
+    # o `esc` da PÁGINA, só que contado.
+    conta_esc = ("\nvar _escReal = esc; "
+                 "esc = function(s){ _escChamado++; return _escReal(s); };\n")
+    chamada = """
+maybeShowAreaPrompt(%s, %s);
+JSON.stringify({
+  apareceu: !_els['area-prompt'].escondido,
+  titulo: _els['area-prompt-titulo'].textContent,
+  texto: _els['area-prompt-texto'].innerHTML,
+  valor: String(_els['area-input'].value),
+  faltaram: _faltaram, avisos: _avisos, esc: _escChamado
+});
+""" % (json.dumps(proj), json.dumps(items))
+    return json.loads(dukpy.evaljs(
+        harness + _dependencias_js(bloco) + conta_esc
+        + corpo_js("maybeShowAreaPrompt", src=bloco) + chamada))
+
+
+def _linha_vazia(unidade="m²", obs=""):
+    return {"unit": unidade, "quantity": 0, "description": "Piso ceramico",
+            "observations": obs}
+
+
+def test_CONTROLE_o_banco_de_ensaio_reprova_id_que_nao_existe():
+    """🧪 O DOM de mentira só vale se ele NÃO inventar elemento."""
+    assert "area-prompt" in _IDS_DA_TELA and "area-prompt-titulo" in _IDS_DA_TELA
+    assert "area-prompt-box" not in _IDS_DA_TELA
+    r = rodar_o_convite({"total_area": 290.0}, [_linha_vazia()])
+    assert r["apareceu"] and not r["faltaram"] and not r["avisos"], r
 
 
 # ── O extrator, antes de confiar nele ──────────────────────────────────────
@@ -178,12 +263,23 @@ def test_o_convite_NAO_promete_quantas_linhas_serao_preenchidas():
 def test_os_ids_que_o_JS_escreve_EXISTEM_no_html():
     """🚨 `getElementById` de id inexistente devolve null, o `.textContent`
     estoura, o `catch` engole e o convite NÃO APARECE — em silêncio, para
-    todo mundo. É o modo de falha mais caro possível aqui."""
-    for _id in ("area-prompt", "area-prompt-titulo", "area-prompt-texto",
-                "area-input", "area-submit"):
-        assert ('id="%s"' % _id) in _PROJ, (
-            "o id %r sumiu do HTML e o JS escreve nele — o convite morre "
-            "calado no catch" % _id)
+    todo mundo. É o modo de falha mais caro possível aqui.
+
+    🪤 06/09/2026 — o guarda anterior tinha lista fixa de 5 ids e conferia
+    só o lado do HTML. Trocar a chamada pra `area-prompt-box` (com o
+    `id="area-prompt"` intacto no HTML) matava o convite pra todo mundo e ele
+    passava verde. Agora o DOM de ensaio tem EXATAMENTE os ids da tela e quem
+    responde é a função rodando: id que ela pede e a tela não tem aparece em
+    `faltaram`.
+    """
+    for proj in ({"total_area": 290.0}, {"total_area": 0}):
+        r = rodar_o_convite(proj, [_linha_vazia()])
+        assert not r["faltaram"], (
+            "o convite pediu %r, que NÃO existe na tela: getElementById "
+            "devolve null, o catch engole e o convite morre calado pra todo "
+            "mundo" % (r["faltaram"],))
+        assert not r["avisos"], "o convite caiu no catch: %r" % (r["avisos"],)
+        assert r["apareceu"], "o convite não apareceu (proj=%r)" % (proj,)
 
 
 def test_a_funcao_de_escape_existe():

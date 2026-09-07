@@ -42,6 +42,9 @@ import sys
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _RAIZ = os.path.dirname(_BACKEND)
 sys.path.insert(0, _BACKEND)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from _corpo import bloco_desde  # noqa: E402
 
 
 def _main():
@@ -52,13 +55,66 @@ def _sem_comentarios(txt):
     return "\n".join(l for l in txt.splitlines() if not l.lstrip().startswith("#"))
 
 
-# ── (1) o aviso da área informada ──────────────────────────────────────────
+# ── (1) o aviso da área informada ──────────
+_ANCORA_UPLOAD = '        if _uta > 0 and not (project_data.total_area or 0):'
+
+
+class _ProjectDataFake:
+    def __init__(self, total_area=0, total_area_source=""):
+        self.total_area = total_area
+        self.total_area_source = total_area_source
+        self.warnings = None
+
+
+def _rodar(ancora, project_data, **extras):
+    """EXECUTA o bloco real do `process_job` e devolve os avisos do cliente."""
+    logs = []
+    ns = {
+        "project_data": project_data,
+        "job_id": "job-de-teste",
+        "_log_error": lambda stage, msg, job=None, **k: logs.append((stage, str(msg))),
+        "print": lambda *a, **k: None,
+    }
+    ns.update(extras)
+    exec(compile(bloco_desde(ancora), "<main:%s>" % ancora[:24], "exec"), ns, ns)
+    return list(project_data.warnings or []), logs
+
+
+def _aviso_do_upload(area_informada=150.0):
+    """O cenário da cliente-31 no momento do upload: ela informou, a planta não
+    trouxe quadro de áreas ainda."""
+    pd = _ProjectDataFake(total_area=0)
+    avisos, _ = _rodar(_ANCORA_UPLOAD, pd, _uta=float(area_informada))
+    assert len(avisos) == 1, (
+        "esperava UM aviso no ramo da área informada, veio %r" % (avisos,))
+    return avisos[0], pd
+
+
+# Palavras que só cabem em quem já SABE o destino. No momento do upload a
+# decisão ainda não foi tomada — `_apply_area_honesty` roda ~600 linhas depois.
+_PROMESSAS = ("iten", "item", "entra", "vira", "será", "sera", "serve",
+              "usada", "usar", "base")
+
+
 def test_o_aviso_do_upload_NAO_promete_que_vai_usar():
-    """🩸 A frase que a cliente-31 leu e não se cumpriu."""
-    limpo = _sem_comentarios(_main())
-    assert "entra como BASE pros itens de área" not in limpo, (
-        "o aviso voltou a prometer que a área informada vira base — ela só "
-        "vira quando a geometria NÃO mediu, e isso se decide bem depois")
+    """🩸 A frase que a cliente-31 leu e não se cumpriu.
+
+    🩸 06/09: o guarda anterior bania UMA string exata do `main.py`
+    ("entra como BASE pros itens de área"). Mutação que passou verde:
+    acrescentar ao mesmo aviso "Ela entra como base dos itens de area." — a
+    promessa volta parafraseada e a string banida continua ausente.
+
+    Agora o teste lê o aviso RENDERIZADO e cobra a regra, não a frase: no
+    upload a gente só pode CONSTATAR. Qualquer palavra que fale de destino
+    (itens, entra, vira, usada, base…) é promessa feita antes da decisão.
+    """
+    aviso, _ = _aviso_do_upload()
+    baixo = aviso.lower()
+    achadas = [p for p in _PROMESSAS if p in baixo]
+    assert not achadas, (
+        "o aviso do upload voltou a falar do DESTINO da área (%s) — ele é "
+        "escrito antes de `_apply_area_honesty` decidir, e no job da "
+        "cliente-31 a decisão foi NÃO usar:\n  %s" % (achadas, aviso))
 
 
 def test_o_aviso_do_upload_ainda_CONSTATA_o_fato():

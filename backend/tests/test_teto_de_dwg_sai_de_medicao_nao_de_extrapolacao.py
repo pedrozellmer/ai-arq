@@ -32,6 +32,14 @@ o preço foi um cliente novo recusado no primeiro projeto.
 nenhuma. A extração tem o próprio juiz: a trava de 2,5 GB do processo filho.
 Confundir os dois foi o que produziu três tetos discordando entre si.
 """
+import io
+import os
+import sys
+import textwrap
+
+_BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BACKEND)
+
 from dwg_extractor import _MAX_DWG_BYTES
 
 MB = 1024 * 1024
@@ -48,11 +56,100 @@ _ORCAMENTO_MB = 2200
 _FATOR_PESSIMISTA = 35
 
 
-def test_o_arquivo_do_fabio_passa():
+# ══════════════════════════════════════════════════════════════════════════
+#  A PORTA DE VERDADE — a fatia real do process_job, executada
+# ══════════════════════════════════════════════════════════════════════════
+# 🪤 Recorte por ÂNCORA (`if _tam_dwg > _TETO_DWG:`), nunca por janela de
+# tamanho fixo, e a fatia vai do `try:` do import da constante até a linha da
+# conversão — é ali que a decisão acontece.
+def _fatia_da_trava_do_dwg():
+    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+    ancora = "                        if _tam_dwg > _TETO_DWG:\n"
+    assert src.count(ancora) == 1, (
+        "a âncora da trava do DWG deixou de ser única — reveja o recorte "
+        "antes de confiar neste guarda")
+    i_anc = src.index(ancora)
+    inicio = ("                        try:\n"
+              "                            from dwg_extractor import "
+              "_MAX_DWG_BYTES as _TETO_DWG\n")
+    assert src.count(inicio) == 1
+    i = src.index(inicio)
+    fim = "                            dxf_path = convert_dwg_to_dxf(cad_path)\n"
+    assert src.count(fim) == 1
+    j = src.index(fim, i_anc) + len(fim)
+    assert i < i_anc < j, "as âncoras saíram de ordem"
+    fatia = textwrap.dedent(src[i:j])
+    assert "convert_dwg_to_dxf(cad_path)" in fatia and "_TETO_DWG" in fatia
+    return fatia
+
+
+def _dwg_de(tmp_path, nome, mb):
+    """Cria um arquivo com o TAMANHO do caso real (esparso: não escreve 44 MB)."""
+    p = os.path.join(str(tmp_path), nome)
+    with io.open(p, "wb") as f:
+        f.truncate(int(mb * MB))
+    return p
+
+
+def _porta_do_dwg(caminho):
+    """EXECUTA a trava anti-OOM real e devolve o que ela decidiu."""
+    visto = {"converteu": False, "recusou": False, "log": [],
+             "aviso_pro_cliente": "", "teto_mb": None}
+
+    def _converte(p):
+        visto["converteu"] = True
+        return p + ".dxf"
+
+    class _JobsFalso:
+        def update_field(self, job_id, **kw):
+            visto.setdefault("passos", []).append(kw.get("current_step", ""))
+
+    msgs = []
+    ns = {
+        "os": os, "io": io,
+        "cad_path": caminho, "job_id": "job-de-teste",
+        "_descartou_por_tamanho": False, "dxf_path": None,
+        "_dxf_grandes_msgs": msgs, "jobs": _JobsFalso(),
+        "convert_dwg_to_dxf": _converte,
+        "_log_error": lambda *a, **k: visto["log"].append(
+            " | ".join(str(x) for x in a)),
+    }
+    exec(compile(_fatia_da_trava_do_dwg(), "<main:trava-dwg>", "exec"), ns, ns)
+    visto["recusou"] = bool(ns.get("_descartou_por_tamanho"))
+    visto["aviso_pro_cliente"] = "\n".join(msgs)
+    visto["teto_mb"] = ns["_TETO_DWG"] / MB
+    return visto
+
+
+def test_o_arquivo_de_44MB_do_job_75dab573_passa(tmp_path):
     """44,5 MB: convertia com 836 MB de pico e extraía com 1.964 MB."""
-    assert 44.5 * MB <= _MAX_DWG_BYTES, (
-        "o DWG de 44,5 MB do Fábio voltou a ser recusado — medido, ele cabe "
-        "nas três etapas")
+    r = _porta_do_dwg(_dwg_de(tmp_path, "BRB_Estadio.dwg", 44.5))
+    assert r["converteu"] and not r["recusou"], (
+        "o DWG de 44,5 MB do job 75dab573 voltou a ser recusado (teto em vigor "
+        "no process_job: %.0f MB) — medido, ele cabe nas três etapas. "
+        "Aviso que iria pra ele: %r" % (r["teto_mb"], r["aviso_pro_cliente"]))
+    assert not r["aviso_pro_cliente"], r["aviso_pro_cliente"]
+
+
+def test_o_teto_que_a_porta_USA_e_o_da_medicao(tmp_path):
+    """🪤 A constante certa não vale nada se o `process_job` não a enxergar:
+    o `except` dele fixa 40 MB, o número velho, e a queda é silenciosa."""
+    r = _porta_do_dwg(_dwg_de(tmp_path, "qualquer.dwg", 1))
+    assert r["teto_mb"] * MB == _MAX_DWG_BYTES, (
+        "o process_job está julgando por %.0f MB e a medição fixou %.0f MB — "
+        "o import da constante quebrou e o except assumiu calado"
+        % (r["teto_mb"], _MAX_DWG_BYTES / MB))
+
+
+def test_CONTROLE_uma_prancha_ENORME_continua_sendo_recusada(tmp_path):
+    """A trava existe pra alguma coisa: sem este controle, um teto infinito
+    passaria no teste do job 75dab573 e derrubaria o container."""
+    r = _porta_do_dwg(_dwg_de(tmp_path, "gigante.dwg", 150))
+    assert r["recusou"] and not r["converteu"], (
+        "DWG de 150 MB entrou na conversão — pediria ~5 GB num container de 4")
+    assert "grande demais" in r["aviso_pro_cliente"], r["aviso_pro_cliente"]
+    assert "não tem defeito" in r["aviso_pro_cliente"], (
+        "o aviso culpa o arquivo do cliente: %r" % r["aviso_pro_cliente"])
 
 
 def test_NOTA_o_teto_antigo_era_40MB_e_o_arquivo_tinha_44():

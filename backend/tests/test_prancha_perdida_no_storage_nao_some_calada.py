@@ -29,10 +29,17 @@ de rodar. Por isso `_avisos_com` passou a aceitar lista, e os dois usam.
 """
 import ast
 import io
+import json
 import os
+import sys
+
+import pytest
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _BACKEND)
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
+
+import main  # noqa: E402
 
 _BAIXA = "_supabase_storage_download_prancha"
 
@@ -129,13 +136,82 @@ def _alertas_ausentes(codigo):
 # ══════════════════════════════════════════════════════════════════════════
 #  O julgamento sobre o código REAL
 # ══════════════════════════════════════════════════════════════════════════
-def test_nenhum_laco_descarta_prancha_sem_registrar():
-    ruins = _perdas_caladas(_FONTE)
-    assert not ruins, (
-        "laço que baixa do Storage e descarta prancha sem juntar o nome "
-        "(linha %s do main.py) — o arquivo some e o cliente recebe `done` numa "
-        "leitura incompleta" % ", ".join(str(n) for n in ruins))
+class _Parou(Exception):
+    """Sentinela: para o caminho logo depois do ponto que a gente mede."""
 
+
+def _storage_de_mentira(monkeypatch, presentes, sumidas, respostas=None):
+    """Storage que LISTA todas as pranchas e só ENTREGA algumas.
+
+    É o caso de 18/08 encenado: o arquivo existe na listagem e o download volta
+    vazio (truncado, e por isso descartado desde 03/09).
+    """
+    import urllib.request as _ur
+
+    nomes = list(presentes) + list(sumidas)
+    respostas = respostas or {}
+    diario = []
+
+    class _Resp:
+        def __init__(self, dados):
+            self._d = dados
+
+        def read(self):
+            return self._d
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def _urlopen(req, timeout=None):
+        url, metodo = req.full_url, req.get_method()
+        diario.append((metodo, url))
+        for chave, dados in respostas.items():
+            if chave in url:
+                return _Resp(dados)
+        if "storage/v1/object/list" in url:
+            return _Resp(json.dumps([{"name": n} for n in nomes]).encode())
+        return _Resp(b"[]")
+
+    monkeypatch.setattr(_ur, "urlopen", _urlopen)
+    monkeypatch.setattr(main, _BAIXA,
+                        lambda job_id, fname: (b"PDF-de-mentira"
+                                               if fname in presentes else None))
+    return diario
+
+
+def test_nenhum_laco_descarta_prancha_sem_registrar(monkeypatch):
+    """O filhote de avaliação perde 1 de 3 pranchas — e o alerta recebe o NOME.
+
+    Não basta a lista existir: ela tem que chegar cheia no alerta.
+    """
+    avisos = []
+
+    def _alerta(job_id, perdidos, total, onde):
+        avisos.append({"job_id": job_id, "perdidos": list(perdidos),
+                       "total": total, "onde": onde})
+        raise _Parou()          # o que vem depois é o job inteiro; já medimos
+
+    _storage_de_mentira(
+        monkeypatch, presentes=["planta-a.pdf", "planta-c.pdf"],
+        sumidas=["planta-b.pdf"],
+        respostas={"rest/v1/projects": json.dumps(
+            [{"job_id": "job-orig", "is_eval": False, "typology": "office"}]).encode()})
+    monkeypatch.setattr(main, "_require_admin", lambda *a, **k: {"email": "x"})
+    monkeypatch.setattr(main, "_alerta_pranchas_perdidas", _alerta)
+
+    with pytest.raises(_Parou):
+        main.admin_eval_reprocess("job-orig", request=None)
+
+    assert avisos, "baixou 2 de 3 pranchas e o alerta nunca foi chamado"
+    assert avisos[0]["perdidos"] == ["planta-b.pdf"], (
+        "o laço descartou a prancha e a lista de perdas chegou %r — o arquivo "
+        "some e o cliente recebe `done` numa leitura incompleta"
+        % avisos[0]["perdidos"])
+    assert avisos[0]["total"] == 3, (
+        "o alerta não sabe de QUANTAS: %r" % avisos[0]["total"])
 
 def test_toda_funcao_que_baixa_em_laco_avisa_da_perda():
     ausentes = _alertas_ausentes(_FONTE)

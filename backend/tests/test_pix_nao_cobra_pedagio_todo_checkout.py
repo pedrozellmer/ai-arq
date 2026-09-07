@@ -14,10 +14,12 @@ quatro. Pra conta BRASILEIRA o PIX à vista é INVITE ONLY no Stripe
    não peça DUAS VEZES o que já se sabe que vai falhar —
    e não transforme a recusa de hoje numa decisão permanente.
 """
+import asyncio
 import io
 import os
 import sys
 import time
+import types
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
@@ -28,6 +30,37 @@ import main  # noqa: E402
 def _zerar():
     main._PIX_ESTADO["indisponivel"] = False
     main._PIX_ESTADO["ate"] = 0.0
+
+
+class _SessaoFalsa:
+    url = "https://checkout.stripe.test/c/sessao"
+    id = "cs_test_do_guarda"
+
+
+def _stripe_que_recusa_pix():
+    """Devolve (módulo, chamadas). `chamadas` guarda os
+    `payment_method_types` de CADA tentativa."""
+    mod = types.ModuleType("stripe")
+    mod.api_key = None
+    chamadas = []
+
+    class InvalidRequestError(Exception):
+        pass
+
+    class _Session:
+        @staticmethod
+        def create(**params):
+            metodos = params.get("payment_method_types") or []
+            chamadas.append(list(metodos))
+            if "pix" in metodos:
+                raise InvalidRequestError(
+                    "The payment method type provided: pix is invalid. "
+                    "Please check `payment_method_types`.")
+            return _SessaoFalsa()
+
+    mod.error = types.SimpleNamespace(InvalidRequestError=InvalidRequestError)
+    mod.checkout = types.SimpleNamespace(Session=_Session)
+    return mod, chamadas
 
 
 def test_por_padrao_o_pix_e_tentado():
@@ -89,17 +122,46 @@ def test_o_checkout_monta_os_metodos_a_partir_da_lembranca():
         "a recusa do Stripe não está mais sendo lembrada — o pedágio volta")
 
 
-def test_o_fallback_para_cartao_continua_existindo():
+def test_o_fallback_para_cartao_continua_existindo(monkeypatch):
     """🚨 O conserto é de custo, não de comportamento. Se o PIX for pedido e o
-    Stripe recusar, o cliente TEM que continuar conseguindo pagar com cartão —
-    era o que já funcionava, e não pode ter sido perdido no caminho."""
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    i = src.index('@app.post("/api/checkout")')
-    corpo = src[i:i + 12000]
-    assert 'payment_method_types": ["card"]' in corpo, (
-        "o fallback card-only sumiu — uma recusa de PIX passaria a derrubar o "
-        "pagamento do cliente")
-    assert "card-only fallback" in corpo
+    Stripe recusar, o cliente TEM que continuar conseguindo pagar com cartão."""
+    _zerar()
+    mod, chamadas = _stripe_que_recusa_pix()
+    monkeypatch.setitem(sys.modules, "stripe", mod)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_do_guarda")
+    monkeypatch.setattr(main, "_log_error", lambda *a, **k: None)
+
+    r = asyncio.run(main.create_checkout(request=None, num_pranchas=3))
+
+    assert chamadas == [["card", "pix"], ["card"]], (
+        "o checkout não tentou PIX e depois cartão — tentativas: %r" % chamadas)
+    assert r["checkout_url"] == _SessaoFalsa.url, (
+        "a recusa de PIX derrubou o pagamento: o cliente ficou sem checkout")
+    assert r["payment_methods"] == ["card"], r["payment_methods"]
+    assert main._pix_vale_tentar() is False, (
+        "a recusa não foi registrada — a segunda chamada ao Stripe volta a "
+        "acontecer em todo checkout")
+
+
+def test_CONTROLE_com_o_pix_liberado_o_fallback_nao_roda(monkeypatch):
+    """🧪 O teste de cima só vale se souber distinguir."""
+    _zerar()
+    mod, chamadas = _stripe_que_recusa_pix()
+    mod.checkout.Session.create = staticmethod(
+        lambda **p: (chamadas.append(list(p.get("payment_method_types") or [])),
+                     _SessaoFalsa())[1])
+    monkeypatch.setitem(sys.modules, "stripe", mod)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_do_guarda")
+    _avisos = []
+    monkeypatch.setattr(main, "_log_error",
+                        lambda *a, **k: _avisos.append(a[0] if a else ""))
+
+    r = asyncio.run(main.create_checkout(request=None, num_pranchas=3))
+    assert chamadas == [["card", "pix"]], chamadas
+    assert r["payment_methods"] == ["card", "pix"]
+    assert "checkout:pix-liberado" in _avisos, (
+        "o PIX passou e ninguém foi avisado — a copy do site continua "
+        "prometendo só cartão")
 
 
 def test_CONTROLE_a_leitura_do_checkout_ACHA_o_alvo():

@@ -41,21 +41,87 @@ _CORPO = sem_comentarios(fonte("main.py"))
 
 
 # ── O conserto ─────────────────────────────────────────────────────────────
-def test_o_erro_SALVA_os_avisos_acumulados():
-    """🩸 Os 94 projetos. Se cair, o motor volta a esquecer o que descobriu.
+# ── helpers: o except do process_job, tirado por AST e RODADO ──────────
+import ast as _ast
+_ARVORE = _ast.parse(fonte("main.py"))
 
-    🪤 04/09: este assert era `'"warnings": _avisos_ate_aqui' in _CORPO` e
-    reprovou um conserto LEGÍTIMO — o pacote passou a gravar
-    `_avisos_com(job_id, _avisos_ate_aqui)`, que faz a mesma coisa E ainda
-    preserva o que já estava no banco. Guarda ancorado na REDAÇÃO barra a
-    melhoria; o que ele tem que cobrar é que os avisos acumulados cheguem ao
-    pacote, em qualquer forma.
-    """
+
+def _codigo_do_except_do_process_job():
+    """O corpo do `except` de `process_job` — o código REAL, pronto pra rodar."""
+    achados = []
+    for no in _ast.walk(_ARVORE):
+        if not (isinstance(no, _ast.FunctionDef) and no.name == "process_job"):
+            continue
+        for t in _ast.walk(no):
+            if not isinstance(t, _ast.Try):
+                continue
+            for h in t.handlers:
+                txt = _ast.unparse(_ast.Module(body=h.body, type_ignores=[]))
+                if "_avisos_ate_aqui" in txt and "_supabase_update" in txt:
+                    achados.append(txt)
+    assert len(achados) == 1, (
+        "esperava UM except de process_job que salve avisos e grave no banco, "
+        "achei %d" % len(achados))
+    return achados[0]
+
+
+class _JobsFalso:
+    def __init__(self):
+        self.campos = {}
+
+    def update_field(self, job_id, **kw):
+        self.campos.update(kw)
+
+
+def _rodar_o_except(project_data=..., log_error=None, erro=None,
+                    avisos_no_banco=("aviso que JA estava no banco",)):
+    """Executa o tratamento de erro de verdade e devolve (pacotes, logs)."""
     import re
-    assert re.search(r'"warnings":[^\n]*_avisos_ate_aqui', _CORPO), (
-        "o pacote de erro voltou a gravar só status e mensagem — os avisos "
-        "acumulados até o momento da falha não chegam mais")
-    assert "_avisos_ate_aqui" in _CORPO
+    pacotes, logs = [], []
+
+    def _log(stage, message, job_id=None, severity="error"):
+        logs.append((stage, message, severity))
+        if log_error:
+            log_error(stage, message, job_id, severity)
+
+    escopo = {
+        "e": erro or RuntimeError("a IA devolveu 0 itens"),
+        "job_id": "job-de-teste",
+        "jobs": _JobsFalso(),
+        "_log_error": _log,
+        "_supabase_update": lambda tab, campo, valor, dados:
+            pacotes.append({"tabela": tab, "campo": campo,
+                            "valor": valor, "dados": dados}),
+        "_avisos_com": lambda jid, novos: list(avisos_no_banco) + [
+            a for a in novos if a not in avisos_no_banco],
+        "_TRANSIENT_ERR_RX": re.compile("sobrecarregad|timeout", re.I),
+        "_email_falha_cliente": lambda *a, **k: None,
+        "print": lambda *a, **k: None,
+    }
+    if project_data is not ...:
+        escopo["project_data"] = project_data
+    exec(_codigo_do_except_do_process_job(), escopo)
+    return pacotes, logs
+
+
+def test_o_erro_SALVA_os_avisos_acumulados():
+    """🩸 94 projetos em erro (42 de cliente) com ZERO aviso gravado."""
+    class _PD:
+        warnings = ["prancha 03 cortada por tamanho",
+                    "plano B do conversor acionado"]
+
+    pacotes, _logs = _rodar_o_except(project_data=_PD())
+    assert len(pacotes) == 1, pacotes
+    dados = pacotes[0]["dados"]
+    assert dados.get("status") == "error"
+    assert "warnings" in dados, (
+        "o pacote de erro voltou a gravar só status e mensagem — os %d avisos "
+        "que o motor tinha acumulado morreram junto com o job" % len(_PD.warnings))
+    for _a in _PD.warnings:
+        assert _a in dados["warnings"], (
+            "o aviso %r não chegou ao banco: %r" % (_a, dados["warnings"]))
+    assert "aviso que JA estava no banco" in dados["warnings"], (
+        "o pacote passou por cima do que já estava lá (o clobber de 04/09)")
 
 
 def test_o_aviso_so_vai_QUANDO_EXISTE():

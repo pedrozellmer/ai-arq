@@ -178,27 +178,104 @@ def test_controle_positivo_o_guarda_de_fisica_REPROVA_mesmo():
         "controle negativo furado: cotas de 60-80 cm são normais")
 
 
-def test_ambigua_deixou_de_ser_beco_sem_saida():
-    """🪤 Guarda de CALL SITE: prancha com cota ganhava MENOS tentativa.
+def _prancha_sem_cota():
+    doc = ezdxf.new("R2010")
+    doc.header["$INSUNITS"] = _INSUNITS_CM
+    msp = doc.modelspace()
+    if "PAREDES" not in doc.layers:
+        doc.layers.add("PAREDES")
+    msp.add_line((0, 0), (500, 0), dxfattribs={"layer": "PAREDES"})
+    msp.add_line((500, 0), (500, 400), dxfattribs={"layer": "PAREDES"})
+    return doc
 
-    `ambigua` ficava de fora da cascata, então uma prancha com 376 cotas não
-    recebia as réguas de reserva (DIMLFAC e plausibilidade) que uma prancha SEM
-    cota nenhuma recebe. Ler a função não pega isso — só o chamador.
-    """
-    import io as _io
-    _here = os.path.dirname(os.path.abspath(__file__))
-    fonte = _io.open(os.path.join(_here, "..", "dwg_extractor.py"),
-                     encoding="utf-8").read()
-    corpo = chr(10).join(l for l in fonte.split(chr(10))
-                         if not l.strip().startswith("#"))
-    assert 'dim_check.get("status") in (None, "ambigua")' in corpo, (
-        "'ambigua' voltou a ficar fora da cascata das réguas de reserva")
-    # 🪤 `_unidade_por_dimlfac` também aparece na DEFINIÇÃO dela, muito antes
-    # do chamador — procurar a 1ª ocorrência compara com o lugar errado.
-    i_casc = corpo.find('dim_check.get("status") in (None, "ambigua")')
-    i_lfac = corpo.find("_unidade_por_dimlfac(doc", i_casc)
-    assert i_casc > 0 and i_lfac > i_casc, (
-        "a cascata não chega mais no DIMLFAC depois da régua das cotas")
+
+def _extrair(doc):
+    import dwg_extractor as _dx
+    d = tempfile.mkdtemp(prefix="_regua_")
+    p = os.path.join(d, "p.dxf")
+    doc.saveas(p)
+    try:
+        return _dx.extract_dxf(p)
+    finally:
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+
+def _cascata_com(status, *, lfac_decide=True, monkeypatch=None):
+    import dwg_extractor as _dx
+    chamou = {"lfac": 0, "plausibilidade": 0}
+
+    def _dim(doc, uf):
+        d = {"motivo": "duas leituras plausíveis", "cotas_utilizaveis": 376}
+        if status:
+            d["status"] = status
+        if status == "validada":
+            d.update(fator=uf, n_cotas=376, unidade_nome="metro")
+        return d
+
+    def _lfac(doc, uf):
+        chamou["lfac"] += 1
+        if not lfac_decide:
+            return {"status": "nada"}
+        return {"status": "corrigida_lfac", "fator_corrigido": 0.001,
+                "mensagem": "DIMLFAC=1000 prova milímetro",
+                "unidade_nome": "milímetro"}
+
+    def _plaus(doc, uf):
+        chamou["plausibilidade"] += 1
+        return {"status": "corrigida_plausibilidade", "fator_corrigido": 0.01,
+                "mensagem": "o desenho em metro seria fisicamente impossível"}
+
+    monkeypatch.setattr(_dx, "_validate_unit_by_dimensions", _dim)
+    monkeypatch.setattr(_dx, "_unidade_por_dimlfac", _lfac)
+    monkeypatch.setattr(_dx, "_unidade_por_plausibilidade", _plaus)
+    ex = _extrair(_prancha_sem_cota())
+    return chamou, ex.metadata
+
+
+def test_ambigua_deixou_de_ser_beco_sem_saida(monkeypatch):
+    """Guarda de CALL SITE: prancha com cota ganhava MENOS tentativa."""
+    chamou, md = _cascata_com("ambigua", monkeypatch=monkeypatch)
+    assert chamou["lfac"] == 1, (
+        "a prancha 'ambigua' NAO recebeu a regua do DIMLFAC — ela ganha menos "
+        "tentativa que uma prancha sem cota nenhuma, que e o defeito que este "
+        "arquivo existe pra impedir")
+    assert md.get("fator_para_metros") == "0.001", (
+        "o DIMLFAC decidiu e o fator nao mudou (%r) — a cascata nao aplicou o "
+        "resultado" % md.get("fator_para_metros"))
+    assert md.get("regua_cotas_status") == "corrigida_lfac", md.get("regua_cotas_status")
+
+    # e a 4a regua vem DEPOIS da 3a, quando o DIMLFAC tambem se cala
+    chamou2, md2 = _cascata_com("ambigua", lfac_decide=False,
+                                monkeypatch=monkeypatch)
+    assert chamou2["plausibilidade"] == 1, (
+        "a cascata parou no DIMLFAC — a 4a regua (plausibilidade) nao roda "
+        "mais pra prancha ambigua")
+    assert md2.get("fator_para_metros") == "0.01", md2.get("fator_para_metros")
+    assert md2.get("alerta_unidade"), (
+        "correcao por plausibilidade NAO e prova: tem que virar ressalva")
+
+
+def test_CONTROLE_a_prancha_JA_PROVADA_nao_entra_na_cascata(monkeypatch):
+    """O outro lado: quem ja provou a escala por cota nao pode ser 'corrigido'
+    pelas reguas de reserva."""
+    chamou, md = _cascata_com("validada", monkeypatch=monkeypatch)
+    assert chamou == {"lfac": 0, "plausibilidade": 0}, (
+        "prancha VALIDADA por cota entrou nas reguas de reserva: %s" % (chamou,))
+    assert md.get("regua_cotas_status") == "validada"
+    assert md.get("fator_para_metros") == "0.01", (
+        "mexeram no fator de uma prancha ja provada: %r"
+        % md.get("fator_para_metros"))
+
+
+def test_a_prancha_SEM_COTA_continua_recebendo_as_reservas(monkeypatch):
+    """Regressao do caso cliente-XX (05/08): 28 cotas com DIMLFAC=100 provam
+    metro num arquivo que declara milimetro — sem isso, 36 pilares somem."""
+    chamou, md = _cascata_com(None, monkeypatch=monkeypatch)
+    assert chamou["lfac"] == 1, chamou
+    assert md.get("fator_para_metros") == "0.001"
 
 
 def test_o_log_conta_POR_QUE_a_regua_se_calou():

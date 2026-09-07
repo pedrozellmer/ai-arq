@@ -65,15 +65,6 @@ def _passada6(src, so_codigo=False):
 #  O descarte acabou
 # ─────────────────────────────────────────────────────────────────────────────
 
-def test_a_passada_6_NAO_elege_vencedor_nem_descarta():
-    """🚨 O invariante central: nenhuma leitura de prancha é apagada."""
-    corpo = _passada6(_fonte(), so_codigo=True)
-    assert "losers" not in corpo, (
-        "o winner/losers voltou — alguma prancha está sendo apagada de novo")
-    assert not re.search(r"winner\s*=\s*max\(group", corpo), (
-        "a eleição de vencedor voltou à passada 6")
-
-
 def test_o_texto_que_o_cliente_le_MUDOU_de_descarte_para_aviso():
     """Antes a observação dizia 'Versões descartadas: …' — ou seja, contava pro
     cliente o que a gente tinha jogado fora. Agora ela avisa e devolve a

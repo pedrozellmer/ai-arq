@@ -89,6 +89,53 @@ def _postgrest_de_verdade(pedidos):
     return _urlopen
 
 
+# ── a bancada que o guarda convertido pede ────────────────────────────────
+NO_BANCO = {"projects": 229, "profiles": 77}
+
+
+class _FakeReq:
+    headers = {}
+    client = None
+
+
+def _postgrest(monkeypatch, quebradas=(), pedidos=None):
+    """PostgREST do dia 25/08: 400 na coluna que a tabela nao tem."""
+    pedidos = [] if pedidos is None else pedidos
+
+    def _urlopen(req, timeout=None):
+        url = req.full_url if hasattr(req, "full_url") else str(req)
+        pedidos.append(url)
+        caminho = url.split("/rest/v1/", 1)[-1]
+        tabela = caminho.split("?", 1)[0]
+        colunas = []
+        for parte in caminho.split("?", 1)[-1].split("&"):
+            if parte.startswith("select="):
+                colunas = [c for c in parte[len("select="):].split(",") if c]
+        if tabela in quebradas:
+            raise urllib.error.HTTPError(url, 500, "boom", {}, None)
+        for c in colunas:
+            if c != CHAVE.get(tabela):
+                raise urllib.error.HTTPError(
+                    url, 400, "column %s.%s does not exist" % (tabela, c), {}, None)
+        return _RespostaFalsa(NO_BANCO.get(tabela, 0))
+
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen)
+    monkeypatch.setattr(main, "_get_user_from_request",
+                        lambda request, tolerante=False: {
+                            "id": "uid-admin", "email": main.ADMIN_EMAIL})
+    return _FakeReq()
+
+
+def _chamar(fn, *a):
+    """Roda a rota aceitando `def` OU `async def`."""
+    import asyncio
+    import inspect
+    r = fn(*a)
+    if inspect.isawaitable(r):
+        return asyncio.run(r)
+    return r
+
+
 def _health_de_admin(monkeypatch):
     """Chama `/api/health` DE VERDADE como admin. Devolve (saida, urls pedidas)."""
     pedidos = []
@@ -102,36 +149,15 @@ def _health_de_admin(monkeypatch):
 
 
 def test_cada_tabela_e_contada_pela_coluna_que_ELA_tem(monkeypatch):
-    """RODA o /api/health contra um PostgREST que se comporta como o de 25/08.
-
-    🚨 O bug: `profiles?select=id` devolve 400 (a tabela nao tem coluna `id`,
-    a chave e `user_id`), o 400 caia num except e o zero ia pro ar como se
-    fosse medicao — com 77 perfis no banco.
-
-    🩸 A versao anterior lia o fonte: cobrava a string
-    `_count_table('profiles', 'user_id')`. Fazer o argumento ser IGNORADO
-    (`?select=id` fixo dentro de `_count_table`) mantinha a chamada escrita
-    identica, e o guarda passava enquanto a contagem de perfis morria de novo.
-    """
-    saida, pedidos = _health_de_admin(monkeypatch)
-    stats = saida["stats"]
-
+    """🚨 O bug, medido na SAÍDA: `profiles?select=id` devolve 400 e o painel
+    dizia "0 usuários" com 77 perfis no banco."""
+    req = _postgrest(monkeypatch)
+    stats = _chamar(main.health, req)["stats"]
     assert stats["total_users"] == 77, (
-        "a contagem de perfis voltou a morrer: total_users=%r. A consulta que "
-        "saiu foi %s — `profiles` nao tem coluna `id`, o PostgREST devolve 400 "
-        "e o numero vai a zero (ou a None)."
-        % (stats["total_users"],
-           [u.split("/rest/v1/", 1)[-1] for u in pedidos if "profiles" in u]))
-    assert stats["total_projects"] == 229, (
-        "a contagem de projetos morreu: %r" % stats["total_projects"])
-
-    # E cada tabela foi perguntada pela coluna que ELA tem.
-    for tabela, coluna in sorted(CHAVE.items()):
-        assert any("%s?select=%s&limit=1" % (tabela, coluna) in u for u in pedidos), (
-            "ninguem contou %s por %s; as consultas foram %s"
-            % (tabela, coluna,
-               [u.split("/rest/v1/", 1)[-1] for u in pedidos]))
-
+        "a contagem de profiles voltou a pedir uma coluna que a tabela não tem "
+        "— o PostgREST devolve 400 e o número morre (veio %r)"
+        % stats["total_users"])
+    assert stats["total_projects"] == 229, stats
 
 def test_CONTROLE_a_bancada_REPROVA_a_coluna_errada(monkeypatch):
     """🧪 Se o PostgREST falso aceitasse qualquer coluna, o teste de cima seria

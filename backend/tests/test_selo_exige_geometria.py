@@ -25,7 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 # 🪤 Janela de tamanho fixo mede o vizinho (ou um pedaço) e passa
 # verde por engano — a auditoria de 25/08 achou 17 assim. O recorte
 # certo mora num lugar só.
-from _corpo import corpo_de  # noqa: E402
+from _corpo import corpo_de, bloco_desde  # noqa: E402
 import sys
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -173,47 +173,90 @@ def test_a_rede_so_REBAIXA_nunca_promove():
     assert [a["indice"] for a in ach] == [1]
 
 
+# ══════════════════════════════════════════
+#  🧪 A BANCADA QUE EXECUTA O BLOCO REAL DO process_job
+# ══════════════════════════════════════════
+_NL_ = chr(10)
+_ANCORA_REDE = ("try:" + _NL_ + " " * 12
+                + "from engine_rules import selos_sem_geometria as _ssg")
+
+_OBS_SO_TEXTO = ("Fonte: texto layer 'ARQ-TEXTO 1': "
+                 "'AREA TOTAL CLINICA = 264,54 m²'. Inclui todas as áreas internas.")
+_OBS_MEDIDA = ("Fonte: área hachurada do layer 'ARQ-DET-GENF' = 12,33 m² "
+               "(soma de 12 hachuras).")
+
+
+class _ItemFake(object):
+    """O que o bloco lê e escreve num item: selo, observações, descrição."""
+
+    def __init__(self, obs, conf="confirmado", desc="Item", unit="m²",
+                 quantity=10.0, origem=""):
+        self.description = desc
+        self.unit = unit
+        self.quantity = quantity
+        self.confidence = conf
+        self.observations = obs
+        self.origem = origem
+
+
+class _ProjectDataFake(object):
+    def __init__(self):
+        self.warnings = []
+
+
+def _selo(item):
+    c = getattr(item, "confidence", "")
+    return str(getattr(c, "value", c) or "").strip().lower()
+
+
+def _rodar_a_rede(itens):
+    """Executa o BLOCO REAL do process_job sobre `itens`.
+
+    Devolve (avisos_ao_cliente, logs). Nada de rede, banco ou IA: o bloco só
+    precisa de `all_items`, `project_data`, `job_id` e `_log_error`.
+    """
+    logs = []
+    pd = _ProjectDataFake()
+    ns = {
+        "all_items": itens,
+        "project_data": pd,
+        "job_id": "job-do-guarda",
+        "_log_error": lambda etapa, msg, *a, **k: logs.append((etapa, msg)),
+        "print": lambda *a, **k: None,
+    }
+    exec(compile(bloco_desde(_ANCORA_REDE), "<rede-do-selo>", "exec"), ns, ns)
+    return pd.warnings, logs
+
+
 def test_a_rede_esta_ligada_no_process_job():
-    """🚨 25/08 (auditoria): a versão anterior deste guarda passava VERDE com a
-    rede NUNCA sendo chamada. Ela conferia que o import existia e que 4 strings
-    apareciam numa janela de 1400 chars — nada disso prova execução.
+    """🚨 A defesa da REGRA DURA Nº1, RODANDO — não lida."""
+    texto = _ItemFake(_OBS_SO_TEXTO, desc="Piso — revestimento de piso interno")
+    medido = _ItemFake(_OBS_MEDIDA, desc="Contrapiso")
+    avisos, logs = _rodar_a_rede([texto, medido])
 
-    É a defesa da REGRA DURA Nº1, a mais importante do produto, e dava pra
-    desligá-la sem nenhum teste reclamar. Sabotagem que provou: trocar
-    `_ssg(all_items)` por `(lambda *a, **k: [])(all_items)` → 8 testes passaram.
+    assert _selo(texto) == "estimado", (
+        "o item cuja procedência é texto continuou com selo de MEDIDO (%r) — a "
+        "rede da regra dura nº1 não agiu" % _selo(texto))
+    assert texto.observations.startswith("⚠ ESTIMADO — este número foi LIDO"), (
+        "rebaixou o selo e não explicou ao cliente por quê: %r"
+        % texto.observations[:90])
+    assert _selo(medido) == "confirmado", (
+        "rebaixou medição legítima (hachura) — a rede só pode REBAIXAR o que "
+        "não tem lastro, nunca destruir o trabalho do motor")
+    assert any(e == "motor:selo-sem-geometria" for e, _ in logs), (
+        "rebaixou item e não deixou rastro no log: %r" % (logs,))
+    assert not avisos, (
+        "o caminho normal (rede rodou e rebaixou) não pode gerar aviso de "
+        "falha: %r" % (avisos,))
 
-    🪤 Mesmo erro do guarda da ordenação de e-mails, no mesmo dia: conferir que
-    a função EXISTE em vez de conferir que ela é CHAMADA e que o resultado é
-    USADO."""
-    import io
-    import re
-    src = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
-    assert "selos_sem_geometria as _ssg" in src, "a rede nem é importada"
 
-    # 1. é CHAMADA, com os itens do projeto
-    assert re.search(r"_sem_geo\s*=\s*_ssg\(\s*all_items\s*\)", src), (
-        "a rede não é chamada com all_items — foi assim que a sabotagem passou")
-    # 2. o resultado é PERCORRIDO pelo laço que REBAIXA — e só ele conta.
-    # 🪤 A 1ª versão deste guarda procurava "for X in _sem_geo" em TODO o
-    # arquivo, e casava com `for x in _sem_geo[:4]` de DENTRO da mensagem de
-    # log. Trocar o laço de verdade por `for _a in []` passava verde, porque o
-    # laço do log continuava lá. Guarda tem que olhar o trecho que AGE.
-    i = src.index("_sem_geo = _ssg(")
-    j = src.index("motor:selo-sem-geometria", i)
-    age = src[i:j]                      # só o que roda ANTES do log
-    assert re.search(r"for\s+\w+\s+in\s+_sem_geo\s*:", age), (
-        "o resultado da rede não é percorrido pelo laço que rebaixa — foi assim "
-        "que a sabotagem passou")
-    # 3. o que ela aponta é REBAIXADO, nunca promovido.
-    # 🪤 Aqui eu me enrolei: usei o MESMO trecho (que vai só até o log) pra
-    # depois exigir que o log estivesse dentro dele — impossível por
-    # construção, e o guarda reprovava o código CERTO. Duas perguntas
-    # diferentes pedem duas janelas diferentes.
-    trecho = src[i:i + 1400]
-    assert "_CfG.ESTIMADO" in trecho, "não rebaixa o selo"
-    assert "_CfG.CONFIRMADO" not in trecho, "🚨 a rede está PROMOVENDO"
-    assert "motor:selo-sem-geometria" in trecho, "não deixa rastro no log"
-    assert "LIDO de um texto da prancha" in trecho, "não explica ao cliente"
+def test_a_rede_so_REBAIXA_no_process_job_nunca_PROMOVE():
+    """🧪 Controle de direção, executado."""
+    est = _ItemFake(_OBS_SO_TEXTO, conf="estimado")
+    ver = _ItemFake(_OBS_MEDIDA, conf="verificar")
+    _rodar_a_rede([est, ver])
+    assert _selo(est) == "estimado" and _selo(ver) == "verificar", (
+        "🚨 o bloco PROMOVEU selo: %r / %r" % (_selo(est), _selo(ver)))
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -255,7 +298,6 @@ def test_a_rota_de_contagem_NAO_altera_nada():
 
 def test_a_rota_e_so_de_admin():
     import io as _io
-    src = _io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
     assert "_require_admin(request)" in corpo_de("admin_selo_historico")
 
 

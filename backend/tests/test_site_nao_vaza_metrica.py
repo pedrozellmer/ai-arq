@@ -33,7 +33,7 @@ _METRICA = re.compile(
 
 def _servido(nome):
     """O HTML como o público recebe: com os comentários HTML já removidos."""
-    return sh.limpa_html(io._read(nome)) if False else sh.limpa_html(
+    return sh.limpa_html(
         open(os.path.join(RAIZ, nome), encoding="utf-8").read())
 
 

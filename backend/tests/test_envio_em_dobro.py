@@ -60,6 +60,52 @@ def _par(nome, tam):
     return (_FakeUpload(nome, tam), "", "")
 
 
+# ═══ A bancada que RODA a rota ═══
+import asyncio                                                    # noqa: E402
+import types                                                      # noqa: E402
+
+import pytest                                                     # noqa: E402
+
+
+class _RequestDeMentira:
+    def __init__(self):
+        self.headers = {}
+        self.client = types.SimpleNamespace(host="203.0.113.9")
+
+
+@pytest.fixture
+def rota_de_upload(monkeypatch, tmp_path):
+    """Chama `/api/process` de verdade. Se a rota passar da trava, o
+    `_stream_upload_to_disk` encenado levanta — e e isso que prova que ela
+    seguiu pro caminho de criar job novo."""
+    _limpar()
+
+    async def _nao_devia_chegar(upload_file, path):
+        raise AssertionError(
+            "a rota passou da trava de envio em dobro e foi CRIAR UM JOB NOVO")
+
+    monkeypatch.setattr(M, "_get_user_from_request",
+                        lambda request, tolerante=False: {
+                            "id": "u-cliente-41",
+                            "email": "cliente-41@example.com"})
+    monkeypatch.setattr(M, "_rate_limit_ok", lambda *a, **k: True)
+    monkeypatch.setattr(M, "_log_error", lambda *a, **k: None)
+    monkeypatch.setattr(M, "WORK_DIR", str(tmp_path))
+    monkeypatch.setattr(M, "_stream_upload_to_disk", _nao_devia_chegar)
+
+    def _chamar(nome_projeto="Harmonia - 9º Pavimentos",
+                arquivo="ARQ_HARMONIA_R02.dwg", tam=41_000_000):
+        async def _go():
+            return await M.process_files(
+                request=_RequestDeMentira(), background_tasks=None,
+                files=[_FakeUpload(arquivo, tam)], sheet_types=[],
+                sheet_ambientes=[], project_name=nome_projeto,
+                user_email="cliente-41@example.com", user_id="u-cliente-41")
+        return asyncio.run(_go())
+
+    yield _chamar
+    _limpar()
+
 def test_o_caso_da_AMANDA_o_segundo_envio_devolve_o_PRIMEIRO_job():
     """O teste que define o commit."""
     _limpar()
@@ -151,19 +197,40 @@ def test_o_dicionario_NAO_cresce_pra_sempre():
             "entradas vencidas ficaram: %d" % len(M._ENVIOS_RECENTES))
 
 
-def test_a_rota_USA_a_trava_antes_de_criar_o_job():
-    """🪤 Guarda de CALL SITE: a função pode estar certa e nunca ser chamada.
-    E a ordem importa — depois do `job_id = uuid` não adianta nada."""
-    import io
-    _b = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    corpo = io.open(os.path.join(_b, "main.py"), encoding="utf-8").read()
-    i_chk = corpo.find("_envio_recente_igual(_assinatura_envio)")
-    i_job = corpo.find("job_id = str(uuid.uuid4())[:8]")
-    assert i_chk > 0, "a trava não é chamada no /api/process"
-    assert i_chk < i_job, (
-        "a checagem vem DEPOIS de criar o job — o job duplicado já nasceu")
-    assert "_registrar_envio(_assinatura_envio, job_id)" in corpo, (
-        "o envio não é registrado — a trava nunca teria o que comparar")
+def test_a_rota_USA_a_trava_antes_de_criar_o_job(rota_de_upload):
+    """🪤 Guarda de CALL SITE: a função pode estar certa e nunca ser usada.
+
+    O caso real, encenado: o site manda o MESMO arquivo duas vezes com 1
+    segundo de diferença. O segundo POST tem que devolver o job do primeiro
+    em vez de abrir outro processamento.
+    """
+    import main as M
+    # 1º envio: a trava deixa passar; o job nasce e fica registrado.
+    # (A criação de verdade é o `_stream_upload_to_disk`, que aqui levanta —
+    # então o que interessa registrar é feito à mão, como a rota faz.)
+    assinatura = M._assinatura_do_envio(
+        "u-cliente-41", "Harmonia - 9º Pavimentos",
+        [(_FakeUpload("ARQ_HARMONIA_R02.dwg", 41_000_000), "", "")])
+    M._registrar_envio(assinatura, "b249f3e4")
+
+    # 2º envio, 1 segundo depois: MESMO usuário, MESMO projeto, MESMO arquivo.
+    r = rota_de_upload()
+    assert r.get("duplicado") is True, (
+        "a rota não reconheceu o envio repetido: %r" % r)
+    assert r.get("job_id") == "b249f3e4", (
+        "a rota devolveu %r em vez do job que já estava processando" % r.get("job_id"))
+
+
+def test_CONTROLE_envio_NOVO_nao_e_barrado_pela_trava(rota_de_upload):
+    """🧪 Sem isto, uma trava que barrasse TUDO passaria nos dois testes acima
+    e ninguém conseguiria mandar projeto nenhum.
+
+    Aqui não há envio anterior: a rota tem que SEGUIR pro caminho de criar o
+    job — e é o `_stream_upload_to_disk` encenado que prova que ela seguiu.
+    """
+    import pytest as _pt
+    with _pt.raises(AssertionError, match="CRIAR UM JOB NOVO"):
+        rota_de_upload(nome_projeto="Casa Nova", arquivo="planta.dwg", tam=999)
 
 
 def test_a_resposta_do_duplicado_tem_os_campos_QUE_O_SITE_LE():

@@ -34,6 +34,8 @@ try/except deixa passar. Sem isso, TODA medição de PDF morreria de ImportError
 em desenvolvimento. Por isso o teste de comportamento abaixo só roda em Linux —
 no CI, que é ubuntu.
 """
+import ast
+import io
 import os
 import subprocess
 import sys
@@ -48,11 +50,60 @@ sys.path.insert(0, _AQUI)
 from _corpo import fonte, sem_comentarios          # noqa: E402
 
 _SRC = sem_comentarios(fonte("main.py"))
+_MAIN = os.path.join(_BACKEND, "main.py")
 
-# o prefixo que o filho executa, reproduzido aqui pro teste de comportamento
-_PREFIXO = ("try:\n    import resource; resource.setrlimit("
-            "resource.RLIMIT_AS, (2_000_000_000, 2_000_000_000))\n"
-            "except Exception:\n    pass\n")
+
+# ══════════════════════════════════════════════════════════════════════════
+#  🧪 O comando REAL que o filho recebe — não o texto que o monta
+# ══════════════════════════════════════════════════════════════════════════
+# 🪤 06/09/2026: o guarda do teto conferia se o literal `RLIMIT_AS, (2_000_...`
+# aparecia no fonte, perto do `_cmd = [...]`. Envolver as três linhas do prefixo
+# num `("" if 1 else "...") +` deixa o literal exatamente onde ele procurava E
+# tira o teto do `-c` que o filho executa — o guarda passava e o filho voltava a
+# rodar sem teto, que é o caminho que derrubou o site por 2 minutos.
+#
+# 🔑 A pergunta certa não é "o texto existe?", é "o teto CHEGA ao filho?".
+# `process_job` tem ~3.900 linhas e não dá pra chamar num teste; então a
+# atribuição `_cmd = [...]` é levantada do PRÓPRIO fonte (AST, sem janela de
+# tamanho fixo) e EXECUTADA — o que sai é o argv de verdade.
+def _no_unico(pred, oque):
+    tree = ast.parse(io.open(_MAIN, encoding="utf-8").read())
+    achados = [n for n in ast.walk(tree) if pred(n)]
+    assert len(achados) == 1, (
+        "esperava 1 %s em main.py, achei %d — o guarda perdeu o alvo"
+        % (oque, len(achados)))
+    return achados[0]
+
+
+def _argv_real_do_filho():
+    """Executa a atribuição `_cmd = [...]` de main.py e devolve o argv."""
+    no = _no_unico(
+        lambda n: isinstance(n, ast.Assign) and len(n.targets) == 1
+        and isinstance(n.targets[0], ast.Name) and n.targets[0].id == "_cmd",
+        "atribuição de _cmd")
+
+    class _Sysv:                       # o `sys` que main.py importa como _sysv
+        executable = sys.executable
+
+    ns = {"os": os, "_sysv": _Sysv, "__file__": _MAIN,
+          "pdf_path": "/tmp/prancha.pdf", "page_index": 0}
+    exec(compile(ast.unparse(no), "<_cmd de main.py>", "exec"), ns)
+    return ns["_cmd"]
+
+
+def _prefixo_real():
+    """Só o pedaço do `-c` que vem ANTES da medição: é ele que põe o teto."""
+    codigo = _argv_real_do_filho()[2]
+    marco = "import sys, json"
+    assert marco in codigo, (
+        "o comando do filho mudou de forma — não achei onde a medição começa")
+    return codigo[:codigo.index(marco)]
+
+
+# o prefixo que o filho executa — LEVANTADO DO CÓDIGO DE PRODUÇÃO, não copiado.
+# 🪤 A versão anterior era uma cópia colada aqui: os testes de comportamento
+# provavam que UM texto limita memória, nunca que era ESSE que o filho recebia.
+_PREFIXO = _prefixo_real()
 
 
 # ── O comportamento, no sistema que importa ────────────────────────────────
@@ -90,14 +141,31 @@ def test_CONTROLE_o_prefixo_NAO_estoura_em_sistema_sem_resource():
 
 
 # ── O código de produção ───────────────────────────────────────────────────
-def test_a_chamada_de_medicao_LEVA_o_teto():
-    assert "resource.RLIMIT_AS, (2_000_000_000, 2_000_000_000)" in _SRC, (
-        "a medição do PDF voltou a rodar sem teto de memória — é o caminho "
-        "que derrubou o site por 2 minutos em 03/09")
-    i = _SRC.find("_cmd = [_sysv.executable")
-    assert i > 0
-    assert "RLIMIT_AS" in _SRC[i:i + 600], (
-        "o teto saiu de dentro do comando que o filho executa")
+def test_a_chamada_de_medicao_LEVA_o_teto(tmp_path):
+    """🩸 O teto tem que CHEGAR ao filho — não basta existir no arquivo.
+
+    O filho de verdade é rodado aqui, com um `resource` de brinquedo na frente
+    do da máquina (PYTHONPATH), que só conta o que recebeu. Assim o teste vale
+    igual no Windows (onde `resource` não existe) e no Linux do CI, e mede o
+    que importa: o valor que o kernel receberia."""
+    prefixo = _prefixo_real()
+    espiao = tmp_path / "resource.py"
+    espiao.write_text(
+        "RLIMIT_AS = 9\n"
+        "def setrlimit(qual, limites):\n"
+        "    import sys\n"
+        "    sys.stderr.write('SETRLIMIT %r %r\\n' % (qual, tuple(limites)))\n",
+        encoding="utf-8")
+    r = subprocess.run(
+        [sys.executable, "-c", prefixo + "print('o filho rodou')"],
+        capture_output=True, text=True, timeout=60,
+        env={**os.environ, "PYTHONPATH": str(tmp_path)})
+    assert "o filho rodou" in r.stdout, (
+        "o prefixo do teto quebrou o filho: %s" % (r.stderr or "")[-400:])
+    assert "SETRLIMIT 9 (2000000000, 2000000000)" in r.stderr, (
+        "o filho da medição de PDF NÃO recebeu o teto de 2 GB — é o caminho "
+        "que derrubou o site por 2 minutos em 03/09. stderr: %r"
+        % (r.stderr or "")[-400:])
 
 
 def test_o_teto_e_TOLERANTE_a_plataforma():
@@ -109,10 +177,58 @@ def test_o_teto_e_TOLERANTE_a_plataforma():
 
 def test_o_ramo_que_AVISA_o_cliente_continua_de_pe():
     """🔑 O conserto não precisou de tratamento novo justamente porque este
-    ramo já existia: filho com rc≠0 vira log + aviso ao cliente."""
-    assert "if _pr.returncode != 0:" in _SRC
-    assert '"pdfvec:filho-morreu"' in _SRC
-    assert "_pdfvec_falhas.append(" in _SRC
+    ramo já existia: filho com rc≠0 vira log + aviso ao cliente.
+
+    🪤 06/09: o guarda antigo procurava três strings no fonte INTEIRO — e as
+    três existem em OUTROS ramos do mesmo arquivo ('pdfvec:filho-morreu'
+    aparece 3×, `_pdfvec_falhas.append(` 4×). Esvaziar este ramo (`pass` e o
+    corpo debaixo de `if False:`) deixava o guarda verde e a prancha morta
+    voltava a sumir em silêncio. Agora o ramo é EXECUTADO: filho com rc=-6
+    entra, e o que se confere é o que ele DEIXOU — a falha na lista que vira
+    aviso do cliente e a linha de log."""
+    ramo = _no_unico(
+        lambda n: isinstance(n, ast.If) and _teste_do_if(n) == "_pr.returncode != 0",
+        "ramo `if _pr.returncode != 0:`")
+
+    def _rodar(rc):
+        falhas, logs = [], []
+
+        class _PR:
+            returncode = rc
+            stderr = "Fatal Python error: Cannot allocate memory\n"
+            stdout = ""
+
+        ns = {"_pr": _PR, "_pdfvec_falhas": falhas, "_stem": "prancha_p0",
+              "filename": "planta.pdf", "pdf_path": "/tmp/planta.pdf",
+              "page_index": 0, "job_id": "job-de-teste",
+              "_log_error": lambda *a, **k: logs.append((a, k))}
+        exec(compile(ast.Module(body=[ramo], type_ignores=[]), "<ramo>", "exec"), ns)
+        return falhas, logs
+
+    falhas, logs = _rodar(-6)
+    assert falhas, (
+        "o filho morreu (rc=-6) e NADA entrou em `_pdfvec_falhas` — a prancha "
+        "some da medição sem o cliente ficar sabendo")
+    assert falhas[0]["motivo"] == "processo" and falhas[0]["rc"] == -6, falhas[0]
+    assert falhas[0]["arquivo"] == "planta.pdf", (
+        "o aviso não diz QUAL prancha morreu")
+    assert logs and logs[0][0][0] == "pdfvec:filho-morreu", (
+        "o filho morreu e não sobrou linha de log — o traceback foi pro lixo")
+    assert "Cannot allocate memory" in logs[0][0][1], (
+        "o log não carrega o stderr do filho: sem ele não dá pra saber se "
+        "morreu de memória ou de outra coisa")
+
+    # 🧪 controle negativo: filho SÃO não pode gerar aviso nenhum
+    falhas_ok, logs_ok = _rodar(0)
+    assert not falhas_ok and not logs_ok, (
+        "prancha medida com sucesso virou aviso de falha pro cliente")
+
+
+def _teste_do_if(no):
+    try:
+        return ast.unparse(no.test)
+    except Exception:
+        return ""
 
 
 def test_o_cronometro_NAO_foi_subido_junto():

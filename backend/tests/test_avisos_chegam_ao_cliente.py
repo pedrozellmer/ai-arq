@@ -34,6 +34,52 @@ import re
 
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+sys.path.insert(0, _BACKEND)
+
+import main  # noqa: E402
+
+
+_AVISOS_DO_CLIENTE_19 = [
+    "A leitura da prancha '4366-EL-E.dwg' ficou INCOMPLETA: ela tem itens demais",
+    "Usamos o leitor alternativo nesta prancha",
+    "⚠ 3 prancha(s) não entraram nesta planilha",
+    "Escala assumida por padrão em 1 prancha",
+    "⚠ 2 itens sem unidade reconhecida",
+    "Blocos repetidos foram agrupados",
+    "✅ Escala conferida pelas cotas",
+]
+
+
+class _ItemFalso(object):
+    """O minimo que `_build_reading_diagnostic` le de um item."""
+
+    def __init__(self, confianca):
+        self.confidence = confianca
+        self.origem = "cad"
+
+
+def _diagnostico_com(avisos):
+    """Monta o bloco 'Como lemos o seu projeto' - a funcao REAL do e-mail."""
+    from models import Confidence as _Conf
+    itens = [_ItemFalso(_Conf.CONFIRMADO), _ItemFalso(_Conf.ESTIMADO)]
+    projeto = type("ProjetoFalso", (), {"warnings": list(avisos)})()
+    bloco = main._build_reading_diagnostic(itens, 0, 1, "arquitetura", projeto)
+    assert bloco, "o bloco de diagnostico nem foi montado - o e-mail saiu mudo"
+    return bloco
+
+
+def _avisos_no_email(bloco):
+    """Os avisos que o cliente REALMENTE le, na ordem em que sairam."""
+    import html as _hd
+    saiu = []
+    for pedaco in bloco.split("<br>&bull;")[1:]:
+        texto = pedaco.split("</div>")[0].strip()
+        if texto.startswith("<i>e mais"):
+            continue
+        saiu.append(_hd.unescape(texto))
+    return saiu
+
+
 
 def _main():
     return io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
@@ -70,27 +116,39 @@ def _sem_comentarios(src: str) -> str:
 #  1. Nada de aviso descartado calado no e-mail
 # ══════════════════════════════════════════════════════════════════════════
 def test_o_email_nao_corta_mais_nos_dois_primeiros():
-    src = _main()
-    assert 'or [])[:2]:' not in src, (
-        "voltou o corte cego em 2 avisos — foi assim que o 'ⓘ 3 pranchas não "
-        "entraram' do cliente-19 nunca saiu por e-mail")
+    """🩸 O defeito de 24/08 em pessoa: com os 7 avisos do cliente-19, o e-mail
+    mandava os DOIS PRIMEIROS na ordem crua do motor.
 
+    🪤 06/09/2026 — ESTE GUARDA ERA CEGO. Ele proibia a string `or [])[:2]:`.
+    Reescrevi o mesmo corte com `or list()` no lugar de `or []`: o cliente
+    voltava a receber 2 avisos de 7, sem anúncio nenhum, e ele passou verde.
+    Agora monta o e-mail e conta o que saiu.
+    """
+    saiu = _avisos_no_email(_diagnostico_com(_AVISOS_DO_CLIENTE_19))
+    assert len(saiu) == 6, (
+        "o e-mail levou %d dos 7 avisos (o teto é 6) — voltou o corte cego: %r"
+        % (len(saiu), saiu))
+    assert any("não entraram" in a for a in saiu), (
+        "o aviso '3 prancha(s) não entraram' NÃO saiu no e-mail — é o de "
+        "24/08 de novo: metade do projeto sumido e o cliente só sabendo pela "
+        "tela, que 43 de 44 nunca reabrem. Saiu: %r" % (saiu,))
 
 def test_o_email_ordena_por_gravidade_e_prancha_faltando_vem_primeiro():
-    src = _main()
-    assert "def _peso_aviso" in src, "sumiu a ordenação por gravidade"
-    # 🪤 Definir não é usar: na primeira versão deste guarda eu conferia só a
-    # existência da função. Sabotei o CHAMADOR (troquei o sort por um corte em 2)
-    # e o teste passou verde. Guarda que não pega o defeito que motivou ele é
-    # enfeite.
-    assert "_avisos.sort(key=_peso_aviso)" in _sem_comentarios(src), (
-        "a ordenação existe mas não é aplicada — os avisos voltam à ordem "
-        "em que o motor calhou de gerar")
-    assert "_avisos[:2]" not in _sem_comentarios(src), "voltou o corte em 2"
-    corpo = corpo_de("_peso_aviso")
-    # prancha inteira faltando tem que pesar MENOS (vir antes) que o resto
-    assert "não entraram" in corpo and "return 0" in corpo
-
+    """🪤 06/09/2026 — o guarda antigo conferia as strings `_avisos.sort(...)` e
+    `def _peso_aviso` no fonte. Inverti a condição DENTRO do `_peso_aviso`
+    (`in` → `not in`, com a frase e o `return 0` intactos no corpo) e ele
+    passou: o aviso de prancha faltando caía pro 7º lugar e era cortado pelo
+    teto de 6. Agora a ordem é lida no e-mail montado."""
+    saiu = _avisos_no_email(_diagnostico_com(_AVISOS_DO_CLIENTE_19))
+    assert "não entraram" in saiu[0], (
+        "prancha inteira faltando não é o 1º aviso do e-mail — a ordem voltou "
+        "a ser a que o motor calhou de gerar. Ordem que saiu: %r" % (saiu,))
+    pos = {a: i for i, a in enumerate(saiu)}
+    incompleta = next(i for a, i in pos.items() if "INCOMPLETA" in a)
+    alternativo = next(i for a, i in pos.items() if "leitor alternativo" in a)
+    assert incompleta < alternativo, (
+        "'leitura incompleta' tem que vir antes de aviso neutro — foi um "
+        "neutro que ocupou a vaga do aviso grave em 24/08")
 
 def test_o_que_nao_couber_e_anunciado_nunca_sumido():
     """Trocar um corte cego por outro não seria conserto."""
@@ -102,7 +160,6 @@ def test_o_que_nao_couber_e_anunciado_nunca_sumido():
 def test_boa_noticia_vai_por_ultimo():
     """'✅ Escala conferida' é ótimo, mas não pode empurrar 'faltou prancha'
     pra fora do e-mail."""
-    src = _main()
     assert "return 9" in corpo_de("_peso_aviso")
 
 
@@ -162,7 +219,6 @@ def test_o_helper_de_nome_bonito_tira_mesmo_o_sufixo_interno():
     passam e o cliente continua vendo o nome errado."""
     import sys
     sys.path.insert(0, _BACKEND)
-    src = _main()
     corpo = corpo_de("_nome_prancha_bonito")
     for suf in ("_libredwg.dxf", ".slim.dxf"):
         assert suf in corpo, "o helper parou de conhecer o sufixo %s" % suf

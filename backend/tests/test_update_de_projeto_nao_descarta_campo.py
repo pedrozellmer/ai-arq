@@ -90,16 +90,76 @@ def _pacotes_enviados():
 
 
 # ── O guarda ───────────────────────────────────────────────────────────────
-def test_NENHUM_update_de_projeto_manda_campo_que_a_RPC_descarta():
-    """🩸 Os dois casos reais. Se este teste cair, alguém voltou a gravar num
-    caminho que responde OK e não grava."""
-    aceitos = _campos_que_a_rpc_aceita()
-    ruins = [(n, var, sorted(ch - aceitos)) for n, var, ch in _pacotes_enviados()
-             if ch - aceitos]
-    assert not ruins, (
-        "estes updates mandam campo que a RPC update_project_status DESCARTA "
-        "em silêncio (e ainda devolve sucesso): %r.\nUse _projeto_patch pra "
-        "esses campos — ele faz PATCH direto na tabela." % ruins)
+_META_DA_TELA = {
+    "project_name": "Reforma do apartamento 402",
+    "typology": "residential",
+    "address": "Rua das Acacias, 100 - sala 3",
+    "phase": "Projeto executivo",
+}
+
+
+def _salvar_meta_de_verdade(monkeypatch, campos):
+    """Chama a rota /meta e devolve (resposta, o-que-foi-gravado, caminhos).
+
+    🔑 Os dublês ficam no NÍVEL DO BANCO (`_supa_rest_service` e o `urlopen`
+    das RPCs), não na rota. Assim a rota escolhe o caminho dela sozinha e a
+    gente vê o que sobrou do outro lado — que é onde os quatro campos sumiam.
+    """
+    import asyncio, json, urllib.request
+    import main as m
+    gravado, caminhos = {}, []
+
+    def _rest_falso(metodo, caminho, body=None, params=None, prefer=None, timeout=15):
+        caminhos.append("%s %s" % (metodo, caminho))
+        if metodo == "PATCH" and caminho.startswith("projects?job_id=eq."):
+            gravado.update(body or {})
+            return 204, None
+        return 200, []
+
+    class _RespFalsa:
+        def read(self):
+            return b"1"
+
+    def _urlopen_falso(req, timeout=None):
+        caminhos.append("POST %s" % req.full_url)
+        corpo = json.loads((req.data or b"{}").decode("utf-8"))
+        # cada RPC só GUARDA o que ela conhece; o resto ela descarta calada
+        for k, v in corpo.items():
+            if k == "p_job_id" or v is None:
+                continue
+            gravado[k[2:]] = v
+        return _RespFalsa()
+
+    monkeypatch.setattr(m, "_require_project_owner", lambda *a, **k: None)
+    monkeypatch.setattr(m, "_supa_rest_service", _rest_falso)
+    monkeypatch.setattr(m, "_supa_log", lambda *a, **k: None)
+    monkeypatch.setattr(m, "_log_error", lambda *a, **k: None)
+    monkeypatch.setattr(urllib.request, "urlopen", _urlopen_falso)
+
+    resposta = asyncio.run(m.update_project_meta(
+        "job-de-teste", m.ProjectMetaPayload(**campos), None))
+    return resposta, gravado, caminhos
+
+
+def test_NENHUM_update_de_projeto_manda_campo_que_a_RPC_descarta(monkeypatch):
+    """🩸 A rota respondia 'ok' e o banco não mudava, desde 13/05/2026.
+
+    🪤 O varredor de fonte lia `"campo":` com ASPAS DUPLAS. Um dicionário com
+    aspas simples é invisível pra ele — mesmo defeito, roupa nova. Aqui a rota
+    RODA e a pergunta é a de sempre: o que a tela mandou chegou no banco?
+    """
+    resposta, gravado, caminhos = _salvar_meta_de_verdade(monkeypatch, _META_DA_TELA)
+    assert resposta.get("status") == "ok", resposta
+
+    perdidos = {k: v for k, v in _META_DA_TELA.items() if gravado.get(k) != v}
+    assert not perdidos, (
+        "a rota devolveu OK e estes campos NÃO chegaram ao banco: %r.\n"
+        "Gravado de verdade: %r\nCaminhos usados: %r"
+        % (sorted(perdidos), gravado, caminhos))
+
+    assert not [c for c in caminhos if "update_project_status" in c], (
+        "os dados do projeto foram por `update_project_status`, que aceita 7 "
+        "campos fixos, descarta o resto e AINDA devolve sucesso: %r" % caminhos)
 
 
 def test_CONTROLE_o_guarda_ACHA_os_dois_formatos_de_pacote():

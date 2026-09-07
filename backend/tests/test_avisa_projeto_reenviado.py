@@ -27,6 +27,8 @@ import io
 import os
 import sys
 
+import pytest  # noqa: F401
+
 _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _BACKEND)
 
@@ -177,13 +179,91 @@ def _site(p):
                    encoding="utf-8").read()
 
 
-def test_o_upload_devolve_o_aviso_e_o_site_mostra():
-    limpo = "\n".join(l for l in _fonte("main.py").splitlines()
-                      if not l.lstrip().startswith("#"))
-    assert 'resp["aviso_repetido"]' in limpo, "o aviso não sai do backend"
-    assert "upload:projeto-repetido" in limpo, "não vira linha em error_log"
+class _Upload:
+    """Um arquivo de upload como o Starlette entrega — nome, tamanho e leitura
+    em pedaços."""
+
+    def __init__(self, filename, conteudo=b"%PDF-1.4 planta de mentira\n"):
+        self.filename = filename
+        self._c = conteudo
+        self.size = len(conteudo)
+        self._i = 0
+
+    async def seek(self, n):
+        self._i = n
+
+    async def read(self, n=-1):
+        if n is None or n < 0:
+            n = len(self._c) - self._i
+        pedaco = self._c[self._i:self._i + n]
+        self._i += len(pedaco)
+        return pedaco
+
+
+class _ReqUpload:
+    headers = {}
+    client = None
+
+
+def _chamar_upload(monkeypatch, nomes, pe_direito=0, area=0, tmp_path=None):
+    """Roda o /api/process de verdade e devolve (resposta, linhas de error_log).
+
+    Tudo que toca rede, banco, disco de produção e o motor é dublado — o que
+    fica de pé é a rota: as travas, o cálculo do aviso e a resposta.
+    """
+    import asyncio
+    import tempfile
+    logs = []
+    monkeypatch.setattr(main, "_get_user_from_request",
+                        lambda req, tolerante=False: {"id": "u1", "email": "cliente-nn@example.com"})
+    monkeypatch.setattr(main, "_rate_limit_ok", lambda *a, **k: True)
+    monkeypatch.setattr(main, "WORK_DIR", str(tmp_path or tempfile.mkdtemp(prefix="upl_")))
+    monkeypatch.setattr(main, "_supabase_insert", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_process_job_throttled", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_notify_admin", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_log_error",
+                        lambda stage, msg, job=None, severity="error":
+                        logs.append((stage, msg, severity)))
+    # 🪤 A trava de envio em dobro guarda assinatura em memória entre testes.
+    monkeypatch.setattr(main, "_ENVIOS_RECENTES", {})
+    # 🪤 `sheet_types` e `sheet_ambientes` têm `Form(default=[])` na assinatura:
+    # chamada direta recebe o OBJETO Form, não a lista, e a rota estoura num
+    # `len()`. Quem chama por fora do FastAPI passa as listas na mão.
+    resp = asyncio.run(main.process_files(
+        _ReqUpload(), None, files=[_Upload(n) for n in nomes],
+        sheet_types=[], sheet_ambientes=[],
+        project_name="LUANA", user_id="u1", user_email="cliente-nn@example.com",
+        user_total_area=area, user_pe_direito=pe_direito))
+    return resp, logs
+
+
+def test_o_upload_devolve_o_aviso_e_o_site_mostra(monkeypatch, tmp_path):
+    """🩸 O caso do cliente-NN, de ponta a ponta: reenviou o mesmo caderno e a
+    RESPOSTA do upload tem que trazer o aviso — é ela que o site lê."""
+    _cenario(monkeypatch, CADERNO)
+    resp, logs = _chamar_upload(monkeypatch, CADERNO, tmp_path=tmp_path)
+    av = resp.get("aviso_repetido")
+    assert av, "o aviso não sai do backend — a resposta foi %r" % sorted(resp)
+    assert av["job_anterior"] == "144c1f04"
+    assert av["arquivos_iguais"] == 6 and av["arquivos_enviados"] == 6
+    assert av["titulo"] and av["texto"], av
+    assert any(s == "upload:projeto-repetido" for s, _m, _sev in logs), (
+        "não vira linha em error_log: %r" % [s for s, _m, _sev in logs])
     site = _site("dashboard.html")
     assert "data.aviso_repetido" in site, "o site não lê o aviso"
+
+
+def test_CONTROLE_projeto_novo_nao_leva_aviso_na_resposta(monkeypatch, tmp_path):
+    """🧪 O outro lado: se a resposta trouxesse o aviso sempre, o teste acima
+    passaria com a trava quebrada."""
+    _cenario(monkeypatch, CADERNO)
+    outros = ["casa da praia - planta.pdf", "casa da praia - corte.pdf",
+              "casa da praia - fachada.pdf", "casa da praia - cobertura.pdf"]
+    resp, logs = _chamar_upload(monkeypatch, outros, tmp_path=tmp_path)
+    assert "aviso_repetido" not in resp, (
+        "acusou repetição num projeto novo — ofende quem está mandando "
+        "trabalho de verdade")
+    assert resp.get("job_id") and resp.get("status") == "queued", resp
 
 
 def test_o_aviso_NAO_promete_resultado_igual():

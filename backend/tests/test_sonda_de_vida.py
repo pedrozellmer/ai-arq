@@ -30,6 +30,8 @@ _BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 _FONTE = io.open(os.path.join(_BACKEND, "main.py"), encoding="utf-8").read()
 
+import main as M  # noqa: E402
+
 
 def _corpo_da_sonda():
     i = _FONTE.find('@app.get("/health")')
@@ -38,9 +40,23 @@ def _corpo_da_sonda():
     return _FONTE[i:fim if fim > i else i + 2000]
 
 
+def _cliente():
+    """Fala com o app pelo MESMO caminho do Render: uma requisicao HTTP.
+
+    SEM `with`: o context manager dispara os eventos de startup, que tocam
+    banco. Quem sonda o Render nao roda startup nenhum.
+    """
+    from fastapi.testclient import TestClient
+    return TestClient(M.app, raise_server_exceptions=False)
+
+
 def test_a_sonda_existe():
-    assert '@app.get("/health")' in _FONTE, (
-        "sem /health o Render não tem o que sondar — e o 404 volta pro log")
+    """EXECUTA a sonda pelo caminho do Render: um GET /health."""
+    r = _cliente().get("/health")
+    assert r.status_code == 200, (
+        "GET /health respondeu %s — e este 404 que enche o log do Render e "
+        "deixa a plataforma sem saber se o processo travou" % r.status_code)
+    assert r.json() == {"ok": True}, r.text
 
 
 def test_a_sonda_NAO_toca_em_banco_nem_rede():

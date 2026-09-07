@@ -208,21 +208,113 @@ def test_a_LISTA_NEGRA_nao_cresce_sozinha():
          % sorted(llm_cache._NAO_SEMANTICO))
 
 
+def _decisoes_de_cache_do_process_job():
+    """A EXPRESSÃO que decide `cache=` em cada chamada de IA do process_job.
+
+    Devolve funções `f(reprocess_count) -> bool` que AVALIAM a expressão real
+    do call site. 🔑 Avaliar, e não procurar a string: `_reproc_atual == 0`
+    continua no fonte dentro de `(_reproc_atual == 0 or True)`, que serve o
+    cache sempre — foi assim que este guarda passou cego em 06/09/2026.
+    """
+    import ast
+    import io
+    src = io.open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "main.py"), encoding="utf-8").read()
+    fn = [n for n in ast.walk(ast.parse(src))
+          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+          and n.name == "process_job"]
+    assert len(fn) == 1, "process_job sumiu ou virou duas definições"
+    decisoes = []
+    for n in ast.walk(fn[0]):
+        if not isinstance(n, ast.Call):
+            continue
+        for kw in n.keywords:
+            if kw.arg != "cache":
+                continue
+            fonte = ast.unparse(kw.value)
+            decisoes.append((fonte, compile(ast.Expression(kw.value),
+                                            "cache_kw", "eval")))
+    assert decisoes, (
+        "nenhuma chamada de IA no process_job passa `cache=` — o cache por "
+        "conteúdo saiu do caminho do cliente sem ninguém notar")
+    return decisoes
+
+
+def _reproc_atual_lido_do_banco(reprocess_count):
+    """Roda o pedaço REAL que lê `reprocess_count` e devolve `_reproc_atual`.
+
+    🪤 Este bloco fala com o banco por `urllib.request.urlopen` DIRETO, sem o
+    helper — quem patchar `_supa_rest_service` não intercepta nada e vê zero
+    parecendo zero de verdade."""
+    import ast
+    import io
+    import json as _j
+    import textwrap
+    import urllib.request
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    src = io.open(os.path.join(base, "main.py"), encoding="utf-8").read()
+    linhas = src.splitlines(True)
+    fn = [n for n in ast.walk(ast.parse(src))
+          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+          and n.name == "process_job"][0]
+    corpo = "".join(linhas[fn.lineno - 1:fn.end_lineno])
+    a = "_reproc_atual = 0\n"
+    z = 'print(f"[ckpt] cache indisponível (segue do zero): {_cke}")'
+    assert corpo.count(a) == 1 and corpo.count(z) == 1, (
+        "as âncoras do bloco que lê o reprocess_count deixaram de ser únicas")
+    i = corpo.rfind("\n", 0, corpo.index(a)) + 1
+    j = corpo.index("\n", corpo.index(z, i)) + 1
+    fatia = textwrap.dedent(corpo[i:j])
+
+    class _R(object):
+        def read(self):
+            return _j.dumps([{"reprocess_count": reprocess_count,
+                              "auto_resume_count": 0}]).encode("utf-8")
+
+    ns = {"__name__": "cache_ns", "_json": _j, "job_id": "job-teste",
+          "SUPABASE_URL": "https://exemplo.invalid",
+          "SUPABASE_KEY": "anon-de-mentira",
+          "SUPABASE_SERVICE_ROLE_KEY": "service-de-mentira",
+          "_ckpt_load_all": lambda j: {}}
+    real = urllib.request.urlopen
+    urllib.request.urlopen = lambda req, **k: _R()
+    try:
+        exec(compile(fatia, "reproc_atual", "exec"), ns)
+    finally:
+        urllib.request.urlopen = real
+    return ns["_reproc_atual"]
+
+
 def test_o_reprocesso_do_cliente_NAO_le_do_cache():
     """🪤 Quem clica "reprocessar" quer leitura NOVA. Com temperatura 0,7 uma
     rodada nova é justamente a chance de consertar a prancha — servir o cache
     ali mataria a saída de emergência dele.
 
-    Guarda do CALL SITE: já passei verde duas vezes testando a função e não
-    quem chama."""
-    import io
-    src = io.open(os.path.join(os.path.dirname(os.path.dirname(
-        os.path.abspath(__file__))), "main.py"), encoding="utf-8").read()
-    linhas = [l for l in src.split("\n")
-              if "cache=" in l and "cache_system" not in l
-              and not l.strip().startswith("#")]
-    assert any("_reproc_atual == 0" in l for l in linhas), (
-        "o caminho DXF deixou de desligar o cache no reprocesso: %s" % linhas[:5])
+    Guarda do CALL SITE, e AVALIADO: já passei verde duas vezes testando a
+    função e não quem chama, e uma terceira procurando a string
+    `_reproc_atual == 0` numa expressão que sempre dava True.
+    """
+    for reproc in (1, 2, 7):
+        assert _reproc_atual_lido_do_banco(reproc) == reproc, (
+            "o motor deixou de ler o reprocess_count do projeto — a decisão de "
+            "cache passa a ser tomada sobre zero")
+        for fonte, expr in _decisoes_de_cache_do_process_job():
+            ligado = bool(eval(expr, {"_reproc_atual": reproc}))
+            assert not ligado, (
+                "com reprocess_count=%d a chamada de IA ainda serve cache: "
+                "`cache=%s` avaliou True — a saída de emergência do cliente "
+                "devolve a leitura anterior" % (reproc, fonte))
+
+
+def test_CONTROLE_a_PRIMEIRA_leitura_continua_podendo_usar_o_cache():
+    """O outro lado: desligar o cache sempre custaria uma chamada de IA em todo
+    job, e o guarda de cima passaria igual. Sem este controle ele exigiria só
+    'nunca cacheie'."""
+    assert _reproc_atual_lido_do_banco(0) == 0
+    for fonte, expr in _decisoes_de_cache_do_process_job():
+        assert bool(eval(expr, {"_reproc_atual": 0})), (
+            "a 1ª leitura do projeto deixou de poder usar o cache: `cache=%s`"
+            % fonte)
 
 
 def test_o_cache_DA_SINAL_DE_VIDA_no_boot():
