@@ -17,7 +17,12 @@ on:
 jobs:
   bancada:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # 07/09/2026: 15 -> 30. A conversão dos guardas cegos trocou leitura de
+    # fonte por EXECUÇÃO — vários agora sobem o motor de verdade (process_job,
+    # Duktape rodando o JS do admin), e a bancada local foi de ~9 pra 15min54s.
+    # Com o teto em 15 o job morreria por tempo, e a falha por timeout não diz
+    # QUAL teste — é a mais cara de diagnosticar depois da falha de coleta.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +36,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install pytest pyflakes esprima
+          # 🪤 07/09/2026 — dukpy entrou aqui depois de o CI quebrar em 12s no
+          # a1cd349: guardas novos rodam JavaScript de verdade (Duktape) e o
+          # `import dukpy` é DURO de propósito — `importorskip` viraria skip
+          # silencioso, e guarda que pula não guarda. Eu tinha dukpy na minha
+          # máquina e o CI não: medi com ferramenta que o outro lado não tem.
+          # O guarda `test_dependencia_de_teste_declarada` impede a próxima.
+          pip install pytest pyflakes esprima dukpy
 
       # A regra que nasceu do deploy 8d597a6 (NameError no boot, 21/08):
       # nome indefinido não aparece no py_compile, só no pyflakes.
