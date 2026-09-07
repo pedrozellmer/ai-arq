@@ -7952,6 +7952,127 @@ def _regua_da_sombra(user_total_area, total_area_ia):
     return None, None
 
 
+def voz_do_email_de_reprocesso(nome_escapado, nome_cru, n_itens, n_medidos,
+                               n_geo, frase_piora="", frase_origem=""):
+    """As CINCO vozes do e-mail de reprocesso, decididas num lugar só.
+
+    Devolve (abertura, assunto, titulo, selo, preheader).
+
+    🚨 REGRA DURA Nº1 DENTRO DO E-MAIL. O ramo de boa notícia dizia "medimos
+    com o CAD" e punha o selo "✓ Medido" SEM CONFERIR se algo foi medido. No
+    job 6e9649a7: 0 itens medidos, e o e-mail afirmando medição — enquanto o
+    aviso, no corpo do MESMO e-mail, dizia "nenhuma quantidade foi medida da
+    geometria". Duas frases, uma verdade.
+
+    🔑 EXTRAÍDA DO PROCESSAMENTO EM 06/09/2026 pra que o guarda EXECUTE a
+    decisão. Enquanto era um `if/elif/else` solto no meio da função, o teste
+    só podia fatiar o TEXTO dos ramos e conferir que as frases de medição
+    moravam no ramo certo — sem nunca perguntar EM QUE CONDIÇÃO aquele ramo
+    roda. Por isso ele passava, verde, com `_mediu_c = _n_med_c > 0` trocado
+    por `_n_med_c > 0 or len(all_items) > 0`: o ramo continuava no lugar, e
+    qualquer reprocesso com ZERO medidos caía nele. Ver
+    [[feedback_guarda_que_le_fonte]].
+
+    🪤 `n_geo` separa "o desenho foi lido mas nada ganhou selo" de "nada saiu
+    da geometria" — a distinção de 03/09, quando o preheader contradizia o
+    corpo do próprio e-mail.
+    """
+    piorou = bool(frase_piora)
+    mediu = n_medidos > 0
+    if piorou:
+        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> com os arquivos que você "
+                    f"anexou, e preciso ser direto sobre o resultado.<br><br>"
+                    f"<b>&#9888; {frase_piora}</b>")
+        assunto = (f"{nome_cru} — refizemos, e a leitura mudou bastante"
+                   if nome_cru else "Refizemos seu projeto — a leitura mudou bastante")
+        titulo, selo = "Leitura refeita — compare as duas", "&#9888; Mudou"
+        pre = "As duas versões ficam no painel — compare antes de orçar."
+    elif mediu:
+        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> medindo pelo <b>CAD</b> "
+                    f"que você anexou — a planilha foi atualizada, agora com "
+                    f"<b>{n_itens} itens</b>, "
+                    f"<b>{n_medidos}</b> medidos do desenho.")
+        assunto = (f"{nome_cru} — medimos com o CAD, planilha atualizada"
+                   if nome_cru else "Medimos seu projeto com o CAD — planilha atualizada")
+        titulo, selo = "Planilha atualizada com o CAD", "&#10003; Medido"
+        pre = "O arquivo CAD que você mandou depois entrou na conta."
+    else:
+        # 🚨 nem abertura, nem assunto, nem selo, nem preheader podem afirmar
+        # medição quando `n_medidos == 0`
+        abertura = (f"Refizemos o projeto <b>{nome_escapado}</b> com o <b>CAD</b> que você "
+                    f"anexou — a planilha foi atualizada, agora com "
+                    f"<b>{n_itens} itens</b>.<br><br>"
+                    f"<b>Nenhum item saiu com o selo ✓ MEDIDO do CAD desta "
+                    f"vez.</b> {frase_origem} Trate como mapa do que "
+                    f"existe, não como levantamento fechado.")
+        assunto = (f"{nome_cru} — planilha atualizada com o CAD"
+                   if nome_cru else "Planilha atualizada com o CAD")
+        titulo = "Planilha atualizada com o CAD"
+        # 🩸 03/09 — O PREHEADER CONTRADIZIA O PRÓPRIO CORPO. Ele dizia
+        # "nenhuma quantidade saiu da geometria" e o corpo, três linhas
+        # abaixo, dizia "parte das quantidades foi tirada da geometria". O
+        # preheader é o que aparece na CAIXA DE ENTRADA: o cliente lê a
+        # negação antes de abrir e a afirmação depois de abrir.
+        if n_geo > 0:
+            selo = "&#9888; Sem selo de medido"
+            pre = ("O CAD entrou na conta e parte das quantidades "
+                   "saiu do desenho — mas nada ganhou o selo de "
+                   "medido.")
+        else:
+            selo = "&#9888; Sem medida do desenho"
+            pre = ("O CAD entrou na conta, mas nenhuma quantidade "
+                   "saiu da geometria.")
+    return abertura, assunto, titulo, selo, pre
+
+
+def rebaixar_itens_sem_identidade(all_items):
+    """Item cuja identidade é o nome do bloco do CAD perde o selo BRANCO.
+
+    Devolve quantos foram rebaixados.
+
+    🩸 04/09/2026, olhando o 1º projeto da cliente-22: a planilha dela trazia
+    "Equipamento não identificado — bloco CAD '1258C37_v'", 1 un, com o selo
+    ✓ MEDIDO DO CAD. Medido na base: 75 itens assim, 55 com o selo branco. E
+    das 6 vezes em que um cliente rejeitou um item BRANCO, 6 de 6 eram desta
+    classe. A geometria prova que existem N ocorrências DE ALGUMA COISA — não
+    prova QUE COISA. O selo mais forte no item mais fraco.
+
+    🪤 Só REBAIXA, nunca promove (regra dura nº1). E fala com o cliente na
+    LINHA, que é onde ele lê — não num aviso de topo.
+
+    🔑 SEPARADA DO `process_job` DE PROPÓSITO (06/09/2026), pelo mesmo motivo
+    que `monta_linha_de_revisao`: assim o guarda EXECUTA isto em vez de ler o
+    fonte. Enquanto era um bloco solto dentro da função de 3.000 linhas, o
+    teste só conseguia afirmar por string — e por isso passava com a regra
+    invertida (`if not _sem_ident(...)` virando `if _sem_ident(...)`) e até com
+    um `else` que PROMOVIA o item, escrito como `_CfB("confirmado")` pra
+    escapar da grafia que o teste procurava. Ver
+    [[feedback_guarda_que_le_fonte]].
+    """
+    from engine_rules import item_e_bloco_sem_identidade as _sem_ident
+    from models import Confidence as _CfB
+    n = 0
+    for _it in (all_items or []):
+        if not _sem_ident(getattr(_it, "description", ""),
+                          getattr(_it, "unit", "")):
+            continue
+        _cf = str(getattr(getattr(_it, "confidence", None), "value",
+                          getattr(_it, "confidence", "")) or "")
+        if _cf == "confirmado":
+            try:
+                _it.confidence = _CfB.ESTIMADO
+                n += 1
+            except Exception:
+                pass
+        _ob = str(getattr(_it, "observations", "") or "")
+        if "não sabemos o que é" not in _ob:
+            _it.observations = (
+                "⚠ A CONTAGEM é do desenho, mas não sabemos o que é "
+                "este elemento: o nome do bloco no CAD não diz. Vale a "
+                "quantidade; a descrição precisa vir do projetista. " + _ob)[:1000]
+    return n
+
+
 def process_job(job_id: str, file_paths: list[str], work_dir: str,
                 typology: str = "office",
                 user_sheet_types: dict[str, str] | None = None,
@@ -10873,27 +10994,9 @@ bloco — só cite os que estão no inventário deste arquivo."""
         # 🪤 Só REBAIXA, nunca promove (regra nº1). E fala com o cliente na
         # LINHA, que é onde ele lê — não num aviso de topo.
         try:
-            from engine_rules import item_e_bloco_sem_identidade as _sem_ident
-            from models import Confidence as _CfB
-            _n_reb_bloco = 0
-            for _it in (all_items or []):
-                if not _sem_ident(getattr(_it, "description", ""),
-                                  getattr(_it, "unit", "")):
-                    continue
-                _cf = str(getattr(getattr(_it, "confidence", None), "value",
-                                  getattr(_it, "confidence", "")) or "")
-                if _cf == "confirmado":
-                    try:
-                        _it.confidence = _CfB.ESTIMADO
-                        _n_reb_bloco += 1
-                    except Exception:
-                        pass
-                _ob = str(getattr(_it, "observations", "") or "")
-                if "não sabemos o que é" not in _ob:
-                    _it.observations = (
-                        "⚠ A CONTAGEM é do desenho, mas não sabemos o que é "
-                        "este elemento: o nome do bloco no CAD não diz. Vale a "
-                        "quantidade; a descrição precisa vir do projetista. " + _ob)[:1000]
+            # 🔑 A regra mora em `rebaixar_itens_sem_identidade`, no módulo, pra
+            # que o guarda possa EXECUTÁ-LA. Ver a docstring de lá.
+            _n_reb_bloco = rebaixar_itens_sem_identidade(all_items)
             if _n_reb_bloco:
                 _log_error("motor:bloco-sem-identidade",
                            "rebaixei %d item(ns) de contagem cuja identidade é o "
@@ -13014,71 +13117,22 @@ bloco — só cite os que estão no inventário deste arquivo."""
                     # anunciar "atualizada" como se fosse melhora quando não foi —
                     # caso cliente-16 10/08: 47 medidos viraram 28 e o e-mail comemorou.
                     _cmp_c = _comparar_com_versao_anterior(job_id, _n_med_c, len(all_items))
-                    # 🚨 25/08: aqui era `bool(_cmp_c.get("perdeu_medidos"))` e
+                    # 🚨 25/08: o sinal de piora era `_cmp_c["perdeu_medidos"]` e
                     # ignorava a queda de LINHAS. No job 6e9649a7 a releitura foi
                     # de 208 itens pra 15 com 0 medido dos dois lados: `perdeu_
                     # medidos` deu 0, e o cliente recebeu o e-mail de boa notícia.
-                    # Quem sabe se houve piora é a `frase`, que já olha os dois.
-                    _piorou_c = bool(_cmp_c.get("frase"))
-                    # 🚨 REGRA Nº1 DENTRO DO E-MAIL. O ramo de boa notícia dizia
-                    # "medimos com o CAD" / selo "✓ Medido" SEM CONFERIR se algo
-                    # foi medido. No mesmo job: 0 itens medidos, e o e-mail
-                    # afirmando medição — enquanto o aviso, no corpo do MESMO
-                    # e-mail, dizia "nenhuma quantidade foi medida da geometria".
-                    # Duas frases, uma verdade.
-                    _mediu_c = _n_med_c > 0
-                    if _piorou_c:
-                        _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> com os arquivos que você "
-                                   f"anexou, e preciso ser direto sobre o resultado.<br><br>"
-                                   f"<b>&#9888; {_cmp_c['frase']}</b>")
-                    elif _mediu_c:
-                        _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> medindo pelo <b>CAD</b> "
-                                   f"que você anexou — a planilha foi atualizada, agora com "
-                                   f"<b>{len(all_items)} itens</b>, "
-                                   f"<b>{_n_med_c}</b> medidos do desenho.")
-                    else:
-                        _abre_c = (f"Refizemos o projeto <b>{_pn_c}</b> com o <b>CAD</b> que você "
-                                   f"anexou — a planilha foi atualizada, agora com "
-                                   f"<b>{len(all_items)} itens</b>.<br><br>"
-                                   f"<b>Nenhum item saiu com o selo ✓ MEDIDO do CAD desta "
-                                   f"vez.</b> {_frase_origem_c} Trate como mapa do que "
-                                   f"existe, não como levantamento fechado.")
-                    _body_c = f"{_greet_c}<br><br>{_abre_c}{_diag_c}{_proximos_c}"
+                    # Quem sabe se houve piora é a `frase`, que já olha os dois —
+                    # e é ela que vai pra `voz_do_email_de_reprocesso` abaixo.
                     _pn_c_raw = (_rows[0].get("project_name") or "").strip()
-                    if _piorou_c:
-                        _subj_c = (f"{_pn_c_raw} — refizemos, e a leitura mudou bastante"
-                                   if _pn_c_raw else "Refizemos seu projeto — a leitura mudou bastante")
-                        _titulo_c, _badge_c = "Leitura refeita — compare as duas", "&#9888; Mudou"
-                        _pre_c = "As duas versões ficam no painel — compare antes de orçar."
-                    elif _mediu_c:
-                        _subj_c = (f"{_pn_c_raw} — medimos com o CAD, planilha atualizada"
-                                   if _pn_c_raw else "Medimos seu projeto com o CAD — planilha atualizada")
-                        _titulo_c, _badge_c = "Planilha atualizada com o CAD", "&#10003; Medido"
-                        _pre_c = "O arquivo CAD que você mandou depois entrou na conta."
-                    else:
-                        # 🚨 nem assunto, nem selo, nem preheader podem afirmar
-                        # medição quando `_n_med_c == 0`
-                        _subj_c = (f"{_pn_c_raw} — planilha atualizada com o CAD"
-                                   if _pn_c_raw else "Planilha atualizada com o CAD")
-                        _titulo_c = "Planilha atualizada com o CAD"
-                        # 🩸 03/09 — O PREHEADER CONTRADIZIA O PRÓPRIO CORPO.
-                        # Ele dizia "nenhuma quantidade saiu da geometria" e o
-                        # corpo, três linhas abaixo, dizia "parte das quantidades
-                        # foi tirada da geometria do desenho". O preheader é o
-                        # que aparece na CAIXA DE ENTRADA — o cliente lê a
-                        # negação antes de abrir e a afirmação depois de abrir.
-                        # 🔑 Vem da MESMA fonte do corpo (`_origem_das_
-                        # quantidades`), como o `_saida` da falha parcial. Duas
-                        # vozes sobre o mesmo fato é como isto começa.
-                        if _n_geo_c > 0:
-                            _badge_c = "&#9888; Sem selo de medido"
-                            _pre_c = ("O CAD entrou na conta e parte das quantidades "
-                                      "saiu do desenho — mas nada ganhou o selo de "
-                                      "medido.")
-                        else:
-                            _badge_c = "&#9888; Sem medida do desenho"
-                            _pre_c = ("O CAD entrou na conta, mas nenhuma quantidade "
-                                      "saiu da geometria.")
+                    # 🔑 As cinco vozes saem de UMA função (06/09/2026), pra que
+                    # o guarda EXECUTE a decisão em vez de ler o fonte dos
+                    # ramos. Ver a docstring de `voz_do_email_de_reprocesso`.
+                    (_abre_c, _subj_c, _titulo_c,
+                     _badge_c, _pre_c) = voz_do_email_de_reprocesso(
+                        _pn_c, _pn_c_raw, len(all_items), _n_med_c, _n_geo_c,
+                        frase_piora=(_cmp_c.get("frase") or ""),
+                        frase_origem=_frase_origem_c)
+                    _body_c = f"{_greet_c}<br><br>{_abre_c}{_diag_c}{_proximos_c}"
                     _ok_c = _send_email_smtp(
                         _pe, _subj_c,
                         _email_wrap(

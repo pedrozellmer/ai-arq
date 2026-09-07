@@ -118,30 +118,121 @@ _FONTE = io.open(os.path.join(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))), "main.py"), encoding="utf-8").read()
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+#  O MOTOR, EXECUTADO
+# ═══════════════════════════════════════════════════════════════════════════
+# 🩸 06/09/2026 — OS DOIS GUARDAS ABAIXO ERAM CEGOS, provado por mutação.
+# Eles liam o fonte: um procurava a Call `_sem_ident` na AST e as strings
+# `_CfB.ESTIMADO` / "não sabemos o que é" numa janela de 2.200 chars; o outro
+# proibia a grafia `_CfB.CONFIRMADO` na mesma janela. Duas mutações passaram
+# por baixo dos dois, com a bancada verde:
+#   (a) inverter a guarda — `if not _sem_ident(...)` virando `if _sem_ident(...)`.
+#       A Call continua lá, as strings continuam lá, e o efeito INVERTE: os
+#       itens sem identidade voltam a sair ✓ MEDIDO e o aviso passa a sujar
+#       justamente os itens que a gente identificou de verdade.
+#   (b) acrescentar um `else: _it.confidence = _CfB("confirmado")` — PROMOVE,
+#       violando a regra dura nº1, sem escrever a literal que o teste proibia.
+# Agora eles CHAMAM a regra e olham o selo que sai. Para isso, a regra saiu de
+# dentro do `process_job` e virou `main.rebaixar_itens_sem_identidade`.
+
+
+class _ItemFalso:
+    """O mínimo que a regra toca. Objeto simples de propósito: o código de
+    produção lê tudo por getattr, e um BudgetItem real exigiria campos que não
+    têm nada a ver com o que está sendo testado."""
+
+    def __init__(self, description, unit, confidence, observations=""):
+        self.description = description
+        self.unit = unit
+        self.confidence = confidence
+        self.observations = observations
+
+
+def _selo(it):
+    return str(getattr(getattr(it, "confidence", None), "value",
+                       getattr(it, "confidence", "")) or "")
+
+
 def test_o_motor_chama_a_regra_e_REBAIXA():
+    """Guarda de EFEITO: item sem identidade entra BRANCO e sai LARANJA."""
+    import main
+    from models import Confidence
+
+    sem_ident = _ItemFalso(
+        "Equipamento não identificado — bloco CAD '1258C37_v' — verificar com projetista",
+        "un", Confidence.CONFIRMADO)
+    n = main.rebaixar_itens_sem_identidade([sem_ident])
+    assert _selo(sem_ident) == "estimado", (
+        "o item sem identidade continuou com o selo BRANCO — é o defeito da "
+        "cliente-22, 55 itens na base")
+    assert n == 1, "a contagem de rebaixados não bate: %r" % n
+    assert "não sabemos o que é" in sem_ident.observations, (
+        "sumiu a explicação NA LINHA — aviso de topo o cliente não liga ao item")
+
+
+def test_CONTROLE_o_item_IDENTIFICADO_sai_INTACTO():
+    """🪤 O outro lado, e o que pega a inversão da guarda. Se a condição virar
+    do avesso, ESTE item é que seria rebaixado e sujo com o aviso — e o teste
+    de cima continuaria verde sozinho."""
+    import main
+    from models import Confidence
+
+    ok = _ItemFalso("Janela JA04 — alumínio, 1,20x1,00m", "un",
+                    Confidence.CONFIRMADO, observations="medida da prancha A-04")
+    main.rebaixar_itens_sem_identidade([ok])
+    assert _selo(ok) == "confirmado", (
+        "a regra rebaixou um item IDENTIFICADO — a guarda foi invertida e "
+        "estamos jogando fora medição legítima")
+    assert "não sabemos o que é" not in ok.observations, (
+        "o aviso de 'não sabemos o que é' foi parar num item que a gente "
+        "identificou — o cliente lê que não sabemos algo que sabemos")
+
+
+def test_o_rebaixamento_NUNCA_promove():
+    """🚨 Regra dura nº1: só rebaixa. Executa os dois casos em que uma promoção
+    apareceria — o item sem identidade que JÁ era estimado, e o identificado."""
+    import main
+    from models import Confidence
+
+    itens = [
+        _ItemFalso("Bloco/elemento não identificado — fuy — identificar e especificar",
+                   "un", Confidence.ESTIMADO),
+        _ItemFalso("Alvenaria de vedação — bloco cerâmico 14cm", "m²",
+                   Confidence.ESTIMADO),
+    ]
+    main.rebaixar_itens_sem_identidade(itens)
+    for it in itens:
+        assert _selo(it) != "confirmado", (
+            "a regra PROMOVEU um item para CONFIRMADO (%r) — ela só pode "
+            "rebaixar. É a regra dura nº1 pelo avesso." % it.description[:50])
+
+
+def test_a_regra_e_CHAMADA_pelo_motor():
+    """Regra correta que ninguém chama é código morto. Aqui só a chamada — o
+    efeito já está provado acima, executando."""
     chamou = any(isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
-                 and n.func.id == "_sem_ident"
+                 and n.func.id == "rebaixar_itens_sem_identidade"
                  for n in ast.walk(ast.parse(_FONTE)))
     assert chamou, (
         "o motor parou de consultar a regra — os itens sem identidade voltam "
         "a sair com ✓ MEDIDO")
-    i = _FONTE.index("from engine_rules import item_e_bloco_sem_identidade")
-    bloco = _FONTE[i:i + 2200]
-    assert "_CfB.ESTIMADO" in bloco, "sumiu o rebaixamento do selo"
-    assert "não sabemos o que é" in bloco, (
-        "sumiu a explicação NA LINHA — aviso de topo o cliente não liga ao item")
 
 
-def test_o_rebaixamento_NUNCA_promove():
-    """🚨 Regra nº1: só rebaixa. Se um dia promover, é o furo que o selo existe
-    pra fechar."""
-    i = _FONTE.index("from engine_rules import item_e_bloco_sem_identidade")
-    bloco = _FONTE[i:i + 2200]
-    assert "_CfB.CONFIRMADO" not in bloco, (
-        "este bloco passou a poder marcar item como CONFIRMADO — ele só pode "
-        "rebaixar")
-    assert 'if _cf == "confirmado":' in bloco, (
-        "o rebaixamento deixou de ser condicionado ao selo atual")
+def test_o_rebaixamento_e_condicionado_ao_selo_ATUAL():
+    """🪤 Executa em vez de ler: um item sem identidade que JÁ era estimado não
+    pode ser contado como rebaixado. Contagem inflada vira alarme falso no
+    error_log e a gente aprende errado sobre o tamanho do problema."""
+    import main
+    from models import Confidence
+
+    ja_laranja = _ItemFalso("Bloco/elemento não identificado — fuy", "un",
+                            Confidence.ESTIMADO)
+    n = main.rebaixar_itens_sem_identidade([ja_laranja])
+    assert n == 0, (
+        "contou como rebaixado um item que já era estimado — o rebaixamento "
+        "deixou de ser condicionado ao selo atual")
+    # e mesmo sem rebaixar, a explicação NA LINHA tem que ir
+    assert "não sabemos o que é" in ja_laranja.observations
 
 
 # ══════════════════════════════════════════════════════════════════════════
