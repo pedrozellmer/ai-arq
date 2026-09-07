@@ -28378,10 +28378,32 @@ CLEANUP_SECRET = os.getenv("CLEANUP_SECRET", "")
 
 
 def _supabase_storage_delete(bucket: str, object_path: str) -> bool:
-    """Deleta um objeto do Storage. Retorna True se OK (ou se já não existia)."""
-    import urllib.request, urllib.error
+    """Deleta um objeto do Storage. Retorna True se OK (ou se já não existia).
+
+    🩸 07/09/2026 — A PROMESSA DOS 90 DIAS NÃO VALIA PRA ARQUIVO COM ESPAÇO NO
+    NOME, e a assinatura no banco é perfeita: dos 1.282 arquivos do storage,
+    **32 passaram dos 90 dias — e os 32 têm espaço no nome. Zero sem espaço.**
+    Ou seja: quem não tem espaço é apagado direitinho; quem tem, nunca.
+    São 66 MB de arquivo de cliente que a política de privacidade promete
+    apagar e que estão lá há mais de três meses.
+
+    A causa: `object_path` entrava CRU na URL. Espaço não é caractere válido
+    em URL — a requisição saía malformada e o Storage recusava.
+
+    🪤 E o silêncio era duplo: o `except Exception: return False` engolia o
+    erro sem rastro, e o chamador contava `files_ok` como se tivesse apagado.
+    O painel dizia "arquivos removidos" enquanto eles continuavam lá. Achado
+    nº59/73 da auditoria de 06/09, CRÍTICO.
+
+    🪤 `quote` com `safe="/"`: a barra separa pastas no path do Storage e NÃO
+    pode virar %2F, senão o job_id e o nome do arquivo viram um nome só.
+    """
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+    caminho = urllib.parse.quote(str(object_path or ""), safe="/")
     try:
-        url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{object_path}"
+        url = f"{SUPABASE_URL}/storage/v1/object/{bucket}/{caminho}"
         req = urllib.request.Request(url, method="DELETE")
         req.add_header("apikey", SUPABASE_KEY)
         req.add_header("Authorization", f"Bearer {SUPABASE_SERVICE_ROLE_KEY}")
@@ -28391,8 +28413,17 @@ def _supabase_storage_delete(bucket: str, object_path: str) -> bool:
         # 404 = já não existe (tudo ok)
         if e.code == 404:
             return True
+        _log_error("storage:delete-falhou",
+                   "HTTP %s ao apagar %s/%s — o arquivo CONTINUA no storage e a "
+                   "retenção de 90 dias não se cumpriu" % (e.code, bucket, object_path),
+                   None, severity="error")
         return False
-    except Exception:
+    except Exception as _e:
+        # 🚨 Falha calada aqui é promessa de privacidade descumprida em silêncio.
+        _log_error("storage:delete-falhou",
+                   "%s ao apagar %s/%s — o arquivo CONTINUA no storage"
+                   % (type(_e).__name__, bucket, object_path),
+                   None, severity="error")
         return False
 
 
